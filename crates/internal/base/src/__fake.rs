@@ -10,6 +10,7 @@ pub use crate::__private::{EXPERIENCE_SOURCES, MOD_OFF, copy_out, ids};
 use crate::abi::CallFn;
 use crate::abi::PointFn;
 pub use crate::fresh::renew;
+pub use crate::load::outcome;
 use crate::points::{Point, Verdict};
 #[cfg(feature = "unstable")]
 use crate::services::Call;

@@ -247,14 +247,19 @@ pub(crate) extern "system" fn inventory_submit(
     let Some(request) = (unsafe { enshwick_core::abi::read_headed(request, required) }) else {
         return Status::BAD_ARGS;
     };
-    if request.ops.is_null() || request.op_count == 0 {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: the request holds `op_count` operations, read during the call.
-    let ops = unsafe { core::slice::from_raw_parts(request.ops, request.op_count as usize) };
     with(Status::MISSING, |s| {
-        if s.host.no_inventories {
+        if s.host.no_inventories || (s.host.side != Side::SERVER && !s.host.hosting) {
             return Status::MISSING;
+        }
+        // SAFETY: the request holds `op_count` operations, read during the
+        // call.
+        let Some(ops) = (unsafe {
+            enshwick_core::__fake::copy::list_in(request.ops, request.op_count as usize)
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        if enshwick_core::__fake::rules::inventory_checks::refused(ops) {
+            return Status::BAD_ARGS;
         }
         s.inventory_requests.push(OpenRequest {
             request: SubmittedRequest {
@@ -266,4 +271,84 @@ pub(crate) extern "system" fn inventory_submit(
         });
         Status::OK
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick_core::abi::{
+        Header, InventoryOp, InventoryRequest, InventoryResult, ModHandle, Side, Status,
+    };
+
+    use crate::test::FakeHost;
+
+    unsafe extern "system" fn ignored(result: *const InventoryResult, _: *mut core::ffi::c_void) {
+        let _read = crate::test::table::base::io::get_headed(result);
+    }
+
+    fn give(count: u32) -> InventoryOp {
+        InventoryOp {
+            kind: InventoryOp::GIVE,
+            flags: 0,
+            target: 7,
+            other: 0,
+            item: enshwick_core::ItemId::new(3),
+            count,
+        }
+    }
+
+    fn submit(ops: &[InventoryOp]) -> Status {
+        let request = InventoryRequest {
+            header: Header::of::<InventoryRequest>(),
+            flags: 0,
+            actor: enshwick_core::Entity(0),
+            ops: ops.as_ptr(),
+            op_count: u32::try_from(ops.len()).unwrap_or(u32::MAX),
+            reserved: 0,
+        };
+        super::inventory_submit(
+            ModHandle(1),
+            &raw const request,
+            ignored,
+            core::ptr::null_mut(),
+        )
+    }
+
+    #[test]
+    fn the_fake_refuses_the_inventory_requests_the_loader_refuses() {
+        let _loader = FakeHost::new().install();
+        let too_many = vec![give(1); enshwick_core::inventory::MAX_OPS + 1];
+        assert_eq!(
+            submit(&too_many),
+            Status::BAD_ARGS,
+            "more ops than a request holds"
+        );
+        assert_eq!(submit(&[give(0)]), Status::BAD_ARGS, "a give of nothing");
+        assert_eq!(submit(&[give(1)]), Status::OK);
+    }
+
+    #[test]
+    fn the_fake_refuses_inventory_requests_on_a_client_that_hosts_nothing() {
+        let _loader = FakeHost::new().side(Side::CLIENT).install();
+        assert_eq!(submit(&[give(1)]), Status::MISSING);
+    }
+
+    #[test]
+    fn the_fake_checks_the_side_before_the_ops_as_the_loader_does() {
+        let _loader = FakeHost::new().side(Side::CLIENT).install();
+        let request = InventoryRequest {
+            header: Header::of::<InventoryRequest>(),
+            flags: 0,
+            actor: enshwick_core::Entity(0),
+            ops: core::ptr::null(),
+            op_count: 3,
+            reserved: 0,
+        };
+        let status = super::inventory_submit(
+            ModHandle(1),
+            &raw const request,
+            ignored,
+            core::ptr::null_mut(),
+        );
+        assert_eq!(status, Status::MISSING);
+    }
 }

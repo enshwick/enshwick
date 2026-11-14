@@ -268,22 +268,4 @@ pub(crate) extern "system" fn voxel_read(
     Status::OK
 }
 
-/// Whether the loader takes `edit`: a known kind and shape, a radius above
-/// 0 and up to 16, a position at 0 or more, and for an add or a flatten a
-/// terrain material, for an add a height above 0 and up to 16.
-pub(crate) fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
-    let reach = |metres: f32| metres > 0.0 && metres <= enshwick_core::terrain::MAX_RADIUS;
-    let material = (1..=0x7f).contains(&edit.material);
-    reach(edit.radius)
-        && edit
-            .position
-            .iter()
-            .all(|axis| axis.is_finite() && *axis >= 0.0)
-        && edit.shape <= TerrainEdit::SQUARE
-        && match edit.kind {
-            TerrainEdit::ADD => material && reach(edit.height),
-            TerrainEdit::DIG => true,
-            TerrainEdit::FLATTEN => material,
-            _ => false,
-        }
-}
+pub(crate) use enshwick_core::__fake::rules::terrain_edit_valid;

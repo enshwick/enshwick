@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 
+use super::checks::{fill, valid};
 use super::*;
 
 unsafe extern "system" fn nothing(_result: *const InventoryResult, _user: *mut c_void) {}

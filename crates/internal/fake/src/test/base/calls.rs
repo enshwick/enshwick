@@ -267,14 +267,10 @@ impl Installed {
                 user,
             )
         });
-        match status {
-            // SAFETY: an OK status means the handler wrote an answer of the
-            // matched type, `C::Output`.
-            Status::OK => Ok(unsafe { answer.assume_init() }),
-            Status::MISSING => Err(CallError::Unmatched),
-            Status::REFUSED => Err(CallError::Off),
-            _ => Err(CallError::Failed),
-        }
+        enshwick_core::__fake::outcome::<CallError>(status)?;
+        // SAFETY: an OK status means the handler wrote an answer of the
+        // matched type, `C::Output`.
+        Ok(unsafe { answer.assume_init() })
     }
 
     /// The calls the mod serves, as `<name> v<major>`, in order.

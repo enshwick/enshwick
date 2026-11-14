@@ -75,29 +75,36 @@ pub enum WorldError {
 
 crate::load::off_from!(WorldError);
 
+impl enshwick_base::load::StatusError for WorldError {
+    fn of(status: Status) -> Self {
+        match status {
+            Status::WRONG_THREAD => Self::WrongThread,
+            Status::NOT_LOADED => Self::NotLoaded,
+            Status::OUTSIDE_WORLD => Self::OutsideWorld,
+            #[cfg(feature = "unstable")]
+            Status::STATIC_HALF => Self::StaticHalf,
+            #[cfg(feature = "unstable")]
+            Status::NOT_A_PROP => Self::NotAProp,
+            Status::REFUSED | Status::BAD_ARGS => Self::Refused,
+            _ => Self::Missing,
+        }
+    }
+}
+
 impl WorldError {
     /// The error the loader's `status` stands for, with `missing` for
     /// [`Status::MISSING`]: [`Self::Gone`] where the call names an entity,
     /// [`Self::Lacks`] where it names a component.
     pub(crate) fn check(status: Status, missing: Self) -> Result<(), Self> {
-        match status {
-            Status::OK => Ok(()),
-            Status::WRONG_THREAD => Err(Self::WrongThread),
-            Status::NOT_LOADED => Err(Self::NotLoaded),
-            Status::OUTSIDE_WORLD => Err(Self::OutsideWorld),
-            #[cfg(feature = "unstable")]
-            Status::STATIC_HALF => Err(Self::StaticHalf),
-            #[cfg(feature = "unstable")]
-            Status::NOT_A_PROP => Err(Self::NotAProp),
-            Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
-            Status::MISSING => Err(missing),
-            _ => Err(Self::Missing),
+        if status == Status::MISSING {
+            return Err(missing);
         }
+        enshwick_base::load::outcome(status)
     }
 
     /// [`Self::check`] for a call whose missing piece is the feature itself.
     pub(crate) fn from_status(status: Status) -> Result<(), Self> {
-        Self::check(status, Self::Missing)
+        enshwick_base::load::outcome(status)
     }
 }
 

@@ -126,3 +126,7 @@ harness = false
 [[bench]]
 name = "event_copy"
 harness = false
+
+[[bench]]
+name = "host_entry"
+harness = false

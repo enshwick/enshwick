@@ -1,35 +1,24 @@
 //! Host functions for hooks and code patches.
 
 use enshwick_base::Relock;
-use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
+use enshwick_core::abi::{HookSpec, MidHookSpec, Status};
 
 use crate::engine::chains::Link;
-use crate::engine::loader::loader;
 use crate::engine::mid::MidLink;
 use crate::engine::mod_index::ModIndex;
-use crate::host::memory::{put, slice};
-use crate::host::{caller_index, calling, entry};
+use crate::host::layer::{In, Mod, Out, entries};
+use crate::host::memory::slice;
 
-pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
-    entry("hook", || {
-        let (loader, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: a non-null spec from a mod points at a valid `HookSpec`.
-        let Some(spec) = (unsafe { spec.as_ref() }) else {
-            return Status::BAD_ARGS;
-        };
+entries! {
+    fn hook(me as Mod, spec as In<HookSpec>) -> Status {
         // SAFETY: `next` is a static inside the mod's DLL, which is never unloaded.
-        let Some(next) = (unsafe { spec.next.as_ref::<'static>() }) else {
-            return Status::BAD_ARGS;
-        };
+        let next = unsafe { spec.next.as_ref::<'static>() }.ok_or(Status::BAD_ARGS)?;
         // A pack's links are the API's own code in the loader, shared by
         // every pack: they stay when one pack turns off.
-        let owner = if loader.mods[index].pack {
+        let owner = if me.record.pack {
             ModIndex::LOADER
         } else {
-            index
+            me.index
         };
         let link = Link {
             owner,
@@ -40,70 +29,37 @@ pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Stat
             hop: None,
             feature: None,
         };
-        loader.chains.relock().add(spec.target, link)
-    })
-}
+        Ok(me.loader.chains.relock().add(spec.target, link))
+    }
 
-pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -> Status {
-    entry("hook_at", || {
-        let (loader, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: a non-null spec from a mod points at a valid `MidHookSpec`.
-        let Some(spec) = (unsafe { spec.as_ref() }) else {
-            return Status::BAD_ARGS;
-        };
+    fn hook_at(me as Mod, spec as In<MidHookSpec>) -> Status {
         let link = MidLink {
-            owner: index,
+            owner: me.index,
             handler: spec.handler,
             user: spec.user.expose_provenance(),
             priority: spec.priority,
             flags: spec.flags,
         };
-        loader.mids.relock().add(spec.address, link)
-    })
-}
+        Ok(me.loader.mids.relock().add(spec.address, link))
+    }
 
-pub(crate) extern "system" fn code_range(start: *mut u64, len: *mut u64) -> Status {
-    entry("code_range", || {
-        let Some((address, size)) =
-            loader().and_then(|loader| crate::engine::code::text(loader.base))
-        else {
-            return Status::MISSING;
-        };
-        // SAFETY: `HostApi::code_range` has the mod pass `start` null or
-        // pointing at a writable, aligned `u64` that no other thread touches
-        // during the call.
-        let status = unsafe { put(start, address as u64) };
-        if !status.is_ok() {
-            return status;
-        }
-        // SAFETY: `HostApi::code_range` has the mod pass `len` null or pointing
-        // at a writable, aligned `u64` that no other thread touches during the
-        // call.
-        unsafe { put(len, size as u64) }
-    })
-}
+    fn code_range(start as Out<u64>, len as Out<u64>) -> Status {
+        let (address, size) = crate::engine::loader::loader()
+            .and_then(|loader| crate::engine::code::text(loader.base))
+            .ok_or(Status::MISSING)?;
+        start.put(address as u64)?;
+        len.put(size as u64)
+    }
 
-pub(crate) extern "system" fn patch_code(
-    me: ModHandle,
-    address: u64,
-    expected: *const u8,
-    replacement: *const u8,
-    len: usize,
-) -> Status {
-    entry("patch_code", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        let (Ok(address), Some(text)) = (
-            usize::try_from(address),
-            crate::engine::code::text(loader.base),
-        ) else {
-            return Status::BAD_ARGS;
-        };
+    fn patch_code(
+        me as Mod,
+        address: u64,
+        expected: *const u8,
+        replacement: *const u8,
+        len: usize,
+    ) -> Status {
+        let address = usize::try_from(address).map_err(|_| Status::BAD_ARGS)?;
+        let text = crate::engine::code::text(me.loader.base).ok_or(Status::BAD_ARGS)?;
         // SAFETY: the ABI has the mod pass `len` readable bytes at a non-null
         // `expected`, unchanged for the call; `register` copies them into a box
         // before it returns.
@@ -112,9 +68,9 @@ pub(crate) extern "system" fn patch_code(
         // `replacement`, unchanged for the call; `register` copies them into a
         // box before it returns.
         let replacement = unsafe { slice(replacement, len) };
-        crate::engine::code::register(
+        Ok(crate::engine::code::register(
             crate::engine::code::CodePatch {
-                owner: index,
+                owner: me.index,
                 feature: crate::engine::code::WHOLE_MOD,
                 address,
                 expected: expected.into(),
@@ -122,10 +78,10 @@ pub(crate) extern "system" fn patch_code(
                 needs: Box::default(),
             },
             text,
-        )
-    })
-}
+        ))
+    }
 
-pub(crate) extern "system" fn workshop_recipes() -> u32 {
-    entry("workshop_recipes", crate::engine::code::workshop_recipes)
+    fn workshop_recipes() -> u32 {
+        Ok(crate::engine::code::workshop_recipes())
+    }
 }

@@ -1,26 +1,23 @@
 //! Host functions for described services, calls.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Level, ModHandle, Status};
+use enshwick_core::abi::Status;
 
-use crate::host::entries::base::services::{required_owner, spec_parts, unexported};
-use crate::host::memory::{get_headed, put};
-use crate::host::{caller_index, calling, entry};
+use crate::host::entries::base::services::{exported, required_owner, spec_parts};
+use crate::host::layer::guards::open;
+use crate::host::layer::{Headed, Mod, Out, Rule, entries};
 
-/// The declaration of a call spec read through its header.
-///
-/// # Safety
-///
-/// - The spec's name and its `input` and `output` layouts, with their
-///   fields and names, are readable and unchanged for the call.
-unsafe fn declared(spec: &api_frame::CallSpec) -> Option<crate::base::calls::Declared> {
-    // SAFETY: the caller guarantees the spec's name and its `input` layout
-    // readable and unchanged for the call; `spec` holds the same pointers.
-    let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }?;
-    // SAFETY: the caller guarantees the spec's `output` layout, its fields and
-    // their names, readable and unchanged for the call.
-    let output = unsafe { enshwick_core::services::read_layout(&spec.output) }?;
-    Some(crate::base::calls::Declared {
+/// The declaration of a call spec read through its header: a bad argument
+/// when its name or layouts do not read.
+fn declared(spec: &api_frame::CallSpec) -> Result<crate::base::calls::Declared, Status> {
+    // SAFETY: the ABI has the mod pass the spec's name and its `input`
+    // layout, with its fields and names, readable and unchanged for the call.
+    let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }.ok_or(Status::BAD_ARGS)?;
+    // SAFETY: the ABI has the mod pass the spec's `output` layout, its fields
+    // and their names, readable and unchanged for the call.
+    let output =
+        unsafe { enshwick_core::services::read_layout(&spec.output) }.ok_or(Status::BAD_ARGS)?;
+    Ok(crate::base::calls::Declared {
         name: name.to_owned(),
         major: spec.major,
         input,
@@ -30,123 +27,47 @@ unsafe fn declared(spec: &api_frame::CallSpec) -> Option<crate::base::calls::Dec
     })
 }
 
-pub(crate) extern "system" fn serve_call(
-    me: ModHandle,
-    spec: *const api_frame::CallSpec,
-    callback: api_frame::CallFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("serve_call", || {
-        let (_, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if crate::base::calls::sealed() {
-            return Status::TOO_LATE;
-        }
-        // SAFETY: a mod passes null or its version of the spec, and all of
-        // the spec is required.
-        let Some(spec) = (unsafe {
-            get_headed(
-                spec,
-                <api_frame::CallSpec as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: the ABI has the mod pass the spec's name and layouts, with
-        // their fields and names, readable and unchanged for the call.
-        let Some(declared) = (unsafe { declared(&spec) }) else {
-            return Status::BAD_ARGS;
-        };
-        let served = crate::base::calls::registry().serve(
-            index,
-            &record.id,
+entries! {
+    fn serve_call(
+        me as Mod,
+        spec as Headed<api_frame::CallSpec>,
+        callback: api_frame::CallFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        open(crate::base::calls::sealed())?;
+        let declared = declared(&spec)?;
+        crate::base::calls::registry().serve(
+            me.index,
+            &me.record.id,
             declared,
             callback,
             user.expose_provenance(),
-        );
-        match served {
-            Ok(()) => Status::OK,
-            Err(reason) => {
-                crate::engine::log::write(Level::WARN, &record.id, &reason.to_string());
-                Status::REFUSED
-            }
-        }
-    })
-}
+        )?;
+        Ok(())
+    }
 
-pub(crate) extern "system" fn find_call(
-    me: ModHandle,
-    spec: *const api_frame::CallSpec,
-    out: *mut u32,
-) -> Status {
-    entry("find_call", || {
-        let (loader, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if crate::base::calls::sealed() {
-            return Status::TOO_LATE;
-        }
-        if out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: a mod passes null or its version of the spec, and all of
-        // the spec is required.
-        let Some(spec) = (unsafe {
-            get_headed(
-                spec,
-                <api_frame::CallSpec as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: the ABI has the mod pass the spec's name and layouts, with
-        // their fields and names, readable and unchanged for the call.
-        let Some(declared) = (unsafe { declared(&spec) }) else {
-            return Status::BAD_ARGS;
-        };
-        let unmet = unexported(
-            loader,
-            record,
-            crate::base::manifest::Kind::Call,
-            &declared.name,
-        )
-        .or_else(|| {
-            let owner = required_owner(record, &declared.name)?;
-            let reason = crate::base::calls::registry().unmatched(&declared, loader)?;
-            Some(format!(
+    fn find_call(me as Mod, spec as Headed<api_frame::CallSpec>, out as Out<u32>) -> Status {
+        open(crate::base::calls::sealed())?;
+        let declared = declared(&spec)?;
+        exported(me.loader, me.record, crate::base::manifest::Kind::Call, &declared.name)?;
+        if let Some(owner) = required_owner(me.record, &declared.name)
+            && let Some(reason) = crate::base::calls::registry().unmatched(&declared, me.loader)
+        {
+            return Err(Rule(format!(
                 "call {} v{}: this mod requires {owner}, and the call cannot match: {reason}",
                 declared.name, declared.major
             ))
-        });
-        if let Some(reason) = unmet {
-            crate::engine::log::write(Level::WARN, &record.id, &reason);
-            return Status::REFUSED;
+            .into());
         }
-        let found = crate::base::calls::registry().find(index, declared);
-        match found {
-            // SAFETY: `HostApi::find_call` has the mod pass `out` pointing at a
-            // writable, aligned `u32` that no other thread touches during the
-            // call; checked non-null above.
-            Ok(id) => unsafe { put(out, id) },
-            Err(reason) => {
-                crate::engine::log::write(Level::WARN, &record.id, &reason.to_string());
-                Status::REFUSED
-            }
-        }
-    })
-}
+        out.put(crate::base::calls::registry().find(me.index, declared)?)
+    }
 
-pub(crate) extern "system" fn call(
-    me: ModHandle,
-    id: u32,
-    input: *const core::ffi::c_void,
-    output: *mut core::ffi::c_void,
-) -> Status {
-    entry("call", || match caller_index(me) {
-        Ok((_, index)) => crate::base::calls::run(index.get(), id, input, output),
-        Err(status) => status,
-    })
+    fn call(
+        me as Mod,
+        id: u32,
+        input: *const core::ffi::c_void,
+        output: *mut core::ffi::c_void,
+    ) -> Status {
+        Ok(crate::base::calls::run(me.index.get(), id, input, output))
+    }
 }

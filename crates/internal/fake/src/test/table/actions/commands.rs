@@ -307,7 +307,7 @@ pub(crate) extern "system" fn command_list(
             })
             .collect::<Vec<_>>()
     });
-    crate::test::table::base::mods::list(&infos, out, entry_size, capacity, count)
+    crate::test::table::base::io::list(&infos, out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn actions_changed(_me: ModHandle) -> Status {

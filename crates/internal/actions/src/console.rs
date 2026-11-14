@@ -70,12 +70,18 @@ pub fn run(line: &str) -> Result<String, RunError> {
     let host = crate::host().ok_or(RunError::NoLoader)?;
     let mut out = Str::EMPTY;
     let status = (host.api().run_console)(host.handle(), Str::new(line), &raw mut out);
-    match status {
-        // SAFETY: the reply stays valid until the next call on this thread.
-        Status::OK => Ok(unsafe { out.as_str() }.unwrap_or("").to_owned()),
-        Status::MISSING => Err(RunError::Unknown),
-        Status::WRONG_THREAD => Err(RunError::NotOnGameThread),
-        other => Err(RunError::Refused(other.0)),
+    enshwick_base::load::outcome::<RunError>(status)?;
+    // SAFETY: the reply stays valid until the next call on this thread.
+    Ok(unsafe { out.as_str() }.unwrap_or("").to_owned())
+}
+
+impl enshwick_base::load::StatusError for RunError {
+    fn of(status: Status) -> Self {
+        match status {
+            Status::MISSING => Self::Unknown,
+            Status::WRONG_THREAD => Self::NotOnGameThread,
+            _ => Self::Refused(status.0),
+        }
     }
 }
 

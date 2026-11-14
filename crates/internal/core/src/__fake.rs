@@ -11,7 +11,7 @@ pub use enshwick_content::__fake::*;
 pub use enshwick_ui::__fake::*;
 pub use enshwick_world::__fake::*;
 
-pub use crate::__private::rules;
+pub use crate::__private::{copy, rules};
 use crate::abi::{HostApi, Manifest};
 
 /// Why the fake refuses the manifest of a mod whose init runs on a table,

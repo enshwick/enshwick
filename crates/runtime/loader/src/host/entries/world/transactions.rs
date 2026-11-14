@@ -1,84 +1,71 @@
 //! Host functions for transactions of the world: commits, statuses and undos.
 
 use enshwick_core::abi::{
-    BlockPlace, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
-    TransactionOp, VoxelRegion, VoxelWrite,
+    BlockPlace, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
+    VoxelRegion, VoxelWrite,
 };
 
-use crate::host::memory::{put, put_headed, put_list};
-use crate::host::{caller_index, entry};
+use crate::host::layer::{HeadedOut, ListOut, Mod, Out, UnalignedList, Values, entries};
 use crate::world::transactions::{Change, Erase, Paste};
 
-pub(crate) extern "system" fn transaction_commit(
-    me: ModHandle,
-    ops: *const TransactionOp,
-    count: u32,
-    id: *mut u64,
-) -> Status {
-    entry("transaction_commit", || commit(me, None, ops, count, id))
-}
+entries! {
+    fn transaction_commit(me as Mod, [ops, count] as UnalignedList<TransactionOp>, id as Out<u64>) -> Status {
+        id.put(commit(me, None, ops)?)
+    }
 
-pub(crate) extern "system" fn transaction_commit_for(
-    me: ModHandle,
-    actor: enshwick_core::Entity,
-    ops: *const TransactionOp,
-    count: u32,
-    id: *mut u64,
-) -> Status {
-    entry("transaction_commit_for", || {
+    fn transaction_commit_for(
+        me as Mod,
+        actor: enshwick_core::Entity,
+        [ops, count] as UnalignedList<TransactionOp>,
+        id as Out<u64>,
+    ) -> Status {
         if actor == enshwick_core::Entity(0) {
-            return Status::BAD_ARGS;
+            return Err(Status::BAD_ARGS.into());
         }
-        commit(me, Some(actor.0), ops, count, id)
-    })
+        id.put(commit(me, Some(actor.0), ops)?)
+    }
+
+    fn transaction_entities(
+        me as Mod,
+        id: u64,
+        [out, capacity, count] as ListOut<enshwick_core::Entity>,
+    ) -> Status {
+        let created = crate::world::transactions::entities(me.index, id).ok_or(Status::MISSING)?;
+        let created: Vec<enshwick_core::Entity> =
+            created.into_iter().map(enshwick_core::Entity).collect();
+        out.put(&created)
+    }
+
+    fn transaction_status(me as Mod, id: u64, out as HeadedOut<TransactionInfo>) -> Status {
+        out.put(crate::world::transactions::info(me.index, id).ok_or(Status::MISSING)?)
+    }
+
+    fn transaction_undo(me as Mod, id: u64) -> Status {
+        crate::world::transactions::undo(me.index, id)?;
+        Ok(())
+    }
 }
 
-fn commit(
-    me: ModHandle,
-    actor: Option<u32>,
-    ops: *const TransactionOp,
-    count: u32,
-    id: *mut u64,
-) -> Status {
-    let count = count as usize;
-    if ops.is_null() || id.is_null() || count == 0 || count > crate::world::transactions::LIMITS.ops
-    {
-        return Status::BAD_ARGS;
+/// Commits `ops` as the calling mod, for `actor` when it names one, and
+/// gives the transaction's id.
+fn commit(me: Mod, actor: Option<u32>, ops: Values<'_, TransactionOp>) -> Result<u64, Status> {
+    if ops.len() == 0 || ops.len() > crate::world::transactions::LIMITS.ops {
+        return Err(Status::BAD_ARGS);
     }
-    let (loader, owner) = match caller_index(me) {
-        Ok(caller) => caller,
-        Err(status) => return status,
-    };
-    let mut changes = Vec::with_capacity(count);
-    for i in 0..count {
-        // SAFETY: `ops` is non-null, checked above, and `i` is below
-        // `count`; `HostApi::transaction_commit` has the mod pass `count`
-        // ops at `ops`, so the offset stays inside that array.
-        let slot = unsafe { ops.add(i) };
-        // SAFETY: `slot` is inside the `count` ops the mod passes, borrowed
-        // for the call; an unaligned read needs no alignment.
-        // The mod's ops array, not game memory.
-        // ast-grep-ignore: game-memory-through-raw
-        let op = unsafe { slot.read_unaligned() };
-        if op.reserved != 0 {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: `HostApi::transaction_commit` has the mod pass each op's
-        // `data` null or pointing at the record its kind names, with its
-        // header, and a `VoxelWrite`'s voxels at `voxels`, all borrowed for
-        // the call.
-        match unsafe { change(loader, &op) } {
-            Ok(change) => changes.push(change),
-            Err(status) => return status,
-        }
-    }
-    match crate::world::transactions::commit(loader, owner, actor, changes) {
-        // SAFETY: `id` is non-null, checked above; `HostApi::transaction_commit`
-        // has the mod pass it pointing at a writable, aligned `u64` that no
-        // other thread touches during the call.
-        Ok(next) => unsafe { put(id, next) },
-        Err(status) => status,
-    }
+    let changes = ops
+        .iter()
+        .map(|op| {
+            if op.reserved != 0 {
+                return Err(Status::BAD_ARGS);
+            }
+            // SAFETY: `HostApi::transaction_commit` has the mod pass each
+            // op's `data` null or pointing at the record its kind names, with
+            // its header, and a `VoxelWrite`'s voxels at `voxels`, all
+            // borrowed for the call.
+            unsafe { change(me.loader, &op) }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    crate::world::transactions::commit(me.loader, me.index, actor, changes)
 }
 
 /// The change `op` hands over; [`Status::BAD_ARGS`] for a kind or a
@@ -186,57 +173,4 @@ unsafe fn change(
         }
         _ => Err(Status::BAD_ARGS),
     }
-}
-
-pub(crate) extern "system" fn transaction_entities(
-    me: ModHandle,
-    id: u64,
-    out: *mut enshwick_core::Entity,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("transaction_entities", || {
-        let owner = match caller_index(me) {
-            Ok((_, owner)) => owner,
-            Err(status) => return status,
-        };
-        let Some(created) = crate::world::transactions::entities(owner, id) else {
-            return Status::MISSING;
-        };
-        let created: Vec<enshwick_core::Entity> =
-            created.into_iter().map(enshwick_core::Entity).collect();
-        // SAFETY: `HostApi::transaction_entities` has the mod pass `count`
-        // null or a writable `u32`, and `out` null or `capacity` writable
-        // `Entity`s, untouched by other threads during the call.
-        unsafe { put_list(&created, out, capacity, count) }
-    })
-}
-
-pub(crate) extern "system" fn transaction_status(
-    me: ModHandle,
-    id: u64,
-    out: *mut TransactionInfo,
-) -> Status {
-    entry("transaction_status", || {
-        let owner = match caller_index(me) {
-            Ok((_, owner)) => owner,
-            Err(status) => return status,
-        };
-        let Some(info) = crate::world::transactions::info(owner, id) else {
-            return Status::MISSING;
-        };
-        // SAFETY: `HostApi::transaction_status` has the mod pass `out` null
-        // or pointing at a writable `TransactionInfo` whose header names its
-        // size, untouched by other threads during the call.
-        unsafe { put_headed(out, info) }
-    })
-}
-
-pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status {
-    entry("transaction_undo", || {
-        match caller_index(me).and_then(|(_, owner)| crate::world::transactions::undo(owner, id)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
 }

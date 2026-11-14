@@ -371,7 +371,7 @@ pub(crate) extern "system" fn map_marker_types(
     }) else {
         return Status::MISSING;
     };
-    crate::test::table::base::mods::list(&types, out, entry_size, capacity, count)
+    crate::test::table::base::io::list(&types, out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn ui_dialog(

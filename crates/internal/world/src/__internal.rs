@@ -37,6 +37,32 @@ pub fn altar_template_of(host: Host, entity: Entity) -> Option<Guid> {
     crate::altars::template_of(host, entity)
 }
 
+/// Whether the loader takes the terrain edit `edit`, a check the loader and
+/// the fake host share.
+///
+/// It takes a known kind and shape, a radius above 0 and up to
+/// [`MAX_RADIUS`](crate::terrain::MAX_RADIUS), a position at 0 or more on
+/// every axis, and for an add or a flatten a terrain material, 1 to 127,
+/// for an add a height above 0 and up to the same limit.
+#[must_use]
+pub fn terrain_edit_valid(edit: &crate::abi::TerrainEdit) -> bool {
+    use crate::abi::TerrainEdit;
+    let reach = |metres: f32| metres > 0.0 && metres <= crate::terrain::MAX_RADIUS;
+    let material = (1..=0x7f).contains(&edit.material);
+    reach(edit.radius)
+        && edit
+            .position
+            .iter()
+            .all(|axis| axis.is_finite() && *axis >= 0.0)
+        && edit.shape <= TerrainEdit::SQUARE
+        && match edit.kind {
+            TerrainEdit::ADD => material && reach(edit.height),
+            TerrainEdit::DIG => true,
+            TerrainEdit::FLATTEN => material,
+            _ => false,
+        }
+}
+
 /// `status` of a world call as its outcome.
 ///
 /// # Errors

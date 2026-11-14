@@ -2,25 +2,34 @@
 //! server's world, features, the status report and game events.
 
 use enshwick_base::Relock;
-use enshwick_core::abi::{EventTypeInfo, Header, Level, ModHandle, Side, Status, Str};
+use enshwick_core::abi::{EventTypeInfo, Header, Level, Side, Status, Str};
 use enshwick_core::{Entity, abi as api_frame};
 
-use crate::engine::loader::loader;
 use crate::engine::world::Whose;
-use crate::host::memory::{put, put_headed_list, text};
-use crate::host::{caller, calling, entry};
+use crate::host::layer::guards::in_init;
+use crate::host::layer::{Caller, HeadedListOut, Mod, Out, Text, entries};
 
-pub(crate) extern "system" fn event_types(
-    me: ModHandle,
-    out: *mut EventTypeInfo,
-    capacity: u32,
-    count: *mut u32,
+/// Registers the calling mod's game event handler for the world `whose`.
+fn game_event_of(
+    whose: Whose,
+    me: Mod,
+    type_hash: u32,
+    callback: api_frame::GameEventFn,
+    user: *mut core::ffi::c_void,
 ) -> Status {
-    entry("event_types", || {
-        let loader = match caller(me) {
-            Ok(loader) => loader,
-            Err(status) => return status,
-        };
+    crate::base::game_events::register(
+        me.loader.side,
+        whose,
+        me.index,
+        crate::engine::loader::in_init(me.index.get()),
+        type_hash,
+        callback,
+        user,
+    )
+}
+
+entries! {
+    fn event_types(loader as Caller, [out, capacity, count] as HeadedListOut<EventTypeInfo>) -> Status {
         let types: Vec<EventTypeInfo> = crate::engine::catalogue::event_types(&loader.reflection)
             .filter_map(|ty| {
                 Some(EventTypeInfo {
@@ -31,77 +40,39 @@ pub(crate) extern "system" fn event_types(
                 })
             })
             .collect();
-        // SAFETY: `HostApi::event_types` has the mod pass `out` null or
-        // pointing at `capacity` entries of its version of `EventTypeInfo`,
-        // each writable for the size the first entry's header states, and
-        // `count` null or pointing at a writable, aligned `u32`, neither
-        // touched by another thread during the call.
-        unsafe { put_headed_list(&types, out, capacity, count) }
-    })
-}
+        out.put(&types)
+    }
 
-pub(crate) extern "system" fn component(
-    me: ModHandle,
-    entity: Entity,
-    type_hash: u32,
-    out: *mut *const core::ffi::c_void,
-) -> Status {
-    entry("component", || {
-        match caller(me)
-            .and_then(|loader| crate::engine::world::component(loader, entity, type_hash))
-        {
-            // SAFETY: `HostApi::component` has the mod pass `out` null or
-            // pointing at a writable, aligned `c_void` that no other thread
-            // touches during the call.
-            Ok(data) => unsafe { put(out, data) },
-            Err(status) => status,
-        }
-    })
-}
+    fn component(
+        loader as Caller,
+        entity: Entity,
+        type_hash: u32,
+        out as Out<*const core::ffi::c_void>,
+    ) -> Status {
+        out.put(crate::engine::world::component(loader, entity, type_hash)?)
+    }
 
-pub(crate) extern "system" fn entity_template(
-    me: ModHandle,
-    entity: Entity,
-    out: *mut [u8; 16],
-) -> Status {
-    entry("entity_template", || {
-        match caller(me).and_then(|loader| crate::engine::world::template(loader, entity)) {
-            // SAFETY: `HostApi::entity_template` has the mod pass `out` null or
-            // pointing at a writable, aligned `[u8; 16]` that no other thread
-            // touches during the call.
-            Ok(guid) => unsafe { put(out, guid) },
-            Err(status) => status,
-        }
-    })
-}
+    fn entity_template(loader as Caller, entity: Entity, out as Out<[u8; 16]>) -> Status {
+        out.put(crate::engine::world::template(loader, entity)?)
+    }
 
-pub(crate) extern "system" fn hosting() -> u8 {
-    entry("hosting", || {
-        loader().map_or(0, |loader| {
+    fn hosting() -> u8 {
+        Ok(crate::engine::loader::loader().map_or(0, |loader| {
             u8::from(loader.side == Side::SERVER || crate::engine::world::hosting())
-        })
-    })
-}
+        }))
+    }
 
-pub(crate) extern "system" fn server_world() -> u64 {
-    entry("server_world", crate::engine::world::server_world)
-}
+    fn server_world() -> u64 {
+        Ok(crate::engine::world::server_world())
+    }
 
-pub(crate) extern "system" fn feature(me: ModHandle, name: Str, off: Str) -> Status {
-    entry("feature", || {
-        let (Some(name), Some(off)) = (text(name), text(off)) else {
-            return Status::BAD_ARGS;
-        };
+    fn feature(me as Mod, name as Text, off as Text) -> Status {
         if name.is_empty() {
-            return Status::BAD_ARGS;
+            return Err(Status::BAD_ARGS.into());
         }
-        let record = match calling(me) {
-            Ok((_, _, record)) => record,
-            Err(status) => return status,
-        };
-        let texts = record.texts.relock();
+        let texts = me.record.texts.relock();
         let changed = crate::engine::features::report(
-            &mut record.features.relock(),
+            &mut me.record.features.relock(),
             name,
             Some(off).filter(|off| !off.is_empty()),
             texts.as_ref(),
@@ -113,73 +84,35 @@ pub(crate) extern "system" fn feature(me: ModHandle, name: Str, off: Str) -> Sta
             } else {
                 Level::WARN
             };
-            crate::engine::log::write(level, &record.id, &line);
+            crate::engine::log::write(level, &me.record.id, &line);
         }
-        Status::OK
-    })
-}
+        Ok(())
+    }
 
-pub(crate) extern "system" fn status(
-    me: ModHandle,
-    callback: api_frame::StatusFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("status", || {
-        let (_, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if !crate::engine::loader::in_init(index.get()) {
-            return Status::TOO_LATE;
-        }
-        crate::base::status::register(index, callback, user)
-    })
-}
+    fn status(
+        me as Mod,
+        callback: api_frame::StatusFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        in_init(me.index)?;
+        Ok(crate::base::status::register(me.index, callback, user))
+    }
 
-pub(crate) extern "system" fn client_game_event(
-    me: ModHandle,
-    type_hash: u32,
-    callback: api_frame::GameEventFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    game_event_of(Whose::Client, me, type_hash, callback, user)
-}
+    fn client_game_event(
+        me as Mod,
+        type_hash: u32,
+        callback: api_frame::GameEventFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        Ok(game_event_of(Whose::Client, me, type_hash, callback, user))
+    }
 
-pub(crate) extern "system" fn game_event(
-    me: ModHandle,
-    type_hash: u32,
-    callback: api_frame::GameEventFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    game_event_of(Whose::Server, me, type_hash, callback, user)
-}
-
-/// Registers the calling mod's game event handler for the world `whose`.
-fn game_event_of(
-    whose: Whose,
-    me: ModHandle,
-    type_hash: u32,
-    callback: api_frame::GameEventFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    let entry_name = match whose {
-        Whose::Server => "game_event",
-        Whose::Client => "client_game_event",
-    };
-    entry(entry_name, || {
-        let (loader, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        let in_init = crate::engine::loader::in_init(index.get());
-        crate::base::game_events::register(
-            loader.side,
-            whose,
-            index,
-            in_init,
-            type_hash,
-            callback,
-            user,
-        )
-    })
+    fn game_event(
+        me as Mod,
+        type_hash: u32,
+        callback: api_frame::GameEventFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        Ok(game_event_of(Whose::Server, me, type_hash, callback, user))
+    }
 }

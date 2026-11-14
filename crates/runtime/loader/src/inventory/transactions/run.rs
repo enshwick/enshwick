@@ -2,10 +2,9 @@ use enshwick_core::abi::{InventoryOp, InventoryOpResult, InventoryRequest, Inven
 
 use crate::engine::memory::{read, read_ptr, write};
 
-use super::{
-    ACTOR_FLAG, DESC_AREA, Executor, Finished, NOTIFY_FLAGS, Request, Res, commits, fill,
-    renew_give,
-};
+use enshwick_core::__private::rules::inventory_checks::{fill, renew_give};
+
+use super::{ACTOR_FLAG, DESC_AREA, Executor, Finished, NOTIFY_FLAGS, Request, Res, commits};
 
 /// Runs one request as one transaction.
 ///

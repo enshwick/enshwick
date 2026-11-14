@@ -4,12 +4,13 @@ use std::sync::atomic::Ordering;
 
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickHandle};
+use enshwick_core::abi::{Event, EventFn, Header, Status, Str, TickHandle};
 
 use crate::engine::kept_text::keep;
 use crate::engine::loader::{Loader, ModRecord, Subscription};
-use crate::host::memory::{get_headed, put, put_headed, text};
-use crate::host::{caller, caller_index, calling, entry};
+use crate::host::layer::guards::{before_delivery, open};
+use crate::host::layer::{Asker, Headed, HeadedOut, Mod, Out, Rule, entries};
+use crate::host::memory::{headed_in, text};
 
 impl crate::base::points::Mods for Loader {
     fn find(&self, id: &str) -> Option<usize> {
@@ -54,6 +55,20 @@ pub(crate) fn unexported(
     crate::base::manifest::unexported(kind, name, &record.id, &provider.exports())
 }
 
+/// [`unexported`] as a refusal of the call.
+///
+/// # Errors
+///
+/// The [`Rule`] the unexported name breaks.
+pub(crate) fn exported(
+    loader: &Loader,
+    record: &ModRecord,
+    kind: crate::base::manifest::Kind,
+    name: &str,
+) -> Result<(), Rule> {
+    unexported(loader, record, kind, name).map_or(Ok(()), |reason| Err(Rule(reason)))
+}
+
 /// The name and layout of a service or event spec the safe layer passed.
 ///
 /// # Safety
@@ -72,202 +87,15 @@ pub(crate) unsafe fn spec_parts(
     Some((name, fields))
 }
 
-pub(crate) extern "system" fn publish(
-    me: ModHandle,
-    spec: *const api_frame::ServiceSpec,
-) -> Status {
-    entry("publish", || {
-        let (loader, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: a mod passes null or its version of the spec, and all of
-        // the spec is required.
-        let Some(spec) = (unsafe {
-            get_headed(
-                spec,
-                <api_frame::ServiceSpec as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
-        // fields and their names, readable and unchanged for the call.
-        let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
-            return Status::BAD_ARGS;
-        };
-        if spec.table.is_null() {
-            return Status::BAD_ARGS;
-        }
-        let published = crate::base::services::registry().publish(
-            index,
-            name,
-            spec.major,
-            fields,
-            spec.table.expose_provenance(),
-            loader,
-        );
-        match published {
-            Ok(()) => Status::OK,
-            Err(reason) => {
-                crate::engine::log::write(Level::WARN, &record.id, &reason.to_string());
-                Status::REFUSED
-            }
-        }
-    })
-}
-
-pub(crate) extern "system" fn service(
-    me: ModHandle,
-    wanted: *const api_frame::ServiceSpec,
-    out: *mut api_frame::ServiceFound,
-) -> Status {
-    entry("service", || {
-        let loader = match caller(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: a mod passes null or its version of the spec, and all of
-        // the spec is required.
-        let Some(wanted) = (unsafe {
-            get_headed(
-                wanted,
-                <api_frame::ServiceSpec as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
-        // fields and their names, readable and unchanged for the call.
-        let Some((name, fields)) = (unsafe { spec_parts(wanted.name, &wanted.layout) }) else {
-            return Status::BAD_ARGS;
-        };
-        let refused = loader.record(me).and_then(|(_, record)| {
-            unexported(loader, record, crate::base::manifest::Kind::Service, name)
-        });
-        let found = match refused {
-            Some(reason) => Err(crate::base::services::FindServiceError::Unexported { reason }),
-            None => crate::base::services::registry().find(name, wanted.major, &fields, loader),
-        };
-        let mut answer = api_frame::ServiceFound::EMPTY;
-        let status = match found {
-            Ok(found) => {
-                let (id, version) = crate::base::services::Names::name(loader, found.owner.get());
-                answer.table = core::ptr::with_exposed_provenance(found.table);
-                answer.fields = found.fields;
-                answer.owner = Str::new(keep(id));
-                answer.owner_version = Str::new(keep(version));
-                Status::OK
-            }
-            Err(refused) => {
-                answer.reason = Str::new(keep(&refused.to_string()));
-                refused.status()
-            }
-        };
-        // SAFETY: `HostApi::service` has the mod pass `out` null or pointing at
-        // its version of `ServiceFound`, writable for the size its header
-        // states, that no other thread touches during the call.
-        match unsafe { put_headed(out, answer) } {
-            Status::OK => status,
-            refused => refused,
-        }
-    })
-}
-
-pub(crate) extern "system" fn define_event(
-    me: ModHandle,
-    spec: *const api_frame::EventSpec,
-    out: *mut u32,
-) -> Status {
-    entry("define_event", || {
-        let (_, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if crate::base::services::sealed() {
-            return Status::TOO_LATE;
-        }
-        // SAFETY: a mod passes null or its version of the spec, and all of
-        // the spec is required.
-        let Some(spec) = (unsafe {
-            get_headed(
-                spec,
-                <api_frame::EventSpec as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
-        // fields and their names, readable and unchanged for the call.
-        let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
-            return Status::BAD_ARGS;
-        };
-        if out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        let defined = crate::base::services::registry().define(
-            index,
-            &record.id,
-            name,
-            fields,
-            spec.layout.size,
-        );
-        match defined {
-            // SAFETY: `HostApi::define_event` has the mod pass `out` null or
-            // pointing at a writable, aligned `u32` that no other thread
-            // touches during the call.
-            Ok(id) => unsafe { put(out, id) },
-            Err(reason) => {
-                crate::engine::log::write(Level::WARN, &record.id, &reason.to_string());
-                Status::REFUSED
-            }
-        }
-    })
-}
-
-pub(crate) extern "system" fn subscribe_event(
-    me: ModHandle,
-    spec: *const api_frame::EventSpec,
-    callback: api_frame::ModEventFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("subscribe_event", || {
-        let (loader, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if crate::base::services::sealed() {
-            return Status::TOO_LATE;
-        }
-        // SAFETY: a mod passes null or its version of the spec, and all of
-        // the spec is required.
-        let Some(spec) = (unsafe {
-            get_headed(
-                spec,
-                <api_frame::EventSpec as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
-        // fields and their names, readable and unchanged for the call.
-        let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
-            return Status::BAD_ARGS;
-        };
-        if let Some(reason) = unexported(loader, record, crate::base::manifest::Kind::Event, name) {
-            crate::engine::log::write(Level::WARN, &record.id, &reason);
-            return Status::REFUSED;
-        }
-        crate::base::services::registry().subscribe(
-            index,
-            name,
-            fields,
-            spec.layout.size,
-            callback,
-            user.expose_provenance(),
-        );
-        Status::OK
-    })
+/// [`spec_parts`] of a spec the mod passed, refused as a bad argument when it
+/// does not read.
+fn parts(
+    name: Str,
+    layout: &api_frame::Layout,
+) -> Result<(&str, crate::base::services::Fields), Status> {
+    // SAFETY: the ABI has the mod pass a spec's name and layout, with its
+    // fields and their names, readable and unchanged for the call.
+    unsafe { spec_parts(name, layout) }.ok_or(Status::BAD_ARGS)
 }
 
 /// The declaration a point spec carries; `None` for a bad one.
@@ -284,7 +112,7 @@ pub(crate) unsafe fn point_parts(
     // SAFETY: the caller guarantees `spec` null or readable for the size its
     // header gives, with no concurrent writer; all of the spec is required.
     let spec = unsafe {
-        get_headed(
+        headed_in(
             spec,
             <api_frame::PointSpec as enshwick_core::abi::Headed>::BORN,
         )
@@ -328,104 +156,124 @@ pub(crate) unsafe fn declared(
 /// - `raw` is null or points at `count` aligned `Str`s readable for the call.
 /// - Each string's bytes are borrowed and unchanged for the call.
 pub(crate) unsafe fn point_ids(raw: *const Str, count: u32) -> Option<Vec<String>> {
-    if count == 0 {
-        return Some(Vec::new());
-    }
-    if raw.is_null() {
-        return None;
-    }
-    // SAFETY: `raw` is non-null and `count` nonzero, checked just before; the
-    // caller guarantees `count` aligned `Str`s there, readable for the call.
-    let ids = unsafe { core::slice::from_raw_parts(raw, count as usize) };
+    // SAFETY: the caller guarantees `raw` null or `count` aligned `Str`s
+    // readable for the call, which is `list_in`'s need.
+    let ids = unsafe { crate::host::memory::list_in(raw, count as usize) }?;
     ids.iter().map(|id| text(*id).map(str::to_owned)).collect()
 }
 
-pub(crate) extern "system" fn define_point(
-    me: ModHandle,
-    spec: *const api_frame::PointSpec,
-    out: *mut api_frame::PointHandle,
-) -> Status {
-    entry("define_point", || {
-        let (_, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if crate::base::points::sealed() {
-            return Status::TOO_LATE;
+entries! {
+    fn publish(me as Mod, spec as Headed<api_frame::ServiceSpec>) -> Status {
+        let (name, fields) = parts(spec.name, &spec.layout)?;
+        if spec.table.is_null() {
+            return Err(Status::BAD_ARGS.into());
         }
-        // SAFETY: a mod passes null or its version of the spec, and all of
-        // the spec is required.
-        let Some(spec) = (unsafe {
-            get_headed(
-                spec,
-                <api_frame::PointSpec as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
+        crate::base::services::registry().publish(
+            me.index,
+            name,
+            spec.major,
+            fields,
+            spec.table.expose_provenance(),
+            me.loader,
+        )?;
+        Ok(())
+    }
+
+    fn service(
+        me as Asker,
+        wanted as Headed<api_frame::ServiceSpec>,
+        out as HeadedOut<api_frame::ServiceFound>,
+    ) -> Status {
+        let (loader, record) = (me.loader, me.record);
+        let (name, fields) = parts(wanted.name, &wanted.layout)?;
+        let refused = record.and_then(|record| {
+            unexported(loader, record, crate::base::manifest::Kind::Service, name)
+        });
+        let found = match refused {
+            Some(reason) => Err(crate::base::services::FindServiceError::Unexported { reason }),
+            None => crate::base::services::registry().find(name, wanted.major, &fields, loader),
         };
+        let mut answer = api_frame::ServiceFound::EMPTY;
+        let status = match found {
+            Ok(found) => {
+                let (id, version) = crate::base::services::Names::name(loader, found.owner.get());
+                answer.table = core::ptr::with_exposed_provenance(found.table);
+                answer.fields = found.fields;
+                answer.owner = Str::new(keep(id));
+                answer.owner_version = Str::new(keep(version));
+                Status::OK
+            }
+            Err(refused) => {
+                answer.reason = Str::new(keep(&refused.to_string()));
+                crate::host::layer::Refusal::status(&refused)
+            }
+        };
+        out.put(answer)?;
+        Ok(status)
+    }
+
+    fn define_event(me as Mod, spec as Headed<api_frame::EventSpec>, out as Out<u32>) -> Status {
+        open(crate::base::services::sealed())?;
+        let (name, fields) = parts(spec.name, &spec.layout)?;
+        let id = crate::base::services::registry().define(
+            me.index,
+            &me.record.id,
+            name,
+            fields,
+            spec.layout.size,
+        )?;
+        out.put(id)
+    }
+
+    fn subscribe_event(
+        me as Mod,
+        spec as Headed<api_frame::EventSpec>,
+        callback: api_frame::ModEventFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        open(crate::base::services::sealed())?;
+        let (name, fields) = parts(spec.name, &spec.layout)?;
+        exported(me.loader, me.record, crate::base::manifest::Kind::Event, name)?;
+        crate::base::services::registry().subscribe(
+            me.index,
+            name,
+            fields,
+            spec.layout.size,
+            callback,
+            user.expose_provenance(),
+        );
+        Ok(())
+    }
+
+    fn define_point(
+        me as Mod,
+        spec as Headed<api_frame::PointSpec>,
+        out as HeadedOut<api_frame::PointHandle>,
+    ) -> Status {
+        open(crate::base::points::sealed())?;
         // SAFETY: the ABI has the mod pass the spec's name and layouts, with
         // their fields and names, readable and unchanged for the call.
-        let Some(declared) = (unsafe { declared(&spec) }) else {
-            return Status::BAD_ARGS;
-        };
+        let declared = unsafe { declared(&spec) }.ok_or(Status::BAD_ARGS)?;
         // Checked before the point is defined: a point whose handle is lost
         // could never be asked, nor defined again.
-        // SAFETY: a non-null out pointer from a mod starts with its header.
-        // The mod's headed out struct, not game memory.
-        // ast-grep-ignore: game-memory-through-raw
-        let room = (!out.is_null()).then(|| unsafe { out.cast::<Header>().read_unaligned() }.size);
-        if room.is_none_or(|room| {
-            (room as usize) < <api_frame::PointHandle as enshwick_core::abi::Headed>::BORN
-        }) {
-            return Status::BAD_ARGS;
+        if !out.holds_born() {
+            return Err(Status::BAD_ARGS.into());
         }
-        let defined = crate::base::points::registry().define(index, &record.id, declared);
-        match defined {
-            // SAFETY: `HostApi::define_point` has the mod pass `out` null or
-            // pointing at its version of `PointHandle`, writable for the size
-            // its header states, that no other thread touches during the call.
-            Ok((id, live)) => unsafe {
-                put_headed(
-                    out,
-                    api_frame::PointHandle {
-                        header: Header::of::<api_frame::PointHandle>(),
-                        id,
-                        live,
-                    },
-                )
-            },
-            Err(reason) => {
-                crate::engine::log::write(Level::WARN, &record.id, &reason.to_string());
-                Status::REFUSED
-            }
-        }
-    })
-}
+        let (id, live) = crate::base::points::registry().define(me.index, &me.record.id, declared)?;
+        out.put(api_frame::PointHandle {
+            header: Header::of::<api_frame::PointHandle>(),
+            id,
+            live,
+        })
+    }
 
-pub(crate) extern "system" fn attach_point(
-    me: ModHandle,
-    link: *const api_frame::PointLink,
-    callback: api_frame::PointFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("attach_point", || {
-        let (loader, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if crate::base::points::sealed() {
-            return Status::TOO_LATE;
-        }
-        // SAFETY: a mod passes null or its version of the link, and all of
-        // the link is required.
-        let Some(link) = (unsafe {
-            get_headed(
-                link,
-                <api_frame::PointLink as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
+    fn attach_point(
+        me as Mod,
+        link as Headed<api_frame::PointLink>,
+        callback: api_frame::PointFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        open(crate::base::points::sealed())?;
         // SAFETY: the ABI has the mod pass `link.point` null or its version of
         // the spec, with its name and layouts readable and unchanged for the
         // call.
@@ -436,145 +284,79 @@ pub(crate) extern "system" fn attach_point(
         // SAFETY: the ABI has the mod pass `link.after` null or pointing at
         // `after_count` strings readable and unchanged for the call.
         let after = unsafe { point_ids(link.after, link.after_count) };
-        let parts = (declared, before, after);
-        let (Some(declared), Some(before), Some(after)) = parts else {
-            return Status::BAD_ARGS;
+        let (Some(declared), Some(before), Some(after)) = (declared, before, after) else {
+            return Err(Status::BAD_ARGS.into());
         };
-        let unmet = unexported(
-            loader,
-            record,
-            crate::base::manifest::Kind::Point,
-            &declared.name,
-        )
-        .or_else(|| {
-            let owner = required_owner(record, &declared.name)?;
-            let reason = crate::base::points::registry().unlinkable(&declared, loader)?;
-            Some(format!(
+        exported(me.loader, me.record, crate::base::manifest::Kind::Point, &declared.name)?;
+        if let Some(owner) = required_owner(me.record, &declared.name)
+            && let Some(reason) = crate::base::points::registry().unlinkable(&declared, me.loader)
+        {
+            return Err(Rule(format!(
                 "point {}: this mod requires {owner}, and the link cannot match: {reason}",
                 declared.name
             ))
-        });
-        if let Some(reason) = unmet {
-            crate::engine::log::write(Level::WARN, &record.id, &reason);
-            return Status::REFUSED;
+            .into());
         }
-        let attached = crate::base::points::registry().attach(crate::base::points::Pending {
-            owner: index,
+        crate::base::points::registry().attach(crate::base::points::Pending {
+            owner: me.index,
             declared,
             priority: link.priority,
             before,
             after,
             callback,
             user: user.expose_provenance(),
-        });
-        match attached {
-            Ok(()) => Status::OK,
-            Err(reason) => {
-                crate::engine::log::write(Level::WARN, &record.id, &reason.to_string());
-                Status::REFUSED
-            }
-        }
-    })
-}
+        })?;
+        Ok(())
+    }
 
-pub(crate) extern "system" fn run_point(
-    me: ModHandle,
-    point: u32,
-    input: *const core::ffi::c_void,
-    value: *mut core::ffi::c_void,
-    verdict: *mut api_frame::PointVerdict,
-) -> Status {
-    entry("run_point", || {
-        let index = match caller_index(me) {
-            Ok((_, index)) => index,
-            Err(status) => return status,
-        };
-        match crate::base::points::run(index.get(), point, input, value) {
-            // SAFETY: `HostApi::run_point` has the mod pass `verdict` null or
-            // pointing at a writable, aligned `PointVerdict` that no other
-            // thread touches during the call.
-            Ok(answer) => unsafe { put(verdict, answer) },
-            Err(status) => status,
-        }
-    })
-}
+    fn run_point(
+        me as Mod,
+        point: u32,
+        input: *const core::ffi::c_void,
+        value: *mut core::ffi::c_void,
+        verdict as Out<api_frame::PointVerdict>,
+    ) -> Status {
+        verdict.put(crate::base::points::run(me.index.get(), point, input, value)?)
+    }
 
-pub(crate) extern "system" fn send_event(
-    me: ModHandle,
-    event: u32,
-    data: *const core::ffi::c_void,
-) -> Status {
-    entry("send_event", || match caller_index(me) {
-        Ok((_, index)) => crate::base::services::send(index.get(), event, data),
-        Err(status) => status,
-    })
-}
+    fn send_event(me as Mod, event: u32, data: *const core::ffi::c_void) -> Status {
+        Ok(crate::base::services::send(me.index.get(), event, data))
+    }
 
-pub(crate) extern "system" fn subscribe(
-    me: ModHandle,
-    event: Event,
-    callback: EventFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("subscribe", || {
-        let (loader, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
+    fn subscribe(
+        me as Mod,
+        event: Event,
+        callback: EventFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
         if !(Event::SETTINGS_CHANGED.0..=Event::PROGRESS_WRITTEN.0).contains(&event.0) {
-            return Status::MISSING;
+            return Err(Status::MISSING.into());
         }
-        let subscription = Subscription {
-            owner: index,
+        before_delivery(me.loader)?;
+        me.loader.subscriptions.relock().push(Subscription {
+            owner: me.index,
             event,
             callback,
             user: user.expose_provenance(),
-        };
-        if loader.delivery.get().is_some() {
-            return Status::TOO_LATE;
-        }
-        let mut subscriptions = loader.subscriptions.relock();
-        subscriptions.push(subscription);
-        Status::OK
-    })
-}
+        });
+        Ok(())
+    }
 
-pub(crate) extern "system" fn subscribe_tick(
-    me: ModHandle,
-    every_nanos: u64,
-    callback: EventFn,
-    user: *mut core::ffi::c_void,
-    out: *mut TickHandle,
-) -> Status {
-    entry("subscribe_tick", || {
-        let (loader, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        if loader.delivery.get().is_some() {
-            return Status::TOO_LATE;
-        }
-        let Some(handle) = crate::engine::ticks::TICKS.add(index, every_nanos, callback, user)
-        else {
-            return Status::REFUSED;
-        };
-        // SAFETY: `out` is non-null by the check before it and, by
-        // `HostApi::subscribe_tick`, the caller's and writable for a handle.
-        unsafe { out.write_unaligned(handle) };
-        Status::OK
-    })
-}
+    fn subscribe_tick(
+        me as Mod,
+        every_nanos: u64,
+        callback: EventFn,
+        user: *mut core::ffi::c_void,
+        out as Out<TickHandle>,
+    ) -> Status {
+        before_delivery(me.loader)?;
+        let handle = crate::engine::ticks::TICKS
+            .add(me.index, every_nanos, callback, user)
+            .ok_or(Status::REFUSED)?;
+        out.put(handle)
+    }
 
-pub(crate) extern "system" fn set_tick_every(
-    me: ModHandle,
-    handle: TickHandle,
-    every_nanos: u64,
-) -> Status {
-    entry("set_tick_every", || match calling(me) {
-        Ok((_, index, _)) => crate::engine::ticks::TICKS.set_every(handle, index, every_nanos),
-        Err(status) => status,
-    })
+    fn set_tick_every(me as Mod, handle: TickHandle, every_nanos: u64) -> Status {
+        Ok(crate::engine::ticks::TICKS.set_every(handle, me.index, every_nanos))
+    }
 }

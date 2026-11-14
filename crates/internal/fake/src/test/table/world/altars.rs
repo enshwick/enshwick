@@ -4,7 +4,7 @@
 use core::ffi::c_void;
 
 use crate::test::BaseCode;
-use crate::test::table::base::mods::list;
+use crate::test::table::base::io::list;
 use crate::test::table::{Registered, put, with};
 use enshwick_core::abi::{
     AltarInfo, AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BuildingZoneCheckFn, Header,

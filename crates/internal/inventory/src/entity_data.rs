@@ -177,13 +177,12 @@ where
             bytes.as_ptr(),
             u32::try_from(bytes.len()).unwrap_or(u32::MAX),
         );
+        // Entity data runs on the server's game thread and names an entity,
+        // which item data does not.
         match status {
-            Status::OK => Ok(()),
-            Status::REFUSED | Status::WRONG_THREAD => Err(SetError::NotServer),
-            Status::MISSING => Err(SetError::NoWorld),
+            Status::WRONG_THREAD => Err(SetError::NotServer),
             Status::BAD_ARGS => Err(SetError::NoEntity),
-            Status::NOT_KEPT => Err(SetError::NotKept),
-            other => Err(SetError::Refused(other.0)),
+            status => enshwick_base::load::outcome(status),
         }
     }
 }

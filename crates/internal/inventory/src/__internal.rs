@@ -8,6 +8,11 @@ pub use crate::damage::script::ScriptDamage;
 /// The lookup a script's handler gets from `Load::on_survivor_lookup_script`.
 pub use crate::survivors::script::ScriptLookup;
 
+/// What the loader and the fake host refuse in an inventory request.
+pub mod inventory_checks {
+    pub use crate::inventory::checks::*;
+}
+
 /// Adds `drop` to random loot as `Load::add_loot` does, in the drops of
 /// `group`, a data pack's, which [`replace_loot_group`] replaces.
 ///

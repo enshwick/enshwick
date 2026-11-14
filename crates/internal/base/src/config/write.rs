@@ -73,7 +73,7 @@ pub(super) fn write(
         Str::new(key),
         Str::new(&value),
     );
-    SetSettingError::check(status)
+    crate::load::outcome::<SetSettingError>(status)
 }
 
 /// Why [`set`] wrote nothing; the file stays as it was and the mod's log
@@ -109,15 +109,13 @@ pub enum SetSettingError {
     Refused,
 }
 
-impl SetSettingError {
-    /// The outcome of `HostApi::config_set`.
-    fn check(status: Status) -> Result<(), Self> {
+impl crate::load::StatusError for SetSettingError {
+    fn of(status: Status) -> Self {
         match status {
-            Status::OK => Ok(()),
-            Status::UNAVAILABLE => Err(Self::NoWorld),
-            Status::MISSING => Err(Self::NoSetting),
-            Status::BAD_ARGS => Err(Self::BadValue),
-            _ => Err(Self::Refused),
+            Status::UNAVAILABLE => Self::NoWorld,
+            Status::MISSING => Self::NoSetting,
+            Status::BAD_ARGS => Self::BadValue,
+            _ => Self::Refused,
         }
     }
 }
@@ -135,22 +133,22 @@ mod tests {
 
     #[test]
     fn each_status_of_the_write_reads_as_its_outcome() {
-        assert_eq!(SetSettingError::check(Status::OK), Ok(()));
+        assert_eq!(crate::load::outcome::<SetSettingError>(Status::OK), Ok(()));
         assert_eq!(
-            SetSettingError::check(Status::UNAVAILABLE),
+            crate::load::outcome::<SetSettingError>(Status::UNAVAILABLE),
             Err(SetSettingError::NoWorld)
         );
         assert_eq!(
-            SetSettingError::check(Status::MISSING),
+            crate::load::outcome::<SetSettingError>(Status::MISSING),
             Err(SetSettingError::NoSetting)
         );
         assert_eq!(
-            SetSettingError::check(Status::BAD_ARGS),
+            crate::load::outcome::<SetSettingError>(Status::BAD_ARGS),
             Err(SetSettingError::BadValue)
         );
         for status in [Status::REFUSED, Status::FAULTED, Status(99)] {
             assert_eq!(
-                SetSettingError::check(status),
+                crate::load::outcome::<SetSettingError>(status),
                 Err(SetSettingError::Refused)
             );
         }

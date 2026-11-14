@@ -37,6 +37,14 @@ mod start;
 pub use engine::pages::{forget as forget_read_only, read_only};
 #[cfg(windows)]
 pub use parts::table_ids;
+
+/// The loader's `HostApi` table, for the benchmark of one entry call.
+#[cfg(windows)]
+#[doc(hidden)]
+#[must_use]
+pub fn host_api() -> &'static enshwick_core::abi::HostApi {
+    &host::API
+}
 #[cfg(windows)]
 pub use start::{DryMod, DryRun, DryRunError, dry_run};
 

@@ -166,20 +166,24 @@ pub fn run(line: &str, caller: &Caller) -> Result<Outcome, RunCommandError> {
         u32::from(caller.permissions),
         &raw mut out,
     );
-    match status {
-        Status::OK => {
-            // SAFETY: the reply's text stays valid until the next call on this
-            // thread, and it is copied at once.
-            let text = unsafe { out.text.as_str() }.unwrap_or("");
-            Ok(if out.done == 1 {
-                Outcome::done(text)
-            } else {
-                Outcome::refused(text)
-            })
+    enshwick_base::load::outcome::<RunCommandError>(status)?;
+    // SAFETY: the reply's text stays valid until the next call on this
+    // thread, and it is copied at once.
+    let text = unsafe { out.text.as_str() }.unwrap_or("");
+    Ok(if out.done == 1 {
+        Outcome::done(text)
+    } else {
+        Outcome::refused(text)
+    })
+}
+
+impl enshwick_base::load::StatusError for RunCommandError {
+    fn of(status: Status) -> Self {
+        match status {
+            Status::MISSING => Self::Unknown,
+            Status::WRONG_THREAD => Self::NotOnGameThread,
+            _ => Self::Refused(status.0),
         }
-        Status::MISSING => Err(RunCommandError::Unknown),
-        Status::WRONG_THREAD => Err(RunCommandError::NotOnGameThread),
-        other => Err(RunCommandError::Refused(other.0)),
     }
 }
 

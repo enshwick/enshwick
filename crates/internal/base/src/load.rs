@@ -331,6 +331,30 @@ pub fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> Result<
     }
 }
 
+/// A domain's error for a status the loader answered: the statuses the
+/// domain tells apart, and its error for every other.
+#[doc(hidden)]
+pub trait StatusError: Sized {
+    /// The error for `status`, any but [`Status::OK`]: one the domain tells
+    /// apart, or its error for the rest, a newer loader's included.
+    fn of(status: Status) -> Self;
+}
+
+/// The outcome `status` stands for in a domain whose error is `E`: `Ok` for
+/// [`Status::OK`], `E`'s error for a status it knows, and for any other,
+/// one this mod's build may not know, `E`'s failure.
+///
+/// # Errors
+///
+/// `E`'s error for any status but [`Status::OK`].
+#[doc(hidden)]
+pub fn outcome<E: StatusError>(status: Status) -> Result<(), E> {
+    if status.is_ok() {
+        return Ok(());
+    }
+    Err(E::of(status))
+}
+
 /// Hands `value` to the loader through `register` as its user pointer, which
 /// the loader keeps for the life of the process once it accepts it.
 ///

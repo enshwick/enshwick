@@ -1,261 +1,109 @@
 //! Host functions for the mod's interface.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{ModHandle, Side, Status};
+use enshwick_core::abi::Status;
 
-use crate::host::memory::{get_headed, get_headed_list, put, put_headed};
-use crate::host::{caller, caller_index, entry};
+use crate::host::layer::guards::on_client;
+use crate::host::layer::{
+    Caller, Headed, HeadedInOut, HeadedList, HeadedOut, MaybeBuffer, Mod, Out, SizedListOut,
+    checked, entries,
+};
 
-pub(crate) extern "system" fn local_held(me: ModHandle, out: *mut u64) -> Status {
-    entry("local_held", || {
-        if out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        let loader = match caller(me) {
-            Ok(loader) => loader,
-            Err(status) => return status,
-        };
-        if loader.side != Side::CLIENT {
-            return Status::MISSING;
-        }
-        match crate::actions::local_held::held() {
-            // SAFETY: `HostApi::local_held` has the mod pass `out` pointing at
-            // a writable, aligned `u64` that no other thread touches during
-            // the call, non-null by the check above.
-            Ok(bits) => unsafe { put(out, bits) },
-            Err(status) => status,
-        }
-    })
-}
+entries! {
+    fn local_held(loader as Caller, out as Out<u64>) -> Status {
+        on_client(loader)?;
+        out.put(crate::actions::local_held::held()?)
+    }
 
-pub(crate) extern "system" fn ui_frame(
-    me: ModHandle,
-    callback: api_frame::UiFrameFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("ui_frame", || match caller_index(me) {
-        Ok((loader, index)) => crate::ui::interface::register_frame(loader, index, callback, user),
-        Err(status) => status,
-    })
-}
+    fn ui_frame(me as Mod, callback: api_frame::UiFrameFn, user: *mut core::ffi::c_void) -> Status {
+        checked(crate::ui::interface::register_frame(me.loader, me.index, callback, user))
+    }
 
-pub(crate) extern "system" fn ui_widget(
-    me: ModHandle,
-    frame: u64,
-    widget: *mut api_frame::UiWidget,
-) -> Status {
-    entry("ui_widget", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: a mod passes null or its version of the widget, and all of
-        // it is required.
-        let Some(mut copy) = (unsafe {
-            get_headed(
-                widget,
-                <api_frame::UiWidget as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        let status = crate::ui::interface::widget(loader, index, frame, &mut copy);
-        // SAFETY: `HostApi::ui_widget` has the mod pass `widget` null or
-        // pointing at its version of `UiWidget`, writable for the size its
-        // header states, that no other thread touches during the call.
-        match unsafe { put_headed(widget, copy) } {
-            Status::OK => status,
-            refused => refused,
-        }
-    })
-}
+    fn ui_widget(me as Mod, frame: u64, widget as HeadedInOut<api_frame::UiWidget>) -> Status {
+        let (mut copy, slot) = widget;
+        let status = crate::ui::interface::widget(me.loader, me.index, frame, &mut copy);
+        slot.put(copy)?;
+        Ok(status)
+    }
 
-pub(crate) extern "system" fn ui_hud(
-    me: ModHandle,
-    callback: api_frame::UiFrameFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("ui_hud", || match caller_index(me) {
-        Ok((loader, index)) => crate::ui::interface::register_hud(loader, index, callback, user),
-        Err(status) => status,
-    })
-}
+    fn ui_hud(me as Mod, callback: api_frame::UiFrameFn, user: *mut core::ffi::c_void) -> Status {
+        checked(crate::ui::interface::register_hud(me.loader, me.index, callback, user))
+    }
 
-pub(crate) extern "system" fn ui_extension(
-    me: ModHandle,
-    spec: *const api_frame::UiExtension,
-    callback: api_frame::UiFrameFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("ui_extension", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: `HostApi::ui_extension` has the mod pass `spec` null or
-        // readable for the size its header gives, with no other writer
-        // during the call, and all of it is required.
-        let Some(spec) = (unsafe {
-            get_headed(
-                spec,
-                <api_frame::UiExtension as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
+    fn ui_extension(
+        me as Mod,
+        spec as Headed<api_frame::UiExtension>,
+        callback: api_frame::UiFrameFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
         // SAFETY: the mod's screen name stays alive and unchanged for this
         // call by the ABI's borrow rule; `register_extension` resolves it
         // before it returns.
-        let Some(screen) = (unsafe { spec.screen.as_str() }) else {
-            return Status::BAD_ARGS;
-        };
+        let screen = unsafe { spec.screen.as_str() }.ok_or(Status::BAD_ARGS)?;
         // SAFETY: `HostApi::ui_extension` has the mod pass `hosts` null or
         // readable for `host_count` GUIDs for the call, which
         // `register_extension` copies before it returns.
-        let Some(hosts) = (unsafe { spec.host_list() }) else {
-            return Status::BAD_ARGS;
-        };
-        crate::ui::interface::register_extension(
-            loader, index, screen, spec.edge, hosts, callback, user,
-        )
-    })
-}
+        let hosts = unsafe { spec.host_list() }.ok_or(Status::BAD_ARGS)?;
+        checked(crate::ui::interface::register_extension(
+            me.loader, me.index, screen, spec.edge, hosts, callback, user,
+        ))
+    }
 
-pub(crate) extern "system" fn ui_markers(
-    me: ModHandle,
-    markers: *const api_frame::UiMarker,
-    count: u32,
-) -> Status {
-    entry("ui_markers", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if loader.side != Side::CLIENT {
-            return Status::MISSING;
-        }
-        // SAFETY: a mod passes `count` markers of its version, valid for the
-        // call, and all of a marker is required.
-        let Some(given) = (unsafe {
-            get_headed_list(
-                markers,
-                count,
-                <api_frame::UiMarker as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        if given.iter().any(|m| m.marker_type != 0) {
-            let types = match crate::world::scene::marker_types(loader) {
-                Ok(types) => types,
-                Err(status) => return status,
-            };
+    fn ui_markers(me as Mod, [markers, count] as HeadedList<api_frame::UiMarker>) -> Status {
+        on_client(me.loader)?;
+        if markers.iter().any(|m| m.marker_type != 0) {
+            let types = crate::world::scene::marker_types(me.loader)?;
             let listed = |id: u32| types.iter().any(|t| t.marker_id == id);
-            if given
+            if markers
                 .iter()
                 .any(|m| m.marker_type != 0 && !listed(m.marker_type))
             {
-                return Status::BAD_ARGS;
+                return Err(Status::BAD_ARGS.into());
             }
         }
-        crate::ui::interface::set_markers(index, &given)
-    })
-}
+        checked(crate::ui::interface::set_markers(me.index, &markers))
+    }
 
-pub(crate) extern "system" fn map_marker_types(
-    me: ModHandle,
-    out: *mut api_frame::MapMarkerTypeInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("map_marker_types", || {
-        let types = match caller_index(me)
-            .and_then(|(loader, _)| crate::world::scene::marker_types(loader))
-        {
-            Ok(types) => types,
-            Err(status) => return status,
-        };
-        // SAFETY: the ABI has the mod pass `out` null or writable for
-        // `capacity` entries of `entry_size` bytes and `count` null or a
-        // writable `u32`, untouched by the mod during the call.
-        unsafe { crate::host::memory::list(&types, out, entry_size, capacity, count) }
-    })
-}
+    fn map_marker_types(
+        me as Mod,
+        [out, entry_size, capacity, count] as SizedListOut<api_frame::MapMarkerTypeInfo>,
+    ) -> Status {
+        out.put(&crate::world::scene::marker_types(me.loader)?)
+    }
 
-pub(crate) extern "system" fn ui_dialog(
-    me: ModHandle,
-    dialog: *const api_frame::UiDialog,
-    callback: api_frame::UiAnswerFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("ui_dialog", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: a mod passes null or its version of the dialog, and all of
-        // it is required.
-        let Some(dialog) = (unsafe {
-            get_headed(
-                dialog,
-                <api_frame::UiDialog as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        crate::ui::interface::mod_dialog(loader, index, &dialog, callback, user)
-    })
-}
+    fn ui_dialog(
+        me as Mod,
+        dialog as Headed<api_frame::UiDialog>,
+        callback: api_frame::UiAnswerFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        checked(crate::ui::interface::mod_dialog(me.loader, me.index, &dialog, callback, user))
+    }
 
-pub(crate) extern "system" fn fog_open(me: ModHandle) -> Status {
-    entry("fog_open", || match caller_index(me) {
-        Ok((loader, index)) => crate::world::fog::open(loader, index),
-        Err(status) => status,
-    })
-}
+    fn fog_open(me as Mod) -> Status {
+        checked(crate::world::fog::open(me.loader, me.index))
+    }
 
-pub(crate) extern "system" fn fog_read(
-    me: ModHandle,
-    info: *mut api_frame::FogInfo,
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    out: *mut u8,
-    capacity: u32,
-) -> Status {
-    entry("fog_read", || {
-        let index = match caller_index(me) {
-            Ok((_, index)) => index,
-            Err(status) => return status,
-        };
-        if info.is_null() {
-            return Status::BAD_ARGS;
-        }
-        let wanted = width != 0 && height != 0;
-        let Ok(len) = usize::try_from(capacity) else {
-            return Status::BAD_ARGS;
-        };
-        let out: &mut [u8] = if !wanted {
-            &mut []
-        } else if out.is_null() {
-            return Status::BAD_ARGS;
-        } else {
-            // SAFETY: `HostApi::fog_read` has the mod pass `capacity`
-            // writable bytes at a non-null (checked earlier) `out`, untouched
-            // by the mod during the call.
-            unsafe { core::slice::from_raw_parts_mut(out, len) }
+    fn fog_read(
+        me as Mod,
+        info as HeadedOut<api_frame::FogInfo>,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        [out, capacity] as MaybeBuffer<u8>,
+    ) -> Status {
+        let out: &mut [u8] = match out {
+            _ if width == 0 || height == 0 => &mut [],
+            Some(out) => out,
+            None => return Err(Status::BAD_ARGS.into()),
         };
         let mut found = api_frame::FogInfo::EMPTY;
-        let status = crate::world::fog::read(index, &mut found, [x, y], [width, height], out);
+        let status = crate::world::fog::read(me.index, &mut found, [x, y], [width, height], out);
         if status == Status::REFUSED || status == Status::MISSING {
-            return status;
+            return Err(status.into());
         }
-        // SAFETY: `HostApi::fog_read` has the mod pass `info` pointing at
-        // its version of `FogInfo` (non-null, checked earlier), writable for
-        // the size its header states and untouched by the mod meanwhile.
-        let written = unsafe { put_headed(info, found) };
-        if written.is_ok() { status } else { written }
-    })
+        info.put(found)?;
+        Ok(status)
+    }
 }

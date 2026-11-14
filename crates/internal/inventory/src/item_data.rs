@@ -214,12 +214,17 @@ where
             bytes.as_ptr(),
             u32::try_from(bytes.len()).unwrap_or(u32::MAX),
         );
+        enshwick_base::load::outcome(status)
+    }
+}
+
+impl enshwick_base::load::StatusError for SetError {
+    fn of(status: Status) -> Self {
         match status {
-            Status::OK => Ok(()),
-            Status::REFUSED => Err(SetError::NotServer),
-            Status::MISSING => Err(SetError::NoWorld),
-            Status::NOT_KEPT => Err(SetError::NotKept),
-            other => Err(SetError::Refused(other.0)),
+            Status::REFUSED => Self::NotServer,
+            Status::MISSING => Self::NoWorld,
+            Status::NOT_KEPT => Self::NotKept,
+            _ => Self::Refused(status.0),
         }
     }
 }

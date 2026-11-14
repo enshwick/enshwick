@@ -411,7 +411,7 @@ pub(crate) extern "system" fn map_markers(
     let Some(markers) = markers else {
         return Status::NOT_LOADED;
     };
-    crate::test::table::base::mods::list(&markers, out, entry_size, capacity, count)
+    crate::test::table::base::io::list(&markers, out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn map_frame(

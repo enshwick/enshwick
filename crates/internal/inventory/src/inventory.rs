@@ -70,6 +70,8 @@ impl LoadMethods for crate::BaseLoad {
     }
 }
 
+#[doc(hidden)]
+pub(crate) mod checks;
 mod ops;
 mod read;
 mod results;

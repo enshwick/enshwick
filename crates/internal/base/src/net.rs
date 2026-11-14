@@ -275,11 +275,22 @@ fn send_raw(host: Host, id: u32, peer: PlayerKey, bytes: &[u8]) -> Result<(), Se
     }
     let api = host.api();
     let size = u32::try_from(bytes.len()).map_err(|_| SendError::TooLarge)?;
-    match (api.net_send)(host.handle(), id, peer, bytes.as_ptr(), size) {
-        Status::OK => Ok(()),
-        Status::MISSING => Err(SendError::NotReady),
-        Status::REFUSED => Err(SendError::OverRate),
-        _ => Err(SendError::Refused),
+    crate::load::outcome((api.net_send)(
+        host.handle(),
+        id,
+        peer,
+        bytes.as_ptr(),
+        size,
+    ))
+}
+
+impl crate::load::StatusError for SendError {
+    fn of(status: Status) -> Self {
+        match status {
+            Status::MISSING => Self::NotReady,
+            Status::REFUSED => Self::OverRate,
+            _ => Self::Refused,
+        }
     }
 }
 
