@@ -75,16 +75,16 @@ impl Skip {
     /// screen and the chat line at world load show it.
     #[must_use]
     pub fn shown(&self) -> String {
-        use crate::engine::texts::{fill, text};
+        use crate::engine::texts::fill;
         match self {
             Self::SecondMod { other } => fill("mods.skipped.second", &[("other", other)]),
             Self::OtherAbi(_) | Self::Manifest(ManifestError::OtherAbi(_)) => {
-                text("mods.skipped.abi").to_owned()
+                fill("mods.skipped.abi", &[])
             }
-            Self::NotAMod | Self::Manifest(_) => text("mods.skipped.broken").to_owned(),
+            Self::NotAMod | Self::Manifest(_) => fill("mods.skipped.broken", &[]),
             Self::Unloadable { code, error } => match errors::load_hint(*code) {
-                Some(errors::LoadHint::NotWindows64) => text("mods.skipped.not-64-bit").to_owned(),
-                Some(errors::LoadHint::MissingDll) => text("mods.skipped.needs-dll").to_owned(),
+                Some(errors::LoadHint::NotWindows64) => fill("mods.skipped.not-64-bit", &[]),
+                Some(errors::LoadHint::MissingDll) => fill("mods.skipped.needs-dll", &[]),
                 None => fill("mods.skipped.unloadable", &[("error", error)]),
             },
             Self::Duplicate { id, .. } => fill("mods.skipped.copy", &[("id", id)]),
