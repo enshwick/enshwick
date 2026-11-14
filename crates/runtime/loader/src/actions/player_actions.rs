@@ -92,7 +92,8 @@ impl Question {
 
 /// Asks `registered` its `question` about `player`, with the action, its
 /// arguments and the word that named the mod in a typed line, and the
-/// object `target` the run names; the answer.
+/// object `target` the run names; the answer, or `None` when the mod
+/// turned off since [`running`] listed it.
 fn ask(
     registered: Registered,
     question: Question,
@@ -100,7 +101,7 @@ fn ask(
     language: u32,
     (action, args, word): (&str, &str, &str),
     target: ActionTarget,
-) -> Answer {
+) -> Option<Answer> {
     let kind = question.kind;
     let mut written: ActionReply = bytemuck::Zeroable::zeroed();
     let call = ActionCall {
@@ -121,7 +122,7 @@ fn ask(
         reason: question.reason,
     };
     let mut reply = Str::EMPTY;
-    let _asked = crate::engine::filters::ask(
+    crate::engine::filters::ask(
         [&registered],
         crate::engine::profile::Feature::Actions,
         |callback| {
@@ -133,33 +134,33 @@ fn ask(
             });
             core::ops::ControlFlow::Break(())
         },
-    );
+    )?;
     if written.header.size != 0 {
         // SAFETY: the mod wrote the reply, whose text stays valid until the
         // callback runs again.
         let text = unsafe { written.text.as_str() }.unwrap_or("").to_owned();
-        return Answer {
+        return Some(Answer {
             done: written.done == 1,
             text,
-        };
+        });
     }
     // SAFETY: the reply stays valid until the callback runs again.
     let text = unsafe { reply.as_str() }.unwrap_or("");
     if answers_text(kind) {
-        return Answer {
+        return Some(Answer {
             done: true,
             text: text.to_owned(),
-        };
+        });
     }
     // A mod built before ABI 11.19 answers a run as `1` or `0` and the text.
     let (done, text) = match text.split_at_checked(1) {
         Some((flag, text)) => (flag == "1", text),
         None => (false, ""),
     };
-    Answer {
+    Some(Answer {
         done,
         text: text.to_owned(),
-    }
+    })
 }
 
 /// Whether a mod answers question `kind` with a text alone, a sheet or a
@@ -186,7 +187,7 @@ pub(crate) fn window(
         language,
         (id, "", ""),
         ActionTarget::NONE,
-    );
+    )?;
     Some(answer.text)
 }
 
@@ -227,14 +228,14 @@ pub(crate) fn command(
     (word, rest): (&str, &str),
 ) -> Option<Answer> {
     let registered = running(loader).find(|r| r.owner == owner)?;
-    Some(ask(
+    ask(
         registered,
         Question::of(path.kind()),
         caller,
         language,
         (rest, "", word),
         ActionTarget::NONE,
-    ))
+    )
 }
 
 /// Tells the mods that the client of account `key` closed mod `owner`'s
@@ -281,7 +282,7 @@ pub(crate) fn allowed(
         0,
         ("", "", ""),
         ActionTarget::NONE,
-    );
+    )?;
     Some(sheet_ids(&sheet.text))
 }
 
@@ -417,7 +418,8 @@ fn admitted_run(
         crate::base::net::language_number(key),
         (action, args, ""),
         target,
-    );
+    )
+    .ok_or(Refusal::Unavailable)?;
     crate::ui::windows::ran(registered.owner, key);
     crate::log!(
         DEBUG,
@@ -515,6 +517,29 @@ mod tests {
             .off
             .store(true, core::sync::atomic::Ordering::Release);
         assert!(owners(&registered).is_empty(), "a mod turned off");
+    }
+
+    #[test]
+    fn a_mod_that_turned_off_after_it_was_listed_gives_no_answer() {
+        let player = PlayerInfo::without_character(enshwick_core::PlayerKey::new(1), 0, "");
+        let asked = |owner| {
+            let registered = Registered {
+                owner,
+                callback: answer,
+                user: 0,
+            };
+            ask(
+                registered,
+                Question::of(ActionCall::WINDOW),
+                &player,
+                0,
+                ("", "", ""),
+                ActionTarget::NONE,
+            )
+        };
+        // Without a running loader every mod counts as off.
+        assert!(asked(ModIndex::new(0)).is_none());
+        assert!(asked(ModIndex::LOADER).is_some_and(|answer| answer.text.is_empty()));
     }
 
     #[test]

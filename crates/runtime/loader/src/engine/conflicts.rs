@@ -86,8 +86,9 @@ thread_local! {
     static WRITTEN: RefCell<FxHashSet<(u32, ModIndex)>> = RefCell::default();
 }
 
-/// Records mod `owner`'s claim on `feature`, granted or refused; a call that
-/// failed for another reason is no claim and is not noted.
+/// Records mod `owner`'s claim on `feature`, granted or refused. Every call
+/// is noted, so the caller passes only grants and refusals: a call that
+/// failed for another reason is no claim.
 pub fn note(feature: impl Into<Cow<'static, str>>, owner: ModIndex, mode: Mode, granted: bool) {
     STATE.relock().claims.push(Claim {
         feature: feature.into(),

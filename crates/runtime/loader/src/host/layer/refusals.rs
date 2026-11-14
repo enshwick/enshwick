@@ -962,3 +962,6 @@ impl Refusal for crate::actions::chat_mute::SetMuteError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

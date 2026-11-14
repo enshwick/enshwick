@@ -151,9 +151,9 @@ pub(crate) fn item_lines(pide: u32, item: u32) -> Result<Vec<ItemLine>, StatsErr
 /// The text key and rarity of affix `affix`.
 pub(crate) fn affix_info(affix: u32) -> Result<(Str, u8), StatsError> {
     let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
-    let affix = sealed
-        .affixes
-        .get(usize::try_from(affix).map_err(|_| StatsError::BadStat)?)
+    let affix = usize::try_from(affix)
+        .ok()
+        .and_then(|affix| sealed.affixes.get(affix))
         .ok_or(StatsError::NoAffix)?;
     // The affixes live as long as the process, so their text does too.
     Ok((Str::new(&affix.text), affix.def.rarity.to_raw()))

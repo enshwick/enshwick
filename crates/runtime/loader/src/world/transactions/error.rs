@@ -81,7 +81,7 @@ pub(crate) enum TransactionError {
     Terrain(TerrainError),
     /// The actor's build rights, unreadable now.
     #[error(transparent)]
-    Rights(#[from] RightsError),
+    Rights(RightsError),
     /// The item the change places, unreadable now.
     #[cfg(windows)]
     #[error(transparent)]
@@ -117,6 +117,18 @@ impl From<VoxelError> for TransactionError {
     }
 }
 
+/// The server's world unreadable for the rights check is the same reason as
+/// for any other read; the rest is the rights'.
+impl From<RightsError> for TransactionError {
+    fn from(error: RightsError) -> Self {
+        match error {
+            #[cfg(windows)]
+            RightsError::World(error) => Self::World(error),
+            other => Self::Rights(other),
+        }
+    }
+}
+
 /// As [`From<VoxelError>`], through the edit's own reasons.
 #[cfg(windows)]
 impl From<TerrainError> for TransactionError {
@@ -127,5 +139,26 @@ impl From<TerrainError> for TransactionError {
             TerrainError::World(error) => Self::World(error),
             other => Self::Terrain(other),
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(windows)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unreadable_world_is_one_reason_whichever_read_met_it() {
+        let world = WorldError::InStep;
+        let reasons = [
+            TransactionError::from(RightsError::World(world)),
+            TransactionError::from(VoxelError::World(world)),
+            TransactionError::from(TerrainError::World(world)),
+        ];
+        assert_eq!(reasons, [TransactionError::World(world); 3]);
+        assert_eq!(
+            TransactionError::from(RightsError::NoZones),
+            TransactionError::Rights(RightsError::NoZones)
+        );
     }
 }

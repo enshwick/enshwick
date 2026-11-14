@@ -291,9 +291,10 @@ pub(crate) fn to_one_player() -> bool {
     !ONE_FUSE.is_off()
 }
 
-/// Chat lines are not carried: this build lacks the chat's layout.
+// Chat lines are not carried: the chat is not linked yet, or this build
+/// lacks its layout.
 #[derive(Debug, thiserror::Error)]
-#[error("chat lines are off on this build")]
+#[error("chat lines are not linked: too early, or this build lacks the chat layout")]
 pub(crate) struct ChatOffError;
 
 /// Queues `text` for the player with account key `to`, or for everyone;
@@ -312,7 +313,8 @@ pub(crate) fn send(to: u64, text: &str) -> bool {
 ///
 /// # Errors
 ///
-/// [`ChatOffError`] while chat lines are off on this build.
+/// [`ChatOffError`] while chat lines are not linked: before the link, or on a
+/// build that lacks the chat layout.
 pub(crate) fn send_for_mod(to: u64, text: &str) -> Result<(), ChatOffError> {
     send(to, text).then_some(()).ok_or(ChatOffError)
 }

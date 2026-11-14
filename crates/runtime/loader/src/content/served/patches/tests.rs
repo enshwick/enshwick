@@ -149,7 +149,7 @@ unsafe extern "system" fn read_other(
         // SAFETY: `run_patches` passes `out` and `out_len` writable for the
         // call.
         Ok(bytes) => unsafe { hand_out(bytes, out, out_len) },
-        Err(_) => Status::MISSING,
+        Err(error) => crate::host::layer::Refusal::status(&error),
     }
 }
 

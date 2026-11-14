@@ -60,14 +60,10 @@ fn rebuild_entry(list: &[Served], entry: &Served) -> Result<(), ServedError> {
     if building(&entry.key) {
         return Err(ServedError::Building);
     }
-    match rebuild_one(entry) {
-        Ok(Some(0)) => Ok(()),
-        Ok(_) => {
-            rebuild_readers(list, entry);
-            Ok(())
-        }
-        Err(error) => Err(error),
+    if rebuild_one(entry)? != Some(0) {
+        rebuild_readers(list, entry);
     }
+    Ok(())
 }
 
 /// Builds `entry` again from its kept base and writes the bytes that differ
