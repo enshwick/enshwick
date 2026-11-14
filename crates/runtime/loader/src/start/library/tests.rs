@@ -264,7 +264,8 @@ fn loader_lines() -> Vec<(Level, String)> {
 /// Fills `mods` from the fixtures in `built`, one folder each: two mods,
 /// one beside a copy of itself and one beside a second mod in its folder,
 /// one DLL for each other reason to skip, and mods where none is read: a
-/// top-level DLL and one in the loader's folder.
+/// top-level DLL and one in the loader's folder; beside the two mods, a file
+/// that is no PE file before and after each, as a mod's own helper.
 fn fill_mods(built: &Path, mods: &Path) {
     for (from, to) in [
         ("lanterns", "lanterns/lanterns.dll"),
@@ -282,15 +283,93 @@ fn fill_mods(built: &Path, mods: &Path) {
         std::fs::copy(built.join(format!("{from}.dll")), to).unwrap();
     }
     std::fs::create_dir_all(mods.join("not-pe")).unwrap();
-    std::fs::write(mods.join("not-pe/not-pe.dll"), "not a DLL").unwrap();
+    for file in [
+        "not-pe/not-pe.dll",
+        "lanterns/a-helper.dll",
+        "lockers/z-helper.dll",
+    ] {
+        std::fs::write(mods.join(file), "not a DLL").unwrap();
+    }
 }
 
-/// The fixtures' second lanterns file reaches the screens and the status as
-/// the one skipped copy, the file the log `line` names.
-fn assert_one_copy_of_lanterns(copies: &[crate::base::resolve::Skipped], line: &str) {
-    let [copy] = copies else {
-        panic!("one copy for the screens and the status: {copies:?}");
+/// A DLL freed for its exports or ABI still ran while it loaded, so the code
+/// watch needs where it was mapped; only a file that never mapped has no
+/// range, and a helper after its folder's mod is never loaded at all.
+fn assert_only_unloadable_files_unmapped(
+    mapped: &[(String, Option<(usize, usize)>)],
+    lines: &[(Level, String)],
+) {
+    let unmapped: Vec<&str> = mapped
+        .iter()
+        .filter_map(|(file, range)| range.is_none().then_some(file.as_str()))
+        .collect();
+    assert_eq!(
+        unmapped,
+        ["lanterns/a-helper.dll", "not-pe/not-pe.dll"],
+        "{mapped:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|(_, text)| text.starts_with("lanterns/a-helper.dll could not be loaded: ")),
+        "a helper that fails beside its mod is logged: {lines:#?}"
+    );
+}
+
+/// Every refused fixture reaches the screens and the status by its folder,
+/// with the line the log wrote for it, and the second lanterns file as the
+/// one skipped copy, the file the log `line` names.
+fn assert_refused_reach_the_screens(
+    refused: &[crate::base::resolve::Skipped],
+    lines: &[(Level, String)],
+    line: &str,
+) {
+    let [half, second, no_manifest, not_pe, old_abi, copy] = refused else {
+        panic!("each refused file for the screens and the status: {refused:?}");
     };
+    for (skipped, folder) in [
+        (half, "half"),
+        (second, "lockers"),
+        (no_manifest, "no-manifest"),
+        (not_pe, "not-pe"),
+        (old_abi, "old-abi"),
+    ] {
+        assert_eq!(
+            (
+                skipped.id.as_str(),
+                skipped.label.as_str(),
+                skipped.version.as_str()
+            ),
+            (folder, folder, ""),
+            "{skipped:?}"
+        );
+        let crate::base::resolve::Skip::Refused { skip } = &skipped.reason else {
+            panic!("refused at start: {skipped:?}");
+        };
+        let line = skip.line(&skipped.file);
+        assert!(
+            lines.iter().any(|(_, text)| *text == line),
+            "the line the log wrote: {skipped:?}"
+        );
+        assert_eq!(
+            skipped.counts_off(|_| true),
+            folder != "lockers",
+            "a second mod file beside the running Lockers is no mod that is off"
+        );
+    }
+    assert!(
+        matches!(
+            &not_pe.reason,
+            crate::base::resolve::Skip::Refused {
+                skip: super::Skip::Unloadable {
+                    code: Some(193),
+                    ..
+                },
+                ..
+            }
+        ),
+        "{not_pe:?}"
+    );
     assert!(
         line.starts_with(&copy.file),
         "the copy the log names: {copy:?}"
@@ -338,14 +417,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     let lines = loader_lines();
     drop(turn);
 
-    // A DLL freed for its exports or ABI still ran while it loaded, so the
-    // code watch needs where it was mapped; only a file that never mapped
-    // has no range.
-    let unmapped: Vec<&str> = mapped
-        .iter()
-        .filter_map(|(file, range)| range.is_none().then_some(file.as_str()))
-        .collect();
-    assert_eq!(unmapped, ["not-pe/not-pe.dll"], "{mapped:?}");
+    assert_only_unloadable_files_unmapped(&mapped, &lines);
 
     let (found, candidates, others) = (all.libraries, all.candidates, all.others);
     let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();
@@ -409,7 +481,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         "{}",
         duplicates[0]
     );
-    assert_one_copy_of_lanterns(&all.copies, duplicates[0]);
+    assert_refused_reach_the_screens(&all.refused, &lines, duplicates[0]);
 
     for library in &found {
         super::unload(library);
@@ -514,5 +586,5 @@ fn imports_load_in_this_process() {
         return;
     };
     let (library, _) = super::load(Path::new(&path), "imports", "imports/imports.dll");
-    println!("{LOADED}{}", library.is_some());
+    println!("{LOADED}{}", library.is_ok());
 }

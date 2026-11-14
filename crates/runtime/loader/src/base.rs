@@ -13,11 +13,7 @@ pub mod configure;
     expect(dead_code, reason = "only the running game reads the marker")
 )]
 pub(crate) mod developer_tools;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game discovers mods")
-)]
-pub(crate) mod discovery;
+pub mod discovery;
 #[cfg(windows)]
 pub(crate) mod emits;
 #[cfg(windows)]

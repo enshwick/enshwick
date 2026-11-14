@@ -156,7 +156,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         libraries,
         candidates,
         others,
-        copies,
+        refused,
     } = libraries(&mods_dir, Run::Dry, &mut |_, _| {});
     let plan = resolve::resolve(&candidates);
     let loader = Loader {
@@ -177,7 +177,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
-        skipped: skipped(&libraries, &candidates, &plan, copies),
+        skipped: skipped(&libraries, &candidates, &plan, refused),
         parts: crate::engine::parts::Parts::new(crate::parts::LAYERS),
     };
     let loader = crate::engine::loader::install(loader).ok_or(DryRunError::AlreadyRan)?;

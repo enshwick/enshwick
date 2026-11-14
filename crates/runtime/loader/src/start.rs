@@ -147,7 +147,7 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         settings_problems,
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
-        skipped: skipped(&libraries, &candidates, &plan, found.copies),
+        skipped: skipped(&libraries, &candidates, &plan, found.refused),
         parts: Parts::new(crate::parts::LAYERS),
     };
     let Some(loader) = crate::engine::loader::install(loader) else {
@@ -241,13 +241,13 @@ fn skip(libraries: &[Library], plan: &resolve::Plan) {
     }
 }
 
-/// The mods `plan` skips, then the other `copies` of a mod id, as the screens
+/// The mods `plan` skips, then the files `refused` at start, as the screens
 /// name them.
 fn skipped(
     libraries: &[Library],
     candidates: &[Candidate],
     plan: &resolve::Plan,
-    copies: Vec<resolve::Skipped>,
+    refused: Vec<resolve::Skipped>,
 ) -> Vec<resolve::Skipped> {
     plan.skipped
         .iter()
@@ -263,7 +263,7 @@ fn skipped(
             file: libraries[*i].file.clone(),
             reason: reason.clone(),
         })
-        .chain(copies)
+        .chain(refused)
         .collect()
 }
 
