@@ -104,6 +104,37 @@ warned!(
     crate::base::services::DeclareServiceError,
 );
 
+/// A registry sealed once init ends: the mod asked too late.
+impl Refusal for crate::engine::registry::Sealed {
+    fn status(&self) -> Status {
+        Status::TOO_LATE
+    }
+}
+
+/// Too late after init; missing where the build or the side lacks the
+/// feature; refused where another registration holds the place.
+impl Refusal for crate::engine::registry::RegisterError {
+    fn status(&self) -> Status {
+        match self {
+            Self::TooLate => Status::TOO_LATE,
+            Self::Unavailable => Status::MISSING,
+            Self::Taken => Status::REFUSED,
+        }
+    }
+}
+
+/// A malformed alias is a bad argument; a second ask or a taken name is
+/// refused, the taken name already reported as a part off.
+impl Refusal for crate::actions::commands::NameCommandsError {
+    fn status(&self) -> Status {
+        match self {
+            Self::TooLate => Status::TOO_LATE,
+            Self::Malformed => Status::BAD_ARGS,
+            Self::Twice | Self::Taken => Status::REFUSED,
+        }
+    }
+}
+
 /// A reflection lookup by name: ambiguous for more than one match, else
 /// missing on this build.
 impl Refusal for enshwick_gamedata::reflect::LookupError {

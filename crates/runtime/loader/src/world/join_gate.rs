@@ -12,15 +12,17 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use enshwick_core::PlayerKey;
-use enshwick_core::abi::{Header, HookFlags, JoinCall, JoinRuleFn, Status};
+use enshwick_core::abi::{Header, HookFlags, JoinCall, JoinRuleFn};
 
 use super::join_message::{self, JoinLayout, JoinOffsets};
+use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::session;
 use crate::engine::pinned::{Constant, Symbol};
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::RegisterError;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -71,7 +73,7 @@ struct Layout {
 static LAYOUT: OnceLock<Result<Layout, (&'static str, &'static str)>> = OnceLock::new();
 /// The switch of the mods' join rules.
 static FUSE: Fuse = Fuse::new("join rules");
-static RULES: Registry<Registered<JoinRuleFn>> = Registry::new();
+static RULES: Filters<JoinRuleFn> = Filters::new(Feature::Joins);
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     found(loader).as_ref().ok()
@@ -131,23 +133,25 @@ fn found(loader: &Loader) -> &'static Result<Layout, (&'static str, &'static str
     })
 }
 
-/// Registers mod `owner`'s join rule; [`Status::MISSING`] on a build
-/// without the join path, so the mod can choose another way.
+/// Registers mod `owner`'s join rule.
+///
+/// # Errors
+///
+/// [`RegisterError::Unavailable`] on a build without the join path, so the
+/// mod can choose another way; [`RegisterError::TooLate`] after init.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     callback: JoinRuleFn,
     user: *mut c_void,
-) -> Status {
+) -> Result<(), RegisterError> {
     if RULES.is_sealed() {
-        return Status::TOO_LATE;
+        return Err(RegisterError::TooLate);
     }
     if layout(loader).is_none() {
-        return Status::MISSING;
+        return Err(RegisterError::Unavailable);
     }
-    RULES
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+    Ok(RULES.register(owner, callback, user)?)
 }
 
 /// Links the join check when a mod has a join rule.
@@ -173,7 +177,7 @@ crate::engine::chains::chain_detour! {
     next JOIN_NEXT;
     fuse &FUSE, "the join";
     |onward| {
-        let (Some(loader), Some(rules)) = (crate::engine::loader::loader(), RULES.sealed()) else {
+        let Some(loader) = crate::engine::loader::loader().filter(|_| RULES.any()) else {
             return onward.call();
         };
         let Some(layout) = layout(loader) else {
@@ -216,7 +220,7 @@ crate::engine::chains::chain_detour! {
         // writes while it handles a message.
         let platform: u8 = unsafe { enshwick_core::raw::read_at(session, layout.platform) };
         let steam = platform == join_message::STEAM;
-        let Some((rule, player)) = refuser(rules, &layout.join, entries, steam) else {
+        let Some((rule, player)) = refuser(&RULES, &layout.join, entries, steam) else {
             return onward.call();
         };
         // SAFETY: `session` is the handler's own non-null session (checked
@@ -243,37 +247,24 @@ crate::engine::chains::chain_detour! {
 /// message `entries`, and that account's key; `steam` when the session is
 /// of Steam.
 fn refuser<'a>(
-    rules: &'a [Registered<JoinRuleFn>],
+    rules: &'a Filters<JoinRuleFn>,
     join: &JoinLayout,
     entries: &[u8],
     steam: bool,
 ) -> Option<(&'a Registered<JoinRuleFn>, Option<PlayerKey>)> {
     join.keys(entries, steam).find_map(|player| {
+        let call = JoinCall {
+            header: Header::of::<JoinCall>(),
+            player: player.unwrap_or(PlayerKey::new(0)),
+        };
+        // SAFETY: the rule is the mod's registered `JoinRuleFn` in its DLL,
+        // which stays loaded for the process, called with a `JoinCall` that
+        // outlives the call and the mod's own `user` word; the mod's safe
+        // layer catches its panics.
         rules
-            .iter()
-            .filter(|r| r.live())
-            .find(|r| !allows(r, player))
+            .refuser(|rule, user| unsafe { rule(&raw const call, user) } != 0)
             .map(|r| (r, player))
     })
-}
-
-/// Whether `rule` lets `player` in.
-fn allows(rule: &Registered<JoinRuleFn>, player: Option<PlayerKey>) -> bool {
-    let call = JoinCall {
-        header: Header::of::<JoinCall>(),
-        player: player.unwrap_or(PlayerKey::new(0)),
-    };
-    let user = rule.user();
-    // SAFETY: the rule is the mod's registered `JoinRuleFn` in its DLL, which
-    // stays loaded for the process, called with a `JoinCall` that outlives
-    // the call and the mod's own `user` word; the mod's safe layer catches
-    // its panics.
-    let answer = crate::engine::profile::call(
-        rule.owner,
-        crate::engine::profile::Feature::Joins,
-        || unsafe { (rule.callback)(&raw const call, user) },
-    );
-    answer != 0
 }
 
 /// Whether `peer` already has a machine in `session`, which makes the
@@ -380,7 +371,7 @@ mod tests {
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         assert_eq!(
             register(loader, ModIndex::new(0), allow, core::ptr::null_mut()),
-            Status::MISSING,
+            Err(RegisterError::Unavailable),
             "a mod learns at init that its rule will not run"
         );
         link(loader);
@@ -398,10 +389,13 @@ mod tests {
             .flatten()
             .unwrap();
         let user = core::ptr::without_provenance_mut(usize::try_from(key.get()).unwrap());
-        let rules = [
-            Registered::<JoinRuleFn>::new(ModIndex::LOADER, allow, core::ptr::null_mut()),
-            Registered::<JoinRuleFn>::new(ModIndex::LOADER, refuse_key, user),
-        ];
+        let rules = Filters::<JoinRuleFn>::new(Feature::Joins);
+        assert_eq!(
+            rules.register(ModIndex::LOADER, allow, core::ptr::null_mut()),
+            Ok(())
+        );
+        assert_eq!(rules.register(ModIndex::LOADER, refuse_key, user), Ok(()));
+        let _sealed = rules.seal();
         let (rule, player) = refuser(&rules, &layout.join, &entries(&[1, steam]), true).unwrap();
         assert_eq!(
             rule.user(),

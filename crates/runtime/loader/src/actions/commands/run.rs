@@ -7,13 +7,15 @@ use enshwick_core::abi::{CommandInfo, Header, Status, Str};
 
 use enshwick_core::command_names::{alias_asked, check};
 
-use super::{MAX_LINE, Named, Refusal, Typed, parse, remote_caller, typed, word};
+use super::{
+    MAX_LINE, NameCommandsError, Named, Refusal, Typed, parse, remote_caller, typed, word,
+};
 use crate::actions::admission::{self, Path, Verdict};
 use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pending::Pending;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{Registry, Sealed};
 
 /// Chat commands waiting for the end of the step at most; more are dropped.
 const MAX_PENDING: usize = 64;
@@ -57,7 +59,16 @@ static STATE: State = State {
 /// have turns off only this mod's commands, reported the same way. A mod
 /// built before names came from ids whose alias no longer fits runs its
 /// commands by their name, reported the same way too.
-pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status {
+///
+/// # Errors
+///
+/// [`NameCommandsError`] after init, for a malformed alias, a second ask,
+/// or a name another mod's commands have.
+pub(crate) fn register(
+    loader: &Loader,
+    owner: ModIndex,
+    alias: &str,
+) -> Result<(), NameCommandsError> {
     let ids: Vec<(ModIndex, &str)> = loader
         .mods
         .iter()
@@ -76,7 +87,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
         })
     });
     match checked {
-        Err(sealed) => sealed.into(),
+        Err(Sealed) => Err(NameCommandsError::TooLate),
         Ok(Ok((name, holder))) => {
             STATE.any.store(true, Ordering::Release);
             if asked.is_none() {
@@ -100,17 +111,17 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
                     format!("/{alias} is {theirs}'s; use /{name}"),
                 );
             }
-            Status::OK
+            Ok(())
         }
-        Ok(Err(Refusal::Malformed)) => Status::BAD_ARGS,
-        Ok(Err(Refusal::Twice)) => Status::REFUSED,
+        Ok(Err(Refusal::Malformed)) => Err(NameCommandsError::Malformed),
+        Ok(Err(Refusal::Twice)) => Err(NameCommandsError::Twice),
         Ok(Err(Refusal::Taken(other))) => {
             let (mine, theirs) = (id(owner), id(other));
             let name = enshwick_core::commands::name_of(mine);
             let feature = format!("commands of {mine}");
             let line = format!("{feature} off: /{name} is taken by {theirs}");
             part_off(&feature, line, format!("/{name} taken by {theirs}"));
-            Status::REFUSED
+            Err(NameCommandsError::Taken)
         }
     }
 }

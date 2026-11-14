@@ -22,6 +22,7 @@ pub mod early;
 pub(crate) mod ecs;
 pub mod errors;
 pub mod features;
+pub(crate) mod filters;
 pub mod fuse;
 #[cfg_attr(
     all(not(windows), not(test)),

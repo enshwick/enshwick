@@ -13,6 +13,24 @@ use enshwick_core::abi::PlayerInfo;
 
 use crate::engine::mod_index::ModIndex;
 
+/// Why a mod's commands were not named.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum NameCommandsError {
+    /// The mod asked after init.
+    #[error("commands named after init")]
+    TooLate,
+    /// The alias is not a command word.
+    #[error("the alias is not a command word")]
+    Malformed,
+    /// The mod named its commands before.
+    #[error("commands named twice")]
+    Twice,
+    /// Another mod's commands have the name in this mod's id; that part of
+    /// the mod is off and reported.
+    #[error("the command name is taken")]
+    Taken,
+}
+
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]

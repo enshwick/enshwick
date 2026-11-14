@@ -30,7 +30,7 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{RegisterError, Registry};
 use crate::engine::world::Whose;
 
 /// The build table ids this part of the loader names.
@@ -335,6 +335,10 @@ thread_local! {
 /// Registers mod `owner`'s handler for the events of `type_hash` in the
 /// world `whose`, 0 for every type, on the loader of `side`, while `owner`
 /// runs its `init`.
+///
+/// # Errors
+///
+/// [`RegisterError::TooLate`] outside the mod's `init`.
 pub(crate) fn register(
     side: Side,
     whose: Whose,
@@ -343,7 +347,7 @@ pub(crate) fn register(
     type_hash: u32,
     callback: GameEventFn,
     user: *mut c_void,
-) -> Status {
+) -> Result<(), RegisterError> {
     let subscriber = Subscriber {
         whose,
         owner,
@@ -355,22 +359,20 @@ pub(crate) fn register(
 }
 
 /// Keeps `subscriber` in `registry`: too late outside the mod's `init` or
-/// once the registry is sealed, and OK without keeping it for a client
+/// once the registry is sealed, and fine without keeping it for a client
 /// handler on a dedicated server, where no client world steps.
 fn keep(
     registry: &Registry<Subscriber>,
     side: Side,
     in_init: bool,
     subscriber: Subscriber,
-) -> Status {
+) -> Result<(), RegisterError> {
     if !in_init {
-        Status::TOO_LATE
+        Err(RegisterError::TooLate)
     } else if subscriber.whose == Whose::Client && side != Side::CLIENT {
-        Status::OK
+        Ok(())
     } else {
-        registry
-            .add(subscriber)
-            .map_or_else(Status::from, |()| Status::OK)
+        Ok(registry.add(subscriber)?)
     }
 }
 
@@ -804,12 +806,12 @@ mod tests {
     fn a_dedicated_server_answers_a_client_handler_without_keeping_it() {
         let registry = Registry::new();
         let client = subscriber(Whose::Client, 7);
-        assert_eq!(keep(&registry, Side::SERVER, true, client), Status::OK);
+        assert_eq!(keep(&registry, Side::SERVER, true, client), Ok(()));
         assert_eq!(
             keep(&registry, Side::SERVER, true, subscriber(Whose::Server, 7)),
-            Status::OK
+            Ok(())
         );
-        assert_eq!(keep(&registry, Side::CLIENT, true, client), Status::OK);
+        assert_eq!(keep(&registry, Side::CLIENT, true, client), Ok(()));
         let kept: Vec<Whose> = registry.seal().iter().map(|s| s.whose).collect();
         assert_eq!(kept, [Whose::Server, Whose::Client]);
     }
@@ -821,7 +823,7 @@ mod tests {
             for whose in [Whose::Server, Whose::Client] {
                 assert_eq!(
                     keep(&registry, side, false, subscriber(whose, 7)),
-                    Status::TOO_LATE,
+                    Err(RegisterError::TooLate),
                     "{whose:?}"
                 );
             }
@@ -836,7 +838,7 @@ mod tests {
         for side in [Side::CLIENT, Side::SERVER] {
             assert_eq!(
                 keep(&registry, side, true, subscriber(Whose::Server, 7)),
-                Status::TOO_LATE,
+                Err(RegisterError::TooLate),
                 "{side:?}"
             );
         }

@@ -26,7 +26,7 @@ fn kept(answer: crate::actions::player_actions::Answer) -> ActionReply {
 entries! {
     fn commands(me as Mod, _name: Str, alias as Text) -> Status {
         in_init(me.index)?;
-        checked(crate::actions::commands::register(me.loader, me.index, alias))?;
+        crate::actions::commands::register(me.loader, me.index, alias)?;
         crate::engine::log::write(Level::DEBUG, &me.record.id, &format!("commands, alias /{alias}"));
         Ok(())
     }

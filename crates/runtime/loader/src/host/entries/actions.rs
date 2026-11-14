@@ -60,7 +60,7 @@ entries! {
 
     fn actions(me as Mod, callback: api_frame::ActionFn, user: *mut core::ffi::c_void) -> Status {
         in_init(me.index)?;
-        checked(crate::actions::player_actions::register(me.index, callback, user))?;
+        crate::actions::player_actions::register(me.index, callback, user)?;
         crate::engine::log::write(Level::DEBUG, &me.record.id, "player actions");
         Ok(())
     }
