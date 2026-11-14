@@ -44,7 +44,7 @@ pub(crate) trait ReadFailure: core::fmt::Display + Send + 'static {
 /// When no thread starts, `finish` gets [`ReadFailure::THREAD`] on the
 /// calling thread. `finish` runs once either way.
 #[cfg_attr(
-    not(windows),
+    all(not(windows), not(test)),
     expect(dead_code, reason = "the reads off the game thread run on Windows")
 )]
 pub(crate) fn read<T: Send + 'static, E: ReadFailure>(
