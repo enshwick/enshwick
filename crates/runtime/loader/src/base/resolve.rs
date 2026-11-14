@@ -77,15 +77,24 @@ pub enum Skip {
     },
     /// The mod is in a cycle of requirements.
     Cycle,
+    /// Its file does not start as a mod: Windows did not load it, or the
+    /// loader refused it before its manifest read.
+    Refused {
+        /// Why, as the start decided.
+        skip: crate::base::discovery::Skip,
+        /// The log line the start wrote for it.
+        line: String,
+    },
 }
 
 /// A mod that does not load, as the Mods screen and the chat line at world
 /// load name it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Skipped {
-    /// The mod id.
+    /// The mod id; for a file refused before its manifest read, its folder
+    /// in `mods/`.
     pub id: String,
-    /// Its version.
+    /// Its version; empty for a file refused before its manifest read.
     pub version: String,
     /// The name players read, or the id when the manifest names none.
     pub label: String,
@@ -117,6 +126,7 @@ impl core::fmt::Display for Skip {
                 write!(f, "does not work beside {id} {version}; remove one of them")
             }
             Self::Cycle => f.write_str("in a dependency cycle"),
+            Self::Refused { line, .. } => f.write_str(line),
         }
     }
 }
@@ -144,6 +154,7 @@ impl Skip {
                 &[("id", id), ("version", &version.to_string())],
             ),
             Self::Cycle => crate::engine::texts::fill("mods.skipped.cycle", &[]),
+            Self::Refused { skip, .. } => skip.shown(),
         }
     }
 }

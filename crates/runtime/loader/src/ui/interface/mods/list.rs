@@ -33,6 +33,17 @@ const fn has_gear(settings: bool, here: bool, bindings: bool) -> bool {
     settings && here || bindings
 }
 
+/// The text a gear shows on a build whose icons do not read: settings where
+/// it opens them (`settings_here`), else only the player's key bindings,
+/// which belong to no world and so open in the main menu too.
+const fn gear_text(settings_here: bool) -> &'static str {
+    if settings_here {
+        "mods.settings"
+    } else {
+        "controls.title"
+    }
+}
+
 /// What a click on mod `index`'s Details button or gear opens: the Details
 /// button the mod's own page, the gear its settings.
 const fn clicked(details: bool, gear: bool, index: usize) -> Option<Listed> {
@@ -94,14 +105,23 @@ fn skipped_row(paint: &Painter<'_>, skipped: &crate::base::resolve::Skipped) {
         paint,
         &skipped.label,
         &metadata(&skipped.version, core::slice::from_ref(&skipped.file)),
-        state_text(true, false).map(|state| {
-            (
-                state,
-                skipped.version.as_str(),
-                Some(skipped.reason.shown()),
-            )
-        }),
+        Some((
+            skipped_state(&skipped.version),
+            skipped.version.as_str(),
+            Some(skipped.reason.shown()),
+        )),
     );
+}
+
+/// The off state of a skipped mod in words: with its version, or, for a
+/// file refused before its version read, without one.
+const fn skipped_state(version: &str) -> (&'static str, u32) {
+    let key = if version.is_empty() {
+        "mods.off.file"
+    } else {
+        "mods.off"
+    };
+    (key, UiWidget::STYLE_NEGATIVE)
 }
 
 /// The text that says in words that a mod is off or waiting, with its
@@ -170,9 +190,11 @@ pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
     }
 }
 
-/// A mod's dimmed line under its name: its version, then its authors.
+/// A mod's dimmed line under its name: its version, when it has one, then
+/// its authors.
 fn metadata(version: &str, authors: &[String]) -> String {
     core::iter::once(version)
+        .filter(|version| !version.is_empty())
         .chain(authors.iter().map(String::as_str))
         .collect::<Vec<_>>()
         .join(texts::text("mods.metadata.gap"))
@@ -279,11 +301,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, count);
     let shown = listing.shown(*first, count);
-    let button = |icon: Icon| {
-        let fallback = match icon {
-            Icon::Settings => "mods.settings",
-            Icon::Info => "mods.details",
-        };
+    let button = |icon: Icon, fallback: &'static str| {
         paint.icon_button(icon, texts::text(fallback).as_bytes(), true)
     };
     let controls = crate::actions::controls::rows();
@@ -295,18 +313,20 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             .settings_schema()
             .is_some_and(|s| !s.fields.is_empty());
         let sent = record.server_values.relock().is_some();
+        let here = mods_screen::gear(world, sent);
         let opens = has_gear(
             settings,
-            mods_screen::gear(world, sent),
+            here,
             super::controls::any_in(&controls, &record.id),
         );
+        let gear = gear_text(settings && here);
         // The Details button on every mod, at the same place; the gear under
         // it where the mod has something to set here, else its place kept.
         let clicked = paint.row(
             || state(paint, record),
             || {
-                let details = button(Icon::Info);
-                let settings = opens && button(Icon::Settings);
+                let details = button(Icon::Info, "mods.details");
+                let settings = opens && button(Icon::Settings, gear);
                 if !opens {
                     paint.icon_slot();
                 }
@@ -337,7 +357,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
                     false,
                 );
             },
-            || button(Icon::Settings),
+            || button(Icon::Settings, gear_text(false)),
         );
         if opened {
             done = Listed::Bindings(id, name);
@@ -375,7 +395,9 @@ pub(super) fn pages(paint: &Painter<'_>, listing: Listing, first: &mut usize, co
 
 #[cfg(test)]
 mod tests {
-    use super::{Listed, clicked, has_gear, metadata, state_text, store_off};
+    use super::{
+        Listed, clicked, gear_text, has_gear, metadata, skipped_state, state_text, store_off,
+    };
     use crate::engine::texts;
 
     #[test]
@@ -384,6 +406,16 @@ mod tests {
         assert!(!has_gear(true, false, false), "settings not shown here");
         assert!(!has_gear(false, true, false), "nothing to set");
         assert!(has_gear(false, false, true), "key bindings anywhere");
+    }
+
+    #[test]
+    fn a_gear_without_icons_names_settings_only_where_it_opens_them() {
+        assert_eq!(texts::text(gear_text(true)), "Settings");
+        assert_eq!(
+            texts::text(gear_text(false)),
+            "Key bindings",
+            "in the main menu a gear opens only key bindings"
+        );
     }
 
     #[test]
@@ -403,6 +435,20 @@ mod tests {
         assert_eq!(line(true, true).as_deref(), Some("Safes 0.1.1 (off)"));
         assert_eq!(line(false, true).as_deref(), Some("Safes 0.1.1 (waiting)"));
         assert_eq!(line(false, false), None, "a mod that runs");
+        let skipped = |version| {
+            let (key, _) = skipped_state(version);
+            texts::fill(key, &[("name", "lanterns"), ("version", version)])
+        };
+        assert_eq!(skipped("0.1.1"), "lanterns 0.1.1 (off)");
+        assert_eq!(
+            skipped(""),
+            "lanterns (off)",
+            "a file refused before its version read"
+        );
+        assert_eq!(
+            metadata("", &["lanterns/lanterns.dll".to_owned()]),
+            "lanterns/lanterns.dll"
+        );
     }
 
     #[test]

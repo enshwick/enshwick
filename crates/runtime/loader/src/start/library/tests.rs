@@ -285,12 +285,54 @@ fn fill_mods(built: &Path, mods: &Path) {
     std::fs::write(mods.join("not-pe/not-pe.dll"), "not a DLL").unwrap();
 }
 
-/// The fixtures' second lanterns file reaches the screens and the status as
-/// the one skipped copy, the file the log `line` names.
-fn assert_one_copy_of_lanterns(copies: &[crate::base::resolve::Skipped], line: &str) {
-    let [copy] = copies else {
-        panic!("one copy for the screens and the status: {copies:?}");
+/// Every refused fixture reaches the screens and the status by its folder,
+/// with the line the log wrote for it, and the second lanterns file as the
+/// one skipped copy, the file the log `line` names.
+fn assert_refused_reach_the_screens(
+    refused: &[crate::base::resolve::Skipped],
+    lines: &[(Level, String)],
+    line: &str,
+) {
+    let [half, second, no_manifest, not_pe, old_abi, copy] = refused else {
+        panic!("each refused file for the screens and the status: {refused:?}");
     };
+    for (skipped, folder) in [
+        (half, "half"),
+        (second, "lockers"),
+        (no_manifest, "no-manifest"),
+        (not_pe, "not-pe"),
+        (old_abi, "old-abi"),
+    ] {
+        assert_eq!(
+            (
+                skipped.id.as_str(),
+                skipped.label.as_str(),
+                skipped.version.as_str()
+            ),
+            (folder, folder, ""),
+            "{skipped:?}"
+        );
+        let crate::base::resolve::Skip::Refused { line, .. } = &skipped.reason else {
+            panic!("refused at start: {skipped:?}");
+        };
+        assert!(
+            lines.iter().any(|(_, text)| text == line),
+            "the line the log wrote: {skipped:?}"
+        );
+    }
+    assert!(
+        matches!(
+            &not_pe.reason,
+            crate::base::resolve::Skip::Refused {
+                skip: super::Skip::Unloadable {
+                    code: Some(193),
+                    ..
+                },
+                ..
+            }
+        ),
+        "{not_pe:?}"
+    );
     assert!(
         line.starts_with(&copy.file),
         "the copy the log names: {copy:?}"
@@ -409,7 +451,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         "{}",
         duplicates[0]
     );
-    assert_one_copy_of_lanterns(&all.copies, duplicates[0]);
+    assert_refused_reach_the_screens(&all.refused, &lines, duplicates[0]);
 
     for library in &found {
         super::unload(library);
@@ -514,5 +556,5 @@ fn imports_load_in_this_process() {
         return;
     };
     let (library, _) = super::load(Path::new(&path), "imports", "imports/imports.dll");
-    println!("{LOADED}{}", library.is_some());
+    println!("{LOADED}{}", library.is_ok());
 }

@@ -6,7 +6,7 @@ use crate::engine::errors;
 
 /// Why a DLL in a mod folder does not start.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Skip {
+pub enum Skip {
     /// Its folder holds another DLL with the Enshwick exports, and a folder
     /// holds one mod.
     SecondMod {
@@ -19,6 +19,13 @@ pub(crate) enum Skip {
     OtherAbi(enshwick_core::abi::CheckAbiError),
     /// Its manifest does not read or parse.
     Manifest(ManifestError),
+    /// Windows did not load it, with the system's error code and text.
+    Unloadable {
+        /// The system's error code, when the error has one.
+        code: Option<i32>,
+        /// The system's text.
+        error: String,
+    },
     /// Another file in `mods/` holds the same mod and runs instead.
     Duplicate {
         /// The mod's id.
@@ -35,7 +42,8 @@ pub(crate) enum Skip {
 impl Skip {
     /// The log line for the DLL `file`, with the error code a problem
     /// carries.
-    pub(crate) fn line(&self, file: &str) -> String {
+    #[must_use]
+    pub fn line(&self, file: &str) -> String {
         match self {
             Self::SecondMod { other } => format!(
                 "{file} skipped: its folder also holds the mod {other}, and a folder in mods/ \
@@ -49,6 +57,7 @@ impl Skip {
             Self::Manifest(reason) => {
                 format!("{file} skipped: {reason} ({})", errors::BROKEN_DLL)
             }
+            Self::Unloadable { code, error } => errors::load_failure(file, *code, error),
             Self::Duplicate {
                 id,
                 version,
@@ -61,11 +70,62 @@ impl Skip {
             ),
         }
     }
+
+    /// Why the file does not start, in the player's language, as the Mods
+    /// screen and the chat line at world load show it.
+    #[must_use]
+    pub fn shown(&self) -> String {
+        use crate::engine::texts::{fill, text};
+        match self {
+            Self::SecondMod { other } => fill("mods.skipped.second", &[("other", other)]),
+            Self::OtherAbi(_) | Self::Manifest(ManifestError::OtherAbi(_)) => {
+                text("mods.skipped.abi").to_owned()
+            }
+            Self::NotAMod | Self::Manifest(_) => text("mods.skipped.broken").to_owned(),
+            Self::Unloadable { code, error } => match errors::load_hint(*code) {
+                Some(errors::LoadHint::NotWindows64) => text("mods.skipped.not-64-bit").to_owned(),
+                Some(errors::LoadHint::MissingDll) => text("mods.skipped.needs-dll").to_owned(),
+                None => fill("mods.skipped.unloadable", &[("error", error)]),
+            },
+            Self::Duplicate { id, .. } => fill("mods.skipped.copy", &[("id", id)]),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refused_file_tells_the_player_why_in_their_language() {
+        let unloadable = |code| Skip::Unloadable {
+            code,
+            error: "denied".into(),
+        };
+        assert!(
+            unloadable(Some(193))
+                .shown()
+                .contains("not a 64-bit Windows DLL")
+        );
+        assert!(unloadable(Some(126)).shown().contains("Visual C++"));
+        assert!(unloadable(Some(5)).shown().ends_with("denied"));
+        let why = enshwick_core::abi::check_abi(1, 0).unwrap_err();
+        let abi = Skip::OtherAbi(why).shown();
+        assert!(abi.contains("another version of Enshwick"), "{abi}");
+        assert_eq!(Skip::Manifest(ManifestError::OtherAbi(why)).shown(), abi);
+        assert_ne!(Skip::Manifest(ManifestError::Missing).shown(), abi);
+        assert_eq!(
+            Skip::NotAMod.shown(),
+            Skip::Manifest(ManifestError::Missing).shown()
+        );
+        let second = Skip::SecondMod {
+            other: "lanterns/lanterns.dll".into(),
+        };
+        assert!(second.shown().contains("lanterns/lanterns.dll"));
+        let uk = Some(enshwick_core::i18n::Language::UK_UA);
+        let shown = crate::engine::texts::for_reader(uk, || unloadable(Some(193)).shown());
+        assert!(shown.contains("64-бітна"), "{shown}");
+    }
 
     #[test]
     fn a_second_mod_in_a_folder_names_both_files() {

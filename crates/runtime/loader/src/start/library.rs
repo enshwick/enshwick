@@ -53,8 +53,9 @@ pub(super) struct Found {
     pub(super) candidates: Vec<Candidate>,
     /// In a game, the proxies of other mods beside it.
     pub(super) others: Vec<OtherDll>,
-    /// The other files of a mod id, which do not load.
-    pub(super) copies: Vec<resolve::Skipped>,
+    /// The files that do not start: those refused, then the other files of
+    /// a mod id.
+    pub(super) refused: Vec<resolve::Skipped>,
 }
 
 /// What `mods/` holds: the mods with readable manifests, one per folder, and
@@ -82,7 +83,8 @@ pub(super) fn libraries(mods_dir: &Path, run: Run, loaded: &mut Loaded<'_>) -> F
                 ready: crate::packs::data_packs::ready,
             }
         });
-    let found = discover(mods_dir, loaded);
+    let mut refused = Vec::new();
+    let found = discover(mods_dir, loaded, &mut refused);
     let others = if run == Run::Game {
         beside(mods_dir)
     } else {
@@ -100,15 +102,39 @@ pub(super) fn libraries(mods_dir: &Path, run: Run, loaded: &mut Loaded<'_>) -> F
                 candidates.push(candidate);
                 libraries.push(library);
             }
-            Err(reason) => log_skip(&Skip::Manifest(reason), &library.file),
+            Err(reason) => {
+                refused.push(refuse(
+                    Skip::Manifest(reason),
+                    &library.folder,
+                    &library.file,
+                ));
+                unload(&library);
+            }
         }
     }
     let (libraries, candidates, copies) = drop_duplicates(mods_dir, libraries, candidates);
+    refused.extend(copies);
     Found {
         libraries,
         candidates,
         others,
-        copies,
+        refused,
+    }
+}
+
+/// Logs why the file `file` in `folder` of `mods/` does not start, and
+/// keeps it for the screens and the status, named by its folder.
+fn refuse(skip: Skip, folder: &str, file: &str) -> resolve::Skipped {
+    log_skip(&skip, file);
+    resolve::Skipped {
+        id: folder.to_owned(),
+        version: String::new(),
+        label: folder.to_owned(),
+        file: file.to_owned(),
+        reason: resolve::Skip::Refused {
+            line: skip.line(file),
+            skip,
+        },
     }
 }
 
@@ -280,8 +306,13 @@ pub(super) fn unload(library: &Library) {
 /// Loads the one DLL with the Enshwick exports in each folder of `mods/`,
 /// told apart from the folder's other DLLs, the mod's own, by their export
 /// tables before they load. A second such DLL in a folder is skipped, named
-/// with the first; the loader's own folder holds no mod.
-fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> Vec<Library> {
+/// with the first; the loader's own folder holds no mod. Each file that does
+/// not start goes into `refused`.
+fn discover(
+    mods_dir: &Path,
+    loaded: &mut Loaded<'_>,
+    refused: &mut Vec<resolve::Skipped>,
+) -> Vec<Library> {
     let mut mods = Vec::new();
     for folder in folders(mods_dir) {
         let name = folder
@@ -300,18 +331,19 @@ fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> Vec<Library> {
                     .unwrap_or_default()
             );
             if let Some(other) = &first {
-                log_skip(
-                    &Skip::SecondMod {
-                        other: other.clone(),
-                    },
-                    &file,
-                );
+                let skip = Skip::SecondMod {
+                    other: other.clone(),
+                };
+                refused.push(refuse(skip, &name, &file));
                 continue;
             }
             let (library, range) = load(&path, &name, &file);
             loaded(&file, range);
+            match library {
+                Ok(library) => mods.push(library),
+                Err(skip) => refused.push(refuse(skip, &name, &file)),
+            }
             first = Some(file);
-            mods.extend(library);
         }
     }
     mods
@@ -346,26 +378,25 @@ pub(super) enum Run {
 }
 
 /// Loads the mod DLL at `path`, in `folder` of `mods/` and named `file`
-/// there, and where it was mapped; the mod is `None`, logged, when it is no
-/// mod of this ABI. A DLL freed for that still ran while it loaded, so its
-/// range is taken before it is freed.
-fn load(path: &Path, folder: &str, file: &str) -> (Option<Library>, Option<(usize, usize)>) {
+/// there, and where it was mapped; the mod is why it does not start when
+/// Windows does not load it or it is no mod of this ABI. A DLL freed for that
+/// still ran while it loaded, so its range is taken before it is freed.
+fn load(path: &Path, folder: &str, file: &str) -> (Result<Library, Skip>, Option<(usize, usize)>) {
     let module = match crate::engine::module::load_library(path) {
         Ok(module) => module,
         Err(error) => {
-            crate::log!(
-                WARN,
-                "{}",
-                crate::engine::errors::load_failure(file, &error)
-            );
-            return (None, None);
+            let skip = Skip::Unloadable {
+                code: error.raw_os_error(),
+                error: error.to_string(),
+            };
+            return (Err(skip), None);
         }
     };
     let range = crate::engine::crash::range_of(module);
     let library = exports_of(module, folder, file, range);
-    if library.is_none() {
+    if library.is_err() {
         // SAFETY: `module` was loaded by `load_library` in this function;
-        // `exports_of` returned `None`, so it kept none of the module's
+        // `exports_of` returned an error, so it kept none of the module's
         // exports or manifest, and the calls it made into them have
         // returned, so none of its code is in use.
         unsafe { FreeLibrary(module) };
@@ -374,14 +405,14 @@ fn load(path: &Path, folder: &str, file: &str) -> (Option<Library>, Option<(usiz
 }
 
 /// The mod in the loaded `module`, from `folder` of `mods/` and named `file`
-/// in messages and mapped at `range`; `None`, logged, when it exports no
-/// Enshwick interface of this ABI.
+/// in messages and mapped at `range`; why it does not start when it exports
+/// no Enshwick interface of this ABI.
 fn exports_of(
     module: HMODULE,
     folder: &str,
     file: &str,
     range: Option<(usize, usize)>,
-) -> Option<Library> {
+) -> Result<Library, Skip> {
     // SAFETY: `module` was loaded by `load`, which frees it only after
     // this returns; the `Module` does not leave this function, and the
     // exports it finds are called only while the library stays loaded.
@@ -393,8 +424,7 @@ fn exports_of(
         find(exports::INIT),
         find(exports::READY),
     ) else {
-        log_skip(&Skip::NotAMod, file);
-        return None;
+        return Err(Skip::NotAMod);
     };
     // SAFETY: a mod's `ABI` export has the signature `enshwick_core::abi::exports`
     // documents for it.
@@ -411,20 +441,16 @@ fn exports_of(
     // The export states only the major; the manifest's header holds the
     // minor, which `manifest::parse` checks.
     if let Err(why) = check_major(abi()) {
-        log_skip(&Skip::OtherAbi(why), file);
-        return None;
+        return Err(Skip::OtherAbi(why));
     }
     // SAFETY: `query` returns null or the mod's manifest, readable for the
     // size its header says, its strings and lists unwritten for the process
     // (`abi::exports::QUERY`).
     let manifest = match unsafe { crate::base::manifest::read(query()) } {
         Ok(manifest) => manifest,
-        Err(reason) => {
-            log_skip(&Skip::Manifest(reason), file);
-            return None;
-        }
+        Err(reason) => return Err(Skip::Manifest(reason)),
     };
-    Some(Library {
+    Ok(Library {
         folder: folder.to_owned(),
         file: file.to_owned(),
         module,

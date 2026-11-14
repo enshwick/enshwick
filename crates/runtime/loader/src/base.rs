@@ -17,7 +17,7 @@ pub(crate) mod developer_tools;
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the running game discovers mods")
 )]
-pub(crate) mod discovery;
+pub mod discovery;
 #[cfg(windows)]
 pub(crate) mod emits;
 #[cfg(windows)]
