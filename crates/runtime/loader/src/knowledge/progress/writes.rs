@@ -649,10 +649,14 @@ mod tests {
     fn writers_are_sealed_with_experience_filters_and_no_write_goes_in_once_experience_is_off() {
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         let (filter, writer) = (ModIndex::new(0), ModIndex::new(1));
-        super::super::EXPERIENCE_FILTERS
-            .relock()
-            .push(Registered::new(filter, no_pass, core::ptr::null_mut()));
+        let filtered = super::super::EXPERIENCE_FILTERS.add(Registered::new(
+            filter,
+            no_pass,
+            core::ptr::null_mut(),
+        ));
+        assert_eq!(filtered, Ok(()));
         assert_eq!(WRITERS.add(writer), Ok(()));
+        super::super::seal();
         super::super::link(loader);
         assert!(WRITERS.sealed().is_some_and(|mods| mods.contains(&writer)));
         assert!(

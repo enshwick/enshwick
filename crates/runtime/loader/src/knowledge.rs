@@ -14,6 +14,7 @@ use crate::engine::parts::{Part, fused, part, step};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: store::TABLE_IDS,
+        seal: Some(|_| store::guard::seal()),
         link: Some(store::guard::link),
         steps: &[step!(Follow, "knowledge steps", |s| store::after_step(
             s.loader
@@ -23,6 +24,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: progress::TABLE_IDS,
+        seal: Some(|_| progress::seal()),
         link: Some(progress::link),
         steps: &[step!(Follow, "level writes", |s| progress::after_step(
             s.loader
@@ -42,6 +44,7 @@ pub(crate) static PARTS: &[&Part] = &[
                 store::changes::world_event(loader, event);
             }
         )),
+        forget: Some(|_| store::changes::forget()),
         ..part!("knowledge changes", store::changes)
     },
 ];

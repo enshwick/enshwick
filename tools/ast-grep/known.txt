@@ -47,11 +47,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/engine/log.rs static 
 # The notices waiting for a slot, runtime state; they move into the
 # notices' state struct with the slots.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/notices.rs static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
-# The skill, comfort and experience callbacks mods register during init;
-# they move into a `Registry<T>` each.
-static-is-registry-fuse-or-state crates/runtime/loader/src/knowledge/progress.rs static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());
-static-is-registry-fuse-or-state crates/runtime/loader/src/knowledge/progress.rs static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperiencePassFn>>> = Mutex::new(Vec::new());
-static-is-registry-fuse-or-state crates/runtime/loader/src/knowledge/progress.rs static SKILLS: Mutex<Vec<(u32, Registered<SkillCheckFn>)>> = Mutex::new(Vec::new());
 # When each player last changed a setting, the server's rate state; it
 # moves into one remote state struct with `QUERIES`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/remote/live.rs static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
@@ -141,12 +136,6 @@ loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs stat
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static REGISTRY: AtomicUsize = AtomicUsize::new(0);
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static SETTLED: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static WANTED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/knowledge/progress.rs static FLY_MODE: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/knowledge/store.rs static SEEN_STEP: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/knowledge/store.rs static UNSEEN: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/knowledge/store/changes.rs static WAITING: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/knowledge/store/guard.rs static LINES: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/knowledge/store/guard.rs static REFUSED: AtomicU32 = AtomicU32::new(0);
 loader-flag-is-in-state crates/runtime/loader/src/start.rs static STARTED: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/ui/interface.rs static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 loader-flag-is-in-state crates/runtime/loader/src/ui/interface.rs static UI_THREAD: AtomicU32 = AtomicU32::new(0);
