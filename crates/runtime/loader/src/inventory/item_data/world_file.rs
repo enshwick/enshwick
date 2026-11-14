@@ -1,7 +1,6 @@
 //! A world's file of values: read when the world loads, written when it saves and shuts down.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::Event;
 use rustc_hash::FxHashSet;
@@ -157,11 +156,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 pending.len(),
                 key.as_deref().unwrap_or("?")
             );
-            STATE.kept.store(false, Ordering::Relaxed);
-            STATE.unread.store(false, Ordering::Relaxed);
-            STATE.finding.store(!pending.is_empty(), Ordering::Relaxed);
-            let _earlier_world = STATE.destroyed.take();
-            *STATE.server.relock() = Some(Server {
+            STATE.start_server(Server {
                 key,
                 values: Values::default(),
                 pending,

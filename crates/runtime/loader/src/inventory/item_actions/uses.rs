@@ -95,7 +95,7 @@ impl Use {
 
 /// The uses the loader watches, whether it watches any, so a step without
 /// one takes no lock, and whether it said it watches too many.
-struct Uses {
+pub(super) struct Uses {
     watched: Mutex<Vec<Use>>,
     any: AtomicBool,
     full: AtomicBool,
@@ -113,7 +113,7 @@ impl Uses {
     /// Starts watching `call`, the use of `version` whose slot holds
     /// `count` of `item`, while the player's other handled actions are
     /// `moves`; once per use, and not at all without `moves`.
-    fn watch(
+    pub(super) fn watch(
         &self,
         call: ItemAction,
         version: u32,
@@ -155,7 +155,7 @@ impl Uses {
     /// paying one use of its slot, oldest first; refused ones are let go,
     /// and so are those whose player did anything else since: a stack
     /// dragged or stashed out of its slot looks like one the game took.
-    fn taken(
+    pub(super) fn taken(
         &self,
         at: Instant,
         mut slot_now: impl FnMut(&ItemAction) -> Option<((u32, u32), Option<u64>)>,
@@ -211,27 +211,7 @@ impl Uses {
     }
 }
 
-static USES: Uses = Uses::new();
-
-/// Starts watching `call` for [`USES`]; see [`Uses::watch`].
-pub(super) fn watch(
-    call: ItemAction,
-    version: u32,
-    item: u32,
-    count: u32,
-    moves: Option<u64>,
-    at: Instant,
-) {
-    USES.watch(call, version, item, count, moves, at);
-}
-
-/// The watched uses whose item the game took; see [`Uses::taken`].
-pub(super) fn taken(
-    at: Instant,
-    slot_now: impl FnMut(&ItemAction) -> Option<((u32, u32), Option<u64>)>,
-) -> Vec<ItemAction> {
-    USES.taken(at, slot_now)
-}
+pub(super) static USES: Uses = Uses::new();
 
 /// Forgets the watched uses, when a world ends.
 pub(crate) fn forget() {

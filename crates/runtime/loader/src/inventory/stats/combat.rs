@@ -37,13 +37,13 @@ pub(super) fn combat(sealed: &Sealed, values: &[f32]) -> Option<Combat> {
 /// Whether any entity has hit factors, for the damage site's check before it
 /// reads a hit: one load.
 pub(crate) fn changes_hits() -> bool {
-    STATE.hits.load(Ordering::Acquire)
+    STATE.reads.hits.load(Ordering::Acquire)
 }
 
 /// Applies the hit factors of `source` and `target` to a hit's damage by
 /// type. On the damage site's worker thread: no lock, no allocation.
 pub(crate) fn on_hit(amounts: &mut [f32; TYPES], target: u32, source: u32) {
-    let Some(values) = STATE.snapshot.get() else {
+    let Some(values) = STATE.reads.snapshot.get() else {
         return;
     };
     let values = values.load();

@@ -21,9 +21,22 @@ fn the_survivor_lookup_is_wholly_off_when_one_of_its_links_fails() {
     );
 }
 
+/// Opens the survivor registrations again when dropped, so a failed
+/// assertion leaves the next test open ones.
+struct Reopen;
+
+impl Drop for Reopen {
+    fn drop(&mut self) {
+        STATE.registrations.reopen();
+    }
+}
+
 #[test]
 fn a_survivor_feature_no_mod_asked_for_links_nothing_and_stays_on() {
+    let _reopen = Reopen;
     let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    seal();
+    assert!(STATE.registrations.is_sealed(), "the seal phase seals them");
     link(loader);
     let fuses = [
         LOOKUP_FUSE.is_off(),
@@ -33,12 +46,30 @@ fn a_survivor_feature_no_mod_asked_for_links_nothing_and_stays_on() {
     assert_eq!(fuses, [false; 3]);
     assert!(!FILED_FUSE.is_off() && !MENU_FUSE.is_off());
     assert!(loader.chains.relock().is_empty());
-    assert!(STATE.registrations.is_sealed(), "the link seals them");
-    STATE.registrations.reopen();
+}
+
+#[test]
+fn a_summoned_filter_alone_asks_for_the_staffs_and_seals_both_staff_registries() {
+    unsafe extern "system" fn summon(
+        _call: *const enshwick_core::abi::Summon,
+        _user: *mut c_void,
+    ) -> u8 {
+        0
+    }
+    let registrations = Registrations::new();
+    let added = registrations.summoned.add(Registered::new(
+        ModIndex::new(1),
+        summon,
+        core::ptr::null_mut(),
+    ));
+    assert!(added.is_ok());
+    let asked = registrations.seal();
+    assert!(asked.summons && !asked.lookup && !asked.beds && !asked.items && !asked.status);
     assert!(
-        !STATE.registrations.is_sealed(),
-        "the next test registers again"
+        registrations.is_sealed(),
+        "every registry, not only the last"
     );
+    assert!(registrations.summons.is_sealed());
 }
 
 unsafe extern "system" fn no_lookup(
@@ -54,7 +85,7 @@ fn one_mod_holds_the_lookup_until_the_seal_and_a_reopened_one_takes_any() {
     let registrations = Registrations::new();
     let (first, second) = (ModIndex::new(1), ModIndex::new(2));
     let hold = |owner| {
-        Registrations::hold_one(
+        hold_one(
             &registrations.lookup,
             Registered::new(owner, no_lookup, core::ptr::null_mut()),
         )
@@ -62,7 +93,7 @@ fn one_mod_holds_the_lookup_until_the_seal_and_a_reopened_one_takes_any() {
     assert_eq!(hold(first), Status::OK);
     assert_eq!(hold(first), Status::OK, "the same mod replaces its own");
     assert_eq!(hold(second), Status::REFUSED);
-    registrations.seal();
+    assert!(registrations.seal().lookup);
     assert!(registrations.is_sealed());
     assert_eq!(registrations.lookup().map(|r| r.owner), Some(first));
     assert_eq!(hold(first), Status::TOO_LATE);

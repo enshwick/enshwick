@@ -161,13 +161,7 @@ fn filtering_in(filters: &Registry<Registered<DamageFilterFn>>) -> bool {
 /// changes hits.
 #[inline]
 fn hits_watched() -> bool {
-    hits_watched_in(&FILTERS)
-}
-
-/// Whether a hit is the loader's to read with these `filters`.
-#[inline]
-fn hits_watched_in(filters: &Registry<Registered<DamageFilterFn>>) -> bool {
-    filtering_in(filters) || crate::inventory::stats::changes_hits()
+    filtering() || crate::inventory::stats::changes_hits()
 }
 
 /// Runs every live filter on `check`.
@@ -595,12 +589,7 @@ mod tests {
 
     #[test]
     fn a_hit_a_mod_filters_is_the_loader_s_to_read() {
-        let filters = one_filter();
-        assert!(filtering_in(&filters));
-        assert!(
-            hits_watched_in(&filters),
-            "a filter alone makes a hit watched"
-        );
+        assert!(filtering_in(&one_filter()));
     }
 
     #[test]

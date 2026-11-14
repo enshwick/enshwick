@@ -260,8 +260,10 @@ impl Finished {
 }
 
 /// Requests in order; `pending` is set while it holds any, so a row with
-/// nothing to do takes one atomic load.
+/// nothing to do takes one atomic load. Alone on its cache lines, since mod
+/// threads write it, so the row's read of the registry shares none with it.
 #[derive(Debug, Default)]
+#[repr(align(128))]
 struct Queue {
     pending: AtomicBool,
     requests: Mutex<VecDeque<Request>>,

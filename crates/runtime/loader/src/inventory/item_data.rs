@@ -196,6 +196,18 @@ impl State {
         self.unread.load(Ordering::Relaxed)
     }
 
+    /// Takes `server` as the records of a world that loaded: what followed
+    /// an earlier world goes, and its records wait for the first step when
+    /// it has any.
+    fn start_server(&self, server: Server) {
+        self.kept.store(false, Ordering::Relaxed);
+        self.unread.store(false, Ordering::Relaxed);
+        self.finding
+            .store(!server.pending.is_empty(), Ordering::Relaxed);
+        drop(self.destroyed.take());
+        *self.server.relock() = Some(server);
+    }
+
     /// Forgets the server's records and what follows them, as when its
     /// world goes away; the records it kept, and whether they still waited
     /// for the first step, for their last write.
@@ -216,8 +228,10 @@ impl State {
 }
 
 /// Entities the game asked to destroy since the last step, written from any
-/// thread without a lock.
+/// thread without a lock; alone on its cache lines, so the destroy detour's
+/// read of `kept` shares none with them.
 #[derive(Debug)]
+#[repr(align(128))]
 struct Destroyed {
     /// Each entity in the low word under its round in the high one, 0 for an
     /// empty slot. A slot from an earlier round is stale.

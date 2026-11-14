@@ -166,8 +166,8 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static ITEM_MAP: OnceLock<Option<ItemMap>> = OnceLock::new();
 static MENU: OnceLock<Option<Menu>> = OnceLock::new();
 
-/// What mods register for the survivors during init, sealed before the
-/// links.
+/// What mods register for the survivors during init, sealed in the parts'
+/// seal phase, before any link.
 #[derive(Debug)]
 struct Registrations {
     /// The one mod's survivor lookup.
@@ -193,19 +193,6 @@ impl Registrations {
         }
     }
 
-    /// Holds `registered` in `one`, which takes one mod at a time: refused
-    /// while another mod holds it, replaced for the same mod.
-    fn hold_one<F>(one: &Registry<Registered<F>>, registered: Registered<F>) -> Status {
-        let held = one.edit(|held| {
-            if held.iter().any(|r| r.owner != registered.owner) {
-                return Status::REFUSED;
-            }
-            *held = vec![registered];
-            Status::OK
-        });
-        held.unwrap_or(Status::TOO_LATE)
-    }
-
     /// The registered lookup, once sealed.
     fn lookup(&self) -> Option<Registered<SurvivorLookupFn>> {
         self.lookup.sealed()?.first().copied()
@@ -216,19 +203,27 @@ impl Registrations {
         self.status.sealed()?.first().copied()
     }
 
-    /// Seals every registration once every mod's init ran.
-    fn seal(&self) {
-        let _lookup = self.lookup.seal();
-        let _beds = self.bed_checks.seal();
-        let _summons = self.summons.seal();
-        let _summoned = self.summoned.seal();
-        let _items = self.items.seal();
-        let _status = self.status.seal();
+    /// Seals every registration once every mod's init ran and says what
+    /// mods asked for; later calls say the same.
+    fn seal(&self) -> Asked {
+        let (summons, summoned) = (self.summons.seal(), self.summoned.seal());
+        Asked {
+            lookup: !self.lookup.seal().is_empty(),
+            beds: !self.bed_checks.seal().is_empty(),
+            summons: !summons.is_empty() || !summoned.is_empty(),
+            items: !self.items.seal().is_empty(),
+            status: !self.status.seal().is_empty(),
+        }
     }
 
-    /// Whether the registrations are sealed, so the links ran.
+    /// Whether every registration is sealed, so the links may run.
     fn is_sealed(&self) -> bool {
-        self.status.is_sealed()
+        self.lookup.is_sealed()
+            && self.bed_checks.is_sealed()
+            && self.summons.is_sealed()
+            && self.summoned.is_sealed()
+            && self.items.is_sealed()
+            && self.status.is_sealed()
     }
 
     /// Opens every registration again, empty, for the next test.
@@ -241,6 +236,34 @@ impl Registrations {
         self.items.reopen();
         self.status.reopen();
     }
+}
+
+/// Which survivor features mods asked for, from their sealed registrations.
+#[derive(Debug, Clone, Copy)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one independent flag per feature link reads"
+)]
+struct Asked {
+    lookup: bool,
+    beds: bool,
+    /// A summon or a summoned filter.
+    summons: bool,
+    items: bool,
+    status: bool,
+}
+
+/// Holds `registered` in `one`, which takes one mod at a time: refused while
+/// another mod holds it, replaced for the same mod.
+fn hold_one<F>(one: &Registry<Registered<F>>, registered: Registered<F>) -> Status {
+    let held = one.edit(|held| {
+        if held.iter().any(|r| r.owner != registered.owner) {
+            return Status::REFUSED;
+        }
+        *held = vec![registered];
+        Status::OK
+    });
+    held.unwrap_or(Status::TOO_LATE)
 }
 
 /// The survivor and entity a staff moves, and since when.
@@ -451,7 +474,7 @@ pub(crate) fn register_lookup(
     if layout(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    Registrations::hold_one(
+    hold_one(
         &STATE.registrations.lookup,
         Registered::new(owner, callback, user),
     )
@@ -542,7 +565,7 @@ pub(crate) fn register_status(
     {
         return Status::MISSING;
     }
-    Registrations::hold_one(
+    hold_one(
         &STATE.registrations.status,
         Registered::new(owner, callback, user),
     )
@@ -570,20 +593,21 @@ fn menu_system(loader: &Loader) -> Option<Target<'static>> {
 /// The system that fills the survivor menu.
 const MENU_SYSTEM: &str = "ui_npc_status";
 
-/// Seals what mods registered and links what they asked for.
+/// Seals what mods registered before any link, so no other part's link
+/// runs while mods may still register.
+pub(crate) fn seal() {
+    let _asked = STATE.registrations.seal();
+}
+
+/// Links what mods asked for.
 pub(crate) fn link(loader: &'static Loader) {
-    fn any<T>(registry: &Registry<T>) -> bool {
-        registry.with(|items| !items.is_empty())
-    }
-    let registered = &STATE.registrations;
-    registered.seal();
-    let (lookup, beds, summons, items, status) = (
-        any(&registered.lookup),
-        any(&registered.bed_checks),
-        any(&registered.summons) || any(&registered.summoned),
-        any(&registered.items),
-        any(&registered.status),
-    );
+    let Asked {
+        lookup,
+        beds,
+        summons,
+        items,
+        status,
+    } = STATE.registrations.seal();
     let wanted = lookup || beds || summons || items || status;
     let lookup = lookup && lookup::link(loader) && moves::link_moves(loader);
     let beds = beds && moves::link_bed_checks(loader);

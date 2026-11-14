@@ -2,7 +2,7 @@
 source: crates/runtime/loader/src/parts.rs
 expression: phases()
 ---
-seal: services, points, calls, status, content, item_actions, stats, item_data, knowledge, progress, vetoes, commands, chat, interactions, player_actions
+seal: services, points, calls, status, content, item_actions, survivors, stats, item_data, knowledge, progress, vetoes, commands, chat, interactions, player_actions
 link: crash, world, events, game_events, saves, net, carrier, recipes, textures, rate_links, altars, daytime, weather, label, join_gate, bases, fog, voxels, terrain_pages, inventory, damage, deaths, item_actions, survivors, item_data, drops, knowledge, progress, vetoes, chat, interactions, local_held, controls, ui
 step, follow: altar steps, day steps, game settings steps, weather steps, inventory deliveries, death steps, survivor steps, item data steps, stat steps, knowledge steps, level writes, knowledge change steps, interaction steps, control firings, carried controls, build refusals, carried windows
 step, input: join admission at the step, console lines, chat commands, chat sending

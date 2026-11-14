@@ -73,6 +73,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: survivors::TABLE_IDS,
+        seal: Some(|_| survivors::seal()),
         link: Some(survivors::link),
         steps: &[step!(Follow, "survivor steps", |s| survivors::after_step(
             s.loader

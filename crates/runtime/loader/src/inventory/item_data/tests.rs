@@ -777,6 +777,47 @@ fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_cle
 }
 
 #[test]
+fn the_inventory_parts_forget_the_item_data_server_at_a_hosted_game_s_end() {
+    STATE.kept.store(true, Ordering::Relaxed);
+    STATE.unread.store(true, Ordering::Relaxed);
+    STATE.destroyed.note(Entity(901));
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    crate::engine::parts::Part::forget_in(crate::inventory::PARTS, "item_data", loader);
+    assert!(!STATE.kept.load(Ordering::Relaxed));
+    assert!(!STATE.unread());
+    assert!(!STATE.destroyed.any());
+}
+
+#[test]
+fn a_loaded_world_starts_its_records_from_its_own_file_alone() {
+    let state = State::new();
+    state.kept.store(true, Ordering::Relaxed);
+    state.unread.store(true, Ordering::Relaxed);
+    state.destroyed.note(Entity(900));
+    let waiting = Pending {
+        kind: KindIndex(0),
+        anchor: Anchor::Session(5),
+        check: 77,
+        value: Box::new([1]),
+        aside: false,
+    };
+    state.start_server(server(vec![waiting], Vec::new()));
+    assert!(state.server.relock().is_some());
+    assert!(state.finding(), "its records wait for the first step");
+    assert!(!state.kept.load(Ordering::Relaxed));
+    assert!(!state.unread(), "the new world takes values");
+    assert!(
+        !state.destroyed.any(),
+        "no earlier world's request reaches it"
+    );
+    state.start_server(server(Vec::new(), Vec::new()));
+    assert!(
+        !state.finding(),
+        "a world with no records waits for nothing"
+    );
+}
+
+#[test]
 fn a_change_of_server_forgets_what_the_client_got() {
     let state = State::new();
     *state.client.relock() = Some(Values::default());
