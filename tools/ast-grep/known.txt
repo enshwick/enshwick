@@ -47,9 +47,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/engine/log.rs static 
 # The notices waiting for a slot, runtime state; they move into the
 # notices' state struct with the slots.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/notices.rs static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
-# The data packs loaded this world, runtime state; they move into the
-# packs domain's state struct.
-static-is-registry-fuse-or-state crates/runtime/loader/src/packs/data_packs.rs static PACKS: Mutex<Option<FxHashMap<String, Loaded>>> = Mutex::new(None);
 # The skill, comfort and experience callbacks mods register during init;
 # they move into a `Registry<T>` each.
 static-is-registry-fuse-or-state crates/runtime/loader/src/knowledge/progress.rs static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());

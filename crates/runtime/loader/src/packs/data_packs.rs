@@ -27,13 +27,11 @@ pub(crate) struct Found {
     pub(crate) manifest: &'static Manifest,
 }
 
-/// A pack the loader runs: its folder, the hash of its files, its scripts
-/// and, once it initialised, what it added and its running scripts.
+/// A pack the loader runs: its folder, the hash of its files and, once it
+/// initialised, its running scripts.
 struct Loaded {
     dir: PathBuf,
     hash: u32,
-    scripts: Vec<String>,
-    pack: Option<Pack>,
     runtime: Option<enshwick_luau::Runtime>,
 }
 
@@ -46,11 +44,21 @@ fn scripts_of(files: &PackFiles) -> Option<enshwick_luau::Scripts> {
     scripts.has_main().then_some(scripts)
 }
 
-static PACKS: Mutex<Option<FxHashMap<String, Loaded>>> = Mutex::new(None);
+/// The packs domain's state: the packs `discover` found, by id. It lives for
+/// the process, not a hosted game: packs load once at the start, and one
+/// that turns off stays off until a restart, so no part's
+/// [`forget`](crate::engine::parts::Part::forget) drops it; only [`forget`]
+/// drops the pack that turned off.
+struct State {
+    packs: Mutex<FxHashMap<String, Loaded>>,
+}
+
+static STATE: State = State {
+    packs: Mutex::new(FxHashMap::with_hasher(rustc_hash::FxBuildHasher)),
+};
 
 fn with<R>(f: impl FnOnce(&mut FxHashMap<String, Loaded>) -> R) -> R {
-    let mut packs = PACKS.relock();
-    f(packs.get_or_insert_with(FxHashMap::default))
+    f(&mut STATE.packs.relock())
 }
 
 /// A string for the process.
@@ -173,8 +181,6 @@ pub(crate) fn discover(mods_dir: &Path) -> Vec<Found> {
                 Loaded {
                     dir: dir.clone(),
                     hash: files.hash(),
-                    scripts: files.scripts().map(|(name, _)| name.to_owned()).collect(),
-                    pack: None,
                     runtime: None,
                 },
             );
@@ -268,7 +274,6 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     with(|packs| {
         if let Some(loaded) = packs.get_mut(&id) {
             loaded.hash = files.hash();
-            loaded.scripts = files.scripts().map(|(name, _)| name.to_owned()).collect();
         }
     });
     let mut runtime = None;
@@ -310,7 +315,6 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
         );
         with(|packs| {
             if let Some(loaded) = packs.get_mut(&id) {
-                loaded.pack = Some(pack);
                 loaded.runtime = runtime;
             }
         });
@@ -323,10 +327,13 @@ pub(crate) extern "system" fn ready(_api: *const HostApi, _me: ModHandle) {}
 
 /// Forgets the loot of pack `id`, which is off.
 pub(crate) fn forget(id: &str) {
-    let known = with(|packs| packs.remove(id).is_some());
-    if known {
-        let _forgotten = enshwick_core::packs::forget_loot(id);
-    }
+    // Dropped after the lock: a Luau runtime's teardown must not block the
+    // join check's `hash_of`.
+    let Some(gone) = with(|packs| packs.remove(id)) else {
+        return;
+    };
+    let _forgotten = enshwick_core::packs::forget_loot(id);
+    drop(gone);
 }
 
 #[cfg(test)]
