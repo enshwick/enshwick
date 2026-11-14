@@ -669,8 +669,11 @@ pub(crate) fn after_step(loader: &Loader) {
 /// Forgets the players' trackers and waiting firings, as when the server's
 /// world goes away.
 pub(crate) fn forget() {
-    STATE.players.relock().forget();
-    STATE.firing.store(false, Ordering::Release);
+    let mut players = STATE.players.relock();
+    players.forget();
+    // Under the lock, as every writer of `firing`.
+    STATE.firing.store(players.waiting(), Ordering::Release);
+    drop(players);
     *STATE.rights.relock() = None;
 }
 
@@ -951,6 +954,14 @@ mod tests {
             callback: fired,
             user: 0,
         }
+    }
+
+    #[test]
+    fn a_game_s_end_leaves_no_firing_waiting_for_the_next() {
+        STATE.firing.store(true, Ordering::Release);
+        forget();
+        assert!(!STATE.firing.load(Ordering::Acquire));
+        assert!(!STATE.players.relock().waiting());
     }
 
     #[test]

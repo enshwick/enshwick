@@ -247,8 +247,8 @@ crate::engine::chains::chain_detour! {
 ///   reflected size, which no other thread touches during the call.
 #[cold]
 unsafe fn scale_slot(slot: *mut u8, rate: f32) {
-    let Some((loader, fields)) =
-        crate::engine::loader::loader().zip(LINKED.get().and_then(|linked| linked.slot))
+    let Some((loader, fields)) = crate::engine::loader::linked(&LINKED)
+        .and_then(|(loader, linked)| Some((loader, linked.slot?)))
     else {
         return;
     };

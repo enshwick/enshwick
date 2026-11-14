@@ -55,7 +55,9 @@ impl<T> Pending<T> {
     }
 
     /// Queues `more`, all or none: false, queuing nothing, when the queue
-    /// would pass `bound` items.
+    /// would pass `bound` items. The bound is checked by `more`'s length
+    /// before it yields, so items made by [`core::iter::once_with`] are not
+    /// built past it.
     pub fn push_within(&self, bound: usize, more: impl ExactSizeIterator<Item = T>) -> bool {
         let mut items = self.items.relock();
         if items.len().saturating_add(more.len()) > bound {
@@ -129,6 +131,15 @@ mod tests {
         assert_eq!(queue.take(), [1, 2, 3]);
         assert!(queue.push_within(3, core::iter::empty()));
         assert!(!queue.any(), "an empty batch leaves nothing to take");
+    }
+
+    #[test]
+    fn a_batch_past_the_bound_builds_none_of_its_items() {
+        let queue = Pending::new();
+        queue.push(1);
+        let refused = core::iter::once_with(|| -> u32 { unreachable!("built past the bound") });
+        assert!(!queue.push_within(1, refused));
+        assert_eq!(queue.take(), [1]);
     }
 
     #[test]

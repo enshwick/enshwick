@@ -144,7 +144,7 @@ static BUILDING_FUSE: Fuse = Fuse::new("building events");
 
 /// The links' state once linked.
 fn loaded() -> Option<(&'static Loader, &'static Offsets)> {
-    Some((crate::engine::loader::loader()?, OFFSETS.get()?))
+    crate::engine::loader::linked(&OFFSETS)
 }
 
 /// Runs a link's own work under its fuse; a panic in it turns that link off

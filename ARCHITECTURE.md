@@ -356,7 +356,8 @@ its own; these steps hold for one that grows inside core first.
   lock.
 - Every module reaches the `Loader` through `engine::loader::loader()`; a
   module keeps only what its links found of the build, such as a layout, in
-  a `OnceLock` of its own.
+  a `OnceLock` of its own, and reads both at once through
+  `engine::loader::linked`.
 - Work a hook queues for a later pass (a step, a frame, a world event) goes
   into an `engine::pending::Pending`: a pass with nothing queued reads one
   atomic and takes no lock. Any other state a step reads every time is

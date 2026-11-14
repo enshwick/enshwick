@@ -174,7 +174,7 @@ pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
     let queued = admitted
         && STATE.pending.push_within(
             MAX_PENDING,
-            core::iter::once(Queued {
+            core::iter::once_with(|| Queued {
                 key,
                 owner,
                 word: word(text),

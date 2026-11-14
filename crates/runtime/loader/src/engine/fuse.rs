@@ -415,7 +415,7 @@ mod test_switch {
                 return process.load(order);
             }
             let id = self.id();
-            per_test::with(|turned| turned.fuses.contains(&id))
+            per_test::with(|turned| turned.switches.contains(&id))
         }
 
         pub(super) fn swap(&self, off: bool, order: Ordering) -> bool {
@@ -425,9 +425,9 @@ mod test_switch {
             let id = self.id();
             per_test::with(|turned| {
                 if off {
-                    !turned.fuses.insert(id)
+                    !turned.switches.insert(id)
                 } else {
-                    turned.fuses.remove(&id)
+                    turned.switches.remove(&id)
                 }
             })
         }

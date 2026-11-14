@@ -54,6 +54,9 @@ struct SceneState {
     frame: SceneCache<MapFrameInfo, ReadFrameError>,
     /// The client's marker types, once read; `None` when they do not read.
     marker_types: OnceLock<Option<Arc<[MapMarkerTypeInfo]>>>,
+    /// The hosted game the caches belong to; [`forget`] moves it on, so a
+    /// read started in an ended game cannot land in the next one's cache.
+    generation: u64,
 }
 
 static STATE: Mutex<SceneState> = Mutex::new(SceneState {
@@ -62,6 +65,7 @@ static STATE: Mutex<SceneState> = Mutex::new(SceneState {
     markers: SceneCache::new(),
     frame: SceneCache::new(),
     marker_types: OnceLock::new(),
+    generation: 0,
 });
 
 /// The API's marker type groups, by the catalogue's id of the game's
@@ -359,11 +363,14 @@ fn cached<V: Described, E: SceneFailure>(
     if fuse.is_off() {
         return Err(Status::MISSING);
     }
-    match cache(&mut STATE.relock()).lookup(key) {
+    let mut state = STATE.relock();
+    let generation = state.generation;
+    match cache(&mut state).lookup(key) {
         Lookup::Ready(found) => return found.map_err(|_| Status::MISSING),
         Lookup::Pending => return Err(Status::NOT_LOADED),
         Lookup::Start => {}
     }
+    drop(state);
     let what = fuse.feature();
     crate::engine::off_thread::read(what, read, move |found, took| {
         match &found {
@@ -371,9 +378,21 @@ fn cached<V: Described, E: SceneFailure>(
             Err(why) if why.is_fault() => fuse.turn_off(&Off::fault(what, &why.to_string())),
             Err(why) => crate::log!(WARN, "{what}: this scene does not read: {why}"),
         }
-        let _kept = cache(&mut STATE.relock()).finish(key, found);
+        let _kept = land(key, generation, cache, found);
     });
     Err(Status::NOT_LOADED)
+}
+
+/// Keeps the read of `key` started in `generation`, unless its hosted game
+/// has ended since; whether it was kept.
+fn land<V: Described, E: SceneFailure>(
+    key: SceneKey,
+    generation: u64,
+    cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
+    found: Result<V, E>,
+) -> bool {
+    let mut state = STATE.relock();
+    state.generation == generation && cache(&mut state).finish(key, found)
 }
 
 /// The markers of the scene the server runs; on its game thread at a quiet
@@ -494,11 +513,13 @@ fn read_marker_types(loader: &Loader) -> Result<Vec<MapMarkerTypeInfo>, ReadType
 
 /// Forgets the markers and the frame read for the last scene, when a hosted
 /// game ends: the next world's served data may differ. A read still under
-/// way finds its scene gone and is dropped; the build's layouts stay.
+/// way is dropped, even when the next game asks for the same scene; the
+/// build's layouts stay.
 pub(crate) fn forget() {
     let mut state = STATE.relock();
     state.markers = SceneCache::new();
     state.frame = SceneCache::new();
+    state.generation = state.generation.wrapping_add(1);
 }
 
 #[cfg(test)]
@@ -525,6 +546,31 @@ mod tests {
             matches!(state.frame.lookup(key), Lookup::Start),
             "and asked again"
         );
+    }
+
+    #[test]
+    fn a_read_of_an_ended_game_does_not_land_when_the_next_game_asks_for_the_same_scene() {
+        let _turn = TURN.relock();
+        let key = SceneKey::new([8; 16], 3).unwrap();
+        let ended = STATE.relock().generation;
+        assert!(matches!(STATE.relock().frame.lookup(key), Lookup::Start));
+        forget();
+        let next = STATE.relock().generation;
+        assert!(matches!(STATE.relock().frame.lookup(key), Lookup::Start));
+        let frame: fn(&mut SceneState) -> &mut SceneCache<MapFrameInfo, ReadFrameError> =
+            |state| &mut state.frame;
+        assert!(
+            !land(key, ended, frame, Err(ReadFrameError::Scene)),
+            "the ended game's read is dropped"
+        );
+        assert!(
+            land(key, next, frame, Err(ReadFrameError::BiomeMap)),
+            "the next game's read lands"
+        );
+        assert!(matches!(
+            STATE.relock().frame.lookup(key),
+            Lookup::Ready(Err(ReadFrameError::BiomeMap))
+        ));
     }
 
     /// Asks `cache` for `key` under `fuse` until the read is done.

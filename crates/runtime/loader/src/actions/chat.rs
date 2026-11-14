@@ -162,15 +162,26 @@ type MarkFn = unsafe extern "system" fn(store: *mut u8, node: *mut u8, slot: u32
 static LINKED: OnceLock<Layout> = OnceLock::new();
 
 /// The loader with what chat reads of the build, once linked.
-fn linked() -> Option<(&'static Loader, Layout)> {
-    Some((crate::engine::loader::loader()?, *LINKED.get()?))
+fn linked() -> Option<(&'static Loader, &'static Layout)> {
+    crate::engine::loader::linked(&LINKED)
 }
 // SAFETY: `PostFn` is the signature of the game's `chat.post`, and `link`
 // uses this slot only as the `next` of `post`, its link on that function.
 static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
-static OUTBOX: Mutex<Outbox<Line>> = Mutex::new(Outbox::new(MAX_WAITING));
-/// Set while the outbox holds anything, so an idle step takes no lock.
-static WAITING: AtomicBool = AtomicBool::new(false);
+
+/// The lines waiting for the game thread; replies to typed commands have
+/// less room than other lines, so they cannot fill it.
+struct Outgoing {
+    /// Set, under the lock of `lines`, while it holds anything, so an idle
+    /// step takes no lock.
+    any: AtomicBool,
+    lines: Mutex<Outbox<Line>>,
+}
+
+static OUTGOING: Outgoing = Outgoing {
+    any: AtomicBool::new(false),
+    lines: Mutex::new(Outbox::new(MAX_WAITING)),
+};
 
 /// What became of the lines for one player.
 #[derive(Debug)]
@@ -273,7 +284,7 @@ fn cut(text: &str, max: usize) -> &str {
 /// Queues `lines`, each a chat line, while fewer than `room` lines wait;
 /// how many it left out.
 fn queue<'a>(to: To, lines: impl Iterator<Item = &'a str>, room: usize) -> usize {
-    let mut outbox = OUTBOX.relock();
+    let mut outbox = OUTGOING.lines.relock();
     let mut left_out = 0;
     for line in lines {
         let line = Line {
@@ -284,7 +295,7 @@ fn queue<'a>(to: To, lines: impl Iterator<Item = &'a str>, room: usize) -> usize
             left_out += 1;
         }
     }
-    WAITING.store(!outbox.is_empty(), Ordering::Release);
+    OUTGOING.any.store(!outbox.is_empty(), Ordering::Release);
     left_out
 }
 
@@ -766,8 +777,11 @@ const fn sent_by_clients(kind: u8) -> bool {
 
 /// Drops the lines waiting for a hosted game that stops.
 pub(crate) fn forget() {
-    OUTBOX.relock().clear();
-    WAITING.store(false, Ordering::Release);
+    {
+        let mut lines = OUTGOING.lines.relock();
+        lines.clear();
+        OUTGOING.any.store(false, Ordering::Release);
+    }
     said::forget();
 }
 
@@ -777,7 +791,7 @@ pub(crate) fn drain() {
     if let Some((loader, _)) = linked() {
         said::raise(loader);
     }
-    if !WAITING.load(Ordering::Acquire) {
+    if !OUTGOING.any.load(Ordering::Acquire) {
         return;
     }
     let (Some((loader, layout)), Some(post)) = (linked(), next()) else {
@@ -794,9 +808,9 @@ pub(crate) fn drain() {
         return;
     }
     let lines: Vec<Line> = {
-        let mut outbox = OUTBOX.relock();
+        let mut outbox = OUTGOING.lines.relock();
         let lines = outbox.take(LINES_PER_DRAIN).collect();
-        WAITING.store(!outbox.is_empty(), Ordering::Release);
+        OUTGOING.any.store(!outbox.is_empty(), Ordering::Release);
         lines
     };
     let machines = if lines.iter().any(|l| matches!(l.to, To::Key(_))) {
@@ -822,7 +836,7 @@ pub(crate) fn drain() {
         // SAFETY: `store` is the server's non-zero chat store, checked by the
         // guard before it, read on its game thread between steps
         // (`world::server`), and `post` is the rest of `chat.post`'s chain.
-        unsafe { post_line(post, &layout, store, to, cut(&line.text, layout.max_text)) };
+        unsafe { post_line(post, layout, store, to, cut(&line.text, layout.max_text)) };
     }
 }
 

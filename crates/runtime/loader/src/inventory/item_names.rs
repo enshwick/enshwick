@@ -146,7 +146,9 @@ pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>
         return Some(list);
     }
     if !STATE.building.swap(true, Ordering::AcqRel) {
-        let built = crate::engine::off_thread::start("item names", move || {
+        // Asked each frame a picker shows, so a thread that does not start
+        // is told once.
+        let built = crate::engine::off_thread::spawn("item names", move || {
             for _ in 0..BUILD_TRIES {
                 if let Some(list) = build(language, mods) {
                     STATE.list.store(Some(Arc::new(list)));
@@ -156,7 +158,8 @@ pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>
             }
             STATE.building.store(false, Ordering::Release);
         });
-        if !built {
+        if let Err(why) = built {
+            crate::log_once!(WARN, "item names: no thread to build them ({why})");
             STATE.building.store(false, Ordering::Release);
         }
     }

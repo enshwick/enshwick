@@ -1,6 +1,6 @@
 //! What one of the loader's own tests turned off, kept apart from every
-//! other test in the process: the fuses it blew and the parts it listed
-//! off. libtest runs every test on a thread of its own, even with one test
+//! other test in the process: the fuses it blew or checked and the parts it
+//! listed off. libtest runs every test on a thread of its own, even with one test
 //! thread, so a test's scope is its thread's, and work it hands another
 //! thread through [`carried`] joins it. Outside the loader's tests the
 //! loader keeps one process-wide state and [`carried`] is the work itself.
@@ -37,11 +37,12 @@ mod scope {
 
     use crate::engine::diag::PartOff;
 
-    /// What one test turned off.
+    /// What one test turned off or checked.
     #[derive(Debug, Default)]
     pub(crate) struct Turned {
-        /// The identities of the fuses it blew.
-        pub(crate) fuses: FxHashSet<u64>,
+        /// The identities of the fuse switches it set: the fuses it blew and
+        /// the fuses whose live check held.
+        pub(crate) switches: FxHashSet<u64>,
         /// The parts it listed off, in order.
         pub(crate) parts: Vec<PartOff>,
     }

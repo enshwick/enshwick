@@ -62,6 +62,7 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "death steps", |s| deaths::after_step(
             s.loader
         ))],
+        forget: Some(|_| deaths::forget()),
         ..part!("deaths", deaths)
     },
     &Part {

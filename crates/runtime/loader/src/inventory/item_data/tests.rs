@@ -2,7 +2,7 @@
 
 use super::attach::attach;
 use super::carried::*;
-use super::world_file::{read_file, read_world, unwritten, write_file};
+use super::world_file::{last_write, read_file, read_world, unwritten, write_file};
 use super::*;
 use crate::inventory::item_records::anchor::{CharacterId, Index};
 
@@ -723,6 +723,30 @@ fn only_a_missing_world_file_starts_the_world_empty() {
 }
 
 #[test]
+fn a_value_set_after_the_world_s_last_save_is_written_as_the_world_ends() {
+    let _turn = DESTROYS.relock();
+    kinds();
+    FINDING.store(false, Ordering::Relaxed);
+    assert_eq!(
+        last_write(server(Vec::new(), Vec::new())),
+        None,
+        "nothing set since the save"
+    );
+    let mut set = server(Vec::new(), Vec::new());
+    set.values.insert(
+        key(1, 1027),
+        Record {
+            item: 9,
+            anchor: Some(Anchor::Placed(chest(1))),
+            value: Box::new([6]),
+        },
+    );
+    set.changed = true;
+    let expected = write_file(&set);
+    assert_eq!(last_write(set), Some(("w".to_owned(), expected)));
+}
+
+#[test]
 fn a_failed_write_marks_the_same_world_changed_again() {
     let mut kept = Some(server(Vec::new(), Vec::new()));
     unwritten(&mut kept, "other");
@@ -734,8 +758,8 @@ fn a_failed_write_marks_the_same_world_changed_again() {
     assert!(none.is_none());
 }
 
-/// The only test that sets the server's records and their flags, which
-/// are the process's own.
+/// Sets the server's records and their flags, which are the process's own,
+/// under the same turn as every test that reads them.
 #[cfg(windows)]
 #[test]
 fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_clean() {

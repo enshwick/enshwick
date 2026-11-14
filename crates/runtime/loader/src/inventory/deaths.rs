@@ -257,6 +257,12 @@ pub(crate) fn after_step(loader: &Loader) {
     }
 }
 
+/// Drops the deaths no step raised before a hosted game ended: their records
+/// name the old world's players.
+pub(crate) fn forget() {
+    SEEN.clear();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,5 +291,12 @@ mod tests {
         assert!((death.position[0] - 1.5).abs() < f32::EPSILON);
         assert_eq!(death.cause_guid[0], 0xab);
         assert_eq!((death.was_deadly_fog, death.drowned), (0, 1));
+    }
+
+    #[test]
+    fn a_death_no_step_raised_before_the_game_ended_is_not_raised_in_the_next() {
+        let _kept = SEEN.push_within(MOST, core::iter::once([7; 64]));
+        forget();
+        assert!(SEEN.take().is_empty());
     }
 }

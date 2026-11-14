@@ -297,7 +297,6 @@ fn give_back<S: Scope>(mut batch: Batch) {
 
 static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
-/// The loader, and the build's stream layout when it has one.
 /// The build's stream layout when it has one, once linked.
 static LINKED: OnceLock<Option<Layout>> = OnceLock::new();
 /// The event move's link, off only when this build cannot link it or its
@@ -433,7 +432,7 @@ crate::engine::chains::chain_detour! {
     next MERGE_NEXT;
     fuse &EVENTS_FUSE, "the event move";
     |onward| {
-        let (Some(loader), Some(&layout)) = (crate::engine::loader::loader(), LINKED.get()) else {
+        let Some((loader, &layout)) = crate::engine::loader::linked(&LINKED) else {
             return onward.call();
         };
         match crate::engine::world::whose(loader.side, entity_world.expose_provenance()) {

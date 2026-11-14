@@ -93,8 +93,8 @@ static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
 
 /// The loader with what the links read, once linked.
 fn linked() -> Option<(&'static Loader, &'static Layout, &'static Components)> {
-    let (layout, components) = LINKED.get()?;
-    Some((crate::engine::loader::loader()?, layout, components))
+    let (loader, (layout, components)) = crate::engine::loader::linked(&LINKED)?;
+    Some((loader, layout, components))
 }
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();

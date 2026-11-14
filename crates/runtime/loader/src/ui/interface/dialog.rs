@@ -138,11 +138,49 @@ const QUEUED: u8 = 0;
 const IN_GAME: u8 = 1;
 const SYSTEM: u8 = 2;
 
+/// The dialogs waiting to show, oldest first.
+struct Waiting {
+    /// Set, under the lock of `dialogs`, while it may hold a dialog, so a
+    /// frame with none waiting takes no lock.
+    any: AtomicBool,
+    dialogs: Mutex<VecDeque<Pending>>,
+}
+
+impl Waiting {
+    const fn new() -> Self {
+        Self {
+            any: AtomicBool::new(false),
+            dialogs: Mutex::new(VecDeque::new()),
+        }
+    }
+
+    /// Queues `dialog` behind `dialogs`, the queue's own guard.
+    fn push(&self, dialogs: &mut VecDeque<Pending>, dialog: Pending) {
+        dialogs.push_back(dialog);
+        self.any.store(true, Ordering::Release);
+    }
+
+    /// The oldest dialog waiting; no lock when none waits.
+    fn pop(&self) -> Option<Pending> {
+        if !self.any.load(Ordering::Acquire) {
+            return None;
+        }
+        let mut dialogs = self.dialogs.relock();
+        let next = dialogs.pop_front();
+        self.any.store(!dialogs.is_empty(), Ordering::Release);
+        next
+    }
+
+    /// Takes every dialog waiting, oldest first.
+    fn take_all(&self) -> VecDeque<Pending> {
+        let mut dialogs = self.dialogs.relock();
+        self.any.store(false, Ordering::Release);
+        std::mem::take(&mut *dialogs)
+    }
+}
+
 static MODE: AtomicU8 = AtomicU8::new(QUEUED);
-static WAITING: Mutex<VecDeque<Pending>> = Mutex::new(VecDeque::new());
-/// Set, under [`WAITING`]'s lock, while it may hold a dialog, so a frame
-/// with none waiting takes no lock.
-static ANY_WAITING: AtomicBool = AtomicBool::new(false);
+static WAITING: Waiting = Waiting::new();
 static SHOWN: Mutex<VecDeque<Arc<Shown>>> = Mutex::new(VecDeque::new());
 static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
 
@@ -204,7 +242,7 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 /// so. The mode is read under the queue's lock, so a dialog queued while
 /// [`fall_back`] runs is either drained by it or shows as a box itself.
 pub(crate) fn queue(dialog: Pending) -> Status {
-    let mut waiting = WAITING.relock();
+    let mut waiting = WAITING.dialogs.relock();
     if MODE.load(Ordering::Acquire) == SYSTEM {
         drop(waiting);
         system_box(dialog);
@@ -213,8 +251,7 @@ pub(crate) fn queue(dialog: Pending) -> Status {
     if waiting.len() >= MAX_WAITING {
         return Status::REFUSED;
     }
-    waiting.push_back(dialog);
-    ANY_WAITING.store(true, Ordering::Release);
+    WAITING.push(&mut waiting, dialog);
     Status::OK
 }
 
@@ -245,12 +282,7 @@ pub(crate) fn show(
 pub(crate) fn armed(in_game: bool) {
     MODE.store(if in_game { IN_GAME } else { SYSTEM }, Ordering::Release);
     if !in_game {
-        let waiting = {
-            let mut waiting = WAITING.relock();
-            ANY_WAITING.store(false, Ordering::Release);
-            std::mem::take(&mut *waiting)
-        };
-        for dialog in waiting {
+        for dialog in WAITING.take_all() {
             system_box(dialog);
         }
     }
@@ -265,12 +297,7 @@ pub(super) fn fall_back() {
         return;
     }
     let on_screen = CURRENT.take();
-    let dialogs = {
-        let mut waiting = WAITING.relock();
-        ANY_WAITING.store(false, Ordering::Release);
-        stranded(on_screen, &mut waiting)
-    };
-    for dialog in dialogs {
+    for dialog in stranded(on_screen, &mut WAITING.take_all()) {
         system_box(dialog);
     }
 }
@@ -350,15 +377,7 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
-    if !ANY_WAITING.load(Ordering::Acquire) {
-        return None;
-    }
-    let dialog = {
-        let mut waiting = WAITING.relock();
-        let next = waiting.pop_front();
-        ANY_WAITING.store(!waiting.is_empty(), Ordering::Release);
-        next
-    }?;
+    let dialog = WAITING.pop()?;
     let slot = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % KEPT;
     let texts = Arc::new(Shown {
         slot,
@@ -517,6 +536,25 @@ mod tests {
         assert_eq!(dialogs[0].buttons, 1 << UiDialog::CANCEL);
         assert!(waiting.is_empty(), "none is left waiting");
         assert!(stranded(None, &mut waiting).is_empty());
+    }
+
+    #[test]
+    fn waiting_dialogs_pop_oldest_first_and_the_flag_follows_the_queue() {
+        let loader = || Answerer::Loader(Box::new(|_| {}));
+        let waiting = Waiting::new();
+        assert!(waiting.pop().is_none());
+        for title in ["first", "second", "third"] {
+            waiting.push(
+                &mut waiting.dialogs.relock(),
+                Pending::new(title, "", "", 0, loader()),
+            );
+        }
+        assert_eq!(waiting.pop().map(|d| d.title), Some("first".to_owned()));
+        assert!(waiting.any.load(Ordering::Acquire), "two still wait");
+        let rest: Vec<_> = waiting.take_all().into_iter().map(|d| d.title).collect();
+        assert_eq!(rest, ["second", "third"]);
+        assert!(!waiting.any.load(Ordering::Acquire));
+        assert!(waiting.pop().is_none());
     }
 
     #[test]
