@@ -212,6 +212,12 @@ fn said_hello(key: u64, hello: &crate::base::admission::Hello) {
         return;
     }
     let greeting = state(|s| greet(s, key, Instant::now()));
+    // A client takes the server's settings messages only after the
+    // welcome; without it, the client says hello again.
+    let welcomed = super::carry(key, CONTROL, &control(WELCOME));
+    if welcomed && let Some(loader) = crate::engine::loader::loader() {
+        loader.parts.hello(loader, key);
+    }
     if greeting.fresh {
         crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
     } else if greeting.data {
@@ -220,9 +226,7 @@ fn said_hello(key: u64, hello: &crate::base::admission::Hello) {
             "mod messages: the client of {key:016x} said hello again; it gets its data again"
         );
     }
-    // A client takes the server's settings messages only after the
-    // welcome; without it, the client says hello again.
-    if super::carry(key, CONTROL, &control(WELCOME)) && greeting.data {
+    if welcomed && greeting.data {
         hand_data(key);
     }
 }

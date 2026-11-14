@@ -9,7 +9,7 @@
 //! shows. Texts a mod hands in are copied into a per-frame arena, kept for a
 //! few frames, since the game may read them after the call.
 
-use painter::{copy, read};
+use painter::{Widgets, copy, options, read};
 
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -958,6 +958,8 @@ fn frames(engine: &Engine, context: usize, reads: extensions::FrameReads) {
 }
 
 mod painter;
+#[cfg(test)]
+mod recorder;
 pub(crate) use painter::{Painter, widget};
 #[cfg(test)]
 mod tests;

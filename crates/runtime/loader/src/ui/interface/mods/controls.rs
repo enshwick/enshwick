@@ -11,7 +11,7 @@ use crate::actions::bindings::{self, Capture, Captured, clashes};
 use crate::actions::controls::{self, Row, SetKeyError, capture_keys, key_name};
 use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::ui::interface::Painter;
+use crate::ui::interface::{Painter, Widgets};
 
 /// Controls a page shows on a build without the scroll area, under the
 /// settings rows of the same page.

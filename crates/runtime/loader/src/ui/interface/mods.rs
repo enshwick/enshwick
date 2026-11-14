@@ -51,7 +51,7 @@ use crate::ui::mods_screen::{self, BACK_PRESSED, Back, Heard, Kind};
 use enshwick_base::Relock;
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
-use super::{ENGINE, Painter, copy};
+use super::{ENGINE, Painter, Widgets, copy};
 
 /// Mods a list page shows on a build without scroll areas.
 const MODS_PER_PAGE: usize = 4;

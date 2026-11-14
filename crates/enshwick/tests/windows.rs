@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Side, Status};
     use enshwick::actions::sheet::ArgView;
@@ -22,6 +22,24 @@ mod tests {
 
     /// How often the mod was asked whether a player may wave.
     static ALLOWS: AtomicUsize = AtomicUsize::new(0);
+
+    /// Whether the mod's per-player lists name many players with long
+    /// names, so a window of all three renders past the bound.
+    static LONG: AtomicBool = AtomicBool::new(false);
+
+    /// The ids of the mod's per-player lists.
+    const LISTS: [&str; 3] = ["friends", "guests", "muted"];
+
+    /// A list's accounts: one short, or as many as a list shows, each
+    /// with a long name.
+    fn listed() -> Vec<(PlayerKey, String)> {
+        if !LONG.load(Ordering::Relaxed) {
+            return vec![(PlayerKey::new(100), "Ann".into())];
+        }
+        (0..enshwick::actions::MAX_PLAYERS as u64)
+            .map(|n| (PlayerKey::new(100 + n), format!("{n:02}{}", "x".repeat(60))))
+            .collect()
+    }
 
     const TEXTS: &str = r#"
 [en]
@@ -74,6 +92,9 @@ mod tests {
                 }),
                 done,
             )?;
+            for list in LISTS {
+                actions.add(Action::per_player(list, list, |_, _| listed()), done)?;
+            }
             let shown = actions.clone();
             actions.add(
                 Action::new("open", "Open the panel"),
@@ -176,6 +197,34 @@ mod tests {
         assert!(
             loader.carried_windows(&bob, 0).is_empty(),
             "Bob may not run the actions the window names"
+        );
+    }
+
+    #[test]
+    fn a_render_past_the_bound_closes_the_window_and_its_mod_hears_of_it() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        let lists = LISTS
+            .iter()
+            .fold(Window::new("lists", "Lists"), |window, list| {
+                window.action(list)
+            });
+
+        actions().show(lists.clone(), &[root.key]).unwrap();
+        let carried = loader.carried_windows(&root, 0);
+        assert_eq!(carried.len(), 1, "three short lists fit");
+        assert!(carried[0].1.len() <= enshwick::actions::window::MAX_BYTES);
+
+        LONG.store(true, Ordering::Relaxed);
+        actions().show(lists, &[root.key]).unwrap();
+        assert!(
+            loader.carried_windows(&root, 0).is_empty(),
+            "three lists of long names render past the bound"
+        );
+        assert_eq!(
+            *CLOSED.lock().unwrap(),
+            [(9, Some("lists".to_owned()))],
+            "the mod forgets the window that closed"
         );
     }
 

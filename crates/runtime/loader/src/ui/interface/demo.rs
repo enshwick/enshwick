@@ -13,8 +13,8 @@ use enshwick_core::abi::{UiDialog, UiWidget};
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
 
-use super::Painter;
 use super::engine::{Engine, Window};
+use super::{Painter, Widgets};
 
 /// Asked to open, from the thread that takes the server's chat.
 static OPEN: AtomicBool = AtomicBool::new(false);

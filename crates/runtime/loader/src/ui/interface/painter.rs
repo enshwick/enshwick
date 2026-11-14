@@ -1,6 +1,7 @@
 use core::cell::Cell;
 
 use enshwick_core::abi::{Status, Str, UiWidget};
+use enshwick_core::ui::MAX_OPTIONS;
 
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
@@ -57,14 +58,6 @@ impl<'a> Painter<'a> {
         }
     }
 
-    pub(super) fn label(&self, text: &[u8], style: u32, wrap: bool, center: bool) {
-        let text = copy(&[text]);
-        // SAFETY: a window is open on this thread with `self.context`, by
-        // the contract of `Painter::new`; the text lives in the frame's
-        // arena.
-        unsafe { self.engine.label(self.context, &text, style, wrap, center) };
-    }
-
     /// A list entry's name, above the entry's text.
     pub(super) fn name(&self, text: &[u8]) {
         let text = copy(&[text]);
@@ -72,13 +65,6 @@ impl<'a> Painter<'a> {
         // the contract of `Painter::new`; the text lives in the frame's
         // arena.
         unsafe { self.engine.name(self.context, &text) };
-    }
-
-    pub(super) fn button(&self, text: &[u8], enabled: bool) -> bool {
-        let text = copy(&[text]);
-        // SAFETY: a window is open on this thread, by the contract of
-        // `Painter::new`; the text lives in the frame's arena.
-        unsafe { self.engine.button(&text, enabled) }
     }
 
     pub(super) fn button_compact(&self, text: &[u8], enabled: bool) -> bool {
@@ -102,31 +88,6 @@ impl<'a> Painter<'a> {
         // SAFETY: a window is open on this thread, by the contract of
         // `Painter::new`.
         unsafe { self.engine.icon_slot() };
-    }
-
-    pub(super) fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool> {
-        let label = copy(&[label]);
-        // SAFETY: a window is open on this thread with `self.context`, by
-        // the contract of `Painter::new`; the label lives in the frame's
-        // arena.
-        unsafe { self.engine.toggle(self.context, &label, on, read_only) }
-    }
-
-    pub(super) fn slider(
-        &self,
-        label: &[u8],
-        value: f32,
-        range: (f32, f32),
-        steps: u32,
-        read_only: bool,
-    ) -> Option<f32> {
-        let label = copy(&[label]);
-        // SAFETY: a window is open on this thread, by the contract of
-        // `Painter::new`; the label lives in the frame's arena.
-        unsafe {
-            self.engine
-                .slider(&label, value, range, steps, read_only, Takes::Live)
-        }
     }
 
     /// A settings slider that takes its value when the player lets go; one
@@ -153,43 +114,6 @@ impl<'a> Painter<'a> {
                 Takes::OnRelease { whole },
             )
         }
-    }
-
-    pub(super) fn dropdown(
-        &self,
-        label: &[u8],
-        options: &[&[u8]],
-        index: u32,
-        read_only: bool,
-    ) -> Option<u32> {
-        let mut texts = [UiText::EMPTY; enshwick_core::ui::MAX_OPTIONS];
-        for (slot, option) in texts.iter_mut().zip(options) {
-            *slot = copy(&[option]);
-        }
-        let count = options.len().min(texts.len());
-        let label = copy(&[label]);
-        // SAFETY: a window is open on this thread, by the contract of
-        // `Painter::new`; the label and options live in the frame's arena.
-        unsafe {
-            self.engine
-                .dropdown(&label, &texts[..count], index, read_only)
-        }
-    }
-
-    /// A text field over `buffer` with `hint` in it while it is empty,
-    /// which gives up the caret when `ending`; `None` on a build without
-    /// text fields.
-    pub(super) fn text_field(
-        &self,
-        buffer: &mut TextBuffer,
-        hint: &[u8],
-        ending: bool,
-    ) -> Option<Typed> {
-        let hint = copy(&[hint]);
-        // SAFETY: a window is open on this thread with `self.context`, by
-        // the contract of `Painter::new`; the hint lives in the frame's
-        // arena.
-        unsafe { self.engine.text_field(self.context, buffer, &hint, ending) }
     }
 
     /// Draws a list entry as a row: what `about` draws at the left, what
@@ -245,6 +169,125 @@ impl<'a> Painter<'a> {
         // `self.context`, by the contract of `Painter::new`.
         unsafe { self.engine.sound(self.context, sound) };
     }
+}
+
+/// The widgets the loader's own windows draw, so their drawing runs on the
+/// game's engine or, in a test, on a recorder of what it drew.
+pub(super) trait Widgets {
+    /// A text in `style`, wrapped and centred as asked.
+    fn label(&self, text: &[u8], style: u32, wrap: bool, center: bool);
+
+    /// A button; whether the player pressed it this frame.
+    fn button(&self, text: &[u8], enabled: bool) -> bool;
+
+    /// A switch showing `on`; its new state when the player flipped it.
+    fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool>;
+
+    /// A slider over `range` in `steps`, 0 for any value; its new value
+    /// while the player moves it.
+    fn slider(
+        &self,
+        label: &[u8],
+        value: f32,
+        range: (f32, f32),
+        steps: u32,
+        read_only: bool,
+    ) -> Option<f32>;
+
+    /// A dropdown of at most [`MAX_OPTIONS`] `options` with `index`
+    /// picked, past them for none; the row the player picked.
+    fn dropdown(&self, label: &[u8], options: &[&[u8]], index: u32, read_only: bool)
+    -> Option<u32>;
+
+    /// A text field over `buffer` with `hint` in it while it is empty,
+    /// which gives up the caret when `ending`; `None` on a build without
+    /// text fields.
+    fn text_field(&self, buffer: &mut TextBuffer, hint: &[u8], ending: bool) -> Option<Typed>;
+}
+
+impl Widgets for Painter<'_> {
+    fn label(&self, text: &[u8], style: u32, wrap: bool, center: bool) {
+        let text = copy(&[text]);
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`; the text lives in the frame's
+        // arena.
+        unsafe { self.engine.label(self.context, &text, style, wrap, center) };
+    }
+
+    fn button(&self, text: &[u8], enabled: bool) -> bool {
+        let text = copy(&[text]);
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`; the text lives in the frame's arena.
+        unsafe { self.engine.button(&text, enabled) }
+    }
+
+    fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool> {
+        let label = copy(&[label]);
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`; the label lives in the frame's
+        // arena.
+        unsafe { self.engine.toggle(self.context, &label, on, read_only) }
+    }
+
+    fn slider(
+        &self,
+        label: &[u8],
+        value: f32,
+        range: (f32, f32),
+        steps: u32,
+        read_only: bool,
+    ) -> Option<f32> {
+        let label = copy(&[label]);
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`; the label lives in the frame's arena.
+        unsafe {
+            self.engine
+                .slider(&label, value, range, steps, read_only, Takes::Live)
+        }
+    }
+
+    fn dropdown(
+        &self,
+        label: &[u8],
+        options: &[&[u8]],
+        index: u32,
+        read_only: bool,
+    ) -> Option<u32> {
+        let mut texts = [UiText::EMPTY; MAX_OPTIONS];
+        for (slot, option) in texts.iter_mut().zip(options) {
+            *slot = copy(&[option]);
+        }
+        let count = options.len().min(texts.len());
+        let label = copy(&[label]);
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`; the label and options live in the frame's arena.
+        unsafe {
+            self.engine
+                .dropdown(&label, &texts[..count], index, read_only)
+        }
+    }
+
+    fn text_field(&self, buffer: &mut TextBuffer, hint: &[u8], ending: bool) -> Option<Typed> {
+        let hint = copy(&[hint]);
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`; the hint lives in the frame's
+        // arena.
+        unsafe { self.engine.text_field(self.context, buffer, &hint, ending) }
+    }
+}
+
+/// A dropdown's options on the stack: the bytes of the first
+/// [`MAX_OPTIONS`] of `texts`, and how many there are.
+pub(super) fn options<'a>(
+    texts: impl IntoIterator<Item = &'a str>,
+) -> ([&'a [u8]; MAX_OPTIONS], usize) {
+    let mut options: [&[u8]; MAX_OPTIONS] = [&[]; MAX_OPTIONS];
+    let mut count = 0;
+    for (slot, text) in options.iter_mut().zip(texts) {
+        *slot = text.as_bytes();
+        count += 1;
+    }
+    (options, count)
 }
 
 pub(super) fn read(value: Str) -> Option<&'static [u8]> {
@@ -460,7 +503,7 @@ pub(super) fn row(
             // there for the call by the ABI's borrow rule; `count` is at most
             // that.
             let given = unsafe { core::slice::from_raw_parts(raw.options, count) };
-            let mut options = [UiText::EMPTY; enshwick_core::ui::MAX_OPTIONS];
+            let mut options = [UiText::EMPTY; MAX_OPTIONS];
             for (slot, option) in options.iter_mut().zip(given) {
                 *slot = read(*option).map_or(UiText::EMPTY, |bytes| copy(&[bytes]));
             }

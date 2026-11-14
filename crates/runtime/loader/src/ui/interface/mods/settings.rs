@@ -9,7 +9,7 @@ use super::{Entries, ROWS_PER_PAGE};
 use crate::base::configure::rows::{self, Lock, Row, Widget};
 use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::ui::interface::Painter;
+use crate::ui::interface::{Painter, Widgets, options};
 use crate::ui::mods_screen;
 use enshwick_base::Relock;
 
@@ -114,14 +114,16 @@ pub(super) fn draw_row(
 ) -> Option<String> {
     let label = mods_screen::row_label(row);
     let read_only = row.lock != Lock::Open;
-    let file = crate::engine::loader::loader()
-        .and_then(|loader| loader.find_mod(id))
-        .map_or_else(
-            || format!("{id}/settings.toml"),
-            |(_, record)| {
-                crate::base::worlds::shown_file(id, &record.settings_files.relock(), &row.key)
-            },
-        );
+    let file = || {
+        crate::engine::loader::loader()
+            .and_then(|loader| loader.find_mod(id))
+            .map_or_else(
+                || format!("{id}/settings.toml"),
+                |(_, record)| {
+                    crate::base::worlds::shown_file(id, &record.settings_files.relock(), &row.key)
+                },
+            )
+    };
     match &row.widget {
         Widget::Toggle(on) => paint
             .toggle(label.as_bytes(), *on, read_only)
@@ -142,11 +144,14 @@ pub(super) fn draw_row(
                 *whole,
             )
             .map(|v| rows::slid(v, *whole)),
-        Widget::Choice { options, index } => {
-            let options: Vec<&[u8]> = options.iter().map(String::as_bytes).collect();
+        Widget::Choice {
+            options: choices,
+            index,
+        } => {
+            let (options, count) = options(choices.iter().map(String::as_str));
             let picked = paint.dropdown(
                 label.as_bytes(),
-                &options,
+                &options[..count],
                 u32::try_from(*index).unwrap_or(u32::MAX),
                 read_only,
             )?;
@@ -162,7 +167,7 @@ pub(super) fn draw_row(
             } else {
                 texts::fill(
                     "row.text",
-                    &[("label", &label), ("value", toml), ("file", &file)],
+                    &[("label", &label), ("value", toml), ("file", &file())],
                 )
             };
             paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
@@ -171,7 +176,7 @@ pub(super) fn draw_row(
         Widget::Text(value) => {
             let line = texts::fill(
                 "row.text",
-                &[("label", &label), ("value", value), ("file", &file)],
+                &[("label", &label), ("value", value), ("file", &file())],
             );
             paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
             None

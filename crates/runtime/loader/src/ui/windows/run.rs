@@ -8,8 +8,8 @@ use enshwick_core::PlayerKey;
 use enshwick_core::abi::{Side, Status};
 
 use super::{
-    Change, Held, MAX_PLAYERS, Told, Waiting, close_told, heard, holds, leaving, merged, message,
-    note, queue,
+    Change, Held, MAX_PLAYERS, Route, Told, Waiting, close_told, greeted, heard, holds, leaving,
+    merged, message, note, pend, queue, route,
 };
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
@@ -23,6 +23,9 @@ struct Windows {
     any: AtomicBool,
     /// The windows each client got and was not told to close.
     held: Mutex<Held>,
+    /// The windows shown to players whose client takes no messages yet,
+    /// carried at its hello.
+    pending: Mutex<Held>,
     /// Closes and leaves the mods hear after the step.
     told: Mutex<Vec<Told>>,
     /// Set once the log named a window past the bound, so a mod that shows
@@ -34,6 +37,7 @@ static WINDOWS: Windows = Windows {
     waiting: Mutex::new(Vec::new()),
     any: AtomicBool::new(false),
     held: Mutex::new(Vec::new()),
+    pending: Mutex::new(Vec::new()),
     told: Mutex::new(Vec::new()),
     warned: AtomicBool::new(false),
 };
@@ -130,11 +134,33 @@ pub(crate) fn closed(loader: &Loader, key: u64, id: &str, window: String) {
     }
 }
 
-/// Forgets the windows player `key`'s client held, when the player leaves;
-/// the mods hear of it after the step.
+/// Forgets the windows player `key`'s client held and those waiting for
+/// its hello, when the player leaves; the mods hear of it after the step.
 pub(crate) fn left(key: u64) {
     WINDOWS.held.relock().retain(|(k, _, _)| *k != key);
+    WINDOWS.pending.relock().retain(|(k, _, _)| *k != key);
     tell(Told::Left { key });
+}
+
+/// Player `key`'s client said hello and was welcomed, on a link that holds
+/// no window: those it held and those shown to it while it took no
+/// messages go after the step, before newer changes; the mods hear of
+/// those with no room.
+pub(crate) fn hello(key: u64) {
+    let no_room = {
+        let mut held = WINDOWS.held.relock();
+        let mut pending = WINDOWS.pending.relock();
+        let mut waiting = WINDOWS.waiting.relock();
+        let no_room = greeted(&mut held, &mut pending, &mut waiting, key);
+        if !waiting.is_empty() {
+            WINDOWS.any.store(true, Ordering::Release);
+        }
+        no_room
+    };
+    if !no_room.is_empty() {
+        crate::log!(DEBUG, "windows: too many wait to show {key:016x} theirs");
+    }
+    no_room.into_iter().for_each(tell);
 }
 
 /// Tells the mods what `told` holds: a window's mod of its close, and
@@ -163,9 +189,9 @@ fn taken() -> (Vec<Told>, Vec<Waiting>) {
 /// to its player's client: a show or an update as the mod renders it for
 /// that player, in their language, and a close where the mod renders
 /// nothing for them. An update goes only to a client that holds the
-/// window. A player not online is skipped, and so is one whose client
-/// takes no messages, as one without Enshwick: the mod renders nothing for
-/// it and the server notes nothing as held. Then tells the mods of the
+/// window. A player not online is skipped. A change for a player whose
+/// client takes no messages yet waits for its hello: the mod renders
+/// nothing for it until then. Then tells the mods of the
 /// players who left and of every window a client no longer holds: closed
 /// by the client, let go for a newer one, or closed by a render; not one
 /// its mod closed itself.
@@ -180,31 +206,43 @@ pub(crate) fn after_step(loader: &Loader) {
 }
 
 /// Carries `waiting` to the clients, adding to `told` the windows a client
-/// closed for it.
+/// closed for it, or let go while its hello was on its way.
 fn carry(loader: &Loader, waiting: Vec<Waiting>, told: &mut Vec<Told>) {
     if waiting.is_empty() {
         return;
     }
     let online = crate::engine::world::players(loader).unwrap_or_default();
-    for Waiting {
-        owner,
-        window,
-        key,
-        change,
-    } in waiting
-    {
-        let Some(record) = loader.mods.get(owner.get()) else {
+    for waiting in waiting {
+        let Some(record) = loader.mods.get(waiting.owner.get()) else {
             continue;
         };
-        if !crate::base::net::ready(key) {
-            continue;
-        }
-        if change == Change::Update && !holds(&WINDOWS.held.relock(), key, owner, &window) {
-            continue;
-        }
-        let Some(player) = online.iter().find(|p| p.key == PlayerKey::new(key)) else {
+        let Some(player) = online.iter().find(|p| p.key == PlayerKey::new(waiting.key)) else {
             continue;
         };
+        let ready = crate::base::net::ready(waiting.key);
+        let route = route(&waiting, ready, || {
+            holds(
+                &WINDOWS.held.relock(),
+                waiting.key,
+                waiting.owner,
+                &waiting.window,
+            )
+        });
+        match route {
+            Route::Skip => continue,
+            Route::Pend => {
+                let mut held = WINDOWS.held.relock();
+                told.extend(pend(&mut held, &mut WINDOWS.pending.relock(), waiting));
+                continue;
+            }
+            Route::Carry => {}
+        }
+        let Waiting {
+            owner,
+            window,
+            key,
+            change,
+        } = waiting;
         let text = if change == Change::Close {
             String::new()
         } else {
@@ -236,14 +274,16 @@ fn carry(loader: &Loader, waiting: Vec<Waiting>, told: &mut Vec<Told>) {
     }
 }
 
-/// Forgets the waiting changes and what clients hold, as when the server's
-/// world goes away; the mods of `loader` hear that every player who held a
-/// window or was waiting to be told of one left.
+/// Forgets the waiting changes, the shows waiting for a hello and what
+/// clients hold, as when the server's world goes away; the mods of
+/// `loader` hear that every player who held a window, had one waiting for
+/// their hello or was waiting to be told of one left.
 pub(crate) fn forget(loader: Option<&Loader>) {
     WINDOWS.waiting.relock().clear();
     let told = core::mem::take(&mut *WINDOWS.told.relock());
     WINDOWS.any.store(false, Ordering::Release);
-    let held = core::mem::take(&mut *WINDOWS.held.relock());
+    let mut held = core::mem::take(&mut *WINDOWS.held.relock());
+    held.append(&mut WINDOWS.pending.relock());
     WINDOWS.warned.store(false, Ordering::Relaxed);
     if let Some(loader) = loader {
         tell_mods(loader, leaving(told, &held));
