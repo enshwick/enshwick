@@ -5,15 +5,16 @@ use clap::ValueEnum as _;
 use super::*;
 
 #[test]
-fn the_docs_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
+fn the_docs_stable_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
     assert_eq!(Part::from_str("docs", false), Ok(Part::Docs));
+    assert_eq!(Part::from_str("stable-api", false), Ok(Part::StableApi));
     assert_eq!(
         Part::from_str("windows-tests", false),
         Ok(Part::WindowsTests)
     );
     assert_eq!(Part::from_str("trybuild", false), Ok(Part::Trybuild));
     assert_eq!(Part::from_str("semver", false), Ok(Part::Semver));
-    for part in [Part::Docs, Part::Trybuild, Part::Semver] {
+    for part in [Part::Docs, Part::StableApi, Part::Trybuild, Part::Semver] {
         assert!(Part::every(false).contains(&part), "{part:?}");
         assert!(Part::every(true).contains(&part), "{part:?}");
     }
@@ -103,14 +104,19 @@ fn planned(parts: &[Part]) -> Vec<String> {
 }
 
 #[test]
-fn the_host_and_docs_parts_split_the_steps_a_check_of_every_part_runs_in_order() {
+fn the_host_docs_and_stable_parts_split_the_steps_a_check_of_every_part_runs_in_order() {
     let host = planned(&[Part::Host, Part::Trybuild]);
     let docs = planned(&[Part::Docs]);
+    let stable_part = planned(&[Part::StableApi]);
+    let args = stable();
     let starts = |steps: &[String], with: &str| steps.iter().any(|s| s.starts_with(with));
     assert!(starts(&host, "cargo nextest") && starts(&host, "cargo deny"));
     assert!(!starts(&host, "cargo test --doc") && !starts(&host, "cargo doc"));
     assert!(starts(&docs, "cargo test --doc") && starts(&docs, "cargo doc"));
     assert!(!starts(&docs, "cargo nextest") && !starts(&docs, "cargo fmt"));
+    let stable_line = args.join(" ");
+    assert!(!docs.iter().any(|s| s.contains(&stable_line)), "{docs:?}");
+    assert!(starts(&stable_part, "cargo test --doc") && starts(&stable_part, "cargo doc"));
     let every = planned(&Part::every(false));
     // A step that runs twice, such as the link check after each docs
     // build, takes its next place in the full run.
@@ -124,12 +130,13 @@ fn the_host_and_docs_parts_split_the_steps_a_check_of_every_part_runs_in_order()
         }
         taken
     };
-    assert_eq!(every.len(), host.len() + docs.len());
+    assert_eq!(every.len(), host.len() + docs.len() + stable_part.len());
     assert!(order(&host).is_sorted() && order(&docs).is_sorted());
+    assert!(order(&stable_part).is_sorted());
 }
 
 #[test]
-fn a_change_to_the_api_docs_alone_plans_the_stable_steps_in_the_docs_part() {
+fn a_change_to_the_api_docs_alone_plans_the_stable_steps_in_their_part() {
     let docs_of = |name: &str| Scope::Some {
         code: BTreeSet::new(),
         docs: [name.to_owned()].into(),
@@ -144,7 +151,7 @@ fn a_change_to_the_api_docs_alone_plans_the_stable_steps_in_the_docs_part() {
             Some(""),
             &[],
             false,
-            &[Part::Docs],
+            &[Part::StableApi],
         )
         .iter()
         .any(|step| step.args.ends_with(&args))

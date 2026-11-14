@@ -228,9 +228,12 @@ pub(crate) enum Part {
     /// fmt with `--all`, clippy, nextest and cargo-deny for the host, and the
     /// repository's own checks.
     Host,
-    /// The doctests, the API crate's stable-surface checks and the workspace
-    /// rustdoc, for the host.
+    /// The doctests and the workspace rustdoc, for the host.
     Docs,
+    /// The API crate's stable-surface checks ([`stable_api_steps`]): a
+    /// build of its own without `unstable`, which shares nothing with the
+    /// docs part's, so CI runs it beside that part.
+    StableApi,
     /// clippy for the Windows target through cargo-xwin, off Windows.
     WindowsLint,
     /// The tests of the changed packages that run only on Windows, under
@@ -249,12 +252,13 @@ pub(crate) enum Part {
 
 impl Part {
     /// The parts that run when none is named: the host check, the docs, the
-    /// Windows lint, the trybuild test and semver-checks, and the Windows
-    /// tests with `--all` or `--windows`.
+    /// stable surface, the Windows lint, the trybuild test and semver-checks,
+    /// and the Windows tests with `--all` or `--windows`.
     fn every(windows_tests: bool) -> Vec<Self> {
         let mut every = vec![
             Self::Host,
             Self::Docs,
+            Self::StableApi,
             Self::WindowsLint,
             Self::Trybuild,
             Self::Semver,
@@ -581,7 +585,7 @@ fn host_steps(
         Scope::All => true,
         Scope::Some { docs, .. } => docs.iter().any(|name| name == FACADE),
     };
-    if run_docs && (touches(scope, FACADE) || api_docs) {
+    if parts.contains(&Part::StableApi) && (touches(scope, FACADE) || api_docs) {
         steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, full) {
