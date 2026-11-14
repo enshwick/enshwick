@@ -333,19 +333,98 @@ impl Drop for Turn<'_> {
 }
 
 static EXECUTOR: OnceLock<Option<Executor>> = OnceLock::new();
-static QUEUE: Queue = Queue::new();
-static BUSY: AtomicBool = AtomicBool::new(false);
-/// Results for the mods, handed out after the step.
-static FINISHED: Pending<Finished> = Pending::new();
-/// A mod asked for inventories during init, or a dedicated server runs,
-/// whose console gives items.
-static WANTED: AtomicBool = AtomicBool::new(false);
-/// The row hook is in place.
-static ARMED: AtomicBool = AtomicBool::new(false);
-/// The arming is over, armed or not.
-static SETTLED: AtomicBool = AtomicBool::new(false);
-/// The item registry the inventory system last saw.
-static REGISTRY: AtomicUsize = AtomicUsize::new(0);
+
+/// What the inventory requests follow while the loader runs.
+#[derive(Debug)]
+struct State {
+    queue: Queue,
+    /// A transaction runs; one at a time.
+    busy: AtomicBool,
+    /// Results for the mods, handed out after the step.
+    finished: Pending<Finished>,
+    /// A mod asked for inventories during init, or a dedicated server runs,
+    /// whose console gives items; a fact of the process.
+    wanted: AtomicBool,
+    /// The row hook is in place; a fact of the process.
+    armed: AtomicBool,
+    /// The arming is over, armed or not; a fact of the process.
+    settled: AtomicBool,
+    /// The item registry the inventory system last saw, gone with the
+    /// hosted game that held it.
+    registry: AtomicUsize,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            queue: Queue::new(),
+            busy: AtomicBool::new(false),
+            finished: Pending::new(),
+            wanted: AtomicBool::new(false),
+            armed: AtomicBool::new(false),
+            settled: AtomicBool::new(false),
+            registry: AtomicUsize::new(0),
+        }
+    }
+
+    fn wanted(&self) -> bool {
+        self.wanted.load(Ordering::Acquire)
+    }
+
+    /// Answers every queued request with `outcome`, without running it.
+    fn answer_all(&self, outcome: u32) {
+        let gone = self.queue.drain(|_| true);
+        self.finished
+            .extend(gone.iter().map(|r| Finished::without_run(r, outcome)));
+    }
+
+    /// Records whether the row hook got armed; `failed` are the
+    /// mid-function addresses that did not.
+    fn settle(&self, loader: &Loader, failed: impl IntoIterator<Item = u64>) {
+        let site = executor(loader).map(|e| e.site);
+        let armed = self.wanted()
+            && !INVENTORY_FUSE.is_off()
+            && site.is_some_and(|site| failed.into_iter().all(|f| f != site));
+        self.armed.store(armed, Ordering::Release);
+        self.settled.store(true, Ordering::Release);
+        if self.wanted() && !armed {
+            let id = pinned::inventory::ACTIONS_ROW.id();
+            let _off = loader.fuse_off(&INVENTORY_FUSE, id, "could not be armed");
+            self.answer_all(InventoryResult::UNAVAILABLE);
+        }
+    }
+
+    /// Answers the requests no row will run: every one as unavailable once
+    /// the feature is off, since the mid-hook dispatch passes the row from
+    /// then on, and the rest as timed out once they waited past [`TIMEOUT`].
+    fn expire(&self, now: Instant) {
+        let off = INVENTORY_FUSE.is_off();
+        let late = self
+            .queue
+            .drain(|r| off || now.duration_since(r.queued) > TIMEOUT);
+        if late.is_empty() {
+            return;
+        }
+        let outcome = if off {
+            InventoryResult::UNAVAILABLE
+        } else {
+            InventoryResult::TIMED_OUT
+        };
+        self.finished
+            .extend(late.iter().map(|r| Finished::without_run(r, outcome)));
+    }
+
+    /// Forgets the item registry of a hosted game that ended and answers the
+    /// requests still queued for its world as unavailable, so their mods
+    /// hear before the parts forget; what the process learnt of the hook
+    /// stays.
+    fn end(&self) {
+        self.registry.store(0, Ordering::Release);
+        self.answer_all(InventoryResult::UNAVAILABLE);
+    }
+}
+
+static STATE: State = State::new();
 
 /// The registry to use and whether the two disagree, from the one the
 /// inventory system handed its row (`captured`) and the game-systems
@@ -365,7 +444,7 @@ fn pick_registry(captured: usize, held: usize) -> (usize, bool) {
 /// neither is known. Both live while `access` is held.
 fn registry(loader: &Loader, access: &ServerAccess<'_>) -> usize {
     pick_registry(
-        REGISTRY.load(Ordering::Acquire),
+        STATE.registry.load(Ordering::Acquire),
         held(loader, access).unwrap_or(0),
     )
     .0
@@ -537,7 +616,7 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
     if let Some((symbol, why)) = unchecked(loader) {
         // Read lazily for item facts too: off only where requests are wanted,
         // by a mod or by a dedicated server's console.
-        if WANTED.load(Ordering::Acquire) || loader.side == Side::SERVER {
+        if STATE.wanted() || loader.side == Side::SERVER {
             let _off = loader.fuse_off(&INVENTORY_FUSE, symbol.id(), &why.to_string());
         }
         return None;
@@ -572,7 +651,7 @@ pub(crate) fn open(loader: &Loader) -> Status {
     }
     // Wanted before the executor is read, so a build without it lists the
     // requests off.
-    WANTED.store(true, Ordering::Release);
+    STATE.wanted.store(true, Ordering::Release);
     if executor(loader).is_none() {
         return Status::MISSING;
     }
@@ -583,9 +662,9 @@ pub(crate) fn open(loader: &Loader) -> Status {
 /// dedicated server, whose console gives items.
 pub(crate) fn link(loader: &Loader) {
     if loader.side == Side::SERVER && executor(loader).is_some() {
-        WANTED.store(true, Ordering::Release);
+        STATE.wanted.store(true, Ordering::Release);
     }
-    if !WANTED.load(Ordering::Acquire) {
+    if !STATE.wanted() {
         return;
     }
     if executor(loader).is_none() {
@@ -602,37 +681,14 @@ pub(crate) fn link(loader: &Loader) {
 /// Records whether the row hook got armed; `failed` are the mid-function
 /// addresses that did not.
 pub(crate) fn settle(loader: &Loader, failed: impl IntoIterator<Item = u64>) {
-    let site = executor(loader).map(|e| e.site);
-    let armed = WANTED.load(Ordering::Acquire)
-        && !INVENTORY_FUSE.is_off()
-        && site.is_some_and(|site| failed.into_iter().all(|f| f != site));
-    ARMED.store(armed, Ordering::Release);
-    SETTLED.store(true, Ordering::Release);
-    if WANTED.load(Ordering::Acquire) && !armed {
-        let id = pinned::inventory::ACTIONS_ROW.id();
-        let _off = loader.fuse_off(&INVENTORY_FUSE, id, "could not be armed");
-        let gone = QUEUE.drain(|_| true);
-        finish(
-            gone.iter()
-                .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
-        );
-    }
+    STATE.settle(loader, failed);
 }
 
 /// A hosted game ended: its item registry is gone, and the requests still
 /// queued for its world are answered as unavailable.
-pub(crate) fn forget() {
-    REGISTRY.store(0, Ordering::Release);
-    let gone = QUEUE.drain(|_| true);
-    finish(
-        gone.iter()
-            .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
-    );
+pub(crate) fn end() {
+    STATE.end();
     deliver(Instant::now());
-}
-
-fn finish(results: impl IntoIterator<Item = Finished>) {
-    FINISHED.extend(results);
 }
 
 /// Queues a request of the mod `owner`.
@@ -643,10 +699,10 @@ pub(crate) fn submit(
     done: InventoryResultFn,
     user: *mut c_void,
 ) -> Status {
-    if executor(loader).is_none() || !WANTED.load(Ordering::Acquire) || INVENTORY_FUSE.is_off() {
+    if executor(loader).is_none() || !STATE.wanted() || INVENTORY_FUSE.is_off() {
         return Status::MISSING;
     }
-    if SETTLED.load(Ordering::Acquire) && !ARMED.load(Ordering::Acquire) {
+    if STATE.settled.load(Ordering::Acquire) && !STATE.armed.load(Ordering::Acquire) {
         return Status::MISSING;
     }
     if loader.side != Side::SERVER && !crate::engine::world::hosting() {
@@ -663,7 +719,7 @@ pub(crate) fn submit(
         return Status::BAD_ARGS;
     }
     let ops = ops.to_vec();
-    QUEUE.push(Request {
+    STATE.queue.push(Request {
         owner,
         flags: request.flags,
         actor: request.actor.0,
@@ -735,8 +791,8 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
 /// Answers the requests that waited too long and hands out the results; on
 /// the game thread after each step.
 pub(crate) fn deliver(now: Instant) {
-    expire(now);
-    for result in FINISHED.take() {
+    STATE.expire(now);
+    for result in STATE.finished.take() {
         if crate::engine::loader::is_off(result.owner) {
             continue;
         }
@@ -761,23 +817,6 @@ pub(crate) fn deliver(now: Instant) {
             },
         );
     }
-}
-
-/// Answers the requests no row will run: every one as unavailable once the
-/// feature is off, since the mid-hook dispatch passes the row from then on,
-/// and the rest as timed out once they waited past [`TIMEOUT`].
-fn expire(now: Instant) {
-    let off = INVENTORY_FUSE.is_off();
-    let late = QUEUE.drain(|r| off || now.duration_since(r.queued) > TIMEOUT);
-    if late.is_empty() {
-        return;
-    }
-    let outcome = if off {
-        InventoryResult::UNAVAILABLE
-    } else {
-        InventoryResult::TIMED_OUT
-    };
-    finish(late.iter().map(|r| Finished::without_run(r, outcome)));
 }
 
 /// Whether a transaction with these results is committed.
@@ -825,12 +864,8 @@ unsafe fn row_hit(registers: &Registers) {
         .wrapping_sub(executor.view_frame);
     let build = crate::engine::loader::loader().map_or("", |loader| loader.build.name.as_str());
     if !INVENTORY_FUSE.verify(build, || run::view_holds(executor, view)) {
-        if INVENTORY_FUSE.is_off() && QUEUE.pending.load(Ordering::Acquire) {
-            let gone = QUEUE.drain(|_| true);
-            finish(
-                gone.iter()
-                    .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
-            );
+        if INVENTORY_FUSE.is_off() && STATE.queue.pending.load(Ordering::Acquire) {
+            STATE.answer_all(InventoryResult::UNAVAILABLE);
         }
         return;
     }
@@ -839,8 +874,8 @@ unsafe fn row_hit(registers: &Registers) {
     // row loop (`inventory.view_fill` checked by `Loader::code_holds`); it holds the
     // item registry pointer at the table's `inventory.view_item_registry`.
     let registry = unsafe { read_ptr::<u8>(view, executor.view_item_registry) }.expose_provenance();
-    if REGISTRY.load(Ordering::Acquire) != registry
-        && REGISTRY.swap(registry, Ordering::AcqRel) != registry
+    if STATE.registry.load(Ordering::Acquire) != registry
+        && STATE.registry.swap(registry, Ordering::AcqRel) != registry
         && pick_registry(
             registry,
             crate::engine::loader::loader()
@@ -855,13 +890,13 @@ unsafe fn row_hit(registers: &Registers) {
             "inventories: the inventory system's item registry differs from the game-systems holder's; the inventory system's is used"
         );
     }
-    if !QUEUE.pending.load(Ordering::Acquire) {
+    if !STATE.queue.pending.load(Ordering::Acquire) {
         return;
     }
-    let Some(_turn) = Turn::take(&BUSY) else {
+    let Some(_turn) = Turn::take(&STATE.busy) else {
         return;
     };
-    while let Some(request) = QUEUE.claim() {
+    while let Some(request) = STATE.queue.claim() {
         if crate::engine::loader::is_off(request.owner) {
             continue;
         }
@@ -870,7 +905,7 @@ unsafe fn row_hit(registers: &Registers) {
         // its filled view at `view`, and `Turn` lets one transaction run at a
         // time.
         let finished = unsafe { run(executor, ctx, view, &request) };
-        finish([finished]);
+        STATE.finished.extend([finished]);
     }
 }
 

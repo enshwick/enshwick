@@ -304,11 +304,6 @@ impl<F> Registered<F> {
     }
 }
 
-/// Takes what mods registered during init, for sealing.
-pub(crate) fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
-    std::mem::take(&mut *list.relock())
-}
-
 /// Whether the mod at index `owner` is off; the loader's own links never are.
 pub(crate) fn is_off(owner: ModIndex) -> bool {
     loader().map_or(owner != ModIndex::LOADER, |loader| {

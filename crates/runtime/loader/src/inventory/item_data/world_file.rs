@@ -8,8 +8,8 @@ use rustc_hash::FxHashSet;
 
 use super::carried::{set_aside_cleared, set_aside_older};
 use super::{
-    FILE, FINDING, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of, scope,
-    serves, take_destroyed, template_id, wanted,
+    FILE, KINDS, Kind, STATE, Scope, Server, Values, game, kind_of, scope, serves, template_id,
+    wanted,
 };
 use crate::engine::loader::Loader;
 use crate::inventory::item_records::anchor::{Anchor, KindIndex, Pending};
@@ -157,11 +157,11 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 pending.len(),
                 key.as_deref().unwrap_or("?")
             );
-            KEPT.store(false, Ordering::Relaxed);
-            UNREAD.store(false, Ordering::Relaxed);
-            FINDING.store(!pending.is_empty(), Ordering::Relaxed);
-            let _earlier_world = take_destroyed();
-            *SERVER.relock() = Some(Server {
+            STATE.kept.store(false, Ordering::Relaxed);
+            STATE.unread.store(false, Ordering::Relaxed);
+            STATE.finding.store(!pending.is_empty(), Ordering::Relaxed);
+            let _earlier_world = STATE.destroyed.take();
+            *STATE.server.relock() = Some(Server {
                 key,
                 values: Values::default(),
                 pending,
@@ -307,9 +307,10 @@ fn set_aside_overwritten(server: &mut Server) {
 
 /// The world key and file bytes of `server` as its world goes away, when
 /// values changed since its last save; the anchors stand as last read, since
-/// the world is gone.
-pub(super) fn last_write(mut server: Server) -> Option<(String, Vec<u8>)> {
-    if !FINDING.load(Ordering::Relaxed) {
+/// the world is gone. `finding`: its records still waited for the first
+/// step.
+pub(super) fn last_write(mut server: Server, finding: bool) -> Option<(String, Vec<u8>)> {
+    if !finding {
         set_aside_overwritten(&mut server);
     }
     if !server.changed {
@@ -321,8 +322,8 @@ pub(super) fn last_write(mut server: Server) -> Option<(String, Vec<u8>)> {
 
 /// Writes what `server` set after its world's last save, such as values mods
 /// set in their `ShutdownStarted` handlers, which run after the parts save.
-pub(super) fn save_last(server: Server) {
-    let Some((key, bytes)) = last_write(server) else {
+pub(super) fn save_last(server: Server, finding: bool) {
+    let Some((key, bytes)) = last_write(server, finding) else {
         return;
     };
     let path = file(&key);
@@ -339,7 +340,7 @@ pub(super) fn save_last(server: Server) {
 /// holds them now.
 fn save(loader: &Loader, after_game_save: bool) {
     let (key, bytes, anchorless) = {
-        let mut server = SERVER.relock();
+        let mut server = STATE.server.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
@@ -347,7 +348,7 @@ fn save(loader: &Loader, after_game_save: bool) {
         // since carry the anchors they were set with. At shutdown the world
         // is being torn down: the anchors of its last save stand, but for
         // the items players carry, whose slots change all the time.
-        let anchorless = if FINDING.load(Ordering::Relaxed) {
+        let anchorless = if STATE.finding() {
             0
         } else if after_game_save {
             refresh(loader, server)
@@ -358,7 +359,7 @@ fn save(loader: &Loader, after_game_save: bool) {
         // A carried value, its anchor read afresh, on a slot a record from
         // an earlier leave still waits on counts: written so, the next load
         // would name the slot twice.
-        if !FINDING.load(Ordering::Relaxed) {
+        if !STATE.finding() {
             if !server.cleared.is_empty() {
                 for (entity, character) in crate::engine::world::characters(loader) {
                     server.changed |= set_aside_cleared(server, character, |link, slot| {
@@ -385,7 +386,7 @@ fn save(loader: &Loader, after_game_save: bool) {
     }
     let path = file(&key);
     if let Err(error) = enshwick_core::files::write_atomically(&path, &bytes) {
-        unwritten(&mut SERVER.relock(), &key);
+        unwritten(&mut STATE.server.relock(), &key);
         crate::log!(
             WARN,
             "mod data: {} not written, kept for the next save: {error}",

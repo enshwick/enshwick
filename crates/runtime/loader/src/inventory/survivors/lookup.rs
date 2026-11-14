@@ -1,6 +1,5 @@
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
-use std::time::Instant;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{Header, Side, SurvivorLookup};
@@ -13,16 +12,12 @@ use crate::engine::chains::Onward;
 use crate::engine::ecs::Engine;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
-use enshwick_base::Relock;
 
-use super::{
-    LOOKUP_FUSE, Layout, MOVE_ACTIVE, MOVING, NPC_COMMON_TYPE, SEALED, SKIP_UPDATE, TRANSFORM_TYPE,
-    layout,
-};
+use super::{LOOKUP_FUSE, Layout, SKIP_UPDATE, STATE, layout};
 
 /// Asks the registered lookup; `None` for the game's own answer.
 pub(super) fn ask(call: &SurvivorLookup) -> Option<u32> {
-    let registered = SEALED.get()?.lookup?;
+    let registered = STATE.registrations.lookup()?;
     if crate::engine::loader::is_off(registered.owner) {
         return None;
     }
@@ -224,8 +219,7 @@ pub(super) unsafe fn resolve(
             cell_of_fixed(target),
         ))?;
         if answer != 0 {
-            *MOVING.relock() = Some((survivor, answer, Instant::now()));
-            MOVE_ACTIVE.store(true, Ordering::Release);
+            STATE.start_move(survivor, answer);
         }
         return Some(answer);
     }
@@ -317,7 +311,7 @@ pub(super) struct BedToken<'e> {
 
 /// The bed `entity` sleeps in: its `NpcCommon.bedId`.
 pub(super) unsafe extern "system" fn bed_of(token: *mut c_void, entity: Entity) -> Entity {
-    let kind = NPC_COMMON_TYPE.load(Ordering::Acquire);
+    let kind = STATE.npc_common_type.load(Ordering::Acquire);
     if token.is_null() || kind == u16::MAX || entity == Entity(0) {
         return Entity(0);
     }
@@ -348,7 +342,7 @@ pub(super) unsafe fn position_of(
     ctx: *mut u64,
     entity: Entity,
 ) -> Option<[i64; 3]> {
-    let kind = TRANSFORM_TYPE.load(Ordering::Acquire);
+    let kind = STATE.transform_type.load(Ordering::Acquire);
     if kind == u16::MAX || ctx.is_null() || entity == Entity(0) {
         return None;
     }

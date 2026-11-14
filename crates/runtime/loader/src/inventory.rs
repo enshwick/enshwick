@@ -47,7 +47,7 @@ pub(crate) static PARTS: &[&Part] = &[
             transactions::deliver(s.now);
         })],
         end: Some(fused!("inventory requests at a game's end", |_| {
-            transactions::forget();
+            transactions::end();
         })),
         ..part!("inventory", transactions)
     },

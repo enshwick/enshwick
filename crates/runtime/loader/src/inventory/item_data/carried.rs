@@ -7,8 +7,8 @@ use enshwick_core::{Entity, ItemId};
 use rustc_hash::FxHashSet;
 
 use super::{
-    KEPT, SERVER, Scope, Server, UNREAD, game, insert_found, kind, messages_for, removals, scope,
-    send, serves, wanted,
+    STATE, Scope, Server, game, insert_found, kind, messages_for, removals, scope, send, serves,
+    wanted,
 };
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
@@ -78,13 +78,13 @@ pub(crate) fn player_left(loader: &Loader, entity: Entity) {
 
 fn joined(loader: &Loader, entity: Entity) {
     // A world whose things did not read attaches nothing this session.
-    if !wanted() || !serves() || UNREAD.load(Ordering::Relaxed) {
+    if !wanted() || !serves() || STATE.unread() {
         return;
     }
     let Some(character) = crate::engine::world::character_of(loader, entity) else {
         return;
     };
-    let mut server = SERVER.relock();
+    let mut server = STATE.server.relock();
     let Some(server) = server.as_mut() else {
         return;
     };
@@ -105,7 +105,7 @@ fn left(loader: &Loader, entity: Entity) {
     let characters = crate::engine::world::characters(loader);
     let character_of = |root| crate::engine::world::character_in(&characters, root);
     let messages = {
-        let mut server = SERVER.relock();
+        let mut server = STATE.server.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
@@ -134,7 +134,7 @@ fn left(loader: &Loader, entity: Entity) {
         }
         if let Some(character) = character_of(entity)
             && settled
-            && !UNREAD.load(Ordering::Relaxed)
+            && !STATE.unread()
             && game::filled(loader, entity) == Some(true)
         {
             // Its looks have run on filled inventories, which read exactly
@@ -373,7 +373,7 @@ pub(super) fn set_aside_waiting(
 #[cold]
 fn find_carried(loader: &Loader) {
     let (messages, stats) = {
-        let mut server = SERVER.relock();
+        let mut server = STATE.server.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
@@ -413,7 +413,9 @@ fn find_carried(loader: &Loader) {
             }
             at += 1;
         }
-        KEPT.store(!server.values.is_empty(), Ordering::Relaxed);
+        STATE
+            .kept
+            .store(!server.values.is_empty(), Ordering::Relaxed);
         (
             messages_for(&server.values, &found),
             touches_item_stats(&found),

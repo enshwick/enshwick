@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 use enshwick_core::{Entity, ItemId};
 use rustc_hash::FxHashSet;
 
-use super::{FINDING, KEPT, SERVER, Server, UNREAD, game, insert_found, messages_for, send};
+use super::{STATE, Server, game, insert_found, messages_for, send};
 use crate::engine::loader::Loader;
 use crate::inventory::item_records::anchor::{self, Anchor, Index, KindIndex, Pending};
 use enshwick_base::Relock;
@@ -105,9 +105,9 @@ pub(super) fn find_pending(loader: &Loader) {
     if crate::engine::world::server().is_err() {
         return;
     }
-    FINDING.store(false, Ordering::Relaxed);
+    STATE.finding.store(false, Ordering::Relaxed);
     let pending = {
-        let server = SERVER.relock();
+        let server = STATE.server.relock();
         let Some(server) = server.as_ref() else {
             return;
         };
@@ -119,7 +119,7 @@ pub(super) fn find_pending(loader: &Loader) {
     let started = std::time::Instant::now();
     let index = index(loader, &pending);
     let (attached, messages) = {
-        let mut server = SERVER.relock();
+        let mut server = STATE.server.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
@@ -128,12 +128,14 @@ pub(super) fn find_pending(loader: &Loader) {
         });
         let found = attached.as_ref().map_or(&[][..], |a| &a.found[..]);
         let messages = messages_for(&server.values, found);
-        KEPT.store(!server.values.is_empty(), Ordering::Relaxed);
+        STATE
+            .kept
+            .store(!server.values.is_empty(), Ordering::Relaxed);
         (attached, messages)
     };
     send(&messages);
     let Some(attached) = attached else {
-        UNREAD.store(true, Ordering::Relaxed);
+        STATE.unread.store(true, Ordering::Relaxed);
         crate::log!(
             WARN,
             "mod data: the world's placed things did not read on this game build; {} values wait as read and no mod data attaches this session",

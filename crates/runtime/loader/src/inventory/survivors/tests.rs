@@ -33,6 +33,59 @@ fn a_survivor_feature_no_mod_asked_for_links_nothing_and_stays_on() {
     assert_eq!(fuses, [false; 3]);
     assert!(!FILED_FUSE.is_off() && !MENU_FUSE.is_off());
     assert!(loader.chains.relock().is_empty());
+    assert!(STATE.registrations.is_sealed(), "the link seals them");
+    STATE.registrations.reopen();
+    assert!(
+        !STATE.registrations.is_sealed(),
+        "the next test registers again"
+    );
+}
+
+unsafe extern "system" fn no_lookup(
+    _call: *const enshwick_core::abi::SurvivorLookup,
+    _user: *mut c_void,
+    _out: *mut enshwick_core::Entity,
+) -> u8 {
+    0
+}
+
+#[test]
+fn one_mod_holds_the_lookup_until_the_seal_and_a_reopened_one_takes_any() {
+    let registrations = Registrations::new();
+    let (first, second) = (ModIndex::new(1), ModIndex::new(2));
+    let hold = |owner| {
+        Registrations::hold_one(
+            &registrations.lookup,
+            Registered::new(owner, no_lookup, core::ptr::null_mut()),
+        )
+    };
+    assert_eq!(hold(first), Status::OK);
+    assert_eq!(hold(first), Status::OK, "the same mod replaces its own");
+    assert_eq!(hold(second), Status::REFUSED);
+    registrations.seal();
+    assert!(registrations.is_sealed());
+    assert_eq!(registrations.lookup().map(|r| r.owner), Some(first));
+    assert_eq!(hold(first), Status::TOO_LATE);
+    registrations.reopen();
+    assert!(!registrations.is_sealed());
+    assert_eq!(hold(second), Status::OK);
+}
+
+#[test]
+fn a_hosted_world_s_end_forgets_its_component_types_and_its_move() {
+    let state = State::new();
+    state.transform_type.store(3, Ordering::Release);
+    state.npc_common_type.store(4, Ordering::Release);
+    assert!(state.knows_types());
+    state.start_move(7, 9);
+    assert!(state.move_active.load(Ordering::Acquire));
+    state.forget();
+    assert!(
+        !state.knows_types(),
+        "the next world's indexes are read anew"
+    );
+    assert!(state.moving.relock().is_none());
+    assert!(!state.move_active.load(Ordering::Acquire));
 }
 
 #[test]

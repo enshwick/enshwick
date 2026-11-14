@@ -32,13 +32,9 @@ fn ids_take_the_mod_s_namespace_unless_they_name_one() {
     assert_eq!(full_id("you.lanterns", ":x"), None);
 }
 
-/// One test at a time over the destroy requests, which are the process's
-/// own.
-static DESTROYS: Mutex<()> = Mutex::new(());
-
 #[test]
 fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
-    let _turn = DESTROYS.relock();
+    let requests = Destroyed::new();
     let record = |item| Record {
         item,
         anchor: None,
@@ -48,10 +44,10 @@ fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
     values.insert(key(0, 900), record(7));
     values.insert(key(1, 900), record(0));
     values.insert(key(0, 901), record(7));
-    note_destroyed(Entity(900));
-    note_destroyed(Entity(0));
-    let destroyed = take_destroyed();
-    assert!(take_destroyed().is_empty(), "each request is taken once");
+    requests.note(Entity(900));
+    requests.note(Entity(0));
+    let destroyed = requests.take();
+    assert!(requests.take().is_empty(), "each request is taken once");
     let mut gone = prune_destroyed(&mut values, &destroyed);
     gone.sort_unstable();
     assert_eq!(gone, [key(0, 900), key(1, 900)]);
@@ -60,20 +56,20 @@ fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
     assert!(values.contains_key(&key(0, 901)));
     // Past the cap in one step, requests are left for the save.
     for entity in 1..=u32::try_from(DESTROYED_CAP).unwrap() + 10 {
-        note_destroyed(Entity(entity));
+        requests.note(Entity(entity));
     }
-    let destroyed = take_destroyed();
+    let destroyed = requests.take();
     assert_eq!(destroyed.len(), DESTROYED_CAP);
     assert!(!destroyed.contains(&(u32::try_from(DESTROYED_CAP).unwrap() + 1)));
     // A request filled after its round was taken never reaches a later
     // one, where its slot is still being filled.
-    note_destroyed(Entity(1));
-    let late = reserve_destroyed();
-    assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [1]);
-    fill_destroyed(late, Entity(5));
-    note_destroyed(Entity(2));
-    let _filling = reserve_destroyed();
-    assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [2]);
+    requests.note(Entity(1));
+    let late = requests.reserve();
+    assert_eq!(requests.take().into_iter().collect::<Vec<_>>(), [1]);
+    requests.fill(late, Entity(5));
+    requests.note(Entity(2));
+    let _filling = requests.reserve();
+    assert_eq!(requests.take().into_iter().collect::<Vec<_>>(), [2]);
 }
 
 /// The kinds these tests share, sealed once per process: `a:charges`
@@ -724,11 +720,9 @@ fn only_a_missing_world_file_starts_the_world_empty() {
 
 #[test]
 fn a_value_set_after_the_world_s_last_save_is_written_as_the_world_ends() {
-    let _turn = DESTROYS.relock();
     kinds();
-    FINDING.store(false, Ordering::Relaxed);
     assert_eq!(
-        last_write(server(Vec::new(), Vec::new())),
+        last_write(server(Vec::new(), Vec::new()), false),
         None,
         "nothing set since the save"
     );
@@ -743,7 +737,7 @@ fn a_value_set_after_the_world_s_last_save_is_written_as_the_world_ends() {
     );
     set.changed = true;
     let expected = write_file(&set);
-    assert_eq!(last_write(set), Some(("w".to_owned(), expected)));
+    assert_eq!(last_write(set, false), Some(("w".to_owned(), expected)));
 }
 
 #[test]
@@ -758,29 +752,39 @@ fn a_failed_write_marks_the_same_world_changed_again() {
     assert!(none.is_none());
 }
 
-/// Sets the server's records and their flags, which are the process's own,
-/// under the same turn as every test that reads them.
-#[cfg(windows)]
 #[test]
 fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_clean() {
-    let _turn = DESTROYS.relock();
-    *SERVER.relock() = Some(server(Vec::new(), vec!["old:kind".to_owned()]));
-    KEPT.store(true, Ordering::Relaxed);
-    FINDING.store(true, Ordering::Relaxed);
-    UNREAD.store(true, Ordering::Relaxed);
-    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-    crate::engine::parts::Part::forget_in(crate::inventory::PARTS, "item_data", loader);
+    let state = State::new();
+    *state.server.relock() = Some(server(Vec::new(), vec!["old:kind".to_owned()]));
+    state.kept.store(true, Ordering::Relaxed);
+    state.finding.store(true, Ordering::Relaxed);
+    state.unread.store(true, Ordering::Relaxed);
+    state.destroyed.note(Entity(900));
+    let (last, finding) = state.forget_server().unwrap();
+    assert_eq!(last.unopened, ["old:kind"], "handed on for its last write");
+    assert!(finding, "its records still waited for the first step");
     assert!(
-        SERVER.relock().is_none(),
+        state.server.relock().is_none(),
         "the records went with their world"
     );
     assert!(
-        !KEPT.load(Ordering::Relaxed),
+        !state.kept.load(Ordering::Relaxed),
         "no destroy request is noted for them"
     );
-    assert!(!FINDING.load(Ordering::Relaxed));
+    assert!(!state.finding());
+    assert!(!state.unread(), "the next world takes values");
+    assert!(!state.destroyed.any(), "no earlier request reaches it");
+}
+
+#[test]
+fn a_change_of_server_forgets_what_the_client_got() {
+    let state = State::new();
+    *state.client.relock() = Some(Values::default());
+    state.client_full.store(true, Ordering::Relaxed);
+    state.forget_client();
+    assert!(state.client.relock().is_none());
     assert!(
-        !UNREAD.load(Ordering::Relaxed),
-        "the next world takes values"
+        !state.client_full.load(Ordering::Relaxed),
+        "the next server's overflow is told again"
     );
 }

@@ -3,15 +3,30 @@ use super::*;
 
 #[test]
 fn a_stopped_game_leaves_no_entities_or_values_behind() {
-    with_state(|state| {
-        state.watched.entry(7).or_default().asked = true;
+    let state = State::new();
+    state.with_world(|world| {
+        world.watched.entry(7).or_default().asked = true;
     });
     let mut values = Snapshot::default();
     values.values.insert(7, Box::new([2.0]));
-    snapshot().store(Arc::new(values));
-    forget();
-    assert!(STATE.relock().is_none());
-    assert!(snapshot().load().values.is_empty());
+    values.combat.insert(
+        7,
+        Combat {
+            deals: [2.0; TYPES],
+            takes: [1.0; TYPES],
+        },
+    );
+    state.swap_in(values);
+    state.look.store(true, Ordering::Relaxed);
+    assert!(state.hits.load(Ordering::Acquire));
+    state.forget();
+    assert!(state.world.relock().is_none());
+    assert!(state.snapshot().load().values.is_empty());
+    assert!(
+        !state.hits.load(Ordering::Acquire),
+        "no hit reads the gone world's factors"
+    );
+    assert!(!state.look.load(Ordering::Relaxed));
 }
 
 fn sealed(kinds: &[(&str, StatDef)]) -> Sealed {

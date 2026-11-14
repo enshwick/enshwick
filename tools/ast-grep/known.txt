@@ -10,33 +10,7 @@ static-is-registry-fuse-or-state crates/internal/base/src/i18n.rs static HANDED:
 # Each mod's task queue, kept for the process; it moves into a
 # `Registry<T>` by mod handle.
 static-is-registry-fuse-or-state crates/internal/base/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
-# The bed checks, summons and survivor items mods register during init;
-# they move into a `Registry<T>` each.
-static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static BED_CHECKS: Mutex<Vec<Registered<BedCheckFn>>> = Mutex::new(Vec::new());
-static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static ITEMS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
-static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static SUMMONED: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
-static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static SUMMONS: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
-# The survivor a staff moves, runtime state; it moves into the survivors'
-# state struct.
-static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
 
 # Loose atomic statics of the loader from before its rule; each moves into
 # its domain's state struct, a `Pending` queue or its fuse.
 loader-flag-is-in-state crates/runtime/loader/src/events.rs static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
-loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static CLIENT_FULL: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static DESTROYED: [AtomicU64; DESTROYED_CAP] = [const { AtomicU64::new(0) }; DESTROYED_CAP];
-loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static DESTROYED_COUNT: AtomicU64 = AtomicU64::new(1 << 32);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static FINDING: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static KEPT: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static UNREAD: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/stats.rs static HITS: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/stats.rs static ITEMS: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/stats.rs static LOOK: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/survivors.rs static MOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/survivors.rs static NPC_COMMON_TYPE: AtomicU16 = AtomicU16::new(u16::MAX);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/survivors.rs static TRANSFORM_TYPE: AtomicU16 = AtomicU16::new(u16::MAX);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static ARMED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static BUSY: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static REGISTRY: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static SETTLED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static WANTED: AtomicBool = AtomicBool::new(false);

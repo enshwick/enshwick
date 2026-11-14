@@ -159,14 +159,11 @@ fn late_requests_drain_and_the_rest_stay_in_order() {
     assert!(queue.claim().is_none());
 }
 
-/// A turn over the process-wide queue, fuse and results, for the tests that
-/// use them in one process.
-static SHARED: Mutex<()> = Mutex::new(());
-
-/// The outcome the results hold for the request with `user`, taking them
-/// as the step's delivery would.
-fn outcome_of(user: usize) -> Option<u32> {
-    FINISHED
+/// The outcome `state`'s results hold for the request with `user`, taking
+/// them as the step's delivery would.
+fn outcome_of(state: &State, user: usize) -> Option<u32> {
+    state
+        .finished
         .take()
         .iter()
         .find(|f| f.user == user)
@@ -175,35 +172,54 @@ fn outcome_of(user: usize) -> Option<u32> {
 
 #[test]
 fn requests_queued_when_the_feature_turns_off_are_answered_unavailable_at_the_next_step() {
-    let _turn = SHARED.relock();
-    QUEUE.push(request(7));
+    let state = State::new();
+    state.queue.push(request(7));
     INVENTORY_FUSE.blow("a test");
-    expire(Instant::now());
-    assert!(!QUEUE.pending.load(Ordering::Acquire), "no row runs it now");
-    assert_eq!(outcome_of(7), Some(InventoryResult::UNAVAILABLE));
+    state.expire(Instant::now());
+    assert!(
+        !state.queue.pending.load(Ordering::Acquire),
+        "no row runs it now"
+    );
+    assert_eq!(outcome_of(&state, 7), Some(InventoryResult::UNAVAILABLE));
 }
 
 #[test]
 fn a_wanted_row_hook_that_did_not_arm_turns_the_requests_off_and_answers_the_queue() {
-    let _turn = SHARED.relock();
-    // Put back however the test ends, so a failure here fails no other.
-    let _unwanted = crate::engine::undo::Undo::new(|| WANTED.store(false, Ordering::Release));
-    WANTED.store(true, Ordering::Release);
-    QUEUE.push(request(9));
-    settle(&crate::start::tests::bare_loader(), []);
+    let state = State::new();
+    state.wanted.store(true, Ordering::Release);
+    state.queue.push(request(9));
+    state.settle(&crate::start::tests::bare_loader(), []);
     assert!(
         INVENTORY_FUSE.is_off(),
         "off by its fuse, not only in the log"
     );
-    assert!(!QUEUE.pending.load(Ordering::Acquire));
-    assert_eq!(outcome_of(9), Some(InventoryResult::UNAVAILABLE));
+    assert!(!state.queue.pending.load(Ordering::Acquire));
+    assert_eq!(outcome_of(&state, 9), Some(InventoryResult::UNAVAILABLE));
 }
 
 #[test]
 fn an_unwanted_row_hook_leaves_the_requests_on_at_settling() {
-    let _turn = SHARED.relock();
-    settle(&crate::start::tests::bare_loader(), []);
+    let state = State::new();
+    state.settle(&crate::start::tests::bare_loader(), []);
     assert!(!INVENTORY_FUSE.is_off());
+    assert!(state.settled.load(Ordering::Acquire));
+    assert!(!state.armed.load(Ordering::Acquire));
+}
+
+#[test]
+fn a_hosted_game_s_end_answers_its_requests_and_drops_its_registry() {
+    let state = State::new();
+    state.wanted.store(true, Ordering::Release);
+    state.registry.store(0x1000, Ordering::Release);
+    state.queue.push(request(5));
+    state.end();
+    assert_eq!(outcome_of(&state, 5), Some(InventoryResult::UNAVAILABLE));
+    assert_eq!(
+        state.registry.load(Ordering::Acquire),
+        0,
+        "the next world's registry is read anew"
+    );
+    assert!(state.wanted(), "what a mod asked for at init stays");
 }
 
 #[test]

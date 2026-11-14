@@ -15,9 +15,10 @@ use enshwick_core::abi::{BedCheckFn, Side, Status, SummonFn, SurvivorLookupFn, S
 use enshwick_core::raw::read_at;
 
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::{Loader, Registered, Target, take};
+use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Symbol};
+use crate::engine::registry::Registry;
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -165,34 +166,147 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static ITEM_MAP: OnceLock<Option<ItemMap>> = OnceLock::new();
 static MENU: OnceLock<Option<Menu>> = OnceLock::new();
 
-static LOOKUP: Mutex<Option<Registered<SurvivorLookupFn>>> = Mutex::new(None);
-static BED_CHECKS: Mutex<Vec<Registered<BedCheckFn>>> = Mutex::new(Vec::new());
-static SUMMONS: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
-static SUMMONED: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
-static ITEMS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
-static STATUS: Mutex<Option<Registered<SurvivorStatusFn>>> = Mutex::new(None);
-
+/// What mods register for the survivors during init, sealed before the
+/// links.
 #[derive(Debug)]
-struct Sealed {
-    lookup: Option<Registered<SurvivorLookupFn>>,
-    bed_checks: Box<[Registered<BedCheckFn>]>,
-    summons: Box<[Registered<SummonFn>]>,
-    summoned: Box<[Registered<SummonFn>]>,
-    items: Box<[(u32, u32)]>,
-    status: Option<Registered<SurvivorStatusFn>>,
+struct Registrations {
+    /// The one mod's survivor lookup.
+    lookup: Registry<Registered<SurvivorLookupFn>>,
+    bed_checks: Registry<Registered<BedCheckFn>>,
+    summons: Registry<Registered<SummonFn>>,
+    summoned: Registry<Registered<SummonFn>>,
+    /// Staff items filed in the survivor registry, as (item, survivor).
+    items: Registry<(u32, u32)>,
+    /// The one mod's menu status merge, client only.
+    status: Registry<Registered<SurvivorStatusFn>>,
 }
 
-static SEALED: OnceLock<Sealed> = OnceLock::new();
+impl Registrations {
+    const fn new() -> Self {
+        Self {
+            lookup: Registry::new(),
+            bed_checks: Registry::new(),
+            summons: Registry::new(),
+            summoned: Registry::new(),
+            items: Registry::new(),
+            status: Registry::new(),
+        }
+    }
 
-/// The registry index of `CurrentTransform`, looked up after a step.
-static TRANSFORM_TYPE: AtomicU16 = AtomicU16::new(u16::MAX);
-/// The registry index of `NpcCommon`, looked up after a step.
-static NPC_COMMON_TYPE: AtomicU16 = AtomicU16::new(u16::MAX);
+    /// Holds `registered` in `one`, which takes one mod at a time: refused
+    /// while another mod holds it, replaced for the same mod.
+    fn hold_one<F>(one: &Registry<Registered<F>>, registered: Registered<F>) -> Status {
+        let held = one.edit(|held| {
+            if held.iter().any(|r| r.owner != registered.owner) {
+                return Status::REFUSED;
+            }
+            *held = vec![registered];
+            Status::OK
+        });
+        held.unwrap_or(Status::TOO_LATE)
+    }
+
+    /// The registered lookup, once sealed.
+    fn lookup(&self) -> Option<Registered<SurvivorLookupFn>> {
+        self.lookup.sealed()?.first().copied()
+    }
+
+    /// The registered menu status merge, once sealed.
+    fn status(&self) -> Option<Registered<SurvivorStatusFn>> {
+        self.status.sealed()?.first().copied()
+    }
+
+    /// Seals every registration once every mod's init ran.
+    fn seal(&self) {
+        let _lookup = self.lookup.seal();
+        let _beds = self.bed_checks.seal();
+        let _summons = self.summons.seal();
+        let _summoned = self.summoned.seal();
+        let _items = self.items.seal();
+        let _status = self.status.seal();
+    }
+
+    /// Whether the registrations are sealed, so the links ran.
+    fn is_sealed(&self) -> bool {
+        self.status.is_sealed()
+    }
+
+    /// Opens every registration again, empty, for the next test.
+    #[cfg(test)]
+    fn reopen(&self) {
+        self.lookup.reopen();
+        self.bed_checks.reopen();
+        self.summons.reopen();
+        self.summoned.reopen();
+        self.items.reopen();
+        self.status.reopen();
+    }
+}
+
+/// The survivor and entity a staff moves, and since when.
+#[derive(Debug, Clone, Copy)]
+struct Moving {
+    survivor: u32,
+    entity: u32,
+    since: Instant,
+}
+
+/// What the survivors follow while the loader runs.
+#[derive(Debug)]
+struct State {
+    registrations: Registrations,
+    /// The registry index of `CurrentTransform`, looked up after a step of
+    /// each hosted world.
+    transform_type: AtomicU16,
+    /// The registry index of `NpcCommon`, looked up after a step of each
+    /// hosted world.
+    npc_common_type: AtomicU16,
+    moving: Mutex<Option<Moving>>,
+    /// Set while `moving` holds a move, so the move hook skips the lock.
+    move_active: AtomicBool,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            registrations: Registrations::new(),
+            transform_type: AtomicU16::new(u16::MAX),
+            npc_common_type: AtomicU16::new(u16::MAX),
+            moving: Mutex::new(None),
+            move_active: AtomicBool::new(false),
+        }
+    }
+
+    /// Whether both component types are known for the hosted world.
+    fn knows_types(&self) -> bool {
+        self.transform_type.load(Ordering::Relaxed) != u16::MAX
+            && self.npc_common_type.load(Ordering::Relaxed) != u16::MAX
+    }
+
+    /// Notes that a staff moves `survivor` to `entity` now.
+    fn start_move(&self, survivor: u32, entity: u32) {
+        *self.moving.relock() = Some(Moving {
+            survivor,
+            entity,
+            since: Instant::now(),
+        });
+        self.move_active.store(true, Ordering::Release);
+    }
+
+    /// Forgets the component types and the move of a hosted world that
+    /// ended; what mods registered stays for the next.
+    fn forget(&self) {
+        self.transform_type.store(u16::MAX, Ordering::Release);
+        self.npc_common_type.store(u16::MAX, Ordering::Release);
+        *self.moving.relock() = None;
+        self.move_active.store(false, Ordering::Release);
+    }
+}
+
+static STATE: State = State::new();
+
 /// The type hashes of `CurrentTransform` and `NpcCommon`.
 static TYPE_HASHES: OnceLock<Option<[u32; 2]>> = OnceLock::new();
-/// The survivor and entity a staff moves, and since when.
-static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
-static MOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Each entity's survivor id, row order and status, and one survivor's statuses.
 type StatusRows = (Vec<(u32, u32, u8)>, Vec<u8>);
@@ -321,7 +435,7 @@ fn menu(loader: &Loader) -> Option<&'static Menu> {
 }
 
 fn too_late(loader: &Loader) -> bool {
-    loader.delivery.get().is_some() || SEALED.get().is_some()
+    loader.delivery.get().is_some() || STATE.registrations.is_sealed()
 }
 
 /// Registers mod `owner`'s survivor lookup; one mod at a time.
@@ -337,12 +451,15 @@ pub(crate) fn register_lookup(
     if layout(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    let mut held = LOOKUP.relock();
-    if held.is_some_and(|r| r.owner != owner) {
-        return Status::REFUSED;
-    }
-    *held = Some(Registered::new(owner, callback, user));
-    Status::OK
+    Registrations::hold_one(
+        &STATE.registrations.lookup,
+        Registered::new(owner, callback, user),
+    )
+}
+
+/// Adds `item` to `registry`; [`Status::TOO_LATE`] once it is sealed.
+fn add<T>(registry: &Registry<T>, item: T) -> Status {
+    registry.add(item).map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 pub(crate) fn register_bed_check(
@@ -357,10 +474,10 @@ pub(crate) fn register_bed_check(
     if layout(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    BED_CHECKS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+    add(
+        &STATE.registrations.bed_checks,
+        Registered::new(owner, callback, user),
+    )
 }
 
 pub(crate) fn register_summon(
@@ -375,10 +492,10 @@ pub(crate) fn register_summon(
     if layout(loader).is_none() || symbol(loader, pinned::survivors::SPAWN).is_none() {
         return Status::MISSING;
     }
-    SUMMONS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+    add(
+        &STATE.registrations.summons,
+        Registered::new(owner, callback, user),
+    )
 }
 
 pub(crate) fn register_summoned(
@@ -393,10 +510,10 @@ pub(crate) fn register_summoned(
     if layout(loader).is_none() || symbol(loader, pinned::survivors::SPAWN).is_none() {
         return Status::MISSING;
     }
-    SUMMONED
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+    add(
+        &STATE.registrations.summoned,
+        Registered::new(owner, callback, user),
+    )
 }
 
 pub(crate) fn register_item(loader: &Loader, item: u32, survivor: u32) -> Status {
@@ -406,8 +523,7 @@ pub(crate) fn register_item(loader: &Loader, item: u32, survivor: u32) -> Status
     if item_map(loader).is_none() || symbol(loader, pinned::survivors::REGISTRY_LOAD).is_none() {
         return Status::MISSING;
     }
-    ITEMS.relock().push((item, survivor));
-    Status::OK
+    add(&STATE.registrations.items, (item, survivor))
 }
 
 /// Registers mod `owner`'s menu status merge; client only, one mod.
@@ -426,12 +542,10 @@ pub(crate) fn register_status(
     {
         return Status::MISSING;
     }
-    let mut held = STATUS.relock();
-    if held.is_some_and(|r| r.owner != owner) {
-        return Status::REFUSED;
-    }
-    *held = Some(Registered::new(owner, callback, user));
-    Status::OK
+    Registrations::hold_one(
+        &STATE.registrations.status,
+        Registered::new(owner, callback, user),
+    )
 }
 
 /// `ui_npc_status`, while it reads the components its iterator layout
@@ -456,23 +570,20 @@ fn menu_system(loader: &Loader) -> Option<Target<'static>> {
 /// The system that fills the survivor menu.
 const MENU_SYSTEM: &str = "ui_npc_status";
 
+/// Seals what mods registered and links what they asked for.
 pub(crate) fn link(loader: &'static Loader) {
-    let sealed = Sealed {
-        lookup: LOOKUP.relock().take(),
-        bed_checks: take(&BED_CHECKS).into_boxed_slice(),
-        summons: take(&SUMMONS).into_boxed_slice(),
-        summoned: take(&SUMMONED).into_boxed_slice(),
-        items: take(&ITEMS).into_boxed_slice(),
-        status: STATUS.relock().take(),
-    };
+    fn any<T>(registry: &Registry<T>) -> bool {
+        registry.with(|items| !items.is_empty())
+    }
+    let registered = &STATE.registrations;
+    registered.seal();
     let (lookup, beds, summons, items, status) = (
-        sealed.lookup.is_some(),
-        !sealed.bed_checks.is_empty(),
-        !sealed.summons.is_empty() || !sealed.summoned.is_empty(),
-        !sealed.items.is_empty(),
-        sealed.status.is_some(),
+        any(&registered.lookup),
+        any(&registered.bed_checks),
+        any(&registered.summons) || any(&registered.summoned),
+        any(&registered.items),
+        any(&registered.status),
     );
-    let _first = SEALED.set(sealed);
     let wanted = lookup || beds || summons || items || status;
     let lookup = lookup && lookup::link(loader) && moves::link_moves(loader);
     let beds = beds && moves::link_bed_checks(loader);
@@ -491,10 +602,7 @@ pub(crate) fn link(loader: &'static Loader) {
 /// Looks up the registry indexes of the component types the lookups read,
 /// once per hosted world, on the game thread after a step.
 pub(crate) fn after_step(loader: &Loader) {
-    if SEALED.get().is_none()
-        || (TRANSFORM_TYPE.load(Ordering::Relaxed) != u16::MAX
-            && NPC_COMMON_TYPE.load(Ordering::Relaxed) != u16::MAX)
-    {
+    if !STATE.registrations.is_sealed() || STATE.knows_types() {
         return;
     }
     learn_types(loader);
@@ -524,8 +632,8 @@ fn learn_types(loader: &Loader) {
     let (Some(transform), Some(common)) = (index(hashes[0]), index(hashes[1])) else {
         return;
     };
-    TRANSFORM_TYPE.store(transform, Ordering::Release);
-    NPC_COMMON_TYPE.store(common, Ordering::Release);
+    STATE.transform_type.store(transform, Ordering::Release);
+    STATE.npc_common_type.store(common, Ordering::Release);
     crate::log!(
         INFO,
         "survivors: CurrentTransform is component type {transform}, NpcCommon {common}"
@@ -533,10 +641,7 @@ fn learn_types(loader: &Loader) {
 }
 
 pub(crate) fn forget() {
-    TRANSFORM_TYPE.store(u16::MAX, Ordering::Release);
-    NPC_COMMON_TYPE.store(u16::MAX, Ordering::Release);
-    *MOVING.relock() = None;
-    MOVE_ACTIVE.store(false, Ordering::Release);
+    STATE.forget();
 }
 
 /// The survivor lookups with the moves and record updates that keep one
