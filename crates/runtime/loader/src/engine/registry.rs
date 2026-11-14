@@ -87,9 +87,18 @@ impl<T> Registry<T> {
     /// Seals the registry and returns what was registered; later calls
     /// return the same slice.
     pub fn seal(&self) -> &[T] {
+        self.seal_with(|items| items)
+    }
+
+    /// Seals the registry with what `finish` makes of the items registered,
+    /// such as the loader's own entries added: additions from other threads
+    /// wait while it runs and are refused after, so none falls between the
+    /// items taken and the seal. `finish` must not use this registry, whose
+    /// lock it runs under; it runs only on the first seal.
+    pub fn seal_with(&self, finish: impl FnOnce(Vec<T>) -> Vec<T>) -> &[T] {
         let mut open = self.open.relock();
         self.sealed
-            .get_or_init(|| std::mem::take(&mut *open).into_boxed_slice())
+            .get_or_init(|| finish(std::mem::take(&mut *open)).into_boxed_slice())
     }
 
     /// The sealed items; `None` while the registry is open.
@@ -121,5 +130,25 @@ mod tests {
         assert_eq!(registry.add(2), Err(Sealed));
         assert_eq!(registry.seal(), [1]);
         assert_eq!(registry.sealed(), Some(&[1][..]));
+    }
+
+    #[test]
+    fn an_addition_while_the_seal_finishes_is_refused_not_kept_half_sealed() {
+        static REGISTRY: Registry<u32> = Registry::new();
+        assert_eq!(REGISTRY.add(1), Ok(()));
+        let mut late = None;
+        let sealed = REGISTRY.seal_with(|mut items| {
+            late = Some(std::thread::spawn(|| REGISTRY.add(9)));
+            items.push(2);
+            items
+        });
+        assert_eq!(sealed, [1, 2]);
+        let late = late.map(|thread| thread.join().ok());
+        assert_eq!(
+            late,
+            Some(Some(Err(Sealed))),
+            "the late addition is refused"
+        );
+        assert_eq!(REGISTRY.seal_with(|_| vec![3]), [1, 2], "finish runs once");
     }
 }

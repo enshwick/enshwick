@@ -32,7 +32,7 @@ pub(crate) use patches::enter_build;
 pub(crate) use patches::{
     OwnPatch, builds_begun, hand_out, lend, own_patch, rebuild, scratch, served_now,
 };
-use texts::{TEXTS, seal_texts};
+use texts::seal_texts;
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
@@ -207,37 +207,38 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     if !ids.is_empty() {
         crate::log!(DEBUG, "content ids: {ids}");
     }
-    // Taken out of the registry, so the loader's patches are made without
-    // its lock.
-    let Ok(mut served) = RESOURCES.edit(std::mem::take) else {
+    let _first = RENAMES.set(renames);
+    let mut made = None;
+    RESOURCES.seal_with(|mut served| {
+        let count = served.len();
+        let aliases = crate::content::clones::update(
+            &loader.mods_dir,
+            served.iter().map(|s| (s.key, s.base)),
+        );
+        let standing = stand_ins.map_or(0, |(items, registry)| {
+            serve_stand_ins(&mut served, items, registry)
+        });
+        let changed = serve_changes(
+            &mut served,
+            crate::content::data_changes::serve(loader),
+            crate::content::data_changes::has_live(),
+        );
+        let rated = serve_rates(
+            &mut served,
+            crate::content::rate_links::recipe_patch(loader),
+        );
+        made = Some((count, aliases, standing, changed, rated));
+        served
+    });
+    let Some((count, aliases, standing, changed, rated)) = made else {
         return;
     };
-    let count = served.len();
-    let aliases =
-        crate::content::clones::update(&loader.mods_dir, served.iter().map(|s| (s.key, s.base)));
-    let standing = stand_ins.map_or(0, |(items, registry)| {
-        serve_stand_ins(&mut served, items, registry)
-    });
-    let changed = serve_changes(
-        &mut served,
-        crate::content::data_changes::serve(loader),
-        crate::content::data_changes::has_live(),
-    );
-    let rated = serve_rates(
-        &mut served,
-        crate::content::rate_links::recipe_patch(loader),
-    );
+    let served = RESOURCES.sealed().unwrap_or_default();
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
         .count();
     let recorded = aliases.len();
-    let _first = RENAMES.set(renames);
-    let _open = RESOURCES.edit(|open| {
-        served.append(open);
-        *open = served;
-    });
-    RESOURCES.seal();
     if ALIASES.set(aliases).is_err()
         || count + recorded + renames.len() + standing + changed + rated == 0
     {
@@ -473,10 +474,7 @@ pub(crate) fn summary() -> crate::engine::diag::Served {
         resources: served.len(),
         built,
         failed,
-        texts: TEXTS
-            .sealed
-            .get()
-            .map_or(0, |t| t.values().map(Vec::len).sum()),
+        texts: texts::count(),
     }
 }
 
@@ -860,4 +858,5 @@ mod patches;
 mod tests;
 mod texts;
 
+pub use texts::bench_text_lookup;
 pub(crate) use texts::{add_text, language, mod_text, mod_texts_sealed};

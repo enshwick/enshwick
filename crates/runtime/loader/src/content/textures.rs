@@ -771,6 +771,31 @@ pub(crate) fn content_of(hash: &ContentHash) -> Result<Vec<u8>, Status> {
         .ok_or(Status::MISSING)
 }
 
+/// Readies the content request for its benchmark with a stand-in for the
+/// game's: nothing served, so each request passes on, as on a game whose
+/// mods serve no pixels. The closure runs one request.
+#[doc(hidden)]
+pub fn bench_texture_request() -> impl FnMut() {
+    /// Stands in for the game's content request: answers nothing.
+    unsafe extern "system" fn game(_: *mut u8, _: *mut Requests) {}
+    let next: RequestFn = game;
+    #[expect(
+        clippy::fn_to_numeric_cast_any,
+        reason = "a slot holds its next function's address"
+    )]
+    REQUEST_NEXT.slot().store(next as usize, Ordering::Release);
+    let mut requester = 0u8;
+    let mut requests = Requests {
+        data: core::ptr::null_mut(),
+        count: 0,
+    };
+    move || {
+        // SAFETY: `requester` and `requests` are live for the call, and the
+        // slot holds the stand-in, which reads neither.
+        unsafe { request(&raw mut requester, &raw mut requests) };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

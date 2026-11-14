@@ -18,10 +18,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/world/altars.rs stati
 # The code patches mods ask for during init, sealed at its end; they move
 # into a `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/code.rs static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
-# The resources mods serve during init, sealed at its end; they move into
-# a `Registry<T>`.
-# The texts mods add during init; they move into a `Registry<T>` beside the
-# served resources.
 # The mods that asked to change the day's speed, a mod registration; it
 # moves into a `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/world/daytime.rs static SPEED_MODS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());

@@ -8,17 +8,16 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::base::handed::Handed;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
-use crate::engine::pending::Pending;
 use crate::engine::pinned;
+use crate::engine::registry::Registry;
 
 /// The mod texts and the language the client's game shows them in. Both
 /// live for the process, so nothing here ends with a hosted game.
-pub(super) struct Texts {
-    /// Mod texts while mods initialise: tag id, language, text.
-    pending: Pending<(u32, u32, String)>,
-    /// Mod texts once sealed: tag id to `(language, text)`, read without a
-    /// lock.
-    pub(super) sealed: OnceLock<FxHashMap<u32, Vec<(u32, &'static str)>>>,
+struct Texts {
+    /// Mod texts as mods add them during init: tag id, language, text.
+    added: Registry<(u32, u32, String)>,
+    /// The sealed texts by tag id, `(language, text)`, read without a lock.
+    by_id: OnceLock<FxHashMap<u32, Vec<(u32, &'static str)>>>,
     /// Every tag id the loader answers: the mods' texts, the notices' and
     /// the dialogs'; the text format's one check before it passes a tag on.
     ours: OnceLock<FxHashSet<u32>>,
@@ -28,9 +27,9 @@ pub(super) struct Texts {
     language: AtomicU32,
 }
 
-pub(super) static TEXTS: Texts = Texts {
-    pending: Pending::new(),
-    sealed: OnceLock::new(),
+static TEXTS: Texts = Texts {
+    added: Registry::new(),
+    by_id: OnceLock::new(),
     ours: OnceLock::new(),
     pool_language: OnceLock::new(),
     language: AtomicU32::new(ENGLISH),
@@ -46,11 +45,22 @@ pub(crate) fn language() -> enshwick_core::i18n::Language {
 
 /// Registers a mod text; refused after init.
 pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
-    if TEXTS.sealed.get().is_some() {
-        return Status::TOO_LATE;
-    }
-    TEXTS.pending.push((id, language, text.to_owned()));
-    Status::OK
+    added(&TEXTS.added, id, language, text)
+}
+
+/// Adds a mod text to `added`; refused once it is sealed.
+fn added(added: &Registry<(u32, u32, String)>, id: u32, language: u32, text: &str) -> Status {
+    added
+        .add((id, language, text.to_owned()))
+        .map_or_else(Status::from, |()| Status::OK)
+}
+
+/// How many mod texts are sealed, for the status summary.
+pub(super) fn count() -> usize {
+    TEXTS
+        .by_id
+        .get()
+        .map_or(0, |texts| texts.values().map(Vec::len).sum())
 }
 
 /// The text of `id` for `language`: its own, else the next language of its
@@ -67,14 +77,14 @@ pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
 
 /// Whether the mods' texts are sealed, so [`mod_text`] answers.
 pub(crate) fn mod_texts_sealed() -> bool {
-    TEXTS.sealed.get().is_some()
+    TEXTS.by_id.get().is_some()
 }
 
 /// A mod's text `id` for `language`, as [`text_for`] picks it: its own, else
 /// the next language of its lookup order's, else English; `None` before the
 /// texts seal or for a tag no mod gave text.
 pub(crate) fn mod_text(id: u32, language: u32) -> Option<&'static str> {
-    let texts = TEXTS.sealed.get()?.get(&id)?;
+    let texts = TEXTS.by_id.get()?.get(&id)?;
     let pick = |wanted: u32| texts.iter().find(|(l, _)| *l == wanted).map(|(_, t)| *t);
     enshwick_core::i18n::Language(language)
         .lookup_order()
@@ -196,16 +206,18 @@ fn ours(texts: &FxHashMap<u32, Vec<(u32, &'static str)>>) -> FxHashSet<u32> {
 
 /// Seals the mod texts and links the client's text lookups when there are any.
 pub(super) fn seal_texts(loader: &'static Loader) {
-    let pending = TEXTS.pending.take();
-    let count = pending.len();
+    let sealed = TEXTS.added.seal();
+    let count = sealed.len();
     let mut texts: FxHashMap<u32, Vec<(u32, &'static str)>> = FxHashMap::default();
-    for (id, language, text) in pending {
-        let text: &'static str = Box::leak(text.into_boxed_str());
-        texts.entry(id).or_default().push((language, text));
+    for (id, language, text) in sealed {
+        texts
+            .entry(*id)
+            .or_default()
+            .push((*language, text.as_str()));
     }
     let _first = TEXTS.ours.set(ours(&texts));
     // The client always links its lookups, for the loader's notices.
-    if TEXTS.sealed.set(texts).is_err() || (count == 0 && loader.side != Side::CLIENT) {
+    if TEXTS.by_id.set(texts).is_err() || (count == 0 && loader.side != Side::CLIENT) {
         return;
     }
     // Only the client shows text; a server has no lookups to link.
@@ -261,11 +273,51 @@ fn link_texts(loader: &Loader) -> usize {
     linked.into_iter().filter(|&made| made).count()
 }
 
+/// Readies the text lookup for its benchmark: one mod text with tag 7, an
+/// English text pool and a stand-in for the game's lookup. The closure runs
+/// one lookup of a tag and returns the out record's first word.
+#[doc(hidden)]
+pub fn bench_text_lookup() -> impl FnMut(u32) -> u64 {
+    /// Stands in for the game's lookup: answers nothing.
+    unsafe extern "system" fn game(out: *mut [u64; 3], _: *mut u8, _: u32) -> *mut [u64; 3] {
+        out
+    }
+    let next: unsafe extern "system" fn(*mut [u64; 3], *mut u8, u32) -> *mut [u64; 3] = game;
+    #[expect(
+        clippy::fn_to_numeric_cast_any,
+        reason = "a slot holds its next function's address"
+    )]
+    TEXT_NEXT.slot().store(next as usize, Ordering::Release);
+    let mut texts = FxHashMap::default();
+    texts.insert(7, vec![(ENGLISH, "bench")]);
+    let _first = TEXTS.ours.set(ours(&texts));
+    let _first = TEXTS.by_id.set(texts);
+    let _first = TEXTS.pool_language.set(0);
+    let mut pool = ENGLISH;
+    let mut out = [0u64; 3];
+    move |id| {
+        // SAFETY: `out` is a writable record of three `u64`, and `pool` a
+        // stand-in text pool whose current language is its `u32` at offset
+        // 0, the offset set above.
+        unsafe { lookup(&raw mut out, (&raw mut pool).cast(), id) };
+        out[0]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::base::handed::hash;
     use enshwick_base::Relock;
+
+    #[test]
+    fn a_text_added_after_the_seal_is_refused_not_answered_ok_and_lost() {
+        let added_texts = Registry::new();
+        assert_eq!(added(&added_texts, 7, ENGLISH, "early"), Status::OK);
+        assert_eq!(added_texts.seal().len(), 1);
+        assert_eq!(added(&added_texts, 8, ENGLISH, "late"), Status::TOO_LATE);
+        assert_eq!(added_texts.seal().len(), 1);
+    }
 
     /// Stands in for the game's text format: the tag id in the hash word.
     unsafe extern "system" fn passed(out: *mut [u64; 3], id: u32) -> *mut [u64; 3] {
@@ -297,7 +349,7 @@ mod tests {
         );
         assert!(!answered.contains(&0) && !answered.contains(&1));
         assert!(TEXTS.ours.set(answered).is_ok());
-        assert!(TEXTS.sealed.set(texts).is_ok());
+        assert!(TEXTS.by_id.set(texts).is_ok());
 
         let mut out = [0u64; 3];
         // SAFETY: `out` is a writable record of three `u64`.
