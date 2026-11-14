@@ -143,15 +143,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         ));
         Scope::All
     };
-    let windows_tests: Vec<&str> = packages
-        .iter()
-        .filter(|p| p.windows_tests)
-        .filter(|p| match &scope {
-            Scope::All => true,
-            Scope::Some { code, docs, .. } => code.contains(&p.name) || docs.contains(&p.name),
-        })
-        .map(|p| p.name.as_str())
-        .collect();
+    let windows_tests = windows_tests(&scope, &packages);
     if args.list_windows_tests {
         // One name a line: the packages CI tests on a Windows runner.
         for name in &windows_tests {
@@ -170,11 +162,15 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         }
     }
     if parts.contains(&Part::Trybuild) && !touches(&scope, FACADE) {
-        say(&if reaches(&scope, FACADE) {
-            format!("the trybuild test is left to CI: {FACADE} is only built here")
-        } else {
-            format!("the trybuild test is out of scope: the change does not reach {FACADE}")
-        });
+        say(
+            &if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
+                format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
+            } else if reaches(&scope, FACADE) {
+                format!("the trybuild test is left to CI: {FACADE} is only built here")
+            } else {
+                format!("the trybuild test is out of scope: the change does not reach {FACADE}")
+            },
+        );
     }
     let checked = check(&scope, &packages, args.all, &parts)
         && (!parts.contains(&Part::Semver) || semver(&args.semver));
@@ -196,11 +192,16 @@ fn touches(scope: &Scope, package: &str) -> bool {
     }
 }
 
-/// Whether `scope` checks or only builds the code of `package`.
+/// Whether `scope` checks, tests or only builds the code of `package`.
 fn reaches(scope: &Scope, package: &str) -> bool {
     match scope {
         Scope::All => true,
-        Scope::Some { code, built, .. } => code.contains(package) || built.contains(package),
+        Scope::Some {
+            code,
+            tested,
+            built,
+            ..
+        } => code.contains(package) || tested.contains(package) || built.contains(package),
     }
 }
 
@@ -446,6 +447,65 @@ fn doctest_filters<'a>(
     filters
 }
 
+/// The nextest filter that runs the tests of `names`; empty, which runs
+/// none, without one.
+fn test_filter<'a>(names: impl Iterator<Item = &'a String>) -> String {
+    names
+        .map(|name| format!("package({name})"))
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+/// The flags, nextest filter and doctest filters [`host_steps`] takes for
+/// `scope`: the examples of the packages it only tests stay out.
+/// `host_ok` says whether a package's tests run on this host.
+fn plan(
+    scope: &Scope,
+    packages: &[Package],
+    host_ok: impl Fn(&String) -> bool,
+) -> ((bool, bool, bool), Option<String>, Vec<String>) {
+    let Scope::Some {
+        code,
+        docs,
+        tested,
+        built,
+    } = scope
+    else {
+        return ((true, true, true), None, Vec::new());
+    };
+    let host: Vec<&String> = code.iter().filter(|name| host_ok(name)).collect();
+    let filter = test_filter(
+        host.iter()
+            .copied()
+            .chain(tested.iter().filter(|name| host_ok(name))),
+    );
+    let doctests = doctest_filters(host.into_iter().chain(docs), packages);
+    (
+        (
+            !code.is_empty() || !tested.is_empty() || !built.is_empty(),
+            !code.is_empty(),
+            !doctests.is_empty(),
+        ),
+        Some(filter),
+        doctests,
+    )
+}
+
+/// The packages of `scope` whose Windows tests run: those it checks in
+/// full. Under Wine the tests run one at a time with their examples, so a
+/// package only tested leaves them to CI.
+fn windows_tests<'a>(scope: &Scope, packages: &'a [Package]) -> Vec<&'a str> {
+    packages
+        .iter()
+        .filter(|p| p.windows_tests)
+        .filter(|p| match scope {
+            Scope::All => true,
+            Scope::Some { code, docs, .. } => code.contains(&p.name) || docs.contains(&p.name),
+        })
+        .map(|p| p.name.as_str())
+        .collect()
+}
+
 /// The checks of the API crate's stable surface, built without `unstable`:
 /// its lints when its code changed, its examples and its rustdoc whenever
 /// it changed. `stable` names the crates and features ([`stable_api`]).
@@ -624,45 +684,44 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     let on_windows = cfg!(windows);
     let host_ok =
         |name: &String| on_windows || packages.iter().any(|p| &p.name == name && !p.windows_only);
-    let (flags, tests, doctests) = match scope {
-        Scope::All => ((true, true, true), None, Vec::new()),
-        Scope::Some { code, docs, built } => {
-            if code.is_empty() && docs.is_empty() && built.is_empty() {
-                say("no package changed; nothing to check");
-                return true;
-            }
-            let names: Vec<&str> = code.iter().chain(docs).map(String::as_str).collect();
-            if !names.is_empty() {
-                say(&format!("checking {}", names.join(", ")));
-            }
-            if !built.is_empty() {
-                let built: Vec<&str> = built.iter().map(String::as_str).collect();
-                say(&format!(
-                    "only building and linting {}: CI and the merge queue test them",
-                    built.join(", ")
-                ));
-            }
-            let host: Vec<&String> = code.iter().filter(|name| host_ok(name)).collect();
-            let filter = host
-                .iter()
-                .map(|name| format!("package({name})"))
-                .collect::<Vec<_>>()
-                .join(" | ");
-            let doctests = doctest_filters(host.into_iter().chain(docs), packages);
-            (
-                (
-                    !code.is_empty() || !built.is_empty(),
-                    !code.is_empty(),
-                    !doctests.is_empty(),
-                ),
-                Some(filter),
-                doctests,
-            )
+    if let Scope::Some {
+        code,
+        docs,
+        tested,
+        built,
+    } = scope
+    {
+        if code.is_empty() && docs.is_empty() && tested.is_empty() && built.is_empty() {
+            say("no package changed; nothing to check");
+            return true;
         }
-    };
-    if matches!(scope, Scope::All) {
+        let names: Vec<&str> = code.iter().chain(docs).map(String::as_str).collect();
+        if !names.is_empty() {
+            say(&format!("checking {}", names.join(", ")));
+        }
+        if !tested.is_empty() {
+            let names: Vec<&str> = tested.iter().map(String::as_str).collect();
+            say(&format!(
+                "running only the tests of {}: CI and the merge queue run their examples{}",
+                names.join(", "),
+                if tested.contains(FACADE) {
+                    format!(" and {FACADE}'s stable surface")
+                } else {
+                    String::new()
+                }
+            ));
+        }
+        if !built.is_empty() {
+            let built: Vec<&str> = built.iter().map(String::as_str).collect();
+            say(&format!(
+                "only building and linting {}: CI and the merge queue test them",
+                built.join(", ")
+            ));
+        }
+    } else {
         say("checking the whole workspace");
     }
+    let (flags, tests, doctests) = plan(scope, packages, host_ok);
     let workspace = host_args(packages, on_windows);
     let stable = stable_api(packages);
     let host_steps = host_steps(
