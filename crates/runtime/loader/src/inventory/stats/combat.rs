@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 
 use crate::engine::loader::Loader;
 
-use super::{Combat, HEALING, HITS, SNAPSHOT, Sealed, State, TYPES};
+use super::{Combat, HEALING, STATE, Sealed, TYPES, World};
 
 /// The hit factors of an entity with `values`; `None` when it changes no
 /// hit.
@@ -37,13 +37,13 @@ pub(super) fn combat(sealed: &Sealed, values: &[f32]) -> Option<Combat> {
 /// Whether any entity has hit factors, for the damage site's check before it
 /// reads a hit: one load.
 pub(crate) fn changes_hits() -> bool {
-    HITS.load(Ordering::Acquire)
+    STATE.reads.hits.load(Ordering::Acquire)
 }
 
 /// Applies the hit factors of `source` and `target` to a hit's damage by
 /// type. On the damage site's worker thread: no lock, no allocation.
 pub(crate) fn on_hit(amounts: &mut [f32; TYPES], target: u32, source: u32) {
-    let Some(values) = SNAPSHOT.get() else {
+    let Some(values) = STATE.reads.snapshot.get() else {
         return;
     };
     let values = values.load();
@@ -64,7 +64,7 @@ pub(crate) fn on_hit(amounts: &mut [f32; TYPES], target: u32, source: u32) {
 }
 
 /// Drops the modifiers that ran out, by `now`.
-pub(super) fn expire(state: &mut State, now: Instant) {
+pub(super) fn expire(state: &mut World, now: Instant) {
     if state.next_expiry.is_none_or(|at| at > now) {
         return;
     }
@@ -84,7 +84,7 @@ pub(super) fn expire(state: &mut State, now: Instant) {
 
 /// Watches the players online and forgets the entities nothing keeps
 /// watched or that left the world; whether it forgot any.
-pub(super) fn follow(loader: &Loader, state: &mut State, players: &[PlayerInfo]) -> bool {
+pub(super) fn follow(loader: &Loader, state: &mut World, players: &[PlayerInfo]) -> bool {
     let online: FxHashSet<u32> = players.iter().map(|p| p.entity.0).collect();
     for p in players {
         let watched = state.watched.entry(p.entity.0).or_default();

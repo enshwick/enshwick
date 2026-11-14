@@ -151,27 +151,150 @@ fn scope(kind: KindIndex, anchor: Option<Anchor>) -> Option<Scope> {
 /// Kinds while mods initialise.
 /// Kinds once sealed; the index is the kind.
 static KINDS: Registry<Kind> = Registry::new();
-static SERVER: Mutex<Option<Server>> = Mutex::new(None);
-/// What a client got from its server.
-static CLIENT: Mutex<Option<Values>> = Mutex::new(None);
-/// Whether the client said once that it dropped records over
-/// [`MAX_CLIENT_RECORDS`] from this server.
-static CLIENT_FULL: AtomicBool = AtomicBool::new(false);
-/// Whether the server keeps any record, so destroy requests are noted.
-static KEPT: AtomicBool = AtomicBool::new(false);
-/// Whether a loaded world's records wait for its first step to find their
-/// entities.
-static FINDING: AtomicBool = AtomicBool::new(false);
-/// Whether the world's placed things did not read at the first step: its
-/// records wait unattached, so a value set now would claim a place one of
-/// them holds. The store refuses values until the next load.
-static UNREAD: AtomicBool = AtomicBool::new(false);
-/// Entities the game asked to destroy since the last step, each in the low
-/// word under its round in the high one, 0 for an empty slot; written from
-/// any thread without a lock. A slot from an earlier round is stale.
-static DESTROYED: [AtomicU64; DESTROYED_CAP] = [const { AtomicU64::new(0) }; DESTROYED_CAP];
-/// The round in the high word and the slots taken in it in the low one.
-static DESTROYED_COUNT: AtomicU64 = AtomicU64::new(1 << 32);
+
+/// The values the loader keeps for mods while it runs, and what follows
+/// them.
+#[derive(Debug)]
+struct State {
+    /// The server's values, while a world it serves runs.
+    server: Mutex<Option<Server>>,
+    /// What a client got from its server.
+    client: Mutex<Option<Values>>,
+    /// Whether the client said once that it dropped records over
+    /// [`MAX_CLIENT_RECORDS`] from this server.
+    client_full: AtomicBool,
+    /// Whether the server keeps any record, so destroy requests are noted.
+    kept: AtomicBool,
+    /// Whether a loaded world's records wait for its first step to find
+    /// their entities.
+    finding: AtomicBool,
+    /// Whether the world's placed things did not read at the first step: its
+    /// records wait unattached, so a value set now would claim a place one
+    /// of them holds. The store refuses values until the next load.
+    unread: AtomicBool,
+    destroyed: Destroyed,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            server: Mutex::new(None),
+            client: Mutex::new(None),
+            client_full: AtomicBool::new(false),
+            kept: AtomicBool::new(false),
+            finding: AtomicBool::new(false),
+            unread: AtomicBool::new(false),
+            destroyed: Destroyed::new(),
+        }
+    }
+
+    fn finding(&self) -> bool {
+        self.finding.load(Ordering::Relaxed)
+    }
+
+    fn unread(&self) -> bool {
+        self.unread.load(Ordering::Relaxed)
+    }
+
+    /// Takes `server` as the records of a world that loaded: what followed
+    /// an earlier world goes, and its records wait for the first step when
+    /// it has any.
+    fn start_server(&self, server: Server) {
+        self.kept.store(false, Ordering::Relaxed);
+        self.unread.store(false, Ordering::Relaxed);
+        self.finding
+            .store(!server.pending.is_empty(), Ordering::Relaxed);
+        drop(self.destroyed.take());
+        *self.server.relock() = Some(server);
+    }
+
+    /// Forgets the server's records and what follows them, as when its
+    /// world goes away; the records it kept, and whether they still waited
+    /// for the first step, for their last write.
+    fn forget_server(&self) -> Option<(Server, bool)> {
+        let last = self.server.relock().take();
+        let finding = self.finding.swap(false, Ordering::Relaxed);
+        self.kept.store(false, Ordering::Relaxed);
+        self.unread.store(false, Ordering::Relaxed);
+        drop(self.destroyed.take());
+        last.map(|server| (server, finding))
+    }
+
+    /// Forgets what the client got, when it changes servers.
+    fn forget_client(&self) {
+        *self.client.relock() = None;
+        self.client_full.store(false, Ordering::Relaxed);
+    }
+}
+
+/// Entities the game asked to destroy since the last step, written from any
+/// thread without a lock; alone on its cache lines, so the destroy detour's
+/// read of `kept` shares none with them.
+#[derive(Debug)]
+#[repr(align(128))]
+struct Destroyed {
+    /// Each entity in the low word under its round in the high one, 0 for an
+    /// empty slot. A slot from an earlier round is stale.
+    slots: [AtomicU64; DESTROYED_CAP],
+    /// The round in the high word and the slots taken in it in the low one.
+    count: AtomicU64,
+}
+
+impl Destroyed {
+    const fn new() -> Self {
+        Self {
+            slots: [const { AtomicU64::new(0) }; DESTROYED_CAP],
+            count: AtomicU64::new(1 << 32),
+        }
+    }
+
+    /// Notes that the game asked to destroy `entity`.
+    fn note(&self, entity: Entity) {
+        self.fill(self.reserve(), entity);
+    }
+
+    /// A slot for a destroy request: its index and its round.
+    fn reserve(&self) -> (usize, u64) {
+        let count = self.count.fetch_add(1, Ordering::AcqRel);
+        ((count & 0xffff_ffff) as usize, count >> 32)
+    }
+
+    fn fill(&self, (at, round): (usize, u64), entity: Entity) {
+        if let Some(slot) = self.slots.get(at) {
+            slot.store(round << 32 | u64::from(entity.0), Ordering::Release);
+        }
+    }
+
+    /// Whether a destroy request waits to be taken.
+    fn any(&self) -> bool {
+        self.count.load(Ordering::Acquire) & 0xffff_ffff != 0
+    }
+
+    /// The entities noted since the last call. A request filled after the
+    /// call that counted it is dropped, never taken in a later round, as its
+    /// entity id may be another's by then.
+    fn take(&self) -> FxHashSet<u32> {
+        let count = self
+            .count
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                Some(((count >> 32) + 1) << 32)
+            })
+            .unwrap_or_else(|count| count);
+        let (taken, round) = (
+            ((count & 0xffff_ffff) as usize).min(DESTROYED_CAP),
+            count >> 32,
+        );
+        self.slots[..taken]
+            .iter()
+            .map(|slot| slot.swap(0, Ordering::AcqRel))
+            .filter(|&noted| noted >> 32 == round)
+            .map(|noted| (noted & 0xffff_ffff) as u32)
+            .filter(|&entity| entity != 0)
+            .collect()
+    }
+}
+
+static STATE: State = State::new();
 
 /// The switch of the destroy requests' follow-up; its work only stores
 /// atomics, so it turns off only when its link fails.
@@ -316,55 +439,11 @@ crate::engine::chains::chain_detour! {
     next DESTROY_NEXT;
     |onward| {
         let queued = onward.call();
-        if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
-            note_destroyed(Entity(entity));
+        if queued != 0 && entity != 0 && STATE.kept.load(Ordering::Relaxed) {
+            STATE.destroyed.note(Entity(entity));
         }
         queued
     }
-}
-
-/// Notes that the game asked to destroy `entity`.
-fn note_destroyed(entity: Entity) {
-    fill_destroyed(reserve_destroyed(), entity);
-}
-
-/// A slot for a destroy request: its index and its round.
-fn reserve_destroyed() -> (usize, u64) {
-    let count = DESTROYED_COUNT.fetch_add(1, Ordering::AcqRel);
-    ((count & 0xffff_ffff) as usize, count >> 32)
-}
-
-fn fill_destroyed((at, round): (usize, u64), entity: Entity) {
-    if let Some(slot) = DESTROYED.get(at) {
-        slot.store(round << 32 | u64::from(entity.0), Ordering::Release);
-    }
-}
-
-/// Whether a destroy request waits to be taken.
-fn any_destroyed() -> bool {
-    DESTROYED_COUNT.load(Ordering::Acquire) & 0xffff_ffff != 0
-}
-
-/// The entities noted since the last call. A request filled after the call
-/// that counted it is dropped, never taken in a later round, as its entity
-/// id may be another's by then.
-fn take_destroyed() -> FxHashSet<u32> {
-    let count = DESTROYED_COUNT
-        .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
-            Some(((count >> 32) + 1) << 32)
-        })
-        .unwrap_or_else(|count| count);
-    let (taken, round) = (
-        ((count & 0xffff_ffff) as usize).min(DESTROYED_CAP),
-        count >> 32,
-    );
-    DESTROYED[..taken]
-        .iter()
-        .map(|slot| slot.swap(0, Ordering::AcqRel))
-        .filter(|&noted| noted >> 32 == round)
-        .map(|noted| (noted & 0xffff_ffff) as u32)
-        .filter(|&entity| entity != 0)
-        .collect()
 }
 
 /// Drops the records of the `destroyed` entities from `values`; the keys
@@ -386,18 +465,18 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(Kind
 /// carried items; after every step, drops the records of the entities
 /// destroyed in it, and tells the clients.
 pub(crate) fn after_step(loader: &Loader) {
-    if FINDING.load(Ordering::Relaxed) {
+    if STATE.finding() {
         find_pending(loader);
     }
     if crate::engine::ticks::steps().is_multiple_of(JOIN_LOOK_EVERY) && wanted() {
         look_for_carried(loader);
     }
-    if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
+    if !STATE.kept.load(Ordering::Relaxed) || !STATE.destroyed.any() {
         return;
     }
-    let destroyed = take_destroyed();
+    let destroyed = STATE.destroyed.take();
     let gone = {
-        let mut server = SERVER.relock();
+        let mut server = STATE.server.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
@@ -518,7 +597,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
     let (kind, pide) = (KindIndex(kind), Entity(pide));
     let scope = self::kind(kind).ok_or(Status::BAD_ARGS)?.scope;
     if serves() {
-        let mut server = SERVER.relock();
+        let mut server = STATE.server.relock();
         let server = server.as_mut().ok_or(Status::MISSING)?;
         let record = server.values.get(&(kind, pide)).ok_or(Status::MISSING)?;
         let wanted = match scope {
@@ -539,7 +618,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
         }
         return Err(Status::MISSING);
     }
-    let client = CLIENT.relock();
+    let client = STATE.client.relock();
     client
         .as_ref()
         .and_then(|v| v.get(&(kind, pide)).cloned())
@@ -562,7 +641,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
     if !serves() {
         return Err(Status::REFUSED);
     }
-    if !value.is_empty() && UNREAD.load(Ordering::Relaxed) {
+    if !value.is_empty() && STATE.unread() {
         return Err(Status::NOT_KEPT);
     }
     let loader = crate::engine::loader::loader();
@@ -596,7 +675,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         }
     };
     {
-        let mut server = SERVER.relock();
+        let mut server = STATE.server.relock();
         let server = server.as_mut().ok_or(Status::MISSING)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
@@ -610,7 +689,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
                 value: value.into(),
             };
             server.values.insert((kind, pide), record);
-            KEPT.store(true, Ordering::Relaxed);
+            STATE.kept.store(true, Ordering::Relaxed);
         }
         server.changed = true;
     }
@@ -629,7 +708,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
 /// The messages that give a client every value, each at most
 /// [`MESSAGE_BYTES`] long.
 fn snapshot() -> Vec<Vec<u8>> {
-    let server = SERVER.relock();
+    let server = STATE.server.relock();
     let mut messages = Vec::new();
     for (&(kind, pide), record) in server.iter().flat_map(|s| &s.values) {
         if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
@@ -653,9 +732,9 @@ pub(crate) fn received(bytes: &[u8]) {
     if !wanted() {
         return;
     }
-    let mut client = CLIENT.relock();
+    let mut client = STATE.client.relock();
     let values = client.get_or_insert_with(Values::default);
-    if !keep(values, bytes) && !CLIENT_FULL.swap(true, Ordering::Relaxed) {
+    if !keep(values, bytes) && !STATE.client_full.swap(true, Ordering::Relaxed) {
         crate::log!(
             WARN,
             "mod data: the server sent more than {MAX_CLIENT_RECORDS} records; the rest are dropped"
@@ -696,20 +775,14 @@ fn keep(values: &mut Values, bytes: &[u8]) -> bool {
 /// goes away, so the next world starts from its own file alone; values set
 /// since the world's last save are written first.
 pub(crate) fn forget_server() {
-    let last = SERVER.relock().take();
-    if let Some(server) = last {
-        world_file::save_last(server);
+    if let Some((server, finding)) = STATE.forget_server() {
+        world_file::save_last(server, finding);
     }
-    KEPT.store(false, Ordering::Relaxed);
-    FINDING.store(false, Ordering::Relaxed);
-    UNREAD.store(false, Ordering::Relaxed);
-    drop(take_destroyed());
 }
 
 /// Forgets what the client got, when it changes servers.
 pub(crate) fn forget_client() {
-    *CLIENT.relock() = None;
-    CLIENT_FULL.store(false, Ordering::Relaxed);
+    STATE.forget_client();
 }
 
 #[cfg(test)]

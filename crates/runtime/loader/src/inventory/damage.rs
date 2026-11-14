@@ -114,8 +114,12 @@ fn layout(loader: &Loader) -> Result<Layout, Constant> {
 /// Seals the filters and links every site when a mod filters damage or
 /// uses stats: the filters arm at all the sites or none.
 pub(crate) fn link(loader: &Loader) {
-    let filters = FILTERS.seal();
-    if filters.is_empty() && !crate::inventory::stats::wanted() {
+    link_in(loader, FILTERS.seal(), crate::inventory::stats::wanted());
+}
+
+/// Links the sites `filters` and the stats, when `stats` are wanted, need.
+fn link_in(loader: &Loader, filters: &[Registered<DamageFilterFn>], stats: bool) {
+    if filters.is_empty() && !stats {
         return;
     }
     let layout = match layout(loader) {
@@ -142,12 +146,20 @@ fn sites(filtering: bool) -> &'static [(Symbol, MidHookFn)] {
 }
 
 /// Whether a mod filters damage; one load, before a site reads anything.
+#[inline]
 fn filtering() -> bool {
-    FILTERS.sealed().is_some_and(|filters| !filters.is_empty())
+    filtering_in(&FILTERS)
+}
+
+/// Whether `filters` hold a mod's filter, once sealed.
+#[inline]
+fn filtering_in(filters: &Registry<Registered<DamageFilterFn>>) -> bool {
+    filters.sealed().is_some_and(|filters| !filters.is_empty())
 }
 
 /// Whether a hit is the loader's to read: a mod filters damage, or a stat
 /// changes hits.
+#[inline]
 fn hits_watched() -> bool {
     filtering() || crate::inventory::stats::changes_hits()
 }
@@ -557,6 +569,43 @@ mod tests {
         };
         // SAFETY: the registers are borrowed for the call, as a stub's are.
         unsafe { hit(&raw mut registers, core::ptr::null_mut()) };
+        assert!(!DAMAGE_FUSE.is_off());
+    }
+
+    unsafe extern "system" fn keep(_check: *mut DamageCheck, _user: *mut c_void) {}
+
+    /// Filters holding one filter of mod 0, sealed as the seal phase does.
+    fn one_filter() -> Registry<Registered<DamageFilterFn>> {
+        let filters: Registry<Registered<DamageFilterFn>> = Registry::new();
+        let added = filters.add(Registered::new(
+            ModIndex::new(0),
+            keep,
+            core::ptr::null_mut(),
+        ));
+        assert!(added.is_ok());
+        let _sealed = filters.seal();
+        filters
+    }
+
+    #[test]
+    fn a_hit_a_mod_filters_is_the_loader_s_to_read() {
+        assert!(filtering_in(&one_filter()));
+    }
+
+    #[test]
+    fn a_build_without_the_hit_layout_turns_the_filters_off_when_a_mod_filters() {
+        let filters = one_filter();
+        link_in(
+            &crate::start::tests::bare_loader(),
+            filters.sealed().unwrap_or_default(),
+            false,
+        );
+        assert!(DAMAGE_FUSE.is_off(), "off by its fuse, not only in the log");
+    }
+
+    #[test]
+    fn nothing_filtering_damage_links_no_site_and_leaves_the_filters_on() {
+        link_in(&crate::start::tests::bare_loader(), &[], false);
         assert!(!DAMAGE_FUSE.is_off());
     }
 

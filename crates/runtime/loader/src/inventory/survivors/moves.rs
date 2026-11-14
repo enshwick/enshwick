@@ -9,9 +9,7 @@ use enshwick_base::Relock;
 use enshwick_core::abi::HookFlags;
 
 use super::lookup::{home, position_of};
-use super::{
-    BEDS_FUSE, LOOKUP_FUSE, MOVE_ACTIVE, MOVE_WINDOW, MOVING, SEALED, SKIP_UPDATE, layout,
-};
+use super::{BEDS_FUSE, LOOKUP_FUSE, MOVE_WINDOW, Moving, SKIP_UPDATE, STATE, layout};
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 
@@ -72,7 +70,7 @@ crate::engine::chains::chain_detour! {
         // SAFETY: the game passes the move the non-null (checked first)
         // behaviour context of the survivor it moves, on the system's thread
         // while it runs.
-        if MOVE_ACTIVE.load(Ordering::Acquire) && !ctx.is_null() && unsafe { skip_move(ctx) } {
+        if STATE.move_active.load(Ordering::Acquire) && !ctx.is_null() && unsafe { skip_move(ctx) } {
             0
         } else {
             onward.call()
@@ -98,13 +96,18 @@ pub(super) unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
     let Some(layout) = layout(loader) else {
         return false;
     };
-    let mut moving = MOVING.relock();
-    let Some((survivor, target, at)) = *moving else {
+    let mut moving = STATE.moving.relock();
+    let Some(Moving {
+        survivor,
+        entity: target,
+        since,
+    }) = *moving
+    else {
         return false;
     };
-    if at.elapsed() > MOVE_WINDOW {
+    if since.elapsed() > MOVE_WINDOW {
         *moving = None;
-        MOVE_ACTIVE.store(false, Ordering::Release);
+        STATE.move_active.store(false, Ordering::Release);
         return false;
     }
     let ctx = ctx.cast_const().cast::<u8>();
@@ -116,7 +119,7 @@ pub(super) unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
     let me = unsafe { engine.entity(query) };
     if me == target {
         *moving = None;
-        MOVE_ACTIVE.store(false, Ordering::Release);
+        STATE.move_active.store(false, Ordering::Release);
         return false;
     }
     // SAFETY: the caller's contract makes `ctx` a live behaviour context
@@ -160,10 +163,10 @@ crate::engine::chains::chain_detour! {
 ///   `survivors.npc_*` offsets.
 /// - The call runs on the behaviour system's thread while it runs.
 pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
-    let (Some(loader), Some(engine), Some(sealed)) = (
+    let (Some(loader), Some(engine), Some(bed_checks)) = (
         crate::engine::loader::loader(),
         crate::engine::ecs::resolved(),
-        SEALED.get(),
+        STATE.registrations.bed_checks.sealed(),
     ) else {
         return true;
     };
@@ -215,8 +218,7 @@ pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
         home: unsafe { home(saved, transform) },
         bed_at,
     };
-    sealed
-        .bed_checks
+    bed_checks
         .iter()
         .filter(|r| !crate::engine::loader::is_off(r.owner))
         .all(|r| {

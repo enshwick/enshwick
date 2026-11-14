@@ -151,11 +151,12 @@ struct Saved {
 
 /// The server's watched entities and saved modifiers.
 #[derive(Debug, Default)]
-struct State {
+struct World {
     watched: FxHashMap<u32, Watched>,
     saved: Vec<Saved>,
     saved_changed: bool,
-    world: Option<String>,
+    /// The world's key, where its saved modifiers go.
+    key: Option<String>,
     next_expiry: Option<Instant>,
 }
 
@@ -184,29 +185,99 @@ struct Combat {
 
 static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
 static SEALED: OnceLock<Sealed> = OnceLock::new();
-static STATE: Mutex<Option<State>> = Mutex::new(None);
-static SNAPSHOT: OnceLock<ArcSwap<Snapshot>> = OnceLock::new();
-/// Bumped whenever an item's stats change, so every watched entity looks
-/// again.
-static ITEMS: AtomicU64 = AtomicU64::new(0);
-/// Set when something asks for a look before the next round.
-static LOOK: AtomicBool = AtomicBool::new(false);
 
-/// Set while the snapshot holds hit factors, so a hit without any skips the
-/// snapshot.
-static HITS: AtomicBool = AtomicBool::new(false);
-
-fn snapshot() -> &'static ArcSwap<Snapshot> {
-    SNAPSHOT.get_or_init(|| ArcSwap::from_pointee(Snapshot::default()))
+/// What the stats follow while the server runs a world.
+#[derive(Debug)]
+struct State {
+    /// The served world's watched entities and saved modifiers.
+    world: Mutex<Option<World>>,
+    reads: HitReads,
+    /// Bumped whenever an item's stats change, so every watched entity
+    /// looks again.
+    items: AtomicU64,
+    /// Set when something asks for a look before the next round.
+    look: AtomicBool,
 }
 
-/// Makes `next` the snapshot every reader sees. Only the game thread swaps
-/// (the step, world events and forget phases), so [`HITS`] follows the last
-/// snapshot.
-fn swap_in(next: Snapshot) {
-    HITS.store(next.changes_hits(), Ordering::Release);
-    snapshot().store(Arc::new(next));
+/// What every hit reads on the damage workers, alone on its cache lines:
+/// the game thread locks `world` every step, and mods bump `items` and
+/// `look` from any thread.
+#[derive(Debug)]
+#[repr(align(128))]
+struct HitReads {
+    /// The values every reader sees, made at first use.
+    snapshot: OnceLock<ArcSwap<Snapshot>>,
+    /// Set while the snapshot holds hit factors, so a hit without any skips
+    /// the snapshot.
+    hits: AtomicBool,
 }
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            world: Mutex::new(None),
+            reads: HitReads {
+                snapshot: OnceLock::new(),
+                hits: AtomicBool::new(false),
+            },
+            items: AtomicU64::new(0),
+            look: AtomicBool::new(false),
+        }
+    }
+
+    fn snapshot(&self) -> &ArcSwap<Snapshot> {
+        self.reads
+            .snapshot
+            .get_or_init(|| ArcSwap::from_pointee(Snapshot::default()))
+    }
+
+    /// Makes `next` the snapshot every reader sees. Only the game thread
+    /// swaps (the step, world events and forget phases), so `hits` follows
+    /// the last snapshot.
+    fn swap_in(&self, next: Snapshot) {
+        self.reads
+            .hits
+            .store(next.changes_hits(), Ordering::Release);
+        self.snapshot().store(Arc::new(next));
+    }
+
+    fn with_world<R>(&self, f: impl FnOnce(&mut World) -> R) -> R {
+        let mut world = self.world.relock();
+        f(world.get_or_insert_with(World::default))
+    }
+
+    /// Writes the saved modifiers when they changed since the last write.
+    fn save(&self) {
+        let Some((key, bytes)) = self.with_world(|world| {
+            if !world.saved_changed {
+                return None;
+            }
+            world.saved_changed = false;
+            Some((
+                world.key.clone()?,
+                postcard::to_allocvec(&world.saved).ok()?,
+            ))
+        }) else {
+            return;
+        };
+        let path = file(&key);
+        if let Err(error) = enshwick_core::files::write_atomically(&path, &bytes) {
+            crate::log!(WARN, "stats: {} not written: {error}", path.display());
+        }
+    }
+
+    /// Saves what changed in a hosted game that stopped and drops its
+    /// world's entities, values and asked looks, so the next world starts
+    /// clean; the item stats' generation goes on, as signatures fold it in.
+    fn forget(&self) {
+        self.save();
+        *self.world.relock() = None;
+        self.look.store(false, Ordering::Relaxed);
+        self.swap_in(Snapshot::default());
+    }
+}
+
+static STATE: State = State::new();
 
 fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
     if SEALED.get().is_some() {
@@ -426,7 +497,7 @@ pub(crate) fn value(entity: Entity, stat: u32) -> Result<f32, Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     let index = usize::try_from(stat).map_err(|_| Status::BAD_ARGS)?;
     let default = *sealed.defaults.get(index).ok_or(Status::BAD_ARGS)?;
-    let values = snapshot().load();
+    let values = STATE.snapshot().load();
     Ok(values
         .values
         .get(&entity.0)
@@ -438,11 +509,6 @@ pub(crate) fn value(entity: Entity, stat: u32) -> Result<f32, Status> {
 /// Whether this process runs the server's world.
 fn serves() -> bool {
     crate::engine::world::server_world() != 0
-}
-
-fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mut state = STATE.relock();
-    f(state.get_or_insert_with(State::default))
 }
 
 /// Sets or removes mod `owner`'s modifier.
@@ -470,7 +536,7 @@ pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> 
                 .ok_or(Status::BAD_ARGS)?,
         ),
     };
-    with_state(|state| {
+    STATE.with_world(|state| {
         let watched = state.watched.entry(request.entity.0).or_default();
         if saved && !remove && watched.player.is_none() {
             return Err(Status::REFUSED);
@@ -531,7 +597,7 @@ pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), Status> {
     if !serves() {
         return Err(Status::REFUSED);
     }
-    with_state(|state| {
+    STATE.with_world(|state| {
         if on {
             let watched = state.watched.entry(entity.0).or_default();
             watched.asked = true;
@@ -545,13 +611,13 @@ pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), Status> {
 
 /// An item's stats changed: every watched entity looks again.
 pub(crate) fn items_changed() {
-    ITEMS.fetch_add(1, Ordering::Relaxed);
-    LOOK.store(true, Ordering::Relaxed);
+    STATE.items.fetch_add(1, Ordering::Relaxed);
+    STATE.look.store(true, Ordering::Relaxed);
 }
 
 /// A player's equipment changed: look before the next round.
 pub(crate) fn equipment_changed() {
-    LOOK.store(true, Ordering::Relaxed);
+    STATE.look.store(true, Ordering::Relaxed);
 }
 
 /// A player joined: watch them and give back their saved modifiers.
@@ -559,7 +625,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
     let Some(sealed) = SEALED.get().filter(|_| wanted()) else {
         return;
     };
-    with_state(|state| {
+    STATE.with_world(|state| {
         let mut restored = Vec::new();
         for saved in state.saved.iter().filter(|s| s.player == player.key.get()) {
             let owner = loader.mods.iter().position(|m| m.id == saved.owner);
@@ -674,7 +740,7 @@ pub(crate) fn sources(
 ) -> Result<Vec<StatSource>, Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     crate::engine::world::server()?;
-    let held = with_state(|state| {
+    let held = STATE.with_world(|state| {
         state
             .watched
             .get(&entity.0)
@@ -690,7 +756,7 @@ pub(crate) fn sources(
 /// `state`, and the changes into `changes`; whether any value moved.
 fn take_values(
     sealed: &Sealed,
-    state: &mut State,
+    state: &mut World,
     results: Vec<(u32, u64, Box<[f32]>)>,
     changes: &mut Vec<StatChange>,
 ) -> bool {
@@ -758,7 +824,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         return;
     }
     let round = step.is_multiple_of(LOOK_EVERY);
-    let look = LOOK.swap(false, Ordering::Relaxed) || round;
+    let look = STATE.look.swap(false, Ordering::Relaxed) || round;
     let players = if round {
         crate::engine::world::players(loader).ok()
     } else {
@@ -766,7 +832,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
     };
     let mut forgot = false;
     let mut due = Vec::new();
-    with_state(|state| {
+    STATE.with_world(|state| {
         expire(state, now);
         if let Some(players) = &players {
             forgot = follow(loader, state, players);
@@ -782,7 +848,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
             }
         }
     });
-    let generation = ITEMS.load(Ordering::Relaxed);
+    let generation = STATE.items.load(Ordering::Relaxed);
     let mut results = Vec::new();
     for (entity, held, signature, dirty) in due {
         let (list, seen) = gather(loader, sealed, Entity(entity), &held);
@@ -795,7 +861,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         return;
     }
     let mut changes = Vec::new();
-    let published = with_state(|state| {
+    let published = STATE.with_world(|state| {
         let entities: Vec<u32> = results.iter().map(|r| r.0).collect();
         let moved = take_values(sealed, state, results, &mut changes);
         for entity in entities {
@@ -806,7 +872,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         (moved || forgot).then(|| publish(sealed, state))
     });
     if let Some(next) = published {
-        swap_in(next);
+        STATE.swap_in(next);
     }
     for change in &changes {
         for handler in sealed.handlers.iter().filter(|h| h.live()) {
@@ -826,7 +892,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
 
 /// The snapshot of `state`'s values: the entities whose values differ from
 /// the defaults.
-fn publish(sealed: &Sealed, state: &State) -> Snapshot {
+fn publish(sealed: &Sealed, state: &World) -> Snapshot {
     let mut next = Snapshot::default();
     for (&entity, watched) in &state.watched {
         if watched.values.is_empty() || *watched.values == *sealed.defaults {
@@ -879,14 +945,14 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 }
             };
             crate::log!(INFO, "stats: {} saved modifiers", saved.len());
-            *STATE.relock() = Some(State {
+            *STATE.world.relock() = Some(World {
                 saved,
-                world: key,
-                ..State::default()
+                key,
+                ..World::default()
             });
-            swap_in(Snapshot::default());
+            STATE.swap_in(Snapshot::default());
         }
-        Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => save(),
+        Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => STATE.save(),
         _ => {}
     }
 }
@@ -894,28 +960,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// The hosted game stopped: saves what changed and drops its world's
 /// entities and values, so the next world starts clean.
 pub(crate) fn forget() {
-    save();
-    *STATE.relock() = None;
-    swap_in(Snapshot::default());
-}
-
-fn save() {
-    let Some((key, bytes)) = with_state(|state| {
-        if !state.saved_changed {
-            return None;
-        }
-        state.saved_changed = false;
-        Some((
-            state.world.clone()?,
-            postcard::to_allocvec(&state.saved).ok()?,
-        ))
-    }) else {
-        return;
-    };
-    let path = file(&key);
-    if let Err(error) = enshwick_core::files::write_atomically(&path, &bytes) {
-        crate::log!(WARN, "stats: {} not written: {error}", path.display());
-    }
+    STATE.forget();
 }
 
 mod combat;

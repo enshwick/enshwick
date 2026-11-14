@@ -7,7 +7,7 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 
 use super::{
-    FILED_FUSE, ItemMap, MENU_FUSE, Menu, SEALED, STATUS_ROWS, UI_PLAY_DATA, UI_STATE, UI_WORDS,
+    FILED_FUSE, ItemMap, MENU_FUSE, Menu, STATE, STATUS_ROWS, UI_PLAY_DATA, UI_STATE, UI_WORDS,
     item_map, menu,
 };
 
@@ -51,7 +51,7 @@ crate::engine::chains::chain_detour! {
 unsafe fn load_registry(onward: &Onward<(), impl Fn()>, registry: *mut u8) {
     let ready = crate::engine::loader::loader()
         .and_then(item_map)
-        .zip(SEALED.get())
+        .zip(STATE.registrations.items.sealed())
         .filter(|_| !registry.is_null());
     // The game calls this often and builds only once: a registry that holds
     // its collection already is left as it is.
@@ -61,11 +61,11 @@ unsafe fn load_registry(onward: &Onward<(), impl Fn()>, registry: *mut u8) {
     let built =
         ready.is_some_and(|(m, _)| !unsafe { read_ptr_at::<u8>(registry, m.loaded) }.is_null());
     onward.call();
-    let Some((map, sealed)) = ready.filter(|_| !built) else {
+    let Some((map, items)) = ready.filter(|_| !built) else {
         return;
     };
     let mut filed = 0;
-    for &(item, survivor) in &sealed.items {
+    for &(item, survivor) in items {
         // SAFETY: the game's load just built the non-null registry, whose
         // staff item map lies at the table's `survivors.registry_item_map`;
         // the load's thread alone uses it during the call.
@@ -164,14 +164,13 @@ crate::engine::chains::chain_detour! {
 ///   [`UI_WORDS`] words over [`UI_READS`].
 /// - The call runs on the system's thread while the system runs.
 pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
-    let (Some(loader), Some(engine), Some(sealed)) = (
+    let (Some(loader), Some(engine)) = (
         crate::engine::loader::loader(),
         crate::engine::ecs::resolved(),
-        SEALED.get(),
     ) else {
         return;
     };
-    let (Some(menu), Some(merge)) = (menu(loader), sealed.status) else {
+    let (Some(menu), Some(merge)) = (menu(loader), STATE.registrations.status()) else {
         return;
     };
     if crate::engine::loader::is_off(merge.owner) {

@@ -10,7 +10,7 @@ use enshwick_core::abi::HookFlags;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 
-use super::{SEALED, STAFFS_FUSE, layout};
+use super::{STAFFS_FUSE, STATE, layout};
 
 /// Links the staffs' spawn; false once they are off.
 pub(super) fn link(loader: &Loader) -> bool {
@@ -94,7 +94,10 @@ pub(super) fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
 /// - The call runs before the spawn reads the request, on its thread, so
 ///   nothing else reads or writes it during the call.
 pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
-    let (Some(loader), Some(sealed)) = (crate::engine::loader::loader(), SEALED.get()) else {
+    let (Some(loader), Some(summons)) = (
+        crate::engine::loader::loader(),
+        STATE.registrations.summons.sealed(),
+    ) else {
         return None;
     };
     let layout = layout(loader)?;
@@ -137,8 +140,7 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
         reserved: [0; 3],
     };
     let mut consume = false;
-    for r in sealed
-        .summons
+    for r in summons
         .iter()
         .filter(|r| !crate::engine::loader::is_off(r.owner))
     {
@@ -171,11 +173,10 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
 
 /// Tells the handlers that a use spawned or moved a survivor.
 pub(super) fn summoned(call: Summon) {
-    let Some(sealed) = SEALED.get() else {
+    let Some(summoned) = STATE.registrations.summoned.sealed() else {
         return;
     };
-    for r in sealed
-        .summoned
+    for r in summoned
         .iter()
         .filter(|r| !crate::engine::loader::is_off(r.owner))
     {

@@ -34,7 +34,7 @@ use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
 pub(crate) use uses::forget;
-use uses::{moves, taken, watch};
+use uses::{USES, moves};
 
 /// The system that runs the players' equips and unequips.
 const EQUIPMENT_SYSTEM: &str = "equipment_actions";
@@ -424,7 +424,7 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             // `ServerConsumedPlayerInput` component.
             Some((stack, unsafe { moves(layout, consumed) }))
         };
-        for consumed in taken(now, slot_now) {
+        for consumed in USES.taken(now, slot_now) {
             let _heard = ask(&consumed, false);
         }
     }
@@ -491,7 +491,7 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
                 crate::content::recipes::item_words(loader, item)
             );
         } else if kind == ItemAction::CONSUME {
-            watch(
+            USES.watch(
                 ItemAction {
                     kind: ItemAction::CONSUMED,
                     ..call
