@@ -243,6 +243,7 @@ pub(crate) struct State {
     pub(crate) game_actions: Vec<(String, bool)>,
     /// The local player's held controls, `None` as outside a game.
     pub(crate) local_held: Option<u64>,
+    pub(crate) local_input_info: enshwick_core::abi::LocalInputInfo,
     /// What the HUD drawing now drew, with each item's anchor, while one
     /// draws.
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
@@ -464,6 +465,12 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         screen_host_read: None,
         game_actions: Vec::new(),
         local_held: None,
+        local_input_info: enshwick_core::abi::LocalInputInfo {
+            header: Header::of::<enshwick_core::abi::LocalInputInfo>(),
+            flags: 0,
+            reserved: 0,
+            age_ms: u64::MAX,
+        },
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),
@@ -742,4 +749,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     language_of,
     client_game_event,
     join_rule,
+    local_input_status,
 };

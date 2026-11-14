@@ -664,3 +664,34 @@ impl FogInfo {
         uncovered_size: [0; 2],
     };
 }
+
+/// Cached diagnostics of the client's local gameplay-input sampler.
+/// Flags and age are weakly consistent observations, not world or session identity.
+/// Reading this does not request sampling. ABI 11.31.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct LocalInputInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// A combination of this type's flag constants; unknown flags are ignored.
+    pub flags: u32,
+    /// Reserved; 0.
+    pub reserved: u32,
+    /// Age of the last cached sample in milliseconds; `u64::MAX` means never sampled.
+    pub age_ms: u64,
+}
+impl_headed!(LocalInputInfo);
+impl LocalInputInfo {
+    /// A mod requested sampling through `local_held`.
+    pub const REQUESTED: u32 = 1;
+    /// The sampler's existing layout resolved.
+    pub const LAYOUT_AVAILABLE: u32 = 2;
+    /// The existing sampler link succeeded and its fuse remains on.
+    pub const LINK_AVAILABLE: u32 = 4;
+    /// The sampler's read fuse remains on; this alone does not mean reads can run.
+    pub const READ_ENABLED: u32 = 8;
+    /// At least one sample was cached, including a zero mask.
+    pub const SAMPLE_PRESENT: u32 = 16;
+    /// Requested, available, enabled and sampled within the existing 1000 ms window.
+    pub const FRESH: u32 = 32;
+}

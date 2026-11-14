@@ -233,4 +233,5 @@ pub(crate) static API: HostApi = HostApi {
     language_of,
     client_game_event,
     join_rule,
+    local_input_status,
 };

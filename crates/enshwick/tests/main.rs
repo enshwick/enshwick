@@ -124,6 +124,8 @@ mod language_of;
 mod lifecycle;
 mod live_changes;
 mod live_changes_join;
+#[cfg(feature = "unstable")]
+mod local_input_status;
 mod loot_drops;
 mod loot_table_changes;
 mod manifest_flags;

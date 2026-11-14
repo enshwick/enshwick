@@ -1,4 +1,4 @@
-abi 11.30
+abi 11.31
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 216 align 8 born 144
@@ -344,7 +344,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1696 align 8
+HostApi size 1704 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -556,6 +556,7 @@ HostApi size 1696 align 8
     language_of at 1672 size 8 type extern "system" fn(ModHandle, PlayerKey) -> u32
     client_game_event at 1680 size 8 type extern "system" fn(ModHandle, u32, unsafe extern "system" fn(*const GameEventData, *mut c_void), *mut c_void) -> Status
     join_rule at 1688 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const JoinCall, *mut c_void) -> u8, *mut c_void) -> Status
+    local_input_status at 1696 size 8 type extern "system" fn(ModHandle, *mut LocalInputInfo) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -645,6 +646,11 @@ LayoutField size 24 align 8
     hash at 16 size 8 type u64
 Level size 1 align 1
     0 at 0 size 1 type u8
+LocalInputInfo size 24 align 8 born 24
+    header at 0 size 8 type Header
+    flags at 8 size 4 type u32
+    reserved at 12 size 4 type u32
+    age_ms at 16 size 8 type u64
 LoopWaitData size 24 align 8 born 24
     header at 0 size 8 type Header
     ms at 8 size 4 type u32

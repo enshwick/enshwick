@@ -12,15 +12,15 @@ use crate::abi::{
     DropRequest, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
     ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
     InventoryResultFn, ItemActionFn, ItemData, ItemLine, JoinRuleFn, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
-    MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
-    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind,
-    RenameCallFn, ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec,
-    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
-    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
-    TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront,
+    KnowledgeInputFn, Level, LocalInputInfo, LoopWaitFn, LoopWaitSites, MapFrameInfo,
+    MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn,
+    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
+    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn,
+    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension,
+    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -2045,6 +2045,11 @@ pub struct HostApi {
     /// [`Status::REFUSED`]. ABI 11.30.
     pub join_rule:
         extern "system" fn(me: ModHandle, callback: JoinRuleFn, user: *mut c_void) -> Status,
+    /// Copies the local input sampler's cached diagnostics without requesting reads.
+    /// Client only (`Status::MISSING` on a server); callable on any thread.
+    /// No game memory is read. Flags are weakly consistent and age is not session identity.
+    /// `out` is a headed, writable `LocalInputInfo`. ABI 11.31.
+    pub local_input_status: extern "system" fn(me: ModHandle, out: *mut LocalInputInfo) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2195,5 +2200,6 @@ const _: () = {
     assert!(offset_of!(HostApi, language_of) == 24 + 206 * 8);
     assert!(offset_of!(HostApi, client_game_event) == 24 + 207 * 8);
     assert!(offset_of!(HostApi, join_rule) == 24 + 208 * 8);
-    assert!(size_of::<HostApi>() == 24 + 209 * 8);
+    assert!(offset_of!(HostApi, local_input_status) == 24 + 209 * 8);
+    assert!(size_of::<HostApi>() == 24 + 210 * 8);
 };

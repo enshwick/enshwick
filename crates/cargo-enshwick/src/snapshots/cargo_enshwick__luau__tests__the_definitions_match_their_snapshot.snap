@@ -1344,6 +1344,24 @@ export type ListedPlayer = {
 	name: string,
 }
 
+--- Cached client sampler metadata. This is not world/session identity or proof of input execution.
+export type LocalInputStatus = {
+	--- Some mod requested sampling; this getter never requests it.
+	requested: boolean,
+	--- The sampler layout resolved.
+	layout_available: boolean,
+	--- The existing system link is available.
+	link_available: boolean,
+	--- The read fuse is enabled, independently of layout and link availability.
+	read_enabled: boolean,
+	--- A cached sample exists, including an empty held mask.
+	sample_present: boolean,
+	--- Sampling was requested, layout/link are available, the read is enabled, and the cached sample is no older than 1000 ms. This is not an input receipt.
+	fresh: boolean,
+	--- Age in milliseconds, or nil before any sample.
+	age_ms: string?,
+}
+
 --- A survivor lookup the game makes, for `on_survivor_lookup` to answer.
 export type Lookup = {
 	--- The survivor, as `Lookup.survivor` holds it.
@@ -4250,6 +4268,8 @@ declare enshwick: {
 		held: (player: number) -> {string}?,
 		--- The game's controls the local player holds, as this client's interface read them in its last step; nil on a server, outside a game and while no step ran for a second, as in the pause menu. Only the gameplay controls: the client-only ones, such as the menu and map keys, are not in it. Read on any thread.
 		local_held: () -> {string}?,
+		--- Observes only cached loader metadata on any thread, without starting sampling. Fields are weakly consistent; no world, session, player or current UI state is inferred. Requires a matching ABI 11.31 or newer loader; older loaders cannot load this SDK.
+		local_status: () -> LocalInputStatus,
 	},
 	--- The client's interface, drawn with the game's own widgets.
 	ui: {

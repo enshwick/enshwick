@@ -249,3 +249,4 @@ names every entry of the golden layout once, in that order.
 | `language_of` | game | — | with a player |
 | `client_game_event` | game | — | on a client, hosting and joined |
 | `join_rule` | game | — | with a client joining |
+| `local_input_status` | loader | fake client/server and cached-state tests | not exercised |

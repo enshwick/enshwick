@@ -118,6 +118,7 @@ impl HostRead {
 struct State {
     layout: OnceLock<Layout>,
     asked: AtomicBool,
+    linked: AtomicBool,
     start: OnceLock<Instant>,
     bits: AtomicU64,
     read_ms: AtomicU64,
@@ -133,6 +134,7 @@ struct State {
 static STATE: State = State {
     layout: OnceLock::new(),
     asked: AtomicBool::new(false),
+    linked: AtomicBool::new(false),
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
     read_ms: AtomicU64::new(0),
@@ -231,7 +233,9 @@ pub(crate) fn link(loader: &Loader) {
 /// both answer as stale. True when linked.
 fn link_system(loader: &Loader, entry: Option<u64>) -> bool {
     let target = Target::Found(SYSTEM, entry);
-    loader.link_fused(&LINK_FUSE, target, &NEXT, player_ui, HookFlags::NONE)
+    let linked = loader.link_fused(&LINK_FUSE, target, &NEXT, player_ui, HookFlags::NONE);
+    STATE.linked.store(linked, Ordering::Release);
+    linked
 }
 
 /// Reads the local player's mask from `player_ui`'s context.
@@ -365,9 +369,107 @@ pub(crate) fn held() -> Result<u64, HeldError> {
     Ok(STATE.bits.load(Ordering::Relaxed))
 }
 
+/// Cached loader metadata only; never starts sampling or accesses a game object.
+pub(crate) fn status() -> enshwick_core::abi::LocalInputInfo {
+    cached_status(
+        STATE.asked.load(Ordering::Relaxed),
+        STATE.layout.get().is_some(),
+        STATE.linked.load(Ordering::Acquire) && !LINK_FUSE.is_off(),
+        !FUSE.is_off(),
+        STATE.read_ms.load(Ordering::Acquire),
+        now_ms(),
+    )
+}
+
+#[expect(
+    clippy::fn_params_excessive_bools,
+    reason = "independent cached sampler gates are combined without inferring a game state"
+)]
+fn cached_status(
+    requested: bool,
+    layout: bool,
+    linked: bool,
+    enabled: bool,
+    read: u64,
+    now: u64,
+) -> enshwick_core::abi::LocalInputInfo {
+    use enshwick_core::abi::{Header, LocalInputInfo as Info};
+    let mut flags = 0;
+    for (present, flag) in [
+        (requested, Info::REQUESTED),
+        (layout, Info::LAYOUT_AVAILABLE),
+        (linked, Info::LINK_AVAILABLE),
+        (enabled, Info::READ_ENABLED),
+        (read != 0, Info::SAMPLE_PRESENT),
+        (
+            requested && layout && linked && enabled && fresh(read, now),
+            Info::FRESH,
+        ),
+    ] {
+        if present {
+            flags |= flag;
+        }
+    }
+    Info {
+        header: Header::of::<Info>(),
+        flags,
+        reserved: 0,
+        age_ms: if read == 0 {
+            u64::MAX
+        } else {
+            now.saturating_sub(read)
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_diagnostics_distinguish_never_read_stale_and_disabled_gates() {
+        use enshwick_core::abi::LocalInputInfo as Info;
+        let never = cached_status(false, true, true, true, 0, 100);
+        assert_eq!(
+            never.flags,
+            Info::LAYOUT_AVAILABLE | Info::LINK_AVAILABLE | Info::READ_ENABLED
+        );
+        assert_eq!(never.age_ms, u64::MAX);
+        let fresh = cached_status(true, true, true, true, 100, 1100);
+        assert_eq!(
+            fresh.flags,
+            Info::REQUESTED
+                | Info::LAYOUT_AVAILABLE
+                | Info::LINK_AVAILABLE
+                | Info::READ_ENABLED
+                | Info::SAMPLE_PRESENT
+                | Info::FRESH
+        );
+        assert_eq!(fresh.age_ms, 1000);
+        let stale = cached_status(true, true, true, true, 100, 1101);
+        assert_eq!(stale.flags & Info::FRESH, 0);
+        assert_eq!(stale.age_ms, 1001);
+        for (requested, layout, link, read) in [
+            (false, true, true, true),
+            (true, false, true, true),
+            (true, true, false, true),
+            (true, true, true, false),
+        ] {
+            let disabled = cached_status(requested, layout, link, read, 100, 101);
+            assert_eq!(disabled.flags & Info::FRESH, 0);
+            assert_ne!(disabled.flags & Info::SAMPLE_PRESENT, 0);
+            assert_eq!(disabled.age_ms, 1);
+        }
+    }
+
+    #[test]
+    fn diagnostics_neither_request_sampling_nor_read_game_state() {
+        assert!(!STATE.asked.load(Ordering::Relaxed));
+        let info = status();
+        assert_eq!(info.flags, enshwick_core::abi::LocalInputInfo::READ_ENABLED);
+        assert_eq!(info.age_ms, u64::MAX);
+        assert!(!STATE.asked.load(Ordering::Relaxed));
+    }
 
     #[test]
     fn a_panic_in_the_held_read_leaves_the_host_reads_linked() {

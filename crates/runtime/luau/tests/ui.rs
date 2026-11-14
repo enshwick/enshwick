@@ -251,6 +251,61 @@ mod tests {
     }
 
     #[test]
+    fn a_script_observes_cached_sampler_flags_and_nil_zero_or_stale_age() {
+        use enshwick::abi::{Header, LocalInputInfo as Info};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local status = enshwick.input.local_status()
+                assert(status.age_ms == nil or type(status.age_ms) == 'string')
+                if status.fresh then assert(status.age_ms == '0') end
+                enshwick.log.info(`sample {status.sample_present} age {status.age_ms} fresh {status.fresh}`)
+            end)
+            ",
+        );
+        let _drawn = loader.draw_frame();
+        loader.set_local_input_status(Info {
+            header: Header::of::<Info>(),
+            flags: Info::SAMPLE_PRESENT | Info::FRESH,
+            reserved: 0,
+            age_ms: 0,
+        });
+        let _drawn = loader.draw_frame();
+        loader.set_local_input_status(Info {
+            header: Header::of::<Info>(),
+            flags: Info::SAMPLE_PRESENT,
+            reserved: 0,
+            age_ms: 1001,
+        });
+        let _drawn = loader.draw_frame();
+        for line in [
+            "sample false age nil fresh false",
+            "sample true age 0 fresh true",
+            "sample true age 1001 fresh false",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
+    fn a_script_cannot_read_client_sampler_status_on_a_server() {
+        let loader = run(
+            FakeHost::new().player_input(),
+            r"
+            assert(type(enshwick.input.local_status) == 'function')
+            local ok = pcall(enshwick.input.local_status)
+            enshwick.log.info(`sampler available {ok}`)
+        ",
+        );
+        assert!(
+            logged(&loader, "sampler available false"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_script_reads_the_prompt_the_screen_s_host_and_the_local_held_controls() {
         let loader = run(
             FakeHost::new().side(Side::CLIENT).player_input(),

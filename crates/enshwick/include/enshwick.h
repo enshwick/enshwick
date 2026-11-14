@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 30
+#define ENSHWICK_ABI_MINOR 31
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -3471,6 +3471,32 @@ typedef struct EnshwickJoinCall {
 // not unwind.
 typedef uint8_t (*EnshwickJoinRuleFn)(const struct EnshwickJoinCall *call, void *user);
 
+// Cached diagnostics of the client's local gameplay-input sampler.
+// Flags and age are weakly consistent observations, not world or session identity.
+// Reading this does not request sampling. ABI 11.31.
+typedef struct EnshwickLocalInputInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // A combination of this type's flag constants; unknown flags are ignored.
+  uint32_t flags;
+  // Reserved; 0.
+  uint32_t reserved;
+  // Age of the last cached sample in milliseconds; `u64::MAX` means never sampled.
+  uint64_t age_ms;
+} EnshwickLocalInputInfo;
+// A mod requested sampling through `local_held`.
+#define EnshwickLocalInputInfo_REQUESTED 1
+// The sampler's existing layout resolved.
+#define EnshwickLocalInputInfo_LAYOUT_AVAILABLE 2
+// The existing sampler link succeeded and its fuse remains on.
+#define EnshwickLocalInputInfo_LINK_AVAILABLE 4
+// The sampler's read fuse remains on; this alone does not mean reads can run.
+#define EnshwickLocalInputInfo_READ_ENABLED 8
+// At least one sample was cached, including a zero mask.
+#define EnshwickLocalInputInfo_SAMPLE_PRESENT 16
+// Requested, available, enabled and sampled within the existing 1000 ms window.
+#define EnshwickLocalInputInfo_FRESH 32
+
 // The table of services the loader offers a mod.
 //
 // A function appended at its end is a new
@@ -5391,6 +5417,11 @@ typedef struct EnshwickHostApi {
   // freed by the loader. A panic in the loader returns
   // `Status::REFUSED`. ABI 11.30.
   EnshwickStatus (*join_rule)(EnshwickModHandle me, EnshwickJoinRuleFn callback, void *user);
+  // Copies the local input sampler's cached diagnostics without requesting reads.
+  // Client only (`Status::MISSING` on a server); callable on any thread.
+  // No game memory is read. Flags are weakly consistent and age is not session identity.
+  // `out` is a headed, writable `LocalInputInfo`. ABI 11.31.
+  EnshwickStatus (*local_input_status)(EnshwickModHandle me, struct EnshwickLocalInputInfo *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

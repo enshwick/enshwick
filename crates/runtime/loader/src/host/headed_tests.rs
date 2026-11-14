@@ -67,6 +67,7 @@ macro_rules! headed {
             KnowledgeData,
             KnowledgeInfo,
             KnowledgeInput,
+            LocalInputInfo,
             LoopWaitData,
             MapFrameInfo,
             MapMarkerInfo,

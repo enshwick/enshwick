@@ -115,3 +115,28 @@ with the keys anyway, such as a stance or a hint. Never let them decide
 rights, rewards or an admin step. Those come from the server's own state,
 or from a [player action](actions.md), which the server checks on every
 run.
+
+## Cached local sampler diagnostics
+
+`Input::local_status()` (Luau: `enshwick.input.local_status()`) reports the loader's cached sampler metadata on any thread.
+It shows whether a mod requested sampling, whether its layout and system link are
+available, and whether its read fuse is enabled. It also reports whether a sample
+exists and remains fresh. `age_ms` is `None` before any sample. In Luau, this is `nil`. A stale or disabled
+sample can still have an age. Luau represents the age as a decimal string, as
+it represents other `u64` values. A zero held mask is a valid sample.
+
+This getter does not request sampling. Only the existing `local_held()` call
+starts it. The flags are weakly consistent observations of cached metadata.
+They are not world or session identity, or proof of input execution.
+They do not explain why a player row or component was not sampled.
+No new game memory is read. The getter is client-only and returns
+`WorldError::Missing` on a server. It requires ABI 11.31 or newer.
+An older loader rejects this SDK at mod initialization before accessing its
+appended host slot.
+
+```lua
+local status = enshwick.input.local_status()
+if status.sample_present then
+    enshwick.log.info(`Cached sample age: {status.age_ms} ms`)
+end
+```

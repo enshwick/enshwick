@@ -10,6 +10,11 @@ use crate::host::layer::{
 };
 
 entries! {
+    fn local_input_status(loader as Caller, out as HeadedOut<api_frame::LocalInputInfo>) -> Status {
+        on_client(loader)?;
+        out.put(crate::actions::local_held::status())
+    }
+
     fn local_held(loader as Caller, out as Out<u64>) -> Status {
         on_client(loader)?;
         out.put(crate::actions::local_held::held()?)

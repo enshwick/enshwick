@@ -292,6 +292,11 @@ impl Installed {
         table::with((), |s| s.local_held = held);
     }
 
+    /// Sets cached local sampler diagnostics without changing held input.
+    pub fn set_local_input_status(&self, info: enshwick_core::abi::LocalInputInfo) {
+        table::with((), |s| s.local_input_info = info);
+    }
+
     /// The mod's markers on the map, as it set them last.
     ///
     /// # Examples

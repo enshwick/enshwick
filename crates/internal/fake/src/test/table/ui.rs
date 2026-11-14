@@ -461,6 +461,22 @@ pub(crate) extern "system" fn fog_read(
     })
 }
 
+/// A cached client sampler status supplied by the test; no sampling is requested.
+pub(crate) extern "system" fn local_input_status(
+    _me: ModHandle,
+    out: *mut enshwick_core::abi::LocalInputInfo,
+) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        super::put_headed(out, s.local_input_info)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

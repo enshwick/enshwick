@@ -63,7 +63,8 @@ pub struct Input(&'static Resolved);
 impl crate::script::Bound for Input {
     const NAME: &'static str = "input";
     const DOC: &'static str = "The game's controls each player holds, read in the server's world, and the local player's on a client.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_HELD];
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_HELD, Self::SCRIPT_LOCAL_STATUS];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Input::open(load)
@@ -197,6 +198,64 @@ impl Input {
         ((host.api().local_held)(host.handle(), &raw mut bits) == Status::OK).then_some(InputMask {
             bits,
             actions: &self.0.actions,
+        })
+    }
+}
+
+/// Cached client sampler metadata. This is not world/session identity or proof of input execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent cached sampler gates are not mutually exclusive states"
+)]
+pub struct LocalInputStatus {
+    /// Some mod requested sampling; this getter never requests it.
+    pub requested: bool,
+    /// The sampler layout resolved.
+    pub layout_available: bool,
+    /// The existing system link is available.
+    pub link_available: bool,
+    /// The read fuse is enabled, independently of layout and link availability.
+    pub read_enabled: bool,
+    /// A cached sample exists, including an empty held mask.
+    pub sample_present: bool,
+    /// Sampling was requested, layout/link are available, the read is enabled,
+    /// and the cached sample is no older than 1000 ms. This is not an input receipt.
+    pub fresh: bool,
+    /// Age in milliseconds, or `None` before any sample.
+    pub age_ms: Option<u64>,
+}
+
+#[crate::script(local_status)]
+impl Input {
+    /// Observes only cached loader metadata on any thread, without starting sampling.
+    /// Fields are weakly consistent; no world, session, player or current UI state is inferred.
+    /// Requires a matching ABI 11.31 or newer loader; older loaders cannot load this SDK.
+    ///
+    /// # Errors
+    /// [`WorldError::Missing`] on a server, otherwise the loader's refusal.
+    #[script]
+    pub fn local_status(self) -> Result<LocalInputStatus, WorldError> {
+        use crate::abi::{Header, LocalInputInfo as Info};
+        let mut info = Info {
+            header: Header::of::<Info>(),
+            flags: 0,
+            reserved: 0,
+            age_ms: u64::MAX,
+        };
+        let host = self.0.host;
+        world_status((host.api().local_input_status)(
+            host.handle(),
+            &raw mut info,
+        ))?;
+        Ok(LocalInputStatus {
+            requested: info.flags & Info::REQUESTED != 0,
+            layout_available: info.flags & Info::LAYOUT_AVAILABLE != 0,
+            link_available: info.flags & Info::LINK_AVAILABLE != 0,
+            read_enabled: info.flags & Info::READ_ENABLED != 0,
+            sample_present: info.flags & Info::SAMPLE_PRESENT != 0,
+            fresh: info.flags & Info::FRESH != 0,
+            age_ms: (info.age_ms != u64::MAX).then_some(info.age_ms),
         })
     }
 }
