@@ -16,7 +16,7 @@ entries! {
         patch: api_frame::ResourcePatchFn,
         user: *mut core::ffi::c_void,
     ) -> Status {
-        Ok(crate::content::served::register(me.index, key, base, patch, user))
+        Ok(crate::content::served::register(me.index, key, base, patch, user)?)
     }
 
     fn rebuild_resource(me as Mod, key as In<ResourceKey>) -> Status {

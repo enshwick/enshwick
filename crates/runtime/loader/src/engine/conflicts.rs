@@ -58,7 +58,9 @@ pub struct Claim {
     pub granted: bool,
 }
 
-/// What the loader found where mods meet.
+/// What the loader found where mods meet. Claims and code are made at
+/// start and the writes only grow, so it lasts the process and no part
+/// forgets it.
 #[derive(Debug)]
 struct Found {
     claims: Vec<Claim>,
@@ -71,7 +73,7 @@ struct Found {
     writes: Vec<(u32, ModIndex)>,
 }
 
-static FOUND: Mutex<Found> = Mutex::new(Found {
+static STATE: Mutex<Found> = Mutex::new(Found {
     claims: Vec::new(),
     code: (0, Vec::new()),
     fields: Vec::new(),
@@ -80,7 +82,8 @@ static FOUND: Mutex<Found> = Mutex::new(Found {
 
 thread_local! {
     /// The component writes this thread has already reported, so a repeated
-    /// write takes no lock.
+    /// write takes no lock: a per-thread copy of what [`STATE`]'s writes
+    /// hold, which only grow, so it needs no reset either.
     static WRITTEN: RefCell<FxHashSet<(u32, ModIndex)>> = RefCell::default();
 }
 
@@ -93,7 +96,7 @@ pub fn note(
     status: Status,
 ) -> Status {
     if status.is_ok() || status == Status::REFUSED {
-        FOUND.relock().claims.push(Claim {
+        STATE.relock().claims.push(Claim {
             feature: feature.into(),
             owner,
             mode,
@@ -106,31 +109,31 @@ pub fn note(
 /// Every claim, in order.
 #[must_use]
 pub fn claims() -> Vec<Claim> {
-    FOUND.relock().claims.clone()
+    STATE.relock().claims.clone()
 }
 
 /// Keeps the game code changed outside the API, found while the loader
 /// started, with where `.text` starts from the image base.
 pub fn set_code_changes(text_rva: usize, changes: Vec<CodeChange>) {
-    FOUND.relock().code = (text_rva, changes);
+    STATE.relock().code = (text_rva, changes);
 }
 
 /// The game code changed outside the API, as [`set_code_changes`] kept it.
 #[must_use]
 pub fn code_changes() -> (usize, Vec<CodeChange>) {
-    FOUND.relock().code.clone()
+    STATE.relock().code.clone()
 }
 
 /// Replaces the lines on vanilla values one mod's set overrides another's,
 /// after each merge of the declared changes.
 pub fn set_fields(lines: Vec<String>) {
-    FOUND.relock().fields = lines;
+    STATE.relock().fields = lines;
 }
 
 /// The lines on vanilla values one mod's set overrides another's.
 #[must_use]
 pub fn fields() -> Vec<String> {
-    FOUND.relock().fields.clone()
+    STATE.relock().fields.clone()
 }
 
 /// Notes that mod `owner` wrote a component of type `hash`; a write this
@@ -139,7 +142,7 @@ pub fn fields() -> Vec<String> {
 pub fn note_write(hash: u32, owner: ModIndex) {
     let new = WRITTEN.try_with(|seen| seen.borrow_mut().insert((hash, owner)));
     if new == Ok(true) {
-        let mut found = FOUND.relock();
+        let mut found = STATE.relock();
         if !found.writes.contains(&(hash, owner)) {
             found.writes.push((hash, owner));
         }
@@ -150,7 +153,7 @@ pub fn note_write(hash: u32, owner: ModIndex) {
 /// they first wrote it.
 #[must_use]
 pub fn shared_writes() -> Vec<(u32, Vec<ModIndex>)> {
-    let found = FOUND.relock();
+    let found = STATE.relock();
     let mut shared: Vec<(u32, Vec<ModIndex>)> = Vec::new();
     for &(hash, owner) in &found.writes {
         match shared.iter_mut().find(|(h, _)| *h == hash) {

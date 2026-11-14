@@ -1,0 +1,29 @@
+id: loader-state-is-in-its-domain
+valid:
+  - "static STATE: Mutex<State> = Mutex::new(State::new());"
+  - "static STATE: State = State { lines: Mutex::new(None) };"
+  - "static STATE: LazyLock<State> = LazyLock::new(State::new);"
+  - "static STATE: ArcSwapOption<State> = ArcSwapOption::const_empty();"
+  - "static STATE: OnceLock<(Instant, PathBuf)> = OnceLock::new();"
+  - "static LAYOUT: OnceLock<Layout> = OnceLock::new();"
+  - "static LIFT: OnceLock<Lift> = OnceLock::new();"
+  - "static TEXT: OnceLock<Option<(usize, usize)>> = OnceLock::new();"
+  - "static SEALED: OnceLock<Box<[Route]>> = OnceLock::new();"
+  - "static FILTERS: Filters<JoinRuleFn> = Filters::new(Feature::Joins);"
+  - "static NEXT: Next<JoinFn> = unsafe { Next::new() };"
+  - "static FUSE: Fuse = Fuse::new(\"lamp\");"
+  - |
+    #[cfg(test)]
+    mod tests {
+        static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    }
+invalid:
+  - "static FOUND: Mutex<Found> = Mutex::new(Found::new());"
+  - "static KEPT: std::sync::Mutex<KeptText> = std::sync::Mutex::new(KeptText::new(0));"
+  - "static TABLE: RwLock<Table> = RwLock::new(Table::new());"
+  - "static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();"
+  - "static LINES: OnceLock<SyncSender<Line>> = OnceLock::new();"
+  - "static STARTED: OnceLock<Instant> = OnceLock::new();"
+  - "static ARMED_AT: OnceLock<(u64, std::time::Instant)> = OnceLock::new();"
+  - "static FILE: OnceLock<PathBuf> = OnceLock::new();"
+  - "static RECIPES: LazyLock<Recipes> = LazyLock::new(Recipes::new);"

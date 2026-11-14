@@ -2,24 +2,27 @@
 //! mods that asked for it.
 
 use core::ffi::c_void;
+use core::ops::ControlFlow;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::{
     Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
-    SkillCheck, SkillCheckFn, Status,
+    SkillCheck, SkillCheckFn,
 };
 
 use crate::engine::chains::{Next, Onward};
 use crate::engine::ecs::Engine;
+use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Registered;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::{JoinFeatureError, Registry};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -62,7 +65,7 @@ const REGISTRY: usize = 22;
 mod writes;
 
 use writes::{PENDING, WRITERS, WRITES_FUSE};
-pub(crate) use writes::{after_step, game_ended, write};
+pub(crate) use writes::{WriteProgressError, after_step, game_ended, write};
 
 /// The engine pieces experience needs.
 #[derive(Debug, Clone, Copy)]
@@ -77,8 +80,8 @@ struct Levels {
 
 /// The skill checks mods register, each with the node it answers for.
 static SKILLS: Registry<(u32, Registered<SkillCheckFn>)> = Registry::new();
-static COMFORT: Registry<Registered<ComfortFn>> = Registry::new();
-static EXPERIENCE_FILTERS: Registry<Registered<ExperiencePassFn>> = Registry::new();
+static COMFORT: Filters<ComfortFn> = Filters::new(Feature::Progress);
+static EXPERIENCE_FILTERS: Filters<ExperiencePassFn> = Filters::new(Feature::Progress);
 /// Where the fly mode gate's call returns to, once the link found it on
 /// this build.
 static FLY_MODE: OnceLock<usize> = OnceLock::new();
@@ -134,10 +137,6 @@ fn levels(loader: &Loader) -> Option<&'static Levels> {
         .as_ref()
 }
 
-fn too_late<T>(loader: &Loader, registry: &Registry<T>) -> bool {
-    loader.delivery.get().is_some() || registry.is_sealed()
-}
-
 /// Ends the skill checks, comfort and experience filters and level writers
 /// mods registered during init.
 pub(crate) fn seal() {
@@ -147,56 +146,58 @@ pub(crate) fn seal() {
     let _writers = WRITERS.seal();
 }
 
+/// Registers mod `owner`'s check of skill node `node`.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the skill check.
 pub(crate) fn register_skill(
     loader: &Loader,
     owner: ModIndex,
     node: u32,
     callback: SkillCheckFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader, &SKILLS) {
-        return Status::TOO_LATE;
+) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
+    if SKILLS.is_sealed() {
+        return Err(JoinFeatureError::TooLate);
     }
     if symbol(loader, pinned::skill::NODE_UNLOCKED).is_none() {
-        return Status::MISSING;
+        return Err(JoinFeatureError::Unavailable);
     }
-    SKILLS
-        .add((node, Registered::new(owner, callback, user)))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+    Ok(SKILLS.add((node, Registered::new(owner, callback, user)))?)
 }
 
+/// Registers mod `owner`'s comfort filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without comfort providers.
 pub(crate) fn register_comfort(
     loader: &Loader,
     owner: ModIndex,
     callback: ComfortFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader, &COMFORT) {
-        return Status::TOO_LATE;
-    }
-    if symbol(loader, pinned::comfort::BASE_REGISTER).is_none() {
-        return Status::MISSING;
-    }
-    COMFORT
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
+    let available = || symbol(loader, pinned::comfort::BASE_REGISTER).is_some();
+    COMFORT.register_when(available, owner, callback, user)
 }
 
+/// Registers mod `owner`'s experience filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without player levels.
 pub(crate) fn register_experience(
     loader: &Loader,
     owner: ModIndex,
     callback: ExperiencePassFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader, &EXPERIENCE_FILTERS) {
-        return Status::TOO_LATE;
-    }
-    if levels(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
-        return Status::MISSING;
-    }
-    EXPERIENCE_FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
+    let available = || levels(loader).is_some() && crate::engine::ecs::engine(loader).is_some();
+    EXPERIENCE_FILTERS.register_when(available, owner, callback, user)
 }
 
 /// The system that levels players up from their experience.
@@ -204,13 +205,10 @@ const LEVEL_SYSTEM: &str = "player_level";
 
 pub(crate) fn link(loader: &'static Loader) {
     let writers = WRITERS.sealed().is_some_and(|mods| !mods.is_empty());
-    let filters = EXPERIENCE_FILTERS
-        .sealed()
-        .is_some_and(|filters| !filters.is_empty());
+    let filters = EXPERIENCE_FILTERS.has_sealed();
     let wants = [
         SKILLS.sealed().is_some_and(|skills| !skills.is_empty()),
-        COMFORT.sealed().is_some_and(|filters| !filters.is_empty())
-            || crate::content::rate_links::wanted(pinned::comfort::BASE_REGISTER),
+        COMFORT.has_sealed() || crate::content::rate_links::wanted(pinned::comfort::BASE_REGISTER),
         filters || writers,
     ];
     if let Some(gate) = symbol(loader, pinned::skill::FLY_MODE_GATE_RETURN) {
@@ -350,26 +348,18 @@ unsafe fn override_skill(onward: &Onward<u8, impl Fn() -> u8>, node: u32) -> u8 
     let Some(skills) = SKILLS.sealed() else {
         return vanilla;
     };
-    for (_, r) in skills
-        .iter()
-        .filter(|(n, r)| *n == node && !crate::engine::loader::is_off(r.owner))
-    {
-        let user = core::ptr::with_exposed_provenance_mut(r.user);
-        match crate::engine::profile::call(
-            r.owner,
-            crate::engine::profile::Feature::Progress,
-            // SAFETY: `callback` is a `SkillCheckFn` the mod registered, in
-            // its DLL, which stays loaded (`Registered`); `user` is the
-            // pointer it registered with it, and `check` lives on this stack
-            // for the call.
-            || unsafe { (r.callback)(&raw const check, user) },
-        ) {
-            SkillCheck::UNLOCKED => return 1,
-            SkillCheck::LOCKED => return 0,
-            _ => {}
+    let ours = skills.iter().filter(|(n, _)| *n == node).map(|(_, r)| r);
+    let answer = crate::engine::filters::ask(ours, Feature::Progress, |callback| {
+        // SAFETY: the check's mod runs, so its DLL that holds the callback
+        // stays loaded; it gets the user pointer its mod registered, and
+        // `check` lives on this stack for the call.
+        match callback.call(|callback, user| unsafe { callback(&raw const check, user) }) {
+            SkillCheck::UNLOCKED => ControlFlow::Break(1),
+            SkillCheck::LOCKED => ControlFlow::Break(0),
+            _ => ControlFlow::Continue(()),
         }
-    }
-    vanilla
+    });
+    answer.map_or(vanilla, |(_, answer)| answer)
 }
 
 /// The loader's link on the table's `comfort.base_register`: a comfort
@@ -382,7 +372,7 @@ unsafe extern "system" fn register(
     comfort: i32,
     position: *const f32,
 ) -> u64 {
-    let filtered = |filters: &[Registered<ComfortFn>]| {
+    let filtered = || {
         let at = if position.is_null() {
             [0.0; 3]
         } else {
@@ -392,31 +382,25 @@ unsafe extern "system" fn register(
             // the call.
             unsafe { enshwick_core::raw::read_at::<[f32; 3]>(position.cast(), 0) }
         };
-        filters
-            .iter()
-            .filter(|r| !crate::engine::loader::is_off(r.owner))
-            .fold(comfort, |value, r| {
-                let call = Comfort {
-                    header: Header::of::<Comfort>(),
-                    category,
-                    value,
-                    position: at,
-                };
-                let user = core::ptr::with_exposed_provenance_mut(r.user);
-                // SAFETY: `callback` is a `ComfortFn` the mod registered, in
-                // its DLL, which stays loaded (`Registered`); `user` is the
-                // pointer it registered with it, and `call` lives on this
-                // stack for the call.
-                crate::engine::profile::call(
-                    r.owner,
-                    crate::engine::profile::Feature::Progress,
-                    || unsafe { (r.callback)(&raw const call, user) },
-                )
-            })
+        let mut value = comfort;
+        COMFORT.each(|callback, user| {
+            let call = Comfort {
+                header: Header::of::<Comfort>(),
+                category,
+                value,
+                position: at,
+            };
+            // SAFETY: the filter's mod runs, so its DLL that holds the
+            // callback stays loaded; it gets the user pointer its mod
+            // registered, and `call` lives on this stack for the call.
+            value = unsafe { callback(&raw const call, user) };
+        });
+        value
     };
     let filtered = COMFORT
-        .sealed()
-        .and_then(|filters| COMFORT_FILTERS_FUSE.run("a comfort provider", || filtered(filters)))
+        .has_sealed()
+        .then(|| COMFORT_FILTERS_FUSE.run("a comfort provider", filtered))
+        .flatten()
         .unwrap_or(comfort);
     let comfort = COMFORT_FUSE
         .run("the comfort rate", || {
@@ -438,7 +422,7 @@ crate::engine::chains::chain_detour! {
     fn player_level_link(ctx: *mut u64) -> ();
     next LEVEL_NEXT;
     |onward| {
-        let filtered = EXPERIENCE_FILTERS.sealed().is_some_and(|f| !f.is_empty());
+        let filtered = EXPERIENCE_FILTERS.has_sealed();
         let writes = PENDING.any.load(Ordering::Acquire);
         if filtered || writes {
             onward.run(&LEVEL_FUSE, "the player level pass", |onward| {
@@ -526,7 +510,7 @@ unsafe extern "system" fn need_for(token: *mut c_void, level: u32) -> u32 {
 /// - `ctx` is the live query context the game passed to `player_level`,
 ///   used on that system's thread while it runs, before vanilla runs.
 unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
-    let (Some(levels), Some(filters)) = (levels(loader), EXPERIENCE_FILTERS.sealed()) else {
+    let Some(levels) = levels(loader).filter(|_| EXPERIENCE_FILTERS.is_sealed()) else {
         return;
     };
     ROWS.with_borrow_mut(|rows| {
@@ -564,10 +548,7 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
             // registry of a live `player_level` row, on that system's thread
             // while it runs.
             let level_cap = unsafe { (levels.level_cap)(balancing) };
-            for r in filters
-                .iter()
-                .filter(|r| !crate::engine::loader::is_off(r.owner))
-            {
+            EXPERIENCE_FILTERS.each(|callback, user| {
                 let mut pass = ExperiencePass {
                     header: Header::of::<ExperiencePass>(),
                     rows: rows.as_mut_ptr(),
@@ -576,19 +557,12 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                     need_for: Some(need_for),
                     token: (&raw mut token).cast(),
                 };
-                let user = core::ptr::with_exposed_provenance_mut(r.user);
-                // SAFETY: `callback` is an `ExperiencePassFn` the mod
-                // registered, in its DLL, which stays loaded (`Registered`);
-                // `user` is the pointer it registered with it; `pass`, the
-                // rows and `token` live on this thread for the call.
-                crate::engine::profile::call(
-                    r.owner,
-                    crate::engine::profile::Feature::Progress,
-                    || unsafe {
-                        (r.callback)(&raw mut pass, user);
-                    },
-                );
-            }
+                // SAFETY: the filter's mod runs, so its DLL that holds the
+                // callback stays loaded; it gets the user pointer its mod
+                // registered; `pass`, the rows and `token` live on this thread
+                // for the call.
+                unsafe { callback(&raw mut pass, user) };
+            });
             if rows.iter().zip(before.iter()).all(|(r, b)| r.gained == *b) {
                 return;
             }
@@ -710,11 +684,11 @@ mod tests {
         let user = core::ptr::null_mut();
         assert_eq!(
             register_skill(&loader, owner, 1, no_skill, user),
-            Status::TOO_LATE
+            Err(JoinFeatureError::TooLate)
         );
         assert_eq!(
             register_comfort(&loader, owner, no_comfort, user),
-            Status::TOO_LATE
+            Err(JoinFeatureError::TooLate)
         );
     }
 }

@@ -166,22 +166,30 @@ impl Count {
     }
 }
 
-/// Each armed function's counters, by target, once armed with counting.
-static COUNTERS: OnceLock<Box<[(u64, &'static Counter)]>> = OnceLock::new();
-/// The time-stamp counter and the clock when the hooks were armed, to measure
-/// the counter's rate.
-static ARMED_AT: OnceLock<(u64, std::time::Instant)> = OnceLock::new();
+/// What arming keeps: the hooks arm once per process, so no part forgets it.
+struct State {
+    /// Each armed function's counters, by target, once armed with counting.
+    counters: OnceLock<Box<[(u64, &'static Counter)]>>,
+    /// The time-stamp counter and the clock when the hooks were armed, to
+    /// measure the counter's rate.
+    armed_at: OnceLock<(u64, std::time::Instant)>,
+}
+
+static STATE: State = State {
+    counters: OnceLock::new(),
+    armed_at: OnceLock::new(),
+};
 
 /// Each armed function's counters, by target; empty without counting.
 pub(crate) fn counters() -> &'static [(u64, &'static Counter)] {
-    COUNTERS.get().map_or(&[], |c| c)
+    STATE.counters.get().map_or(&[], |c| c)
 }
 
 /// The time-stamp counter's rate in ticks a second, measured since arming;
 /// `None` before a second has passed.
 #[expect(clippy::cast_precision_loss, reason = "a rate for people to read")]
 pub(crate) fn tsc_hz() -> Option<f64> {
-    let &(ticks, at) = ARMED_AT.get()?;
+    let &(ticks, at) = STATE.armed_at.get()?;
     let seconds = at.elapsed().as_secs_f64();
     let now = rdtsc();
     (seconds >= 1.0).then(|| now.wrapping_sub(ticks) as f64 / seconds)
@@ -373,8 +381,8 @@ pub(crate) fn arm(
     // the loader never frees.
     unsafe { register_unwind(block, function_base, table.count) };
     if counting != Count::Off {
-        let _first = COUNTERS.set(counters.into_boxed_slice());
-        let _first = ARMED_AT.set((rdtsc(), std::time::Instant::now()));
+        let _first = STATE.counters.set(counters.into_boxed_slice());
+        let _first = STATE.armed_at.set((rdtsc(), std::time::Instant::now()));
     }
 
     // SAFETY: `block` and `code_len` are the code pages `allocate` gave this

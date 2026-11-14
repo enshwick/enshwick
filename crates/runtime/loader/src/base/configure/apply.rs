@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::thread::ThreadId;
 
-use enshwick_core::abi::{Status, Str};
+use enshwick_core::abi::Str;
 use enshwick_core::config::MAX_NESTED_WRITES;
 
 use crate::engine::loader::Loader;
@@ -43,15 +43,30 @@ pub(crate) fn apply(
 ///
 /// # Errors
 ///
-/// [`ApplySettingError`] as for [`apply`].
+/// [`SetOwnSettingError`], holding an [`ApplySettingError`] as for [`apply`].
 pub(crate) fn apply_own(
     loader: &Loader,
     index: usize,
     file: &str,
     key: &str,
     value: &str,
-) -> Result<Change, ApplySettingError> {
-    write(loader, index, Some(file), key, value, Writer::Mod)
+) -> Result<Change, SetOwnSettingError> {
+    write(loader, index, Some(file), key, value, Writer::Mod).map_err(|error| SetOwnSettingError {
+        file: file.to_owned(),
+        key: key.to_owned(),
+        error: Box::new(error),
+    })
+}
+
+/// A mod's write of its own setting `key` in `file` that was not made, for
+/// the mod's log: the value is never quoted, as it may be secret, so the
+/// inner error is no `source` a chain printer would show whole.
+#[derive(Debug, thiserror::Error)]
+#[error("{file}.toml {key} not written: {}", .error.logged())]
+pub(crate) struct SetOwnSettingError {
+    pub(crate) file: String,
+    pub(crate) key: String,
+    pub(crate) error: Box<ApplySettingError>,
 }
 
 /// Who writes a setting.
@@ -242,29 +257,6 @@ impl ApplySettingError {
         }
     }
 
-    /// The answer to a mod's write of its own setting, as
-    /// `HostApi::config_set` states it.
-    pub(crate) fn status(&self) -> Status {
-        match self {
-            Self::NoWorld => Status::UNAVAILABLE,
-            Self::NoSchema { .. } | Self::Change(ChangeSettingError::Find(_)) => Status::MISSING,
-            Self::NoMod
-            | Self::Change(
-                ChangeSettingError::BadValue { .. }
-                | ChangeSettingError::Refused { .. }
-                | ChangeSettingError::NoElement { .. },
-            ) => Status::BAD_ARGS,
-            Self::Change(
-                ChangeSettingError::Secret { .. }
-                | ChangeSettingError::Toml { .. }
-                | ChangeSettingError::Unwritable { .. },
-            )
-            | Self::Write { .. }
-            | Self::Check(_)
-            | Self::Nested => Status::REFUSED,
-        }
-    }
-
     /// Why, for the log, never quoting the value, which may be secret.
     pub(crate) fn logged(&self) -> String {
         match self {
@@ -407,6 +399,31 @@ mod tests {
         assert!(
             logged.starts_with("the settings file of you.trading-post is no TOML: "),
             "{logged}"
+        );
+    }
+
+    #[test]
+    fn a_refused_own_setting_shows_no_secret_through_its_source_chain() {
+        let source = "token = \"hunter2\n"
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap_err();
+        let error = SetOwnSettingError {
+            file: "trading".to_owned(),
+            key: "token".to_owned(),
+            error: Box::new(ApplySettingError::Change(ChangeSettingError::Toml {
+                id: "you.trading-post".to_owned(),
+                source,
+            })),
+        };
+        let mut chain = vec![error.to_string()];
+        let mut next = std::error::Error::source(&error);
+        while let Some(cause) = next {
+            chain.push(cause.to_string());
+            next = cause.source();
+        }
+        assert!(
+            chain.iter().all(|line| !line.contains("hunter2")),
+            "{chain:?}"
         );
     }
 }

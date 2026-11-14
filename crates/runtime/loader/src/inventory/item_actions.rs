@@ -25,21 +25,23 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side, Status};
+use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side};
 use enshwick_core::raw::{read_at, write_at};
 
 use crate::engine::ecs::{Components, Engine};
+use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::{Loader, Registered, Target};
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::JoinFeatureError;
 pub(crate) use uses::forget;
 use uses::{USES, moves};
 
 /// The system that runs the players' equips and unequips.
 const EQUIPMENT_SYSTEM: &str = "equipment_actions";
 
-static FILTERS: Registry<Registered<ItemActionFn>> = Registry::new();
+static FILTERS: Filters<ItemActionFn> = Filters::new(Feature::Items);
 /// The layout and components the links read, once linked.
 static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
 
@@ -244,30 +246,28 @@ fn events(loader: &Loader) -> Events {
 }
 
 /// Registers mod `owner`'s item filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without item actions.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     callback: ItemActionFn,
     user: *mut c_void,
-) -> Status {
-    if FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    if layout(loader).is_none()
-        || Components::resolve(loader).is_none()
-        || crate::engine::ecs::engine(loader).is_none()
-    {
-        return Status::MISSING;
-    }
-    FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    let available = || {
+        layout(loader).is_some()
+            && Components::resolve(loader).is_some()
+            && crate::engine::ecs::engine(loader).is_some()
+    };
+    FILTERS.register_when(available, owner, callback, user)
 }
 
 /// Whether a mod filters item actions, so the players are read and the
 /// event streams screened for it.
 pub(crate) fn wanted() -> bool {
-    FILTERS.sealed().is_some_and(|filters| !filters.is_empty())
+    FILTERS.has_sealed()
 }
 
 /// Seals the filters before any link: game events link the event move when
@@ -320,23 +320,15 @@ pub(crate) fn link(loader: &'static Loader) {
 /// Asks every live filter about `call`; a refusable action stops at the
 /// first refusal, one after the fact reaches every filter.
 fn ask(call: &ItemAction, refusable: bool) -> bool {
-    let Some(filters) = FILTERS.sealed() else {
-        return true;
-    };
-    let mut live = filters.iter().filter(|f| f.live());
-    let one = |f: &Registered<ItemActionFn>| {
-        // SAFETY: `f` is live, so the mod's DLL that holds the callback stays
-        // loaded; the callback gets the user pointer its mod registered and
-        // `call`, which lives for the call.
-        crate::engine::profile::call(f.owner, crate::engine::profile::Feature::Items, || unsafe {
-            (f.callback)(call, f.user()) != 0
-        })
-    };
+    // SAFETY: a filter's mod runs, so its DLL that holds the callback stays
+    // loaded; it gets the user pointer its mod registered and `call`, which
+    // lives for the call.
+    let allows = |filter: &ItemActionFn, user| unsafe { filter(call, user) != 0 };
     if refusable {
-        live.all(one)
+        FILTERS.refuser(allows).is_none()
     } else {
-        live.for_each(|f| {
-            let _ignored = one(f);
+        FILTERS.each(|filter, user| {
+            let _ignored = allows(filter, user);
         });
         true
     }
@@ -660,11 +652,7 @@ mod tests {
     #[test]
     fn a_registered_filter_is_wanted_once_sealed_before_any_link() {
         FILTERS
-            .add(Registered::new(
-                ModIndex::new(0),
-                filter as ItemActionFn,
-                core::ptr::null_mut(),
-            ))
+            .register(ModIndex::new(0), filter, core::ptr::null_mut())
             .unwrap();
         assert!(!wanted(), "open filters answer nothing yet");
         seal();

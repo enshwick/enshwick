@@ -27,6 +27,14 @@ unsafe extern "system" fn lit(glow: u32) -> u32 {
 static EMBER_NEXT: Next<Lit> = unsafe { Next::new() };
 
 #[test]
+fn a_registration_joins_until_the_loader_delivers_and_is_too_late_after() {
+    let loader = crate::start::tests::bare_loader();
+    assert_eq!(loader.before_delivery(), Ok(()));
+    assert!(loader.delivery.set(Box::default()).is_ok());
+    assert_eq!(loader.before_delivery(), Err(JoinFeatureError::TooLate));
+}
+
+#[test]
 fn a_panic_under_another_fuse_of_a_link_s_name_leaves_the_link_wired() {
     static EMBERS: Fuse = Fuse::new("test embers");
     let loader = crate::start::tests::bare_loader();

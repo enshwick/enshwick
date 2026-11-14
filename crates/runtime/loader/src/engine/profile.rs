@@ -143,9 +143,6 @@ struct Bucket {
     ticks: AtomicU64,
 }
 
-/// Every mod's buckets, `FEATURES` per mod, once timing is on.
-static BUCKETS: OnceLock<Box<[Bucket]>> = OnceLock::new();
-
 thread_local! {
     /// Ticks the callbacks inside the running one took, so each callback
     /// counts its own time alone.
@@ -157,7 +154,9 @@ thread_local! {
 
 /// Turns callback timing on for `mods` mods; at start, with diagnostics on.
 pub fn start(mods: usize) {
-    let _first = BUCKETS.set((0..mods * FEATURES).map(|_| Bucket::default()).collect());
+    let _first = STATE
+        .buckets
+        .set((0..mods * FEATURES).map(|_| Bucket::default()).collect());
 }
 
 /// Runs mod `owner`'s callback `f` for `feature`, marking it for crash
@@ -270,7 +269,8 @@ fn as_owner<R>(_owner: ModIndex, f: impl FnOnce() -> R) -> R {
 /// Runs `f`, timed in `owner`'s bucket for `feature` while timing is on.
 #[inline]
 fn measured<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
-    match BUCKETS
+    match STATE
+        .buckets
         .get()
         .zip(owner.get().checked_mul(FEATURES))
         .and_then(|(b, at)| b.get(at.checked_add(feature as usize)?))
@@ -310,23 +310,27 @@ pub fn events_reading(owner: ModIndex) -> Option<(u64, u64)> {
         .get()
         .checked_mul(FEATURES)?
         .checked_add(Feature::Events as usize)?;
-    let bucket = BUCKETS.get()?.get(at)?;
+    let bucket = STATE.buckets.get()?.get(at)?;
     Some((
         bucket.calls.load(Ordering::Relaxed),
         bucket.ticks.load(Ordering::Relaxed),
     ))
 }
 
-/// What the profiler measured of the machine; it lasts the process, so no
-/// part forgets it.
+/// What the profiler keeps for the process: the machine's counter rate and
+/// every mod's buckets. Nothing of it belongs to a world, so no part forgets
+/// it.
 #[derive(Debug)]
 struct State {
     /// The time-stamp counter's rate in ticks a second, 0 until measured.
     tsc_hz: AtomicU64,
+    /// Every mod's buckets, `FEATURES` per mod, once timing is on.
+    buckets: OnceLock<Box<[Bucket]>>,
 }
 
 static STATE: State = State {
     tsc_hz: AtomicU64::new(0),
+    buckets: OnceLock::new(),
 };
 
 /// Keeps the time-stamp counter's rate, measured off the game thread, for
@@ -468,7 +472,7 @@ pub fn own_times(chain: &ChainReading) -> Vec<(ModIndex, u64, f64)> {
 /// Every mod's callback buckets now: calls and ticks, `FEATURES` per mod.
 #[must_use]
 pub fn buckets() -> Vec<(u64, u64)> {
-    BUCKETS.get().map_or_else(Vec::new, |buckets| {
+    STATE.buckets.get().map_or_else(Vec::new, |buckets| {
         buckets
             .iter()
             .map(|b| {

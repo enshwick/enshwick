@@ -90,16 +90,16 @@ fn one_mod_holds_the_lookup_until_the_seal_and_a_reopened_one_takes_any() {
             Registered::new(owner, no_lookup, core::ptr::null_mut()),
         )
     };
-    assert_eq!(hold(first), Status::OK);
-    assert_eq!(hold(first), Status::OK, "the same mod replaces its own");
-    assert_eq!(hold(second), Status::REFUSED);
+    assert_eq!(hold(first), Ok(()));
+    assert_eq!(hold(first), Ok(()), "the same mod replaces its own");
+    assert_eq!(hold(second), Err(JoinFeatureError::Taken));
     assert!(registrations.seal().lookup);
     assert!(registrations.is_sealed());
     assert_eq!(registrations.lookup().map(|r| r.owner), Some(first));
-    assert_eq!(hold(first), Status::TOO_LATE);
+    assert_eq!(hold(first), Err(JoinFeatureError::TooLate));
     registrations.reopen();
     assert!(!registrations.is_sealed());
-    assert_eq!(hold(second), Status::OK);
+    assert_eq!(hold(second), Ok(()));
 }
 
 #[test]

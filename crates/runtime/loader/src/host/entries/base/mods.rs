@@ -161,16 +161,7 @@ entries! {
     }
 
     fn config_set(me as Mod, file as Text, key as Text, value as Text) -> Status {
-        crate::base::configure::apply_own(me.loader, me.index.get(), file, key, value).map_err(
-            |error| {
-                crate::engine::log::write(
-                    Level::WARN,
-                    &me.record.id,
-                    &format!("{file}.toml {key} not written: {}", error.logged()),
-                );
-                error.status()
-            },
-        )?;
+        crate::base::configure::apply_own(me.loader, me.index.get(), file, key, value)?;
         Ok(())
     }
 

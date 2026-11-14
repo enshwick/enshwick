@@ -123,7 +123,7 @@ entries! {
     }
 
     fn add_text(_loader as Caller, id: u32, language: u32, text as Text) -> Status {
-        checked(crate::content::served::add_text(id, language, text))
+        Ok(crate::content::served::add_text(id, language, text)?)
     }
 
     fn item_data_open(me as Mod, id as Text, out as Out<u32>) -> Status {

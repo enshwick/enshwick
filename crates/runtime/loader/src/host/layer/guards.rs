@@ -34,7 +34,7 @@ pub(crate) fn in_init(index: ModIndex) -> Result<(), Status> {
 ///
 /// [`Status::TOO_LATE`] after the delivery.
 pub(crate) fn before_delivery(loader: &Loader) -> Result<(), Status> {
-    open(loader.delivery.get().is_some())
+    open(loader.before_delivery().is_err())
 }
 
 /// [`Status::MISSING`] off the client, which alone has what the entry

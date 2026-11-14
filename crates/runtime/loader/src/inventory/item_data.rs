@@ -35,7 +35,7 @@ mod world_file;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick_core::abi::{HookFlags, Status};
+use enshwick_core::abi::HookFlags;
 use enshwick_core::{Entity, ItemId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -47,7 +47,7 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use crate::inventory::item_records::anchor::{self, Anchor, KindIndex, Pending};
 use crate::inventory::item_records::{decode, encode};
 use enshwick_base::Relock;
@@ -317,20 +317,72 @@ fn full_id(mod_id: &str, id: &str) -> Option<String> {
         .then(|| format!("{namespace}:{name}"))
 }
 
+/// Why a data kind did not open, or a value was not read or kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum UseItemDataError {
+    /// The kind's opening itself was refused: after init.
+    #[error(transparent)]
+    Register(#[from] JoinFeatureError),
+    /// The kind id is malformed or outside the mod's namespace.
+    #[error("a malformed data kind id")]
+    BadId,
+    /// The kind is open for items and asked for entities, or the other way.
+    #[error("the data kind is open for the other scope")]
+    OtherScope,
+    /// More kinds than an index holds.
+    #[error("too many data kinds")]
+    Full,
+    /// No kind has the index.
+    #[error("no data kind has the index")]
+    UnknownKind,
+    /// The value is longer than a kind's value holds.
+    #[error("the value is too long")]
+    TooLong,
+    /// No entity, item or template the value could belong to.
+    #[error("no entity or item to hold the value")]
+    NoHolder,
+    /// Only the server sets values.
+    #[error("values are set on the server")]
+    NotServer,
+    /// The value would not be found again at the next load.
+    #[error("the value would not be kept")]
+    NotKept,
+    /// Off the server's game thread.
+    #[error("off the server's game thread")]
+    WrongThread,
+    /// No world is loaded, or the holder has no value of the kind.
+    #[error("no value")]
+    NoValue,
+    /// The loader's own kind is not open, as no feature asked for it.
+    #[error("the loader's data kind is not open")]
+    Unopened,
+}
+
+sealed_is_too_late!(UseItemDataError);
+
 /// Opens item kind `id` for mod `owner` and returns its index; the same id
 /// gives the same index to every mod. During init only.
-pub(crate) fn open(loader: &Loader, owner: ModIndex, id: &str) -> Result<u32, Status> {
+///
+/// # Errors
+///
+/// [`UseItemDataError`] after init, for a bad id, an id open for entities, or
+/// one kind too many.
+pub(crate) fn open(loader: &Loader, owner: ModIndex, id: &str) -> Result<u32, UseItemDataError> {
     open_kind(loader, owner, id, Scope::Item, true)
 }
 
 /// Opens entity kind `id` for mod `owner`, sent to clients when `sent`
 /// (once any mod asks for it), and returns its index. During init only.
+///
+/// # Errors
+///
+/// As [`open`], an id open for items refused.
 pub(crate) fn open_entity(
     loader: &Loader,
     owner: ModIndex,
     id: &str,
     sent: bool,
-) -> Result<u32, Status> {
+) -> Result<u32, UseItemDataError> {
     open_kind(loader, owner, id, Scope::Entity, sent)
 }
 
@@ -340,9 +392,12 @@ fn open_kind(
     id: &str,
     scope: Scope,
     sent: bool,
-) -> Result<u32, Status> {
-    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let full = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+) -> Result<u32, UseItemDataError> {
+    let record = loader
+        .mods
+        .get(owner.get())
+        .ok_or(UseItemDataError::BadId)?;
+    let full = full_id(&record.id, id).ok_or(UseItemDataError::BadId)?;
     let index = KINDS.edit(|pending| {
         if let Some(index) = pending.iter().position(|k| k.id == full) {
             let kind = &mut pending[index];
@@ -352,7 +407,7 @@ fn open_kind(
                     &record.id,
                     &format!("data kind {full} is opened for items and for entities"),
                 );
-                return Err(Status::REFUSED);
+                return Err(UseItemDataError::OtherScope);
             }
             kind.sent |= sent;
             Ok(index)
@@ -365,7 +420,7 @@ fn open_kind(
             Ok(pending.len() - 1)
         }
     })??;
-    u32::try_from(index).map_err(|_| Status::REFUSED)
+    u32::try_from(index).map_err(|_| UseItemDataError::Full)
 }
 
 /// Opens the loader's own item kind `id` for a platform feature, before the
@@ -390,8 +445,8 @@ pub(crate) fn get_platform_kind(id: &str, pide: u32, item: u32) -> Option<Box<[u
 
 /// Sets the item stats of the item `pide` holding `item`, as a mod's set
 /// would.
-pub(crate) fn set_platform(pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
-    let kind = kind_of(enshwick_core::stats::ITEM_KIND).ok_or(Status::MISSING)?;
+pub(crate) fn set_platform(pide: u32, item: u32, value: &[u8]) -> Result<(), UseItemDataError> {
+    let kind = kind_of(enshwick_core::stats::ITEM_KIND).ok_or(UseItemDataError::Unopened)?;
     set(kind.0, pide, item, value)
 }
 
@@ -593,13 +648,16 @@ fn serves() -> bool {
 /// The value of kind `kind` on the item `pide` holding `item`, or for an
 /// entity kind on the entity `pide` (`item` 0). On the server's game thread
 /// an entity whose template changed loses its value.
-pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> {
+pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, UseItemDataError> {
     let (kind, pide) = (KindIndex(kind), Entity(pide));
-    let scope = self::kind(kind).ok_or(Status::BAD_ARGS)?.scope;
+    let scope = self::kind(kind).ok_or(UseItemDataError::UnknownKind)?.scope;
     if serves() {
         let mut server = STATE.server.relock();
-        let server = server.as_mut().ok_or(Status::MISSING)?;
-        let record = server.values.get(&(kind, pide)).ok_or(Status::MISSING)?;
+        let server = server.as_mut().ok_or(UseItemDataError::NoValue)?;
+        let record = server
+            .values
+            .get(&(kind, pide))
+            .ok_or(UseItemDataError::NoValue)?;
         let wanted = match scope {
             Scope::Item => item,
             // An entity in an area that is not loaded is not in the world's
@@ -616,7 +674,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
             server.values.remove(&(kind, pide));
             server.changed = true;
         }
-        return Err(Status::MISSING);
+        return Err(UseItemDataError::NoValue);
     }
     let client = STATE.client.relock();
     client
@@ -624,32 +682,35 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
         .and_then(|v| v.get(&(kind, pide)).cloned())
         .filter(|r| scope == Scope::Entity || r.item == item)
         .map(|r| r.value)
-        .ok_or(Status::MISSING)
+        .ok_or(UseItemDataError::NoValue)
 }
 
 /// Sets, or for an empty value removes, kind `kind`'s value on the item
 /// `pide` holding `item`, and sends the change to the clients. On the
 /// server only, once its world has loaded. An entity kind's value needs an
-/// entity the next load finds again: [`Status::NOT_KEPT`] otherwise.
-pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
+/// entity the next load finds again: [`UseItemDataError::NotKept`] otherwise.
+pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), UseItemDataError> {
     let (kind, pide) = (KindIndex(kind), Entity(pide));
-    let spec = self::kind(kind).ok_or(Status::BAD_ARGS)?;
+    let spec = self::kind(kind).ok_or(UseItemDataError::UnknownKind)?;
     let id = spec.id.as_str();
-    if pide.0 == 0 || value.len() > MAX_VALUE {
-        return Err(Status::BAD_ARGS);
+    if pide.0 == 0 {
+        return Err(UseItemDataError::NoHolder);
+    }
+    if value.len() > MAX_VALUE {
+        return Err(UseItemDataError::TooLong);
     }
     if !serves() {
-        return Err(Status::REFUSED);
+        return Err(UseItemDataError::NotServer);
     }
     if !value.is_empty() && STATE.unread() {
-        return Err(Status::NOT_KEPT);
+        return Err(UseItemDataError::NotKept);
     }
     let loader = crate::engine::loader::loader();
     let (item, anchor) = match spec.scope {
-        Scope::Item if item == 0 => return Err(Status::BAD_ARGS),
+        Scope::Item if item == 0 => return Err(UseItemDataError::NoHolder),
         // No layout, no anchor: the value would be aside at the next load.
         Scope::Item if !value.is_empty() && loader.is_some_and(|l| !game::readable(l)) => {
-            return Err(Status::NOT_KEPT);
+            return Err(UseItemDataError::NotKept);
         }
         Scope::Item => (
             item,
@@ -662,21 +723,21 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
                 .and_then(|held| held.anchor),
         ),
         Scope::Entity => {
-            crate::engine::world::server().map_err(|_| Status::WRONG_THREAD)?;
+            crate::engine::world::server().map_err(|_| UseItemDataError::WrongThread)?;
             if value.is_empty() {
                 (0, None)
             } else {
-                let template = template_id(pide).ok_or(Status::BAD_ARGS)?;
+                let template = template_id(pide).ok_or(UseItemDataError::NoHolder)?;
                 let placed = loader
                     .and_then(|loader| game::placed(loader, pide.0))
-                    .ok_or(Status::NOT_KEPT)?;
+                    .ok_or(UseItemDataError::NotKept)?;
                 (template, Some(Anchor::Placed(placed)))
             }
         }
     };
     {
         let mut server = STATE.server.relock();
-        let server = server.as_mut().ok_or(Status::MISSING)?;
+        let server = server.as_mut().ok_or(UseItemDataError::NoValue)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
             if spec.scope == Scope::Item {

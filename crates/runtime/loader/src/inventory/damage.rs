@@ -19,16 +19,16 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{
-    DamageCheck, DamageFilterFn, Header, HookFlags, MidHookFn, Registers, Status,
-};
+use enshwick_core::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, MidHookFn, Registers};
 
+use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mid::mid_handler;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Constant, Symbol};
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::JoinFeatureError;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -57,7 +57,7 @@ const CARRY: u64 = 1;
 /// filters refuse it.
 static NO_HEALTH: u64 = 0;
 
-static FILTERS: Registry<Registered<DamageFilterFn>> = Registry::new();
+static FILTERS: Filters<DamageFilterFn> = Filters::new(Feature::Damage);
 static LAYOUT: OnceLock<Layout> = OnceLock::new();
 
 /// Where each site keeps what the filters need, from the build table.
@@ -84,21 +84,18 @@ const SITES: [(Symbol, MidHookFn); 9] = [
 ];
 
 /// Registers mod `owner`'s damage filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the hit's layout.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     callback: DamageFilterFn,
     user: *mut c_void,
-) -> Status {
-    if FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    if layout(loader).is_err() || crate::engine::ecs::engine(loader).is_none() {
-        return Status::MISSING;
-    }
-    FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    let available = || layout(loader).is_ok() && crate::engine::ecs::engine(loader).is_some();
+    FILTERS.register_when(available, owner, callback, user)
 }
 
 /// The hit's layout, or the first of its constants this build lacks.
@@ -148,13 +145,7 @@ fn sites(filtering: bool) -> &'static [(Symbol, MidHookFn)] {
 /// Whether a mod filters damage; one load, before a site reads anything.
 #[inline]
 fn filtering() -> bool {
-    filtering_in(&FILTERS)
-}
-
-/// Whether `filters` hold a mod's filter, once sealed.
-#[inline]
-fn filtering_in(filters: &Registry<Registered<DamageFilterFn>>) -> bool {
-    filters.sealed().is_some_and(|filters| !filters.is_empty())
+    FILTERS.has_sealed()
 }
 
 /// Whether a hit is the loader's to read: a mod filters damage, or a stat
@@ -166,21 +157,12 @@ fn hits_watched() -> bool {
 
 /// Runs every live filter on `check`.
 fn filter(check: &mut DamageCheck) {
-    let Some(filters) = FILTERS.sealed() else {
-        return;
-    };
-    for f in filters.iter().filter(|f| f.live()) {
-        // SAFETY: `callback` is a `DamageFilterFn` the mod registered, in its
-        // DLL, which stays loaded (`Registered`); `user` is the pointer it
-        // registered with it, and `check` is borrowed for the call.
-        crate::engine::profile::call(
-            f.owner,
-            crate::engine::profile::Feature::Damage,
-            || unsafe {
-                (f.callback)(&raw mut *check, f.user());
-            },
-        );
-    }
+    FILTERS.each(|filter, user| {
+        // SAFETY: the filter's mod runs, so its DLL that holds the callback
+        // stays loaded; it gets the user pointer its mod registered, and
+        // `check` is borrowed for the call.
+        unsafe { filter(&raw mut *check, user) };
+    });
 }
 
 fn blank(cause: u32, target: u32) -> DamageCheck {
@@ -575,21 +557,12 @@ mod tests {
     unsafe extern "system" fn keep(_check: *mut DamageCheck, _user: *mut c_void) {}
 
     /// Filters holding one filter of mod 0, sealed as the seal phase does.
-    fn one_filter() -> Registry<Registered<DamageFilterFn>> {
-        let filters: Registry<Registered<DamageFilterFn>> = Registry::new();
-        let added = filters.add(Registered::new(
-            ModIndex::new(0),
-            keep,
-            core::ptr::null_mut(),
-        ));
+    fn one_filter() -> Filters<DamageFilterFn> {
+        let filters = Filters::<DamageFilterFn>::new(Feature::Damage);
+        let added = filters.register(ModIndex::new(0), keep, core::ptr::null_mut());
         assert!(added.is_ok());
         let _sealed = filters.seal();
         filters
-    }
-
-    #[test]
-    fn a_hit_a_mod_filters_is_the_loader_s_to_read() {
-        assert!(filtering_in(&one_filter()));
     }
 
     #[test]

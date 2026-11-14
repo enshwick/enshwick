@@ -8,7 +8,7 @@ use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
+use enshwick_core::abi::{Header, Side, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_gamedata::catalogue;
 
 use crate::engine::builds::ABSENT;
@@ -16,7 +16,7 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry};
 
 use super::engine::{Engine, UiText, Window};
 use super::{DRAWING, Drawing, copy, next_token};
@@ -154,10 +154,35 @@ thread_local! {
     static TITLE: RefCell<[u8; TITLE_MAX]> = const { RefCell::new([0; TITLE_MAX]) };
 }
 
+/// Why a mod's screen extension was not registered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum ExtendScreenError {
+    /// The registration itself was refused: after init.
+    #[error(transparent)]
+    Register(#[from] JoinFeatureError),
+    /// Only a client draws screens.
+    #[error("screens are extended on a client")]
+    NotClient,
+    /// No screen of the game has the name on this build.
+    #[error("no screen has the name")]
+    UnknownScreen,
+    /// The edge is none of the four.
+    #[error("no such edge")]
+    BadEdge,
+    /// On the screen the player is in the world with no window open.
+    #[error("a screen of play")]
+    ScreenOfPlay,
+}
+
 /// Registers mod `owner`'s panel at `edge` of the game's screen named
 /// `screen`; client only, during init. A screen on which the player is in
 /// the world with no window open is refused: a full-screen window there
 /// would cover play while the mods' keys still fire.
+///
+/// # Errors
+///
+/// [`ExtendScreenError`] off a client, after init, for an unknown screen,
+/// a bad edge or a screen of play.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
@@ -166,26 +191,27 @@ pub(crate) fn register(
     hosts: &[[u8; 16]],
     callback: UiFrameFn,
     user: *mut c_void,
-) -> Status {
+) -> Result<(), ExtendScreenError> {
     if loader.side != Side::CLIENT {
-        return Status::MISSING;
+        return Err(ExtendScreenError::NotClient);
     }
-    if edge > UiExtension::BOTTOM || crate::actions::controls::OPEN_SCREENS.contains(&screen) {
-        return Status::BAD_ARGS;
+    if edge > UiExtension::BOTTOM {
+        return Err(ExtendScreenError::BadEdge);
+    }
+    if crate::actions::controls::OPEN_SCREENS.contains(&screen) {
+        return Err(ExtendScreenError::ScreenOfPlay);
     }
     let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
-    let Some(screen) = loader
+    let screen = loader
         .reflection
         .enum_value(screens, screen)
         .ok()
         .and_then(|value| u8::try_from(value).ok())
-    else {
-        return Status::MISSING;
-    };
+        .ok_or(ExtendScreenError::UnknownScreen)?;
     if crate::actions::controls::open_screens(loader)
         .is_some_and(|open| crate::actions::controls::is_open_screen(open, screen))
     {
-        return Status::BAD_ARGS;
+        return Err(ExtendScreenError::ScreenOfPlay);
     }
     EXTENSIONS
         .add(Extension {
@@ -194,7 +220,7 @@ pub(crate) fn register(
             edge,
             hosts: hosts.into(),
         })
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+        .map_err(|sealed| ExtendScreenError::Register(sealed.into()))
 }
 
 /// Seals the extensions, so a registration after init is too late on every

@@ -19,6 +19,31 @@ fn declared(link: &str) -> Declared {
 }
 
 #[test]
+fn threads_declaring_one_control_at_once_keep_exactly_one() {
+    static DECLARED: Registry<Declared> = Registry::new();
+    const THREADS: usize = 8;
+    let start = std::sync::Barrier::new(THREADS);
+    let answers: Vec<_> = std::thread::scope(|scope| {
+        let threads: Vec<_> = (0..THREADS)
+            .map(|_| {
+                scope.spawn(|| {
+                    start.wait();
+                    declare(&DECLARED, declared(""))
+                })
+            })
+            .collect();
+        threads.into_iter().filter_map(|t| t.join().ok()).collect()
+    });
+    let kept = answers.iter().filter(|answer| answer.is_ok()).count();
+    let twice = answers
+        .iter()
+        .filter(|answer| **answer == Err(DeclareControlError::Twice))
+        .count();
+    assert_eq!((kept, twice), (1, THREADS - 1), "{answers:?}");
+    assert_eq!(DECLARED.seal().len(), 1);
+}
+
+#[test]
 fn a_game_s_end_leaves_no_firing_waiting_for_the_next() {
     let state = State::new();
     state.firing.store(true, Ordering::Release);

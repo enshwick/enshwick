@@ -1,5 +1,7 @@
 use enshwick_base::Relock;
 
+use enshwick_core::abi::Status;
+
 use super::patches::{Build, run_patches, write_differences};
 use super::*;
 
@@ -68,16 +70,13 @@ fn a_change_of_a_new_resource_chains_onto_its_maker_in_either_order() {
         } else {
             ((new, 2), (base, 1))
         };
-        assert_eq!(add(&mut pending, new, first.0, patch(first.1)), Status::OK);
-        assert_eq!(
-            add(&mut pending, new, second.0, patch(second.1)),
-            Status::OK
-        );
+        assert_eq!(add(&mut pending, new, first.0, patch(first.1)), Ok(()));
+        assert_eq!(add(&mut pending, new, second.0, patch(second.1)), Ok(()));
         assert_eq!(pending[0].base, base, "maker first: {maker_first}");
         assert_eq!(owners(&pending[0]), [ModIndex::new(1), ModIndex::new(2)]);
         assert_eq!(
             add(&mut pending, new, other, patch(3)),
-            Status::REFUSED,
+            Err(ServeResourceError::OtherBase),
             "a second maker"
         );
     }

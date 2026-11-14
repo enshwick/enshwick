@@ -46,8 +46,6 @@ const CAP: u64 = 8 << 20;
 /// Seconds ahead a file that reached its cap looks for a free stamp to go
 /// on under; past them it grows on.
 const ROLL_SECONDS: u64 = 60;
-/// The loader's file of this run, once the log opens.
-static LOADER_FILE: OnceLock<PathBuf> = OnceLock::new();
 
 /// One line as written, with its level and where its source sits in it, so
 /// the source costs no copy of its own.
@@ -85,7 +83,6 @@ impl Line {
     }
 }
 
-static LINES: OnceLock<SyncSender<Line>> = OnceLock::new();
 /// What the channel to the writer has carried.
 struct Counts {
     /// Lines the full channel could not take since the writer last said so.
@@ -98,26 +95,17 @@ struct Counts {
     stopped: AtomicBool,
 }
 
-static COUNTS: Counts = Counts {
-    dropped: AtomicU64::new(0),
-    sent: AtomicU64::new(0),
-    taken: AtomicU64::new(0),
-    stopped: AtomicBool::new(false),
-};
-/// The latest lines the writer kept.
-static RECENT_LINES: Mutex<Recent> = Mutex::new(Recent::new());
-static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();
-
 /// Keeps lines up to the levels in `settings`; before the first call every
 /// source keeps `info`.
 pub fn set_levels(settings: Settings) {
-    LEVELS.store(Some(std::sync::Arc::new(settings)));
+    STATE.levels.store(Some(std::sync::Arc::new(settings)));
 }
 
 /// The most detailed level kept for lines from `source`.
 #[must_use]
 pub fn level(source: &str) -> Level {
-    LEVELS
+    STATE
+        .levels
         .load()
         .as_ref()
         .map_or(Level::INFO, |s| s.level(source))
@@ -133,14 +121,14 @@ pub fn enabled(level: Level, source: &str) -> bool {
 /// Whether the writer runs, so lines reach the files.
 #[must_use]
 pub fn is_open() -> bool {
-    LINES.get().is_some() && !COUNTS.stopped.load(Ordering::Acquire)
+    STATE.sender.get().is_some() && !STATE.counts.stopped.load(Ordering::Acquire)
 }
 
 /// The loader's file of this run, once the log opens; a crash writes its
 /// line there too.
 #[must_use]
 pub fn loader_file() -> Option<&'static Path> {
-    LOADER_FILE.get().map(PathBuf::as_path)
+    STATE.file.get().map(PathBuf::as_path)
 }
 
 /// Starts the writer in `dir`, the game's `logs/`.
@@ -156,7 +144,7 @@ pub fn open(dir: &Path) {
     }
     let dir = dir.to_path_buf();
     let stamp = crate::engine::early::log_stamp(now() / 1000);
-    let _first = LOADER_FILE.set(run_path(&dir, LOADER_ID, &stamp));
+    let _first = STATE.file.set(run_path(&dir, LOADER_ID, &stamp));
     let (send, receive) = sync_channel::<Line>(QUEUE);
     let started = crate::engine::off_thread::spawn("log", move || {
         // On the writer's thread: the game's start never waits on the
@@ -169,7 +157,7 @@ pub fn open(dir: &Path) {
         }
         files.insert(LOADER_ID.to_owned(), loader);
         for line in receive {
-            let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
+            let dropped = STATE.counts.dropped.swap(0, Ordering::Relaxed);
             if dropped > 0 {
                 let note = Line::new(
                     now(),
@@ -192,12 +180,12 @@ pub fn open(dir: &Path) {
                 file.write(line.text.as_bytes());
             }
             keep(line);
-            COUNTS.taken.fetch_add(1, Ordering::Release);
+            STATE.counts.taken.fetch_add(1, Ordering::Release);
         }
     });
     match started {
         Ok(()) => {
-            let _first = LINES.set(send);
+            let _first = STATE.sender.set(send);
         }
         Err(e) => crate::engine::early::note(&format!("no log: its thread did not start: {e}")),
     }
@@ -352,10 +340,17 @@ impl Capped {
     }
 }
 
-/// The dry run's capture of the log, kept for the process: a dry run ends
-/// it, so no part forgets it.
-#[derive(Debug)]
+/// What the log keeps for the process: its writer, the levels and the dry
+/// run's capture. Nothing of it belongs to a world, so no part forgets it.
 struct State {
+    /// The loader's file of this run, once the log opens.
+    file: OnceLock<PathBuf>,
+    /// The channel to the writer, once its thread runs.
+    sender: OnceLock<SyncSender<Line>>,
+    counts: Counts,
+    /// The latest lines the writer kept.
+    recent: Mutex<Recent>,
+    levels: ArcSwapOption<Settings>,
     /// Whether lines go to `lines` instead of the files.
     on: AtomicBool,
     /// Lines kept in memory instead of written. Its lock stays off the
@@ -370,6 +365,16 @@ struct State {
 }
 
 static STATE: State = State {
+    file: OnceLock::new(),
+    sender: OnceLock::new(),
+    counts: Counts {
+        dropped: AtomicU64::new(0),
+        sent: AtomicU64::new(0),
+        taken: AtomicU64::new(0),
+        stopped: AtomicBool::new(false),
+    },
+    recent: Mutex::new(Recent::new()),
+    levels: ArcSwapOption::const_empty(),
     on: AtomicBool::new(false),
     lines: Mutex::new(None),
     #[cfg(test)]
@@ -461,7 +466,7 @@ pub fn write(level: Level, source: &str, message: &str) {
         }
         return;
     }
-    let Some(lines) = LINES.get() else {
+    let Some(lines) = STATE.sender.get() else {
         return;
     };
     if !enabled(level, source) {
@@ -469,10 +474,10 @@ pub fn write(level: Level, source: &str, message: &str) {
     }
     match lines.try_send(Line::new(now(), level, source, message)) {
         Ok(()) => {
-            COUNTS.sent.fetch_add(1, Ordering::Relaxed);
+            STATE.counts.sent.fetch_add(1, Ordering::Relaxed);
         }
         Err(TrySendError::Full(_)) => {
-            COUNTS.dropped.fetch_add(1, Ordering::Relaxed);
+            STATE.counts.dropped.fetch_add(1, Ordering::Relaxed);
         }
         Err(TrySendError::Disconnected(_)) => {}
     }
@@ -482,9 +487,9 @@ pub fn write(level: Level, source: &str, message: &str) {
 /// latest, so [`recent`] holds them, or `longest` passes; whether it did.
 /// Never on a game thread: it sleeps.
 pub fn settle(longest: Duration) -> bool {
-    let sent = COUNTS.sent.load(Ordering::Relaxed);
+    let sent = STATE.counts.sent.load(Ordering::Relaxed);
     let started = Instant::now();
-    while COUNTS.taken.load(Ordering::Acquire) < sent {
+    while STATE.counts.taken.load(Ordering::Acquire) < sent {
         if started.elapsed() >= longest {
             return false;
         }
@@ -495,7 +500,7 @@ pub fn settle(longest: Duration) -> bool {
 
 /// Keeps `line` among the latest lines.
 fn keep(line: Line) {
-    RECENT_LINES.relock().keep(line);
+    STATE.recent.relock().keep(line);
 }
 
 /// The latest [`RECENT`] lines, oldest first.
@@ -538,7 +543,7 @@ impl Recent {
 /// `level` or more severe, oldest first, without their line ends.
 #[must_use]
 pub fn recent(source: Option<&str>, level: Level, count: usize) -> Vec<String> {
-    RECENT_LINES.relock().latest(source, level, count)
+    STATE.recent.relock().latest(source, level, count)
 }
 
 fn now() -> u64 {

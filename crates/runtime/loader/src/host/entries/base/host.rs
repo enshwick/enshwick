@@ -16,7 +16,7 @@ fn game_event_of(
     type_hash: u32,
     callback: api_frame::GameEventFn,
     user: *mut core::ffi::c_void,
-) -> Status {
+) -> Result<(), crate::engine::registry::JoinFeatureError> {
     crate::base::game_events::register(
         me.loader.side,
         whose,
@@ -95,7 +95,7 @@ entries! {
         user: *mut core::ffi::c_void,
     ) -> Status {
         in_init(me.index)?;
-        Ok(crate::base::status::register(me.index, callback, user))
+        Ok(crate::base::status::register(me.index, callback, user)?)
     }
 
     fn client_game_event(
@@ -104,7 +104,7 @@ entries! {
         callback: api_frame::GameEventFn,
         user: *mut core::ffi::c_void,
     ) -> Status {
-        Ok(game_event_of(Whose::Client, me, type_hash, callback, user))
+        Ok(game_event_of(Whose::Client, me, type_hash, callback, user)?)
     }
 
     fn game_event(
@@ -113,6 +113,6 @@ entries! {
         callback: api_frame::GameEventFn,
         user: *mut core::ffi::c_void,
     ) -> Status {
-        Ok(game_event_of(Whose::Server, me, type_hash, callback, user))
+        Ok(game_event_of(Whose::Server, me, type_hash, callback, user)?)
     }
 }

@@ -11,10 +11,12 @@
 
 use levels::{observe, read_levels, write_ranges};
 
+use crate::engine::filters::Filters;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::{JoinFeatureError, Registry, Sealed};
 use crate::world::openers::Openers;
 use enshwick_base::Relock;
 
@@ -295,7 +297,6 @@ const ZONES_SYSTEM: &str = "add_buildzones_server";
 /// The reflected system the range and level passes follow.
 const UPGRADE_SYSTEM: &str = "upgrade_building_range";
 
-type Filter = Registered<BuildingZoneCheckFn>;
 type Sizer = Registered<AltarZoneFn>;
 
 #[derive(Debug, Clone, Copy)]
@@ -308,7 +309,7 @@ struct SeamLayout {
     corner_size: usize,
 }
 
-static FILTERS: Registry<Filter> = Registry::new();
+static FILTERS: Filters<BuildingZoneCheckFn> = Filters::new(Feature::Altars);
 static SEAM: OnceLock<SeamLayout> = OnceLock::new();
 
 thread_local! {
@@ -331,34 +332,32 @@ fn drop_stale_buffers() {
 }
 
 /// Opens altars for mod `owner`; during init only.
-pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Status {
-    if loader.delivery.get().is_some() {
-        return Status::TOO_LATE;
-    }
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the entity engine.
+pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
     if crate::engine::ecs::engine(loader).is_none() {
-        return Status::MISSING;
+        return Err(JoinFeatureError::Unavailable);
     }
-    STATE
-        .openers
-        .open(owner)
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+    Ok(STATE.openers.open(owner)?)
 }
 
 /// Adds mod `owner`'s altar zone filter; it opens altars too. During init
 /// only.
+///
+/// # Errors
+///
+/// As [`open`].
 pub(crate) fn add_sizer(
     loader: &Loader,
     owner: ModIndex,
     callback: AltarZoneFn,
     user: *mut c_void,
-) -> Status {
-    let status = open(loader, owner);
-    if !status.is_ok() {
-        return status;
-    }
-    SIZERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    open(loader, owner)?;
+    Ok(SIZERS.add(Registered::new(owner, callback, user))?)
 }
 
 /// Has the zones sized again on the server's next step, for mod `owner`,
@@ -405,7 +404,7 @@ fn chain(
         let before = zone;
         // SAFETY: the mod's filter with its own pointer and a zone valid for
         // the call; the safe layer catches its panics.
-        crate::engine::profile::call(owner, crate::engine::profile::Feature::Altars, || unsafe {
+        crate::engine::profile::call(owner, Feature::Altars, || unsafe {
             callback(&raw mut zone, user);
         });
         zone.header = before.header;
@@ -548,17 +547,17 @@ pub(crate) fn forget() {
     STATE.forget();
 }
 
+/// Registers mod `owner`'s building zone check.
+///
+/// # Errors
+///
+/// [`Sealed`] after init.
 pub(crate) fn register(
     owner: ModIndex,
     callback: BuildingZoneCheckFn,
     user: *mut c_void,
-) -> Status {
-    if FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), Sealed> {
+    FILTERS.register(owner, callback, user)
 }
 
 pub(crate) fn link(loader: &'static Loader) {
@@ -811,13 +810,13 @@ crate::engine::chains::chain_detour! {
         if vanilla != 0 || zones.is_null() || corners.is_null() {
             return vanilla;
         }
-        let (Some(layout), Some(filters)) = (SEAM.get(), FILTERS.sealed()) else {
+        let Some(layout) = SEAM.get().filter(|_| FILTERS.has_sealed()) else {
             return vanilla;
         };
         // SAFETY: `zones` and `corners` are non-null by the check before it
         // and are the seam check's own arguments, the engine's zone list and
         // the object's two corners, live for the call.
-        u8::from(unsafe { check(layout, filters, zones, corners, margin) })
+        u8::from(unsafe { check(layout, &FILTERS, zones, corners, margin) })
     }
 }
 
@@ -832,7 +831,7 @@ crate::engine::chains::chain_detour! {
 #[expect(clippy::cast_possible_truncation, reason = "margins are a few metres")]
 unsafe fn check(
     layout: &SeamLayout,
-    filters: &[Filter],
+    filters: &Filters<BuildingZoneCheckFn>,
     list: *const u8,
     corners: *const i64,
     margin: f32,
@@ -885,16 +884,18 @@ unsafe fn check(
         },
         margin: (f64::from(margin) * enshwick_core::ecs::FIXED_PER_METRE) as i64,
     };
-    filters.iter().filter(|f| f.live()).any(|f| {
-        // SAFETY: `f` is live, so the mod's DLL that holds the callback stays
-        // loaded; the callback gets the user pointer its mod registered and
-        // `call`, which lives for the call.
-        crate::engine::profile::call(
-            f.owner,
-            crate::engine::profile::Feature::Altars,
-            || unsafe { (f.callback)(&raw const call, f.user()) != 0 },
-        )
-    })
+    filters
+        .ask(|filter| {
+            // SAFETY: a filter's mod runs, so its DLL that holds the callback
+            // stays loaded; the callback gets the user pointer its mod
+            // registered and `call`, which lives for the call.
+            if filter.call(|filter, user| unsafe { filter(&raw const call, user) }) != 0 {
+                core::ops::ControlFlow::Break(())
+            } else {
+                core::ops::ControlFlow::Continue(())
+            }
+        })
+        .is_some()
 }
 
 #[cfg(test)]

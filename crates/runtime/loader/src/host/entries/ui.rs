@@ -16,7 +16,7 @@ entries! {
     }
 
     fn ui_frame(me as Mod, callback: api_frame::UiFrameFn, user: *mut core::ffi::c_void) -> Status {
-        checked(crate::ui::interface::register_frame(me.loader, me.index, callback, user))
+        Ok(crate::ui::interface::register_frame(me.loader, me.index, callback, user)?)
     }
 
     fn ui_widget(me as Mod, frame: u64, widget as HeadedInOut<api_frame::UiWidget>) -> Status {
@@ -27,7 +27,7 @@ entries! {
     }
 
     fn ui_hud(me as Mod, callback: api_frame::UiFrameFn, user: *mut core::ffi::c_void) -> Status {
-        checked(crate::ui::interface::register_hud(me.loader, me.index, callback, user))
+        Ok(crate::ui::interface::register_hud(me.loader, me.index, callback, user)?)
     }
 
     fn ui_extension(
@@ -44,9 +44,9 @@ entries! {
         // readable for `host_count` GUIDs for the call, which
         // `register_extension` copies before it returns.
         let hosts = unsafe { spec.host_list() }.ok_or(Status::BAD_ARGS)?;
-        checked(crate::ui::interface::register_extension(
+        Ok(crate::ui::interface::register_extension(
             me.loader, me.index, screen, spec.edge, hosts, callback, user,
-        ))
+        )?)
     }
 
     fn ui_markers(me as Mod, [markers, count] as HeadedList<api_frame::UiMarker>) -> Status {
@@ -81,7 +81,7 @@ entries! {
     }
 
     fn fog_open(me as Mod) -> Status {
-        checked(crate::world::fog::open(me.loader, me.index))
+        Ok(crate::world::fog::open(me.loader, me.index)?)
     }
 
     fn fog_read(

@@ -31,6 +31,7 @@ use crate::engine::loader::{Loader, Target, is_off};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Symbol;
+use crate::engine::registry::JoinFeatureError;
 use crate::world::openers::Openers;
 
 /// The build table ids this part of the loader names.
@@ -306,17 +307,18 @@ fn forward(before: i64, within: i64, cycle: i64) -> i64 {
 }
 
 /// Registers mod `owner` as one that changes the speed.
-pub(crate) fn register_speed(loader: &Loader, owner: ModIndex) -> Status {
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the speed.
+pub(crate) fn register_speed(loader: &Loader, owner: ModIndex) -> Result<(), JoinFeatureError> {
     if STATE.factors.get().is_some() {
-        return Status::TOO_LATE;
+        return Err(JoinFeatureError::TooLate);
     }
     if layout(loader).is_none() || loader.address(pinned::daytime::SET_SPEED).is_none() {
-        return Status::MISSING;
+        return Err(JoinFeatureError::Unavailable);
     }
-    STATE
-        .speeders
-        .open(owner)
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+    Ok(STATE.speeders.open(owner)?)
 }
 
 /// Sets mod `owner`'s factor on the speed and applies the product at once.

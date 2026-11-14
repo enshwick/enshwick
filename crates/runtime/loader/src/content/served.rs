@@ -25,7 +25,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_core::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
+use enshwick_core::abi::{HookFlags, ResourceKey, ResourcePatchFn};
 use enshwick_core::raw::{read_at, write_at};
 #[cfg(test)]
 pub(crate) use patches::enter_build;
@@ -39,7 +39,7 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -142,40 +142,62 @@ type OpenFn = unsafe extern "system" fn(
 type ResolveFn =
     unsafe extern "system" fn(out: *mut [u64; 3], database: *mut u8, handle: u32) -> *mut [u64; 3];
 
-/// Adds mod `owner`'s patch of `key`; refused after init and for a key another
-/// mod serves from a different base.
+/// Why a mod's patch of a resource was not added.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum ServeResourceError {
+    /// The registration itself was refused: after init.
+    #[error(transparent)]
+    Register(#[from] JoinFeatureError),
+    /// Another mod serves the key from a different base.
+    #[error("another mod serves the resource from a different base")]
+    OtherBase,
+}
+
+sealed_is_too_late!(ServeResourceError);
+
+/// Adds mod `owner`'s patch of `key`.
+///
+/// # Errors
+///
+/// [`ServeResourceError`] after init and for a key another mod serves from
+/// a different base.
 pub(crate) fn register(
     owner: ModIndex,
     key: ResourceKey,
     base: ResourceKey,
     patch: ResourcePatchFn,
     user: *mut c_void,
-) -> Status {
+) -> Result<(), ServeResourceError> {
     let patch = Patch {
         owner,
         apply: patch,
         user: user.expose_provenance(),
     };
-    RESOURCES
-        .edit(|pending| add(pending, key, base, patch))
-        .unwrap_or_else(Status::from)
+    RESOURCES.edit(|pending| add(pending, key, base, patch))?
 }
 
 /// Adds `patch` of `key` from `base` to `pending`. A change, served from
 /// its own key, chains onto the base the key's maker serves it from, and a
 /// maker that comes after changes goes first, so mods change each other's
 /// new resources in either load order.
-fn add(pending: &mut Vec<Served>, key: ResourceKey, base: ResourceKey, patch: Patch) -> Status {
+fn add(
+    pending: &mut Vec<Served>,
+    key: ResourceKey,
+    base: ResourceKey,
+    patch: Patch,
+) -> Result<(), ServeResourceError> {
     match pending.iter_mut().find(|s| s.key == key) {
         Some(served) if served.base == key && base != key => {
             served.base = base;
             served.patches.insert(0, patch);
         }
-        Some(served) if base != key && served.base != base => return Status::REFUSED,
+        Some(served) if base != key && served.base != base => {
+            return Err(ServeResourceError::OtherBase);
+        }
         Some(served) => served.patches.push(patch),
         None => pending.push(Served::new(key, base, vec![patch], false)),
     }
-    Status::OK
+    Ok(())
 }
 
 /// Ends registration and links the database when anything is served.

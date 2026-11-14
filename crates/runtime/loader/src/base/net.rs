@@ -32,7 +32,7 @@ use crate::base::wire::{
 pub(crate) use crate::base::wire::{MAX_CONTROL, MAX_MESSAGE};
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
 
 mod server;
@@ -128,28 +128,61 @@ fn channel_id(id: &str, name: &str) -> u32 {
     id.max(1)
 }
 
+/// Why a mod's channel did not open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum OpenChannelError {
+    /// The registration itself was refused: after init.
+    #[error(transparent)]
+    Register(#[from] JoinFeatureError),
+    /// No mod has the index.
+    #[error("no such mod")]
+    NoMod,
+    /// The mod does not run on both sides, so no peer can answer.
+    #[error("the mod does not run on both sides")]
+    OneSided,
+    /// The name is empty or longer than [`MAX_CHANNEL_NAME`] bytes.
+    #[error("a channel name of 1 to {MAX_CHANNEL_NAME} bytes")]
+    BadName,
+    /// The mod opened a channel of that name, or one of the same id.
+    #[error("the channel is open")]
+    Twice,
+}
+
+sealed_is_too_late!(OpenChannelError);
+
+/// The longest channel name, in bytes.
+const MAX_CHANNEL_NAME: usize = 64;
+
 /// Opens mod `owner`'s channel `name`; its id.
+///
+/// # Errors
+///
+/// [`OpenChannelError`] after init, for a mod not on both sides, a bad name
+/// or one open already.
 pub(crate) fn open(
     loader: &Loader,
     owner: ModIndex,
     name: &str,
     callback: NetMessageFn,
     user: *mut c_void,
-) -> Result<u32, Status> {
+) -> Result<u32, OpenChannelError> {
     if CHANNELS.is_sealed() {
-        return Err(Status::TOO_LATE);
+        return Err(JoinFeatureError::TooLate.into());
     }
-    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
+    let record = loader
+        .mods
+        .get(owner.get())
+        .ok_or(OpenChannelError::NoMod)?;
     if !record.joins_when_on() {
-        return Err(Status::REFUSED);
+        return Err(OpenChannelError::OneSided);
     }
-    if name.is_empty() || name.len() > 64 {
-        return Err(Status::BAD_ARGS);
+    if name.is_empty() || name.len() > MAX_CHANNEL_NAME {
+        return Err(OpenChannelError::BadName);
     }
     let id = channel_id(&record.id, name);
     CHANNELS.edit(|pending| {
         if pending.iter().any(|c| c.id == id) {
-            return Err(Status::REFUSED);
+            return Err(OpenChannelError::Twice);
         }
         pending.push(Channel {
             id,

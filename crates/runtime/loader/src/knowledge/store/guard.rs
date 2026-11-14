@@ -21,19 +21,19 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_core::abi::{
-    Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Status,
-};
+use enshwick_core::abi::{Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn};
 
+use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::{Loader, Registered, Target};
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::JoinFeatureError;
 
 use super::{Layout, definition, layout, quest_set, read};
 
-static FILTERS: Registry<Registered<KnowledgeInputFn>> = Registry::new();
+static FILTERS: Filters<KnowledgeInputFn> = Filters::new(Feature::Vetoes);
 static SITE: OnceLock<Site> = OnceLock::new();
 const LOGGED: u32 = 64;
 
@@ -99,21 +99,18 @@ pub(crate) fn status() -> Option<String> {
 }
 
 /// Registers mod `owner`'s filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the guard's site.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     callback: KnowledgeInputFn,
     user: *mut c_void,
-) -> Status {
-    if FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    if site(loader).is_none() || !loader.code_holds(pinned::knowledge::INPUT_CHECK) {
-        return Status::MISSING;
-    }
-    FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    let available = || site(loader).is_some() && loader.code_holds(pinned::knowledge::INPUT_CHECK);
+    FILTERS.register_when(available, owner, callback, user)
 }
 
 fn site(loader: &Loader) -> Option<Site> {
@@ -238,19 +235,13 @@ fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
 
 /// The verdict on `call` after the guard and every live filter.
 fn decide(call: &mut KnowledgeInput) -> bool {
-    if let Some(filters) = FILTERS.sealed() {
-        for f in filters.iter().filter(|f| f.live()) {
-            // SAFETY: `f` is live, so the mod's DLL that holds the callback
-            // stays loaded; the callback gets the user pointer its mod
-            // registered and `call`, which lives for the call.
-            let verdict = crate::engine::profile::call(
-                f.owner,
-                crate::engine::profile::Feature::Vetoes,
-                || unsafe { (f.callback)(&raw const *call, f.user()) },
-            );
-            call.allowed = u32::from(verdict != 0);
-        }
-    }
+    FILTERS.each(|filter, user| {
+        // SAFETY: a filter's mod runs, so its DLL that holds the callback
+        // stays loaded; the callback gets the user pointer its mod registered
+        // and `call`, which lives for the call.
+        let verdict = unsafe { filter(&raw const *call, user) };
+        call.allowed = u32::from(verdict != 0);
+    });
     call.allowed != 0
 }
 

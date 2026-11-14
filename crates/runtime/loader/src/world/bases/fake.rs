@@ -16,6 +16,8 @@ use enshwick_base::Relock;
 /// the side tables or a test file's call log: the process keeps one window
 /// entry per live object and one side table per kind, so tests running at
 /// once would take each other's.
+// A test-only turn lock in a module built only for tests, not runtime state.
+// ast-grep-ignore: loader-state-is-in-its-domain
 static SHARED: Mutex<()> = Mutex::new(());
 
 /// This test's turn at the bases state the tests share, until dropped.

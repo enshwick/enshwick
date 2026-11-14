@@ -8,45 +8,38 @@
 //! game's notices, in the language the client named when it joined.
 
 use enshwick_core::abi::{
-    ActionCall, ActionFn, ActionReply, ActionTarget, Header, PlayerInfo, Status, Str,
+    ActionCall, ActionFn, ActionReply, ActionTarget, Header, PlayerInfo, Str,
 };
 
 use crate::actions::admission::{self, Path, Refusal, Verdict};
 use crate::base::remote::Message;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry};
 
 /// A mod's actions callback.
-#[derive(Clone, Copy)]
-struct Registered {
-    owner: ModIndex,
-    callback: ActionFn,
-    user: usize,
-}
+type Registered = crate::engine::loader::Registered<ActionFn>;
 
 static REGISTERED: Registry<Registered> = Registry::new();
 
-/// Registers mod `owner`'s actions callback; a second one is refused, and
-/// any after the seal.
+/// Registers mod `owner`'s actions callback.
+///
+/// # Errors
+///
+/// [`JoinFeatureError::Taken`] for a second one, [`JoinFeatureError::TooLate`]
+/// after init.
 pub(crate) fn register(
     owner: ModIndex,
     callback: ActionFn,
     user: *mut core::ffi::c_void,
-) -> Status {
-    REGISTERED
-        .edit(|registered| {
-            if registered.iter().any(|r| r.owner == owner) {
-                return Status::REFUSED;
-            }
-            registered.push(Registered {
-                owner,
-                callback,
-                user: user.expose_provenance(),
-            });
-            Status::OK
-        })
-        .unwrap_or_else(Status::from)
+) -> Result<(), JoinFeatureError> {
+    REGISTERED.edit(|registered| {
+        if registered.iter().any(|r| r.owner == owner) {
+            return Err(JoinFeatureError::Taken);
+        }
+        registered.push(Registered::new(owner, callback, user));
+        Ok(())
+    })?
 }
 
 /// Seals the actions callbacks once every mod's init ran.
