@@ -14,7 +14,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
+use enshwick_core::abi::{Header, TerrainEdit, TerrainMaterialInfo};
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::{BlobArray, read};
@@ -193,9 +193,36 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
+/// Why a terrain edit or a read of the terraforming registry failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum TerrainError {
+    /// The build's table or reflection lacks what terrain edits read.
+    #[error("this build lacks the terrain reads")]
+    Unread,
+    /// The server has no voxel editor, voxel world, game object or loaded
+    /// terraforming registry yet.
+    #[error("no voxel editor or terraforming registry runs")]
+    NoEditor,
+    /// An edit of an unknown kind or shape, or out of its bounds.
+    #[error("the edit is malformed")]
+    BadEdit,
+    /// A material that is no terrain material.
+    #[error("no terrain material has the id")]
+    BadMaterial,
+    /// The box the edit can write leaves the world.
+    #[error("the edit leaves the world")]
+    OutsideWorld,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+    /// The world's voxels, as their read answered.
+    #[error(transparent)]
+    Voxels(#[from] crate::world::voxels::VoxelError),
+}
+
 /// The voxel editor, the voxel world's allocator and the game object, on
 /// the game thread.
-fn editor(layout: &Layout) -> Result<(usize, usize, usize), Status> {
+fn editor(layout: &Layout) -> Result<(usize, usize, usize), TerrainError> {
     let server = crate::engine::world::server()?;
     // SAFETY: `server` comes from `crate::engine::world::server`, on the game thread
     // that alone writes it; the table's `terrain.editor` offset holds its
@@ -210,56 +237,56 @@ fn editor(layout: &Layout) -> Result<(usize, usize, usize), Status> {
     // its game object pointer.
     let game: usize = unsafe { read(server, layout.game) };
     if editor == 0 || world == 0 || game == 0 {
-        return Err(Status::MISSING);
+        return Err(TerrainError::NoEditor);
     }
     // SAFETY: `world` is non-zero (`world == 0` returns first), the server's
     // voxel world, which starts with its allocator pointer; read on the game
     // thread.
     let alloc: usize = unsafe { read(world, 0) };
     if alloc == 0 {
-        return Err(Status::MISSING);
+        return Err(TerrainError::NoEditor);
     }
     Ok((editor, alloc, game))
 }
 
 /// The server's voxel editor and its voxel world's allocator, on the game
 /// thread at a quiet moment.
-pub(crate) fn editor_and_allocator(loader: &Loader) -> Result<(usize, usize), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn editor_and_allocator(loader: &Loader) -> Result<(usize, usize), TerrainError> {
+    let layout = layout(loader).ok_or(TerrainError::Unread)?;
     let (editor, alloc, _) = editor(layout)?;
     Ok((editor, alloc))
 }
 
 /// The running game's terraforming registry resource, on the game thread.
-fn resource(layout: &Layout) -> Result<usize, Status> {
+fn resource(layout: &Layout) -> Result<usize, TerrainError> {
     let (_, _, game) = editor(layout)?;
     // SAFETY: `game` is the non-zero game object `editor` read on the game
     // thread; the table's `terrain.registry` offset holds its terraforming
     // registry pointer.
     let registry: usize = unsafe { read(game, layout.registry) };
     if registry == 0 {
-        return Err(Status::MISSING);
+        return Err(TerrainError::NoEditor);
     }
     // SAFETY: `registry` is non-zero (`registry == 0` returns first); the
     // table's `terrain.registry_resource` offset holds its resource pointer
     // once loaded; read on the game thread.
     let resource: usize = unsafe { read(registry, layout.registry_resource) };
     if resource == 0 {
-        return Err(Status::MISSING);
+        return Err(TerrainError::NoEditor);
     }
     Ok(resource)
 }
 
 /// The building materials' terraforming configs of the running game: each
 /// one's material, counted from 0x80, and its hardness.
-pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, Status> {
+pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, TerrainError> {
     use enshwick_gamedata::catalogue;
 
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let layout = layout(loader).ok_or(TerrainError::Unread)?;
     let at = |id| {
         catalogue::constant(id, &loader.reflection)
             .and_then(|at| usize::try_from(at).ok())
-            .ok_or(Status::MISSING)
+            .ok_or(TerrainError::Unread)
     };
     let configs = at(catalogue::ids::TERRAFORMING_REGISTRY_BUILDING_CONFIGS)?;
     let material_at = at(catalogue::ids::BUILDING_TERRAFORMING_CONFIG_BUILDING_MATERIAL)?;
@@ -271,7 +298,7 @@ pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, Status>
         ))
         .ok()
         .and_then(|info| usize::try_from(info.size()).ok())
-        .ok_or(Status::MISSING)?;
+        .ok_or(TerrainError::Unread)?;
     let resource = resource(layout)?;
     // SAFETY: `resource` is the live terraforming registry resource
     // `resource` returned, whose reflected `buildingConfigs` array header
@@ -297,8 +324,8 @@ pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, Status>
 }
 
 /// The terrain materials of the running game.
-pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, TerrainError> {
+    let layout = layout(loader).ok_or(TerrainError::Unread)?;
     let resource = resource(layout)?;
     // SAFETY: `resource` is the live terraforming registry resource
     // `resource` returned, whose reflected `terrainConfigs` array header
@@ -351,21 +378,21 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
 
 /// Runs a terrain edit; the amount it changed: volume added or removed in
 /// cubic metres, or 1 when a flatten changed anything.
-/// [`Status::OUTSIDE_WORLD`] when the box the edit can write leaves the
-/// world, [`Status::NOT_LOADED`] unless every column of bricks in it is
+/// [`TerrainError::OutsideWorld`] when the box the edit can write leaves the
+/// world, a not-loaded [`TerrainError::Voxels`] unless every column of bricks in it is
 /// loaded: the game's edit would otherwise load such a column holding only
 /// the edit.
-pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, TerrainError> {
+    let layout = layout(loader).ok_or(TerrainError::Unread)?;
     let radius = request.radius;
     if !enshwick_core::__private::rules::terrain_edit_valid(request) {
-        return Err(Status::BAD_ARGS);
+        return Err(TerrainError::BadEdit);
     }
     let (editor, alloc, _) = editor(layout)?;
     let extent = crate::world::voxels::extent(loader)?;
     let bricks = crate::world::transactions::cover::cover(request)
         .filter(|bricks| bricks.inside(extent))
-        .ok_or(Status::OUTSIDE_WORLD)?;
+        .ok_or(TerrainError::OutsideWorld)?;
     for column in bricks.columns() {
         crate::world::voxels::column_loaded(loader, column.min())?;
     }
@@ -375,14 +402,14 @@ pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Status
         alloc: core::ptr::with_exposed_provenance_mut(alloc),
         position: Vector([x, y, z, 0.0]),
         radius,
-        shape: u8::try_from(request.shape).map_err(|_| Status::BAD_ARGS)?,
+        shape: u8::try_from(request.shape).map_err(|_| TerrainError::BadEdit)?,
         dry: u8::from(request.flags & TerrainEdit::DRY_RUN != 0),
     };
     match request.kind {
         TerrainEdit::ADD => add(layout, &site, request),
         TerrainEdit::DIG => Ok(dig(layout, &site, &request.protect)),
         TerrainEdit::FLATTEN => flatten(layout, &site, request.material),
-        _ => Err(Status::BAD_ARGS),
+        _ => Err(TerrainError::BadEdit),
     }
 }
 
@@ -397,7 +424,7 @@ struct Site {
     dry: u8,
 }
 
-fn add(layout: &Layout, site: &Site, request: &TerrainEdit) -> Result<f32, Status> {
+fn add(layout: &Layout, site: &Site, request: &TerrainEdit) -> Result<f32, TerrainError> {
     let material = terrain_material(request.material)?;
     // SAFETY: `add` is the table's `terrain.add`, called on the server's
     // live, non-zero voxel editor and allocator (checked by `editor`) at a
@@ -467,7 +494,7 @@ fn dig(layout: &Layout, site: &Site, protect: &[u8; 16]) -> f32 {
     out.removed * VOXEL_VOLUME
 }
 
-fn flatten(layout: &Layout, site: &Site, material: u32) -> Result<f32, Status> {
+fn flatten(layout: &Layout, site: &Site, material: u32) -> Result<f32, TerrainError> {
     let material = terrain_material(material)?;
     let mut fillable = [0u8; MATERIALS];
     for slot in fillable.iter_mut().take(0x80) {
@@ -505,11 +532,11 @@ fn flatten(layout: &Layout, site: &Site, material: u32) -> Result<f32, Status> {
 /// The volume of a voxel, half a metre a side, in cubic metres.
 const VOXEL_VOLUME: f32 = 0.125;
 
-fn terrain_material(material: u32) -> Result<u8, Status> {
+fn terrain_material(material: u32) -> Result<u8, TerrainError> {
     u8::try_from(material)
         .ok()
         .filter(|id| TERRAIN.contains(id))
-        .ok_or(Status::BAD_ARGS)
+        .ok_or(TerrainError::BadMaterial)
 }
 
 #[cfg(test)]

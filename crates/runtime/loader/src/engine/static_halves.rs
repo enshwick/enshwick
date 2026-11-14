@@ -10,7 +10,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick_core::abi::Status;
+use crate::engine::world::WorldError;
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::read;
@@ -142,9 +142,9 @@ impl StaticHalves {
     }
 
     /// The static half of `entity`'s component of the type at `index`: the
-    /// template's set-up data, read-only. [`Status::MISSING`] when the entity
-    /// is not in the world or lacks the type, or on a build without the
-    /// static read.
+    /// template's set-up data, read-only. [`WorldError::Absent`] when the
+    /// entity is not in the world or lacks the type, [`WorldError::Unread`]
+    /// on a build without the static read.
     ///
     /// # Safety
     ///
@@ -158,15 +158,15 @@ impl StaticHalves {
         world: usize,
         index: *const u16,
         entity: u32,
-    ) -> Result<*const u8, Status> {
-        let read_static = self.read_static.ok_or(Status::MISSING)?;
+    ) -> Result<*const u8, WorldError> {
+        let read_static = self.read_static.ok_or(WorldError::Unread)?;
         // SAFETY: `read_static` is the table's `ecs.component_read_static`,
         // which reads the world's entity map and the entity's record without
         // a lock; the caller guarantees a live world and the index of a type
         // with a static half.
         let data = unsafe { read_static(core::ptr::with_exposed_provenance(world), index, entity) };
         if data.is_null() {
-            Err(Status::MISSING)
+            Err(WorldError::Absent)
         } else {
             Ok(data)
         }
@@ -255,9 +255,9 @@ mod tests {
         // SAFETY: the read is refused before any call, so neither the world
         // nor the index is read.
         let read = unsafe { halves(None).read(0, &raw const index, 7) };
-        assert_eq!(read, Err(Status::MISSING));
+        assert_eq!(read, Err(WorldError::Unread));
         // SAFETY: `no_read` reads nothing and answers null.
         let read = unsafe { halves(Some(no_read)).read(0, &raw const index, 7) };
-        assert_eq!(read, Err(Status::MISSING), "an entity without the type");
+        assert_eq!(read, Err(WorldError::Absent), "an entity without the type");
     }
 }

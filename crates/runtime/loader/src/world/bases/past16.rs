@@ -362,9 +362,8 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
     {
         return;
     }
-    let status = crate::engine::code::register_all(sites.patches.clone(), text);
-    if !status.is_ok() {
-        let why = format!("were refused ({})", status.0);
+    if let Err(error) = crate::engine::code::register_all(sites.patches.clone(), text) {
+        let why = format!("were refused ({error})");
         let _off = loader.fuse_off(&PAST16, "the size patches", &why);
         return;
     }

@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering, fence};
 use std::time::Instant;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{HookFlags, Side, Status};
+use enshwick_core::abi::{HookFlags, Side};
 use enshwick_gamedata::catalogue;
 
 use crate::engine::ecs::Components;
@@ -346,16 +346,21 @@ crate::engine::chains::chain_detour! {
     }
 }
 
-/// The local player's held mask, or why not: [`Status::MISSING`] while no
-/// step read it for [`FRESH_MS`], on a server or on a build without it.
-/// The first ask starts the reads, so it answers [`Status::MISSING`].
-pub(crate) fn held() -> Result<u64, Status> {
+/// The local player's held mask is unread: no step read it for
+/// [`FRESH_MS`], on a server or on a build without it.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("the held controls are not read")]
+pub(crate) struct HeldError;
+
+/// The local player's held mask, or [`HeldError`] while it is unread. The
+/// first ask starts the reads, so it answers [`HeldError`].
+pub(crate) fn held() -> Result<u64, HeldError> {
     if !STATE.asked.load(Ordering::Relaxed) {
         STATE.asked.store(true, Ordering::Relaxed);
     }
     let read = STATE.read_ms.load(Ordering::Acquire);
     if read == 0 || FUSE.is_off() || now_ms().saturating_sub(read) > FRESH_MS {
-        return Err(Status::MISSING);
+        return Err(HeldError);
     }
     Ok(STATE.bits.load(Ordering::Relaxed))
 }
@@ -418,7 +423,7 @@ mod tests {
             !STATE.asked.load(Ordering::Relaxed),
             "the detour reads nothing"
         );
-        assert_eq!(held(), Err(Status::MISSING));
+        assert_eq!(held(), Err(HeldError));
         assert!(STATE.asked.load(Ordering::Relaxed));
     }
 

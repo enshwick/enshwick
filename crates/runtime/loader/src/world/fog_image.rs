@@ -154,11 +154,13 @@ impl FogShape {
 }
 
 /// Why a read of the image is refused.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ReadError {
     /// The box leaves the image.
+    #[error("the box leaves the image")]
     Outside,
     /// The buffer is smaller than the box.
+    #[error("the buffer is smaller than the box")]
     Short,
 }
 

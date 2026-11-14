@@ -86,21 +86,18 @@ crate::engine::chains::chain_detour! {
         let Some(limits) = LIMITS.sealed() else {
             return vanilla;
         };
-        let running = limits
-            .iter()
-            .filter(|f| !crate::engine::loader::is_off(f.owner));
-        chain_limit(flame_level, vanilla, base_limit().zones, running)
+        chain_limit(flame_level, vanilla, base_limit().zones, limits)
     }
 }
 
-/// Runs `filters` in order on the limit of `flame_level`, where the game
-/// allows `vanilla`, each on the count the last one left; the answer is
-/// kept within `zones`.
+/// Runs the `filters` whose mods run, in order, on the limit of
+/// `flame_level`, where the game allows `vanilla`, each on the count the
+/// last one left; the answer is kept within `zones`.
 pub(super) fn chain_limit<'a>(
     flame_level: u32,
     vanilla: u8,
     zones: u32,
-    filters: impl Iterator<Item = &'a LimitFilter>,
+    filters: impl IntoIterator<Item = &'a LimitFilter>,
 ) -> u8 {
     let vanilla_limit = AltarLimit {
         header: enshwick_core::abi::Header::of::<AltarLimit>(),
@@ -110,23 +107,19 @@ pub(super) fn chain_limit<'a>(
         reserved: [0; 2],
     };
     let mut limit = vanilla_limit;
-    for filter in filters {
-        // SAFETY: the owner is not off, so the mod's DLL that holds the
-        // filter stays loaded; the filter gets the user pointer its mod
-        // registered and a limit valid for the call, and the safe layer
-        // catches its panics.
-        crate::engine::profile::call(
-            filter.owner,
-            crate::engine::profile::Feature::Altars,
-            || unsafe {
-                (filter.callback)(&raw mut limit, filter.user());
-            },
-        );
-        limit = AltarLimit {
-            allowed: limit.allowed,
-            ..vanilla_limit
-        };
-    }
+    let _none: Option<(_, ())> =
+        crate::engine::filters::ask(filters, crate::engine::profile::Feature::Altars, |filter| {
+            // SAFETY: the owner runs, so the mod's DLL that holds the filter
+            // stays loaded; the filter gets the user pointer its mod
+            // registered and a limit valid for the call, and the safe layer
+            // catches its panics.
+            filter.call(|filter, user| unsafe { filter(&raw mut limit, user) });
+            limit = AltarLimit {
+                allowed: limit.allowed,
+                ..vanilla_limit
+            };
+            core::ops::ControlFlow::Continue(())
+        });
     limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
 }
 

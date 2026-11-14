@@ -34,7 +34,10 @@ fn an_undo_of_a_placed_prop_that_is_gone_is_refused() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::REFUSED)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::Changed)
+        )
     );
 }
 
@@ -119,7 +122,10 @@ fn a_removed_prop_whose_place_is_taken_is_not_brought_back() {
     run_out(&mut ledger, &mut world);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::REFUSED)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::Changed)
+        )
     );
     assert_eq!(world.props.len(), 1);
 }
@@ -147,7 +153,11 @@ fn a_prop_holding_state_is_not_removed() {
     let info = ledger.info(ME, id).unwrap();
     assert_eq!(
         (info.state, info.reason, info.holds),
-        (TransactionInfo::FAILED, Status::REFUSED, 0b101)
+        (
+            TransactionInfo::FAILED,
+            Some(TransactionError::HoldsState),
+            0b101
+        )
     );
     assert_eq!(world.edits, 0, "refused before the first write");
     assert_eq!(world.props.len(), 1);
@@ -178,7 +188,11 @@ fn a_removal_that_discards_state_goes_ahead_and_its_undo_is_refused() {
     let info = ledger.info(ME, id).unwrap();
     assert_eq!(
         (info.state, info.reason, info.holds),
-        (TransactionInfo::UNDO_REFUSED, Status::REFUSED, 0b1),
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::HoldsState),
+            0b1
+        ),
         "a respawn would come back without what it held"
     );
     assert!(world.props.is_empty());
@@ -198,7 +212,11 @@ fn an_undo_never_destroys_a_placed_prop_that_has_gained_state() {
     let info = ledger.info(ME, id).unwrap();
     assert_eq!(
         (info.state, info.reason, info.holds),
-        (TransactionInfo::UNDO_REFUSED, Status::REFUSED, 0b10)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::HoldsState),
+            0b10
+        )
     );
     assert_eq!(world.props.len(), 1);
 

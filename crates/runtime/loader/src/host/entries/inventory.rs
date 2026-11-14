@@ -7,8 +7,7 @@ use enshwick_core::{Entity, abi as api_frame};
 use crate::engine::conflicts::Mode;
 use crate::host::entries::base::services::exported;
 use crate::host::layer::{
-    Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded, Mod, Out, Text, checked,
-    entries,
+    Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded, Mod, Out, Text, entries,
 };
 
 /// Where every inventory request's required fields end: its op count.
@@ -189,7 +188,7 @@ entries! {
     }
 
     fn inventory_open(loader as Caller) -> Status {
-        checked(crate::inventory::transactions::open(loader))
+        Ok(crate::inventory::transactions::open(loader)?)
     }
 
     fn inventory_submit(
@@ -198,7 +197,7 @@ entries! {
         done: api_frame::InventoryResultFn,
         user: *mut core::ffi::c_void,
     ) -> Status {
-        checked(crate::inventory::transactions::submit(me.loader, me.index, &request, done, user))
+        Ok(crate::inventory::transactions::submit(me.loader, me.index, &request, done, user)?)
     }
 
     fn item_filter(me as Mod, callback: ItemActionFn, user: *mut core::ffi::c_void) -> Status {

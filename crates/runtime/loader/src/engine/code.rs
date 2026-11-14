@@ -12,7 +12,9 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::__private::rules::{patch_fits, spans_overlap as overlaps};
-use enshwick_core::abi::{HookFlags, Status};
+use enshwick_core::abi::HookFlags;
+
+use crate::engine::chains::LinkError;
 use rustc_hash::FxHashMap;
 
 use crate::engine::loader::{Loader, Target};
@@ -358,33 +360,36 @@ pub(crate) fn disk_text(base: u64, rva: usize, len: usize) -> Option<Vec<u8>> {
 
 /// Registers `patch` within `text`; refused once sealed, outside the code,
 /// with lengths that differ or are zero, and over another patch.
-pub(crate) fn register(patch: CodePatch, text: (usize, usize)) -> Status {
+pub(crate) fn register(patch: CodePatch, text: (usize, usize)) -> Result<(), LinkError> {
     register_all(vec![patch], text)
 }
 
 /// Registers every patch of `patches` within `text`, or none of them, on
 /// the terms of [`register`]; patches of one set must not overlap each
 /// other either.
-pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Status {
-    // Sealed first: a late call hears TOO_LATE whatever its arguments.
+pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Result<(), LinkError> {
+    // Sealed first: a late call is too late whatever its arguments.
     if STATE.patches.is_sealed() {
-        return Status::TOO_LATE;
+        return Err(LinkError::Armed);
     }
     if patches
         .iter()
         .any(|p| p.replacement.len() != p.expected.len() || !patch_fits(p.span(), text))
     {
-        return Status::BAD_ARGS;
+        return Err(LinkError::Malformed);
     }
     STATE
         .patches
         .edit(|pending| register_unclashed(pending, patches))
-        .unwrap_or(Status::TOO_LATE)
+        .unwrap_or(Err(LinkError::Armed))
 }
 
 /// Adds `patches` to `pending` unless one overlaps a patch held or an
 /// earlier one of the set, noting the clash between two owners.
-fn register_unclashed(pending: &mut Vec<CodePatch>, patches: Vec<CodePatch>) -> Status {
+fn register_unclashed(
+    pending: &mut Vec<CodePatch>,
+    patches: Vec<CodePatch>,
+) -> Result<(), LinkError> {
     let clash = patches.iter().enumerate().find_map(|(i, patch)| {
         pending
             .iter()
@@ -399,19 +404,19 @@ fn register_unclashed(pending: &mut Vec<CodePatch>, patches: Vec<CodePatch>) -> 
                 feature.clone(),
                 holder,
                 crate::engine::conflicts::Mode::Exclusive,
-                Status::OK,
+                true,
             );
             crate::engine::conflicts::note(
                 feature,
                 patch.owner,
                 crate::engine::conflicts::Mode::Exclusive,
-                Status::REFUSED,
+                false,
             );
         }
-        return Status::REFUSED;
+        return Err(LinkError::Clash);
     }
     pending.extend(patches);
-    Status::OK
+    Ok(())
 }
 
 /// Ends registration and hands over every patch, once: the registry keeps
@@ -780,12 +785,10 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
         needs: Box::new([lookup]),
         ..patch
     };
-    let status = register(patch, range);
-    if !status.is_ok() {
+    if let Err(error) = register(patch, range) {
         crate::log!(
             WARN,
-            "workshop recipe limit kept: its patch at {address:#x} was refused ({})",
-            status.0
+            "workshop recipe limit kept: its patch at {address:#x} was refused ({error})"
         );
         return;
     }

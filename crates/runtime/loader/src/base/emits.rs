@@ -18,7 +18,7 @@
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Status, TeleportRequest};
+use enshwick_core::abi::TeleportRequest;
 use rustc_hash::FxHashMap;
 
 use crate::engine::catalogue::{ids, type_name};
@@ -187,44 +187,76 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
+/// Why an event or a teleport was not raised.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum EmitError {
+    /// The build's table lacks the event's pieces.
+    #[error("this build lacks the events")]
+    Unread,
+    /// No entity world or event stream yet.
+    #[error("no entity world runs")]
+    NoWorld,
+    /// A type mods may not raise.
+    #[error("mods may not raise the type")]
+    NotAllowed,
+    /// Bytes that are not the type's size.
+    #[error("the bytes are not the type's size")]
+    BadSize,
+    /// The engine refused the event or command.
+    #[error("the engine refused the event")]
+    Refused,
+    /// The build lacks the teleport, or the world has no command buffer.
+    #[error("the teleport does not run here")]
+    Unavailable,
+    /// Entity 0, which names none.
+    #[error("no entity")]
+    NoEntity,
+    /// An entity the game's teleport does not move.
+    #[error("the game's teleport does not move the entity")]
+    NotMovable,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// The server's entity world, when the caller is on its game thread.
-fn entity_world() -> Result<usize, Status> {
+fn entity_world() -> Result<usize, EmitError> {
     crate::engine::world::server()?;
     usize::try_from(crate::engine::world::server_world())
         .ok()
         .filter(|&world| world != 0)
-        .ok_or(Status::MISSING)
+        .ok_or(EmitError::NoWorld)
 }
 
 /// Raises the event `bytes` of the allowed type `hash`, its whole reflected
 /// size; the loader stamps it with the game time.
-pub(crate) fn emit(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
-    let allowed = layout.allowed.get(&hash).ok_or(Status::REFUSED)?;
+pub(crate) fn emit(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), EmitError> {
+    let layout = layout(loader).ok_or(EmitError::Unread)?;
+    let allowed = layout.allowed.get(&hash).ok_or(EmitError::NotAllowed)?;
     if usize::try_from(allowed.size).ok() != Some(bytes.len()) {
-        return Err(Status::BAD_ARGS);
+        return Err(EmitError::BadSize);
     }
     push(loader, hash, bytes)
 }
 
 /// Raises the event `bytes` of type `hash` for the loader's own features,
 /// which know the type's consumers; stamped with the game time.
-pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), EmitError> {
+    let layout = layout(loader).ok_or(EmitError::Unread)?;
     if bytes.len() < layout.time_offset + size_of::<i64>() {
-        return Err(Status::BAD_ARGS);
+        return Err(EmitError::BadSize);
     }
     let size = u32::try_from(bytes.len())
         .ok()
         .filter(|&size| size < MAX_EVENT)
-        .ok_or(Status::BAD_ARGS)?;
+        .ok_or(EmitError::BadSize)?;
     let world = entity_world()?;
     // SAFETY: `entity_world` returned the server's non-zero entity world on
     // its game thread between steps, where no system writes it; the pointer
     // to its first event stream sits at the table's `ecs.event_streams`.
     let stream: usize = unsafe { crate::engine::memory::read(world, layout.streams) };
     if stream == 0 {
-        return Err(Status::MISSING);
+        return Err(EmitError::NoWorld);
     }
     // SAFETY: `layout.time` is the table's `world.time`; the entity world
     // lies at the table's `world.entities` inside the live server World, so
@@ -247,7 +279,7 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
         )
     };
     if payload.is_null() {
-        return Err(Status::REFUSED);
+        return Err(EmitError::Refused);
     }
     // SAFETY: `payload` is non-null, checked by the guard before it, and the
     // game's push handed out `size` writable bytes for the event, `size` being
@@ -262,19 +294,19 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
 
 /// Asks the server to teleport an entity after the next step, as its admin
 /// teleport does.
-pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(), Status> {
+pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(), EmitError> {
     crate::engine::world::entity_call(loader)?;
-    let layout = layout(loader).ok_or(Status::UNAVAILABLE)?;
-    let teleport = layout.teleport.ok_or(Status::UNAVAILABLE)?;
+    let layout = layout(loader).ok_or(EmitError::Unavailable)?;
+    let teleport = layout.teleport.ok_or(EmitError::Unavailable)?;
     let world = entity_world()?;
     if request.entity == Entity(0) {
-        return Err(Status::BAD_ARGS);
+        return Err(EmitError::NoEntity);
     }
     let current = crate::engine::world::component(loader, request.entity, layout.transform)?;
     // The game's teleport moves only what counts its teleports, actors and
     // characters; a prop would keep the component and stay.
     if crate::engine::world::component(loader, request.entity, layout.teleport_count).is_err() {
-        return Err(Status::REFUSED);
+        return Err(EmitError::NotMovable);
     }
     let orientation: [f32; 4] = if request.flags & TeleportRequest::ORIENTED == 0 {
         // SAFETY: `component` found the entity's live `CurrentTransform` on
@@ -310,9 +342,9 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     // sits at the table's `ecs.command_buffers`.
     let buffer: usize = unsafe { crate::engine::memory::read(world, layout.command_buffers) };
     if buffer == 0 {
-        return Err(Status::UNAVAILABLE);
+        return Err(EmitError::Unavailable);
     }
-    let size = u32::try_from(layout.record_data + data.len()).map_err(|_| Status::BAD_ARGS)?;
+    let size = u32::try_from(layout.record_data + data.len()).map_err(|_| EmitError::BadSize)?;
     // SAFETY: `layout.append` is the table's `ecs.command_append`, on the
     // non-zero first command buffer checked by the guard before it and its
     // record list at the table's `ecs.command_records`, on the game thread
@@ -327,9 +359,9 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
         )
     };
     if record.is_null() {
-        return Err(Status::REFUSED);
+        return Err(EmitError::Refused);
     }
-    let component_size = u16::try_from(data.len()).map_err(|_| Status::BAD_ARGS)?;
+    let component_size = u16::try_from(data.len()).map_err(|_| EmitError::BadSize)?;
     // SAFETY: `record` is non-null, checked by the guard before it: the game's
     // append handed out `size` writable bytes for the record, which nothing
     // else touches before the next step; the component hash is a `u32` at the

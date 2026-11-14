@@ -206,7 +206,7 @@ fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_
     });
     let dropped = STATE.dropped.load(Ordering::Relaxed);
     let refused = (0..200)
-        .filter(|_| send_to_server(CHANNEL, b"burst") == Err(Status::REFUSED))
+        .filter(|_| send_to_server(CHANNEL, b"burst") == Err(NetError::Throttled))
         .count();
     let admitted = 200 - u64::try_from(refused).unwrap();
     assert!(
@@ -276,7 +276,13 @@ fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no
     // One test, since both read the net's shared state.
     client_carried(CONTROL, &control(WELCOME));
     for _ in 0..200 {
-        assert_eq!(send_to_server(5, b"x"), Err(Status::MISSING), "no link");
+        assert_eq!(
+            send_to_server(5, b"x"),
+            Err(NetError::Carrier(
+                crate::base::carrier::CarrierError::NoLink
+            )),
+            "no link"
+        );
     }
     let tokens = state(|s| s.sending[&server].rate.tokens());
     assert!(tokens >= 39.0, "{tokens}");

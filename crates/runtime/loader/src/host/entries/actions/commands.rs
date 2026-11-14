@@ -3,7 +3,7 @@
 use enshwick_core::abi::{ActionReply, CommandInfo, Header, Level, Status, Str};
 
 use crate::host::layer::guards::in_init;
-use crate::host::layer::{Caller, HeadedOut, List, Mod, SizedListOut, Text, checked, entries};
+use crate::host::layer::{Caller, HeadedOut, List, Mod, SizedListOut, Text, entries};
 
 thread_local! {
     /// The text `run_command` last handed out on this thread.
@@ -63,6 +63,6 @@ entries! {
         if players.len() > crate::ui::windows::MAX_PLAYERS {
             return Err(Status::BAD_ARGS.into());
         }
-        checked(crate::ui::windows::show(me.loader, me.index, id, players, close))
+        Ok(crate::ui::windows::show(me.loader, me.index, id, players, close)?)
     }
 }

@@ -121,17 +121,17 @@ fn ask(
         reason: question.reason,
     };
     let mut reply = Str::EMPTY;
-    // SAFETY: the callback lives in the mod's DLL, which stays loaded; the
-    // safe layer catches its panics. `written` outlives the call.
-    crate::engine::profile::call(
-        registered.owner,
+    let _asked = crate::engine::filters::ask(
+        [&registered],
         crate::engine::profile::Feature::Actions,
-        || unsafe {
-            (registered.callback)(
-                &raw const call,
-                core::ptr::with_exposed_provenance_mut(registered.user),
-                &raw mut reply,
-            );
+        |callback| {
+            // SAFETY: the callback lives in the mod's DLL, which stays loaded
+            // while its mod runs; the safe layer catches its panics.
+            // `written` outlives the call.
+            callback.call(|callback, user| unsafe {
+                callback(&raw const call, user, &raw mut reply);
+            });
+            core::ops::ControlFlow::Break(())
         },
     );
     if written.header.size != 0 {

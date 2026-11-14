@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_core::abi::{Level, PointFn, PointMode, PointVerdict, Status};
+use enshwick_core::abi::{Level, PointFn, PointMode, PointVerdict};
 use enshwick_core::points::{LinkPlace, order};
 use enshwick_core::services::{LayoutError, compare};
 
@@ -484,7 +484,7 @@ impl Sealed {
 }
 
 /// The registry while mods initialise.
-static REGISTRY: Mutex<Registry> = Mutex::new(Registry {
+static STATE: Mutex<Registry> = Mutex::new(Registry {
     defined: Vec::new(),
     pending: Vec::new(),
 });
@@ -495,7 +495,7 @@ static INERT: OnceLock<Vec<Inert>> = OnceLock::new();
 
 /// The registry, for the entry points.
 pub(crate) fn registry() -> std::sync::MutexGuard<'static, Registry> {
-    REGISTRY.relock()
+    STATE.relock()
 }
 
 /// Whether the points are sealed: defining and attaching are over.
@@ -548,19 +548,30 @@ pub(crate) fn rearm(off: impl Fn(ModIndex) -> bool) {
     }
 }
 
+/// Why a mod's point did not run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RunPointError {
+    /// No point has the id.
+    #[error("no point has the id")]
+    Unknown,
+    /// Another mod defined the point.
+    #[error("the point is another mod's")]
+    NotOwner,
+}
+
 /// Runs the point `id`, which the mod at `asker` defined, over `value`.
 pub(crate) fn run(
     asker: usize,
     id: u32,
     input: *const core::ffi::c_void,
     value: *mut core::ffi::c_void,
-) -> Result<PointVerdict, Status> {
+) -> Result<PointVerdict, RunPointError> {
     let Some(points) = SEALED.get() else {
         return Ok(PointVerdict::PASS);
     };
-    let point = points.get(id as usize).ok_or(Status::BAD_ARGS)?;
+    let point = points.get(id as usize).ok_or(RunPointError::Unknown)?;
     if point.owner != ModIndex::new(asker) {
-        return Err(Status::REFUSED);
+        return Err(RunPointError::NotOwner);
     }
     Ok(point.run(
         input,

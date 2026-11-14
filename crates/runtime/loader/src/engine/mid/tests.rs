@@ -694,7 +694,7 @@ fn measures_the_stub_cost() {
         }
     }
     let mut mids = Mids::default();
-    assert_eq!(mids.add(0x10, link(ModIndex::new(0), empty, 0)), Status::OK);
+    assert_eq!(mids.add(0x10, link(ModIndex::new(0), empty, 0)), Ok(()));
     let site = core::ptr::from_ref(mids.sites(|_| false)[0]).expose_provenance();
     let vectors = Vectors::current();
     let alone = per_call(hook_mark(plain_clear, callback, vectors));
@@ -706,7 +706,7 @@ fn measures_the_stub_cost() {
     );
     let mut mids = Mids::default();
     let ours = link(ModIndex::LOADER, empty, i32::MIN);
-    assert_eq!(mids.add_fused(0x10, ours, Some(&MEASURED)), Status::OK);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&MEASURED)), Ok(()));
     let site = core::ptr::from_ref(mids.sites(|_| false)[0]).expose_provenance();
     let fused = per_call(hook_mark_with(plain_clear, dispatching, site, vectors));
     println!(
@@ -774,11 +774,11 @@ fn a_panicking_handler_changes_nothing_and_is_skipped_once_its_mod_is_off() {
     let mut mids = Mids::default();
     assert_eq!(
         mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
-        Status::OK
+        Ok(())
     );
     assert_eq!(
         mids.add(0x10, link(ModIndex::new(0), panicking, -1)),
-        Status::OK
+        Ok(())
     );
     let off: fn(ModIndex) -> bool =
         |owner| owner == ModIndex::new(0) && FAULTED.load(Ordering::Relaxed);
@@ -812,7 +812,7 @@ unsafe extern "system" fn blame(_registers: *mut Registers, _user: *mut c_void) 
 #[test]
 fn a_handler_runs_as_its_mod_s_mid_hook_for_crash_blame() {
     let mut mids = Mids::default();
-    assert_eq!(mids.add(0x10, link(ModIndex::new(3), blame, 0)), Status::OK);
+    assert_eq!(mids.add(0x10, link(ModIndex::new(3), blame, 0)), Ok(()));
     let site = mids.sites(|_| false)[0];
     let target = function(&SUM);
     install(
@@ -850,7 +850,7 @@ unsafe extern "system" fn host_of(_registers: *mut Registers, _user: *mut c_void
 fn a_data_pack_s_handler_runs_as_the_pack_found_at_arming() {
     let pack = ModIndex::new(4);
     let mut mids = Mids::default();
-    assert_eq!(mids.add(0x10, link(pack, host_of, 0)), Status::OK);
+    assert_eq!(mids.add(0x10, link(pack, host_of, 0)), Ok(()));
     let site = mids.sites_as(|_| false, |owner| (owner == pack).then(|| owner.handle()))[0];
     let target = function(&SUM);
     install(
@@ -880,32 +880,32 @@ fn duplicate_and_exclusive_handlers_are_refused() {
         flags: HookFlags::EXCLUSIVE,
         ..link(ModIndex::new(0), add_hundred, 0)
     };
-    assert_eq!(mids.add(0x10, exclusive), Status::OK);
+    assert_eq!(mids.add(0x10, exclusive), Ok(()));
     assert_eq!(
         mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
-        Status::REFUSED
+        Err(LinkError::Clash)
     );
     assert_eq!(
         mids.add(0x20, link(ModIndex::new(1), add_hundred, 0)),
-        Status::OK
+        Ok(())
     );
     assert_eq!(
         mids.add(0x20, link(ModIndex::new(1), add_hundred, 0)),
-        Status::REFUSED
+        Err(LinkError::Clash)
     );
     assert_eq!(
         mids.add(0x20, link(ModIndex::new(2), add_hundred, 0)),
-        Status::OK
+        Ok(())
     );
     assert_eq!(
         mids.add(0, link(ModIndex::new(3), add_hundred, 0)),
-        Status::BAD_ARGS
+        Err(LinkError::Malformed)
     );
     assert_eq!(mids.owners(0x20), [ModIndex::new(1), ModIndex::new(2)]);
     mids.seal();
     assert_eq!(
         mids.add(0x30, link(ModIndex::new(3), add_hundred, 0)),
-        Status::TOO_LATE
+        Err(LinkError::Armed)
     );
     assert_eq!(mids.len(), 2);
 }
@@ -922,10 +922,10 @@ fn a_loader_handler_of_a_feature_that_turns_off_is_passed_and_a_mod_s_still_runs
     static GLOW: Fuse = Fuse::new("mid glow");
     let mut mids = Mids::default();
     let ours = link(ModIndex::LOADER, add_hundred, i32::MIN);
-    assert_eq!(mids.add_fused(0x10, ours, Some(&GLOW)), Status::OK);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&GLOW)), Ok(()));
     assert_eq!(
         mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
-        Status::OK
+        Ok(())
     );
     mids.seal();
     let site = mids.sites(|_| false)[0];
@@ -943,11 +943,11 @@ fn sealing_drops_the_handlers_of_features_already_off_and_addresses_left_empty()
     let mut mids = Mids::default();
     let first = link(ModIndex::LOADER, add_hundred, i32::MIN);
     let second = link(ModIndex::LOADER, add_hundred, i32::MIN);
-    assert_eq!(mids.add_fused(0x10, first, Some(&LAMP)), Status::OK);
-    assert_eq!(mids.add_fused(0x20, second, Some(&LAMP)), Status::OK);
+    assert_eq!(mids.add_fused(0x10, first, Some(&LAMP)), Ok(()));
+    assert_eq!(mids.add_fused(0x20, second, Some(&LAMP)), Ok(()));
     assert_eq!(
         mids.add(0x20, link(ModIndex::new(0), add_hundred, 0)),
-        Status::OK
+        Ok(())
     );
     LAMP.blow("a test");
     mids.seal();
@@ -970,10 +970,10 @@ fn the_features_at_an_address_are_the_loader_s_links_only() {
     static WICK: Fuse = Fuse::new("mid wick");
     let mut mids = Mids::default();
     let ours = link(ModIndex::LOADER, add_hundred, i32::MIN);
-    assert_eq!(mids.add_fused(0x10, ours, Some(&WICK)), Status::OK);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&WICK)), Ok(()));
     assert_eq!(
         mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
-        Status::OK
+        Ok(())
     );
     let features = mids.features_at(0x10);
     assert_eq!(features.len(), 1);

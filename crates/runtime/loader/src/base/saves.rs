@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_core::abi::{Event, HookFlags, Side, Status};
+use enshwick_core::abi::{Event, HookFlags, Side};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -32,7 +32,7 @@ use enshwick_base::Relock;
 
 mod holds;
 
-pub(crate) use holds::{hold, shut_down, shutting_down};
+pub(crate) use holds::{HoldSavesError, hold, shut_down, shutting_down};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -134,6 +134,9 @@ struct State {
     seen: Mutex<Vec<&'static str>>,
     /// Whether a save was under way at the last step.
     under_way: AtomicBool,
+    /// The folder where Steam keeps the running account's cloud files, once
+    /// found; one account runs for the process.
+    steam_folder: OnceLock<PathBuf>,
 }
 
 impl State {
@@ -142,6 +145,7 @@ impl State {
             keys: Mutex::new(Keys::CLOSED),
             seen: Mutex::new(Vec::new()),
             under_way: AtomicBool::new(false),
+            steam_folder: OnceLock::new(),
         }
     }
 
@@ -426,12 +430,11 @@ fn full_path(
 /// The folder where Steam keeps the running account's cloud files of the
 /// game, `userdata/<account>/<app>/remote/`; found once Steam has started.
 fn steam_saves() -> Option<&'static Path> {
-    static FOLDER: OnceLock<PathBuf> = OnceLock::new();
-    if let Some(folder) = FOLDER.get() {
+    if let Some(folder) = STATE.steam_folder.get() {
         return Some(folder);
     }
     let folder = cloud_folder(&steam_user_data()?)?;
-    Some(FOLDER.get_or_init(|| folder))
+    Some(STATE.steam_folder.get_or_init(|| folder))
 }
 
 /// The cloud folder beside the account's `local/` folder that
@@ -496,10 +499,33 @@ pub(crate) fn stem(key: &'static str) -> &'static str {
     key.rsplit(['\\', '/']).next().unwrap_or(key)
 }
 
+/// Why a save was not asked for, or its information not read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum SaveError {
+    /// The build's table lacks the save's pieces.
+    #[error("this build lacks the saves")]
+    Unread,
+    /// The server refuses saves now, or has no save system yet.
+    #[error("the server refuses saves now")]
+    Blocked,
+    /// The save system does not allow a save now.
+    #[error("the save system does not allow a save now")]
+    NotAllowed,
+    /// No world runs.
+    #[error("no world runs")]
+    NoWorld,
+    /// The save's information did not read.
+    #[error("the save does not read")]
+    Unreadable,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// Asks the server to save the world now; `Event::WORLD_SAVED` follows when
 /// the save is on disk. A save already under way counts as asked.
-pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn request(loader: &Loader) -> Result<(), SaveError> {
+    let layout = layout(loader).ok_or(SaveError::Unread)?;
     let server = crate::engine::world::server()?;
     // SAFETY: `world::server` returned the live server on its game thread
     // between steps, where nothing else writes it; its byte that refuses
@@ -510,7 +536,7 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
     // `server.save_system`.
     let system: usize = unsafe { crate::engine::memory::read(server, layout.save_system) };
     if blocked != 0 || system == 0 {
-        return Err(Status::REFUSED);
+        return Err(SaveError::Blocked);
     }
     // SAFETY: `system` is non-zero, checked by the guard before it, and is the
     // live server's save system, read on its game thread; its phase byte sits
@@ -524,7 +550,7 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
         return Ok(());
     }
     if flags & SAVE_ALLOWED == 0 {
-        return Err(Status::REFUSED);
+        return Err(SaveError::NotAllowed);
     }
     // SAFETY: `layout.request` is the table's `server.save_request`, called
     // with the live server on its game thread between steps
@@ -575,9 +601,9 @@ pub(crate) fn after_step(loader: &Loader) {
 /// The save of the world the server runs, for mods.
 pub(crate) fn info(
     loader: &Loader,
-) -> Result<Option<crate::base::world_folders::SaveInfo>, Status> {
+) -> Result<Option<crate::base::world_folders::SaveInfo>, SaveError> {
     static UNREAD: crate::base::wire::Drops = crate::base::wire::Drops::new();
-    let key = world_key(loader).ok_or(Status::MISSING)?;
+    let key = world_key(loader).ok_or(SaveError::NoWorld)?;
     crate::base::world_folders::save_info(key).map_err(|e| {
         if let Some(total) = UNREAD.add(1) {
             crate::log!(
@@ -585,7 +611,7 @@ pub(crate) fn info(
                 "world {key}: its save was not read ({total} times): {e}"
             );
         }
-        Status::REFUSED
+        SaveError::Unreadable
     })
 }
 

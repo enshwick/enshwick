@@ -26,11 +26,27 @@ type Source = crate::engine::loader::Registered<StatusFn>;
 /// The mods' status sources, added in their init and sealed with the
 /// loader's other registries.
 static SOURCES: Registry<Source> = Registry::new();
-static STARTED: OnceLock<Instant> = OnceLock::new();
+
+/// What the summary measures from, kept for the process.
+struct State {
+    /// The loader's start, for the uptime.
+    started: OnceLock<Instant>,
+    /// The readings the profile window starts from.
+    baseline: Mutex<Baseline>,
+}
+
+static STATE: State = State {
+    started: OnceLock::new(),
+    baseline: Mutex::new(Baseline {
+        at: None,
+        hops: rustc_hash::FxHashMap::with_hasher(rustc_hash::FxBuildHasher),
+        buckets: Vec::new(),
+    }),
+};
 
 /// Marks the loader's start, for the uptime.
 pub(crate) fn mark_start() {
-    let _first = STARTED.set(Instant::now());
+    let _first = STATE.started.set(Instant::now());
 }
 
 /// Adds mod `owner`'s status source.
@@ -156,7 +172,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         version: env!("CARGO_PKG_VERSION").to_owned(),
         game: loader.build.name.clone(),
         hosting: loader.side == Side::SERVER || crate::engine::world::hosting(),
-        uptime: STARTED.get().map_or(Duration::ZERO, Instant::elapsed),
+        uptime: STATE.started.get().map_or(Duration::ZERO, Instant::elapsed),
         last_crash: crate::engine::crash::last().map(str::to_owned),
         at: crate::engine::diag::now(),
         mods,
@@ -222,12 +238,6 @@ struct Baseline {
     buckets: Vec<(u64, u64)>,
 }
 
-static BASELINE: Mutex<Baseline> = Mutex::new(Baseline {
-    at: None,
-    hops: rustc_hash::FxHashMap::with_hasher(rustc_hash::FxBuildHasher),
-    buckets: Vec::new(),
-});
-
 /// Every chain with timed thunks, as the profile reads it, since `base`.
 fn chain_readings(
     loader: &Loader,
@@ -284,7 +294,7 @@ pub(crate) fn reset_profile(loader: &Loader) {
             }
         }
     }
-    *BASELINE.relock() = Baseline {
+    *STATE.baseline.relock() = Baseline {
         at: Some(Instant::now()),
         hops,
         buckets: crate::engine::profile::buckets(),
@@ -299,7 +309,7 @@ pub(crate) fn costs(
     if !crate::engine::diag::counting() {
         return None;
     }
-    let base = BASELINE.relock();
+    let base = STATE.baseline.relock();
     let chains = {
         let chains = loader.chains.relock();
         chain_readings(loader, &chains, &base)
@@ -320,7 +330,7 @@ pub(crate) fn costs(
         &base.buckets,
         name,
     );
-    let since = base.at.or_else(|| STARTED.get().copied())?;
+    let since = base.at.or_else(|| STATE.started.get().copied())?;
     Some((costs, since.elapsed(), base.at.is_some()))
 }
 

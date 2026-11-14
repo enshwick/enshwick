@@ -81,9 +81,8 @@ fn a_build_without_the_chat_layout_lists_the_chat_lines_off_and_refuses_mods_lin
     let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
     link(loader);
     assert!(CHAT_FUSE.is_off());
-    assert_eq!(
-        send(0, "hello"),
-        Status::MISSING,
+    assert!(
+        send_for_mod(0, "hello").is_err(),
         "mods' lines stay refused"
     );
     let off = crate::base::off_reason(&CHAT_FUSE);

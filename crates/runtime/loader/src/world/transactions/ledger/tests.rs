@@ -1,8 +1,9 @@
-use enshwick_core::abi::{Header, Status, TerrainEdit, TransactionInfo};
+use enshwick_core::abi::{Header, TerrainEdit, TransactionInfo};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{BRICK_VOXELS, Brick, Change, Image, Ledger, Limits, Voxels};
 use crate::engine::mod_index::ModIndex;
+use crate::world::transactions::TransactionError;
 use crate::world::transactions::block::Block;
 use crate::world::transactions::cover;
 use crate::world::transactions::paste::{Erase, Paste, Region};
@@ -37,7 +38,7 @@ struct World {
     /// A column the next edit unloads once it has written.
     unload_on_edit: Option<Brick>,
     /// What the next restore fails with.
-    restore_fails: Option<Status>,
+    restore_fails: Option<TransactionError>,
     /// The refusal each actor meets, by entity; none for the rest.
     refusals: FxHashMap<u32, u32>,
     /// The boxes asked about, in metres.
@@ -114,7 +115,7 @@ impl World {
 }
 
 impl Voxels for World {
-    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status> {
+    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, TransactionError> {
         self.last_entity += 1;
         self.props.insert(self.last_entity, *prop);
         if let Some(&kind) = self.trigger_items.get(&prop.item) {
@@ -132,14 +133,21 @@ impl Voxels for World {
         self.owned.push(entity);
     }
 
-    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {
-        if self.landing.contains(&entity) || self.facts_missing {
-            return Err(Status::MISSING);
+    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), TransactionError> {
+        if self.facts_missing {
+            return Err(TransactionError::Unavailable);
+        }
+        if self.landing.contains(&entity) {
+            return Err(TransactionError::Gone);
         }
         if self.creatures.contains(&entity) {
-            return Err(Status::NOT_A_PROP);
+            return Err(TransactionError::NotAProp);
         }
-        let prop = self.props.get(&entity).copied().ok_or(Status::NOT_A_PROP)?;
+        let prop = self
+            .props
+            .get(&entity)
+            .copied()
+            .ok_or(TransactionError::NotAProp)?;
         let trigger = self.kinds.get(&entity).copied().unwrap_or(0);
         Ok((
             prop,
@@ -147,14 +155,14 @@ impl Voxels for World {
         ))
     }
 
-    fn hold_prop(&mut self, entity: u32) -> Result<(), Status> {
+    fn hold_prop(&mut self, entity: u32) -> Result<(), TransactionError> {
         self.held.insert(entity);
         Ok(())
     }
 
-    fn still_held(&mut self, entity: u32) -> Result<(), Status> {
+    fn still_held(&mut self, entity: u32) -> Result<(), TransactionError> {
         if self.filter_off || !self.held.contains(&entity) {
-            return Err(Status::MISSING);
+            return Err(TransactionError::Gone);
         }
         Ok(())
     }
@@ -163,30 +171,35 @@ impl Voxels for World {
         self.held.remove(&entity);
     }
 
-    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status> {
+    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, TransactionError> {
         if self.landing.contains(&entity) || !self.props.contains_key(&entity) {
-            return Err(Status::MISSING);
+            return Err(TransactionError::Gone);
         }
         Ok(self.triggers.get(&entity).cloned())
     }
 
-    fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status> {
+    fn prop_at(&mut self, prop: &Prop) -> Result<bool, TransactionError> {
         Ok(self.props.values().any(|there| there == prop))
     }
 
-    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), Status> {
-        self.props.remove(&entity).ok_or(Status::MISSING)?;
+    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), TransactionError> {
+        self.props.remove(&entity).ok_or(TransactionError::Gone)?;
         self.held.remove(&entity);
         self.announced.push(("prop removed", actor));
         Ok(())
     }
 
-    fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status> {
+    fn rights(
+        &mut self,
+        actor: u32,
+        min: [f64; 3],
+        max: [f64; 3],
+    ) -> Result<u32, TransactionError> {
         self.asked.push((min, max));
         Ok(self.refusals.get(&actor).copied().unwrap_or(0))
     }
 
-    fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status> {
+    fn place(&mut self, block: &Block, actor: u32) -> Result<(), TransactionError> {
         let word = u16::from(block.material) | 0xff00;
         for brick in block.region.bricks().iter() {
             let mut image = self.brick(brick);
@@ -206,25 +219,26 @@ impl Voxels for World {
         self.announced.push(("torn down", actor));
     }
 
-    fn extent(&mut self) -> Result<WorldExtent, Status> {
-        WorldExtent::from_grid(32 << 3 | 32 << 35, self.pages, self.pages).ok_or(Status::MISSING)
+    fn extent(&mut self) -> Result<WorldExtent, TransactionError> {
+        WorldExtent::from_grid(32 << 3 | 32 << 35, self.pages, self.pages)
+            .ok_or(TransactionError::Unavailable)
     }
 
-    fn loaded(&mut self, brick: Brick) -> Result<(), Status> {
+    fn loaded(&mut self, brick: Brick) -> Result<(), TransactionError> {
         let [x, _, z] = brick.0;
         if self.unloaded.contains(&[x, z]) {
-            Err(Status::NOT_LOADED)
+            Err(TransactionError::NotLoaded)
         } else {
             Ok(())
         }
     }
 
-    fn read(&mut self, brick: Brick) -> Result<Image, Status> {
+    fn read(&mut self, brick: Brick) -> Result<Image, TransactionError> {
         self.loaded(brick)?;
         Ok(Box::new(self.brick(brick)))
     }
 
-    fn edit(&mut self, edit: &TerrainEdit) -> Result<(), Status> {
+    fn edit(&mut self, edit: &TerrainEdit) -> Result<(), TransactionError> {
         self.edits += 1;
         for brick in cover::check(edit)?.iter() {
             self.bricks
@@ -236,7 +250,7 @@ impl Voxels for World {
         Ok(())
     }
 
-    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status> {
+    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), TransactionError> {
         if let Some(reason) = self.restore_fails.take() {
             return Err(reason);
         }
@@ -266,12 +280,12 @@ fn terrain(at: f32) -> TerrainEdit {
     }
 }
 
-fn state(ledger: &Ledger, id: u64) -> (u32, Status) {
+fn state(ledger: &Ledger, id: u64) -> (u32, Option<TransactionError>) {
     let info = ledger.info(ME, id).unwrap();
     (info.state, info.reason)
 }
 
-fn applied(ledger: &Ledger, id: u64) -> u32 {
+fn applied(ledger: &Ledger, id: u64) -> usize {
     ledger.info(ME, id).unwrap().applied
 }
 

@@ -1,22 +1,54 @@
 //! The checks a mod's widget passes before the loader draws it: the order
 //! of its window's start and end, and the numbers and options it hands in.
 
-use enshwick_core::abi::{Status, UiWidget};
+use enshwick_core::abi::UiWidget;
 
-/// Whether a widget of `kind` may draw now: `Status::OK`, or why not.
+/// Why a mod's widget was not drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum WidgetError {
+    /// A window started while one is open, an end without one, or another
+    /// widget outside a window.
+    #[error("the widget is out of its window's order")]
+    OutOfOrder,
+    /// A widget kind the loader has none of.
+    #[error("no such widget kind")]
+    Unknown,
+    /// The interface's engine is not made yet.
+    #[error("the interface does not run yet")]
+    NoEngine,
+    /// Called outside the mod's own frame callback.
+    #[error("called outside the mod's frame callback")]
+    WrongThread,
+    /// A text, number or option the widget does not take.
+    #[error("the widget is malformed")]
+    Malformed,
+    /// A HUD widget of a kind the HUD does not show, or a HUD full.
+    #[error("the HUD does not take the widget")]
+    HudRefused,
+    /// What the widget shows is not there: a sound or a key hint.
+    #[error("what the widget shows is not there")]
+    Unavailable,
+}
+
+/// Whether a widget of `kind` may draw now, or why not.
 ///
 /// A window starts only while none is open (`window_open`) and ends only
 /// an open one; a sound plays anywhere, and every other widget draws inside
 /// the window.
-#[must_use]
-pub const fn order(kind: u32, window_open: bool) -> Status {
+///
+/// # Errors
+///
+/// [`WidgetError::OutOfOrder`] out of the window's order,
+/// [`WidgetError::Unknown`] for a kind the loader has none of.
+pub const fn order(kind: u32, window_open: bool) -> Result<(), WidgetError> {
     match kind {
-        UiWidget::WINDOW if window_open => Status::REFUSED,
-        UiWidget::END if !window_open => Status::REFUSED,
-        UiWidget::WINDOW | UiWidget::END | UiWidget::SOUND | UiWidget::PLAY => Status::OK,
-        _ if !window_open => Status::REFUSED,
-        kind if needs_window(kind) => Status::OK,
-        _ => Status::MISSING,
+        UiWidget::WINDOW if window_open => Err(WidgetError::OutOfOrder),
+        UiWidget::END if !window_open => Err(WidgetError::OutOfOrder),
+        UiWidget::WINDOW | UiWidget::END | UiWidget::SOUND | UiWidget::PLAY => Ok(()),
+        _ if !window_open => Err(WidgetError::OutOfOrder),
+        kind if needs_window(kind) => Ok(()),
+        _ => Err(WidgetError::Unknown),
     }
 }
 
@@ -72,10 +104,10 @@ mod tests {
 
     #[test]
     fn a_window_starts_once_and_ends_only_when_open() {
-        assert_eq!(order(UiWidget::WINDOW, false), Status::OK);
-        assert_eq!(order(UiWidget::WINDOW, true), Status::REFUSED);
-        assert_eq!(order(UiWidget::END, true), Status::OK);
-        assert_eq!(order(UiWidget::END, false), Status::REFUSED);
+        assert_eq!(order(UiWidget::WINDOW, false), Ok(()));
+        assert_eq!(order(UiWidget::WINDOW, true), Err(WidgetError::OutOfOrder));
+        assert_eq!(order(UiWidget::END, true), Ok(()));
+        assert_eq!(order(UiWidget::END, false), Err(WidgetError::OutOfOrder));
     }
 
     #[test]
@@ -89,12 +121,12 @@ mod tests {
             UiWidget::PROGRESS,
             UiWidget::INPUT_HINT,
         ] {
-            assert_eq!(order(kind, true), Status::OK, "{kind}");
-            assert_eq!(order(kind, false), Status::REFUSED, "{kind}");
+            assert_eq!(order(kind, true), Ok(()), "{kind}");
+            assert_eq!(order(kind, false), Err(WidgetError::OutOfOrder), "{kind}");
         }
         for sound in [UiWidget::SOUND, UiWidget::PLAY] {
-            assert_eq!(order(sound, false), Status::OK, "{sound}");
-            assert_eq!(order(sound, true), Status::OK, "{sound}");
+            assert_eq!(order(sound, false), Ok(()), "{sound}");
+            assert_eq!(order(sound, true), Ok(()), "{sound}");
         }
     }
 
@@ -116,9 +148,9 @@ mod tests {
 
     #[test]
     fn an_unknown_widget_is_missing_inside_the_window_and_refused_outside() {
-        assert_eq!(order(0, true), Status::MISSING);
-        assert_eq!(order(u32::MAX, true), Status::MISSING);
-        assert_eq!(order(u32::MAX, false), Status::REFUSED);
+        assert_eq!(order(0, true), Err(WidgetError::Unknown));
+        assert_eq!(order(u32::MAX, true), Err(WidgetError::Unknown));
+        assert_eq!(order(u32::MAX, false), Err(WidgetError::OutOfOrder));
     }
 
     #[test]

@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use enshwick_core::abi::{CommandInfo, Header, Status, Str};
+use enshwick_core::abi::{CommandInfo, Header, Str};
 
 use enshwick_core::command_names::{alias_asked, check};
 
@@ -267,30 +267,44 @@ pub(crate) fn after_step(loader: &Loader) {
     }
 }
 
+/// Why a command line for a remote caller did not run.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum RunCommandError {
+    /// An empty line, or one over [`MAX_LINE`] bytes.
+    #[error("the line is empty or too long")]
+    BadLine,
+    /// Off the server's game thread.
+    #[error("not on the server's game thread")]
+    WrongThread,
+    /// No running mod's commands have the line's first word.
+    #[error("no running mod has this command")]
+    Unknown,
+}
+
 /// Runs the command line `line` for the remote caller `label` with
 /// `permissions`, on the server's game thread; the mod's answer.
 ///
 /// # Errors
 ///
-/// [`Status::WRONG_THREAD`] off the server's game thread,
-/// [`Status::BAD_ARGS`] for an empty line or one over [`MAX_LINE`] bytes,
-/// [`Status::MISSING`] when no running mod's commands have its first word.
+/// [`RunCommandError`] off the server's game thread, for an empty line or
+/// one over [`MAX_LINE`] bytes, or when no running mod's commands have its
+/// first word.
 pub(crate) fn run_remote(
     loader: &Loader,
     line: &str,
     label: &str,
     permissions: u32,
-) -> Result<crate::actions::player_actions::Answer, Status> {
+) -> Result<crate::actions::player_actions::Answer, RunCommandError> {
     if line.len() > MAX_LINE || line.trim().is_empty() {
-        return Err(Status::BAD_ARGS);
+        return Err(RunCommandError::BadLine);
     }
-    crate::engine::world::server().map_err(|_| Status::WRONG_THREAD)?;
-    let (owner, rest) = owner_of(loader, line).ok_or(Status::MISSING)?;
+    crate::engine::world::server().map_err(|_| RunCommandError::WrongThread)?;
+    let (owner, rest) = owner_of(loader, line).ok_or(RunCommandError::Unknown)?;
     let caller = remote_caller(label, permissions);
     crate::log!(DEBUG, "{label} runs the command {line}");
     let word = word(line);
     crate::actions::player_actions::command(loader, owner, Path::Remote, &caller, 0, (&word, rest))
-        .ok_or(Status::MISSING)
+        .ok_or(RunCommandError::Unknown)
 }
 
 /// The running mods' command sets with their mod ids, in load order.

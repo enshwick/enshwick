@@ -7,7 +7,7 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use arc_swap::ArcSwap;
-use enshwick_core::abi::{Level, RecipeRuleKind, Side, Status};
+use enshwick_core::abi::{Level, RecipeRuleKind, Side};
 use enshwick_core::content::items::{ITEM_REGISTRY, ItemLayout};
 use enshwick_core::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use enshwick_core::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
@@ -123,11 +123,17 @@ impl Recipes {
     }
 
     /// Mod `owner`'s rule: added, or taken back.
-    fn rule(&self, owner: ModIndex, kind: Kind, name: &str, disable: bool) -> Status {
+    fn rule(
+        &self,
+        owner: ModIndex,
+        kind: Kind,
+        name: &str,
+        disable: bool,
+    ) -> Result<(), RecipeRuleError> {
         // Mods' init runs before `init` resolves the layout: keep their rules
         // until then, and refuse only on a build known to lack it.
         if self.layout.get().is_some_and(Option::is_none) {
-            return Status::MISSING;
+            return Err(RecipeRuleError::Unavailable);
         }
         self.live(|l| {
             l.mods
@@ -137,7 +143,7 @@ impl Recipes {
             }
         });
         self.changed();
-        Status::OK
+        Ok(())
     }
 
     /// Forgets the server list when the client's hosted game ends; the
@@ -187,7 +193,7 @@ impl Recipes {
     }
 }
 
-static RECIPES: LazyLock<Recipes> = LazyLock::new(Recipes::new);
+static STATE: LazyLock<Recipes> = LazyLock::new(Recipes::new);
 /// The switch of the disabled recipes: off where the build does not reflect
 /// or read the recipe registry, and the rules mods set in init then do
 /// nothing.
@@ -195,7 +201,7 @@ static DISABLED_FUSE: Fuse = Fuse::new("disabled recipes");
 
 /// Sets disabled recipes up: the layout and the lookup hook. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
-    if !RECIPES.keep_layout(
+    if !STATE.keep_layout(
         loader,
         RecipeLayout::resolve(&Reflected(&loader.reflection)),
     ) {
@@ -205,7 +211,7 @@ pub(crate) fn init(loader: &'static Loader) {
     // see it, disabled recipes stay in the crafting menus and the rest of
     // them holds.
     let _linked = crate::engine::code::link_recipe_lookup(loader);
-    RECIPES.changed();
+    STATE.changed();
 }
 
 /// The world's own recipe file, while a world runs.
@@ -225,18 +231,18 @@ fn stamp(path: &Path) -> Stamp {
 /// Looks at the world's recipe file and applies the rules when anything
 /// changed; on the settings thread, once a second.
 pub(crate) fn poll(loader: &Loader) {
-    if RECIPES.layout().is_none() || DISABLED_FUSE.is_off() {
+    if STATE.layout().is_none() || DISABLED_FUSE.is_off() {
         return;
     }
     let world = world_path();
     let world_stamp = world.as_deref().and_then(stamp);
     let seen = (world, world_stamp);
-    let moved = RECIPES.live(|l| {
+    let moved = STATE.live(|l| {
         let moved = l.stamps != seen;
         l.stamps = seen;
         moved
     });
-    if (moved | RECIPES.dirty.swap(false, Ordering::AcqRel))
+    if (moved | STATE.dirty.swap(false, Ordering::AcqRel))
         && let Some(index) = ensure_index(loader)
     {
         apply(loader, &index);
@@ -246,31 +252,31 @@ pub(crate) fn poll(loader: &Loader) {
 /// The index of the recipe registry: the served one once the game built
 /// it, else the archive's, read once.
 fn ensure_index(loader: &Loader) -> Option<Arc<Index>> {
-    if let Some(index) = RECIPES.live(|l| l.index.clone()) {
+    if let Some(index) = STATE.live(|l| l.index.clone()) {
         return Some(index);
     }
     if crate::content::served::served_recipes() {
         // Mods change the registry: wait for the game's build of it, and
         // look again next poll, as the build may fail or its mods turn off.
-        RECIPES.changed();
+        STATE.changed();
         return None;
     }
     let read = crate::engine::archive::game()
         .and_then(|archive| archive.resource(&RECIPE_REGISTRY.key_by_hash(types::RECIPE_REGISTRY)))
-        .and_then(|registry| Index::read(RECIPES.layout()?, &registry))
+        .and_then(|registry| Index::read(STATE.layout()?, &registry))
         .map(|index| index.with_content(&content_names()));
     let Some(index) = read.map(Arc::new) else {
-        RECIPES.unreadable(loader, "the game's recipe registry");
+        STATE.unreadable(loader, "the game's recipe registry");
         return None;
     };
-    RECIPES.live(|l| l.index = Some(Arc::clone(&index)));
+    STATE.live(|l| l.index = Some(Arc::clone(&index)));
     Some(index)
 }
 
 /// The names of the game's items and workshops, from its archive, read
 /// once; empty when they do not read.
 fn names(loader: &Loader) -> Arc<Names> {
-    if let Some(names) = RECIPES.live(|l| l.names.clone()) {
+    if let Some(names) = STATE.live(|l| l.names.clone()) {
         return names;
     }
     let names = read_names(loader).unwrap_or_else(|| {
@@ -281,7 +287,7 @@ fn names(loader: &Loader) -> Arc<Names> {
         Names::default()
     });
     let names = Arc::new(names.with_content(&content_names()));
-    RECIPES.live(|l| l.names = Some(Arc::clone(&names)));
+    STATE.live(|l| l.names = Some(Arc::clone(&names)));
     names
 }
 
@@ -373,14 +379,14 @@ enum WriteRuleError {
 /// Resolves the rules in force and swaps the disabled recipes in.
 fn apply(loader: &Loader, index: &Index) {
     let names = names(loader);
-    let server = RECIPES
+    let server = STATE
         .live(|l| l.server.clone())
         .filter(|_| loader.side == Side::CLIENT);
     let ours = server.is_none();
     let (ids, problems) = if let Some(ids) = server {
         (ids.into_iter().collect(), Vec::new())
     } else {
-        let mods: Vec<Rule> = RECIPES
+        let mods: Vec<Rule> = STATE
             .live(|l| l.mods.clone())
             .into_iter()
             .filter(|(owner, ..)| {
@@ -411,7 +417,7 @@ fn apply(loader: &Loader, index: &Index) {
         problems.extend(found);
         (ids, problems)
     };
-    let fresh = RECIPES.live(|l| {
+    let fresh = STATE.live(|l| {
         let fresh = l.problems != problems;
         l.problems.clone_from(&problems);
         fresh
@@ -427,7 +433,7 @@ fn apply(loader: &Loader, index: &Index) {
         }
     }
     let ids: FxHashSet<u32> = ids.into_iter().collect();
-    let old = RECIPES.disabled.load();
+    let old = STATE.disabled.load();
     if old.ids == ids {
         return;
     }
@@ -435,9 +441,7 @@ fn apply(loader: &Loader, index: &Index) {
     let count = ids.len();
     let mut sorted: Vec<u32> = ids.iter().copied().collect();
     sorted.sort_unstable();
-    RECIPES
-        .disabled
-        .store(Arc::new(Disabled { ids, generation }));
+    STATE.disabled.store(Arc::new(Disabled { ids, generation }));
     crate::log!(
         INFO,
         "disabled recipes: {count}{}",
@@ -460,7 +464,7 @@ fn messages(ids: &[u32]) -> Vec<crate::base::remote::Message> {
 /// Notes that the game built the recipe registry, `len` bytes at `data`,
 /// which lives for the process.
 pub(crate) fn registry_built(data: usize, len: usize) {
-    let Some(layout) = RECIPES.layout() else {
+    let Some(layout) = STATE.layout() else {
         return;
     };
     // SAFETY: the one caller, the content build of the recipe registry,
@@ -469,29 +473,52 @@ pub(crate) fn registry_built(data: usize, len: usize) {
     let registry = unsafe { core::slice::from_raw_parts(data as *const u8, len) };
     let Some(index) = Index::read(layout, registry) else {
         if let Some(loader) = crate::engine::loader::loader() {
-            RECIPES.unreadable(loader, "the served recipe registry");
+            STATE.unreadable(loader, "the served recipe registry");
         }
         return;
     };
-    RECIPES.live(|l| l.index = Some(Arc::new(index.with_content(&content_names()))));
-    RECIPES.changed();
+    STATE.live(|l| l.index = Some(Arc::new(index.with_content(&content_names()))));
+    STATE.changed();
+}
+
+/// Why a mod's recipe rule was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RecipeRuleError {
+    /// A rule kind the API has none of.
+    #[error("no such recipe rule kind")]
+    BadKind,
+    /// A blank name.
+    #[error("the rule names no recipe")]
+    BadName,
+    /// This build lacks the recipe registry's layout.
+    #[error("this build lacks the recipe rules")]
+    Unavailable,
 }
 
 /// Mod `owner`'s rule: added, or taken back.
-pub(crate) fn rule(owner: ModIndex, kind: RecipeRuleKind, name: &str, disable: bool) -> Status {
+///
+/// # Errors
+///
+/// [`RecipeRuleError`] for a bad kind or name, or a build without the rules.
+pub(crate) fn rule(
+    owner: ModIndex,
+    kind: RecipeRuleKind,
+    name: &str,
+    disable: bool,
+) -> Result<(), RecipeRuleError> {
     let Some(kind) = Kind::from_abi(kind) else {
-        return Status::BAD_ARGS;
+        return Err(RecipeRuleError::BadKind);
     };
     let name = name.trim();
     if name.is_empty() {
-        return Status::BAD_ARGS;
+        return Err(RecipeRuleError::BadName);
     }
-    RECIPES.rule(owner, kind, name, disable)
+    STATE.rule(owner, kind, name, disable)
 }
 
 /// Whether recipe `id` is disabled in this process now.
 pub(crate) fn is_disabled(id: u32) -> bool {
-    RECIPES.is_disabled(id)
+    STATE.is_disabled(id)
 }
 
 /// The item with game id `id` in words, by the item names, read from the
@@ -504,7 +531,7 @@ pub(crate) fn item_words(loader: &Loader, id: u32) -> String {
 /// The recipe with id `id` in words, its full id and the number, once the
 /// recipe registry is read; the number alone before.
 pub(crate) fn recipe_words(id: u32) -> String {
-    RECIPES
+    STATE
         .live(|l| l.index.clone())
         .and_then(|index| {
             let recipe = index.recipes().iter().find(|r| r.id == id)?;
@@ -518,7 +545,7 @@ pub(crate) fn recipe_words(id: u32) -> String {
 /// filters the list once and returns the length the game reads back.
 #[doc(hidden)]
 pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
-    let _first = RECIPES.layout.set(Some(RecipeLayout {
+    let _first = STATE.layout.set(Some(RecipeLayout {
         recipes: 0,
         recipe: size_of::<u32>(),
         guid: 0,
@@ -534,9 +561,9 @@ pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
         stack_item: 0,
         stack_count: 0,
     }));
-    RECIPES.disabled.store(Arc::new(Disabled {
+    STATE.disabled.store(Arc::new(Disabled {
         ids: disabled.iter().copied().collect(),
-        generation: RECIPES.disabled.load().generation + 1,
+        generation: STATE.disabled.load().generation + 1,
     }));
     let recipes: Box<[u32]> = (1..=8).collect();
     let list: Box<[u64]> = recipes
@@ -558,9 +585,9 @@ pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
 /// Disables exactly `ids`, for tests.
 #[cfg(test)]
 pub(crate) fn disable_for_test(ids: &[u32]) {
-    RECIPES.disabled.store(Arc::new(Disabled {
+    STATE.disabled.store(Arc::new(Disabled {
         ids: ids.iter().copied().collect(),
-        generation: RECIPES.disabled.load().generation + 1,
+        generation: STATE.disabled.load().generation + 1,
     }));
 }
 
@@ -569,27 +596,27 @@ pub(crate) fn disable_for_test(ids: &[u32]) {
 /// its own rules.
 pub(crate) fn world_changed(loader: &Loader) {
     let path = world_path();
-    if RECIPES.layout().is_some()
+    if STATE.layout().is_some()
         && let Some(path) = path.as_ref().filter(|path| !path.exists())
         && let Err(e) = crate::base::worlds::write_target(path, TEMPLATE)
     {
         crate::log!(WARN, "{} not written: {e}", path.display());
     }
-    RECIPES.world_changed(loader.side == Side::CLIENT, path.is_some());
+    STATE.world_changed(loader.side == Side::CLIENT, path.is_some());
 }
 
 /// The client joins a server: nothing is disabled until the server says.
 pub(crate) fn joining() {
-    RECIPES.live(|l| {
+    STATE.live(|l| {
         l.server = Some(Vec::new());
         l.incoming.clear();
     });
-    RECIPES.changed();
+    STATE.changed();
 }
 
 /// The client's hosted game ended: its own rules apply again.
 pub(crate) fn forget() {
-    RECIPES.forget();
+    STATE.forget();
 }
 
 /// Disabled recipe ids a client takes from its server at most, far past the
@@ -598,7 +625,7 @@ const MAX_SERVER_RECIPES: usize = 1 << 14;
 
 /// A part of the server's disabled recipes, on the client.
 pub(crate) fn received(first: bool, last: bool, ids: &[u32]) {
-    RECIPES.live(|l| match l.incoming.add(first, last, ids.iter().copied()) {
+    STATE.live(|l| match l.incoming.add(first, last, ids.iter().copied()) {
         Some(ids) => l.server = Some(ids),
         None if last => crate::log!(
             WARN,
@@ -607,17 +634,17 @@ pub(crate) fn received(first: bool, last: bool, ids: &[u32]) {
         None => {}
     });
     if last {
-        RECIPES.changed();
+        STATE.changed();
     }
 }
 
 /// A client said hello: it gets the disabled recipes. False when the line
 /// queue dropped them.
 pub(crate) fn hello(key: u64) -> bool {
-    if RECIPES.live(|l| l.server.is_some()) {
+    if STATE.live(|l| l.server.is_some()) {
         return true;
     }
-    let mut ids: Vec<u32> = RECIPES.disabled.load().ids.iter().copied().collect();
+    let mut ids: Vec<u32> = STATE.disabled.load().ids.iter().copied().collect();
     ids.sort_unstable();
     messages(&ids)
         .iter()
@@ -635,7 +662,7 @@ pub(crate) fn hello(key: u64) -> bool {
 ///   recipe addresses, each 0 or a recipe of the game's live registry,
 ///   unchanged during the call.
 pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
-    let recipes = &*RECIPES;
+    let recipes = &*STATE;
     let disabled = recipes.disabled.load();
     if disabled.ids.is_empty() {
         return;
@@ -750,7 +777,7 @@ unsafe fn filtered(
 
 /// `enshwick recipes ...` on the server's console.
 pub(crate) fn command(loader: &Loader, args: &str) -> String {
-    if RECIPES.layout().is_none() {
+    if STATE.layout().is_none() {
         return texts::fill("recipes.off", &[]);
     }
     let Some(index) = ensure_index(loader) else {
@@ -776,7 +803,7 @@ pub(crate) fn command(loader: &Loader, args: &str) -> String {
 }
 
 fn disabled_list(index: &Index, names: &Names) -> String {
-    let disabled = RECIPES.disabled.load();
+    let disabled = STATE.disabled.load();
     if disabled.ids.is_empty() {
         return texts::fill("recipes.none", &[]);
     }
@@ -802,7 +829,7 @@ fn found_list(index: &Index, names: &Names, text: &str) -> String {
     if found.is_empty() {
         return texts::fill("recipes.found.none", &[("text", text)]);
     }
-    let disabled = RECIPES.disabled.load();
+    let disabled = STATE.disabled.load();
     let mut lines = vec![texts::fill(
         "recipes.found",
         &[("count", &found.len().to_string()), ("text", text)],
@@ -844,7 +871,7 @@ fn change(index: &Index, names: &Names, kind: Kind, name: &str, disable: bool) -
         .and_then(|text| Ok(crate::base::worlds::write_target(&path, &text)?));
     match written {
         Ok(()) => {
-            RECIPES.changed();
+            STATE.changed();
             texts::fill(
                 if disable {
                     "recipes.disabled"

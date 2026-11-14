@@ -15,7 +15,7 @@
 
 pub(crate) mod changes;
 
-use enshwick_core::abi::{Status, Voxel};
+use enshwick_core::abi::Voxel;
 
 use crate::engine::pinned;
 
@@ -66,15 +66,44 @@ pub(crate) struct ReadBox {
     pub(crate) count: usize,
 }
 
+/// Why voxels could not be read, written or checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum VoxelError {
+    /// An empty box, one past [`Voxel::END`], or more voxels than
+    /// [`Voxel::READ_MAX`] or the output holds.
+    #[error("the box is empty, too large or past the world's end")]
+    BadBox,
+    /// A voxel whose kind is not the one its material names, or whose
+    /// reserved byte is set.
+    #[error("the voxel's kind does not match its material")]
+    BadVoxel,
+    /// The build's table lacks the voxel editor's reads.
+    #[error("this build lacks the voxel reads")]
+    Unread,
+    /// The server has no voxel editor or store yet, or its column grid does
+    /// not read.
+    #[error("no voxel editor runs")]
+    NoEditor,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+    /// The box leaves the world.
+    #[error("the box leaves the world")]
+    OutsideWorld,
+    /// A brick of the box is not loaded.
+    #[error("a brick of the box is not loaded")]
+    NotLoaded,
+}
+
 impl ReadBox {
     /// The box of `size` from `min` for an output of `capacity` voxels;
-    /// [`Status::BAD_ARGS`] for an empty box, one past [`Voxel::END`],
+    /// [`VoxelError::BadBox`] for an empty box, one past [`Voxel::END`],
     /// more than [`Voxel::READ_MAX`] voxels or a `capacity` below them.
-    pub(crate) fn new(min: [u32; 3], size: [u32; 3], capacity: u64) -> Result<Self, Status> {
+    pub(crate) fn new(min: [u32; 3], size: [u32; 3], capacity: u64) -> Result<Self, VoxelError> {
         let count = Voxel::read_count(min, size)
             .filter(|&count| count <= capacity)
             .and_then(|count| usize::try_from(count).ok())
-            .ok_or(Status::BAD_ARGS)?;
+            .ok_or(VoxelError::BadBox)?;
         Ok(Self { min, size, count })
     }
 }
@@ -136,11 +165,11 @@ pub(crate) const fn decode(word: u16) -> Voxel {
 }
 
 /// The game's voxel word for `voxel`, the inverse of [`decode`];
-/// [`Status::BAD_ARGS`] when its kind is not the one its material names,
+/// [`VoxelError::BadVoxel`] when its kind is not the one its material names,
 /// or its reserved byte is set.
-pub(crate) const fn encode(voxel: Voxel) -> Result<u16, Status> {
+pub(crate) const fn encode(voxel: Voxel) -> Result<u16, VoxelError> {
     if decode(voxel.material as u16).kind != voxel.kind || voxel.reserved != 0 {
-        return Err(Status::BAD_ARGS);
+        return Err(VoxelError::BadVoxel);
     }
     Ok(u16::from_le_bytes([voxel.material, voxel.fill]))
 }
@@ -198,8 +227,8 @@ struct Finest {
 }
 
 #[cfg(windows)]
-fn finest(loader: &crate::engine::loader::Loader) -> Result<Finest, Status> {
-    let constant = |id| loader.offset(id).ok_or(Status::MISSING);
+fn finest(loader: &crate::engine::loader::Loader) -> Result<Finest, VoxelError> {
+    let constant = |id| loader.offset(id).ok_or(VoxelError::Unread);
     let level = constant(pinned::voxel::FINEST_LEVEL)?;
     let grids = constant(pinned::voxel::GRIDS)?;
     let pages = constant(pinned::voxel::GRID_PAGES)?;
@@ -207,11 +236,11 @@ fn finest(loader: &crate::engine::loader::Loader) -> Result<Finest, Status> {
     let grid = level
         .checked_mul(stride)
         .and_then(|offset| offset.checked_add(grids))
-        .ok_or(Status::MISSING)?;
+        .ok_or(VoxelError::Unread)?;
     let in_grid =
-        |field| grid_field(grids, stride, grid, field, size_of::<u32>()).ok_or(Status::MISSING);
+        |field| grid_field(grids, stride, grid, field, size_of::<u32>()).ok_or(VoxelError::Unread);
     Ok(Finest {
-        level: u32::try_from(level).map_err(|_| Status::MISSING)?,
+        level: u32::try_from(level).map_err(|_| VoxelError::Unread)?,
         grid,
         width: in_grid(pages)?,
         depth: in_grid(constant(pinned::voxel::GRID_DEPTH)?)?,
@@ -223,19 +252,19 @@ fn finest(loader: &crate::engine::loader::Loader) -> Result<Finest, Status> {
 
 /// The server's voxel editor, on the game thread at a quiet moment.
 #[cfg(windows)]
-fn editor(loader: &crate::engine::loader::Loader) -> Result<usize, Status> {
+fn editor(loader: &crate::engine::loader::Loader) -> Result<usize, VoxelError> {
     use crate::engine::memory::read;
 
     let server = crate::engine::world::server()?;
     let editor_at = loader
         .offset(pinned::terrain::EDITOR)
-        .ok_or(Status::MISSING)?;
+        .ok_or(VoxelError::Unread)?;
     // SAFETY: `server` comes from `crate::engine::world::server`, on the game thread
     // that alone writes it; the table's `terrain.editor` offset holds its
     // voxel editor pointer.
     let editor: usize = unsafe { read(server, editor_at) };
     if editor == 0 {
-        return Err(Status::MISSING);
+        return Err(VoxelError::NoEditor);
     }
     Ok(editor)
 }
@@ -243,7 +272,7 @@ fn editor(loader: &crate::engine::loader::Loader) -> Result<usize, Status> {
 /// The world's extent from the editor's finest column grid, the bounds the
 /// game's own column lookup takes; on the game thread at a quiet moment.
 #[cfg(windows)]
-pub(crate) fn extent(loader: &crate::engine::loader::Loader) -> Result<WorldExtent, Status> {
+pub(crate) fn extent(loader: &crate::engine::loader::Loader) -> Result<WorldExtent, VoxelError> {
     use crate::engine::memory::read;
 
     let finest = finest(loader)?;
@@ -261,7 +290,7 @@ pub(crate) fn extent(loader: &crate::engine::loader::Loader) -> Result<WorldExte
     // game thread; the table's `voxel.grid_depth` places the finest grid's
     // pages along z at `finest.depth`.
     let depth: u32 = unsafe { read(editor, finest.depth) };
-    WorldExtent::from_grid(packed, width, depth).ok_or(Status::MISSING)
+    WorldExtent::from_grid(packed, width, depth).ok_or(VoxelError::NoEditor)
 }
 
 /// The pages a finest column grid may hold for the page events to scan it:
@@ -341,15 +370,15 @@ pub(crate) fn finest_slots(loader: &crate::engine::loader::Loader) -> Result<(),
 }
 
 /// The finest column grid's slots of the editor the voxel API reads; on the
-/// game thread at a quiet moment. [`Status::MISSING`] before a world runs,
+/// game thread at a quiet moment. [`VoxelError`] before a world runs,
 /// on a build without the slots, or for a grid of pages that are not
 /// square, not whole metres or more than [`MAX_PAGES`].
 #[cfg(windows)]
-pub(crate) fn slots(loader: &crate::engine::loader::Loader) -> Result<Slots, Status> {
+pub(crate) fn slots(loader: &crate::engine::loader::Loader) -> Result<Slots, VoxelError> {
     use crate::engine::memory::read;
 
     let finest = finest(loader)?;
-    let slots_at = finest.slots.ok_or(Status::MISSING)?;
+    let slots_at = finest.slots.ok_or(VoxelError::Unread)?;
     let editor = editor(loader)?;
     // SAFETY: `editor` is the server's non-zero voxel editor, read on the
     // game thread that alone replaces it; the table's `voxel.grids`,
@@ -369,37 +398,39 @@ pub(crate) fn slots(loader: &crate::engine::loader::Loader) -> Result<Slots, Sta
     // slot pointer at `slots_at`, 8 bytes inside the grid (checked by
     // `grid_field` in `finest`).
     let at: usize = unsafe { read(editor, slots_at) };
-    Slots::from_grid(at, packed, width, depth).ok_or(Status::MISSING)
+    Slots::from_grid(at, packed, width, depth).ok_or(VoxelError::NoEditor)
 }
 
 /// The voxel words of `request` at the finest level, x fastest, then y, then z;
-/// on the game thread at a quiet moment only. [`Status::NOT_LOADED`] while
-/// a brick of the box is not resident, [`Status::OUTSIDE_WORLD`] for a box
-/// that leaves the world, [`Status::MISSING`] before a world runs or on a
+/// on the game thread at a quiet moment only. [`VoxelError::NotLoaded`] while
+/// a brick of the box is not resident, [`VoxelError::OutsideWorld`] for a box
+/// that leaves the world, another [`VoxelError`] before a world runs or on a
 /// build without the read.
 #[cfg(windows)]
 pub(crate) fn read(
     loader: &crate::engine::loader::Loader,
     request: &ReadBox,
-) -> Result<Vec<u16>, Status> {
+) -> Result<Vec<u16>, VoxelError> {
     use crate::engine::memory::read;
 
     let function = loader
         .address(pinned::voxel::READ_BOX)
         .and_then(|address| usize::try_from(address).ok())
-        .ok_or(Status::MISSING)?;
-    let store_at = loader.offset(pinned::voxel::STORE).ok_or(Status::MISSING)?;
+        .ok_or(VoxelError::Unread)?;
+    let store_at = loader
+        .offset(pinned::voxel::STORE)
+        .ok_or(VoxelError::Unread)?;
     let level = finest(loader)?.level;
     let editor = editor(loader)?;
     if !extent(loader)?.holds(request.min, request.size) {
-        return Err(Status::OUTSIDE_WORLD);
+        return Err(VoxelError::OutsideWorld);
     }
     // SAFETY: `editor` is the server's non-zero voxel editor (checked by
     // `editor`), read on the game thread that alone replaces it; the
     // table's `voxel.store` offset holds its store pointer.
     let store: usize = unsafe { read(editor, store_at) };
     if store == 0 {
-        return Err(Status::MISSING);
+        return Err(VoxelError::NoEditor);
     }
     // SAFETY: the table's `voxel.read_box` is the address of the game
     // function with the `ReadBoxFn` signature on this build, in the image,
@@ -441,13 +472,13 @@ pub(crate) fn read(
         )
     };
     if resident == 0 {
-        return Err(Status::NOT_LOADED);
+        return Err(VoxelError::NotLoaded);
     }
     Ok(words)
 }
 
 /// `Ok` when the column of bricks holding the voxel at `at` is loaded;
-/// [`Status::NOT_LOADED`] when not. The game keeps a column loaded or not
+/// [`VoxelError::NotLoaded`] when not. The game keeps a column loaded or not
 /// as one, and its box read answers false for a column without data and
 /// starts loading it. An editor write there computes the edit against air
 /// and merges it onto the real ground when that arrives (server 399,
@@ -456,7 +487,7 @@ pub(crate) fn read(
 pub(crate) fn column_loaded(
     loader: &crate::engine::loader::Loader,
     at: [u32; 3],
-) -> Result<(), Status> {
+) -> Result<(), VoxelError> {
     read(loader, &ReadBox::new(at, [1; 3], 1)?).map(drop)
 }
 
@@ -605,7 +636,7 @@ mod tests {
                 ..voxel(Voxel::AIR, 0)
             },
         ] {
-            assert_eq!(encode(bad), Err(Status::BAD_ARGS), "{bad:?}");
+            assert_eq!(encode(bad), Err(VoxelError::BadVoxel), "{bad:?}");
         }
     }
 
@@ -632,14 +663,14 @@ mod tests {
 
     #[test]
     fn an_empty_or_oversized_box_is_refused() {
-        assert_eq!(ReadBox::new([0; 3], [0, 1, 1], 1), Err(Status::BAD_ARGS));
+        assert_eq!(ReadBox::new([0; 3], [0, 1, 1], 1), Err(VoxelError::BadBox));
         assert_eq!(
             ReadBox::new([0; 3], [65, 64, 64], u64::MAX),
-            Err(Status::BAD_ARGS)
+            Err(VoxelError::BadBox)
         );
         assert_eq!(
             ReadBox::new([0; 3], [u32::MAX, u32::MAX, 2], u64::MAX),
-            Err(Status::BAD_ARGS)
+            Err(VoxelError::BadBox)
         );
     }
 
@@ -647,13 +678,13 @@ mod tests {
     fn a_box_whose_voxel_count_overflows_is_refused() {
         assert_eq!(
             ReadBox::new([0; 3], [1 << 30, 1 << 30, 16], u64::MAX),
-            Err(Status::BAD_ARGS)
+            Err(VoxelError::BadBox)
         );
     }
 
     #[test]
     fn a_capacity_below_the_box_is_refused() {
-        assert_eq!(ReadBox::new([0; 3], [2, 2, 2], 7), Err(Status::BAD_ARGS));
+        assert_eq!(ReadBox::new([0; 3], [2, 2, 2], 7), Err(VoxelError::BadBox));
     }
 
     #[test]
@@ -662,11 +693,11 @@ mod tests {
         assert!(ReadBox::new([end - 1, 0, 0], [1, 1, 1], 1).is_ok());
         assert_eq!(
             ReadBox::new([end, 0, 0], [1, 1, 1], 1),
-            Err(Status::BAD_ARGS)
+            Err(VoxelError::BadBox)
         );
         assert_eq!(
             ReadBox::new([0, u32::MAX, 0], [1, 1, 1], 1),
-            Err(Status::BAD_ARGS)
+            Err(VoxelError::BadBox)
         );
     }
 }

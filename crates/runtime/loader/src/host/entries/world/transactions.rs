@@ -5,7 +5,9 @@ use enshwick_core::abi::{
     VoxelRegion, VoxelWrite,
 };
 
-use crate::host::layer::{HeadedOut, ListOut, Mod, Out, UnalignedList, Values, entries};
+use crate::host::layer::{
+    HeadedOut, ListOut, Mod, Out, Refusal, Refused, UnalignedList, Values, entries,
+};
 use crate::world::transactions::{Change, Erase, Paste};
 
 entries! {
@@ -37,7 +39,19 @@ entries! {
     }
 
     fn transaction_status(me as Mod, id: u64, out as HeadedOut<TransactionInfo>) -> Status {
-        out.put(crate::world::transactions::info(me.index, id).ok_or(Status::MISSING)?)
+        let standing = crate::world::transactions::info(me.index, id).ok_or(Status::MISSING)?;
+        out.put(TransactionInfo {
+            header: enshwick_core::abi::Header::of::<TransactionInfo>(),
+            state: standing.state,
+            reason: standing.reason.map_or(Status::OK, |reason| reason.status()),
+            ops: u32::try_from(standing.ops).unwrap_or(u32::MAX),
+            applied: u32::try_from(standing.applied).unwrap_or(u32::MAX),
+            bricks: standing.bricks as u64,
+            refusal: standing.refusal,
+            reserved: 0,
+            holds: standing.holds,
+            created: u32::try_from(standing.created).unwrap_or(u32::MAX),
+        })
     }
 
     fn transaction_undo(me as Mod, id: u64) -> Status {
@@ -48,15 +62,15 @@ entries! {
 
 /// Commits `ops` as the calling mod, for `actor` when it names one, and
 /// gives the transaction's id.
-fn commit(me: Mod, actor: Option<u32>, ops: Values<'_, TransactionOp>) -> Result<u64, Status> {
+fn commit(me: Mod, actor: Option<u32>, ops: Values<'_, TransactionOp>) -> Result<u64, Refused> {
     if ops.len() == 0 || ops.len() > crate::world::transactions::LIMITS.ops {
-        return Err(Status::BAD_ARGS);
+        return Err(Status::BAD_ARGS.into());
     }
     let changes = ops
         .iter()
         .map(|op| {
             if op.reserved != 0 {
-                return Err(Status::BAD_ARGS);
+                return Err(Status::BAD_ARGS.into());
             }
             // SAFETY: `HostApi::transaction_commit` has the mod pass each
             // op's `data` null or pointing at the record its kind names, with
@@ -65,7 +79,9 @@ fn commit(me: Mod, actor: Option<u32>, ops: Values<'_, TransactionOp>) -> Result
             unsafe { change(me.loader, &op) }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    crate::world::transactions::commit(me.loader, me.index, actor, changes)
+    Ok(crate::world::transactions::commit(
+        me.loader, me.index, actor, changes,
+    )?)
 }
 
 /// The change `op` hands over; [`Status::BAD_ARGS`] for a kind or a
@@ -80,7 +96,7 @@ fn commit(me: Mod, actor: Option<u32>, ops: Values<'_, TransactionOp>) -> Result
 unsafe fn change(
     loader: &crate::engine::loader::Loader,
     op: &TransactionOp,
-) -> Result<Change, Status> {
+) -> Result<Change, Refused> {
     match op.kind {
         TransactionOp::TERRAIN => {
             // SAFETY: the caller guarantees `op.data` for a terrain op.
@@ -90,7 +106,7 @@ unsafe fn change(
                     <TerrainEdit as enshwick_core::abi::Headed>::BORN,
                 )
             };
-            edit.map(Change::Terrain).ok_or(Status::BAD_ARGS)
+            Ok(edit.map(Change::Terrain).ok_or(Status::BAD_ARGS)?)
         }
         TransactionOp::VOXELS => {
             // SAFETY: the caller guarantees `op.data` for a voxels op.
@@ -103,7 +119,7 @@ unsafe fn change(
             .ok_or(Status::BAD_ARGS)?;
             let most = crate::world::transactions::LIMITS.bricks as u64 * 512;
             if write.voxels.is_null() || write.count > most {
-                return Err(Status::BAD_ARGS);
+                return Err(Status::BAD_ARGS.into());
             }
             let count = usize::try_from(write.count).map_err(|_| Status::BAD_ARGS)?;
             // SAFETY: `write.voxels` is non-null, checked above, and the
@@ -114,7 +130,7 @@ unsafe fn change(
                 .iter()
                 .map(|voxel| crate::world::voxels::encode(*voxel))
                 .collect::<Result<Vec<_>, _>>()?;
-            Paste::new(write.min, write.size, words).map(Change::Voxels)
+            Ok(Paste::new(write.min, write.size, words).map(Change::Voxels)?)
         }
         TransactionOp::ERASE => {
             // SAFETY: the caller guarantees `op.data` for an erase op.
@@ -125,7 +141,7 @@ unsafe fn change(
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
-            Erase::new(region.min, region.size).map(Change::Erase)
+            Ok(Erase::new(region.min, region.size).map(Change::Erase)?)
         }
         #[cfg(windows)]
         TransactionOp::BLOCK => {
@@ -137,8 +153,9 @@ unsafe fn change(
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
-            crate::world::transactions::resolve(loader, &block)
-                .map(|block| Change::Block(Box::new(block)))
+            Ok(Change::Block(Box::new(
+                crate::world::transactions::resolve(loader, &block)?,
+            )))
         }
         #[cfg(windows)]
         TransactionOp::PLACE_PROP => {
@@ -150,7 +167,7 @@ unsafe fn change(
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
-            crate::world::transactions::resolve_prop(loader, &prop).map(Change::PlaceProp)
+            Ok(crate::world::transactions::resolve_prop(loader, &prop).map(Change::PlaceProp)?)
         }
         TransactionOp::REMOVE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a removal op.
@@ -164,13 +181,13 @@ unsafe fn change(
             if remove.entity == enshwick_core::Entity(0)
                 || remove.flags & !PropRemove::DISCARD_STATE != 0
             {
-                return Err(Status::BAD_ARGS);
+                return Err(Status::BAD_ARGS.into());
             }
             Ok(Change::RemoveProp {
                 entity: remove.entity.0,
                 discard_state: remove.flags & PropRemove::DISCARD_STATE != 0,
             })
         }
-        _ => Err(Status::BAD_ARGS),
+        _ => Err(Status::BAD_ARGS.into()),
     }
 }

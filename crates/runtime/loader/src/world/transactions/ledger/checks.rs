@@ -1,9 +1,10 @@
 //! The checks before a transaction or its undo writes: extent, rights, columns, bricks and props.
 
-use enshwick_core::abi::{Status, TransactionInfo};
+use enshwick_core::abi::TransactionInfo;
 use rustc_hash::FxHashSet;
 
 use super::{Brick, Bricks, Change, Done, Outcome, Pass, Prop, Settings, Voxels, Work, hash};
+use crate::world::transactions::TransactionError;
 
 /// `Ok` while the prop the transaction placed as `entity` is still there
 /// as it placed it and holds no state, its start state as it first was;
@@ -13,7 +14,7 @@ pub(super) fn still_placed(
     entity: u32,
     prop: &Prop,
     settings: &Settings,
-) -> Result<(), (Status, u32)> {
+) -> Result<(), (TransactionError, u32)> {
     const START: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER | TransactionInfo::HOLDS_GROWTH;
     match world.read_prop(entity) {
         Ok((now, holds)) if now.same_place(prop) => {
@@ -25,10 +26,10 @@ pub(super) fn still_placed(
             if holds == 0 {
                 Ok(())
             } else {
-                Err((Status::REFUSED, holds))
+                Err((TransactionError::HoldsState, holds))
             }
         }
-        Ok(_) | Err(Status::NOT_A_PROP) => Err((Status::REFUSED, 0)),
+        Ok(_) | Err(TransactionError::NotAProp) => Err((TransactionError::Changed, 0)),
         Err(reason) => Err((reason, 0)),
     }
 }
@@ -50,13 +51,13 @@ pub(super) fn still_removed(
     world: &mut impl Voxels,
     prop: &Prop,
     holds: u32,
-) -> Result<(), (Status, u32)> {
+) -> Result<(), (TransactionError, u32)> {
     if holds != 0 {
-        return Err((Status::REFUSED, holds));
+        return Err((TransactionError::HoldsState, holds));
     }
     match world.prop_at(prop) {
         Ok(false) => Ok(()),
-        Ok(true) => Err((Status::REFUSED, 0)),
+        Ok(true) => Err((TransactionError::Changed, 0)),
         Err(reason) => Err((reason, 0)),
     }
 }
@@ -70,14 +71,16 @@ impl Work {
         world: &mut impl Voxels,
         pass: &mut Pass,
     ) -> Option<Outcome> {
-        let failed = |reason| Some(Outcome::Done(TransactionInfo::FAILED, reason));
+        let failed = |reason| Some(Outcome::Done(TransactionInfo::FAILED, Some(reason)));
         let inside = pass.extent.map(|extent| {
             self.ops
                 .iter()
                 .all(|op| op.bricks.is_none_or(|bricks| bricks.inside(extent)))
         });
         if inside != Some(true) {
-            return failed(inside.map_or(Status::MISSING, |_| Status::OUTSIDE_WORLD));
+            return failed(inside.map_or(TransactionError::Unavailable, |_| {
+                TransactionError::OutsideWorld
+            }));
         }
         let mut removed = Vec::with_capacity(self.ops.len());
         for op in &self.ops {
@@ -89,7 +92,7 @@ impl Work {
                     Ok((prop, holds)) if holds == 0 || discard_state => Some(prop),
                     Ok((_, holds)) => {
                         self.holds = holds;
-                        return failed(Status::REFUSED);
+                        return failed(TransactionError::HoldsState);
                     }
                     Err(reason) => return failed(reason),
                 },
@@ -100,13 +103,13 @@ impl Work {
         if let Some(actor) = self.actor {
             for (op, prop) in self.ops.iter().zip(&removed) {
                 let Some((min, max)) = op.change.reach(prop.as_ref()) else {
-                    return failed(Status::MISSING);
+                    return failed(TransactionError::Gone);
                 };
                 match world.rights(actor, min, max) {
                     Ok(0) => {}
                     Ok(refusal) => {
                         self.refusal = refusal;
-                        return failed(Status::REFUSED);
+                        return failed(TransactionError::NoRights);
                     }
                     Err(reason) => return failed(reason),
                 }
@@ -129,7 +132,10 @@ impl Work {
     /// The checks of an undo before it writes anything: every brick holds
     /// what the transaction left, every prop it placed is there without
     /// state, every prop it removed can come back.
-    pub(super) fn undo_check(&self, world: &mut impl Voxels) -> Result<(), (Status, u32)> {
+    pub(super) fn undo_check(
+        &self,
+        world: &mut impl Voxels,
+    ) -> Result<(), (TransactionError, u32)> {
         let bricks: FxHashSet<Brick> = self
             .done
             .iter()
@@ -139,7 +145,7 @@ impl Work {
             match (self.now.get(&brick), world.read(brick)) {
                 (Some(left), Ok(now)) if hash(&now) == *left => {}
                 (_, Err(reason)) => return Err((reason, 0)),
-                _ => return Err((Status::REFUSED, 0)),
+                _ => return Err((TransactionError::Changed, 0)),
             }
         }
         for done in &self.done {
@@ -158,7 +164,10 @@ impl Work {
 
     /// Holds every prop it removes against players, for the step before
     /// it removes them; whether it holds any.
-    pub(super) fn hold_removals(&mut self, world: &mut impl Voxels) -> Result<bool, Status> {
+    pub(super) fn hold_removals(
+        &mut self,
+        world: &mut impl Voxels,
+    ) -> Result<bool, TransactionError> {
         let removals = self.ops.iter().filter_map(|op| match op.change {
             Change::RemoveProp { entity, .. } => Some(entity),
             _ => None,
@@ -178,11 +187,11 @@ impl Work {
         entity: u32,
         discard_state: bool,
         actor: u32,
-    ) -> Result<(), Status> {
+    ) -> Result<(), TransactionError> {
         let (prop, holds) = world.read_prop(entity)?;
         if holds != 0 && !discard_state {
             self.holds = holds;
-            return Err(Status::REFUSED);
+            return Err(TransactionError::HoldsState);
         }
         world.still_held(entity)?;
         world.remove_prop(entity, actor)?;
@@ -205,7 +214,7 @@ impl Work {
             {
                 match world.start_state(*entity) {
                     Ok(bytes) => *settings = Settings::Read(bytes),
-                    Err(Status::MISSING) => waiting = true,
+                    Err(TransactionError::Gone | TransactionError::Unavailable) => waiting = true,
                     Err(_) => {}
                 }
             }
@@ -217,15 +226,15 @@ impl Work {
             }
         }
         self.waits = 0;
-        Outcome::Done(TransactionInfo::APPLIED, Status::OK)
+        Outcome::Done(TransactionInfo::APPLIED, None)
     }
 
     /// Stops an undo for `reason`, with the kinds of state `holds` that
     /// stopped it; asking again checks afresh.
-    pub(super) fn refuse_undo(&mut self, reason: Status, holds: u32) -> Outcome {
+    pub(super) fn refuse_undo(&mut self, reason: TransactionError, holds: u32) -> Outcome {
         self.undo_checked = false;
         self.waits = 0;
         self.holds = holds;
-        Outcome::Done(TransactionInfo::UNDO_REFUSED, reason)
+        Outcome::Done(TransactionInfo::UNDO_REFUSED, Some(reason))
     }
 }

@@ -412,8 +412,8 @@ impl Loader {
             hop: None,
             feature: Some(feature),
         };
-        let status = self.chains.relock().add(address, link);
-        self.linked(feature, id, address, status)
+        let added = self.chains.relock().add(address, link);
+        self.linked(feature, id, address, added)
     }
 
     /// Links one of the loader's own mid-function `handler`s of `feature` at
@@ -438,8 +438,8 @@ impl Loader {
             priority: i32::MIN,
             flags,
         };
-        let status = self.mids.relock().add_fused(address, link, Some(feature));
-        self.linked(feature, id, address, status)
+        let added = self.mids.relock().add_fused(address, link, Some(feature));
+        self.linked(feature, id, address, added)
     }
 
     /// The address of `target` for a link of `feature`, after its checks: a
@@ -474,16 +474,16 @@ impl Loader {
     }
 
     /// Whether the link of `feature` on `address`, the entry `id`, was made
-    /// with `status`; a refused link turns the feature off.
+    /// as `added` says; a refused link turns the feature off.
     fn linked(
         &self,
         feature: &'static Fuse,
         id: &str,
         address: u64,
-        status: api_frame::Status,
+        added: Result<(), crate::engine::chains::LinkError>,
     ) -> bool {
-        if !status.is_ok() {
-            return self.fuse_off(feature, id, &format!("refused the link ({})", status.0));
+        if let Err(error) = added {
+            return self.fuse_off(feature, id, &format!("refused the link ({error})"));
         }
         crate::engine::diag::name(address, id);
         true

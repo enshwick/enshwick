@@ -143,31 +143,31 @@ fn registering_refuses_overlaps_bad_lengths_and_bytes_outside_the_code() {
     // Each test owns its addresses: the registry is shared.
     assert_eq!(
         register(patch(ModIndex::new(0), 0x1010, &[1, 2], &[3, 4]), text),
-        Status::OK
+        Ok(())
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x1011, &[2], &[5]), text),
-        Status::REFUSED
+        Err(LinkError::Clash)
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x1012, &[9], &[5]), text),
-        Status::OK
+        Ok(())
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x1020, &[1], &[]), text),
-        Status::BAD_ARGS
+        Err(LinkError::Malformed)
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x1020, &[], &[]), text),
-        Status::BAD_ARGS
+        Err(LinkError::Malformed)
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x10ff, &[1, 2], &[3, 4]), text),
-        Status::BAD_ARGS
+        Err(LinkError::Malformed)
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x0fff, &[1, 2], &[3, 4]), text),
-        Status::BAD_ARGS
+        Err(LinkError::Malformed)
     );
 }
 
@@ -206,7 +206,7 @@ fn a_set_of_patches_registers_whole_or_not_at_all() {
             ],
             text
         ),
-        Status::BAD_ARGS
+        Err(LinkError::Malformed)
     );
     assert_eq!(
         register_all(
@@ -216,15 +216,15 @@ fn a_set_of_patches_registers_whole_or_not_at_all() {
             ],
             text
         ),
-        Status::REFUSED
+        Err(LinkError::Clash)
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x2010, &[1], &[2]), text),
-        Status::OK
+        Ok(())
     );
     assert_eq!(
         register(patch(ModIndex::new(1), 0x2020, &[1], &[2]), text),
-        Status::OK
+        Ok(())
     );
 }
 

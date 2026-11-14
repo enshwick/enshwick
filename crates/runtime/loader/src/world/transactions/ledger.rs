@@ -14,9 +14,10 @@
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
 
-use enshwick_core::abi::{Status, TerrainEdit, TransactionInfo};
+use enshwick_core::abi::{TerrainEdit, TransactionInfo};
 use rustc_hash::{FxHashMap, FxHasher};
 
+use super::TransactionError;
 use super::block::Block;
 use super::cover::{self, BRICK_VOXELS, Brick, Bricks};
 use super::paste::{Erase, Paste};
@@ -35,56 +36,57 @@ pub(crate) type Image = Box<[u16; BRICK_VOXELS]>;
 pub(crate) trait Voxels {
     /// Whether the server lets `actor` edit the box from `min` to `max` in
     /// metres: 0, or the game's reason it refuses.
-    fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status>;
+    fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3])
+    -> Result<u32, TransactionError>;
     /// Places `block` for `actor` (0 for none) and announces it; an error
     /// means nothing was written.
-    fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status>;
+    fn place(&mut self, block: &Block, actor: u32) -> Result<(), TransactionError>;
     /// Spawns `prop` for `actor` (0 for none) and announces it; the new
     /// entity, in the world from the next step.
-    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status>;
+    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, TransactionError>;
     /// Notes that a mod placed `entity` as `prop`, so it counts as the
     /// mod's own; an undo's restore, which may bring back a player's prop,
     /// is never noted.
     fn placed(&mut self, entity: u32, prop: &Prop);
     /// The prop `entity` is, and the kinds of state it holds that a
-    /// respawn would lose, as bits; [`Status::MISSING`] when it is no prop.
-    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status>;
+    /// respawn would lose, as bits; [`TransactionError::NotAProp`] when it is no prop.
+    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), TransactionError>;
     /// Holds the prop `entity` against players until its destroy: no
     /// opening, moving items in or out, Quick Stash or dismantling; the
     /// game's systems of the next step run with it held.
-    fn hold_prop(&mut self, entity: u32) -> Result<(), Status>;
+    fn hold_prop(&mut self, entity: u32) -> Result<(), TransactionError>;
     /// `Ok` while the prop `entity` is still held and the filter that
-    /// keeps players from it is on; [`Status::MISSING`] otherwise, when a
+    /// keeps players from it is on; [`TransactionError::Gone`] otherwise, when a
     /// destroy would go unguarded.
-    fn still_held(&mut self, entity: u32) -> Result<(), Status>;
+    fn still_held(&mut self, entity: u32) -> Result<(), TransactionError>;
     /// Lets players reach the prop `entity` again, as before
     /// [`Voxels::hold_prop`].
     fn release_prop(&mut self, entity: u32);
     /// The start state of the prop `entity` as bytes to compare: what a
     /// fresh prop of its kind holds and a player or time may change, a
     /// logic trigger's settings and a plant's level; `None` for a prop with
-    /// none, [`Status::MISSING`] while it is not in the world.
-    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status>;
+    /// none, [`TransactionError::Gone`] while it is not in the world.
+    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, TransactionError>;
     /// Whether a prop like `prop` stands where it stood.
-    fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status>;
+    fn prop_at(&mut self, prop: &Prop) -> Result<bool, TransactionError>;
     /// Removes the prop `entity` for `actor` (0 for none), as the game tears
     /// one down, and announces it.
-    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), Status>;
+    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), TransactionError>;
     /// Announces that `erase` tore down building voxels for `actor` (0 for
     /// none); called only when it cleared some and wrote every brick.
     fn erased(&mut self, erase: &Erase, actor: u32);
     /// The world's extent.
-    fn extent(&mut self) -> Result<WorldExtent, Status>;
+    fn extent(&mut self) -> Result<WorldExtent, TransactionError>;
     /// `Ok` when the column of bricks `brick` stands in is loaded;
-    /// [`Status::NOT_LOADED`] when not.
-    fn loaded(&mut self, brick: Brick) -> Result<(), Status>;
-    /// The voxels of `brick`; [`Status::NOT_LOADED`] when not loaded.
-    fn read(&mut self, brick: Brick) -> Result<Image, Status>;
+    /// [`TransactionError::NotLoaded`] when not.
+    fn loaded(&mut self, brick: Brick) -> Result<(), TransactionError>;
+    /// The voxels of `brick`; [`TransactionError::NotLoaded`] when not.loaded.
+    fn read(&mut self, brick: Brick) -> Result<Image, TransactionError>;
     /// Writes `edit`; an error means nothing was written.
-    fn edit(&mut self, edit: &TerrainEdit) -> Result<(), Status>;
+    fn edit(&mut self, edit: &TerrainEdit) -> Result<(), TransactionError>;
     /// Writes `image` into `brick`, as an edit that clients receive and the
     /// save keeps.
-    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status>;
+    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), TransactionError>;
 }
 
 /// How much the ledger holds.
@@ -121,9 +123,9 @@ pub(crate) enum Change {
 
 impl Change {
     /// The bricks it can write, or where a prop goes; `None` for a removal,
-    /// whose place the step reads. [`Status::BAD_ARGS`] for a change the
+    /// whose place the step reads. [`TransactionError::BadEdit`] for a change the
     /// loader refuses.
-    fn bricks(&self) -> Result<Option<Bricks>, Status> {
+    fn bricks(&self) -> Result<Option<Bricks>, TransactionError> {
         Ok(Some(match self {
             Self::Terrain(edit) => cover::check(edit)?,
             Self::Voxels(paste) => paste.bricks(),
@@ -255,7 +257,7 @@ struct Record {
     bound: usize,
     /// One of the [`TransactionInfo`] states.
     state: u32,
-    reason: Status,
+    reason: Option<TransactionError>,
     /// Its work; `None` while a step has it in hand.
     work: Option<Work>,
     /// Changes written and not undone, as of the last return of its work.
@@ -294,7 +296,7 @@ impl Record {
         }
     }
 
-    fn settle(&mut self, state: u32, reason: Status) {
+    fn settle(&mut self, state: u32, reason: Option<TransactionError>) {
         self.state = state;
         self.reason = reason;
     }
@@ -329,11 +331,32 @@ pub(crate) struct Task {
     pub(crate) owner: ModIndex,
 }
 
+/// Where a transaction stands, as its mod reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Standing {
+    /// One of the [`TransactionInfo`] states.
+    pub(crate) state: u32,
+    /// Why it failed or its undo was refused; `None` otherwise.
+    pub(crate) reason: Option<TransactionError>,
+    /// Its changes.
+    pub(crate) ops: usize,
+    /// Changes written and not undone.
+    pub(crate) applied: usize,
+    /// Bricks of undo data held.
+    pub(crate) bricks: usize,
+    /// The game's reason the server refused its actor, 0 for none.
+    pub(crate) refusal: u32,
+    /// The kinds of state a prop held that stopped it, as bits.
+    pub(crate) holds: u32,
+    /// The props it placed and still holds.
+    pub(crate) created: usize,
+}
+
 /// How a step's run of a task ended.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Outcome {
     /// It settled in this state, for this reason.
-    Done(u32, Status),
+    Done(u32, Option<TransactionError>),
     /// The step's budget ran out; it goes on first in the next step.
     Again,
     /// It waits for a part of the world to load; it goes on after the rest.

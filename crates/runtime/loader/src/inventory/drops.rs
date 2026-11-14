@@ -16,7 +16,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::{DropRequest, Header, Side, SpawnRequest, Status};
+use enshwick_core::abi::{DropRequest, Header, Side, SpawnRequest};
 use enshwick_core::affixes::ItemRarity;
 
 use crate::engine::fuse::{Fuse, Off};
@@ -106,9 +106,9 @@ impl Reading {
 
     /// The layout, waiting for a read [`Reading::start`] began, so a drop
     /// right after the world loads waits out the rest of the read instead
-    /// of failing; [`Status::MISSING`] when the read failed.
-    fn layout(&self) -> Result<&Layout, Status> {
-        self.layout.wait().as_ref().ok_or(Status::MISSING)
+    /// of failing; `None` when the read failed.
+    fn layout(&self) -> Option<&Layout> {
+        self.layout.wait().as_ref()
     }
 }
 
@@ -237,15 +237,35 @@ fn pickup(layout: &Layout, request: &DropRequest) -> Option<Vec<u8>> {
     ))
 }
 
+/// Why a drop did not happen.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum DropError {
+    /// The pickup did not read on this build.
+    #[error("the pickup does not read on this build")]
+    Unread,
+    /// A count of none or past a pickup, or an unknown rarity.
+    #[error("the drop request is malformed")]
+    BadRequest,
+    /// An item whose data does not read.
+    #[error("the item does not read")]
+    NoItem,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+    /// The pickup's spawn.
+    #[error(transparent)]
+    Spawn(#[from] crate::inventory::spawns::SpawnError),
+}
+
 /// Drops the stack `request` asks for; the pickup's entity.
-pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Result<u32, Status> {
+pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Result<u32, DropError> {
     crate::engine::world::server()?;
     // A drop on a server no phase started the read for starts it itself.
     start(loader);
-    let layout = READING.layout()?;
-    let bytes = pickup(layout, request).ok_or(Status::BAD_ARGS)?;
+    let layout = READING.layout().ok_or(DropError::Unread)?;
+    let bytes = pickup(layout, request).ok_or(DropError::BadRequest)?;
     crate::inventory::transactions::item_info(loader, request.item.get())
-        .map_err(|_| Status::REFUSED)?;
+        .map_err(|_| DropError::NoItem)?;
     let spawn = SpawnRequest {
         header: Header::of::<SpawnRequest>(),
         template: layout.template,
@@ -256,7 +276,12 @@ pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Resu
         lifetime_ns: 0,
         flags: 0,
     };
-    crate::inventory::spawns::spawn_with(loader, &spawn, vec![(layout.hash, bytes)], 0)
+    Ok(crate::inventory::spawns::spawn_with(
+        loader,
+        &spawn,
+        vec![(layout.hash, bytes)],
+        0,
+    )?)
 }
 
 #[cfg(test)]
@@ -329,7 +354,7 @@ mod tests {
         }
         finished(reading);
         assert_eq!(reads.load(Ordering::Relaxed), 1);
-        assert_eq!(reading.layout().err(), Some(Status::MISSING));
+        assert!(reading.layout().is_none());
         let began = std::time::Instant::now();
         let drops = loop {
             let off = crate::engine::diag::parts_off();
@@ -349,11 +374,7 @@ mod tests {
             drops.reason
         );
         reading.start("build 1", || Ok(LAYOUT));
-        assert_eq!(
-            reading.layout().err(),
-            Some(Status::MISSING),
-            "no second read"
-        );
+        assert!(reading.layout().is_none(), "no second read");
     }
 
     #[test]
@@ -379,7 +400,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(200));
             Ok(LAYOUT)
         });
-        assert_eq!(reading.layout().map(|l| l.hash), Ok(LAYOUT.hash));
+        assert_eq!(reading.layout().map(|l| l.hash), Some(LAYOUT.hash));
     }
 
     #[test]
@@ -387,11 +408,11 @@ mod tests {
         let read = reading();
         read.start("build 1", || Ok(LAYOUT));
         finished(read);
-        assert_eq!(read.layout().map(|l| l.hash), Ok(LAYOUT.hash));
+        assert_eq!(read.layout().map(|l| l.hash), Some(LAYOUT.hash));
         let panicked = reading();
         panicked.start("build 1", || panic!("a read that panics"));
         finished(panicked);
-        assert_eq!(panicked.layout().err(), Some(Status::MISSING));
+        assert!(panicked.layout().is_none());
     }
 
     #[test]

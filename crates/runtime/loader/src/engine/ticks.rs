@@ -7,7 +7,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::{EventFn, Status, TickData, TickHandle};
+use enshwick_core::abi::{EventFn, TickData, TickHandle};
 
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
@@ -146,6 +146,18 @@ pub struct StepTime {
     pub average: u64,
 }
 
+/// Why a handler's period was not set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum SetEveryError {
+    /// No handler has the handle.
+    #[error("no tick handler has the handle")]
+    NoHandler,
+    /// The handler is another mod's.
+    #[error("the tick handler is another mod's")]
+    OtherMod,
+}
+
 /// The periodic tick handlers of every mod, and the time of the steps they
 /// run after.
 #[derive(Debug)]
@@ -241,19 +253,27 @@ impl Ticks {
         Some(handle)
     }
 
-    /// Sets the period of handler `handle` for mod `owner`:
-    /// [`Status::REFUSED`] for another mod's handler, [`Status::MISSING`]
-    /// for no handler.
-    pub fn set_every(&self, handle: TickHandle, owner: ModIndex, every: u64) -> Status {
+    /// Sets the period of handler `handle` for mod `owner`.
+    ///
+    /// # Errors
+    ///
+    /// [`SetEveryError::NoHandler`] for no handler,
+    /// [`SetEveryError::OtherMod`] for another mod's.
+    pub fn set_every(
+        &self,
+        handle: TickHandle,
+        owner: ModIndex,
+        every: u64,
+    ) -> Result<(), SetEveryError> {
         let list = self.list.load();
         let Some(&tick) = list.as_deref().and_then(|l| l.get(handle.0 as usize)) else {
-            return Status::MISSING;
+            return Err(SetEveryError::NoHandler);
         };
         if tick.owner != owner {
-            return Status::REFUSED;
+            return Err(SetEveryError::OtherMod);
         }
         tick.every.store(every, Ordering::Relaxed);
-        Status::OK
+        Ok(())
     }
 
     /// Calls each due handler for step `step` at `now` through `call`,
@@ -383,7 +403,7 @@ mod tests {
         let _first = steps(&ticks, 0, 1, 50 * MS);
         assert_eq!(
             ticks.set_every(TickHandle(0), ModIndex::new(0), 300 * MS),
-            Status::OK
+            Ok(())
         );
         assert_eq!(steps(&ticks, 1, 6, 50 * MS), [(0, 7, 6, 300 * MS)]);
     }
@@ -423,9 +443,9 @@ mod tests {
     fn another_mod_s_handler_is_refused_and_an_unknown_one_missing() {
         let ticks = listed(&[0, 0]);
         let set = |handle, owner| ticks.set_every(TickHandle(handle), ModIndex::new(owner), 5);
-        assert_eq!(set(1, 0), Status::REFUSED);
-        assert_eq!(set(2, 0), Status::MISSING);
-        assert_eq!(set(1, 1), Status::OK);
+        assert_eq!(set(1, 0), Err(SetEveryError::OtherMod));
+        assert_eq!(set(2, 0), Err(SetEveryError::NoHandler));
+        assert_eq!(set(1, 1), Ok(()));
     }
 
     #[test]

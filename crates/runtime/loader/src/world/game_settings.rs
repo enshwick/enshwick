@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_core::abi::{Event, Status};
+use enshwick_core::abi::Event;
 
 use crate::engine::fuse::Fuse;
 use crate::engine::live;
@@ -157,26 +157,52 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
+/// Why the game settings could not be read, written or kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum GameSettingsError {
+    /// The build's table lacks the settings' reads.
+    #[error("this build lacks the game settings")]
+    Unread,
+    /// The server has no settings yet.
+    #[error("no game settings run")]
+    NoSettings,
+    /// No world runs to keep the fields with.
+    #[error("no world to keep the fields with")]
+    NoWorldKey,
+    /// Bytes or a mask that are not the settings' size.
+    #[error("the bytes are not the settings' size")]
+    BadSize,
+    /// A day or night length that is not positive.
+    #[error("a day or night length is not positive")]
+    BadLength,
+    /// The settings writes' fuse refused the write.
+    #[error(transparent)]
+    Fuse(#[from] crate::engine::fuse::FuseError),
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// The live settings, on the game thread.
-fn live(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+fn live(loader: &Loader) -> Result<(&'static Layout, usize, usize), GameSettingsError> {
+    let layout = layout(loader).ok_or(GameSettingsError::Unread)?;
     let server = crate::engine::world::server()?;
     // SAFETY: `server` comes from `crate::engine::world::server`, so this runs on the
     // game thread that alone writes it; the table's `server.game_settings`
     // offset holds the pointer to its settings, set from its start.
     let settings: usize = unsafe { crate::engine::memory::read(server, layout.settings) };
     if settings == 0 {
-        return Err(Status::MISSING);
+        return Err(GameSettingsError::NoSettings);
     }
     Ok((layout, server, settings))
 }
 
 /// Copies the live settings into `out`, which is their reflected size, and
 /// returns the preset.
-pub(crate) fn read(loader: &Loader, out: &mut [u8]) -> Result<u8, Status> {
+pub(crate) fn read(loader: &Loader, out: &mut [u8]) -> Result<u8, GameSettingsError> {
     let (layout, server, settings) = live(loader)?;
     if out.len() != layout.size {
-        return Err(Status::BAD_ARGS);
+        return Err(GameSettingsError::BadSize);
     }
     for (at, byte) in out.iter_mut().enumerate() {
         // SAFETY: `settings` is non-zero (checked by `live`) and the live
@@ -222,15 +248,15 @@ fn settings_hold(layout: &Layout, server: usize) -> Result<(), live::Broken> {
 
 /// Replaces the live settings with `bytes`, their whole reflected layout,
 /// and tells the clients.
-pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), Status> {
-    let checked = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), GameSettingsError> {
+    let checked = layout(loader).ok_or(GameSettingsError::Unread)?;
     let server = crate::engine::world::server()?;
     if !WRITES_FUSE.verify(&loader.build.name, || settings_hold(checked, server)) {
-        return Err(WRITES_FUSE.refused());
+        return Err(WRITES_FUSE.refused().into());
     }
     let (layout, server, settings) = live(loader)?;
     if bytes.len() != layout.size {
-        return Err(Status::BAD_ARGS);
+        return Err(GameSettingsError::BadSize);
     }
     let length = |at: usize| {
         bytes
@@ -239,7 +265,7 @@ pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), Status> {
             .map_or(0, i64::from_le_bytes)
     };
     if length(layout.day_length) <= 0 || length(layout.night_length) <= 0 {
-        return Err(Status::BAD_ARGS);
+        return Err(GameSettingsError::BadLength);
     }
 
     for (at, &byte) in bytes.iter().enumerate() {
@@ -263,11 +289,10 @@ pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), Status> {
     let mut event = vec![0u8; layout.event_size];
     if let Some(out) = event.get_mut(layout.event_settings..layout.event_settings + bytes.len()) {
         out.copy_from_slice(bytes);
-        if let Err(status) = crate::base::emits::push(loader, layout.event, &event) {
+        if let Err(error) = crate::base::emits::push(loader, layout.event, &event) {
             crate::log!(
                 DEBUG,
-                "game settings changed; the event was refused ({}), the info message carries them",
-                status.0
+                "game settings changed; the event was refused ({error}), the info message carries them"
             );
         }
     }
@@ -460,19 +485,19 @@ fn settle(loader: &Loader) {
     let applied = overlay(layout, &mut bytes, &kept.fields);
     match write(loader, &bytes) {
         Ok(()) => crate::log!(INFO, "game settings: {applied} kept fields applied"),
-        Err(status) => crate::log!(WARN, "game settings: kept fields refused ({})", status.0),
+        Err(error) => crate::log!(WARN, "game settings: kept fields refused ({error})"),
     }
 }
 
 /// Writes `data` as [`write`] does and keeps the fields `mask` marks with
 /// the running world.
-pub(crate) fn keep(loader: &Loader, data: &[u8], mask: &[u8]) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn keep(loader: &Loader, data: &[u8], mask: &[u8]) -> Result<(), GameSettingsError> {
+    let layout = layout(loader).ok_or(GameSettingsError::Unread)?;
     if mask.len() != data.len() {
-        return Err(Status::BAD_ARGS);
+        return Err(GameSettingsError::BadSize);
     }
     let mut kept = STATE.kept.relock();
-    let key = kept.key.clone().ok_or(Status::MISSING)?;
+    let key = kept.key.clone().ok_or(GameSettingsError::NoWorldKey)?;
     write(loader, data)?;
     let fields = masked(layout, data, mask);
     if fields.is_empty() {
@@ -491,10 +516,10 @@ pub(crate) fn forget_world() {
 
 /// Forgets the running world's kept fields and puts back the values it
 /// loaded with.
-pub(crate) fn forget(loader: &Loader) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn forget(loader: &Loader) -> Result<(), GameSettingsError> {
+    let layout = layout(loader).ok_or(GameSettingsError::Unread)?;
     let mut kept = STATE.kept.relock();
-    let key = kept.key.clone().ok_or(Status::MISSING)?;
+    let key = kept.key.clone().ok_or(GameSettingsError::NoWorldKey)?;
     if kept.fields.is_empty() {
         return Ok(());
     }

@@ -20,7 +20,7 @@ entries! {
     }
 
     fn rebuild_resource(me as Mod, key as In<ResourceKey>) -> Status {
-        Ok(crate::content::served::rebuild(me.index, key))
+        Ok(crate::content::served::rebuild(me.index, key)?)
     }
 
     fn content_serve(
@@ -47,7 +47,9 @@ entries! {
     }
 
     fn resource_served(_loader as Caller, key as In<ResourceKey>, [out, capacity, len] as BytesOut) -> Status {
-        copy_keeping("resource_served", key, &out, crate::content::served::served_now)
+        copy_keeping("resource_served", key, &out, |key| {
+            crate::content::served::served_now(key).map_err(|error| Refused::from(error).status())
+        })
     }
 
     fn resource_buffer(me: ModHandle, len: u32, out as Out<*mut u8>) -> Status {

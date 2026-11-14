@@ -8,9 +8,8 @@
 //! as of that pass.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::Status;
 
-use super::{Layout, layout, record, store_of};
+use super::{KnowledgeError, Layout, layout, record, store_of};
 use crate::engine::loader::Loader;
 use crate::engine::memory::read;
 use crate::engine::pinned;
@@ -142,9 +141,9 @@ fn fields_fit(size: usize, id: usize, compare: usize, operator: usize, kind: usi
 
 /// Whether the game query `query` holds for the character `entity`, or for
 /// the world for `Entity(0)`, as the game answers it now.
-pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool, Status> {
-    let layout: &Layout = layout(loader).ok_or(Status::MISSING)?;
-    let calls = layout.query.as_ref().ok_or(Status::MISSING)?;
+pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool, KnowledgeError> {
+    let layout: &Layout = layout(loader).ok_or(KnowledgeError::Unread)?;
+    let calls = layout.query.as_ref().ok_or(KnowledgeError::Unread)?;
     let (game, state) = store_of(layout, crate::engine::world::server()?)?;
     // SAFETY: `game` is the server's game object `store_of` found non-null on
     // the game thread; its knowledge object pointer, non-null by the same
@@ -178,14 +177,14 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
 
 /// Whether the query holds by what the wrapper `call` writes; a wrapper
 /// that returns without writing has not answered.
-fn answered(call: impl FnOnce(*mut Answer)) -> Result<bool, Status> {
+fn answered(call: impl FnOnce(*mut Answer)) -> Result<bool, KnowledgeError> {
     let mut answer = Answer {
         status: u8::MAX,
         ..bytemuck::Zeroable::zeroed()
     };
     call(&raw mut answer);
     if answer.status != 0 {
-        return Err(Status::MISSING);
+        return Err(KnowledgeError::Unanswered);
     }
     Ok(answer.holds != 0)
 }
@@ -209,14 +208,17 @@ mod tests {
 
     #[test]
     fn a_wrapper_that_writes_nothing_reads_as_missing() {
-        assert_eq!(answered(|_| {}), Err(Status::MISSING));
+        assert!(matches!(answered(|_| {}), Err(KnowledgeError::Unanswered)));
     }
 
     #[test]
     fn a_wrapper_s_answer_is_read_only_at_status_zero() {
-        assert_eq!(answered(wrote(0, 1)), Ok(true));
-        assert_eq!(answered(wrote(0, 0)), Ok(false));
-        assert_eq!(answered(wrote(1, 1)), Err(Status::MISSING));
+        assert!(matches!(answered(wrote(0, 1)), Ok(true)));
+        assert!(matches!(answered(wrote(0, 0)), Ok(false)));
+        assert!(matches!(
+            answered(wrote(1, 1)),
+            Err(KnowledgeError::Unanswered)
+        ));
     }
 
     #[test]

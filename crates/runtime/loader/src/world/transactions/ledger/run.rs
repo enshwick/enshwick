@@ -1,11 +1,12 @@
 //! A task's run in a step: its changes written in order, or its undo newest first.
 
-use enshwick_core::abi::{Status, TransactionInfo};
+use enshwick_core::abi::TransactionInfo;
 
 use super::checks::{still_placed, still_removed};
 use super::{
     BRICK_VOXELS, Brick, Change, Done, Image, Mode, Outcome, Pass, Settings, Task, Voxels, hash,
 };
+use crate::world::transactions::TransactionError;
 
 /// Writes each brick of `images` back with `change` laid over it; the first
 /// write that fails, after which the bricks before it stay written.
@@ -13,7 +14,7 @@ fn write_over(
     world: &mut impl Voxels,
     images: &[(Brick, Image)],
     mut change: impl FnMut(Brick, &mut [u16; BRICK_VOXELS]),
-) -> Option<Status> {
+) -> Option<TransactionError> {
     images
         .iter()
         .try_for_each(|(brick, before)| {
@@ -41,7 +42,7 @@ impl Task {
 
     fn apply(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
         let work = &mut self.work;
-        let failed = |reason| Outcome::Done(TransactionInfo::FAILED, reason);
+        let failed = |reason| Outcome::Done(TransactionInfo::FAILED, Some(reason));
         if !work.started {
             work.started = true;
             if let Some(outcome) = work.first_check(world, pass) {
@@ -81,7 +82,7 @@ impl Task {
                 }
                 change => {
                     let Some(bricks) = op.bricks else {
-                        return failed(Status::MISSING);
+                        return failed(TransactionError::Unavailable);
                     };
                     let images = bricks
                         .iter()
@@ -179,7 +180,7 @@ impl Task {
                         if Some(hash(&now)) == expected {
                             world.write(brick, image)
                         } else {
-                            Err(Status::REFUSED)
+                            Err(TransactionError::Changed)
                         }
                     });
                     match result {
@@ -189,10 +190,10 @@ impl Task {
                             pass.spent += 1;
                             work.waits = 0;
                         }
-                        Err(Status::NOT_LOADED) => {
+                        Err(TransactionError::NotLoaded) => {
                             work.waits += 1;
                             if work.waits >= pass.waits {
-                                return work.refuse_undo(Status::NOT_LOADED, 0);
+                                return work.refuse_undo(TransactionError::NotLoaded, 0);
                             }
                             return Outcome::Later;
                         }
@@ -232,6 +233,6 @@ impl Task {
         }
         work.now.clear();
         work.holds = 0;
-        Outcome::Done(TransactionInfo::UNDONE, Status::OK)
+        Outcome::Done(TransactionInfo::UNDONE, None)
     }
 }

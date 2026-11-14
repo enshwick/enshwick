@@ -18,8 +18,27 @@ use loom::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use enshwick_core::__private::rules;
-use enshwick_core::abi::{HookFlags, Status};
+use enshwick_core::abi::HookFlags;
 use rustc_hash::FxHashMap;
+
+/// Why a hook link or a code patch was not added.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum LinkError {
+    /// The hooks armed, or the patches sealed, before the call.
+    #[error("asked after the hooks armed")]
+    Armed,
+    /// The target, detour or patch is incomplete or outside the code.
+    #[error("the target, detour or patch is malformed")]
+    Malformed,
+    /// The link's `next` slot already joins a chain.
+    #[error("the link's slot already joins a chain")]
+    SlotTaken,
+    /// Another link or patch claims the place, or one of the two claims it
+    /// exclusively.
+    #[error("another link claims the place")]
+    Clash,
+}
 
 /// The `next` slot of one of the loader's own links, typed by the function
 /// it hooks, so a link calls on with the hooked function's signature.
@@ -380,17 +399,23 @@ impl Chains {
     ///
     /// Refused after arming, for a second link of the same mod on one target,
     /// and when either side claims the target exclusively.
-    pub fn add(&mut self, target: u64, link: Link) -> Status {
+    ///
+    /// # Errors
+    ///
+    /// [`LinkError::Armed`] after arming, [`LinkError::Malformed`] for an
+    /// incomplete target or detour, [`LinkError::SlotTaken`] or
+    /// [`LinkError::Clash`] for a link the chain refuses.
+    pub fn add(&mut self, target: u64, link: Link) -> Result<(), LinkError> {
         if self.armed {
-            return Status::TOO_LATE;
+            return Err(LinkError::Armed);
         }
         if !rules::is_complete_hook(target, link.detour) {
-            return Status::BAD_ARGS;
+            return Err(LinkError::Malformed);
         }
         // One slot joins one chain: a link whose slot is wired twice would
         // call on into the other target's chain with this one's arguments.
         if self.slot_taken(link.next) {
-            return Status::REFUSED;
+            return Err(LinkError::SlotTaken);
         }
         let chain = self.by_target.entry(target).or_insert_with(|| Chain {
             target,
@@ -411,10 +436,10 @@ impl Chains {
                 owner: link.owner,
                 holder,
             });
-            return Status::REFUSED;
+            return Err(LinkError::Clash);
         }
         chain.links.push(link);
-        Status::OK
+        Ok(())
     }
 
     /// Whether `next` is already the slot of a link on any target.
@@ -549,20 +574,20 @@ mod tests {
         let mut chains = Chains::default();
         let first = link(ModIndex::new(0), 0xa, 0, HookFlags::NONE);
         let next = first.next;
-        assert_eq!(chains.add(0x10, first), Status::OK);
+        assert_eq!(chains.add(0x10, first), Ok(()));
         let again = Link {
             next,
             ..link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)
         };
-        assert_eq!(chains.add(0x20, again), Status::REFUSED);
+        assert_eq!(chains.add(0x20, again), Err(LinkError::SlotTaken));
         let other = Link {
             next,
             ..link(ModIndex::new(1), 0xb, 0, HookFlags::NONE)
         };
-        assert_eq!(chains.add(0x10, other), Status::REFUSED);
+        assert_eq!(chains.add(0x10, other), Err(LinkError::SlotTaken));
         assert_eq!(
             chains.add(0x20, link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
     }
 
@@ -606,10 +631,10 @@ mod tests {
         static GLOW: Fuse = Fuse::new("chains glow");
         let mut chains = Chains::default();
         let ours = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
-        assert_eq!(chains.add(0x10, of(&GLOW, ours)), Status::OK);
+        assert_eq!(chains.add(0x10, of(&GLOW, ours)), Ok(()));
         assert_eq!(
             chains.add(0x10, link(ModIndex::new(0), 0xb, 0, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
         chains.seal();
         let head = slot();
@@ -630,11 +655,11 @@ mod tests {
         let mut chains = Chains::default();
         let first = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
         let second = link(ModIndex::LOADER, 0xb, i32::MIN, HookFlags::NONE);
-        assert_eq!(chains.add(0x10, of(&LAMP, first)), Status::OK);
-        assert_eq!(chains.add(0x20, of(&LAMP, second)), Status::OK);
+        assert_eq!(chains.add(0x10, of(&LAMP, first)), Ok(()));
+        assert_eq!(chains.add(0x20, of(&LAMP, second)), Ok(()));
         assert_eq!(
             chains.add(0x20, link(ModIndex::new(0), 0xc, 0, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
         LAMP.blow("a test");
         chains.seal();
@@ -647,15 +672,15 @@ mod tests {
         let mut chains = Chains::default();
         assert_eq!(
             chains.add(0x10, link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
         assert_eq!(
             chains.add(0x10, link(ModIndex::new(1), 0xb, -5, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
         assert_eq!(
             chains.add(0x10, link(ModIndex::new(2), 0xc, 0, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
         let head = slot();
         for chain in chains.iter_mut() {
@@ -679,7 +704,7 @@ mod tests {
         assert_eq!(value(head), 0xff);
         assert_eq!(
             chains.add(0x20, link(ModIndex::new(0), 0xd, 0, HookFlags::NONE)),
-            Status::TOO_LATE
+            Err(LinkError::Armed)
         );
     }
 
@@ -688,27 +713,27 @@ mod tests {
         let mut chains = Chains::default();
         assert_eq!(
             chains.add(0x10, link(ModIndex::new(0), 0xa, 0, HookFlags::EXCLUSIVE)),
-            Status::OK
+            Ok(())
         );
         assert_eq!(
             chains.add(0x10, link(ModIndex::new(1), 0xb, 0, HookFlags::NONE)),
-            Status::REFUSED
+            Err(LinkError::Clash)
         );
         assert_eq!(
             chains.add(0x20, link(ModIndex::new(1), 0xb, 0, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
         assert_eq!(
             chains.add(0x20, link(ModIndex::new(1), 0xc, 0, HookFlags::NONE)),
-            Status::REFUSED
+            Err(LinkError::Clash)
         );
         assert_eq!(
             chains.add(0x20, link(ModIndex::new(2), 0xc, 0, HookFlags::EXCLUSIVE)),
-            Status::REFUSED
+            Err(LinkError::Clash)
         );
         assert_eq!(
             chains.add(0, link(ModIndex::new(2), 0xc, 0, HookFlags::NONE)),
-            Status::BAD_ARGS
+            Err(LinkError::Malformed)
         );
         assert_eq!(chains.len(), 2);
         assert_eq!(
@@ -748,10 +773,10 @@ mod tests {
             slot: first_slot,
             counter: &COUNTER,
         });
-        assert_eq!(chains.add(0x30, first), Status::OK);
+        assert_eq!(chains.add(0x30, first), Ok(()));
         assert_eq!(
             chains.add(0x30, link(ModIndex::new(1), 0xb, 1, HookFlags::NONE)),
-            Status::OK
+            Ok(())
         );
         let (head, original_slot) = (slot(), slot());
         for chain in chains.iter_mut() {

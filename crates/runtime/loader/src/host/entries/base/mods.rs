@@ -93,7 +93,7 @@ entries! {
 
     fn rename_content(me as Mod, [renames, count] as List<ContentRename>) -> Status {
         before_delivery(me.loader)?;
-        Ok(crate::content::content_renames::declare(me.index, renames))
+        Ok(crate::content::content_renames::declare(me.index, renames)?)
     }
 
     fn mods(me as AnyMod, [out, entry_size, capacity, count] as SizedListOut<ModInfo>) -> Status {

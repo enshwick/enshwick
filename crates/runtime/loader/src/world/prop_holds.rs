@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::Status;
 
 use enshwick_base::Relock;
 
@@ -34,6 +33,12 @@ struct Hold {
     /// What the hold changed to keep Quick Stash out, as it was.
     deposit: Option<Stash>,
 }
+
+/// Why a prop was not held: a hook the hold relies on did not link, or the
+/// interaction filter's fuse is off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the hooks that hold props do not run")]
+pub struct HoldError;
 
 /// The props held, and whether the interaction filter that keeps players
 /// from them is in place.
@@ -93,15 +98,15 @@ impl PropHolds {
     }
 
     /// Holds `entity` against players until [`PropHolds::release`] or its
-    /// destroy. [`Status::MISSING`] unless every hook the hold relies on
-    /// linked and the filter's fuse is on (`fuse_off` false).
+    /// destroy, unless a hook the hold relies on did not link or the filter's
+    /// fuse is off (`fuse_off` true).
     ///
     /// # Errors
     ///
-    /// [`Status::MISSING`] as above.
-    pub fn hold(&self, entity: u32, fuse_off: bool) -> Result<(), Status> {
+    /// [`HoldError`] as above.
+    pub fn hold(&self, entity: u32, fuse_off: bool) -> Result<(), HoldError> {
         if fuse_off || !self.linked.load(Ordering::Acquire) {
-            return Err(Status::MISSING);
+            return Err(HoldError);
         }
         let world = self.world.load(Ordering::Acquire);
         let mut held = self.held.relock();
@@ -244,7 +249,7 @@ mod tests {
     fn a_hold_needs_every_hook_linked() {
         let holds = PropHolds::new();
         holds.linked(0, false);
-        assert_eq!(holds.hold(7, false), Err(Status::MISSING));
+        assert_eq!(holds.hold(7, false), Err(HoldError));
         assert!(!holds.is_held(7));
         assert!(holds.quiet());
     }
@@ -252,7 +257,7 @@ mod tests {
     #[test]
     fn a_hold_needs_the_filter_s_fuse_on() {
         let holds = linked();
-        assert_eq!(holds.hold(7, true), Err(Status::MISSING));
+        assert_eq!(holds.hold(7, true), Err(HoldError));
         assert!(!holds.is_held(7));
     }
 

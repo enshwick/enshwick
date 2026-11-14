@@ -6,8 +6,6 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::Status;
-
 use super::{Layout, layout};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
@@ -147,15 +145,26 @@ const fn block(holding: bool, held: Option<u8>, byte: u8) -> (Option<u8>, Option
     }
 }
 
+/// Why a mod's hold on the saves was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum HoldSavesError {
+    /// The build's table lacks the save's pieces.
+    #[error("this build lacks the saves")]
+    Unread,
+    /// The holds' link is off.
+    #[error("the save holds are off")]
+    Off,
+}
+
 /// Mod `owner` holds the world's saves (`hold`) or lets them go: the game
 /// saves only while no mod holds them, and a save asked for meanwhile is
 /// refused.
-pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
+pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Result<(), HoldSavesError> {
     if layout(loader).is_none() {
-        return Status::MISSING;
+        return Err(HoldSavesError::Unread);
     }
     if hold && HOLDS_FUSE.is_off() {
-        return Status::UNAVAILABLE;
+        return Err(HoldSavesError::Off);
     }
     let id = mod_id(loader, owner);
     let mut saving = STATE.saving.relock();
@@ -178,7 +187,7 @@ pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
         Change::LetGo => crate::log!(INFO, "world saves let go by {id}"),
         Change::Same => {}
     }
-    Status::OK
+    Ok(())
 }
 
 /// The id of mod `owner`, for the log.

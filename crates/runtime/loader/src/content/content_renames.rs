@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{ContentRename, Status};
+use enshwick_core::abi::ContentRename;
 use rustc_hash::FxHashMap;
 
 use crate::engine::mod_index::ModIndex;
@@ -21,26 +21,44 @@ static DECLARED: Registry<Declared> = Registry::new();
 /// Each old GUID to the end of its chain, once sealed.
 static RENAMES: OnceLock<FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
 
-/// Keeps the renames of the mod `owner`; [`Status::REFUSED`] for a rename to
+/// Why a mod's renames were refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RenameError {
+    /// A rename of an id to itself.
+    #[error("a rename to itself")]
+    ToItself,
+    /// The mod's second declaration.
+    #[error("the mod declared its renames already")]
+    Twice,
+    /// Content is sealed.
+    #[error("asked after content was sealed")]
+    Sealed,
+}
+
+/// Keeps the renames of the mod `owner`; [`RenameError`] for a rename to
 /// itself, a mod's second declaration, or one after content is sealed.
-pub(crate) fn declare(owner: ModIndex, renames: &[ContentRename]) -> Status {
+pub(crate) fn declare(owner: ModIndex, renames: &[ContentRename]) -> Result<(), RenameError> {
     add(&DECLARED, owner, renames)
 }
 
-fn add(declared: &Registry<Declared>, owner: ModIndex, renames: &[ContentRename]) -> Status {
+fn add(
+    declared: &Registry<Declared>,
+    owner: ModIndex,
+    renames: &[ContentRename],
+) -> Result<(), RenameError> {
     if renames.iter().any(|r| r.from == r.to) {
-        return Status::REFUSED;
+        return Err(RenameError::ToItself);
     }
     let renames = renames.iter().map(|r| (r.from, r.to)).collect();
     declared
         .edit(|list| {
             if list.iter().any(|d| d.owner == owner) {
-                return Status::REFUSED;
+                return Err(RenameError::Twice);
             }
             list.push(Declared { owner, renames });
-            Status::OK
+            Ok(())
         })
-        .unwrap_or(Status::REFUSED)
+        .unwrap_or(Err(RenameError::Sealed))
 }
 
 /// The renames of every mod `on` keeps, old GUID to the end of its chain:
@@ -95,8 +113,8 @@ mod tests {
     fn content_renamed_twice_reads_as_the_last_guid() {
         let declared = Registry::new();
         let (first, second) = (ModIndex::new(0), ModIndex::new(1));
-        assert_eq!(add(&declared, first, &[rename(1, 2)]), Status::OK);
-        assert_eq!(add(&declared, second, &[rename(2, 3)]), Status::OK);
+        assert_eq!(add(&declared, first, &[rename(1, 2)]), Ok(()));
+        assert_eq!(add(&declared, second, &[rename(2, 3)]), Ok(()));
         let renames = sealed(&declared, |_| true);
         assert_eq!(renames[&[1; 16]], [3; 16]);
         assert_eq!(renames[&[2; 16]], [3; 16]);
@@ -107,8 +125,8 @@ mod tests {
     fn a_mod_that_is_off_renames_nothing() {
         let declared = Registry::new();
         let (on, off) = (ModIndex::new(0), ModIndex::new(1));
-        assert_eq!(add(&declared, on, &[rename(1, 2)]), Status::OK);
-        assert_eq!(add(&declared, off, &[rename(4, 5)]), Status::OK);
+        assert_eq!(add(&declared, on, &[rename(1, 2)]), Ok(()));
+        assert_eq!(add(&declared, off, &[rename(4, 5)]), Ok(()));
         let renames = sealed(&declared, |owner| owner == on);
         assert_eq!(renames.len(), 1);
         assert_eq!(renames[&[1; 16]], [2; 16]);
@@ -118,13 +136,19 @@ mod tests {
     fn a_rename_to_itself_a_second_declaration_or_a_late_one_is_refused() {
         let declared = Registry::new();
         let owner = ModIndex::new(0);
-        assert_eq!(add(&declared, owner, &[rename(1, 1)]), Status::REFUSED);
-        assert_eq!(add(&declared, owner, &[rename(1, 2)]), Status::OK);
-        assert_eq!(add(&declared, owner, &[rename(3, 4)]), Status::REFUSED);
+        assert_eq!(
+            add(&declared, owner, &[rename(1, 1)]),
+            Err(RenameError::ToItself)
+        );
+        assert_eq!(add(&declared, owner, &[rename(1, 2)]), Ok(()));
+        assert_eq!(
+            add(&declared, owner, &[rename(3, 4)]),
+            Err(RenameError::Twice)
+        );
         let _sealed = sealed(&declared, |_| true);
         assert_eq!(
             add(&declared, ModIndex::new(1), &[rename(5, 6)]),
-            Status::REFUSED
+            Err(RenameError::Sealed)
         );
     }
 

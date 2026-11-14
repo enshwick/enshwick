@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick_core::abi::{PlayerInfo, Status};
+use enshwick_core::abi::PlayerInfo;
 
 use crate::engine::loader::Loader;
 use crate::engine::texts;
@@ -34,8 +34,8 @@ pub(crate) fn after_step(loader: &Loader) {
                 crate::log!(INFO, "console: {line}:\n{answer}");
                 answer
             }
-            Err(status) => {
-                let why = refusal(&line, status);
+            Err(error) => {
+                let why = refusal(&line, &error);
                 crate::log!(WARN, "console: {line}: {why}");
                 why
             }
@@ -52,13 +52,27 @@ fn show(answer: &str) {
     let _shown = writeln!(out, "{answer}").and_then(|()| out.flush());
 }
 
-/// Why the console did not answer `line`.
-fn refusal(line: &str, status: Status) -> String {
+/// Why the console did not run a line.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ConsoleError {
+    /// An empty line.
+    #[error("the line is empty")]
+    Empty,
+    /// Off the server's game thread.
+    #[error("not on the server's game thread")]
+    WrongThread,
+    /// No running mod with actions has the line's first word.
+    #[error("no running mod has this word")]
+    Unknown,
+}
+
+/// Why the console did not answer `line`, named by the error's variant,
+/// which reads the same in every language.
+fn refusal(line: &str, error: &ConsoleError) -> String {
     let word = line.split_whitespace().next().unwrap_or_default();
-    if status == Status::MISSING {
-        texts::fill("enshwick.unknown", &[("id", word)])
-    } else {
-        texts::fill("console.not-run", &[("status", &format!("{status:?}"))])
+    match error {
+        ConsoleError::Unknown => texts::fill("enshwick.unknown", &[("id", word)]),
+        _ => texts::fill("console.not-run", &[("status", &format!("{error:?}"))]),
     }
 }
 
@@ -73,12 +87,13 @@ pub(crate) fn the_console() -> PlayerInfo {
 }
 
 /// Runs `line` as the server's console, on the game thread; the answer.
-/// [`Status::MISSING`] when no running mod with actions has the line's
-/// first word as its id, command name or alias (a leading `/` allowed).
-pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
-    crate::engine::world::server().map_err(|_| Status::WRONG_THREAD)?;
+/// [`ConsoleError::Unknown`] when no running mod with actions has the
+/// line's first word as its id, command name or alias (a leading `/`
+/// allowed).
+pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, ConsoleError> {
+    crate::engine::world::server().map_err(|_| ConsoleError::WrongThread)?;
     match parse(line) {
-        Line::Empty => Err(Status::BAD_ARGS),
+        Line::Empty => Err(ConsoleError::Empty),
         Line::Mod { id, rest } => {
             let index = loader
                 .find_mod(&id.to_ascii_lowercase())
@@ -86,7 +101,7 @@ pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
                 .or_else(|| {
                     crate::actions::commands::find(id).map(crate::engine::mod_index::ModIndex::get)
                 })
-                .ok_or(Status::MISSING)?;
+                .ok_or(ConsoleError::Unknown)?;
             crate::log!(DEBUG, "the console runs {id} {rest}");
             crate::actions::player_actions::console(
                 loader,
@@ -94,7 +109,7 @@ pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
                 &crate::actions::commands::word(id),
                 rest,
             )
-            .ok_or(Status::MISSING)
+            .ok_or(ConsoleError::Unknown)
         }
         Line::Loader(tool) => {
             crate::log!(DEBUG, "the console runs {line}");

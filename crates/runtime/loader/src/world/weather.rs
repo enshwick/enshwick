@@ -23,7 +23,7 @@ mod check;
 
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
+use enshwick_core::abi::{ChunkData, Event, Header, HookFlags, WeatherFront};
 use enshwick_core::raw::read_at;
 
 use crate::engine::fuse::Fuse;
@@ -252,8 +252,29 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
+/// Why the weather could not be read or changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum WeatherError {
+    /// The build's table lacks the weather's reads.
+    #[error("this build lacks the weather reads")]
+    Unread,
+    /// The server has no weather system, game object or weather resource
+    /// yet.
+    #[error("no weather system runs")]
+    NoSystem,
+    /// A negative duration or an effect the game has none of.
+    #[error("no such weather")]
+    BadWeather,
+    /// The weather changes' fuse refused the write.
+    #[error(transparent)]
+    Fuse(#[from] crate::engine::fuse::FuseError),
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// The weather system and the weather clock, on the game thread.
-fn system(layout: &Layout) -> Result<(usize, i64), Status> {
+fn system(layout: &Layout) -> Result<(usize, i64), WeatherError> {
     let server = crate::engine::world::server()?;
     // SAFETY: `world::server` returned the live server on the game thread at
     // a quiet moment; its weather system pointer sits at the build table's
@@ -264,7 +285,7 @@ fn system(layout: &Layout) -> Result<(usize, i64), Status> {
     // `server.player_infos` offset.
     let game: usize = unsafe { read(server, layout.game) };
     if system == 0 || game == 0 {
-        return Err(Status::MISSING);
+        return Err(WeatherError::NoSystem);
     }
     // SAFETY: `game` is the server's non-null game object by the check
     // before it, and `world::server` put this call on the game thread.
@@ -327,8 +348,8 @@ impl Drop for Resource<'_> {
 }
 
 /// How clear, rainy, snowy and stormy it is at `position`.
-pub(crate) fn sample(loader: &Loader, position: [i64; 3]) -> Result<[f32; 4], Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn sample(loader: &Loader, position: [i64; 3]) -> Result<[f32; 4], WeatherError> {
+    let layout = layout(loader).ok_or(WeatherError::Unread)?;
     let (system, now) = system(layout)?;
     let mut out = [0.0f32; 4];
     // SAFETY: `system` is the live weather system `system()` found on the
@@ -395,10 +416,10 @@ fn instance(layout: &Layout, system: usize, handle: u32) -> Option<usize> {
 }
 
 /// The current front of each layer.
-pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, WeatherError> {
+    let layout = layout(loader).ok_or(WeatherError::Unread)?;
     let (system, now) = system(layout)?;
-    let resource = Resource::lock(layout, system).ok_or(Status::MISSING)?;
+    let resource = Resource::lock(layout, system).ok_or(WeatherError::NoSystem)?;
     // SAFETY: `resource` holds the weather resource locked, and its
     // reflected `phenomenons` field is a blob array header.
     let BlobArray {
@@ -618,8 +639,8 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 #[derive(Debug, thiserror::Error)]
 enum RemapError {
     /// The weather system or its resource is not there.
-    #[error("the weather is not loaded ({0:?})")]
-    Unloaded(Status),
+    #[error("the weather is not loaded: {0}")]
+    Unloaded(WeatherError),
     /// The live weather system did not hold its found offsets.
     #[error("weather changes are off on this game build")]
     Off,
@@ -631,17 +652,16 @@ enum RemapError {
 /// Remaps or frees the restored fronts by the GUIDs at `path`; see
 /// [`as_saved`] for a save without them.
 fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
-    let layout = layout(loader).ok_or(RemapError::Unloaded(Status::MISSING))?;
-    writable(loader, layout).map_err(|status| {
-        if status == Status::UNAVAILABLE {
-            RemapError::Off
-        } else {
-            RemapError::Unloaded(status)
-        }
+    let layout = layout(loader).ok_or(RemapError::Unloaded(WeatherError::Unread))?;
+    writable(loader, layout).map_err(|error| match error {
+        WeatherError::Fuse(crate::engine::fuse::FuseError::Off) => RemapError::Off,
+        other => RemapError::Unloaded(other),
     })?;
     let (system, _) = system(layout).map_err(RemapError::Unloaded)?;
-    let resource = Resource::lock(layout, system).ok_or(RemapError::Unloaded(Status::MISSING))?;
-    let served = phenomena(layout, &resource).ok_or(RemapError::Unloaded(Status::MISSING))?;
+    let resource =
+        Resource::lock(layout, system).ok_or(RemapError::Unloaded(WeatherError::NoSystem))?;
+    let served =
+        phenomena(layout, &resource).ok_or(RemapError::Unloaded(WeatherError::NoSystem))?;
     let text = enshwick_core::files::read_to_string_if_present(path)
         .map_err(|why| RemapError::Unread(path.to_owned(), why.to_string()))?;
     let saved = text
@@ -659,7 +679,7 @@ fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
         start: layer_defs,
         count: layer_def_count,
     } = unsafe { BlobArray::read(resource.address() + layout.resource_layers) }
-        .ok_or(RemapError::Unloaded(Status::MISSING))?;
+        .ok_or(RemapError::Unloaded(WeatherError::NoSystem))?;
     // SAFETY: `system` is the live weather system `system()` found on the
     // game thread; its layer array pointer sits at the build table's
     // `weather.layers` offset.
@@ -736,14 +756,14 @@ fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
 /// Starts new weather in every layer: `effect` where a layer has it,
 /// nothing elsewhere, for `duration` game nanoseconds (0 for the game's
 /// own); [`ANY`] lets the game choose at its next update.
-pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Status> {
+pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), WeatherError> {
     if duration < 0 || (effect > WeatherFront::BLIZZARD && effect != ANY) {
-        return Err(Status::BAD_ARGS);
+        return Err(WeatherError::BadWeather);
     }
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let layout = layout(loader).ok_or(WeatherError::Unread)?;
     writable(loader, layout)?;
     let (system, now) = system(layout)?;
-    let resource = Resource::lock(layout, system).ok_or(Status::MISSING)?;
+    let resource = Resource::lock(layout, system).ok_or(WeatherError::NoSystem)?;
     // SAFETY: `resource` holds the weather resource locked, and its
     // reflected `layers` field is a blob array header.
     let BlobArray {

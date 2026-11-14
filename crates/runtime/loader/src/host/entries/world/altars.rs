@@ -4,7 +4,7 @@ use enshwick_core::abi as api_frame;
 use enshwick_core::abi::Status;
 
 use crate::engine::conflicts::Mode;
-use crate::host::layer::{Caller, HeadedOut, Mod, Out, SizedListOut, checked, entries};
+use crate::host::layer::{Caller, HeadedOut, Mod, Out, SizedListOut, entries};
 use crate::world::base_groups::limit::Limits;
 
 entries! {
@@ -35,7 +35,7 @@ entries! {
     }
 
     fn altar_zones_changed(me as Mod) -> Status {
-        checked(crate::world::altars::resize(me.index))
+        Ok(crate::world::altars::resize(me.index)?)
     }
 
     fn building_zone_check_filter(
@@ -78,15 +78,15 @@ entries! {
     }
 
     fn raise_base_limit(me as Mod) -> Status {
-        checked(crate::world::bases::request(me.loader, Limits::RAISED))
+        Ok(crate::world::bases::request(me.loader, Limits::RAISED)?)
     }
 
     fn request_base_limits(me as Mod, zones: u32, bases: u32) -> Status {
-        checked(crate::world::bases::request(me.loader, Limits { zones, bases }))
+        Ok(crate::world::bases::request(me.loader, Limits { zones, bases })?)
     }
 
     fn set_base_cap(me as Mod, bases: u32) -> Status {
-        checked(crate::world::bases::cap(me.index, bases))
+        Ok(crate::world::bases::cap(me.index, bases)?)
     }
 
     fn base_zones(_loader as Caller, zones as Out<u32>, bases as Out<u32>) -> Status {

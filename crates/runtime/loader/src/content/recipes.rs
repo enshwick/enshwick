@@ -618,8 +618,8 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
 
 #[cfg(windows)]
 pub(crate) use live::{
-    command, filter, forget, hello, init, is_disabled, item_words, joining, poll, received,
-    recipe_words, registry_built, rule, world_changed,
+    RecipeRuleError, command, filter, forget, hello, init, is_disabled, item_words, joining, poll,
+    received, recipe_words, registry_built, rule, world_changed,
 };
 
 #[cfg(all(windows, test))]

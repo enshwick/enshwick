@@ -320,7 +320,7 @@ entries! {
     }
 
     fn send_event(me as Mod, event: u32, data: *const core::ffi::c_void) -> Status {
-        Ok(crate::base::services::send(me.index.get(), event, data))
+        Ok(crate::base::services::send(me.index.get(), event, data)?)
     }
 
     fn subscribe(
@@ -357,6 +357,7 @@ entries! {
     }
 
     fn set_tick_every(me as Mod, handle: TickHandle, every_nanos: u64) -> Status {
-        Ok(crate::engine::ticks::TICKS.set_every(handle, me.index, every_nanos))
+        crate::engine::ticks::TICKS.set_every(handle, me.index, every_nanos)?;
+        Ok(())
     }
 }

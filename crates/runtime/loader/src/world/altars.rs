@@ -24,6 +24,7 @@ mod geometry;
 mod levels;
 
 use core::ffi::c_void;
+use core::ops::ControlFlow;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -34,7 +35,7 @@ use arc_swap::ArcSwapOption;
 use arrayvec::ArrayVec;
 use enshwick_core::abi::{
     AltarInfo, AltarZone, AltarZoneFn, Bounds, BuildingZoneCheck, BuildingZoneCheckFn, Event,
-    Header, HookFlags, Side, Status,
+    Header, HookFlags, Side,
 };
 use enshwick_core::altars::MAX_ZONES;
 use enshwick_core::raw::{read_at, read_ptr_at};
@@ -360,14 +361,23 @@ pub(crate) fn add_sizer(
     Ok(SIZERS.add(Registered::new(owner, callback, user))?)
 }
 
+/// Why the zones were not sized again: the mod has no sizer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the mod has no zone sizer")]
+pub(crate) struct NoSizerError;
+
 /// Has the zones sized again on the server's next step, for mod `owner`,
 /// which must have a filter.
-pub(crate) fn resize(owner: ModIndex) -> Status {
+///
+/// # Errors
+///
+/// [`NoSizerError`] for a mod without a sizer.
+pub(crate) fn resize(owner: ModIndex) -> Result<(), NoSizerError> {
     if !SIZERS.any(|sizer| sizer.owner == owner) {
-        return Status::REFUSED;
+        return Err(NoSizerError);
     }
     STATE.sizing.asked.store(true, Ordering::Release);
-    Status::OK
+    Ok(())
 }
 
 pub(crate) fn opened(owner: ModIndex) -> bool {
@@ -380,7 +390,7 @@ fn running_sizers() -> impl Iterator<Item = &'static Sizer> {
         .sealed()
         .unwrap_or_default()
         .iter()
-        .filter(|s| !crate::engine::loader::is_off(s.owner))
+        .filter(|s| s.live())
 }
 
 /// One altar's vanilla zone, taken from the state before the filters run.
@@ -391,31 +401,28 @@ struct Vanilla {
     turn: (f64, f64),
 }
 
-/// Runs `filters` in order on `zone`, each on what the last one left: a
-/// filter keeps the altar and level, cannot shrink the zone below vanilla
-/// width, and a height below one cell keeps the height before it. The
-/// result, or `None` when it is the vanilla zone.
-fn chain(
-    vanilla: AltarZone,
-    filters: impl Iterator<Item = (ModIndex, AltarZoneFn, *mut c_void)>,
-) -> Option<(i64, i64)> {
+/// Runs the `sizers` whose mods run, in order, on `zone`, each on what the
+/// last one left: a filter keeps the altar and level, cannot shrink the
+/// zone below vanilla width, and a height below one cell keeps the height
+/// before it. The result, or `None` when it is the vanilla zone.
+fn chain(vanilla: AltarZone, sizers: &[&Sizer]) -> Option<(i64, i64)> {
     let mut zone = vanilla;
-    for (owner, callback, user) in filters {
-        let before = zone;
-        // SAFETY: the mod's filter with its own pointer and a zone valid for
-        // the call; the safe layer catches its panics.
-        crate::engine::profile::call(owner, Feature::Altars, || unsafe {
-            callback(&raw mut zone, user);
+    let _none: Option<(_, ())> =
+        crate::engine::filters::ask(sizers.iter().copied(), Feature::Altars, |sizer| {
+            let before = zone;
+            // SAFETY: the mod's filter with its own pointer and a zone valid
+            // for the call; the safe layer catches its panics.
+            sizer.call(|callback, user| unsafe { callback(&raw mut zone, user) });
+            zone.header = before.header;
+            zone.altar = before.altar;
+            zone.level = before.level;
+            zone.reserved = before.reserved;
+            zone.grow = zone.grow.max(0);
+            if zone.height <= 0 {
+                zone.height = before.height;
+            }
+            ControlFlow::Continue(())
         });
-        zone.header = before.header;
-        zone.altar = before.altar;
-        zone.level = before.level;
-        zone.reserved = before.reserved;
-        zone.grow = zone.grow.max(0);
-        if zone.height <= 0 {
-            zone.height = before.height;
-        }
-    }
     ((zone.grow, zone.height) != (vanilla.grow, vanilla.height)).then_some((zone.grow, zone.height))
 }
 
@@ -464,8 +471,7 @@ fn size_zones_with(sizers: &[&Sizer]) {
     };
     let mut targets = Targets::new();
     for altar in vanilla {
-        let filters = sizers.iter().map(|s| (s.owner, s.callback, s.user()));
-        if let Some((grow, height)) = chain(altar.zone, filters) {
+        if let Some((grow, height)) = chain(altar.zone, sizers) {
             targets.insert(
                 altar.zone.altar.0,
                 (
@@ -890,9 +896,9 @@ unsafe fn check(
             // stays loaded; the callback gets the user pointer its mod
             // registered and `call`, which lives for the call.
             if filter.call(|filter, user| unsafe { filter(&raw const call, user) }) != 0 {
-                core::ops::ControlFlow::Break(())
+                ControlFlow::Break(())
             } else {
-                core::ops::ControlFlow::Continue(())
+                ControlFlow::Continue(())
             }
         })
         .is_some()

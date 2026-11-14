@@ -12,7 +12,7 @@
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{EntityPlace, Status};
+use enshwick_core::abi::EntityPlace;
 
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
@@ -192,19 +192,48 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
+/// Why an entity read or call failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum EntityError {
+    /// The build's table lacks the entity list's reads.
+    #[error("this build lacks the entity reads")]
+    Unread,
+    /// No entity world runs.
+    #[error("no entity world runs")]
+    NoWorld,
+    /// The build lacks the entity call, or the world has no command buffer.
+    #[error("the entity call does not run here")]
+    Unavailable,
+    /// Entity 0, which names none.
+    #[error("no entity")]
+    NoEntity,
+    /// A player's character, which no mod destroys.
+    #[error("a player's character")]
+    Player,
+    /// A vanilla entity, whose saves no mod changes.
+    #[error("not an entity a mod spawned")]
+    NotSpawned,
+    /// The engine refused the command.
+    #[error("the engine refused the command")]
+    Refused,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// The server's entity world, when the caller is on its game thread.
-fn entity_world() -> Result<usize, Status> {
+fn entity_world() -> Result<usize, EntityError> {
     crate::engine::world::server()?;
     usize::try_from(crate::engine::world::server_world())
         .ok()
         .filter(|&world| world != 0)
-        .ok_or(Status::MISSING)
+        .ok_or(EntityError::NoWorld)
 }
 
 /// Every entity with a component of type `ty` and a transform, with its
 /// position in 32.32 fixed-point metres.
-pub(crate) fn with_component(loader: &Loader, ty: u32) -> Result<Vec<EntityPlace>, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn with_component(loader: &Loader, ty: u32) -> Result<Vec<EntityPlace>, EntityError> {
+    let layout = layout(loader).ok_or(EntityError::Unread)?;
     let world = entity_world()?;
     let mut capacity = FIRST_CAPACITY;
     loop {
@@ -261,33 +290,33 @@ fn place(layout: &Layout, entry: &[u8]) -> EntityPlace {
 
 /// Asks the engine to destroy `entity` after the systems of the next step;
 /// players' characters and entities not in the world are refused.
-pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
+pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), EntityError> {
     crate::engine::world::entity_call(loader)?;
-    let layout = layout(loader).ok_or(Status::UNAVAILABLE)?;
+    let layout = layout(loader).ok_or(EntityError::Unavailable)?;
     let world = entity_world()?;
     if entity == Entity(0) {
-        return Err(Status::BAD_ARGS);
+        return Err(EntityError::NoEntity);
     }
     crate::engine::world::template(loader, entity)?;
     if crate::engine::world::players(loader)?
         .iter()
         .any(|p| p.entity == entity)
     {
-        return Err(Status::REFUSED);
+        return Err(EntityError::Player);
     }
     // SAFETY: `entity_world` checked the caller is on the server's game
     // thread and the world is non-null; the world holds the pointer to its
     // command buffers at the table's `ecs.command_buffers`.
     let buffer = unsafe { crate::engine::memory::read_ptr::<u8>(world, layout.command_buffers) };
     if buffer.is_null() {
-        return Err(Status::UNAVAILABLE);
+        return Err(EntityError::Unavailable);
     }
     // SAFETY: `buffer` is the world's first command buffer, non-null by the
     // earlier check, used on the game thread between steps, where no system
     // writes it.
     let queued = unsafe { (layout.destroy)(buffer, 0, entity.0) };
     if queued == 0 {
-        return Err(Status::REFUSED);
+        return Err(EntityError::Refused);
     }
     crate::inventory::spawns::destroyed(entity);
     Ok(())
@@ -297,23 +326,23 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
 /// (`saved` false) or puts it back in them, after the systems of the next
 /// step; vanilla entities are refused, so no mod drops the game's own data
 /// from a save.
-pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<(), Status> {
+pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<(), EntityError> {
     if entity == Entity(0) {
-        return Err(Status::BAD_ARGS);
+        return Err(EntityError::NoEntity);
     }
     crate::engine::world::entity_call(loader)?;
-    let saving = saving(loader).ok_or(Status::UNAVAILABLE)?;
+    let saving = saving(loader).ok_or(EntityError::Unavailable)?;
     let world = entity_world()?;
     let template = crate::engine::world::template(loader, entity)?;
     if crate::inventory::spawns::spawned(entity) != Some(template) {
-        return Err(Status::REFUSED);
+        return Err(EntityError::NotSpawned);
     }
     let live = crate::engine::world::component(loader, entity, saving.hash).is_err();
     if !crate::inventory::spawns::needs_saved(entity, saved, live) {
         return Ok(());
     }
     if saved {
-        let remove = saving.remove.ok_or(Status::UNAVAILABLE)?;
+        let remove = saving.remove.ok_or(EntityError::Unavailable)?;
         let command = append(saving, world, remove.kind, remove.size, entity)?;
         // SAFETY: `append` handed out `remove.size` writable bytes, the
         // table's `ecs.remove_components_size`, which nothing else touches
@@ -321,7 +350,7 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
         // table's `ecs.remove_components_hashes`, inside them.
         unsafe { enshwick_core::raw::write_at(command, remove.hash_at, saving.hash) };
     } else {
-        let add = saving.add.ok_or(Status::UNAVAILABLE)?;
+        let add = saving.add.ok_or(EntityError::Unavailable)?;
         let command = append(saving, world, add.kind, add.size, entity)?;
         // SAFETY: `append` handed out `add.size` writable bytes,
         // `ecs.command_set_data` plus the component's size, zeroed after the
@@ -346,13 +375,13 @@ fn append(
     kind: u8,
     size: u32,
     entity: Entity,
-) -> Result<*mut u8, Status> {
+) -> Result<*mut u8, EntityError> {
     // SAFETY: `entity_world` checked the caller is on the server's game
     // thread and the world is non-null; the world holds the pointer to its
     // command buffers at the table's `ecs.command_buffers`.
     let buffer = unsafe { crate::engine::memory::read_ptr::<u8>(world, saving.command_buffers) };
     if buffer.is_null() {
-        return Err(Status::UNAVAILABLE);
+        return Err(EntityError::Unavailable);
     }
     // SAFETY: `saving.append` is the table's `ecs.command_append`, on the
     // world's first command buffer, non-null by the guard before it, and its
@@ -368,7 +397,7 @@ fn append(
         )
     };
     if command.is_null() {
-        return Err(Status::REFUSED);
+        return Err(EntityError::Refused);
     }
     Ok(command)
 }

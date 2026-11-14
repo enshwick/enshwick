@@ -12,7 +12,7 @@ use core::ffi::c_void;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick_core::abi::{Level, ResourceKey, Status};
+use enshwick_core::abi::{Level, ResourceKey};
 use enshwick_core::content::Guid;
 use enshwick_core::content::changes::{Change, Entry, Field};
 use enshwick_core::content::containers::{ContainerLayout, container_slots};
@@ -98,10 +98,34 @@ struct ItemPatch {
     fuse: Fuse,
 }
 
+/// Why a mod's data change was refused, or its new value not put in force.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DataChangeError {
+    /// Declared after init.
+    #[error("declared after init")]
+    TooLate,
+    /// More changes than an id counts.
+    #[error("too many changes")]
+    TooMany,
+    /// A change the mod did not declare.
+    #[error("the mod did not declare the change")]
+    Unknown,
+    /// A value its field does not take.
+    #[error("the field does not take the value")]
+    BadValue,
+    /// The new value did not apply; it takes a restart.
+    #[error("the new value takes a restart")]
+    NeedsRestart,
+}
+
 /// Records mod `owner`'s `change` from `source`; refused once init is over.
-pub(crate) fn declare(owner: ModIndex, change: Change, source: String) -> Status {
+pub(crate) fn declare(
+    owner: ModIndex,
+    change: Change,
+    source: String,
+) -> Result<(), DataChangeError> {
     if CHANGES.sealed.get().is_some() {
-        return Status::TOO_LATE;
+        return Err(DataChangeError::TooLate);
     }
     CHANGES.declared.relock().push(Pending::One(Declared {
         owner,
@@ -109,14 +133,18 @@ pub(crate) fn declare(owner: ModIndex, change: Change, source: String) -> Status
         source,
         live: None,
     }));
-    Status::OK
+    Ok(())
 }
 
 /// Records mod `owner`'s `change` of every item a selection picks, from
 /// `source`; refused once init is over.
-pub(crate) fn declare_items(owner: ModIndex, change: ItemsChange, source: String) -> Status {
+pub(crate) fn declare_items(
+    owner: ModIndex,
+    change: ItemsChange,
+    source: String,
+) -> Result<(), DataChangeError> {
     if CHANGES.sealed.get().is_some() {
-        return Status::TOO_LATE;
+        return Err(DataChangeError::TooLate);
     }
     CHANGES.declared.relock().push(Pending::Each {
         owner,
@@ -124,26 +152,26 @@ pub(crate) fn declare_items(owner: ModIndex, change: ItemsChange, source: String
         source,
         live: None,
     });
-    Status::OK
+    Ok(())
 }
 
 /// Records mod `owner`'s change of `target`, whose value it sets later;
-/// its number. `TOO_LATE` once init is over.
+/// its number.
 ///
 /// # Errors
 ///
-/// The status the entry answers.
+/// [`DataChangeError::TooLate`] once init is over.
 pub(crate) fn declare_change(
     owner: ModIndex,
     target: LiveTarget,
     field: Field,
-) -> Result<ChangeId, Status> {
+) -> Result<ChangeId, DataChangeError> {
     let mut declared = CHANGES.declared.relock();
     if CHANGES.sealed.get().is_some() {
-        return Err(Status::TOO_LATE);
+        return Err(DataChangeError::TooLate);
     }
     let mut live = CHANGES.live.relock();
-    let id = ChangeId(u32::try_from(live.len() + 1).map_err(|_| Status::BAD_ARGS)?);
+    let id = ChangeId(u32::try_from(live.len() + 1).map_err(|_| DataChangeError::TooMany)?);
     let pending = match target {
         LiveTarget::Entry(entry, source) => Pending::One(Declared {
             owner,
@@ -173,7 +201,11 @@ pub(crate) enum LiveTarget {
 
 /// Puts `value` in force for mod `owner`'s change `id`, or takes the
 /// mod's value out for `None`, and builds what it reaches again.
-pub(crate) fn set_change(owner: ModIndex, id: ChangeId, value: Option<Value>) -> Status {
+pub(crate) fn set_change(
+    owner: ModIndex,
+    id: ChangeId,
+    value: Option<Value>,
+) -> Result<(), DataChangeError> {
     let field = CHANGES
         .live
         .relock()
@@ -181,16 +213,16 @@ pub(crate) fn set_change(owner: ModIndex, id: ChangeId, value: Option<Value>) ->
         .find(|(o, i, _)| *o == owner && *i == id)
         .map(|(_, _, field)| *field);
     let Some(field) = field else {
-        return Status::BAD_ARGS;
+        return Err(DataChangeError::Unknown);
     };
     if value.is_some_and(|value| field.check(value).is_err()) {
-        return Status::BAD_ARGS;
+        return Err(DataChangeError::BadValue);
     }
     let sealed = {
         let mut pending = CHANGES.declared.relock();
         let Some(sealed) = CHANGES.sealed.get() else {
             super::set_pending(&mut pending, owner, id, value);
-            return Status::OK;
+            return Ok(());
         };
         sealed
     };
@@ -201,14 +233,14 @@ pub(crate) fn set_change(owner: ModIndex, id: ChangeId, value: Option<Value>) ->
     }
     .and_then(|patched| rebuild(&patched));
     match rebuilt {
-        Ok(_) => Status::OK,
+        Ok(_) => Ok(()),
         Err(why) => {
             crate::engine::log::write(
                 Level::WARN,
                 &self::id(sealed.loader, owner),
                 &format!("{field}: the new value is not in force and takes a restart: {why}"),
             );
-            Status::TOO_LATE
+            Err(DataChangeError::NeedsRestart)
         }
     }
 }
@@ -454,16 +486,20 @@ fn expand_from_game(loader: &Loader, pending: Vec<Pending>) -> (Vec<Declared>, V
 
 /// Records mod `owner`'s `change` of every recipe a selection picks, from
 /// `source`; refused once init is over.
-pub(crate) fn declare_recipes(owner: ModIndex, change: RecipesChange, source: String) -> Status {
+pub(crate) fn declare_recipes(
+    owner: ModIndex,
+    change: RecipesChange,
+    source: String,
+) -> Result<(), DataChangeError> {
     if CHANGES.sealed.get().is_some() {
-        return Status::TOO_LATE;
+        return Err(DataChangeError::TooLate);
     }
     CHANGES.declared.relock().push(Pending::Recipes {
         owner,
         change,
         source,
     });
-    Status::OK
+    Ok(())
 }
 
 /// Puts `next` in force as every change: merges it and reports the
@@ -533,8 +569,7 @@ fn apply(
 fn rebuild(patched: &[ResourceKey]) -> Result<usize, ApplyChangesError> {
     let mut failed = Vec::new();
     for key in patched {
-        let status = crate::content::served::rebuild(ModIndex::LOADER, *key);
-        if !status.is_ok() {
+        if crate::content::served::rebuild(ModIndex::LOADER, *key).is_err() {
             failed.push(*key);
         }
     }

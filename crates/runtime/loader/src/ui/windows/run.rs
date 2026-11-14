@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::PlayerKey;
-use enshwick_core::abi::{Side, Status};
+use enshwick_core::abi::Side;
 
 use super::{
     Change, Held, MAX_PLAYERS, Route, Told, Waiting, close_told, greeted, heard, holds, leaving,
@@ -51,28 +51,52 @@ fn wait(more: impl ExactSizeIterator<Item = Waiting>) -> bool {
     true
 }
 
+/// Why a mod's window was not queued for its clients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum ShowWindowError {
+    /// A client that hosts no game carries no windows.
+    #[error("no game hosted here carries windows")]
+    NotServing,
+    /// A change value the ABI has none of.
+    #[error("no such window change")]
+    BadChange,
+    /// A malformed window id, or more players than a world holds.
+    #[error("the window id or the players are malformed")]
+    BadWindow,
+    /// The mod declared no actions.
+    #[error("the mod declared no actions")]
+    NoActions,
+    /// The windows waiting for the step fill their queue.
+    #[error("too many windows wait")]
+    Full,
+}
+
 /// Queues mod `owner`'s window `window` for the clients of `keys`, at most
 /// [`MAX_PLAYERS`], for the step: to show, close or update as `change`
-/// says, a `close` value of `HostApi::action_window`; the status that call
-/// answers.
+/// says, a `close` value of `HostApi::action_window`.
+///
+/// # Errors
+///
+/// [`ShowWindowError`] where no windows are carried, for a bad change, id or
+/// crowd, a mod without actions or a full queue.
 pub(crate) fn show(
     loader: &Loader,
     owner: ModIndex,
     window: &str,
     keys: &[PlayerKey],
     change: u32,
-) -> Status {
+) -> Result<(), ShowWindowError> {
     if loader.side == Side::CLIENT && !crate::engine::world::hosting() {
-        return Status::MISSING;
+        return Err(ShowWindowError::NotServing);
     }
     let Some(change) = Change::of(change) else {
-        return Status::BAD_ARGS;
+        return Err(ShowWindowError::BadChange);
     };
     if !enshwick_core::actions::is_valid_id(window) || keys.len() > MAX_PLAYERS {
-        return Status::BAD_ARGS;
+        return Err(ShowWindowError::BadWindow);
     }
     if !crate::actions::player_actions::declaring(loader).contains(&owner) {
-        return Status::REFUSED;
+        return Err(ShowWindowError::NoActions);
     }
     let more = keys.iter().map(|key| Waiting {
         owner,
@@ -81,9 +105,9 @@ pub(crate) fn show(
         change,
     });
     if wait(more) {
-        Status::OK
+        Ok(())
     } else {
-        Status::REFUSED
+        Err(ShowWindowError::Full)
     }
 }
 
@@ -353,27 +377,30 @@ mod tests {
         let owner = ModIndex::new(0);
         let one = [PlayerKey::new(7)];
         let crowd = vec![PlayerKey::new(7); MAX_PLAYERS + 1];
-        let bad = Status::BAD_ARGS;
+        let bad = Err(ShowWindowError::BadChange);
         assert_eq!(
             show(&loader, owner, "panel", &one, 3),
             bad,
             "an unknown change"
         );
-        assert_eq!(show(&loader, owner, "Bad Id", &one, 0), bad);
+        assert_eq!(
+            show(&loader, owner, "Bad Id", &one, 0),
+            Err(ShowWindowError::BadWindow)
+        );
         assert_eq!(
             show(&loader, owner, "panel", &crowd, 0),
-            bad,
+            Err(ShowWindowError::BadWindow),
             "too many players"
         );
         assert_eq!(
             show(&loader, owner, "panel", &crowd[..MAX_PLAYERS], 2),
-            Status::REFUSED,
+            Err(ShowWindowError::NoActions),
             "the bound itself passes, and a mod that declared no actions is refused"
         );
         loader.side = Side::CLIENT;
         assert_eq!(
             show(&loader, owner, "panel", &one, 0),
-            Status::MISSING,
+            Err(ShowWindowError::NotServing),
             "a client that hosts no game carries no windows"
         );
         assert!(WINDOWS.waiting.relock().is_empty());

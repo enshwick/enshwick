@@ -134,6 +134,13 @@ pub(crate) struct Callback<'a, F: 'static> {
 }
 
 impl<F> Callback<'_, F> {
+    /// The mod the callback belongs to, for the loader's work around the
+    /// call, such as what a widget the call draws belongs to.
+    #[inline]
+    pub(crate) fn owner(&self) -> ModIndex {
+        self.registered.owner
+    }
+
     /// Runs `call` with the callback and its user pointer, profiled as the
     /// mod's callback for the feature.
     #[inline]

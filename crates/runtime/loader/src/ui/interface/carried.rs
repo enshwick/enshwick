@@ -40,12 +40,12 @@ struct Held {
 
 /// The windows the client holds, the newest last, and `None` while it
 /// holds none: swapped whole, so a frame reads them without a lock.
-static CARRIED: ArcSwapOption<Vec<Held>> = ArcSwapOption::const_empty();
+static STATE: ArcSwapOption<Vec<Held>> = ArcSwapOption::const_empty();
 
 /// Changes the windows the client holds with `change`, which may run more
 /// than once.
 fn change(change: impl Fn(&mut Vec<Held>)) {
-    CARRIED.rcu(|held| {
+    STATE.rcu(|held| {
         let mut held = held.as_deref().cloned().unwrap_or_default();
         change(&mut held);
         (!held.is_empty()).then(|| Arc::new(held))
@@ -94,7 +94,7 @@ pub(crate) fn closed(id: &str, window: &str) {
 /// Forgets every window, as when the client leaves its server or loses
 /// its link to it.
 pub(crate) fn forget() {
-    CARRIED.store(None);
+    STATE.store(None);
 }
 
 /// A button's form: the values its button gave, and fields for the rest.
@@ -179,7 +179,7 @@ enum Click {
 /// - `context` is the non-zero context `Engine::context` read in this frame.
 /// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize) {
-    let held = CARRIED.load();
+    let held = STATE.load();
     let Some(top) = held.as_deref().and_then(|held| held.last()) else {
         DRAWN.set(None);
         return;
@@ -748,7 +748,7 @@ mod tests {
     }
 
     fn held() -> Vec<(String, String)> {
-        let held = CARRIED.load();
+        let held = STATE.load();
         let held = held.as_deref().map(Vec::as_slice).unwrap_or_default();
         held.iter()
             .map(|h| (h.mod_id.clone(), h.window.clone()))
@@ -771,7 +771,7 @@ mod tests {
         );
         closed("you.admin", "bans");
         closed("you.other", "panel");
-        assert!(CARRIED.load().is_none(), "nothing held");
+        assert!(STATE.load().is_none(), "nothing held");
     }
 
     #[test]
@@ -779,6 +779,6 @@ mod tests {
         heard("you.admin", "panel", true, "W\tPanel\n");
         assert_eq!(held().len(), 1);
         crate::base::net::link_lost();
-        assert!(CARRIED.load().is_none());
+        assert!(STATE.load().is_none());
     }
 }

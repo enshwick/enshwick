@@ -180,11 +180,11 @@ impl Ids {
     }
 }
 
-static IDS: Mutex<Option<Ids>> = Mutex::new(None);
+static STATE: Mutex<Option<Ids>> = Mutex::new(None);
 
 /// Runs `f` on the process's ids.
 pub(crate) fn with<R>(f: impl FnOnce(&mut Ids) -> R) -> R {
-    let mut ids = IDS.relock();
+    let mut ids = STATE.relock();
     f(ids.get_or_insert_with(Ids::default))
 }
 

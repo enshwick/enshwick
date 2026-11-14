@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::{HookFlags, Side, Status};
+use enshwick_core::abi::{HookFlags, Side};
 use enshwick_core::raw::{
     read_at, read_bytes_at, read_ptr_at, write_at, write_bytes_at, write_ptr_at,
 };
@@ -268,11 +268,22 @@ pub(crate) fn hash_of(data: &[u8]) -> ContentHash {
     ]
 }
 
+/// Why content was not served or read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum TextureError {
+    /// No bytes, or more than a `u32` counts.
+    #[error("no bytes, or too many")]
+    BadData,
+    /// The game's archive has no such content.
+    #[error("the archive has no such content")]
+    NotInArchive,
+}
+
 /// Serves `data` as content and returns its hash; the same bytes give the
 /// same hash.
-pub(crate) fn serve(data: &[u8]) -> Result<ContentHash, Status> {
+pub(crate) fn serve(data: &[u8]) -> Result<ContentHash, TextureError> {
     if data.is_empty() || u32::try_from(data.len()).is_err() {
-        return Err(Status::BAD_ARGS);
+        return Err(TextureError::BadData);
     }
     let hash = hash_of(data);
     let _serving = TEXTURES.serving.relock();
@@ -765,10 +776,10 @@ crate::engine::chains::chain_detour! {
 
 /// Reads the game's archive for a mod: the loader's own copy of `kfc`
 /// lookups, free of the game's state.
-pub(crate) fn content_of(hash: &ContentHash) -> Result<Vec<u8>, Status> {
+pub(crate) fn content_of(hash: &ContentHash) -> Result<Vec<u8>, TextureError> {
     crate::engine::archive::game()
         .and_then(|archive| archive.content(hash))
-        .ok_or(Status::MISSING)
+        .ok_or(TextureError::NotInArchive)
 }
 
 /// Readies the content request for its benchmark with a stand-in for the

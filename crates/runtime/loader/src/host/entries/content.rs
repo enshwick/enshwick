@@ -8,7 +8,7 @@ use enshwick_core::content::changes::{Change, Field, ItemsChange, RecipesChange,
 use crate::host::entries::base::services::exported;
 use crate::host::layer::guards::before_delivery;
 use crate::host::layer::{
-    BytesOut, Caller, Headed, HeadedSince, In, List, Mod, Out, RuleOff, Text, checked, entries,
+    BytesOut, Caller, Headed, HeadedSince, In, List, Mod, Out, RuleOff, Text, entries,
 };
 use crate::host::memory::text;
 
@@ -34,7 +34,7 @@ entries! {
         name as Text,
         disable: u32,
     ) -> Status {
-        checked(crate::content::recipes::rule(me.index, kind, name, disable != 0))
+        Ok(crate::content::recipes::rule(me.index, kind, name, disable != 0)?)
     }
 
     fn recipe_disabled(_loader as Caller, recipe: enshwick_core::RecipeId, out as Out<u32>) -> Status {
@@ -57,7 +57,7 @@ entries! {
         let source = text(raw.source).unwrap_or_default().to_owned();
         if let Ok(Some(change)) = RecipesChange::from_abi(&raw) {
             reachable(me.loader, change.field)?;
-            return checked(crate::content::data_changes::declare_recipes(me.index, change, source));
+            return Ok(crate::content::data_changes::declare_recipes(me.index, change, source)?);
         }
         if raw.select != api_frame::DataSelect::ENTRY {
             let change = ItemsChange::from_abi(&raw)
@@ -65,11 +65,11 @@ entries! {
                 .flatten()
                 .ok_or(Status::BAD_ARGS)?;
             reachable(me.loader, change.field)?;
-            return checked(crate::content::data_changes::declare_items(me.index, change, source));
+            return Ok(crate::content::data_changes::declare_items(me.index, change, source)?);
         }
         let change = Change::from_abi(&raw).ok().flatten().ok_or(Status::BAD_ARGS)?;
         reachable(me.loader, change.field)?;
-        checked(crate::content::data_changes::declare(me.index, change, source))
+        Ok(crate::content::data_changes::declare(me.index, change, source)?)
     }
 
     fn declare_change(
@@ -119,7 +119,7 @@ entries! {
             api_frame::ChangeOp::RESET => None,
             _ => return Err(Status::BAD_ARGS.into()),
         };
-        checked(crate::content::data_changes::set_change(me.index, id, value))
+        Ok(crate::content::data_changes::set_change(me.index, id, value)?)
     }
 
     fn add_text(_loader as Caller, id: u32, language: u32, text as Text) -> Status {
@@ -188,18 +188,18 @@ entries! {
             // The loot rate reads stack sizes from the item registry, which
             // the inventory link finds.
             && (rate != RateId::LOOT || crate::inventory::transactions::open(me.loader).is_ok());
-        checked(crate::content::rates::RATES.declare(
+        Ok(crate::content::rates::RATES.declare(
             me.index,
             rate,
             available,
             me.record.joins_when_on(),
-        ))
+        )?)
     }
 
     fn set_rate(me as Mod, rate: RateId, factor: f32) -> Status {
         let recipes = crate::content::rates::is_recipe_output(rate);
         let before = recipes.then(|| crate::content::rate_links::factor(rate).to_bits());
-        checked(crate::content::rates::RATES.set(me.index, rate, factor))?;
+        crate::content::rates::RATES.set(me.index, rate, factor)?;
         if before.is_some_and(|before| before != crate::content::rate_links::factor(rate).to_bits()) {
             crate::content::rate_links::rebuild_recipes();
         }

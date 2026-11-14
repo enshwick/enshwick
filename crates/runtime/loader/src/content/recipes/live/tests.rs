@@ -27,10 +27,7 @@ fn a_list_is_made_once_per_generation_and_kept_until_the_next() {
 fn a_mod_s_rule_from_init_is_kept_until_the_layout_resolves_and_shows_off_without_it() {
     let recipes = Recipes::new();
     let owner = ModIndex::new(3);
-    assert_eq!(
-        recipes.rule(owner, Kind::Output, "a-guid", true),
-        Status::OK
-    );
+    assert_eq!(recipes.rule(owner, Kind::Output, "a-guid", true), Ok(()));
     assert!(recipes.live(|l| l.mods.contains(&(3, Kind::Output, "a-guid".to_owned()))));
     let loader = crate::start::tests::bare_loader();
     assert!(!recipes.keep_layout(&loader, Err("no recipe layout")));
@@ -46,7 +43,7 @@ fn a_mod_s_rule_from_init_is_kept_until_the_layout_resolves_and_shows_off_withou
     );
     assert_eq!(
         recipes.rule(owner, Kind::Output, "a-guid", true),
-        Status::MISSING,
+        Err(RecipeRuleError::Unavailable),
         "a build without the layout refuses"
     );
 }
@@ -56,11 +53,11 @@ fn a_mod_s_rule_with_a_blank_name_or_an_unknown_kind_is_refused() {
     let owner = ModIndex::new(3);
     assert_eq!(
         rule(owner, RecipeRuleKind::OUTPUT, "  ", true),
-        Status::BAD_ARGS
+        Err(RecipeRuleError::BadName)
     );
     assert_eq!(
         rule(owner, RecipeRuleKind(u32::MAX), "a-guid", true),
-        Status::BAD_ARGS
+        Err(RecipeRuleError::BadKind)
     );
 }
 

@@ -1,6 +1,8 @@
 use core::cell::Cell;
 
-use enshwick_core::abi::{Status, Str, UiWidget};
+use enshwick_core::abi::{Str, UiWidget};
+
+use crate::ui::widget_checks::WidgetError;
 use enshwick_core::ui::MAX_OPTIONS;
 
 use crate::engine::loader::Loader;
@@ -12,15 +14,20 @@ use super::{ARENA, DRAWING, WINDOW};
 use super::{Drawing, ENGINE, gather};
 
 /// Draws a mod's widget in its frame callback.
-pub(crate) fn widget(loader: &Loader, owner: ModIndex, token: u64, raw: &mut UiWidget) -> Status {
+pub(crate) fn widget(
+    loader: &Loader,
+    owner: ModIndex,
+    token: u64,
+    raw: &mut UiWidget,
+) -> Result<(), WidgetError> {
     let Some(engine) = ENGINE.get() else {
-        return Status::MISSING;
+        return Err(WidgetError::NoEngine);
     };
     let Some(mut drawing) = DRAWING.get() else {
-        return Status::WRONG_THREAD;
+        return Err(WidgetError::WrongThread);
     };
     if drawing.token != token || drawing.owner != owner {
-        return Status::WRONG_THREAD;
+        return Err(WidgetError::WrongThread);
     }
     raw.result = 0;
     if drawing.hud {
@@ -306,15 +313,15 @@ pub(super) fn draw(
     engine: &Engine,
     drawing: &mut Drawing,
     raw: &mut UiWidget,
-) -> Status {
+) -> Result<(), WidgetError> {
     let context = drawing.context;
     let Some(text) = read(raw.text) else {
-        return Status::BAD_ARGS;
+        return Err(WidgetError::Malformed);
     };
     let read_only = raw.flags & UiWidget::READ_ONLY != 0;
     if let Some(edge) = drawing.extension {
         if matches!(raw.kind, UiWidget::WINDOW | UiWidget::END) {
-            return Status::REFUSED;
+            return Err(WidgetError::OutOfOrder);
         }
         if !drawing.window_open && widget_checks::needs_window(raw.kind) {
             // SAFETY: `widget` found this thread's `DRAWING`, which
@@ -325,16 +332,13 @@ pub(super) fn draw(
             drawing.window_open = true;
         }
     }
-    let order = widget_checks::order(raw.kind, drawing.window_open);
-    if !order.is_ok() {
-        return order;
-    }
+    widget_checks::order(raw.kind, drawing.window_open)?;
     match raw.kind {
         UiWidget::WINDOW => {
             let (Some(record), Some(title)) =
                 (loader.mods.get(drawing.owner.get()), read(raw.detail))
             else {
-                return Status::BAD_ARGS;
+                return Err(WidgetError::Malformed);
             };
             let name = copy(&[b"enshwick/", record.id.as_bytes(), b"/", text]);
             let title = copy(&[title]);
@@ -347,7 +351,7 @@ pub(super) fn draw(
                 engine.window_begin(context, window, &name, &title);
             });
             drawing.window_open = true;
-            Status::OK
+            Ok(())
         }
         UiWidget::END => {
             // SAFETY: `window_open`, checked by `widget_checks::order`, is set
@@ -356,24 +360,24 @@ pub(super) fn draw(
             // in place, and widgets close every frame they open.
             WINDOW.with_borrow_mut(|window| unsafe { engine.window_end(context, window) });
             drawing.window_open = false;
-            Status::OK
+            Ok(())
         }
         UiWidget::SOUND => {
             // SAFETY: `widget` found this thread's `DRAWING`, set only while
             // a frame callback runs inside the frame on the interface thread,
             // with its non-zero `context`.
             unsafe { engine.sound(context, raw.style) };
-            Status::OK
+            Ok(())
         }
         UiWidget::PLAY => {
             if !holds_sound(raw.sound) {
-                return Status::MISSING;
+                return Err(WidgetError::Unavailable);
             }
             // SAFETY: `widget` found this thread's `DRAWING`, set only while
             // a frame callback runs inside the frame on the interface thread,
             // with its non-zero `context`.
             unsafe { engine.play(context, &raw.sound) };
-            Status::OK
+            Ok(())
         }
         UiWidget::LABEL => {
             let text = copy(&[text]);
@@ -389,7 +393,7 @@ pub(super) fn draw(
                     raw.flags & UiWidget::CENTER != 0,
                 );
             }
-            Status::OK
+            Ok(())
         }
         UiWidget::BUTTON => {
             let text = copy(&[text]);
@@ -397,7 +401,7 @@ pub(super) fn draw(
             // callback's window is open in this frame on this thread; the text
             // lives in the frame's arena.
             raw.result = u32::from(unsafe { engine.button(&text, !read_only) });
-            Status::OK
+            Ok(())
         }
         UiWidget::TOGGLE | UiWidget::SLIDER | UiWidget::DROPDOWN => {
             row(engine, context, copy(&[text]), raw, read_only)
@@ -405,25 +409,25 @@ pub(super) fn draw(
         UiWidget::INPUT_HINT => input_hint(engine, text, raw),
         UiWidget::PROGRESS => {
             let Some(value) = widget_checks::progress(raw.value, raw.min, raw.max) else {
-                return Status::BAD_ARGS;
+                return Err(WidgetError::Malformed);
             };
             // SAFETY: `window_open`, checked by `widget_checks::order`, means this
             // callback's window is open in this frame on this thread.
             unsafe { engine.progress(value, raw.min, raw.max) };
-            Status::OK
+            Ok(())
         }
-        _ => Status::MISSING,
+        _ => Err(WidgetError::Unknown),
     }
 }
 
 /// Draws the key bound to the game action named `action`, with the
 /// widget's `detail` beside it; `result` 1 when the game drew a key.
-fn input_hint(engine: &Engine, action: &[u8], raw: &mut UiWidget) -> Status {
+fn input_hint(engine: &Engine, action: &[u8], raw: &mut UiWidget) -> Result<(), WidgetError> {
     let Some(hint) = &engine.hint else {
-        return Status::MISSING;
+        return Err(WidgetError::Unavailable);
     };
     let (Ok(action), Some(label)) = (core::str::from_utf8(action), read(raw.detail)) else {
-        return Status::BAD_ARGS;
+        return Err(WidgetError::Malformed);
     };
     let label = if label.is_empty() {
         UiText::EMPTY
@@ -438,9 +442,9 @@ fn input_hint(engine: &Engine, action: &[u8], raw: &mut UiWidget) -> Status {
     match unsafe { hint.draw(action, &label) } {
         Some(drawn) => {
             raw.result = u32::from(drawn);
-            Status::OK
+            Ok(())
         }
-        None => Status::MISSING,
+        None => Err(WidgetError::Unavailable),
     }
 }
 
@@ -467,7 +471,7 @@ pub(super) fn row(
     label: UiText,
     raw: &mut UiWidget,
     read_only: bool,
-) -> Status {
+) -> Result<(), WidgetError> {
     match raw.kind {
         UiWidget::TOGGLE => {
             // SAFETY: `draw` calls this only with this callback's window open
@@ -481,7 +485,7 @@ pub(super) fn row(
         }
         UiWidget::SLIDER => {
             let Some((range, value)) = widget_checks::slider(raw.value, raw.min, raw.max) else {
-                return Status::BAD_ARGS;
+                return Err(WidgetError::Malformed);
             };
             // SAFETY: `draw` calls this only with this callback's window open
             // in this frame on this thread; the label lives in the frame's
@@ -496,7 +500,7 @@ pub(super) fn row(
         _ => {
             let Some(count) = widget_checks::options(raw.option_count, !raw.options.is_null())
             else {
-                return Status::BAD_ARGS;
+                return Err(WidgetError::Malformed);
             };
             // SAFETY: `raw.options` is non-null, checked by
             // `widget_checks::options`, and the mod's `UiWidget` holds `option_count` aligned `Str`s
@@ -518,5 +522,5 @@ pub(super) fn row(
             }
         }
     }
-    Status::OK
+    Ok(())
 }

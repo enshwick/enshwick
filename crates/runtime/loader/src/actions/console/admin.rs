@@ -3,8 +3,6 @@
 //! the server keeps its own ban list (`bannedAccounts` in
 //! `enshrouded_server.json`).
 
-use enshwick_core::abi::Status;
-
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
 
@@ -93,17 +91,35 @@ fn find(loader: &Loader) -> Result<Handler, FindGameCodeError> {
     })
 }
 
+/// Why the game was not asked to act on an account.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum AccountActionError {
+    /// This build lacks the handler or the action's layout.
+    #[error("this build lacks the account action handler")]
+    Unread,
+    /// Account 0.
+    #[error("no account")]
+    NoAccount,
+    /// An administrator online, a hosted game's host, or a kick or a ban of
+    /// an account not online.
+    #[error("the game would refuse the action")]
+    Refused,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// Asks the game to `act` on `account`, on the game thread.
 ///
 /// # Errors
 ///
-/// [`Status::MISSING`] when this build lacks the handler or the action's
-/// layout; [`Status::WRONG_THREAD`] off the game thread.
-pub(crate) fn act(loader: &Loader, act: Act, account: u64) -> Result<(), Status> {
-    let handler = handler(loader).ok_or(Status::MISSING)?;
+/// [`AccountActionError::Unread`] when this build lacks the handler or the
+/// action's layout; [`AccountActionError::World`] off the game thread.
+pub(crate) fn act(loader: &Loader, act: Act, account: u64) -> Result<(), AccountActionError> {
+    let handler = handler(loader).ok_or(AccountActionError::Unread)?;
     let server = crate::engine::world::server()?;
-    let action =
-        event(handler.size, handler.account, handler.act, act, account).ok_or(Status::MISSING)?;
+    let action = event(handler.size, handler.account, handler.act, act, account)
+        .ok_or(AccountActionError::Unread)?;
     // SAFETY: `server` comes from `crate::engine::world::server`, so this runs on the
     // game thread, the only one the handler runs on, with the live server the
     // game passes it; `action` holds the reflected action's size, aligned to
@@ -123,12 +139,17 @@ pub(crate) fn act(loader: &Loader, act: Act, account: u64) -> Result<(), Status>
 ///
 /// # Errors
 ///
-/// [`Status::BAD_ARGS`] for account 0; [`Status::REFUSED`] for an
-/// administrator online or a hosted game's host, unless unbanned, and for a
-/// kick or a ban of an account not online; as [`act`] otherwise.
-pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<(), Status> {
+/// [`AccountActionError::NoAccount`] for account 0;
+/// [`AccountActionError::Refused`] for an administrator online or a hosted
+/// game's host, unless unbanned, and for a kick or a ban of an account not
+/// online; as [`act`] otherwise.
+pub(crate) fn account_action(
+    loader: &Loader,
+    act: Act,
+    account: u64,
+) -> Result<(), AccountActionError> {
     if account == 0 {
-        return Err(Status::BAD_ARGS);
+        return Err(AccountActionError::NoAccount);
     }
     let online: Vec<Online> = crate::engine::world::players(loader)?
         .iter()
@@ -142,9 +163,9 @@ pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<
         .iter()
         .find(|p| p.key == account)
         .map_or(Target::Account(account), |p| Target::Player(p.clone()));
-    let key = decide(act, &target).map_err(|_| Status::REFUSED)?;
+    let key = decide(act, &target).map_err(|_| AccountActionError::Refused)?;
     if act != Act::Unban && crate::base::admission::host() == Some(key) {
-        return Err(Status::REFUSED);
+        return Err(AccountActionError::Refused);
     }
     self::act(loader, act, key)
 }

@@ -12,7 +12,7 @@ fn a_transaction_writes_its_changes_in_order_and_its_undo_puts_every_brick_back(
     let id = ledger.commit(ME, None, vec![dig(20.0), dig(22.0)]).unwrap();
     assert_eq!(state(&ledger, id).0, TransactionInfo::PENDING);
     ledger.step(&mut world, 1000);
-    assert_eq!(state(&ledger, id), (TransactionInfo::APPLIED, Status::OK));
+    assert_eq!(state(&ledger, id), (TransactionInfo::APPLIED, None));
     assert_eq!(world.edits, 3);
     assert_eq!(
         world.brick(Brick([5, 5, 5])),
@@ -66,11 +66,15 @@ fn a_transaction_over_an_unloaded_column_fails_before_writing_anything() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::NOT_LOADED)
+        (TransactionInfo::FAILED, Some(TransactionError::NotLoaded))
     );
     assert_eq!(world.edits, 0);
     assert_eq!(applied(&ledger, id), 0);
-    assert_eq!(ledger.undo(ME, id), Err(Status::REFUSED), "nothing to undo");
+    assert_eq!(
+        ledger.undo(ME, id),
+        Err(TransactionError::NotUndoable),
+        "nothing to undo"
+    );
 }
 
 #[test]
@@ -83,7 +87,7 @@ fn a_column_unloaded_between_steps_stops_the_transaction_where_it_is() {
     ledger.step(&mut world, 64);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::NOT_LOADED)
+        (TransactionInfo::FAILED, Some(TransactionError::NotLoaded))
     );
     assert_eq!((world.edits, applied(&ledger, id)), (1, 1));
 
@@ -117,7 +121,7 @@ fn an_undo_of_a_queued_transaction_drops_it() {
     assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
     ledger.step(&mut world, 1000);
     assert_eq!(world.edits, 0);
-    assert_eq!(ledger.undo(ME, id), Err(Status::REFUSED));
+    assert_eq!(ledger.undo(ME, id), Err(TransactionError::NotUndoable));
 }
 
 #[test]
@@ -133,7 +137,10 @@ fn an_undo_is_refused_while_a_later_change_holds_its_bricks() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, first),
-        (TransactionInfo::UNDO_REFUSED, Status::REFUSED)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::Changed)
+        )
     );
     assert_eq!(world.snapshot(), both, "a refused undo writes nothing");
 
@@ -156,7 +163,10 @@ fn an_undo_over_an_unloaded_column_is_refused_and_may_be_asked_again() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::NOT_LOADED)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::NotLoaded)
+        )
     );
 
     world.unloaded.clear();
@@ -200,7 +210,10 @@ fn a_transaction_leaving_the_world_fails_before_writing_anything() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::OUTSIDE_WORLD)
+        (
+            TransactionInfo::FAILED,
+            Some(TransactionError::OutsideWorld)
+        )
     );
     assert_eq!(world.edits, 0);
 }
@@ -214,7 +227,7 @@ fn once_the_extent_is_known_a_commit_leaving_the_world_is_refused() {
     assert_eq!(state(&ledger, first).0, TransactionInfo::APPLIED);
     assert_eq!(
         ledger.commit(ME, None, vec![dig(20.0), past_the_edge()]),
-        Err(Status::OUTSIDE_WORLD)
+        Err(TransactionError::OutsideWorld)
     );
     let high = TerrainEdit {
         position: [20.0, 1023.0, 20.0],
@@ -222,7 +235,7 @@ fn once_the_extent_is_known_a_commit_leaving_the_world_is_refused() {
     };
     assert_eq!(
         ledger.commit(ME, None, vec![Change::Terrain(high)]),
-        Err(Status::OUTSIDE_WORLD)
+        Err(TransactionError::OutsideWorld)
     );
     ledger.forget();
     assert!(
@@ -246,7 +259,10 @@ fn a_brick_changed_between_undo_steps_stops_the_undo_before_it() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::REFUSED)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::Changed)
+        )
     );
     assert_eq!(
         world.brick(player),
@@ -256,7 +272,7 @@ fn a_brick_changed_between_undo_steps_stops_the_undo_before_it() {
     assert!(world.restores < 64);
     assert_eq!(
         ledger.info(ME, id).unwrap().bricks,
-        64 - world.restores as u64,
+        64 - world.restores,
         "what was put back is no longer held"
     );
 
@@ -280,7 +296,7 @@ fn a_brick_that_cannot_be_read_after_its_edit_fails_the_transaction() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::NOT_LOADED)
+        (TransactionInfo::FAILED, Some(TransactionError::NotLoaded))
     );
     assert_eq!((world.edits, applied(&ledger, id)), (1, 1));
 
@@ -289,7 +305,10 @@ fn a_brick_that_cannot_be_read_after_its_edit_fails_the_transaction() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::REFUSED),
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::Changed)
+        ),
         "a brick whose state after the edit is unknown is never written over"
     );
 }
@@ -302,11 +321,14 @@ fn a_failed_restore_refuses_the_undo_and_a_new_one_finishes_it() {
     ledger.step(&mut world, 1000);
     ledger.undo(ME, id).unwrap();
     ledger.step(&mut world, 8);
-    world.restore_fails = Some(Status::MISSING);
+    world.restore_fails = Some(TransactionError::Unavailable);
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::MISSING)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::Unavailable)
+        )
     );
     assert_eq!(ledger.info(ME, id).unwrap().bricks, 56);
 
@@ -332,7 +354,10 @@ fn an_undo_waits_a_limited_number_of_steps_for_a_column() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::NOT_LOADED)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::NotLoaded)
+        )
     );
     assert!(!ledger.busy(), "it no longer holds the queue");
 

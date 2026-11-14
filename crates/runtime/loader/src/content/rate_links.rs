@@ -319,15 +319,13 @@ pub(crate) fn rebuild_recipes() {
     if !RATES.is_sealed() || !recipes_rated() {
         return;
     }
-    let status = crate::content::served::rebuild(
+    if let Err(error) = crate::content::served::rebuild(
         crate::engine::mod_index::ModIndex::LOADER,
         crate::content::served::recipe_registry(),
-    );
-    if status != Status::OK {
+    ) {
         crate::log!(
             WARN,
-            "recipe output rates: the recipes were not rebuilt ({})",
-            status.0
+            "recipe output rates: the recipes were not rebuilt ({error})"
         );
     }
 }
