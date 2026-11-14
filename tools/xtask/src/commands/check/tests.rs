@@ -264,13 +264,35 @@ fn the_stable_api_is_the_facade_and_each_internal_crate_whose_examples_name_it()
         "enshwick-content",
         "enshwick-world",
         "enshwick-fake",
+        "enshwick-values",
+        "enshwick-abi",
     ] {
         assert!(named(name), "{name}");
     }
-    for name in ["enshwick-values", "enshwick-abi", "enshwick-luau", "xtask"] {
+    // Typed's examples need the facade's `typed`; the macros and the
+    // runtimes have no stable surface of their own to check.
+    for name in [
+        "enshwick-typed",
+        "enshwick-macros",
+        "enshwick-luau",
+        "xtask",
+    ] {
         assert!(!named(name), "{name}");
     }
     assert!(stable.ends_with(&["--features".to_owned(), "enshwick/test".to_owned()]));
+}
+
+#[test]
+fn a_package_only_built_is_reached_but_not_touched() {
+    let scope = Scope::Some {
+        code: ["enshwick-abi".to_owned()].into(),
+        docs: BTreeSet::new(),
+        built: ["enshwick".to_owned()].into(),
+    };
+    assert!(reaches(&scope, "enshwick") && !touches(&scope, "enshwick"));
+    assert!(reaches(&scope, "enshwick-abi") && touches(&scope, "enshwick-abi"));
+    assert!(!reaches(&scope, "xtask"));
+    assert!(reaches(&Scope::All, "xtask"));
 }
 
 #[test]
@@ -292,7 +314,7 @@ fn host_args_leave_out_windows_only_crates_only_off_windows() {
         lib: None,
         windows_only,
         windows_tests: windows_only,
-        unstable: false,
+        stable_build: false,
     };
     let packages = [package("api", false), package("loader", true)];
     let base = ["--workspace", "--features", TEST_FEATURE];
@@ -337,7 +359,7 @@ fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
         "core/src/rates.rs",
         "core/src/item_data.rs",
         "base/src/script.rs",
-        "base/src/services/calls.rs",
+        "values/src/script/objects.rs",
     ] {
         let name = format!("crates/internal/{file} - item (line 1)");
         assert!(skipped(&name), "{name}");

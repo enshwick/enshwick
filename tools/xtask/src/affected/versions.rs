@@ -6,23 +6,15 @@ use std::collections::BTreeSet;
 
 use toml::{Table, Value};
 
-/// The manifest table of package fields.
-const PACKAGE: &str = "package";
+use super::shared::{DEPENDENCIES, DEPENDENCY_TABLES, LOCKED_PACKAGES, PACKAGE, TARGET, WORKSPACE};
+
 /// The manifest key of a version.
 const VERSION: &str = "version";
 /// The key of a dependency entry that makes it a workspace package.
 const PATH: &str = "path";
-/// The manifest table of workspace settings.
-const WORKSPACE: &str = "workspace";
-/// The manifest table of platform-specific dependency tables.
-const TARGET: &str = "target";
-/// The tables of a manifest that list dependencies.
-const DEPENDENCY_TABLES: &[&str] = &["dependencies", "dev-dependencies", "build-dependencies"];
-/// The lock file's array of locked packages, and an entry's keys.
-const LOCKED_PACKAGES: &str = "package";
+/// A lock entry's keys: registry and git entries have a source, members not.
 const SOURCE: &str = "source";
 const NAME: &str = "name";
-const DEPENDENCIES: &str = "dependencies";
 
 /// Whether a package manifest changed only in its version and the versions
 /// of its path dependencies; `false` when either side does not read.
@@ -56,19 +48,20 @@ pub(super) fn root(before: &str, after: &str) -> bool {
 /// packages, the entries without a source; `false` when either side does not
 /// read.
 pub(super) fn lock(before: &str, after: &str) -> bool {
-    let members = |text: &str| -> BTreeSet<String> {
-        toml::from_str::<Table>(text)
-            .ok()
-            .and_then(|lock| lock.get(LOCKED_PACKAGES).cloned())
-            .and_then(|entries| entries.as_array().cloned())
-            .into_iter()
-            .flatten()
-            .filter(|entry| entry.get(SOURCE).is_none())
-            .filter_map(|entry| entry.get(NAME)?.as_str().map(str::to_owned))
-            .collect()
+    let (Ok(before), Ok(after)) = (
+        toml::from_str::<Table>(before),
+        toml::from_str::<Table>(after),
+    ) else {
+        return false;
     };
-    let members: BTreeSet<String> = members(before).union(&members(after)).cloned().collect();
-    same(before, after, |lock| {
+    let members: BTreeSet<String> = [&before, &after]
+        .into_iter()
+        .filter_map(|lock| lock.get(LOCKED_PACKAGES)?.as_array())
+        .flatten()
+        .filter(|entry| entry.get(SOURCE).is_none())
+        .filter_map(|entry| entry.get(NAME)?.as_str().map(str::to_owned))
+        .collect();
+    equal_without(before, after, |lock| {
         let Some(Value::Array(entries)) = lock.get_mut(LOCKED_PACKAGES) else {
             return;
         };
@@ -92,12 +85,18 @@ pub(super) fn lock(before: &str, after: &str) -> bool {
 /// Whether `before` and `after` read as TOML and are equal once `strip` took
 /// the versions out of both.
 fn same(before: &str, after: &str, strip: impl Fn(&mut Table)) -> bool {
-    let (Ok(mut before), Ok(mut after)) = (
+    let (Ok(before), Ok(after)) = (
         toml::from_str::<Table>(before),
         toml::from_str::<Table>(after),
     ) else {
         return false;
     };
+    equal_without(before, after, strip)
+}
+
+/// Whether `before` and `after` are equal once `strip` took the versions out
+/// of both.
+fn equal_without(mut before: Table, mut after: Table, strip: impl Fn(&mut Table)) -> bool {
     strip(&mut before);
     strip(&mut after);
     before == after

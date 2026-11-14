@@ -211,6 +211,16 @@ mod tests {
     }
 
     #[test]
+    fn the_parallel_map_keeps_the_items_order() {
+        let items: Vec<u32> = (0..1000).collect();
+        assert_eq!(
+            super::parallel::map(&items, |n| n * 2),
+            items.iter().map(|n| n * 2).collect::<Vec<_>>()
+        );
+        assert!(super::parallel::map(&[] as &[u32], |n| *n).is_empty());
+    }
+
+    #[test]
     fn two_array_headers_on_one_block_are_found_shared() {
         let registry = pair();
         let ty = registry.named("demo::Pair").unwrap();

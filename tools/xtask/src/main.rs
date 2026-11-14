@@ -184,10 +184,28 @@ fn packages() -> Result<Vec<Package>, String> {
                 windows_tests: ["windows-tests", "windows-only"]
                     .iter()
                     .any(|key| package["metadata"]["xtask"][key].as_bool() == Some(true)),
-                unstable: package["features"].get("unstable").is_some(),
+                stable_build: package["features"].get("unstable").is_some()
+                    || stable_examples(package),
             }
         })
         .collect())
+}
+
+/// Whether the examples of `package`, a `cargo metadata` entry, name the
+/// facade as a stable mod does: through a dev-dependency on it that turns on
+/// no feature beyond `test`.
+fn stable_examples(package: &serde_json::Value) -> bool {
+    package["dependencies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|dep| {
+            dep["name"] == FACADE
+                && dep["kind"] == "dev"
+                && dep["features"]
+                    .as_array()
+                    .is_some_and(|features| features.iter().all(|feature| feature == "test"))
+        })
 }
 
 /// `cargo xtask compat` runs `xtask-compat`, the binary built with the

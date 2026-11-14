@@ -34,13 +34,3 @@ pub(crate) fn map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> 
     done.sort_unstable_by_key(|(at, _)| *at);
     done.into_iter().map(|(_, result)| result).collect()
 }
-
-#[test]
-fn the_results_keep_the_items_order() {
-    let items: Vec<u32> = (0..1000).collect();
-    assert_eq!(
-        map(&items, |n| n * 2),
-        items.iter().map(|n| n * 2).collect::<Vec<_>>()
-    );
-    assert!(map(&[] as &[u32], |n| *n).is_empty());
-}

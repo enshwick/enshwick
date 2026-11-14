@@ -441,7 +441,7 @@ mod tests {
             lib: None,
             windows_only: false,
             windows_tests: false,
-            unstable: false,
+            stable_build: false,
         }
     }
 

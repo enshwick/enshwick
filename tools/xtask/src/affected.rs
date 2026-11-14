@@ -25,8 +25,10 @@ pub(crate) struct Package {
     /// Has tests of its Windows code, run under Wine off Windows
     /// (`package.metadata.xtask.windows-tests`, or `windows-only`).
     pub(crate) windows_tests: bool,
-    /// Has an `unstable` feature: part of its API stands only with it.
-    pub(crate) unstable: bool,
+    /// Has a stable surface to check in a build without `unstable`: an
+    /// `unstable` feature of its own, or examples that name the facade as a
+    /// stable mod does (a dev-dependency on it with no feature beyond `test`).
+    pub(crate) stable_build: bool,
 }
 
 /// What a change needs checked.
@@ -61,10 +63,16 @@ pub(crate) enum Lane {
 impl Lane {
     /// CI when the `CI` variable is set, as every CI service sets it.
     pub(crate) fn current() -> Self {
-        if std::env::var_os("CI").is_some() {
-            Self::Ci
-        } else {
-            Self::Local
+        Self::from_ci(std::env::var("CI").ok().as_deref())
+    }
+
+    /// The lane a value of `CI` names: an empty, `false` or `0` value turns
+    /// CI mode off, as tools that read the variable take it.
+    fn from_ci(value: Option<&str>) -> Self {
+        match value.map(str::trim) {
+            None | Some("" | "0") => Self::Local,
+            Some(value) if value.eq_ignore_ascii_case("false") => Self::Local,
+            Some(_) => Self::Ci,
         }
     }
 }
@@ -77,8 +85,10 @@ pub(crate) const MAX_LOCAL_DEPENDENTS: usize = 8;
 /// A package's own changelog and change files, which no build reads.
 const CHANGELOG: &str = "CHANGELOG.md";
 const CHANGES_DIR: &str = "changes/";
-/// A package's readme: documentation, which at most its crate's docs
-/// include, so its examples are the most it can break.
+/// A package's readme: documentation, which no build reads unless its
+/// crate's docs include it, so its examples are the most it can break; no
+/// crate includes one today, and its doctests run so one that does stays
+/// checked.
 const README: &str = "README.md";
 /// A package's manifest, relative to its directory.
 const PACKAGE_MANIFEST: &str = "Cargo.toml";
@@ -126,7 +136,10 @@ pub(crate) fn scope(
     for file in files {
         match file.as_str() {
             shared::LOCK if local && bump(texts, file, versions::lock) => {}
-            shared::MANIFEST if local && bump(texts, file, versions::root) => {}
+            shared::MANIFEST if local && bump(texts, file, versions::root) => {
+                // Members that inherit the version build under the new one.
+                bumped.extend(shared::inherited(texts, packages).unwrap_or_default());
+            }
             shared::LOCK => {
                 let Some(reached) = shared::locked(texts, packages) else {
                     return Scope::All;
@@ -232,7 +245,7 @@ mod tests {
             lib: None,
             windows_only: false,
             windows_tests: false,
-            unstable: false,
+            stable_build: false,
         }
     }
 
@@ -760,6 +773,31 @@ checksum = "cc"
             code(super::scope(&files, &workspace(), &tree, Lane::Ci)),
             everyone
         );
+    }
+
+    #[test]
+    fn members_inheriting_the_workspace_version_are_built_on_its_bump() {
+        let root = manifest("[workspace.package]\nversion = \"1.0.0-alpha.14\"\n");
+        let tree = Tree::changed("Cargo.toml", &root, &root.replace("alpha.14", "alpha.15"))
+            .member("mods/my-mod", "[package]\nversion.workspace = true\n");
+        assert_eq!(
+            super::scope(&files(&["Cargo.toml"]), &workspace(), &tree, Lane::Local),
+            Scope::Some {
+                code: names(&[]),
+                docs: names(&[]),
+                built: names(&["my-mod"]),
+            }
+        );
+    }
+
+    #[test]
+    fn only_a_ci_value_that_turns_ci_on_picks_the_ci_lane() {
+        for value in [None, Some(""), Some("0"), Some("false"), Some("False")] {
+            assert_eq!(Lane::from_ci(value), Lane::Local, "{value:?}");
+        }
+        for value in ["true", "1", "yes"] {
+            assert_eq!(Lane::from_ci(Some(value)), Lane::Ci, "{value}");
+        }
     }
 
     #[test]

@@ -70,14 +70,15 @@ pub(crate) struct Args {
 }
 
 /// The crates of the API ([`crate::check::crate_rules::is_api_crate`]) with
-/// an `unstable` feature, each a `--package` argument, with the API crate's
-/// `test` feature and without `unstable`: the workspace turns the feature
-/// on for the runtimes, so only a build of their own shows that the stable
-/// surface, its docs and its examples stand without the unstable one.
+/// a stable surface of their own ([`Package::stable_build`]), each a
+/// `--package` argument, with the API crate's `test` feature and without
+/// `unstable`: the workspace turns the feature on for the runtimes, so only
+/// a build of their own shows that the stable surface, its docs and its
+/// examples stand without the unstable one.
 pub(crate) fn stable_api(packages: &[Package]) -> Vec<String> {
     let mut args = Vec::new();
     for package in packages.iter().filter(|p| {
-        p.unstable && crate::check::crate_rules::is_api_crate(&p.name, Path::new(&p.dir))
+        p.stable_build && crate::check::crate_rules::is_api_crate(&p.name, Path::new(&p.dir))
     }) {
         args.extend(["--package".to_owned(), package.name.clone()]);
     }
@@ -158,7 +159,8 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         }
         return Ok(true);
     }
-    if parts.contains(&Part::Host) && touches(&scope, header::PACKAGE) {
+    // It compiles nothing, so it runs wherever the change reaches the facade.
+    if parts.contains(&Part::Host) && reaches(&scope, header::PACKAGE) {
         let problems = header::check(&root);
         for problem in &problems {
             say(&format!("C header: {problem}"));
@@ -168,9 +170,11 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         }
     }
     if parts.contains(&Part::Trybuild) && !touches(&scope, FACADE) {
-        say(&format!(
-            "the trybuild test is out of scope: the change does not reach {FACADE}"
-        ));
+        say(&if reaches(&scope, FACADE) {
+            format!("the trybuild test is left to CI: {FACADE} is only built here")
+        } else {
+            format!("the trybuild test is out of scope: the change does not reach {FACADE}")
+        });
     }
     let checked = check(&scope, &packages, args.all, &parts)
         && (!parts.contains(&Part::Semver) || semver(&args.semver));
@@ -189,6 +193,14 @@ fn touches(scope: &Scope, package: &str) -> bool {
     match scope {
         Scope::All => true,
         Scope::Some { code, .. } => code.iter().any(|name| name == package),
+    }
+}
+
+/// Whether `scope` checks or only builds the code of `package`.
+fn reaches(scope: &Scope, package: &str) -> bool {
+    match scope {
+        Scope::All => true,
+        Scope::Some { code, built, .. } => code.contains(package) || built.contains(package),
     }
 }
 
@@ -446,8 +458,8 @@ fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
                 .then(&["--", "-D", "warnings"]),
         );
     }
-    // The script binding, the rates, item data and base's described calls
-    // are public only with `unstable`, so their examples fail to build
+    // The script binding, the rates and item data are public only with
+    // `unstable`, so their examples fail to build
     // without it. They are marked `standalone_crate` and skipped here: one
     // example that fails in the merged build makes rustdoc build the rest
     // one by one, which takes minutes; merged they share one binary and take
@@ -456,12 +468,7 @@ fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
     let mut doctests = Step::new(&["test", "--doc"])
         .then_owned(stable)
         .then(&["--"]);
-    for module in [
-        "src/script",
-        "src/rates.rs",
-        "src/item_data.rs",
-        "src/services/calls.rs",
-    ] {
+    for module in ["src/script", "src/rates.rs", "src/item_data.rs"] {
         let windows = module.replace('/', "\\");
         doctests = doctests.then(&["--skip", module, "--skip", &windows]);
     }

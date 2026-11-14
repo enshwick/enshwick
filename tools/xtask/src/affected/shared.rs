@@ -12,15 +12,15 @@ pub(super) const MANIFEST: &str = "Cargo.toml";
 /// The lock file.
 pub(super) const LOCK: &str = "Cargo.lock";
 /// The lock file's array of locked packages.
-const LOCKED_PACKAGES: &str = "package";
+pub(super) const LOCKED_PACKAGES: &str = "package";
 /// The manifest table of workspace settings, and the key that inherits one.
-const WORKSPACE: &str = "workspace";
+pub(super) const WORKSPACE: &str = "workspace";
 /// The manifest table of platform-specific dependency tables.
-const TARGET: &str = "target";
+pub(super) const TARGET: &str = "target";
 /// The manifest table of package fields.
-const PACKAGE: &str = "package";
+pub(super) const PACKAGE: &str = "package";
 /// The manifest table of normal dependencies.
-const DEPENDENCIES: &str = "dependencies";
+pub(super) const DEPENDENCIES: &str = "dependencies";
 /// The key of a dependency entry that names its crate when the entry's own
 /// key does not.
 const RENAMED: &str = "package";
@@ -28,7 +28,8 @@ const RENAMED: &str = "package";
 const INHERITED: &[&str] = &[PACKAGE, DEPENDENCIES];
 /// The tables of a manifest that list dependencies, at its root or under
 /// `[target.<cfg>]`.
-const DEPENDENCY_TABLES: &[&str] = &[DEPENDENCIES, "dev-dependencies", "build-dependencies"];
+pub(super) const DEPENDENCY_TABLES: &[&str] =
+    &[DEPENDENCIES, "dev-dependencies", "build-dependencies"];
 
 /// The workspace packages a change of the lock file reaches: those whose
 /// locked entries changed and those that depend on such an entry, directly
