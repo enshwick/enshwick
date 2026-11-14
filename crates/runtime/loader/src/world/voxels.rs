@@ -85,6 +85,7 @@ pub(crate) enum VoxelError {
     #[error("no voxel editor runs")]
     NoEditor,
     /// The server's world, unreadable now.
+    #[cfg(windows)]
     #[error(transparent)]
     World(#[from] crate::engine::world::WorldError),
     /// The box leaves the world.

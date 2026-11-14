@@ -1,7 +1,9 @@
 //! Why a transaction, a change of one, or a call about one failed.
 
+#[cfg(windows)]
 use crate::engine::world::WorldError;
 use crate::world::rights::RightsError;
+#[cfg(windows)]
 use crate::world::terrain::TerrainError;
 use crate::world::voxels::VoxelError;
 
@@ -67,24 +69,29 @@ pub(crate) enum TransactionError {
     #[error("the world changed since")]
     Changed,
     /// The server's world, unreadable now.
+    #[cfg(windows)]
     #[error(transparent)]
     World(#[from] WorldError),
     /// The world's voxels, as their read answered.
     #[error(transparent)]
     Voxels(VoxelError),
     /// The terrain edit, as the game's editor answered.
+    #[cfg(windows)]
     #[error(transparent)]
     Terrain(TerrainError),
     /// The actor's build rights, unreadable now.
     #[error(transparent)]
     Rights(#[from] RightsError),
     /// The item the change places, unreadable now.
+    #[cfg(windows)]
     #[error(transparent)]
     Item(#[from] crate::inventory::transactions::ItemInfoError),
     /// The prop's spawn, as the server answered.
+    #[cfg(windows)]
     #[error(transparent)]
     Spawn(#[from] crate::inventory::spawns::SpawnError),
     /// The prop's entity, as the entity list or call answered.
+    #[cfg(windows)]
     #[error(transparent)]
     Entity(#[from] crate::world::entities::EntityError),
 }
@@ -103,6 +110,7 @@ impl From<VoxelError> for TransactionError {
         match error {
             VoxelError::NotLoaded => Self::NotLoaded,
             VoxelError::OutsideWorld => Self::OutsideWorld,
+            #[cfg(windows)]
             VoxelError::World(error) => Self::World(error),
             other => Self::Voxels(other),
         }
@@ -110,6 +118,7 @@ impl From<VoxelError> for TransactionError {
 }
 
 /// As [`From<VoxelError>`], through the edit's own reasons.
+#[cfg(windows)]
 impl From<TerrainError> for TransactionError {
     fn from(error: TerrainError) -> Self {
         match error {

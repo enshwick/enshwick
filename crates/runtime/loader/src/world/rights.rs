@@ -89,6 +89,7 @@ pub(crate) enum RightsError {
     #[error("no building zones run")]
     NoZones,
     /// The server's world, unreadable now.
+    #[cfg(windows)]
     #[error(transparent)]
     World(#[from] crate::engine::world::WorldError),
 }
