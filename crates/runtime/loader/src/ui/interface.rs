@@ -244,9 +244,34 @@ static HUDS: Registry<Registered<UiFrameFn>> = Registry::new();
 type HudFn = unsafe extern "system" fn(arg: *mut u8);
 /// HUD items a frame gathers at most.
 const MAX_HUD_ITEMS: usize = 128;
-static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
-/// The thread that draws the interface, once it drew.
-static UI_THREAD: AtomicU32 = AtomicU32::new(0);
+
+/// What the interface keeps while the game runs. None of it belongs to a
+/// world, so a hosted game's end forgets only the demo's request
+/// ([`forget`]).
+#[derive(Debug)]
+struct State {
+    /// The token of the next frame callback to draw; never reset, so a
+    /// widget call holding an old token matches no later callback.
+    next_token: AtomicU64,
+    /// The thread that draws the interface, once it drew: the game's main
+    /// thread, the same for every world.
+    ui_thread: AtomicU32,
+}
+
+static STATE: State = State {
+    next_token: AtomicU64::new(1),
+    ui_thread: AtomicU32::new(0),
+};
+
+/// A token for the frame callback about to draw, unique in the process.
+fn next_token() -> u64 {
+    STATE.next_token.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Forgets what the interface kept of a client's hosted game that ended.
+pub(crate) fn forget(_loader: &'static Loader) {
+    demo::forget();
+}
 // Each of the loader's windows turns off at its first panic: a panic
 // between a window's begin and end would leave the game's window stack
 // unbalanced every frame.
@@ -425,7 +450,8 @@ pub(crate) fn mod_dialog(
     if loader.side != Side::CLIENT {
         return Status::MISSING;
     }
-    if raw.flags & UiDialog::WAITING != 0 && UI_THREAD.load(Ordering::Acquire) == thread_id() {
+    if raw.flags & UiDialog::WAITING != 0 && STATE.ui_thread.load(Ordering::Acquire) == thread_id()
+    {
         return Status::WRONG_THREAD;
     }
     if raw.buttons & UiDialog::BUTTONS == 0 {
@@ -611,7 +637,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     if vanilla {
         return;
     }
-    UI_THREAD.store(thread_id(), Ordering::Release);
+    STATE.ui_thread.store(thread_id(), Ordering::Release);
     let frame = mods::next_frame();
     map::note(context);
     let asked = extensions::hosts_asked(FRAMES.sealed().is_some_and(|f| !f.is_empty()));
@@ -784,7 +810,7 @@ fn hud(engine: &Engine, context: usize) {
     // thread with the frame's own non-zero `context`.
     let reads = unsafe { frame_reads(engine, context, !huds.is_empty()) };
     for registered in huds.iter().filter(|r| r.live()) {
-        let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
+        let token = next_token();
         DRAWING.set(Some(Drawing {
             token,
             owner: registered.owner,
@@ -922,7 +948,7 @@ fn frames(engine: &Engine, context: usize, reads: extensions::FrameReads) {
     };
     let screen = screen(engine.app_state(context));
     for registered in frames.iter().filter(|r| r.live()) {
-        let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
+        let token = next_token();
         DRAWING.set(Some(Drawing {
             token,
             owner: registered.owner,

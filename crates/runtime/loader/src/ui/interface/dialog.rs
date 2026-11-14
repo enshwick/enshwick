@@ -179,10 +179,27 @@ impl Waiting {
     }
 }
 
-static MODE: AtomicU8 = AtomicU8::new(QUEUED);
-static WAITING: Waiting = Waiting::new();
-static SHOWN: Mutex<VecDeque<Arc<Shown>>> = Mutex::new(VecDeque::new());
-static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
+/// What the dialogs keep while the game runs. A hosted game's end resets
+/// none of it: where dialogs show is settled once at arming, the dialogs
+/// waiting belong to mods that outlive the world and wait for their answer,
+/// and the game may still read a kept dialog's texts.
+struct State {
+    /// Where dialogs show: [`QUEUED`] until the hooks are armed, then
+    /// [`IN_GAME`] or [`SYSTEM`].
+    mode: AtomicU8,
+    waiting: Waiting,
+    /// The texts of the last [`KEPT`] dialogs that showed, one per slot.
+    shown: Mutex<VecDeque<Arc<Shown>>>,
+    /// The slot the next dialog takes, counted round [`KEPT`].
+    next_slot: AtomicUsize,
+}
+
+static STATE: State = State {
+    mode: AtomicU8::new(QUEUED),
+    waiting: Waiting::new(),
+    shown: Mutex::new(VecDeque::new()),
+    next_slot: AtomicUsize::new(0),
+};
 
 thread_local! {
     static CURRENT: core::cell::RefCell<Option<Current>> = const { core::cell::RefCell::new(None) };
@@ -221,7 +238,7 @@ pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
 /// The text of a dialog text tag, by its id, while its dialog is kept.
 pub(crate) fn text(id: u32) -> Option<&'static str> {
     let index = (0..TAGS.len()).find(|&i| tag_id(i) == id)?;
-    let shown = SHOWN.relock();
+    let shown = STATE.shown.relock();
     let texts = shown.iter().find(|s| s.slot == index / 2)?;
     if !texts.read.swap(true, Ordering::Relaxed) {
         crate::log!(INFO, "interface: the game reads dialog \"{}\"", texts.title);
@@ -231,7 +248,7 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     } else {
         &texts.message
     };
-    // SAFETY: the `Box<str>` stays in `SHOWN` until `KEPT` more dialogs
+    // SAFETY: the `Box<str>` stays in the state's `shown` until `KEPT` more dialogs
     // showed, and the game reads a tag's text only while drawing its dialog,
     // which shows one at a time. The `'static` is wider than that: a caller
     // that keeps the text past `KEPT` dialogs reads freed memory.
@@ -242,8 +259,8 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 /// so. The mode is read under the queue's lock, so a dialog queued while
 /// [`fall_back`] runs is either drained by it or shows as a box itself.
 pub(crate) fn queue(dialog: Pending) -> Status {
-    let mut waiting = WAITING.dialogs.relock();
-    if MODE.load(Ordering::Acquire) == SYSTEM {
+    let mut waiting = STATE.waiting.dialogs.relock();
+    if STATE.mode.load(Ordering::Acquire) == SYSTEM {
         drop(waiting);
         system_box(dialog);
         return Status::OK;
@@ -251,7 +268,7 @@ pub(crate) fn queue(dialog: Pending) -> Status {
     if waiting.len() >= MAX_WAITING {
         return Status::REFUSED;
     }
-    WAITING.push(&mut waiting, dialog);
+    STATE.waiting.push(&mut waiting, dialog);
     Status::OK
 }
 
@@ -280,9 +297,11 @@ pub(crate) fn show(
 /// interface hook is wired, else as system message boxes, those already
 /// waiting among them.
 pub(crate) fn armed(in_game: bool) {
-    MODE.store(if in_game { IN_GAME } else { SYSTEM }, Ordering::Release);
+    STATE
+        .mode
+        .store(if in_game { IN_GAME } else { SYSTEM }, Ordering::Release);
     if !in_game {
-        for dialog in WAITING.take_all() {
+        for dialog in STATE.waiting.take_all() {
             system_box(dialog);
         }
     }
@@ -293,11 +312,13 @@ pub(crate) fn armed(in_game: bool) {
 /// waiting, and every later one at once. On the interface thread, which
 /// holds the dialog on screen.
 pub(super) fn fall_back() {
-    if MODE.load(Ordering::Acquire) == SYSTEM || MODE.swap(SYSTEM, Ordering::AcqRel) == SYSTEM {
+    if STATE.mode.load(Ordering::Acquire) == SYSTEM
+        || STATE.mode.swap(SYSTEM, Ordering::AcqRel) == SYSTEM
+    {
         return;
     }
     let on_screen = CURRENT.take();
-    for dialog in stranded(on_screen, &mut WAITING.take_all()) {
+    for dialog in stranded(on_screen, &mut STATE.waiting.take_all()) {
         system_box(dialog);
     }
 }
@@ -377,8 +398,8 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
-    let dialog = WAITING.pop()?;
-    let slot = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % KEPT;
+    let dialog = STATE.waiting.pop()?;
+    let slot = STATE.next_slot.fetch_add(1, Ordering::Relaxed) % KEPT;
     let texts = Arc::new(Shown {
         slot,
         title: dialog.title.into_boxed_str(),
@@ -388,7 +409,7 @@ fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
     });
     crate::log!(INFO, "interface: dialog \"{}\" shows", texts.title);
     {
-        let mut shown = SHOWN.relock();
+        let mut shown = STATE.shown.relock();
         shown.retain(|s| s.slot != slot);
         shown.push_back(Arc::clone(&texts));
     }

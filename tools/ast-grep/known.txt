@@ -48,12 +48,8 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.r
 static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
 # The UI demo's answer, HUD samples and position, a developer tool's
 # state; they move into the thread-local `Demo` or one demo state struct.
-static-is-registry-fuse-or-state crates/runtime/loader/src/ui/interface/demo.rs static ANSWER: Mutex<Option<&'static str>> = Mutex::new(None);
-static-is-registry-fuse-or-state crates/runtime/loader/src/ui/interface/demo.rs static HUD_SAMPLES: Mutex<Option<f32>> = Mutex::new(None);
-static-is-registry-fuse-or-state crates/runtime/loader/src/ui/interface/demo.rs static WHERE: Mutex<Option<[i64; 3]>> = Mutex::new(None);
 # The dialogs shown, UI state; they move into one dialog state struct with
 # `MODE` and `WAITING`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/ui/interface/dialog.rs static SHOWN: Mutex<VecDeque<Arc<Shown>>> = Mutex::new(VecDeque::new());
 # The files the loader wrote itself, the watcher's state; they move into
 # the watcher's state struct.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/watch.rs static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
@@ -113,14 +109,3 @@ loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs stat
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static SETTLED: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static WANTED: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/start.rs static STARTED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface.rs static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface.rs static UI_THREAD: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/demo.rs static OPEN: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/dialog.rs static MODE: AtomicU8 = AtomicU8::new(QUEUED);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/dialog.rs static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static BACK: AtomicU8 = AtomicU8::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static FRAME: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static MAIN_SEEN: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static NODE: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static OPEN: AtomicU8 = AtomicU8::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static PAUSE_SEEN: AtomicU64 = AtomicU64::new(0);

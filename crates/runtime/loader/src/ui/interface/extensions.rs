@@ -7,7 +7,6 @@
 use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
 use std::sync::OnceLock;
-use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_gamedata::catalogue;
@@ -20,7 +19,7 @@ use crate::engine::pinned;
 use crate::engine::registry::Registry;
 
 use super::engine::{Engine, UiText, Window};
-use super::{DRAWING, Drawing, NEXT_TOKEN, copy};
+use super::{DRAWING, Drawing, copy, next_token};
 
 /// The open screen's name in what mods' frames read.
 static SCREEN_NAMES_FUSE: Fuse = Fuse::new("open screen names");
@@ -534,7 +533,7 @@ unsafe fn close(engine: &Engine, context: usize) {
 ///   with that frame's non-zero `context`, while no window but the
 ///   extensions' own is open.
 unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, reads: FrameReads) {
-    let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
+    let token = next_token();
     DRAWING.set(Some(Drawing {
         token,
         owner: registered.owner,

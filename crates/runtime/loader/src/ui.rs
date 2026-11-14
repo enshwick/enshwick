@@ -16,6 +16,7 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: interface::TABLE_IDS,
         link: Some(interface::link),
+        forget: Some(interface::forget),
         ..part!("ui", interface)
     },
     &Part {
