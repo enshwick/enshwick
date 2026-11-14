@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 mod affected;
+mod cargo_files;
 mod check;
 mod commands;
 

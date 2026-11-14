@@ -6,30 +6,17 @@ use std::collections::BTreeSet;
 use toml::{Table, Value};
 
 use super::{Package, Texts};
+pub(super) use crate::cargo_files::LOCK;
+use crate::cargo_files::{self, DEPENDENCIES, Locked};
 
 /// The workspace manifest.
 pub(super) const MANIFEST: &str = "Cargo.toml";
-/// The lock file.
-pub(super) const LOCK: &str = "Cargo.lock";
-/// The lock file's array of locked packages.
-pub(super) const LOCKED_PACKAGES: &str = "package";
 /// The manifest table of workspace settings, and the key that inherits one.
 pub(super) const WORKSPACE: &str = "workspace";
-/// The manifest table of platform-specific dependency tables.
-pub(super) const TARGET: &str = "target";
 /// The manifest table of package fields.
 pub(super) const PACKAGE: &str = "package";
-/// The manifest table of normal dependencies.
-pub(super) const DEPENDENCIES: &str = "dependencies";
-/// The key of a dependency entry that names its crate when the entry's own
-/// key does not.
-const RENAMED: &str = "package";
 /// The `[workspace]` tables members take keys from with `key.workspace = true`.
 const INHERITED: &[&str] = &[PACKAGE, DEPENDENCIES];
-/// The tables of a manifest that list dependencies, at its root or under
-/// `[target.<cfg>]`.
-pub(super) const DEPENDENCY_TABLES: &[&str] =
-    &[DEPENDENCIES, "dev-dependencies", "build-dependencies"];
 
 /// The workspace packages a change of the lock file reaches: those whose
 /// locked entries changed and those that depend on such an entry, directly
@@ -41,7 +28,7 @@ pub(super) fn locked(texts: &dyn Texts, packages: &[Package]) -> Option<BTreeSet
         .iter()
         .filter(|entry| !after.contains(entry))
         .chain(after.iter().filter(|entry| !before.contains(entry)))
-        .map(Entry::key)
+        .map(key)
         .collect();
     Some(reach(changed, before.iter().chain(&after), packages))
 }
@@ -50,11 +37,11 @@ pub(super) fn locked(texts: &dyn Texts, packages: &[Package]) -> Option<BTreeSet
 /// one of them, directly or not.
 fn reach<'a>(
     mut reached: BTreeSet<Key>,
-    entries: impl Iterator<Item = &'a Entry>,
+    entries: impl Iterator<Item = &'a Locked>,
     packages: &[Package],
 ) -> BTreeSet<String> {
     let graph: Vec<(Key, Vec<&str>)> = entries
-        .map(|entry| (entry.key(), entry.dependencies().collect()))
+        .map(|entry| (key(entry), entry.dependencies().collect()))
         .collect();
     loop {
         let known = reached.len();
@@ -83,41 +70,17 @@ fn reach<'a>(
 /// member).
 type Key = (String, String, Option<String>);
 
-/// One `[[package]]` of a lock file, whole.
-#[derive(PartialEq)]
-struct Entry(Table);
-
-impl Entry {
-    fn key(&self) -> Key {
-        let field = |name| self.0.get(name).and_then(Value::as_str).map(str::to_owned);
-        (
-            field("name").unwrap_or_default(),
-            field("version").unwrap_or_default(),
-            field("source"),
-        )
-    }
-
-    /// Its `dependencies`, each `name`, `name version` or
-    /// `name version (source)`.
-    fn dependencies(&self) -> impl Iterator<Item = &str> {
-        self.0
-            .get(DEPENDENCIES)
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-    }
+fn key(entry: &Locked) -> Key {
+    (
+        entry.name().unwrap_or_default().to_owned(),
+        entry.version().unwrap_or_default().to_owned(),
+        entry.source().map(str::to_owned),
+    )
 }
 
 /// The entries of a lock file; `None` when it does not read.
-fn lock(text: &str) -> Option<Vec<Entry>> {
-    toml::from_str::<Table>(text)
-        .ok()?
-        .get(LOCKED_PACKAGES)?
-        .as_array()?
-        .iter()
-        .map(|entry| entry.as_table().cloned().map(Entry))
-        .collect()
+fn lock(text: &str) -> Option<Vec<Locked>> {
+    cargo_files::locked(text).ok()
 }
 
 /// Whether the dependency `dep` of a lock entry names the entry `key`.
@@ -149,13 +112,12 @@ pub(super) fn inherited(texts: &dyn Texts, packages: &[Package]) -> Option<BTree
                 continue;
             }
             if section == DEPENDENCIES {
-                crates.extend([was, is].into_iter().flatten().map(|entry| {
-                    entry
-                        .get(RENAMED)
-                        .and_then(Value::as_str)
-                        .unwrap_or(key)
-                        .to_owned()
-                }));
+                crates.extend(
+                    [was, is]
+                        .into_iter()
+                        .flatten()
+                        .map(|entry| cargo_files::package(key, entry).to_owned()),
+                );
             }
             changed.push((section, key.clone()));
         }
@@ -172,7 +134,7 @@ pub(super) fn inherited(texts: &dyn Texts, packages: &[Package]) -> Option<BTree
     };
     let built_on = entries
         .iter()
-        .map(Entry::key)
+        .map(key)
         .filter(|(name, _, _)| crates.contains(name))
         .collect();
     let mut reached = reach(built_on, entries.iter(), packages);
@@ -210,25 +172,12 @@ fn take(manifest: &mut Table, key: &str) -> Table {
 
 /// Whether a member's manifest inherits `key` of `[workspace.<section>]`.
 fn takes(manifest: &Table, section: &str, key: &str) -> bool {
-    let inherits = |table: Option<&Value>| {
-        table
-            .and_then(|table| table.get(key))
-            .and_then(|entry| entry.get(WORKSPACE))
-            .and_then(Value::as_bool)
-            == Some(true)
-    };
+    let inherits = |entry: &Value| entry.get(WORKSPACE).and_then(Value::as_bool) == Some(true);
     if section != DEPENDENCIES {
-        return inherits(manifest.get(section));
+        return manifest
+            .get(section)
+            .and_then(|table| table.get(key))
+            .is_some_and(inherits);
     }
-    let targets = manifest
-        .get(TARGET)
-        .and_then(Value::as_table)
-        .into_iter()
-        .flat_map(Table::values)
-        .filter_map(Value::as_table);
-    std::iter::once(manifest).chain(targets).any(|root| {
-        DEPENDENCY_TABLES
-            .iter()
-            .any(|kind| inherits(root.get(*kind)))
-    })
+    cargo_files::dependencies(manifest).any(|dep| dep.key == key && inherits(dep.entry))
 }

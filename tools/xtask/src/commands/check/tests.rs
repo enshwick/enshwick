@@ -340,6 +340,46 @@ fn a_package_whose_tests_alone_run_gets_no_examples_trybuild_or_stable_surface_s
     assert_eq!(windows_tests(&scope, &packages), Vec::<&str>::new());
 }
 
+#[test]
+fn a_facade_change_with_many_dependents_leaves_trybuild_and_the_stable_surface_to_ci() {
+    let args = stable();
+    let scope = |tested: &[&str]| Scope::Some {
+        code: ["enshwick".to_owned()].into(),
+        docs: BTreeSet::new(),
+        tested: tested.iter().map(|name| (*name).to_owned()).collect(),
+        built: BTreeSet::new(),
+    };
+    let steps = |scope: &Scope| -> Vec<String> {
+        host_steps(
+            scope,
+            (&[], &args),
+            (true, true, true),
+            Some("package(enshwick)"),
+            &[],
+            false,
+            &Part::every(false),
+        )
+        .iter()
+        .map(Step::line)
+        .collect()
+    };
+    let has = |steps: &[String], with: &str| steps.iter().any(|step| step.contains(with));
+    let stable_line = args.join(" ");
+    let narrow = steps(&scope(&[]));
+    assert!(has(&narrow, "--test main"), "{narrow:?}");
+    assert!(has(&narrow, &format!("cargo test --doc {stable_line}")));
+    assert!(has(&narrow, &format!("cargo doc --no-deps {stable_line}")));
+    let wide = steps(&scope(&["enshwick-loader", "enshwick-luau"]));
+    assert!(!has(&wide, "--test main"), "{wide:?}");
+    assert!(!has(&wide, &format!("cargo test --doc {stable_line}")));
+    assert!(!has(&wide, &format!("cargo doc --no-deps {stable_line}")));
+    assert!(!has(
+        &wide,
+        &format!("cargo clippy --all-targets {stable_line}")
+    ));
+    assert!(has(&wide, "cargo nextest") && has(&wide, "cargo doc --no-deps"));
+}
+
 /// A package at `dir`, with Windows tests when it builds only for Windows.
 fn package(name: &str, dir: &str, windows_only: bool) -> Package {
     Package {

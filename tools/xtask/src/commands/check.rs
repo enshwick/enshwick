@@ -23,7 +23,7 @@ use std::process::Command;
 use std::thread;
 use std::time::Instant;
 
-use crate::affected::{self, Lane, Package, Scope};
+use crate::affected::{self, Lane, MAX_LOCAL_DEPENDENTS, Package, Scope};
 use crate::commands::{fuzz, header, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 
@@ -161,16 +161,18 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             return Ok(false);
         }
     }
-    if parts.contains(&Part::Trybuild) && !touches(&scope, FACADE) {
-        say(
-            &if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
-                format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
-            } else if reaches(&scope, FACADE) {
-                format!("the trybuild test is left to CI: {FACADE} is only built here")
-            } else {
-                format!("the trybuild test is out of scope: the change does not reach {FACADE}")
-            },
-        );
+    if parts.contains(&Part::Trybuild) && (!touches(&scope, FACADE) || wide(&scope)) {
+        say(&if touches(&scope, FACADE) {
+            format!(
+                "the trybuild test is left to CI: the change reaches more than {MAX_LOCAL_DEPENDENTS} dependents"
+            )
+        } else if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
+            format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
+        } else if reaches(&scope, FACADE) {
+            format!("the trybuild test is left to CI: {FACADE} is only built here")
+        } else {
+            format!("the trybuild test is out of scope: the change does not reach {FACADE}")
+        });
     }
     let checked = check(&scope, &packages, args.all, &parts)
         && (!parts.contains(&Part::Semver) || semver(&args.semver));
@@ -190,6 +192,14 @@ fn touches(scope: &Scope, package: &str) -> bool {
         Scope::All => true,
         Scope::Some { code, .. } => code.iter().any(|name| name == package),
     }
+}
+
+/// Whether a local check of `scope` left the examples of the change's many
+/// dependents to CI ([`MAX_LOCAL_DEPENDENTS`]): it leaves the trybuild test
+/// and the stable surface's build there too, which alone kept
+/// a check of a facade change over ten minutes (669 s, 2026-11-14).
+fn wide(scope: &Scope) -> bool {
+    matches!(scope, Scope::Some { tested, .. } if !tested.is_empty())
 }
 
 /// Whether `scope` checks, tests or only builds the code of `package`.
@@ -622,7 +632,7 @@ fn host_steps(
             steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
         }
     }
-    if parts.contains(&Part::Trybuild) && touches(scope, FACADE) {
+    if parts.contains(&Part::Trybuild) && touches(scope, FACADE) && !wide(scope) {
         steps.push(Step::new(&[
             "nextest",
             "run",
@@ -652,7 +662,7 @@ fn host_steps(
         Scope::All => true,
         Scope::Some { docs, .. } => docs.iter().any(|name| name == FACADE),
     };
-    if parts.contains(&Part::StableApi) && (touches(scope, FACADE) || api_docs) {
+    if parts.contains(&Part::StableApi) && (touches(scope, FACADE) || api_docs) && !wide(scope) {
         steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, full) {
@@ -704,7 +714,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
             say(&format!(
                 "running only the tests of {}: CI and the merge queue run their examples{}",
                 names.join(", "),
-                if tested.contains(FACADE) {
+                if tested.contains(FACADE) || code.contains(FACADE) {
                     format!(" and {FACADE}'s stable surface")
                 } else {
                     String::new()

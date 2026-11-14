@@ -72,25 +72,59 @@ those: tell the player, or keep them in its own
 [world data](../state.md) and give them later. Enshwick stores nothing
 about a reward.
 
+`QuestCompleted` can come again for a quest the player already completed,
+as the end of this section says. So the handler keeps a mark per player in
+a world store and gives only on the first one.
+
 ```rust
+use std::collections::BTreeSet;
+
 use enshwick::events::QuestCompleted;
 use enshwick::knowledge::KnowledgeId;
 
+/// The players given the reward, by account key in hex.
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+struct Given {
+    players: BTreeSet<String>,
+}
+
 fn init(load: &mut enshwick::Load<'_>, trail: KnowledgeId, torch: enshwick::ItemId) -> Result<(), enshwick::Off> {
     let inventories = load.inventories()?;
+    let world = load.world()?;
+    let given = load.world_store::<Given>("torch")?;
     load.on::<QuestCompleted>(move |done| {
-        if done.quest == trail {
-            let _ticket = inventories.give_what_fits(done.entity, torch, 1, |left, outcome| {
-                if !outcome.is_committed() {
-                    enshwick::warn!("reward not given: {:?}", outcome.done);
-                } else if left > 0 {
-                    enshwick::warn!("no room for {left} of the reward");
-                }
-            });
+        if done.quest != trail {
+            return;
         }
+        let Some(player) = world.player(done.entity) else {
+            return;
+        };
+        let key = format!("{:x}", player.key.get());
+        // `None` while no world runs or the store is shut: no reward then.
+        if given.with(|given| given.players.contains(&key)) != Some(false) {
+            return;
+        }
+        given.update(|given| given.players.insert(key.clone()));
+        let given = given.clone();
+        let _ticket = inventories.give_what_fits(done.entity, torch, 1, move |left, outcome| {
+            if outcome.is_committed() && left == 0 {
+                return;
+            }
+            // Nothing was given: the next completion tries again.
+            given.update(|given| given.players.remove(&key));
+            if outcome.is_committed() {
+                enshwick::warn!("no room for the reward");
+            } else {
+                enshwick::warn!("reward not given: {:?}", outcome.done);
+            }
+        });
     })
 }
 ```
+
+A request that is not committed, or that found no room for the one item,
+gave nothing. The handler clears the player's mark then, so the next
+completion tries again.
 
 `load.quests().quest(done.quest)` gives the rewards the quest declares, for
 a handler that serves several quests. A mod gives only the items it
@@ -243,16 +277,44 @@ local trail = enshwick.content.add_quest({
 })
 
 local torch = enshwick.content.item_id("<the GUID of a vanilla item>")
+-- The players given the reward, by account key: a mark against a repeat.
+local rewarded = enshwick.world_store("torch")
+local function mark(key: string, set: boolean)
+    rewarded:update(function(data)
+        local marks = if type(data) == "table" then data else {}
+        marks[key] = set -- false, not nil: an empty table saves as none
+        return marks
+    end)
+end
 enshwick.on("QuestCompleted", function(done)
-    if done.quest == trail then
-        enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left, outcome)
-            if outcome.done ~= "Committed" then
-                enshwick.log.warn(`reward not given: {outcome.done}`)
-            elseif left > 0 then
-                enshwick.log.warn(`no room for {left} of the reward`)
-            end
-        end)
+    if done.quest ~= trail then
+        return
     end
+    local player = enshwick.world.player(done.entity)
+    if not player then
+        return
+    end
+    local key = player.key
+    -- nil while no world runs or the store is shut: no reward then.
+    local marked = rewarded:with(function(data)
+        return type(data) == "table" and data[key] == true
+    end)
+    if marked ~= false then
+        return
+    end
+    mark(key, true)
+    enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left, outcome)
+        if outcome.done == "Committed" and left == 0 then
+            return
+        end
+        -- Nothing was given: the next completion tries again.
+        mark(key, false)
+        if outcome.done == "Committed" then
+            enshwick.log.warn("no room for the reward")
+        else
+            enshwick.log.warn(`reward not given: {outcome.done}`)
+        end
+    end)
 end)
 ```
 

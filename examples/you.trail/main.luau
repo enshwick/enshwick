@@ -72,18 +72,53 @@ local trail = content.add_quest({
 local NO_ROOM = "No room for the trail's torch. / Немає місця для смолоскипа стежки."
 local torch = content.item_id(TORCH)
 
+-- The players given the torch, by account key, beside the world's save.
+-- QuestCompleted comes again when a join or reload replays the quest, so
+-- the mark keeps it to one torch.
+local given_torch = enshwick.world_store("torch")
+
+-- Sets or clears the mark of `key`.
+local function mark(key: string, set: boolean)
+	given_torch:update(function(data)
+		local marks = if type(data) == "table" then data else {}
+		-- false, not nil: a table left empty would save as no table.
+		marks[key] = set
+		return marks
+	end)
+end
+
 enshwick.on("QuestCompleted", function(done)
 	if done.quest ~= trail then
 		return
 	end
+	local player = enshwick.world.player(done.entity)
+	if not player then
+		return
+	end
+	local key = player.key
+	-- A read first: a replay leaves the file as it is. Nil while no world
+	-- runs or the store is shut: no torch then.
+	local marked = given_torch:with(function(data)
+		return type(data) == "table" and data[key] == true
+	end)
+	if marked ~= false then
+		return
+	end
+	mark(key, true)
 	enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left, outcome)
+		if outcome.done == "Committed" and left == 0 then
+			return
+		end
+		-- Nothing was given: the next completion tries again.
+		mark(key, false)
 		if outcome.done ~= "Committed" then
 			enshwick.log.warn(`torch not given: {outcome.done}`)
 			return
 		end
-		local player = enshwick.world.player(done.entity)
-		if left > 0 and player then
-			enshwick.world.notify(player, NO_ROOM)
+		-- The player may have left while the request ran.
+		local now = enshwick.world.player(done.entity)
+		if now then
+			enshwick.world.notify(now, NO_ROOM)
 		end
 	end)
 end)

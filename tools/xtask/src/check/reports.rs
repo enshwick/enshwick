@@ -10,6 +10,8 @@ use std::process::Command;
 
 use sha2::{Digest as _, Sha256};
 
+use crate::cargo_files::{self, LOCK};
+
 /// The compatibility reports, from the repository root.
 pub(crate) const REPORTS: &str = "crates/enshwick-gamedata/reports";
 
@@ -58,9 +60,6 @@ const INPUTS: &[&str] = &[
 /// decoder every engine route reads code with.
 const LOCKED: &[&str] = &["iced-x86"];
 
-/// The lock file that holds their versions, from the repository root.
-const LOCK: &str = "Cargo.lock";
-
 /// The start of the line that holds a report's seal.
 const SEAL: &str = "sealed = ";
 
@@ -101,15 +100,11 @@ fn locked(root: &Path) -> Result<Vec<(String, String)>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
-    let lock: toml::Table = text.parse().map_err(|e| format!("{LOCK}: {e}"))?;
-    let mut found: Vec<(String, String)> = lock
-        .get("package")
-        .and_then(toml::Value::as_array)
-        .into_iter()
-        .flatten()
+    let mut found: Vec<(String, String)> = cargo_files::locked(&text)?
+        .iter()
         .filter_map(|package| {
-            let name = package.get("name")?.as_str()?;
-            let version = package.get("version")?.as_str()?;
+            let name = package.name()?;
+            let version = package.version()?;
             LOCKED
                 .contains(&name)
                 .then(|| (name.to_owned(), version.to_owned()))

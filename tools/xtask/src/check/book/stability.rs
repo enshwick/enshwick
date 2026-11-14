@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 use syn::{Attribute, ImplItem, Item, Visibility};
 
 use super::SOURCE;
-use crate::FACADE;
 use crate::affected::Package;
 use crate::check::domains::use_leaves;
 use crate::check::domains::walk::{Cfg, cfgs, item_attrs, test_attrs};
+use crate::{FACADE, cargo_files};
 
 /// The chapter, under the book's source.
 const CHAPTER: &str = "stability.md";
@@ -202,12 +202,9 @@ fn reached_features(
         // shortcut: a rename in [workspace.dependencies] is not read; read
         // the root manifest once one appears there.
         let package_of = |key: &str| {
-            manifest
-                .get("dependencies")
-                .and_then(|deps| deps.get(key))
-                .and_then(|dep| dep.get("package"))
-                .and_then(toml::Value::as_str)
-                .unwrap_or(key)
+            cargo_files::dependencies(&manifest)
+                .find(|dep| dep.key == key)
+                .map_or(key, |dep| dep.package())
                 .to_owned()
         };
         for entry in turned_on {

@@ -411,10 +411,10 @@ checksum = "cc"
 
     #[test]
     fn a_lock_change_checks_only_the_packages_built_on_the_changed_entry() {
-        let tree = Tree::changed("Cargo.lock", &lock("bb"), &lock("b2"));
+        let tree = Tree::changed(shared::LOCK, &lock("bb"), &lock("b2"));
         assert_eq!(
             code(super::scope(
-                &files(&["Cargo.lock"]),
+                &files(&[shared::LOCK]),
                 &workspace(),
                 &tree,
                 Lane::Ci
@@ -426,13 +426,13 @@ checksum = "cc"
     #[test]
     fn a_lock_change_reaches_the_dependents_of_a_package_built_on_it() {
         let tree = Tree::changed(
-            "Cargo.lock",
+            shared::LOCK,
             &lock("bb"),
             &lock("bb").replace("checksum = \"aa\"", "checksum = \"a2\""),
         );
         assert_eq!(
             code(super::scope(
-                &files(&["Cargo.lock"]),
+                &files(&[shared::LOCK]),
                 &workspace(),
                 &tree,
                 Lane::Ci
@@ -450,9 +450,9 @@ checksum = "cc"
 
     #[test]
     fn a_lock_that_does_not_read_checks_everything() {
-        let tree = Tree::changed("Cargo.lock", &lock("bb"), "[[package]");
+        let tree = Tree::changed(shared::LOCK, &lock("bb"), "[[package]");
         assert_eq!(
-            super::scope(&files(&["Cargo.lock"]), &workspace(), &tree, Lane::Ci),
+            super::scope(&files(&[shared::LOCK]), &workspace(), &tree, Lane::Ci),
             Scope::All
         );
     }
@@ -582,7 +582,7 @@ checksum = "cc"
                 "[workspace.dependencies]\nwin = { package = \"windows\", version = \"0.1\", features = [\"Win32\"] }\n",
             ),
         );
-        tree.after.insert("Cargo.lock".to_owned(), lock("bb"));
+        tree.after.insert(shared::LOCK.to_owned(), lock("bb"));
         assert_eq!(
             code(super::scope(
                 &files(&["Cargo.toml"]),
@@ -748,7 +748,7 @@ checksum = "cc"
     /// and the lock's member versions move from `alpha.14` to `alpha.15`.
     fn release() -> (Vec<String>, Tree) {
         let mut tree = Tree::default();
-        let mut changed = vec!["Cargo.toml".to_owned(), "Cargo.lock".to_owned()];
+        let mut changed = vec!["Cargo.toml".to_owned(), shared::LOCK.to_owned()];
         for package in workspace() {
             let path = format!("{}/Cargo.toml", package.dir);
             let manifest = format!(
@@ -764,7 +764,7 @@ checksum = "cc"
             "[workspace.dependencies]\nenshwick = { path = \"crates/enshwick\", version = \"=1.0.0-alpha.14\" }\nserde = \"1\"\n",
         );
         let lock = lock("bb").replace("0.0.0-dev", "1.0.0-alpha.14");
-        for (path, text) in [("Cargo.toml", root), ("Cargo.lock", lock)] {
+        for (path, text) in [("Cargo.toml", root), (shared::LOCK, lock)] {
             tree.after
                 .insert(path.to_owned(), text.replace("alpha.14", "alpha.15"));
             tree.before.insert(path.to_owned(), text);
