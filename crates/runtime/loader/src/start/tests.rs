@@ -292,6 +292,38 @@ fn a_pack_s_callback_runs_as_the_pack_and_a_dll_s_as_the_loader() {
 }
 
 #[test]
+fn a_found_pack_counts_its_files_in_the_join_version_until_it_turns_off() {
+    use enshwick_core::packs::MANIFEST_FILE;
+    let id = "test.kept-pack";
+    let mods = std::env::temp_dir().join(format!("enshwick-packs-{}", std::process::id()));
+    let _stale = std::fs::remove_dir_all(&mods);
+    let dir = mods.join(id);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join(MANIFEST_FILE),
+        format!("id = \"{id}\"\nversion = \"1.0.0\"\n"),
+    )
+    .unwrap();
+    let found = crate::packs::data_packs::discover(&mods);
+    std::fs::remove_dir_all(&mods).unwrap();
+    assert_eq!(
+        found.iter().map(|f| f.file.as_str()).collect::<Vec<_>>(),
+        [format!("{id}/{MANIFEST_FILE}")]
+    );
+    let (mut loader, _) = loader(&[TestMod::plain(id)], false);
+    loader.mods[0].pack = true;
+    let version = loader.mods[0].join_version();
+    assert!(
+        version
+            .strip_prefix("1.0.0+")
+            .is_some_and(|hash| hash.len() == 8 && hash.bytes().all(|b| b.is_ascii_hexdigit())),
+        "{version}"
+    );
+    loader.turn_off(ModIndex::new(0), "turned off by the test");
+    assert_eq!(loader.mods[0].join_version(), "1.0.0");
+}
+
+#[test]
 fn a_developer_mod_is_off_before_its_init_without_developer_tools() {
     let (loader, order) = loader(&[TestMod::plain("you.lanterns"), DEVELOPER], false);
     initialise(&loader, &order.iter().collect::<Vec<_>>(), None);
