@@ -236,6 +236,19 @@ mod tests {
                 .starts_with("0Write it so: say <Message>")
         );
         assert!(chat("/b tag fox").unwrap().starts_with('0'), "no hours");
+        let bell = format!("/b say {}\u{7}", "x".repeat(23));
+        assert!(
+            chat(&bell)
+                .unwrap()
+                .starts_with("0Write it so: say <Message>"),
+            "a text of exactly its bound with a control character is no text, not a long one"
+        );
+        assert!(
+            chat("/b tag fox 99")
+                .unwrap()
+                .starts_with("0Write it so: tag <Tag> <1-48>"),
+            "a number out of range"
+        );
         assert!(runs().is_empty(), "nothing refused reached the handler");
     }
 
@@ -424,11 +437,14 @@ mod tests {
 
         assert_eq!(run("tHello there").as_deref(), Some("1ok"));
         assert_eq!(runs(), [vec![text("Hello there")]]);
-        assert!(
-            run(&format!("t{}", "x".repeat(25)))
-                .unwrap()
-                .starts_with('0')
-        );
+        let bound = Some("0Message takes at most 24 bytes.");
+        for long in [25, enshwick::actions::MAX_TEXT + 1] {
+            assert_eq!(
+                run(&format!("t{}", "x".repeat(long))).as_deref(),
+                bound,
+                "{long} bytes answer the argument's own bound"
+            );
+        }
         assert!(run("tbell\u{7}").unwrap().starts_with('0'));
         assert!(run("t").unwrap().starts_with('0'), "an empty text");
         assert!(runs().is_empty());

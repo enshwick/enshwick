@@ -212,6 +212,9 @@ fn said_hello(key: u64, hello: &crate::base::admission::Hello) {
         return;
     }
     let greeting = state(|s| greet(s, key, Instant::now()));
+    if let Some(loader) = crate::engine::loader::loader() {
+        loader.parts.hello(loader, key);
+    }
     if greeting.fresh {
         crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
     } else if greeting.data {

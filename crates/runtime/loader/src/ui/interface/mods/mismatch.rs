@@ -6,7 +6,7 @@ use enshwick_core::abi::UiWidget;
 use super::list::{listing, pages};
 use crate::base::join::Row;
 use crate::engine::texts;
-use crate::ui::interface::Painter;
+use crate::ui::interface::{Painter, Widgets};
 
 /// Rows a page shows on a build without scroll areas.
 const ROWS_PER_PAGE: usize = 8;

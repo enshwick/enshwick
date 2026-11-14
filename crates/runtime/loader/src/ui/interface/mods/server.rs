@@ -7,7 +7,7 @@ use super::settings::draw_row;
 use super::{Entries, MODS_PER_PAGE, ROWS_PER_PAGE};
 use crate::base::configure::rows::{self, Row};
 use crate::engine::texts;
-use crate::ui::interface::Painter;
+use crate::ui::interface::{Painter, Widgets};
 use crate::ui::mods_screen;
 use enshwick_base::Relock;
 

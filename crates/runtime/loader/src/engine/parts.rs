@@ -35,6 +35,9 @@ pub(crate) struct Part {
     pub(crate) joined: Option<PlayerCall>,
     /// A player leaves, before the game removes the character.
     pub(crate) left: Option<PlayerCall>,
+    /// The client of the player with this account key said hello, on the
+    /// server: it takes the server's messages from now on.
+    pub(crate) hello: Option<KeyCall>,
     /// A client starts hosting a game.
     pub(crate) hosting: Option<fn(&'static Loader)>,
     /// A client's hosted game ended: the part tells mods what goes with it
@@ -64,6 +67,7 @@ impl Part {
             steps: &[],
             joined: None,
             left: None,
+            hello: None,
             hosting: None,
             end: None,
             forget: None,
@@ -83,6 +87,9 @@ pub(crate) struct Fused<F> {
 
 /// A call at a player's join or leave.
 pub(crate) type PlayerCall = Fused<fn(&'static Loader, &PlayerData)>;
+
+/// A call about one player's client, by its account key.
+pub(crate) type KeyCall = Fused<fn(&'static Loader, u64)>;
 
 /// A call at the world's loaded, saved and shutdown events.
 pub(crate) type WorldCall = Fused<fn(&Loader, Event)>;
@@ -234,6 +241,16 @@ impl Parts {
         }
     }
 
+    /// Tells every part that the client of player `key` said hello, each
+    /// under its own fuse.
+    pub(crate) fn hello(&self, loader: &'static Loader, key: u64) {
+        for fused in self.iter().filter_map(|part| part.hello.as_ref()) {
+            let _ran = fused
+                .fuse
+                .run("a client's hello", || (fused.run)(loader, key));
+        }
+    }
+
     /// Ends a client's hosted game in the parts: every `end`, top layer
     /// first, so a window's close handler may still queue a request the
     /// inventory then answers; then every `forget`, which drops what the
@@ -315,5 +332,24 @@ mod tests {
     fn a_part_knows_its_module() {
         assert_eq!(LOW[0].module, concat!(module_path!(), "::low"));
         assert_eq!(part!("own").module, module_path!());
+    }
+
+    #[test]
+    fn a_client_s_hello_reaches_every_part_that_hears_it_with_its_key() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static HEARD: AtomicU64 = AtomicU64::new(0);
+        static HEARS: &[&Part] = &[
+            &Part {
+                hello: Some(fused!("test hello", |_, key| HEARD
+                    .fetch_add(key, Ordering::Relaxed))),
+                ..part!("hears", hears)
+            },
+            &part!("deaf", deaf),
+        ];
+        static WITH_HELLO: &[(&str, &[&Part])] = &[("low", LOW), ("ears", HEARS)];
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        Parts::new(WITH_HELLO).hello(loader, 7);
+        assert_eq!(HEARD.load(Ordering::Relaxed), 7);
     }
 }

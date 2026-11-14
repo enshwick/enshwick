@@ -475,15 +475,28 @@ impl Registry {
         if arg.takes_text(text) {
             return Ok(Value::Text(text.to_owned()));
         }
-        let too_long = u16::try_from(text.len()).map_or(true, |len| f64::from(len) > arg.range.1);
-        Err(if too_long {
-            ReadArgsError::TooLong {
-                label: arg.label.clone(),
-                max: arg.range.1.to_string(),
-            }
-        } else {
-            ReadArgsError::Usage
+        Err(Self::too_long(arg, text).unwrap_or(ReadArgsError::Usage))
+    }
+
+    /// The error of `text` given to the text argument `arg` when it is
+    /// longer than `arg` takes.
+    fn too_long(arg: &Arg, text: &str) -> Option<ReadArgsError> {
+        let longer = u16::try_from(text.len()).map_or(true, |len| f64::from(len) > arg.range.1);
+        longer.then(|| ReadArgsError::TooLong {
+            label: arg.label.clone(),
+            max: arg.range.1.to_string(),
         })
+    }
+
+    /// The error of the interface's `args` for `action` when one of their
+    /// texts is longer than its argument takes, as a typed line answers;
+    /// the interface keeps a text within it, so only a changed client sends
+    /// one.
+    fn long_text(action: &Action, args: &str) -> Option<ReadArgsError> {
+        args.split('\t')
+            .zip(&action.args)
+            .filter(|(_, arg)| arg.kind == ArgView::TEXT)
+            .find_map(|(field, arg)| Self::too_long(arg, field.strip_prefix('t')?))
     }
 
     /// The one player named `name` among those online and `listed`.
@@ -795,6 +808,9 @@ impl Registry {
             )),
             Some(d) if !Self::allowed(d, player) => {
                 Outcome::refused(self.say("actions.denied", language, &[]))
+            }
+            Some(d) if let Some(why) = Self::long_text(&d.action, args) => {
+                Outcome::refused(self.refusal(&why, &d.action, language))
             }
             Some(d) => match sheet::decode_args(args) {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
