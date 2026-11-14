@@ -1,0 +1,37 @@
+id: loader-flag-is-in-state
+language: rust
+severity: error
+message: keep a loader flag or counter in its domain's state struct or a `Pending` queue, not a loose atomic `static`
+note: >-
+  A domain of the loader keeps its runtime state in one place: a state struct
+  beside its fuses and hook slots, a `Registry`, a `Fuse`, a `Pending` queue,
+  or a `OnceLock` for what its links found of the build. A loose atomic static
+  beside them is state no reset reaches. Statics that were there before the
+  rule are listed in `tools/ast-grep/known.txt`.
+files:
+  - crates/runtime/loader/src/**
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/*_tests.rs"
+utils:
+  atomic:
+    any:
+      - kind: type_identifier
+        regex: '^Atomic[A-Z]'
+      - kind: scoped_type_identifier
+        regex: '(^|::)Atomic[A-Z][A-Za-z0-9]*$'
+rule:
+  kind: static_item
+  has:
+    field: type
+    any:
+      - matches: atomic
+      - kind: array_type
+        has:
+          field: element
+          matches: atomic
+  not:
+    inside:
+      stopBy: end
+      matches: in-test
