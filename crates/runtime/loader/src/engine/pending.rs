@@ -30,6 +30,7 @@ pub struct Pending<T> {
 
 impl<T> Pending<T> {
     /// An empty queue, for a static or a domain's state.
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             any: AtomicBool::new(false),
