@@ -6,7 +6,7 @@ use enshwick_core::abi::{ChatFilterFn, Level, Status, Str};
 
 use crate::engine::conflicts::Mode;
 use crate::host::layer::guards::{in_init, on_client};
-use crate::host::layer::{Caller, Headed, Mod, Out, Text, checked, entries};
+use crate::host::layer::{Caller, Headed, Mod, Out, Text, entries};
 use crate::host::memory::text;
 
 pub(crate) mod commands;
@@ -26,7 +26,7 @@ entries! {
         me.claim(
             "chat filter",
             Mode::Chained,
-            checked(crate::actions::chat::register(me.loader, me.index, callback, user)),
+            crate::actions::chat::register(me.loader, me.index, callback, user),
         )
     }
 
@@ -38,7 +38,7 @@ entries! {
         me.claim(
             "interaction filter",
             Mode::Chained,
-            checked(crate::actions::interactions::register(me.loader, me.index, callback, user)),
+            crate::actions::interactions::register(me.loader, me.index, callback, user),
         )
     }
 
@@ -46,7 +46,7 @@ entries! {
         me.claim(
             "crafting veto",
             Mode::Chained,
-            checked(crate::actions::vetoes::register_craft(me.loader, me.index, callback, user)),
+            crate::actions::vetoes::register_craft(me.loader, me.index, callback, user),
         )
     }
 
@@ -54,13 +54,13 @@ entries! {
         me.claim(
             "building veto",
             Mode::Chained,
-            checked(crate::actions::vetoes::register_build(me.loader, me.index, callback, user)),
+            crate::actions::vetoes::register_build(me.loader, me.index, callback, user),
         )
     }
 
     fn actions(me as Mod, callback: api_frame::ActionFn, user: *mut core::ffi::c_void) -> Status {
         in_init(me.index)?;
-        checked(crate::actions::player_actions::register(me.index, callback, user))?;
+        crate::actions::player_actions::register(me.index, callback, user)?;
         crate::engine::log::write(Level::DEBUG, &me.record.id, "player actions");
         Ok(())
     }
@@ -90,13 +90,7 @@ entries! {
             fires: spec.fires,
             hold_ms: spec.hold_ms,
         };
-        checked(crate::actions::controls::register(
-            me.index,
-            &me.record.id,
-            &read,
-            callback,
-            user,
-        ))?;
+        crate::actions::controls::register(me.index, &me.record.id, &read, callback, user)?;
         crate::engine::log::write(Level::DEBUG, &me.record.id, "a control");
         Ok(())
     }

@@ -5,7 +5,7 @@ use enshwick_core::abi::{KnowledgeId, KnowledgeInfo, Status};
 use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::conflicts::Mode;
-use crate::host::layer::{Caller, HeadedOut, ListOut, Mod, Out, checked, entries};
+use crate::host::layer::{Caller, HeadedOut, ListOut, Mod, Out, entries};
 
 entries! {
     fn skill_override(
@@ -17,13 +17,7 @@ entries! {
         me.claim(
             "skill override",
             Mode::FirstAnswers,
-            checked(crate::knowledge::progress::register_skill(
-                me.loader,
-                me.index,
-                node.get(),
-                callback,
-                user,
-            )),
+            crate::knowledge::progress::register_skill(me.loader, me.index, node.get(), callback, user),
         )
     }
 
@@ -31,7 +25,7 @@ entries! {
         me.claim(
             "comfort filter",
             Mode::Chained,
-            checked(crate::knowledge::progress::register_comfort(me.loader, me.index, callback, user)),
+            crate::knowledge::progress::register_comfort(me.loader, me.index, callback, user),
         )
     }
 
@@ -43,9 +37,7 @@ entries! {
         me.claim(
             "experience filter",
             Mode::Chained,
-            checked(crate::knowledge::progress::register_experience(
-                me.loader, me.index, callback, user,
-            )),
+            crate::knowledge::progress::register_experience(me.loader, me.index, callback, user),
         )
     }
 
@@ -57,7 +49,7 @@ entries! {
         me.claim(
             "knowledge input filter",
             Mode::Chained,
-            checked(crate::knowledge::store::guard::register(me.loader, me.index, callback, user)),
+            crate::knowledge::store::guard::register(me.loader, me.index, callback, user),
         )
     }
 

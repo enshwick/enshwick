@@ -80,7 +80,7 @@ entries! {
         me.claim(
             "rename filter",
             Mode::Chained,
-            checked(crate::world::label::register(me.index, callback, user)),
+            crate::world::label::register(me.index, callback, user),
         )
     }
 
@@ -92,7 +92,7 @@ entries! {
         me.claim(
             "join rule",
             Mode::Chained,
-            checked(crate::world::join_gate::register(me.loader, me.index, callback, user)),
+            crate::world::join_gate::register(me.loader, me.index, callback, user),
         )
     }
 

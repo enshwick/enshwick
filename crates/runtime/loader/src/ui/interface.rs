@@ -13,8 +13,9 @@ use painter::{Widgets, copy, options, read};
 
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry};
 
+mod arena;
 pub(crate) mod carried;
 pub(crate) mod demo;
 mod dialog;
@@ -33,10 +34,11 @@ use enshwick_core::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
 
+use arena::{Arena, escape};
 pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::{close_world_dialogs, show};
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
-pub(crate) use extensions::register as register_extension;
+pub(crate) use extensions::{ExtendScreenError, register as register_extension};
 pub(crate) use map::play_data;
 pub(crate) use map::set as set_markers;
 pub(crate) use mods::mismatch_screen_on;
@@ -289,11 +291,6 @@ static DIALOGS_FUSE: Fuse = Fuse::new("dialogs");
 /// The HUD part: its link on the game's HUD and the mods' HUD items.
 static HUD_FUSE: Fuse = Fuse::new(Part::HUD.name);
 
-/// Frames a text copied into the arena stays readable.
-const ARENA_FRAMES: usize = 3;
-/// Bytes of text per frame.
-const ARENA_BYTES: usize = 64 * 1024;
-
 /// The frame callback drawing now.
 #[derive(Clone, Copy)]
 struct Drawing {
@@ -317,70 +314,6 @@ struct HudItem {
     style: u32,
     text: UiText,
     value: f32,
-}
-
-/// Appends `text` to `out` with each backslash doubled: the game's label
-/// markup reads `\` with the character after it, and shows `\\` as one
-/// backslash (client 26430625).
-fn escape(out: &mut Vec<u8>, text: &[u8]) {
-    let mut from = 0;
-    for at in memchr::memchr_iter(b'\\', text) {
-        out.extend_from_slice(&text[from..=at]);
-        out.push(b'\\');
-        from = at + 1;
-    }
-    out.extend_from_slice(&text[from..]);
-}
-
-/// The bytes [`escape`] adds to `text`.
-fn escaped_extra(text: &[u8]) -> usize {
-    memchr::memchr_iter(b'\\', text).count()
-}
-
-/// Mod texts of the last frames, each frame's in its own buffer.
-struct Arena {
-    buffers: Vec<Vec<u8>>,
-    current: usize,
-}
-
-impl Arena {
-    const fn new() -> Self {
-        Self {
-            buffers: Vec::new(),
-            current: 0,
-        }
-    }
-
-    fn next_frame(&mut self) {
-        if self.buffers.is_empty() {
-            self.buffers = (0..ARENA_FRAMES)
-                .map(|_| Vec::with_capacity(ARENA_BYTES))
-                .collect();
-        }
-        self.current = (self.current + 1) % ARENA_FRAMES;
-        if let Some(buffer) = self.buffers.get_mut(self.current) {
-            buffer.clear();
-        }
-    }
-
-    /// `parts` joined, as a text the game may read for the next frames;
-    /// empty once the frame's buffer is full; [`escape`]d.
-    fn text(&mut self, parts: &[&[u8]]) -> UiText {
-        let Some(buffer) = self.buffers.get_mut(self.current) else {
-            return UiText::EMPTY;
-        };
-        let len: usize = parts.iter().map(|p| p.len() + escaped_extra(p)).sum();
-        if buffer.len() + len > buffer.capacity() {
-            return UiText::EMPTY;
-        }
-        let start = buffer.len();
-        for part in parts {
-            escape(buffer, part);
-        }
-        // Within capacity, the buffer never moves; it is cleared only
-        // `ARENA_FRAMES` frames later.
-        buffer.get(start..).map_or(UiText::EMPTY, UiText::new)
-    }
 }
 
 thread_local! {
@@ -413,32 +346,42 @@ fn thread_id() -> u32 {
 }
 
 /// Registers a mod's frame callback; client only, during init.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] off a client or after init.
 pub(crate) fn register_frame(
     loader: &Loader,
     owner: ModIndex,
     callback: UiFrameFn,
     user: *mut core::ffi::c_void,
-) -> Status {
-    if loader.side != Side::CLIENT {
-        return Status::MISSING;
+) -> Result<(), JoinFeatureError> {
+    on_client(loader)?;
+    Ok(FRAMES.add(Registered::new(owner, callback, user))?)
+}
+
+/// [`JoinFeatureError::Unavailable`] off a client, where no interface draws.
+fn on_client(loader: &Loader) -> Result<(), JoinFeatureError> {
+    if loader.side == Side::CLIENT {
+        Ok(())
+    } else {
+        Err(JoinFeatureError::Unavailable)
     }
-    FRAMES
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Registers a mod's HUD callback; client only, during init.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] off a client or after init.
 pub(crate) fn register_hud(
     loader: &Loader,
     owner: ModIndex,
     callback: UiFrameFn,
     user: *mut core::ffi::c_void,
-) -> Status {
-    if loader.side != Side::CLIENT {
-        return Status::MISSING;
-    }
-    HUDS.add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    on_client(loader)?;
+    Ok(HUDS.add(Registered::new(owner, callback, user))?)
 }
 
 /// Queues a mod's dialog; client only.

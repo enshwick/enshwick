@@ -8,17 +8,19 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
+use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFn, Side};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::UNREFLECTED;
 use crate::engine::builds::ABSENT;
 use crate::engine::ecs::{Components, Engine};
+use crate::engine::filters::Filters;
 use crate::engine::fuse::{Fuse, Off};
-use crate::engine::loader::{Loader, Registered, Target};
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Constant, Symbol};
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::JoinFeatureError;
 
 mod stock;
 
@@ -85,9 +87,7 @@ struct Layout {
     consumed_input: u32,
 }
 
-type Filter = Registered<InteractionFn>;
-
-static FILTERS: Registry<Filter> = Registry::new();
+static FILTERS: Filters<InteractionFn> = Filters::new(Feature::Interactions);
 /// The layout and components the links read, once linked.
 static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
 
@@ -192,24 +192,24 @@ fn layout(loader: &Loader) -> Result<Layout, Lacks> {
     })
 }
 
+/// Registers mod `owner`'s interaction filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without interactions.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     callback: InteractionFn,
     user: *mut c_void,
-) -> Status {
-    if loader.delivery.get().is_some() || FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    if layout(loader).is_err()
-        || Components::resolve(loader).is_none()
-        || crate::engine::ecs::engine(loader).is_none()
-    {
-        return Status::MISSING;
-    }
-    FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
+    let available = || {
+        layout(loader).is_ok()
+            && Components::resolve(loader).is_some()
+            && crate::engine::ecs::engine(loader).is_some()
+    };
+    FILTERS.register_when(available, owner, callback, user)
 }
 
 /// Seals the filters once every mod's init ran, before the links.
@@ -388,19 +388,12 @@ fn allowed(call: &Interaction) -> bool {
     if crate::world::transactions::holds().is_held(call.target.0) {
         return false;
     }
-    let Some(filters) = FILTERS.sealed() else {
-        return true;
-    };
-    filters.iter().filter(|f| f.live()).all(|f| {
-        // SAFETY: `f` is live, so the mod's DLL that holds the callback stays
-        // loaded; the callback gets the user pointer its mod registered and
-        // `call`, which lives for the call.
-        crate::engine::profile::call(
-            f.owner,
-            crate::engine::profile::Feature::Interactions,
-            || unsafe { (f.callback)(call, f.user()) != 0 },
-        )
-    })
+    // SAFETY: a filter's mod runs, so its DLL that holds the callback stays
+    // loaded; it gets the user pointer its mod registered and `call`, which
+    // lives for the call.
+    FILTERS
+        .refuser(|filter, user| unsafe { filter(call, user) != 0 })
+        .is_none()
 }
 
 /// The interaction `kind` of `player` with `target`, with what the target

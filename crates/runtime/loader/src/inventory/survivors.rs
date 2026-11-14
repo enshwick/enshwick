@@ -11,14 +11,14 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::{BedCheckFn, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn};
+use enshwick_core::abi::{BedCheckFn, Side, SummonFn, SurvivorLookupFn, SurvivorStatusFn};
 use enshwick_core::raw::read_at;
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Symbol};
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -255,15 +255,17 @@ struct Asked {
 
 /// Holds `registered` in `one`, which takes one mod at a time: refused while
 /// another mod holds it, replaced for the same mod.
-fn hold_one<F>(one: &Registry<Registered<F>>, registered: Registered<F>) -> Status {
-    let held = one.edit(|held| {
+fn hold_one<F>(
+    one: &Registry<Registered<F>>,
+    registered: Registered<F>,
+) -> Result<(), JoinFeatureError> {
+    one.edit(|held| {
         if held.iter().any(|r| r.owner != registered.owner) {
-            return Status::REFUSED;
+            return Err(JoinFeatureError::Taken);
         }
         *held = vec![registered];
-        Status::OK
-    });
-    held.unwrap_or(Status::TOO_LATE)
+        Ok(())
+    })?
 }
 
 /// The survivor and entity a staff moves, and since when.
@@ -457,114 +459,129 @@ fn menu(loader: &Loader) -> Option<&'static Menu> {
     .as_ref()
 }
 
-fn too_late(loader: &Loader) -> bool {
-    loader.delivery.get().is_some() || STATE.registrations.is_sealed()
+/// Whether a registration may join now: too late once the loader delivers
+/// or the registrations sealed, else unavailable unless `available`.
+fn open(loader: &Loader, available: impl FnOnce() -> bool) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
+    if STATE.registrations.is_sealed() {
+        return Err(JoinFeatureError::TooLate);
+    }
+    if !available() {
+        return Err(JoinFeatureError::Unavailable);
+    }
+    Ok(())
+}
+
+/// Whether the survivors' own layout and the entity engine read.
+fn engine_and_layout(loader: &Loader) -> bool {
+    layout(loader).is_some() && crate::engine::ecs::engine(loader).is_some()
+}
+
+/// Whether summons can run: the layout and the game's spawn.
+fn spawns(loader: &Loader) -> bool {
+    layout(loader).is_some() && symbol(loader, pinned::survivors::SPAWN).is_some()
 }
 
 /// Registers mod `owner`'s survivor lookup; one mod at a time.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init, on a build without survivors, or while
+/// another mod holds the lookup.
 pub(crate) fn register_lookup(
     loader: &Loader,
     owner: ModIndex,
     callback: SurvivorLookupFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader) {
-        return Status::TOO_LATE;
-    }
-    if layout(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
-        return Status::MISSING;
-    }
+) -> Result<(), JoinFeatureError> {
+    open(loader, || engine_and_layout(loader))?;
     hold_one(
         &STATE.registrations.lookup,
         Registered::new(owner, callback, user),
     )
 }
 
-/// Adds `item` to `registry`; [`Status::TOO_LATE`] once it is sealed.
-fn add<T>(registry: &Registry<T>, item: T) -> Status {
-    registry.add(item).map_or(Status::TOO_LATE, |()| Status::OK)
-}
-
+/// Registers mod `owner`'s bed check.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without survivors.
 pub(crate) fn register_bed_check(
     loader: &Loader,
     owner: ModIndex,
     callback: BedCheckFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader) {
-        return Status::TOO_LATE;
-    }
-    if layout(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
-        return Status::MISSING;
-    }
-    add(
-        &STATE.registrations.bed_checks,
-        Registered::new(owner, callback, user),
-    )
+) -> Result<(), JoinFeatureError> {
+    open(loader, || engine_and_layout(loader))?;
+    let registered = Registered::new(owner, callback, user);
+    Ok(STATE.registrations.bed_checks.add(registered)?)
 }
 
+/// Registers mod `owner`'s summon.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the spawn.
 pub(crate) fn register_summon(
     loader: &Loader,
     owner: ModIndex,
     callback: SummonFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader) {
-        return Status::TOO_LATE;
-    }
-    if layout(loader).is_none() || symbol(loader, pinned::survivors::SPAWN).is_none() {
-        return Status::MISSING;
-    }
-    add(
-        &STATE.registrations.summons,
-        Registered::new(owner, callback, user),
-    )
+) -> Result<(), JoinFeatureError> {
+    open(loader, || spawns(loader))?;
+    let registered = Registered::new(owner, callback, user);
+    Ok(STATE.registrations.summons.add(registered)?)
 }
 
+/// Registers mod `owner`'s callback for a summoned survivor.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the spawn.
 pub(crate) fn register_summoned(
     loader: &Loader,
     owner: ModIndex,
     callback: SummonFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader) {
-        return Status::TOO_LATE;
-    }
-    if layout(loader).is_none() || symbol(loader, pinned::survivors::SPAWN).is_none() {
-        return Status::MISSING;
-    }
-    add(
-        &STATE.registrations.summoned,
-        Registered::new(owner, callback, user),
-    )
+) -> Result<(), JoinFeatureError> {
+    open(loader, || spawns(loader))?;
+    let registered = Registered::new(owner, callback, user);
+    Ok(STATE.registrations.summoned.add(registered)?)
 }
 
-pub(crate) fn register_item(loader: &Loader, item: u32, survivor: u32) -> Status {
-    if too_late(loader) {
-        return Status::TOO_LATE;
-    }
-    if item_map(loader).is_none() || symbol(loader, pinned::survivors::REGISTRY_LOAD).is_none() {
-        return Status::MISSING;
-    }
-    add(&STATE.registrations.items, (item, survivor))
+/// Registers `item` as the item of survivor `survivor`.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the item map.
+pub(crate) fn register_item(
+    loader: &Loader,
+    item: u32,
+    survivor: u32,
+) -> Result<(), JoinFeatureError> {
+    open(loader, || {
+        item_map(loader).is_some() && symbol(loader, pinned::survivors::REGISTRY_LOAD).is_some()
+    })?;
+    Ok(STATE.registrations.items.add((item, survivor))?)
 }
 
 /// Registers mod `owner`'s menu status merge; client only, one mod.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init, off a client or a build without the menu,
+/// or while another mod holds the merge.
 pub(crate) fn register_status(
     loader: &Loader,
     owner: ModIndex,
     callback: SurvivorStatusFn,
     user: *mut c_void,
-) -> Status {
-    if too_late(loader) {
-        return Status::TOO_LATE;
-    }
-    if loader.side != Side::CLIENT
-        || menu(loader).is_none()
-        || crate::engine::ecs::engine(loader).is_none()
-    {
-        return Status::MISSING;
-    }
+) -> Result<(), JoinFeatureError> {
+    open(loader, || {
+        loader.side == Side::CLIENT
+            && menu(loader).is_some()
+            && crate::engine::ecs::engine(loader).is_some()
+    })?;
     hold_one(
         &STATE.registrations.status,
         Registered::new(owner, callback, user),

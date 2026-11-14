@@ -16,11 +16,46 @@ use super::{
 use crate::engine::ecs::Engine;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
 
 /// Level and experience writes that wait for the level step at most.
 const MOST_WRITES: usize = 256;
+
+/// Why a mod's ask for writes or its write was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum WriteProgressError {
+    /// A kind of write the API has none of, or the ask for writes on an
+    /// entity other than 0.
+    #[error("no such progress write")]
+    BadKind,
+    /// The build lacks the level step, or it is not linked or off.
+    #[error("the level step does not run")]
+    Unavailable,
+    /// The ask for writes itself was refused: after init.
+    #[error(transparent)]
+    Register(#[from] JoinFeatureError),
+    /// The mod did not ask for writes in its init.
+    #[error("the mod did not ask for writes")]
+    NotAsked,
+    /// The entity is no player's character.
+    #[error("no player has the entity")]
+    NoPlayer,
+    /// [`MOST_WRITES`] wait already.
+    #[error("too many writes wait")]
+    Full,
+    /// The server's world, as the engine answered.
+    #[error("the server's world: {0:?}")]
+    World(Status),
+}
+
+sealed_is_too_late!(WriteProgressError);
+
+impl From<Status> for WriteProgressError {
+    fn from(status: Status) -> Self {
+        Self::World(status)
+    }
+}
 
 /// A level or experience write a mod asked for.
 #[derive(Debug, Clone, Copy)]
@@ -108,10 +143,10 @@ impl Writes {
     }
 
     /// Queues `w` for the level step, while fewer than [`MOST_WRITES`] wait.
-    fn push(&self, w: Write) -> Result<(), Status> {
+    fn push(&self, w: Write) -> Result<(), WriteProgressError> {
         let mut queue = self.queue.relock();
         if queue.waiting.len() >= MOST_WRITES {
-            return Err(Status::REFUSED);
+            return Err(WriteProgressError::Full);
         }
         queue.waiting.push(w);
         self.any.store(true, Ordering::Release);
@@ -177,40 +212,46 @@ pub(super) static WRITES_FUSE: crate::engine::fuse::Fuse =
 
 /// Asks for level and experience writes for mod `owner` during `init`
 /// ([`PROGRESS_OPEN`]), or queues one for the next level step.
+///
+/// # Errors
+///
+/// [`WriteProgressError`] for a bad kind, without the level step, after
+/// init for the ask, for a mod that did not ask, an entity no player has,
+/// a full queue, or the server's world refusing the read.
 pub(crate) fn write(
     loader: &Loader,
     owner: ModIndex,
     entity: u32,
     what: u32,
     value: u32,
-) -> Result<(), Status> {
+) -> Result<(), WriteProgressError> {
     if asks(entity, what)? {
         if levels(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
-            return Err(Status::MISSING);
+            return Err(WriteProgressError::Unavailable);
         }
-        return WRITERS.add(owner).map_err(Status::from);
+        return Ok(WRITERS.add(owner)?);
     }
     if !PENDING.linked.load(Ordering::Relaxed) || WRITES_FUSE.is_off() || super::LEVEL_FUSE.is_off()
     {
-        return Err(Status::MISSING);
+        return Err(WriteProgressError::Unavailable);
     }
     if !WRITERS.sealed().is_some_and(|mods| mods.contains(&owner)) {
-        return Err(Status::REFUSED);
+        return Err(WriteProgressError::NotAsked);
     }
     crate::engine::world::server()?;
     if entity == 0 || !crate::engine::world::player_entities(loader)?.contains(&entity) {
-        return Err(Status::REFUSED);
+        return Err(WriteProgressError::NoPlayer);
     }
     PENDING.push(Write::new(owner, entity, what, value))
 }
 
 /// Whether `what` asks for the writes, which only `Entity(0)` does, rather
 /// than being one.
-fn asks(entity: u32, what: u32) -> Result<bool, Status> {
+fn asks(entity: u32, what: u32) -> Result<bool, WriteProgressError> {
     match what {
         PROGRESS_OPEN if entity == 0 => Ok(true),
         PROGRESS_SET_LEVEL | PROGRESS_SET_EXPERIENCE | PROGRESS_ADD_EXPERIENCE => Ok(false),
-        _ => Err(Status::BAD_ARGS),
+        _ => Err(WriteProgressError::BadKind),
     }
 }
 
@@ -419,7 +460,6 @@ mod tests {
     use enshwick_core::abi::ExperiencePass;
 
     use super::*;
-    use crate::engine::loader::Registered;
 
     fn queued(what: u32, value: u32) -> Write {
         Write::new(ModIndex::new(1), 7, what, value)
@@ -455,7 +495,7 @@ mod tests {
     #[test]
     fn only_entity_0_asks_for_the_writes_and_another_what_is_refused() {
         assert_eq!(asks(0, PROGRESS_OPEN), Ok(true));
-        assert_eq!(asks(7, PROGRESS_OPEN), Err(Status::BAD_ARGS));
+        assert_eq!(asks(7, PROGRESS_OPEN), Err(WriteProgressError::BadKind));
         for what in [
             PROGRESS_SET_LEVEL,
             PROGRESS_SET_EXPERIENCE,
@@ -463,7 +503,7 @@ mod tests {
         ] {
             assert_eq!(asks(7, what), Ok(false), "{what}");
         }
-        assert_eq!(asks(7, 4), Err(Status::BAD_ARGS));
+        assert_eq!(asks(7, 4), Err(WriteProgressError::BadKind));
     }
 
     #[test]
@@ -474,7 +514,7 @@ mod tests {
         }
         assert_eq!(
             pending.push(queued(PROGRESS_SET_LEVEL, 3)),
-            Err(Status::REFUSED)
+            Err(WriteProgressError::Full)
         );
         assert!(pending.any.load(Ordering::Acquire));
         assert!(pending.step_ended().is_empty(), "kept one end");
@@ -482,7 +522,7 @@ mod tests {
         assert!(pending.any.load(Ordering::Acquire));
         assert_eq!(
             pending.push(queued(PROGRESS_SET_LEVEL, 4)),
-            Err(Status::REFUSED)
+            Err(WriteProgressError::Full)
         );
         let dropped = pending.step_ended();
         assert_eq!(dropped.len(), MOST_WRITES, "dropped at the second");
@@ -649,11 +689,8 @@ mod tests {
     fn writers_are_sealed_with_experience_filters_and_no_write_goes_in_once_experience_is_off() {
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         let (filter, writer) = (ModIndex::new(0), ModIndex::new(1));
-        let filtered = super::super::EXPERIENCE_FILTERS.add(Registered::new(
-            filter,
-            no_pass,
-            core::ptr::null_mut(),
-        ));
+        let filtered =
+            super::super::EXPERIENCE_FILTERS.register(filter, no_pass, core::ptr::null_mut());
         assert_eq!(filtered, Ok(()));
         assert_eq!(WRITERS.add(writer), Ok(()));
         super::super::seal();
@@ -665,7 +702,7 @@ mod tests {
         );
         assert_eq!(
             write(loader, writer, 7, PROGRESS_SET_LEVEL, 3),
-            Err(Status::MISSING),
+            Err(WriteProgressError::Unavailable),
             "writes answer missing while the level step is not linked"
         );
         let listed = crate::engine::diag::parts_off();
@@ -679,7 +716,7 @@ mod tests {
         PENDING.linked.store(true, Ordering::Relaxed);
         assert_eq!(
             write(loader, writer, 7, PROGRESS_SET_LEVEL, 3),
-            Err(Status::MISSING),
+            Err(WriteProgressError::Unavailable),
             "no step applies a write once experience is off"
         );
     }

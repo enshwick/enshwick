@@ -10,3 +10,20 @@ static-is-registry-fuse-or-state crates/internal/base/src/i18n.rs static HANDED:
 # Each mod's task queue, kept for the process; it moves into a
 # `Registry<T>` by mod handle.
 static-is-registry-fuse-or-state crates/internal/base/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
+
+# Runtime state beside a domain's STATE, there before the rule; each moves
+# into its domain's STATE, the part's forget resetting what a world holds.
+loader-state-is-in-its-domain crates/runtime/loader/src/actions/admission.rs static RUNS: Mutex<Runs> = Mutex::new(Runs::new());
+loader-state-is-in-its-domain crates/runtime/loader/src/base/advertise.rs static THREAD: std::sync::OnceLock<std::thread::Thread> = std::sync::OnceLock::new();
+loader-state-is-in-its-domain crates/runtime/loader/src/base/calls.rs static REGISTRY: Mutex<Registry> = Mutex::new(Registry {
+loader-state-is-in-its-domain crates/runtime/loader/src/base/ids.rs static IDS: Mutex<Option<Ids>> = Mutex::new(None);
+loader-state-is-in-its-domain crates/runtime/loader/src/base/join/client.rs static ADVERTISED: Mutex<KeptText> = Mutex::new(KeptText::new(ADVERTISED_BYTES));
+loader-state-is-in-its-domain crates/runtime/loader/src/base/points.rs static REGISTRY: Mutex<Registry> = Mutex::new(Registry {
+loader-state-is-in-its-domain crates/runtime/loader/src/base/saves.rs static FOLDER: OnceLock<PathBuf> = OnceLock::new();
+loader-state-is-in-its-domain crates/runtime/loader/src/base/services.rs static REGISTRY: Mutex<Registry> = Mutex::new(Registry {
+loader-state-is-in-its-domain crates/runtime/loader/src/base/status.rs static BASELINE: Mutex<Baseline> = Mutex::new(Baseline {
+loader-state-is-in-its-domain crates/runtime/loader/src/base/status.rs static STARTED: OnceLock<Instant> = OnceLock::new();
+loader-state-is-in-its-domain crates/runtime/loader/src/content/recipes/live.rs static RECIPES: LazyLock<Recipes> = LazyLock::new(Recipes::new);
+loader-state-is-in-its-domain crates/runtime/loader/src/inventory/spawns.rs static SPAWNED: Mutex<Spawned> = Mutex::new(Spawned {
+loader-state-is-in-its-domain crates/runtime/loader/src/inventory/stats.rs static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
+loader-state-is-in-its-domain crates/runtime/loader/src/ui/interface/carried.rs static CARRIED: ArcSwapOption<Vec<Held>> = ArcSwapOption::const_empty();

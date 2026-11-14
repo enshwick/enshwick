@@ -10,17 +10,18 @@
 
 use core::ffi::c_void;
 use std::sync::OnceLock;
-use std::sync::atomic::Ordering;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
+use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::Sealed;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -71,18 +72,10 @@ struct Layout {
     rename_entity: usize,
 }
 
-/// A mod's rename filter.
-#[derive(Debug, Clone, Copy)]
-struct Filter {
-    owner: ModIndex,
-    callback: RenameCallFn,
-    user: usize,
-}
-
 static LAYOUT: OnceLock<Result<Layout, &'static str>> = OnceLock::new();
 /// The switch of the mods' rename filters.
 static FUSE: Fuse = Fuse::new("rename filters");
-static FILTERS: Registry<Filter> = Registry::new();
+static FILTERS: Filters<RenameCallFn> = Filters::new(Feature::Renames);
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     found(loader).as_ref().ok()
@@ -142,17 +135,16 @@ fn found(loader: &Loader) -> &'static Result<Layout, &'static str> {
 }
 
 /// Registers mod `owner`'s rename filter.
-pub(crate) fn register(owner: ModIndex, callback: RenameCallFn, user: *mut c_void) -> Status {
-    if FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    FILTERS
-        .add(Filter {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        })
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+///
+/// # Errors
+///
+/// [`Sealed`] after init.
+pub(crate) fn register(
+    owner: ModIndex,
+    callback: RenameCallFn,
+    user: *mut c_void,
+) -> Result<(), Sealed> {
+    FILTERS.register(owner, callback, user)
 }
 
 /// Links the rename check when a mod filters renames.
@@ -287,7 +279,7 @@ crate::engine::chains::chain_detour! {
 /// - The call runs at the entry of the string swap chain, on the thread the
 ///   game called the swap on, so the loader's caller frame is the swap's.
 unsafe fn refused(text: *const [usize; 2]) -> bool {
-    let (Some(loader), Some(filters)) = (crate::engine::loader::loader(), FILTERS.sealed()) else {
+    let Some(loader) = crate::engine::loader::loader().filter(|_| FILTERS.has_sealed()) else {
         return false;
     };
     let Some(layout) = layout(loader) else {
@@ -350,27 +342,13 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
         }),
         text: Str::new(&name),
     };
-    let refused = filters
-        .iter()
-        .filter(|f| {
-            loader
-                .mods
-                .get(f.owner.get())
-                .is_some_and(|m| !m.off.load(Ordering::Acquire))
-        })
-        .any(|f| {
-            let user = core::ptr::with_exposed_provenance_mut(f.user);
-            // SAFETY: the filter is the mod's registered `RenameCallFn` in
-            // its DLL, which stays loaded for the process, called with a
-            // `RenameCall` that outlives the call and the mod's own `user`
-            // word; the mod's safe layer catches its panics.
-            let allowed = crate::engine::profile::call(
-                f.owner,
-                crate::engine::profile::Feature::Renames,
-                || unsafe { (f.callback)(&raw const call, user) },
-            );
-            allowed == 0
-        });
+    // SAFETY: the filter is the mod's registered `RenameCallFn` in its DLL,
+    // which stays loaded for the process, called with a `RenameCall` that
+    // outlives the call and the mod's own `user` word; the mod's safe layer
+    // catches its panics.
+    let refused = FILTERS
+        .refuser(|filter, user| unsafe { filter(&raw const call, user) } != 0)
+        .is_some();
     if refused {
         crate::log!(INFO, "rename of entity {entity} refused");
     }
@@ -401,7 +379,7 @@ mod tests {
     fn rename_filters_on_a_build_without_the_label_layout_are_listed_off() {
         assert_eq!(
             register(ModIndex::new(0), allow, core::ptr::null_mut()),
-            Status::OK
+            Ok(())
         );
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         link(loader);

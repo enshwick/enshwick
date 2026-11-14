@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{HookFlags, Side, Status};
+use enshwick_core::abi::{HookFlags, Side};
 use enshwick_core::raw::{read_at, write_at};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -9,7 +9,7 @@ use crate::base::handed::Handed;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{Registry, Sealed};
 
 /// The mod texts and the language the client's game shows them in. Both
 /// live for the process, so nothing here ends with a hosted game.
@@ -43,16 +43,13 @@ pub(crate) fn language() -> enshwick_core::i18n::Language {
     enshwick_core::i18n::Language(TEXTS.language.load(Ordering::Relaxed))
 }
 
-/// Registers a mod text; refused after init.
-pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
-    added(&TEXTS.added, id, language, text)
-}
-
-/// Adds a mod text to `added`; refused once it is sealed.
-fn added(added: &Registry<(u32, u32, String)>, id: u32, language: u32, text: &str) -> Status {
-    added
-        .add((id, language, text.to_owned()))
-        .map_or_else(Status::from, |()| Status::OK)
+/// Registers a mod text.
+///
+/// # Errors
+///
+/// [`Sealed`] after init.
+pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Result<(), Sealed> {
+    TEXTS.added.add((id, language, text.to_owned()))
 }
 
 /// How many mod texts are sealed, for the status summary.
@@ -309,15 +306,6 @@ mod tests {
     use super::*;
     use crate::base::handed::hash;
     use enshwick_base::Relock;
-
-    #[test]
-    fn a_text_added_after_the_seal_is_refused_not_answered_ok_and_lost() {
-        let added_texts = Registry::new();
-        assert_eq!(added(&added_texts, 7, ENGLISH, "early"), Status::OK);
-        assert_eq!(added_texts.seal().len(), 1);
-        assert_eq!(added(&added_texts, 8, ENGLISH, "late"), Status::TOO_LATE);
-        assert_eq!(added_texts.seal().len(), 1);
-    }
 
     /// Stands in for the game's text format: the tag id in the hash word.
     unsafe extern "system" fn passed(out: *mut [u64; 3], id: u32) -> *mut [u64; 3] {

@@ -16,6 +16,7 @@ use crate::engine::fuse::{Fuse, Off};
 use crate::engine::mid::Mids;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, Symbol};
+use crate::engine::registry::JoinFeatureError;
 use enshwick_base::Relock;
 
 /// A loaded mod.
@@ -535,6 +536,20 @@ impl Loader {
             && self.mods.get(owner.get()).is_none_or(|m| {
                 m.off.load(Ordering::Acquire) || (waiting && m.waiting.load(Ordering::Acquire))
             })
+    }
+
+    /// Whether a mod's registration may still join: every one is too late
+    /// once the loader delivers its first events. The one place that rule
+    /// lives; a feature's own seal may close it earlier.
+    ///
+    /// # Errors
+    ///
+    /// [`JoinFeatureError::TooLate`] after the delivery.
+    pub(crate) fn before_delivery(&self) -> Result<(), JoinFeatureError> {
+        match self.delivery.get() {
+            Some(_) => Err(JoinFeatureError::TooLate),
+            None => Ok(()),
+        }
     }
 
     /// The mod named `id`, as a player or an administrator names it.

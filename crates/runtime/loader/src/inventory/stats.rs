@@ -25,7 +25,7 @@ mod equipment;
 mod vitals;
 
 use affixes::{Affix, pool};
-pub(crate) use affixes::{affix_info, item_lines, open_affix, roll};
+pub(crate) use affixes::{RollAffixesError, affix_info, item_lines, open_affix, roll};
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

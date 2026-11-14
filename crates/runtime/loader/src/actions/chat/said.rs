@@ -7,22 +7,26 @@ use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
+use core::ops::ControlFlow;
 use enshwick_base::peer::{Admitted, CHAT_LINE_RATE, Rated};
+
 use enshwick_core::abi::{
-    ChatFilterFn, ChatLine, ChatRewrite, Entity, Event, Header, PlayerKey, Status, Str,
+    ChatFilterFn, ChatLine, ChatRewrite, Entity, Event, Header, PlayerKey, Str,
 };
 
 use crate::base::wire::Drops;
-use crate::engine::loader::{Loader, Registered};
+use crate::engine::filters::Filters;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pending::Pending;
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::JoinFeatureError;
 use enshwick_base::Relock;
 
 /// Lines waiting for the end of the step at most; more are dropped.
 const MAX_WAITING: usize = 256;
 
-static FILTERS: Registry<Registered<ChatFilterFn>> = Registry::new();
+static FILTERS: Filters<ChatFilterFn> = Filters::new(Feature::Chat);
 
 /// A line that reached the chat, waiting to be raised.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,25 +79,23 @@ impl Heard {
 static HEARD: Heard = Heard::new();
 
 /// Registers mod `owner`'s chat filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the chat post.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     callback: ChatFilterFn,
     user: *mut c_void,
-) -> Status {
-    if FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    if loader
-        .build
-        .symbol(crate::engine::pinned::chat::POST.id())
-        .is_none()
-    {
-        return Status::MISSING;
-    }
-    FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    let available = || {
+        loader
+            .build
+            .symbol(crate::engine::pinned::chat::POST.id())
+            .is_some()
+    };
+    FILTERS.register_when(available, owner, callback, user)
 }
 
 /// Seals the filters; the chat post links after mods registered theirs.
@@ -103,21 +105,20 @@ pub(crate) fn seal() {
 
 /// Whether no mod filters or hears the chat, so a line needs nothing more.
 pub(crate) fn idle(loader: &Loader) -> bool {
-    FILTERS.sealed().is_none_or(<[_]>::is_empty) && !HEARD.wanted(loader)
+    !FILTERS.has_sealed() && !HEARD.wanted(loader)
 }
 
 /// Runs every live filter on `text`, a line the player of account `player`
 /// typed, in load order: `None` when one dropped it, else the text as the
 /// last filter left it, at most `max_text` bytes.
 pub(crate) fn filter(player: u64, loca: [u32; 2], text: String, max_text: usize) -> Option<String> {
-    let filters = FILTERS.sealed().filter(|filters| !filters.is_empty());
-    let Some(filters) = filters else {
+    if !FILTERS.has_sealed() {
         return Some(text);
-    };
+    }
     let entity = character(player);
     let mut text = text;
     let mut buffer = vec![0u8; max_text];
-    for f in filters.iter().filter(|f| f.live()) {
+    let dropped = FILTERS.ask(|callback| {
         let line = ChatLine {
             header: Header::of::<ChatLine>(),
             player: PlayerKey::new(player),
@@ -132,27 +133,25 @@ pub(crate) fn filter(player: u64, loca: [u32; 2], text: String, max_text: usize)
             capacity: u32::try_from(buffer.len()).unwrap_or(u32::MAX),
             len: 0,
         };
-        // SAFETY: `callback` is a `ChatFilterFn` the mod registered, in its
-        // DLL, which stays loaded (`Registered`); `user` is the pointer it
-        // registered with it; `line`, the text it views and `rewrite` with
-        // its `capacity` writable bytes live for the call.
-        let answer = crate::engine::profile::call(
-            f.owner,
-            crate::engine::profile::Feature::Chat,
-            || unsafe { (f.callback)(&raw const line, &raw mut rewrite, f.user()) },
-        );
+        // SAFETY: the filter's mod runs, so its DLL that holds the callback
+        // stays loaded; it gets the user pointer its mod registered; `line`,
+        // the text it views and `rewrite` with its `capacity` writable bytes
+        // live for the call.
+        let answer = callback
+            .call(|callback, user| unsafe { callback(&raw const line, &raw mut rewrite, user) });
         match answer {
-            ChatRewrite::DROP => return None,
+            ChatRewrite::DROP => return ControlFlow::Break(()),
             ChatRewrite::REWRITTEN => match rewritten(&buffer, rewrite.len) {
                 // The game would post an empty line.
-                Some("") => return None,
+                Some("") => return ControlFlow::Break(()),
                 Some(new) => new.clone_into(&mut text),
                 None => {}
             },
             _ => {}
         }
-    }
-    Some(text)
+        ControlFlow::Continue(())
+    });
+    dropped.is_none().then_some(text)
 }
 
 /// The text a filter wrote: its first `len` bytes when they fit and are

@@ -57,7 +57,7 @@ use crate::engine::builds::Unhooked;
 use crate::engine::code::{CodePatch, Verdict};
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered};
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry};
 use crate::world::base_groups::limit::{Limits, MAX_BASES, VANILLA_ZONES, Zones};
 use crate::world::base_groups::window::{self, Kind};
 use enshwick_base::Relock as _;
@@ -516,25 +516,27 @@ impl Asked {
 type AddBaseFn = unsafe extern "system" fn(bases: *mut u8, zone: *const u8, index: u32);
 
 fn too_late(loader: &Loader) -> bool {
-    loader.delivery.get().is_some() || LIMITS.is_sealed()
+    loader.before_delivery().is_err() || LIMITS.is_sealed()
 }
 
 /// Adds mod `owner`'s altar limit filter; during init only.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the altar limit.
 pub(crate) fn add_limit(
     loader: &Loader,
     owner: ModIndex,
     callback: AltarLimitFilterFn,
     user: *mut c_void,
-) -> Status {
+) -> Result<(), JoinFeatureError> {
     if too_late(loader) {
-        return Status::TOO_LATE;
+        return Err(JoinFeatureError::TooLate);
     }
     if loader.address(pinned::building::MAX_ALTARS).is_none() {
-        return Status::MISSING;
+        return Err(JoinFeatureError::Unavailable);
     }
-    LIMITS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+    Ok(LIMITS.add(Registered::new(owner, callback, user))?)
 }
 
 /// The most altar zones and bases the game groups now: its own, or the

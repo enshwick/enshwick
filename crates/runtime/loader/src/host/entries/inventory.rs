@@ -29,7 +29,7 @@ entries! {
         me.claim(
             "survivor lookup",
             Mode::Exclusive,
-            checked(crate::inventory::survivors::register_lookup(me.loader, me.index, callback, user)),
+            crate::inventory::survivors::register_lookup(me.loader, me.index, callback, user),
         )
     }
 
@@ -41,9 +41,7 @@ entries! {
         me.claim(
             "bed check",
             Mode::Chained,
-            checked(crate::inventory::survivors::register_bed_check(
-                me.loader, me.index, callback, user,
-            )),
+            crate::inventory::survivors::register_bed_check(me.loader, me.index, callback, user),
         )
     }
 
@@ -55,12 +53,12 @@ entries! {
         me.claim(
             "summon filter",
             Mode::Chained,
-            checked(crate::inventory::survivors::register_summon(me.loader, me.index, callback, user)),
+            crate::inventory::survivors::register_summon(me.loader, me.index, callback, user),
         )
     }
 
     fn summoned(me as Mod, callback: api_frame::SummonFn, user: *mut core::ffi::c_void) -> Status {
-        checked(crate::inventory::survivors::register_summoned(me.loader, me.index, callback, user))
+        Ok(crate::inventory::survivors::register_summoned(me.loader, me.index, callback, user)?)
     }
 
     fn stat_open(
@@ -163,7 +161,7 @@ entries! {
         item: enshwick_core::ItemId,
         survivor: enshwick_core::abi::NpcId,
     ) -> Status {
-        checked(crate::inventory::survivors::register_item(me.loader, item.get(), survivor.get()))
+        Ok(crate::inventory::survivors::register_item(me.loader, item.get(), survivor.get())?)
     }
 
     fn survivor_status(
@@ -174,7 +172,7 @@ entries! {
         me.claim(
             "survivor status",
             Mode::Exclusive,
-            checked(crate::inventory::survivors::register_status(me.loader, me.index, callback, user)),
+            crate::inventory::survivors::register_status(me.loader, me.index, callback, user),
         )
     }
 
@@ -186,7 +184,7 @@ entries! {
         me.claim(
             "damage filter",
             Mode::Chained,
-            checked(crate::inventory::damage::register(me.loader, me.index, callback, user)),
+            crate::inventory::damage::register(me.loader, me.index, callback, user),
         )
     }
 
@@ -207,7 +205,7 @@ entries! {
         me.claim(
             "item filter",
             Mode::Chained,
-            checked(crate::inventory::item_actions::register(me.loader, me.index, callback, user)),
+            crate::inventory::item_actions::register(me.loader, me.index, callback, user),
         )
     }
 

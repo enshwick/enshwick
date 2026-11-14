@@ -14,7 +14,7 @@ use crate::engine::texts;
 mod apply;
 pub mod rows;
 #[cfg(windows)]
-pub(crate) use apply::{ApplySettingError, apply, apply_own};
+pub(crate) use apply::{ApplySettingError, SetOwnSettingError, apply, apply_own};
 
 /// What `enshwick config` was asked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

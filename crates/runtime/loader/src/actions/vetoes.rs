@@ -16,18 +16,21 @@
 //! cursor shows as not allowed.
 
 use core::ffi::c_void;
+use core::ops::ControlFlow;
 use std::sync::OnceLock;
 
 use enshwick_core::abi::{
-    BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status, Str,
+    BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Str,
 };
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
+use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::profile::Feature;
+use crate::engine::registry::JoinFeatureError;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -36,8 +39,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::building::CURSOR_NO_PERMISSION.id(),
 ];
 
-static CRAFT_FILTERS: Registry<Registered<CraftCheckFn>> = Registry::new();
-static BUILD_FILTERS: Registry<Registered<BuildCheckFn>> = Registry::new();
+static CRAFT_FILTERS: Filters<CraftCheckFn> = Filters::new(Feature::Vetoes);
+static BUILD_FILTERS: Filters<BuildCheckFn> = Filters::new(Feature::Vetoes);
 static CRAFT: OnceLock<CraftLayout> = OnceLock::new();
 static BUILD: OnceLock<BuildLayout> = OnceLock::new();
 /// The switch of the craft filters, and of the screen of craft requests
@@ -67,42 +70,37 @@ struct BuildLayout {
 }
 
 /// Registers mod `owner`'s craft filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without craft requests.
 pub(crate) fn register_craft(
     loader: &Loader,
     owner: ModIndex,
     callback: CraftCheckFn,
     user: *mut c_void,
-) -> Status {
-    if CRAFT_FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    if craft_layout(loader).is_none() {
-        return Status::MISSING;
-    }
-    CRAFT_FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    let available = || craft_layout(loader).is_some();
+    CRAFT_FILTERS.register_when(available, owner, callback, user)
 }
 
 /// Registers mod `owner`'s build filter.
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or on a build without the cursor check.
 pub(crate) fn register_build(
     loader: &Loader,
     owner: ModIndex,
     callback: BuildCheckFn,
     user: *mut c_void,
-) -> Status {
-    if BUILD_FILTERS.is_sealed() {
-        return Status::TOO_LATE;
-    }
-    if build_layout(loader).is_none()
-        || loader.address(pinned::building::CURSOR_CHECK).is_none()
-        || crate::engine::ecs::engine(loader).is_none()
-    {
-        return Status::MISSING;
-    }
-    BUILD_FILTERS
-        .add(Registered::new(owner, callback, user))
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+) -> Result<(), JoinFeatureError> {
+    let available = || {
+        build_layout(loader).is_some()
+            && loader.address(pinned::building::CURSOR_CHECK).is_some()
+            && crate::engine::ecs::engine(loader).is_some()
+    };
+    BUILD_FILTERS.register_when(available, owner, callback, user)
 }
 
 fn craft_layout(loader: &Loader) -> Option<CraftLayout> {
@@ -211,9 +209,9 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
 ///   `layout.size` bytes, which nothing else reads or writes during the
 ///   call.
 unsafe fn request(layout: &CraftLayout, payload: *mut u8) {
-    let Some(filters) = CRAFT_FILTERS.sealed() else {
+    if !CRAFT_FILTERS.is_sealed() {
         return;
-    };
+    }
     // SAFETY: the event is a `CraftRecipeEvent` readable for its reflected
     // size (the caller's contract), and reflection places its `u32` `craftingOperatorId` at
     // `player`.
@@ -241,17 +239,12 @@ unsafe fn request(layout: &CraftLayout, payload: *mut u8) {
     }
     let disabled = crate::content::recipes::is_disabled(call.recipe_id.get());
     let allowed = !disabled
-        && filters.iter().filter(|f| f.live()).all(|f| {
-            // SAFETY: `callback` is a `CraftCheckFn` the mod registered, in
-            // its DLL, which stays loaded (`Registered`); `user` is the
-            // pointer it registered with it, and `call` lives on this stack
-            // for the call.
-            crate::engine::profile::call(
-                f.owner,
-                crate::engine::profile::Feature::Vetoes,
-                || unsafe { (f.callback)(&raw const call, f.user()) != 0 },
-            )
-        });
+        && CRAFT_FILTERS
+            // SAFETY: a filter's mod runs, so its DLL that holds the callback
+            // stays loaded; it gets the user pointer its mod registered, and
+            // `call` lives on this stack for the call.
+            .refuser(|filter, user| unsafe { filter(&raw const call, user) != 0 })
+            .is_none();
     if !allowed {
         // SAFETY: the event is a `CraftRecipeEvent` writable for its reflected
         // size, which nothing else touches during the call (the caller's
@@ -306,9 +299,9 @@ crate::engine::chains::chain_detour! {
 /// - Called on the thread that ran the check, right after it returned, so
 ///   nothing else writes them during the call.
 unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform: *const i64) {
-    let (Some(layout), Some(filters), Some(engine)) = (
+    let (Some(layout), true, Some(engine)) = (
         BUILD.get(),
-        BUILD_FILTERS.sealed(),
+        BUILD_FILTERS.has_sealed(),
         crate::engine::ecs::resolved(),
     ) else {
         return;
@@ -352,22 +345,9 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         position: unsafe { read_at(transform.cast(), 0) },
         reason: &raw mut reason,
     };
-    let refuses = |f: &&Registered<BuildCheckFn>| {
-        // SAFETY: `callback` is a `BuildCheckFn` the mod registered, in its
-        // DLL, which stays loaded (`Registered`); `user` is the pointer it
-        // registered with it, and `call` and the `reason` it points at live
-        // on this stack for the call.
-        crate::engine::profile::call(
-            f.owner,
-            crate::engine::profile::Feature::Vetoes,
-            || unsafe { (f.callback)(&raw const call, f.user()) == 0 },
-        )
-    };
     // SAFETY: `call.reason` points at `reason`, live on this stack for the
     // whole chain.
-    let refused_by =
-        unsafe { first_refusal(filters.iter().filter(|f| f.live()), call.reason, refuses) };
-    if let Some(filter) = refused_by {
+    if let Some(filter) = unsafe { refuser(&BUILD_FILTERS, &call) } {
         // SAFETY: only the refusing filter wrote `reason`, a text it keeps
         // until its next call on this thread, which comes after this read.
         if let Some(text) = unsafe { reason.as_str() } {
@@ -386,23 +366,31 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
     }
 }
 
-/// The first of `filters` that `refuses`, with `reason` emptied before each
-/// asks, so a reason an allowing filter wrote never counts as the refusing
-/// one's.
+/// The first of `filters` that refuses `call`, with its reason emptied
+/// before each asks, so a reason an allowing filter wrote never counts as
+/// the refusing one's.
 ///
 /// # Safety
 ///
-/// - `reason` is valid for writes of one `Str` throughout the call.
-unsafe fn first_refusal<T>(
-    filters: impl IntoIterator<Item = T>,
-    reason: *mut Str,
-    mut refuses: impl FnMut(&T) -> bool,
-) -> Option<T> {
-    filters.into_iter().find(|f| {
-        // SAFETY: the caller keeps `reason` writable for the call.
-        unsafe { reason.write(Str::EMPTY) };
-        refuses(f)
-    })
+/// - `call.reason` is valid for writes of one `Str` throughout the call.
+unsafe fn refuser<'a>(
+    filters: &'a Filters<BuildCheckFn>,
+    call: &BuildCheck,
+) -> Option<&'a Registered<BuildCheckFn>> {
+    filters
+        .ask(|filter| {
+            // SAFETY: the caller keeps `reason` writable for the call.
+            unsafe { call.reason.write(Str::EMPTY) };
+            // SAFETY: a filter's mod runs, so its DLL that holds the callback
+            // stays loaded; it gets the user pointer its mod registered, and
+            // `call` and the reason it points at live for the call.
+            if filter.call(|filter, user| unsafe { filter(call, user) != 0 }) {
+                ControlFlow::Continue(())
+            } else {
+                ControlFlow::Break(())
+            }
+        })
+        .map(|(refuser, ())| refuser)
 }
 
 #[cfg(test)]
@@ -455,18 +443,36 @@ mod tests {
 
     #[test]
     fn a_reason_an_allowing_filter_wrote_never_counts_for_the_refusing_one() {
+        unsafe extern "system" fn chatty(call: *const BuildCheck, _: *mut c_void) -> u8 {
+            // SAFETY: the test passes a live `BuildCheck` on its stack.
+            let reason = unsafe { (*call).reason };
+            // SAFETY: the check's reason points at a `Str` on the test's stack.
+            unsafe { reason.write(Str::new("chatty but allowing")) };
+            1
+        }
+        unsafe extern "system" fn silent(_: *const BuildCheck, _: *mut c_void) -> u8 {
+            0
+        }
+        let filters = Filters::<BuildCheckFn>::new(Feature::Vetoes);
+        let (first, second) = (
+            core::ptr::without_provenance_mut(1),
+            core::ptr::without_provenance_mut(2),
+        );
+        let loader = ModIndex::LOADER;
+        assert_eq!(filters.register(loader, chatty, first), Ok(()));
+        assert_eq!(filters.register(loader, silent, second), Ok(()));
+        let _sealed = filters.seal();
         let mut reason = Str::EMPTY;
-        let slot = &raw mut reason;
-        let refuses = |f: &i32| {
-            if *f == 1 {
-                // SAFETY: `slot` points at `reason`, which outlives the call.
-                unsafe { slot.write(Str::new("chatty but allowing")) };
-            }
-            *f == 2
+        let call = BuildCheck {
+            header: Header::of::<BuildCheck>(),
+            player: enshwick_core::Entity(1),
+            item: enshwick_core::ItemId::new(2),
+            position: [0; 3],
+            reason: &raw mut reason,
         };
-        // SAFETY: `slot` points at `reason` on this stack for the call.
-        let refused_by = unsafe { first_refusal([1, 2], slot, refuses) };
-        assert_eq!(refused_by, Some(2));
+        // SAFETY: `call.reason` points at `reason` on this stack for the call.
+        let refused_by = unsafe { refuser(&filters, &call) };
+        assert_eq!(refused_by.map(Registered::user), Some(second));
         // SAFETY: `reason` holds `Str::EMPTY`, a static text.
         assert_eq!(unsafe { reason.as_str() }.unwrap_or_default(), "");
     }

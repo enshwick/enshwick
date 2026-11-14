@@ -28,6 +28,7 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
+use crate::engine::registry::JoinFeatureError;
 use crate::world::fog_image::{
     FogImage, FogShape, Plan, ReadError, TileRect, UNCOVER_RANGE_PER_RADIUS, plan,
 };
@@ -131,17 +132,16 @@ impl Mirror {
 }
 
 /// Opens the fog for mod `owner`; during init only, on a client.
-pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Status {
-    if loader.delivery.get().is_some() {
-        return Status::TOO_LATE;
-    }
+///
+/// # Errors
+///
+/// [`JoinFeatureError`] after init or off a client.
+pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
     if loader.side != Side::CLIENT {
-        return Status::MISSING;
+        return Err(JoinFeatureError::Unavailable);
     }
-    STATE
-        .openers
-        .open(owner)
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+    Ok(STATE.openers.open(owner)?)
 }
 
 /// Whether mod `owner` opened the fog.

@@ -104,6 +104,151 @@ warned!(
     crate::base::services::DeclareServiceError,
 );
 
+/// A registry sealed once init ends: the mod asked too late.
+impl Refusal for crate::engine::registry::Sealed {
+    fn status(&self) -> Status {
+        Status::TOO_LATE
+    }
+}
+
+/// Too late after init; missing where the build or the side lacks the
+/// feature; refused where another registration holds the place.
+impl Refusal for crate::engine::registry::JoinFeatureError {
+    fn status(&self) -> Status {
+        match self {
+            Self::TooLate => Status::TOO_LATE,
+            Self::Unavailable => Status::MISSING,
+            Self::Taken => Status::REFUSED,
+        }
+    }
+}
+
+/// A malformed alias is a bad argument; a second ask or a taken name is
+/// refused, the taken name already reported as a part off.
+impl Refusal for crate::actions::commands::NameCommandsError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Register(error) => error.status(),
+            Self::Malformed => Status::BAD_ARGS,
+            Self::Twice | Self::Taken => Status::REFUSED,
+        }
+    }
+}
+
+/// A bad name or mod index is a bad argument; a one-sided mod or a channel open already
+/// is refused.
+impl Refusal for crate::base::net::OpenChannelError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Register(error) => error.status(),
+            Self::BadName | Self::NoMod => Status::BAD_ARGS,
+            Self::OneSided | Self::Twice => Status::REFUSED,
+        }
+    }
+}
+
+/// A resource another mod serves from a different base is refused.
+impl Refusal for crate::content::served::ServeResourceError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Register(error) => error.status(),
+            Self::OtherBase => Status::REFUSED,
+        }
+    }
+}
+
+/// What a data kind's open, read or write met; its log line, for a kind
+/// open for the other scope, is written where it is found.
+impl Refusal for crate::inventory::item_data::UseItemDataError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Register(error) => error.status(),
+            Self::BadId | Self::UnknownKind | Self::TooLong | Self::NoHolder => Status::BAD_ARGS,
+            Self::OtherScope | Self::Full | Self::NotServer => Status::REFUSED,
+            Self::NotKept => Status::NOT_KEPT,
+            Self::WrongThread => Status::WRONG_THREAD,
+            Self::NoValue | Self::Unopened => Status::MISSING,
+        }
+    }
+}
+
+/// A malformed control is a bad argument; one declared twice is refused.
+impl Refusal for crate::actions::controls::DeclareControlError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Register(error) => error.status(),
+            Self::Malformed => Status::BAD_ARGS,
+            Self::Twice => Status::REFUSED,
+        }
+    }
+}
+
+/// Missing off a client or for a screen the build lacks; a bad edge or a
+/// screen of play is a bad argument.
+impl Refusal for crate::ui::interface::ExtendScreenError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Register(error) => error.status(),
+            Self::NotClient | Self::UnknownScreen => Status::MISSING,
+            Self::BadEdge | Self::ScreenOfPlay => Status::BAD_ARGS,
+        }
+    }
+}
+
+/// A mod's write of its own setting, answered as `HostApi::config_set`
+/// states it and logged as the mod's warning.
+impl Refusal for crate::base::configure::SetOwnSettingError {
+    fn status(&self) -> Status {
+        use crate::base::configure::{ApplySettingError as Apply, ChangeSettingError as Change};
+        match &*self.error {
+            Apply::NoWorld => Status::UNAVAILABLE,
+            Apply::NoSchema { .. } | Apply::Change(Change::Find(_)) => Status::MISSING,
+            Apply::NoMod
+            | Apply::Change(
+                Change::BadValue { .. } | Change::Refused { .. } | Change::NoElement { .. },
+            ) => Status::BAD_ARGS,
+            Apply::Change(
+                Change::Secret { .. } | Change::Toml { .. } | Change::Unwritable { .. },
+            )
+            | Apply::Write { .. }
+            | Apply::Check(_)
+            | Apply::Nested => Status::REFUSED,
+        }
+    }
+
+    fn policy(&self) -> Policy {
+        Policy::Warn
+    }
+}
+
+/// A level or experience write: missing without the level step, refused
+/// for a mod that did not ask, an entity no player has or a full queue.
+impl Refusal for crate::knowledge::progress::WriteProgressError {
+    fn status(&self) -> Status {
+        match self {
+            Self::BadKind => Status::BAD_ARGS,
+            Self::Unavailable => Status::MISSING,
+            Self::Register(error) => error.status(),
+            Self::NotAsked | Self::NoPlayer | Self::Full => Status::REFUSED,
+            Self::World(status) => *status,
+        }
+    }
+}
+
+/// An item rolled anew: missing while affixes are not open, a bad argument
+/// without an item, refused when no roll fits or the stats did not encode.
+impl Refusal for crate::inventory::stats::RollAffixesError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Unopened => Status::MISSING,
+            Self::NoItem => Status::BAD_ARGS,
+            Self::NoRoll | Self::Encode => Status::REFUSED,
+            Self::Kept(error) => error.status(),
+            Self::World(status) => *status,
+        }
+    }
+}
+
 /// A reflection lookup by name: ambiguous for more than one match, else
 /// missing on this build.
 impl Refusal for enshwick_gamedata::reflect::LookupError {

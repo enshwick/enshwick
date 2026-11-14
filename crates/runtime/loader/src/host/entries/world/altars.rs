@@ -9,7 +9,7 @@ use crate::world::base_groups::limit::Limits;
 
 entries! {
     fn altars_open(me as Mod) -> Status {
-        checked(crate::world::altars::open(me.loader, me.index))
+        Ok(crate::world::altars::open(me.loader, me.index)?)
     }
 
     fn altars(
@@ -30,7 +30,7 @@ entries! {
         me.claim(
             "altar zone filter",
             Mode::Chained,
-            checked(crate::world::altars::add_sizer(me.loader, me.index, callback, user)),
+            crate::world::altars::add_sizer(me.loader, me.index, callback, user),
         )
     }
 
@@ -46,7 +46,7 @@ entries! {
         me.claim(
             "altar zone check",
             Mode::Chained,
-            checked(crate::world::altars::register(me.index, callback, user)),
+            crate::world::altars::register(me.index, callback, user),
         )
     }
 
@@ -58,7 +58,7 @@ entries! {
         me.claim(
             "altar limit filter",
             Mode::Chained,
-            checked(crate::world::bases::add_limit(me.loader, me.index, callback, user)),
+            crate::world::bases::add_limit(me.loader, me.index, callback, user),
         )
     }
 

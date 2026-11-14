@@ -20,7 +20,7 @@ use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
 use enshwick_core::Entity;
-use enshwick_core::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Status, Str};
+use enshwick_core::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Str};
 use enshwick_core::controls::{GameAction, Key, Tracker, is_valid_name, phases, valid_phases};
 use enshwick_gamedata::catalogue;
 
@@ -31,7 +31,7 @@ use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
 
 /// A control a mod declared.
@@ -178,14 +178,35 @@ fn now_ms() -> u64 {
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
+/// Why a mod's control was not declared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DeclareControlError {
+    /// The registration itself was refused: after init.
+    #[error(transparent)]
+    Register(#[from] JoinFeatureError),
+    /// A malformed name or action, an unknown key, game action or phase.
+    #[error("a malformed control")]
+    Malformed,
+    /// The mod declared a control of that name before.
+    #[error("the control is declared")]
+    Twice,
+}
+
+sealed_is_too_late!(DeclareControlError);
+
 /// Declares mod `owner`'s control `spec`, during its init.
+///
+/// # Errors
+///
+/// [`DeclareControlError`] after init, for a malformed control or one
+/// declared before.
 pub(crate) fn register(
     owner: ModIndex,
     mod_id: &str,
     spec: &Spec<'_>,
     callback: ControlFn,
     user: *mut c_void,
-) -> Status {
+) -> Result<(), DeclareControlError> {
     let name = spec.name;
     let well_named = is_valid_name(name);
     let keys_ok = spec
@@ -195,29 +216,34 @@ pub(crate) fn register(
     let link_ok = spec.link.is_empty() || GameAction::ALL.iter().any(|a| a.name() == spec.link);
     let action_ok = spec.action.is_empty() || is_valid_name(spec.action);
     if !well_named || !keys_ok || !link_ok || !action_ok || !valid_phases(spec.fires) {
-        return Status::BAD_ARGS;
+        return Err(DeclareControlError::Malformed);
     }
-    let id = format!("{mod_id}:{name}");
-    match DECLARED.edit(|declared| declared.iter().any(|d| d.id == id)) {
-        Ok(true) => return Status::REFUSED,
-        Ok(false) => {}
-        Err(_) => return Status::TOO_LATE,
-    }
-    DECLARED
-        .add(Declared {
-            owner,
-            id,
-            name: name.to_owned(),
-            label: spec.label.to_owned(),
-            defaults: spec.keys,
-            link: spec.link.to_owned(),
-            action: spec.action.to_owned(),
-            fires: spec.fires,
-            hold_ms: spec.hold_ms,
-            callback,
-            user: user.expose_provenance(),
-        })
-        .map_or(Status::TOO_LATE, |()| Status::OK)
+    let control = Declared {
+        owner,
+        id: format!("{mod_id}:{name}"),
+        name: name.to_owned(),
+        label: spec.label.to_owned(),
+        defaults: spec.keys,
+        link: spec.link.to_owned(),
+        action: spec.action.to_owned(),
+        fires: spec.fires,
+        hold_ms: spec.hold_ms,
+        callback,
+        user: user.expose_provenance(),
+    };
+    declare(&DECLARED, control)
+}
+
+/// Adds `control` to `declared` unless its id is there, in one edit, so two
+/// threads declaring one id cannot both pass the check.
+fn declare(declared: &Registry<Declared>, control: Declared) -> Result<(), DeclareControlError> {
+    declared.edit(|declared| {
+        if declared.iter().any(|d| d.id == control.id) {
+            return Err(DeclareControlError::Twice);
+        }
+        declared.push(control);
+        Ok(())
+    })?
 }
 
 /// A control as its mod declares it, its strings read.

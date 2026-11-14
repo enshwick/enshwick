@@ -218,3 +218,24 @@ fn a_panic_inside_a_mod_s_callback_blames_the_mod_and_leaves_the_entry_on() {
 fn a_mod_handle_without_a_loader_is_refused_as_a_bad_argument() {
     assert_eq!(oil(ModHandle(1)), Status::BAD_ARGS);
 }
+
+#[test]
+fn every_domain_answers_a_sealed_registry_as_register_error_does() {
+    use crate::engine::registry::Sealed;
+    let answers = [
+        Sealed.status(),
+        crate::actions::controls::DeclareControlError::from(Sealed).status(),
+        crate::base::net::OpenChannelError::from(Sealed).status(),
+        crate::content::served::ServeResourceError::from(Sealed).status(),
+        crate::inventory::item_data::UseItemDataError::from(Sealed).status(),
+        crate::knowledge::progress::WriteProgressError::from(Sealed).status(),
+    ];
+    assert_eq!(answers, [Status::TOO_LATE; 6]);
+}
+
+#[test]
+fn a_channel_for_a_mod_index_with_no_mod_is_a_bad_argument_not_one_sided() {
+    use crate::base::net::OpenChannelError;
+    assert_eq!(OpenChannelError::NoMod.status(), Status::BAD_ARGS);
+    assert_eq!(OpenChannelError::OneSided.status(), Status::REFUSED);
+}

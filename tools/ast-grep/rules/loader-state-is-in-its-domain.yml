@@ -1,0 +1,83 @@
+id: loader-state-is-in-its-domain
+language: rust
+severity: error
+message: keep a domain's runtime state in its `STATE` struct, not a loose `static` beside it
+note: >-
+  A domain of the loader keeps what changes while the game runs in its one
+  state struct, the static named `STATE`, so its part's forget reaches all of
+  it. Beside `STATE` the rule refuses a loose static of runtime state
+  whatever its wrapper: a lock (around a named struct too), an `ArcSwap`, a
+  channel's sender, a lazy cell, or a set-once cell holding a clock, a path,
+  a thread or a sender, which a run fills. What may stay loose: a set-once
+  cell for what the links found of the build once (a layout, an address, a
+  section, a sealed table), which no world changes; detour slots (`Next`);
+  fuses; registries and filters; `Pending` queues. `STATE` itself may take
+  any of these wrappers. Statics that were there before the rule are listed
+  in `tools/ast-grep/known.txt` until each moves into its `STATE`.
+files:
+  - crates/runtime/loader/src/**
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/*_tests.rs"
+utils:
+  lock:
+    kind: generic_type
+    has:
+      field: type
+      regex: '(^|::)(Mutex|RwLock)$'
+  swap-or-lazy:
+    any:
+      - kind: type_identifier
+        regex: '^ArcSwap'
+      - kind: generic_type
+        has:
+          field: type
+          regex: '(^|::)(ArcSwap|ArcSwapOption|ArcSwapAny|LazyLock|LazyCell)$'
+  sender:
+    any:
+      - kind: generic_type
+        has:
+          field: type
+          regex: '(^|::)(Sender|SyncSender)$'
+      - has:
+          stopBy: end
+          kind: generic_type
+          has:
+            field: type
+            regex: '(^|::)(Sender|SyncSender)$'
+  run-value:
+    any:
+      - kind: type_identifier
+        regex: '^(Instant|SystemTime|PathBuf|Thread)$'
+      - kind: scoped_type_identifier
+        regex: '(^|::)(Instant|SystemTime|PathBuf|Thread)$'
+  set-once-of-run-value:
+    kind: generic_type
+    all:
+      - has:
+          field: type
+          regex: '(^|::)(OnceLock|OnceCell)$'
+      - has:
+          field: type_arguments
+          has:
+            stopBy: end
+            matches: run-value
+rule:
+  kind: static_item
+  has:
+    field: type
+    any:
+      - matches: lock
+      - matches: swap-or-lazy
+      - matches: sender
+      - matches: set-once-of-run-value
+  all:
+    - not:
+        has:
+          field: name
+          regex: '^STATE$'
+    - not:
+        inside:
+          stopBy: end
+          matches: in-test

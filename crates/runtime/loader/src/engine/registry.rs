@@ -20,11 +20,47 @@ use enshwick_base::Relock;
 #[error("the registry is sealed")]
 pub struct Sealed;
 
-impl From<Sealed> for enshwick_core::abi::Status {
-    fn from(_: Sealed) -> Self {
-        Self::TOO_LATE
+/// Why the loader refused a mod's registration: too late, or the feature
+/// cannot run in this game.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum JoinFeatureError {
+    /// The mod asked after init, once the feature linked or its registry
+    /// sealed.
+    #[error("asked after init")]
+    TooLate,
+    /// This build lacks what the feature needs, or the feature does not run
+    /// on this side.
+    #[error("the feature does not run in this game")]
+    Unavailable,
+    /// The place takes one registration, and another holds it: the mod's
+    /// own earlier one, or another mod's.
+    #[error("the place is taken")]
+    Taken,
+}
+
+#[cfg(windows)]
+impl From<Sealed> for JoinFeatureError {
+    fn from(Sealed: Sealed) -> Self {
+        Self::TooLate
     }
 }
+
+/// Lets `?` turn [`Sealed`] into each named domain error's
+/// `Register(JoinFeatureError)` variant, so a sealed registry means
+/// [`JoinFeatureError::TooLate`] in one place for every domain.
+#[cfg(windows)]
+macro_rules! sealed_is_too_late {
+    ($($error:ty),* $(,)?) => {$(
+        impl From<$crate::engine::registry::Sealed> for $error {
+            fn from(sealed: $crate::engine::registry::Sealed) -> Self {
+                Self::Register(sealed.into())
+            }
+        }
+    )*};
+}
+#[cfg(windows)]
+pub(crate) use sealed_is_too_late;
 
 /// Items mods register while the loader starts: open for additions until
 /// [`Registry::seal`], then a fixed slice that hot paths read without a lock.

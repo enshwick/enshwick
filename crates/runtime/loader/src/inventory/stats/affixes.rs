@@ -75,13 +75,50 @@ pub(super) fn pool(sealed: &Sealed) -> Vec<Candidate<'_>> {
         .collect()
 }
 
+/// Why an item was not rolled anew.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RollAffixesError {
+    /// No mod opened affixes, so the item stats do not run.
+    #[error("affixes are not open")]
+    Unopened,
+    /// No item, or no entity holding it.
+    #[error("no item to roll")]
+    NoItem,
+    /// The rules leave no roll for the item.
+    #[error("no roll fits the rules")]
+    NoRoll,
+    /// The rolled stats did not encode.
+    #[error("the rolled stats did not encode")]
+    Encode,
+    /// The item stats were not kept.
+    #[error(transparent)]
+    Kept(#[from] crate::inventory::item_data::UseItemDataError),
+    /// The server's world or the item's data, as the engine answered.
+    #[error("the server's world or the item: {0:?}")]
+    World(Status),
+}
+
+impl From<Status> for RollAffixesError {
+    fn from(status: Status) -> Self {
+        Self::World(status)
+    }
+}
+
 /// Rolls an item anew and keeps the result as its item stats; how many
 /// affixes it rolled. On the server's game thread.
-pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, Status> {
-    let sealed = SEALED.get().filter(|_| wanted()).ok_or(Status::MISSING)?;
+///
+/// # Errors
+///
+/// [`RollAffixesError`] while affixes are not open, for no item, a roll
+/// the rules leave none of, stats not kept, or the world refusing a read.
+pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, RollAffixesError> {
+    let sealed = SEALED
+        .get()
+        .filter(|_| wanted())
+        .ok_or(RollAffixesError::Unopened)?;
     crate::engine::world::server()?;
     if roll.pide == Entity(0) || roll.item == enshwick_core::ItemId::new(0) {
-        return Err(Status::BAD_ARGS);
+        return Err(RollAffixesError::NoItem);
     }
     let category = crate::inventory::transactions::item_info(loader, roll.item.get())?.category;
     let current = crate::inventory::item_data::get_platform(roll.pide.0, roll.item.get())
@@ -90,12 +127,12 @@ pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, Status> {
     let rules = RollRules::new(roll.min, roll.max)
         .max_rarity(ItemRarity::from_raw(roll.max_rarity).unwrap_or(ItemRarity::Legendary));
     let once = roll.flags & AffixRoll::ONCE != 0;
-    let next =
-        reroll(&current, &pool(sealed), category, rules, roll.seed, once).ok_or(Status::REFUSED)?;
+    let next = reroll(&current, &pool(sealed), category, rules, roll.seed, once)
+        .ok_or(RollAffixesError::NoRoll)?;
     if next == current {
         return Ok(0);
     }
-    let bytes = postcard::to_allocvec(&next).map_err(|_| Status::REFUSED)?;
+    let bytes = postcard::to_allocvec(&next).map_err(|_| RollAffixesError::Encode)?;
     crate::inventory::item_data::set_platform(roll.pide.0, roll.item.get(), &bytes)?;
     Ok(u32::try_from(next.affixes.len()).unwrap_or(0))
 }

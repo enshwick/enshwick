@@ -38,7 +38,7 @@ fn vanilla() -> AltarZone {
 
 unsafe extern "system" fn blamed(_zone: *mut AltarZone, user: *mut c_void) {
     // SAFETY: the test's own cell, alive for the call.
-    let seen = unsafe { &*user.cast::<Cell<Option<(usize, crate::engine::profile::Feature)>>>() };
+    let seen = unsafe { &*user.cast::<Cell<Option<(usize, Feature)>>>() };
     seen.set(crate::engine::profile::current_callback());
 }
 
@@ -63,17 +63,14 @@ fn a_filter_cannot_move_the_altar_or_shrink_the_zone_below_vanilla() {
 
 #[test]
 fn a_zone_filter_runs_as_its_owner() {
-    let seen: Cell<Option<(usize, crate::engine::profile::Feature)>> = Cell::new(None);
+    let seen: Cell<Option<(usize, Feature)>> = Cell::new(None);
     let filter: Link = (
         ModIndex::new(3),
         blamed,
         (&raw const seen).cast_mut().cast(),
     );
     let _vanilla = chain(vanilla(), core::iter::once(filter));
-    assert_eq!(
-        seen.get(),
-        Some((3, crate::engine::profile::Feature::Altars))
-    );
+    assert_eq!(seen.get(), Some((3, Feature::Altars)));
 }
 
 #[test]

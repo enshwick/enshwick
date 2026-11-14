@@ -8,12 +8,12 @@ use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::{Side, Status, StatusFn, Str};
+use enshwick_core::abi::{Side, StatusFn, Str};
 
 use crate::engine::diag::{HookStat, ModStatus, Summary};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::engine::registry::Registry;
+use crate::engine::registry::{Registry, Sealed};
 use crate::engine::settings::LOADER_ID;
 use enshwick_base::Relock;
 
@@ -21,12 +21,7 @@ use enshwick_base::Relock;
 const POLL: Duration = Duration::from_secs(1);
 
 /// A mod's status source.
-#[derive(Clone, Copy, Debug)]
-struct Source {
-    owner: ModIndex,
-    callback: StatusFn,
-    user: usize,
-}
+type Source = crate::engine::loader::Registered<StatusFn>;
 
 /// The mods' status sources, added in their init and sealed with the
 /// loader's other registries.
@@ -39,13 +34,16 @@ pub(crate) fn mark_start() {
 }
 
 /// Adds mod `owner`'s status source.
-pub(crate) fn register(owner: ModIndex, callback: StatusFn, user: *mut c_void) -> Status {
-    let added = SOURCES.add(Source {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    });
-    added.map_or(Status::TOO_LATE, |()| Status::OK)
+///
+/// # Errors
+///
+/// [`Sealed`] after init.
+pub(crate) fn register(
+    owner: ModIndex,
+    callback: StatusFn,
+    user: *mut c_void,
+) -> Result<(), Sealed> {
+    SOURCES.add(Source::new(owner, callback, user))
 }
 
 /// Ends the status sources mods add in their init.

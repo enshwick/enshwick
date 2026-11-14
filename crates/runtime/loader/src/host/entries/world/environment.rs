@@ -25,7 +25,7 @@ entries! {
         me.claim(
             "time speed",
             Mode::Exclusive,
-            crate::host::layer::checked(crate::world::daytime::register_speed(me.loader, me.index)),
+            crate::world::daytime::register_speed(me.loader, me.index),
         )
     }
 
