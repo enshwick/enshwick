@@ -125,32 +125,48 @@ pub(super) fn field(paint: &impl Widgets, arg: &ArgView, state: &mut Field) -> b
     is_set(arg, state)
 }
 
-/// Whether `state` holds a value for `arg`, the one [`value`] builds,
-/// found without building it.
-fn is_set(arg: &ArgView, state: &Field) -> bool {
-    match arg.kind {
-        ArgView::PLAYER => {
-            !state.text.text().trim().is_empty() || picked(arg, state.pick).is_some()
+/// A field's value borrowed from its state, so a frame learns whether the
+/// field holds one without building it.
+#[derive(Debug, PartialEq)]
+enum Given<'a> {
+    /// Typed text, trimmed: a text argument's, or a player's name.
+    Typed(&'a str),
+    /// A value that owns no text.
+    Value(Value),
+}
+
+impl Given<'_> {
+    /// The value an action runs with.
+    fn into_value(self) -> Value {
+        match self {
+            Given::Typed(text) => Value::Text(text.to_owned()),
+            Given::Value(value) => value,
         }
-        ArgView::CHOICE => chosen(arg, state.pick).is_some(),
-        ArgView::NUMBER | ArgView::TOGGLE => true,
-        ArgView::TEXT => text_fits(arg, state.text.text()),
-        ArgView::ITEM => state.item.is_some(),
-        _ => false,
     }
+}
+
+/// The value `state` holds for `arg`, borrowed; `None` while it holds none.
+fn given<'a>(arg: &ArgView, state: &'a Field) -> Option<Given<'a>> {
+    let owned = |value| Some(Given::Value(value));
+    match arg.kind {
+        ArgView::PLAYER => player_given(arg, state.pick, state.text.text()),
+        ArgView::CHOICE => owned(Value::Choice(chosen(arg, state.pick)?)),
+        ArgView::NUMBER => owned(Value::Number(snapped(arg, f64::from(state.number)))),
+        ArgView::TOGGLE => owned(Value::Toggle(state.on)),
+        ArgView::TEXT => text_given(arg, state.text.text()),
+        ArgView::ITEM => owned(Value::Item(state.item?)),
+        _ => None,
+    }
+}
+
+/// Whether `state` holds a value for `arg`.
+fn is_set(arg: &ArgView, state: &Field) -> bool {
+    given(arg, state).is_some()
 }
 
 /// The value `state` holds for `arg`; `None` while it holds none.
 pub(super) fn value(arg: &ArgView, state: &Field) -> Option<Value> {
-    match arg.kind {
-        ArgView::PLAYER => player_value(arg, state.pick, state.text.text()),
-        ArgView::CHOICE => chosen(arg, state.pick).map(Value::Choice),
-        ArgView::NUMBER => Some(Value::Number(snapped(arg, f64::from(state.number)))),
-        ArgView::TOGGLE => Some(Value::Toggle(state.on)),
-        ArgView::TEXT => text_value(arg, state.text.text()),
-        ArgView::ITEM => state.item.map(Value::Item),
-        _ => None,
-    }
+    given(arg, state).map(Given::into_value)
 }
 
 /// The choice row `pick` of a choice argument, `None` past its choices.
@@ -240,20 +256,20 @@ fn followed(players: &[(PlayerKey, String)], picked: Option<PlayerKey>, pick: u3
 
 /// A player argument's value: the typed name when there is one, which the
 /// server looks up, else the player picked from the list.
-fn player_value(arg: &ArgView, pick: u32, typed: &str) -> Option<Value> {
+fn player_given<'a>(arg: &ArgView, pick: u32, typed: &'a str) -> Option<Given<'a>> {
     let typed = typed.trim();
     if !typed.is_empty() {
-        return Some(Value::Text(typed.to_owned()));
+        return Some(Given::Typed(typed));
     }
-    Some(Value::Player {
+    Some(Given::Value(Value::Player {
         key: picked(arg, pick)?,
         name: String::new(),
-    })
+    }))
 }
 
 /// A text argument's value: the typed text within its bytes.
-fn text_value(arg: &ArgView, typed: &str) -> Option<Value> {
-    text_fits(arg, typed).then(|| Value::Text(typed.trim().to_owned()))
+fn text_given<'a>(arg: &ArgView, typed: &'a str) -> Option<Given<'a>> {
+    text_fits(arg, typed).then(|| Given::Typed(typed.trim()))
 }
 
 /// Whether `typed`, trimmed, is a text argument's value: not empty and
@@ -424,41 +440,6 @@ mod tests {
     }
 
     #[test]
-    fn a_field_holds_a_value_exactly_when_it_gives_one() {
-        let text = ArgView {
-            kind: ArgView::TEXT,
-            max: 4.0,
-            ..ArgView::default()
-        };
-        let choice = ArgView {
-            kind: ArgView::CHOICE,
-            choices: vec!["Basic".into()],
-            ..ArgView::default()
-        };
-        let item = ArgView {
-            kind: ArgView::ITEM,
-            ..ArgView::default()
-        };
-        let unknown = ArgView {
-            kind: 200,
-            ..ArgView::default()
-        };
-        for arg in [ann_and_bob(), text, choice, item, unknown] {
-            for (pick, typed) in [(0, ""), (1, ""), (5, ""), (NO_PICK, "Zed"), (0, "toolong")] {
-                let mut state = Field::new(&arg);
-                state.pick = pick;
-                state.text.set(typed);
-                assert_eq!(
-                    is_set(&arg, &state),
-                    value(&arg, &state).is_some(),
-                    "kind {} pick {pick} typed {typed:?}",
-                    arg.kind
-                );
-            }
-        }
-    }
-
-    #[test]
     fn fields_give_values_within_their_arguments() {
         let players = ArgView {
             kind: ArgView::PLAYER,
@@ -466,17 +447,17 @@ mod tests {
             ..ArgView::default()
         };
         assert_eq!(
-            player_value(&players, 0, ""),
-            Some(Value::Player {
+            player_given(&players, 0, ""),
+            Some(Given::Value(Value::Player {
                 key: PlayerKey::new(7),
                 name: String::new()
-            })
+            }))
         );
         assert_eq!(
-            player_value(&players, 0, " Bob "),
-            Some(Value::Text("Bob".into()))
+            player_given(&players, 0, " Bob "),
+            Some(Given::Typed("Bob"))
         );
-        assert_eq!(player_value(&players, 3, ""), None);
+        assert_eq!(player_given(&players, 3, ""), None);
 
         let text = ArgView {
             kind: ArgView::TEXT,
@@ -484,9 +465,9 @@ mod tests {
             max: 4.0,
             ..ArgView::default()
         };
-        assert_eq!(text_value(&text, " hi "), Some(Value::Text("hi".into())));
-        assert_eq!(text_value(&text, "toolong"), None);
-        assert_eq!(text_value(&text, "  "), None);
+        assert_eq!(text_given(&text, " hi "), Some(Given::Typed("hi")));
+        assert_eq!(text_given(&text, "toolong"), None);
+        assert_eq!(text_given(&text, "  "), None);
 
         let hours = ArgView {
             kind: ArgView::NUMBER,
@@ -559,7 +540,7 @@ mod tests {
             players: carl.to_vec(),
             ..ArgView::default()
         };
-        assert_eq!(player_value(&arg, pick, ""), None, "nothing to run on");
+        assert_eq!(player_given(&arg, pick, ""), None, "nothing to run on");
         assert_eq!(
             Field::new(&arg).pick,
             NO_PICK,

@@ -35,8 +35,9 @@ pub(crate) struct Part {
     pub(crate) joined: Option<PlayerCall>,
     /// A player leaves, before the game removes the character.
     pub(crate) left: Option<PlayerCall>,
-    /// The client of the player with this account key said hello, on the
-    /// server: it takes the server's messages from now on.
+    /// The client of the player with this account key said hello and the
+    /// server welcomed it, on a link that holds nothing yet: it takes the
+    /// server's messages from now on.
     pub(crate) hello: Option<KeyCall>,
     /// A client starts hosting a game.
     pub(crate) hosting: Option<fn(&'static Loader)>,

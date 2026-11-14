@@ -8,8 +8,8 @@ use enshwick_core::PlayerKey;
 use enshwick_core::abi::{Side, Status};
 
 use super::{
-    Change, Held, MAX_PLAYERS, Route, Told, Waiting, close_told, greeted, heard, leaving, merged,
-    message, note, pend, queue, route,
+    Change, Held, MAX_PLAYERS, Route, Told, Waiting, close_told, greeted, heard, holds, leaving,
+    merged, message, note, pend, queue, route,
 };
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
@@ -142,13 +142,25 @@ pub(crate) fn left(key: u64) {
     tell(Told::Left { key });
 }
 
-/// Player `key`'s client said hello: the windows shown to them while it
-/// took no messages go after the step.
+/// Player `key`'s client said hello and was welcomed, on a link that holds
+/// no window: those it held and those shown to it while it took no
+/// messages go after the step, before newer changes; the mods hear of
+/// those with no room.
 pub(crate) fn hello(key: u64) {
-    let shows = greeted(&mut WINDOWS.pending.relock(), key);
-    if !shows.is_empty() && !wait(shows.into_iter()) {
+    let no_room = {
+        let mut held = WINDOWS.held.relock();
+        let mut pending = WINDOWS.pending.relock();
+        let mut waiting = WINDOWS.waiting.relock();
+        let no_room = greeted(&mut held, &mut pending, &mut waiting, key);
+        if !waiting.is_empty() {
+            WINDOWS.any.store(true, Ordering::Release);
+        }
+        no_room
+    };
+    if !no_room.is_empty() {
         crate::log!(DEBUG, "windows: too many wait to show {key:016x} theirs");
     }
+    no_room.into_iter().for_each(tell);
 }
 
 /// Tells the mods what `told` holds: a window's mod of its close, and
@@ -208,11 +220,19 @@ fn carry(loader: &Loader, waiting: Vec<Waiting>, told: &mut Vec<Told>) {
             continue;
         };
         let ready = crate::base::net::ready(waiting.key);
-        let route = route(&waiting, ready, &WINDOWS.held.relock());
+        let route = route(&waiting, ready, || {
+            holds(
+                &WINDOWS.held.relock(),
+                waiting.key,
+                waiting.owner,
+                &waiting.window,
+            )
+        });
         match route {
             Route::Skip => continue,
             Route::Pend => {
-                told.extend(pend(&mut WINDOWS.pending.relock(), waiting));
+                let mut held = WINDOWS.held.relock();
+                told.extend(pend(&mut held, &mut WINDOWS.pending.relock(), waiting));
                 continue;
             }
             Route::Carry => {}

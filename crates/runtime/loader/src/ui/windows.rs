@@ -11,11 +11,12 @@
 //! the carrier's loop inside the process.
 //!
 //! A player may join the game before their client's hello reaches the
-//! server: the client says hello when its link opens, and says it again
-//! only every few seconds when the server dropped it. A window shown to
-//! that player waits for the hello, so one shown at join is not lost; a
-//! client without Enshwick never says hello, and its player's shows wait,
-//! bounded, until the player leaves.
+//! server: the client says hello when a link opens, holding no window, and
+//! says it again every few seconds until the server welcomes it. A window
+//! shown to that player waits for the welcome, so one shown at join is not
+//! lost, and at the welcome the windows the client held on a link that
+//! started over show again; a client without Enshwick never says hello,
+//! and its player's shows wait, bounded, until the player leaves.
 //!
 //! A mod may also update a window only where it still shows, and hears
 //! when a client closed one or its player left. Merging the changes and
@@ -89,14 +90,13 @@ pub enum Route {
 }
 
 /// Where the step takes `waiting`, its player's client `ready` to take
-/// messages and holding what `held` says.
+/// messages; `holds` says whether the client holds the window, asked only
+/// for an update to a ready client.
 #[must_use]
-pub fn route(waiting: &Waiting, ready: bool, held: &[(u64, ModIndex, String)]) -> Route {
+pub fn route(waiting: &Waiting, ready: bool, holds: impl FnOnce() -> bool) -> Route {
     if !ready {
         Route::Pend
-    } else if waiting.change == Change::Update
-        && !holds(held, waiting.key, waiting.owner, &waiting.window)
-    {
+    } else if waiting.change == Change::Update && !holds() {
         Route::Skip
     } else {
         Route::Carry
@@ -238,10 +238,12 @@ fn hold(held: &mut Held, key: u64, owner: ModIndex, window: String) -> Option<To
 /// Keeps in `pending` the change `waiting` for a client that takes no
 /// messages yet, to carry at its hello.
 ///
-/// A show waits, a close takes a waiting show back, and an update waits
-/// for nothing, since the show renders anew. The answer is the window let go for a newer one past [`MAX_HELD`], which its mod
+/// A show waits; a close takes the window back from `pending` and from
+/// `held`, where a client whose link started over left it; an update
+/// waits for nothing, since the hello shows the window anew. The answer
+/// is the window let go for a newer one past [`MAX_HELD`], which its mod
 /// hears as closed, as when a client lets its oldest go.
-pub fn pend(pending: &mut Held, waiting: Waiting) -> Option<Told> {
+pub fn pend(held: &mut Held, pending: &mut Held, waiting: Waiting) -> Option<Told> {
     let Waiting {
         owner,
         window,
@@ -251,24 +253,48 @@ pub fn pend(pending: &mut Held, waiting: Waiting) -> Option<Told> {
     match change {
         Change::Show if !holds(pending, key, owner, &window) => hold(pending, key, owner, window),
         Change::Close => {
-            pending.retain(|(k, o, w)| !(*k == key && *o == owner && *w == window));
+            let _closed_by_its_mod = close_told(held, key, owner, window.clone());
+            let _taken_back = close_told(pending, key, owner, window);
             None
         }
         Change::Show | Change::Update => None,
     }
 }
 
-/// The shows `pending` kept for client `key`, which said hello, as changes
-/// for the next step, in the order the mods made them; `pending` keeps
-/// those of other clients.
-pub fn greeted(pending: &mut Held, key: u64) -> Vec<Waiting> {
-    pending
-        .extract_if(.., |(k, _, _)| *k == key)
+/// Shows client `key`'s windows again at its hello, before the changes
+/// `waiting`.
+///
+/// A client says hello on a new link that holds no window, so those `held`
+/// noted and those `pending` kept go, oldest first, before the changes the
+/// mods made after them. All go or none past [`MAX_WAITING`]; the answer is
+/// then the windows that will not show, which their mods hear as closed.
+pub fn greeted(
+    held: &mut Held,
+    pending: &mut Held,
+    waiting: &mut Vec<Waiting>,
+    key: u64,
+) -> Vec<Told> {
+    let theirs = |(k, _, _): &mut (u64, ModIndex, String)| *k == key;
+    let shows: Vec<Waiting> = held
+        .extract_if(.., theirs)
+        .chain(pending.extract_if(.., theirs))
         .map(|(key, owner, window)| Waiting {
             owner,
             window,
             key,
             change: Change::Show,
+        })
+        .collect();
+    if waiting.len() + shows.len() <= MAX_WAITING {
+        waiting.splice(0..0, shows);
+        return Vec::new();
+    }
+    shows
+        .into_iter()
+        .map(|w| Told::Closed {
+            key: w.key,
+            owner: w.owner,
+            window: w.window,
         })
         .collect()
 }
@@ -569,6 +595,7 @@ mod tests {
             key,
             change,
         };
+        let mut held = vec![(7, mine, "bans".to_owned()), (8, mine, "bans".to_owned())];
         let mut pending = Vec::new();
         for waiting in [
             change(mine, 7, "panel", Change::Show),
@@ -579,8 +606,9 @@ mod tests {
             change(mine, 7, "rules", Change::Show),
             change(mine, 7, "rules", Change::Close),
             change(mine, 9, "gone", Change::Close),
+            change(mine, 7, "bans", Change::Close),
         ] {
-            assert_eq!(pend(&mut pending, waiting), None);
+            assert_eq!(pend(&mut held, &mut pending, waiting), None);
         }
         assert_eq!(
             pending,
@@ -589,6 +617,11 @@ mod tests {
                 (7, other, "panel".to_owned())
             ],
             "a show waits once, an update waits for nothing and a close takes its show back"
+        );
+        assert_eq!(
+            held,
+            [(8, mine, "bans".to_owned())],
+            "a close takes back a window a client whose link started over left held"
         );
     }
 
@@ -599,6 +632,7 @@ mod tests {
         let let_go: Vec<Told> = (0..=MAX_HELD)
             .filter_map(|n| {
                 pend(
+                    &mut Vec::new(),
                     &mut pending,
                     Waiting {
                         owner: mine,
@@ -625,47 +659,82 @@ mod tests {
         );
     }
 
+    /// Mod `owner`'s change `change` of window `window` for client 7.
+    fn change_of(owner: ModIndex, window: &str, change: Change) -> Waiting {
+        Waiting {
+            owner,
+            window: window.into(),
+            key: 7,
+            change,
+        }
+    }
+
     #[test]
-    fn a_hello_takes_the_player_s_waiting_shows_in_order_and_leaves_the_rest() {
+    fn a_hello_shows_again_what_the_client_held_then_what_waited_before_newer_changes() {
         let (mine, other) = (ModIndex::new(0), ModIndex::new(1));
+        let mut held = vec![(7, mine, "bans".to_owned()), (8, mine, "bans".to_owned())];
         let mut pending = vec![
             (7, mine, "panel".to_owned()),
             (8, mine, "panel".to_owned()),
             (7, other, "rules".to_owned()),
         ];
-        let show = |owner, window: &str| Waiting {
-            owner,
-            window: window.into(),
+        let mut waiting = vec![change_of(mine, "panel", Change::Close)];
+        assert!(greeted(&mut held, &mut pending, &mut waiting, 7).is_empty());
+        assert_eq!(
+            waiting,
+            [
+                change_of(mine, "bans", Change::Show),
+                change_of(mine, "panel", Change::Show),
+                change_of(other, "rules", Change::Show),
+                change_of(mine, "panel", Change::Close),
+            ]
+        );
+        assert_eq!(
+            merged(waiting.clone())[1],
+            change_of(mine, "panel", Change::Close),
+            "a close the mod made after its show wins"
+        );
+        assert_eq!(held, [(8, mine, "bans".to_owned())]);
+        assert_eq!(pending, [(8, mine, "panel".to_owned())]);
+        waiting.clear();
+        assert!(greeted(&mut held, &mut pending, &mut waiting, 7).is_empty());
+        assert!(waiting.is_empty(), "a second hello shows nothing again");
+    }
+
+    #[test]
+    fn shows_a_hello_has_no_room_for_are_told_closed_and_none_go() {
+        let mine = ModIndex::new(0);
+        let mut held = vec![(7, mine, "bans".to_owned())];
+        let mut pending = vec![(7, mine, "panel".to_owned())];
+        let mut waiting = vec![change_of(mine, "other", Change::Update); MAX_WAITING - 1];
+        let closed = |window: &str| Told::Closed {
             key: 7,
-            change: Change::Show,
+            owner: mine,
+            window: window.to_owned(),
         };
         assert_eq!(
-            greeted(&mut pending, 7),
-            [show(mine, "panel"), show(other, "rules")]
+            greeted(&mut held, &mut pending, &mut waiting, 7),
+            [closed("bans"), closed("panel")]
         );
-        assert_eq!(pending, [(8, mine, "panel".to_owned())]);
-        assert!(
-            greeted(&mut pending, 7).is_empty(),
-            "a second hello shows nothing again"
-        );
+        assert_eq!(waiting.len(), MAX_WAITING - 1);
+        assert!(held.is_empty() && pending.is_empty());
     }
 
     #[test]
     fn a_change_waits_for_a_client_without_its_hello_and_an_update_goes_only_where_held() {
         let mine = ModIndex::new(0);
-        let change = |change| Waiting {
-            owner: mine,
-            window: "panel".into(),
-            key: 7,
-            change,
-        };
-        let held = vec![(7, mine, "panel".to_owned())];
+        let change = |change| change_of(mine, "panel", change);
+        let unasked = || -> bool { panic!("holds asked for a change that does not need it") };
         for each in [Change::Show, Change::Update, Change::Close] {
-            assert_eq!(route(&change(each), false, &held), Route::Pend, "{each:?}");
-            assert_eq!(route(&change(each), true, &held), Route::Carry, "{each:?}");
+            assert_eq!(
+                route(&change(each), false, unasked),
+                Route::Pend,
+                "{each:?}"
+            );
         }
-        assert_eq!(route(&change(Change::Update), true, &[]), Route::Skip);
-        assert_eq!(route(&change(Change::Show), true, &[]), Route::Carry);
-        assert_eq!(route(&change(Change::Close), true, &[]), Route::Carry);
+        assert_eq!(route(&change(Change::Update), true, || true), Route::Carry);
+        assert_eq!(route(&change(Change::Update), true, || false), Route::Skip);
+        assert_eq!(route(&change(Change::Show), true, unasked), Route::Carry);
+        assert_eq!(route(&change(Change::Close), true, unasked), Route::Carry);
     }
 }
