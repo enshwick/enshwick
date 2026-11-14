@@ -68,21 +68,49 @@ const GAP: f32 = 14.0;
 const FROM_MAIN: u8 = 1;
 const FROM_PAUSE: u8 = 2;
 
-/// Asked to open, from a menu hook: where from.
-static OPEN: AtomicU8 = AtomicU8::new(0);
 /// The main menu's Mods entry: its hook and its draw.
 pub(super) static MAIN_MENU_FUSE: Fuse = Fuse::new(Part::MAIN_MENU.name);
 /// The pause menu's Mods entry: its hook and its draw.
 pub(super) static PAUSE_MENU_FUSE: Fuse = Fuse::new(Part::PAUSE_MENU.name);
-/// The frame each menu hook last ran in.
-static MAIN_SEEN: AtomicU64 = AtomicU64::new(0);
-static PAUSE_SEEN: AtomicU64 = AtomicU64::new(0);
-/// The frame being drawn, counted by the interface hook.
-static FRAME: AtomicU64 = AtomicU64::new(0);
-/// The screen's panel node, from its last frame, for the Back action.
-static NODE: AtomicU64 = AtomicU64::new(0);
-/// Set by a hook that saw Back while the screen showed.
-static BACK: AtomicU8 = AtomicU8::new(0);
+
+/// What the menu hooks and the interface's frames hand each other about the
+/// screen. A hosted game's end resets none of it: the frame count only
+/// grows, so the menus' last frames stay comparable, and the screen closes
+/// with its menu by those, whichever world the menu was in.
+#[derive(Debug)]
+struct State {
+    /// Asked to open, from a menu hook: where from.
+    open: AtomicU8,
+    /// The frame each menu hook last ran in.
+    main_seen: AtomicU64,
+    pause_seen: AtomicU64,
+    /// The frame being drawn, counted by the interface hook.
+    frame: AtomicU64,
+    /// The screen's panel node, from its last frame, for the Back action.
+    node: AtomicU64,
+    /// Set by a hook that saw Back while the screen showed.
+    back: AtomicU8,
+}
+
+impl State {
+    /// The frame menu `from` last ran in.
+    const fn seen(&self, from: u8) -> &AtomicU64 {
+        if from == FROM_MAIN {
+            &self.main_seen
+        } else {
+            &self.pause_seen
+        }
+    }
+}
+
+static STATE: State = State {
+    open: AtomicU8::new(0),
+    main_seen: AtomicU64::new(0),
+    pause_seen: AtomicU64::new(0),
+    frame: AtomicU64::new(0),
+    node: AtomicU64::new(0),
+    back: AtomicU8::new(0),
+};
 
 /// What the screen shows.
 enum Page {
@@ -207,14 +235,14 @@ thread_local! {
 
 /// Counts a frame of the interface.
 pub(super) fn next_frame() -> u64 {
-    FRAME.fetch_add(1, Ordering::Relaxed) + 1
+    STATE.frame.fetch_add(1, Ordering::Relaxed) + 1
 }
 
 /// The frame being drawn, as [`next_frame`] counts it: the interface hook
 /// counts each frame before it draws any of the loader's windows, so every
 /// dropdown a window draws sees the count of its own frame.
 pub(super) fn frame() -> u64 {
-    FRAME.load(Ordering::Relaxed)
+    STATE.frame.load(Ordering::Relaxed)
 }
 
 /// Links the menu hooks; the screen draws from the interface hook.
@@ -250,26 +278,21 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     let Some(engine) = ENGINE.get() else {
         return;
     };
-    let frame = FRAME.load(Ordering::Relaxed);
-    let seen = if from == FROM_MAIN {
-        &MAIN_SEEN
-    } else {
-        &PAUSE_SEEN
-    };
-    seen.store(frame, Ordering::Relaxed);
+    let frame = STATE.frame.load(Ordering::Relaxed);
+    STATE.seen(from).store(frame, Ordering::Relaxed);
     let showing = SCREEN.with_borrow(|s| s.as_ref().map(|s| s.from)) == Some(from);
     // SAFETY: `entry` runs only from the main and pause menu hooks, which
     // the game reaches while drawing its menu inside a frame on the
     // interface thread.
-    if showing && unsafe { engine.back_pressed(NODE.load(Ordering::Relaxed)) } {
-        BACK.store(BACK_PRESSED, Ordering::Relaxed);
+    if showing && unsafe { engine.back_pressed(STATE.node.load(Ordering::Relaxed)) } {
+        STATE.back.store(BACK_PRESSED, Ordering::Relaxed);
     }
     let text = copy(&[texts::text("mods.title").as_bytes()]);
     let clicked = draw(engine, &text);
     // A refusal or a kick for the mods opens the screen in the main menu.
     let differs = from == FROM_MAIN && crate::base::join::client::difference_waits();
     if (clicked || differs) && !showing {
-        OPEN.store(from, Ordering::Relaxed);
+        STATE.open.store(from, Ordering::Relaxed);
     }
 }
 
@@ -277,8 +300,8 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
 /// frames, the main menu's entry has run, and neither the interface, the
 /// entry nor the screen turned off.
 pub(crate) fn mismatch_screen_on() -> bool {
-    FRAME.load(Ordering::Relaxed) > 0
-        && MAIN_SEEN.load(Ordering::Relaxed) > 0
+    STATE.frame.load(Ordering::Relaxed) > 0
+        && STATE.main_seen.load(Ordering::Relaxed) > 0
         && screen_drawn(
             &super::INTERFACE_FUSE,
             &MAIN_MENU_FUSE,
@@ -337,7 +360,7 @@ crate::engine::mid::mid_handler! {
 /// - No other window is open.
 /// - `frame` is the count [`next_frame`] gave this frame.
 pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, frame: u64) {
-    let opened = OPEN.swap(0, Ordering::Relaxed);
+    let opened = STATE.open.swap(0, Ordering::Relaxed);
     SCREEN.with_borrow_mut(|slot| {
         if opened != 0 {
             let layer = if opened == FROM_MAIN {
@@ -358,16 +381,12 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 window: Window::screen(layer, GAP),
                 scroll: Scroll::new(),
             });
-            BACK.store(0, Ordering::Relaxed);
+            STATE.back.store(0, Ordering::Relaxed);
         }
         let Some(screen) = slot.as_mut() else {
             return;
         };
-        let seen = if screen.from == FROM_MAIN {
-            MAIN_SEEN.load(Ordering::Relaxed)
-        } else {
-            PAUSE_SEEN.load(Ordering::Relaxed)
-        };
+        let seen = STATE.seen(screen.from).load(Ordering::Relaxed);
         // The menu under the screen went away: the screen goes with it.
         if mods_screen::missed_frame(seen, frame) {
             *slot = None;
@@ -377,7 +396,7 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             entries.ending = false;
         }
         let editing = screen.page.editing();
-        match mods_screen::heard(BACK.swap(0, Ordering::Relaxed), editing) {
+        match mods_screen::heard(STATE.back.swap(0, Ordering::Relaxed), editing) {
             Heard::EndTyping => screen.page.end_typing(),
             Heard::Back if back(screen) => {
                 *slot = None;
@@ -388,7 +407,9 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window, which `show` asks for.
         let close = unsafe { show(loader, engine, context, screen) };
-        NODE.store(engine.node_id(&screen.window), Ordering::Relaxed);
+        STATE
+            .node
+            .store(engine.node_id(&screen.window), Ordering::Relaxed);
         if close {
             *slot = None;
         }
@@ -517,7 +538,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     }
     if screen.page.editing() {
         // Taken as a Back press in the next frame, which ends the typing.
-        BACK.store(BACK_PRESSED, Ordering::Relaxed);
+        STATE.back.store(BACK_PRESSED, Ordering::Relaxed);
         return false;
     }
     self::back(screen)
@@ -573,7 +594,10 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             server,
             controls: view,
         } => {
-            let look = FRAME.load(Ordering::Relaxed).is_multiple_of(JOINED_EVERY);
+            let look = STATE
+                .frame
+                .load(Ordering::Relaxed)
+                .is_multiple_of(JOINED_EVERY);
             let joined = if look {
                 joined_elsewhere()
             } else {

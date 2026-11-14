@@ -386,6 +386,7 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
 pub(crate) fn joining(runs_enshwick: bool) {
     forget();
     crate::content::recipes::joining();
+    crate::ui::interface::demo::forget();
     SERVER_RUNS_ENSHWICK.store(runs_enshwick, Ordering::Release);
 }
 
