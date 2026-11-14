@@ -162,6 +162,18 @@ mod tests {
         assert!(!logged("not given: Committed"), "{:?}", loader.logs());
 
         assert_eq!(loader.raise::<QuestCompleted>(&completed(trail)), 1);
+        assert_eq!(
+            loader.inventory_requests().len(),
+            1,
+            "a full inventory got no torch, so it is tried again"
+        );
+        let all_fit = InventoryOpResult {
+            error: 0,
+            remaining: 0,
+        };
+        assert!(loader.finish_inventory(InventoryResult::COMMITTED, &[all_fit]));
+
+        assert_eq!(loader.raise::<QuestCompleted>(&completed(trail)), 1);
         assert!(
             loader.inventory_requests().is_empty(),
             "a replayed completion gives no second torch"

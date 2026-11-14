@@ -7,15 +7,13 @@ use std::collections::BTreeSet;
 use toml::{Table, Value};
 
 use super::shared::{PACKAGE, WORKSPACE};
-use crate::cargo_files::{DEPENDENCIES, DEPENDENCY_TABLES, LOCKED_PACKAGES, TARGET};
+// Registry and git lock entries have a `SOURCE`, members not.
+use crate::cargo_files::{
+    DEPENDENCIES, DEPENDENCY_TABLES, LOCKED_PACKAGES, NAME, SOURCE, TARGET, VERSION,
+};
 
-/// The manifest key of a version.
-const VERSION: &str = "version";
 /// The key of a dependency entry that makes it a workspace package.
 const PATH: &str = "path";
-/// A lock entry's keys: registry and git entries have a source, members not.
-const SOURCE: &str = "source";
-const NAME: &str = "name";
 
 /// Whether a package manifest changed only in its version and the versions
 /// of its path dependencies; `false` when either side does not read.

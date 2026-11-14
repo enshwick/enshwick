@@ -18,6 +18,12 @@ pub(crate) const DEPENDENCY_TABLES: &[&str] =
     &[DEPENDENCIES, DEV_DEPENDENCIES, "build-dependencies"];
 /// The lock file's array of locked packages.
 pub(crate) const LOCKED_PACKAGES: &str = "package";
+/// A lock entry's key of its crate's name.
+pub(crate) const NAME: &str = "name";
+/// A lock entry's or a manifest's key of a version.
+pub(crate) const VERSION: &str = "version";
+/// A lock entry's key of where its crate comes from.
+pub(crate) const SOURCE: &str = "source";
 /// The key of a dependency entry that names its crate when the entry's own
 /// key does not.
 const RENAMED: &str = "package";
@@ -32,16 +38,16 @@ impl Locked {
     }
 
     pub(crate) fn name(&self) -> Option<&str> {
-        self.field("name")
+        self.field(NAME)
     }
 
     pub(crate) fn version(&self) -> Option<&str> {
-        self.field("version")
+        self.field(VERSION)
     }
 
     /// Where it comes from: none for a workspace member.
     pub(crate) fn source(&self) -> Option<&str> {
-        self.field("source")
+        self.field(SOURCE)
     }
 
     /// Its `dependencies`, each `name`, `name version` or
@@ -56,15 +62,16 @@ impl Locked {
     }
 }
 
-/// The entries of a lock file; none when it locks no package.
+/// The entries of a lock file.
 ///
 /// # Errors
 ///
-/// When the text is no TOML, or its packages are no array of tables.
+/// When the text is no TOML or holds no array of package tables: a
+/// workspace's lock always locks its own members.
 pub(crate) fn locked(text: &str) -> Result<Vec<Locked>, String> {
     let mut lock: Table = toml::from_str(text).map_err(|e| format!("{LOCK}: {e}"))?;
     match lock.remove(LOCKED_PACKAGES) {
-        None => Ok(Vec::new()),
+        None => Err(format!("{LOCK}: no [[{LOCKED_PACKAGES}]]")),
         Some(Value::Array(entries)) => entries
             .into_iter()
             .map(|entry| match entry {
@@ -128,7 +135,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_walk_finds_every_table_at_the_root_then_under_each_target() {
+    fn the_walk_finds_every_table_at_the_root_and_under_each_target() {
         let manifest: Table = toml::from_str(
             "[dependencies]\na = \"1\"\nb = { package = \"bee\", version = \"1\" }\n\
              [dev-dependencies]\nc = \"1\"\n[build-dependencies]\nd = \"1\"\n\
@@ -136,9 +143,11 @@ mod tests {
              [target.'cfg(unix)'.dev-dependencies]\nf = \"1\"\n[features]\ng = []\n",
         )
         .expect("the manifest reads");
-        let found: Vec<(&str, &str, &str)> = dependencies(&manifest)
+        // Sorted: toml's `preserve_order` feature changes the targets' order.
+        let mut found: Vec<(&str, &str, &str)> = dependencies(&manifest)
             .map(|dep| (dep.kind, dep.key, dep.package()))
             .collect();
+        found.sort_unstable_by_key(|&(_, key, _)| key);
         assert_eq!(
             found,
             [
@@ -146,8 +155,8 @@ mod tests {
                 (DEPENDENCIES, "b", "bee"),
                 (DEV_DEPENDENCIES, "c", "c"),
                 ("build-dependencies", "d", "d"),
-                (DEV_DEPENDENCIES, "f", "f"),
                 (DEPENDENCIES, "e", "e"),
+                (DEV_DEPENDENCIES, "f", "f"),
             ]
         );
     }
@@ -172,8 +181,8 @@ mod tests {
     }
 
     #[test]
-    fn a_lock_without_packages_locks_none_and_a_broken_one_fails() {
-        assert_eq!(locked("version = 4\n"), Ok(Vec::new()));
+    fn a_lock_without_packages_fails_like_a_broken_one() {
+        assert!(locked("version = 4\n").is_err());
         assert!(locked("[[package]").is_err());
         assert!(locked("package = 1\n").is_err());
         assert!(locked("package = [1]\n").is_err());

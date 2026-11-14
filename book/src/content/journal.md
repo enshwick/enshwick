@@ -93,27 +93,38 @@ fn init(load: &mut enshwick::Load<'_>, trail: KnowledgeId, torch: enshwick::Item
     let world = load.world()?;
     let given = load.world_store::<Given>("torch")?;
     load.on::<QuestCompleted>(move |done| {
-        let Some(player) = world.player(done.entity).filter(|_| done.quest == trail) else {
-            return;
-        };
-        // `None` while no world runs or the store is shut: no reward then.
-        let key = format!("{:x}", player.key.get());
-        if given.update(|given| given.players.insert(key)) != Some(true) {
+        if done.quest != trail {
             return;
         }
-        let _ticket = inventories.give_what_fits(done.entity, torch, 1, |left, outcome| {
-            if !outcome.is_committed() {
+        let Some(player) = world.player(done.entity) else {
+            return;
+        };
+        let key = format!("{:x}", player.key.get());
+        // `None` while no world runs or the store is shut: no reward then.
+        if given.with(|given| given.players.contains(&key)) != Some(false) {
+            return;
+        }
+        given.update(|given| given.players.insert(key.clone()));
+        let given = given.clone();
+        let _ticket = inventories.give_what_fits(done.entity, torch, 1, move |left, outcome| {
+            if outcome.is_committed() && left == 0 {
+                return;
+            }
+            // Nothing was given: the next completion tries again.
+            given.update(|given| given.players.remove(&key));
+            if outcome.is_committed() {
+                enshwick::warn!("no room for the reward");
+            } else {
                 enshwick::warn!("reward not given: {:?}", outcome.done);
-            } else if left > 0 {
-                enshwick::warn!("no room for {left} of the reward");
             }
         });
     })
 }
 ```
 
-A request that is not committed gave nothing. The example mod `you.trail`
-clears the player's mark then, so the next completion tries again.
+A request that is not committed, or that found no room for the one item,
+gave nothing. The handler clears the player's mark then, so the next
+completion tries again.
 
 `load.quests().quest(done.quest)` gives the rewards the quest declares, for
 a handler that serves several quests. A mod gives only the items it
@@ -267,30 +278,41 @@ local trail = enshwick.content.add_quest({
 
 local torch = enshwick.content.item_id("<the GUID of a vanilla item>")
 -- The players given the reward, by account key: a mark against a repeat.
-local given = enshwick.world_store("torch")
-enshwick.on("QuestCompleted", function(done)
-    local player = enshwick.world.player(done.entity)
-    if done.quest ~= trail or not player then
-        return
-    end
-    local first = false
-    given:update(function(data)
+local rewarded = enshwick.world_store("torch")
+local function mark(key: string, set: boolean)
+    rewarded:update(function(data)
         local marks = if type(data) == "table" then data else {}
-        if marks[player.key] then
-            return nil -- nil keeps the data as it is
-        end
-        marks[player.key] = true
-        first = true
+        marks[key] = set -- false, not nil: an empty table saves as none
         return marks
     end)
-    if not first then
+end
+enshwick.on("QuestCompleted", function(done)
+    if done.quest ~= trail then
         return
     end
+    local player = enshwick.world.player(done.entity)
+    if not player then
+        return
+    end
+    local key = player.key
+    -- nil while no world runs or the store is shut: no reward then.
+    local marked = rewarded:with(function(data)
+        return type(data) == "table" and data[key] == true
+    end)
+    if marked ~= false then
+        return
+    end
+    mark(key, true)
     enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left, outcome)
-        if outcome.done ~= "Committed" then
+        if outcome.done == "Committed" and left == 0 then
+            return
+        end
+        -- Nothing was given: the next completion tries again.
+        mark(key, false)
+        if outcome.done == "Committed" then
+            enshwick.log.warn("no room for the reward")
+        else
             enshwick.log.warn(`reward not given: {outcome.done}`)
-        elseif left > 0 then
-            enshwick.log.warn(`no room for {left} of the reward`)
         end
     end)
 end)
