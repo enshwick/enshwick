@@ -4,14 +4,18 @@
 //! step, while the engine already moves that world's events as it loads it
 //! (`ecs.event_merge` has callers besides `world.step`, client 26430625).
 //! So from a hosted server's start until its world is seen, no world counts
-//! as the client's own.
+//! as the client's own; from then until its teardown, which follows the
+//! final save after the hosted game ends, no world its thread moves does.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick_core::abi::Side;
 
 /// A hosted server started on this client and its world is not seen yet.
 static STARTING: AtomicBool = AtomicBool::new(false);
+/// The hosted server's game thread, from its world's first sight until its
+/// teardown; 0 for none.
+static HOSTED_THREAD: AtomicU32 = AtomicU32::new(0);
 
 /// Whose world a pass over an entity world is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,8 +31,15 @@ pub(crate) fn server_starts() {
     STARTING.store(true, Ordering::Release);
 }
 
-/// The hosted server's world is seen, or the server is gone.
-pub(super) fn server_settled() {
+/// The server's world is seen, stepped on `thread`.
+pub(super) fn server_seen(thread: u32) {
+    HOSTED_THREAD.store(thread, Ordering::Release);
+    STARTING.store(false, Ordering::Release);
+}
+
+/// The server is torn down.
+pub(super) fn server_gone() {
+    HOSTED_THREAD.store(0, Ordering::Release);
     STARTING.store(false, Ordering::Release);
 }
 
@@ -42,6 +53,7 @@ pub(crate) fn whose(side: Side, entity_world: usize) -> Option<Whose> {
         world: entity_world,
         server: usize::try_from(super::server_world()).unwrap_or(0),
         on_game_thread: super::hosting() && me == super::GAME_THREAD.load(Ordering::Acquire),
+        on_hosted_thread: me == HOSTED_THREAD.load(Ordering::Acquire),
         starting: STARTING.load(Ordering::Acquire),
     })
 }
@@ -53,7 +65,11 @@ struct Seen {
     world: usize,
     /// The running server's entity world, 0 for none seen.
     server: usize,
+    /// On the live server's game thread.
     on_game_thread: bool,
+    /// On the thread of a server seen and not yet torn down, live or
+    /// stopping.
+    on_hosted_thread: bool,
     starting: bool,
 }
 
@@ -62,7 +78,7 @@ fn tell(seen: Seen) -> Option<Whose> {
         None
     } else if seen.server != 0 && seen.world == seen.server {
         seen.on_game_thread.then_some(Whose::Server)
-    } else if seen.side == Side::CLIENT && !seen.starting {
+    } else if seen.side == Side::CLIENT && !seen.starting && !seen.on_hosted_thread {
         Some(Whose::Client)
     } else {
         None
@@ -82,8 +98,32 @@ mod tests {
             world,
             server,
             on_game_thread: world == server,
+            on_hosted_thread: world == server,
             starting,
         }
+    }
+
+    #[test]
+    fn a_hosted_server_s_world_after_its_game_ended_is_nobody_s_until_its_teardown() {
+        let final_save = Seen {
+            on_hosted_thread: true,
+            ..seen(Side::CLIENT, SERVER, 0, false)
+        };
+        assert_eq!(tell(final_save), None);
+        assert_eq!(
+            tell(seen(Side::CLIENT, CLIENT, 0, false)),
+            Some(Whose::Client)
+        );
+    }
+
+    #[test]
+    fn another_world_the_hosted_server_s_thread_moves_is_nobody_s() {
+        let other = Seen {
+            on_game_thread: true,
+            on_hosted_thread: true,
+            ..seen(Side::CLIENT, CLIENT, SERVER, false)
+        };
+        assert_eq!(tell(other), None);
     }
 
     #[test]

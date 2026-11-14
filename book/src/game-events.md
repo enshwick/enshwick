@@ -229,8 +229,8 @@ A handler of the client's own events:
 - gets only that world's events, also while the client hosts a game, and a
   server handler never gets them;
 - runs with no filter, veto or item action on the events;
-- never runs on a dedicated server, where the subscription is kept without
-  an error, so one `both` mod serves both sides.
+- never runs on a dedicated server, where the subscription answers without
+  an error and is not kept, so one `both` mod serves both sides.
 
 While a hosted game starts, the client's own events are not handed over.
 Until the server's first step, the loader cannot tell its world from the

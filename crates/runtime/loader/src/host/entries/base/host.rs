@@ -171,6 +171,15 @@ fn game_event_of(
             Ok(found) => found,
             Err(status) => return status,
         };
-        crate::base::game_events::register(loader.side, whose, index, type_hash, callback, user)
+        let in_init = crate::engine::loader::in_init(index.get());
+        crate::base::game_events::register(
+            loader.side,
+            whose,
+            index,
+            in_init,
+            type_hash,
+            callback,
+            user,
+        )
     })
 }

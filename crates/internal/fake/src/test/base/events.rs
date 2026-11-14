@@ -232,11 +232,11 @@ impl Installed {
     }
 }
 
-/// Hands the game event of `type_hash` with `bytes` to every handler of the
-/// list `kept` picks for that type or for every type; returns how many ran.
 /// One world's game event handlers, by type hash.
 type GameEventHandlers = Vec<(u32, table::Registered<enshwick_core::abi::GameEventFn>)>;
 
+/// Hands the game event of `type_hash` with `bytes` to every handler of the
+/// list `kept` picks for that type or for every type; returns how many ran.
 fn raise_in(kept: fn(&table::State) -> &GameEventHandlers, type_hash: u32, bytes: &[u8]) -> usize {
     let handlers: Vec<_> = table::with(Vec::new(), |s| {
         kept(s)

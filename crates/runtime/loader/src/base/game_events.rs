@@ -76,9 +76,10 @@ struct Subscriber {
     user: usize,
 }
 
-/// The event types one world's handlers asked for.
+/// One world's handlers and the event types they asked for.
 #[derive(Debug, Default)]
 struct Wanted {
+    subscribers: Box<[Subscriber]>,
     types: FxHashSet<u32>,
     every: bool,
 }
@@ -86,13 +87,16 @@ struct Wanted {
 impl Wanted {
     fn of(subscribers: &[Subscriber], whose: Whose) -> Self {
         let mut wanted = Self::default();
+        let mut own = Vec::new();
         for subscriber in subscribers.iter().filter(|s| s.whose == whose) {
             if subscriber.type_hash == 0 {
                 wanted.every = true;
             } else {
                 wanted.types.insert(subscriber.type_hash);
             }
+            own.push(*subscriber);
         }
+        wanted.subscribers = own.into_boxed_slice();
         wanted
     }
 
@@ -108,7 +112,6 @@ impl Wanted {
 /// The subscriptions once every mod is initialised.
 #[derive(Debug)]
 struct Sealed {
-    subscribers: Box<[Subscriber]>,
     server: Wanted,
     client: Wanted,
     /// The server's equipment event, when stats follow it.
@@ -162,13 +165,14 @@ impl Batch {
 /// one impl each, so the copy and the delivery hold no case of their own,
 /// and the server's move compiles without the client's bounds.
 trait Scope {
-    /// The world whose handlers get the events.
-    const WHOSE: Whose;
     /// Whether a move stops at the client's bounds.
     const BOUNDED: bool;
 
     /// This thread's batch of the world's copied events.
     fn batch() -> &'static LocalKey<RefCell<Batch>>;
+
+    /// The world's handlers.
+    fn wanted(sealed: &Sealed) -> &Wanted;
 
     /// Whether no handler and no part of the loader wants any event here.
     fn idle(sealed: &Sealed) -> bool;
@@ -198,15 +202,21 @@ struct ServerScope;
 struct ClientScope;
 
 impl Scope for ServerScope {
-    const WHOSE: Whose = Whose::Server;
     const BOUNDED: bool = false;
 
     fn batch() -> &'static LocalKey<RefCell<Batch>> {
         &BATCH
     }
 
-    fn idle(_sealed: &Sealed) -> bool {
-        false
+    fn wanted(sealed: &Sealed) -> &Wanted {
+        &sealed.server
+    }
+
+    fn idle(sealed: &Sealed) -> bool {
+        sealed.server.is_empty()
+            && sealed.equipment.is_none()
+            && !crate::actions::vetoes::crafting()
+            && !crate::inventory::item_actions::wanted()
     }
 
     #[inline]
@@ -242,11 +252,14 @@ impl Scope for ServerScope {
 }
 
 impl Scope for ClientScope {
-    const WHOSE: Whose = Whose::Client;
     const BOUNDED: bool = true;
 
     fn batch() -> &'static LocalKey<RefCell<Batch>> {
         &CLIENT_BATCH
+    }
+
+    fn wanted(sealed: &Sealed) -> &Wanted {
+        &sealed.client
     }
 
     fn idle(sealed: &Sealed) -> bool {
@@ -306,18 +319,19 @@ thread_local! {
 }
 
 /// Registers mod `owner`'s handler for the events of `type_hash` in the
-/// world `whose`, 0 for every type, on the loader of `side`. A dedicated
-/// server answers a client handler without keeping it: no client world
-/// steps there.
+/// world `whose`, 0 for every type, on the loader of `side`, while `owner`
+/// runs its `init`. A dedicated server answers a client handler without
+/// keeping it: no client world steps there.
 pub(crate) fn register(
     side: Side,
     whose: Whose,
     owner: ModIndex,
+    in_init: bool,
     type_hash: u32,
     callback: GameEventFn,
     user: *mut c_void,
 ) -> Status {
-    if SEALED.get().is_some() {
+    if !in_init || SEALED.get().is_some() {
         return Status::TOO_LATE;
     }
     if whose == Whose::Client && side != Side::CLIENT {
@@ -347,10 +361,10 @@ pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
         server: Wanted::of(&subscribers, Whose::Server),
         client: Wanted::of(&subscribers, Whose::Client),
-        subscribers: subscribers.into_boxed_slice(),
         equipment,
     };
-    let count = sealed.subscribers.len() + usize::from(equipment.is_some());
+    let count = subscribers.len() + usize::from(equipment.is_some());
+    let client_wanted = !sealed.client.is_empty();
     // A client always links the move, to raise the loader's notices in its
     // own world.
     if SEALED.set(sealed).is_err()
@@ -363,7 +377,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     // Without the layout the move still links: a client's notices and the
     // freeing of handed lists need no stream.
-    let _first = LOADED.set((loader, stream_layout(loader)));
+    let _first = LOADED.set((loader, stream_layout(loader, client_wanted)));
     let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
     if loader.link_fused(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "game events: {count} subscriptions");
@@ -371,9 +385,9 @@ pub(crate) fn link(loader: &'static Loader) {
 }
 
 /// The build's event stream layout; without it the delivery is off, listed
-/// by the first entry the build lacks, and on a client the delivery of its
-/// own events too.
-fn stream_layout(loader: &Loader) -> Option<Layout> {
+/// by the first entry the build lacks, and on a client with `client_wanted`
+/// handlers the delivery of its own events too.
+fn stream_layout(loader: &Loader, client_wanted: bool) -> Option<Layout> {
     let constant = |name: Constant| {
         loader
             .build
@@ -396,7 +410,7 @@ fn stream_layout(loader: &Loader) -> Option<Layout> {
         .inspect_err(|missing: &Constant| {
             let absent = crate::engine::builds::ABSENT;
             let _off = loader.fuse_off(&DELIVERY_FUSE, missing.id(), absent);
-            if loader.side == Side::CLIENT {
+            if loader.side == Side::CLIENT && client_wanted {
                 let _off = loader.fuse_off(&CLIENT_FUSE, missing.id(), absent);
             }
         })
@@ -434,10 +448,13 @@ fn server_move<N: Fn()>(
     if let Some(layout) = layout {
         onward.before(&DELIVERY_FUSE, "the event copy", || {
             let _quiet = crate::engine::world::Quiet::enter();
-            // SAFETY: `whose` told `entity_world` the running server's, on
-            // its game thread; the game handed it to `ecs.event_merge`, which
-            // has not moved its streams yet (`before` never calls the chain).
-            unsafe { copy::<ServerScope>(layout, entity_world) };
+            if let Some(sealed) = SEALED.get() {
+                // SAFETY: `whose` told `entity_world` the running server's,
+                // on its game thread; the game handed it to
+                // `ecs.event_merge`, which has not moved its streams yet
+                // (`before` never calls the chain).
+                unsafe { copy::<ServerScope>(sealed, layout, entity_world) };
+            }
         });
     }
     onward.call();
@@ -462,20 +479,25 @@ fn client_move<N: Fn()>(
     layout: Option<&Layout>,
     entity_world: *mut u8,
 ) {
+    // The copy comes first: the notices the raise adds to the client's
+    // streams are the loader's own, not the game's events.
+    if let Some(layout) = layout {
+        onward.before(&CLIENT_FUSE, "the client event copy", || {
+            if let Some(sealed) = SEALED.get() {
+                // SAFETY: `whose` told `entity_world` the client's own,
+                // handed to `ecs.event_merge` on the thread that steps it,
+                // which has not moved its streams yet (`before` never calls
+                // the chain).
+                unsafe { copy::<ClientScope>(sealed, layout, entity_world) };
+            }
+        });
+    }
     onward.before(&NOTICES_FUSE, "the notice raise", || {
         // SAFETY: `whose` told `entity_world` the client's own, handed to
         // `ecs.event_merge` on the thread that steps it, which has not moved
         // its streams yet (`before` never calls the chain).
         unsafe { crate::base::notices::raise(loader, entity_world.expose_provenance()) };
     });
-    if let Some(layout) = layout {
-        onward.before(&CLIENT_FUSE, "the client event copy", || {
-            // SAFETY: `whose` told `entity_world` the client's own, handed
-            // to `ecs.event_merge` on the thread that steps it, which has not
-            // moved its streams yet (`before` never calls the chain).
-            unsafe { copy::<ClientScope>(layout, entity_world) };
-        });
-    }
     onward.call();
     onward.run(&RETIRE_FUSE, "freeing what the game was handed", |_| {
         crate::engine::retire::step();
@@ -487,8 +509,9 @@ fn client_move<N: Fn()>(
     }
 }
 
-/// Copies the events `S` wants from `entity_world`'s streams into this
-/// thread's batch of `S`, letting the loader's filters screen each first.
+/// Copies the events `S` wants of `sealed` from `entity_world`'s streams
+/// into this thread's batch of `S`, letting the loader's filters screen
+/// each first.
 ///
 /// # Safety
 ///
@@ -496,10 +519,10 @@ fn client_move<N: Fn()>(
 ///   `layout` says.
 /// - Called on the thread that steps it, before the engine moves its event
 ///   streams, so no system writes them during the call.
-unsafe fn copy<S: Scope>(layout: &Layout, entity_world: *mut u8) {
-    let Some(sealed) = SEALED.get().filter(|sealed| !S::idle(sealed)) else {
+unsafe fn copy<S: Scope>(sealed: &Sealed, layout: &Layout, entity_world: *mut u8) {
+    if S::idle(sealed) {
         return;
-    };
+    }
     let world = entity_world.expose_provenance();
     // SAFETY: `world` is the live entity world of `S` on its thread (the
     // caller's contract); the table's `ecs.event_streams` offset holds its
@@ -614,9 +637,8 @@ fn deliver<S: Scope>(loader: &Loader) {
             size: event.size,
             data: payload.as_ptr(),
         };
-        for subscriber in sealed.subscribers.iter().filter(|s| {
-            s.whose == S::WHOSE
-                && (s.type_hash == 0 || s.type_hash == event.type_hash)
+        for subscriber in S::wanted(sealed).subscribers.iter().filter(|s| {
+            (s.type_hash == 0 || s.type_hash == event.type_hash)
                 && loader
                     .mods
                     .get(s.owner.get())
@@ -644,9 +666,10 @@ fn deliver<S: Scope>(loader: &Loader) {
 }
 
 /// The server's copy of one move with `wanted` the one type a handler asked
-/// for, then the batch emptied, for `benches/event_copy.rs`. `offsets` are
-/// the stream layout in the build table's order: streams, stream count,
-/// stream size, stream used, record size, record header, record align.
+/// for, then the batch emptied, for `benches/event_copy.rs`; it leaves the
+/// loader's own subscriptions alone. `offsets` are the stream layout in the
+/// build table's order: streams, stream count, stream size, stream used,
+/// record size, record header, record align.
 ///
 /// # Safety
 ///
@@ -663,15 +686,14 @@ pub unsafe fn bench_server_copy(entity_world: *mut u8, offsets: [usize; 7], want
         record_header,
         record_align,
     ] = offsets;
-    let _first = SEALED.set(Sealed {
+    let sealed = Sealed {
         server: Wanted {
             types: [wanted].into_iter().collect(),
-            every: false,
+            ..Wanted::default()
         },
         client: Wanted::default(),
-        subscribers: Box::new([]),
         equipment: None,
-    });
+    };
     let layout = Layout {
         streams,
         stream_count,
@@ -681,8 +703,10 @@ pub unsafe fn bench_server_copy(entity_world: *mut u8, offsets: [usize; 7], want
         record_header,
         record_align,
     };
-    // SAFETY: the caller's contract.
-    unsafe { copy::<ServerScope>(&layout, entity_world) };
+    // SAFETY: `entity_world` holds streams laid out as `layout` says, which
+    // nothing else reads or writes during the call (this function's
+    // `# Safety`), all `copy` asks of a world and its thread.
+    unsafe { copy::<ServerScope>(&sealed, &layout, entity_world) };
     BATCH.with_borrow_mut(|batch| {
         batch.events.clear();
         batch.bytes.clear();
@@ -709,7 +733,6 @@ mod tests {
         Sealed {
             server: Wanted::of(subscribers, Whose::Server),
             client: Wanted::of(subscribers, Whose::Client),
-            subscribers: subscribers.into(),
             equipment: None,
         }
     }
@@ -736,26 +759,56 @@ mod tests {
 
     #[test]
     fn a_dedicated_server_answers_a_client_handler_without_keeping_it() {
+        let before = PENDING.relock().len();
         let status = register(
             Side::SERVER,
             Whose::Client,
             ModIndex::new(0),
+            true,
             42,
             unused,
             core::ptr::null_mut(),
         );
         assert_eq!(status, Status::OK);
-        assert!(PENDING.relock().is_empty());
+        assert_eq!(PENDING.relock().len(), before);
         let status = register(
             Side::CLIENT,
             Whose::Client,
             ModIndex::new(0),
+            true,
             0,
             unused,
             core::ptr::null_mut(),
         );
         assert_eq!(status, Status::OK, "every type is a client handler too");
-        assert_eq!(PENDING.relock().len(), 1);
+        assert_eq!(PENDING.relock().pop().map(|s| s.whose), Some(Whose::Client));
+    }
+
+    #[test]
+    fn a_handler_registered_outside_its_mod_s_init_is_too_late_on_either_world() {
+        let before = PENDING.relock().len();
+        for whose in [Whose::Server, Whose::Client] {
+            let status = register(
+                Side::CLIENT,
+                whose,
+                ModIndex::new(0),
+                false,
+                42,
+                unused,
+                core::ptr::null_mut(),
+            );
+            assert_eq!(status, Status::TOO_LATE, "{whose:?}");
+        }
+        assert_eq!(PENDING.relock().len(), before);
+    }
+
+    #[test]
+    fn the_bench_copy_leaves_the_subscriptions_unsealed() {
+        let mut world = [0u64; 2];
+        // SAFETY: `world` is a stream array pointer of 0 and a count of 0,
+        // laid out as the offsets say, which nothing else touches.
+        unsafe { bench_server_copy(world.as_mut_ptr().cast(), [0, 8, 0x18, 0x10, 6, 8, 8], 42) };
+        assert!(SEALED.get().is_none(), "mods could still subscribe");
     }
 
     #[test]
@@ -769,6 +822,33 @@ mod tests {
         let every = sealed_with(&[subscriber(Whose::Client, 0)]);
         assert!(ClientScope::copies(&every, 99));
         assert!(!ServerScope::copies(&every, 99));
+        let hashes = |wanted: &Wanted| {
+            wanted
+                .subscribers
+                .iter()
+                .map(|s| s.type_hash)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(hashes(ServerScope::wanted(&sealed)), [42]);
+        assert_eq!(hashes(ClientScope::wanted(&sealed)), [7]);
+    }
+
+    #[test]
+    fn a_server_world_nothing_wants_is_idle() {
+        let client_only = sealed_with(&[subscriber(Whose::Client, 7)]);
+        assert!(
+            ServerScope::idle(&client_only),
+            "no handler, stats, filter or item action"
+        );
+        assert!(!ServerScope::idle(&sealed_with(&[subscriber(
+            Whose::Server,
+            42
+        )])));
+        let equipment = Sealed {
+            equipment: Some(43),
+            ..sealed_with(&[])
+        };
+        assert!(!ServerScope::idle(&equipment));
     }
 
     #[test]
@@ -824,7 +904,7 @@ mod tests {
     #[test]
     fn a_build_without_the_stream_layout_lists_only_the_delivery_off_by_the_entry_it_lacks() {
         let loader = crate::start::tests::bare_loader();
-        assert!(stream_layout(&loader).is_none());
+        assert!(stream_layout(&loader, true).is_none());
         assert!(DELIVERY_FUSE.is_off());
         assert!(!EVENTS_FUSE.is_off(), "the move still links for the rest");
         let reason = crate::base::off_reason(&DELIVERY_FUSE).unwrap_or_default();
@@ -837,7 +917,12 @@ mod tests {
     #[test]
     fn a_client_build_without_the_stream_layout_lists_its_client_events_off_too() {
         let loader = crate::start::tests::pinning_loader(Side::CLIENT, &[], &[]);
-        assert!(stream_layout(&loader).is_none());
+        assert!(stream_layout(&loader, false).is_none());
+        assert!(
+            !CLIENT_FUSE.is_off(),
+            "no mod asked for client events, so none is listed off"
+        );
+        assert!(stream_layout(&loader, true).is_none());
         assert!(DELIVERY_FUSE.is_off());
         assert!(
             CLIENT_FUSE.is_off(),

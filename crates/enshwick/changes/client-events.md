@@ -13,13 +13,15 @@
 
 ### Fixed
 
-- Loader: while a hosted game starts, the events of its server's world no
-  longer reach the client's handlers (#1081).
+- Loader: while a hosted game starts, and after it ends until its server is
+  torn down, the events of its server's world no longer reach the client's
+  handlers (#1081).
 - Loader: the client's notices are raised before its world's events move,
-  also while client game events are off (#1081).
+  also while client game events are off, and never reach the client's
+  handlers as game events (#1081).
 - Loader: on a build without the event stream layout, a client lists client
-  game events as off (#1081).
-- A client game event subscription on a dedicated server is kept without an
-  error, so a `both` mod no longer turns off there (#1081).
-- The fake host refuses a game event subscription after init, as the loader
-  does (#1081).
+  game events as off when a mod subscribed to them (#1081).
+- A client game event subscription on a dedicated server answers without an
+  error and is not kept, so a `both` mod no longer turns off there (#1081).
+- The loader and the fake host refuse a game event subscription outside the
+  mod's init (#1081).

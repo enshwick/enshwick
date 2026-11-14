@@ -33,6 +33,8 @@ pub(crate) enum Subscription {
 /// A game event type and the fields a script reads from it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RawSpec {
+    /// The script function that subscribed, for its refusals.
+    pub(crate) what: String,
     pub(crate) type_name: String,
     pub(crate) fields: Vec<(String, FieldKind)>,
 }
@@ -111,6 +113,7 @@ impl Subscription {
         }
         read.sort_unstable_by(|a, b| a.0.cmp(&b.0));
         Ok(RawSpec {
+            what: what.to_owned(),
             type_name,
             fields: read,
         })
@@ -203,7 +206,7 @@ impl RawReader {
             .find(|name| *name == spec.type_name)
             .ok_or_else(|| {
                 unsubscribable(
-                    "this game build",
+                    format_args!("{}: this game build", spec.what),
                     format_args!("game event type {}", spec.type_name),
                 )
             })?;
