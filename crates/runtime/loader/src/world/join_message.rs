@@ -7,10 +7,12 @@
 
 use enshwick_core::PlayerKey;
 
+use crate::engine::pinned::session;
+
 /// The bytes of an account id the game hashes.
 const ID_SIZE: usize = 8;
-/// The account kind, and the session platform, of Steam: the one kind the
-/// game keys.
+/// The session platform of Steam, the one platform whose accounts the game
+/// keys: there it keys every account of a kind other than zero.
 pub(crate) const STEAM: u8 = 3;
 /// The game's start value for the FNV-1a 64 hash of an account id.
 const KEY_SEED: u64 = 0x3f63_b56d_b289_0a16;
@@ -23,8 +25,9 @@ const PEER_MASK: u16 = 0x3f;
 /// The ban branch's wait before the session closes a refused peer: one
 /// second.
 pub(crate) const CLOSE_IN_NS: u64 = 1_000_000_000;
-/// The largest message the loader copies.
-const MAX_MESSAGE: usize = 0x4000; // bound, not a game offset: room the loader keeps
+/// The largest message the loader reads, and the stack room it keeps for a
+/// message's accounts and for a reply.
+pub(crate) const MAX_MESSAGE: usize = 0x1000; // bound, not a game offset: room the loader keeps
 
 /// Where a build keeps a join message's accounts, its reply's banned flags
 /// and a session peer slot's fields; made only by [`JoinLayout::new`], which
@@ -78,18 +81,58 @@ pub(crate) struct JoinOffsets {
 }
 
 impl JoinLayout {
-    /// The layout of `offsets`; `None` when a field falls outside what holds
-    /// it, as a misread table would give.
-    pub(crate) fn new(offsets: &JoinOffsets) -> Option<Self> {
+    /// The layout of `offsets`; else the build table id of the first entry
+    /// that falls outside what holds it, as a misread table would give.
+    pub(crate) fn new(offsets: &JoinOffsets) -> Result<Self, &'static str> {
         let o = offsets;
         let inside = |at: usize, size: usize, room: usize| {
             at.checked_add(size).is_some_and(|end| end <= room)
         };
+        let fits = |holds: bool, id: &'static str| if holds { Ok(()) } else { Err(id) };
+        let banned_a = o.banned_frame[0].checked_sub(o.reply_frame);
+        let banned_b = o.banned_frame[1].checked_sub(o.reply_frame);
+        let slot_open = o.peer_slot_open.checked_sub(o.peer_slots);
+        let slot_close = o.peer_slot_close.checked_sub(o.peer_slots);
+        fits(o.message_size <= MAX_MESSAGE, session::MESSAGE_SIZE.id())?;
+        fits(
+            inside(o.count, size_of::<u32>(), o.message_size),
+            session::JOIN_COUNT.id(),
+        )?;
+        fits(
+            o.account_size >= size_of::<u32>(),
+            session::JOIN_ACCOUNT_SIZE.id(),
+        )?;
+        fits(
+            inside(o.accounts, o.account_size, o.message_size),
+            session::JOIN_ACCOUNTS.id(),
+        )?;
+        fits(
+            inside(o.account_id, ID_SIZE, o.account_size),
+            session::JOIN_ACCOUNT_ID.id(),
+        )?;
+        fits(
+            inside(o.account_kind, 1, o.account_size),
+            session::JOIN_ACCOUNT_KIND.id(),
+        )?;
         let banned = [
-            o.banned_frame[0].checked_sub(o.reply_frame)?,
-            o.banned_frame[1].checked_sub(o.reply_frame)?,
+            banned_a
+                .filter(|&flag| inside(flag, 1, o.message_size))
+                .ok_or(session::REPLY_BANNED_A.id())?,
+            banned_b
+                .filter(|&flag| inside(flag, 1, o.message_size))
+                .ok_or(session::REPLY_BANNED_B.id())?,
         ];
-        let layout = Self {
+        fits(
+            o.peer_slot_size >= size_of::<u16>(),
+            session::PEER_SLOT_SIZE.id(),
+        )?;
+        let slot_open = slot_open
+            .filter(|&at| inside(at, 1, o.peer_slot_size))
+            .ok_or(session::PEER_SLOT_OPEN.id())?;
+        let slot_close = slot_close
+            .filter(|&at| inside(at, size_of::<u64>(), o.peer_slot_size))
+            .ok_or(session::PEER_SLOT_CLOSE.id())?;
+        Ok(Self {
             message_size: o.message_size,
             count: o.count,
             accounts: o.accounts,
@@ -98,63 +141,62 @@ impl JoinLayout {
             account_kind: o.account_kind,
             banned,
             peer_slot_size: o.peer_slot_size,
-            slot_open: o.peer_slot_open.checked_sub(o.peer_slots)?,
-            slot_close: o.peer_slot_close.checked_sub(o.peer_slots)?,
-        };
-        let fits = o.message_size <= MAX_MESSAGE
-            && inside(o.count, size_of::<u32>(), o.message_size)
-            && inside(o.accounts, o.account_size, o.message_size)
-            && o.account_size >= size_of::<u32>()
-            && inside(o.account_id, ID_SIZE, o.account_size)
-            && inside(o.account_kind, 1, o.account_size)
-            && banned.iter().all(|&flag| inside(flag, 1, o.message_size))
-            && o.peer_slot_size >= size_of::<u16>()
-            && inside(layout.slot_open, 1, o.peer_slot_size)
-            && inside(layout.slot_close, size_of::<u64>(), o.peer_slot_size);
-        fits.then_some(layout)
+            slot_open,
+            slot_close,
+        })
     }
 
-    /// The size of a decoded session message, which the loader copies whole.
-    pub(crate) const fn message_size(&self) -> usize {
-        self.message_size
+    /// Where a join message keeps its `u32` count of accounts.
+    pub(crate) const fn count(&self) -> usize {
+        self.count
     }
 
-    /// The accounts a join message brings, each with its key, `None` for an
-    /// account the game keys none for, on a session of another platform than
-    /// Steam none at all; `None` for a message of another size or whose count
-    /// passes the entries it holds, which no game sends.
-    pub(crate) fn accounts(&self, message: &[u8], steam: bool) -> Option<Vec<Option<PlayerKey>>> {
-        if message.len() != self.message_size {
-            return None;
-        }
-        let count = usize::try_from(u32_at(message, self.count)).ok()?;
-        if count > (self.message_size - self.accounts) / self.account_size {
-            return None;
-        }
-        Some(
-            (0..count)
-                .map(|i| {
-                    let entry =
-                        &message[self.accounts + i * self.account_size..][..self.account_size];
-                    (steam && entry[self.account_kind] == STEAM).then(|| {
-                        let len =
-                            usize::try_from(u32_at(entry, 0)).map_or(ID_SIZE, |n| n.min(ID_SIZE));
-                        let mut id = [0; ID_SIZE];
-                        id[..len].copy_from_slice(&entry[self.account_id..][..len]);
-                        key(id)
-                    })
-                })
-                .collect(),
-        )
+    /// Where a join message's accounts start.
+    pub(crate) const fn accounts(&self) -> usize {
+        self.accounts
     }
 
-    /// The reply the ban branch sends, kind [`REFUSED_KIND`].
-    pub(crate) fn refusal(&self) -> Vec<u8> {
-        let mut reply = vec![0; self.message_size];
+    /// The bytes `count` accounts take from [`Self::accounts`], at most
+    /// [`MAX_MESSAGE`]; `None` for a count past the entries the message
+    /// holds, which no game sends.
+    pub(crate) fn accounts_size(&self, count: u32) -> Option<usize> {
+        let count = usize::try_from(count).ok()?;
+        (count <= (self.message_size - self.accounts) / self.account_size)
+            .then(|| count * self.account_size)
+    }
+
+    /// The key of each account entry in `entries`, as the game gives it:
+    /// `None` for an account of kind zero, and on a session of another
+    /// platform than Steam for every account.
+    pub(crate) fn keys<'a>(
+        &'a self,
+        entries: &'a [u8],
+        steam: bool,
+    ) -> impl Iterator<Item = Option<PlayerKey>> + 'a {
+        entries.chunks_exact(self.account_size).map(move |entry| {
+            (steam && entry[self.account_kind] != 0).then(|| {
+                let len = usize::try_from(u32_at(entry, 0)).map_or(ID_SIZE, |n| n.min(ID_SIZE));
+                let mut id = [0; ID_SIZE];
+                id[..len].copy_from_slice(&entry[self.account_id..][..len]);
+                key(id)
+            })
+        })
+    }
+
+    /// The reply the ban branch sends, kind [`REFUSED_KIND`], in its first
+    /// message size bytes.
+    pub(crate) fn refusal(&self) -> [u8; MAX_MESSAGE] {
+        let mut reply = [0; MAX_MESSAGE];
         for flag in self.banned {
             reply[flag] = 1;
         }
         reply
+    }
+
+    /// The size of the reply the session's send reads.
+    #[cfg(test)]
+    pub(crate) const fn message_size(&self) -> usize {
+        self.message_size
     }
 
     /// Where peer `peer`'s slot starts among the session's peer slots.
@@ -219,18 +261,19 @@ pub(crate) mod tests {
         JoinLayout::new(&offsets()).unwrap()
     }
 
-    fn message(entries: &[(u32, &[u8], u8)]) -> Vec<u8> {
+    /// The keys of the account entries `(id length, id, kind)`, read as the
+    /// join check reads a message.
+    fn keys(entries: &[(u32, &[u8], u8)], steam: bool) -> Vec<Option<PlayerKey>> {
         let o = offsets();
-        let mut message = vec![0; o.message_size];
-        let count = u32::try_from(entries.len()).unwrap();
-        message[o.count..o.count + 4].copy_from_slice(&count.to_le_bytes());
-        for (i, (len, id, kind)) in entries.iter().enumerate() {
-            let entry = &mut message[o.accounts + i * o.account_size..][..o.account_size];
+        let mut bytes = vec![0; entries.len() * o.account_size];
+        for (entry, (len, id, kind)) in bytes.chunks_exact_mut(o.account_size).zip(entries) {
             entry[..4].copy_from_slice(&len.to_le_bytes());
             entry[o.account_id..o.account_id + id.len()].copy_from_slice(id);
             entry[o.account_kind] = *kind;
         }
-        message
+        let count = u32::try_from(entries.len()).unwrap();
+        assert_eq!(layout().accounts_size(count), Some(bytes.len()));
+        layout().keys(&bytes, steam).collect()
     }
 
     #[test]
@@ -238,48 +281,47 @@ pub(crate) mod tests {
         // Seen live on server 26430253: this Steam id's player and its
         // bannedAccounts entry carry the key.
         let steam = 76_561_198_447_973_054_u64.to_le_bytes();
-        let keys = layout()
-            .accounts(&message(&[(8, &steam, STEAM)]), true)
-            .unwrap();
-        assert_eq!(keys, [Some(PlayerKey::new(6_667_203_504_487_031_118))]);
+        assert_eq!(
+            keys(&[(8, &steam, STEAM)], true),
+            [Some(PlayerKey::new(6_667_203_504_487_031_118))]
+        );
     }
 
     #[test]
-    fn an_account_of_another_kind_has_no_key_and_a_short_id_hashes_zero_padded() {
-        let keys = layout()
-            .accounts(&message(&[(8, &[1; 8], 2), (2, &[7, 9], STEAM)]), true)
-            .unwrap();
+    fn an_account_of_any_kind_but_zero_has_a_key_and_a_short_id_hashes_zero_padded() {
+        // Server 26430253's join handler keys an entry whenever its kind is
+        // not zero on a Steam session, whatever the kind.
+        let keys = keys(
+            &[(8, &[1; 8], 0), (8, &[1; 8], 1), (2, &[7, 9], STEAM)],
+            true,
+        );
         assert_eq!(keys[0], None);
-        assert_eq!(keys[1], Some(key([7, 9, 0, 0, 0, 0, 0, 0])));
+        assert_eq!(keys[1], Some(key([1; 8])));
+        assert_eq!(keys[2], Some(key([7, 9, 0, 0, 0, 0, 0, 0])));
     }
 
     #[test]
     fn a_session_of_another_platform_keys_no_account() {
-        let keys = layout()
-            .accounts(&message(&[(8, &[1; 8], STEAM)]), false)
-            .unwrap();
-        assert_eq!(keys, [None]);
+        assert_eq!(keys(&[(8, &[1; 8], STEAM)], false), [None]);
     }
 
     #[test]
     fn an_id_length_past_eight_bytes_reads_only_eight() {
-        let keys = layout()
-            .accounts(&message(&[(u32::MAX, &[5; 8], STEAM)]), true)
-            .unwrap();
-        assert_eq!(keys, [Some(key([5; 8]))]);
+        assert_eq!(
+            keys(&[(u32::MAX, &[5; 8], STEAM)], true),
+            [Some(key([5; 8]))]
+        );
     }
 
     #[test]
-    fn a_count_past_what_the_message_holds_or_a_message_of_another_size_reads_nothing() {
+    fn a_count_past_what_the_message_holds_reads_nothing() {
         let o = offsets();
         let most = (o.message_size - o.accounts) / o.account_size;
-        let mut full = message(&[]);
         let count = u32::try_from(most).unwrap();
-        full[o.count..o.count + 4].copy_from_slice(&count.to_le_bytes());
-        assert_eq!(layout().accounts(&full, true).map(|a| a.len()), Some(most));
-        full[o.count..o.count + 4].copy_from_slice(&(count + 1).to_le_bytes());
-        assert_eq!(layout().accounts(&full, true), None);
-        assert_eq!(layout().accounts(&full[1..], true), None);
+        assert_eq!(layout().accounts_size(count), Some(most * o.account_size));
+        assert_eq!(layout().accounts_size(count + 1), None);
+        assert_eq!(layout().accounts_size(u32::MAX), None);
+        assert!(most * o.account_size <= MAX_MESSAGE);
     }
 
     #[test]
@@ -300,43 +342,67 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_layout_with_a_field_outside_what_holds_it_is_refused() {
+    fn a_layout_with_a_field_outside_what_holds_it_is_refused_naming_that_field() {
         let wrong = [
-            JoinOffsets {
-                message_size: 0x8000,
-                ..offsets()
-            },
-            JoinOffsets {
-                count: 0x48e,
-                ..offsets()
-            },
-            JoinOffsets {
-                account_id: 0xc,
-                ..offsets()
-            },
-            JoinOffsets {
-                account_kind: 0x10,
-                ..offsets()
-            },
-            JoinOffsets {
-                banned_frame: [0x2ac, 0x200],
-                ..offsets()
-            },
-            JoinOffsets {
-                banned_frame: [0x6e0, 0x2a4],
-                ..offsets()
-            },
-            JoinOffsets {
-                peer_slot_close: 0x1_1428,
-                ..offsets()
-            },
-            JoinOffsets {
-                peer_slot_open: 0x1_1400,
-                ..offsets()
-            },
+            (
+                JoinOffsets {
+                    message_size: 0x8000,
+                    ..offsets()
+                },
+                session::MESSAGE_SIZE,
+            ),
+            (
+                JoinOffsets {
+                    count: 0x48e,
+                    ..offsets()
+                },
+                session::JOIN_COUNT,
+            ),
+            (
+                JoinOffsets {
+                    account_id: 0xc,
+                    ..offsets()
+                },
+                session::JOIN_ACCOUNT_ID,
+            ),
+            (
+                JoinOffsets {
+                    account_kind: 0x10,
+                    ..offsets()
+                },
+                session::JOIN_ACCOUNT_KIND,
+            ),
+            (
+                JoinOffsets {
+                    banned_frame: [0x2ac, 0x200],
+                    ..offsets()
+                },
+                session::REPLY_BANNED_B,
+            ),
+            (
+                JoinOffsets {
+                    banned_frame: [0x6e0, 0x2a4],
+                    ..offsets()
+                },
+                session::REPLY_BANNED_A,
+            ),
+            (
+                JoinOffsets {
+                    peer_slot_close: 0x1_1428,
+                    ..offsets()
+                },
+                session::PEER_SLOT_CLOSE,
+            ),
+            (
+                JoinOffsets {
+                    peer_slot_open: 0x1_1400,
+                    ..offsets()
+                },
+                session::PEER_SLOT_OPEN,
+            ),
         ];
-        for offsets in wrong {
-            assert_eq!(JoinLayout::new(&offsets), None, "{offsets:?}");
+        for (offsets, entry) in wrong {
+            assert_eq!(JoinLayout::new(&offsets), Err(entry.id()), "{offsets:?}");
         }
     }
 }

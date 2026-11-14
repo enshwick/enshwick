@@ -2035,10 +2035,11 @@ pub struct HostApi {
     /// added. The first 0 refuses the machine: it gets the game's own reply
     /// for an account on the ban list, which its player reads as the host
     /// denying access, and loads no world. The loader writes nothing to the
-    /// ban list, and the rules of a mod that is off are not asked. Server
-    /// only: on a client it runs while it hosts a game, and a build without
-    /// the join path turns the rules off, listed on the Mods screen. Allowed
-    /// during `enshwick_mod_init` only ([`Status::TOO_LATE`] after it);
+    /// ban list, and the rules of a mod that is off are not asked. A machine
+    /// that already joined keeps playing: the game drops its join message.
+    /// Server only: on a client it runs while it hosts a game. A build
+    /// without the join path answers [`Status::MISSING`]. Allowed during
+    /// `enshwick_mod_init` only ([`Status::TOO_LATE`] after it);
     /// `callback` and `user` are kept for the life of the process and never
     /// freed by the loader. A panic in the loader returns
     /// [`Status::REFUSED`]. ABI 11.30.

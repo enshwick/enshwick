@@ -537,6 +537,8 @@ asked.
 The rule runs on the thread the server reads joins on, so it answers at
 once from what the mod holds. A panic in the rule turns the mod off and lets
 that account in. A dedicated server and a game a client hosts both ask it.
+On a game build without the join path, `on_join` returns an error at init.
+The mod can then choose another way, such as a kick when the player joins.
 
 ```rust
 use enshwick::PlayerKey;

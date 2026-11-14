@@ -741,8 +741,15 @@ pub struct JoinCall {
 
 impl_headed!(JoinCall);
 
-/// A mod's join rule: the call and the pointer given at registration;
-/// returns 1 to let the account in, 0 to refuse it.
+/// A mod's join rule, registered with
+/// [`HostApi::join_rule`](super::HostApi::join_rule).
+///
+/// It is called on the thread the session reads its messages on, not the
+/// game thread, once for each account a joining machine brings; it returns
+/// 1 to let the account in and 0 to refuse it, any other answer letting it
+/// in. `call` is borrowed for the call and never null; `user` is the
+/// pointer given at registration, passed as it is. Never re-entered; it must
+/// not unwind.
 ///
 /// # Examples
 ///

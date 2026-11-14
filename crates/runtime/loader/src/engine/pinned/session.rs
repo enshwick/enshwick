@@ -2,6 +2,7 @@
 
 use super::{Constant, Symbol};
 
+pub(crate) const FIND_MACHINE: Symbol = Symbol::new("session.find_machine");
 pub(crate) const HOST_MACHINE: Constant = Constant::new("session.host_machine");
 pub(crate) const JOIN_ACCOUNT_ID: Constant = Constant::new("session.join_account_id");
 pub(crate) const JOIN_ACCOUNT_KIND: Constant = Constant::new("session.join_account_kind");

@@ -8997,6 +8997,13 @@ take = "address"
 check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi"]
 
 [[route]]
+id = "session.find_machine"
+in = "session.join_game"
+shape = ["mov r14,rcx", "movzx edx,r8w", "call *", "test rax,rax"]
+take = "address"
+check = ["mov [rsp+0x10],dx", "sub rsp,0x58"]
+
+[[route]]
 id = "session.peer_slots"
 in = "session.join_game"
 shape = ["and ecx,0x3f", "add rcx,rcx", "mov [r14+rcx*8+*],ax", "mov byte [r14+rcx*8+?],0x0", "mov qword [r14+rcx*8+?],0x3b9aca00"]

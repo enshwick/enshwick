@@ -18,7 +18,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader refuses the rule, as after init.
+    /// [`Off`] when the loader refuses the rule, as after init, or on a game
+    /// build without the join path, so the mod can choose another way.
     ///
     /// # Examples
     ///

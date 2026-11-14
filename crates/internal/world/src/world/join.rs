@@ -27,7 +27,8 @@ where
     // all-zero call is valid. Every field is there since the minor that added
     // join rules.
     let Some(call) = (unsafe { read_headed(call, size_of::<JoinCall>()) }) else {
-        return 1;
+        // A call the rule cannot read refuses, so a broken gate keeps accounts out.
+        return 0;
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let rule = unsafe { &*user.cast::<F>() };
@@ -88,5 +89,17 @@ mod tests {
         assert_eq!(rule_call(&rule, 8), 0);
         let none = |join: &Join| join.player.is_none();
         assert_eq!(rule_call(&none, 0), 1);
+    }
+
+    #[test]
+    fn a_call_the_rule_cannot_read_refuses_the_account() {
+        fn let_in(_: &Join) -> bool {
+            true
+        }
+        let rule: fn(&Join) -> bool = let_in;
+        let user = core::ptr::from_ref(&rule).cast_mut().cast::<c_void>();
+        // SAFETY: no call, which `read_headed` refuses, and the rule as user.
+        let answer = unsafe { run_rule::<fn(&Join) -> bool>(core::ptr::null(), user) };
+        assert_eq!(answer, 0);
     }
 }
