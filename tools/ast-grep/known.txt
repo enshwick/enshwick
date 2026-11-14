@@ -20,10 +20,8 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/world/altars.rs stati
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/code.rs static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
 # The resources mods serve during init, sealed at its end; they move into
 # a `Registry<T>`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/content/served.rs static PENDING: Mutex<Vec<Served>> = Mutex::new(Vec::new());
 # The texts mods add during init; they move into a `Registry<T>` beside the
 # served resources.
-static-is-registry-fuse-or-state crates/runtime/loader/src/content/served/texts.rs pub(super) static PENDING_TEXTS: Mutex<Vec<(u32, u32, String)>> = Mutex::new(Vec::new());
 # The mods that asked to change the day's speed, a mod registration; it
 # moves into a `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/world/daytime.rs static SPEED_MODS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
@@ -97,12 +95,6 @@ loader-flag-is-in-state crates/runtime/loader/src/base/net.rs static SERVER_RUNS
 loader-flag-is-in-state crates/runtime/loader/src/base/notices.rs static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
 loader-flag-is-in-state crates/runtime/loader/src/base/saves.rs static UNDER_WAY: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/base/saves/holds.rs static HOLDING: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/content/recipes/live.rs static DIRTY: AtomicBool = AtomicBool::new(true);
-loader-flag-is-in-state crates/runtime/loader/src/content/served/texts.rs pub(super) static LANGUAGE: core::sync::atomic::AtomicU32 =
-loader-flag-is-in-state crates/runtime/loader/src/content/served/texts.rs pub(super) static POOL_LANGUAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
-loader-flag-is-in-state crates/runtime/loader/src/content/textures.rs static CONTENT_LINKED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/content/textures.rs static LISTED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/content/textures.rs static RELISTED: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/engine/builds.rs static PATTERNS: AtomicBool = AtomicBool::new(true);
 loader-flag-is-in-state crates/runtime/loader/src/engine/code.rs static LIFTED: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/engine/code.rs static SEALED: AtomicBool = AtomicBool::new(false);

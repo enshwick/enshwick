@@ -71,29 +71,104 @@ struct Live {
     problems: Vec<String>,
 }
 
-static DISABLED: LazyLock<ArcSwap<Disabled>> = LazyLock::new(ArcSwap::default);
-static LISTS: LazyLock<ArcSwap<Lists>> = LazyLock::new(ArcSwap::default);
-static LIVE: Mutex<Option<Live>> = Mutex::new(None);
+/// The disabled recipes' state in this process: the recipes disabled, the
+/// lookup's lists, the rules, and the layout the start resolved.
+struct Recipes {
+    disabled: ArcSwap<Disabled>,
+    lists: ArcSwap<Lists>,
+    live: Mutex<Live>,
+    /// Unset until the start resolves it, `None` on a build without it.
+    layout: OnceLock<Option<RecipeLayout>>,
+    /// Set when the rules or what they resolve against changed.
+    dirty: AtomicBool,
+}
+
+impl Recipes {
+    fn new() -> Self {
+        Self {
+            disabled: ArcSwap::default(),
+            lists: ArcSwap::default(),
+            live: Mutex::default(),
+            layout: OnceLock::new(),
+            dirty: AtomicBool::new(true),
+        }
+    }
+
+    fn live<R>(&self, work: impl FnOnce(&mut Live) -> R) -> R {
+        work(&mut self.live.relock())
+    }
+
+    fn layout(&self) -> Option<&RecipeLayout> {
+        self.layout.get().and_then(Option::as_ref)
+    }
+
+    /// Notes that the rules or what they resolve against changed.
+    fn changed(&self) {
+        self.dirty.store(true, Ordering::Release);
+    }
+
+    /// Keeps the resolved layout, or turns disabled recipes off by their
+    /// fuse.
+    fn keep_layout(
+        &self,
+        loader: &Loader,
+        resolved: Result<RecipeLayout, impl core::fmt::Display>,
+    ) -> bool {
+        if let Err(off) = &resolved {
+            let why = format!("does not resolve: {off}");
+            let _off = loader.fuse_off(&DISABLED_FUSE, super::RECIPE_LAYOUT, &why);
+        }
+        let _first = self.layout.set(resolved.ok());
+        self.layout().is_some()
+    }
+
+    /// Mod `owner`'s rule: added, or taken back.
+    fn rule(&self, owner: ModIndex, kind: Kind, name: &str, disable: bool) -> Status {
+        // Mods' init runs before `init` resolves the layout: keep their rules
+        // until then, and refuse only on a build known to lack it.
+        if self.layout.get().is_some_and(Option::is_none) {
+            return Status::MISSING;
+        }
+        self.live(|l| {
+            l.mods
+                .retain(|(o, k, n)| !(*o == owner.get() && *k == kind && n == name));
+            if disable {
+                l.mods.push((owner.get(), kind, name.to_owned()));
+            }
+        });
+        self.changed();
+        Status::OK
+    }
+
+    /// Forgets what came from the server a client hosted or joined; the
+    /// client's own rules apply again at the next poll.
+    fn forget(&self) {
+        self.live(|l| {
+            l.server = None;
+            l.incoming.clear();
+            l.problems.clear();
+        });
+        self.changed();
+    }
+}
+
+static RECIPES: LazyLock<Recipes> = LazyLock::new(Recipes::new);
 /// The switch of the disabled recipes: off where the build does not reflect
 /// or read the recipe registry, and the rules mods set in init then do
 /// nothing.
 static DISABLED_FUSE: Fuse = Fuse::new("disabled recipes");
-static LAYOUT: OnceLock<Option<RecipeLayout>> = OnceLock::new();
-/// Set when the rules or what they resolve against changed.
-static DIRTY: AtomicBool = AtomicBool::new(true);
 
 fn live<R>(work: impl FnOnce(&mut Live) -> R) -> R {
-    let mut guard = LIVE.relock();
-    work(guard.get_or_insert_with(Live::default))
+    RECIPES.live(work)
 }
 
 fn layout() -> Option<&'static RecipeLayout> {
-    LAYOUT.get().and_then(Option::as_ref)
+    LazyLock::force(&RECIPES).layout()
 }
 
 /// Sets disabled recipes up: the layout and the lookup hook. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
-    if !keep_layout(
+    if !RECIPES.keep_layout(
         loader,
         RecipeLayout::resolve(&Reflected(&loader.reflection)),
     ) {
@@ -103,17 +178,7 @@ pub(crate) fn init(loader: &'static Loader) {
     // see it, disabled recipes stay in the crafting menus and the rest of
     // them holds.
     let _linked = crate::engine::code::link_recipe_lookup(loader);
-    DIRTY.store(true, Ordering::Release);
-}
-
-/// Keeps the resolved layout, or turns disabled recipes off by their fuse.
-fn keep_layout(loader: &Loader, resolved: Result<RecipeLayout, impl core::fmt::Display>) -> bool {
-    if let Err(off) = &resolved {
-        let why = format!("does not resolve: {off}");
-        let _off = loader.fuse_off(&DISABLED_FUSE, super::RECIPE_LAYOUT, &why);
-    }
-    let _first = LAYOUT.set(resolved.ok());
-    layout().is_some()
+    RECIPES.changed();
 }
 
 /// Turns disabled recipes off: the recipe registry, the game's or the one
@@ -127,8 +192,8 @@ fn unreadable(loader: &Loader, registry: &str) {
         registry,
         "does not read with the recipe layout",
     );
-    let generation = DISABLED.load().generation + 1;
-    DISABLED.store(Arc::new(Disabled {
+    let generation = RECIPES.disabled.load().generation + 1;
+    RECIPES.disabled.store(Arc::new(Disabled {
         ids: FxHashSet::default(),
         generation,
     }));
@@ -162,7 +227,7 @@ pub(crate) fn poll(loader: &Loader) {
         l.stamps = seen;
         moved
     });
-    if (moved | DIRTY.swap(false, Ordering::AcqRel))
+    if (moved | RECIPES.dirty.swap(false, Ordering::AcqRel))
         && let Some(index) = ensure_index(loader)
     {
         apply(loader, &index);
@@ -178,7 +243,7 @@ fn ensure_index(loader: &Loader) -> Option<Arc<Index>> {
     if crate::content::served::served_recipes() {
         // Mods change the registry: wait for the game's build of it, and
         // look again next poll, as the build may fail or its mods turn off.
-        DIRTY.store(true, Ordering::Release);
+        RECIPES.changed();
         return None;
     }
     let read = crate::engine::archive::game()
@@ -350,7 +415,7 @@ fn apply(loader: &Loader, index: &Index) {
         }
     }
     let ids: FxHashSet<u32> = ids.into_iter().collect();
-    let old = DISABLED.load();
+    let old = RECIPES.disabled.load();
     if old.ids == ids {
         return;
     }
@@ -358,7 +423,9 @@ fn apply(loader: &Loader, index: &Index) {
     let count = ids.len();
     let mut sorted: Vec<u32> = ids.iter().copied().collect();
     sorted.sort_unstable();
-    DISABLED.store(Arc::new(Disabled { ids, generation }));
+    RECIPES
+        .disabled
+        .store(Arc::new(Disabled { ids, generation }));
     crate::log!(
         INFO,
         "disabled recipes: {count}{}",
@@ -395,7 +462,7 @@ pub(crate) fn registry_built(data: usize, len: usize) {
         return;
     };
     live(|l| l.index = Some(Arc::new(index.with_content(&content_names()))));
-    DIRTY.store(true, Ordering::Release);
+    RECIPES.changed();
 }
 
 /// Mod `owner`'s rule: added, or taken back.
@@ -407,25 +474,12 @@ pub(crate) fn rule(owner: ModIndex, kind: RecipeRuleKind, name: &str, disable: b
     if name.is_empty() {
         return Status::BAD_ARGS;
     }
-    // Mods' init runs before `init` resolves the layout: keep their rules
-    // until then, and refuse only on a build known to lack it.
-    if LAYOUT.get().is_some_and(Option::is_none) {
-        return Status::MISSING;
-    }
-    live(|l| {
-        l.mods
-            .retain(|(o, k, n)| !(*o == owner.get() && *k == kind && n == name));
-        if disable {
-            l.mods.push((owner.get(), kind, name.to_owned()));
-        }
-    });
-    DIRTY.store(true, Ordering::Release);
-    Status::OK
+    RECIPES.rule(owner, kind, name, disable)
 }
 
 /// Whether recipe `id` is disabled in this process now.
 pub(crate) fn is_disabled(id: u32) -> bool {
-    DISABLED.load().ids.contains(&id)
+    RECIPES.disabled.load().ids.contains(&id)
 }
 
 /// The item with game id `id` in words, by the item names, read from the
@@ -449,9 +503,9 @@ pub(crate) fn recipe_words(id: u32) -> String {
 /// Disables exactly `ids`, for tests.
 #[cfg(test)]
 pub(crate) fn disable_for_test(ids: &[u32]) {
-    DISABLED.store(Arc::new(Disabled {
+    RECIPES.disabled.store(Arc::new(Disabled {
         ids: ids.iter().copied().collect(),
-        generation: DISABLED.load().generation + 1,
+        generation: RECIPES.disabled.load().generation + 1,
     }));
 }
 
@@ -468,7 +522,7 @@ pub(crate) fn world_changed(loader: &Loader) {
     {
         crate::log!(WARN, "{} not written: {e}", path.display());
     }
-    DIRTY.store(true, Ordering::Release);
+    RECIPES.changed();
 }
 
 /// The client joins a server: nothing is disabled until the server says.
@@ -477,13 +531,12 @@ pub(crate) fn joining() {
         l.server = Some(Vec::new());
         l.incoming.clear();
     });
-    DIRTY.store(true, Ordering::Release);
+    RECIPES.changed();
 }
 
 /// The client's hosted game ended: its own rules apply again.
-pub(crate) fn left() {
-    live(|l| l.server = None);
-    DIRTY.store(true, Ordering::Release);
+pub(crate) fn forget() {
+    RECIPES.forget();
 }
 
 /// Disabled recipe ids a client takes from its server at most, far past the
@@ -501,7 +554,7 @@ pub(crate) fn received(first: bool, last: bool, ids: &[u32]) {
         None => {}
     });
     if last {
-        DIRTY.store(true, Ordering::Release);
+        RECIPES.changed();
     }
 }
 
@@ -511,7 +564,7 @@ pub(crate) fn hello(key: u64) -> bool {
     if live(|l| l.server.is_some()) {
         return true;
     }
-    let mut ids: Vec<u32> = DISABLED.load().ids.iter().copied().collect();
+    let mut ids: Vec<u32> = RECIPES.disabled.load().ids.iter().copied().collect();
     ids.sort_unstable();
     messages(&ids)
         .iter()
@@ -529,11 +582,12 @@ pub(crate) fn hello(key: u64) -> bool {
 ///   recipe addresses, each 0 or a recipe of the game's live registry,
 ///   unchanged during the call.
 pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
-    let disabled = DISABLED.load();
+    let recipes = &*RECIPES;
+    let disabled = recipes.disabled.load();
     if disabled.ids.is_empty() {
         return;
     }
-    let Some(layout) = layout() else {
+    let Some(layout) = recipes.layout() else {
         return;
     };
     // SAFETY: the caller's contract makes `out` readable for a `[u64; 2]`
@@ -543,7 +597,7 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
         return;
     }
     let key = (workshop, address, len);
-    let list = cached(key, disabled.generation, || {
+    let list = recipes.cached(key, disabled.generation, || {
         // SAFETY: the caller's contract makes the non-zero `address` (checked
         // earlier) the start of `len` readable recipe addresses, each 0 or a
         // live recipe, unchanged during the call; `layout.id` is the
@@ -552,7 +606,8 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
     });
     if let Some(list) = list {
         // SAFETY: the caller's contract makes `out` writable for a `[u64; 2]`
-        // span for the call. The list it now names stays in `LISTS` while its
+        // span for the call. The list it now names stays in the state's
+        // `lists` while its
         // generation is current and is retired after, freed only once the
         // world has stepped `retire::GRACE` times and `retire::MIN_AGE` has
         // passed; the game's callers read it before they return.
@@ -566,40 +621,43 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
     }
 }
 
-/// The filtered list of `key` in disable generation `generation`, made by
-/// `make` the first time it is asked for. A list handed out stays alive until
-/// the world has stepped past the caller that got it: it stays in
-/// [`LISTS`] while its generation is current, the lists of an older
-/// generation are retired, and a fresh list is retired too, in case another
-/// thread cached its own copy of it first.
-fn cached(
-    key: ListKey,
-    generation: u64,
-    make: impl FnOnce() -> Option<Arc<[u64]>>,
-) -> Option<Arc<[u64]>> {
-    let lists = LISTS.load();
-    if lists.generation == generation
-        && let Some(list) = lists.lists.get(&key)
-    {
-        return list.clone();
+impl Recipes {
+    /// The filtered list of `key` in disable generation `generation`, made by
+    /// `make` the first time it is asked for. A list handed out stays alive
+    /// until the world has stepped past the caller that got it: it stays in
+    /// `lists` while its generation is current, the lists of an older
+    /// generation are retired, and a fresh list is retired too, in case
+    /// another thread cached its own copy of it first.
+    fn cached(
+        &self,
+        key: ListKey,
+        generation: u64,
+        make: impl FnOnce() -> Option<Arc<[u64]>>,
+    ) -> Option<Arc<[u64]>> {
+        let lists = self.lists.load();
+        if lists.generation == generation
+            && let Some(list) = lists.lists.get(&key)
+        {
+            return list.clone();
+        }
+        let list = make();
+        let replaced = self.lists.rcu(|old| {
+            let mut lists = if old.generation == generation {
+                old.lists.clone()
+            } else {
+                FxHashMap::default()
+            };
+            lists.entry(key).or_insert_with(|| list.clone());
+            Lists { generation, lists }
+        });
+        if replaced.generation != generation {
+            crate::engine::retire::retire(replaced);
+        }
+        if let Some(list) = &list {
+            crate::engine::retire::retire(Arc::clone(list));
+        }
+        list
     }
-    let list = make();
-    let replaced = LISTS.rcu(|old| {
-        let mut lists = if old.generation == generation {
-            old.lists.clone()
-        } else {
-            FxHashMap::default()
-        };
-        lists.entry(key).or_insert_with(|| list.clone());
-        Lists { generation, lists }
-    });
-    if replaced.generation != generation {
-        crate::engine::retire::retire(replaced);
-    }
-    if let Some(list) = &list {
-        crate::engine::retire::retire(Arc::clone(list));
-    }
-    list
 }
 
 /// The recipes of the `len` at `address` that are not disabled; `None` when
@@ -665,7 +723,7 @@ pub(crate) fn command(loader: &Loader, args: &str) -> String {
 }
 
 fn disabled_list(index: &Index, names: &Names) -> String {
-    let disabled = DISABLED.load();
+    let disabled = RECIPES.disabled.load();
     if disabled.ids.is_empty() {
         return texts::fill("recipes.none", &[]);
     }
@@ -691,7 +749,7 @@ fn found_list(index: &Index, names: &Names, text: &str) -> String {
     if found.is_empty() {
         return texts::fill("recipes.found.none", &[("text", text)]);
     }
-    let disabled = DISABLED.load();
+    let disabled = RECIPES.disabled.load();
     let mut lines = vec![texts::fill(
         "recipes.found",
         &[("count", &found.len().to_string()), ("text", text)],
@@ -733,7 +791,7 @@ fn change(index: &Index, names: &Names, kind: Kind, name: &str, disable: bool) -
         .and_then(|text| Ok(crate::base::worlds::write_target(&path, &text)?));
     match written {
         Ok(()) => {
-            DIRTY.store(true, Ordering::Release);
+            RECIPES.changed();
             texts::fill(
                 if disable {
                     "recipes.disabled"
@@ -753,16 +811,19 @@ mod tests {
 
     #[test]
     fn a_list_is_made_once_per_generation_and_kept_until_the_next() {
-        // Generations far from any other test's.
-        let (first, next) = (u64::MAX - 10, u64::MAX - 9);
+        let recipes = Recipes::new();
+        let (first, next) = (1, 2);
         let key = (7, 0x1000, 3);
-        let made = cached(key, first, || Some(Arc::from([1_u64, 2])));
-        let again = cached(key, first, || panic!("made twice in one generation"));
+        let made = recipes.cached(key, first, || Some(Arc::from([1_u64, 2])));
+        let again = recipes.cached(key, first, || panic!("made twice in one generation"));
         assert!(Arc::ptr_eq(made.as_ref().unwrap(), again.as_ref().unwrap()));
-        let none = cached((7, 0x2000, 3), first, || None);
+        let none = recipes.cached((7, 0x2000, 3), first, || None);
         assert_eq!(none, None);
-        assert_eq!(cached((7, 0x2000, 3), first, || panic!("made twice")), None);
-        let renewed = cached(key, next, || Some(Arc::from([1_u64])));
+        assert_eq!(
+            recipes.cached((7, 0x2000, 3), first, || panic!("made twice")),
+            None
+        );
+        let renewed = recipes.cached(key, next, || Some(Arc::from([1_u64])));
         assert_eq!(renewed.as_deref(), Some(&[1_u64][..]));
         assert_eq!(
             made.as_deref(),
@@ -773,19 +834,15 @@ mod tests {
 
     #[test]
     fn a_mod_s_rule_from_init_is_kept_until_the_layout_resolves_and_shows_off_without_it() {
-        assert!(LAYOUT.get().is_none(), "one process per test");
+        let recipes = Recipes::new();
         let owner = ModIndex::new(3);
         assert_eq!(
-            rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
+            recipes.rule(owner, Kind::Output, "a-guid", true),
             Status::OK
         );
-        assert!(live(|l| l.mods.contains(&(
-            3,
-            Kind::Output,
-            "a-guid".to_owned()
-        ))));
+        assert!(recipes.live(|l| l.mods.contains(&(3, Kind::Output, "a-guid".to_owned()))));
         let loader = crate::start::tests::bare_loader();
-        assert!(!keep_layout(&loader, Err("no recipe layout")));
+        assert!(!recipes.keep_layout(&loader, Err("no recipe layout")));
         assert!(
             DISABLED_FUSE.is_off(),
             "off by its fuse, not only in the log"
@@ -797,9 +854,47 @@ mod tests {
             "the rules kept from init show as off"
         );
         assert_eq!(
-            rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
+            recipes.rule(owner, Kind::Output, "a-guid", true),
             Status::MISSING,
             "a build without the layout refuses"
+        );
+    }
+
+    #[test]
+    fn a_mod_s_rule_with_a_blank_name_or_an_unknown_kind_is_refused() {
+        let owner = ModIndex::new(3);
+        assert_eq!(
+            rule(owner, RecipeRuleKind::OUTPUT, "  ", true),
+            Status::BAD_ARGS
+        );
+        assert_eq!(
+            rule(owner, RecipeRuleKind(u32::MAX), "a-guid", true),
+            Status::BAD_ARGS
+        );
+    }
+
+    #[test]
+    fn the_end_of_a_hosted_game_forgets_its_server_s_recipes_and_applies_the_client_s_own() {
+        let recipes = Recipes::new();
+        recipes.dirty.store(false, Ordering::Relaxed);
+        recipes.live(|l| {
+            l.server = Some(vec![5]);
+            assert!(l.incoming.add(true, false, [6].into_iter()).is_none());
+            l.problems.push("a problem of the last world".to_owned());
+        });
+        recipes.forget();
+        recipes.live(|l| {
+            assert_eq!(l.server, None);
+            assert!(l.problems.is_empty(), "the next world logs its own");
+            assert_eq!(
+                l.incoming.add(false, true, [7].into_iter()),
+                Some(vec![7]),
+                "the last server's part is gone"
+            );
+        });
+        assert!(
+            recipes.dirty.load(Ordering::Acquire),
+            "applied at the next poll"
         );
     }
 

@@ -65,16 +65,29 @@ const MARK: u32 = 0x4b57_4845;
 
 pub(crate) use crate::engine::archive::ContentHash;
 
-/// The content mods serve, by hash, swapped whole so requests read it
-/// without a lock; `SERVING` orders the writers.
-static CONTENT: ArcSwapOption<FxHashMap<ContentHash, &'static [u8]>> = ArcSwapOption::const_empty();
-static SERVING: Mutex<()> = Mutex::new(());
-/// Whether the content link ran, so served pixels reach the GPU.
-static CONTENT_LINKED: AtomicBool = AtomicBool::new(false);
-/// Whether the listing link handed the served UI images to the registry.
-static LISTED: AtomicBool = AtomicBool::new(false);
-/// Whether the registry listed again after arming.
-static RELISTED: AtomicBool = AtomicBool::new(false);
+/// The content mods serve and how far the client's game took the served UI
+/// images. The game's UI registry lives for the process, so nothing here
+/// ends with a hosted game.
+struct Textures {
+    /// The content by hash, swapped whole so requests read it without a
+    /// lock; `serving` orders the writers.
+    content: ArcSwapOption<FxHashMap<ContentHash, &'static [u8]>>,
+    serving: Mutex<()>,
+    /// Whether the content link ran, so served pixels reach the GPU.
+    linked: AtomicBool,
+    /// Whether the listing link handed the served UI images to the registry.
+    listed: AtomicBool,
+    /// Whether the registry listed again after arming.
+    relisted: AtomicBool,
+}
+
+static TEXTURES: Textures = Textures {
+    content: ArcSwapOption::const_empty(),
+    serving: Mutex::new(()),
+    linked: AtomicBool::new(false),
+    listed: AtomicBool::new(false),
+    relisted: AtomicBool::new(false),
+};
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The listing handed back for the game's own array (its address and
 /// count): built once, as the game lists its UI images once or twice.
@@ -262,14 +275,14 @@ pub(crate) fn serve(data: &[u8]) -> Result<ContentHash, Status> {
         return Err(Status::BAD_ARGS);
     }
     let hash = hash_of(data);
-    let _serving = SERVING.relock();
-    let current = CONTENT.load_full();
+    let _serving = TEXTURES.serving.relock();
+    let current = TEXTURES.content.load_full();
     if current.as_ref().is_some_and(|map| map.contains_key(&hash)) {
         return Ok(hash);
     }
     let mut map = current.map_or_else(FxHashMap::default, |map| (*map).clone());
     map.insert(hash, Box::leak(data.to_vec().into_boxed_slice()));
-    CONTENT.store(Some(Arc::new(map)));
+    TEXTURES.content.store(Some(Arc::new(map)));
     Ok(hash)
 }
 
@@ -283,9 +296,9 @@ fn served(
 /// Whether served UI images show on this client: the links ran and the
 /// registry knows them.
 pub(crate) fn ready() -> bool {
-    CONTENT_LINKED.load(Ordering::Acquire)
-        && LISTED.load(Ordering::Acquire)
-        && RELISTED.load(Ordering::Acquire)
+    TEXTURES.linked.load(Ordering::Acquire)
+        && TEXTURES.listed.load(Ordering::Acquire)
+        && TEXTURES.relisted.load(Ordering::Acquire)
 }
 
 /// Links the key listing on any side that serves templates or UI images of
@@ -353,8 +366,8 @@ fn link_keys(loader: &Loader) -> bool {
 /// by `chain_detour!`, since it passes the rest of the chain only the
 /// requests it did not answer.
 unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
-    CONTENT_LINKED.store(true, Ordering::Release);
-    let content = CONTENT.load();
+    TEXTURES.linked.store(true, Ordering::Release);
+    let content = TEXTURES.content.load();
     let layout = LAYOUT.get().copied().flatten();
     let Some(content) = content
         .as_ref()
@@ -639,7 +652,7 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
         // SAFETY: the caller guarantees `out` is live and writable, and
         // nothing else touches it during the call.
         unsafe { hand_back(out, keys) };
-        LISTED.fetch_or(images, Ordering::AcqRel);
+        TEXTURES.listed.fetch_or(images, Ordering::AcqRel);
         return;
     }
     let extra = crate::content::served::new_keys_of_type(type_hash);
@@ -667,7 +680,7 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
     // SAFETY: the caller guarantees `out` is live and writable, and nothing
     // else touches it during the call.
     unsafe { hand_back(out, keys) };
-    LISTED.fetch_or(images, Ordering::AcqRel);
+    TEXTURES.listed.fetch_or(images, Ordering::AcqRel);
     if !images {
         crate::log!(
             INFO,
@@ -718,7 +731,7 @@ crate::engine::chains::chain_detour! {
     fn fill(registry: *mut u8) -> ();
     next FILL_NEXT;
     |onward| {
-        if RELISTED.load(Ordering::Acquire) || registry.is_null() {
+        if TEXTURES.relisted.load(Ordering::Acquire) || registry.is_null() {
             return onward.call();
         }
         onward.run(&TEXTURES_FUSE, "the UI registry fill", |onward| {
@@ -739,11 +752,11 @@ crate::engine::chains::chain_detour! {
             // offset.
             let listed: u8 = unsafe { read_at(registry, layout.registry_listed) };
             if listed == 1 {
-                RELISTED.store(true, Ordering::Release);
+                TEXTURES.relisted.store(true, Ordering::Release);
                 crate::log!(
                     INFO,
                     "mod textures: the UI registry knows the served images: {}",
-                    LISTED.load(Ordering::Acquire)
+                    TEXTURES.listed.load(Ordering::Acquire)
                 );
             }
         });
