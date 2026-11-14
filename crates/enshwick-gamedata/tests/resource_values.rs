@@ -5,10 +5,11 @@
 //! without them those tests pass trivially.
 
 #[cfg(test)]
-mod tests {
-    #[path = "../support/parallel.rs"]
-    mod parallel;
+#[path = "support/parallel.rs"]
+mod parallel;
 
+#[cfg(test)]
+mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
 
@@ -276,7 +277,7 @@ mod tests {
         let keys = archive.keys();
         // Per resource: its type's name, its blocks' check and its round
         // trip's error; `None` for a type the executable lacks.
-        let checked = parallel::map(&keys, |key| {
+        let checked = super::parallel::map(&keys, |key| {
             let ty = registry.hashed(key.type_hash)?;
             let name = ty.qualified_name();
             let base = archive.resource(key).unwrap();
