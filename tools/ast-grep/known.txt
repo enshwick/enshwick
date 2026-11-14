@@ -27,9 +27,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/content/served/texts.
 # The mods that asked to change the day's speed, a mod registration; it
 # moves into a `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/world/daytime.rs static SPEED_MODS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
-# Deaths a hook saw since the last step, runtime state; they move into the
-# deaths domain's state struct.
-static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/deaths.rs static SEEN: Mutex<Vec<[u8; 64]>> = Mutex::new(Vec::new());
 # The near-memory blocks detours write into, the loader's own bookkeeping;
 # they move into the detour engine's state struct.
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/detour.rs static BLOCKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
@@ -38,21 +35,12 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/engine/detour.rs stat
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
-# Building events from worker threads, raised after the step; they move
-# into the events' `Session`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/events.rs static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
 # The mods that opened the fog, a mod registration; it moves into a
 # `Registry<T>` or one fog state struct with `MIRROR`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/world/fog.rs static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 # The game event subscriptions mods make during init; they move into a
 # `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/game_events.rs static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
-# Inventory changes finished off the game thread, runtime state; they move
-# into the inventory domain's state struct with `QUEUE`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/transactions.rs static FINISHED: Mutex<Vec<Finished>> = Mutex::new(Vec::new());
-# Knowledge changes raised after the next step, runtime state; they move
-# into the knowledge `Queue` state.
-static-is-registry-fuse-or-state crates/runtime/loader/src/knowledge/store/changes.rs static RAISED: Mutex<Vec<KnowledgeData>> = Mutex::new(Vec::new());
 # The dry run's captured lines, kept off the poison policy on purpose; they
 # move into the log's state struct with `CAPTURING`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/log.rs static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
@@ -96,9 +84,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/ui/interface/dialog.r
 # The files the loader wrote itself, the watcher's state; they move into
 # the watcher's state struct.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/watch.rs static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
-# Weather chunk events raised after the step, runtime state; they move
-# into the weather domain's state struct with `CHUNKS`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/world/weather.rs static CHUNK_EVENTS: Mutex<Vec<(Event, ChunkData)>> = Mutex::new(Vec::new());
 
 # Loose atomic statics of the loader from before its rule; each moves into
 # its domain's state struct, a `Pending` queue or its fuse.
