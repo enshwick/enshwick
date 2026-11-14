@@ -728,7 +728,12 @@ mod tests {
         ));
         PAST16.blow("a test");
         assert!(!TEARDOWN.is_off());
-        let chains = enshwick_base::Relock::relock(&loader.chains);
+        let mut chains = enshwick_base::Relock::relock(&loader.chains);
+        chains.seal();
+        assert!(
+            chains.features_at(0x2000).is_empty(),
+            "the create went with the window"
+        );
         let at_destroy = chains.features_at(0x1000);
         assert!(
             at_destroy.len() == 1 && core::ptr::eq(at_destroy[0], &raw const TEARDOWN),
@@ -764,15 +769,21 @@ mod tests {
     fn the_window_makes_new_windows_only_while_it_and_its_teardown_are_on() {
         ARMED.store(true, Ordering::Release);
         assert!(armed(), "armed with the window and its teardown on");
+        // A thread not carried keeps fuses of its own, so this test's stay on.
+        let after_fault = std::thread::spawn(|| {
+            PAST16.blow("a test");
+            armed()
+        })
+        .join();
+        assert_eq!(
+            after_fault.ok(),
+            Some(false),
+            "no window once the window is off"
+        );
+        assert!(armed());
         TEARDOWN.blow("a test");
         assert!(!armed(), "no window is made that nothing would free");
         ARMED.store(false, Ordering::Release);
-        assert!(!armed());
-    }
-
-    #[test]
-    fn a_fault_in_the_window_stops_new_windows() {
-        PAST16.blow("a test");
         assert!(!armed());
     }
 

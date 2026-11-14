@@ -446,11 +446,10 @@ mod tests {
     fn a_build_without_the_craft_request_lists_the_craft_filters_off() {
         seal(&crate::start::tests::bare_loader());
         assert!(CRAFT_FUSE.is_off());
-        let listed = crate::engine::diag::parts_off();
-        let off = listed.iter().find(|p| p.part == "craft filters");
+        let off = crate::base::off_reason(&CRAFT_FUSE);
         assert!(
-            off.is_some_and(|p| p.reason.starts_with(CRAFT_EVENT)),
-            "{listed:?}"
+            off.as_deref().is_some_and(|r| r.starts_with(CRAFT_EVENT)),
+            "{off:?}"
         );
     }
 

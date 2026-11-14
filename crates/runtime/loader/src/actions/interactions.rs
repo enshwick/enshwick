@@ -889,11 +889,9 @@ mod tests {
         link(loader);
         assert!(INTERACTIONS_FUSE.is_off() && ACTIONS_FUSE.is_off() && HOLDS_FUSE.is_off());
         assert!(!reads_inputs());
-        let listed = crate::engine::diag::parts_off();
-        let holds = listed.iter().find(|p| p.part == HOLDS_FUSE.feature());
-        assert!(
-            holds.is_some_and(|p| p.reason == "interaction filters is off"),
-            "{listed:?}"
+        assert_eq!(
+            crate::base::off_reason(&HOLDS_FUSE).as_deref(),
+            Some("interaction filters is off")
         );
     }
 

@@ -86,11 +86,11 @@ fn a_build_without_the_chat_layout_lists_the_chat_lines_off_and_refuses_mods_lin
         Status::MISSING,
         "mods' lines stay refused"
     );
-    let listed = crate::engine::diag::parts_off();
-    let off = listed.iter().find(|p| p.part == CHAT_FUSE.feature());
+    let off = crate::base::off_reason(&CHAT_FUSE);
     assert!(
-        off.is_some_and(|p| p.reason.starts_with(pinned::chat::MARK_DELIVERED.id())),
-        "{listed:?}"
+        off.as_deref()
+            .is_some_and(|r| r.starts_with(pinned::chat::MARK_DELIVERED.id())),
+        "{off:?}"
     );
 }
 
