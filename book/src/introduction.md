@@ -44,6 +44,24 @@ start on the fake host whenever the header changes ([Mods in C and C++](mods-in-
 Any other language that builds a Windows DLL and can call a C ABI works the
 same way, but no other language is tested.
 
+## What a mod gets from Enshwick
+
+- **Native speed for native mods.** Rust, C and C++ mods run as machine code
+  inside the game, with no garbage collector. Luau scripts run in an
+  interpreter and cost more per call ([Performance](concepts/performance.md)).
+- **No update for a game update.** The loader reads the game's own description
+  of its data at every start. It turns off only what it cannot find
+  ([Why a game update needs no Enshwick update](concepts/game-updates.md)).
+- **An API across the game.** Items, recipes, loot, the world, players and the
+  interface each have calls; [API coverage](https://enshwick.com/dev/api-coverage/)
+  shows each game area. Where the API has no call, a mod reaches the game
+  directly ([Before you reach into the game](reaching-into-the-game.md)).
+- **A failure stays with its mod.** A panic turns off the mod and leaves the
+  game running. When a hardware fault ends the game, the crash file names the
+  mod ([The life of a mod](concepts/lifecycle.md)).
+- **Mods that work together.** A mod offers other mods typed services, events
+  and extension points ([Services between mods](services.md)).
+
 ## How to read this book
 
 The book leads from the simplest mod to the hardest parts. Start with

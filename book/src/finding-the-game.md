@@ -43,6 +43,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 `system` returns the absolute address of the update function, ready for
 [`load.hook`](hooks.md). A name that is missing or matches more than one
 system or type gives an `Off` that says so.
+[Why a game update needs no Enshwick update](concepts/game-updates.md) explains
+why reflection keeps a mod working across updates.
 
 ## Pinned symbols and constants
 

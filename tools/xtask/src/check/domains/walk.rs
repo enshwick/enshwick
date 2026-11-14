@@ -368,7 +368,7 @@ pub(super) fn test_only(item: &Item) -> bool {
 
 /// Whether `attrs` hold a plain `#[cfg(test)]`; a compound `cfg` with
 /// `test` in it counts as none.
-fn test_attrs(attrs: &[Attribute]) -> bool {
+pub(crate) fn test_attrs(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path().is_ident("cfg") && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "test")
     })
@@ -376,7 +376,7 @@ fn test_attrs(attrs: &[Attribute]) -> bool {
 
 /// The attributes of `item`; none for a kind that never carries a `cfg`
 /// here.
-pub(super) fn item_attrs(item: &Item) -> &[Attribute] {
+pub(crate) fn item_attrs(item: &Item) -> &[Attribute] {
     match item {
         Item::Const(item) => &item.attrs,
         Item::Enum(item) => &item.attrs,
@@ -401,7 +401,7 @@ pub(super) fn feature_only(attrs: &[Attribute]) -> bool {
 }
 
 /// The predicates of the `#[cfg]` attributes among `attrs`.
-pub(super) fn cfgs(attrs: &[Attribute]) -> impl Iterator<Item = Cfg> + '_ {
+pub(crate) fn cfgs(attrs: &[Attribute]) -> impl Iterator<Item = Cfg> + '_ {
     attrs
         .iter()
         .filter(|attr| attr.path().is_ident("cfg"))
@@ -462,13 +462,13 @@ impl Cfg {
 
     /// Whether the predicate can hold while only the features `allowed`
     /// takes may be on, every other option either way.
-    pub(super) fn can_hold(&self, allowed: &dyn Fn(&str) -> bool) -> bool {
+    pub(crate) fn can_hold(&self, allowed: &dyn Fn(&str) -> bool) -> bool {
         self.can_be(true, allowed)
     }
 
     /// The predicate with the option `name` known to be off: `any()`, which
     /// never holds, in its place.
-    pub(super) fn with_off(&self, name: &str) -> Self {
+    pub(crate) fn with_off(&self, name: &str) -> Self {
         let each = |parts: &[Self]| parts.iter().map(|part| part.with_off(name)).collect();
         match self {
             Self::Other(other) if other == name => Self::Any(Vec::new()),

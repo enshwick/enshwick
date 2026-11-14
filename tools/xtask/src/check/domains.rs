@@ -21,7 +21,7 @@ mod calls;
 mod deps;
 mod fake;
 mod loader;
-mod walk;
+pub(super) mod walk;
 
 use walk::{Walk, paths, test_only};
 
@@ -391,7 +391,7 @@ fn roots(lib: &str) -> Result<BTreeMap<String, String>, String> {
 /// Each name a `use` tree brings in with the path it stands for, as
 /// written: `{self}` binds its module's own name, and a glob is `None` with
 /// the path of the module it takes whole.
-fn use_leaves(tree: &UseTree) -> Vec<(Option<String>, Vec<String>)> {
+pub(super) fn use_leaves(tree: &UseTree) -> Vec<(Option<String>, Vec<String>)> {
     fn walk(
         tree: &UseTree,
         prefix: &mut Vec<String>,

@@ -105,6 +105,7 @@
   - [Sides and hosting](concepts/sides-and-hosting.md)
   - [The join check](concepts/join-check.md)
   - [Threads](concepts/threads.md)
+  - [Why a game update needs no Enshwick update](concepts/game-updates.md)
   - [Typed types across game builds](concepts/typed-stability.md)
   - [Performance](concepts/performance.md)
 

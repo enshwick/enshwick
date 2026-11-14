@@ -9,6 +9,7 @@
 
 pub(crate) mod links;
 pub(crate) mod prose;
+pub(crate) mod stability;
 
 use std::path::Path;
 
