@@ -1,20 +1,19 @@
 //! Keeps the mods' command names and runs their commands on the server's
 //! game thread.
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use enshwick_core::abi::{ActionCall, CommandInfo, Header, Status, Str};
+use enshwick_core::abi::{CommandInfo, Header, Status, Str};
 
 use enshwick_core::command_names::{alias_asked, check};
 
-use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
+use super::{MAX_LINE, Named, Refusal, Typed, parse, remote_caller, typed, word};
+use crate::actions::admission::{self, Path, Verdict};
 use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pending::Pending;
 use crate::engine::registry::Registry;
-use enshwick_base::Relock;
 
 /// Chat commands waiting for the end of the step at most; more are dropped.
 const MAX_PENDING: usize = 64;
@@ -32,13 +31,13 @@ struct Queued {
 /// What the commands keep while the game runs.
 struct State {
     pending: Pending<Queued>,
+    /// The commands the admission refused while the game posted the chat,
+    /// answered at the end of the step, outside the game's chat post.
+    refused: Pending<(Queued, admission::Refusal)>,
     /// Set once a mod named commands, so a chat line takes one load while
     /// none did.
     any: AtomicBool,
-    /// Each account's rate of commands, the chat's own: at most eight a
-    /// second, so only a flood loses one.
-    rate: Mutex<Vec<crate::actions::chat::Rate>>,
-    /// Commands dropped over a rate or a full queue, so the log names only
+    /// Commands refused over a rate or a full queue, so the log names only
     /// the first and every hundredth.
     dropped: AtomicU32,
 }
@@ -46,8 +45,8 @@ struct State {
 static NAMED: Registry<Named> = Registry::new();
 static STATE: State = State {
     pending: Pending::new(),
+    refused: Pending::new(),
     any: AtomicBool::new(false),
-    rate: Mutex::new(Vec::new()),
     dropped: AtomicU32::new(0),
 };
 
@@ -158,70 +157,84 @@ fn owner_of<'a>(loader: &Loader, text: &'a str) -> Option<(ModIndex, &'a str)> {
 
 /// Takes the line `text` the player of account `key` typed when it is a
 /// mod's command, a `/` and its name or alias first, and queues it for the
-/// end of the step; false for any other line. A command of a mod that is
-/// off, or over the rate or a full queue, is taken and dropped.
+/// end of the step past the [admission](admission) of chat; false for any
+/// other line. A command of a mod that is off is taken, runs nowhere and is
+/// answered as unavailable, without its words; one the admission refuses,
+/// over the rate or a full queue, is answered at the end of the step.
 pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
     let Some(named) = NAMED.sealed() else {
         return false;
     };
-    let (owner, rest) = match typed(named, text, |owner| running_mod(loader, owner)) {
+    let (owner, rest, off) = match typed(named, text, |owner| running_mod(loader, owner)) {
         Typed::Chat => return false,
-        Typed::Off => return true,
-        Typed::Run(owner, rest) => (owner, rest),
+        Typed::Off(owner) => (owner, "", true),
+        Typed::Run(owner, rest) => (owner, rest, false),
     };
-    let admitted =
-        crate::actions::chat::admit(&mut STATE.rate.relock(), key, std::time::Instant::now());
-    let queued = admitted
-        && STATE.pending.push_within(
-            MAX_PENDING,
-            core::iter::once_with(|| Queued {
-                key,
-                owner,
-                word: word(text),
-                rest: rest.to_owned(),
-            }),
-        );
-    if !queued {
-        let dropped = STATE.dropped.fetch_add(1, Ordering::Relaxed);
-        if dropped.is_multiple_of(100) {
-            crate::log!(
-                DEBUG,
-                "{key:016x} sent a command over its rate or a full queue ({} dropped)",
-                dropped + 1
-            );
+    let command = || Queued {
+        key,
+        owner,
+        word: word(text),
+        rest: rest.to_owned(),
+    };
+    let refusal = match admission::admit(loader, Path::Chat, key) {
+        Verdict::Run if off => Some(admission::Refusal::Unavailable),
+        Verdict::Run => {
+            if STATE
+                .pending
+                .push_within(MAX_PENDING, core::iter::once_with(command))
+            {
+                return true;
+            }
+            Some(admission::Refusal::Busy)
         }
+        Verdict::Refuse(refusal) => Some(refusal),
+        Verdict::Drop => None,
+    };
+    if let Some(refusal) = refusal {
+        let _answered = STATE
+            .refused
+            .push_within(MAX_PENDING, core::iter::once_with(|| (command(), refusal)));
+    }
+    if off {
+        return true;
+    }
+    let dropped = STATE.dropped.fetch_add(1, Ordering::Relaxed);
+    if dropped.is_multiple_of(100) {
+        crate::log!(
+            DEBUG,
+            "{key:016x} sent a command over its rate or a full queue ({} refused)",
+            dropped + 1
+        );
     }
     true
 }
 
-/// Forgets the commands waiting and each account's rate, when a hosted game
-/// ends, so none runs in the next one.
+/// Forgets the commands waiting and their refusals, when a hosted game
+/// ends, so none runs or answers in the next one.
 pub(crate) fn forget() {
     STATE.pending.clear();
-    STATE.rate.relock().clear();
+    STATE.refused.clear();
 }
 
-/// Runs the chat commands queued during the step and tells each player the
-/// reply as [`reply_by`] sends it; on the server's game thread, after the
-/// step.
+/// Runs the chat commands queued during the step and gives each player the
+/// reply the one way replies go, then answers the ones refused, which came
+/// after them; on the server's game thread, after the step.
 pub(crate) fn after_step(loader: &Loader) {
+    let refused = STATE.refused.take();
     for command in STATE.pending.take() {
-        let Some((player, language)) =
-            crate::actions::player_actions::commander(loader, command.key)
-        else {
+        let Some(player) = crate::actions::player_actions::player(loader, command.key) else {
             continue;
         };
         let Some(reply) = crate::actions::player_actions::command(
             loader,
             command.owner,
-            ActionCall::CHAT,
+            Path::Chat,
             &player,
-            language,
+            crate::base::net::language_number(command.key),
             (&command.word, &command.rest),
         ) else {
             continue;
         };
-        let text = reply.text.as_str();
         crate::log!(
             DEBUG,
             "{:016x} ran a command of mod {}: {}",
@@ -229,13 +242,17 @@ pub(crate) fn after_step(loader: &Loader) {
             command.owner.get(),
             if reply.done { "done" } else { "refused" }
         );
-        match reply_by(text, reply.done, crate::actions::chat::to_one_player()) {
-            Reply::Chat(text) => {
-                let _queued = crate::actions::chat::reply(command.key, text);
-            }
-            Reply::Notice(text) => crate::actions::player_actions::tell(loader, command.key, &text),
-            Reply::None => {}
-        }
+        crate::actions::reply::answer(loader, Path::Chat, command.key, reply.done, &reply.text);
+    }
+    for (command, refusal) in refused {
+        crate::actions::player_actions::refuse(
+            loader,
+            Path::Chat,
+            command.key,
+            refusal,
+            Some(command.owner),
+            (&command.rest, "", &command.word),
+        );
     }
 }
 
@@ -261,15 +278,8 @@ pub(crate) fn run_remote(
     let caller = remote_caller(label, permissions);
     crate::log!(DEBUG, "{label} runs the command {line}");
     let word = word(line);
-    crate::actions::player_actions::command(
-        loader,
-        owner,
-        ActionCall::REMOTE,
-        &caller,
-        0,
-        (&word, rest),
-    )
-    .ok_or(Status::MISSING)
+    crate::actions::player_actions::command(loader, owner, Path::Remote, &caller, 0, (&word, rest))
+        .ok_or(Status::MISSING)
 }
 
 /// The running mods' command sets with their mod ids, in load order.

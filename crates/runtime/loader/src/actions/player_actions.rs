@@ -8,30 +8,16 @@
 //! game's notices, in the language the client named when it joined.
 
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 use enshwick_core::abi::{
     ActionCall, ActionFn, ActionReply, ActionTarget, Header, PlayerInfo, Status, Str,
 };
 
+use crate::actions::admission::{self, Path, Refusal, Verdict};
 use crate::base::remote::Message;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
-
-/// The least time between two runs one player sends.
-const RUN_GAP: Duration = Duration::from_millis(200);
-
-/// The most bytes of arguments a run a client sends takes: enshwick's
-/// bound, room for several texts of the most bytes a text argument takes.
-const MAX_ARGS: usize = 2_048;
-
-/// Whether a client's arguments `args` pass the boundary: within
-/// [`MAX_ARGS`] and without a control character but the tab between
-/// fields; the mod checks each value against its argument again.
-fn args_in_bounds(args: &str) -> bool {
-    args.len() <= MAX_ARGS && !args.chars().any(|c| c.is_control() && c != '\t')
-}
 
 /// A mod's actions callback.
 #[derive(Clone, Copy)]
@@ -42,27 +28,6 @@ struct Registered {
 }
 
 static REGISTERED: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
-
-/// The server's state per client: the language it reads and when it last
-/// ran an action.
-#[derive(Default)]
-struct Client {
-    language: u32,
-    last_run: Option<Instant>,
-}
-
-struct ServerState {
-    clients: rustc_hash::FxHashMap<u64, Client>,
-}
-
-static SERVER: Mutex<Option<ServerState>> = Mutex::new(None);
-
-fn server_state<R>(f: impl FnOnce(&mut ServerState) -> R) -> R {
-    let mut slot = SERVER.relock();
-    f(slot.get_or_insert_with(|| ServerState {
-        clients: rustc_hash::FxHashMap::default(),
-    }))
-}
 
 /// Registers mod `owner`'s actions callback; a second one is refused.
 pub(crate) fn register(
@@ -97,17 +62,38 @@ fn running(loader: &Loader) -> Vec<Registered> {
         .collect()
 }
 
-/// Asks `registered` its question `kind` about `player`, with the action,
-/// its arguments and the word that named the mod in a typed line, and the
+/// A question the loader asks a mod: its kind, and for
+/// [`ActionCall::REFUSED`] the run's own kind and the reason.
+#[derive(Clone, Copy, Debug)]
+struct Question {
+    kind: u32,
+    via: u32,
+    reason: u32,
+}
+
+impl Question {
+    /// The question `kind`, no refusal.
+    const fn of(kind: u32) -> Self {
+        Self {
+            kind,
+            via: 0,
+            reason: 0,
+        }
+    }
+}
+
+/// Asks `registered` its `question` about `player`, with the action, its
+/// arguments and the word that named the mod in a typed line, and the
 /// object `target` the run names; the answer.
 fn ask(
     registered: Registered,
-    kind: u32,
+    question: Question,
     player: &PlayerInfo,
     language: u32,
     (action, args, word): (&str, &str, &str),
     target: ActionTarget,
 ) -> Answer {
+    let kind = question.kind;
     let mut written: ActionReply = bytemuck::Zeroable::zeroed();
     let call = ActionCall {
         header: Header::of::<ActionCall>(),
@@ -123,6 +109,8 @@ fn ask(
             &raw mut written
         },
         word: Str::new(word),
+        via: question.via,
+        reason: question.reason,
     };
     let mut reply = Str::EMPTY;
     // SAFETY: the callback lives in the mod's DLL, which stays loaded; the
@@ -185,7 +173,7 @@ pub(crate) fn window(
     let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
     let answer = ask(
         registered,
-        ActionCall::WINDOW,
+        Question::of(ActionCall::WINDOW),
         player,
         language,
         (id, "", ""),
@@ -210,7 +198,7 @@ pub(crate) fn console(loader: &Loader, index: usize, word: &str, rest: &str) -> 
     let reply = command(
         loader,
         ModIndex::new(index),
-        ActionCall::CONSOLE,
+        Path::Console,
         &console,
         0,
         (word, rest),
@@ -219,14 +207,13 @@ pub(crate) fn console(loader: &Loader, index: usize, word: &str, rest: &str) -> 
 }
 
 /// Asks mod `owner` to run the text form `rest` of one of its actions for
-/// `caller`, as question `kind` ([`ActionCall::CONSOLE`],
-/// [`ActionCall::CHAT`] or [`ActionCall::REMOTE`]), `word` being what named
-/// the mod in the line, in lower case; its reply, `1` or `0` and the text,
+/// `caller`, who typed it on `path` (the console, chat or a remote caller),
+/// `word` being what named the mod in the line, in lower case; its reply,
 /// or `None` when the mod is off or declared no actions.
 pub(crate) fn command(
     loader: &Loader,
     owner: ModIndex,
-    kind: u32,
+    path: Path,
     caller: &PlayerInfo,
     language: u32,
     (word, rest): (&str, &str),
@@ -234,7 +221,7 @@ pub(crate) fn command(
     let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
     Some(ask(
         registered,
-        kind,
+        Question::of(path.kind()),
         caller,
         language,
         (rest, "", word),
@@ -242,69 +229,12 @@ pub(crate) fn command(
     ))
 }
 
-/// Admits a run that the player of account `key` sends now, at most one per
-/// [`RUN_GAP`]: the connected player and the language they read, or `None`
-/// for a run too soon or a player not in the world.
-fn admit(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> {
-    let now = Instant::now();
-    let (language, admitted) = server_state(|s| {
-        let client = s.clients.entry(key).or_default();
-        let admitted = client
-            .last_run
-            .is_none_or(|last| now.duration_since(last) >= RUN_GAP);
-        if admitted {
-            client.last_run = Some(now);
-        }
-        (client.language, admitted)
-    });
-    if !admitted {
-        return None;
-    }
-    caller(loader, key, language)
-}
-
-/// The connected player of account `key` and the language they read,
-/// `hello` being the one their client named in its hello.
-fn caller(loader: &Loader, key: u64, hello: u32) -> Option<(PlayerInfo, u32)> {
-    Some((player(loader, key)?, read_language(key, hello)))
-}
-
-/// The language the player of account `key` reads: the one their client
-/// names now, else `hello`, the one it named in its hello.
-fn read_language(key: u64, hello: u32) -> u32 {
-    crate::base::net::language_of(key).map_or(hello, |l| l.0)
-}
-
-/// The connected player of account `key` and the language they read, for a
-/// command they typed, which counts against the chat's rate, not
-/// [`RUN_GAP`].
-pub(crate) fn commander(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> {
-    Some((player(loader, key)?, language_of(key)))
-}
-
-/// The language the player of account `key` reads, as their client named
-/// it; 0, the fallback, for one that named none.
-pub(crate) fn language_of(key: u64) -> u32 {
-    read_language(
-        key,
-        server_state(|s| s.clients.get(&key).map_or(0, |c| c.language)),
-    )
-}
-
 /// Tells the mods that the client of account `key` closed mod `owner`'s
 /// window `window`, given as `Some((owner, window))`, which that mod hears,
 /// or with `None` that the player left, which every running mod with
 /// actions hears. The mods get the key alone, since the player may be gone.
 pub(crate) fn window_closed(loader: &Loader, key: u64, closed: Option<(ModIndex, &str)>) {
-    let who = PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: u32::MAX,
-        entity: enshwick_core::Entity(0),
-        key: enshwick_core::PlayerKey::new(key),
-        permissions: 0,
-        name_len: 0,
-        name: [0; 64],
-    };
+    let who = PlayerInfo::without_character(enshwick_core::PlayerKey::new(key), 0, "");
     for registered in running(loader) {
         let window = match closed {
             None => "",
@@ -313,7 +243,7 @@ pub(crate) fn window_closed(loader: &Loader, key: u64, closed: Option<(ModIndex,
         };
         let _heard = ask(
             registered,
-            ActionCall::WINDOW_CLOSED,
+            Question::of(ActionCall::WINDOW_CLOSED),
             &who,
             0,
             (window, "", ""),
@@ -338,7 +268,7 @@ pub(crate) fn allowed(
     let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
     let sheet = ask(
         registered,
-        ActionCall::SHEET,
+        Question::of(ActionCall::SHEET),
         player,
         0,
         ("", "", ""),
@@ -363,19 +293,9 @@ pub(crate) fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
         .find(|p| p.key == enshwick_core::PlayerKey::new(key))
 }
 
-/// A client names the language its player reads replies in, on the
-/// server's game thread; a run takes its hello's language before this one.
-/// A number the game does not know is dropped, as the hello's is.
-pub(crate) fn language(key: u64, language: u32) {
-    let named = enshwick_core::i18n::Language(language);
-    if enshwick_core::i18n::Language::ALL.contains(&named) {
-        server_state(|s| s.clients.entry(key).or_default().language = language);
-        crate::base::net::language_named(key, named);
-    }
-}
-
 /// A client runs mod `id`'s action on the object `target` its client named,
-/// on the server's game thread.
+/// on the server's game thread: through the [admission](admission) of the
+/// interface, then the mod, and its answer back the one way replies go.
 pub(crate) fn run(
     loader: &Loader,
     key: u64,
@@ -384,71 +304,122 @@ pub(crate) fn run(
     args: &str,
     target: Option<ActionTarget>,
 ) {
-    if !args_in_bounds(args) {
-        crate::log!(
-            DEBUG,
-            "{key:016x} sent {} bytes of arguments out of bounds for {id}:{action}",
-            args.len()
+    // Looked up past the rate, so the rest of a flood costs no lock or scan.
+    let registered = || {
+        running(loader)
+            .into_iter()
+            .find(|r| loader.mods.get(r.owner.get()).is_some_and(|m| m.id == id))
+    };
+    let refused = |registered: Option<Registered>, refusal| {
+        let owner = registered.map(|r| r.owner);
+        let (action, args) = admission::heard_of_client(action, args);
+        refuse(
+            loader,
+            Path::Interface,
+            key,
+            refusal,
+            owner,
+            (action, args, ""),
         );
-        return;
+    };
+    match admission::admit(loader, Path::Interface, key) {
+        Verdict::Run => {}
+        Verdict::Refuse(refusal) => return refused(registered(), refusal),
+        Verdict::Drop => return,
     }
-    let Some((player, language)) = admit(loader, key) else {
+    let registered = registered();
+    if let Err(refusal) = admitted_run(loader, key, registered, (id, action, args), target) {
+        crate::log!(DEBUG, "{key:016x} ran {id:?}:{action:?}: {refusal:?}");
+        refused(registered, refusal);
+    }
+}
+
+/// Answers the caller of account `key` the run from `path` refused for
+/// `refusal`, then tells mod `owner`, when it runs, with what the run
+/// would have held (action or line, arguments, word), so it hears every
+/// refused run of its actions after the caller got the answer.
+pub(crate) fn refuse(
+    loader: &Loader,
+    path: Path,
+    key: u64,
+    refusal: Refusal,
+    owner: Option<ModIndex>,
+    held: (&str, &str, &str),
+) {
+    admission::refuse(loader, path, key, refusal);
+    let Some(reason) = refusal.abi_reason() else {
         return;
     };
-    let Some(registered) = running(loader)
-        .into_iter()
-        .find(|r| loader.mods.get(r.owner.get()).is_some_and(|m| m.id == id))
+    let Some(registered) =
+        owner.and_then(|owner| running(loader).into_iter().find(|r| r.owner == owner))
     else {
         return;
     };
+    let caller = player(loader, key).unwrap_or_else(|| {
+        PlayerInfo::without_character(enshwick_core::PlayerKey::new(key), 0, "")
+    });
+    let question = Question {
+        kind: ActionCall::REFUSED,
+        via: path.kind(),
+        reason,
+    };
+    let language = crate::base::net::language_number(key);
+    let _heard = ask(
+        registered,
+        question,
+        &caller,
+        language,
+        held,
+        ActionTarget::NONE,
+    );
+}
+
+/// Runs a client's run of `action` of the mod `registered` (whose id the
+/// client named as `id`) with `args` past its rate: the peer bounds, the
+/// mod, the reach of `target`, then the mod's handler and its answer; the
+/// refusal of a run the platform stops before the mod.
+fn admitted_run(
+    loader: &Loader,
+    key: u64,
+    registered: Option<Registered>,
+    (id, action, args): (&str, &str, &str),
+    target: Option<ActionTarget>,
+) -> Result<(), Refusal> {
+    if !admission::args_in_bounds(args) {
+        return Err(Refusal::Bounds);
+    }
+    // A player not in the world has no screen to answer on.
+    let Some(player) = player(loader, key) else {
+        return Ok(());
+    };
+    let registered = registered.ok_or(Refusal::Unavailable)?;
     let target = match target {
         None => ActionTarget::NONE,
         Some(named) => {
             let position = |entity| crate::engine::world::fixed_position(loader, entity);
-            let Some(target) = reached(named, player.entity, |e| {
+            reached(named, player.entity, |e| {
                 position(e).map(enshwick_core::ecs::metres)
-            }) else {
-                crate::log!(
-                    DEBUG,
-                    "{key:016x} named an object out of reach for {id}:{action}"
-                );
-                let text = crate::engine::texts::for_player(key, || {
-                    crate::engine::texts::text("actions.out-of-reach")
-                });
-                tell(loader, key, text);
-                return;
-            };
-            target
+            })
+            .ok_or(Refusal::Reach)?
         }
     };
     let reply = ask(
         registered,
-        ActionCall::RUN,
+        Question::of(ActionCall::RUN),
         &player,
-        language,
+        crate::base::net::language_number(key),
         (action, args, ""),
         target,
     );
     crate::ui::windows::ran(registered.owner, key);
-    let (ok, text) = (reply.done, reply.text.as_str());
-    let name =
-        String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned();
     crate::log!(
         DEBUG,
-        "{name} ({key:016x}) ran {id}:{action}: {}",
-        if ok { "done" } else { "refused" }
+        "{} ({key:016x}) ran {id}:{action}: {}",
+        player.name_text(),
+        if reply.done { "done" } else { "refused" }
     );
-    if !text.is_empty() {
-        tell(loader, key, &one_line(text));
-    }
-}
-
-/// Tells player `key` `text` as a notice, or in chat to a client that
-/// cannot show one.
-pub(crate) fn tell(loader: &Loader, key: u64, text: &str) {
-    if crate::base::notices::send(loader, key, text).is_err() {
-        let _queued = crate::actions::chat::send(key, text);
-    }
+    crate::actions::reply::answer(loader, Path::Interface, key, reply.done, &reply.text);
+    Ok(())
 }
 
 /// How far from the player an object their client names may stand, in
@@ -476,16 +447,6 @@ fn reached(
     let from = position(player)?;
     let distance_sq: f64 = (0..3).map(|i| (target.position[i] - from[i]).powi(2)).sum();
     (distance_sq <= REACH * REACH).then_some(target)
-}
-
-/// A reply's lines joined into the one line a notice shows.
-fn one_line(text: &str) -> String {
-    text.lines().collect::<Vec<_>>().join(" ")
-}
-
-/// Forgets the clients, as when the server's world goes away.
-pub(crate) fn forget() {
-    *SERVER.relock() = None;
 }
 
 /// Runs mod `id`'s action on the server, on the object `target` names if
@@ -517,27 +478,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_language_the_game_does_not_know_is_dropped_and_a_known_one_kept() {
-        use enshwick_core::i18n::Language;
-        let key = 0x5eed_1a96;
-        language(key, u32::MAX);
-        assert_eq!(
-            language_of(key),
-            0,
-            "an unknown number reads as the fallback"
-        );
-        language(key, Language::UK_UA.0);
-        language(key, 9999);
-        assert_eq!(language_of(key), Language::UK_UA.0);
-    }
-
-    #[test]
-    fn a_reply_of_several_lines_shows_every_line_in_its_notice() {
-        assert_eq!(one_line("3 players\nAnn\r\nBob"), "3 players Ann Bob");
-        assert_eq!(one_line("Сейф"), "Сейф");
-    }
-
-    #[test]
     fn the_actions_a_sheet_lists_are_the_ones_carried() {
         use enshwick_core::actions::sheet::{Entry, encode};
 
@@ -565,15 +505,6 @@ mod tests {
         ] {
             assert!(!answers_text(kind), "{kind}");
         }
-    }
-
-    #[test]
-    fn arguments_over_the_bound_or_with_a_control_character_are_dropped() {
-        assert!(args_in_bounds("tBan for griefing\tb1"));
-        assert!(args_in_bounds(&"t".repeat(MAX_ARGS)));
-        assert!(!args_in_bounds(&"t".repeat(MAX_ARGS + 1)));
-        assert!(!args_in_bounds("tline\nbreak"));
-        assert!(!args_in_bounds("tbell\u{7}"));
     }
 
     fn places(entity: enshwick_core::Entity) -> Option<[f64; 3]> {

@@ -494,7 +494,7 @@ pub(crate) extern "system" fn account_action(
             .host
             .players
             .iter()
-            .any(|p| p.key == account && p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
+            .any(|p| p.key == account && p.is_admin());
         match action {
             AccountActionType::UN_BAN => s.banned.retain(|&banned| banned != account),
             _ if admin || s.host.host_key == Some(account) => return Status::REFUSED,
@@ -534,7 +534,7 @@ pub(crate) extern "system" fn chat_mute_set(
             .host
             .players
             .iter()
-            .any(|p| p.key == account && p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
+            .any(|p| p.key == account && p.is_admin());
         let at = s.muted.iter().position(|&k| k == account);
         match (muted == 1, at) {
             (true, _) if admin || s.host.host_key == Some(account) => return Status::REFUSED,

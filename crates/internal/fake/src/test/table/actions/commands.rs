@@ -23,18 +23,8 @@ pub(crate) struct FakeCommands {
 }
 
 #[cfg(feature = "unstable")]
-use enshwick_core::actions::{
-    is_valid_id as is_window_id,
-    window::{MAX_CALL_PLAYERS, MAX_WAITING},
-};
-/// The most players one show or close names, as
-/// `actions::window::MAX_CALL_PLAYERS` holds it where that module is built.
-#[cfg(not(feature = "unstable"))]
-const MAX_CALL_PLAYERS: usize = 64;
-/// The most shows and closes that wait, as `actions::window::MAX_WAITING`
-/// holds it where that module is built.
-#[cfg(not(feature = "unstable"))]
-const MAX_WAITING: usize = 256;
+use enshwick_core::actions::is_valid_id as is_window_id;
+use enshwick_core::peer::{MAX_CALL_PLAYERS, MAX_WAITING_WINDOWS as MAX_WAITING};
 
 /// Without the `actions` module the fake takes any window id of 1 to 32
 /// bytes.
@@ -187,21 +177,12 @@ pub(crate) fn is_own(word: &str) -> bool {
     })
 }
 
-/// The first word of `line` without its `/`, and the rest.
-fn split(line: &str) -> (String, String) {
-    let line = line.trim();
-    let (first, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
-    (
-        first.strip_prefix('/').unwrap_or(first).to_lowercase(),
-        rest.trim().to_owned(),
-    )
-}
-
 /// The mod's reply to command line `line` asked as `kind` for `caller`,
 /// `1` or `0` and the text; `None` when the line names neither the mod's
 /// commands nor another mod's.
 pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) -> Option<String> {
-    let (word, rest) = split(line);
+    let word = enshwick_core::command_names::command_word(line);
+    let (_, rest) = enshwick_core::command_names::first_word(line);
     let (own, other, actions) = with((false, None, None), |s| {
         let (sets, id) = sets_now(s);
         let Some(set) = sets.iter().find(|set| set.is_called(&word)) else {
@@ -229,28 +210,20 @@ pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) 
         kind,
         caller,
         language,
-        &rest,
+        rest,
         &word,
         ActionTarget::NONE,
     ))
 }
 
 /// The remote caller `label` with the game's permission bits
-/// `permissions`, as the loader builds it: no character, account key 0,
-/// the label cut to 64 bytes as its name.
+/// `permissions`, as the loader builds it.
 fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
-    let label = &label[..label.floor_char_boundary(64)];
-    let mut name = [0u8; 64];
-    name[..label.len()].copy_from_slice(label.as_bytes());
-    PlayerInfo {
-        header: enshwick_core::abi::Header::of::<PlayerInfo>(),
-        slot: u32::MAX,
-        entity: enshwick_core::Entity(0),
-        key: enshwick_core::PlayerKey::new(0),
-        permissions: u8::try_from(permissions & u32::from(ALL_BITS)).unwrap_or(0),
-        name_len: u8::try_from(label.len()).unwrap_or(64),
-        name,
-    }
+    PlayerInfo::without_character(
+        enshwick_core::PlayerKey::new(0),
+        u8::try_from(permissions & u32::from(ALL_BITS)).unwrap_or(0),
+        label,
+    )
 }
 
 pub(crate) extern "system" fn run_command(

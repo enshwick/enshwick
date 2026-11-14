@@ -27,7 +27,7 @@ pub(crate) use enshwick_base::facts;
 pub use enshwick_base::{
     code, command_names,
     config::{self},
-    ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule,
+    ecs, events, files, game_events, i18n, mods, net, pacing, peer, points, resources, schedule,
     services, state, status, time,
 };
 // The macros the base exports, which the code here calls by `crate::`.

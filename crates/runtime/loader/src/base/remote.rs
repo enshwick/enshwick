@@ -9,12 +9,12 @@
 //! never sends a field marked `secret`, and changes a setting only through
 //! the same checks as `enshwick config` on the console.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
+use enshwick_base::peer::{Admitted, Rated};
 use enshwick_core::abi::ActionTarget;
 use enshwick_core::config::Schema;
 
-use crate::base::wire::Peer;
 use crate::engine::texts;
 
 /// The control frame kinds, after the protocol's notice (3), item data (4)
@@ -52,24 +52,7 @@ pub const MAX_CARRIED: usize = 24;
 /// name, in bytes; the server cuts a longer one.
 pub const MAX_CARRIED_TEXT: usize = 160;
 
-/// The least time between two changes one player sends.
-pub const EDIT_GAP: Duration = Duration::from_millis(250);
-/// The [rated](Message::is_rated) messages a player who is no administrator
-/// sends per second, and in one burst.
-///
-/// The server answers each with up to a whole control message, so the frame
-/// rate alone would let a player make it send far more than the player sends.
-pub const QUERY_RATE: f64 = 2.0;
-/// See [`QUERY_RATE`].
-pub const QUERY_BURST: f64 = 8.0;
-/// The action runs a second a player who is no administrator sends, after
-/// a burst of [`RUN_BURST`].
-///
-/// A control sends one a key press, so faster than queries, and each costs
-/// the server one handler call and one notice.
-pub const RUN_RATE: f64 = 10.0;
-/// See [`RUN_RATE`].
-pub const RUN_BURST: f64 = 20.0;
+pub use enshwick_base::peer::{EDIT_RATE, QUERY_RATE};
 
 /// A message between a client's loader and its server's.
 #[derive(Clone, Debug, PartialEq)]
@@ -363,17 +346,14 @@ impl Message {
         }
     }
 
-    /// Whether the server answers it with a reply of its own making or runs
-    /// a mod's handler for it, so a player who is no administrator sends it
-    /// at [`QUERY_RATE`] only, or an action run at [`RUN_RATE`].
+    /// Whether the server answers it with a reply of its own making, so a
+    /// player who is no administrator sends it at [`QUERY_RATE`] only; an
+    /// action run passes the actions' own admission instead.
     #[must_use]
     pub const fn is_rated(&self) -> bool {
         matches!(
             self,
-            Self::Query { .. }
-                | Self::Edit { .. }
-                | Self::ActionsLanguage { .. }
-                | Self::ActionRun { .. }
+            Self::Query { .. } | Self::Edit { .. } | Self::ActionsLanguage { .. }
         )
     }
 
@@ -629,13 +609,13 @@ pub fn redacted(schema: &Schema, text: &str) -> String {
 ///
 /// # Errors
 ///
-/// [`AdmitEditError`]: not an administrator, a secret field, or too soon
-/// after the last change.
+/// [`AdmitEditError`]: not an administrator, a secret field, or over the
+/// [`EDIT_RATE`] of account `account` in `edits`.
 pub fn admit(
     schema: &Schema,
     key: &str,
     admin: bool,
-    last: Option<Instant>,
+    (account, edits): (u64, &mut Rated),
     now: Instant,
 ) -> Result<(), AdmitEditError> {
     if !admin {
@@ -646,7 +626,7 @@ pub fn admit(
             key: key.to_owned(),
         });
     }
-    if last.is_some_and(|last| now.duration_since(last) < EDIT_GAP) {
+    if edits.admit(account, now) != Admitted::Yes {
         return Err(AdmitEditError::Busy);
     }
     Ok(())
@@ -695,59 +675,58 @@ pub enum Gate {
     Drop,
 }
 
-/// The rates of the [rated](Message::is_rated) messages of players who are
+/// The rate of the [rated](Message::is_rated) messages of players who are
 /// no administrators, on the server.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Queries {
-    rates: rustc_hash::FxHashMap<u64, Peer>,
-    /// Each player's own rate of action runs, apart from the queries'.
-    runs: rustc_hash::FxHashMap<u64, Peer>,
+    rated: Rated,
+}
+
+impl Default for Queries {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Queries {
-    /// Takes one rated message of the player with account key `key` at
-    /// `now`; false when the player is over [`QUERY_RATE`]. An
-    /// administrator's messages are not rated.
-    pub fn admit(&mut self, key: u64, admin: bool, now: Instant) -> bool {
-        admin
-            || self
-                .rates
-                .entry(key)
-                .or_insert_with(|| Peer::with_tokens(QUERY_BURST))
-                .admit_at(now, QUERY_RATE, QUERY_BURST)
+    /// No player seen yet.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            rated: Rated::new(QUERY_RATE),
+        }
     }
 
     /// Decides whether the server serves `message` of the player with
     /// account key `key` at `now`. Only [rated](Message::is_rated) messages
-    /// spend the player's rate; a language message over it gets no answer.
-    pub fn gate(&mut self, key: u64, admin: bool, message: &Message, now: Instant) -> Gate {
-        let admitted = match message {
-            Message::ActionRun { .. } => {
-                admin
-                    || self
-                        .runs
-                        .entry(key)
-                        .or_insert_with(|| Peer::with_tokens(RUN_BURST))
-                        .admit_at(now, RUN_RATE, RUN_BURST)
-            }
-            _ => !message.is_rated() || self.admit(key, admin, now),
-        };
-        if admitted {
-            Gate::Pass
-        } else if matches!(message, Message::ActionsLanguage { .. }) {
-            Gate::Drop
-        } else {
-            Gate::Busy(Message::Result {
+    /// spend the player's [`QUERY_RATE`], and `admin` is asked only of one
+    /// over it, since an administrator's messages are not rated. Every query
+    /// or edit over the rate is answered busy, since its client waits for an
+    /// answer and the wire's own rate bounds the answers; a language message
+    /// over it gets none.
+    pub fn gate(
+        &mut self,
+        key: u64,
+        admin: impl FnOnce() -> bool,
+        message: &Message,
+        now: Instant,
+    ) -> Gate {
+        if !message.is_rated() {
+            return Gate::Pass;
+        }
+        match self.rated.admit_or(key, now, admin) {
+            Admitted::Yes => Gate::Pass,
+            _ if matches!(message, Message::ActionsLanguage { .. }) => Gate::Drop,
+            Admitted::First | Admitted::Again => Gate::Busy(Message::Result {
                 ok: false,
                 text: texts::fill("remote.slow", &[]),
-            })
+            }),
         }
     }
 
     /// Forgets the player with account key `key`, who left.
     pub fn forget(&mut self, key: u64) {
-        self.rates.remove(&key);
-        self.runs.remove(&key);
+        self.rated.forget(key);
     }
 }
 

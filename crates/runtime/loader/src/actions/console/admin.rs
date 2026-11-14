@@ -135,7 +135,7 @@ pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<
         .map(|p| Online {
             name: super::tools::name(p),
             key: p.key.get(),
-            admin: super::tools::is_admin(p),
+            admin: p.is_admin(),
         })
         .collect();
     let target = online

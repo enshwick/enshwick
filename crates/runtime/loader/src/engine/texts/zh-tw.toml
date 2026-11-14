@@ -1,6 +1,8 @@
 [zh-tw]
 "actions.close" = "關閉"
 "actions.out-of-reach" = "距離太遠。"
+"actions.bad-request" = "伺服器無法讀取該請求。"
+"actions.unavailable" = "該操作目前在此伺服器上無法使用。"
 "windows.run" = "執行"
 "windows.cancel" = "取消"
 "windows.name" = "或輸入名字"

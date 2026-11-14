@@ -37,7 +37,7 @@ fn account(key: enshwick_core::PlayerKey) -> Result<u64, Status> {
 
 entries! {
     fn language_of(_me as Mod, key: enshwick_core::PlayerKey) -> u32 {
-        Ok(crate::base::net::language_of(key.get()).map_or(0, |language| language.0))
+        Ok(crate::base::net::language_number(key.get()))
     }
 
     fn progress_write(me as Mod, entity: Entity, what: u32, value: u32) -> Status {

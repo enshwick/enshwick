@@ -56,10 +56,7 @@ const PROBE_HEAD: usize = 2 + 1 + 8;
 /// A control message from the server: the mods of side both its world
 /// runs, to a client whose hello named others, before the kick.
 pub const MODS: u8 = 7;
-/// Messages each peer may send per second.
-pub const RATE: f64 = 20.0;
-/// Messages each peer may send in one burst.
-pub const BURST: f64 = 40.0;
+pub use enshwick_base::peer::MESSAGE_RATE;
 
 /// Bit of a hello's flags: the mod list is whole.
 const HELLO_COMPLETE: u8 = 1;

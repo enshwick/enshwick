@@ -218,7 +218,7 @@ impl Player {
     /// See [`World`].
     #[must_use]
     pub const fn is_admin(&self) -> bool {
-        self.permissions & PlayerInfo::CAN_KICK_BAN != 0
+        PlayerInfo::admin(self.permissions)
     }
 
     /// Whether the server gives the player `permission`, as their user

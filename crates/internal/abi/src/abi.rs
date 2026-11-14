@@ -806,7 +806,7 @@ const _: () = {
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);
     assert!(size_of::<MidHookSpec>() == 32);
     assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
-    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16 + 40 + 8 + 16);
+    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16 + 40 + 8 + 16 + 4 + 4);
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
     assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8 + 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);

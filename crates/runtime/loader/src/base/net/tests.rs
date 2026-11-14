@@ -50,10 +50,14 @@ fn a_language_named_after_the_hello_fills_only_a_peer_whose_hello_named_none() {
         peer.language = Some(Language::FALLBACK);
         s.peers.insert(named, peer);
     });
-    language_named(silent, Language::UK_UA);
-    language_named(named, Language::UK_UA);
-    language_named(0x1a96_0003, Language::UK_UA);
+    language_named(silent, u32::MAX);
+    assert_eq!(language_of(silent), None, "an unknown number is dropped");
+    language_named(silent, Language::UK_UA.0);
+    language_named(named, Language::UK_UA.0);
+    language_named(0x1a96_0003, Language::UK_UA.0);
     assert_eq!(language_of(silent), Some(Language::UK_UA));
+    assert_eq!(language_number(silent), Language::UK_UA.0);
+    assert_eq!(language_number(0x1a96_0003), 0, "the fallback");
     assert_eq!(
         language_of(named),
         Some(Language::FALLBACK),
@@ -133,7 +137,7 @@ fn every_message_of_a_stranger_takes_from_its_rate() {
     for _ in 0..200 {
         let _taken = take_message(&mut state, 7, CONTROL, false);
     }
-    assert!(state.greeting[&7].tokens < 1.0, "the rate ran out");
+    assert!(state.greeting[&7].rate.tokens() < 1.0, "the rate ran out");
 }
 
 #[test]
@@ -183,7 +187,7 @@ fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_
     let _link = crate::base::carrier::tests::alone();
     let (host, wired) = (7, 9);
     let in_burst = |count: u64| {
-        let burst = crate::base::wire::BURST;
+        let burst = crate::base::wire::MESSAGE_RATE.burst;
         (burst..=burst + 2.0).contains(&f64::from(u32::try_from(count).unwrap()))
     };
     let _pending = CHANNELS.edit(|pending| {
@@ -271,7 +275,7 @@ fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no
     for _ in 0..200 {
         assert_eq!(send_to_server(5, b"x"), Err(Status::MISSING), "no link");
     }
-    let tokens = state(|s| s.sending[&server].tokens);
+    let tokens = state(|s| s.sending[&server].rate.tokens());
     assert!(tokens >= 39.0, "{tokens}");
 }
 

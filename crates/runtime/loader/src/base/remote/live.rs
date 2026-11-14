@@ -4,16 +4,26 @@ use enshwick_base::Relock;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use enshwick_core::abi::PlayerInfo;
 use enshwick_core::config::Schema;
 
-use super::{AdmitEditError, Gate, Message, Queries, admit, redacted, texts};
+use enshwick_base::peer::Rated;
+
+use super::{AdmitEditError, EDIT_RATE, Gate, Message, Queries, admit, redacted, texts};
+use crate::actions::player_actions::player;
 use crate::engine::loader::Loader;
 
-/// When each player last changed a setting.
-static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
-/// The rates of the queries of players who are no administrators.
-static QUERIES: Mutex<Option<Queries>> = Mutex::new(None);
+/// The server's rates of its clients' messages.
+struct Rates {
+    /// The queries of players who are no administrators.
+    queries: Queries,
+    /// Each administrator's settings changes.
+    edits: Rated,
+}
+
+static RATES: Mutex<Rates> = Mutex::new(Rates {
+    queries: Queries::new(),
+    edits: Rated::new(EDIT_RATE),
+});
 /// What the client last heard from its server, for the Mods screen.
 static HEARD: Mutex<Heard> = Mutex::new(Heard::new());
 
@@ -131,18 +141,6 @@ pub(crate) fn client(message: Message) {
     }
 }
 
-/// The connected player with account key `key`.
-fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
-    crate::engine::world::players(loader)
-        .ok()?
-        .into_iter()
-        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
-}
-
-fn name(player: &PlayerInfo) -> String {
-    String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned()
-}
-
 /// Takes a message a client sent, on the server's game thread; the
 /// answer is in the language the client's player reads.
 pub(crate) fn server(loader: &Loader, key: u64, message: Message) {
@@ -151,8 +149,8 @@ pub(crate) fn server(loader: &Loader, key: u64, message: Message) {
 
 /// Answers a message the client `key` sent.
 fn answer(loader: &Loader, key: u64, message: Message) {
-    let admin = player(loader, key).is_some_and(|p| p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
-    match gate(key, admin, &message) {
+    let is_admin = || player(loader, key).is_some_and(|p| p.is_admin());
+    match gate(key, is_admin, &message) {
         Gate::Pass => {}
         Gate::Busy(answer) => {
             crate::base::net::to_player(key, &answer);
@@ -162,6 +160,7 @@ fn answer(loader: &Loader, key: u64, message: Message) {
     }
     match message {
         Message::Query { id } if id.is_empty() => {
+            let admin = is_admin();
             let mut text = String::new();
             for record in loader
                 .mods
@@ -184,12 +183,13 @@ fn answer(loader: &Loader, key: u64, message: Message) {
                 },
             );
         }
-        Message::Query { id } => snapshot(loader, key, &id, admin),
+        Message::Query { id } => snapshot(loader, key, &id, is_admin()),
         Message::Edit {
             id,
             key: setting,
             value,
         } => {
+            let admin = is_admin();
             let reply = edit(loader, key, &id, &setting, &value, admin);
             let ok = reply.is_ok();
             let text = reply.unwrap_or_else(|why| why.reply());
@@ -197,7 +197,7 @@ fn answer(loader: &Loader, key: u64, message: Message) {
             snapshot(loader, key, &id, admin);
         }
         Message::ActionsLanguage { language } => {
-            crate::actions::player_actions::language(key, language);
+            crate::base::net::language_named(key, language);
         }
         Message::ActionRun {
             id,
@@ -220,21 +220,18 @@ fn answer(loader: &Loader, key: u64, message: Message) {
 
 /// What the server does with `message` of the player with account key
 /// `key` now.
-fn gate(key: u64, admin: bool, message: &Message) -> Gate {
-    QUERIES
+fn gate(key: u64, admin: impl FnOnce() -> bool, message: &Message) -> Gate {
+    RATES
         .relock()
-        .get_or_insert_with(Queries::default)
+        .queries
         .gate(key, admin, message, Instant::now())
 }
 
 /// Forgets the player with account key `key`, who left the server.
 pub(crate) fn forget_player(key: u64) {
-    if let Some(queries) = QUERIES.relock().as_mut() {
-        queries.forget(key);
-    }
-    if let Some(last) = LAST_EDIT.relock().as_mut() {
-        last.remove(&key);
-    }
+    let mut rates = RATES.relock();
+    rates.queries.forget(key);
+    rates.edits.forget(key);
 }
 
 /// Sends mod `id`'s settings to the client of `key`, without secrets: to
@@ -298,13 +295,15 @@ fn edit(
         .settings_schema()
         .ok_or_else(|| EditSettingError::NoSchema { id: id.to_owned() })?;
     let now = Instant::now();
-    {
-        let mut last = LAST_EDIT.relock();
-        let last = last.get_or_insert_with(rustc_hash::FxHashMap::default);
-        admit(&schema, setting, admin, last.get(&key).copied(), now)?;
-        last.insert(key, now);
-    }
-    let who = player(loader, key).map_or_else(|| format!("{key:016x}"), |p| name(&p));
+    admit(
+        &schema,
+        setting,
+        admin,
+        (key, &mut RATES.relock().edits),
+        now,
+    )?;
+    let who =
+        player(loader, key).map_or_else(|| format!("{key:016x}"), |p| p.name_text().into_owned());
     let change = crate::base::configure::apply(loader, index, setting, value, &who)?;
     Ok(crate::base::configure::changed(id, setting, &change))
 }

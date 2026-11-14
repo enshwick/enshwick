@@ -9,7 +9,7 @@
 //! code, as for a console line. Reading names and lines is pure logic here;
 //! the run module keeps them and runs the commands on the game thread.
 
-use enshwick_core::abi::{Header, PlayerInfo};
+use enshwick_core::abi::PlayerInfo;
 
 use crate::engine::mod_index::ModIndex;
 
@@ -30,26 +30,14 @@ pub type Named = enshwick_core::command_names::Named<ModIndex>;
 /// Why a mod's commands are refused.
 pub type Refusal = enshwick_core::command_names::Refusal<ModIndex>;
 
-/// The first word of `line` and the rest, trimmed.
-fn split(line: &str) -> (&str, &str) {
-    let line = line.trim();
-    let (first, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
-    (first, rest.trim())
-}
-
-/// The word that names a mod in `line`, as the mod is told it: the first
-/// word in lower case, without a leading `/`.
-#[must_use]
-pub fn word(line: &str) -> String {
-    let (first, _) = split(line);
-    first.strip_prefix('/').unwrap_or(first).to_lowercase()
-}
+pub use enshwick_core::command_names::command_word as word;
+use enshwick_core::command_names::first_word;
 
 /// The mod whose command name or alias is `line`'s first word, a leading
 /// `/` allowed, and the rest of the line.
 #[must_use]
 pub fn parse<'a>(named: &[Named], line: &'a str) -> Option<(ModIndex, &'a str)> {
-    let (first, rest) = split(line);
+    let (first, rest) = first_word(line);
     let word = first.strip_prefix('/').unwrap_or(first);
     named
         .iter()
@@ -62,9 +50,9 @@ pub fn parse<'a>(named: &[Named], line: &'a str) -> Option<(ModIndex, &'a str)> 
 pub enum Typed<'a> {
     /// No command: the chat posts it.
     Chat,
-    /// A command of a mod that is off: it leaves the chat, so its words
+    /// A command of mod `0`, which is off: it leaves the chat, so its words
     /// reach no other player, and runs nowhere.
-    Off,
+    Off(ModIndex),
     /// A command of a running mod, and the rest of the line.
     Run(ModIndex, &'a str),
 }
@@ -78,56 +66,19 @@ pub fn typed<'a>(named: &[Named], text: &'a str, running: impl Fn(ModIndex) -> b
     match parse(named, text) {
         None => Typed::Chat,
         Some((owner, rest)) if running(owner) => Typed::Run(owner, rest),
-        Some(_) => Typed::Off,
-    }
-}
-
-/// How a command's reply reaches the player who typed it.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Reply<'a> {
-    /// No text: nothing goes.
-    None,
-    /// One notice.
-    Notice(std::borrow::Cow<'a, str>),
-    /// Several lines in chat, to that player alone, however many.
-    Chat(&'a str),
-}
-
-/// How the reply `text` of a command typed in chat goes to its player.
-///
-/// One line of an action that was `done` goes as a notice. Several lines,
-/// and every refusal, go in chat, where the player typed and reads, while
-/// `chat_to_one` (lines to one player) works, else joined into one notice.
-#[must_use]
-pub fn reply_by(text: &str, done: bool, chat_to_one: bool) -> Reply<'_> {
-    if text.is_empty() {
-        Reply::None
-    } else if done && text.lines().nth(1).is_none() {
-        Reply::Notice(text.into())
-    } else if chat_to_one {
-        Reply::Chat(text)
-    } else {
-        Reply::Notice(text.lines().collect::<Vec<_>>().join(" / ").into())
+        Some((owner, _)) => Typed::Off(owner),
     }
 }
 
 /// The remote caller `label` with the game's permission bits
-/// `permissions`: no character, account key 0, the label, cut to 64 bytes,
-/// as its name.
+/// `permissions`: no character, account key 0, the label as its name.
 #[must_use]
 pub fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
-    let label = &label[..label.floor_char_boundary(64)];
-    let mut name = [0u8; 64];
-    name[..label.len()].copy_from_slice(label.as_bytes());
-    PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: u32::MAX,
-        entity: enshwick_core::Entity(0),
-        key: enshwick_core::PlayerKey::new(0),
-        permissions: u8::try_from(permissions & u32::from(ALL_PERMISSIONS)).unwrap_or(0),
-        name_len: u8::try_from(label.len()).unwrap_or(64),
-        name,
-    }
+    PlayerInfo::without_character(
+        enshwick_core::PlayerKey::new(0),
+        u8::try_from(permissions & u32::from(ALL_PERMISSIONS)).unwrap_or(0),
+        label,
+    )
 }
 
 #[cfg(test)]
@@ -163,7 +114,7 @@ mod tests {
         let running = |owner: ModIndex| owner.get() == 5;
         assert_eq!(
             typed(&all, "/adm password hunter2", running),
-            Typed::Off,
+            Typed::Off(ModIndex::new(3)),
             "never posted for every player to read"
         );
         assert_eq!(
@@ -172,33 +123,6 @@ mod tests {
         );
         assert_eq!(typed(&all, "adm online", running), Typed::Chat);
         assert_eq!(typed(&all, "/me waves", running), Typed::Chat);
-    }
-
-    #[test]
-    fn a_reply_of_several_lines_goes_as_one_notice_when_chat_to_one_player_is_off() {
-        let help = "online: players online\nkick: kick a player";
-        assert_eq!(reply_by(help, true, true), Reply::Chat(help));
-        assert_eq!(
-            reply_by(help, true, false),
-            Reply::Notice("online: players online / kick: kick a player".into())
-        );
-        assert_eq!(
-            reply_by("kicked Ann", true, true),
-            Reply::Notice("kicked Ann".into())
-        );
-        assert_eq!(reply_by("", true, false), Reply::None);
-        assert_eq!(reply_by("", false, true), Reply::None);
-    }
-
-    #[test]
-    fn a_refusal_of_a_typed_command_goes_into_the_chat_of_who_typed_it() {
-        let unknown = "No action dance. /adm help lists them.";
-        assert_eq!(reply_by(unknown, false, true), Reply::Chat(unknown));
-        assert_eq!(
-            reply_by(unknown, false, false),
-            Reply::Notice(unknown.into()),
-            "as a notice while lines to one player are off"
-        );
     }
 
     #[test]

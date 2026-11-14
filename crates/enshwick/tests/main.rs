@@ -189,6 +189,8 @@ mod recipe_kinds;
 #[cfg(feature = "unstable")]
 mod recipe_menu;
 mod recipe_rules;
+#[cfg(feature = "unstable")]
+mod refused_runs;
 #[cfg(feature = "typed")]
 mod rekey_served;
 #[cfg(feature = "typed")]

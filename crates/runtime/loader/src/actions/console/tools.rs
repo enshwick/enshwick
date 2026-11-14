@@ -14,12 +14,7 @@ use super::answers::{self, Loaded, Online, Seen};
 
 /// A player's name as the client sent it, safe for one line.
 pub(crate) fn name(player: &PlayerInfo) -> String {
-    let len = usize::from(player.name_len).min(player.name.len());
-    accounts::shown(&String::from_utf8_lossy(&player.name[..len]))
-}
-
-pub(crate) fn is_admin(player: &PlayerInfo) -> bool {
-    player.permissions & PlayerInfo::CAN_KICK_BAN != 0
+    accounts::shown(&player.name_text())
 }
 
 fn position(loader: &Loader, entity: u32) -> Option<[f64; 3]> {
@@ -37,7 +32,7 @@ pub(crate) fn world(loader: &Loader) -> String {
                     slot: p.slot,
                     entity: p.entity.0,
                     key: p.key.get(),
-                    admin: is_admin(p),
+                    admin: p.is_admin(),
                     position: position(loader, p.entity.0),
                 })
                 .collect::<Vec<_>>(),

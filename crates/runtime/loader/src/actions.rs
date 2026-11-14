@@ -1,6 +1,7 @@
 //! The actions domain: player actions, console commands, controls, chat,
 //! interactions and vetoes.
 
+pub mod admission;
 pub mod bindings;
 #[cfg(windows)]
 pub(crate) mod build_reasons;
@@ -18,6 +19,7 @@ pub mod linked_controls;
 pub(crate) mod local_held;
 #[cfg(windows)]
 pub(crate) mod player_actions;
+pub mod reply;
 #[cfg(windows)]
 pub(crate) mod vetoes;
 
@@ -98,7 +100,7 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("controls", controls)
     },
     &Part {
-        forget: Some(|_| player_actions::forget()),
+        forget: Some(|_| admission::forget()),
         ..part!("player_actions", player_actions)
     },
     &Part {

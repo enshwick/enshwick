@@ -16,7 +16,7 @@ use std::sync::{Mutex, OnceLock};
 
 mod said;
 
-pub(crate) use said::{Rate, admit, register};
+pub(crate) use said::register;
 
 use enshwick_core::abi::{ChatLine, HookFlags, Status};
 

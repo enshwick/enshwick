@@ -446,6 +446,33 @@ id_conversions!(
 
 guid_ids!(ItemId, RecipeId, KnowledgeId, BuffTypeId, NpcId);
 
+impl PlayerKey {
+    /// The key `text` writes in hex, as the interface and the console send
+    /// it: 1 to 16 hex digits after an optional `0x`, nothing else, not even
+    /// a sign.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::PlayerKey;
+    ///
+    /// assert_eq!(PlayerKey::from_hex("000000000000002a"), Some(PlayerKey::new(42)));
+    /// assert_eq!(PlayerKey::from_hex("0x2A"), Some(PlayerKey::new(42)));
+    /// assert_eq!(PlayerKey::from_hex("+2a"), None);
+    /// ```
+    #[must_use]
+    pub fn from_hex(text: &str) -> Option<Self> {
+        let hex = text
+            .strip_prefix("0x")
+            .or_else(|| text.strip_prefix("0X"))
+            .unwrap_or(text);
+        if hex.is_empty() || hex.len() > 16 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        u64::from_str_radix(hex, 16).ok().map(Self)
+    }
+}
+
 const _: () = {
     assert!(size_of::<Entity>() == size_of::<u32>() && align_of::<Entity>() == align_of::<u32>());
     assert!(size_of::<ItemId>() == size_of::<u32>() && align_of::<ItemId>() == align_of::<u32>());

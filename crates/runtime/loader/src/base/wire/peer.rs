@@ -2,7 +2,9 @@
 
 use std::time::{Duration, Instant};
 
-use super::{BURST, RATE};
+use enshwick_base::peer::{Bucket, Rate};
+
+use super::MESSAGE_RATE;
 
 /// How long after a peer got the data a hello of its brings it again.
 ///
@@ -26,8 +28,7 @@ pub const DATA_AGAIN: Duration = Duration::from_secs(15);
 #[derive(Debug)]
 pub struct Peer {
     /// Messages the peer may still send now.
-    pub(crate) tokens: f64,
-    seen: Instant,
+    pub(crate) rate: Bucket,
     /// The language the peer's player reads the game in, once its hello
     /// named one.
     #[cfg_attr(
@@ -53,7 +54,7 @@ impl Peer {
     /// See [`Peer`].
     #[must_use]
     pub fn new() -> Self {
-        Self::with_tokens(BURST)
+        Self::with_tokens(MESSAGE_RATE.burst)
     }
 
     /// A peer that may send `tokens` messages now.
@@ -68,8 +69,7 @@ impl Peer {
     #[must_use]
     pub fn with_tokens(tokens: f64) -> Self {
         Self {
-            tokens,
-            seen: Instant::now(),
+            rate: Bucket::with_tokens(tokens, Instant::now()),
             language: None,
             answered: None,
         }
@@ -113,7 +113,7 @@ impl Peer {
     ///
     /// See [`Peer`].
     pub fn admit(&mut self) -> bool {
-        self.admit_at(Instant::now(), RATE, BURST)
+        self.rate.admit_at(Instant::now(), MESSAGE_RATE)
     }
 
     /// Gives back the message [`Peer::admit`] took, for one that did not
@@ -130,7 +130,7 @@ impl Peer {
     /// assert!(peer.admit());
     /// ```
     pub fn refund(&mut self) {
-        self.tokens = (self.tokens + 1.0).min(BURST);
+        self.rate.refund(MESSAGE_RATE);
     }
 
     /// Takes one from a rate of `rate` a second up to `burst` at `now`;
@@ -147,14 +147,7 @@ impl Peer {
     /// assert!(peer.admit_at(later, 1.0, 1.0));
     /// ```
     pub fn admit_at(&mut self, now: Instant, rate: f64, burst: f64) -> bool {
-        let gained = now.saturating_duration_since(self.seen).as_secs_f64() * rate;
-        self.seen = now;
-        self.tokens = (self.tokens + gained).min(burst);
-        if self.tokens < 1.0 {
-            return false;
-        }
-        self.tokens -= 1.0;
-        true
+        self.rate.admit_at(now, Rate::new(rate, burst))
     }
 }
 

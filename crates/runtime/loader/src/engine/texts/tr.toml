@@ -1,6 +1,8 @@
 [tr]
 "actions.close" = "Kapat"
 "actions.out-of-reach" = "Bu çok uzakta."
+"actions.bad-request" = "Sunucu bu isteği okuyamadı."
+"actions.unavailable" = "Bu eylem şu anda bu sunucuda kullanılamıyor."
 "windows.run" = "Çalıştır"
 "windows.cancel" = "İptal"
 "windows.name" = "Ya da bir ad yaz"

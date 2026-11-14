@@ -210,10 +210,7 @@ pub fn decode(text: &str) -> Vec<Entry> {
                     let players = items
                         .filter_map(|item| {
                             let (key, name) = item.split_once(PAIR)?;
-                            Some((
-                                u64::from_str_radix(key, 16).ok().map(PlayerKey::new)?,
-                                name.to_owned(),
-                            ))
+                            Some((PlayerKey::from_hex(key)?, name.to_owned()))
                         })
                         .collect();
                     (Vec::new(), players)
@@ -232,10 +229,8 @@ pub fn decode(text: &str) -> Vec<Entry> {
                 });
             }
             ["O", key, on, name] => {
-                let (Some(entry), Ok(key)) = (
-                    entries.last_mut(),
-                    u64::from_str_radix(key, 16).map(PlayerKey::new),
-                ) else {
+                let (Some(entry), Some(key)) = (entries.last_mut(), PlayerKey::from_hex(key))
+                else {
                     continue;
                 };
                 entry.players.push((key, (*name).to_owned(), *on == "1"));
@@ -293,7 +288,7 @@ pub fn decode_args(text: &str) -> Option<Vec<Value>> {
             let (tag, rest) = field.split_at_checked(1)?;
             Some(match tag {
                 "p" => Value::Player {
-                    key: u64::from_str_radix(rest, 16).ok().map(PlayerKey::new)?,
+                    key: PlayerKey::from_hex(rest)?,
                     name: String::new(),
                 },
                 "c" => Value::Choice(rest.parse().ok()?),

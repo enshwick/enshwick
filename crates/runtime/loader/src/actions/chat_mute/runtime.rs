@@ -10,7 +10,6 @@ use std::time::Instant;
 use enshwick_core::abi::Event;
 
 use crate::engine::loader::Loader;
-use crate::engine::texts;
 use enshwick_base::Relock;
 
 use super::{FILE, SetMuteError, changed, parse, protected, tell};
@@ -52,10 +51,9 @@ fn keep(keys: Vec<u64>) {
 /// game thread, where the players do not read.
 fn admin_online(loader: &Loader, key: u64) -> bool {
     crate::engine::world::players(loader).is_ok_and(|players| {
-        players.iter().any(|p| {
-            p.key == enshwick_core::PlayerKey::new(key)
-                && crate::actions::console::player_is_admin(p)
-        })
+        players
+            .iter()
+            .any(|p| p.key == enshwick_core::PlayerKey::new(key) && p.is_admin())
     })
 }
 
@@ -184,10 +182,7 @@ fn dropped(loader: &Loader, key: u64) -> bool {
         due
     };
     if due {
-        let line = texts::for_player(key, || texts::text("muted.notice"));
-        if crate::base::notices::send(loader, key, line).is_err() {
-            let _queued = crate::actions::chat::send(key, line);
-        }
+        crate::actions::reply::tell_text(loader, key, "muted.notice");
     }
     true
 }
