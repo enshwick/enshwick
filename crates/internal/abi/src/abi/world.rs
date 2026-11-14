@@ -1,8 +1,8 @@
-//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather and build rights.
+//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather, build rights and joins.
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, ItemId, KnowledgeId, RecipeId, Str};
+use crate::abi::{Entity, Header, ItemId, KnowledgeId, PlayerKey, RecipeId, Str};
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -710,3 +710,41 @@ impl AccountActionType {
     /// Takes the account off the ban list.
     pub const UN_BAN: Self = Self(2);
 }
+
+/// An account joining the game, handed to the rules registered with
+/// [`HostApi::join_rule`](super::HostApi::join_rule).
+///
+/// The rules see it before any player of its machine enters the world.
+/// Layout grows only by appending; read a later field after
+/// [`Header::covers`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, JoinCall};
+///
+/// let call = JoinCall {
+///     header: Header::of::<JoinCall>(),
+///     player: enshwick::PlayerKey::new(7),
+/// };
+/// assert_eq!(call.player.get(), 7);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct JoinCall {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The joining account's key, the one its player and the server's ban
+    /// list carry; zero for an account the game gives no key.
+    pub player: PlayerKey,
+}
+
+impl_headed!(JoinCall);
+
+/// A mod's join rule: the call and the pointer given at registration;
+/// returns 1 to let the account in, 0 to refuse it.
+///
+/// # Examples
+///
+/// The safe layer wraps it in `Load::on_join`.
+pub type JoinRuleFn = unsafe extern "system" fn(call: *const JoinCall, user: *mut c_void) -> u8;

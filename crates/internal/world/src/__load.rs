@@ -24,4 +24,6 @@ pub use crate::world::LoadMethods as _;
 #[cfg(feature = "unstable")]
 pub use crate::world::fields::LoadMethods as _;
 #[cfg(feature = "unstable")]
+pub use crate::world::join::LoadMethods as _;
+#[cfg(feature = "unstable")]
 pub use crate::world::rename::LoadMethods as _;

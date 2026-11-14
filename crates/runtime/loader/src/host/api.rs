@@ -232,4 +232,5 @@ pub(crate) static API: HostApi = HostApi {
     content_name,
     language_of,
     client_game_event,
+    join_rule,
 };

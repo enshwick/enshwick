@@ -3,10 +3,10 @@
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, put, text, with};
+use crate::test::table::{Registered, Registration, put, text, with};
 use enshwick_core::abi::{
-    AccountActionType, EntityPlace, ModHandle, PlayerInfo, RenameCallFn, Side, Status, Str,
-    TerrainEdit,
+    AccountActionType, EntityPlace, JoinRuleFn, ModHandle, PlayerInfo, RenameCallFn, Side, Status,
+    Str, TerrainEdit,
 };
 
 pub(crate) mod altars;
@@ -112,6 +112,20 @@ pub(crate) extern "system" fn rename_filter(
 ) -> Status {
     with(Status::MISSING, |s| {
         s.rename_filters.push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn join_rule(
+    me: ModHandle,
+    callback: JoinRuleFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        s.join_rules.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -276,7 +290,7 @@ pub(crate) extern "system" fn progress_write(
             if entity.0 != 0 {
                 return Status::BAD_ARGS;
             }
-            if s.registration == super::Registration::Closed {
+            if s.registration == Registration::Closed {
                 return Status::TOO_LATE;
             }
             s.progress_writes.get_or_insert_with(Vec::new);
@@ -292,7 +306,7 @@ pub(crate) extern "system" fn progress_write(
             return Status::BAD_ARGS;
         }
         // The loader's level step links after `init`.
-        if s.registration != super::Registration::Closed {
+        if s.registration != Registration::Closed {
             return Status::MISSING;
         }
         let in_game = s.host.players.iter().any(|p| p.entity == entity);

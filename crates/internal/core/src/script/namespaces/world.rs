@@ -27,7 +27,11 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::starting(
         "world",
         "",
-        &[Load::SCRIPT_WORLD_RENAME, Load::SCRIPT_WRITABLE_TYPE],
+        &[
+            Load::SCRIPT_WORLD_JOIN,
+            Load::SCRIPT_WORLD_RENAME,
+            Load::SCRIPT_WRITABLE_TYPE,
+        ],
     ),
     Namespace::of::<Buffs>(),
     Namespace::of::<GameSettings>(),

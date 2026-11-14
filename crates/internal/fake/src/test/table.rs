@@ -15,10 +15,10 @@ use enshwick_core::Relock;
 use enshwick_core::abi::{
     ActiveBuff, AltarInfo, AltarLimitFilterFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
     BuildingZoneCheckFn, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo,
-    Event, EventFn, ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, KnowledgeInfo,
-    KnowledgeInputFn, Level, MidHookFn, ModEventFn, ModHandle, NetMessageFn, RenameCallFn,
-    ResourceKey, ResourcePatchFn, SkillCheckFn, SpawnRequest, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainMaterialInfo, UiAnswerFn,
+    Event, EventFn, ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, JoinRuleFn,
+    KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, ModEventFn, ModHandle, NetMessageFn,
+    RenameCallFn, ResourceKey, ResourcePatchFn, SkillCheckFn, SpawnRequest, StatusFn, Str,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainMaterialInfo, UiAnswerFn,
     UiFrameFn, WeatherFront,
 };
 
@@ -112,6 +112,7 @@ pub(crate) struct State {
     pub(crate) chat: Vec<(enshwick_core::PlayerKey, String)>,
     pub(crate) labels: Vec<(u32, String)>,
     pub(crate) rename_filters: Vec<Registered<RenameCallFn>>,
+    pub(crate) join_rules: Vec<Registered<JoinRuleFn>>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
     pub(crate) status_sources: Vec<Registered<StatusFn>>,
     /// The mod's features as it last reported them: name and, when off,
@@ -409,6 +410,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         chat: Vec::new(),
         labels: Vec::new(),
         rename_filters: Vec::new(),
+        join_rules: Vec::new(),
         status_sources: Vec::new(),
         features: Vec::new(),
         console: Vec::new(),
@@ -739,4 +741,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     content_name,
     language_of,
     client_game_event,
+    join_rule,
 };

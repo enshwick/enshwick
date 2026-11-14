@@ -63,6 +63,7 @@ macro_rules! headed {
             InventoryRequest,
             InventoryResult,
             ItemData,
+            JoinCall,
             KnowledgeData,
             KnowledgeInfo,
             KnowledgeInput,

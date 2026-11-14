@@ -519,6 +519,39 @@ fn toggle_mute(world: &World, key: enshwick::PlayerKey) -> Result<bool, WorldErr
 }
 ```
 
+### Join rules
+
+[`load.on_join(|join| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world/join.rs)
+runs for each account that joins the server, before its player enters the
+world. It gets a
+[`Join`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world/join.rs)
+with the account's `player` key, the same key its player and the ban list
+carry. The key is `None` for an account the game gives no key.
+
+Returning `false` refuses the account. The server answers its game as it
+answers an account on the ban list. The player reads that the host denies
+access, and no world loads. The ban list stays as it was. Rules run in load
+order, and the first one that refuses decides. A mod that is off is not
+asked.
+
+The rule runs on the thread the server reads joins on, so it answers at
+once from what the mod holds. A panic in the rule turns the mod off and lets
+that account in. A dedicated server and a game a client hosts both ask it.
+
+```rust
+use enshwick::PlayerKey;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    // Only the accounts on this mod's list join.
+    let allowed = [PlayerKey::new(0x5c86_aa43_5230_614e)];
+    load.on_join(move |join| join.player.is_some_and(|key| allowed.contains(&key)))
+}
+```
+
+In Luau, `enshwick.world.on_join(function(join) ... end)` takes the same
+rule. There `join.player` is the key as a decimal string, or `nil` for an
+account without one.
+
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit

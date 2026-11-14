@@ -5,6 +5,7 @@ use crate::{Load, Off};
 use enshwick_world::__load::*;
 
 mod fields;
+mod join;
 mod rename;
 
 #[enshwick_macros::forward(base)]

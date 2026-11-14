@@ -105,6 +105,8 @@ mod item_changes;
 mod item_data;
 #[cfg(feature = "unstable")]
 mod items;
+#[cfg(feature = "unstable")]
+mod join_rules;
 #[cfg(feature = "typed")]
 mod journal;
 mod knowledge;

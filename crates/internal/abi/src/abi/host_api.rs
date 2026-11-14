@@ -11,15 +11,16 @@ use crate::abi::{
     ContentRename, ControlFn, ControlSpec, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
     DropRequest, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
     ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
-    InventoryResultFn, ItemActionFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level,
-    LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
-    ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
-    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn,
-    UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    InventoryResultFn, ItemActionFn, ItemData, ItemLine, JoinRuleFn, KnowledgeInfo,
+    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
+    MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
+    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind,
+    RenameCallFn, ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec,
+    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
+    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
+    TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel,
+    WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -2028,6 +2029,21 @@ pub struct HostApi {
         callback: GameEventFn,
         user: *mut c_void,
     ) -> Status,
+    /// Adds `callback` with `user` to the join rules, which the server asks
+    /// in load order, on the thread the game reads a machine's join on, once
+    /// for each account the machine brings and before any of its players is
+    /// added. The first 0 refuses the machine: it gets the game's own reply
+    /// for an account on the ban list, which its player reads as the host
+    /// denying access, and loads no world. The loader writes nothing to the
+    /// ban list, and the rules of a mod that is off are not asked. Server
+    /// only: on a client it runs while it hosts a game, and a build without
+    /// the join path turns the rules off, listed on the Mods screen. Allowed
+    /// during `enshwick_mod_init` only ([`Status::TOO_LATE`] after it);
+    /// `callback` and `user` are kept for the life of the process and never
+    /// freed by the loader. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.30.
+    pub join_rule:
+        extern "system" fn(me: ModHandle, callback: JoinRuleFn, user: *mut c_void) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2177,5 +2193,6 @@ const _: () = {
     assert!(offset_of!(HostApi, content_name) == 24 + 205 * 8);
     assert!(offset_of!(HostApi, language_of) == 24 + 206 * 8);
     assert!(offset_of!(HostApi, client_game_event) == 24 + 207 * 8);
-    assert!(size_of::<HostApi>() == 24 + 208 * 8);
+    assert!(offset_of!(HostApi, join_rule) == 24 + 208 * 8);
+    assert!(size_of::<HostApi>() == 24 + 209 * 8);
 };
