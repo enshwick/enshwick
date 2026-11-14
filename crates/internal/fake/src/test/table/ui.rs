@@ -37,13 +37,19 @@ pub(crate) extern "system" fn ui_frame(
 }
 
 /// The local player's held controls, as the test set them; the loader's
-/// answers: [`Status::MISSING`] on a server or outside a game.
+/// answers: [`Status::MISSING`] on a server, outside a game and at the
+/// first ask, which starts the reads.
 pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Status {
     if out.is_null() {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        match s.local_held.filter(|_| s.host.side != Side::SERVER) {
+        let asked = core::mem::replace(&mut s.local_held.asked, true);
+        match s
+            .local_held
+            .bits
+            .filter(|_| asked && s.host.side != Side::SERVER)
+        {
             Some(bits) => {
                 // SAFETY: the safe layer passes a writable `u64` for the call,
                 // non-null by the check above.

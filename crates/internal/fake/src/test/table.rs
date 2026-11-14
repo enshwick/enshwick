@@ -57,6 +57,14 @@ pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, Registe
 /// templates it shows for (empty for every host).
 pub(crate) type Extension = (String, u32, Registered<UiFrameFn>, Vec<[u8; 16]>);
 
+/// The local player's held controls as the test set them, `None` as outside
+/// a game, and whether a mod asked yet: the loader starts reading them at
+/// the first ask, so that ask answers missing.
+pub(crate) struct Held {
+    pub(crate) bits: Option<u64>,
+    pub(crate) asked: bool,
+}
+
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
     pub(crate) host: FakeHost,
@@ -241,8 +249,8 @@ pub(crate) struct State {
     /// The game actions the fake build names, each with whether a key is
     /// bound to it.
     pub(crate) game_actions: Vec<(String, bool)>,
-    /// The local player's held controls, `None` as outside a game.
-    pub(crate) local_held: Option<u64>,
+    /// The local player's held controls.
+    pub(crate) local_held: Held,
     /// What the HUD drawing now drew, with each item's anchor, while one
     /// draws.
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
@@ -463,7 +471,10 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         screen_host: 0,
         screen_host_read: None,
         game_actions: Vec::new(),
-        local_held: None,
+        local_held: Held {
+            bits: None,
+            asked: false,
+        },
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),

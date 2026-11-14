@@ -278,7 +278,8 @@ impl Installed {
 
     /// Makes `held`, a `Bitmask64` of the game's `PlayerInputType`, the
     /// controls the local player holds from now on, as the client's last
-    /// step read them; `None` as outside a game.
+    /// step read them; `None` as outside a game. As in the game, a mod's
+    /// first ask starts the reads and answers `None`.
     ///
     /// # Examples
     ///
@@ -289,7 +290,7 @@ impl Installed {
     /// loader.hold_locally(Some(1 << 30));
     /// ```
     pub fn hold_locally(&self, held: Option<u64>) {
-        table::with((), |s| s.local_held = held);
+        table::with((), |s| s.local_held.bits = held);
     }
 
     /// The mod's markers on the map, as it set them last.

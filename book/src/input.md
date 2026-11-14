@@ -72,7 +72,9 @@ names a [control's](controls.md) `link` uses, such as `"ContextualAction_Tap"`.
 On a client, `input.local_held()` returns the game actions its own player
 holds, as an `InputMask`. It is the mask the client read in its last step.
 It returns `None` on a server and outside a game. It also returns `None`
-while no step ran for a second, as in the pause menu.
+while no step ran for a second, as in the pause menu. The client reads the
+mask only after a mod first asks for it, so that first call returns `None`.
+The calls after the client's next step return the mask.
 
 It holds the gameplay controls only. The client's own controls, such as the
 menu and map keys, are not in it. `local_held` runs on any thread, such as

@@ -9100,3 +9100,42 @@ in = "session.join_game"
 shape = ["je ?b", "cmp byte [r14+*],0x3", "jne ?b", "mov r8d,[rsi]"]
 take = "value"
 range = [0x40, 0x100]
+
+[[route]]
+id = "~local_player_check"
+sides = ["client"]
+system = "player_ui"
+shape = ["call {ecs.row_entity}", "mov rdx,rbx", "mov ecx,[rax]", "call *"]
+take = "address"
+
+[[route]]
+id = "ecs.local_player_id"
+sides = ["client"]
+in = "~local_player_check"
+shape = ["cmp [rdx+*],ecx", "sete al"]
+take = "value"
+range = [2, 16]
+
+[[route]]
+id = "ecs.player_ui_iterator_size"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov r8d,*", "lea rdx,[rbp+?]", "mov ?r,rcx", "call {ecs.iterator_init}"]
+take = "value"
+range = [0x1e4, 0x790]
+
+[[route]]
+id = "ecs.player_ui_iterator"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov r8d,?", "lea rdx,[rbp+*]", "mov ?r,rcx", "call {ecs.iterator_init}"]
+take = "value"
+range = [0x38, 0xe0]
+
+[[route]]
+id = "ecs.player_ui_local_player"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov rbx,[rbp+*]", "lea rdx,[rbp+?]", "mov rcx,?r", "call {ecs.row_entity}", "mov rdx,rbx", "mov ecx,[rax]", "call {~local_player_check}"]
+take = "value"
+range = [0xc8, 0x320]
