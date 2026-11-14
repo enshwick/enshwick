@@ -34,7 +34,7 @@ use crate::engine::parts::{Part, fused, part};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         link: Some(recipes::init),
-        forget: Some(|_| recipes::left()),
+        forget: Some(|_| recipes::forget()),
         ..part!("recipes", recipes)
     },
     &Part {

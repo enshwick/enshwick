@@ -32,13 +32,14 @@ pub(crate) use patches::enter_build;
 pub(crate) use patches::{
     OwnPatch, builds_begun, hand_out, lend, own_patch, rebuild, scratch, served_now,
 };
-use texts::{TEXTS, seal_texts};
+use texts::seal_texts;
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
+use crate::engine::registry::Registry;
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -118,10 +119,10 @@ static RESOURCES_FUSE: Fuse = Fuse::new("served resources");
 /// key lookup, which would read past the game's table.
 static SERVING_FUSE: Fuse = Fuse::new("served resource builds");
 
-/// Registrations while mods initialise.
-static PENDING: Mutex<Vec<Served>> = Mutex::new(Vec::new());
-/// The registrations once sealed, read without a lock.
-static SERVED_LIST: OnceLock<Box<[Served]>> = OnceLock::new();
+/// The served resources: mods' registrations while they initialise, and with
+/// the loader's own patches once sealed, read without a lock. The game keeps
+/// what they built for the process, so nothing here ends with a hosted game.
+static RESOURCES: Registry<Served> = Registry::new();
 /// Cloned templates ever served, clone GUID to vanilla GUID: read in place of
 /// a clone no mod serves now.
 static ALIASES: OnceLock<rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
@@ -150,15 +151,14 @@ pub(crate) fn register(
     patch: ResourcePatchFn,
     user: *mut c_void,
 ) -> Status {
-    if SERVED_LIST.get().is_some() {
-        return Status::TOO_LATE;
-    }
     let patch = Patch {
         owner,
         apply: patch,
         user: user.expose_provenance(),
     };
-    add(&mut PENDING.relock(), key, base, patch)
+    RESOURCES
+        .edit(|pending| add(pending, key, base, patch))
+        .unwrap_or_else(Status::from)
 }
 
 /// Adds `patch` of `key` from `base` to `pending`. A change, served from
@@ -188,7 +188,9 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
             .is_some_and(|m| !m.off.load(Ordering::Acquire))
     });
     let stand_ins = {
-        let keys: Vec<ResourceKey> = PENDING.relock().iter().map(|s| s.key).collect();
+        let keys: Vec<ResourceKey> = RESOURCES
+            .edit(|pending| pending.iter().map(|s| s.key).collect())
+            .unwrap_or_default();
         let recorded = crate::content::clones::items(&loader.mods_dir);
         let orphans =
             crate::content::standins::orphans(&recorded, &keys, |guid| renames.contains_key(guid));
@@ -205,30 +207,39 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     if !ids.is_empty() {
         crate::log!(DEBUG, "content ids: {ids}");
     }
-    let mut served = std::mem::take(&mut *PENDING.relock());
-    let count = served.len();
-    let aliases =
-        crate::content::clones::update(&loader.mods_dir, served.iter().map(|s| (s.key, s.base)));
-    let standing = stand_ins.map_or(0, |(items, registry)| {
-        serve_stand_ins(&mut served, items, registry)
+    let _first = RENAMES.set(renames);
+    let mut made = None;
+    RESOURCES.seal_with(|mut served| {
+        let count = served.len();
+        let aliases = crate::content::clones::update(
+            &loader.mods_dir,
+            served.iter().map(|s| (s.key, s.base)),
+        );
+        let standing = stand_ins.map_or(0, |(items, registry)| {
+            serve_stand_ins(&mut served, items, registry)
+        });
+        let changed = serve_changes(
+            &mut served,
+            crate::content::data_changes::serve(loader),
+            crate::content::data_changes::has_live(),
+        );
+        let rated = serve_rates(
+            &mut served,
+            crate::content::rate_links::recipe_patch(loader),
+        );
+        made = Some((count, aliases, standing, changed, rated));
+        served
     });
-    let changed = serve_changes(
-        &mut served,
-        crate::content::data_changes::serve(loader),
-        crate::content::data_changes::has_live(),
-    );
-    let rated = serve_rates(
-        &mut served,
-        crate::content::rate_links::recipe_patch(loader),
-    );
+    let Some((count, aliases, standing, changed, rated)) = made else {
+        return;
+    };
+    let served = RESOURCES.sealed().unwrap_or_default();
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
         .count();
     let recorded = aliases.len();
-    let _first = RENAMES.set(renames);
-    if SERVED_LIST.set(served.into_boxed_slice()).is_err()
-        || ALIASES.set(aliases).is_err()
+    if ALIASES.set(aliases).is_err()
         || count + recorded + renames.len() + standing + changed + rated == 0
     {
         return;
@@ -388,7 +399,7 @@ const STAND_INS: &str = "item stand-ins";
 /// The served resources of type `type_hash` that are new, not a vanilla
 /// one changed, whose mods are on.
 pub(crate) fn new_keys_of_type(type_hash: u32) -> Vec<ResourceKey> {
-    SERVED_LIST.get().map_or_else(Vec::new, |served| {
+    RESOURCES.sealed().map_or_else(Vec::new, |served| {
         served
             .iter()
             .filter(|s| s.key.type_hash == type_hash && s.key != s.base && owner_on(s))
@@ -417,7 +428,7 @@ pub(crate) fn orphan_templates() -> Vec<([u8; 16], [u8; 16])> {
 /// Every served resource several mods patch: its key in words and the
 /// patching mods, in the order their patches run.
 pub(crate) fn shared() -> Vec<(String, Vec<ModIndex>)> {
-    let served = SERVED_LIST.get().map_or(&[][..], |s| s);
+    let served = RESOURCES.sealed().unwrap_or_default();
     served
         .iter()
         .filter_map(|entry| {
@@ -452,7 +463,7 @@ fn key_name(key: &ResourceKey) -> String {
 
 /// What mods serve, for the status summary.
 pub(crate) fn summary() -> crate::engine::diag::Served {
-    let served = SERVED_LIST.get().map_or(&[][..], |s| s);
+    let served = RESOURCES.sealed().unwrap_or_default();
     let (mut built, mut failed) = (0, 0);
     for entry in served {
         let state = entry.state.relock();
@@ -463,7 +474,7 @@ pub(crate) fn summary() -> crate::engine::diag::Served {
         resources: served.len(),
         built,
         failed,
-        texts: TEXTS.get().map_or(0, |t| t.values().map(Vec::len).sum()),
+        texts: texts::count(),
     }
 }
 
@@ -511,8 +522,8 @@ fn route(key: &ResourceKey) -> Route {
 
 /// The served resource at `key` whose mods are on, with its index.
 fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
-    SERVED_LIST
-        .get()?
+    RESOURCES
+        .sealed()?
         .iter()
         .enumerate()
         .find(|(_, s)| s.key == *key && owner_on(s))
@@ -529,15 +540,15 @@ pub(crate) fn recipe_registry() -> ResourceKey {
 /// Whether mods that are on serve the recipe registry and its build has
 /// not failed; otherwise the game reads the vanilla one.
 pub(crate) fn served_recipes() -> bool {
-    SERVED_LIST
-        .get()
+    RESOURCES
+        .sealed()
         .is_some_and(|served| serves(served, &recipe_registry(), mod_on))
 }
 
 /// Whether mods, not the loader's own changes of values alone, serve the
 /// recipe registry: only they add recipes past a workshop's vanilla count.
 fn mods_serve_recipes() -> bool {
-    SERVED_LIST.get().is_some_and(|served| {
+    RESOURCES.sealed().is_some_and(|served| {
         serves(served, &recipe_registry(), |owner| {
             !owner.is_loader() && mod_on(owner)
         })
@@ -555,8 +566,8 @@ fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(ModIndex) -> bool) -
 /// Whether mods that are on serve `key` and its build has not failed, as
 /// for a resource a mod added.
 pub(crate) fn mods_serve(key: &ResourceKey) -> bool {
-    SERVED_LIST
-        .get()
+    RESOURCES
+        .sealed()
         .is_some_and(|served| serves(served, key, mod_on))
 }
 
@@ -565,7 +576,7 @@ fn served(handle: u32) -> Option<&'static Served> {
         return None;
     }
     let index = usize::try_from((handle & !SERVED).checked_sub(1)?).ok()?;
-    SERVED_LIST.get()?.get(index)
+    RESOURCES.sealed()?.get(index)
 }
 
 fn mod_on(owner: ModIndex) -> bool {
@@ -847,4 +858,5 @@ mod patches;
 mod tests;
 mod texts;
 
+pub use texts::bench_text_lookup;
 pub(crate) use texts::{add_text, language, mod_text, mod_texts_sealed};

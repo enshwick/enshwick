@@ -19,8 +19,8 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::{ResourceKey, Status};
 
 use super::{
-    OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, SERVING_FUSE, Served, State,
-    hex, key_name, mod_on, route,
+    OPEN_NEXT, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served, State, hex, key_name,
+    mod_on, route,
 };
 use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
@@ -32,15 +32,16 @@ use enshwick_base::Relock;
 /// for every served key whose build read it.
 pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Status {
     let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
-    let Some(list) = SERVED_LIST.get() else {
-        let pending = PENDING.relock();
-        return match pending.iter().find(|s| serves(s)) {
+    let Some(list) = RESOURCES.sealed() else {
+        let pending = RESOURCES.edit(|pending| match pending.iter().find(|s| serves(s)) {
             Some(entry) => {
                 entry.keeps_base.store(true, Ordering::Relaxed);
                 Status::OK
             }
             None => Status::BAD_ARGS,
-        };
+        });
+        // Sealed since the look before: rebuild from the sealed list.
+        return pending.unwrap_or_else(|_| rebuild(owner, key));
     };
     match list.iter().find(|s| serves(s)) {
         Some(entry) => rebuild_entry(list, entry),
@@ -174,7 +175,7 @@ pub(super) unsafe fn build_first(
 /// [`Status::BUILDING`] for a key whose patches run on this thread, which a
 /// patch reading it would build again without end.
 pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, Status> {
-    if SERVED_LIST.get().is_none() {
+    if RESOURCES.sealed().is_none() {
         return Err(Status::REFUSED);
     }
     let archive = |key: &ResourceKey| {

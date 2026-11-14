@@ -618,12 +618,16 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
 
 #[cfg(windows)]
 pub(crate) use live::{
-    command, filter, hello, init, is_disabled, item_words, joining, left, poll, received,
+    command, filter, forget, hello, init, is_disabled, item_words, joining, poll, received,
     recipe_words, registry_built, rule, world_changed,
 };
 
 #[cfg(all(windows, test))]
 pub(crate) use live::disable_for_test;
+
+#[cfg(windows)]
+#[doc(hidden)]
+pub use live::bench_recipe_filter;
 
 #[cfg(windows)]
 mod live;

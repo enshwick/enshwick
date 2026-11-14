@@ -134,3 +134,7 @@ harness = false
 [[bench]]
 name = "pending"
 harness = false
+
+[[bench]]
+name = "content_detours"
+harness = false
