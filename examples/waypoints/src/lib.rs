@@ -157,7 +157,7 @@ enshwick::declare_mod!(Waypoints);
 mod tests {
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Side, Status};
     use enshwick::content::EngineFacts;
-    use enshwick::i18n::Texts;
+    use enshwick::i18n::{Language, Texts};
     use enshwick::net::{Peer, SendError};
     use enshwick::test::{Drawn, FakeHost, facts};
     use enshwick::{Entity, PlayerKey};
@@ -167,11 +167,7 @@ mod tests {
     #[test]
     fn every_text_exists_in_both_languages() {
         let texts = Texts::parse(texts::TOML).expect("the texts parse");
-        assert!(
-            texts.untranslated().is_empty(),
-            "{:?}",
-            texts.untranslated()
-        );
+        assert_eq!(texts.missing_in(Language::REQUIRED), []);
     }
 
     #[test]

@@ -62,14 +62,16 @@ pub(crate) fn plan(
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::{discovery_on, forget, host_runs_enshwick, poll, register};
+pub(crate) use runtime::{discovery_on, forget, host_runs_enshwick, left, poll, register};
 
 #[cfg(windows)]
 mod runtime {
     use core::ffi::{CStr, c_char, c_void};
     use std::ffi::CString;
-    use std::sync::OnceLock;
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Mutex, OnceLock};
+
+    use enshwick_base::Relock;
 
     use enshwick_core::abi::UiDialog;
 
@@ -125,14 +127,19 @@ mod runtime {
         api: OnceLock<Api>,
         /// The lobby the client last entered, 0 for none.
         lobby: AtomicU64,
-        /// The lobby whose entry was handled, so a second notice of the same
-        /// entry turns nothing off twice.
-        handled: AtomicU64,
+        /// The joins the client started from the game's menus, each of which
+        /// leaves the lobby it was in.
+        joins: AtomicU64,
+        /// The lobby whose entry was handled and the join it came in, so a
+        /// second notice of one entry turns nothing off twice while a new
+        /// entry into the same lobby is checked again.
+        handled: Mutex<(u64, u64)>,
         /// The lobby the hosting client put its data into.
         published: AtomicU64,
-        /// Set while the lobby the client entered names a host with
-        /// Enshwick.
-        host_runs: AtomicBool,
+        /// Whether the lobby the client entered names a host with Enshwick,
+        /// in bit 0, and the join it entered in, above: it holds only until
+        /// the next join.
+        host_runs: AtomicU64,
     }
 
     impl State {
@@ -140,16 +147,41 @@ mod runtime {
             Self {
                 api: OnceLock::new(),
                 lobby: AtomicU64::new(0),
-                handled: AtomicU64::new(0),
+                joins: AtomicU64::new(0),
+                handled: Mutex::new((0, 0)),
                 published: AtomicU64::new(0),
-                host_runs: AtomicBool::new(false),
+                host_runs: AtomicU64::new(0),
             }
+        }
+
+        /// The client starts a join, leaving its lobby.
+        fn left(&self) {
+            self.joins.fetch_add(1, Ordering::AcqRel);
+        }
+
+        /// Notes the client's entry into `lobby`, whose host runs Enshwick
+        /// when `host_runs`; true when the host's mods are to be checked,
+        /// false for a second notice of the same entry.
+        fn note_entry(&self, lobby: u64, host_runs: bool) -> bool {
+            let join = self.joins.load(Ordering::Acquire);
+            self.host_runs
+                .store(join << 1 | u64::from(host_runs), Ordering::Release);
+            host_runs
+                && core::mem::replace(&mut *self.handled.relock(), (lobby, join)) != (lobby, join)
+        }
+
+        /// Whether the lobby the client entered since its last join names a
+        /// host with Enshwick.
+        fn host_runs(&self) -> bool {
+            let noted = self.host_runs.load(Ordering::Acquire);
+            noted & 1 == 1 && noted >> 1 == self.joins.load(Ordering::Acquire)
         }
 
         /// Forgets the lobby the hosting client published into; the Steam
         /// calls stay. The entry guard and whether a host runs Enshwick
-        /// stay too: the next lobby entry sets both on Steam's thread, maybe
-        /// before a hosted game's end reaches this.
+        /// stay too: the next join ends both, and the next lobby entry sets
+        /// both on Steam's thread, maybe before a hosted game's end reaches
+        /// this.
         fn forget(&self) {
             self.lobby.store(0, Ordering::Release);
             self.published.store(0, Ordering::Relaxed);
@@ -162,6 +194,13 @@ mod runtime {
     /// hosts or joins starts from no lobby.
     pub(crate) fn forget() {
         STATE.forget();
+    }
+
+    /// Notes that the client starts a join from the game's menus, which
+    /// leaves the lobby it was in: until it enters the next, no host takes
+    /// its hello.
+    pub(crate) fn left() {
+        STATE.left();
     }
 
     /// Steam's `CCallbackBase` as MSVC lays it out: the table, then the
@@ -346,7 +385,7 @@ mod runtime {
     /// Whether the lobby the client entered last names a host with
     /// Enshwick, which takes the client's hello.
     pub(crate) fn host_runs_enshwick() -> bool {
-        STATE.host_runs.load(Ordering::Acquire)
+        STATE.host_runs()
     }
 
     /// Puts the hosting client's data into its lobby once per lobby; on the
@@ -395,7 +434,7 @@ mod runtime {
     fn entered(lobby: u64) {
         STATE.lobby.store(lobby, Ordering::Release);
         if crate::engine::world::hosting() {
-            STATE.host_runs.store(false, Ordering::Release);
+            let _own = STATE.note_entry(lobby, false);
             return;
         }
         let Some(api) = STATE.api.get() else {
@@ -404,10 +443,7 @@ mod runtime {
         let version = api.get(lobby, super::KEY);
         // A dedicated server's lobby names nothing: its rules went through
         // the join check before the game connected.
-        STATE
-            .host_runs
-            .store(!version.is_empty(), Ordering::Release);
-        if version.is_empty() || STATE.handled.swap(lobby, Ordering::AcqRel) == lobby {
+        if !STATE.note_entry(lobby, !version.is_empty()) {
             return;
         }
         let host = api.get(lobby, super::KEY_MODS);
@@ -447,21 +483,45 @@ mod runtime {
         fn a_hosted_game_s_end_forgets_its_lobby_and_keeps_what_the_next_entry_sets() {
             let state = State::new();
             state.lobby.store(7, Ordering::Release);
-            state.handled.store(8, Ordering::Release);
+            assert!(state.note_entry(8, true));
             state.published.store(7, Ordering::Relaxed);
-            state.host_runs.store(true, Ordering::Release);
             state.forget();
             assert_eq!(state.lobby.load(Ordering::Acquire), 0);
             assert_eq!(state.published.load(Ordering::Relaxed), 0);
-            assert_eq!(
-                state.handled.load(Ordering::Acquire),
-                8,
+            assert!(
+                !state.note_entry(8, true),
                 "a second notice of an entry turns nothing off twice"
             );
+            assert!(state.host_runs(), "an entry before the end keeps its host");
+        }
+
+        #[test]
+        fn a_join_ends_the_last_lobby_s_host_and_a_later_entry_sets_it_again() {
+            let state = State::new();
+            assert!(!state.host_runs());
+            assert!(state.note_entry(7, true));
+            assert!(state.host_runs());
+            state.left();
             assert!(
-                state.host_runs.load(Ordering::Acquire),
-                "an entry before the end keeps its host"
+                !state.host_runs(),
+                "a vanilla server joined next gets no hello before its own lobby"
             );
+            assert!(!state.note_entry(9, false), "a dedicated server's lobby");
+            assert!(!state.host_runs());
+            state.left();
+            assert!(state.note_entry(7, true));
+            assert!(state.host_runs());
+        }
+
+        #[test]
+        fn entering_the_same_lobby_again_after_a_join_checks_it_again_but_a_second_notice_does_not()
+        {
+            let state = State::new();
+            assert!(state.note_entry(7, true));
+            assert!(!state.note_entry(7, true), "Steam's second notice");
+            state.left();
+            assert!(state.note_entry(7, true), "the same lobby entered again");
+            assert!(!state.note_entry(7, true));
         }
 
         #[test]

@@ -10,7 +10,3 @@ static-is-registry-fuse-or-state crates/internal/base/src/i18n.rs static HANDED:
 # Each mod's task queue, kept for the process; it moves into a
 # `Registry<T>` by mod handle.
 static-is-registry-fuse-or-state crates/internal/base/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
-
-# Loose atomic statics of the loader from before its rule; each moves into
-# its domain's state struct, a `Pending` queue or its fuse.
-loader-flag-is-in-state crates/runtime/loader/src/events.rs static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];

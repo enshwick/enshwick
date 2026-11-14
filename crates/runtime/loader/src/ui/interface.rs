@@ -34,7 +34,7 @@ use enshwick_core::abi::{
 };
 
 pub(crate) use demo::open as open_demo;
-pub(crate) use dialog::show;
+pub(crate) use dialog::{close_world_dialogs, show};
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
 pub(crate) use extensions::register as register_extension;
 pub(crate) use map::play_data;
@@ -271,6 +271,7 @@ fn next_token() -> u64 {
 /// Forgets what the interface kept of a client's hosted game that ended.
 pub(crate) fn forget(_loader: &'static Loader) {
     demo::forget();
+    close_world_dialogs();
 }
 
 // Each of the loader's windows turns off at its first panic: a panic
@@ -469,13 +470,14 @@ pub(crate) fn mod_dialog(
     else {
         return Status::BAD_ARGS;
     };
-    dialog::queue(dialog::Pending::new(
+    let dialog = dialog::Pending::new(
         title,
         message,
         detail,
         raw.buttons,
         dialog::Answerer::Mod(Registered::new(owner, callback, user)),
-    ))
+    );
+    dialog::queue(dialog.of_world(loader, owner))
 }
 
 /// The ids of the dialogs' text tags, for the loader's text format.
@@ -625,6 +627,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     if context == 0 || state.is_null() {
         return;
     }
+    dialog::note_world(screen(engine.app_state(context)) != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
     crate::actions::controls::frame(context);

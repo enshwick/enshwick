@@ -53,6 +53,7 @@ crate::engine::chains::chain_detour! {
     next NEXT;
     fuse &JOIN_FUSE, "the join check";
     |onward| {
+        crate::base::lobby::left();
         let Some(layout) = LAYOUT.get() else {
             return onward.call();
         };

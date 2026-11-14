@@ -299,7 +299,7 @@ fn a_pack_s_callback_runs_as_the_pack_and_a_dll_s_as_the_loader() {
 }
 
 #[test]
-fn a_found_pack_counts_its_files_in_the_join_version_until_it_turns_off() {
+fn a_found_pack_counts_its_files_in_the_join_version_after_it_turns_off_too() {
     use enshwick_core::packs::MANIFEST_FILE;
     let id = "test.kept-pack";
     let mods = std::env::temp_dir().join(format!("enshwick-packs-{}", std::process::id()));
@@ -327,7 +327,11 @@ fn a_found_pack_counts_its_files_in_the_join_version_until_it_turns_off() {
         "{version}"
     );
     loader.turn_off(ModIndex::new(0), "turned off by the test");
-    assert_eq!(loader.mods[0].join_version(), "1.0.0");
+    assert_eq!(
+        loader.mods[0].join_version(),
+        version,
+        "an off pack keeps its files' hash, so a refusal tells a restart from other files"
+    );
 }
 
 #[test]

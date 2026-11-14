@@ -210,7 +210,7 @@ The crate holds:
   crates.io, so the API comes from git, at the tag of the alpha the tool is
   from;
 - `src/lib.rs`, a mod with one setting, `enabled`, and two tests: every
-  text exists in every language, and the mod starts on the
+  text exists in English and Ukrainian, and the mod starts on the
   [fake loader](testing.md);
 - `src/texts.toml`, the mod's name, description and setting labels in
   English and Ukrainian ([Texts](content/texts.md));

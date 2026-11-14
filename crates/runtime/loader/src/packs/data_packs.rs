@@ -6,18 +6,24 @@
 //! in a sandbox of their own (`enshwick-luau`). A change to a pack's files
 //! takes a restart.
 //!
+//! Finding packs and keeping their state touch neither the game nor
+//! Windows; running them in the game is the `run` module's.
+//!
 //! [`Load::add_pack`]: enshwick_core::Load::add_pack
+
+#[cfg(windows)]
+mod run;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use enshwick_core::abi::{
-    Dependency, Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Side, Status, Str,
-};
-use enshwick_core::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
+use enshwick_core::abi::{Dependency, Header, Manifest, ManifestFlags, Side, Str};
+use enshwick_core::packs::{MANIFEST_FILE, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
 use enshwick_base::Relock;
+#[cfg(windows)]
+pub(crate) use run::{forget, init, ready};
 
 /// A pack folder found in `mods/`.
 pub(crate) struct Found {
@@ -32,23 +38,15 @@ pub(crate) struct Found {
 struct Loaded {
     dir: PathBuf,
     hash: u32,
+    #[cfg(windows)]
     runtime: Option<enshwick_luau::Runtime>,
-}
-
-/// The scripts of `files`, when they hold a `main.luau`.
-fn scripts_of(files: &PackFiles) -> Option<enshwick_luau::Scripts> {
-    let mut scripts = enshwick_luau::Scripts::new();
-    for (name, bytes) in files.scripts() {
-        scripts = scripts.with(name, bytes);
-    }
-    scripts.has_main().then_some(scripts)
 }
 
 /// The packs domain's state: the packs `discover` found, by id. It lives for
 /// the process, not a hosted game: packs load once at the start, and one
 /// that turns off stays off until a restart, so no part's
 /// [`forget`](crate::engine::parts::Part::forget) drops it; only [`forget`]
-/// drops the pack that turned off.
+/// drops the scripts of a pack that turned off, keeping its hash.
 struct State {
     packs: Mutex<FxHashMap<String, Loaded>>,
 }
@@ -181,6 +179,7 @@ pub(crate) fn discover(mods_dir: &Path) -> Vec<Found> {
                 Loaded {
                     dir: dir.clone(),
                     hash: files.hash(),
+                    #[cfg(windows)]
                     runtime: None,
                 },
             );
@@ -214,133 +213,46 @@ pub(crate) fn sha256_of(id: &str) -> Option<String> {
     Some(crate::base::record::sha256(&all))
 }
 
-/// Logs every problem of a pack under its id, one line each.
-fn report(id: &str, errors: &enshwick_core::packs::ParsePackError) {
-    for error in errors.list() {
-        crate::engine::log::write(Level::ERROR, id, &error.to_string());
-    }
-}
-
-/// Logs every change a pack skips because the game dropped what it names.
-fn report_skipped(id: &str, pack: &Pack) {
-    for skipped in pack.skipped() {
-        crate::engine::log::write(Level::WARN, id, &skipped.to_string());
-    }
-}
-
-/// The side, id and folder of the calling pack, as the loader keeps them;
-/// its other calls check the same side.
-fn calling(me: ModHandle) -> Option<(Side, String, PathBuf)> {
-    let loader = crate::engine::loader::loader()?;
-    let record = loader.mods.get(me.0.checked_sub(1)?)?;
-    let dir = with(|packs| packs.get(&record.id).map(|p| p.dir.clone()))?;
-    Some((record.manifest.side, record.id.clone(), dir))
-}
-
-/// A pack's `init`: reads its files and adds what they describe.
-///
-/// # Safety
-///
-/// - `api` is the loader's process-wide host table, valid for the process.
-pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) -> Status {
-    let Some((side, id, dir)) = calling(me) else {
-        return Status::BAD_ARGS;
-    };
-    let files = match PackFiles::read_dir(&dir) {
-        Ok(files) => files,
-        Err(why) => {
-            crate::engine::log::write(Level::ERROR, &id, &why.to_string());
-            return Status::REFUSED;
-        }
-    };
-    let pack = match Pack::parse(&id, &files) {
-        Ok(pack) => pack,
-        Err(errors) => {
-            report(&id, &errors);
-            return Status::REFUSED;
-        }
-    };
-    report_skipped(&id, &pack);
-    let manifest = std::fs::read_to_string(dir.join(MANIFEST_FILE))
-        .ok()
-        .and_then(|text| PackManifest::parse(&text).ok().map(|m| (m, text)));
-    if let Some((manifest, text)) = &manifest
-        && let Err(problem) = manifest.check(text, &pack)
-    {
-        crate::engine::log::write(Level::ERROR, &id, &problem.to_string());
-        return Status::REFUSED;
-    }
-    let scripts = scripts_of(&files);
-    with(|packs| {
-        if let Some(loaded) = packs.get_mut(&id) {
-            loaded.hash = files.hash();
-        }
-    });
-    let mut runtime = None;
-    // SAFETY: `api` is the loader's process-wide table, by this function's
-    // `# Safety` contract, which is what `init_pack` asks for.
-    let status = unsafe {
-        enshwick_core::__private::init_pack(api, me, side, |load| {
-            load.add_pack(&pack)?;
-            let scripts = scripts.map(|s| s.with_items(&pack.item_bindings()));
-            let limits = enshwick_luau::Limits::default();
-            runtime = match (scripts, &manifest) {
-                (None, _) => None,
-                (Some(scripts), Some((manifest, _))) => {
-                    Some(enshwick_luau::start_pack(load, manifest, scripts, limits)?)
-                }
-                (Some(scripts), None) => {
-                    Some(enshwick_luau::start(load, &id, scripts, None, limits)?)
-                }
-            };
-            Ok(())
-        })
-    };
-    if status.is_ok() {
-        let luau = if runtime.is_some() {
-            ", Luau scripts running"
-        } else {
-            ""
-        };
-        crate::engine::log::write(
-            Level::INFO,
-            &id,
-            &format!(
-                "data pack: {} ids, {} loot drops, {} changes, {} selections{luau}",
-                pack.ids().len(),
-                pack.drops().len(),
-                pack.changes().len(),
-                pack.selections().len() + pack.recipe_selections().len()
-            ),
-        );
-        with(|packs| {
-            if let Some(loaded) = packs.get_mut(&id) {
-                loaded.runtime = runtime;
-            }
-        });
-    }
-    status
-}
-
-/// A pack's `ready`: nothing to start.
-pub(crate) extern "system" fn ready(_api: *const HostApi, _me: ModHandle) {}
-
-/// Forgets the loot of pack `id`, which is off.
-pub(crate) fn forget(id: &str) {
-    // Dropped after the lock: a Luau runtime's teardown must not block the
-    // join check's `hash_of`.
-    let Some(gone) = with(|packs| packs.remove(id)) else {
-        return;
-    };
-    let _forgotten = enshwick_core::packs::forget_loot(id);
-    drop(gone);
-}
-
 #[cfg(test)]
 mod tests {
     use enshwick_core::abi::Relation;
 
     use super::*;
+
+    #[test]
+    fn discovery_keeps_each_pack_named_for_its_folder_with_its_files_hash() {
+        let mods = std::env::temp_dir().join(format!("enshwick-discover-{}", std::process::id()));
+        let _stale = std::fs::remove_dir_all(&mods);
+        for (folder, id) in [
+            ("test.found-pack", "test.found-pack"),
+            ("test.misnamed-pack", "test.other-name"),
+            (
+                crate::engine::settings::LOADER_ID,
+                crate::engine::settings::LOADER_ID,
+            ),
+        ] {
+            let dir = mods.join(folder);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join(MANIFEST_FILE),
+                format!("id = \"{id}\"\nversion = \"1.0.0\"\n"),
+            )
+            .unwrap();
+        }
+        let found = discover(&mods);
+        std::fs::remove_dir_all(&mods).unwrap();
+        assert_eq!(
+            found.iter().map(|f| f.file.as_str()).collect::<Vec<_>>(),
+            [format!("test.found-pack/{MANIFEST_FILE}")]
+        );
+        let hash = hash_of("test.found-pack").unwrap();
+        assert!(
+            hash.len() == 8 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{hash}"
+        );
+        assert_eq!(hash_of("test.misnamed-pack"), None);
+        assert_eq!(hash_of("test.other-name"), None);
+    }
 
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {

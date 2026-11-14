@@ -51,8 +51,11 @@ const CLIENT_EVENTS: usize = 256;
 const CLIENT_BYTES: usize = 64 * 1024;
 /// The most records one move of the client's own world reads, copied or not.
 const CLIENT_RECORDS: usize = 65_536;
-/// The most streams one move of the client's own world reads.
-const CLIENT_STREAMS: usize = 256;
+/// The most streams one move of either world reads. The engine's stream
+/// count is the popcount of a 64-bit worker mask, clamped to 8 workers
+/// (`FUN_140983140`, client 26430625 and server 26430253), so a larger count
+/// is a corrupted one.
+const STREAMS: usize = 64;
 
 /// Tells the log, once, that a move of the client's own world held more
 /// than its bounds let the loader copy.
@@ -60,9 +63,19 @@ const CLIENT_STREAMS: usize = 256;
 fn client_drop() {
     crate::log_once!(
         WARN,
-        "client game events: a move held more than {CLIENT_EVENTS} events, {CLIENT_BYTES} bytes, \
-         {CLIENT_RECORDS} records or {CLIENT_STREAMS} streams; the rest of each such move is not \
-         handed to mods"
+        "client game events: a move held more than {CLIENT_EVENTS} events, {CLIENT_BYTES} bytes \
+         or {CLIENT_RECORDS} records; the rest of each such move is not handed to mods"
+    );
+}
+
+/// Tells the log, once, that a world claimed more event streams than the
+/// engine can hold.
+#[cold]
+fn too_many_streams(count: usize) {
+    crate::log_once!(
+        WARN,
+        "game events: a world claimed {count} event streams, more than {STREAMS}; only the first \
+         {STREAMS} are read"
     );
 }
 
@@ -561,9 +574,9 @@ unsafe fn copy<S: Scope>(sealed: &Sealed, layout: &Layout, entity_world: *mut u8
     if streams == 0 {
         return;
     }
-    if S::BOUNDED && count > CLIENT_STREAMS {
-        client_drop();
-        count = CLIENT_STREAMS;
+    if count > STREAMS {
+        too_many_streams(count);
+        count = STREAMS;
     }
     let mut batch = S::batch().take();
     let mut records = 0;
