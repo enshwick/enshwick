@@ -1,6 +1,8 @@
 [ko]
 "actions.close" = "닫기"
 "actions.out-of-reach" = "너무 멀리 있습니다."
+"actions.bad-request" = "서버가 이 요청을 읽지 못했습니다."
+"actions.unavailable" = "이 작업은 지금 이 서버에서 사용할 수 없습니다."
 "windows.run" = "실행"
 "windows.cancel" = "취소"
 "windows.name" = "또는 이름 입력"

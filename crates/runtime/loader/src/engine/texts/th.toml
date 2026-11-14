@@ -1,6 +1,8 @@
 [th]
 "actions.close" = "ปิด"
 "actions.out-of-reach" = "อยู่ไกลเกินไป"
+"actions.bad-request" = "เซิร์ฟเวอร์อ่านคำขอนี้ไม่ได้"
+"actions.unavailable" = "การกระทำนี้ใช้ไม่ได้บนเซิร์ฟเวอร์นี้ในตอนนี้"
 "windows.run" = "ดำเนินการ"
 "windows.cancel" = "ยกเลิก"
 "windows.name" = "หรือพิมพ์ชื่อ"

@@ -77,6 +77,8 @@ export type Actions = {
 	update: (self: Actions, window: ActionWindow, players: {string}) -> (),
 	--- Calls `closed` with a player's account key and a window's id when their client closed that window, and with the key alone when the player left, as `Actions.on_closed` does.
 	on_closed: (self: Actions, closed: (arg1: string, arg2: string?) -> ()) -> (),
+	--- Calls `refused` with each run of the mod's actions the platform refused before its handler, as `Actions.on_refused` does.
+	on_refused: (self: Actions, refused: (arg1: Refused) -> ()) -> (),
 }
 
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
@@ -2217,6 +2219,25 @@ export type RecipesChange = {
 
 --- Why the loader's knowledge guard refuses a client's request. The name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
 export type Refusal = "Unknown" | "Kind" | "World" | "Counter" | "FlagBit" | "Experience" | "SkillPoints" | "Quest" | { Other: number }
+
+--- A run refused before its handler, as a script's `on_refused` function hears it: `Refused`'s fields as a table.
+export type Refused = {
+	--- Who ran it, as `Refused.player` holds it.
+	player: Player,
+	--- Where it came from, as `Refused.via` holds it.
+	via: Via,
+	--- The action's id or typed word, as `Refused.action` holds it.
+	action: string,
+	--- What the caller gave, as `Refused.text` holds it.
+	text: string,
+	--- The values read before the refusal, as `Refused.values` holds them.
+	values: {ActionValue},
+	--- Why it was refused, as `Refused.reason` holds it.
+	reason: RefusedReason,
+}
+
+--- Why the platform refused a run of an action before its handler.
+export type RefusedReason = "UnknownAction" | "NoRight" | "Usage" | "UnknownPlayer" | "SeveralPlayers" | "PlayerGone" | "TooLong" | "UnknownItem" | "SeveralItems" | "CommandsOff" | "Rate" | "Bounds" | "Busy" | "OutOfReach"
 
 --- A player's rename of an entity, for `Load.on_rename`.
 export type Rename = {

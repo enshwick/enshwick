@@ -246,7 +246,7 @@ fn carry(loader: &Loader, waiting: Vec<Waiting>, told: &mut Vec<Told>) {
         let text = if change == Change::Close {
             String::new()
         } else {
-            let language = crate::actions::player_actions::language_of(key);
+            let language = crate::base::net::language_number(key);
             crate::actions::player_actions::window(loader, owner, player, language, &window)
                 .unwrap_or_default()
         };

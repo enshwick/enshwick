@@ -461,4 +461,38 @@ mod tests {
         loader.player_left(root.key);
         assert!(logged(&loader, "closed 9 left"), "{:?}", loader.logs());
     }
+
+    #[test]
+    fn a_script_hears_each_run_refused_before_its_handler() {
+        let ann = player(3, 7, "Ann", false);
+        let loader = run(
+            FakeHost::new().player(ann),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({ id = "wipe", label = "Wipe", admins = true }, function()
+                return enshwick.actions.done("wiped")
+            end)
+            actions:on_refused(function(refused)
+                enshwick.log.info(`refused {refused.player.name} {refused.via} {refused.action} {refused.reason} {#refused.values}`)
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::RUN, &ann, 0, "wipe", "")
+                .as_deref(),
+            Some("0You may not do that.")
+        );
+        assert!(
+            logged(&loader, "refused Ann Interface wipe NoRight 0"),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(loader.refuse_run(&ann, ActionCall::RUN, ActionCall::REFUSED_RATE, "wipe", ""));
+        assert!(
+            logged(&loader, "refused Ann Interface wipe Rate 0"),
+            "{:?}",
+            loader.logs()
+        );
+    }
 }

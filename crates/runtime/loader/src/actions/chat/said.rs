@@ -5,8 +5,9 @@
 
 use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
+use enshwick_base::peer::{Admitted, CHAT_LINE_RATE, Rated};
 use enshwick_core::abi::{
     ChatFilterFn, ChatLine, ChatRewrite, Entity, Event, Header, PlayerKey, Status, Str,
 };
@@ -20,13 +21,6 @@ use enshwick_base::Relock;
 
 /// Lines waiting for the end of the step at most; more are dropped.
 const MAX_WAITING: usize = 256;
-/// Lines of one account raised in a window at most; the filters still run
-/// on every line.
-const PER_WINDOW: u32 = 8;
-/// The rate window.
-const WINDOW: Duration = Duration::from_secs(1);
-/// Accounts the rate keeps before it forgets those of past windows.
-const RATE_ACCOUNTS: usize = 64;
 
 static FILTERS: Registry<Registered<ChatFilterFn>> = Registry::new();
 
@@ -41,20 +35,16 @@ pub(crate) struct Said {
     pub(crate) text: String,
 }
 
-/// One account's rate: its key, the start of its window, lines in it.
-pub(crate) type Rate = (u64, Instant, u32);
-
 /// The lines heard while the game runs, and who said them.
 struct Heard {
     waiting: Pending<Said>,
-    /// Each account's rate; at most [`RATE_ACCOUNTS`] accounts, scanned, so
-    /// no peer key is hashed.
-    rate: Mutex<Vec<Rate>>,
+    /// Each account's rate of lines raised.
+    rate: Mutex<Rated>,
 }
 
 static HEARD: Heard = Heard {
     waiting: Pending::new(),
-    rate: Mutex::new(Vec::new()),
+    rate: Mutex::new(Rated::new(CHAT_LINE_RATE)),
 };
 /// Whether a mod listens for `Event::CHAT_SAID`; fixed once mods are in,
 /// since they subscribe only during init.
@@ -169,7 +159,8 @@ pub(crate) fn heard(loader: &Loader, said: Said) {
     if !wanted(loader) {
         return;
     }
-    let over = rated(said.kind) && !admit(&mut HEARD.rate.relock(), said.player, Instant::now());
+    let over =
+        rated(said.kind) && HEARD.rate.relock().admit(said.player, Instant::now()) != Admitted::Yes;
     if over
         || !HEARD
             .waiting
@@ -185,37 +176,14 @@ const fn rated(kind: u32) -> bool {
     kind != ChatLine::NOTICE
 }
 
-/// Whether one more line of `player` fits its rate at `now`, counting it.
-pub(crate) fn admit(rate: &mut Vec<Rate>, player: u64, now: Instant) -> bool {
-    let index = if let Some(index) = rate.iter().position(|&(key, ..)| key == player) {
-        index
-    } else {
-        if rate.len() >= RATE_ACCOUNTS {
-            rate.retain(|&(_, start, _)| now.duration_since(start) < WINDOW);
-        }
-        if rate.len() >= RATE_ACCOUNTS {
-            // Every account is in this window: the line counts as over.
-            return false;
-        }
-        rate.push((player, now, 0));
-        rate.len() - 1
-    };
-    let (_, start, count) = &mut rate[index];
-    if now.duration_since(*start) >= WINDOW {
-        *start = now;
-        *count = 0;
-    }
-    *count += 1;
-    *count <= PER_WINDOW
-}
-
 /// Counts a line not raised and logs the first and every hundredth.
 #[cold]
 fn skipped() {
     if let Some(total) = SKIPPED.add(1) {
         crate::log!(
             WARN,
-            "chat lines: {total} not raised to mods, over a player's {PER_WINDOW} a second or a full queue"
+            "chat lines: {total} not raised to mods, over a player's {} a second or a full queue",
+            CHAT_LINE_RATE.per_second
         );
     }
 }
@@ -279,38 +247,20 @@ mod tests {
                 .waiting
                 .push_within(MAX_WAITING, core::iter::once(said))
         );
-        assert!(admit(&mut HEARD.rate.relock(), 7, Instant::now()));
+        let now = Instant::now();
+        let spent = (0..20)
+            .take_while(|_| HEARD.rate.relock().admit(7, now) == Admitted::Yes)
+            .count();
+        assert_eq!(
+            f64::from(u32::try_from(spent).unwrap()),
+            CHAT_LINE_RATE.burst
+        );
         forget();
         assert!(HEARD.waiting.take().is_empty());
-        assert!(HEARD.rate.relock().is_empty());
-    }
-
-    #[test]
-    fn an_account_gets_eight_lines_a_second_and_a_new_window_starts_afresh() {
-        let mut rate = Vec::new();
-        let start = Instant::now();
-        let admitted = (0..12).filter(|_| admit(&mut rate, 7, start)).count();
-        assert_eq!(admitted, PER_WINDOW as usize);
-        assert!(
-            admit(&mut rate, 8, start),
-            "another account has its own rate"
-        );
-        assert!(admit(&mut rate, 7, start + WINDOW), "a new window");
-    }
-
-    #[test]
-    fn the_rate_forgets_accounts_of_past_windows_once_it_holds_many() {
-        let mut rate = Vec::new();
-        let start = Instant::now();
-        for player in 0..RATE_ACCOUNTS as u64 {
-            assert!(admit(&mut rate, player, start));
-        }
-        assert!(!admit(&mut rate, 999, start), "no room in this window");
-        assert!(admit(&mut rate, 1000, start + WINDOW));
         assert_eq!(
-            rate.len(),
-            1,
-            "only the account of the current window stays"
+            HEARD.rate.relock().admit(7, now),
+            Admitted::Yes,
+            "the next game starts with a full rate"
         );
     }
 

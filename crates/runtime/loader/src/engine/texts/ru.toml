@@ -1,6 +1,8 @@
 [ru]
 "actions.close" = "Закрыть"
 "actions.out-of-reach" = "Это слишком далеко."
+"actions.bad-request" = "Сервер не смог прочитать этот запрос."
+"actions.unavailable" = "Это действие сейчас недоступно на этом сервере."
 "windows.run" = "Выполнить"
 "windows.cancel" = "Отмена"
 "windows.name" = "Или введи имя"

@@ -18,10 +18,6 @@ pub(crate) fn name(player: &PlayerInfo) -> String {
     accounts::shown(&String::from_utf8_lossy(&player.name[..len]))
 }
 
-pub(crate) fn is_admin(player: &PlayerInfo) -> bool {
-    player.permissions & PlayerInfo::CAN_KICK_BAN != 0
-}
-
 fn position(loader: &Loader, entity: u32) -> Option<[f64; 3]> {
     crate::engine::world::fixed_position(loader, Entity(entity)).map(answers::metres)
 }
@@ -37,7 +33,7 @@ pub(crate) fn world(loader: &Loader) -> String {
                     slot: p.slot,
                     entity: p.entity.0,
                     key: p.key.get(),
-                    admin: is_admin(p),
+                    admin: p.is_admin(),
                     position: position(loader, p.entity.0),
                 })
                 .collect::<Vec<_>>(),

@@ -1,6 +1,8 @@
 [pt-br]
 "actions.close" = "Fechar"
 "actions.out-of-reach" = "Isso está longe demais."
+"actions.bad-request" = "O servidor não conseguiu ler esse pedido."
+"actions.unavailable" = "Essa ação não está disponível neste servidor agora."
 "windows.run" = "Executar"
 "windows.cancel" = "Cancelar"
 "windows.name" = "Ou digite um nome"

@@ -32,9 +32,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/engine/log.rs static 
 # The notices waiting for a slot, runtime state; they move into the
 # notices' state struct with the slots.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/notices.rs static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
-# When each player last changed a setting, the server's rate state; it
-# moves into one remote state struct with `QUERIES`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/base/remote/live.rs static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
 # Every world key seen this process; it moves into the saves' `Keys`
 # state.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/saves.rs static SEEN: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());

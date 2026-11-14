@@ -535,6 +535,72 @@ impl PlayerInfo {
     pub const CAN_EXTEND_BASE: u8 = 1 << 4;
     /// Receives experience.
     pub const CAN_RECEIVE_EXP: u8 = 1 << 5;
+
+    /// A caller with no character, as the server's console, a remote caller
+    /// or a player who left: account `key`, `permissions`, and `name` cut on
+    /// a character boundary to the 64 bytes `name` holds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::PlayerInfo;
+    /// use enshwick::PlayerKey;
+    ///
+    /// let console = PlayerInfo::without_character(PlayerKey::new(0), 0x3f, "console");
+    /// assert_eq!(console.name_text(), "console");
+    /// assert!(console.is_admin());
+    /// ```
+    #[must_use]
+    pub fn without_character(key: PlayerKey, permissions: u8, name: &str) -> Self {
+        let name = &name[..name.floor_char_boundary(64)];
+        let mut bytes = [0u8; 64];
+        bytes[..name.len()].copy_from_slice(name.as_bytes());
+        Self {
+            header: Header::of::<Self>(),
+            slot: u32::MAX,
+            entity: Entity(0),
+            key,
+            permissions,
+            name_len: u8::try_from(name.len()).unwrap_or(64),
+            name: bytes,
+        }
+    }
+
+    /// Whether the server lets the player kick and ban: its administrators.
+    ///
+    /// # Examples
+    ///
+    /// See [`PlayerInfo::without_character`].
+    #[must_use]
+    pub const fn is_admin(&self) -> bool {
+        Self::admin(self.permissions)
+    }
+
+    /// Whether `permissions` make an administrator: the one test every path
+    /// that asks for one uses, the world's players and callers alike.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::PlayerInfo;
+    ///
+    /// assert!(PlayerInfo::admin(PlayerInfo::CAN_KICK_BAN));
+    /// assert!(!PlayerInfo::admin(PlayerInfo::CAN_EDIT_BASE));
+    /// ```
+    #[must_use]
+    pub const fn admin(permissions: u8) -> bool {
+        permissions & Self::CAN_KICK_BAN != 0
+    }
+
+    /// The player's name, a byte the client sent that is not UTF-8 replaced.
+    ///
+    /// # Examples
+    ///
+    /// See [`PlayerInfo::without_character`].
+    #[must_use]
+    pub fn name_text(&self) -> std::borrow::Cow<'_, str> {
+        String::from_utf8_lossy(&self.name[..usize::from(self.name_len).min(self.name.len())])
+    }
 }
 
 /// The data of the [`Ticked`](../events/struct.Ticked.html) event.

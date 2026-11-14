@@ -156,7 +156,7 @@ shapes! {
         TickData { header, step, elapsed_steps, elapsed_nanos, step_nanos, cost_nanos, game },
         TickHandle { 0 },
         PlayerData { header, slot, entity, key },
-        ActionCall { header, kind, language, player, action, args, target, reply, word },
+        ActionCall { header, kind, language, player, action, args, target, reply, word, via, reason },
         ActionReply { header, done, text },
         ActionTarget { header, flags, entity, position },
         CommandInfo { header, name, alias, mod_id },

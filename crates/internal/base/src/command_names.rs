@@ -31,6 +31,41 @@ pub fn is_alias(word: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
+/// The first word of a typed `line` and the rest, both trimmed: the one
+/// split of every typed line, on the console, in chat or from a remote
+/// caller.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::command_names::first_word;
+///
+/// assert_eq!(first_word("  /adm  kick  Ann "), ("/adm", "kick  Ann"));
+/// assert_eq!(first_word(""), ("", ""));
+/// ```
+#[must_use]
+pub fn first_word(line: &str) -> (&str, &str) {
+    let line = line.trim();
+    let (first, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
+    (first, rest.trim())
+}
+
+/// The word that names a mod in a typed `line`, as the mod is told it: the
+/// first word in lower case, without a leading `/`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::command_names::command_word;
+///
+/// assert_eq!(command_word("/ADM  online"), "adm");
+/// ```
+#[must_use]
+pub fn command_word(line: &str) -> String {
+    let (first, _) = first_word(line);
+    first.strip_prefix('/').unwrap_or(first).to_lowercase()
+}
+
 /// Whether `word` is one no mod's commands may take.
 #[must_use]
 pub fn is_reserved(word: &str) -> bool {

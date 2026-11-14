@@ -36,13 +36,7 @@ pub const MAX_KEPT: usize = 1_024;
 /// the oldest go, which its mod hears as closed.
 pub const MAX_HELD: usize = 8;
 
-/// The most players one show or close hands the loader in a call;
-/// [`Actions::show`](super::Actions::show) splits a longer list.
-pub const MAX_CALL_PLAYERS: usize = 64;
-
-/// The most shows, updates and closes the loader keeps for its next step,
-/// one for each player; a call past it is refused.
-pub const MAX_WAITING: usize = 256;
+pub use enshwick_base::peer::{MAX_CALL_PLAYERS, MAX_WAITING_WINDOWS as MAX_WAITING};
 
 /// The most bytes of a title, line or label the client shows; the server
 /// cuts a longer one at a character's edge.

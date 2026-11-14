@@ -120,6 +120,8 @@ type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, FindSubjectError> + Send + Syn
 type On = Box<dyn Fn(&Ask<'_>, Option<&Subject>) -> Vec<(PlayerKey, String)> + Send + Sync>;
 type Known = Box<dyn Fn(&Ask<'_>) -> Vec<(PlayerKey, String)> + Send + Sync>;
 type Closed = Arc<dyn Fn(PlayerKey, Option<&str>) + Send + Sync>;
+/// A mod's function for a run of its actions refused before its handler.
+type RefusedFn = Arc<dyn Fn(&Refused<'_>) + Send + Sync>;
 
 /// The most accounts the platform takes from an action's
 /// [`known`](Action::known) function, in the order it gives them.
@@ -309,14 +311,16 @@ impl Action {
         self
     }
 
-    /// Only the server's administrators see the action and may run it.
+    /// Only the server's administrators see the action and may run it: the
+    /// permission to kick and ban, so it holds beside an
+    /// [`allow`](Self::allow) set before or after it.
     ///
     /// # Examples
     ///
     /// See the [module](self).
     #[must_use]
     pub fn admins(self) -> Self {
-        self.allow(Player::is_admin)
+        self.needs(PlayerPermissions::CanKickBan)
     }
 
     /// Only players the server gives `permission`, as the game's user
@@ -862,6 +866,34 @@ impl Actions {
     {
         *self.registry.closed.relock_write() = Some(Arc::new(closed));
     }
+
+    /// Calls `refused` with each run of the mod's actions the platform
+    /// refused before its handler: an unknown action, a caller without the
+    /// right, arguments that name nothing, the platform's rate, bounds or
+    /// reach. It runs on the server's game thread after the caller got the
+    /// refusal, once for each refused run: the platform answers the rest of a
+    /// player's flood unheard, and the console and remote callers are
+    /// trusted. A panic in it turns off only the mod's actions, as in a
+    /// handler. Without it a refused run is only answered. One function at a
+    /// time: a second call replaces the first.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
+    ///     actions.on_refused(|refused| {
+    ///         enshwick::info!("{} refused {}: {:?}", refused.player.name, refused.action, refused.reason);
+    ///     });
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn on_refused<F>(&self, refused: F)
+    where
+        F: Fn(&Refused<'_>) + Send + Sync + 'static,
+    {
+        *self.registry.refused.relock_write() = Some(Arc::new(refused));
+    }
 }
 
 /// `Load`'s methods of this module on the base handle, which core's
@@ -884,6 +916,7 @@ impl LoadMethods for crate::BaseLoad {
             declared: RwLock::new(Vec::new()),
             windows: RwLock::default(),
             closed: RwLock::new(None),
+            refused: RwLock::new(None),
             commands: core::sync::atomic::AtomicBool::new(false),
             commands_off: core::sync::atomic::AtomicBool::new(false),
         });

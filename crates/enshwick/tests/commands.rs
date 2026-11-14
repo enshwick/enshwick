@@ -329,6 +329,36 @@ mod tests {
     }
 
     #[test]
+    fn a_run_without_the_right_gets_one_refusal_on_every_path_and_never_runs() {
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(enshwick::test::FakeHost::new().player(ann));
+        let denied = "You may not do that.";
+
+        let interface = loader.ask_actions(ActionCall::RUN, &ann, 0, "kick", "tRoot");
+        let button = loader.ask_action_at(
+            &ann,
+            0,
+            "kick",
+            "tRoot",
+            enshwick::actions::ActionTarget::at([1.0, 2.0, 3.0]),
+        );
+        let chat = loader.type_in_chat(&ann, 0, "/adm kick Root");
+        let console = loader.ask_actions(ActionCall::CONSOLE, &ann, 0, "kick Root", "adm");
+        for (path, reply) in [
+            ("interface", interface),
+            ("button", button),
+            ("chat", chat),
+            ("console", console),
+        ] {
+            assert_eq!(reply, Some(format!("0{denied}")), "{path}");
+        }
+        let remote = commands::run("adm kick Root", &Caller::new("rcon")).unwrap();
+        assert!(!remote.is_done());
+        assert_eq!(remote.text(), denied, "remote");
+        assert!(runs().is_empty());
+    }
+
+    #[test]
     fn an_action_that_needs_a_permission_is_listed_and_run_only_for_players_holding_it() {
         let guest = player(3, 7, "Guest", 0);
         let friend = player(

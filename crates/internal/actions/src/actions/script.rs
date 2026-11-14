@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use super::registry::Registry;
 use super::{
-    Action, ActionTarget, Actions, Arg, Ask, FindSubjectError, Outcome, Request, Row, Subject,
-    Value, Via, Window,
+    Action, ActionTarget, Actions, Arg, Ask, FindSubjectError, Outcome, RefusedReason, Request,
+    Row, Subject, Value, Via, Window,
 };
 use crate::__load::*;
 use crate::i18n::{Language, Texts};
@@ -84,14 +84,11 @@ impl ScriptAction {
             action = action.arg(arg);
         }
         action = self.needs.into_iter().fold(action, Action::needs);
-        let admins = self.admins;
-        match self.allow {
-            Some(allow) => {
-                action = action
-                    .allow(move |player| (!admins || player.is_admin()) && allow.allows(player));
-            }
-            None if admins => action = action.admins(),
-            None => {}
+        if self.admins {
+            action = action.admins();
+        }
+        if let Some(allow) = self.allow {
+            action = action.allow(move |player| allow.allows(player));
         }
         if let Some(at) = self.at {
             let registry = Arc::clone(registry);
@@ -453,6 +450,27 @@ fn say(texts: &Texts, key: &str, language: Language, values: &[(String, String)]
     texts.fill(key, language, &values)
 }
 
+/// A run refused before its handler, as a script's
+/// [`on_refused`](Actions::on_refused) function hears it: [`Refused`](super::Refused)'s
+/// fields as a table.
+#[derive(Clone, Debug, crate::Script)]
+#[script(name = "Refused")]
+pub(crate) struct ScriptRefused {
+    /// Who ran it, as [`Refused::player`](super::Refused::player) holds it.
+    pub player: Player,
+    /// Where it came from, as [`Refused::via`](super::Refused::via) holds it.
+    pub via: Via,
+    /// The action's id or typed word, as [`Refused::action`](super::Refused::action) holds it.
+    pub action: String,
+    /// What the caller gave, as [`Refused::text`](super::Refused::text) holds it.
+    pub text: String,
+    /// The values read before the refusal, as [`Refused::values`](super::Refused::values) holds
+    /// them.
+    pub values: Vec<Value>,
+    /// Why it was refused, as [`Refused::reason`](super::Refused::reason) holds it.
+    pub reason: RefusedReason,
+}
+
 /// How a request went, as a script's handler answers it: [`Outcome`]'s
 /// parts as a table.
 #[derive(Clone, Debug, crate::Script)]
@@ -674,6 +692,25 @@ impl Actions {
         closed: impl Fn(PlayerKey, Option<String>) + Send + Sync + 'static,
     ) {
         self.on_closed(move |player, window| closed(player, window.map(str::to_owned)));
+    }
+
+    /// Calls `refused` with each run of the mod's actions the platform
+    /// refused before its handler, as [`Actions::on_refused`] does.
+    #[script(name = "on_refused")]
+    pub(crate) fn on_refused_script(
+        &self,
+        refused: impl Fn(ScriptRefused) + Send + Sync + 'static,
+    ) {
+        self.on_refused(move |run| {
+            refused(ScriptRefused {
+                player: run.player.clone(),
+                via: run.via,
+                action: run.action.to_owned(),
+                text: run.text.to_owned(),
+                values: run.values.to_vec(),
+                reason: run.reason,
+            });
+        });
     }
 }
 

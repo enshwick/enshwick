@@ -399,6 +399,70 @@ mod's controls and panels and the console all follow them.
 The platform's replies, such as "No player named Bob.", are under
 `actions.*` keys and take the mod's texts over them.
 
+`.admins()` is the permission to kick and ban. It holds beside an `.allow`,
+in either order, and the player needs both.
+
+Each player's runs from controls, panels, windows and chat share one rate:
+5 a second after a burst of 10. Administrators, the server's console and a
+remote caller are not rated. Every refused run gets an answer with its
+reason. Of a flood over the rate, only the first run gets one.
+
+## Refused runs
+
+`actions.on_refused(fn)` tells the mod of each run of its actions that the
+platform refused before the handler, after the caller got the answer. The
+function gets a `Refused` that holds:
+
+| Field | What it holds |
+| --- | --- |
+| `player` | who ran it; the account key alone for a caller who left |
+| `via` | where it came from, its `Via` |
+| `action` | the action's id, or the word a typed line named it by |
+| `text` | the line typed after the command, or the values the interface sent |
+| `values` | the values read before the refusal, empty when none were |
+| `reason` | why, a `RefusedReason` |
+
+| `RefusedReason` | The run |
+| --- | --- |
+| `UnknownAction` | named no action of the mod |
+| `NoRight` | came from a caller the action's rights refuse |
+| `Usage` | did not follow the action's usage |
+| `UnknownPlayer`, `SeveralPlayers`, `PlayerGone` | named no player, several, or one who left |
+| `TooLong` | gave a text longer than its argument takes |
+| `UnknownItem`, `SeveralItems` | named no item the server's game knows, or several |
+| `CommandsOff` | was typed while the mod's commands are off after a panic |
+| `Rate` | came over the player's rate |
+| `Bounds` | sent arguments out of the platform's bounds, which only a changed client does |
+| `Busy` | found the queue of commands for the step full |
+| `OutOfReach` | named an object out of the player's reach |
+
+An audit log keeps refused attempts this way. The function runs once per
+refused run on the server's game thread. The rest of a flood reaches the mod
+no more than the caller. A panic in it turns off the mod's actions, as in a
+handler.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.on_refused(|refused| {
+        enshwick::info!(
+            "{} was refused {}: {:?}",
+            refused.player.name,
+            refused.action,
+            refused.reason
+        );
+    });
+    Ok(())
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:on_refused(function(refused)
+    enshwick.log.info(`{refused.player.name} was refused {refused.action}: {refused.reason}`)
+end)
+```
+
 ## On a named object
 
 A panel beside a chest's screen acts on that chest, not on whatever `.at`

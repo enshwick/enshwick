@@ -10,7 +10,7 @@ use crate::i18n::Language;
 use crate::world::Player;
 
 use super::registry::{Registry, Typed};
-use super::request::{ActionTarget, Outcome, Via};
+use super::request::{ActionTarget, Outcome, Refused, RefusedReason, Via};
 
 /// What the mod answers the loader: a text, such as its sheet, or how a run
 /// went.
@@ -36,7 +36,17 @@ fn run_command(
     use core::sync::atomic::Ordering;
 
     if registry.commands_off.load(Ordering::Acquire) {
-        return Outcome::refused(registry.say("actions.commands_off", language, &[]));
+        let outcome = Outcome::refused(registry.say("actions.commands_off", language, &[]));
+        let first = typed.line.split_whitespace().next().unwrap_or("");
+        let refused = Refused {
+            player,
+            via: typed.via,
+            action: &first.to_lowercase(),
+            text: typed.line,
+            values: &[],
+            reason: RefusedReason::CommandsOff,
+        };
+        return registry.refused(&refused, outcome);
     }
     let run = || registry.run_from_console(player, language, typed);
     crate::host::caught(run).unwrap_or_else(|panicked| {
@@ -44,6 +54,48 @@ fn run_command(
         crate::warn!("commands off: a handler panicked: {}", panicked.text());
         Outcome::refused("")
     })
+}
+
+/// Tells the mod's own function of a run the loader refused before asking
+/// the mod, as [`ActionCall::REFUSED`] holds it: the run's question `via`,
+/// the loader's `reason`, and the action or line and arguments it would
+/// have held. A question or reason this build does not know is not told.
+fn loader_refused(
+    registry: &Registry,
+    player: &Player,
+    (via, reason): (u32, u32),
+    action: &str,
+    args: &str,
+) {
+    let via = match via {
+        ActionCall::RUN => Via::Interface,
+        ActionCall::CONSOLE => Via::Console,
+        ActionCall::CHAT => Via::Chat,
+        ActionCall::REMOTE => Via::Remote,
+        _ => return,
+    };
+    let reason = match reason {
+        ActionCall::REFUSED_RATE => RefusedReason::Rate,
+        ActionCall::REFUSED_BOUNDS => RefusedReason::Bounds,
+        ActionCall::REFUSED_BUSY => RefusedReason::Busy,
+        ActionCall::REFUSED_REACH => RefusedReason::OutOfReach,
+        _ => return,
+    };
+    let (action, text) = if via == Via::Interface {
+        (action.to_owned(), args)
+    } else {
+        let first = action.split_whitespace().next().unwrap_or("");
+        (first.to_lowercase(), action)
+    };
+    let refused = Refused {
+        player,
+        via,
+        action: &action,
+        text,
+        values: &[],
+        reason,
+    };
+    let _told = registry.refused(&refused, Outcome::refused(""));
 }
 
 /// Answers one of the loader's questions about this mod's actions.
@@ -109,6 +161,15 @@ pub(super) unsafe extern "system" fn answer(
             ActionCall::WINDOW => Answered::Text(registry.window(&player, language, action)),
             ActionCall::WINDOW_CLOSED => {
                 registry.window_closed(player.key, action);
+                Answered::Text(String::new())
+            }
+            ActionCall::REFUSED => {
+                let covered = call
+                    .header
+                    .covers(core::mem::offset_of!(ActionCall, reason) + size_of::<u32>());
+                if covered {
+                    loader_refused(registry, &player, (call.via, call.reason), action, args);
+                }
                 Answered::Text(String::new())
             }
             ActionCall::RUN => {

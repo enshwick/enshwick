@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 28
+#define ENSHWICK_ABI_MINOR 29
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -232,6 +232,14 @@ typedef struct EnshwickActionCall {
   // caller typed it; empty for the other questions. Valid for the call.
   // ABI 11.23.
   struct EnshwickStr word;
+  // For `ActionCall::REFUSED`, the question the run would have been:
+  // `ActionCall::RUN`, `ActionCall::CONSOLE`, `ActionCall::CHAT` or
+  // `ActionCall::REMOTE`; 0 for the other questions. ABI 11.29.
+  uint32_t via;
+  // For `ActionCall::REFUSED`, why the loader refused the run, one of
+  // the `ActionCall::REFUSED_` reasons; 0 for the other questions. ABI
+  // 11.29.
+  uint32_t reason;
 } EnshwickActionCall;
 // The actions the player may use now, as a sheet: the reply is the
 // sheet's text.
@@ -271,6 +279,24 @@ typedef struct EnshwickActionCall {
 // forgets what it kept for them. `player` holds the account key alone:
 // no character, name or permission. No reply is read. ABI 11.23.
 #define EnshwickActionCall_WINDOW_CLOSED 7
+// The loader refused a run of one of the mod's actions before asking
+// the mod, and answered the caller itself: `via` names the question the
+// run would have been, `reason` why, and `action`, `args` and `word`
+// hold what that question would have held. `player` is the caller, or
+// the account key alone for one no longer in the world. No reply is
+// read. ABI 11.29.
+#define EnshwickActionCall_REFUSED 8
+// `ActionCall::reason`: the caller is over the loader's rate of runs.
+#define EnshwickActionCall_REFUSED_RATE 1
+// `ActionCall::reason`: the run's arguments are out of the loader's
+// bounds, which only a changed client sends.
+#define EnshwickActionCall_REFUSED_BOUNDS 2
+// `ActionCall::reason`: the runs waiting for the end of the step fill
+// the loader's queue.
+#define EnshwickActionCall_REFUSED_BUSY 3
+// `ActionCall::reason`: the object the run names stands out of the
+// caller's reach.
+#define EnshwickActionCall_REFUSED_REACH 4
 
 // A buff type of the game by its id, the
 // `Guid::fnv1a` of its GUID, to apply,

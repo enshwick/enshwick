@@ -1,3 +1,5 @@
+use enshwick_base::peer::Rated;
+
 use super::*;
 
 #[test]
@@ -385,10 +387,34 @@ fn secrets_never_leave_and_never_change() {
         "{shown}"
     );
     let now = Instant::now();
-    assert!(admit(&schema(), "limit", true, None, now).is_ok());
-    assert!(admit(&schema(), "limit", false, None, now).is_err());
-    assert!(admit(&schema(), "token", true, None, now).is_err());
-    assert!(admit(&schema(), "limit", true, Some(now), now).is_err());
+    let mut edits = Rated::new(EDIT_RATE);
+    assert_eq!(
+        admit(&schema(), "limit", false, (7, &mut edits), now),
+        Err(AdmitEditError::NotAdmin)
+    );
+    assert!(matches!(
+        admit(&schema(), "token", true, (7, &mut edits), now),
+        Err(AdmitEditError::Secret { .. })
+    ));
+    assert_eq!(
+        admit(&schema(), "limit", true, (7, &mut edits), now),
+        Ok(())
+    );
+    assert_eq!(
+        admit(&schema(), "limit", true, (7, &mut edits), now),
+        Err(AdmitEditError::Busy),
+        "a refused change spent no rate, the next one too soon after the last"
+    );
+    assert_eq!(
+        admit(
+            &schema(),
+            "limit",
+            true,
+            (7, &mut edits),
+            now + std::time::Duration::from_millis(250)
+        ),
+        Ok(())
+    );
 }
 
 #[test]
@@ -420,47 +446,75 @@ fn secrets_in_inline_tables_never_leave() {
     }
 }
 
+fn query() -> Message {
+    Message::Query { id: String::new() }
+}
+
+fn passed(queries: &mut Queries, key: u64, message: &Message, now: Instant) -> usize {
+    (0..100)
+        .take_while(|_| queries.gate(key, || false, message, now) == Gate::Pass)
+        .count()
+}
+
 #[test]
 fn a_player_who_is_no_administrator_asks_at_the_query_rate() {
     let mut queries = Queries::default();
     let start = Instant::now();
-    let asked = (0..100).filter(|_| queries.admit(7, false, start)).count();
-    assert_eq!(f64::from(u32::try_from(asked).unwrap()), QUERY_BURST);
-    assert!(!queries.admit(7, false, start));
-    assert!(
-        queries.admit(8, false, start),
+    let asked = passed(&mut queries, 7, &query(), start);
+    assert_eq!(f64::from(u32::try_from(asked).unwrap()), QUERY_RATE.burst);
+    assert_eq!(
+        passed(&mut queries, 8, &query(), start),
+        asked,
         "each player has a rate of his own"
     );
-    let later = start + Duration::from_secs(1);
-    let again = (0..100).filter(|_| queries.admit(7, false, later)).count();
-    assert_eq!(f64::from(u32::try_from(again).unwrap()), QUERY_RATE);
+    let later = start + std::time::Duration::from_secs(1);
+    let again = passed(&mut queries, 7, &query(), later);
+    assert_eq!(
+        f64::from(u32::try_from(again).unwrap()),
+        QUERY_RATE.per_second
+    );
 }
 
 #[test]
-fn an_administrator_s_queries_are_not_rated() {
+fn an_administrator_s_queries_are_not_rated_and_are_asked_only_over_the_rate() {
     let mut queries = Queries::default();
     let now = Instant::now();
-    assert!((0..1000).all(|_| queries.admit(7, true, now)));
-    assert!(queries.rates.is_empty());
+    let mut asked = 0;
+    for _ in 0..1000 {
+        let gate = queries.gate(
+            7,
+            || {
+                asked += 1;
+                true
+            },
+            &query(),
+            now,
+        );
+        assert_eq!(gate, Gate::Pass);
+    }
+    let burst = (0_u32..1_000)
+        .take_while(|&n| f64::from(n) < QUERY_RATE.burst)
+        .count();
+    assert_eq!(asked, 1000 - burst, "no player lookup within the rate");
 }
 
 #[test]
 fn a_player_who_left_is_forgotten() {
     let mut queries = Queries::default();
     let now = Instant::now();
-    while queries.admit(7, false, now) {}
+    passed(&mut queries, 7, &query(), now);
     queries.forget(7);
-    assert!(queries.rates.is_empty());
-    assert!(
-        queries.admit(7, false, now),
+    assert_eq!(
+        queries.gate(7, || false, &query(), now),
+        Gate::Pass,
         "a new join starts with a full burst"
     );
 }
 
 #[test]
-fn queries_and_edits_are_rated_and_answers_are_not() {
+fn queries_and_edits_are_rated_and_answers_and_action_runs_are_not() {
     let rated = [
-        Message::Query { id: String::new() },
+        query(),
         Message::Edit {
             id: "zones".into(),
             key: "radius".into(),
@@ -478,94 +532,60 @@ fn queries_and_edits_are_rated_and_answers_are_not() {
             id: "zones".into(),
             values: String::new(),
         },
+        Message::ActionRun {
+            id: "zones".into(),
+            action: "clear".into(),
+            args: String::new(),
+            target: None,
+        },
     ];
     assert!(!free.iter().any(Message::is_rated));
 }
 
-fn over_the_rate(queries: &mut Queries, key: u64, now: Instant) {
-    while queries.admit(key, false, now) {}
-}
-
 #[test]
-fn a_query_or_edit_over_the_rate_is_answered_busy_and_not_served() {
+fn a_flood_over_the_rate_is_answered_busy_once_and_then_dropped() {
     let mut queries = Queries::default();
     let now = Instant::now();
-    over_the_rate(&mut queries, 7, now);
-    let busy = Gate::Busy(Message::Result {
-        ok: false,
-        text: texts::fill("remote.slow", &[]),
-    });
-    for message in [
-        Message::Query { id: String::new() },
-        Message::Edit {
-            id: "zones".into(),
-            key: "radius".into(),
-            value: "5".into(),
-        },
-    ] {
-        assert_eq!(queries.gate(7, false, &message, now), busy);
-    }
+    let edit = Message::Edit {
+        id: "zones".into(),
+        key: "radius".into(),
+        value: "5".into(),
+    };
+    let gates: Vec<Gate> = (0..12)
+        .map(|_| queries.gate(7, || false, &edit, now))
+        .collect();
+    let burst = (0_u32..1_000)
+        .take_while(|&n| f64::from(n) < QUERY_RATE.burst)
+        .count();
+    assert!(gates[..burst].iter().all(|g| *g == Gate::Pass));
+    assert_eq!(
+        gates[burst],
+        Gate::Busy(Message::Result {
+            ok: false,
+            text: texts::fill("remote.slow", &[]),
+        })
+    );
+    assert!(gates[burst + 1..].iter().all(|g| *g == Gate::Drop));
+    assert_eq!(queries.gate(7, || false, &query(), now), Gate::Drop);
 }
 
 #[test]
 fn a_language_message_over_the_rate_gets_no_answer_at_all() {
     let mut queries = Queries::default();
     let now = Instant::now();
-    over_the_rate(&mut queries, 7, now);
+    passed(&mut queries, 7, &query(), now);
     let message = Message::ActionsLanguage { language: 0 };
-    assert_eq!(queries.gate(7, false, &message, now), Gate::Drop);
+    assert_eq!(queries.gate(7, || false, &message, now), Gate::Drop);
 }
 
 #[test]
-fn rated_messages_pass_until_the_burst_is_spent() {
+fn unrated_messages_always_pass() {
     let mut queries = Queries::default();
     let now = Instant::now();
-    let message = Message::Query { id: String::new() };
-    let passed = (0..100)
-        .take_while(|_| queries.gate(7, false, &message, now) == Gate::Pass)
-        .count();
-    assert_eq!(f64::from(u32::try_from(passed).unwrap()), QUERY_BURST);
-}
-
-#[test]
-fn action_runs_have_a_rate_of_their_own_and_over_it_are_busy_and_not_run() {
-    let mut queries = Queries::default();
-    let now = Instant::now();
-    over_the_rate(&mut queries, 7, now);
-    let run = Message::ActionRun {
-        id: "zones".into(),
-        action: "clear".into(),
-        args: String::new(),
-        target: None,
-    };
-    let passed = (0..100)
-        .take_while(|_| queries.gate(7, false, &run, now) == Gate::Pass)
-        .count();
-    assert_eq!(
-        f64::from(u32::try_from(passed).unwrap()),
-        RUN_BURST,
-        "spent queries leave the runs alone"
-    );
-    assert!(matches!(
-        queries.gate(7, false, &run, now),
-        Gate::Busy(Message::Result { ok: false, .. })
-    ));
-    let query = Message::Query { id: String::new() };
-    let mut fresh = Queries::default();
-    while fresh.gate(8, false, &run, now) == Gate::Pass {}
-    assert_eq!(fresh.gate(8, false, &query, now), Gate::Pass);
-}
-
-#[test]
-fn unrated_messages_and_administrators_always_pass() {
-    let mut queries = Queries::default();
-    let now = Instant::now();
-    over_the_rate(&mut queries, 7, now);
+    passed(&mut queries, 7, &query(), now);
     let sync = Message::Sync {
         id: "zones".into(),
         values: String::new(),
     };
-    assert_eq!(queries.gate(7, false, &sync, now), Gate::Pass);
-    let query = Message::Query { id: String::new() };
-    assert!((0..100).all(|_| queries.gate(8, true, &query, now) == Gate::Pass));
+    assert_eq!(queries.gate(7, || false, &sync, now), Gate::Pass);
 }

@@ -562,6 +562,23 @@ mod tests {
     }
 
     #[test]
+    fn values_that_do_not_decode_answer_the_usage_not_a_missing_right() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[root]);
+
+        for args in ["zzz", "p00zz\ttx", "n\ttx"] {
+            let reply = loader.ask_actions(ActionCall::RUN, &root, 0, "ban", args);
+            assert!(
+                reply
+                    .as_deref()
+                    .is_some_and(|reply| reply.starts_with("0Write it so: ban ")),
+                "{args}: {reply:?}"
+            );
+        }
+        assert!(runs().is_empty());
+    }
+
+    #[test]
     fn a_player_who_may_not_run_an_action_learns_nothing_of_the_accounts_it_knows() {
         let ann = player(3, 7, "Ann", 0);
         let loader = start(&[ann]);

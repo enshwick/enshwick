@@ -2,8 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick_core::Entity;
-use enshwick_core::abi::{Header, PlayerInfo, Status};
+use enshwick_core::abi::{PlayerInfo, Status};
 
 use crate::engine::loader::Loader;
 use crate::engine::texts;
@@ -66,17 +65,11 @@ fn refusal(line: &str, status: Status) -> String {
 /// The server's console as a player: every permission the game gives, and
 /// no character.
 pub(crate) fn the_console() -> PlayerInfo {
-    let mut name = [0u8; 64];
-    name[..7].copy_from_slice(b"console");
-    PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: u32::MAX,
-        entity: Entity(0),
-        key: enshwick_core::PlayerKey::new(0),
-        permissions: crate::actions::commands::ALL_PERMISSIONS,
-        name_len: 7,
-        name,
-    }
+    PlayerInfo::without_character(
+        enshwick_core::PlayerKey::new(0),
+        crate::actions::commands::ALL_PERMISSIONS,
+        "console",
+    )
 }
 
 /// Runs `line` as the server's console, on the game thread; the answer.

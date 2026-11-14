@@ -31,8 +31,6 @@ pub(crate) use admin::{TABLE_IDS, account_action};
 mod tools;
 #[cfg(windows)]
 pub(crate) use run::{after_step, run, start, the_console};
-#[cfg(windows)]
-pub(crate) use tools::is_admin as player_is_admin;
 
 /// What the console keeps while the game runs.
 struct State {
@@ -177,12 +175,7 @@ pub enum Tool<'a> {
     UiDemo(&'a str),
 }
 
-/// The first word of `text` and the rest, trimmed.
-fn split(text: &str) -> (&str, &str) {
-    let text = text.trim();
-    let (first, rest) = text.split_once(char::is_whitespace).unwrap_or((text, ""));
-    (first, rest.trim())
-}
+use enshwick_core::command_names::first_word as split;
 
 /// Reads a console line.
 #[must_use]

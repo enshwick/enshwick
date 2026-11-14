@@ -61,15 +61,13 @@ pub enum Refusal {
 /// digits `enshwick world` shows; 0 is no account.
 #[must_use]
 pub fn account(word: &str) -> Option<u64> {
-    let hex = match word.strip_prefix("0x").or_else(|| word.strip_prefix("0X")) {
-        Some(hex) => hex,
-        None if word.len() == 16 => word,
-        None => return None,
-    };
-    if hex.is_empty() || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+    let prefixed = word.starts_with("0x") || word.starts_with("0X");
+    if !prefixed && word.len() != 16 {
         return None;
     }
-    u64::from_str_radix(hex, 16).ok().filter(|&key| key != 0)
+    enshwick_core::PlayerKey::from_hex(word)
+        .map(enshwick_core::PlayerKey::get)
+        .filter(|&key| key != 0)
 }
 
 /// The account the game is asked to `act` on for `target`.

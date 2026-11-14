@@ -422,10 +422,21 @@ pub(crate) fn language_of(key: u64) -> Option<Language> {
     state(|s| language_in(s, key))
 }
 
+/// The language the player of client `key` reads, as the ABI numbers it:
+/// [`language_of`], else 0, the fallback.
+pub(crate) fn language_number(key: u64) -> u32 {
+    language_of(key).map_or(0, |language| language.0)
+}
+
 /// Keeps `language`, which client `key` named after its hello for its
 /// action replies, as the peer's language where its hello named none, so
-/// every reader of [`language_of`] sees the one the actions use.
-pub(crate) fn language_named(key: u64, language: Language) {
+/// every reader of [`language_of`] sees the one the actions use. A number
+/// the game does not know is dropped, as the hello's is.
+pub(crate) fn language_named(key: u64, language: u32) {
+    let language = Language(language);
+    if !Language::ALL.contains(&language) {
+        return;
+    }
     state(|s| {
         if let Some(peer) = s.peers.get_mut(&key) {
             peer.language.get_or_insert(language);

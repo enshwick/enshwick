@@ -1,6 +1,8 @@
 [ja]
 "actions.close" = "閉じる"
 "actions.out-of-reach" = "遠すぎます。"
+"actions.bad-request" = "サーバーはこのリクエストを読み取れませんでした。"
+"actions.unavailable" = "このアクションは現在このサーバーでは使えません。"
 "windows.run" = "実行"
 "windows.cancel" = "キャンセル"
 "windows.name" = "または名前を入力"

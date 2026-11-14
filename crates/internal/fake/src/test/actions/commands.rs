@@ -111,6 +111,11 @@ impl Installed {
         args: &str,
     ) -> Option<String> {
         let actions = table::with(None, |s| s.actions)?;
+        let run = enshwick_core::abi::ActionCall::RUN;
+        if kind == run && !enshwick_core::peer::args_in_bounds(args) {
+            // The loader answers its own text and never asks the mod.
+            return Some("0".to_owned());
+        }
         let reply = ask(
             actions,
             kind,
@@ -444,24 +449,74 @@ impl Installed {
     }
 }
 
+#[expect(
+    clippy::unused_self,
+    reason = "the fake's state is process-wide; `self` proves it is installed"
+)]
+#[cfg(feature = "unstable")]
+impl Installed {
+    /// Tells the mod, as the loader does, that it refused `player`'s run
+    /// before asking the mod: `via` is the question the run would have been
+    /// ([`ActionCall::RUN`](enshwick_core::abi::ActionCall::RUN) with the
+    /// action's id and its arguments, or a typed kind with the line after
+    /// the command), `reason` an `ActionCall::REFUSED_` value. The mod's
+    /// [`Actions::on_refused`](enshwick_core::actions::Actions::on_refused)
+    /// hears it; `false` when the mod declared no actions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{ActionCall, Header, PlayerInfo};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo::without_character(enshwick::PlayerKey::new(7), 0, "Ann");
+    /// let told = loader.refuse_run(&player, ActionCall::RUN, ActionCall::REFUSED_RATE, "kick", "");
+    /// assert!(!told, "no actions declared");
+    /// ```
+    #[must_use]
+    pub fn refuse_run(
+        &self,
+        player: &PlayerInfo,
+        via: u32,
+        reason: u32,
+        action: &str,
+        args: &str,
+    ) -> bool {
+        let Some(actions) = table::with(None, |s| s.actions) else {
+            return false;
+        };
+        let _heard = ask_call(
+            actions,
+            enshwick_core::abi::ActionCall {
+                header: Header::of::<enshwick_core::abi::ActionCall>(),
+                kind: enshwick_core::abi::ActionCall::REFUSED,
+                language: 0,
+                player: *player,
+                action: Str::new(action),
+                args: Str::new(args),
+                target: enshwick_core::abi::ActionTarget::NONE,
+                reply: core::ptr::null_mut(),
+                word: Str::EMPTY,
+                via,
+                reason,
+            },
+        );
+        true
+    }
+}
+
 /// The server's console as a player: an administrator with no character.
 pub(crate) fn console() -> PlayerInfo {
-    let mut name = [0u8; 64];
-    name[..7].copy_from_slice(b"console");
-    PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: u32::MAX,
-        entity: enshwick_core::Entity(0),
-        key: enshwick_core::PlayerKey::new(0),
-        permissions: PlayerInfo::CAN_KICK_BAN
+    PlayerInfo::without_character(
+        enshwick_core::PlayerKey::new(0),
+        PlayerInfo::CAN_KICK_BAN
             | PlayerInfo::CAN_ACCESS_INVENTORIES
             | PlayerInfo::CAN_EDIT_BASE
             | PlayerInfo::CAN_EDIT_WORLD
             | PlayerInfo::CAN_EXTEND_BASE
             | PlayerInfo::CAN_RECEIVE_EXP,
-        name_len: 7,
-        name,
-    }
+        "console",
+    )
 }
 
 /// Asks a mod's actions callback as the loader does; its reply. `extra` is
@@ -486,6 +541,8 @@ pub(crate) fn ask(
         target,
         reply: core::ptr::null_mut(),
         word: Str::EMPTY,
+        via: 0,
+        reason: 0,
     };
     let typed = [
         enshwick_core::abi::ActionCall::CONSOLE,
@@ -497,8 +554,17 @@ pub(crate) fn ask(
     } else {
         call.args = Str::new(extra);
     }
+    ask_call(actions, call)
+}
+
+/// Asks a mod's actions callback the question `call` as the loader does;
+/// its reply.
+fn ask_call(
+    actions: table::Registered<enshwick_core::abi::ActionFn>,
+    mut call: enshwick_core::abi::ActionCall,
+) -> String {
     let mut written: enshwick_core::abi::ActionReply = bytemuck::Zeroable::zeroed();
-    if kind != enshwick_core::abi::ActionCall::SHEET {
+    if call.kind != enshwick_core::abi::ActionCall::SHEET {
         call.reply = &raw mut written;
     }
     let mut reply = Str::EMPTY;

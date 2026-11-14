@@ -30,6 +30,8 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 ///     target: enshwick::abi::ActionTarget::NONE,
 ///     reply: core::ptr::null_mut(),
 ///     word: Str::EMPTY,
+///     via: 0,
+///     reason: 0,
 /// };
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
@@ -76,6 +78,14 @@ pub struct ActionCall {
     /// caller typed it; empty for the other questions. Valid for the call.
     /// ABI 11.23.
     pub word: Str,
+    /// For [`ActionCall::REFUSED`], the question the run would have been:
+    /// [`ActionCall::RUN`], [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] or
+    /// [`ActionCall::REMOTE`]; 0 for the other questions. ABI 11.29.
+    pub via: u32,
+    /// For [`ActionCall::REFUSED`], why the loader refused the run, one of
+    /// the `ActionCall::REFUSED_` reasons; 0 for the other questions. ABI
+    /// 11.29.
+    pub reason: u32,
 }
 
 impl_headed!(ActionCall, born = 144);
@@ -298,6 +308,24 @@ impl ActionCall {
     /// forgets what it kept for them. `player` holds the account key alone:
     /// no character, name or permission. No reply is read. ABI 11.23.
     pub const WINDOW_CLOSED: u32 = 7;
+    /// The loader refused a run of one of the mod's actions before asking
+    /// the mod, and answered the caller itself: `via` names the question the
+    /// run would have been, `reason` why, and `action`, `args` and `word`
+    /// hold what that question would have held. `player` is the caller, or
+    /// the account key alone for one no longer in the world. No reply is
+    /// read. ABI 11.29.
+    pub const REFUSED: u32 = 8;
+    /// [`ActionCall::reason`]: the caller is over the loader's rate of runs.
+    pub const REFUSED_RATE: u32 = 1;
+    /// [`ActionCall::reason`]: the run's arguments are out of the loader's
+    /// bounds, which only a changed client sends.
+    pub const REFUSED_BOUNDS: u32 = 2;
+    /// [`ActionCall::reason`]: the runs waiting for the end of the step fill
+    /// the loader's queue.
+    pub const REFUSED_BUSY: u32 = 3;
+    /// [`ActionCall::reason`]: the object the run names stands out of the
+    /// caller's reach.
+    pub const REFUSED_REACH: u32 = 4;
 }
 
 /// A mod's answer to the loader's questions about its player actions: the

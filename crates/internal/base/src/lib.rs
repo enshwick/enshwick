@@ -96,4 +96,6 @@ pub mod __internal;
 #[doc(hidden)]
 pub mod __private;
 #[doc(hidden)]
+pub mod peer;
+#[doc(hidden)]
 pub mod schema_section;

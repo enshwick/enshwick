@@ -469,6 +469,81 @@ pub enum Via {
     Remote,
 }
 
+/// Why the platform refused a run of an action before its handler.
+///
+/// # Examples
+///
+/// See [`Refused`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub enum RefusedReason {
+    /// No action of the mod has the id, or the typed word.
+    UnknownAction,
+    /// The caller may not run the action.
+    NoRight,
+    /// The words or values do not follow the action's usage.
+    Usage,
+    /// No player online or known to the action has the name.
+    UnknownPlayer,
+    /// Several players have the name.
+    SeveralPlayers,
+    /// The player named by account left.
+    PlayerGone,
+    /// A text is longer than its argument takes.
+    TooLong,
+    /// No item the server's game knows has the name.
+    UnknownItem,
+    /// Several items have the name.
+    SeveralItems,
+    /// The mod's typed lines are off since a handler panicked in one.
+    CommandsOff,
+    /// The caller is over the platform's rate of runs.
+    Rate,
+    /// The run's arguments are out of the platform's bounds, which only a
+    /// changed client sends.
+    Bounds,
+    /// The runs waiting for the end of the step fill the platform's queue.
+    Busy,
+    /// The object the run names stands out of the caller's reach.
+    OutOfReach,
+}
+
+/// A run of one of the mod's actions that the platform refused before its
+/// handler, as [`Actions::on_refused`](crate::actions::Actions::on_refused)
+/// hears it, after the caller got the refusal.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::actions::{Refused, RefusedReason};
+///
+/// fn kept(refused: &Refused<'_>) -> Option<String> {
+///     (refused.reason != RefusedReason::Rate).then(|| {
+///         format!("{} {:?} {} {}", refused.player.name, refused.via, refused.action, refused.text)
+///     })
+/// }
+/// ```
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Refused<'a> {
+    /// Who ran it; the account key alone for a caller no longer in the
+    /// world.
+    pub player: &'a Player,
+    /// Where it came from.
+    pub via: Via,
+    /// The action's id; for a typed line the word that would have named
+    /// one, empty when the line held none.
+    pub action: &'a str,
+    /// What the caller gave: the line typed after the command or the
+    /// console's mod id, or the arguments the interface sent.
+    pub text: &'a str,
+    /// The values read before the refusal, in the order of the arguments;
+    /// empty when none were.
+    pub values: &'a [Value],
+    /// Why it was refused.
+    pub reason: RefusedReason,
+}
+
 /// A player's request to run an action, handed to its handler on the
 /// server's game thread once the platform checked who may use it.
 ///

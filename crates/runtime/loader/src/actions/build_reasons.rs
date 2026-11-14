@@ -191,9 +191,7 @@ pub(crate) fn after_step(loader: &Loader) {
             continue;
         }
         let text = shown(loader, &seen.reason, crate::base::net::language_of(key));
-        if crate::base::notices::send(loader, key, &text).is_err() {
-            let _sent = crate::actions::chat::send(key, &text);
-        }
+        crate::actions::reply::tell(loader, key, &text);
     }
 }
 
