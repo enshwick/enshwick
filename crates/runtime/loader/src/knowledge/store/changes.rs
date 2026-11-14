@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
+use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo};
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::write;
@@ -30,7 +30,7 @@ use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use enshwick_base::Relock;
 
-use super::{definition, layout, read, store};
+use super::{KnowledgeError, definition, layout, read, store};
 
 /// The queue's file in a world's folder.
 const FILE: &str = "knowledge.toml";
@@ -157,20 +157,20 @@ pub(crate) fn revoke(
     id: u32,
     kind: u32,
     value: u32,
-) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
-    let parts = parts(loader).ok_or(Status::MISSING)?;
+) -> Result<(), KnowledgeError> {
+    let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
+    let parts = parts(loader).ok_or(KnowledgeError::Unread)?;
     let (game, state) = store(layout)?;
-    let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;
+    let (scope, def) = definition(layout, state, id).ok_or(KnowledgeError::BadChange)?;
     // SAFETY: `def` is the definition `definition` found in the live blob;
     // its u8 kind sits at the reflected `type` field.
     let def_kind: u8 = unsafe { read(def, layout.def_kind) };
     if u32::from(def_kind) != kind {
-        return Err(Status::BAD_ARGS);
+        return Err(KnowledgeError::BadChange);
     }
     let player = scope == KnowledgeInfo::PLAYER;
     let current = super::value(loader, if player { Entity(entity) } else { Entity(0) }, id)?.value;
-    let new = lowered(def_kind, current, value).ok_or(Status::BAD_ARGS)?;
+    let new = lowered(def_kind, current, value).ok_or(KnowledgeError::BadChange)?;
     if new == current {
         return Ok(());
     }
@@ -188,7 +188,7 @@ pub(crate) fn revoke(
         let record = super::record(layout, state, Entity(entity))?;
         let slot = entity as usize - 1;
         if !loaded(parts, game, slot) {
-            return Err(Status::REFUSED);
+            return Err(KnowledgeError::NotLoaded);
         }
         // SAFETY: `record` is the character's active record (`record`
         // checked it) whose save has loaded (`loaded` checked it), with its
@@ -384,7 +384,7 @@ fn write_queue(key: &str, waiting: &[Waiting]) {
     }
 }
 
-fn apply(loader: &Loader, entity: Entity, change: &Waiting) -> Result<(), Status> {
+fn apply(loader: &Loader, entity: Entity, change: &Waiting) -> Result<(), KnowledgeError> {
     if change.revoke {
         revoke(
             loader,
@@ -424,16 +424,16 @@ pub(crate) fn for_account(
     kind: u32,
     value: u32,
     revoking: bool,
-) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
-    parts(loader).ok_or(Status::MISSING)?;
+) -> Result<(), KnowledgeError> {
+    let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
+    parts(loader).ok_or(KnowledgeError::Unread)?;
     let (_, state) = store(layout)?;
-    let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;
+    let (scope, def) = definition(layout, state, id).ok_or(KnowledgeError::BadChange)?;
     // SAFETY: `def` is the definition `definition` found in the live blob;
     // its u8 kind sits at the reflected `type` field.
     let def_kind: u8 = unsafe { read(def, layout.def_kind) };
     if scope != KnowledgeInfo::PLAYER || u32::from(def_kind) != kind {
-        return Err(Status::BAD_ARGS);
+        return Err(KnowledgeError::BadChange);
     }
     let change = Waiting {
         account: format!("{key:016x}"),
@@ -446,7 +446,7 @@ pub(crate) fn for_account(
         return apply(loader, entity, &change);
     }
     let mut queue = STATE.queue.relock();
-    let world = queue.key.clone().ok_or(Status::MISSING)?;
+    let world = queue.key.clone().ok_or(KnowledgeError::NoWorld)?;
     if queue.waiting.contains(&change) {
         return Ok(());
     }
@@ -520,13 +520,12 @@ fn settle(loader: &Loader) {
         }
         match apply(loader, player.entity, change) {
             Ok(()) => false,
-            Err(status) if status == Status::REFUSED => true,
-            Err(status) => {
+            Err(error) if error.may_pass() => true,
+            Err(error) => {
                 crate::log!(
                     WARN,
-                    "knowledge: change of id {} for an account dropped ({})",
-                    change.id,
-                    status.0
+                    "knowledge: change of id {} for an account dropped: {error}",
+                    change.id
                 );
                 false
             }

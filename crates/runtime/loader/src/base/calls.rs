@@ -329,7 +329,7 @@ pub(crate) enum RouteCallError {
 }
 
 /// The registry while mods initialise.
-static REGISTRY: Mutex<Registry> = Mutex::new(Registry {
+static STATE: Mutex<Registry> = Mutex::new(Registry {
     served: Vec::new(),
     wanted: Vec::new(),
 });
@@ -340,7 +340,7 @@ static OFFERS: OnceLock<Vec<Offer>> = OnceLock::new();
 
 /// The registry, for the entry points.
 pub(crate) fn registry() -> std::sync::MutexGuard<'static, Registry> {
-    REGISTRY.relock()
+    STATE.relock()
 }
 
 /// Whether the calls are sealed: serving and asking are over.
@@ -376,36 +376,64 @@ pub(crate) fn seal(mods: &impl Mods) {
     let _first = OFFERS.set(offers);
 }
 
-/// Runs the call `id`, which the mod at `caller` asked for.
+/// Why a call did not reach its serving mod.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RunCallError {
+    /// The calls are not sealed yet.
+    #[error("the calls are not sealed yet")]
+    Unsealed,
+    /// No call has the id.
+    #[error("no call has the id")]
+    Unknown,
+    /// Another mod asked for the call.
+    #[error("the call is another mod's")]
+    NotCaller,
+    /// A null input or output.
+    #[error("a null input or output")]
+    NullArgs,
+    /// No mod serves the call.
+    #[error("no mod serves the call")]
+    NoServer,
+    /// The serving mod is off.
+    #[error("the serving mod is off")]
+    ServerOff,
+}
+
+/// Runs the call `id`, which the mod at `caller` asked for: the serving
+/// mod's own answer, which the ABI hands on as it is.
+///
+/// # Errors
+///
+/// [`RunCallError`] when the call reaches no serving mod.
 pub(crate) fn run(
     caller: usize,
     id: u32,
     input: *const core::ffi::c_void,
     output: *mut core::ffi::c_void,
-) -> Status {
+) -> Result<Status, RunCallError> {
     let Some(routes) = SEALED.get() else {
-        return Status::MISSING;
+        return Err(RunCallError::Unsealed);
     };
     let Some(route) = routes.get(id as usize) else {
-        return Status::BAD_ARGS;
+        return Err(RunCallError::Unknown);
     };
     if route.caller != ModIndex::new(caller) {
-        return Status::BAD_ARGS;
+        return Err(RunCallError::NotCaller);
     }
     if input.is_null() || output.is_null() {
-        return Status::BAD_ARGS;
+        return Err(RunCallError::NullArgs);
     }
     let Ok(server) = &route.server else {
-        return Status::MISSING;
+        return Err(RunCallError::NoServer);
     };
     if crate::engine::loader::is_off(server.owner) {
-        return Status::REFUSED;
+        return Err(RunCallError::ServerOff);
     }
     // SAFETY: the handler lives in the server's DLL, which stays loaded; the
     // seal matched the caller's input and answer to the server's field by
     // field and in size, the caller passes both as large as its declaration
     // says, and the safe layer catches the handler's panics.
-    crate::engine::profile::call(
+    Ok(crate::engine::profile::call(
         server.owner,
         crate::engine::profile::Feature::Calls,
         || unsafe {
@@ -415,7 +443,7 @@ pub(crate) fn run(
                 core::ptr::with_exposed_provenance_mut(server.user),
             )
         },
-    )
+    ))
 }
 
 /// A line per served call and per unmatched asked call, for the status

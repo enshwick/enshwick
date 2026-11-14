@@ -15,7 +15,9 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{HookFlags, MidHookFn, ModHandle, Registers, Status};
+use enshwick_core::abi::{HookFlags, MidHookFn, ModHandle, Registers};
+
+use crate::engine::chains::LinkError;
 use rustc_hash::FxHashMap;
 
 use crate::engine::fuse::Fuse;
@@ -202,7 +204,7 @@ pub(crate) struct Mids {
 
 impl Mids {
     /// Adds a mod's `link` at `address`, by [`Mids::add_fused`].
-    pub(crate) fn add(&mut self, address: u64, link: MidLink) -> Status {
+    pub(crate) fn add(&mut self, address: u64, link: MidLink) -> Result<(), LinkError> {
         self.add_fused(address, link, None)
     }
 
@@ -215,22 +217,22 @@ impl Mids {
         address: u64,
         link: MidLink,
         feature: Option<&'static Fuse>,
-    ) -> Status {
+    ) -> Result<(), LinkError> {
         if self.armed {
-            return Status::TOO_LATE;
+            return Err(LinkError::Armed);
         }
         if address == 0 {
-            return Status::BAD_ARGS;
+            return Err(LinkError::Malformed);
         }
         let links = self.sites.entry(address).or_default();
         let clash = links.iter().any(|(l, _)| {
             enshwick_core::__private::rules::hooks_clash(l.owner == link.owner, l.flags, link.flags)
         });
         if clash {
-            return Status::REFUSED;
+            return Err(LinkError::Clash);
         }
         links.push((link, feature));
-        Status::OK
+        Ok(())
     }
 
     /// Marks the hooks armed: no more links. The links of loader features

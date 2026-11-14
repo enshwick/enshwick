@@ -284,21 +284,20 @@ fn the_cursor_s_body_fixes_the_offsets_its_detour_reads() {
 
 #[test]
 fn limit_filters_chain_on_the_count_so_far_within_the_zones() {
-    let filter = LimitFilter::new(ModIndex::new(0), plus_vanilla, core::ptr::null_mut());
+    let filter = LimitFilter::new(ModIndex::LOADER, plus_vanilla, core::ptr::null_mut());
     assert_eq!(chain_limit(3, 6, 16, core::iter::empty()), 6);
-    assert_eq!(chain_limit(3, 6, 32, [&filter].into_iter()), 12);
+    assert_eq!(chain_limit(3, 6, 32, [&filter]), 12);
+    let off = LimitFilter::new(ModIndex::new(5), plus_vanilla, core::ptr::null_mut());
+    assert_eq!(chain_limit(3, 6, 32, [&off]), 6, "a mod that is off");
     SEEN.relock().clear();
     assert_eq!(
-        chain_limit(3, 6, 32, [&filter, &filter].into_iter()),
+        chain_limit(3, 6, 32, [&filter, &filter]),
         18,
         "each filter sees the game's own count"
     );
     assert_eq!(*SEEN.relock(), [3, 3], "each filter sees the level");
-    assert_eq!(chain_limit(3, 6, 16, [&filter, &filter].into_iter()), 16);
-    assert_eq!(
-        chain_limit(11, 16, 255, [&filter, &filter, &filter].into_iter()),
-        64
-    );
+    assert_eq!(chain_limit(3, 6, 16, [&filter, &filter]), 16);
+    assert_eq!(chain_limit(11, 16, 255, [&filter, &filter, &filter]), 64);
 }
 
 #[test]

@@ -20,7 +20,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::{Side, Status};
+use enshwick_core::abi::Side;
 
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
@@ -84,15 +84,33 @@ impl Application {
     }
 }
 
+/// Why a mod's ask to stop the server was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum StopError {
+    /// Not a dedicated server.
+    #[error("not a dedicated server")]
+    NotServer,
+    /// The build has no handler the loader found.
+    #[error("this build lacks the server's stop")]
+    Unread,
+    /// The game has not started yet, or is stopping already.
+    #[error("the game is not running")]
+    NotRunning,
+    /// The stop's thread did not start.
+    #[error("the stop's thread did not start")]
+    NoThread,
+}
+
 /// Asks the dedicated server to stop through the game's own path, for
-/// `HostApi::server_stop`: [`Status::OK`] when the stop starts,
-/// [`Status::REFUSED`] when it is under way already, from a mod or the
-/// game, or the game has not started yet, [`Status::UNAVAILABLE`] off a
-/// dedicated server and [`Status::MISSING`] when the build has no handler
-/// the loader found; `who` names the asking mod for the log.
-pub(crate) fn request(loader: &Loader, who: &str) -> Status {
+/// `HostApi::server_stop`; `who` names the asking mod for the log.
+///
+/// # Errors
+///
+/// [`StopError`] off a dedicated server, on a build without the handler,
+/// while the game is not running or when the stop's thread did not start.
+pub(crate) fn request(loader: &Loader, who: &str) -> Result<(), StopError> {
     if loader.side != Side::SERVER {
-        return Status::UNAVAILABLE;
+        return Err(StopError::NotServer);
     }
     let found = (
         loader
@@ -104,7 +122,7 @@ pub(crate) fn request(loader: &Loader, who: &str) -> Status {
         loader.offset(pinned::server::EXIT_REASON),
     );
     let (Some(handler), Some(global), Some(reason)) = found else {
-        return Status::MISSING;
+        return Err(StopError::Unread);
     };
     let application = Application::read(global, reason);
     if application != Application::Running
@@ -120,7 +138,7 @@ pub(crate) fn request(loader: &Loader, who: &str) -> Status {
                 "stopping already"
             }
         );
-        return Status::REFUSED;
+        return Err(StopError::NotRunning);
     }
     // SAFETY: the table's `server.console_handler` is the routine this
     // build hands `SetConsoleCtrlHandler` (route `server.console_handler`,
@@ -134,10 +152,10 @@ pub(crate) fn request(loader: &Loader, who: &str) -> Status {
     });
     if started {
         crate::log!(INFO, "{who} asked the server to stop; the game shuts down");
-        Status::OK
+        Ok(())
     } else {
         STOP.asked.store(false, Ordering::Release);
-        Status::REFUSED
+        Err(StopError::NoThread)
     }
 }
 

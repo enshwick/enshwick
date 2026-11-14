@@ -68,6 +68,6 @@ entries! {
         input: *const core::ffi::c_void,
         output: *mut core::ffi::c_void,
     ) -> Status {
-        Ok(crate::base::calls::run(me.index.get(), id, input, output))
+        Ok(crate::base::calls::run(me.index.get(), id, input, output)?)
     }
 }

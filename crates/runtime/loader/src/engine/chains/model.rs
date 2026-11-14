@@ -8,7 +8,7 @@
 mod tests {
     use crate::engine::chains::{Chains, Link};
     use crate::engine::mod_index::ModIndex;
-    use enshwick_core::abi::{HookFlags, Status};
+    use enshwick_core::abi::HookFlags;
     use loom::sync::atomic::{AtomicUsize, Ordering};
     use loom::thread;
 
@@ -44,7 +44,7 @@ mod tests {
         for (priority, &(owner, detour)) in (0..).zip(links) {
             let link = link(owner, detour, priority);
             hops.push((detour, link.next));
-            assert_eq!(chains.add(TARGET, link), Status::OK);
+            assert_eq!(chains.add(TARGET, link), Ok(()));
         }
         let head = slot();
         for chain in chains.iter_mut() {

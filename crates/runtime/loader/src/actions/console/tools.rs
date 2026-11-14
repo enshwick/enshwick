@@ -4,7 +4,7 @@
 use std::sync::atomic::Ordering;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{PlayerInfo, Status};
+use enshwick_core::abi::PlayerInfo;
 
 use crate::engine::loader::Loader;
 use crate::engine::texts;
@@ -37,7 +37,7 @@ pub(crate) fn world(loader: &Loader) -> String {
                 })
                 .collect::<Vec<_>>(),
         ),
-        Err(status) => unread(status),
+        Err(error) => unread(error),
     }
 }
 
@@ -99,9 +99,10 @@ pub(crate) fn mods(loader: &Loader) -> String {
     )
 }
 
-/// Why the world did not read.
-pub(super) fn unread(status: Status) -> String {
-    texts::fill("console.unread", &[("status", &format!("{status:?}"))])
+/// Why the world did not read, named by the error's variant, which reads
+/// the same in every language.
+pub(super) fn unread(error: crate::engine::world::WorldError) -> String {
+    texts::fill("console.unread", &[("status", &format!("{error:?}"))])
 }
 
 #[cfg(test)]

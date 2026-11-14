@@ -159,7 +159,9 @@ impl Mod {
         let status = outcome
             .as_ref()
             .map_or_else(Refused::status, |()| Status::OK);
-        crate::engine::conflicts::note(feature, self.index, mode, status);
+        if status.is_ok() || status == Status::REFUSED {
+            crate::engine::conflicts::note(feature, self.index, mode, status.is_ok());
+        }
         outcome
     }
 }

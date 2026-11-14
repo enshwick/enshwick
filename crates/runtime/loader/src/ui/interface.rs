@@ -13,6 +13,7 @@ use painter::{Widgets, copy, options, read};
 
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
+use crate::engine::profile::Feature;
 use crate::engine::registry::{JoinFeatureError, Registry};
 
 mod arena;
@@ -27,11 +28,12 @@ mod mods;
 mod off;
 
 use core::cell::{Cell, RefCell};
+use core::ops::ControlFlow;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use enshwick_core::abi::{
-    HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
+    HookFlags, Side, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
 
 use arena::{Arena, escape};
@@ -40,7 +42,7 @@ pub(crate) use dialog::{close_world_dialogs, show};
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
 pub(crate) use extensions::{ExtendScreenError, register as register_extension};
 pub(crate) use map::play_data;
-pub(crate) use map::set as set_markers;
+pub(crate) use map::{MarkersError, set as set_markers};
 pub(crate) use mods::mismatch_screen_on;
 
 use crate::engine::chains::{Next, Onward};
@@ -384,6 +386,24 @@ pub(crate) fn register_hud(
     Ok(HUDS.add(Registered::new(owner, callback, user))?)
 }
 
+/// Why a mod's dialog was not queued.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DialogError {
+    /// Dialogs show only on a client.
+    #[error("dialogs show only on a client")]
+    NotClient,
+    /// A dialog that waits, asked from the interface thread, which it would
+    /// block.
+    #[error("a waiting dialog asked from the interface thread")]
+    WrongThread,
+    /// No buttons, or a text that does not read.
+    #[error("the dialog is malformed")]
+    Malformed,
+    /// Too many dialogs wait.
+    #[error(transparent)]
+    Full(#[from] dialog::DialogsFullError),
+}
+
 /// Queues a mod's dialog; client only.
 pub(crate) fn mod_dialog(
     loader: &Loader,
@@ -391,16 +411,16 @@ pub(crate) fn mod_dialog(
     raw: &UiDialog,
     callback: UiAnswerFn,
     user: *mut core::ffi::c_void,
-) -> Status {
+) -> Result<(), DialogError> {
     if loader.side != Side::CLIENT {
-        return Status::MISSING;
+        return Err(DialogError::NotClient);
     }
     if raw.flags & UiDialog::WAITING != 0 && STATE.ui_thread.load(Ordering::Acquire) == thread_id()
     {
-        return Status::WRONG_THREAD;
+        return Err(DialogError::WrongThread);
     }
     if raw.buttons & UiDialog::BUTTONS == 0 {
-        return Status::BAD_ARGS;
+        return Err(DialogError::Malformed);
     }
     let read = |value: Str| {
         // SAFETY: the mod's `UiDialog` texts stay alive and unchanged for
@@ -411,7 +431,7 @@ pub(crate) fn mod_dialog(
     let (Some(title), Some(message), Some(detail)) =
         (read(raw.title), read(raw.message), read(raw.detail))
     else {
-        return Status::BAD_ARGS;
+        return Err(DialogError::Malformed);
     };
     let dialog = dialog::Pending::new(
         title,
@@ -420,7 +440,7 @@ pub(crate) fn mod_dialog(
         raw.buttons,
         dialog::Answerer::Mod(Registered::new(owner, callback, user)),
     );
-    dialog::queue(dialog.of_world(loader, owner))
+    Ok(dialog::queue(dialog.of_world(loader, owner))?)
 }
 
 /// The ids of the dialogs' text tags, for the loader's text format.
@@ -762,27 +782,25 @@ fn hud(engine: &Engine, context: usize) {
     // SAFETY: `hud_detour` calls this inside the frame on the interface
     // thread with the frame's own non-zero `context`.
     let reads = unsafe { frame_reads(engine, context, !huds.is_empty()) };
-    for registered in huds.iter().filter(|r| r.live()) {
-        let token = next_token();
-        DRAWING.set(Some(Drawing {
-            token,
-            owner: registered.owner,
-            context,
-            window_open: false,
-            hud: true,
-            extension: None,
-        }));
-        let frame = reads.frame(token);
-        // SAFETY: the callback lives in a mod DLL that stays loaded, and it
-        // gets a live `UiFrame` and the pointer its mod registered with it;
-        // an `extern "system"` function aborts rather than unwinds.
-        crate::engine::profile::call(
-            registered.owner,
-            crate::engine::profile::Feature::Interface,
-            || unsafe { (registered.callback)(&raw const frame, registered.user()) },
-        );
-        DRAWING.set(None);
-    }
+    let _none: Option<(_, ())> =
+        crate::engine::filters::ask(huds, Feature::Interface, |callback| {
+            let token = next_token();
+            DRAWING.set(Some(Drawing {
+                token,
+                owner: callback.owner(),
+                context,
+                window_open: false,
+                hud: true,
+                extension: None,
+            }));
+            let frame = reads.frame(token);
+            // SAFETY: the callback lives in a mod DLL that stays loaded, and
+            // it gets a live `UiFrame` and the pointer its mod registered with
+            // it; an `extern "system"` function aborts rather than unwinds.
+            callback.call(|callback, user| unsafe { callback(&raw const frame, user) });
+            DRAWING.set(None);
+            ControlFlow::Continue(())
+        });
     HUD_ITEMS.with_borrow_mut(demo::hud_samples);
     HUD_ITEMS.with_borrow_mut(|items| {
         crate::actions::build_reasons::hud_line(|text| {
@@ -840,14 +858,14 @@ fn hud(engine: &Engine, context: usize) {
 }
 
 /// Gathers a HUD callback's widget for its anchor.
-fn gather(raw: &UiWidget) -> Status {
+fn gather(raw: &UiWidget) -> Result<(), crate::ui::widget_checks::WidgetError> {
     if raw.anchor > UiWidget::BOTTOM_RIGHT {
-        return Status::BAD_ARGS;
+        return Err(crate::ui::widget_checks::WidgetError::Malformed);
     }
     let item = match raw.kind {
         UiWidget::LABEL => {
             let Some(text) = read(raw.text) else {
-                return Status::BAD_ARGS;
+                return Err(crate::ui::widget_checks::WidgetError::Malformed);
             };
             HudItem {
                 anchor: raw.anchor,
@@ -861,7 +879,7 @@ fn gather(raw: &UiWidget) -> Status {
             if !(raw.value.is_finite() && raw.min.is_finite() && raw.max.is_finite())
                 || raw.max <= raw.min
             {
-                return Status::BAD_ARGS;
+                return Err(crate::ui::widget_checks::WidgetError::Malformed);
             }
             HudItem {
                 anchor: raw.anchor,
@@ -871,7 +889,7 @@ fn gather(raw: &UiWidget) -> Status {
                 value: ((raw.value - raw.min) / (raw.max - raw.min)).clamp(0.0, 1.0),
             }
         }
-        _ => return Status::REFUSED,
+        _ => return Err(crate::ui::widget_checks::WidgetError::HudRefused),
     };
     HUD_ITEMS.with_borrow_mut(|items| {
         if items.capacity() == 0 {
@@ -879,9 +897,9 @@ fn gather(raw: &UiWidget) -> Status {
         }
         if items.len() < MAX_HUD_ITEMS {
             items.push(item);
-            Status::OK
+            Ok(())
         } else {
-            Status::REFUSED
+            Err(crate::ui::widget_checks::WidgetError::HudRefused)
         }
     })
 }
@@ -899,40 +917,38 @@ fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::Frame
     let Some(frames) = FRAMES.sealed() else {
         return;
     };
-    for registered in frames.iter().filter(|r| r.live()) {
-        let token = next_token();
-        DRAWING.set(Some(Drawing {
-            token,
-            owner: registered.owner,
-            context,
-            window_open: false,
-            hud: false,
-            extension: None,
-        }));
-        let frame = UiFrame {
-            screen,
-            ..reads.frame(token)
-        };
-        // SAFETY: the callback lives in a mod DLL that stays loaded, and it
-        // gets a live `UiFrame` and the pointer its mod registered with it;
-        // an `extern "system"` function aborts rather than unwinds.
-        crate::engine::profile::call(
-            registered.owner,
-            crate::engine::profile::Feature::Interface,
-            || unsafe { (registered.callback)(&raw const frame, registered.user()) },
-        );
-        let left = DRAWING.take();
-        if let Some(drawing) = left
-            && drawing.window_open
-        {
-            // SAFETY: `window_open` is set only when the callback's `WINDOW`
-            // widget started the thread-local window in this frame with this
-            // `context`; it stayed in place, and widgets close every frame
-            // they open.
-            WINDOW.with_borrow_mut(|window| unsafe { engine.window_end(context, window) });
-            crate::log!(DEBUG, "interface: a frame callback left its window open");
-        }
-    }
+    let _none: Option<(_, ())> =
+        crate::engine::filters::ask(frames, Feature::Interface, |callback| {
+            let token = next_token();
+            DRAWING.set(Some(Drawing {
+                token,
+                owner: callback.owner(),
+                context,
+                window_open: false,
+                hud: false,
+                extension: None,
+            }));
+            let frame = UiFrame {
+                screen,
+                ..reads.frame(token)
+            };
+            // SAFETY: the callback lives in a mod DLL that stays loaded, and
+            // it gets a live `UiFrame` and the pointer its mod registered with
+            // it; an `extern "system"` function aborts rather than unwinds.
+            callback.call(|callback, user| unsafe { callback(&raw const frame, user) });
+            let left = DRAWING.take();
+            if let Some(drawing) = left
+                && drawing.window_open
+            {
+                // SAFETY: `window_open` is set only when the callback's
+                // `WINDOW` widget started the thread-local window in this
+                // frame with this `context`; it stayed in place, and widgets
+                // close every frame they open.
+                WINDOW.with_borrow_mut(|window| unsafe { engine.window_end(context, window) });
+                crate::log!(DEBUG, "interface: a frame callback left its window open");
+            }
+            ControlFlow::Continue(())
+        });
 }
 
 mod painter;

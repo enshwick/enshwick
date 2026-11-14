@@ -36,7 +36,8 @@ pub(crate) enum NameCommandsError {
 mod run;
 #[cfg(windows)]
 pub(crate) use run::{
-    after_step, any, find, forget, list, queue, register, run_remote, running, seal,
+    RunCommandError, after_step, any, find, forget, list, queue, register, run_remote, running,
+    seal,
 };
 
 pub use enshwick_core::commands::MAX_LINE;

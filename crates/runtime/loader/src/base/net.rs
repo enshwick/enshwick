@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, NetMessage, NetMessageFn, Status};
+use enshwick_core::abi::{Header, NetMessage, NetMessageFn};
 use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
@@ -288,18 +288,44 @@ fn deliver(channel: u32, peer: u64, data: &[u8]) {
     );
 }
 
+/// Why a message did not go out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum NetError {
+    /// No ready link to the peer, or no peer has the key.
+    #[error("no ready link to the peer")]
+    NoPeer,
+    /// A channel the mod did not open.
+    #[error("the mod did not open the channel")]
+    BadChannel,
+    /// A message longer than a frame carries.
+    #[error("the message is too long")]
+    TooLong,
+    /// Only a server sends to clients.
+    #[error("only a server sends to clients")]
+    NotServing,
+    /// The peer's sending rate is spent.
+    #[error("the peer's sending rate is spent")]
+    Throttled,
+    /// The control message was not carried.
+    #[error("the control message was not carried")]
+    NotCarried,
+    /// The carrier did not take the payload.
+    #[error(transparent)]
+    Carrier(#[from] crate::base::carrier::CarrierError),
+}
+
 /// Sends the client of the player with account key `key` a notice for the
 /// player's entity `entity`; the client shows `text`.
-pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status> {
+pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), NetError> {
     if !ready(key) {
-        return Err(Status::MISSING);
+        return Err(NetError::NoPeer);
     }
     let data = crate::base::wire::notice(entity.0, text);
     if data.len() > MAX_CONTROL {
-        return Err(Status::BAD_ARGS);
+        return Err(NetError::TooLong);
     }
     if !carry(key, CONTROL, &data) {
-        return Err(Status::REFUSED);
+        return Err(NetError::NotCarried);
     }
     Ok(())
 }
@@ -343,16 +369,16 @@ pub(crate) fn refused_mods(key: u64, mods: &str) {
 
 /// Tells the client of the player with account key `key` to open the
 /// interface demo, with where the player stands.
-pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
+pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), NetError> {
     if !ready(key) {
-        return Err(Status::MISSING);
+        return Err(NetError::NoPeer);
     }
     let mut data = control(UI_DEMO);
     for axis in at.iter().flatten() {
         data.extend_from_slice(&axis.to_le_bytes());
     }
     if !carry(key, CONTROL, &data) {
-        return Err(Status::REFUSED);
+        return Err(NetError::NotCarried);
     }
     Ok(())
 }
@@ -551,15 +577,15 @@ pub(crate) fn send(
     channel: u32,
     peer: u64,
     data: &[u8],
-) -> Result<(), Status> {
+) -> Result<(), NetError> {
     let open = CHANNELS
         .sealed()
         .and_then(|channels| channels.iter().find(|c| c.id == channel));
     if open.is_none_or(|c| c.handler.owner != owner) {
-        return Err(Status::BAD_ARGS);
+        return Err(NetError::BadChannel);
     }
     if data.len() > MAX_MESSAGE {
-        return Err(Status::BAD_ARGS);
+        return Err(NetError::TooLong);
     }
     if peer == NetMessage::SERVER.get() {
         return send_to_server(channel, data);
@@ -567,12 +593,12 @@ pub(crate) fn send(
     let serving =
         crate::engine::world::hosting() || loader.side == enshwick_core::abi::Side::SERVER;
     if !serving {
-        return Err(Status::WRONG_THREAD);
+        return Err(NetError::NotServing);
     }
     send_to_clients(channel, peer, data)
 }
 
-fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
+fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), NetError> {
     let keys = state(|s| {
         let keys: Vec<u64> = if peer == 0 {
             s.peers
@@ -583,14 +609,14 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         } else if s.peers.contains_key(&peer) {
             vec![peer]
         } else {
-            return Err(Status::MISSING);
+            return Err(NetError::NoPeer);
         };
         let keys: Vec<u64> = keys
             .into_iter()
             .filter(|&key| admit_sending(s, key))
             .collect();
         if peer != 0 && keys.is_empty() {
-            return Err(Status::REFUSED);
+            return Err(NetError::Throttled);
         }
         Ok(keys)
     })?;
@@ -603,23 +629,25 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         refund(&failed.iter().map(|&(key, _)| key).collect::<Vec<_>>());
     }
     match failed.first() {
-        Some(&(_, status)) if peer != 0 => Err(status),
+        Some(&(_, error)) if peer != 0 => Err(error.into()),
         _ => Ok(()),
     }
 }
 
-fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
+fn send_to_server(channel: u32, data: &[u8]) -> Result<(), NetError> {
     let server = NetMessage::SERVER.get();
     state(|s| {
         if !s.peers.contains_key(&server) {
-            return Err(Status::MISSING);
+            return Err(NetError::NoPeer);
         }
         if !admit_sending(s, server) {
-            return Err(Status::REFUSED);
+            return Err(NetError::Throttled);
         }
         Ok(())
     })?;
-    crate::base::carrier::send(server, channel, data).inspect_err(|_| refund(&[server]))
+    crate::base::carrier::send(server, channel, data)
+        .inspect_err(|_| refund(&[server]))
+        .map_err(Into::into)
 }
 
 /// Takes one message to `key` from its sending rate, in process too;

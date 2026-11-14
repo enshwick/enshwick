@@ -211,13 +211,13 @@ mod runtime {
     pub(crate) type JoinMods = fn() -> Vec<(String, String)>;
 
     /// The advertising thread, once it runs.
-    static THREAD: std::sync::OnceLock<std::thread::Thread> = std::sync::OnceLock::new();
+    static STATE: std::sync::OnceLock<std::thread::Thread> = std::sync::OnceLock::new();
 
     /// Sets the advertisement again now, not at the next round: the join
     /// mods changed, and a player who checks before the round would read
     /// the old ones.
     pub(crate) fn wake() {
-        if let Some(thread) = THREAD.get() {
+        if let Some(thread) = STATE.get() {
             thread.unpark();
         }
     }
@@ -229,7 +229,7 @@ mod runtime {
             .and_then(|json| super::configured_name(&json))
             .unwrap_or_else(|| "Enshrouded Server".to_owned());
         let _started = crate::engine::off_thread::start("advertise", move || {
-            let _first = THREAD.set(std::thread::current());
+            let _first = STATE.set(std::thread::current());
             advertise(&configured, mods, run);
         });
     }

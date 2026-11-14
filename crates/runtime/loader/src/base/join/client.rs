@@ -34,14 +34,18 @@ struct Joins {
     kicks: Drops,
     /// Set while `shown` holds one, so the menu's frame takes no lock.
     pending: AtomicBool,
+    /// The server-advertised strings the host table has handed out, kept
+    /// for the process since mods may hold them.
+    advertised: Mutex<KeptText>,
 }
 
-static JOINS: Joins = Joins {
+static STATE: Joins = Joins {
     missing: Mutex::new(Vec::new()),
     off_for_world: Mutex::new(Vec::new()),
     shown: Mutex::new(None),
     kicks: Drops::new(),
     pending: AtomicBool::new(false),
+    advertised: Mutex::new(KeptText::new(ADVERTISED_BYTES)),
 };
 
 /// The running mods of side both as the join check counts them,
@@ -64,7 +68,7 @@ pub(crate) fn join_mods_off() -> Vec<(String, String)> {
     let Some(loader) = loader() else {
         return Vec::new();
     };
-    let for_world = JOINS.off_for_world.relock();
+    let for_world = STATE.off_for_world.relock();
     loader
         .mods
         .iter()
@@ -96,14 +100,14 @@ pub(crate) fn turn_off_for_world(id: &str) {
         loader.turn_off(ModIndex::new(index), OFF_UNTIL_RESTART);
         return;
     }
-    JOINS.off_for_world.relock().push(ModIndex::new(index));
+    STATE.off_for_world.relock().push(ModIndex::new(index));
     loader.turn_off(ModIndex::new(index), OFF_FOR_WORLD);
 }
 
 /// Turns the mods off for the last world back on, before the client joins
 /// or hosts another world, which decides again.
 pub(crate) fn back_on() {
-    let indices = core::mem::take(&mut *JOINS.off_for_world.relock());
+    let indices = core::mem::take(&mut *STATE.off_for_world.relock());
     let Some(loader) = loader() else {
         return;
     };
@@ -116,28 +120,28 @@ pub(crate) fn back_on() {
 /// for the mismatch screen, which the menu shows next; built here once, not
 /// in each frame.
 pub(crate) fn show_difference(difference: &Difference) {
-    *JOINS.shown.relock() = Some(difference.rows());
-    JOINS.pending.store(true, Ordering::Release);
+    *STATE.shown.relock() = Some(difference.rows());
+    STATE.pending.store(true, Ordering::Release);
 }
 
 /// The rows the menu shows next, taken: `None` when there are none.
 pub(crate) fn take_difference() -> Option<Vec<Row>> {
-    if !JOINS.pending.swap(false, Ordering::AcqRel) {
+    if !STATE.pending.swap(false, Ordering::AcqRel) {
         return None;
     }
-    JOINS.shown.relock().take()
+    STATE.shown.relock().take()
 }
 
 /// Whether a difference waits for the menu, without a lock.
 pub(crate) fn difference_waits() -> bool {
-    JOINS.pending.load(Ordering::Acquire)
+    STATE.pending.load(Ordering::Acquire)
 }
 
 /// On a client whose hello the server answered: it plays there, so a list
 /// the server sent before is forgotten.
 pub(crate) fn admitted() {
-    JOINS.pending.store(false, Ordering::Release);
-    *JOINS.shown.relock() = None;
+    STATE.pending.store(false, Ordering::Release);
+    *STATE.shown.relock() = None;
 }
 
 /// On a client the server is about to kick: `list` is the server's mods of
@@ -149,7 +153,7 @@ pub(crate) fn kicked_for_mods(list: &str, complete: bool) {
     let difference = crate::base::join::difference(list, &ours, &off, complete);
     // A server may send the list with every hello it refuses: the first and
     // every 100th are logged.
-    if JOINS.kicks.add(1).is_some() {
+    if STATE.kicks.add(1).is_some() {
         crate::log!(
             WARN,
             "the server does not let this game play: {} of its mods missing, {} in another version; the menu lists them ({})",
@@ -240,11 +244,8 @@ pub(crate) const SHOWN_VALUES: usize = 512;
 
 /// The server's mods the last refused join found missing.
 pub(crate) fn join_missing() -> Vec<Missing> {
-    JOINS.missing.relock().clone()
+    STATE.missing.relock().clone()
 }
-
-/// The server-advertised strings the host table has handed out.
-static ADVERTISED: Mutex<KeptText> = Mutex::new(KeptText::new(ADVERTISED_BYTES));
 
 /// On a client the join check kept out: records `missing`, the server's
 /// mods of side both this client lacks or runs in another version, and
@@ -253,7 +254,7 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
     let Some(loader) = loader() else {
         return;
     };
-    let (entries, left_out) = listed(&mut ADVERTISED.relock(), missing, |id| {
+    let (entries, left_out) = listed(&mut STATE.advertised.relock(), missing, |id| {
         keep(
             loader
                 .mods
@@ -269,7 +270,7 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
              the text kept from servers reached {ADVERTISED_BYTES} bytes"
         );
     }
-    *JOINS.missing.relock() = entries;
+    *STATE.missing.relock() = entries;
     loader.emit(Event::JOIN_REFUSED, None, core::ptr::null());
 }
 

@@ -5,7 +5,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_core::abi::{ModEventFn, Status};
+use enshwick_core::abi::ModEventFn;
 use enshwick_core::services::{LayoutError, compare};
 
 use crate::engine::mod_index::ModIndex;
@@ -385,7 +385,7 @@ fn view(fields: &[(String, u64)]) -> Vec<(&str, u64)> {
 }
 
 /// The registry while mods initialise.
-static REGISTRY: Mutex<Registry> = Mutex::new(Registry {
+static STATE: Mutex<Registry> = Mutex::new(Registry {
     published: Vec::new(),
     defined: Vec::new(),
     pending: Vec::new(),
@@ -395,7 +395,7 @@ static SEALED: OnceLock<Box<[Slot]>> = OnceLock::new();
 
 /// The registry, for the entry points.
 pub(crate) fn registry() -> std::sync::MutexGuard<'static, Registry> {
-    REGISTRY.relock()
+    STATE.relock()
 }
 
 /// Whether the events are sealed: subscribing and defining are over.
@@ -456,17 +456,32 @@ pub(crate) fn lines(names: &impl Names) -> Vec<String> {
     lines
 }
 
+/// Why a mod's event was not sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum SendEventError {
+    /// No event has the id.
+    #[error("no event has the id")]
+    Unknown,
+    /// Another mod defined the event.
+    #[error("the event is another mod's")]
+    NotOwner,
+}
+
 /// Hands `data` to every live subscriber of the event `id`, which the mod
 /// at `sender` defined.
-pub(crate) fn send(sender: usize, id: u32, data: *const core::ffi::c_void) -> Status {
+pub(crate) fn send(
+    sender: usize,
+    id: u32,
+    data: *const core::ffi::c_void,
+) -> Result<(), SendEventError> {
     let Some(slots) = SEALED.get() else {
-        return Status::OK;
+        return Ok(());
     };
     let Some(slot) = slots.get(id as usize) else {
-        return Status::BAD_ARGS;
+        return Err(SendEventError::Unknown);
     };
     if slot.owner != ModIndex::new(sender) {
-        return Status::REFUSED;
+        return Err(SendEventError::NotOwner);
     }
     for subscriber in &slot.subscribers {
         if crate::engine::loader::is_off(subscriber.owner) {
@@ -486,16 +501,15 @@ pub(crate) fn send(sender: usize, id: u32, data: *const core::ffi::c_void) -> St
             },
         );
     }
-    Status::OK
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::Status;
 
+    use super::FindServiceError;
     use super::{Names, Registry};
     use crate::engine::mod_index::ModIndex;
-    use crate::host::layer::Refusal as _;
 
     struct Mods(Vec<(&'static str, &'static str, bool)>);
 
@@ -562,7 +576,7 @@ mod tests {
         else {
             panic!("served");
         };
-        assert_eq!(refused.status(), Status::REFUSED);
+        assert!(matches!(refused, FindServiceError::Layout { .. }));
         let reason = refused.to_string();
         assert!(reason.contains("trading-post 0.3.0"), "{reason}");
         assert!(reason.contains("`b`"), "{reason}");
@@ -587,7 +601,7 @@ mod tests {
         let Err(refused) = registry.find("trading-post:prices", 1, &fields(&["a"]), &mods()) else {
             panic!("served");
         };
-        assert_eq!(refused.status(), Status::REFUSED);
+        assert!(matches!(refused, FindServiceError::OtherMajors { .. }));
         let reason = refused.to_string();
         assert!(reason.contains("v2 from trading-post 0.3.0"), "{reason}");
     }
@@ -596,7 +610,7 @@ mod tests {
     fn nothing_published_is_missing() {
         let registry = Registry::default();
         let found = registry.find("trading-post:prices", 1, &fields(&["a"]), &mods());
-        assert_eq!(found.map(|_| ()), Err(super::FindServiceError::Unpublished));
+        assert_eq!(found.map(|_| ()), Err(FindServiceError::Unpublished));
     }
 
     #[test]
@@ -618,7 +632,7 @@ mod tests {
         off.0[0].2 = true;
         let found = registry.find("trading-post:prices", 1, &fields(&["a"]), &off);
         assert!(
-            matches!(&found, Err(refused) if refused.status() == Status::MISSING && refused.to_string().contains("is off"))
+            matches!(&found, Err(refused @ FindServiceError::PublisherOff { .. }) if refused.to_string().contains("is off"))
         );
     }
 

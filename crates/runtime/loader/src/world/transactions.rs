@@ -13,6 +13,7 @@
 
 mod block;
 pub(crate) mod cover;
+mod error;
 #[cfg(windows)]
 mod game;
 mod ledger;
@@ -23,16 +24,19 @@ mod record;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::{Status, TransactionInfo};
+#[cfg(test)]
+use enshwick_core::abi::TransactionInfo;
 
 use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use enshwick_base::Relock;
+pub(crate) use error::TransactionError;
 #[cfg(windows)]
 pub(crate) use game::{resolve, resolve_prop, saving};
 #[cfg(any(windows, test))]
 pub(crate) use ledger::Change;
+pub(crate) use ledger::Standing;
 use ledger::{Ledger, Limits};
 #[cfg(windows)]
 pub(crate) use paste::{Erase, Paste};
@@ -120,7 +124,7 @@ fn guarded(state: &Transactions, work: impl FnOnce()) {
     }
 }
 
-/// Queues `changes` as one transaction of `owner`. [`Status::MISSING`] while
+/// Queues `changes` as one transaction of `owner`. [`TransactionError::Unavailable`] while
 /// no world runs or on a build without the edits, the read or the undo
 /// write; otherwise as [`Ledger::commit`].
 #[cfg(windows)]
@@ -129,9 +133,9 @@ pub(crate) fn commit(
     owner: ModIndex,
     actor: Option<u32>,
     changes: Vec<Change>,
-) -> Result<u64, Status> {
+) -> Result<u64, TransactionError> {
     if STATE.fuse.is_off() || !game::ready(loader) {
-        return Err(Status::MISSING);
+        return Err(TransactionError::Unavailable);
     }
     let mut ledger = STATE.ledger.relock();
     let id = ledger.commit(owner, actor, changes)?;
@@ -140,14 +144,14 @@ pub(crate) fn commit(
 }
 
 /// Queues the undo of transaction `id` of `owner`, as [`Ledger::undo`];
-/// [`Status::MISSING`] once the feature is off.
-pub(crate) fn undo(owner: ModIndex, id: u64) -> Result<(), Status> {
+/// [`TransactionError::Unavailable`] once the feature is off.
+pub(crate) fn undo(owner: ModIndex, id: u64) -> Result<(), TransactionError> {
     undo_in(&STATE, owner, id)
 }
 
-fn undo_in(state: &Transactions, owner: ModIndex, id: u64) -> Result<(), Status> {
+fn undo_in(state: &Transactions, owner: ModIndex, id: u64) -> Result<(), TransactionError> {
     if state.fuse.is_off() {
-        return Err(Status::MISSING);
+        return Err(TransactionError::Unavailable);
     }
     let mut ledger = state.ledger.relock();
     ledger.undo(owner, id)?;
@@ -162,7 +166,7 @@ pub(crate) fn entities(owner: ModIndex, id: u64) -> Option<Vec<u32>> {
 }
 
 /// Where transaction `id` of `owner` stands.
-pub(crate) fn info(owner: ModIndex, id: u64) -> Option<TransactionInfo> {
+pub(crate) fn info(owner: ModIndex, id: u64) -> Option<Standing> {
     STATE.ledger.relock().info(owner, id)
 }
 
@@ -271,9 +275,9 @@ mod tests {
         let info = state.ledger.relock().info(ME, id).unwrap();
         assert_eq!(
             (info.state, info.reason),
-            (TransactionInfo::FAILED, Status::MISSING)
+            (TransactionInfo::FAILED, Some(TransactionError::Unavailable))
         );
-        assert_eq!(undo_in(&state, ME, id), Err(Status::MISSING));
+        assert_eq!(undo_in(&state, ME, id), Err(TransactionError::Unavailable));
 
         let mut ran = false;
         guarded(&state, || ran = true);

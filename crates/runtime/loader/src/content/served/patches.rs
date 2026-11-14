@@ -18,6 +18,8 @@ use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::{ResourceKey, Status};
 
+use super::ServedError;
+
 use super::{
     OPEN_NEXT, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served, State, hex, key_name,
     mod_on, route,
@@ -30,48 +32,44 @@ use enshwick_base::Relock;
 /// is first built; afterwards, builds it again from that base and writes the
 /// bytes that differ over the resource the game holds, then does the same
 /// for every served key whose build read it.
-pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Status {
+pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Result<(), ServedError> {
     let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
     let Some(list) = RESOURCES.sealed() else {
         let pending = RESOURCES.edit(|pending| match pending.iter().find(|s| serves(s)) {
             Some(entry) => {
                 entry.keeps_base.store(true, Ordering::Relaxed);
-                Status::OK
+                Ok(())
             }
-            None => Status::BAD_ARGS,
+            None => Err(ServedError::NotServed),
         });
         // Sealed since the look before: rebuild from the sealed list.
         return pending.unwrap_or_else(|_| rebuild(owner, key));
     };
     match list.iter().find(|s| serves(s)) {
         Some(entry) => rebuild_entry(list, entry),
-        None => Status::BAD_ARGS,
+        None => Err(ServedError::NotServed),
     }
 }
 
 /// Builds `entry` of `list` again, then the keys whose builds read it when
 /// its served value may have changed: it changed, or the game never built
-/// it, so only served reads saw it. [`Status::BUILDING`] while `entry`'s
+/// it, so only served reads saw it. [`ServedError::Building`] while `entry`'s
 /// patches run on this thread: a patch asking to rebuild its own key would
 /// wait on its own build.
-fn rebuild_entry(list: &[Served], entry: &Served) -> Status {
+fn rebuild_entry(list: &[Served], entry: &Served) -> Result<(), ServedError> {
     if building(&entry.key) {
-        return Status::BUILDING;
+        return Err(ServedError::Building);
     }
-    match rebuild_one(entry) {
-        Ok(Some(0)) => Status::OK,
-        Ok(_) => {
-            rebuild_readers(list, entry);
-            Status::OK
-        }
-        Err(status) => status,
+    if rebuild_one(entry)? != Some(0) {
+        rebuild_readers(list, entry);
     }
+    Ok(())
 }
 
 /// Builds `entry` again from its kept base and writes the bytes that differ
 /// over those the game holds; how many differed, `None` before its first
 /// build, which takes the values in force.
-fn rebuild_one(entry: &Served) -> Result<Option<usize>, Status> {
+fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
     let _one_at_a_time = entry.rebuilding.relock();
     // The game resolves the resource meanwhile: the patches run outside the
     // state's lock, on a copy of the base.
@@ -81,7 +79,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, Status> {
             return Ok(None);
         };
         let Some(base) = state.base.clone() else {
-            return Err(Status::MISSING);
+            return Err(ServedError::NoBase);
         };
         (data, len, base, state.built_by.clone())
     };
@@ -92,7 +90,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, Status> {
         Some(&built_by),
         Build::Game,
     )
-    .ok_or(Status::MISSING)?;
+    .ok_or(ServedError::NotBuilt)?;
     if built.len != len {
         crate::log!(
             WARN,
@@ -101,7 +99,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, Status> {
             hex(&entry.key.guid),
             built.len
         );
-        return Err(Status::REFUSED);
+        return Err(ServedError::SizeChanged);
     }
     let changed = write_differences(data, built.data, len);
     crate::log!(
@@ -172,16 +170,16 @@ pub(super) unsafe fn build_first(
 /// archive. A patch that fails is skipped, its mod left on; when every
 /// patch fails, a changed vanilla key reads as the archive has it and a new
 /// key as missing. Refused before the registrations seal;
-/// [`Status::BUILDING`] for a key whose patches run on this thread, which a
+/// [`ServedError::Building`] for a key whose patches run on this thread, which a
 /// patch reading it would build again without end.
-pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, Status> {
+pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, ServedError> {
     if RESOURCES.sealed().is_none() {
-        return Err(Status::REFUSED);
+        return Err(ServedError::Unsealed);
     }
     let archive = |key: &ResourceKey| {
         crate::engine::archive::game()
             .and_then(|archive| archive.resource(key))
-            .ok_or(Status::MISSING)
+            .ok_or(ServedError::NotInArchive)
     };
     if !linked() {
         return archive(&key);
@@ -191,7 +189,7 @@ pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, Status> {
         return archive(&new.or(aliased).unwrap_or(key));
     };
     if building(&entry.key) {
-        return Err(Status::BUILDING);
+        return Err(ServedError::Building);
     }
     read_served(entry, archive(&entry.base)?, archive)
 }
@@ -199,13 +197,13 @@ pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, Status> {
 /// `entry` built for a mod's served read from `base`, its base's bytes:
 /// each patch of a mod on, a failed one skipped. When none built, the key
 /// as `archive` has it: `base` itself for a key patched in place, and
-/// [`Status::MISSING`] for a new one. The game's builds running on this
+/// [`ServedError::NotInArchive`] for a new one. The game's builds running on this
 /// thread are noted as reading `entry`.
 fn read_served(
     entry: &Served,
     base: Vec<u8>,
-    archive: impl FnOnce(&ResourceKey) -> Result<Vec<u8>, Status>,
-) -> Result<Vec<u8>, Status> {
+    archive: impl FnOnce(&ResourceKey) -> Result<Vec<u8>, ServedError>,
+) -> Result<Vec<u8>, ServedError> {
     note_read(entry);
     match run_patches(
         entry,

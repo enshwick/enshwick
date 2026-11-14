@@ -22,10 +22,12 @@ use enshwick_base::Relock;
 
 mod affixes;
 mod equipment;
+mod error;
 mod vitals;
 
 use affixes::{Affix, pool};
 pub(crate) use affixes::{RollAffixesError, affix_info, item_lines, open_affix, roll};
+pub(crate) use error::StatsError;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -35,7 +37,7 @@ use std::time::{Duration, Instant};
 use arc_swap::ArcSwap;
 use enshwick_core::abi::{
     Event, Header, PlayerData, StatChange, StatChangeFn, StatDefData, StatModifierData, StatModify,
-    StatRef, StatSource, Status, Str,
+    StatRef, StatSource, Str,
 };
 use enshwick_core::affixes::lines_of;
 use enshwick_core::content::Id;
@@ -183,12 +185,13 @@ struct Combat {
     takes: [f32; TYPES],
 }
 
-static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 
 /// What the stats follow while the server runs a world.
 #[derive(Debug)]
 struct State {
+    /// The kinds mods open and define in init, until the seal.
+    pending: Mutex<Option<Pending>>,
     /// The served world's watched entities and saved modifiers.
     world: Mutex<Option<World>>,
     reads: HitReads,
@@ -215,6 +218,7 @@ struct HitReads {
 impl State {
     const fn new() -> Self {
         Self {
+            pending: Mutex::new(None),
             world: Mutex::new(None),
             reads: HitReads {
                 snapshot: OnceLock::new(),
@@ -279,11 +283,11 @@ impl State {
 
 static STATE: State = State::new();
 
-fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
+fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, StatsError> {
     if SEALED.get().is_some() {
-        return Err(Status::TOO_LATE);
+        return Err(StatsError::TooLate);
     }
-    let mut pending = PENDING.relock();
+    let mut pending = STATE.pending.relock();
     let pending = pending.get_or_insert_with(|| {
         let mut fresh = Pending::default();
         for (id, def) in builtin::ALL {
@@ -332,11 +336,11 @@ fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
     })
 }
 
-/// Records `full` in its space; a name whose key another has turns mod
-/// `owner` off with both named.
-fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result<(), Status> {
+/// Records `full` in its space; a name whose key another has is
+/// [`StatsError::Taken`], which turns mod `owner` off with both named.
+fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result<(), StatsError> {
     if SEALED.get().is_some() {
-        return Err(Status::TOO_LATE);
+        return Err(StatsError::TooLate);
     }
     let key = key_of(full).0;
     let by = loader.mods.get(owner.get()).map_or("?", |m| m.id.as_str());
@@ -349,10 +353,7 @@ fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result
         }
         ids.declare(by, space, full, key)
     });
-    declared.map_err(|why| {
-        loader.turn_off(owner, &why.to_string());
-        Status::REFUSED
-    })
+    Ok(declared?)
 }
 
 /// Defines or opens kind `id` for mod `owner`. During init only.
@@ -361,30 +362,33 @@ pub(crate) fn open(
     owner: ModIndex,
     id: &str,
     def: Option<StatDef>,
-) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let Asked { full, text, own } = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+) -> Result<StatRef, StatsError> {
+    let record = loader.mods.get(owner.get()).ok_or(StatsError::NoMod)?;
+    let Asked { full, text, own } = full_id(&record.id, id).ok_or(StatsError::BadId)?;
     declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
         let index = index_of(&mut p.kinds, &full);
         if let Some(def) = def {
             let kind = &mut p.kinds[index];
-            if !own || kind.def.is_some() {
-                return Err(Status::REFUSED);
+            if !own {
+                return Err(StatsError::NotOwn);
+            }
+            if kind.def.is_some() {
+                return Err(StatsError::Defined);
             }
             kind.def = Some((def, text, owner.get()));
         }
         Ok(StatRef {
-            index: u32::try_from(index).map_err(|_| Status::REFUSED)?,
+            index: u32::try_from(index).map_err(|_| StatsError::Full)?,
             key: key_of(&full).0,
         })
     })?
 }
 
 /// Gives buff `buff` modifiers. During init only.
-pub(crate) fn buff(buff: u32, modifiers: &[StatModifierData]) -> Result<(), Status> {
+pub(crate) fn buff(buff: u32, modifiers: &[StatModifierData]) -> Result<(), StatsError> {
     if modifiers.iter().any(|m| Op::from_raw(m.op).is_none()) {
-        return Err(Status::BAD_ARGS);
+        return Err(StatsError::BadDef);
     }
     pending(|p| p.buffs.extend(modifiers.iter().map(|&m| (buff, m))))
 }
@@ -394,7 +398,7 @@ pub(crate) fn on_changed(
     owner: ModIndex,
     callback: StatChangeFn,
     user: *mut core::ffi::c_void,
-) -> Result<(), Status> {
+) -> Result<(), StatsError> {
     pending(|p| p.handlers.push(Registered::new(owner, callback, user)))
 }
 
@@ -406,7 +410,8 @@ pub(crate) fn wanted() -> bool {
 /// Seals the kinds; stats run only when a mod used them, and then they
 /// keep item stats as item data of their own.
 pub(crate) fn seal() {
-    let pending = PENDING
+    let pending = STATE
+        .pending
         .relock()
         .take()
         .filter(|p| p.used)
@@ -479,13 +484,13 @@ pub(crate) fn seal() {
 }
 
 /// The definition and id of kind `stat`.
-pub(crate) fn info(stat: u32) -> Result<(StatDefData, Str), Status> {
-    let sealed = SEALED.get().ok_or(Status::MISSING)?;
+pub(crate) fn info(stat: u32) -> Result<(StatDefData, Str), StatsError> {
+    let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
     let kind = sealed
         .kinds
-        .get(usize::try_from(stat).map_err(|_| Status::BAD_ARGS)?)
-        .ok_or(Status::BAD_ARGS)?;
-    let (def, text, _) = kind.def.as_ref().ok_or(Status::MISSING)?;
+        .get(usize::try_from(stat).map_err(|_| StatsError::BadStat)?)
+        .ok_or(StatsError::BadStat)?;
+    let (def, text, _) = kind.def.as_ref().ok_or(StatsError::Undefined)?;
     let mut data = def.to_data();
     // The kinds live as long as the process, so their text does too.
     data.text = Str::new(text);
@@ -493,10 +498,10 @@ pub(crate) fn info(stat: u32) -> Result<(StatDefData, Str), Status> {
 }
 
 /// The value of kind `stat` on `entity`, from the snapshot; any thread.
-pub(crate) fn value(entity: Entity, stat: u32) -> Result<f32, Status> {
-    let sealed = SEALED.get().ok_or(Status::MISSING)?;
-    let index = usize::try_from(stat).map_err(|_| Status::BAD_ARGS)?;
-    let default = *sealed.defaults.get(index).ok_or(Status::BAD_ARGS)?;
+pub(crate) fn value(entity: Entity, stat: u32) -> Result<f32, StatsError> {
+    let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
+    let index = usize::try_from(stat).map_err(|_| StatsError::BadStat)?;
+    let default = *sealed.defaults.get(index).ok_or(StatsError::BadStat)?;
     let values = STATE.snapshot().load();
     Ok(values
         .values
@@ -512,34 +517,39 @@ fn serves() -> bool {
 }
 
 /// Sets or removes mod `owner`'s modifier.
-pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> Result<(), Status> {
-    let sealed = SEALED.get().ok_or(Status::MISSING)?;
+pub(crate) fn modify(
+    loader: &Loader,
+    owner: ModIndex,
+    request: &StatModify,
+) -> Result<(), StatsError> {
+    let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
     let stat = request.modifier.stat;
-    if request.entity == Entity(0)
-        || usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len())
-    {
-        return Err(Status::BAD_ARGS);
+    if request.entity == Entity(0) {
+        return Err(StatsError::BadModifier);
+    }
+    if usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len()) {
+        return Err(StatsError::BadStat);
     }
     if !serves() {
-        return Err(Status::REFUSED);
+        return Err(StatsError::NotServer);
     }
     let remove = request.flags & StatModify::REMOVE != 0;
     let saved = request.flags & StatModify::SAVED != 0;
     if !remove && Op::from_raw(request.modifier.op).is_none() {
-        return Err(Status::BAD_ARGS);
+        return Err(StatsError::BadModifier);
     }
     let until = match request.duration_ms {
         0 => None,
         ms => Some(
             Instant::now()
                 .checked_add(Duration::from_millis(ms))
-                .ok_or(Status::BAD_ARGS)?,
+                .ok_or(StatsError::BadModifier)?,
         ),
     };
     STATE.with_world(|state| {
         let watched = state.watched.entry(request.entity.0).or_default();
         if saved && !remove && watched.player.is_none() {
-            return Err(Status::REFUSED);
+            return Err(StatsError::NotPlayer);
         }
         let same = |h: &Held| h.owner == owner && h.key == request.key && h.stat == stat;
         let was_saved = watched.modifiers.iter().any(|h| same(h) && h.saved);
@@ -590,12 +600,12 @@ pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> 
 }
 
 /// Watches or stops watching `entity` for a mod.
-pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), Status> {
+pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), StatsError> {
     if SEALED.get().is_none() || entity == Entity(0) {
-        return Err(Status::BAD_ARGS);
+        return Err(StatsError::NothingToWatch);
     }
     if !serves() {
-        return Err(Status::REFUSED);
+        return Err(StatsError::NotServer);
     }
     STATE.with_world(|state| {
         if on {
@@ -737,8 +747,8 @@ pub(crate) fn sources(
     loader: &Loader,
     entity: Entity,
     stat: u32,
-) -> Result<Vec<StatSource>, Status> {
-    let sealed = SEALED.get().ok_or(Status::MISSING)?;
+) -> Result<Vec<StatSource>, StatsError> {
+    let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
     crate::engine::world::server()?;
     let held = STATE.with_world(|state| {
         state
@@ -875,18 +885,17 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         STATE.swap_in(next);
     }
     for change in &changes {
-        for handler in sealed.handlers.iter().filter(|h| h.live()) {
-            // SAFETY: the handler lives in the mod's DLL, which stays loaded,
-            // and takes the pointer it registered; the change is valid for
-            // the call; the safe layer catches its panics.
-            crate::engine::profile::call(
-                handler.owner,
-                crate::engine::profile::Feature::Stats,
-                || unsafe {
-                    (handler.callback)(change, handler.user());
-                },
-            );
-        }
+        let _none: Option<(_, ())> = crate::engine::filters::ask(
+            sealed.handlers.iter(),
+            crate::engine::profile::Feature::Stats,
+            |handler| {
+                // SAFETY: the handler lives in the mod's DLL, which stays
+                // loaded, and takes the pointer it registered; the change is
+                // valid for the call; the safe layer catches its panics.
+                handler.call(|handler, user| unsafe { handler(change, user) });
+                core::ops::ControlFlow::Continue(())
+            },
+        );
     }
 }
 

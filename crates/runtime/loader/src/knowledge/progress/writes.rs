@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{
     Event, Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE,
-    PROGRESS_SET_LEVEL, ProgressWriteData, Status,
+    PROGRESS_SET_LEVEL, ProgressWriteData,
 };
 
 use super::{
@@ -44,18 +44,12 @@ pub(crate) enum WriteProgressError {
     /// [`MOST_WRITES`] wait already.
     #[error("too many writes wait")]
     Full,
-    /// The server's world, as the engine answered.
-    #[error("the server's world: {0:?}")]
-    World(Status),
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
 }
 
 sealed_is_too_late!(WriteProgressError);
-
-impl From<Status> for WriteProgressError {
-    fn from(status: Status) -> Self {
-        Self::World(status)
-    }
-}
 
 /// A level or experience write a mod asked for.
 #[derive(Debug, Clone, Copy)]

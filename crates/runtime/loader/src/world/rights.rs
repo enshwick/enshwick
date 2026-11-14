@@ -12,7 +12,7 @@
 //! own functions on its building-zone object, which the server keeps for
 //! the world's life (server 399, client 426).
 
-use enshwick_core::abi::{BuildRights, Status};
+use enshwick_core::abi::BuildRights;
 
 use crate::engine::pinned;
 
@@ -76,19 +76,37 @@ pub(crate) struct EditBox {
     max: [f64; 3],
 }
 
+/// Why the server's build rights could not be checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RightsError {
+    /// A corner that is not finite, or a `max` below `min`.
+    #[error("the box is not finite or inside out")]
+    BadBox,
+    /// The build's table lacks the zone tests or the zone list.
+    #[error("this build lacks the build rights' reads")]
+    Unread,
+    /// The server has no building zones yet, or their list does not read.
+    #[error("no building zones run")]
+    NoZones,
+    /// The server's world, unreadable now.
+    #[cfg(windows)]
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 impl EditBox {
-    /// The box of `check`; [`Status::BAD_ARGS`] for a corner that is not
+    /// The box of `check`; [`RightsError::BadBox`] for a corner that is not
     /// finite or a `max` below `min`.
-    pub(crate) fn new(check: &BuildRights) -> Result<Self, Status> {
+    pub(crate) fn new(check: &BuildRights) -> Result<Self, RightsError> {
         Self::between(check.min, check.max)
     }
 
-    /// The box from `min` to `max`; [`Status::BAD_ARGS`] for a corner that
+    /// The box from `min` to `max`; [`RightsError::BadBox`] for a corner that
     /// is not finite or a `max` below `min`.
-    pub(crate) fn between(min: [f64; 3], max: [f64; 3]) -> Result<Self, Status> {
+    pub(crate) fn between(min: [f64; 3], max: [f64; 3]) -> Result<Self, RightsError> {
         let finite = min.iter().chain(&max).all(|v| v.is_finite());
         if !finite || (0..3).any(|a| max[a] < min[a]) {
-            return Err(Status::BAD_ARGS);
+            return Err(RightsError::BadBox);
         }
         Ok(Self { min, max })
     }
@@ -156,7 +174,9 @@ pub(crate) use game::{check, kept_by_save};
 
 #[cfg(windows)]
 mod game {
-    use enshwick_core::abi::{BuildRights, Status};
+    use enshwick_core::abi::BuildRights;
+
+    use super::RightsError;
     use enshwick_core::altars::MAX_ZONES;
 
     use super::{EditBox, Permissions, Zones, refusal};
@@ -240,11 +260,11 @@ mod game {
 
     /// Whether a save keeps changes in `edit`, as [`super::kept`] decides
     /// from the bases' zones the server holds; on the game thread at a
-    /// quiet moment. [`Status::MISSING`] while no world is loaded or on a
+    /// quiet moment. [`RightsError`] while no world is loaded or on a
     /// build without the zone list.
-    pub(crate) fn kept_by_save(loader: &Loader, edit: EditBox) -> Result<bool, Status> {
+    pub(crate) fn kept_by_save(loader: &Loader, edit: EditBox) -> Result<bool, RightsError> {
         let server = crate::engine::world::server()?;
-        let at = |id| loader.offset(id).ok_or(Status::MISSING);
+        let at = |id| loader.offset(id).ok_or(RightsError::Unread);
         let zones_at = at(pinned::server::BUILD_ZONE_SYSTEM)?;
         let entries_at = at(pinned::building::ZONE_LIST_ENTRIES)?;
         let count_at = at(pinned::building::ZONE_LIST_COUNT)?;
@@ -255,7 +275,7 @@ mod game {
         // offset holds its building-zone object, made when the world starts.
         let zones: usize = unsafe { read(server, zones_at) };
         if zones == 0 {
-            return Err(Status::MISSING);
+            return Err(RightsError::NoZones);
         }
         // SAFETY: `zones` is the live building-zone object, whose first list,
         // the bases' zones, keeps its entries pointer at the table's
@@ -266,7 +286,7 @@ mod game {
         // offset; read on the game thread.
         let count: usize = unsafe { read(zones, count_at) };
         if count > MAX_ZONES || (count > 0 && entries == 0) {
-            return Err(Status::MISSING);
+            return Err(RightsError::NoZones);
         }
         let mut boxes = Vec::with_capacity(count);
         for i in 0..count {
@@ -290,16 +310,16 @@ mod game {
     }
 
     /// The refusal of `check`'s edit, or [`BuildRights::ALLOWED`]; on the
-    /// game thread at a quiet moment. [`Status::MISSING`] while no world
+    /// game thread at a quiet moment. [`RightsError`] while no world
     /// is loaded or on a build without the tests.
-    pub(crate) fn check(loader: &Loader, check: &BuildRights) -> Result<u32, Status> {
+    pub(crate) fn check(loader: &Loader, check: &BuildRights) -> Result<u32, RightsError> {
         let edit = EditBox::new(check)?;
         let server = crate::engine::world::server()?;
         let function = |id| {
             loader
                 .address(id)
                 .and_then(|address| usize::try_from(address).ok())
-                .ok_or(Status::MISSING)
+                .ok_or(RightsError::Unread)
         };
         let (touches, area, no_build) = (
             function(pinned::building::ZONE_TOUCHES)?,
@@ -308,14 +328,14 @@ mod game {
         );
         let zones_at = loader
             .offset(pinned::server::BUILD_ZONE_SYSTEM)
-            .ok_or(Status::MISSING)?;
-        let bits = permissions(loader).ok_or(Status::MISSING)?;
+            .ok_or(RightsError::Unread)?;
+        let bits = permissions(loader).ok_or(RightsError::Unread)?;
         // SAFETY: `server` comes from `crate::engine::world::server`, on the game
         // thread that alone writes it; the table's `server.build_zone_system`
         // offset holds its building-zone object, made when the world starts.
         let zones: usize = unsafe { read(server, zones_at) };
         if zones == 0 {
-            return Err(Status::MISSING);
+            return Err(RightsError::NoZones);
         }
         let mask = crate::engine::world::players(loader)?
             .iter()
@@ -502,15 +522,15 @@ mod tests {
     fn a_box_that_is_not_finite_or_inside_out_is_refused() {
         assert_eq!(
             EditBox::new(&check([0.0, f64::NAN, 0.0], [1.0; 3])),
-            Err(Status::BAD_ARGS)
+            Err(RightsError::BadBox)
         );
         assert_eq!(
             EditBox::new(&check([0.0; 3], [1.0, f64::INFINITY, 1.0])),
-            Err(Status::BAD_ARGS)
+            Err(RightsError::BadBox)
         );
         assert_eq!(
             EditBox::new(&check([2.0, 0.0, 0.0], [1.0; 3])),
-            Err(Status::BAD_ARGS)
+            Err(RightsError::BadBox)
         );
     }
 

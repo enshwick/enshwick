@@ -51,7 +51,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick_core::abi::{AltarLimitFilterFn, Status};
+use enshwick_core::abi::AltarLimitFilterFn;
 
 use crate::engine::builds::Unhooked;
 use crate::engine::code::{CodePatch, Verdict};
@@ -570,44 +570,58 @@ pub(crate) fn most() -> Limits {
 
 /// Takes mod `owner`'s request for `asked`, refused past [`Limits::MOST`];
 /// the first request finds every site, and a miss leaves the game its own.
-pub(crate) fn request(loader: &Loader, asked: Limits) -> Status {
+pub(crate) fn request(loader: &Loader, asked: Limits) -> Result<(), BasesError> {
     if too_late(loader) {
-        return Status::TOO_LATE;
+        return Err(BasesError::TooLate);
     }
     if !asked.within(Limits::MOST) {
-        return Status::BAD_ARGS;
+        return Err(BasesError::BadLimits);
     }
     if SITES.get().is_none() {
-        let status = find(loader);
-        if !status.is_ok() {
-            return status;
-        }
+        find(loader)?;
     }
     STATE.asked.take(asked);
-    Status::OK
+    Ok(())
+}
+
+/// Why a mod's request or cap on the bases was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum BasesError {
+    /// The request came after the sites linked.
+    #[error("asked after init")]
+    TooLate,
+    /// Limits past [`Limits::MOST`].
+    #[error("the limits pass the most the loader raises to")]
+    BadLimits,
+    /// A cap below the game's own bases.
+    #[error("the cap is below the game's bases")]
+    BelowGame,
+    /// The build lacks a site the raise needs, which turns it off.
+    #[error("this build lacks the raised limits")]
+    Unavailable,
 }
 
 /// Puts mod `owner`'s cap on the bases this world holds at `bases`; the
 /// lowest cap of every mod holds, below the largest request. Any time, so a
 /// mod sets it from its settings at world load; refused below the game's 16.
-pub(crate) fn cap(owner: ModIndex, bases: u32) -> Status {
+pub(crate) fn cap(owner: ModIndex, bases: u32) -> Result<(), BasesError> {
     if bases < MAX_BASES {
-        return Status::BAD_ARGS;
+        return Err(BasesError::BelowGame);
     }
     STATE.asked.cap(owner, bases);
-    Status::OK
+    Ok(())
 }
 
 /// Finds every site once, from the build table.
-fn find(loader: &Loader) -> Status {
+fn find(loader: &Loader) -> Result<(), BasesError> {
     if crate::engine::ecs::engine(loader).is_none() {
-        return Status::MISSING;
+        return Err(BasesError::Unavailable);
     }
     let fields = match Fields::read(&|id| loader.offset(id)) {
         Ok(fields) => fields,
         Err(why) => {
             let _off = loader.fuse_off(&RAISED_FUSE, why.entry(), &why.to_string());
-            return Status::MISSING;
+            return Err(BasesError::Unavailable);
         }
     };
     match sites_of(fields, |symbol| loader.address(symbol)) {
@@ -617,12 +631,12 @@ fn find(loader: &Loader) -> Status {
                 ArcSwap::from_pointee(Zones::default()),
                 ArcSwap::from_pointee(Zones::default()),
             ]);
-            Status::OK
+            Ok(())
         }
         Err(symbol) => {
             let absent = Unhooked::Absent.to_string();
             let _off = loader.fuse_off(&RAISED_FUSE, symbol.id(), &absent);
-            Status::MISSING
+            Err(BasesError::Unavailable)
         }
     }
 }

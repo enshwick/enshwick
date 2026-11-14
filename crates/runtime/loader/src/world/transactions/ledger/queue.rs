@@ -2,10 +2,13 @@
 
 use std::collections::VecDeque;
 
-use enshwick_core::abi::{Header, Status, TransactionInfo};
+use enshwick_core::abi::TransactionInfo;
 
-use super::{Bricks, Change, Ledger, Limits, Mode, Op, Outcome, Pass, Record, Task, Voxels, Work};
+use super::{
+    Bricks, Change, Ledger, Limits, Mode, Op, Outcome, Pass, Record, Standing, Task, Voxels, Work,
+};
 use crate::engine::mod_index::ModIndex;
+use crate::world::transactions::TransactionError;
 use crate::world::voxels::WorldExtent;
 
 impl Ledger {
@@ -43,19 +46,20 @@ impl Ledger {
     }
 
     /// Queues `edits` as one transaction of `owner`.
-    /// [`Status::BAD_ARGS`] for none, an edit the loader refuses, more
-    /// changes or bricks than the limits; [`Status::OUTSIDE_WORLD`] for an
-    /// edit that leaves the world, once a step has found its extent;
-    /// [`Status::REFUSED`] while the queued transactions and those
+    /// [`TransactionError::BadCount`] for none or more changes or bricks than
+    /// the limits, [`TransactionError::BadEdit`] for an edit the loader
+    /// refuses; [`TransactionError::OutsideWorld`] for an edit that leaves
+    /// the world, once a step has found its extent;
+    /// [`TransactionError::Full`] while the queued transactions and those
     /// remembered leave no room.
     pub(crate) fn commit(
         &mut self,
         owner: ModIndex,
         actor: Option<u32>,
         changes: Vec<Change>,
-    ) -> Result<u64, Status> {
+    ) -> Result<u64, TransactionError> {
         if changes.is_empty() || changes.len() > self.limits.ops {
-            return Err(Status::BAD_ARGS);
+            return Err(TransactionError::BadCount);
         }
         let ops = changes
             .into_iter()
@@ -66,7 +70,7 @@ impl Ledger {
                 .iter()
                 .all(|op| op.bricks.is_none_or(|bricks| bricks.inside(extent)))
         {
-            return Err(Status::OUTSIDE_WORLD);
+            return Err(TransactionError::OutsideWorld);
         }
         let bound = ops
             .iter()
@@ -75,17 +79,17 @@ impl Ledger {
             .map(Bricks::count)
             .sum::<usize>();
         if bound > self.limits.bricks {
-            return Err(Status::BAD_ARGS);
+            return Err(TransactionError::BadCount);
         }
         if self.claimed() + bound > self.limits.bricks {
-            return Err(Status::REFUSED);
+            return Err(TransactionError::Full);
         }
         if self.records.len() >= self.limits.records {
             let settled = self
                 .records
                 .iter()
                 .position(|record| !record.working())
-                .ok_or(Status::REFUSED)?;
+                .ok_or(TransactionError::Full)?;
             self.records.remove(settled);
         }
         let id = self.next;
@@ -96,7 +100,7 @@ impl Ledger {
             ops: ops.len(),
             bound,
             state: TransactionInfo::PENDING,
-            reason: Status::OK,
+            reason: None,
             work: Some(Work {
                 ops,
                 actor,
@@ -115,13 +119,13 @@ impl Ledger {
     }
 
     /// Queues the undo of transaction `id` of `owner`: one that wrote
-    /// nothing yet is dropped. [`Status::REFUSED`] for an unknown id, one
+    /// nothing yet is dropped. [`TransactionError::NotUndoable`] for an unknown id, one
     /// undone, one without undo data, or while the transactions in work
     /// already claim the cap, which this undo's data would push past.
-    pub(crate) fn undo(&mut self, owner: ModIndex, id: u64) -> Result<(), Status> {
+    pub(crate) fn undo(&mut self, owner: ModIndex, id: u64) -> Result<(), TransactionError> {
         let claimed = self.claimed();
         let cap = self.limits.bricks;
-        let record = self.find(owner, id).ok_or(Status::REFUSED)?;
+        let record = self.find(owner, id).ok_or(TransactionError::NotUndoable)?;
         let queue = match record.state {
             TransactionInfo::UNDOING => return Ok(()),
             TransactionInfo::PENDING if record.work.is_none() => {
@@ -130,7 +134,7 @@ impl Ledger {
             }
             TransactionInfo::PENDING if record.applied == 0 => {
                 record.holds = 0;
-                record.settle(TransactionInfo::UNDONE, Status::OK);
+                record.settle(TransactionInfo::UNDONE, None);
                 self.work.retain(|&queued| queued != id);
                 return Ok(());
             }
@@ -139,13 +143,13 @@ impl Ledger {
                 if record.undoable =>
             {
                 if claimed + record.kept > cap {
-                    return Err(Status::REFUSED);
+                    return Err(TransactionError::NotUndoable);
                 }
                 true
             }
-            _ => return Err(Status::REFUSED),
+            _ => return Err(TransactionError::NotUndoable),
         };
-        record.settle(TransactionInfo::UNDOING, Status::OK);
+        record.settle(TransactionInfo::UNDOING, None);
         record.holds = 0;
         if let Some(work) = &mut record.work {
             work.undo_checked = false;
@@ -160,22 +164,20 @@ impl Ledger {
 
     /// Where transaction `id` of `owner` stands; `None` for an id unknown
     /// or forgotten.
-    pub(crate) fn info(&self, owner: ModIndex, id: u64) -> Option<TransactionInfo> {
+    pub(crate) fn info(&self, owner: ModIndex, id: u64) -> Option<Standing> {
         let record = self
             .records
             .get(self.index(id)?)
             .filter(|record| record.owner == owner)?;
-        Some(TransactionInfo {
-            header: Header::of::<TransactionInfo>(),
+        Some(Standing {
             state: record.state,
             reason: record.reason,
-            ops: u32::try_from(record.ops).unwrap_or(u32::MAX),
-            applied: u32::try_from(record.applied).unwrap_or(u32::MAX),
-            bricks: record.kept as u64,
+            ops: record.ops,
+            applied: record.applied,
+            bricks: record.kept,
             refusal: record.refusal,
-            reserved: 0,
             holds: record.holds,
-            created: u32::try_from(record.created.len()).unwrap_or(u32::MAX),
+            created: record.created.len(),
         })
     }
 
@@ -206,7 +208,7 @@ impl Ledger {
         for record in &mut self.records {
             match record.state {
                 TransactionInfo::PENDING | TransactionInfo::UNDOING => {
-                    record.settle(TransactionInfo::FAILED, Status::MISSING);
+                    record.settle(TransactionInfo::FAILED, Some(TransactionError::Unavailable));
                 }
                 TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED => {
                     record.state = TransactionInfo::EXPIRED;
@@ -323,9 +325,9 @@ impl Ledger {
             self.work.retain(|&queued| queued != task.id);
             let record = &mut self.records[index];
             if record.applied == 0 {
-                record.settle(TransactionInfo::UNDONE, Status::OK);
+                record.settle(TransactionInfo::UNDONE, None);
             } else {
-                record.settle(TransactionInfo::UNDOING, Status::OK);
+                record.settle(TransactionInfo::UNDOING, None);
                 self.work.push_front(task.id);
             }
         }

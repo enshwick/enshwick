@@ -14,7 +14,6 @@ use std::sync::atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::Status;
 
 pub(crate) use crate::base::notice_queue::MAX_TEXT;
 use crate::base::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, cut, push, step_batch};
@@ -287,20 +286,38 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     }
 }
 
+/// Why a notice was not sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum NoticeError {
+    /// No player has the key, or the player's client takes no notices.
+    #[error("the player's client takes no notices")]
+    NoClient,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+    /// The notice did not go out.
+    #[error(transparent)]
+    Net(#[from] crate::base::net::NetError),
+}
+
 /// Sends a notice to the client of the player with account key `key`: the
-/// text with the player's entity, as a mod message. [`Status::MISSING`] when
+/// text with the player's entity, as a mod message. [`NoticeError::NoClient`] when
 /// that client takes no notices, so the caller falls back to chat.
-pub(crate) fn send(loader: &Loader, key: u64, text: &str) -> Result<(), Status> {
+///
+/// # Errors
+///
+/// [`NoticeError`] as above, or while the world is unreadable.
+pub(crate) fn send(loader: &Loader, key: u64, text: &str) -> Result<(), NoticeError> {
     let player = crate::engine::world::players(loader)?
         .into_iter()
         .find(|p| p.key == enshwick_core::PlayerKey::new(key))
-        .ok_or(Status::MISSING)?;
+        .ok_or(NoticeError::NoClient)?;
     if !crate::base::net::ready(key) {
-        return Err(Status::MISSING);
+        return Err(NoticeError::NoClient);
     }
     // Cut here too: a longer text would take several frames, which the
     // client does not read as a notice.
-    crate::base::net::notice(key, player.entity, cut(text))
+    Ok(crate::base::net::notice(key, player.entity, cut(text))?)
 }
 
 #[cfg(test)]

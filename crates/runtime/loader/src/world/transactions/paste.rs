@@ -1,6 +1,8 @@
 //! Voxels a mod writes over a box: their words and how they lie over each brick.
 
-use enshwick_core::abi::{Status, Voxel};
+use enshwick_core::abi::Voxel;
+
+use super::TransactionError;
 
 use super::cover::{BRICK, BRICK_VOXELS, Brick, Bricks};
 
@@ -12,16 +14,17 @@ pub(crate) struct Region {
 }
 
 impl Region {
-    /// The box of `size` from `min`; [`Status::BAD_ARGS`] for an empty box
+    /// The box of `size` from `min`; [`TransactionError::BadBox`] for an empty box
     /// or one past [`Voxel::END`].
-    pub(crate) fn new(min: [u32; 3], size: [u32; 3]) -> Result<Self, Status> {
+    pub(crate) fn new(min: [u32; 3], size: [u32; 3]) -> Result<Self, TransactionError> {
         let fits = (0..3).all(|axis| {
             size[axis] > 0
                 && min[axis]
                     .checked_add(size[axis])
                     .is_some_and(|end| end <= Voxel::END)
         });
-        fits.then_some(Self { min, size }).ok_or(Status::BAD_ARGS)
+        fits.then_some(Self { min, size })
+            .ok_or(TransactionError::BadBox)
     }
 
     /// Its voxels; at most 2⁹⁰, so it fits a `u128`.
@@ -90,12 +93,16 @@ pub(crate) struct Paste {
 }
 
 impl Paste {
-    /// [`Status::BAD_ARGS`] for an empty box, one past [`Voxel::END`] or
+    /// [`TransactionError::BadBox`] for an empty box, one past [`Voxel::END`] or
     /// `words` that do not fill it.
-    pub(crate) fn new(min: [u32; 3], size: [u32; 3], words: Vec<u16>) -> Result<Self, Status> {
+    pub(crate) fn new(
+        min: [u32; 3],
+        size: [u32; 3],
+        words: Vec<u16>,
+    ) -> Result<Self, TransactionError> {
         let region = Region::new(min, size)?;
         if region.count() != words.len() as u128 {
-            return Err(Status::BAD_ARGS);
+            return Err(TransactionError::BadBox);
         }
         Ok(Self {
             region,
@@ -129,8 +136,8 @@ pub(crate) struct Erase {
 }
 
 impl Erase {
-    /// [`Status::BAD_ARGS`] for an empty box or one past [`Voxel::END`].
-    pub(crate) fn new(min: [u32; 3], size: [u32; 3]) -> Result<Self, Status> {
+    /// [`TransactionError::BadBox`] for an empty box or one past [`Voxel::END`].
+    pub(crate) fn new(min: [u32; 3], size: [u32; 3]) -> Result<Self, TransactionError> {
         Region::new(min, size).map(|region| Self { region })
     }
 
@@ -227,15 +234,15 @@ mod tests {
     fn a_paste_whose_words_do_not_fill_its_box_is_refused() {
         assert_eq!(
             Paste::new([0; 3], [2, 2, 2], vec![0; 7]).err(),
-            Some(Status::BAD_ARGS)
+            Some(TransactionError::BadBox)
         );
         assert_eq!(
             Paste::new([0; 3], [0, 2, 2], Vec::new()).err(),
-            Some(Status::BAD_ARGS)
+            Some(TransactionError::BadBox)
         );
         assert_eq!(
             Paste::new([Voxel::END, 0, 0], [1; 3], vec![0]).err(),
-            Some(Status::BAD_ARGS)
+            Some(TransactionError::BadBox)
         );
     }
 }

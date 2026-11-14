@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick_core::abi::{HookFlags, Status, UiMarker};
+use enshwick_core::abi::{HookFlags, UiMarker};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 use enshwick_gamedata::catalogue;
@@ -252,19 +252,30 @@ fn label(marker: &UiMarker) -> Box<[u8]> {
     label.into()
 }
 
+/// Why a mod's markers were not set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum MarkersError {
+    /// The markers' feature is off, so they would not show.
+    #[error("the map markers are off")]
+    Off,
+    /// More markers than a mod may set.
+    #[error("too many markers")]
+    TooMany,
+}
+
 /// Replaces mod `owner`'s markers with `markers`.
-pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
+pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Result<(), MarkersError> {
     set_under(&MARKERS_FUSE, owner, given)
 }
 
 /// [`set`] while `feature`, [`MARKERS_FUSE`] outside tests, is on: missing
 /// once it is off, so a mod learns its markers will not show.
-fn set_under(feature: &Fuse, owner: ModIndex, given: &[UiMarker]) -> Status {
+fn set_under(feature: &Fuse, owner: ModIndex, given: &[UiMarker]) -> Result<(), MarkersError> {
     if feature.is_off() {
-        return Status::MISSING;
+        return Err(MarkersError::Off);
     }
     if given.len() > MAX_MARKERS {
-        return Status::BAD_ARGS;
+        return Err(MarkersError::TooMany);
     }
     let copied: Vec<Owned> = given
         .iter()
@@ -287,7 +298,7 @@ fn set_under(feature: &Fuse, owner: ModIndex, given: &[UiMarker]) -> Status {
     let mut retired = MARKERS.retired.relock();
     retired.push_back((MARKERS.frame.load(Ordering::Acquire), old));
     retire(&mut retired, MARKERS.frame.load(Ordering::Acquire));
-    Status::OK
+    Ok(())
 }
 
 /// Frees the replaced sets no frame can still read at frame `now`, and the
@@ -629,7 +640,7 @@ mod tests {
         let none: [UiMarker; 0] = [];
         assert_eq!(
             set_under(&feature, ModIndex::LOADER, &none),
-            Status::MISSING
+            Err(MarkersError::Off)
         );
     }
 

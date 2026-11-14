@@ -181,13 +181,13 @@ mod live {
     use super::{Path, Refusal, Runs, Verdict};
     use crate::engine::loader::Loader;
 
-    static RUNS: Mutex<Runs> = Mutex::new(Runs::new());
+    static STATE: Mutex<Runs> = Mutex::new(Runs::new());
 
     /// Admits a run of the player of account `key` from `path` now.
     pub(crate) fn admit(loader: &Loader, path: Path, key: u64) -> Verdict {
         let is_admin =
             || crate::actions::player_actions::player(loader, key).is_some_and(|p| p.is_admin());
-        RUNS.relock().admit(path, key, Instant::now(), is_admin)
+        STATE.relock().admit(path, key, Instant::now(), is_admin)
     }
 
     /// Answers the player of account `key` the run from `path` refused for
@@ -201,7 +201,7 @@ mod live {
 
     /// Forgets every player's rate, when a hosted game ends.
     pub(crate) fn forget() {
-        RUNS.relock().clear();
+        STATE.relock().clear();
     }
 }
 
@@ -240,6 +240,15 @@ mod tests {
         );
         let later = now + Duration::from_secs(1);
         assert_eq!(runs.admit(Path::Chat, 7, later, || false), Verdict::Run);
+    }
+
+    #[test]
+    fn the_end_of_a_hosted_game_gives_every_player_a_full_burst_again() {
+        let mut runs = Runs::new();
+        let now = Instant::now();
+        while runs.admit(Path::Interface, 7, now, || false) == Verdict::Run {}
+        runs.clear();
+        assert_eq!(runs.admit(Path::Interface, 7, now, || false), Verdict::Run);
     }
 
     #[test]

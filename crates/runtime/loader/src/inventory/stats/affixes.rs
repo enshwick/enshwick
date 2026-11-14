@@ -2,13 +2,13 @@
 //! and the lines an item's rolled affixes give.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{AffixDefData, AffixRoll, ItemLine, StatRef, Status, Str};
+use enshwick_core::abi::{AffixDefData, AffixRoll, ItemLine, StatRef, Str};
 use enshwick_core::affixes::{
     AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll,
 };
 use enshwick_core::stats::{ItemStats, Stat, key_of};
 
-use super::{Asked, SEALED, Sealed, declare, full_id, pending, wanted};
+use super::{Asked, SEALED, Sealed, StatsError, declare, full_id, pending, wanted};
 use crate::base::ids::Space;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
@@ -29,11 +29,11 @@ pub(crate) fn open_affix(
     owner: ModIndex,
     id: &str,
     data: &AffixDefData,
-) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
-    let Asked { full, text, own } = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+) -> Result<StatRef, StatsError> {
+    let record = loader.mods.get(owner.get()).ok_or(StatsError::NoMod)?;
+    let Asked { full, text, own } = full_id(&record.id, id).ok_or(StatsError::BadId)?;
     if !own {
-        return Err(Status::REFUSED);
+        return Err(StatsError::NotOwn);
     }
     declare(loader, owner, Space::Affix, &full)?;
     pending(|p| {
@@ -47,9 +47,9 @@ pub(crate) fn open_affix(
         };
         // SAFETY: the caller passes the definition's text and ranges for
         // the call.
-        let def = unsafe { AffixDef::from_data(data, stat) }.ok_or(Status::BAD_ARGS)?;
+        let def = unsafe { AffixDef::from_data(data, stat) }.ok_or(StatsError::BadDef)?;
         if p.affixes.iter().any(|known| *known.id == *full) {
-            return Err(Status::REFUSED);
+            return Err(StatsError::Defined);
         }
         p.affixes.push(Affix {
             id: full.clone().into_boxed_str(),
@@ -57,7 +57,7 @@ pub(crate) fn open_affix(
             def,
         });
         Ok(StatRef {
-            index: u32::try_from(p.affixes.len() - 1).map_err(|_| Status::REFUSED)?,
+            index: u32::try_from(p.affixes.len() - 1).map_err(|_| StatsError::Full)?,
             key: AffixKey::of(&full).0,
         })
     })?
@@ -93,15 +93,12 @@ pub(crate) enum RollAffixesError {
     /// The item stats were not kept.
     #[error(transparent)]
     Kept(#[from] crate::inventory::item_data::UseItemDataError),
-    /// The server's world or the item's data, as the engine answered.
-    #[error("the server's world or the item: {0:?}")]
-    World(Status),
-}
-
-impl From<Status> for RollAffixesError {
-    fn from(status: Status) -> Self {
-        Self::World(status)
-    }
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+    /// The item's static data, unreadable now.
+    #[error(transparent)]
+    Item(#[from] crate::inventory::transactions::ItemInfoError),
 }
 
 /// Rolls an item anew and keeps the result as its item stats; how many
@@ -138,8 +135,11 @@ pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, RollAffixes
 }
 
 /// What the item `pide` holding `item` gives, a line per modifier.
-pub(crate) fn item_lines(pide: u32, item: u32) -> Result<Vec<ItemLine>, Status> {
-    let sealed = SEALED.get().filter(|_| wanted()).ok_or(Status::MISSING)?;
+pub(crate) fn item_lines(pide: u32, item: u32) -> Result<Vec<ItemLine>, StatsError> {
+    let sealed = SEALED
+        .get()
+        .filter(|_| wanted())
+        .ok_or(StatsError::NotRunning)?;
     let record = crate::inventory::item_data::get_platform(pide, item)
         .and_then(|bytes| postcard::from_bytes::<ItemStats>(&bytes).ok())
         .unwrap_or_default();
@@ -149,12 +149,12 @@ pub(crate) fn item_lines(pide: u32, item: u32) -> Result<Vec<ItemLine>, Status> 
 }
 
 /// The text key and rarity of affix `affix`.
-pub(crate) fn affix_info(affix: u32) -> Result<(Str, u8), Status> {
-    let sealed = SEALED.get().ok_or(Status::MISSING)?;
-    let affix = sealed
-        .affixes
-        .get(usize::try_from(affix).map_err(|_| Status::BAD_ARGS)?)
-        .ok_or(Status::MISSING)?;
+pub(crate) fn affix_info(affix: u32) -> Result<(Str, u8), StatsError> {
+    let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
+    let affix = usize::try_from(affix)
+        .ok()
+        .and_then(|affix| sealed.affixes.get(affix))
+        .ok_or(StatsError::NoAffix)?;
     // The affixes live as long as the process, so their text does too.
     Ok((Str::new(&affix.text), affix.def.rarity.to_raw()))
 }

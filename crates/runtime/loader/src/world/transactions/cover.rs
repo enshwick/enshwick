@@ -1,6 +1,8 @@
 //! Which 8³-voxel bricks a terrain edit can write, and which edits a transaction takes.
 
-use enshwick_core::abi::{Status, TerrainEdit, Voxel};
+use enshwick_core::abi::{TerrainEdit, Voxel};
+
+use super::TransactionError;
 use enshwick_core::terrain::MAX_RADIUS;
 use enshwick_core::voxels::PER_METRE;
 
@@ -88,7 +90,7 @@ impl Bricks {
 /// position at 0 or more inside the coordinates a box covers, a terrain
 /// material for an add or a flatten and a height for an add; no dry run,
 /// which writes nothing to undo.
-pub(crate) fn check(edit: &TerrainEdit) -> Result<Bricks, Status> {
+pub(crate) fn check(edit: &TerrainEdit) -> Result<Bricks, TransactionError> {
     let reach = |metres: f32| metres > 0.0 && metres <= MAX_RADIUS;
     let material = u8::try_from(edit.material).is_ok_and(|material| TERRAIN.contains(&material));
     let valid = edit.flags & TerrainEdit::DRY_RUN == 0
@@ -105,9 +107,9 @@ pub(crate) fn check(edit: &TerrainEdit) -> Result<Bricks, Status> {
             _ => false,
         };
     if !valid {
-        return Err(Status::BAD_ARGS);
+        return Err(TransactionError::BadEdit);
     }
-    cover(edit).ok_or(Status::BAD_ARGS)
+    cover(edit).ok_or(TransactionError::BadEdit)
 }
 
 /// The bricks `edit` can write: the box the game's edit reads and writes
@@ -319,7 +321,7 @@ mod tests {
         ];
         assert!(check(&fine).is_ok());
         for edit in refused {
-            assert_eq!(check(&edit), Err(Status::BAD_ARGS), "{edit:?}");
+            assert_eq!(check(&edit), Err(TransactionError::BadEdit), "{edit:?}");
         }
     }
 }

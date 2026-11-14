@@ -4,7 +4,9 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::{Side, Status};
+use enshwick_core::abi::Side;
+
+use super::CarrierError;
 
 use super::{CARRIER, MAX_LOOPED, MEMBERS_EVERY};
 use crate::engine::loader::Loader;
@@ -66,15 +68,15 @@ pub(super) fn loop_back(
     host: u64,
     channel: u32,
     payload: &[u8],
-) -> Result<(), Status> {
+) -> Result<(), CarrierError> {
     // Before the server half knows its own player, nobody would take it.
     if host == 0 {
-        return Err(Status::MISSING);
+        return Err(CarrierError::NoLink);
     }
     let (queue, waiting) = looped_queue(to_server);
     let mut looped = queue.relock();
     if looped.len() >= MAX_LOOPED {
-        return Err(Status::REFUSED);
+        return Err(CarrierError::Full);
     }
     looped.push(Looped {
         host,

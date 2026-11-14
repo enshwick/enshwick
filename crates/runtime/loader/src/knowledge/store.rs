@@ -22,7 +22,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Status};
+use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData};
 use rustc_hash::FxHashSet;
 
 use crate::engine::live::{self, Broken};
@@ -280,15 +280,71 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
+/// Why a knowledge read or change did not happen.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum KnowledgeError {
+    /// The build's table or reflection lacks what the call reads.
+    #[error("this build lacks the knowledge store's pieces")]
+    Unread,
+    /// No game object, knowledge object or store yet.
+    #[error("no knowledge store runs")]
+    NoStore,
+    /// No trigger queue yet.
+    #[error("no knowledge trigger queue runs")]
+    NoQueue,
+    /// A change queued for accounts while no world with a key runs.
+    #[error("no world to queue the change with")]
+    NoWorld,
+    /// A read of an id the game does not know.
+    #[error("the game does not know this knowledge")]
+    Unknown,
+    /// A change of an id the game does not know, of another kind, or of a
+    /// value the kind does not take.
+    #[error("the knowledge change is malformed")]
+    BadChange,
+    /// Player knowledge read without a character.
+    #[error("player knowledge needs a character")]
+    PlayerOnly,
+    /// No active record for the character.
+    #[error("the character has no active record")]
+    NoRecord,
+    /// A character whose save has not loaded.
+    #[error("the character's save has not loaded")]
+    NotLoaded,
+    /// The game's queue did not take the grant.
+    #[error("the game's trigger queue refused the grant")]
+    Full,
+    /// A query the game left unanswered.
+    #[error("the game did not answer the query")]
+    Unanswered,
+    /// The grants' fuse.
+    #[error(transparent)]
+    Fuse(#[from] crate::engine::fuse::FuseError),
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
+impl KnowledgeError {
+    /// Whether a change for an account that met this may pass once the
+    /// character is fully in the game, so it keeps waiting.
+    pub(crate) const fn may_pass(&self) -> bool {
+        matches!(
+            self,
+            Self::PlayerOnly | Self::NoRecord | Self::NotLoaded | Self::Full
+        )
+    }
+}
+
 /// The game object and its knowledge store, on the game thread.
-fn store(layout: &Layout) -> Result<(usize, usize), Status> {
+fn store(layout: &Layout) -> Result<(usize, usize), KnowledgeError> {
     store_of(layout, crate::engine::world::server()?)
 }
 
 /// The game object and its knowledge store of `server`, the running server
 /// from [`crate::engine::world::server`] on the game thread or a
 /// [`crate::engine::world::access`] held elsewhere.
-fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), Status> {
+fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), KnowledgeError> {
     // SAFETY: callers pass the running server, non-zero, on its game thread,
     // where the teardown that frees it runs after them, or while they hold
     // an access to it, which keeps its memory until it drops; its game
@@ -296,21 +352,21 @@ fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), Status> {
     // offset.
     let game: usize = unsafe { read(server, layout.game) };
     if game == 0 {
-        return Err(Status::MISSING);
+        return Err(KnowledgeError::NoStore);
     }
     // SAFETY: `game` is the server's non-null game object by the check
     // before it; its knowledge object pointer sits at the build table's
     // `knowledge.object` offset.
     let object: usize = unsafe { read(game, layout.object) };
     if object == 0 {
-        return Err(Status::MISSING);
+        return Err(KnowledgeError::NoStore);
     }
     // SAFETY: `object` is the game's non-null knowledge object by the check
     // before it; its store pointer sits at the build table's `knowledge.state`
     // offset.
     let state: usize = unsafe { read(object, layout.state) };
     if state == 0 {
-        return Err(Status::MISSING);
+        return Err(KnowledgeError::NoStore);
     }
     Ok((game, state))
 }
@@ -388,16 +444,18 @@ fn records(layout: &Layout, state: usize) -> usize {
 }
 
 /// The player record of the character `entity`, active, or why not.
-fn record(layout: &Layout, state: usize, entity: Entity) -> Result<usize, Status> {
+fn record(layout: &Layout, state: usize, entity: Entity) -> Result<usize, KnowledgeError> {
     // SAFETY: `state` is the live store `store_of` found; its record array
     // pointer sits at the build table's `knowledge.records` offset.
     let records: usize = unsafe { read(state, layout.records) };
     // SAFETY: `state` is the live store `store_of` found; its u64 record
     // count sits at the build table's `knowledge.record_count` offset.
     let count: u64 = unsafe { read(state, layout.record_count) };
-    let index = (entity.0 as usize).checked_sub(1).ok_or(Status::REFUSED)?;
+    let index = (entity.0 as usize)
+        .checked_sub(1)
+        .ok_or(KnowledgeError::NoRecord)?;
     if records == 0 || index as u64 >= count {
-        return Err(Status::REFUSED);
+        return Err(KnowledgeError::NoRecord);
     }
     let record = records + index * layout.record_size;
     // SAFETY: `records` is non-null and `index` below the record count by
@@ -406,19 +464,23 @@ fn record(layout: &Layout, state: usize, entity: Entity) -> Result<usize, Status
     // `knowledge.record_active`.
     let active: u8 = unsafe { read(record, layout.record_active) };
     if active == 0 {
-        return Err(Status::REFUSED);
+        return Err(KnowledgeError::NoRecord);
     }
     Ok(record)
 }
 
 /// Knowledge `id` of the character `entity`, or of the world.
-pub(crate) fn value(loader: &Loader, entity: Entity, id: u32) -> Result<KnowledgeInfo, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn value(
+    loader: &Loader,
+    entity: Entity,
+    id: u32,
+) -> Result<KnowledgeInfo, KnowledgeError> {
+    let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let (_, state) = store(layout)?;
-    let (scope, def) = definition(layout, state, id).ok_or(Status::MISSING)?;
+    let (scope, def) = definition(layout, state, id).ok_or(KnowledgeError::Unknown)?;
     let raw = if scope == KnowledgeInfo::WORLD || entity == Entity(0) {
         if scope == KnowledgeInfo::PLAYER {
-            return Err(Status::REFUSED);
+            return Err(KnowledgeError::PlayerOnly);
         }
         // SAFETY: `state` is the live store `store` found through
         // `world::server`, which put this call on the game thread at a quiet
@@ -484,14 +546,14 @@ pub(crate) fn grant(
     id: u32,
     kind: u32,
     value: u32,
-) -> Result<(), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+) -> Result<(), KnowledgeError> {
+    let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let server = crate::engine::world::server()?;
     if !GRANTS_FUSE.verify(&loader.build.name, || store_holds(layout, server)) {
-        return Err(GRANTS_FUSE.refused());
+        return Err(GRANTS_FUSE.refused().into());
     }
     let (game, state) = store_of(layout, server)?;
-    let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;
+    let (scope, def) = definition(layout, state, id).ok_or(KnowledgeError::BadChange)?;
     // SAFETY: `def` is the definition `definition` found in the live blob;
     // its u8 kind sits at the reflected `type` field.
     let def_kind: u8 = unsafe { read(def, layout.def_kind) };
@@ -499,17 +561,17 @@ pub(crate) fn grant(
     // its u32 flags sit at the reflected `expectedFlags` field.
     let expected: u32 = unsafe { read(def, layout.def_flags) };
     if u32::from(def_kind) != kind {
-        return Err(Status::BAD_ARGS);
+        return Err(KnowledgeError::BadChange);
     }
     if def_kind == KnowledgeInfo::FLAGS
         && (value >= 32 || (expected != 0 && expected & (1 << value) == 0))
     {
-        return Err(Status::BAD_ARGS);
+        return Err(KnowledgeError::BadChange);
     }
     let target = if scope == KnowledgeInfo::PLAYER {
         record(layout, state, Entity(entity))?;
         if !changes::character_loaded(loader, Entity(entity)) {
-            return Err(Status::REFUSED);
+            return Err(KnowledgeError::NotLoaded);
         }
         // One player: a 1 in the low byte and the character in the high
         // half, as the game targets a player.
@@ -531,7 +593,7 @@ pub(crate) fn grant(
     // queue pointer sits at the build table's `knowledge.queue` offset.
     let queue: usize = unsafe { read(game, layout.queue) };
     if queue == 0 {
-        return Err(Status::MISSING);
+        return Err(KnowledgeError::NoQueue);
     }
     // SAFETY: `queue` is the game's non-null trigger queue by the check
     // before it, which the game's workers push into from any thread; the push
@@ -543,14 +605,14 @@ pub(crate) fn grant(
         )
     };
     if pushed == 0 {
-        return Err(Status::REFUSED);
+        return Err(KnowledgeError::Full);
     }
     Ok(())
 }
 
 /// The quest ids of the running game.
-pub(crate) fn quests(loader: &Loader) -> Result<Vec<u32>, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+pub(crate) fn quests(loader: &Loader) -> Result<Vec<u32>, KnowledgeError> {
+    let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let (game, _) = store(layout)?;
     let mut ids: Vec<u32> = quest_set(layout, game)
         .map(|set| set.iter().copied().collect())
@@ -711,6 +773,31 @@ pub(crate) fn forget() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_queued_change_keeps_waiting_exactly_when_the_call_was_refused() {
+        use crate::host::layer::Refusal;
+        use enshwick_core::abi::Status;
+        for error in [
+            KnowledgeError::Unread,
+            KnowledgeError::NoStore,
+            KnowledgeError::NoQueue,
+            KnowledgeError::NoWorld,
+            KnowledgeError::Unknown,
+            KnowledgeError::BadChange,
+            KnowledgeError::PlayerOnly,
+            KnowledgeError::NoRecord,
+            KnowledgeError::NotLoaded,
+            KnowledgeError::Full,
+            KnowledgeError::Unanswered,
+        ] {
+            assert_eq!(
+                error.may_pass(),
+                error.status() == Status::REFUSED,
+                "{error:?}"
+            );
+        }
+    }
 
     unsafe extern "system" fn player_value(_: *const u8, _: *const u32, _: u32) -> u64 {
         0

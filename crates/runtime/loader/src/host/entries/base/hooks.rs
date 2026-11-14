@@ -29,7 +29,8 @@ entries! {
             hop: None,
             feature: None,
         };
-        Ok(me.loader.chains.relock().add(spec.target, link))
+        me.loader.chains.relock().add(spec.target, link)?;
+        Ok(())
     }
 
     fn hook_at(me as Mod, spec as In<MidHookSpec>) -> Status {
@@ -40,7 +41,8 @@ entries! {
             priority: spec.priority,
             flags: spec.flags,
         };
-        Ok(me.loader.mids.relock().add(spec.address, link))
+        me.loader.mids.relock().add(spec.address, link)?;
+        Ok(())
     }
 
     fn code_range(start as Out<u64>, len as Out<u64>) -> Status {
@@ -68,7 +70,7 @@ entries! {
         // `replacement`, unchanged for the call; `register` copies them into a
         // box before it returns.
         let replacement = unsafe { slice(replacement, len) };
-        Ok(crate::engine::code::register(
+        crate::engine::code::register(
             crate::engine::code::CodePatch {
                 owner: me.index,
                 feature: crate::engine::code::WHOLE_MOD,
@@ -78,7 +80,8 @@ entries! {
                 needs: Box::default(),
             },
             text,
-        ))
+        )?;
+        Ok(())
     }
 
     fn workshop_recipes() -> u32 {

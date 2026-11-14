@@ -66,7 +66,7 @@ fn the_hosted_queues_are_bounded_and_forget_empties_them() {
     for _ in 0..MAX_LOOPED {
         assert!(loop_back(true, 7, 5, b"x").is_ok());
     }
-    assert_eq!(loop_back(true, 7, 5, b"x"), Err(Status::REFUSED));
+    assert_eq!(loop_back(true, 7, 5, b"x"), Err(CarrierError::Full));
     CARRIER.host_key.store(9, Ordering::Release);
     CARRIER.hosted_hello.store(true, Ordering::Release);
     assert!(loop_back(false, 7, 6, b"y").is_ok());
@@ -100,12 +100,16 @@ fn a_new_host_makes_the_client_half_say_hello_again() {
 #[test]
 fn a_payload_that_may_not_travel_is_refused_before_any_link() {
     let _alone = alone();
-    assert_eq!(send(7, 5, b"\x7fELF\x02"), Err(Status::BAD_ARGS));
+    assert_eq!(send(7, 5, b"\x7fELF\x02"), Err(CarrierError::BadPayload));
     let refused = send_many(&[7, 8], 5, &[1; MAX_SEALED], |_, _| {
         panic!("a refused payload names no key")
     });
-    assert_eq!(refused, Err(Status::BAD_ARGS));
-    assert_eq!(send(7, 5, b"fine"), Err(Status::MISSING), "no link yet");
+    assert_eq!(refused, Err(CarrierError::BadPayload));
+    assert_eq!(
+        send(7, 5, b"fine"),
+        Err(CarrierError::NoLink),
+        "no link yet"
+    );
 }
 
 #[test]
@@ -116,7 +120,10 @@ fn each_key_without_a_link_is_named_and_the_rest_still_go() {
         failed.push((key, status));
     });
     assert_eq!(sent, Ok(()));
-    assert_eq!(failed, [(7, Status::MISSING), (8, Status::MISSING)]);
+    assert_eq!(
+        failed,
+        [(7, CarrierError::NoLink), (8, CarrierError::NoLink)]
+    );
 }
 
 fn peer(heard: bool) -> Peer {

@@ -23,7 +23,6 @@ use crate::engine::off_thread::ReadFailure;
 
 use enshwick_core::abi::{
     Header, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, ResourceKey, Side,
-    Status,
 };
 use enshwick_gamedata::catalogue as names;
 
@@ -176,26 +175,59 @@ fn frame_layout(loader: &Loader) -> Result<FrameLayout, Lacks> {
     })
 }
 
-/// The layout `found` holds, or [`Status::MISSING`] with `fuse` turned off
+/// Why a read of the running scene gave nothing yet, or nothing at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum SceneError {
+    /// The build's table lacks what the read needs.
+    #[error("this build lacks the scene reads")]
+    Unread,
+    /// No entity world, scene chunk manager or scene yet.
+    #[error("no scene runs")]
+    NoScene,
+    /// The read's feature is off.
+    #[error("the scene read is off")]
+    Off,
+    /// The scene's read failed.
+    #[error("the scene does not read")]
+    Unreadable,
+    /// The scene's read runs; ask again.
+    #[error("the scene is still reading")]
+    Reading,
+    /// A dedicated server, whose archive has no marker types.
+    #[error("only a client has marker types")]
+    NotClient,
+    /// The marker types did not read.
+    #[error("the marker types do not read")]
+    NoTypes,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
+/// The layout `found` holds, or [`SceneError::Unread`] with `fuse` turned off
 /// for the entry it lacks.
-fn sound<L>(loader: &Loader, fuse: &'static Fuse, found: Result<L, Lacks>) -> Result<L, Status> {
+fn sound<L>(
+    loader: &Loader,
+    fuse: &'static Fuse,
+    found: Result<L, Lacks>,
+) -> Result<L, SceneError> {
     found.map_err(|(id, why)| {
         if !fuse.is_off() {
             let _off = loader.fuse_off(fuse, id, why);
         }
-        Status::MISSING
+        SceneError::Unread
     })
 }
 
 /// The scene the server runs now and its global chunk; on the game thread
 /// at a quiet moment.
-fn scene_key(loader: &Loader) -> Result<SceneKey, Status> {
+fn scene_key(loader: &Loader) -> Result<SceneKey, SceneError> {
     crate::engine::world::server()?;
     let world = usize::try_from(crate::engine::world::server_world())
         .ok()
         .filter(|&world| world != 0)
-        .ok_or(Status::MISSING)?;
-    let offset = |id| loader.offset(id).ok_or(Status::MISSING);
+        .ok_or(SceneError::NoScene)?;
+    let offset = |id| loader.offset(id).ok_or(SceneError::Unread);
     let chunks_at = offset(pinned::world::SCENE_CHUNKS)?;
     let count_at = offset(pinned::world::SCENE_CHUNKS_COUNT)?;
     let scene_at = offset(pinned::world::SCENE_CHUNKS_SCENE)?;
@@ -205,7 +237,7 @@ fn scene_key(loader: &Loader) -> Result<SceneKey, Status> {
     // scene chunk manager pointer on server 399 and client 426.
     let chunks = unsafe { crate::engine::memory::read_ptr::<u8>(world, chunks_at) };
     if chunks.is_null() {
-        return Err(Status::MISSING);
+        return Err(SceneError::NoScene);
     }
     let chunks = chunks.expose_provenance();
     // SAFETY: `chunks` is the non-null manager the world holds (checked
@@ -216,7 +248,7 @@ fn scene_key(loader: &Loader) -> Result<SceneKey, Status> {
     // earlier), read on the game thread at a quiet moment; the table's
     // offset of the requested scene GUID (16 bytes) lies inside it.
     let scene = unsafe { crate::engine::memory::read::<[u8; 16]>(chunks, scene_at) };
-    SceneKey::new(scene, count).ok_or(Status::MISSING)
+    SceneKey::new(scene, count).ok_or(SceneError::NoScene)
 }
 
 /// Reads the markers of the scene `key` from the archive.
@@ -351,7 +383,7 @@ static FRAME_FUSE: Fuse = Fuse::new("map frame");
 /// The switch of the client's marker types.
 static TYPES_FUSE: Fuse = Fuse::new("map marker types");
 
-/// The read of `key` that `cache` keeps, or [`Status::NOT_LOADED`] while it
+/// The read of `key` that `cache` keeps, or [`SceneError::Reading`] while it
 /// runs: the first call for a scene starts `read` on a thread of its own,
 /// named for `fuse`'s feature. A fault of the read turns the feature off.
 fn cached<V: Described, E: SceneFailure>(
@@ -359,15 +391,15 @@ fn cached<V: Described, E: SceneFailure>(
     fuse: &'static Fuse,
     cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
     read: impl FnOnce() -> Result<V, E> + Send + 'static,
-) -> Result<V, Status> {
+) -> Result<V, SceneError> {
     if fuse.is_off() {
-        return Err(Status::MISSING);
+        return Err(SceneError::Off);
     }
     let mut state = STATE.relock();
     let generation = state.generation;
     match cache(&mut state).lookup(key) {
-        Lookup::Ready(found) => return found.map_err(|_| Status::MISSING),
-        Lookup::Pending => return Err(Status::NOT_LOADED),
+        Lookup::Ready(found) => return found.map_err(|_| SceneError::Unreadable),
+        Lookup::Pending => return Err(SceneError::Reading),
         Lookup::Start => {}
     }
     drop(state);
@@ -380,7 +412,7 @@ fn cached<V: Described, E: SceneFailure>(
         }
         let _kept = land(key, generation, cache, found);
     });
-    Err(Status::NOT_LOADED)
+    Err(SceneError::Reading)
 }
 
 /// Keeps the read of `key` started in `generation`, unless its hosted game
@@ -398,8 +430,8 @@ fn land<V: Described, E: SceneFailure>(
 /// The markers of the scene the server runs; on its game thread at a quiet
 /// moment, since the scene comes from the running world. The first call
 /// for a scene starts reading the archive on a thread of its own and
-/// answers [`Status::NOT_LOADED`] until it is done.
-pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, Status> {
+/// answers [`SceneError::Reading`] until it is done.
+pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, SceneError> {
     let key = scene_key(loader)?;
     let found = *STATE.relock().layout.get_or_init(|| layout(loader));
     let layout = sound(loader, &MARKERS_FUSE, found)?;
@@ -413,7 +445,7 @@ pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, Status> {
 
 /// The map's frame of the scene the server runs; on its game thread at a
 /// quiet moment, read like [`markers`].
-pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, Status> {
+pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, SceneError> {
     let key = scene_key(loader)?;
     let found = *STATE
         .relock()
@@ -432,15 +464,15 @@ pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, Status> {
 /// and kept; any thread. A dedicated server's archive has no registry. The
 /// first ask reads under the scene lock, a few milliseconds once, so two
 /// first asks read and report once.
-pub(crate) fn marker_types(loader: &Loader) -> Result<Arc<[MapMarkerTypeInfo]>, Status> {
+pub(crate) fn marker_types(loader: &Loader) -> Result<Arc<[MapMarkerTypeInfo]>, SceneError> {
     if loader.side == Side::SERVER {
-        return Err(Status::MISSING);
+        return Err(SceneError::NotClient);
     }
     let state = STATE.relock();
     let known = state
         .marker_types
         .get_or_init(|| kept_types(loader, &TYPES_FUSE, || read_marker_types(loader)));
-    known.clone().ok_or(Status::MISSING)
+    known.clone().ok_or(SceneError::NoTypes)
 }
 
 /// The marker types `read` gives, run under `fuse`; `None`, with `fuse`
@@ -579,11 +611,11 @@ mod tests {
         fuse: &'static Fuse,
         cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
         read: impl Fn() -> Result<V, E> + Clone + Send + 'static,
-    ) -> Result<V, Status> {
+    ) -> Result<V, SceneError> {
         let began = Instant::now();
         loop {
             let found = cached(key, fuse, cache, read.clone());
-            if found.as_ref().err() != Some(&Status::NOT_LOADED) {
+            if found.as_ref().err() != Some(&SceneError::Reading) {
                 return found;
             }
             assert!(began.elapsed().as_secs() < 10, "the read never finished");
@@ -599,7 +631,7 @@ mod tests {
         let read = || -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> { panic!("a broken read") };
         assert_eq!(
             settled(key, &MARKS, |state| &mut state.markers, read).err(),
-            Some(Status::MISSING)
+            Some(SceneError::Off)
         );
         assert!(MARKS.is_off());
         let began = Instant::now();
@@ -616,7 +648,7 @@ mod tests {
         let unread = || -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> { unreachable!("off") };
         assert_eq!(
             cached(other, &MARKS, |state| &mut state.markers, unread).err(),
-            Some(Status::MISSING)
+            Some(SceneError::Off)
         );
     }
 
@@ -628,7 +660,7 @@ mod tests {
         let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::NoBiomeMap) };
         assert_eq!(
             settled(key, &FRAMES, |state| &mut state.frame, read).err(),
-            Some(Status::MISSING)
+            Some(SceneError::Unreadable)
         );
         assert!(!FRAMES.is_off());
     }
@@ -651,7 +683,7 @@ mod tests {
         let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::Thread) };
         assert_eq!(
             settled(key, &FRAMES, |state| &mut state.frame, read).err(),
-            Some(Status::MISSING)
+            Some(SceneError::Unreadable)
         );
         assert!(!FRAMES.is_off());
     }
@@ -662,7 +694,7 @@ mod tests {
         let loader = crate::start::tests::bare_loader();
         assert_eq!(
             sound(&loader, &LAID, layout(&loader)).err(),
-            Some(Status::MISSING)
+            Some(SceneError::Unread)
         );
         assert!(LAID.is_off());
         let listed = crate::engine::diag::parts_off();

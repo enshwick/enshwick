@@ -65,7 +65,7 @@ mod live {
         };
         match reply_by(text, done, in_chat) {
             Reply::Chat(text) => {
-                let _queued = crate::actions::chat::reply(key, text);
+                crate::actions::chat::reply(key, text);
             }
             Reply::Notice(text) => tell(loader, key, &text),
             Reply::None => {}

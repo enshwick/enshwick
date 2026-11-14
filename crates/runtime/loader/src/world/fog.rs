@@ -21,7 +21,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick_core::abi::{FogInfo, Header, HookFlags, Side, Status};
+use enshwick_core::abi::{FogInfo, Header, HookFlags, Side};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -348,23 +348,50 @@ pub(crate) fn uncover_here(at: [f32; 2], radius: f32) {
     STATE.uncovers.waiting.store(true, Ordering::Release);
 }
 
+/// Why a circle of a player's fog was not sent to uncover.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum UncoverError {
+    /// No server runs here.
+    #[error("no server runs here")]
+    NotServer,
+    /// A circle the message cannot carry.
+    #[error("the circle is out of range")]
+    BadCircle,
+    /// The player's client has no ready link.
+    #[error("the player's link is not ready")]
+    NotReady,
+    /// The message was not sent.
+    #[error("the message was not sent")]
+    NotSent,
+}
+
 /// Sends the client of the player with account key `key` a circle of its
 /// fog of war to uncover, for `HostApi::fog_uncover`.
-pub(crate) fn uncover_for(loader: &Loader, key: u64, at: [f32; 2], radius: f32) -> Status {
+///
+/// # Errors
+///
+/// [`UncoverError`] off a server, for a circle out of range, a link not
+/// ready or a message not sent.
+pub(crate) fn uncover_for(
+    loader: &Loader,
+    key: u64,
+    at: [f32; 2],
+    radius: f32,
+) -> Result<(), UncoverError> {
     if loader.side != Side::SERVER && !crate::engine::world::hosting() {
-        return Status::UNAVAILABLE;
+        return Err(UncoverError::NotServer);
     }
     if !crate::base::remote::Message::uncover_fits(at, radius) {
-        return Status::BAD_ARGS;
+        return Err(UncoverError::BadCircle);
     }
     if !crate::base::net::ready(key) {
-        return Status::UNAVAILABLE;
+        return Err(UncoverError::NotReady);
     }
     let message = crate::base::remote::Message::FogUncover { at, radius };
     if crate::base::net::to_player(key, &message) {
-        Status::OK
+        Ok(())
     } else {
-        Status::REFUSED
+        Err(UncoverError::NotSent)
     }
 }
 
@@ -470,30 +497,51 @@ fn skip(rect: &TileRect) {
     }
 }
 
+/// Why the fog's info was not read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum FogReadError {
+    /// The mod did not open the fog.
+    #[error("the mod did not open the fog")]
+    Unopened,
+    /// The fog or its copy is off, or no copy is made yet.
+    #[error("no copy of the fog runs")]
+    NoCopy,
+}
+
 /// Writes the fog's info to `info` and the box at `min` of `size` pixels
-/// into `out`, for mod `owner`.
+/// into `out`, for mod `owner`: the box's own read error once the info is
+/// written.
+///
+/// # Errors
+///
+/// [`FogReadError`] when nothing was written.
 pub(crate) fn read(
     owner: ModIndex,
     info: &mut FogInfo,
     min: [u32; 2],
     size: [u32; 2],
     out: &mut [u8],
-) -> Status {
+) -> Result<Result<(), ReadError>, FogReadError> {
     if !opened(owner) {
-        return Status::REFUSED;
+        return Err(FogReadError::Unopened);
     }
     read_opened(info, min, size, out)
 }
 
 /// [`read`] for a mod that opened the fog.
-fn read_opened(info: &mut FogInfo, min: [u32; 2], size: [u32; 2], out: &mut [u8]) -> Status {
+fn read_opened(
+    info: &mut FogInfo,
+    min: [u32; 2],
+    size: [u32; 2],
+    out: &mut [u8],
+) -> Result<Result<(), ReadError>, FogReadError> {
     // A copy turned off mid-run may hold a stale image.
     if FUSE.is_off() || COPY_FUSE.is_off() {
-        return Status::MISSING;
+        return Err(FogReadError::NoCopy);
     }
     let mut mirror = STATE.mirror.relock();
     let Some(mirror) = mirror.as_mut() else {
-        return Status::MISSING;
+        return Err(FogReadError::NoCopy);
     };
     let window = mirror.uncovered();
     let shape = mirror.image.shape();
@@ -517,13 +565,9 @@ fn read_opened(info: &mut FogInfo, min: [u32; 2], size: [u32; 2], out: &mut [u8]
         uncovered_size: window.size,
     };
     if size[0] == 0 || size[1] == 0 {
-        return Status::OK;
+        return Ok(Ok(()));
     }
-    match mirror.image.read(min, size, out) {
-        Ok(()) => Status::OK,
-        Err(ReadError::Outside) => Status::OUTSIDE_WORLD,
-        Err(ReadError::Short) => Status::BAD_ARGS,
-    }
+    Ok(mirror.image.read(min, size, out))
 }
 
 #[cfg(test)]
@@ -589,7 +633,7 @@ mod tests {
         let mut info: FogInfo = bytemuck::Zeroable::zeroed();
         assert_eq!(
             read_opened(&mut info, [0, 0], [0, 0], &mut []),
-            Status::MISSING
+            Err(FogReadError::NoCopy)
         );
     }
 

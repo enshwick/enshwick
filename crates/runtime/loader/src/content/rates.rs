@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::__private::modify_recipes_in;
-use enshwick_core::abi::{RateId, Status};
+use enshwick_core::abi::RateId;
 use enshwick_core::content::recipes::{RecipeKind, RecipeLayout, RecipeView};
 pub(crate) use enshwick_core::rates::scale_whole;
 use enshwick_core::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
@@ -138,6 +138,29 @@ struct Declared {
     factor: AtomicU32,
 }
 
+/// Why a mod's rate was not declared or set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum RateError {
+    /// A rate the API has none of.
+    #[error("no such rate")]
+    BadRate,
+    /// A rate clients count, declared by a mod that does not join.
+    #[error("only a mod that joins declares the rate")]
+    NotJoined,
+    /// This build lacks what the rate needs.
+    #[error("this build lacks the rate")]
+    Unavailable,
+    /// Declared after init.
+    #[error("declared after init")]
+    TooLate,
+    /// A factor out of range.
+    #[error("the factor is out of range")]
+    BadFactor,
+    /// A rate the mod did not declare.
+    #[error("the mod did not declare the rate")]
+    Undeclared,
+}
+
 /// Every mod's declared rates: open while mods initialise, sealed once they
 /// all have, after which sets and reads neither allocate nor lock.
 #[derive(Debug)]
@@ -169,19 +192,19 @@ impl Rates {
         rate: RateId,
         available: bool,
         joins: bool,
-    ) -> Status {
+    ) -> Result<(), RateError> {
         if Rate::from_id(rate).is_none() {
-            return Status::BAD_ARGS;
+            return Err(RateError::BadRate);
         }
         if !enshwick_core::__private::rules::may_declare_rate(rate, joins) {
-            return Status::REFUSED;
+            return Err(RateError::NotJoined);
         }
         if !available {
-            return Status::MISSING;
+            return Err(RateError::Unavailable);
         }
         let mut open = self.open.relock();
         if self.sealed.get().is_some() {
-            return Status::TOO_LATE;
+            return Err(RateError::TooLate);
         }
         if !open.iter().any(|d| d.owner == owner && d.rate == rate) {
             open.push(Declared {
@@ -190,21 +213,21 @@ impl Rates {
                 factor: AtomicU32::new(ONE),
             });
         }
-        Status::OK
+        Ok(())
     }
 
     /// Puts `factor` in force for mod `owner`'s declared `rate`.
-    pub(crate) fn set(&self, owner: ModIndex, rate: RateId, factor: f32) -> Status {
+    pub(crate) fn set(&self, owner: ModIndex, rate: RateId, factor: f32) -> Result<(), RateError> {
         if !is_valid_factor(factor) {
-            return Status::BAD_ARGS;
+            return Err(RateError::BadFactor);
         }
         let store = |declared: &[Declared]| {
             declared
                 .iter()
                 .find(|d| d.owner == owner && d.rate == rate)
-                .map_or(Status::BAD_ARGS, |d| {
+                .map_or(Err(RateError::Undeclared), |d| {
                     d.factor.store(factor.to_bits(), Ordering::Release);
-                    Status::OK
+                    Ok(())
                 })
         };
         if let Some(sealed) = self.sealed.get() {
@@ -285,12 +308,12 @@ mod tests {
         for owner in [0, 1, 2] {
             assert_eq!(
                 rates.declare(ModIndex::new(owner), COMBAT, true, true),
-                Status::OK
+                Ok(())
             );
         }
-        assert_eq!(rates.set(ModIndex::new(0), COMBAT, 2.0), Status::OK);
+        assert_eq!(rates.set(ModIndex::new(0), COMBAT, 2.0), Ok(()));
         rates.seal();
-        assert_eq!(rates.set(ModIndex::new(2), COMBAT, 1.5), Status::OK);
+        assert_eq!(rates.set(ModIndex::new(2), COMBAT, 1.5), Ok(()));
         assert_eq!(rates.factor(COMBAT, on), 3.0);
         assert_eq!(rates.factor(MINING, on), 1.0);
         assert!(rates.declared(COMBAT) && !rates.declared(MINING));
@@ -299,10 +322,10 @@ mod tests {
     #[test]
     fn a_mod_that_is_off_drops_out_of_the_product() {
         let rates = Rates::new();
-        rates.declare(ModIndex::new(0), COMBAT, true, true);
-        rates.declare(ModIndex::new(1), COMBAT, true, true);
-        rates.set(ModIndex::new(0), COMBAT, 4.0);
-        rates.set(ModIndex::new(1), COMBAT, 0.5);
+        rates.declare(ModIndex::new(0), COMBAT, true, true).unwrap();
+        rates.declare(ModIndex::new(1), COMBAT, true, true).unwrap();
+        rates.set(ModIndex::new(0), COMBAT, 4.0).unwrap();
+        rates.set(ModIndex::new(1), COMBAT, 0.5).unwrap();
         rates.seal();
         assert_eq!(rates.factor(COMBAT, |owner| owner == ModIndex::new(1)), 4.0);
     }
@@ -310,10 +333,10 @@ mod tests {
     #[test]
     fn the_product_is_held_to_the_largest_factor() {
         let rates = Rates::new();
-        rates.declare(ModIndex::new(0), COMBAT, true, true);
-        rates.declare(ModIndex::new(1), COMBAT, true, true);
-        rates.set(ModIndex::new(0), COMBAT, 100.0);
-        rates.set(ModIndex::new(1), COMBAT, 100.0);
+        rates.declare(ModIndex::new(0), COMBAT, true, true).unwrap();
+        rates.declare(ModIndex::new(1), COMBAT, true, true).unwrap();
+        rates.set(ModIndex::new(0), COMBAT, 100.0).unwrap();
+        rates.set(ModIndex::new(1), COMBAT, 100.0).unwrap();
         rates.seal();
         assert_eq!(rates.factor(COMBAT, on), enshwick_core::rates::MAX_FACTOR);
     }
@@ -323,36 +346,33 @@ mod tests {
         let rates = Rates::new();
         assert_eq!(
             rates.declare(ModIndex::new(0), RateId(0), true, true),
-            Status::BAD_ARGS
+            Err(RateError::BadRate)
         );
         assert_eq!(
             rates.declare(ModIndex::new(0), COMBAT, false, true),
-            Status::MISSING
+            Err(RateError::Unavailable)
         );
         assert_eq!(
             rates.set(ModIndex::new(0), COMBAT, 2.0),
-            Status::BAD_ARGS,
+            Err(RateError::Undeclared),
             "undeclared"
         );
+        assert_eq!(rates.declare(ModIndex::new(0), COMBAT, true, true), Ok(()));
         assert_eq!(
             rates.declare(ModIndex::new(0), COMBAT, true, true),
-            Status::OK
-        );
-        assert_eq!(
-            rates.declare(ModIndex::new(0), COMBAT, true, true),
-            Status::OK,
+            Ok(()),
             "twice"
         );
         for factor in [-1.0, 100.5, f32::NAN, f32::INFINITY] {
             assert_eq!(
                 rates.set(ModIndex::new(0), COMBAT, factor),
-                Status::BAD_ARGS
+                Err(RateError::BadFactor)
             );
         }
         rates.seal();
         assert_eq!(
             rates.declare(ModIndex::new(1), COMBAT, true, true),
-            Status::TOO_LATE
+            Err(RateError::TooLate)
         );
         assert_eq!(rates.factor(COMBAT, on), 1.0);
     }
@@ -363,23 +383,17 @@ mod tests {
         let speed = RateId::FACTORY_PRODUCTION_SPEED;
         assert_eq!(
             rates.declare(ModIndex::new(0), speed, true, false),
-            Status::REFUSED
+            Err(RateError::NotJoined)
         );
-        assert_eq!(
-            rates.declare(ModIndex::new(0), speed, true, true),
-            Status::OK
-        );
-        assert_eq!(
-            rates.declare(ModIndex::new(1), COMBAT, true, false),
-            Status::OK
-        );
+        assert_eq!(rates.declare(ModIndex::new(0), speed, true, true), Ok(()));
+        assert_eq!(rates.declare(ModIndex::new(1), COMBAT, true, false), Ok(()));
     }
 
     #[test]
     fn nothing_counts_before_the_seal() {
         let rates = Rates::new();
-        rates.declare(ModIndex::new(0), COMBAT, true, true);
-        rates.set(ModIndex::new(0), COMBAT, 2.0);
+        rates.declare(ModIndex::new(0), COMBAT, true, true).unwrap();
+        rates.set(ModIndex::new(0), COMBAT, 2.0).unwrap();
         assert_eq!(rates.factor(COMBAT, on), 1.0);
         assert!(!rates.declared(COMBAT));
     }
@@ -509,7 +523,7 @@ mod tests {
         assert!(!is_recipe_output(COMBAT));
         let rates = Rates::new();
         assert!(!rates.any(is_recipe_output));
-        rates.declare(ModIndex::new(0), roof, true, true);
+        rates.declare(ModIndex::new(0), roof, true, true).unwrap();
         assert!(rates.any(is_recipe_output), "open");
         assert!(!rates.is_sealed());
         rates.seal();

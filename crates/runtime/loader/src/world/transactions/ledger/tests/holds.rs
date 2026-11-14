@@ -38,7 +38,7 @@ fn items_that_land_while_a_chest_is_held_stop_its_removal() {
         (info.state, info.reason, info.holds),
         (
             TransactionInfo::FAILED,
-            Status::REFUSED,
+            Some(TransactionError::HoldsState),
             TransactionInfo::HOLDS_INVENTORY
         )
     );
@@ -110,7 +110,7 @@ fn a_creature_is_never_removed_even_discarding_state() {
     settle(&mut ledger, &mut world, id);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::NOT_A_PROP)
+        (TransactionInfo::FAILED, Some(TransactionError::NotAProp))
     );
     assert_eq!(world.props.len(), 1);
 }
@@ -129,13 +129,16 @@ fn state_reads_this_build_lacks_turn_removal_and_undo_off() {
     settle(&mut ledger, &mut world, removal);
     assert_eq!(
         state(&ledger, removal),
-        (TransactionInfo::FAILED, Status::MISSING)
+        (TransactionInfo::FAILED, Some(TransactionError::Unavailable))
     );
     ledger.undo(ME, placed).unwrap();
     settle(&mut ledger, &mut world, placed);
     assert_eq!(
         state(&ledger, placed),
-        (TransactionInfo::UNDO_REFUSED, Status::MISSING)
+        (
+            TransactionInfo::UNDO_REFUSED,
+            Some(TransactionError::Unavailable)
+        )
     );
     assert_eq!(world.props.len(), 2);
 }
@@ -151,7 +154,7 @@ fn a_filter_gone_off_during_the_hold_stops_the_destroy() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::MISSING)
+        (TransactionInfo::FAILED, Some(TransactionError::Gone))
     );
     assert_eq!(world.props.len(), 1, "nothing goes unguarded");
     assert!(world.held.is_empty());
@@ -171,7 +174,7 @@ fn a_filter_gone_off_during_an_undo_s_hold_keeps_the_prop() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::UNDO_REFUSED, Status::MISSING)
+        (TransactionInfo::UNDO_REFUSED, Some(TransactionError::Gone))
     );
     assert_eq!(world.props.len(), 1);
     assert!(world.held.is_empty());

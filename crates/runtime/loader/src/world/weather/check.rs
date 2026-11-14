@@ -1,7 +1,7 @@
 //! The live check the parts that write the weather run before their first
 //! write.
 
-use enshwick_core::abi::Status;
+use super::WeatherError;
 
 use super::Layout;
 use crate::engine::fuse::Fuse;
@@ -71,14 +71,14 @@ pub(super) fn system_holds(layout: &Layout, server: usize) -> Result<(), Broken>
 ///
 /// # Errors
 ///
-/// The status of [`crate::engine::world::server`] when there is no live server to
-/// check, [`Status::MISSING`] while the system is not made yet and
-/// [`Status::UNAVAILABLE`] once weather changes are off.
-pub(super) fn writable(loader: &Loader, layout: &Layout) -> Result<(), Status> {
+/// The error of [`crate::engine::world::server`] when there is no live server to
+/// check, or the fuse's [`WeatherError::Fuse`]: unmade while the system
+/// is not made yet, off once weather changes are off.
+pub(super) fn writable(loader: &Loader, layout: &Layout) -> Result<(), WeatherError> {
     let server = crate::engine::world::server()?;
     if CHANGES_FUSE.verify(&loader.build.name, || system_holds(layout, server)) {
         Ok(())
     } else {
-        Err(CHANGES_FUSE.refused())
+        Err(CHANGES_FUSE.refused().into())
     }
 }

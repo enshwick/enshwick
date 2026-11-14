@@ -8,7 +8,7 @@ use crate::actions::console::accounts::Act;
 use crate::engine::conflicts::Mode;
 use crate::host::layer::{
     Caller, HeadedInOut, HeadedListOut, HeadedOut, In, ListOut, Mod, Out, SizedListOut, Text,
-    checked, entries,
+    entries,
 };
 
 pub(crate) mod altars;
@@ -65,11 +65,11 @@ entries! {
     }
 
     fn chat(_loader as Caller, to: enshwick_core::PlayerKey, message as Text) -> Status {
-        checked(crate::actions::chat::send(to.get(), message))
+        Ok(crate::actions::chat::send_for_mod(to.get(), message)?)
     }
 
     fn set_label(loader as Caller, entity: Entity, label as Text) -> Status {
-        checked(crate::world::label::set(loader, entity, label))
+        Ok(crate::world::label::set(loader, entity, label)?)
     }
 
     fn rename_filter(
@@ -142,7 +142,7 @@ entries! {
         z: f32,
         radius: f32,
     ) -> Status {
-        checked(crate::world::fog::uncover_for(loader, player.get(), [x, z], radius))
+        Ok(crate::world::fog::uncover_for(loader, player.get(), [x, z], radius)?)
     }
 
     fn component_write(

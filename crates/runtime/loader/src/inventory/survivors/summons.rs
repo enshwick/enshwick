@@ -1,3 +1,4 @@
+use core::ops::ControlFlow;
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
@@ -9,6 +10,7 @@ use enshwick_core::abi::HookFlags;
 
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
+use crate::engine::profile::Feature;
 
 use super::{STAFFS_FUSE, STATE, layout};
 
@@ -140,23 +142,21 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
         reserved: [0; 3],
     };
     let mut consume = false;
-    for r in summons
-        .iter()
-        .filter(|r| !crate::engine::loader::is_off(r.owner))
-    {
-        let user = core::ptr::with_exposed_provenance_mut(r.user);
-        match crate::engine::profile::call(
-            r.owner,
-            crate::engine::profile::Feature::Survivors,
-            // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
-            // stays loaded for the process, and takes the `user` word it
-            // registered; `call` outlives the call.
-            || unsafe { (r.callback)(&raw const call, user) },
-        ) {
-            Summon::REFUSE => return Some(Asked::Refused),
-            0 => {}
-            _ => consume = true,
+    let refused = crate::engine::filters::ask(summons, Feature::Survivors, |callback| {
+        // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
+        // stays loaded while its mod runs, and takes the `user` word it
+        // registered; `call` outlives the call.
+        match callback.call(|callback, user| unsafe { callback(&raw const call, user) }) {
+            Summon::REFUSE => ControlFlow::Break(()),
+            0 => ControlFlow::Continue(()),
+            _ => {
+                consume = true;
+                ControlFlow::Continue(())
+            }
         }
+    });
+    if refused.is_some() {
+        return Some(Asked::Refused);
     }
     if consume {
         // SAFETY: the caller's contract makes `request` the live spawn
@@ -176,18 +176,12 @@ pub(super) fn summoned(call: Summon) {
     let Some(summoned) = STATE.registrations.summoned.sealed() else {
         return;
     };
-    for r in summoned
-        .iter()
-        .filter(|r| !crate::engine::loader::is_off(r.owner))
-    {
-        let user = core::ptr::with_exposed_provenance_mut(r.user);
-        // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
-        // stays loaded for the process, and takes the `user` word it
-        // registered; `call` outlives the call.
-        crate::engine::profile::call(
-            r.owner,
-            crate::engine::profile::Feature::Survivors,
-            || unsafe { (r.callback)(&raw const call, user) },
-        );
-    }
+    let _none: Option<(_, ())> =
+        crate::engine::filters::ask(summoned, Feature::Survivors, |callback| {
+            // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
+            // stays loaded while its mod runs, and takes the `user` word it
+            // registered; `call` outlives the call.
+            callback.call(|callback, user| unsafe { callback(&raw const call, user) });
+            ControlFlow::Continue(())
+        });
 }

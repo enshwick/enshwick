@@ -1,12 +1,13 @@
 //! Building blocks in the game: resolving a block, writing it and announcing it.
 
-use enshwick_core::abi::{BlockPlace, Status};
+use enshwick_core::abi::BlockPlace;
 use enshwick_gamedata::catalogue;
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::read;
 use crate::engine::pinned;
 use crate::engine::world::ServerAccess;
+use crate::world::transactions::TransactionError;
 use crate::world::transactions::block::{Block, BoxLayout, EventLayout, GameBox, replace_table};
 use crate::world::transactions::paste::Region;
 use crate::world::transactions::props::Prop;
@@ -62,33 +63,34 @@ pub(super) type WriteBlockFn = unsafe extern "system" fn(
     flag: u8,
 );
 
-fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, Status> {
+fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, TransactionError> {
     loader
         .address(id)
         .and_then(|address| usize::try_from(address).ok())
-        .ok_or(Status::MISSING)
+        .ok_or(TransactionError::Unavailable)
 }
 
 /// The block `request` asks for, checked: its blueprint, its building
 /// material, its feedback and the voxels of the box the game builds for it.
-/// [`Status::BAD_ARGS`] for a position or rotation out of range, a shape
-/// without a blueprint or a material item that places no building
-/// material; [`Status::MISSING`] while no world runs or on a build without
-/// the pieces. Any thread: under an access to the server, which keeps its
+/// [`TransactionError::BadPlace`] for a position or rotation out of range,
+/// [`TransactionError::BadShape`] for a shape without a blueprint,
+/// [`TransactionError::BadItem`] for a material item that places no
+/// building material; [`TransactionError::Unavailable`] while no world runs
+/// or on a build without the pieces. Any thread: under an access to the server, which keeps its
 /// teardown waiting, it reads only what the world sets at load (the item
 /// and blueprint registries) and calls the game's pure builder; the box
 /// itself is built again at the step, since a world that ends between the
 /// two frees what it points into.
-pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, Status> {
+pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, TransactionError> {
     let position_ok = request.position.iter().all(|axis| {
         axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick_core::abi::Voxel::END)
     });
     let norm: f32 = request.rotation.iter().map(|v| v * v).sum();
     if !position_ok || !norm.is_finite() || norm < 1e-6 {
-        return Err(Status::BAD_ARGS);
+        return Err(TransactionError::BadPlace);
     }
-    let access =
-        crate::engine::world::access(&"block transaction commit").ok_or(Status::MISSING)?;
+    let access = crate::engine::world::access(&"block transaction commit")
+        .ok_or(TransactionError::Unavailable)?;
     let material = building_material(loader, &access, request.material.get())?;
     let (_, region, holder) = game_box(
         loader,
@@ -108,26 +110,27 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
 }
 
 /// Where the game's box keeps the fields the loader reads, from the build
-/// table; [`Status::MISSING`] on a build without them or with a field
+/// table; [`TransactionError::Unavailable`] on a build without them or with a field
 /// outside the box.
-fn box_layout(loader: &Loader) -> Result<BoxLayout, Status> {
-    let row = |id| loader.offset(id).ok_or(Status::MISSING);
+fn box_layout(loader: &Loader) -> Result<BoxLayout, TransactionError> {
+    let row = |id| loader.offset(id).ok_or(TransactionError::Unavailable);
     BoxLayout::new(
         row(pinned::building::BOX_EXTENT)?,
         row(pinned::building::BOX_MIN)?,
         row(pinned::building::BOX_SIZE)?,
     )
-    .ok_or(Status::MISSING)
+    .ok_or(TransactionError::Unavailable)
 }
 
 /// The game's box for `block`, built now from the live blueprint registry;
-/// [`Status::MISSING`] when it no longer gives the voxels the commit
+/// [`TransactionError::BlueprintChanged`] when it no longer gives the voxels the commit
 /// checked, as after the world changed.
-pub(super) fn rebuild(loader: &Loader, block: &Block) -> Result<GameBox, Status> {
-    let access = crate::engine::world::access(&"block rebuild").ok_or(Status::MISSING)?;
+pub(super) fn rebuild(loader: &Loader, block: &Block) -> Result<GameBox, TransactionError> {
+    let access =
+        crate::engine::world::access(&"block rebuild").ok_or(TransactionError::Unavailable)?;
     let (game, region, _) = game_box(loader, &access, block.shape, block.position, block.rotation)?;
     if region != block.region {
-        return Err(Status::MISSING);
+        return Err(TransactionError::BlueprintChanged);
     }
     Ok(game)
 }
@@ -142,16 +145,16 @@ fn game_box(
     shape: u32,
     position: [f64; 3],
     rotation: [f32; 4],
-) -> Result<(GameBox, Region, usize), Status> {
+) -> Result<(GameBox, Region, usize), TransactionError> {
     let layout = box_layout(loader)?;
     let lookup = function(loader, pinned::building::BLUEPRINT_LOOKUP)?;
     let builder = function(loader, pinned::building::BLOCK_BOX)?;
     let holder_at = loader
         .offset(pinned::server::PLAYER_INFOS)
-        .ok_or(Status::MISSING)?;
+        .ok_or(TransactionError::Unavailable)?;
     let registry_at = loader
         .offset(pinned::server::BLUEPRINT_REGISTRY)
-        .ok_or(Status::MISSING)?;
+        .ok_or(TransactionError::Unavailable)?;
     // SAFETY: `access` holds the running server, non-zero. The game frees
     // it, with its game-systems holder, only in the teardown on its game
     // thread after set_state(…, 7) (server 399, client 426). At that call
@@ -161,7 +164,7 @@ fn game_box(
     // waited for. The holder sits at the table's `server.player_infos`.
     let holder: usize = unsafe { read(access.server(), holder_at) };
     if holder == 0 {
-        return Err(Status::MISSING);
+        return Err(TransactionError::Unavailable);
     }
     // SAFETY: `holder` is the pinned server's non-zero game-systems holder
     // (checked above), which `access` keeps alive; its voxel blueprint
@@ -169,7 +172,7 @@ fn game_box(
     // `server.blueprint_registry`.
     let registry: usize = unsafe { read(holder, registry_at) };
     if registry == 0 {
-        return Err(Status::MISSING);
+        return Err(TransactionError::Unavailable);
     }
     // SAFETY: the table's `building.blueprint_lookup` is the address of the
     // game function with the `LookupFn` signature on this build, in the
@@ -180,7 +183,7 @@ fn game_box(
     // after load and `access` keeps alive.
     let item = unsafe { lookup(core::ptr::with_exposed_provenance_mut(registry), shape) };
     if item.is_null() {
-        return Err(Status::BAD_ARGS);
+        return Err(TransactionError::BadShape);
     }
     let at = PosRot {
         position: enshwick_core::ecs::fixed(position),
@@ -230,16 +233,20 @@ fn feedback(loader: &Loader, _access: &ServerAccess<'_>, holder: usize, material
     unsafe { lookup(core::ptr::with_exposed_provenance_mut(registry), material) }
 }
 
-/// The building voxel material `item` places; [`Status::BAD_ARGS`] for an
-/// item the game does not have or that places none, [`Status::MISSING`]
+/// The building voxel material `item` places; [`TransactionError::BadItem`] for an
+/// item the game does not have or that places none, an unreadable [`TransactionError::Item`]
 /// while the loader knows no item registry yet.
-fn building_material(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<u8, Status> {
+fn building_material(
+    loader: &Loader,
+    access: &ServerAccess<'_>,
+    item: u32,
+) -> Result<u8, TransactionError> {
     let info = crate::inventory::transactions::item_info_at(loader, access, item)?
-        .ok_or(Status::BAD_ARGS)?;
+        .ok_or(TransactionError::BadItem)?;
     let at = |id| {
         catalogue::constant(id, &loader.reflection)
             .and_then(|at| usize::try_from(at).ok())
-            .ok_or(Status::MISSING)
+            .ok_or(TransactionError::Unavailable)
     };
     let flag_at = at(catalogue::ids::ITEM_INFO_BUILDING_VOXEL)?;
     let id_at = at(catalogue::ids::ITEM_INFO_PLACE_VOXEL_MATERIAL_ID)?;
@@ -252,7 +259,7 @@ fn building_material(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> R
     // reflected path's offset.
     let material: u8 = unsafe { enshwick_core::raw::read_at(info, id_at) };
     if building == 0 || material < BUILDING_FIRST {
-        return Err(Status::BAD_ARGS);
+        return Err(TransactionError::BadItem);
     }
     Ok(material)
 }
@@ -260,7 +267,7 @@ fn building_material(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> R
 /// The materials a building block may write over in the running game, as
 /// the game's building tool decides for an ordinary building shape; on the
 /// game thread.
-pub(super) fn replaceable(loader: &Loader) -> Result<[u8; MATERIALS], Status> {
+pub(super) fn replaceable(loader: &Loader) -> Result<[u8; MATERIALS], TransactionError> {
     let terrain: Vec<(u8, u8)> = crate::world::terrain::materials(loader)?
         .iter()
         .map(|config| (config.id, config.hardness))

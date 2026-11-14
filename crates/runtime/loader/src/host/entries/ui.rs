@@ -6,7 +6,7 @@ use enshwick_core::abi::Status;
 use crate::host::layer::guards::on_client;
 use crate::host::layer::{
     Caller, Headed, HeadedInOut, HeadedList, HeadedOut, MaybeBuffer, Mod, Out, SizedListOut,
-    checked, entries,
+    entries,
 };
 
 entries! {
@@ -21,9 +21,9 @@ entries! {
 
     fn ui_widget(me as Mod, frame: u64, widget as HeadedInOut<api_frame::UiWidget>) -> Status {
         let (mut copy, slot) = widget;
-        let status = crate::ui::interface::widget(me.loader, me.index, frame, &mut copy);
+        let drawn = crate::ui::interface::widget(me.loader, me.index, frame, &mut copy);
         slot.put(copy)?;
-        Ok(status)
+        Ok(drawn?)
     }
 
     fn ui_hud(me as Mod, callback: api_frame::UiFrameFn, user: *mut core::ffi::c_void) -> Status {
@@ -61,7 +61,7 @@ entries! {
                 return Err(Status::BAD_ARGS.into());
             }
         }
-        checked(crate::ui::interface::set_markers(me.index, &markers))
+        Ok(crate::ui::interface::set_markers(me.index, &markers)?)
     }
 
     fn map_marker_types(
@@ -77,7 +77,7 @@ entries! {
         callback: api_frame::UiAnswerFn,
         user: *mut core::ffi::c_void,
     ) -> Status {
-        checked(crate::ui::interface::mod_dialog(me.loader, me.index, &dialog, callback, user))
+        Ok(crate::ui::interface::mod_dialog(me.loader, me.index, &dialog, callback, user)?)
     }
 
     fn fog_open(me as Mod) -> Status {
@@ -99,11 +99,8 @@ entries! {
             None => return Err(Status::BAD_ARGS.into()),
         };
         let mut found = api_frame::FogInfo::EMPTY;
-        let status = crate::world::fog::read(me.index, &mut found, [x, y], [width, height], out);
-        if status == Status::REFUSED || status == Status::MISSING {
-            return Err(status.into());
-        }
+        let read = crate::world::fog::read(me.index, &mut found, [x, y], [width, height], out)?;
         info.put(found)?;
-        Ok(status)
+        Ok(read?)
     }
 }

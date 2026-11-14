@@ -3,8 +3,9 @@
 mod blocks;
 mod props;
 
-use enshwick_core::abi::{BuildRights, Header, Status, TerrainEdit};
+use enshwick_core::abi::{BuildRights, Header, TerrainEdit};
 
+use super::TransactionError;
 use super::block::Block;
 use super::cover::{BRICK, BRICK_VOXELS, Brick};
 use super::ledger::{Image, Voxels};
@@ -56,14 +57,14 @@ pub(crate) struct Game<'a> {
 impl<'a> Game<'a> {
     /// The editor, when the caller is on the game thread at a quiet moment
     /// and the build has the undo write, reading only the record's head.
-    pub(crate) fn new(loader: &'a Loader) -> Result<Self, Status> {
+    pub(crate) fn new(loader: &'a Loader) -> Result<Self, TransactionError> {
         if !UndoRecord::head_holds(loader.offset(pinned::voxel::UNDO_EXTENT)) {
-            return Err(Status::MISSING);
+            return Err(TransactionError::Unavailable);
         }
         let function = loader
             .address(pinned::voxel::UNDO_APPLY)
             .and_then(|address| usize::try_from(address).ok())
-            .ok_or(Status::MISSING)?;
+            .ok_or(TransactionError::Unavailable)?;
         let (editor, alloc) = crate::world::terrain::editor_and_allocator(loader)?;
         Ok(Self {
             loader,
@@ -89,7 +90,12 @@ impl<'a> Game<'a> {
 }
 
 impl Voxels for Game<'_> {
-    fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status> {
+    fn rights(
+        &mut self,
+        actor: u32,
+        min: [f64; 3],
+        max: [f64; 3],
+    ) -> Result<u32, TransactionError> {
         let check = BuildRights {
             header: Header::of::<BuildRights>(),
             player: enshwick_core::Entity(actor),
@@ -97,11 +103,11 @@ impl Voxels for Game<'_> {
             min,
             max,
         };
-        crate::world::rights::check(self.loader, &check)
+        crate::world::rights::check(self.loader, &check).map_err(Into::into)
     }
 
-    fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status> {
-        let write = self.write_block.ok_or(Status::MISSING)?;
+    fn place(&mut self, block: &Block, actor: u32) -> Result<(), TransactionError> {
+        let write = self.write_block.ok_or(TransactionError::Unavailable)?;
         let replace = match self.replace {
             Some(replace) => replace,
             None => *self.replace.insert(blocks::replaceable(self.loader)?),
@@ -117,7 +123,7 @@ impl Voxels for Game<'_> {
         Ok(())
     }
 
-    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status> {
+    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, TransactionError> {
         let entity = props::spawn(self.loader, prop, actor)?;
         self.events.prop_placed(self.loader, prop, entity, actor);
         Ok(entity)
@@ -127,23 +133,23 @@ impl Voxels for Game<'_> {
         crate::inventory::spawns::note(self.loader, entity, prop.template);
     }
 
-    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {
+    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), TransactionError> {
         props::read(self.loader, entity)
     }
 
-    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status> {
+    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, TransactionError> {
         props::start_state(self.loader, entity)
     }
 
-    fn hold_prop(&mut self, entity: u32) -> Result<(), Status> {
+    fn hold_prop(&mut self, entity: u32) -> Result<(), TransactionError> {
         props::hold(self.loader, entity)
     }
 
-    fn still_held(&mut self, entity: u32) -> Result<(), Status> {
+    fn still_held(&mut self, entity: u32) -> Result<(), TransactionError> {
         if super::holds().still_held(entity, crate::actions::interactions::filter_off()) {
             Ok(())
         } else {
-            Err(Status::MISSING)
+            Err(TransactionError::Gone)
         }
     }
 
@@ -151,11 +157,11 @@ impl Voxels for Game<'_> {
         props::release(self.loader, entity);
     }
 
-    fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status> {
+    fn prop_at(&mut self, prop: &Prop) -> Result<bool, TransactionError> {
         props::stands(self.loader, prop)
     }
 
-    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), Status> {
+    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), TransactionError> {
         let (prop, _) = props::read(self.loader, entity)?;
         props::remove(self.loader, entity)?;
         self.events.prop_removed(self.loader, &prop, actor);
@@ -166,28 +172,30 @@ impl Voxels for Game<'_> {
         self.events.torn_down(self.loader, erase.region(), actor);
     }
 
-    fn extent(&mut self) -> Result<crate::world::voxels::WorldExtent, Status> {
-        crate::world::voxels::extent(self.loader)
+    fn extent(&mut self) -> Result<crate::world::voxels::WorldExtent, TransactionError> {
+        crate::world::voxels::extent(self.loader).map_err(Into::into)
     }
 
-    fn loaded(&mut self, brick: Brick) -> Result<(), Status> {
-        crate::world::voxels::column_loaded(self.loader, brick.min())
+    fn loaded(&mut self, brick: Brick) -> Result<(), TransactionError> {
+        crate::world::voxels::column_loaded(self.loader, brick.min()).map_err(Into::into)
     }
 
-    fn read(&mut self, brick: Brick) -> Result<Image, Status> {
+    fn read(&mut self, brick: Brick) -> Result<Image, TransactionError> {
         let whole = ReadBox::new(brick.min(), [BRICK; 3], BRICK_VOXELS as u64)?;
         let words = crate::world::voxels::read(self.loader, &whole)?;
         words
             .into_boxed_slice()
             .try_into()
-            .map_err(|_| Status::MISSING)
+            .map_err(|_| TransactionError::Unavailable)
     }
 
-    fn edit(&mut self, edit: &TerrainEdit) -> Result<(), Status> {
-        crate::world::terrain::edit(self.loader, edit).map(drop)
+    fn edit(&mut self, edit: &TerrainEdit) -> Result<(), TransactionError> {
+        crate::world::terrain::edit(self.loader, edit)
+            .map(drop)
+            .map_err(Into::into)
     }
 
-    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status> {
+    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), TransactionError> {
         let record = UndoRecord::brick(brick, image);
         // SAFETY: `undo_apply` is the table's `voxel.undo_apply`, called on
         // the game thread at a quiet moment with the server's live, non-zero

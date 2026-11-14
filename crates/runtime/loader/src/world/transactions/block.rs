@@ -1,6 +1,6 @@
 //! A building block a transaction places: checked at commit, written by the game at its step.
 
-use enshwick_core::abi::Status;
+use super::TransactionError;
 
 use super::paste::Region;
 use super::props::Prop;
@@ -24,14 +24,14 @@ impl GameBox {
     }
 
     /// The voxels the block writes, from the fields `layout` places;
-    /// [`Status::BAD_ARGS`] for a box below the world's corner, empty or
+    /// [`TransactionError::BadBox`] for a box below the world's corner, empty or
     /// past the coordinates a box covers.
-    pub(crate) fn region(&self, layout: BoxLayout) -> Result<Region, Status> {
+    pub(crate) fn region(&self, layout: BoxLayout) -> Result<Region, TransactionError> {
         let mut min = [0; 3];
         let mut size = [0; 3];
         for axis in 0..3 {
             let low = i32::from_le_bytes(self.word(layout.min + 4 * axis));
-            min[axis] = u32::try_from(low).map_err(|_| Status::BAD_ARGS)?;
+            min[axis] = u32::try_from(low).map_err(|_| TransactionError::BadBox)?;
             size[axis] = u32::from_le_bytes(self.word(layout.size + 4 * axis));
         }
         Region::new(min, size)

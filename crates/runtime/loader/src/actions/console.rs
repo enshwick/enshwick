@@ -26,11 +26,11 @@ pub mod input;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
-pub(crate) use admin::{TABLE_IDS, account_action};
+pub(crate) use admin::{AccountActionError, TABLE_IDS, account_action};
 #[cfg(windows)]
 mod tools;
 #[cfg(windows)]
-pub(crate) use run::{after_step, run, start, the_console};
+pub(crate) use run::{ConsoleError, after_step, run, start, the_console};
 
 /// What the console keeps while the game runs.
 struct State {

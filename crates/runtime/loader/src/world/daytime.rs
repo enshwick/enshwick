@@ -23,7 +23,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_core::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
+use enshwick_core::abi::{DaytimeInfo, Event, Header, HookFlags};
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
@@ -167,9 +167,32 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
+/// Why the clock could not be read or set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum DaytimeError {
+    /// The build's table lacks the clock's reads.
+    #[error("this build lacks the clock reads")]
+    Unread,
+    /// The server has no world, game object or `Daytime` yet.
+    #[error("no clock runs")]
+    NoClock,
+    /// A speed factor out of range.
+    #[error("the speed factor is out of range")]
+    BadFactor,
+    /// The mod did not ask for the speed in its init.
+    #[error("the mod did not ask for the speed")]
+    NotAsked,
+    /// The speed's link is off or did not wire.
+    #[error("the speed's link does not run")]
+    SpeedOff,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// The server's `Daytime` object and its world, on the game thread.
-fn daytime(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+fn daytime(loader: &Loader) -> Result<(&'static Layout, usize, usize), DaytimeError> {
+    let layout = layout(loader).ok_or(DaytimeError::Unread)?;
     let server = crate::engine::world::server()?;
     // SAFETY: `server` comes from `crate::engine::world::server`, on the game thread
     // that alone writes it; the table's `server.world` offset holds its world
@@ -180,20 +203,20 @@ fn daytime(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
     // its game object pointer.
     let game: usize = unsafe { crate::engine::memory::read(server, layout.game) };
     if world == 0 || game == 0 {
-        return Err(Status::MISSING);
+        return Err(DaytimeError::NoClock);
     }
     // SAFETY: `game` is non-zero (`game == 0` returns first), read on the game
     // thread; the table's `daytime.object` offset holds its `Daytime` pointer
     // from its creation.
     let daytime: usize = unsafe { crate::engine::memory::read(game, layout.daytime) };
     if daytime == 0 {
-        return Err(Status::MISSING);
+        return Err(DaytimeError::NoClock);
     }
     Ok((layout, world, daytime))
 }
 
 /// The clock as it is.
-pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, Status> {
+pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, DaytimeError> {
     let (layout, _world, daytime) = daytime(loader)?;
     // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
     // the game thread that alone writes it; the table's `daytime.clock`
@@ -236,7 +259,7 @@ pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, Status> {
 }
 
 /// Sets the time of day through the game's setter.
-pub(crate) fn set_time(loader: &Loader, time: i64) -> Result<(), Status> {
+pub(crate) fn set_time(loader: &Loader, time: i64) -> Result<(), DaytimeError> {
     let (layout, world, daytime) = daytime(loader)?;
     let time = time.rem_euclid(DAY);
     // SAFETY: `now` is the table's `world.time`, called with the server's
@@ -322,21 +345,21 @@ pub(crate) fn register_speed(loader: &Loader, owner: ModIndex) -> Result<(), Joi
 }
 
 /// Sets mod `owner`'s factor on the speed and applies the product at once.
-pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result<(), Status> {
+pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result<(), DaytimeError> {
     if !(0.0..=MAX_FACTOR).contains(&factor) {
-        return Err(Status::BAD_ARGS);
+        return Err(DaytimeError::BadFactor);
     }
     let slot = STATE
         .factors
         .get()
         .and_then(|factors| factors.iter().find(|(id, _)| *id == owner))
-        .ok_or(Status::REFUSED)?;
+        .ok_or(DaytimeError::NotAsked)?;
     // Off, the speed runs as on a build without the setter's link.
     if SPEED_FUSE.is_off() {
-        return Err(Status::MISSING);
+        return Err(DaytimeError::SpeedOff);
     }
     let (layout, world, daytime) = daytime(loader)?;
-    let next = SPEED_NEXT.wired().ok_or(Status::MISSING)?;
+    let next = SPEED_NEXT.wired().ok_or(DaytimeError::SpeedOff)?;
     slot.1.store(factor.to_bits(), Ordering::Relaxed);
     let wanted = f32::from_bits(STATE.game_speed.load(Ordering::Relaxed)) * product();
     // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
@@ -491,10 +514,13 @@ mod tests {
             .factors
             .set(Box::new([(speeder, AtomicU32::new(ONE))]));
         SPEED_FUSE.blow("a test");
-        assert_eq!(set_speed(&loader, speeder, 2.0), Err(Status::MISSING));
+        assert_eq!(
+            set_speed(&loader, speeder, 2.0),
+            Err(DaytimeError::SpeedOff)
+        );
         assert_eq!(
             set_speed(&loader, ModIndex::new(1), 2.0),
-            Err(Status::REFUSED),
+            Err(DaytimeError::NotAsked),
             "a mod without the control is told so, as on a build with it"
         );
         assert_eq!(SPEED_FUSE.feature(), "time speed", "its link's name");

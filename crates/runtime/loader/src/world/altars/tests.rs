@@ -36,41 +36,29 @@ fn vanilla() -> AltarZone {
     }
 }
 
-unsafe extern "system" fn blamed(_zone: *mut AltarZone, user: *mut c_void) {
-    // SAFETY: the test's own cell, alive for the call.
-    let seen = unsafe { &*user.cast::<Cell<Option<(usize, Feature)>>>() };
-    seen.set(crate::engine::profile::current_callback());
+/// A sizer of the loader's own, which always runs.
+fn sizer(callback: AltarZoneFn) -> Sizer {
+    Sizer::new(ModIndex::LOADER, callback, core::ptr::null_mut())
 }
-
-type Link = (ModIndex, AltarZoneFn, *mut c_void);
 
 #[test]
 fn filters_chain_on_the_zone_so_far_and_vanilla_gives_no_target() {
-    let (none, mod0) = (core::ptr::null_mut(), ModIndex::new(0));
-    assert_eq!(chain(vanilla(), core::iter::empty()), None);
-    let twice: [Link; 2] = [(mod0, wider, none), (mod0, wider, none)];
-    assert_eq!(chain(vanilla(), twice.into_iter()), Some((4, 60)));
+    assert_eq!(chain(vanilla(), &[]), None);
+    let wider = sizer(wider);
+    assert_eq!(chain(vanilla(), &[&wider, &wider]), Some((4, 60)));
 }
 
 #[test]
 fn a_filter_cannot_move_the_altar_or_shrink_the_zone_below_vanilla() {
-    let (none, mod0) = (core::ptr::null_mut(), ModIndex::new(0));
-    let filters: [Link; 2] = [(mod0, wider, none), (mod0, broken, none)];
-    assert_eq!(chain(vanilla(), filters.into_iter()), None);
-    let filters: [Link; 2] = [(mod0, broken, none), (mod0, wider, none)];
-    assert_eq!(chain(vanilla(), filters.into_iter()), Some((2, 60)));
+    let (wider, broken) = (sizer(wider), sizer(broken));
+    assert_eq!(chain(vanilla(), &[&wider, &broken]), None);
+    assert_eq!(chain(vanilla(), &[&broken, &wider]), Some((2, 60)));
 }
 
 #[test]
-fn a_zone_filter_runs_as_its_owner() {
-    let seen: Cell<Option<(usize, Feature)>> = Cell::new(None);
-    let filter: Link = (
-        ModIndex::new(3),
-        blamed,
-        (&raw const seen).cast_mut().cast(),
-    );
-    let _vanilla = chain(vanilla(), core::iter::once(filter));
-    assert_eq!(seen.get(), Some((3, Feature::Altars)));
+fn a_zone_filter_of_a_mod_that_is_off_is_never_asked() {
+    let off = Sizer::new(ModIndex::new(3), wider, core::ptr::null_mut());
+    assert_eq!(chain(vanilla(), &[&off]), None);
 }
 
 #[test]
@@ -91,7 +79,7 @@ fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
         sizes.push([4.0, 30.0, 4.0]);
         let _ = state.levels.merge([(4096, sizes)], now);
     }
-    let sizer = Sizer::new(ModIndex::new(0), lists, core::ptr::null_mut());
+    let sizer = sizer(lists);
     let (done, finished) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         size_zones_with(&[&sizer]);

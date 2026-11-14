@@ -258,7 +258,7 @@ fn link(
     handler: enshwick_core::abi::MidHookFn,
     user: usize,
 ) -> bool {
-    let status = loader.mids.relock().add(
+    let added = loader.mids.relock().add(
         address,
         MidLink {
             owner,
@@ -268,10 +268,11 @@ fn link(
             flags: HookFlags::NONE,
         },
     );
-    if !status.is_ok() {
-        crate::log!(WARN, "{id}: the hook was refused ({})", status.0);
+    if let Err(error) = added {
+        crate::log!(WARN, "{id}: the hook was refused ({error})");
+        return false;
     }
-    status.is_ok()
+    true
 }
 
 /// A mod's handler with its pointer as a hook's user pointer, kept for the

@@ -12,7 +12,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
+use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Str};
 
 use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
@@ -174,18 +174,40 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
+/// Why a label was not set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum LabelError {
+    /// The build's table lacks the label's pieces.
+    #[error("this build lacks the labels")]
+    Unread,
+    /// The entity is not in the world.
+    #[error("the entity is not in the world")]
+    Dead,
+    /// The server has no world or string table yet.
+    #[error("no string table runs")]
+    NoStrings,
+    /// The game refused the text.
+    #[error("the game refused the text")]
+    Refused,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// Gives `entity` the label `text`; on the game thread only.
-pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
+///
+/// # Errors
+///
+/// [`LabelError`] without the labels, the entity, the string table or the
+/// game's yes.
+pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Result<(), LabelError> {
     let Some(layout) = layout(loader) else {
-        return Status::MISSING;
+        return Err(LabelError::Unread);
     };
-    let server = match crate::engine::world::server() {
-        Ok(server) => server,
-        Err(status) => return status,
-    };
+    let server = crate::engine::world::server()?;
     // A dead entity has no template; never add a component to it.
     if crate::engine::world::template(loader, entity).is_err() {
-        return Status::MISSING;
+        return Err(LabelError::Dead);
     }
     // SAFETY: `world::server` returned the live server on its game thread at
     // a quiet moment, when nothing else writes it; it holds its world pointer
@@ -196,7 +218,7 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
     // pointer at the table's `server.custom_strings`.
     let strings = unsafe { crate::engine::memory::read_ptr::<u8>(server, layout.strings) };
     if world.is_null() || strings.is_null() {
-        return Status::MISSING;
+        return Err(LabelError::NoStrings);
     }
     let text = cut(text, layout.max_text);
     let mut found = [0usize; 4];
@@ -223,7 +245,7 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
     // call; on the game thread at a quiet moment.
     unsafe { (layout.replace)(&raw mut result, strings, old, &raw const span) };
     if result[0] & 0xff != 0 {
-        return Status::REFUSED;
+        return Err(LabelError::Refused);
     }
     let id = result[1];
     if !component.is_null() {
@@ -240,7 +262,7 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
         // game thread at a quiet moment.
         let _added = unsafe { (layout.add)(world, entity.0, layout.label_type, &raw const data) };
     }
-    Status::OK
+    Ok(())
 }
 
 crate::engine::chains::chain_detour! {

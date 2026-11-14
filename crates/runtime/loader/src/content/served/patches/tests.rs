@@ -149,13 +149,13 @@ unsafe extern "system" fn read_other(
         // SAFETY: `run_patches` passes `out` and `out_len` writable for the
         // call.
         Ok(bytes) => unsafe { hand_out(bytes, out, out_len) },
-        Err(status) => status,
+        Err(error) => crate::host::layer::Refusal::status(&error),
     }
 }
 
 /// An archive without the key: no game runs the tests.
-fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, Status> {
-    Err(Status::MISSING)
+fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, ServedError> {
+    Err(ServedError::NotInArchive)
 }
 
 fn by_loader(apply: enshwick_core::abi::ResourcePatchFn) -> Patch {
@@ -239,7 +239,7 @@ fn a_failed_patch_in_a_served_read_is_skipped_and_the_rest_builds() {
 
 #[test]
 fn a_served_read_is_refused_before_the_registrations_seal() {
-    assert_eq!(served_now(KEY), Err(Status::REFUSED));
+    assert_eq!(served_now(KEY), Err(ServedError::Unsealed));
 }
 
 #[test]
@@ -254,7 +254,7 @@ fn a_served_read_whose_every_patch_fails_reads_a_changed_key_as_archived_and_a_n
     let added = Served::new(new, KEY, vec![by_loader(fail)], false);
     assert_eq!(
         read_served(&added, vec![5; 3], unarchived),
-        Err(Status::MISSING)
+        Err(ServedError::NotInArchive)
     );
 }
 
@@ -368,7 +368,7 @@ fn a_rebuild_of_a_key_the_game_never_built_still_rebuilds_the_keys_that_read_it(
         "only a served read built it"
     );
     VALUE.store(2, Ordering::Relaxed);
-    assert_eq!(rebuild_entry(list, &list[0]), Status::OK);
+    assert_eq!(rebuild_entry(list, &list[0]), Ok(()));
     assert_eq!(held(&list[1]), 2, "the reader takes the rebuilt value");
 }
 
@@ -398,7 +398,7 @@ fn a_rebuild_a_patch_asks_for_of_its_own_key_is_refused_instead_of_waited_on() {
         finished
             .recv_timeout(std::time::Duration::from_secs(5))
             .ok(),
-        Some(Status::BUILDING),
+        Some(Err(ServedError::Building)),
         "the patch's thread holds the key's build"
     );
 }

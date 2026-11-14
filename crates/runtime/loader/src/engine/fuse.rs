@@ -90,6 +90,18 @@ type Switch = std::sync::atomic::AtomicBool;
 #[cfg(test)]
 type Switch = test_switch::Switch;
 
+/// Why a feature's guarded write was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum FuseError {
+    /// The feature is off.
+    #[error("the feature is off")]
+    Off,
+    /// The feature's live object is not made yet.
+    #[error("the feature's live object is not made yet")]
+    Unmade,
+}
+
 /// A feature's switch, read by every detour of the feature.
 #[derive(Debug)]
 pub struct Fuse {
@@ -170,14 +182,15 @@ impl Fuse {
         }
     }
 
-    /// The status a write [`Fuse::verify`] refused answers: unavailable once
-    /// the feature is off, missing while its live object is not made yet.
+    /// Why [`Fuse::verify`] refused a write: the feature off, or its live
+    /// object not made yet.
     #[cold]
-    pub fn refused(&self) -> enshwick_core::abi::Status {
+    #[must_use]
+    pub fn refused(&self) -> FuseError {
         if self.is_off() {
-            enshwick_core::abi::Status::UNAVAILABLE
+            FuseError::Off
         } else {
-            enshwick_core::abi::Status::MISSING
+            FuseError::Unmade
         }
     }
 

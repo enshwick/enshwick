@@ -16,7 +16,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use enshwick_core::abi::{Side, Status, UiAnswerFn, UiDialog};
+use enshwick_core::abi::{Side, UiAnswerFn, UiDialog};
 
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
@@ -306,21 +306,26 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     Some(unsafe { &*core::ptr::from_ref::<str>(text) })
 }
 
+/// Why a dialog was not queued: too many wait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("too many dialogs wait")]
+pub(crate) struct DialogsFullError;
+
 /// Queues `dialog`, or shows it as a system message box once dialogs show
 /// so. The mode is read under the queue's lock, so a dialog queued while
 /// [`fall_back`] runs is either drained by it or shows as a box itself.
-pub(crate) fn queue(dialog: Pending) -> Status {
+pub(crate) fn queue(dialog: Pending) -> Result<(), DialogsFullError> {
     let mut waiting = STATE.waiting.dialogs.relock();
     if STATE.mode.load(Ordering::Acquire) == SYSTEM {
         drop(waiting);
         system_box(dialog);
-        return Status::OK;
+        return Ok(());
     }
     if waiting.len() >= MAX_WAITING {
-        return Status::REFUSED;
+        return Err(DialogsFullError);
     }
     STATE.waiting.push(&mut waiting, dialog);
-    Status::OK
+    Ok(())
 }
 
 /// Notes, each frame on the interface thread, whether the client shows a
@@ -364,7 +369,7 @@ pub(crate) fn show(
         buttons,
         Answerer::Loader(Box::new(on_answer)),
     ));
-    if !status.is_ok() {
+    if status.is_err() {
         crate::log!(WARN, "dialog \"{title}\" not shown: too many wait");
     }
 }

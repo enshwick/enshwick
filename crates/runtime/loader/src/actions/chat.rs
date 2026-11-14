@@ -18,7 +18,7 @@ mod said;
 
 pub(crate) use said::{register, seal};
 
-use enshwick_core::abi::{ChatLine, HookFlags, Status};
+use enshwick_core::abi::{ChatLine, HookFlags};
 
 use crate::base::wire::{Drops, Outbox, strays};
 use crate::engine::builds::ABSENT;
@@ -291,29 +291,46 @@ pub(crate) fn to_one_player() -> bool {
     !ONE_FUSE.is_off()
 }
 
-/// Queues `text` for the player with account key `to`, or for everyone.
-pub(crate) fn send(to: u64, text: &str) -> Status {
+// Chat lines are not carried: the chat is not linked yet, or this build
+/// lacks its layout.
+#[derive(Debug, thiserror::Error)]
+#[error("chat lines are not linked: too early, or this build lacks the chat layout")]
+pub(crate) struct ChatOffError;
+
+/// Queues `text` for the player with account key `to`, or for everyone;
+/// whether it was queued, which the loader's own lines may ignore.
+pub(crate) fn send(to: u64, text: &str) -> bool {
     if LINKED.get().is_none() {
-        return Status::MISSING;
+        return false;
     }
     let to = if to == 0 { To::All } else { To::Key(to) };
     let _left_out = STATE.queue(to, replied(text), MAX_WAITING);
-    Status::OK
+    true
+}
+
+/// Queues a mod's `text` for the player with account key `to`, or for
+/// everyone.
+///
+/// # Errors
+///
+/// [`ChatOffError`] while chat lines are not linked: before the link, or on a
+/// build that lacks the chat layout.
+pub(crate) fn send_for_mod(to: u64, text: &str) -> Result<(), ChatOffError> {
+    send(to, text).then_some(()).ok_or(ChatOffError)
 }
 
 /// Queues every line of `text` for the player with account key `to` alone:
 /// the reply to a command they typed, which may be longer than the one
 /// message a mod sends, so a long help arrives whole, while fewer than
 /// [`MAX_REPLY_WAITING`] lines wait.
-pub(crate) fn reply(to: u64, text: &str) -> Status {
+pub(crate) fn reply(to: u64, text: &str) {
     if LINKED.get().is_none() {
-        return Status::MISSING;
+        return;
     }
     let left_out = STATE.queue(To::Key(to), shown(text), MAX_REPLY_WAITING);
     if left_out > 0 {
         STATE.dropped(left_out);
     }
-    Status::OK
 }
 
 /// `text` cut to at most `max` bytes at a character boundary.

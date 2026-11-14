@@ -17,7 +17,7 @@ fn the_oldest_undo_data_goes_first_once_the_cap_is_reached() {
     assert_eq!(ledger.kept(), 256);
     assert_eq!(state(&ledger, ids[0]).0, TransactionInfo::EXPIRED);
     assert_eq!(ledger.info(ME, ids[0]).unwrap().bricks, 0);
-    assert_eq!(ledger.undo(ME, ids[0]), Err(Status::REFUSED));
+    assert_eq!(ledger.undo(ME, ids[0]), Err(TransactionError::NotUndoable));
     for &id in &ids[1..] {
         assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
     }
@@ -26,14 +26,17 @@ fn the_oldest_undo_data_goes_first_once_the_cap_is_reached() {
 #[test]
 fn a_transaction_past_the_caps_is_refused_at_commit() {
     let mut ledger = Ledger::new(LIMITS);
-    assert_eq!(ledger.commit(ME, None, vec![]), Err(Status::BAD_ARGS));
+    assert_eq!(
+        ledger.commit(ME, None, vec![]),
+        Err(TransactionError::BadCount)
+    );
     assert_eq!(
         ledger.commit(ME, None, vec![dig(20.0); 9]),
-        Err(Status::BAD_ARGS)
+        Err(TransactionError::BadCount)
     );
     assert_eq!(
         ledger.commit(ME, None, vec![dig(20.0); 5]),
-        Err(Status::BAD_ARGS),
+        Err(TransactionError::BadCount),
         "320 bricks"
     );
     let dry = TerrainEdit {
@@ -42,13 +45,13 @@ fn a_transaction_past_the_caps_is_refused_at_commit() {
     };
     assert_eq!(
         ledger.commit(ME, None, vec![Change::Terrain(dry)]),
-        Err(Status::BAD_ARGS)
+        Err(TransactionError::BadEdit)
     );
 
     ledger.commit(ME, None, vec![dig(20.0); 3]).unwrap();
     assert_eq!(
         ledger.commit(ME, None, vec![dig(20.0); 2]),
-        Err(Status::REFUSED),
+        Err(TransactionError::Full),
         "the queue claims 192 of 256 bricks"
     );
     ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
@@ -65,7 +68,7 @@ fn the_oldest_settled_transaction_is_forgotten_past_the_record_cap() {
     let second = ledger.commit(ME, None, vec![dig(40.0)]).unwrap();
     assert_eq!(
         ledger.commit(ME, None, vec![dig(60.0)]),
-        Err(Status::REFUSED),
+        Err(TransactionError::Full),
         "both work"
     );
     ledger.step(&mut world, 1000);
@@ -73,7 +76,7 @@ fn the_oldest_settled_transaction_is_forgotten_past_the_record_cap() {
     assert_eq!(ledger.info(ME, first), None);
     assert!(ledger.info(ME, second).is_some());
     assert!(ledger.info(ME, third).is_some());
-    assert_eq!(ledger.undo(ME, first), Err(Status::REFUSED));
+    assert_eq!(ledger.undo(ME, first), Err(TransactionError::NotUndoable));
 }
 
 #[test]
@@ -84,7 +87,7 @@ fn a_mod_sees_and_undoes_only_its_own_transactions() {
     ledger.step(&mut world, 1000);
     let other = ModIndex::new(1);
     assert_eq!(ledger.info(other, id), None);
-    assert_eq!(ledger.undo(other, id), Err(Status::REFUSED));
+    assert_eq!(ledger.undo(other, id), Err(TransactionError::NotUndoable));
     assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
 }
 
@@ -99,7 +102,7 @@ fn a_world_that_ends_fails_the_work_and_drops_the_undo_data() {
     assert_eq!(state(&ledger, done).0, TransactionInfo::EXPIRED);
     assert_eq!(
         state(&ledger, queued),
-        (TransactionInfo::FAILED, Status::MISSING)
+        (TransactionInfo::FAILED, Some(TransactionError::Unavailable))
     );
     assert_eq!(ledger.kept(), 0);
     assert!(!ledger.busy());
@@ -120,7 +123,7 @@ fn an_undo_is_refused_while_queued_work_holds_the_cap() {
             vec![dig(100.0), dig(120.0), dig(140.0), dig(160.0)],
         )
         .unwrap();
-    assert_eq!(ledger.undo(ME, first), Err(Status::REFUSED));
+    assert_eq!(ledger.undo(ME, first), Err(TransactionError::NotUndoable));
     ledger.step(&mut world, 1000);
     assert_eq!(state(&ledger, second).0, TransactionInfo::APPLIED);
     assert!(ledger.kept() <= LIMITS.bricks);
@@ -160,7 +163,7 @@ fn a_change_in_hand_when_the_world_ends_is_dropped_on_return() {
     assert!(!ledger.put(task, outcome));
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::MISSING)
+        (TransactionInfo::FAILED, Some(TransactionError::Unavailable))
     );
     assert_eq!(ledger.kept(), 0);
 }

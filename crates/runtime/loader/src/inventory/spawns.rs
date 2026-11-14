@@ -10,7 +10,7 @@
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{SpawnRequest, Status};
+use enshwick_core::abi::SpawnRequest;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::engine::loader::Loader;
@@ -156,14 +156,35 @@ pub(crate) fn bytes(size: usize, parts: &[(usize, &[u8])]) -> Vec<u8> {
     out
 }
 
+/// Why the server did not take a spawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum SpawnError {
+    /// The build's table or reflection lacks what the spawn writes.
+    #[error("this build lacks the spawn's pieces")]
+    Unread,
+    /// No entity world, or no command buffer in it, yet.
+    #[error("no entity world runs")]
+    NoWorld,
+    /// No template, or a lifetime past what the game keeps.
+    #[error("the spawn request is malformed")]
+    BadRequest,
+    /// The engine refused the spawn.
+    #[error("the engine refused the spawn")]
+    Refused,
+    /// The server's world, unreadable now.
+    #[error(transparent)]
+    World(#[from] crate::engine::world::WorldError),
+}
+
 /// Asks the server to spawn an entity of a template; its id.
-pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Status> {
+pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, SpawnError> {
     let mut extra = Vec::new();
     if request.flags & SpawnRequest::DO_NOT_SAVE != 0 {
         // The game's own spawns of passing creatures add DoNotSave so too.
         let ids = crate::engine::catalogue::ids::DO_NOT_SAVE;
-        let hash = crate::engine::catalogue::component_hash(loader, ids).ok_or(Status::MISSING)?;
-        let size = crate::engine::catalogue::size(loader, ids).ok_or(Status::MISSING)?;
+        let hash =
+            crate::engine::catalogue::component_hash(loader, ids).ok_or(SpawnError::Unread)?;
+        let size = crate::engine::catalogue::size(loader, ids).ok_or(SpawnError::Unread)?;
         extra.push((hash, vec![0u8; size]));
     }
     let entity = spawn_with(loader, request, extra, 0)?;
@@ -180,15 +201,15 @@ pub(crate) fn spawn_with(
     request: &SpawnRequest,
     extra: Vec<(u32, Vec<u8>)>,
     requester: u32,
-) -> Result<u32, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+) -> Result<u32, SpawnError> {
+    let layout = layout(loader).ok_or(SpawnError::Unread)?;
     crate::engine::world::server()?;
     let world = usize::try_from(crate::engine::world::server_world())
         .ok()
         .filter(|&world| world != 0)
-        .ok_or(Status::MISSING)?;
+        .ok_or(SpawnError::NoWorld)?;
     if request.template == [0; 16] {
-        return Err(Status::BAD_ARGS);
+        return Err(SpawnError::BadRequest);
     }
     // SAFETY: `world::server` checked the caller is on the server's game
     // thread and `world` is non-null; the entity world lies inside the World
@@ -224,15 +245,15 @@ pub(crate) fn spawn_with(
         (layout.spawn_time.hash, spawn_time),
     ];
     if request.level != 0 {
-        let level = layout.level.ok_or(Status::MISSING)?;
+        let level = layout.level.ok_or(SpawnError::Unread)?;
         initial.push((
             level.hash,
             bytes(level.size, &[(0, &request.level.to_le_bytes())]),
         ));
     }
     if request.lifetime_ns != 0 {
-        let (life, life_at, end_at) = layout.life.ok_or(Status::MISSING)?;
-        let lifetime = i64::try_from(request.lifetime_ns).map_err(|_| Status::BAD_ARGS)?;
+        let (life, life_at, end_at) = layout.life.ok_or(SpawnError::Unread)?;
+        let lifetime = i64::try_from(request.lifetime_ns).map_err(|_| SpawnError::BadRequest)?;
         let end = now.saturating_add(lifetime);
         initial.push((
             life.hash,
@@ -254,7 +275,10 @@ pub(crate) fn spawn_with(
             bytes: data.len() as u64,
         })
         .collect();
-    let entries = layout.request.components(&starts).ok_or(Status::MISSING)?;
+    let entries = layout
+        .request
+        .components(&starts)
+        .ok_or(SpawnError::Unread)?;
     let engine_request = layout
         .request
         .request(
@@ -263,13 +287,13 @@ pub(crate) fn spawn_with(
             entries.as_ptr().expose_provenance() as u64,
             starts.len() as u64,
         )
-        .ok_or(Status::MISSING)?;
+        .ok_or(SpawnError::Unread)?;
     // SAFETY: `world::server` checked the caller is on the server's game
     // thread and `world` is non-null; the entity world holds the pointer to
     // its command buffers at the table's `ecs.command_buffers`.
     let buffer = unsafe { crate::engine::memory::read_ptr::<u8>(world, layout.command_buffers) };
     if buffer.is_null() {
-        return Err(Status::MISSING);
+        return Err(SpawnError::NoWorld);
     }
     let mut entity = 0u32;
     // SAFETY: `buffer` is the world's first command buffer, non-null by the
@@ -278,7 +302,7 @@ pub(crate) fn spawn_with(
     // which copies them.
     unsafe { (layout.spawn)(buffer, &raw mut entity, requester, engine_request.as_ptr()) };
     if entity == 0 {
-        return Err(Status::REFUSED);
+        return Err(SpawnError::Refused);
     }
     crate::log!(DEBUG, "spawn of entity {entity} asked");
     Ok(entity)
@@ -309,7 +333,7 @@ struct Spawned {
     limit: usize,
 }
 
-static SPAWNED: Mutex<Spawned> = Mutex::new(Spawned {
+static STATE: Mutex<Spawned> = Mutex::new(Spawned {
     kept: FxHashMap::with_hasher(FxBuildHasher),
     limit: MOST_SPAWNED,
 });
@@ -365,7 +389,7 @@ impl Spawned {
 /// mod may keep out of the save.
 pub(crate) fn note(loader: &Loader, entity: u32, template: [u8; 16]) {
     let now = crate::engine::ticks::steps();
-    SPAWNED.relock().note(entity, template, now, |kept, was| {
+    STATE.relock().note(entity, template, now, |kept, was| {
         crate::engine::world::template(loader, Entity(kept)) == Ok(was)
     });
 }
@@ -373,17 +397,13 @@ pub(crate) fn note(loader: &Loader, entity: u32, template: [u8; 16]) {
 /// The template a mod spawned or placed `entity` from in the running world,
 /// or `None` for an entity no mod spawned.
 pub(crate) fn spawned(entity: Entity) -> Option<[u8; 16]> {
-    SPAWNED
-        .relock()
-        .kept
-        .get(&entity.0)
-        .map(|kept| kept.template)
+    STATE.relock().kept.get(&entity.0).map(|kept| kept.template)
 }
 
 /// Whether `entity` needs a `DoNotSave` command to end up `saved`, the world
 /// showing `live` now.
 pub(crate) fn needs_saved(entity: Entity, saved: bool, live: bool) -> bool {
-    SPAWNED
+    STATE
         .relock()
         .needs(entity.0, saved, live, crate::engine::ticks::steps())
 }
@@ -391,7 +411,7 @@ pub(crate) fn needs_saved(entity: Entity, saved: bool, live: bool) -> bool {
 /// Notes that a command to make `entity` `saved` went to the world now.
 pub(crate) fn asked_saved(entity: Entity, saved: bool) {
     let now = crate::engine::ticks::steps();
-    if let Some(kept) = SPAWNED.relock().kept.get_mut(&entity.0) {
+    if let Some(kept) = STATE.relock().kept.get_mut(&entity.0) {
         kept.asked = Some((saved, now));
     }
 }
@@ -399,12 +419,12 @@ pub(crate) fn asked_saved(entity: Entity, saved: bool) {
 /// Forgets `entity`, which a mod asked to destroy, so a vanilla entity
 /// given its id later does not pass for it.
 pub(crate) fn destroyed(entity: Entity) {
-    SPAWNED.relock().kept.remove(&entity.0);
+    STATE.relock().kept.remove(&entity.0);
 }
 
 /// Forgets the entities mods spawned, when a hosted game ends.
 pub(crate) fn forget() {
-    let mut spawned = SPAWNED.relock();
+    let mut spawned = STATE.relock();
     spawned.kept.clear();
     spawned.limit = MOST_SPAWNED;
 }
@@ -422,8 +442,8 @@ mod tests {
 
     #[test]
     fn a_spawn_is_kept_with_its_template_until_destroyed_or_the_hosted_game_ends() {
-        SPAWNED.relock().note(7, [1; 16], 0, |_, _| false);
-        SPAWNED.relock().note(9, [1; 16], 0, |_, _| false);
+        STATE.relock().note(7, [1; 16], 0, |_, _| false);
+        STATE.relock().note(9, [1; 16], 0, |_, _| false);
         assert_eq!(spawned(Entity(7)), Some([1; 16]));
         assert_eq!(spawned(Entity(8)), None, "no mod spawned it");
         destroyed(Entity(9));

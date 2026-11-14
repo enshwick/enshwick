@@ -11,7 +11,6 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use enshwick_core::abi::Status;
 use rustc_hash::FxHashSet;
 
 use crate::engine::code_watch::CodeChange;
@@ -87,23 +86,16 @@ thread_local! {
     static WRITTEN: RefCell<FxHashSet<(u32, ModIndex)>> = RefCell::default();
 }
 
-/// Records mod `owner`'s claim on `feature` and passes the loader's answer
-/// on; only grants and refusals count.
-pub fn note(
-    feature: impl Into<Cow<'static, str>>,
-    owner: ModIndex,
-    mode: Mode,
-    status: Status,
-) -> Status {
-    if status.is_ok() || status == Status::REFUSED {
-        STATE.relock().claims.push(Claim {
-            feature: feature.into(),
-            owner,
-            mode,
-            granted: status.is_ok(),
-        });
-    }
-    status
+/// Records mod `owner`'s claim on `feature`, granted or refused. Every call
+/// is noted, so the caller passes only grants and refusals: a call that
+/// failed for another reason is no claim.
+pub fn note(feature: impl Into<Cow<'static, str>>, owner: ModIndex, mode: Mode, granted: bool) {
+    STATE.relock().claims.push(Claim {
+        feature: feature.into(),
+        owner,
+        mode,
+        granted,
+    });
 }
 
 /// Every claim, in order.

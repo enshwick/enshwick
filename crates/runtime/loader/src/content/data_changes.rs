@@ -22,8 +22,8 @@ mod select;
 
 #[cfg(windows)]
 pub(crate) use game::{
-    LiveTarget, declare, declare_change, declare_items, declare_recipes, has_live, reachable,
-    serve, set_change, wanted, world_event,
+    DataChangeError, LiveTarget, declare, declare_change, declare_items, declare_recipes, has_live,
+    reachable, serve, set_change, wanted, world_event,
 };
 pub use kept::{KEPT_FILE, Kept, hold_reason, served};
 pub use live::{UNSET, set_live, set_pending};

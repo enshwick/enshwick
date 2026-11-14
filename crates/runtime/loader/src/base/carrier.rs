@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::{HookFlags, Side, Status};
+use enshwick_core::abi::{HookFlags, Side};
 use rustc_hash::FxHashMap;
 
 use crate::base::wire::{
@@ -278,15 +278,29 @@ crate::engine::chains::chain_detour! {
     }
 }
 
+/// Why a payload did not go to a peer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum CarrierError {
+    /// No link to the peer, or the server has not heard from it.
+    #[error("no link to the peer")]
+    NoLink,
+    /// The peer's link is full.
+    #[error("the peer's link is full")]
+    Full,
+    /// A payload too long, or one that starts like executable code.
+    #[error("the payload is too long or looks like code")]
+    BadPayload,
+}
+
 /// Sends `payload` on `channel` to `key`: the server for the server's key,
 /// else a client the server heard from. Any thread.
 ///
 /// # Errors
 ///
-/// [`Status::MISSING`] without a link to `key`, [`Status::REFUSED`] when
-/// its link is full, [`Status::BAD_ARGS`] for a payload too long or that
+/// [`CarrierError::NoLink`] without a link to `key`, [`CarrierError::Full`] when
+/// its link is full, [`CarrierError::BadPayload`] for a payload too long or that
 /// starts like executable code.
-pub(crate) fn send(key: u64, channel: u32, payload: &[u8]) -> Result<(), Status> {
+pub(crate) fn send(key: u64, channel: u32, payload: &[u8]) -> Result<(), CarrierError> {
     let mut failed = Ok(());
     send_many(&[key], channel, payload, |_, status| failed = Err(status))?;
     failed
@@ -298,16 +312,16 @@ pub(crate) fn send(key: u64, channel: u32, payload: &[u8]) -> Result<(), Status>
 ///
 /// # Errors
 ///
-/// [`Status::BAD_ARGS`] for a payload too long or that starts like
+/// [`CarrierError::BadPayload`] for a payload too long or that starts like
 /// executable code, which goes to no one.
 pub(crate) fn send_many(
     keys: &[u64],
     channel: u32,
     payload: &[u8],
-    mut failed: impl FnMut(u64, Status),
-) -> Result<(), Status> {
+    mut failed: impl FnMut(u64, CarrierError),
+) -> Result<(), CarrierError> {
     if !sealable(payload) {
-        return Err(Status::BAD_ARGS);
+        return Err(CarrierError::BadPayload);
     }
     // One look at both, so each key goes one way.
     let hosting = client_hosts();
@@ -327,7 +341,7 @@ pub(crate) fn send_many(
         return Ok(());
     }
     let mut sealed = [0u8; MAX_SEALED];
-    let size = seal(&mut sealed, channel, payload).ok_or(Status::BAD_ARGS)?;
+    let size = seal(&mut sealed, channel, payload).ok_or(CarrierError::BadPayload)?;
     for (to_server, half) in [(true, &CARRIER.client), (false, &CARRIER.server)] {
         let mut group = wired(to_server).peekable();
         if group.peek().is_none() {
@@ -344,15 +358,15 @@ fn send_sealed(
     half: &Mutex<Option<State>>,
     keys: impl Iterator<Item = u64>,
     sealed: &[u8],
-    failed: &mut impl FnMut(u64, Status),
+    failed: &mut impl FnMut(u64, CarrierError),
 ) {
     let mut guard = half.relock();
     for key in keys {
         let sent = match guard.as_mut().and_then(|state| state.peers.get_mut(&key)) {
             Some(peer) if key == SERVER || peer.heard => {
-                peer.link.send(sealed).map_err(|_| Status::REFUSED)
+                peer.link.send(sealed).map_err(|_| CarrierError::Full)
             }
-            _ => Err(Status::MISSING),
+            _ => Err(CarrierError::NoLink),
         };
         if let Err(status) = sent {
             failed(key, status);

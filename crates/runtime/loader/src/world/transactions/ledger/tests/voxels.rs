@@ -19,7 +19,7 @@ fn a_paste_writes_its_voxels_over_the_bricks_and_its_undo_takes_them_back() {
         .commit(ME, None, vec![paste([30, 30, 30], [4, 4, 4], 0xff83)])
         .unwrap();
     ledger.step(&mut world, 1000);
-    assert_eq!(state(&ledger, id), (TransactionInfo::APPLIED, Status::OK));
+    assert_eq!(state(&ledger, id), (TransactionInfo::APPLIED, None));
     let brick = world.brick(Brick([3, 3, 3]));
     assert_eq!(brick[6 + 8 * 6 + 64 * 6], 0xff83, "inside the paste");
     assert_eq!(brick[0], 1, "the rest of the brick keeps what the dig left");
@@ -46,7 +46,7 @@ fn a_paste_over_an_unloaded_column_fails_before_writing_anything() {
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::NOT_LOADED)
+        (TransactionInfo::FAILED, Some(TransactionError::NotLoaded))
     );
     assert_eq!(world.snapshot(), Vec::new());
 }
@@ -135,7 +135,7 @@ fn an_actor_the_server_refuses_writes_nothing_and_the_status_says_why() {
     let info = ledger.info(ME, id).unwrap();
     assert_eq!(
         (info.state, info.reason, info.refusal),
-        (TransactionInfo::FAILED, Status::REFUSED, 2)
+        (TransactionInfo::FAILED, Some(TransactionError::NoRights), 2)
     );
     assert_eq!(world.edits, 0);
     assert_eq!(world.snapshot(), Vec::new());
@@ -194,13 +194,13 @@ fn an_erase_whose_write_fails_raises_no_event() {
         .commit(ME, None, vec![paste([30, 30, 30], [2, 2, 2], 0xff83)])
         .unwrap();
     ledger.step(&mut world, 1000);
-    world.restore_fails = Some(Status::MISSING);
+    world.restore_fails = Some(TransactionError::Unavailable);
     let erase = Change::Erase(Erase::new([30, 30, 30], [2, 2, 2]).unwrap());
     let id = ledger.commit(ME, None, vec![erase]).unwrap();
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
-        (TransactionInfo::FAILED, Status::MISSING)
+        (TransactionInfo::FAILED, Some(TransactionError::Unavailable))
     );
     assert!(world.announced.is_empty());
 }

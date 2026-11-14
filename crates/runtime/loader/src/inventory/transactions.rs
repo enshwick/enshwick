@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 use enshwick_core::__private::rules::inventory_checks as checks;
 use enshwick_core::abi::{
     Header, HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
-    InventoryResultFn, ItemData, Registers, Side, Status,
+    InventoryResultFn, ItemData, Registers, Side,
 };
 use run::run;
 
@@ -39,6 +39,7 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::pending::Pending;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
+use crate::engine::registry::JoinFeatureError;
 use crate::engine::world::ServerAccess;
 use enshwick_base::Relock;
 
@@ -647,17 +648,49 @@ fn unchecked(loader: &Loader) -> Option<(Symbol, crate::engine::builds::Unhooked
 }
 
 /// A mod asks for inventories: allowed during init, on a build that has them.
-pub(crate) fn open(loader: &Loader) -> Status {
-    if loader.delivery.get().is_some() {
-        return Status::TOO_LATE;
-    }
+///
+/// # Errors
+///
+/// [`JoinFeatureError::TooLate`] after the delivery,
+/// [`JoinFeatureError::Unavailable`] on a build without inventories.
+pub(crate) fn open(loader: &Loader) -> Result<(), JoinFeatureError> {
+    loader.before_delivery()?;
     // Wanted before the executor is read, so a build without it lists the
     // requests off.
     STATE.wanted.store(true, Ordering::Release);
-    if executor(loader).is_none() {
-        return Status::MISSING;
-    }
-    Status::OK
+    executor(loader)
+        .map(drop)
+        .ok_or(JoinFeatureError::Unavailable)
+}
+
+/// Why a mod's inventory request was not queued.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum SubmitInventoryError {
+    /// The build lacks inventories, no mod asked for them, their hook is off
+    /// or did not arm, or no server runs here.
+    #[error("inventories do not run here")]
+    Unavailable,
+    /// The operations do not read or break the request rules.
+    #[error("the request's operations are malformed")]
+    BadOps,
+}
+
+/// Why an item's static data could not be read; every reason is the item
+/// missing to its caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum ItemInfoError {
+    /// The build lacks the item lookup.
+    #[error("this build lacks the item lookup")]
+    Unread,
+    /// The loader knows no item registry yet.
+    #[error("no item registry yet")]
+    NoRegistry,
+    /// No world runs.
+    #[error("no world runs")]
+    NoWorld,
+    /// The game has no such item.
+    #[error("the game has no such item")]
+    NoItem,
 }
 
 /// Links the row hook when a mod asked for inventories, and always on a
@@ -694,31 +727,36 @@ pub(crate) fn end() {
 }
 
 /// Queues a request of the mod `owner`.
+///
+/// # Errors
+///
+/// [`SubmitInventoryError`] where inventories do not run or for
+/// operations the request rules refuse.
 pub(crate) fn submit(
     loader: &Loader,
     owner: ModIndex,
     request: &InventoryRequest,
     done: InventoryResultFn,
     user: *mut c_void,
-) -> Status {
+) -> Result<(), SubmitInventoryError> {
     if executor(loader).is_none() || !STATE.wanted() || INVENTORY_FUSE.is_off() {
-        return Status::MISSING;
+        return Err(SubmitInventoryError::Unavailable);
     }
     if STATE.settled.load(Ordering::Acquire) && !STATE.armed.load(Ordering::Acquire) {
-        return Status::MISSING;
+        return Err(SubmitInventoryError::Unavailable);
     }
     if loader.side != Side::SERVER && !crate::engine::world::hosting() {
-        return Status::MISSING;
+        return Err(SubmitInventoryError::Unavailable);
     }
     // SAFETY: the mod's request carries `op_count` operations at `ops`,
     // borrowed for this call and copied here.
     let Some(ops) = (unsafe {
         enshwick_base::__private::copy::list_in(request.ops, request.op_count as usize)
     }) else {
-        return Status::BAD_ARGS;
+        return Err(SubmitInventoryError::BadOps);
     };
     if checks::refused(ops) {
-        return Status::BAD_ARGS;
+        return Err(SubmitInventoryError::BadOps);
     }
     let ops = ops.to_vec();
     STATE.queue.push(Request {
@@ -730,22 +768,22 @@ pub(crate) fn submit(
         user: user.expose_provenance(),
         queued: Instant::now(),
     });
-    Status::OK
+    Ok(())
 }
 
 /// The game's static data of `item`, its `ItemInfo`, which lives as long
 /// as the item registry, so while `access` is held; `None` for an item the
-/// game does not have. [`Status::MISSING`] while the loader knows no item
+/// game does not have. [`ItemInfoError`] while the loader knows no item
 /// registry yet, or on a build without the lookup.
 pub(crate) fn item_info_at(
     loader: &Loader,
     access: &ServerAccess<'_>,
     item: u32,
-) -> Result<Option<*const u8>, Status> {
-    let executor = executor(loader).ok_or(Status::MISSING)?;
+) -> Result<Option<*const u8>, ItemInfoError> {
+    let executor = executor(loader).ok_or(ItemInfoError::Unread)?;
     let registry = registry(loader, access);
     if registry == 0 {
-        return Err(Status::MISSING);
+        return Err(ItemInfoError::NoRegistry);
     }
     if item == 0 {
         return Ok(None);
@@ -760,10 +798,10 @@ pub(crate) fn item_info_at(
 }
 
 /// The static data of `item`, once a world runs.
-pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> {
-    let executor = executor(loader).ok_or(Status::MISSING)?;
-    let access = crate::engine::world::access(&"item lookup").ok_or(Status::MISSING)?;
-    let info = item_info_at(loader, &access, item)?.ok_or(Status::MISSING)?;
+pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, ItemInfoError> {
+    let executor = executor(loader).ok_or(ItemInfoError::Unread)?;
+    let access = crate::engine::world::access(&"item lookup").ok_or(ItemInfoError::NoWorld)?;
+    let info = item_info_at(loader, &access, item)?.ok_or(ItemInfoError::NoItem)?;
     Ok(ItemData {
         header: Header::of::<ItemData>(),
         id: enshwick_core::ItemId::new(item),

@@ -142,6 +142,32 @@ type OpenFn = unsafe extern "system" fn(
 type ResolveFn =
     unsafe extern "system" fn(out: *mut [u64; 3], database: *mut u8, handle: u32) -> *mut [u64; 3];
 
+/// Why a served resource was not rebuilt or read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum ServedError {
+    /// The mod serves no such key.
+    #[error("the mod serves no such resource")]
+    NotServed,
+    /// The key's patches run on this thread, which would wait on itself.
+    #[error("the resource's patches run on this thread")]
+    Building,
+    /// No base was kept to build the key again from.
+    #[error("no base was kept for the resource")]
+    NoBase,
+    /// No patch built the key.
+    #[error("no patch built the resource")]
+    NotBuilt,
+    /// The rebuild made another size than the game holds.
+    #[error("the rebuild made another size than the game holds")]
+    SizeChanged,
+    /// Asked before the registrations sealed.
+    #[error("asked before the resources sealed")]
+    Unsealed,
+    /// The game's archive has no such resource.
+    #[error("the archive has no such resource")]
+    NotInArchive,
+}
+
 /// Why a mod's patch of a resource was not added.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum ServeResourceError {

@@ -31,7 +31,7 @@ use crate::engine::mod_index::ModIndex;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
-pub(crate) use run::{after_step, closed, forget, hello, left, ran, show};
+pub(crate) use run::{ShowWindowError, after_step, closed, forget, hello, left, ran, show};
 
 pub use enshwick_core::actions::window::MAX_CALL_PLAYERS as MAX_PLAYERS;
 use enshwick_core::actions::window::MAX_WAITING;
