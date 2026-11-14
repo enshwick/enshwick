@@ -26,13 +26,13 @@ fn planned_for(code: &[&str], parts: &[Part]) -> Vec<String> {
     let scope = Scope::Some {
         code: code.iter().map(|name| (*name).to_owned()).collect(),
         docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
         built: BTreeSet::new(),
     };
-    let filter = code
-        .iter()
-        .map(|name| format!("package({name})"))
-        .collect::<Vec<_>>()
-        .join(" | ");
+    let Scope::Some { code, .. } = &scope else {
+        unreachable!()
+    };
+    let filter = test_filter(code.iter());
     host_steps(
         &scope,
         (&[], &[]),
@@ -137,6 +137,7 @@ fn a_change_to_the_api_docs_alone_plans_the_stable_steps_in_their_part() {
     let docs_of = |name: &str| Scope::Some {
         code: BTreeSet::new(),
         docs: [name.to_owned()].into(),
+        tested: BTreeSet::new(),
         built: BTreeSet::new(),
     };
     let args = stable();
@@ -174,6 +175,7 @@ fn the_doctests_run_only_the_examples_of_the_packages_they_are_given() {
     let scope = Scope::Some {
         code: names.into(),
         docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
         built: BTreeSet::new(),
     };
     let steps = host_steps(
@@ -210,6 +212,7 @@ fn a_package_only_built_is_linted_without_tests_examples_or_rustdoc() {
     let scope = Scope::Some {
         code: BTreeSet::new(),
         docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
         built: ["enshwick-core".to_owned()].into(),
     };
     let steps: Vec<String> = host_steps(
@@ -287,12 +290,88 @@ fn a_package_only_built_is_reached_but_not_touched() {
     let scope = Scope::Some {
         code: ["enshwick-abi".to_owned()].into(),
         docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
         built: ["enshwick".to_owned()].into(),
     };
     assert!(reaches(&scope, "enshwick") && !touches(&scope, "enshwick"));
     assert!(reaches(&scope, "enshwick-abi") && touches(&scope, "enshwick-abi"));
     assert!(!reaches(&scope, "xtask"));
     assert!(reaches(&Scope::All, "xtask"));
+}
+
+#[test]
+fn a_package_whose_tests_alone_run_gets_no_examples_trybuild_or_stable_surface_steps() {
+    let packages = [
+        package("enshwick-world", "crates/internal/world", false),
+        package("enshwick", "crates/enshwick", false),
+        package("enshwick-loader", "crates/runtime/loader", true),
+    ];
+    let scope = Scope::Some {
+        code: ["enshwick-world".to_owned()].into(),
+        docs: BTreeSet::new(),
+        tested: ["enshwick".to_owned(), "enshwick-loader".to_owned()].into(),
+        built: BTreeSet::new(),
+    };
+    assert!(reaches(&scope, "enshwick") && !touches(&scope, "enshwick"));
+    let (flags, filter, doctests) = plan(&scope, &packages, |name| name != "enshwick-loader");
+    assert_eq!(
+        filter.as_deref(),
+        Some("package(enshwick-world) | package(enshwick)")
+    );
+    assert_eq!(
+        doctests,
+        ["crates/internal/world/", "crates\\internal\\world\\"]
+    );
+    let steps: Vec<String> = host_steps(
+        &scope,
+        (&[], &[]),
+        flags,
+        filter.as_deref(),
+        &doctests,
+        false,
+        &Part::every(false),
+    )
+    .iter()
+    .map(Step::line)
+    .collect();
+    assert!(steps.iter().any(|step| step.contains("package(enshwick)")));
+    assert!(!steps.iter().any(|step| step.contains("--test main")));
+    assert!(!steps.iter().any(|step| step.contains("crates/enshwick/")));
+    assert_eq!(windows_tests(&scope, &packages), Vec::<&str>::new());
+}
+
+/// A package at `dir`, with Windows tests when it builds only for Windows.
+fn package(name: &str, dir: &str, windows_only: bool) -> Package {
+    Package {
+        name: name.to_owned(),
+        version: "0.0.0-dev".to_owned(),
+        dir: dir.to_owned(),
+        deps: Vec::new(),
+        lib: None,
+        windows_only,
+        windows_tests: windows_only,
+        stable_build: false,
+    }
+}
+
+#[test]
+fn a_changed_package_with_windows_tests_runs_them() {
+    let packages = [package("enshwick-loader", "crates/runtime/loader", true)];
+    let scope = Scope::Some {
+        code: ["enshwick-loader".to_owned()].into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+    };
+    assert_eq!(windows_tests(&scope, &packages), ["enshwick-loader"]);
+    assert_eq!(windows_tests(&Scope::All, &packages), ["enshwick-loader"]);
+}
+
+#[test]
+fn the_test_filter_names_each_package() {
+    let names = ["a".to_owned(), "b".to_owned()];
+    assert_eq!(test_filter(names.iter()), "package(a) | package(b)");
+    assert_eq!(test_filter([].iter()), "");
 }
 
 #[test]
@@ -306,17 +385,10 @@ fn a_tool_step_runs_its_program_and_an_xtask_step_this_binary() {
 
 #[test]
 fn host_args_leave_out_windows_only_crates_only_off_windows() {
-    let package = |name: &str, windows_only| Package {
-        name: name.to_owned(),
-        version: "0.0.0-dev".to_owned(),
-        dir: name.to_owned(),
-        deps: Vec::new(),
-        lib: None,
-        windows_only,
-        windows_tests: windows_only,
-        stable_build: false,
-    };
-    let packages = [package("api", false), package("loader", true)];
+    let packages = [
+        package("api", "api", false),
+        package("loader", "loader", true),
+    ];
     let base = ["--workspace", "--features", TEST_FEATURE];
     assert_eq!(host_args(&packages, true), base);
     assert_eq!(

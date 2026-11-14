@@ -38,22 +38,29 @@ pub(crate) enum Scope {
     All,
     /// Only these packages.
     Some {
-        /// Packages to lint and test: changed ones and their dependents.
+        /// Packages checked in full (lints, tests, examples, and for the
+        /// facade its trybuild test and stable surface): the changed ones
+        /// and their dependents, or locally past [`MAX_LOCAL_DEPENDENTS`]
+        /// the changed ones alone.
         code: BTreeSet<String>,
         /// Packages whose doctests changed without their code: the book's
         /// chapters are doctests of the API crate.
         docs: BTreeSet<String>,
+        /// Packages a local check runs the tests of but not the examples,
+        /// leaving those, the facade's trybuild test and its stable surface
+        /// to CI: the dependents of a change more packages depend on than
+        /// [`MAX_LOCAL_DEPENDENTS`].
+        tested: BTreeSet<String>,
         /// Packages a local check only builds and lints, leaving their tests
-        /// to CI: those whose versions alone moved, and the dependents of a
-        /// change more packages depend on than [`MAX_LOCAL_DEPENDENTS`].
+        /// to CI: those whose versions alone moved.
         built: BTreeSet<String>,
     },
 }
 
-/// Where a check runs. CI and the merge queue test every package a change
-/// reaches; a local check, which must stay under ten minutes, tests only the
-/// changed packages of a change many packages depend on, and only builds a
-/// package whose versions alone moved.
+/// Where a check runs. CI and the merge queue check every package a change
+/// reaches in full; a local check, which must stay under ten minutes, runs
+/// only the tests of the dependents of a change many packages depend on,
+/// and only builds a package whose versions alone moved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Lane {
     Local,
@@ -77,9 +84,11 @@ impl Lane {
     }
 }
 
-/// The most dependents a local check tests beside the changed packages;
-/// past it, as for a change to the base crates, the dependents are left to
-/// CI.
+/// The most dependents a local check checks in full beside the changed
+/// packages; past it only their tests run here. Through the dev-dependencies
+/// on the facade, a change to any API crate reaches about 24 packages, whose
+/// examples, trybuild test and stable surface checked in full go past the
+/// ten-minute local limit on the Windows PC (2026-11-14).
 pub(crate) const MAX_LOCAL_DEPENDENTS: usize = 8;
 
 /// A package's own changelog and change files, which no build reads.
@@ -182,19 +191,25 @@ pub(crate) fn scope(
         }
     }
     let mut code = dependents(&changed, packages);
-    let mut built = BTreeSet::new();
+    let mut tested = BTreeSet::new();
     if local && code.len() - changed.len() > MAX_LOCAL_DEPENDENTS {
-        built = code.difference(&changed).cloned().collect();
+        tested = code.difference(&changed).cloned().collect();
         code = changed;
     }
     // Its own tests read the chapters and run luau-lsp; what depends on it does not.
     if luau && packages.iter().any(|package| package.name == BOOK_LUAU) {
         code.insert(BOOK_LUAU.to_owned());
     }
-    built.extend(bumped);
-    built.retain(|name| !code.contains(name));
+    tested.retain(|name| !code.contains(name));
+    let mut built = bumped;
+    built.retain(|name| !code.contains(name) && !tested.contains(name));
     docs.retain(|name| !code.contains(name));
-    Scope::Some { code, docs, built }
+    Scope::Some {
+        code,
+        docs,
+        tested,
+        built,
+    }
 }
 
 /// Whether the file at `path` changed only in versions, as `only_versions`
@@ -587,6 +602,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&["trading-post", "haggling"]),
                 docs: names(&[]),
+                tested: names(&[]),
                 built: names(&[]),
             }
         );
@@ -612,6 +628,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&[]),
                 docs: names(&["enshwick"]),
+                tested: names(&[]),
                 built: names(&[]),
             }
         );
@@ -635,6 +652,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&["enshwick-luau"]),
                 docs: names(&["enshwick"]),
+                tested: names(&[]),
                 built: names(&[]),
             }
         );
@@ -658,6 +676,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&["cargo-enshwick", "enshwick-luau"]),
                 docs: names(&[]),
+                tested: names(&[]),
                 built: names(&[]),
             }
         );
@@ -673,6 +692,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&[]),
                 docs: names(&[]),
+                tested: names(&[]),
                 built: names(&[]),
             }
         );
@@ -703,6 +723,7 @@ checksum = "cc"
                 Scope::Some {
                     code: names(&[]),
                     docs: names(&[]),
+                    tested: names(&[]),
                     built: names(&[]),
                 },
                 "{lane:?}"
@@ -717,6 +738,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&[]),
                 docs: names(&["enshwick"]),
+                tested: names(&[]),
                 built: names(&[]),
             }
         );
@@ -766,6 +788,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&[]),
                 docs: names(&[]),
+                tested: names(&[]),
                 built: everyone.clone(),
             }
         );
@@ -785,6 +808,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&[]),
                 docs: names(&[]),
+                tested: names(&[]),
                 built: names(&["my-mod"]),
             }
         );
@@ -815,8 +839,84 @@ checksum = "cc"
         assert!(!built.contains("my-mod"));
     }
 
+    /// The API's shape: the facade over the domain crates over the base
+    /// crates, whose examples, like the tools', name the facade through a
+    /// dev-dependency, so a change to any of them reaches nearly everything.
+    fn api_workspace() -> Vec<Package> {
+        vec![
+            package("values", "crates/internal/values", &["enshwick"]),
+            package("abi", "crates/internal/abi", &["values", "enshwick"]),
+            package("core", "crates/internal/core", &["values", "abi"]),
+            package("world", "crates/internal/world", &["core", "enshwick"]),
+            package("ui", "crates/internal/ui", &["core", "enshwick"]),
+            package(
+                "enshwick",
+                "crates/enshwick",
+                &["values", "abi", "core", "world", "ui"],
+            ),
+            package("loader", "crates/runtime/loader", &["enshwick"]),
+            package("luau", "crates/runtime/luau", &["core", "enshwick"]),
+            package(
+                "cargo-enshwick",
+                "crates/cargo-enshwick",
+                &["abi", "core", "enshwick"],
+            ),
+            package("horn", "examples/horn", &["enshwick"]),
+            package("waypoints", "examples/waypoints", &["enshwick"]),
+        ]
+    }
+
     #[test]
-    fn locally_a_change_with_many_dependents_tests_only_the_changed_packages() {
+    fn locally_a_change_with_many_dependents_runs_only_their_tests() {
+        let packages = api_workspace();
+        let files = files(&["crates/internal/world/src/daytime.rs"]);
+        let mut others: BTreeSet<String> = packages.iter().map(|p| p.name.clone()).collect();
+        others.remove("world");
+        assert!(others.len() > MAX_LOCAL_DEPENDENTS);
+        assert_eq!(
+            super::scope(&files, &packages, &Tree::default(), Lane::Local),
+            Scope::Some {
+                code: names(&["world"]),
+                docs: names(&[]),
+                tested: others.clone(),
+                built: names(&[]),
+            }
+        );
+        others.insert("world".to_owned());
+        assert_eq!(
+            super::scope(&files, &packages, &Tree::default(), Lane::Ci),
+            Scope::Some {
+                code: others,
+                docs: names(&[]),
+                tested: names(&[]),
+                built: names(&[]),
+            }
+        );
+    }
+
+    #[test]
+    fn a_change_to_an_api_crate_runs_the_luau_definitions_tests_in_every_lane() {
+        // cargo-enshwick renders the Luau definitions from the script
+        // descriptions the API crates register, which its tests can read
+        // only by linking them through the facade: that edge is the
+        // generator's input list, so the real graph reaches it with no list here.
+        let packages = crate::packages().unwrap();
+        let files = files(&["crates/internal/world/src/daytime.rs"]);
+        for lane in [Lane::Local, Lane::Ci] {
+            let Scope::Some { code, tested, .. } =
+                super::scope(&files, &packages, &Tree::default(), lane)
+            else {
+                panic!("the whole workspace");
+            };
+            assert!(
+                code.contains("cargo-enshwick") || tested.contains("cargo-enshwick"),
+                "{lane:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn locally_dependents_up_to_the_limit_are_checked_in_full() {
         let mut packages = vec![package("base", "crates/base", &[])];
         let leaves: Vec<String> = (0..=MAX_LOCAL_DEPENDENTS)
             .map(|n| format!("mod-{n}"))
@@ -825,32 +925,51 @@ checksum = "cc"
             packages.push(package(leaf, &format!("mods/{leaf}"), &["base"]));
         }
         let files = files(&["crates/base/src/lib.rs"]);
-        let local = super::scope(&files, &packages, &Tree::default(), Lane::Local);
+        let mut everyone: BTreeSet<String> = leaves.iter().cloned().collect();
         assert_eq!(
-            local,
+            super::scope(&files, &packages, &Tree::default(), Lane::Local),
             Scope::Some {
                 code: names(&["base"]),
                 docs: names(&[]),
-                built: leaves.iter().cloned().collect(),
+                tested: everyone.clone(),
+                built: names(&[]),
             }
         );
-        let mut everyone: BTreeSet<String> = leaves.iter().cloned().collect();
         everyone.insert("base".to_owned());
         assert_eq!(
             code(super::scope(&files, &packages, &Tree::default(), Lane::Ci)),
             everyone
         );
-        // At the limit the dependents are still tested here.
         packages.pop();
+        everyone.remove(&format!("mod-{MAX_LOCAL_DEPENDENTS}"));
         assert_eq!(
-            code(super::scope(
-                &files,
-                &packages,
-                &Tree::default(),
-                Lane::Local
-            ))
-            .len(),
-            MAX_LOCAL_DEPENDENTS + 1
+            super::scope(&files, &packages, &Tree::default(), Lane::Local),
+            Scope::Some {
+                code: everyone,
+                docs: names(&[]),
+                tested: names(&[]),
+                built: names(&[]),
+            }
         );
+    }
+
+    #[test]
+    fn a_version_bump_of_a_tested_dependent_is_tested_not_only_built() {
+        let (mut files, tree) = release();
+        files.push("crates/internal/macros/src/lib.rs".to_owned());
+        let mut packages = workspace();
+        for n in 0..MAX_LOCAL_DEPENDENTS {
+            packages.push(package(
+                &format!("mod-{n}"),
+                &format!("mods/m{n}"),
+                &["macros"],
+            ));
+        }
+        let Scope::Some { tested, built, .. } = super::scope(&files, &packages, &tree, Lane::Local)
+        else {
+            panic!("the whole workspace");
+        };
+        assert!(tested.contains("my-mod"));
+        assert!(built.is_disjoint(&tested));
     }
 }
