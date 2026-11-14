@@ -111,6 +111,13 @@ pub(crate) const fn load_hint(code: Option<i32>) -> Option<LoadHint> {
 /// and what the player can do for the two causes a player can fix.
 #[must_use]
 pub fn load_failure(file: &str, code: Option<i32>, error: &str) -> String {
+    format!("{file} {}", load_reason(code, error))
+}
+
+/// Why Windows did not load a DLL, without the file: [`load_failure`]'s
+/// line after the file name.
+#[must_use]
+pub fn load_reason(code: Option<i32>, error: &str) -> String {
     let hint = match load_hint(code) {
         Some(LoadHint::MissingDll) => {
             "; a DLL it needs is missing, often the Microsoft Visual C++ runtime"
@@ -118,7 +125,7 @@ pub fn load_failure(file: &str, code: Option<i32>, error: &str) -> String {
         Some(LoadHint::NotWindows64) => "; it is not a 64-bit Windows DLL, or the file is damaged",
         None => "",
     };
-    format!("{file} could not be loaded: {error}{hint} ({BROKEN_DLL})")
+    format!("could not be loaded: {error}{hint} ({BROKEN_DLL})")
 }
 
 #[cfg(test)]

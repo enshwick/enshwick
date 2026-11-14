@@ -82,8 +82,6 @@ pub enum Skip {
     Refused {
         /// Why, as the start decided.
         skip: crate::base::discovery::Skip,
-        /// The log line the start wrote for it.
-        line: String,
     },
 }
 
@@ -107,10 +105,22 @@ pub struct Skipped {
 
 impl Skipped {
     /// Whether it counts as a mod that is off: a second copy of a mod that
-    /// runs does not, since that mod runs; `loads` tells whether an id runs.
+    /// runs does not, nor a second mod file in the folder of one that runs,
+    /// since that mod runs; `loads` tells whether an id runs.
     #[must_use]
     pub fn counts_off(&self, loads: impl Fn(&str) -> bool) -> bool {
-        !matches!(&self.reason, Skip::Copy { id, .. } if loads(id))
+        match &self.reason {
+            Skip::Copy { id } => !loads(id),
+            Skip::Refused { skip } => !skip.beside_a_running_mod(),
+            _ => true,
+        }
+    }
+
+    /// Whether its file was refused before its manifest read, so it has no
+    /// version and its id is its folder.
+    #[must_use]
+    pub const fn refused_unread(&self) -> bool {
+        matches!(self.reason, Skip::Refused { .. })
     }
 }
 
@@ -126,7 +136,7 @@ impl core::fmt::Display for Skip {
                 write!(f, "does not work beside {id} {version}; remove one of them")
             }
             Self::Cycle => f.write_str("in a dependency cycle"),
-            Self::Refused { line, .. } => f.write_str(line),
+            Self::Refused { skip } => write!(f, "{skip}"),
         }
     }
 }
@@ -154,7 +164,7 @@ impl Skip {
                 &[("id", id), ("version", &version.to_string())],
             ),
             Self::Cycle => crate::engine::texts::fill("mods.skipped.cycle", &[]),
-            Self::Refused { skip, .. } => skip.shown(),
+            Self::Refused { skip } => skip.shown(),
         }
     }
 }

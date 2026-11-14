@@ -106,22 +106,30 @@ fn skipped_row(paint: &Painter<'_>, skipped: &crate::base::resolve::Skipped) {
         &skipped.label,
         &metadata(&skipped.version, core::slice::from_ref(&skipped.file)),
         Some((
-            skipped_state(&skipped.version),
+            skipped_state(skipped.refused_unread()),
             skipped.version.as_str(),
             Some(skipped.reason.shown()),
         )),
     );
 }
 
+/// Whether a mod's settings page shows a setting of `schema`: in another's
+/// world, whose server sent its values (`sent`), only one that is not secret.
+fn shows_settings(schema: Option<&enshwick_core::config::Schema>, sent: bool) -> bool {
+    schema.is_some_and(|s| s.fields.iter().any(|f| !(sent && f.secret)))
+}
+
+/// A mod that is off, in words and its style.
+const OFF: (&str, u32) = ("mods.off", UiWidget::STYLE_NEGATIVE);
+
 /// The off state of a skipped mod in words: with its version, or, for a
-/// file refused before its version read, without one.
-const fn skipped_state(version: &str) -> (&'static str, u32) {
-    let key = if version.is_empty() {
-        "mods.off.file"
+/// file refused before its manifest read (`unread`), without one.
+const fn skipped_state(unread: bool) -> (&'static str, u32) {
+    if unread {
+        ("mods.off.file", OFF.1)
     } else {
-        "mods.off"
-    };
-    (key, UiWidget::STYLE_NEGATIVE)
+        OFF
+    }
 }
 
 /// The text that says in words that a mod is off or waiting, with its
@@ -129,7 +137,7 @@ const fn skipped_state(version: &str) -> (&'static str, u32) {
 /// that runs.
 const fn state_text(off: bool, waiting: bool) -> Option<(&'static str, u32)> {
     if off {
-        Some(("mods.off", UiWidget::STYLE_NEGATIVE))
+        Some(OFF)
     } else if waiting {
         Some(("mods.waiting", UiWidget::STYLE_WARNING))
     } else {
@@ -309,10 +317,8 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         if index > shown.start {
             paint.separator();
         }
-        let settings = record
-            .settings_schema()
-            .is_some_and(|s| !s.fields.is_empty());
         let sent = record.server_values.relock().is_some();
+        let settings = shows_settings(record.settings_schema().as_ref(), sent);
         let here = mods_screen::gear(world, sent);
         let opens = has_gear(
             settings,
@@ -396,9 +402,28 @@ pub(super) fn pages(paint: &Painter<'_>, listing: Listing, first: &mut usize, co
 #[cfg(test)]
 mod tests {
     use super::{
-        Listed, clicked, gear_text, has_gear, metadata, skipped_state, state_text, store_off,
+        Listed, clicked, gear_text, has_gear, metadata, shows_settings, skipped_state, state_text,
+        store_off,
     };
     use crate::engine::texts;
+    use enshwick_core::config::{Field, Schema};
+
+    #[test]
+    fn only_secret_settings_count_as_none_in_another_s_world() {
+        let secret = Schema::new(
+            "",
+            "config",
+            vec![Field::new("token", "").with_secret(true)],
+        );
+        assert!(shows_settings(Some(&secret), false), "the mod's own world");
+        assert!(
+            !shows_settings(Some(&secret), true),
+            "the server keeps its secrets"
+        );
+        let open = Schema::new("", "config", vec![Field::new("lamps", &true)]);
+        assert!(shows_settings(Some(&open), true));
+        assert!(!shows_settings(None, false));
+    }
 
     #[test]
     fn a_row_has_a_gear_for_settings_shown_here_or_for_key_bindings() {
@@ -435,13 +460,13 @@ mod tests {
         assert_eq!(line(true, true).as_deref(), Some("Safes 0.1.1 (off)"));
         assert_eq!(line(false, true).as_deref(), Some("Safes 0.1.1 (waiting)"));
         assert_eq!(line(false, false), None, "a mod that runs");
-        let skipped = |version| {
-            let (key, _) = skipped_state(version);
+        let skipped = |unread, version| {
+            let (key, _) = skipped_state(unread);
             texts::fill(key, &[("name", "lanterns"), ("version", version)])
         };
-        assert_eq!(skipped("0.1.1"), "lanterns 0.1.1 (off)");
+        assert_eq!(skipped(false, "0.1.1"), "lanterns 0.1.1 (off)");
         assert_eq!(
-            skipped(""),
+            skipped(true, ""),
             "lanterns (off)",
             "a file refused before its version read"
         );

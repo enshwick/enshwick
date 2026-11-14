@@ -83,8 +83,7 @@ pub(super) fn libraries(mods_dir: &Path, run: Run, loaded: &mut Loaded<'_>) -> F
                 ready: crate::packs::data_packs::ready,
             }
         });
-    let mut refused = Vec::new();
-    let found = discover(mods_dir, loaded, &mut refused);
+    let (found, mut refused) = discover(mods_dir, loaded);
     let others = if run == Run::Game {
         beside(mods_dir)
     } else {
@@ -131,10 +130,7 @@ fn refuse(skip: Skip, folder: &str, file: &str) -> resolve::Skipped {
         version: String::new(),
         label: folder.to_owned(),
         file: file.to_owned(),
-        reason: resolve::Skip::Refused {
-            line: skip.line(file),
-            skip,
-        },
+        reason: resolve::Skip::Refused { skip },
     }
 }
 
@@ -178,10 +174,7 @@ fn note_old_layout(mods_dir: &Path) {
 
 /// Writes the line of `skip` for the DLL `file` to the loader's log.
 fn log_skip(skip: &Skip, file: &str) {
-    let level = enshwick_core::abi::Level::WARN;
-    if crate::engine::log::enabled(level, crate::engine::settings::LOADER_ID) {
-        crate::engine::log::write(level, crate::engine::settings::LOADER_ID, &skip.line(file));
-    }
+    crate::log!(WARN, "{}", skip.line(file));
 }
 
 /// Other mods' proxies in the game's folder, as
@@ -306,22 +299,23 @@ pub(super) fn unload(library: &Library) {
 /// Loads the one DLL with the Enshwick exports in each folder of `mods/`,
 /// told apart from the folder's other DLLs, the mod's own, by their export
 /// tables before they load. A second such DLL in a folder is skipped, named
-/// with the first; the loader's own folder holds no mod. Each file that does
-/// not start goes into `refused`.
-fn discover(
-    mods_dir: &Path,
-    loaded: &mut Loaded<'_>,
-    refused: &mut Vec<resolve::Skipped>,
-) -> Vec<Library> {
+/// with the first; the loader's own folder holds no mod. Returns the mods and
+/// the files that do not start; a file whose export table does not read
+/// counts as refused only in a folder where no mod starts, since beside one
+/// it is that mod's own DLL.
+fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> (Vec<Library>, Vec<resolve::Skipped>) {
     let mut mods = Vec::new();
+    let mut refused = Vec::new();
     for folder in folders(mods_dir) {
         let name = folder
             .file_name()
             .map(|f| f.to_string_lossy().into_owned())
             .unwrap_or_default();
         let mut first: Option<String> = None;
+        let mut unclear = Vec::new();
         for path in dlls(&folder) {
-            if crate::engine::others::is_mod_file(&path) == Some(false) {
+            let exports = crate::engine::others::is_mod_file(&path);
+            if exports == Some(false) {
                 continue;
             }
             let file = format!(
@@ -331,22 +325,34 @@ fn discover(
                     .unwrap_or_default()
             );
             if let Some(other) = &first {
-                let skip = Skip::SecondMod {
-                    other: other.clone(),
-                };
-                refused.push(refuse(skip, &name, &file));
+                if exports == Some(true) {
+                    let skip = Skip::SecondMod {
+                        other: other.clone(),
+                    };
+                    refused.push(refuse(skip, &name, &file));
+                }
                 continue;
             }
             let (library, range) = load(&path, &name, &file);
             loaded(&file, range);
             match library {
-                Ok(library) => mods.push(library),
+                Ok(library) => {
+                    mods.push(library);
+                    first = Some(file);
+                }
+                Err(skip) if exports.is_none() => unclear.push((skip, file)),
                 Err(skip) => refused.push(refuse(skip, &name, &file)),
             }
-            first = Some(file);
+        }
+        for (skip, file) in unclear {
+            if first.is_some() {
+                log_skip(&skip, &file);
+            } else {
+                refused.push(refuse(skip, &name, &file));
+            }
         }
     }
-    mods
+    (mods, refused)
 }
 
 /// The folders directly in `mods/`, sorted, without the loader's own.

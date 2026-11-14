@@ -55,28 +55,33 @@ const SMALL_LOOK: &str = "standaloneSmall";
 const TEXTURE_SIZE: u32 = 16;
 
 /// Why the look bundle's icons or the small button's look do not read.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 enum IconsUnread {
-    #[error("{GENERIC_ICONS}.{0} is no {TEXTURE_SIZE}-byte texture")]
-    Texture(&'static str),
+    #[error("reflection: {0}")]
+    Reflection(#[from] enshwick_gamedata::reflect::LookupError),
+    #[error("{GENERIC_ICONS} has no typed field {0}")]
+    Field(&'static str),
+    #[error("{GENERIC_ICONS}.{name} is {size} bytes, no {TEXTURE_SIZE}-byte texture")]
+    Size { name: &'static str, size: u32 },
     #[error("the look bundle's path to {GENERIC_ICONS}.{0} does not read")]
     Path(&'static str),
-    #[error("{MENU_BUTTON} does not read")]
-    Button,
     #[error("{MENU_BUTTON}'s looks are no array of one stride holding {SMALL_LOOK}")]
     Looks,
 }
 
 fn generic_icons(loader: &Loader) -> Result<[usize; 2], IconsUnread> {
-    let generic = |name| {
+    let generic = |name: &'static str| -> Result<usize, IconsUnread> {
         let texture = loader
             .reflection
-            .type_info(GENERIC_ICONS)
-            .ok()
-            .and_then(|info| info.fields().iter().find(|f| f.name() == name)?.type_name())
-            .and_then(|texture| loader.reflection.type_info(texture).ok());
-        if texture.is_none_or(|texture| texture.size() != TEXTURE_SIZE) {
-            return Err(IconsUnread::Texture(name));
+            .type_info(GENERIC_ICONS)?
+            .fields()
+            .iter()
+            .find(|f| f.name() == name)
+            .and_then(enshwick_gamedata::reflect::Field::type_name)
+            .ok_or(IconsUnread::Field(name))?;
+        let size = loader.reflection.type_info(texture)?.size();
+        if size != TEXTURE_SIZE {
+            return Err(IconsUnread::Size { name, size });
         }
         path(
             loader,
@@ -95,10 +100,7 @@ fn generic_icons(loader: &Loader) -> Result<[usize; 2], IconsUnread> {
 /// index of `standaloneSmall` among the looks of `FbUiMenuButton`, which the
 /// button's frame indexes by its kind (client 26430625).
 fn small_button(loader: &Loader) -> Result<u32, IconsUnread> {
-    let info = loader
-        .reflection
-        .type_info(MENU_BUTTON)
-        .map_err(|_| IconsUnread::Button)?;
+    let info = loader.reflection.type_info(MENU_BUTTON)?;
     let fields: Vec<(&str, Option<&str>, u64)> = info
         .fields()
         .iter()
@@ -220,7 +222,30 @@ pub(super) fn looks(loader: &Loader) -> Option<Looks> {
 
 #[cfg(test)]
 mod tests {
-    use super::look_index;
+    use super::{GENERIC_ICONS, IconsUnread, look_index};
+
+    #[test]
+    fn an_unread_icon_names_the_check_that_failed() {
+        let missing = IconsUnread::from(enshwick_gamedata::reflect::LookupError::Missing(
+            GENERIC_ICONS.into(),
+        ));
+        assert_eq!(
+            missing.to_string(),
+            "reflection: keen::FbUiGenericIcons not found"
+        );
+        assert_eq!(
+            IconsUnread::Field("settings").to_string(),
+            "keen::FbUiGenericIcons has no typed field settings"
+        );
+        assert_eq!(
+            IconsUnread::Size {
+                name: "settings",
+                size: 8
+            }
+            .to_string(),
+            "keen::FbUiGenericIcons.settings is 8 bytes, no 16-byte texture"
+        );
+    }
 
     const LOOK: Option<&str> = Some("keen::FbUiMenuButtonTextures");
 
