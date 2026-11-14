@@ -118,21 +118,18 @@ fn the_host_docs_and_stable_parts_split_the_steps_a_check_of_every_part_runs_in_
     assert!(!docs.iter().any(|s| s.contains(&stable_line)), "{docs:?}");
     assert!(starts(&stable_part, "cargo test --doc") && starts(&stable_part, "cargo doc"));
     let every = planned(&Part::every(false));
-    // A step that runs twice, such as the link check after each docs
-    // build, takes its next place in the full run.
-    let order = |steps: &[String]| -> Vec<usize> {
-        let mut taken: Vec<usize> = Vec::new();
-        for step in steps {
-            let at = (0..every.len())
-                .find(|at| every[*at] == *step && !taken.contains(at))
-                .unwrap();
-            taken.push(at);
-        }
-        taken
+    // Each part's steps come in the full run's order: a step that runs
+    // twice, such as the link check after each docs build, is found after
+    // the part's step before it.
+    let in_order = |steps: &[String]| {
+        let mut from = 0;
+        steps.iter().all(|step| {
+            let found = (from..every.len()).find(|at| every[*at] == *step);
+            found.inspect(|at| from = at + 1).is_some()
+        })
     };
     assert_eq!(every.len(), host.len() + docs.len() + stable_part.len());
-    assert!(order(&host).is_sorted() && order(&docs).is_sorted());
-    assert!(order(&stable_part).is_sorted());
+    assert!(in_order(&host) && in_order(&docs) && in_order(&stable_part));
 }
 
 #[test]
