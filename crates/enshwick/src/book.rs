@@ -27,6 +27,7 @@ chapters! {
     Luau => "luau.md",
     ReachingIntoTheGame => "reaching-into-the-game.md",
     FindingTheGame => "finding-the-game.md",
+    GameUpdates => "concepts/game-updates.md",
     TypedStability => "concepts/typed-stability.md",
     Performance => "concepts/performance.md",
     ResourceValues => "resource-values.md",

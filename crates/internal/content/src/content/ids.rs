@@ -6,7 +6,8 @@ use crate::abi::ResourceKey;
 ///
 /// The name is 1 to 128 of `[a-z0-9_./-]`; a malformed name, or a crate
 /// without the table, fails the build with the reason. [`Id::part`] derives
-/// further ids from one name.
+/// further ids from one name. Every kind of id follows
+/// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
 ///
 /// # Examples
 ///

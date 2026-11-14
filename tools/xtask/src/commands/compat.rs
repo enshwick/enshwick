@@ -435,7 +435,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             path.clone()
         };
         let inputs = report::sealing_inputs(Path::new(ROOT))?;
-        std::fs::write(&path, data(&build, &inputs)?)
+        std::fs::write(&path, data(&build, &inputs, &report::today())?)
             .map_err(|e| format!("{}: {e}", path.display()))?;
     }
     write_features(&mut out, &build.table);
@@ -772,13 +772,14 @@ mod tests {
             .map(|(id, _)| format!("{id:?}"))
             .unwrap();
         let inputs = [0; 32];
-        let without = data(&build(false), &inputs).unwrap();
+        let without = data(&build(false), &inputs, "2026-11-14").unwrap();
+        assert!(without.contains("checked = \"2026-11-14\""), "{without}");
         let unread = without
             .lines()
             .find(|l| l.starts_with("unread = "))
             .unwrap();
         assert!(unread.contains(&slot), "{without}");
-        let with = data(&build(true), &inputs).unwrap();
+        let with = data(&build(true), &inputs, "2026-11-14").unwrap();
         assert!(!with.contains("unread = "), "{with}");
         let missing = with.lines().find(|l| l.starts_with("missing = ")).unwrap();
         assert!(missing.contains(&slot), "{with}");

@@ -52,11 +52,12 @@ Content covers every game resource a mod adds. That includes items, recipes,
 workshops, templates and icons. It also includes text tags, buffs, sounds and
 weather phenomena.
 
-Three kinds are scoped by the mod without a colon:
+Four kinds are scoped by the mod without a colon:
 
 | Kind | Scope | Name rule |
 | --- | --- | --- |
 | [Actions](../actions.md) | the console line `<mod id> <action>` | 1 to 32 of `[a-z0-9-]` |
+| [Commands](../commands.md) | the line `/<name> <action>`, where the name is the part of the mod's id after the author | the name comes from the id. An alias is 1 to 32 of `[a-z0-9-]` and shorter than the name. It is neither `enshwick` nor `help` |
 | [Settings](../settings.md) | the folder `<stem>-mod-settings/<mod id>/` | a file name of `[a-z0-9_-]`, `settings` by default |
 | [Texts](../content/texts.md) | the mod's own texts file | a key of that file |
 
@@ -140,6 +141,9 @@ off when the `Id` lies outside the mod's namespace.
 | A stat kind or affix defined under another mod's id | the call returns `Off` |
 | A service, event, point or call outside the mod's namespace | the declaration fails with the rule in the log |
 | A control whose name the mod declared already | the second control is refused |
+| A malformed command alias, or one not shorter than the name | the call returns `Off` |
+| A command name another mod's commands have, as for `you.tools` and `they.tools` | only the later mod's commands turn off; the log and the Mods screen name both mods |
+| A command alias another mod's commands, name or id hold | the later mod's commands run by their full name alone; the log and the Mods screen name both mods |
 | Another mod's name that mod does not export | the asking call fails, see [what other mods may use](loader-and-abi.md#what-other-mods-may-use) |
 
 A content id's game id is a 32-bit hash of its GUID. For two content ids with

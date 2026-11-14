@@ -11,11 +11,15 @@ use enshwick_gamedata as tables;
 use super::{Args, Build, build, build_name, module_ids, reports};
 
 /// The report data of `build` as TOML, sealed for `inputs`: names, counts
-/// and ids only. An entry is missing when a route or an anchor of the side
+/// and ids only, with `checked`, the day of this check as `YYYY-MM-DD`. An entry is missing when a route or an anchor of the side
 /// names it and this build does not have it, and unread when it is an
 /// attribute slot and no game archive beside the executable reads; each
 /// loader feature that names a missing entry is listed with them.
-pub(super) fn data(build: &Build, inputs: &reports::Inputs) -> Result<String, String> {
+pub(super) fn data(
+    build: &Build,
+    inputs: &reports::Inputs,
+    checked: &str,
+) -> Result<String, String> {
     if module_ids().is_empty() {
         return Err("only a Windows build of this tool knows the loader's features".to_owned());
     }
@@ -52,6 +56,7 @@ pub(super) fn data(build: &Build, inputs: &reports::Inputs) -> Result<String, St
     if let Some(version) = build.game_version {
         let _w = writeln!(out, "game_version = {version}");
     }
+    let _w = writeln!(out, "checked = {checked:?}");
     let _w = writeln!(
         out,
         "entries = {}",
@@ -186,7 +191,9 @@ fn write(root: &Path, found: &[(String, String)]) -> Result<(), String> {
 
 /// The report data of `exe` and the name of its file in `dir`; where no
 /// file beside the executable states the Steam build or the game version,
-/// the report already there does.
+/// the report already there does. The day of the check is the one that
+/// report states, so a refresh of a build checked before keeps its day and
+/// the data stays the same from one day to the next; a new build takes today.
 pub(super) fn report_data(
     dir: &Path,
     exe: &Path,
@@ -202,6 +209,7 @@ pub(super) fn report_data(
         game_version: None,
     })?;
     let file = tables::file_name(build.side, build.fingerprint);
+    let mut checked = None;
     if let Ok(text) = std::fs::read_to_string(dir.join(&file)) {
         let stated: toml::Table = text.parse().map_err(|e| format!("{file}: {e}"))?;
         let number = |key: &str| {
@@ -218,8 +226,37 @@ pub(super) fn report_data(
             build.game_version,
             build.fingerprint,
         );
+        checked = stated
+            .get("checked")
+            .and_then(toml::Value::as_str)
+            .map(str::to_owned);
     }
-    Ok((file, data(&build, inputs)?))
+    let checked = checked.unwrap_or_else(today);
+    Ok((file, data(&build, inputs, &checked)?))
+}
+
+/// Today in UTC as `YYYY-MM-DD`, the day a report records as its check.
+pub(super) fn today() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    let (year, month, day) = civil_date(i64::try_from(seconds / 86_400).unwrap_or(0));
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// The proleptic Gregorian date `days` after 1970-01-01, by Howard
+/// Hinnant's `civil_from_days`.
+fn civil_date(days: i64) -> (i64, i64, i64) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    (year, month, day)
 }
 
 #[cfg(test)]
@@ -231,6 +268,15 @@ mod tests {
         assert_eq!(feature_state(0, 3), None);
         assert_eq!(feature_state(3, 3), Some("off"));
         assert_eq!(feature_state(1, 3), Some("partly"));
+    }
+
+    #[test]
+    fn a_day_count_from_1970_reads_as_its_calendar_date() {
+        assert_eq!(civil_date(0), (1970, 1, 1));
+        assert_eq!(civil_date(11_016), (2000, 2, 29), "a leap day of a century");
+        assert_eq!(civil_date(19_723), (2024, 1, 1));
+        assert_eq!(civil_date(-1), (1969, 12, 31));
+        assert_eq!(today().len(), "2026-11-14".len());
     }
 
     #[test]

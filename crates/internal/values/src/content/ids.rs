@@ -168,7 +168,9 @@ impl Guid {
     /// The GUID of the content id `id` (`<mod>:<name>`, see [`is_id`]):
     /// a name-based UUID, version 5, of `id`'s UTF-8 bytes in
     /// [`NAMESPACE`], the same on every machine and in every release. A
-    /// malformed literal fails the build when used in a constant.
+    /// malformed literal fails the build when used in a constant. Every kind
+    /// of id follows
+    /// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
     ///
     /// # Panics
     ///
@@ -190,6 +192,8 @@ impl Guid {
     }
 
     /// [`Guid::named`] for an id read at run time; `None` when malformed.
+    /// Every kind of id follows
+    /// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
     ///
     /// # Examples
     ///
@@ -267,7 +271,9 @@ const NAMESPACE_BYTES: [u8; 16] = [
 ];
 
 /// Whether `id` is a content id: `<mod>:<name>`, the mod side 1 to 64 of
-/// `[a-z0-9_.-]`, the name 1 to 128 of `[a-z0-9_./-]`.
+/// `[a-z0-9_.-]`, the name 1 to 128 of `[a-z0-9_./-]`. Every kind of id
+/// follows
+/// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
 ///
 /// # Examples
 ///
@@ -346,6 +352,8 @@ const fn all_of(bytes: &[u8], slash: bool) -> bool {
 /// Two ids are equal when they name the same content, however they were
 /// built. Equal ids may still differ in what they allow: a derived id takes
 /// no further part, while the same id written in full with [`Id::new`] does.
+/// Every kind of id follows
+/// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
 ///
 /// # Examples
 ///

@@ -22,6 +22,9 @@ before the chapters on writing a mod; each is short.
   on a mod set.
 - [Threads](concepts/threads.md): which thread runs what, and what may be
   called where.
+- [Why a game update needs no Enshwick update](concepts/game-updates.md): the
+  game's own reflection data, and what turns off when the loader cannot find
+  something.
 - [Typed types across game builds](concepts/typed-stability.md): what a game
   update does to the game's types a mod uses.
 - [Performance](concepts/performance.md): what native and Luau mods cost at

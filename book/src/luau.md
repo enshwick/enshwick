@@ -21,6 +21,11 @@ Scripts are [Luau](https://luau.org), Roblox's typed dialect of Lua 5.1.
 Each mod runs in a sandbox of its own and reaches the game only through
 `enshwick`.
 
+Luau's interpreter runs the scripts, so each call costs more than the same
+call from a native mod. A call into the API with number arguments takes about
+0.19 µs ([Performance](concepts/performance.md)). Write a mod whose code runs
+on every hit or every frame in Rust, C or C++.
+
 ## How the loader runs it
 
 The loader runs a Luau mod as it runs any pack. It is in the mod list and
