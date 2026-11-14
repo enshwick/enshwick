@@ -199,7 +199,9 @@ crate::engine::chains::chain_detour! {
                 REFUSALS_LOGGED_EVERY,
                 "a join that lists more accounts than its message holds refused"
             );
-            // SAFETY: as for `joined` just before.
+            // SAFETY: `session` is the handler's own non-null session (checked
+            // earlier), on the thread that handles its messages, and `layout`
+            // is this build's.
             return unsafe { refuse(layout, session, peer) };
         };
         let mut room = [0; join_message::MAX_MESSAGE];
@@ -217,7 +219,9 @@ crate::engine::chains::chain_detour! {
         let Some((rule, player)) = refuser(rules, &layout.join, entries, steam) else {
             return onward.call();
         };
-        // SAFETY: as for `joined` above.
+        // SAFETY: `session` is the handler's own non-null session (checked
+        // earlier), on the thread that handles its messages, and `layout`
+        // is this build's.
         if unsafe { joined(layout, session, peer) } {
             return onward.call();
         }
@@ -228,7 +232,9 @@ crate::engine::chains::chain_detour! {
             REFUSALS_LOGGED_EVERY,
             "join of account {key:016x} refused by {id}"
         );
-        // SAFETY: as for `joined` above.
+        // SAFETY: `session` is the handler's own non-null session (checked
+        // earlier), on the thread that handles its messages, and `layout`
+        // is this build's.
         unsafe { refuse(layout, session, peer) }
     }
 }
@@ -422,7 +428,7 @@ mod tests {
             )
         };
         assert!(found);
-        // SAFETY: as just before.
+        // SAFETY: the test lookup reads nothing of the session.
         let found = unsafe {
             joined(
                 &test_layout(no_machine, sent_nothing),
