@@ -6,3 +6,11 @@ Each entry names the pull request that made the change. What mod authors
 see is in the changelog of `enshwick`.
 
 ## [Unreleased]
+
+## [1.0.0-alpha.15] - 2026-11-14
+
+### Changed
+
+- A generated type's value in a script, `runtime::rows::Fields`, lives here
+  (#1044).
+

@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-enshwick"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "anyhow",
  "clap",
@@ -428,7 +428,7 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "enshwick"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "criterion",
  "document-features",
@@ -458,7 +458,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-abi"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "bytemuck",
  "enshwick-values",
@@ -471,7 +471,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-actions"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "bytemuck",
  "enshwick",
@@ -486,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-base"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "aho-corasick",
  "bytemuck",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-content"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "bcdec_rs",
  "enshwick",
@@ -529,7 +529,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-core"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "enshwick",
  "enshwick-abi",
@@ -595,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-fake"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "bytemuck",
  "enshwick",
@@ -610,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-gamedata"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "criterion",
  "enshwick",
@@ -632,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-inventory"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "bytemuck",
  "enshwick",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-knowledge"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "enshwick",
  "enshwick-abi",
@@ -670,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -701,11 +701,11 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader-start"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 
 [[package]]
 name = "enshwick-loader-stub"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "enshwick-loader-start",
  "windows-sys",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-luau"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "arc-swap",
  "cargo-enshwick",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-macros"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -741,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-packs"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "enshwick",
  "enshwick-abi",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-typed"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "enshwick-values",
  "thiserror",
@@ -770,7 +770,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-ui"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "enshwick",
  "enshwick-abi",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-values"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "const-sha1",
  "const_format",
@@ -798,7 +798,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-world"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 dependencies = [
  "enshwick",
  "enshwick-abi",

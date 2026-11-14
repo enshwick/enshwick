@@ -5,7 +5,7 @@ mods. It starts a Rust mod, a Luau mod or a data pack, and it installs a mod
 into the game.
 
 ```sh
-cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.14
+cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.15
 cargo enshwick new you.my-mod --side server
 cd my-mod
 cargo enshwick install --with-loader
@@ -14,7 +14,7 @@ cargo enshwick install --with-loader
 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the
 tool from the release: Windows and Linux binaries, with their SHA-256
 checksums, SBOM and build provenance on the release. Without it,
-`cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.14 cargo-enshwick`
+`cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.15 cargo-enshwick`
 builds the tool from source. The tool says when a newer release of itself
 is out, at most once a day; without a network it says nothing, and `CI` or
 `CARGO_ENSHWICK_NO_UPDATE_CHECK` set turns the check off.

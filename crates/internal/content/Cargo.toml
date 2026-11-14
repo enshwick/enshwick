@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-content"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 description = "Internal part of enshwick; depend on enshwick: the game's content and its rates"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
@@ -13,7 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.15" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-typed = { workspace = true, optional = true }

@@ -6,6 +6,46 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.15] - 2026-11-14
+
+### Added
+
+- The Luau definitions declare `enshwick.on_client_game_type` (#1081).
+- `check [dir]` checks a mod in any form: a data pack or Luau mod as
+  `pack check` reads it, then every `.luau` script type-checked with
+  luau-lsp against the definitions in `types/`, and a Rust mod with clippy
+  for Windows; each problem prints as
+  `<file>:<line>:<column>: <severity>: <message>`, and an error exits with
+  1 (#1017).
+- `check` downloads the luau-lsp release it was built for once into the
+  user's cache folder and checks its SHA-256 when none is on the path;
+  `--offline` skips the download and says so (#1017).
+- The Luau definitions name `enshwick.world.language_of`, and say a
+  change players' games read needs a mod or pack of side both (#1067).
+- The Luau definitions name `enshwick.config.set`, `enshwick.world.stop`,
+  `enshwick.map.uncover`, `uncover_all` and `enshwick.content.content_id`,
+  `item_name` and `name_tag` (#1068).
+- The library's `rules` and `changelog` modules hold the crate rules a mod
+  workspace meets and the Keep a Changelog reader, with change files; the
+  default `cli` feature holds the command and everything else, so a build
+  without it is small enough for a repository's own tasks.
+
+### Changed
+
+- `pack check` names a misspelt or unknown field of pack data with the
+  fields its place takes and the one it is near (#1017).
+- The READMEs `new --luau` and `new --data` write check with
+  `cargo enshwick check` (#1017).
+- Depends on the internal crates `enshwick-core` and `enshwick-abi`
+  instead of `enshwick`; `new` still pins `enshwick` at the same version
+  (#1043).
+- **Breaking:** `pin` ports only the build rows of the mod or workspace it
+  runs in, every `Cargo.toml` below `--dir` (the current folder); `--repo`,
+  `--data`, `--patterns`, `--from`, `--from-file`, `--steam-build` and
+  `--game-version` are gone. Porting the loader's entries, the routes'
+  check shapes and the typed API is the platform's
+  `cargo xtask compat pin` and `cargo xtask compat patterns`.
+
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Added

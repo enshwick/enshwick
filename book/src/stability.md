@@ -56,7 +56,7 @@ Turn the feature on in the mod's `Cargo.toml`:
 
 ```toml
 [dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.14", features = ["unstable"] }
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.15", features = ["unstable"] }
 ```
 
 An unstable item leaves the feature once it has settled and, where it rests on
