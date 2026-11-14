@@ -18,6 +18,12 @@ use std::process::ExitCode;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 
+#[path = "../cargo_files.rs"]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the reports read the lock file, not manifests")
+)]
+mod cargo_files;
 #[path = "compat/pin.rs"]
 mod pin;
 #[path = "compat/report.rs"]

@@ -340,6 +340,46 @@ fn a_package_whose_tests_alone_run_gets_no_examples_trybuild_or_stable_surface_s
     assert_eq!(windows_tests(&scope, &packages), Vec::<&str>::new());
 }
 
+#[test]
+fn a_facade_change_with_many_dependents_leaves_trybuild_and_stable_examples_to_ci() {
+    let args = stable();
+    let scope = |tested: &[&str]| Scope::Some {
+        code: ["enshwick".to_owned()].into(),
+        docs: BTreeSet::new(),
+        tested: tested.iter().map(|name| (*name).to_owned()).collect(),
+        built: BTreeSet::new(),
+    };
+    let steps = |scope: &Scope| -> Vec<String> {
+        host_steps(
+            scope,
+            (&[], &args),
+            (true, true, true),
+            Some("package(enshwick)"),
+            &[],
+            false,
+            &Part::every(false),
+        )
+        .iter()
+        .map(Step::line)
+        .collect()
+    };
+    let has = |steps: &[String], with: &str| steps.iter().any(|step| step.contains(with));
+    let stable_line = args.join(" ");
+    let narrow = steps(&scope(&[]));
+    assert!(has(&narrow, "--test main"), "{narrow:?}");
+    assert!(has(&narrow, &format!("cargo test --doc {stable_line}")));
+    assert!(has(&narrow, &format!("cargo doc --no-deps {stable_line}")));
+    let wide = steps(&scope(&["enshwick-loader", "enshwick-luau"]));
+    assert!(!has(&wide, "--test main"), "{wide:?}");
+    assert!(!has(&wide, &format!("cargo test --doc {stable_line}")));
+    assert!(!has(&wide, &format!("cargo doc --no-deps {stable_line}")));
+    assert!(has(
+        &wide,
+        &format!("cargo clippy --all-targets {stable_line}")
+    ));
+    assert!(has(&wide, "cargo nextest") && has(&wide, "cargo doc --no-deps"));
+}
+
 /// A package at `dir`, with Windows tests when it builds only for Windows.
 fn package(name: &str, dir: &str, windows_only: bool) -> Package {
     Package {
@@ -400,13 +440,19 @@ fn host_args_leave_out_windows_only_crates_only_off_windows() {
 #[test]
 fn a_change_to_the_api_code_builds_its_stable_rustdoc() {
     let args = stable();
-    assert!(runs_stable_rustdoc(&stable_api_steps(true, &args), &args));
+    assert!(runs_stable_rustdoc(
+        &stable_api_steps(true, true, &args),
+        &args
+    ));
 }
 
 #[test]
 fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
     let args = stable();
-    assert!(runs_stable_rustdoc(&stable_api_steps(false, &args), &args));
+    assert!(runs_stable_rustdoc(
+        &stable_api_steps(false, true, &args),
+        &args
+    ));
 }
 
 #[test]
@@ -418,7 +464,7 @@ fn a_change_to_code_builds_the_workspace_rustdoc_outside_the_full_suite() {
 
 #[test]
 fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
-    let steps = stable_api_steps(false, &stable());
+    let steps = stable_api_steps(false, true, &stable());
     let skipped = |name: &str| {
         steps.iter().any(|step| {
             step.args

@@ -93,3 +93,26 @@ impl Off {
         self.text.as_deref().unwrap_or(&self.reason)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Off, reason};
+
+    #[test]
+    fn an_off_with_a_text_reads_as_its_key_and_values_not_its_words() {
+        let off = Off::text("stalls.min", &[("min", "2")]);
+
+        assert_eq!(
+            off.to_reason(),
+            reason::encode("stalls.min", &[("min", "2")])
+        );
+        assert_ne!(off.to_reason(), off.to_string());
+    }
+
+    #[test]
+    fn an_off_without_a_text_reads_as_its_words() {
+        let off = Off::new("this game build is not supported");
+
+        assert_eq!(off.to_reason(), "this game build is not supported");
+    }
+}

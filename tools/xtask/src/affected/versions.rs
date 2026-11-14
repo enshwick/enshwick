@@ -6,7 +6,8 @@ use std::collections::BTreeSet;
 
 use toml::{Table, Value};
 
-use super::shared::{DEPENDENCIES, DEPENDENCY_TABLES, LOCKED_PACKAGES, PACKAGE, TARGET, WORKSPACE};
+use super::shared::{PACKAGE, WORKSPACE};
+use crate::cargo_files::{DEPENDENCIES, DEPENDENCY_TABLES, LOCKED_PACKAGES, TARGET};
 
 /// The manifest key of a version.
 const VERSION: &str = "version";

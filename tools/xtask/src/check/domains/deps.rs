@@ -12,6 +12,7 @@ use syn::Item;
 
 use super::walk::{Cfg, Named, cfgs, feature_only, item_attrs, paths_under, ungated_paths};
 use super::{MAP, Map, collect, declared_modules, drop_test_modules, module_path, package};
+use crate::cargo_files::{self, DEPENDENCIES, DEV_DEPENDENCIES};
 
 /// The crate above every domain, by its folder under `crates/internal`.
 const CORE: &str = "core";
@@ -80,10 +81,10 @@ fn manifests(root: &Path, map: &Map) -> (Vec<String>, Vec<Edge>) {
     };
     let mut edges = Vec::new();
     for (dir, manifest, name) in &packages {
-        let deps: Vec<Dep> = dependencies(manifest, "dependencies")
+        let deps: Vec<Dep> = dependencies(manifest, DEPENDENCIES)
             .filter(|dep| internal.contains(&dep.package.as_str()))
             .collect();
-        let tested: BTreeSet<String> = dependencies(manifest, "dev-dependencies")
+        let tested: BTreeSet<String> = dependencies(manifest, DEV_DEPENDENCIES)
             .map(|dep| dep.package)
             .collect();
         let files = match sources(root, dir) {
@@ -323,25 +324,14 @@ fn turns_on(features: &toml::Table, key: &str, feature: &str) -> bool {
 /// The manifest's dependencies of the table `kind` (`dependencies` or
 /// `dev-dependencies`), at the top and in every `[target.*]`.
 fn dependencies<'a>(manifest: &'a toml::Table, kind: &'a str) -> impl Iterator<Item = Dep> + 'a {
-    let targets = manifest
-        .get("target")
-        .and_then(toml::Value::as_table)
-        .into_iter()
-        .flat_map(|targets| targets.values());
-    std::iter::once(manifest.get(kind))
-        .chain(targets.map(move |target| target.get(kind)))
-        .flatten()
-        .filter_map(toml::Value::as_table)
-        .flatten()
-        .map(|(key, entry)| Dep {
-            package: entry
-                .get("package")
-                .and_then(toml::Value::as_str)
-                .unwrap_or(key)
-                .to_owned(),
-            key: key.clone(),
-            ident: key.replace('-', "_"),
-            optional: entry
+    cargo_files::dependencies(manifest)
+        .filter(move |dep| dep.kind == kind)
+        .map(|dep| Dep {
+            package: dep.package().to_owned(),
+            key: dep.key.to_owned(),
+            ident: dep.key.replace('-', "_"),
+            optional: dep
+                .entry
                 .get("optional")
                 .and_then(toml::Value::as_bool)
                 .unwrap_or(false),
@@ -540,7 +530,7 @@ mod tests {
         let manifest: toml::Table = toml::from_str(
             "[dependencies]\nenshwick-base.workspace = true\nup = { package = \"enshwick-ui\", optional = true }\n\n[target.'cfg(windows)'.dependencies]\nenshwick-world = { workspace = true, optional = true }\n",
         )?;
-        let deps: Vec<(String, String, bool)> = dependencies(&manifest, "dependencies")
+        let deps: Vec<(String, String, bool)> = dependencies(&manifest, DEPENDENCIES)
             .map(|dep| (dep.package, dep.ident, dep.optional))
             .collect();
         let dep =

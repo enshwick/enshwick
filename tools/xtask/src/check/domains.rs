@@ -17,6 +17,8 @@ use std::path::Path;
 
 use syn::{Item, UseTree, Visibility};
 
+use crate::cargo_files;
+
 mod calls;
 mod deps;
 mod fake;
@@ -112,23 +114,9 @@ fn package(root: &Path, dir: &str) -> Result<(toml::Table, String), String> {
 /// The packages a manifest's `[dependencies]` name, a renamed one by its
 /// `package`, those of its `[target.*.dependencies]` included.
 fn dependencies(manifest: &toml::Table) -> Vec<String> {
-    let targets = manifest
-        .get("target")
-        .and_then(toml::Value::as_table)
-        .into_iter()
-        .flat_map(|targets| targets.values());
-    std::iter::once(manifest.get("dependencies"))
-        .chain(targets.map(|target| target.get("dependencies")))
-        .flatten()
-        .filter_map(toml::Value::as_table)
-        .flat_map(|deps| {
-            deps.iter().map(|(key, dep)| {
-                dep.get("package")
-                    .and_then(toml::Value::as_str)
-                    .unwrap_or(key)
-                    .to_owned()
-            })
-        })
+    cargo_files::dependencies(manifest)
+        .filter(|dep| dep.kind == cargo_files::DEPENDENCIES)
+        .map(|dep| dep.package().to_owned())
         .collect()
 }
 

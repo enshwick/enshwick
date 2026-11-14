@@ -23,7 +23,7 @@ use std::process::Command;
 use std::thread;
 use std::time::Instant;
 
-use crate::affected::{self, Lane, Package, Scope};
+use crate::affected::{self, Lane, MAX_LOCAL_DEPENDENTS, Package, Scope};
 use crate::commands::{fuzz, header, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 
@@ -161,16 +161,18 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             return Ok(false);
         }
     }
-    if parts.contains(&Part::Trybuild) && !touches(&scope, FACADE) {
-        say(
-            &if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
-                format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
-            } else if reaches(&scope, FACADE) {
-                format!("the trybuild test is left to CI: {FACADE} is only built here")
-            } else {
-                format!("the trybuild test is out of scope: the change does not reach {FACADE}")
-            },
-        );
+    if parts.contains(&Part::Trybuild) && (!touches(&scope, FACADE) || wide(&scope)) {
+        say(&if touches(&scope, FACADE) {
+            format!(
+                "the trybuild test is left to CI: the change reaches more than {MAX_LOCAL_DEPENDENTS} dependents"
+            )
+        } else if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
+            format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
+        } else if reaches(&scope, FACADE) {
+            format!("the trybuild test is left to CI: {FACADE} is only built here")
+        } else {
+            format!("the trybuild test is out of scope: the change does not reach {FACADE}")
+        });
     }
     let checked = check(&scope, &packages, args.all, &parts)
         && (!parts.contains(&Part::Semver) || semver(&args.semver));
@@ -190,6 +192,14 @@ fn touches(scope: &Scope, package: &str) -> bool {
         Scope::All => true,
         Scope::Some { code, .. } => code.iter().any(|name| name == package),
     }
+}
+
+/// Whether a local check of `scope` left the examples of the change's many
+/// dependents to CI ([`MAX_LOCAL_DEPENDENTS`]): it leaves the trybuild test
+/// and the stable surface's examples and rustdoc there too, which alone kept
+/// a check of a facade change over ten minutes (669 s, 2026-11-14).
+fn wide(scope: &Scope) -> bool {
+    matches!(scope, Scope::Some { tested, .. } if !tested.is_empty())
 }
 
 /// Whether `scope` checks, tests or only builds the code of `package`.
@@ -508,8 +518,9 @@ fn windows_tests<'a>(scope: &Scope, packages: &'a [Package]) -> Vec<&'a str> {
 
 /// The checks of the API crate's stable surface, built without `unstable`:
 /// its lints when its code changed, its examples and its rustdoc whenever
-/// it changed. `stable` names the crates and features ([`stable_api`]).
-fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
+/// it changed and `examples` asks for them. `stable` names the crates and
+/// features ([`stable_api`]).
+fn stable_api_steps(code: bool, examples: bool, stable: &[String]) -> Vec<Step> {
     let mut steps = Vec::new();
     if code {
         steps.push(
@@ -517,6 +528,9 @@ fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
                 .then_owned(stable)
                 .then(&["--", "-D", "warnings"]),
         );
+    }
+    if !examples {
+        return steps;
     }
     // The script binding, the rates and item data are public only with
     // `unstable`, so their examples fail to build
@@ -622,7 +636,7 @@ fn host_steps(
             steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
         }
     }
-    if parts.contains(&Part::Trybuild) && touches(scope, FACADE) {
+    if parts.contains(&Part::Trybuild) && touches(scope, FACADE) && !wide(scope) {
         steps.push(Step::new(&[
             "nextest",
             "run",
@@ -653,7 +667,11 @@ fn host_steps(
         Scope::Some { docs, .. } => docs.iter().any(|name| name == FACADE),
     };
     if parts.contains(&Part::StableApi) && (touches(scope, FACADE) || api_docs) {
-        steps.extend(stable_api_steps(touches(scope, FACADE), stable));
+        steps.extend(stable_api_steps(
+            touches(scope, FACADE),
+            !wide(scope),
+            stable,
+        ));
     }
     if run_docs && workspace_rustdoc(code, full) {
         // `code` alone: a package whose version alone moved needs no docs.
@@ -706,6 +724,8 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
                 names.join(", "),
                 if tested.contains(FACADE) {
                     format!(" and {FACADE}'s stable surface")
+                } else if code.contains(FACADE) {
+                    format!(" and the examples and rustdoc of {FACADE}'s stable surface")
                 } else {
                     String::new()
                 }
