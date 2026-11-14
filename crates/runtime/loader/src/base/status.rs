@@ -13,6 +13,7 @@ use enshwick_core::abi::{Side, Status, StatusFn, Str};
 use crate::engine::diag::{HookStat, ModStatus, Summary};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
+use crate::engine::registry::Registry;
 use crate::engine::settings::LOADER_ID;
 use enshwick_base::Relock;
 
@@ -27,7 +28,9 @@ struct Source {
     user: usize,
 }
 
-static SOURCES: Mutex<Vec<Source>> = Mutex::new(Vec::new());
+/// The mods' status sources, added in their init and sealed with the
+/// loader's other registries.
+static SOURCES: Registry<Source> = Registry::new();
 static STARTED: OnceLock<Instant> = OnceLock::new();
 
 /// Marks the loader's start, for the uptime.
@@ -37,12 +40,17 @@ pub(crate) fn mark_start() {
 
 /// Adds mod `owner`'s status source.
 pub(crate) fn register(owner: ModIndex, callback: StatusFn, user: *mut c_void) -> Status {
-    SOURCES.relock().push(Source {
+    let added = SOURCES.add(Source {
         owner,
         callback,
         user: user.expose_provenance(),
     });
-    Status::OK
+    added.map_or(Status::TOO_LATE, |()| Status::OK)
+}
+
+/// Ends the status sources mods add in their init.
+pub(crate) fn seal(_loader: &'static Loader) {
+    let _sources = SOURCES.seal();
 }
 
 /// The lines mod `owner`'s sources give now.
@@ -91,7 +99,7 @@ fn hook_name(loader: &Loader, target: u64) -> String {
 
 /// Takes the summary now.
 pub(crate) fn summary(loader: &Loader) -> Summary {
-    let sources = SOURCES.relock().clone();
+    let sources = SOURCES.sealed().unwrap_or_default();
     let mods = loader
         .mods
         .iter()
@@ -110,7 +118,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                 running,
                 waiting: running && record.waiting.load(Ordering::Acquire),
                 lines: if running {
-                    lines_of(&sources, ModIndex::new(index))
+                    lines_of(sources, ModIndex::new(index))
                 } else {
                     Vec::new()
                 },

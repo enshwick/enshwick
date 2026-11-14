@@ -125,7 +125,34 @@ impl Keys {
     }
 }
 
-static KEYS: Mutex<Keys> = Mutex::new(Keys::CLOSED);
+/// What the saves keep.
+struct State {
+    keys: Mutex<Keys>,
+    /// Every world key seen, kept once for the process: a menu that builds
+    /// the paths of several worlds sees each key again and again. A game's
+    /// end keeps them, since each is leaked once.
+    seen: Mutex<Vec<&'static str>>,
+    /// Whether a save was under way at the last step.
+    under_way: AtomicBool,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            keys: Mutex::new(Keys::CLOSED),
+            seen: Mutex::new(Vec::new()),
+            under_way: AtomicBool::new(false),
+        }
+    }
+
+    /// Forgets the key of the world that went and its save under way.
+    fn forget(&self) {
+        *self.keys.relock() = Keys::CLOSED;
+        self.under_way.store(false, Ordering::Relaxed);
+    }
+}
+
+static STATE: State = State::new();
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     read_layout(loader).as_ref().ok()
@@ -261,7 +288,7 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
         return;
     }
     let Some(path) = full_path(path, side, steam) else {
-        KEYS.relock().unplace(side);
+        STATE.keys.relock().unplace(side);
         if let Some(total) = UNPLACED.add(1) {
             crate::log!(
                 WARN,
@@ -276,7 +303,7 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
     };
     let key = intern(&key, &path);
     let changed = {
-        let mut keys = KEYS.relock();
+        let mut keys = STATE.keys.relock();
         let before = keys.pick(side);
         keys.note(side, key);
         let now = keys.pick(side);
@@ -326,13 +353,9 @@ pub(crate) fn saved(loader: &Loader) {
     }
 }
 
-/// Every world key seen, kept once for the process: a menu that builds the
-/// paths of several worlds sees each key again and again.
-static SEEN: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
-
 /// `key`, kept for the process; logged the first time, from `path`.
 fn intern(key: &str, path: &str) -> &'static str {
-    let mut seen = SEEN.relock();
+    let mut seen = STATE.seen.relock();
     if let Some(&known) = seen.iter().find(|&&k| k == key) {
         return known;
     }
@@ -345,13 +368,12 @@ fn intern(key: &str, path: &str) -> &'static str {
 /// A hosted game starts to initialise, before it reads its save: the world
 /// paths built from now on are its world's, the menu's before are not.
 pub(crate) fn hosting_begins() {
-    *KEYS.relock() = Keys::OPEN;
+    *STATE.keys.relock() = Keys::OPEN;
 }
 
 /// Forgets the key and every mod's hold on saves, when a hosted game ends.
 pub(crate) fn forget() {
-    *KEYS.relock() = Keys::CLOSED;
-    UNDER_WAY.store(false, Ordering::Relaxed);
+    STATE.forget();
     holds::forget();
 }
 
@@ -462,7 +484,7 @@ fn steam_user_data() -> Option<PathBuf> {
 
 /// The key of the world the server runs, once the engine has built its path.
 pub(crate) fn world_key(loader: &Loader) -> Option<&'static str> {
-    let key = KEYS.relock().pick(loader.side);
+    let key = STATE.keys.relock().pick(loader.side);
     if let Some(key) = key {
         crate::log!(DEBUG, "world key {key}");
     }
@@ -511,9 +533,6 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
     Ok(())
 }
 
-/// Whether a save was under way at the last step.
-static UNDER_WAY: AtomicBool = AtomicBool::new(false);
-
 /// Whether a save got under way since the last step, the save phase now
 /// `phase`, keeping in `under_way` whether one is.
 fn began(under_way: &AtomicBool, phase: u8) -> bool {
@@ -544,7 +563,7 @@ pub(crate) fn after_step(loader: &Loader) {
         // at the table's `save.phase`.
         unsafe { crate::engine::memory::read(system, layout.phase) }
     };
-    let started = began(&UNDER_WAY, phase);
+    let started = began(&STATE.under_way, phase);
     // SAFETY: `server` is `world::server`'s, the live server on its game
     // thread between steps.
     unsafe { holds::after_step(loader, layout, server) };
@@ -595,13 +614,30 @@ mod tests {
     }
 
     #[test]
+    fn a_hosted_game_s_end_forgets_its_key_and_save_but_keeps_the_keys_seen() {
+        let state = State::new();
+        {
+            let mut keys = state.keys.relock();
+            *keys = Keys::OPEN;
+            keys.note(Side::CLIENT, "world1");
+        }
+        state.seen.relock().push("world1");
+        state.under_way.store(true, Ordering::Relaxed);
+        state.forget();
+        assert_eq!(state.keys.relock().pick(Side::CLIENT), None);
+        assert!(!state.keys.relock().open, "the menu's paths name no world");
+        assert!(!state.under_way.load(Ordering::Relaxed));
+        assert_eq!(*state.seen.relock(), ["world1"]);
+    }
+
+    #[test]
     fn a_world_key_is_kept_once() {
         let first = intern("a1b2", "x");
         for _ in 0..3 {
             let _other = intern("c3d4", "y");
             assert!(core::ptr::eq(intern("a1b2", "x"), first));
         }
-        let seen = SEEN.lock().unwrap();
+        let seen = STATE.seen.lock().unwrap();
         assert_eq!(seen.iter().filter(|k| **k == "a1b2").count(), 1);
     }
 
@@ -674,19 +710,19 @@ mod tests {
         hosting_begins();
         remember(local, Side::CLIENT, never);
         assert_eq!(
-            KEYS.relock().pick(Side::CLIENT),
+            STATE.keys.relock().pick(Side::CLIENT),
             Some(r"C:\Users\a\Saved Games\keen games\Enshrouded\default\world1")
         );
         remember("world4.ksd", Side::CLIENT, || None);
         assert_eq!(
-            KEYS.relock().pick(Side::CLIENT),
+            STATE.keys.relock().pick(Side::CLIENT),
             None,
             "neither the menu's local world nor world4 beside the game"
         );
         let steam = Path::new(r"C:\Steam\userdata\487707326\1203620\remote");
         remember("world4.ksd", Side::CLIENT, || Some(steam));
         assert_eq!(
-            KEYS.relock().pick(Side::CLIENT),
+            STATE.keys.relock().pick(Side::CLIENT),
             Some(r"C:\Steam\userdata\487707326\1203620\remote\world4")
         );
         forget();

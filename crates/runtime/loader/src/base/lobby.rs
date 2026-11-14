@@ -62,7 +62,7 @@ pub(crate) fn plan(
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::{discovery_on, host_runs_enshwick, poll, register};
+pub(crate) use runtime::{discovery_on, forget, host_runs_enshwick, poll, register};
 
 #[cfg(windows)]
 mod runtime {
@@ -119,16 +119,50 @@ mod runtime {
         }
     }
 
-    static API: OnceLock<Api> = OnceLock::new();
-    /// The lobby the client last entered, 0 for none.
-    static LOBBY: AtomicU64 = AtomicU64::new(0);
-    /// The lobby whose entry was handled, so a second notice of the same
-    /// entry turns nothing off twice.
-    static HANDLED: AtomicU64 = AtomicU64::new(0);
-    /// The lobby the hosting client put its data into.
-    static PUBLISHED: AtomicU64 = AtomicU64::new(0);
-    /// Set while the lobby the client entered names a host with Enshwick.
-    static HOST_RUNS: AtomicBool = AtomicBool::new(false);
+    /// What the hosted lobby keeps: the Steam calls found once, and the
+    /// lobbies of the game that runs.
+    struct State {
+        api: OnceLock<Api>,
+        /// The lobby the client last entered, 0 for none.
+        lobby: AtomicU64,
+        /// The lobby whose entry was handled, so a second notice of the same
+        /// entry turns nothing off twice.
+        handled: AtomicU64,
+        /// The lobby the hosting client put its data into.
+        published: AtomicU64,
+        /// Set while the lobby the client entered names a host with
+        /// Enshwick.
+        host_runs: AtomicBool,
+    }
+
+    impl State {
+        const fn new() -> Self {
+            Self {
+                api: OnceLock::new(),
+                lobby: AtomicU64::new(0),
+                handled: AtomicU64::new(0),
+                published: AtomicU64::new(0),
+                host_runs: AtomicBool::new(false),
+            }
+        }
+
+        /// Forgets the lobby the hosting client published into; the Steam
+        /// calls stay. The entry guard and whether a host runs Enshwick
+        /// stay too: the next lobby entry sets both on Steam's thread, maybe
+        /// before a hosted game's end reaches this.
+        fn forget(&self) {
+            self.lobby.store(0, Ordering::Release);
+            self.published.store(0, Ordering::Relaxed);
+        }
+    }
+
+    static STATE: State = State::new();
+
+    /// Forgets the lobby a client's hosted game ran in, so the next game it
+    /// hosts or joins starts from no lobby.
+    pub(crate) fn forget() {
+        STATE.forget();
+    }
 
     /// Steam's `CCallbackBase` as MSVC lays it out: the table, then the
     /// flags Steam keeps and the callback id.
@@ -212,7 +246,7 @@ mod runtime {
             ));
             return;
         };
-        if API.set(api).is_err() {
+        if STATE.api.set(api).is_err() {
             return;
         }
         let callback = Box::leak(Box::new(Callback {
@@ -306,21 +340,21 @@ mod runtime {
     /// game and the friends who join it learn each other's mods; false
     /// until [`register`] found them.
     pub(crate) fn discovery_on() -> bool {
-        API.get().is_some()
+        STATE.api.get().is_some()
     }
 
     /// Whether the lobby the client entered last names a host with
     /// Enshwick, which takes the client's hello.
     pub(crate) fn host_runs_enshwick() -> bool {
-        HOST_RUNS.load(Ordering::Acquire)
+        STATE.host_runs.load(Ordering::Acquire)
     }
 
     /// Puts the hosting client's data into its lobby once per lobby; on the
     /// client's thread that sends chat, every frame.
     pub(crate) fn poll() {
-        let lobby = LOBBY.load(Ordering::Acquire);
+        let lobby = STATE.lobby.load(Ordering::Acquire);
         if lobby == 0
-            || PUBLISHED.load(Ordering::Relaxed) == lobby
+            || STATE.published.load(Ordering::Relaxed) == lobby
             || !crate::engine::world::hosting()
         {
             return;
@@ -330,8 +364,8 @@ mod runtime {
 
     #[cold]
     fn publish(lobby: u64) {
-        PUBLISHED.store(lobby, Ordering::Relaxed);
-        let Some(api) = API.get() else {
+        STATE.published.store(lobby, Ordering::Relaxed);
+        let Some(api) = STATE.api.get() else {
             return;
         };
         let mods = crate::base::advertise::mod_list(&crate::base::join::client::join_mods());
@@ -359,19 +393,21 @@ mod runtime {
 
     /// The client entered `lobby`, on the game's thread.
     fn entered(lobby: u64) {
-        LOBBY.store(lobby, Ordering::Release);
+        STATE.lobby.store(lobby, Ordering::Release);
         if crate::engine::world::hosting() {
-            HOST_RUNS.store(false, Ordering::Release);
+            STATE.host_runs.store(false, Ordering::Release);
             return;
         }
-        let Some(api) = API.get() else {
+        let Some(api) = STATE.api.get() else {
             return;
         };
         let version = api.get(lobby, super::KEY);
         // A dedicated server's lobby names nothing: its rules went through
         // the join check before the game connected.
-        HOST_RUNS.store(!version.is_empty(), Ordering::Release);
-        if version.is_empty() || HANDLED.swap(lobby, Ordering::AcqRel) == lobby {
+        STATE
+            .host_runs
+            .store(!version.is_empty(), Ordering::Release);
+        if version.is_empty() || STATE.handled.swap(lobby, Ordering::AcqRel) == lobby {
             return;
         }
         let host = api.get(lobby, super::KEY_MODS);
@@ -404,6 +440,27 @@ mod runtime {
             assert_eq!(
                 crate::base::off_reason(&LOBBY_FUSE).as_deref(),
                 Some("the loader panicked in a lobby entry: a broken entry")
+            );
+        }
+
+        #[test]
+        fn a_hosted_game_s_end_forgets_its_lobby_and_keeps_what_the_next_entry_sets() {
+            let state = State::new();
+            state.lobby.store(7, Ordering::Release);
+            state.handled.store(8, Ordering::Release);
+            state.published.store(7, Ordering::Relaxed);
+            state.host_runs.store(true, Ordering::Release);
+            state.forget();
+            assert_eq!(state.lobby.load(Ordering::Acquire), 0);
+            assert_eq!(state.published.load(Ordering::Relaxed), 0);
+            assert_eq!(
+                state.handled.load(Ordering::Acquire),
+                8,
+                "a second notice of an entry turns nothing off twice"
+            );
+            assert!(
+                state.host_runs.load(Ordering::Acquire),
+                "an entry before the end keeps its host"
             );
         }
 

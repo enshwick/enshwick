@@ -17,8 +17,8 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
+use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, OnceLock};
 use std::thread::LocalKey;
 
 use enshwick_core::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
@@ -30,8 +30,8 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
+use crate::engine::registry::Registry;
 use crate::engine::world::Whose;
-use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -79,24 +79,25 @@ struct Subscriber {
 /// One world's handlers and the event types they asked for.
 #[derive(Debug, Default)]
 struct Wanted {
-    subscribers: Box<[Subscriber]>,
+    subscribers: &'static [Subscriber],
     types: FxHashSet<u32>,
     every: bool,
 }
 
 impl Wanted {
-    fn of(subscribers: &[Subscriber], whose: Whose) -> Self {
-        let mut wanted = Self::default();
-        let mut own = Vec::new();
-        for subscriber in subscribers.iter().filter(|s| s.whose == whose) {
+    /// What one world's `subscribers`, a run of the sealed slice, want.
+    fn of(subscribers: &'static [Subscriber]) -> Self {
+        let mut wanted = Self {
+            subscribers,
+            ..Self::default()
+        };
+        for subscriber in subscribers {
             if subscriber.type_hash == 0 {
                 wanted.every = true;
             } else {
                 wanted.types.insert(subscriber.type_hash);
             }
-            own.push(*subscriber);
         }
-        wanted.subscribers = own.into_boxed_slice();
         wanted
     }
 
@@ -295,7 +296,8 @@ fn give_back<S: Scope>(mut batch: Batch) {
     });
 }
 
-static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
+/// The handlers mods register in their init, sealed at link.
+static SUBSCRIBERS: Registry<Subscriber> = Registry::new();
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 /// The build's stream layout when it has one, once linked.
 static LINKED: OnceLock<Option<Layout>> = OnceLock::new();
@@ -329,35 +331,54 @@ pub(crate) fn register(
     callback: GameEventFn,
     user: *mut c_void,
 ) -> Status {
-    if let Some(status) = unkept(side, whose, in_init, SEALED.get().is_some()) {
-        return status;
-    }
-    PENDING.relock().push(Subscriber {
+    let subscriber = Subscriber {
         whose,
         owner,
         type_hash,
         callback,
         user: user.expose_provenance(),
-    });
-    Status::OK
+    };
+    keep(&SUBSCRIBERS, side, in_init, subscriber)
 }
 
-/// The answer to a registration the loader does not keep, `None` for one it
-/// keeps: too late outside the mod's `init` or once `sealed`, and OK for a
-/// client handler on a dedicated server, where no client world steps.
-fn unkept(side: Side, whose: Whose, in_init: bool, sealed: bool) -> Option<Status> {
-    if !in_init || sealed {
-        Some(Status::TOO_LATE)
-    } else if whose == Whose::Client && side != Side::CLIENT {
-        Some(Status::OK)
+/// Keeps `subscriber` in `registry`: too late outside the mod's `init` or
+/// once the registry is sealed, and OK without keeping it for a client
+/// handler on a dedicated server, where no client world steps.
+fn keep(
+    registry: &Registry<Subscriber>,
+    side: Side,
+    in_init: bool,
+    subscriber: Subscriber,
+) -> Status {
+    if !in_init {
+        Status::TOO_LATE
+    } else if subscriber.whose == Whose::Client && side != Side::CLIENT {
+        Status::OK
     } else {
-        None
+        registry
+            .add(subscriber)
+            .map_or_else(Status::from, |()| Status::OK)
     }
+}
+
+/// Orders sealed subscribers server first, each world's in the order mods
+/// registered them, so each world's handlers are one run of the slice.
+fn server_first(mut subscribers: Vec<Subscriber>) -> Vec<Subscriber> {
+    subscribers.sort_by_key(|subscriber| subscriber.whose == Whose::Client);
+    subscribers
+}
+
+/// Each world's handlers in `sealed`, which [`server_first`] ordered.
+fn by_world(sealed: &'static [Subscriber]) -> (Wanted, Wanted) {
+    let (server, client) =
+        sealed.split_at(sealed.partition_point(|subscriber| subscriber.whose == Whose::Server));
+    (Wanted::of(server), Wanted::of(client))
 }
 
 /// Seals the subscriptions and links the event move when a mod subscribed.
 pub(crate) fn link(loader: &'static Loader) {
-    let subscribers = std::mem::take(&mut *PENDING.relock());
+    let subscribers = SUBSCRIBERS.seal_with(server_first);
+    let (server, client) = by_world(subscribers);
     let equipment = crate::inventory::stats::wanted()
         .then(|| {
             crate::engine::catalogue::component_hash(
@@ -367,8 +388,8 @@ pub(crate) fn link(loader: &'static Loader) {
         })
         .flatten();
     let sealed = Sealed {
-        server: Wanted::of(&subscribers, Whose::Server),
-        client: Wanted::of(&subscribers, Whose::Client),
+        server,
+        client,
         equipment,
         screened: crate::actions::vetoes::crafting() || crate::inventory::item_actions::wanted(),
     };
@@ -736,9 +757,10 @@ mod tests {
     }
 
     fn sealed_with(subscribers: &[Subscriber]) -> Sealed {
+        let (server, client) = by_world(server_first(subscribers.to_vec()).leak());
         Sealed {
-            server: Wanted::of(subscribers, Whose::Server),
-            client: Wanted::of(subscribers, Whose::Client),
+            server,
+            client,
             equipment: None,
             screened: false,
         }
@@ -766,30 +788,60 @@ mod tests {
 
     #[test]
     fn a_dedicated_server_answers_a_client_handler_without_keeping_it() {
+        let registry = Registry::new();
+        let client = subscriber(Whose::Client, 7);
+        assert_eq!(keep(&registry, Side::SERVER, true, client), Status::OK);
         assert_eq!(
-            unkept(Side::SERVER, Whose::Client, true, false),
-            Some(Status::OK)
+            keep(&registry, Side::SERVER, true, subscriber(Whose::Server, 7)),
+            Status::OK
         );
-        assert_eq!(unkept(Side::SERVER, Whose::Server, true, false), None);
-        assert_eq!(unkept(Side::CLIENT, Whose::Client, true, false), None);
+        assert_eq!(keep(&registry, Side::CLIENT, true, client), Status::OK);
+        let kept: Vec<Whose> = registry.seal().iter().map(|s| s.whose).collect();
+        assert_eq!(kept, [Whose::Server, Whose::Client]);
     }
 
     #[test]
     fn a_handler_registered_outside_its_mod_s_init_is_too_late_on_either_world() {
+        let registry = Registry::new();
         for side in [Side::CLIENT, Side::SERVER] {
             for whose in [Whose::Server, Whose::Client] {
                 assert_eq!(
-                    unkept(side, whose, false, false),
-                    Some(Status::TOO_LATE),
+                    keep(&registry, side, false, subscriber(whose, 7)),
+                    Status::TOO_LATE,
                     "{whose:?}"
-                );
-                assert_eq!(
-                    unkept(side, whose, true, true),
-                    Some(Status::TOO_LATE),
-                    "{whose:?} once sealed"
                 );
             }
         }
+        assert!(registry.seal().is_empty());
+    }
+
+    #[test]
+    fn a_handler_registered_in_init_after_the_seal_is_too_late_and_not_kept() {
+        let registry = Registry::new();
+        let _sealed = registry.seal();
+        for side in [Side::CLIENT, Side::SERVER] {
+            assert_eq!(
+                keep(&registry, side, true, subscriber(Whose::Server, 7)),
+                Status::TOO_LATE,
+                "{side:?}"
+            );
+        }
+        assert!(registry.seal().is_empty());
+    }
+
+    #[test]
+    fn each_world_keeps_its_handlers_in_the_order_mods_registered_them() {
+        let sealed = sealed_with(&[
+            subscriber(Whose::Client, 1),
+            subscriber(Whose::Server, 2),
+            subscriber(Whose::Client, 3),
+            subscriber(Whose::Server, 4),
+        ]);
+        let hashes = |wanted: &Wanted| -> Vec<u32> {
+            wanted.subscribers.iter().map(|s| s.type_hash).collect()
+        };
+        assert_eq!(hashes(&sealed.server), [2, 4]);
+        assert_eq!(hashes(&sealed.client), [1, 3]);
     }
 
     #[test]

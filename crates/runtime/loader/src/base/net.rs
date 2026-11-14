@@ -53,9 +53,9 @@ struct Channel {
     handler: Registered<NetMessageFn>,
 }
 
-/// What the net keeps.
+/// The peers the net talks to and their rates.
 #[derive(Debug, Default)]
-struct State {
+struct Links {
     /// On the server: peers by account key that said hello. On a client:
     /// the server, [`NetMessage::SERVER`], once it answered.
     peers: FxHashMap<u64, Peer>,
@@ -72,27 +72,53 @@ struct State {
     owed: Vec<(u64, u8)>,
 }
 
-static CHANNELS: Registry<Channel> = Registry::new();
-static STATE: Mutex<Option<State>> = Mutex::new(None);
-/// Set on a client while the server it joined advertises Enshwick, which
-/// opens the own channel to it.
-static SERVER_RUNS_ENSHWICK: AtomicBool = AtomicBool::new(false);
-/// Set on a client while its server's answer holds, so a frame takes no
-/// lock once it is welcomed.
-static ANSWERED: AtomicBool = AtomicBool::new(false);
-/// Messages dropped: over a rate, or unreadable.
-static DROPPED: AtomicU64 = AtomicU64::new(0);
+/// What the net keeps while a game runs.
+#[derive(Debug)]
+struct State {
+    links: Mutex<Option<Links>>,
+    /// Set on a client while the server it joined advertises Enshwick,
+    /// which opens the own channel to it.
+    server_runs_enshwick: AtomicBool,
+    /// Set on a client while its server's answer holds, so a frame takes no
+    /// lock once it is welcomed.
+    answered: AtomicBool,
+    /// Messages dropped this run, over a rate or unreadable, for the status
+    /// summary; no game's end resets it.
+    dropped: AtomicU64,
+}
 
-fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mut guard = STATE.relock();
-    f(guard.get_or_insert_with(State::default))
+impl State {
+    const fn new() -> Self {
+        Self {
+            links: Mutex::new(None),
+            server_runs_enshwick: AtomicBool::new(false),
+            answered: AtomicBool::new(false),
+            dropped: AtomicU64::new(0),
+        }
+    }
+
+    /// Forgets the game that went: its peers and its answer. Whether the
+    /// server runs Enshwick stays, since the next join check sets it, maybe
+    /// before a hosted game's end reaches this on another thread.
+    fn forget(&self) {
+        self.answered.store(false, Ordering::Release);
+        *self.links.relock() = None;
+    }
+}
+
+static CHANNELS: Registry<Channel> = Registry::new();
+static STATE: State = State::new();
+
+fn state<R>(f: impl FnOnce(&mut Links) -> R) -> R {
+    let mut guard = STATE.links.relock();
+    f(guard.get_or_insert_with(Links::default))
 }
 
 /// [`state`] for a per-frame path: `None`, without waiting, while another
 /// thread holds the state.
-fn try_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
-    let mut guard = STATE.try_relock()?;
-    Some(f(guard.get_or_insert_with(State::default)))
+fn try_state<R>(f: impl FnOnce(&mut Links) -> R) -> Option<R> {
+    let mut guard = STATE.links.try_relock()?;
+    Some(f(guard.get_or_insert_with(Links::default)))
 }
 
 /// The id of mod `id`'s channel `name`.
@@ -156,10 +182,10 @@ fn carry(key: u64, channel: u32, data: &[u8]) -> bool {
 /// a hello it has no room for. Waits on no lock but for a new link.
 pub(crate) fn client_tick(opened: bool) {
     let server = NetMessage::SERVER.get();
-    if ANSWERED.load(Ordering::Acquire) {
+    if STATE.answered.load(Ordering::Acquire) {
         return;
     }
-    let due = |s: &mut State| {
+    let due = |s: &mut Links| {
         let due = !s.peers.contains_key(&server)
             && (opened || s.hello_at.is_none_or(|at| at.elapsed() >= HELLO_AGAIN));
         if due {
@@ -191,7 +217,7 @@ pub(crate) fn client_tick(opened: bool) {
 /// Forgets the server's answer and the windows it showed when the
 /// client's link went.
 pub(crate) fn link_lost() {
-    ANSWERED.store(false, Ordering::Release);
+    STATE.answered.store(false, Ordering::Release);
     state(|s| {
         s.peers.remove(&NetMessage::SERVER.get());
         s.sending.remove(&NetMessage::SERVER.get());
@@ -351,7 +377,7 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
                 .insert(NetMessage::SERVER.get(), Peer::new())
                 .is_none()
         });
-        ANSWERED.store(true, Ordering::Release);
+        STATE.answered.store(true, Ordering::Release);
         if fresh {
             crate::log!(INFO, "mod messages: the server answered");
             crate::actions::player_actions::joined();
@@ -387,22 +413,23 @@ pub(crate) fn joining(runs_enshwick: bool) {
     forget();
     crate::content::recipes::joining();
     crate::ui::interface::demo::forget();
-    SERVER_RUNS_ENSHWICK.store(runs_enshwick, Ordering::Release);
+    STATE
+        .server_runs_enshwick
+        .store(runs_enshwick, Ordering::Release);
 }
 
 /// Whether the server the client joins advertises Enshwick, itself or in
 /// its host's lobby.
 pub(crate) fn server_runs_enshwick() -> bool {
-    SERVER_RUNS_ENSHWICK.load(Ordering::Acquire) || crate::base::lobby::host_runs_enshwick()
+    STATE.server_runs_enshwick.load(Ordering::Acquire) || crate::base::lobby::host_runs_enshwick()
 }
 
 /// Forgets every peer, when the client changes servers or a hosted game
 /// ends.
 pub(crate) fn forget() {
     crate::base::carrier::forget();
-    ANSWERED.store(false, Ordering::Release);
-    let mut guard = STATE.relock();
-    *guard = None;
+    STATE.forget();
+    crate::base::notices::forget();
     crate::inventory::item_data::forget_client();
     crate::actions::controls::forget_carried();
     crate::ui::interface::carried::forget();
@@ -447,7 +474,7 @@ pub(crate) fn language_named(key: u64, language: u32) {
 
 /// Keeps the `language` client `key`'s hello named on its peer, or on its
 /// hello on the way in, so it goes when they go.
-fn remember_language(state: &mut State, key: u64, language: Language) {
+fn remember_language(state: &mut Links, key: u64, language: Language) {
     if let Some(peer) = state.peers.get_mut(&key) {
         peer.language = Some(language);
     } else if let Some(peer) = state.greeting.get_mut(&key) {
@@ -456,7 +483,7 @@ fn remember_language(state: &mut State, key: u64, language: Language) {
 }
 
 /// [`language_of`] in `state`: a peer's, or a hello still on its way in.
-fn language_in(state: &State, key: u64) -> Option<Language> {
+fn language_in(state: &Links, key: u64) -> Option<Language> {
     state
         .peers
         .get(&key)
@@ -563,7 +590,7 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
 
 /// Takes one message to `key` from its sending rate, in process too;
 /// counts one over it as dropped.
-fn admit_sending(s: &mut State, key: u64) -> bool {
+fn admit_sending(s: &mut Links, key: u64) -> bool {
     let admitted = s.sending.entry(key).or_default().admit();
     if !admitted {
         dropped();
@@ -586,13 +613,13 @@ fn refund(keys: &[u64]) {
 /// were.
 pub(crate) fn status() -> Option<String> {
     let (lines, strayed) = crate::actions::chat::delivery();
-    let dropped = DROPPED.load(Ordering::Relaxed) + crate::base::carrier::dropped();
+    let dropped = STATE.dropped.load(Ordering::Relaxed) + crate::base::carrier::dropped();
     crate::engine::diag::messages_line(dropped, lines, strayed)
 }
 
 /// Counts a dropped message and logs the first and every hundredth.
 fn dropped() {
-    let count = DROPPED.fetch_add(1, Ordering::Relaxed) + 1;
+    let count = STATE.dropped.fetch_add(1, Ordering::Relaxed) + 1;
     if count == 1 || count.is_multiple_of(100) {
         crate::log!(
             WARN,

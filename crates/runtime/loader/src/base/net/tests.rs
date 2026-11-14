@@ -11,7 +11,7 @@ use crate::base::wire::DATA_AGAIN;
 
 #[test]
 fn data_dropped_on_the_way_is_owed_until_it_goes_whole() {
-    let mut state = State::default();
+    let mut state = Links::default();
     let now = Instant::now();
     assert!(greet(&mut state, 7, now).data);
     assert_eq!(
@@ -72,7 +72,7 @@ fn a_language_named_after_the_hello_fills_only_a_peer_whose_hello_named_none() {
 
 #[test]
 fn owed_data_stops_after_a_few_tries() {
-    let mut state = State::default();
+    let mut state = Links::default();
     let now = Instant::now();
     let _greeting = greet(&mut state, 7, now);
     let tries: Vec<Handover> = (0..MAX_HANDOVERS)
@@ -84,7 +84,7 @@ fn owed_data_stops_after_a_few_tries() {
 
 #[test]
 fn a_repeated_hello_keeps_the_peer_and_spends_its_rate() {
-    let mut state = State::default();
+    let mut state = Links::default();
     let now = Instant::now();
     assert_eq!(
         greet(&mut state, 7, now),
@@ -118,7 +118,7 @@ fn a_repeated_hello_keeps_the_peer_and_spends_its_rate() {
 
 #[test]
 fn a_stranger_s_message_on_a_mod_channel_is_not_taken() {
-    let mut state = State::default();
+    let mut state = Links::default();
     assert_eq!(take_message(&mut state, 7, 5, false), None);
     assert_eq!(take_message(&mut state, 7, CONTROL, false), Some(false));
     assert!(state.peers.is_empty(), "a hello alone makes no peer");
@@ -126,14 +126,14 @@ fn a_stranger_s_message_on_a_mod_channel_is_not_taken() {
 
 #[test]
 fn a_message_from_an_unknown_sender_is_not_taken() {
-    let mut state = State::default();
+    let mut state = Links::default();
     assert_eq!(take_message(&mut state, 0, CONTROL, false), None);
     assert!(state.greeting.is_empty());
 }
 
 #[test]
 fn every_message_of_a_stranger_takes_from_its_rate() {
-    let mut state = State::default();
+    let mut state = Links::default();
     for _ in 0..200 {
         let _taken = take_message(&mut state, 7, CONTROL, false);
     }
@@ -142,7 +142,7 @@ fn every_message_of_a_stranger_takes_from_its_rate() {
 
 #[test]
 fn strangers_waiting_to_say_hello_are_bounded_and_follow_the_live_slots() {
-    let mut state = State::default();
+    let mut state = Links::default();
     for key in 1..=1000 {
         let _taken = take_message(&mut state, key, CONTROL, false);
     }
@@ -155,7 +155,7 @@ fn strangers_waiting_to_say_hello_are_bounded_and_follow_the_live_slots() {
 
 #[test]
 fn a_hello_s_language_stays_with_its_client_and_goes_with_it() {
-    let mut state = State::default();
+    let mut state = Links::default();
     let _taken = take_message(&mut state, 7, CONTROL, false);
     remember_language(&mut state, 7, Language::UK_UA);
     remember_language(&mut state, 8, Language::DE_DE);
@@ -204,7 +204,7 @@ fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_
         let _host = greet(s, host, Instant::now());
         let _wired = greet(s, wired, Instant::now());
     });
-    let dropped = DROPPED.load(Ordering::Relaxed);
+    let dropped = STATE.dropped.load(Ordering::Relaxed);
     let refused = (0..200)
         .filter(|_| send_to_server(CHANNEL, b"burst") == Err(Status::REFUSED))
         .count();
@@ -213,7 +213,7 @@ fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_
         in_burst(admitted),
         "{admitted} sent before the rate refused"
     );
-    assert!(DROPPED.load(Ordering::Relaxed) - dropped >= 200 - admitted);
+    assert!(STATE.dropped.load(Ordering::Relaxed) - dropped >= 200 - admitted);
     crate::base::carrier::take_hosted();
     assert_eq!(
         ARRIVED.load(Ordering::Relaxed),
@@ -237,7 +237,7 @@ fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_
 
 #[test]
 fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
-    let mut state = State::default();
+    let mut state = Links::default();
     for key in 1..=MAX_GREETING as u64 {
         let _taken = take_message(&mut state, key, CONTROL, false);
     }
@@ -266,10 +266,13 @@ fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no
     assert!(!ready(server));
     client_carried(5, b"before the welcome");
     client_carried(CONTROL, &control(WELCOME));
-    assert!(ready(server) && ANSWERED.load(Ordering::Acquire));
+    assert!(ready(server) && STATE.answered.load(Ordering::Acquire));
     link_lost();
     assert!(!ready(server), "a new link waits for its own welcome");
-    assert!(!ANSWERED.load(Ordering::Acquire), "a frame looks again");
+    assert!(
+        !STATE.answered.load(Ordering::Acquire),
+        "a frame looks again"
+    );
     // One test, since both read the net's shared state.
     client_carried(CONTROL, &control(WELCOME));
     for _ in 0..200 {
@@ -277,6 +280,28 @@ fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no
     }
     let tokens = state(|s| s.sending[&server].rate.tokens());
     assert!(tokens >= 39.0, "{tokens}");
+}
+
+#[test]
+fn a_game_s_end_forgets_its_peers_and_answer_but_keeps_the_next_join_s_flag_and_the_run_s_drops() {
+    let state = State::new();
+    state
+        .links
+        .relock()
+        .get_or_insert_with(Links::default)
+        .peers
+        .insert(7, Peer::new());
+    state.answered.store(true, Ordering::Release);
+    state.server_runs_enshwick.store(true, Ordering::Release);
+    state.dropped.store(3, Ordering::Relaxed);
+    state.forget();
+    assert!(state.links.relock().is_none());
+    assert!(!state.answered.load(Ordering::Acquire));
+    assert!(
+        state.server_runs_enshwick.load(Ordering::Acquire),
+        "a join checked before the hosted game's end keeps its answer"
+    );
+    assert_eq!(state.dropped.load(Ordering::Relaxed), 3);
 }
 
 #[test]

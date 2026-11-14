@@ -10,17 +10,6 @@ static-is-registry-fuse-or-state crates/internal/base/src/i18n.rs static HANDED:
 # Each mod's task queue, kept for the process; it moves into a
 # `Registry<T>` by mod handle.
 static-is-registry-fuse-or-state crates/internal/base/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
-# The game event subscriptions mods make during init; they move into a
-# `Registry<T>`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/base/game_events.rs static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
-# The notices waiting for a slot, runtime state; they move into the
-# notices' state struct with the slots.
-static-is-registry-fuse-or-state crates/runtime/loader/src/base/notices.rs static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
-# Every world key seen this process; it moves into the saves' `Keys`
-# state.
-static-is-registry-fuse-or-state crates/runtime/loader/src/base/saves.rs static SEEN: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
-# The status sources mods register; they move into a `Registry<T>`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/base/status.rs static SOURCES: Mutex<Vec<Source>> = Mutex::new(Vec::new());
 # The bed checks, summons and survivor items mods register during init;
 # they move into a `Registry<T>` each.
 static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static BED_CHECKS: Mutex<Vec<Registered<BedCheckFn>>> = Mutex::new(Vec::new());
@@ -30,22 +19,9 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.r
 # The survivor a staff moves, runtime state; it moves into the survivors'
 # state struct.
 static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
-# The files the loader wrote itself, the watcher's state; they move into
-# the watcher's state struct.
-static-is-registry-fuse-or-state crates/runtime/loader/src/base/watch.rs static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
 
 # Loose atomic statics of the loader from before its rule; each moves into
 # its domain's state struct, a `Pending` queue or its fuse.
-loader-flag-is-in-state crates/runtime/loader/src/base/lobby.rs static HANDLED: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/base/lobby.rs static HOST_RUNS: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/base/lobby.rs static LOBBY: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/base/lobby.rs static PUBLISHED: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/base/net.rs static ANSWERED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/base/net.rs static DROPPED: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/base/net.rs static SERVER_RUNS_ENSHWICK: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/base/notices.rs static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/base/saves.rs static UNDER_WAY: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/base/saves/holds.rs static HOLDING: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/events.rs static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
 loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static CLIENT_FULL: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static DESTROYED: [AtomicU64; DESTROYED_CAP] = [const { AtomicU64::new(0) }; DESTROYED_CAP];

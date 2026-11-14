@@ -20,12 +20,44 @@ struct Rates {
     edits: Rated,
 }
 
-static RATES: Mutex<Rates> = Mutex::new(Rates {
-    queries: Queries::new(),
-    edits: Rated::new(EDIT_RATE),
-});
-/// What the client last heard from its server, for the Mods screen.
-static HEARD: Mutex<Heard> = Mutex::new(Heard::new());
+impl Rates {
+    const fn new() -> Self {
+        Self {
+            queries: Queries::new(),
+            edits: Rated::new(EDIT_RATE),
+        }
+    }
+}
+
+/// What the settings messages keep while a game runs.
+struct State {
+    rates: Mutex<Rates>,
+    /// What the client last heard from its server, for the Mods screen.
+    heard: Mutex<Heard>,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            rates: Mutex::new(Rates::new()),
+            heard: Mutex::new(Heard::new()),
+        }
+    }
+
+    /// Forgets the rates of the hosted game that went. What was heard
+    /// stays: only a client joined to another's game hears, and the Mods
+    /// screen forgets it before each query.
+    fn forget(&self) {
+        *self.rates.relock() = Rates::new();
+    }
+}
+
+static STATE: State = State::new();
+
+/// Forgets the players' rates when a client's hosted game ends.
+pub(crate) fn forget_game() {
+    STATE.forget();
+}
 
 /// What the client last heard from its server.
 #[derive(Debug)]
@@ -54,12 +86,12 @@ impl Heard {
 
 /// Reads what the client last heard, under the lock.
 pub(crate) fn heard<R>(read: impl FnOnce(&Heard) -> R) -> R {
-    read(&HEARD.relock())
+    read(&STATE.heard.relock())
 }
 
 /// Forgets what was heard, as when the screen asks again.
 pub(crate) fn forget() {
-    let mut heard = HEARD.relock();
+    let mut heard = STATE.heard.relock();
     heard.mods = None;
     heard.settings = None;
     heard.result = None;
@@ -102,7 +134,7 @@ pub(crate) fn client(message: Message) {
             schema,
             text,
         } => {
-            let mut heard = HEARD.relock();
+            let mut heard = STATE.heard.relock();
             if id.is_empty() {
                 heard.mods = Some(
                     text.lines()
@@ -116,7 +148,7 @@ pub(crate) fn client(message: Message) {
             heard.news += 1;
         }
         Message::Result { ok, text } => {
-            let mut heard = HEARD.relock();
+            let mut heard = STATE.heard.relock();
             heard.result = Some((ok, text));
             heard.news += 1;
         }
@@ -221,7 +253,8 @@ fn answer(loader: &Loader, key: u64, message: Message) {
 /// What the server does with `message` of the player with account key
 /// `key` now.
 fn gate(key: u64, admin: impl FnOnce() -> bool, message: &Message) -> Gate {
-    RATES
+    STATE
+        .rates
         .relock()
         .queries
         .gate(key, admin, message, Instant::now())
@@ -229,7 +262,7 @@ fn gate(key: u64, admin: impl FnOnce() -> bool, message: &Message) -> Gate {
 
 /// Forgets the player with account key `key`, who left the server.
 pub(crate) fn forget_player(key: u64) {
-    let mut rates = RATES.relock();
+    let mut rates = STATE.rates.relock();
     rates.queries.forget(key);
     rates.edits.forget(key);
 }
@@ -299,7 +332,7 @@ fn edit(
         &schema,
         setting,
         admin,
-        (key, &mut RATES.relock().edits),
+        (key, &mut STATE.rates.relock().edits),
         now,
     )?;
     let who =
@@ -334,5 +367,23 @@ impl EditSettingError {
             Self::Admit(error) => error.reply(),
             Self::Apply(error) => error.reply(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use enshwick_base::peer::Admitted;
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_its_players_rates() {
+        let state = State::new();
+        let now = Instant::now();
+        let spent = core::iter::repeat_with(|| state.rates.relock().edits.admit(7, now))
+            .take(1000)
+            .any(|admitted| admitted != Admitted::Yes);
+        assert!(spent, "the edit rate ran out");
+        state.forget();
+        assert_eq!(state.rates.relock().edits.admit(7, now), Admitted::Yes);
     }
 }

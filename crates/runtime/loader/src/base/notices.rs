@@ -94,11 +94,34 @@ impl SlotText {
     }
 }
 
-static SLOT_TEXTS: [SlotText; SLOTS] = [const { SlotText::new() }; SLOTS];
-static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
-/// The waiting notices, and whether a full queue dropped one since the
-/// last notice it took.
-static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
+/// What the notices keep while the client runs.
+struct State {
+    /// The slots' texts, which stay where they are for the process, since
+    /// the game may keep a view of one; a game's end leaves them.
+    slot_texts: [SlotText; SLOTS],
+    next_slot: AtomicUsize,
+    /// The waiting notices, and whether a full queue dropped one since the
+    /// last notice it took.
+    waiting: Mutex<(Waiting, bool)>,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            slot_texts: [const { SlotText::new() }; SLOTS],
+            next_slot: AtomicUsize::new(0),
+            waiting: Mutex::new((Vec::new(), false)),
+        }
+    }
+
+    /// Drops the notices of the server that went, which its next step
+    /// would raise in another game.
+    fn forget(&self) {
+        *self.waiting.relock() = (Vec::new(), false);
+    }
+}
+
+static STATE: State = State::new();
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 
 type PushFn =
@@ -165,7 +188,7 @@ pub(crate) fn text(id: u32) -> Option<crate::base::handed::Handed> {
     let slot = TAGS
         .iter()
         .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
-    SLOT_TEXTS[slot].view()
+    STATE.slot_texts[slot].view()
 }
 
 /// The ids of the notice text tags.
@@ -177,7 +200,7 @@ pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
 /// Queues a notice the server sent for the client's next step.
 pub(crate) fn queue(entity: Entity, text: &str) {
     let pushed = {
-        let mut guard = WAITING.relock();
+        let mut guard = STATE.waiting.relock();
         let (waiting, dropping) = &mut *guard;
         push(waiting, dropping, entity.0, text)
     };
@@ -189,10 +212,16 @@ pub(crate) fn queue(entity: Entity, text: &str) {
     }
 }
 
+/// Drops the waiting notices when the client changes servers or its hosted
+/// game ends.
+pub(crate) fn forget() {
+    STATE.forget();
+}
+
 /// Writes `text` into the next notice text tag; its GUID.
 fn take_slot(text: &str) -> [u8; 16] {
-    let index = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % SLOTS;
-    SLOT_TEXTS[index].write(cut(text));
+    let index = STATE.next_slot.fetch_add(1, Ordering::Relaxed) % SLOTS;
+    STATE.slot_texts[index].write(cut(text));
     TAGS[index]
 }
 
@@ -207,7 +236,7 @@ fn take_slot(text: &str) -> [u8; 16] {
 ///   event streams, so no system pushes into them during the call.
 pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     let waiting = {
-        let mut guard = WAITING.relock();
+        let mut guard = STATE.waiting.relock();
         if guard.0.is_empty() {
             return;
         }
@@ -287,6 +316,22 @@ mod tests {
         assert!(data.len() <= crate::base::net::MAX_CONTROL);
     }
 
+    #[test]
+    fn a_game_s_end_drops_the_waiting_notices_and_keeps_the_slot_texts() {
+        let state = State::new();
+        state.slot_texts[0].write("Shown");
+        {
+            let mut guard = state.waiting.relock();
+            let (waiting, dropping) = &mut *guard;
+            let _pushed = push(waiting, dropping, 7, "Waiting");
+            *dropping = true;
+        }
+        state.forget();
+        let guard = state.waiting.relock();
+        assert!(guard.0.is_empty() && !guard.1);
+        assert!(state.slot_texts[0].view().is_some(), "the game may show it");
+    }
+
     /// Serialises the tests that take slots, which all tests share.
     static SLOTS_IN_TEST: Mutex<()> = Mutex::new(());
 
@@ -295,7 +340,7 @@ mod tests {
         let slot = TAGS
             .iter()
             .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
-        let slot = &SLOT_TEXTS[slot];
+        let slot = &STATE.slot_texts[slot];
         let len = slot.len.load(Ordering::Acquire).checked_sub(1)?;
         let bytes: Vec<u8> = slot.bytes[..len]
             .iter()
@@ -347,6 +392,6 @@ mod tests {
             .iter()
             .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)
             .unwrap();
-        assert_eq!(SLOT_TEXTS[index].bytes[4].load(Ordering::Relaxed), 0);
+        assert_eq!(STATE.slot_texts[index].bytes[4].load(Ordering::Relaxed), 0);
     }
 }
