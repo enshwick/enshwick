@@ -8,7 +8,6 @@ pub(crate) mod dist;
 pub(crate) mod doc_links;
 pub(crate) mod fuzz;
 pub(crate) mod header;
-pub(crate) mod lower_examples;
 pub(crate) mod notes;
 pub(crate) mod peel;
 pub(crate) mod tag_lines;

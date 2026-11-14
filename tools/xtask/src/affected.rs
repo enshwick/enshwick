@@ -1,7 +1,9 @@
 //! Which packages a change touches: the packages whose files changed and
-//! every workspace package that depends on them.
+//! every workspace package that depends on them. A local check leaves the
+//! widest part to CI and the merge queue ([`Lane`]).
 
 mod shared;
+mod versions;
 
 use std::collections::BTreeSet;
 
@@ -23,8 +25,10 @@ pub(crate) struct Package {
     /// Has tests of its Windows code, run under Wine off Windows
     /// (`package.metadata.xtask.windows-tests`, or `windows-only`).
     pub(crate) windows_tests: bool,
-    /// Has an `unstable` feature: part of its API stands only with it.
-    pub(crate) unstable: bool,
+    /// Has a stable surface to check in a build without `unstable`: an
+    /// `unstable` feature of its own, or examples that name the facade as a
+    /// stable mod does (a dev-dependency on it with no feature beyond `test`).
+    pub(crate) stable_build: bool,
 }
 
 /// What a change needs checked.
@@ -39,8 +43,55 @@ pub(crate) enum Scope {
         /// Packages whose doctests changed without their code: the book's
         /// chapters are doctests of the API crate.
         docs: BTreeSet<String>,
+        /// Packages a local check only builds and lints, leaving their tests
+        /// to CI: those whose versions alone moved, and the dependents of a
+        /// change more packages depend on than [`MAX_LOCAL_DEPENDENTS`].
+        built: BTreeSet<String>,
     },
 }
+
+/// Where a check runs. CI and the merge queue test every package a change
+/// reaches; a local check, which must stay under ten minutes, tests only the
+/// changed packages of a change many packages depend on, and only builds a
+/// package whose versions alone moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Lane {
+    Local,
+    Ci,
+}
+
+impl Lane {
+    /// CI when the `CI` variable is set, as every CI service sets it.
+    pub(crate) fn current() -> Self {
+        Self::from_ci(std::env::var("CI").ok().as_deref())
+    }
+
+    /// The lane a value of `CI` names: an empty, `false` or `0` value turns
+    /// CI mode off, as tools that read the variable take it.
+    fn from_ci(value: Option<&str>) -> Self {
+        match value.map(str::trim) {
+            None | Some("" | "0") => Self::Local,
+            Some(value) if value.eq_ignore_ascii_case("false") => Self::Local,
+            Some(_) => Self::Ci,
+        }
+    }
+}
+
+/// The most dependents a local check tests beside the changed packages;
+/// past it, as for a change to the base crates, the dependents are left to
+/// CI.
+pub(crate) const MAX_LOCAL_DEPENDENTS: usize = 8;
+
+/// A package's own changelog and change files, which no build reads.
+const CHANGELOG: &str = "CHANGELOG.md";
+const CHANGES_DIR: &str = "changes/";
+/// A package's readme: documentation, which no build reads unless its
+/// crate's docs include it, so its examples are the most it can break; no
+/// crate includes one today, and its doctests run so one that does stays
+/// checked.
+const README: &str = "README.md";
+/// A package's manifest, relative to its directory.
+const PACKAGE_MANIFEST: &str = "Cargo.toml";
 
 /// The text of a file before and after the change, for the shared build
 /// files whose content says which packages they reach.
@@ -68,14 +119,27 @@ const BOOK_HARNESS: &str = "enshwick";
 /// The package whose tests compile and type-check the book's Luau examples.
 const BOOK_LUAU: &str = "enshwick-luau";
 
-/// Sorts changed files (relative to the root, `/` separators) into a scope;
-/// `texts` gives the lock file and the root manifest before and after.
-pub(crate) fn scope(files: &[String], packages: &[Package], texts: &dyn Texts) -> Scope {
+/// Sorts changed files (relative to the root, `/` separators) into a scope
+/// for `lane`; `texts` gives the shared build files and the manifests before
+/// and after.
+pub(crate) fn scope(
+    files: &[String],
+    packages: &[Package],
+    texts: &dyn Texts,
+    lane: Lane,
+) -> Scope {
+    let local = lane == Lane::Local;
     let mut changed = BTreeSet::new();
+    let mut bumped = BTreeSet::new();
     let mut docs = BTreeSet::new();
     let mut luau = false;
     for file in files {
         match file.as_str() {
+            shared::LOCK if local && bump(texts, file, versions::lock) => {}
+            shared::MANIFEST if local && bump(texts, file, versions::root) => {
+                // Members that inherit the version build under the new one.
+                bumped.extend(shared::inherited(texts, packages).unwrap_or_default());
+            }
             shared::LOCK => {
                 let Some(reached) = shared::locked(texts, packages) else {
                     return Scope::All;
@@ -97,16 +161,49 @@ pub(crate) fn scope(files: &[String], packages: &[Package], texts: &dyn Texts) -
                 docs.insert(BOOK_HARNESS.to_owned());
                 luau = true;
             }
-            path => changed.extend(owner(path, packages).map(|package| package.name.clone())),
+            path => {
+                let Some(package) = owner(path, packages) else {
+                    continue;
+                };
+                let own = &path[package.dir.len() + 1..];
+                if own == CHANGELOG || own.starts_with(CHANGES_DIR) {
+                    continue;
+                }
+                if own == README {
+                    docs.insert(package.name.clone());
+                    continue;
+                }
+                if local && own == PACKAGE_MANIFEST && bump(texts, path, versions::member) {
+                    bumped.insert(package.name.clone());
+                } else {
+                    changed.insert(package.name.clone());
+                }
+            }
         }
     }
     let mut code = dependents(&changed, packages);
+    let mut built = BTreeSet::new();
+    if local && code.len() - changed.len() > MAX_LOCAL_DEPENDENTS {
+        built = code.difference(&changed).cloned().collect();
+        code = changed;
+    }
     // Its own tests read the chapters and run luau-lsp; what depends on it does not.
     if luau && packages.iter().any(|package| package.name == BOOK_LUAU) {
         code.insert(BOOK_LUAU.to_owned());
     }
+    built.extend(bumped);
+    built.retain(|name| !code.contains(name));
     docs.retain(|name| !code.contains(name));
-    Scope::Some { code, docs }
+    Scope::Some { code, docs, built }
+}
+
+/// Whether the file at `path` changed only in versions, as `only_versions`
+/// judges its text before and after.
+fn bump(texts: &dyn Texts, path: &str, only_versions: fn(&str, &str) -> bool) -> bool {
+    texts
+        .before(path)
+        .zip(texts.after(path))
+        .is_some_and(|(before, after)| only_versions(&before, &after))
 }
 
 /// The package whose directory holds `file`, the innermost one.
@@ -148,7 +245,7 @@ mod tests {
             lib: None,
             windows_only: false,
             windows_tests: false,
-            unstable: false,
+            stable_build: false,
         }
     }
 
@@ -212,7 +309,7 @@ mod tests {
 
     /// The scope of a change to files whose content the scope does not read.
     fn scope(files: &[String], packages: &[Package]) -> Scope {
-        super::scope(files, packages, &Tree::default())
+        super::scope(files, packages, &Tree::default(), Lane::Ci)
     }
 
     fn code(scope: Scope) -> BTreeSet<String> {
@@ -301,7 +398,12 @@ checksum = "cc"
     fn a_lock_change_checks_only_the_packages_built_on_the_changed_entry() {
         let tree = Tree::changed("Cargo.lock", &lock("bb"), &lock("b2"));
         assert_eq!(
-            code(super::scope(&files(&["Cargo.lock"]), &workspace(), &tree)),
+            code(super::scope(
+                &files(&["Cargo.lock"]),
+                &workspace(),
+                &tree,
+                Lane::Ci
+            )),
             names(&["loader"])
         );
     }
@@ -314,7 +416,12 @@ checksum = "cc"
             &lock("bb").replace("checksum = \"aa\"", "checksum = \"a2\""),
         );
         assert_eq!(
-            code(super::scope(&files(&["Cargo.lock"]), &workspace(), &tree)),
+            code(super::scope(
+                &files(&["Cargo.lock"]),
+                &workspace(),
+                &tree,
+                Lane::Ci
+            )),
             names(&[
                 "macros",
                 "enshwick",
@@ -330,7 +437,7 @@ checksum = "cc"
     fn a_lock_that_does_not_read_checks_everything() {
         let tree = Tree::changed("Cargo.lock", &lock("bb"), "[[package]");
         assert_eq!(
-            super::scope(&files(&["Cargo.lock"]), &workspace(), &tree),
+            super::scope(&files(&["Cargo.lock"]), &workspace(), &tree, Lane::Ci),
             Scope::All
         );
     }
@@ -355,7 +462,12 @@ checksum = "cc"
             "[dependencies]\nsyn.workspace = true\n",
         );
         assert_eq!(
-            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            code(super::scope(
+                &files(&["Cargo.toml"]),
+                &workspace(),
+                &tree,
+                Lane::Ci
+            )),
             names(&["trading-post", "haggling", "loader"])
         );
     }
@@ -370,7 +482,12 @@ checksum = "cc"
         .member("mods/my-mod", "[package]\nrust-version.workspace = true\n")
         .member("mods/haggling", "[package]\nedition.workspace = true\n");
         assert_eq!(
-            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            code(super::scope(
+                &files(&["Cargo.toml"]),
+                &workspace(),
+                &tree,
+                Lane::Ci
+            )),
             names(&["my-mod"])
         );
     }
@@ -384,7 +501,12 @@ checksum = "cc"
         )
         .member("mods/my-mod", "[dependencies");
         assert_eq!(
-            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            code(super::scope(
+                &files(&["Cargo.toml"]),
+                &workspace(),
+                &tree,
+                Lane::Ci
+            )),
             names(&["my-mod"])
         );
     }
@@ -404,7 +526,7 @@ checksum = "cc"
         ] {
             let tree = Tree::changed("Cargo.toml", &manifest(before), &manifest(after));
             assert_eq!(
-                super::scope(&files(&["Cargo.toml"]), &workspace(), &tree),
+                super::scope(&files(&["Cargo.toml"]), &workspace(), &tree, Lane::Ci),
                 Scope::All,
                 "{after}"
             );
@@ -425,7 +547,7 @@ checksum = "cc"
                 &format!("[workspace]\n{after}"),
             );
             assert_eq!(
-                super::scope(&files(&["Cargo.toml"]), &workspace(), &tree),
+                super::scope(&files(&["Cargo.toml"]), &workspace(), &tree, Lane::Ci),
                 Scope::All,
                 "{after}"
             );
@@ -447,7 +569,12 @@ checksum = "cc"
         );
         tree.after.insert("Cargo.lock".to_owned(), lock("bb"));
         assert_eq!(
-            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            code(super::scope(
+                &files(&["Cargo.toml"]),
+                &workspace(),
+                &tree,
+                Lane::Ci
+            )),
             names(&["loader", "my-mod"])
         );
     }
@@ -460,6 +587,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&["trading-post", "haggling"]),
                 docs: names(&[]),
+                built: names(&[]),
             }
         );
     }
@@ -484,6 +612,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&[]),
                 docs: names(&["enshwick"]),
+                built: names(&[]),
             }
         );
     }
@@ -506,6 +635,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&["enshwick-luau"]),
                 docs: names(&["enshwick"]),
+                built: names(&[]),
             }
         );
     }
@@ -528,6 +658,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&["cargo-enshwick", "enshwick-luau"]),
                 docs: names(&[]),
+                built: names(&[]),
             }
         );
     }
@@ -542,6 +673,7 @@ checksum = "cc"
             Scope::Some {
                 code: names(&[]),
                 docs: names(&[]),
+                built: names(&[]),
             }
         );
     }
@@ -557,5 +689,168 @@ checksum = "cc"
             panic!("not all");
         };
         assert_eq!(code, names(&["nested", "haggling"]));
+    }
+
+    #[test]
+    fn a_package_s_changelog_and_change_files_need_no_check_in_any_lane() {
+        let files = files(&[
+            "mods/trading-post/CHANGELOG.md",
+            "mods/trading-post/changes/new-stall.md",
+        ]);
+        for lane in [Lane::Ci, Lane::Local] {
+            assert_eq!(
+                super::scope(&files, &workspace(), &Tree::default(), lane),
+                Scope::Some {
+                    code: names(&[]),
+                    docs: names(&[]),
+                    built: names(&[]),
+                },
+                "{lane:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_package_s_readme_runs_its_examples_and_tests_no_dependent() {
+        assert_eq!(
+            scope(&files(&["crates/enshwick/README.md"]), &workspace()),
+            Scope::Some {
+                code: names(&[]),
+                docs: names(&["enshwick"]),
+                built: names(&[]),
+            }
+        );
+    }
+
+    /// A release's change: every member's version, the root's path entries
+    /// and the lock's member versions move from `alpha.14` to `alpha.15`.
+    fn release() -> (Vec<String>, Tree) {
+        let mut tree = Tree::default();
+        let mut changed = vec!["Cargo.toml".to_owned(), "Cargo.lock".to_owned()];
+        for package in workspace() {
+            let path = format!("{}/Cargo.toml", package.dir);
+            let manifest = format!(
+                "[package]\nname = \"{}\"\nversion = \"1.0.0-alpha.14\"\n[dependencies]\nserde.workspace = true\n",
+                package.name
+            );
+            tree.after
+                .insert(path.clone(), manifest.replace("alpha.14", "alpha.15"));
+            tree.before.insert(path.clone(), manifest);
+            changed.push(path);
+        }
+        let root = manifest(
+            "[workspace.dependencies]\nenshwick = { path = \"crates/enshwick\", version = \"=1.0.0-alpha.14\" }\nserde = \"1\"\n",
+        );
+        let lock = lock("bb").replace("0.0.0-dev", "1.0.0-alpha.14");
+        for (path, text) in [("Cargo.toml", root), ("Cargo.lock", lock)] {
+            tree.after
+                .insert(path.to_owned(), text.replace("alpha.14", "alpha.15"));
+            tree.before.insert(path.to_owned(), text);
+        }
+        (changed, tree)
+    }
+
+    #[test]
+    fn a_release_s_versions_alone_are_only_built_locally() {
+        let (files, tree) = release();
+        let everyone = names(&[
+            "macros",
+            "enshwick",
+            "loader",
+            "trading-post",
+            "haggling",
+            "my-mod",
+        ]);
+        assert_eq!(
+            super::scope(&files, &workspace(), &tree, Lane::Local),
+            Scope::Some {
+                code: names(&[]),
+                docs: names(&[]),
+                built: everyone.clone(),
+            }
+        );
+        assert_eq!(
+            code(super::scope(&files, &workspace(), &tree, Lane::Ci)),
+            everyone
+        );
+    }
+
+    #[test]
+    fn members_inheriting_the_workspace_version_are_built_on_its_bump() {
+        let root = manifest("[workspace.package]\nversion = \"1.0.0-alpha.14\"\n");
+        let tree = Tree::changed("Cargo.toml", &root, &root.replace("alpha.14", "alpha.15"))
+            .member("mods/my-mod", "[package]\nversion.workspace = true\n");
+        assert_eq!(
+            super::scope(&files(&["Cargo.toml"]), &workspace(), &tree, Lane::Local),
+            Scope::Some {
+                code: names(&[]),
+                docs: names(&[]),
+                built: names(&["my-mod"]),
+            }
+        );
+    }
+
+    #[test]
+    fn only_a_ci_value_that_turns_ci_on_picks_the_ci_lane() {
+        for value in [None, Some(""), Some("0"), Some("false"), Some("False")] {
+            assert_eq!(Lane::from_ci(value), Lane::Local, "{value:?}");
+        }
+        for value in ["true", "1", "yes"] {
+            assert_eq!(Lane::from_ci(Some(value)), Lane::Ci, "{value}");
+        }
+    }
+
+    #[test]
+    fn a_version_beside_another_change_in_a_manifest_is_tested() {
+        let (files, mut tree) = release();
+        let path = "mods/my-mod/Cargo.toml";
+        let after = tree.after[path].replace("serde.workspace", "toml.workspace");
+        tree.after.insert(path.to_owned(), after);
+        let Scope::Some { code, built, .. } =
+            super::scope(&files, &workspace(), &tree, Lane::Local)
+        else {
+            panic!("the whole workspace");
+        };
+        assert_eq!(code, names(&["my-mod"]));
+        assert!(!built.contains("my-mod"));
+    }
+
+    #[test]
+    fn locally_a_change_with_many_dependents_tests_only_the_changed_packages() {
+        let mut packages = vec![package("base", "crates/base", &[])];
+        let leaves: Vec<String> = (0..=MAX_LOCAL_DEPENDENTS)
+            .map(|n| format!("mod-{n}"))
+            .collect();
+        for leaf in &leaves {
+            packages.push(package(leaf, &format!("mods/{leaf}"), &["base"]));
+        }
+        let files = files(&["crates/base/src/lib.rs"]);
+        let local = super::scope(&files, &packages, &Tree::default(), Lane::Local);
+        assert_eq!(
+            local,
+            Scope::Some {
+                code: names(&["base"]),
+                docs: names(&[]),
+                built: leaves.iter().cloned().collect(),
+            }
+        );
+        let mut everyone: BTreeSet<String> = leaves.iter().cloned().collect();
+        everyone.insert("base".to_owned());
+        assert_eq!(
+            code(super::scope(&files, &packages, &Tree::default(), Lane::Ci)),
+            everyone
+        );
+        // At the limit the dependents are still tested here.
+        packages.pop();
+        assert_eq!(
+            code(super::scope(
+                &files,
+                &packages,
+                &Tree::default(),
+                Lane::Local
+            ))
+            .len(),
+            MAX_LOCAL_DEPENDENTS + 1
+        );
     }
 }

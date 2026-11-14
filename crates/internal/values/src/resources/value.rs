@@ -15,7 +15,6 @@ use crate::content::Guid;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::resources::Value;
 ///
 /// let mut table = Value::Struct(vec![("damage".into(), Value::Float(2.5))]);
@@ -64,7 +63,6 @@ pub enum Value {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::resources::{Value, Variant};
 ///
 /// let shape = Value::Variant(Box::new(Variant::new("demo::ecs::SphereShape", Value::Float(1.0))));
@@ -115,7 +113,6 @@ impl Variant {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::resources::{Value, Variant};
     ///
     /// let mut variant = Variant::new("demo::float32", Value::Float(1.0));

@@ -15,7 +15,6 @@ use crate::abi::{Header, PlayerInfo, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ControlSpec, Header, Str};
 ///
 /// let spec = ControlSpec {
@@ -82,7 +81,6 @@ impl ControlSpec {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ControlEvent, ControlSpec, Header, PlayerInfo, Str};
 ///
 /// let event = ControlEvent {

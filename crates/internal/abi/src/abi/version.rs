@@ -11,7 +11,6 @@
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ABI_MAJOR, Header, Manifest};
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_major, ABI_MAJOR);
@@ -29,7 +28,6 @@ pub const ABI_MAJOR: u16 = 11;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ABI_MINOR, Header, Manifest};
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_minor, ABI_MINOR);
@@ -42,7 +40,6 @@ pub const ABI_MINOR: u16 = 28;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ABI_MAJOR, CheckAbiError, check_abi};
 ///
 /// let why = check_abi(ABI_MAJOR - 1, 0).unwrap_err();
@@ -109,7 +106,6 @@ pub enum CheckAbiError {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ABI_MAJOR, CheckAbiError, check_major};
 ///
 /// assert!(check_major(u32::from(ABI_MAJOR)).is_ok());
@@ -135,7 +131,6 @@ pub fn check_major(major: u32) -> Result<(), CheckAbiError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ABI_MAJOR, ABI_MINOR, check_abi};
 ///
 /// assert!(check_abi(ABI_MAJOR, ABI_MINOR).is_ok());

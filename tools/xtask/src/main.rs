@@ -57,23 +57,11 @@ enum Task {
     Header,
     /// Checks the links rustdoc leaves unchecked in the API crate's pages.
     DocLinks,
-    /// Writes the line that names an internal crate `enshwick` into its doc
-    /// examples.
-    AliasExamples,
     /// Peels a module's `Load` methods into forwarders, `<from>=<into>` each.
     PeelLoad {
         /// The modules, each `<from>=<into>`.
         #[arg(required = true)]
         pairs: Vec<String>,
-    },
-    /// Wraps the examples a doctest log names as failed and copies them
-    /// into the facade.
-    WrapExamples {
-        /// The doctest log.
-        log: PathBuf,
-        /// The feature the copies are built with.
-        #[arg(long)]
-        cfg: Option<String>,
     },
     /// Prints the cargo arguments of a host build, one a line, for CI.
     HostArgs,
@@ -109,11 +97,7 @@ fn run(task: Task) -> Result<ExitCode, String> {
         Task::TagLines => commands::tag_lines::run()?,
         Task::Header => commands::header::run(&root)?,
         Task::DocLinks => commands::doc_links::run(&root)?,
-        Task::AliasExamples => commands::lower_examples::run(&root, &packages()?)?,
         Task::PeelLoad { pairs } => commands::peel::run(&root, &pairs)?,
-        Task::WrapExamples { log, cfg } => {
-            commands::lower_examples::wrap(&root, &packages()?, &log, cfg.as_deref())?
-        }
         Task::HostArgs => {
             // One argument a line, for CI runs that test the host as the check does.
             for arg in commands::check::host_args(&packages()?, cfg!(windows)) {
@@ -200,10 +184,28 @@ fn packages() -> Result<Vec<Package>, String> {
                 windows_tests: ["windows-tests", "windows-only"]
                     .iter()
                     .any(|key| package["metadata"]["xtask"][key].as_bool() == Some(true)),
-                unstable: package["features"].get("unstable").is_some(),
+                stable_build: package["features"].get("unstable").is_some()
+                    || stable_examples(package),
             }
         })
         .collect())
+}
+
+/// Whether the examples of `package`, a `cargo metadata` entry, name the
+/// facade as a stable mod does: through a dev-dependency on it that turns on
+/// no feature beyond `test`.
+fn stable_examples(package: &serde_json::Value) -> bool {
+    package["dependencies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|dep| {
+            dep["name"] == FACADE
+                && dep["kind"] == "dev"
+                && dep["features"]
+                    .as_array()
+                    .is_some_and(|features| features.iter().all(|feature| feature == "test"))
+        })
 }
 
 /// `cargo xtask compat` runs `xtask-compat`, the binary built with the

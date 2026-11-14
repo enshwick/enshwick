@@ -120,6 +120,17 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 
+/// Fails when rustdoc builds this crate's examples one by one, which it does
+/// without a word when one of them does not merge.
+///
+/// ```
+/// assert_ne!(module_path!(), "rust_out", "an example does not merge: \
+///     RUSTC_BOOTSTRAP=1 RUSTDOCFLAGS='-Zunstable-options --merge-doctests=yes' \
+///     cargo test --doc names it");
+/// ```
+#[cfg(doctest)]
+struct MergedExamples;
+
 /// The version of this crate, which a mod's generated `Cargo.toml` pins.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -139,6 +150,8 @@ pub use enshwick_inventory::affixes;
 pub use enshwick_world::altars;
 #[cfg(doctest)]
 mod book;
+#[doc(inline)]
+pub use enshwick_abi::raw;
 #[doc(inline)]
 pub use enshwick_actions::chat;
 #[cfg(feature = "unstable")]
@@ -172,7 +185,18 @@ pub use enshwick_base::game_events;
 #[doc(inline)]
 pub use enshwick_base::i18n;
 #[doc(inline)]
+pub use enshwick_base::mods;
+#[doc(inline)]
+pub use enshwick_base::net;
+#[doc(inline)]
+pub use enshwick_base::pacing;
+#[doc(inline)]
+pub use enshwick_base::points;
+#[doc(inline)]
 pub use enshwick_content::content;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_content::rates;
 #[doc(inline)]
 pub use enshwick_inventory::damage;
 #[doc(inline)]
@@ -193,33 +217,18 @@ pub use enshwick_inventory::loot;
 #[doc(inline)]
 pub use enshwick_knowledge::knowledge;
 #[doc(inline)]
-pub use enshwick_world::buffs;
-#[doc(inline)]
-pub use enshwick_world::daytime;
-#[doc(inline)]
-pub use enshwick_world::game_settings;
-#[cfg(doctest)]
-mod lower_examples;
-#[doc(inline)]
-pub use enshwick_abi::raw;
-#[doc(inline)]
-pub use enshwick_base::mods;
-#[doc(inline)]
-pub use enshwick_base::net;
-#[doc(inline)]
-pub use enshwick_base::pacing;
-#[doc(inline)]
-pub use enshwick_base::points;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_content::rates;
-#[doc(inline)]
 pub use enshwick_knowledge::progress;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_knowledge::quests;
 #[doc(inline)]
 pub use enshwick_packs::packs;
+#[doc(inline)]
+pub use enshwick_world::buffs;
+#[doc(inline)]
+pub use enshwick_world::daytime;
+#[doc(inline)]
+pub use enshwick_world::game_settings;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::map;

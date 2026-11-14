@@ -11,7 +11,6 @@ use super::Header;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, LoopWaitData};
 ///
 /// let wait = LoopWaitData { header: Header::of::<LoopWaitData>(), ms: 0, reserved: 0, left_ns: 400_000 };
@@ -56,7 +55,6 @@ pub type ServerWaitFn = unsafe extern "system" fn(wait_ns: *mut u64, user: *mut 
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::LoopWaitSites;
 ///
 /// let found = LoopWaitSites(LoopWaitSites::HANDLES.0 | LoopWaitSites::MESSAGES.0);

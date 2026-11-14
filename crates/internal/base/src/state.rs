@@ -18,7 +18,6 @@ pub use script::{DataStore, StateFns};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::state::StoreError;
 ///
 /// fn report(error: &StoreError) -> String {
@@ -186,7 +185,6 @@ pub const HOLD_FILE: &str = "hold.txt";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::state::{Hold, holds};
 ///
 /// let mods = std::env::temp_dir().join("enshwick-hold-doc");
@@ -249,7 +247,6 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::state::Hold;
     ///
     /// let hold = Hold::new(&std::env::temp_dir().join("enshwick-text-hold-doc"));
@@ -300,7 +297,6 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// let hold = enshwick::state::Hold::new(&std::env::temp_dir().join("enshwick-no-hold"));
     /// assert_eq!(hold.reason(), None);
     /// ```
@@ -399,7 +395,6 @@ pub fn world_key(host: crate::Host) -> Option<String> {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// #[derive(Default, serde::Deserialize, serde::Serialize)]
 /// struct Bounties {
 ///     paid: u64,
@@ -411,7 +406,6 @@ pub fn world_key(host: crate::Host) -> Option<String> {
 ///         let _paid = bounties.update(|b| b.paid += 1);
 ///     })
 /// }
-/// # }
 /// ```
 pub struct WorldStore<T> {
     slot: std::sync::Arc<std::sync::Mutex<WorldSlot<T>>>,
@@ -560,7 +554,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// # #[derive(Default, serde::Deserialize, serde::Serialize)]
     /// # struct Bounties { paid: u64 }
     /// fn now(store: &enshwick::state::WorldStore<Bounties>) {
@@ -626,7 +619,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// # #[derive(Default, serde::Deserialize, serde::Serialize)]
     /// # struct Bounties { paid: u64 }
     /// fn paid(store: &enshwick::state::WorldStore<Bounties>) -> u64 {
@@ -658,7 +650,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// # #[derive(Default, serde::Deserialize, serde::Serialize)]
     /// # struct Owners { names: Vec<String> }
     /// fn may_open(store: &enshwick::state::WorldStore<Owners>, name: &str) -> bool {
@@ -678,7 +669,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// # #[derive(Default, serde::Deserialize, serde::Serialize)]
     /// # struct Bounties { paid: u64 }
     /// fn which(store: &enshwick::state::WorldStore<Bounties>) -> String {
@@ -706,7 +696,6 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::state::ModLocal;
 ///
 /// static LIMIT: ModLocal<u32> = ModLocal::new();

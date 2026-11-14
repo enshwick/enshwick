@@ -35,12 +35,10 @@ pub trait Bound: Copy + Send + Sync + 'static {
     ///
     /// # Examples
     ///
-    /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
+    /// ```standalone_crate
     /// use enshwick::script::Bound;
     ///
     /// assert!(enshwick::world::World::functions().any(|f| f.name() == "broadcast"));
-    /// # }
     /// ```
     fn functions() -> impl Iterator<Item = &'static Function<Self>> {
         Self::PARTS.iter().flat_map(|part| part.iter())

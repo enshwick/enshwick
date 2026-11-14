@@ -17,7 +17,6 @@ use crate::abi::{Entity, Header, PlayerKey, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ChatLine, Header, Str};
 ///
 /// let line = ChatLine {
@@ -74,7 +73,6 @@ impl ChatLine {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ChatRewrite, Header};
 ///
 /// let mut bytes = [0u8; 16];

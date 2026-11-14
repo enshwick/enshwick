@@ -54,7 +54,6 @@ pub use path::after_crate;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::resources::Value;
 /// use enshwick::typed::Reflected;
 ///
@@ -107,7 +106,6 @@ impl From<ShapeError> for Off {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::resources::Value;
 /// use enshwick::typed::Reflected;
 ///
@@ -133,7 +131,6 @@ pub trait Reflected: Sized {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_typed as enshwick;
 /// fn id<T: enshwick::typed::Named>() -> &'static str {
 ///     T::ID
 /// }
@@ -206,7 +203,6 @@ pub(crate) mod sealed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::typed::Constant;
 ///
 /// assert_ne!(Constant::Number(3), Constant::Name("Three".into()));
@@ -319,7 +315,6 @@ pub fn no_variant(text: &str, name: &str) -> crate::script::Error {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::resources::Value;
 /// use enshwick::typed::{Flags, Reflected};
 ///

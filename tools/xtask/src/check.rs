@@ -5,14 +5,17 @@ pub(crate) mod book;
 pub(crate) mod changelog;
 pub(crate) mod crate_rules;
 mod domains;
+mod merged_examples;
 mod ranges;
+
+pub(crate) use merged_examples::SENTINEL_NAME;
 pub(crate) mod reports;
 pub(crate) mod rules;
 
 use std::path::Path;
 
 use crate::affected::Package;
-use crate::commands::{lower_examples, tag_lines};
+use crate::commands::tag_lines;
 use crate::say;
 
 /// A rule over the tree at the repository root, given the workspace's
@@ -45,8 +48,8 @@ const RULES: [(&str, Rule); 12] = [
     }),
     ("crate rule", |_, packages| crate_rules::check(packages)),
     ("domain rule", |root, _| Ok(domains::check(root))),
-    ("internal example", |root, packages| {
-        Ok(lower_examples::check(root, packages))
+    ("merged examples", |root, packages| {
+        Ok(merged_examples::check(root, packages))
     }),
     ("compatibility report", |root, _| {
         Ok(reports::stale(root, &[]))

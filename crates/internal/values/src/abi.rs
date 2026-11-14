@@ -5,7 +5,6 @@
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::abi::ResourceKey;
 ///
 /// let item = ResourceKey { guid: [0x3a; 16], type_hash: 0xb5ce_8765, part: 0 };

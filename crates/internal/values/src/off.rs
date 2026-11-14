@@ -13,7 +13,6 @@ use crate::reason;
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// let off = enshwick::Off::new("this game build is not supported");
 /// assert_eq!(off.to_string(), "this game build is not supported");
 ///
@@ -21,7 +20,6 @@ use crate::reason;
 ///     let pattern = enshwick::code::Pattern::parse("E8 ?? ?? ?? ??")?;
 ///     Ok(pattern.find_all(load.code()?).count())
 /// }
-/// # }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{reason}")]
@@ -56,7 +54,6 @@ impl Off {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let _texts = load.texts_from("[en]\n\"glow.off\" = \"No glow on this game version.\"\n")?;
     ///     let glow = load.feature("glow", |load| {
@@ -68,7 +65,6 @@ impl Off {
     ///
     /// let off = enshwick::Off::text("stalls.min", &[("min", "2")]);
     /// assert_eq!(off.to_string(), "stalls.min (min = 2)");
-    /// # }
     /// ```
     #[must_use]
     pub fn text(key: &str, args: &[(&str, &str)]) -> Self {

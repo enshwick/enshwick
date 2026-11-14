@@ -20,7 +20,7 @@ it multiplies with `load.rate(rate)`. It does so during `init`. The call returns
 vanilla, 2 doubles, 0 takes it all. Factors run from 0 to 100; workshop
 speed keeps at least 0.01 and a loot stack at least 1.
 
-```rust
+```rust,standalone_crate
 use enshwick::rates::{ExperienceGroup, Rate};
 
 #[enshwick::config]

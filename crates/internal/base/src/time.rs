@@ -13,7 +13,6 @@
 //! # Examples
 //!
 //! ```
-//! # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 //! use std::time::Duration;
 //!
 //! use enshwick::time::StepClock;
@@ -27,7 +26,6 @@
 //!         }
 //!     })
 //! }
-//! # }
 //! ```
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -44,7 +42,6 @@ use crate::{BaseLoad, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use std::time::Duration;
 ///
 /// use enshwick::time::StepClock;

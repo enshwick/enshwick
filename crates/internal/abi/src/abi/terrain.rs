@@ -8,7 +8,6 @@ use crate::abi::{Header, ItemId, ModHandle};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, TerrainMaterialInfo};
 ///
 /// let dirt = TerrainMaterialInfo {
@@ -53,7 +52,6 @@ impl TerrainMaterialInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, TerrainEdit};
 ///
 /// let hole = TerrainEdit {
@@ -125,7 +123,6 @@ impl TerrainEdit {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Voxel;
 ///
 /// let rock = Voxel { kind: Voxel::TERRAIN, material: 9, fill: 0xff, reserved: 0 };
@@ -169,7 +166,6 @@ impl Voxel {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::Voxel;
     ///
     /// assert_eq!(Voxel::read_count([0; 3], [2, 3, 4]), Some(24));
@@ -207,7 +203,6 @@ impl Voxel {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Voxel, VoxelChange};
 ///
 /// let dug = VoxelChange {
@@ -240,7 +235,6 @@ pub struct VoxelChange {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, ModHandle, VoxelChange, VoxelEditData};
 ///
 /// let changes = [VoxelChange::default()];

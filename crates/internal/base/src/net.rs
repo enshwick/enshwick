@@ -16,7 +16,6 @@
 //! # Examples
 //!
 //! ```
-//! # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 //! use enshwick::net::Peer;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
@@ -39,7 +38,6 @@
 //!     }
 //!     Ok(())
 //! }
-//! # }
 //! ```
 
 use core::ffi::c_void;
@@ -73,7 +71,6 @@ const CODE_STARTS: [&[u8]; 8] = [
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::net::looks_like_code;
 ///
 /// assert!(looks_like_code(b"\x7fELF\x02\x01"));
@@ -132,7 +129,6 @@ impl Peer {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::net::SendError;
 ///
 /// assert_eq!(SendError::NotReady.to_string(), "the peer takes no messages now");
@@ -220,7 +216,6 @@ impl<M: serde::Serialize> Channel<M> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// fn announce(markers: &enshwick::net::Channel<String>) {
     ///     let _sent = markers.broadcast(&"restart in five minutes".to_owned());
     /// }

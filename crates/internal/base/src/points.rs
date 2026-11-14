@@ -37,7 +37,6 @@ pub use described::{DescribedField, DescribedOwnedPoint, DescribedPoint, Describ
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::Mode;
 ///
 /// assert!(Mode::Override.changes());
@@ -83,7 +82,6 @@ impl Mode {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::abi::PointMode;
     /// use enshwick::points::Mode;
     ///
@@ -115,7 +113,6 @@ impl Mode {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::{Mode, Point};
 ///
 /// #[enshwick::point(name = "price", mode = Override, output = u32)]
@@ -152,7 +149,6 @@ pub unsafe trait Point: Copy + 'static {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::Verdict;
 ///
 /// let raise = |limit: &u32| Verdict::Set(limit * 2);
@@ -175,7 +171,6 @@ pub enum Verdict<O> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::Decision;
 ///
 /// assert_eq!(Decision::Changed(4).value_or(0), 4);
@@ -229,7 +224,6 @@ impl<O: Copy> Decision<O> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::Order;
 ///
 /// let order = Order::new().after("you.haggling").priority(10);
@@ -262,7 +256,6 @@ impl Order {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// let order = enshwick::points::Order::new().before("you.haggling");
     /// # let _ = order;
     /// ```
@@ -277,7 +270,6 @@ impl Order {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// let order = enshwick::points::Order::new().after("you.haggling");
     /// # let _ = order;
     /// ```
@@ -368,7 +360,6 @@ impl crate::script::FromScript for Order {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// #[enshwick::point(name = "price", mode = Override, output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
@@ -381,7 +372,6 @@ impl crate::script::FromScript for Order {
 ///     enshwick::info!("item 7 costs {coins}");
 ///     Ok(())
 /// }
-/// # }
 /// ```
 pub struct OwnedPoint<P> {
     host: Host,
@@ -427,7 +417,6 @@ impl<P: Point> OwnedPoint<P> {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// #[enshwick::point(name = "price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
@@ -439,7 +428,6 @@ impl<P: Point> OwnedPoint<P> {
     ///     assert!(!price.is_extended(), "links run once every mod is initialised");
     ///     Ok(())
     /// }
-    /// # }
     /// ```
     #[must_use]
     pub fn is_extended(&self) -> bool {
@@ -615,7 +603,6 @@ pub(crate) unsafe extern "system" fn run_link<
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::{LinkPlace, order};
 ///
 /// let links = [

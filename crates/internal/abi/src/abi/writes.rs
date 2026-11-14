@@ -8,7 +8,6 @@ use crate::abi::{Entity, Header, ItemId};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{DropRequest, Header};
 ///
 /// let logs = DropRequest {
@@ -61,7 +60,6 @@ pub const PROGRESS_ADD_EXPERIENCE: u32 = 3;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PROGRESS_SET_LEVEL, ProgressWriteData};
 ///
 /// let written = ProgressWriteData {

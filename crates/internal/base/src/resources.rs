@@ -8,7 +8,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_base as enshwick;
 //! use enshwick::resources::{Field, Kind, Registry, Type, Value};
 //!
 //! let registry = Registry::new([

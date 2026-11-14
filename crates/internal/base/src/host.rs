@@ -27,7 +27,6 @@ thread_local! {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// if let Some(host) = enshwick::host() {
 ///     host.log(enshwick::abi::Level::INFO, "ready");
 /// }
@@ -255,7 +254,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     assert_eq!(host.api().header.abi_major, enshwick::abi::ABI_MAJOR);
     /// }
@@ -270,7 +268,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     assert_ne!(host.handle(), enshwick::abi::ModHandle::NONE);
     /// }
@@ -285,7 +282,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     let build = host.build();
     ///     assert_ne!(build.base, 0);
@@ -314,7 +310,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     let acts = host.hosting();
     /// }
@@ -347,7 +342,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::abi::Level;
     ///
     /// if let Some(host) = enshwick::host() {
@@ -418,7 +412,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     host.fault("the altar table is corrupt");
     /// }
@@ -435,7 +428,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     let frame = host.caller_frame();
     ///     let _ = frame.stack();

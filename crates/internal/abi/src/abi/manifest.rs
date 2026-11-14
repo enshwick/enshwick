@@ -7,7 +7,6 @@ use crate::abi::{Header, Side, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Fingerprint;
 ///
 /// let build = Fingerprint { guid: [0x1c; 16], age: 387 };
@@ -27,7 +26,6 @@ pub struct Fingerprint {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{BuildInfo, BuildTable, Fingerprint, Header, Side};
 ///
 /// let build = BuildInfo {
@@ -62,7 +60,6 @@ impl_headed!(BuildInfo);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::BuildTable;
 ///
 /// assert_ne!(BuildTable::EXACT, BuildTable::PATTERNS);
@@ -85,7 +82,6 @@ impl BuildTable {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Str, Symbol};
 ///
 /// let symbol = Symbol { name: Str::new("npc.lookup"), rva: 0x20_2e80 };
@@ -111,7 +107,6 @@ pub struct Symbol {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::guid;
 ///
 /// assert_eq!(guid("1c129660cd6efc4f9f0b21652d5ff2bf")[0], 0x1c);
@@ -147,7 +142,6 @@ const fn digit(c: u8) -> u8 {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{BuildRow, Fingerprint, Side, Str, Symbol};
 ///
 /// static SYMBOLS: [Symbol; 1] = [Symbol { name: Str::new("npc.update"), rva: 0x20_55f0 }];
@@ -187,7 +181,6 @@ unsafe impl Sync for BuildRow {}
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Relation;
 ///
 /// assert_ne!(Relation::REQUIRES, Relation::BREAKS);
@@ -212,7 +205,6 @@ impl Relation {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Dependency, Relation, Str};
 ///
 /// let zones = Dependency {
@@ -238,7 +230,6 @@ pub struct Dependency {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::ManifestFlags;
 ///
 /// assert!(ManifestFlags::DEVELOPER.contains(ManifestFlags::DEVELOPER));
@@ -274,7 +265,6 @@ impl ManifestFlags {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Manifest, ManifestFlags, Side, Str};
 ///
 /// let manifest = Manifest {

@@ -14,7 +14,6 @@ use crate::abi::{Entity, Header, ItemId, SkillNode};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Interaction};
 ///
 /// let call = Interaction {
@@ -87,7 +86,6 @@ pub type InteractionFn =
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, SkillCheck};
 ///
 /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::abi::SkillNode::new(0x4475_e8dd), gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] };
@@ -139,7 +137,6 @@ pub type SkillCheckFn =
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Comfort, Header};
 ///
 /// let comfort = Comfort { header: Header::of::<Comfort>(), category: 3, value: 5, position: [0.0; 3] };
@@ -174,7 +171,6 @@ pub type ComfortFn = unsafe extern "system" fn(comfort: *const Comfort, user: *m
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::ExperienceRow;
 ///
 /// let row = ExperienceRow { entity: enshwick::Entity(4096), level: 3, progress: 10, need: 100, gained: 5 };
@@ -202,7 +198,6 @@ pub struct ExperienceRow {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ExperiencePass, Header};
 ///
 /// let pass = ExperiencePass { header: Header::of::<ExperiencePass>(), rows: core::ptr::null_mut(), row_count: 0, level_cap: 25, need_for: None, token: core::ptr::null_mut() };
@@ -242,7 +237,6 @@ pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass,
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{AltarLimit, Header};
 ///
 /// let limit = AltarLimit { header: Header::of::<AltarLimit>(), flame_level: 3, vanilla: 6, allowed: 6, reserved: [0; 2] };
@@ -272,7 +266,6 @@ impl_headed!(AltarLimit);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{BaseLimitInfo, Header};
 ///
 /// let limit = BaseLimitInfo {

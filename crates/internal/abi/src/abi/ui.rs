@@ -11,7 +11,6 @@ use crate::abi::{Header, Status, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Str, UiFrame};
 ///
 /// let frame = UiFrame {
@@ -97,7 +96,6 @@ pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Str, UiExtension};
 ///
 /// let spec = UiExtension {
@@ -163,7 +161,6 @@ impl UiExtension {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::{Header, Str, UiExtension};
     ///
     /// let ours = [[7u8; 16]];
@@ -203,7 +200,6 @@ impl UiExtension {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Str, UiWidget};
 ///
 /// let button = UiWidget {
@@ -373,7 +369,6 @@ impl UiWidget {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Str, UiMarker};
 ///
 /// let marker = UiMarker {
@@ -431,7 +426,6 @@ impl UiMarker {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::MarkerTypeSorting;
 ///
 /// assert_ne!(MarkerTypeSorting::DUNGEONS, MarkerTypeSorting::LOCATIONS);
@@ -461,7 +455,6 @@ impl MarkerTypeSorting {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{MapMarkerTypeInfo, MarkerTypeSorting};
 ///
 /// let info = MapMarkerTypeInfo::EMPTY;
@@ -514,7 +507,6 @@ impl MapMarkerTypeInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Str, UiDialog};
 ///
 /// let dialog = UiDialog {
@@ -614,7 +606,6 @@ pub type ConfigCheckFn =
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{FogInfo, Header};
 ///
 /// let info = FogInfo { header: Header::of::<FogInfo>(), ..FogInfo::EMPTY };

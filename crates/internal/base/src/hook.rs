@@ -21,7 +21,6 @@ mod sealed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// fn takes<F: enshwick::FnPtr>() {}
 /// takes::<unsafe extern "system" fn(*mut u64) -> u32>();
 /// ```
@@ -75,7 +74,6 @@ const _: () = assert!(size_of::<extern "system" fn()>() == size_of::<usize>());
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// enshwick::detour! {
 ///     /// Counts upgrades.
 ///     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
@@ -130,7 +128,6 @@ impl<F: FnPtr> Hook<F> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// enshwick::detour! {
     ///     static TICK: extern "system" fn() = tick;
     /// }
@@ -327,7 +324,6 @@ impl<R> core::fmt::Debug for Frame<R> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// enshwick::detour! {
 ///     /// The lookup every survivor caller goes through.
 ///     pub static LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 =
