@@ -22,6 +22,9 @@ const GATES: [&str; 2] = ["unstable", "typed"];
 /// on, and `cfg(test)`, is off in a mod's build.
 const TEST_FEATURE: &str = "test";
 
+/// Packages by name, each with the features of its own something reaches.
+type Features = BTreeMap<String, BTreeSet<String>>;
+
 /// A public item that exists only with a gated feature.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Gated {
@@ -42,12 +45,17 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
         Err(error) => return vec![format!("{chapter_path}: {error}")],
     };
     let named = chapter_names(&chapter);
-    let (gates, tests) = match (
-        reached_features(root, packages, &GATES),
-        reached_features(root, packages, &[TEST_FEATURE]),
+    let none = BTreeSet::new();
+    let (gates, tests) = match reached_features(root, packages, &[TEST_FEATURE], &none).and_then(
+        |(tests, test_deps)| {
+            Ok((
+                reached_features(root, packages, &GATES, &test_deps)?.0,
+                tests,
+            ))
+        },
     ) {
-        (Ok(gates), Ok(tests)) => (gates, tests),
-        (Err(error), _) | (_, Err(error)) => return vec![error],
+        Ok(both) => both,
+        Err(error) => return vec![error],
     };
     let mut problems = Vec::new();
     for (package, features) in &gates {
@@ -81,20 +89,22 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
     problems
 }
 
-/// Whether the developer site marks `item` unstable from the chapter: the
-/// chapter names the item itself, bare or under the inner part of its
-/// module path its re-exports give it (`interactions::Targets`), or its
-/// outermost module. The site matches nothing else, so neither its type nor
-/// an inner module counts.
+/// Whether the developer site marks `item` unstable from the chapter, which
+/// it does when the chapter names a `::` prefix of the item's path: its full
+/// path (`interactions::Targets::target`) or its name as written from its
+/// type (`Damage::new`). So a module, a type or the item itself counts, but
+/// an inner module alone (`items` for `content::items::Foo`) does not.
 fn is_named(item: &Gated, named: &BTreeSet<String>) -> bool {
-    (0..=item.modules.len()).any(|from| {
-        let mut path = item.modules[from..].to_vec();
-        path.push(item.name.clone());
-        named.contains(&path.join("::"))
-    }) || item
+    let written: Vec<&str> = item.name.split("::").collect();
+    let full: Vec<&str> = item
         .modules
-        .first()
-        .is_some_and(|module| named.contains(module))
+        .iter()
+        .map(String::as_str)
+        .chain(written.iter().copied())
+        .collect();
+    [full, written]
+        .iter()
+        .any(|path| (1..=path.len()).any(|end| named.contains(&path[..end].join("::"))))
 }
 
 /// The names in backticks in the first column of the chapter's tables, as
@@ -147,14 +157,21 @@ fn is_path(text: &str) -> bool {
 
 /// Each workspace package that the facade's features `starts` reach, with
 /// the features of its own they turn on: what its code puts behind them is
-/// behind `starts` in the facade too. An optional dependency's feature
-/// (`dep?/f`) counts, since it is on whenever that dependency is.
+/// behind `starts` in the facade too; with them, the optional dependencies
+/// they turn on (`dep:x`). An optional dependency's feature (`dep?/f`)
+/// counts, since it is on whenever that dependency is, unless the
+/// dependency is one of `test_deps`, which only a mod's tests turn on.
+///
+/// shortcut: an optional dependency both the tests and another feature turn
+/// on counts as test only; tell them apart if one ever appears.
 fn reached_features(
     root: &Path,
     packages: &[Package],
     starts: &[&str],
-) -> Result<BTreeMap<String, BTreeSet<String>>, String> {
+    test_deps: &BTreeSet<String>,
+) -> Result<(Features, BTreeSet<String>), String> {
     let mut reached: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut deps = BTreeSet::new();
     let mut queue: Vec<(String, String)> = starts
         .iter()
         .map(|start| (FACADE.to_owned(), (*start).to_owned()))
@@ -182,29 +199,33 @@ fn reached_features(
             .into_iter()
             .flatten()
             .filter_map(toml::Value::as_str);
+        // shortcut: a rename in [workspace.dependencies] is not read; read
+        // the root manifest once one appears there.
+        let package_of = |key: &str| {
+            manifest
+                .get("dependencies")
+                .and_then(|deps| deps.get(key))
+                .and_then(|dep| dep.get("package"))
+                .and_then(toml::Value::as_str)
+                .unwrap_or(key)
+                .to_owned()
+        };
         for entry in turned_on {
-            match entry.split_once('/') {
-                Some((dependency, sub)) => {
-                    let key = dependency.trim_end_matches('?');
-                    // shortcut: a rename in [workspace.dependencies] is not
-                    // read; read the root manifest once one appears there.
-                    let package = manifest
-                        .get("dependencies")
-                        .and_then(|deps| deps.get(key))
-                        .and_then(|dep| dep.get("package"))
-                        .and_then(toml::Value::as_str)
-                        .unwrap_or(key);
-                    queue.push((package.to_owned(), sub.to_owned()));
+            if let Some(key) = entry.strip_prefix("dep:") {
+                deps.insert(package_of(key));
+            } else if let Some((dependency, sub)) = entry.split_once('/') {
+                let optional = dependency.ends_with('?');
+                let dependency = package_of(dependency.trim_end_matches('?'));
+                if !(optional && test_deps.contains(&dependency)) {
+                    queue.push((dependency, sub.to_owned()));
                 }
-                None if !entry.starts_with("dep:") => {
-                    queue.push((package.clone(), entry.to_owned()));
-                }
-                None => {}
+            } else {
+                queue.push((package.clone(), entry.to_owned()));
             }
         }
     }
     reached.retain(|name, _| packages.iter().any(|p| &p.name == name));
-    Ok(reached)
+    Ok((reached, deps))
 }
 
 /// Where a module's own files and its child modules' files lie.
@@ -279,6 +300,16 @@ struct Context {
 }
 
 impl Walk<'_> {
+    /// Whether `attrs` hold a `cfg` no mod's build meets, such as the fake
+    /// host's: what sits under it is test code.
+    fn absent(&self, attrs: &[Attribute]) -> bool {
+        let all: Vec<Cfg> = cfgs(attrs).collect();
+        !all.is_empty()
+            && !Cfg::All(all)
+                .with_off("test")
+                .can_hold(&|feature| !self.test_only.contains(feature))
+    }
+
     /// Whether `attrs` hold a `cfg` a mod's build meets only with one of
     /// the gated features.
     fn gates(&self, attrs: &[Attribute]) -> bool {
@@ -317,7 +348,7 @@ impl Walk<'_> {
         let globbed = glob_modules(items);
         for item in items {
             let attrs = item_attrs(item);
-            if test_attrs(attrs) || hidden(attrs) {
+            if test_attrs(attrs) || hidden(attrs) || self.absent(attrs) {
                 continue;
             }
             let gated = context.gated || self.gates(attrs);
@@ -682,7 +713,7 @@ mod tests {
     fn an_item_another_feature_can_also_turn_on_the_docs_hide_or_a_private_module_holds_is_not_gated()
      {
         let found = walk(
-            "#[cfg(any(feature = \"unstable\", feature = \"serde\"))]\npub fn both() {}\n#[cfg(feature = \"unstable\")]\n#[doc(hidden)]\npub fn hidden() {}\n#[cfg(not(feature = \"unstable\"))]\npub fn stable() {}\n#[cfg(feature = \"unstable\")]\npub(crate) mod private { pub struct Free; }\n#[cfg(feature = \"fake\")]\npub fn test_only() {}\n",
+            "#[cfg(any(feature = \"unstable\", feature = \"serde\"))]\npub fn both() {}\n#[cfg(feature = \"unstable\")]\n#[doc(hidden)]\npub fn hidden() {}\n#[cfg(not(feature = \"unstable\"))]\npub fn stable() {}\n#[cfg(feature = \"unstable\")]\npub(crate) mod private { pub struct Free; }\n#[cfg(feature = \"fake\")]\npub fn test_only() {}\n#[cfg(feature = \"fake\")]\nmod fake { impl FakeHost { #[cfg(feature = \"unstable\")] pub fn bind(&self) {} } }\n",
         );
         assert!(found.is_empty(), "{found:?}");
     }
@@ -713,7 +744,7 @@ mod tests {
     }
 
     #[test]
-    fn an_item_counts_as_named_by_itself_or_its_outermost_module_as_the_site_reads_it() {
+    fn an_item_counts_as_named_by_a_prefix_of_its_path_as_the_site_reads_it() {
         let named: BTreeSet<String> = ["world", "Damage", "interactions::Targets"]
             .into_iter()
             .map(String::from)
@@ -726,12 +757,13 @@ mod tests {
         assert!(is_named(&item("props", &["world"]), &named));
         assert!(is_named(&item("Damage", &[]), &named));
         assert!(is_named(&item("Targets", &["interactions"]), &named));
-        assert!(!is_named(&item("Damage::kind", &[]), &named));
-        assert!(!is_named(
+        assert!(is_named(&item("Damage::kind", &["inventory"]), &named));
+        assert!(is_named(
             &item("Targets::target", &["interactions"]),
             &named
         ));
         assert!(!is_named(&item("Foo", &["content", "world"]), &named));
+        assert!(!is_named(&item("Targets::target", &["content"]), &named));
         assert!(!is_named(&item("Targets", &[]), &named));
         assert!(!is_named(&item("Load::add_sound", &["sound"]), &named));
     }
