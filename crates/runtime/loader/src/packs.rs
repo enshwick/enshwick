@@ -1,8 +1,11 @@
 //! The packs domain: data packs as mods.
 
 #[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the Windows build loads packs")
+    not(windows),
+    expect(
+        dead_code,
+        reason = "only the Windows build loads packs; tests off it reach discovery and the hash"
+    )
 )]
 pub(crate) mod data_packs;
 
