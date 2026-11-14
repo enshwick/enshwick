@@ -82,4 +82,22 @@ mod tests {
             "the next chest on the same screen is a change"
         );
     }
+
+    #[test]
+    fn the_first_ask_for_the_held_controls_answers_none_as_in_the_game() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .player_input()
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Watcher)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        loader.hold_locally(Some(1 << 30));
+        let _first = loader.draw_frame();
+        let _second = loader.draw_frame();
+        let read = READ.lock().unwrap();
+        assert_eq!(read[0].2, None, "the first ask starts the reads");
+        assert_eq!(read[1].2, Some(vec![GameAction::Block]));
+    }
 }

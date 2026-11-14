@@ -266,6 +266,7 @@ mod tests {
             end)
             ",
         );
+        let _first_ask = loader.draw_frame();
         loader.show_prompt(Some(("Chest", 7)));
         loader.hold_locally(Some(1 << 30));
         let _drawn = loader.draw_frame();
@@ -273,6 +274,7 @@ mod tests {
         loader.host_screen(Some(enshwick::Entity(512)));
         let _drawn = loader.draw_frame();
         for line in [
+            "host nil held nil",
             "prompt Chest 7",
             "host nil held Block",
             "host 512 held Block",

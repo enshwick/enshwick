@@ -28,7 +28,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::COMPONENT_READ_RAW.id(),
     pinned::ecs::ITERATOR_NEXT.id(),
     pinned::ecs::LOCAL_PLAYER_ID.id(),
-    pinned::ecs::ROW_ENTITY.id(),
+    pinned::ecs::PLAYER_UI_ITERATOR.id(),
+    pinned::ecs::PLAYER_UI_ITERATOR_SIZE.id(),
+    pinned::ecs::PLAYER_UI_LOCAL_PLAYER.id(),
     pinned::ecs::ENTITY_SLOT.id(),
 ];
 
@@ -65,25 +67,23 @@ const READS: [&str; 19] = [
     "SlotSelection",
 ];
 const WRITES: [&str; 1] = ["ClientPlayerInput"];
-/// `player_ui`'s iterator size in words, 0x3c8 bytes (client 26430625).
+/// `player_ui`'s iterator size in words, 0x3c8 bytes (client 26430625);
+/// a build whose routed `ecs.player_ui_iterator_size` differs has the read
+/// off.
 const WORDS: usize = 121;
-/// The iterator word `player_ui` hands its local player check with each
-/// row's entity: the check holds when the u32 at the table's `ecs.local_player_id` inside
-/// it is the row's entity (client 26430625).
-const LOCAL_PLAYER: usize = 36;
-
-type RowEntity = unsafe extern "system" fn(ctx: *mut u64, out: *mut u32) -> *const u32;
 
 /// Where the mask is read on this build.
 #[derive(Debug)]
 struct Layout {
     engine: &'static Engine,
     components: Components,
-    row_entity: RowEntity,
     input: u32,
     digital: usize,
     /// Where the local player check's word holds the local player's id.
     local_player_id: usize,
+    /// The iterator word `player_ui` hands its local player check with each
+    /// row's entity.
+    local_player: usize,
 }
 
 /// Where the open screen host's template and position are read.
@@ -192,10 +192,6 @@ fn now_ms() -> u64 {
 }
 
 fn layout(loader: &Loader) -> Result<Layout, &'static str> {
-    let row = loader
-        .address(pinned::ecs::ROW_ENTITY)
-        .and_then(|at| usize::try_from(at).ok())
-        .ok_or(pinned::ecs::ROW_ENTITY.id())?;
     let digital = catalogue::constant(
         catalogue::ids::CLIENT_PLAYER_INPUT_DIGITAL,
         &loader.reflection,
@@ -210,11 +206,17 @@ fn layout(loader: &Loader) -> Result<Layout, &'static str> {
     if digital + size_of::<u64>() > usize::try_from(size).unwrap_or(0) {
         return Err(catalogue::ids::CLIENT_PLAYER_INPUT_DIGITAL);
     }
+    let routed = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    let local_player = local_player_word(
+        routed(pinned::ecs::PLAYER_UI_ITERATOR_SIZE)?,
+        routed(pinned::ecs::PLAYER_UI_ITERATOR)?,
+        routed(pinned::ecs::PLAYER_UI_LOCAL_PLAYER)?,
+    )
+    .ok_or(pinned::ecs::PLAYER_UI_ITERATOR_SIZE.id())?;
     Ok(Layout {
+        local_player,
         engine: crate::engine::ecs::engine(loader).ok_or(pinned::ecs::ITERATOR_NEXT.id())?,
         components: Components::resolve(loader).ok_or(pinned::ecs::COMPONENT_READ_RAW.id())?,
-        // SAFETY: the build table pins `ecs.row_entity` to this signature.
-        row_entity: unsafe { core::mem::transmute::<usize, RowEntity>(row) },
         input: catalogue::type_hash(catalogue::ids::CLIENT_PLAYER_INPUT)
             .ok_or(catalogue::ids::CLIENT_PLAYER_INPUT)?,
         digital,
@@ -222,6 +224,18 @@ fn layout(loader: &Loader) -> Result<Layout, &'static str> {
             .offset(pinned::ecs::LOCAL_PLAYER_ID)
             .ok_or(pinned::ecs::LOCAL_PLAYER_ID.id())?,
     })
+}
+
+/// The iterator word `player_ui` hands its local player check, from its
+/// routed iterator size and the frame offsets of its iterator and that word;
+/// `None` unless the iterator is the [`WORDS`] the read lays out and the
+/// word is a whole word inside it, so a reshuffled build turns the read off.
+fn local_player_word(size: usize, iterator: usize, word: usize) -> Option<usize> {
+    let at = word.checked_sub(iterator)?;
+    (size == WORDS * size_of::<u64>()
+        && at % size_of::<u64>() == 0
+        && at / size_of::<u64>() < WORDS)
+        .then_some(at / size_of::<u64>())
 }
 
 /// Where the host reads run on this build, or the id of what it lacks.
@@ -244,6 +258,16 @@ pub(crate) fn link(loader: &Loader) {
     if loader.side != Side::CLIENT {
         return;
     }
+    let entry = loader
+        .reflection
+        .system(SYSTEM)
+        .ok()
+        .map(enshwick_gamedata::reflect::System::entry);
+    if entry.is_none() {
+        // Without the system neither read links: one cause, one entry off.
+        let _linked = link_system(loader, None);
+        return;
+    }
     let mut any = false;
     let held = crate::engine::ecs::components_match(loader, SYSTEM, &READS, &WRITES)
         .map_err(|why| (SYSTEM, why.to_string()))
@@ -263,11 +287,6 @@ pub(crate) fn link(loader: &Loader) {
     if !any {
         return;
     }
-    let entry = loader
-        .reflection
-        .system(SYSTEM)
-        .ok()
-        .map(enshwick_gamedata::reflect::System::entry);
     let _linked = link_system(loader, entry);
 }
 
@@ -284,26 +303,19 @@ fn link_system(loader: &Loader, entry: Option<u64>) -> bool {
 /// # Safety
 ///
 /// - `ctx` is the `player_ui` system's live, non-null context, at its entry
-///   on its thread.
+///   on its thread; the caller puts its row counter back afterwards, even
+///   after a panic.
 unsafe fn read(ctx: *mut u64, layout: &Layout) {
-    let engine = layout.engine;
     // SAFETY: the caller's live context, on its thread, which alone writes
-    // the row counter while the system runs.
-    let saved = unsafe { engine.row(ctx) };
-    // SAFETY: the caller's live context, on its thread, which alone writes
-    // the row counter while the system runs.
-    unsafe { engine.set_row(ctx, 0) };
+    // the row counter while the system runs; the caller puts it back.
+    unsafe { layout.engine.set_row(ctx, 0) };
     // SAFETY: the caller's live `player_ui` context at its entry on its
-    // thread, its row counter set to 0 above and put back below.
-    let player = unsafe { local_player(ctx, layout) };
-    // SAFETY: the caller's live context, on its thread, which alone writes
-    // the row counter while the system runs.
-    unsafe { engine.set_row(ctx, saved) };
-    let Some(player) = player else {
+    // thread, its row counter set to 0 above.
+    let Some(player) = (unsafe { local_player(ctx, layout) }) else {
         return;
     };
     // SAFETY: the caller's live context at the system's entry on its thread.
-    let Some(input) = (unsafe { layout.components.component(ctx, player, layout.input) }) else {
+    let Some(input) = (unsafe { layout.components.component(ctx, player.0, layout.input) }) else {
         return;
     };
     // SAFETY: `input` is the player's live `ClientPlayerInput`, unwritten
@@ -321,32 +333,26 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
 ///
 /// - `ctx` is the `player_ui` system's live, non-null context, at its entry
 ///   on its thread, with its row counter at 0; the caller puts it back.
-unsafe fn local_player(ctx: *mut u64, layout: &Layout) -> Option<u32> {
-    // SAFETY: the caller's contract; `WORDS` is `player_ui`'s iterator size
-    // on the layout `link` checked, and `query` drops at the end of this
-    // function, inside the system's run.
-    let mut query = unsafe { layout.engine.query::<WORDS>(ctx) };
+unsafe fn local_player(ctx: *mut u64, layout: &Layout) -> Option<Entity> {
+    let engine = layout.engine;
+    // SAFETY: the caller's contract; `link` checked the routed iterator size
+    // is `WORDS`, and `query` drops at the end of this function, inside the
+    // system's run.
+    let mut query = unsafe { engine.query::<WORDS>(ctx) };
     let rows = core::iter::from_fn(|| {
         let words = query.next()?;
-        let local = words[LOCAL_PLAYER] as *const u8;
-        if local.is_null() {
+        let local = usize::try_from(words[layout.local_player]).unwrap_or(0);
+        if local == 0 {
             return Some(None);
         }
         // SAFETY: `local` is the non-null word `player_ui` itself reads its
-        // local player id from at `ecs.local_player_id` for this row (client
-        // 26430625), live while the system runs.
-        let id: u32 = unsafe { enshwick_core::raw::read_at(local, layout.local_player_id) };
-        let mut entity = 0u32;
-        // SAFETY: the game's `ecs.row_entity` on the live context, whose
-        // row counter `query` set to this row, with our own out word.
-        let found = unsafe { (layout.row_entity)(ctx, &raw mut entity) };
-        if found.is_null() {
-            return Some(None);
-        }
-        // SAFETY: `ecs.row_entity` returned a non-null pointer to the row's
-        // u32 entity id, live for the call.
-        let row: u32 = unsafe { enshwick_core::raw::read_at(found.cast(), 0) };
-        Some(Some((id, row)))
+        // local player id from at `ecs.local_player_id` for this row, at the
+        // routed iterator word, live while the system runs.
+        let id: u32 = unsafe { crate::engine::memory::read(local, layout.local_player_id) };
+        // SAFETY: the caller's live context on its thread, whose row counter
+        // `query` set to this row.
+        let row = unsafe { engine.entity(ctx) };
+        Some(Some((Entity(id), Entity(row))))
     });
     first_local(rows.flatten())
 }
@@ -354,9 +360,9 @@ unsafe fn local_player(ctx: *mut u64, layout: &Layout) -> Option<u32> {
 /// The first row entity that equals the local player id read beside it,
 /// from `(id, row entity)` pairs; entity 0, the answer before a query takes
 /// a row, is never the local player.
-fn first_local(rows: impl IntoIterator<Item = (u32, u32)>) -> Option<u32> {
+fn first_local(rows: impl IntoIterator<Item = (Entity, Entity)>) -> Option<Entity> {
     rows.into_iter()
-        .find_map(|(id, row)| (row != 0 && row == id).then_some(row))
+        .find_map(|(id, row)| (row.0 != 0 && row == id).then_some(row))
 }
 
 /// Reads the template and position of the open screen's host, `host`, in
@@ -435,7 +441,15 @@ crate::engine::chains::chain_detour! {
         {
             // SAFETY: `ctx` is non-null by the check before it and is the
             // system's own context, at its entry on its thread.
+            let row = unsafe { layout.engine.row(ctx) };
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context, at its entry on its thread; its row
+            // counter goes back below, whether the read panics or not.
             let _read = FUSE.run(FEATURE, || unsafe { read(ctx, layout) });
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context on its thread, which alone writes the row
+            // counter while the system runs.
+            unsafe { layout.engine.set_row(ctx, row) };
         }
         onward.call()
     }
@@ -513,15 +527,62 @@ mod tests {
     }
 
     #[test]
+    fn a_client_without_player_ui_lists_only_the_shared_link_off() {
+        let mut loader = crate::start::tests::bare_loader();
+        loader.side = Side::CLIENT;
+        link(&loader);
+        let listed = crate::engine::diag::parts_off();
+        let parts: Vec<&str> = listed.iter().map(|p| p.part.as_str()).collect();
+        assert_eq!(parts, [LINK_FUSE.feature()], "one cause, one entry");
+        assert!(!FUSE.is_off() && !HOST_FUSE.is_off());
+    }
+
+    #[test]
     fn the_held_read_takes_the_first_row_whose_entity_is_the_local_player() {
+        let rows = |pairs: &[(u32, u32)]| {
+            first_local(pairs.iter().map(|&(id, row)| (Entity(id), Entity(row))))
+        };
         assert_eq!(
-            first_local([(0, 0)]),
+            rows(&[(0, 0)]),
             None,
             "entity 0, as at the system's entry, is never the local player"
         );
-        assert_eq!(first_local([(7, 3), (7, 7), (9, 9)]), Some(7));
-        assert_eq!(first_local([(7, 3), (7, 4)]), None, "another player's rows");
-        assert_eq!(first_local([]), None);
+        assert_eq!(rows(&[(7, 3), (7, 7), (9, 9)]), Some(Entity(7)));
+        assert_eq!(rows(&[(7, 3), (7, 4)]), None, "another player's rows");
+        assert_eq!(rows(&[]), None);
+    }
+
+    #[test]
+    fn the_local_player_word_comes_from_the_routed_frame_and_a_reshuffled_one_turns_the_read_off() {
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x190),
+            Some(36),
+            "client 26430625"
+        );
+        assert_eq!(
+            local_player_word(0x3d0, 0x70, 0x190),
+            None,
+            "another iterator size"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x194),
+            None,
+            "not a whole word"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x190, 0x70),
+            None,
+            "before the iterator"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x70 + 0x3c8),
+            None,
+            "past its end"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x70 + 0x3c0),
+            Some(WORDS - 1)
+        );
     }
 
     #[test]

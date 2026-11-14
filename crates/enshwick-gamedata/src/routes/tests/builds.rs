@@ -309,6 +309,38 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     // `player_ui`'s local player check reads the id at +4 of its iterator
     // word; read in the decompiler, its live check is in-game.
     ("1.0 client (26430625)", "ecs.local_player_id", 4),
+    // `player_ui`'s iterator, 0x3c8 bytes at its frame's +0x70, and the
+    // word at +0x190 it hands its local player check; read in the
+    // disassembly, live in the same check as `ecs.local_player_id`.
+    (
+        "1.0 client (26430625)",
+        "ecs.player_ui_iterator_size",
+        0x3c8,
+    ),
+    ("1.0 client (26430625)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (26430625)", "ecs.player_ui_local_player", 0x190),
+    ("1.0 client (26320373)", "ecs.local_player_id", 4),
+    (
+        "1.0 client (26320373)",
+        "ecs.player_ui_iterator_size",
+        0x3c8,
+    ),
+    ("1.0 client (26320373)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (26320373)", "ecs.player_ui_local_player", 0x190),
+    // One word shorter on 1269579, so the loader leaves the held read off
+    // there.
+    ("1.0 client (1269579)", "ecs.local_player_id", 4),
+    ("1.0 client (1269579)", "ecs.player_ui_iterator_size", 0x3c0),
+    ("1.0 client (1269579)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (1269579)", "ecs.player_ui_local_player", 0x190),
+    ("1.0 client (26082781)", "ecs.local_player_id", 4),
+    (
+        "1.0 client (26082781)",
+        "ecs.player_ui_iterator_size",
+        0x3c0,
+    ),
+    ("1.0 client (26082781)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (26082781)", "ecs.player_ui_local_player", 0x190),
 ];
 
 /// Entries no table pins, found only by their route, with the value the
