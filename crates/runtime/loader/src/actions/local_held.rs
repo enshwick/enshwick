@@ -398,6 +398,21 @@ mod tests {
     }
 
     #[test]
+    fn a_system_that_does_not_link_lists_only_the_shared_link_off() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(!link_system(&loader, None));
+        assert!(LINK_FUSE.is_off());
+        assert!(!FUSE.is_off() && !HOST_FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        let parts: Vec<&str> = listed.iter().map(|p| p.part.as_str()).collect();
+        assert!(parts.contains(&LINK_FUSE.feature()), "{parts:?}");
+        assert!(
+            !parts.contains(&FEATURE) && !parts.contains(&HOST_FEATURE),
+            "one cause, one entry: {parts:?}"
+        );
+    }
+
+    #[test]
     fn the_first_ask_starts_the_reads_and_answers_missing() {
         assert!(
             !STATE.asked.load(Ordering::Relaxed),

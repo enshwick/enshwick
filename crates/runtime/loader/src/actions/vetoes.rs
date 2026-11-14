@@ -443,6 +443,17 @@ mod tests {
     }
 
     #[test]
+    fn a_build_without_the_craft_request_lists_the_craft_filters_off() {
+        seal(&crate::start::tests::bare_loader());
+        assert!(CRAFT_FUSE.is_off());
+        let off = crate::base::off_reason(&CRAFT_FUSE);
+        assert!(
+            off.as_deref().is_some_and(|r| r.starts_with(CRAFT_EVENT)),
+            "{off:?}"
+        );
+    }
+
+    #[test]
     fn a_reason_an_allowing_filter_wrote_never_counts_for_the_refusing_one() {
         let mut reason = Str::EMPTY;
         let slot = &raw mut reason;

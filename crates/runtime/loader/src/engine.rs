@@ -74,6 +74,11 @@ pub(crate) mod patch;
 )]
 pub(crate) mod pe;
 #[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "reads off the game thread run on Windows")
+)]
+pub(crate) mod per_test;
+#[cfg_attr(
     not(windows),
     expect(
         dead_code,

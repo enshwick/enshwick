@@ -294,8 +294,18 @@ pub(crate) fn forget(loader: Option<&Loader>) {
 mod tests {
     use super::*;
 
+    /// One test at a time over [`WINDOWS`], the process's own, each from a
+    /// world that went away.
+    fn turn() -> std::sync::MutexGuard<'static, ()> {
+        static TURN: Mutex<()> = Mutex::new(());
+        let turn = TURN.relock();
+        forget(None);
+        turn
+    }
+
     #[test]
     fn a_run_updates_the_windows_its_player_holds_of_that_mod_and_a_leave_forgets_them() {
+        let _turn = turn();
         let (mine, other) = (ModIndex::new(0), ModIndex::new(1));
         WINDOWS.held.relock().extend([
             (7, mine, "panel".to_owned()),
@@ -338,6 +348,7 @@ mod tests {
 
     #[test]
     fn a_show_is_refused_for_a_bad_change_id_or_crowd_and_for_a_mod_without_actions() {
+        let _turn = turn();
         let mut loader = crate::start::tests::bare_loader();
         let owner = ModIndex::new(0);
         let one = [PlayerKey::new(7)];
@@ -370,6 +381,7 @@ mod tests {
 
     #[test]
     fn what_waits_is_taken_out_of_its_locks_so_a_mod_told_of_it_may_queue_more() {
+        let _turn = turn();
         let mine = ModIndex::new(0);
         let show = |key| Waiting {
             owner: mine,

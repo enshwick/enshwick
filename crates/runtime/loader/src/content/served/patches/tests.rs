@@ -1,5 +1,5 @@
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use super::super::{Patch, State};
 use super::*;
@@ -10,8 +10,11 @@ const KEY: ResourceKey = ResourceKey {
     part: 0,
 };
 
-static SEEN_BUILDING: AtomicBool = AtomicBool::new(false);
-static SEEN_SCRATCH: AtomicBool = AtomicBool::new(false);
+std::thread_local! {
+    /// What [`note_building`] saw, on the thread of the test that ran it.
+    static SEEN_BUILDING: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    static SEEN_SCRATCH: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
 /// The byte [`value`] serves.
 static VALUE: AtomicU8 = AtomicU8::new(1);
 
@@ -22,8 +25,8 @@ unsafe extern "system" fn note_building(
     out: *mut *const u8,
     out_len: *mut usize,
 ) -> Status {
-    SEEN_BUILDING.store(building(&KEY), Ordering::Relaxed);
-    SEEN_SCRATCH.store(scratch(), Ordering::Relaxed);
+    SEEN_BUILDING.set(building(&KEY));
+    SEEN_SCRATCH.set(scratch());
     // SAFETY: `run_patches` passes `out` pointing at a local, writable
     // for the call; `base` is the test's own array, which outlives it.
     unsafe { out.write(base) };
@@ -192,12 +195,12 @@ fn a_key_counts_as_building_only_while_its_patches_run() {
     let at = base.as_ptr().expose_provenance();
     let built = run_patches(&entry, at, base.len(), Some(&[owner]), Build::Game);
     assert!(built.is_some());
-    assert!(SEEN_BUILDING.load(Ordering::Relaxed), "inside its build");
-    assert!(!SEEN_SCRATCH.load(Ordering::Relaxed), "the game's build");
+    assert!(SEEN_BUILDING.get(), "inside its build");
+    assert!(!SEEN_SCRATCH.get(), "the game's build");
     assert!(BUILDING.with_borrow(Vec::is_empty), "after its build");
     assert!(!building(&KEY), "after its build");
     run_patches(&entry, at, base.len(), Some(&[owner]), Build::Scratch);
-    assert!(SEEN_SCRATCH.load(Ordering::Relaxed), "a mod's served read");
+    assert!(SEEN_SCRATCH.get(), "a mod's served read");
     assert!(!scratch(), "after the read");
 }
 

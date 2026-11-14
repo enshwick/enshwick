@@ -406,6 +406,16 @@ mod runtime {
                 Some("the loader panicked in a lobby entry: a broken entry")
             );
         }
+
+        #[test]
+        fn a_steam_library_without_the_lobby_api_lists_the_hosted_lobby_off() {
+            register();
+            assert!(LOBBY_FUSE.is_off());
+            assert_eq!(
+                crate::base::off_reason(&LOBBY_FUSE).as_deref(),
+                Some("steam_api64.dll lacks the lobby API")
+            );
+        }
     }
 }
 
