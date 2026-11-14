@@ -10,7 +10,6 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ActionCall, Header, PlayerInfo, Str};
 ///
 /// let call = ActionCall {
@@ -91,7 +90,6 @@ impl_headed!(ActionCall, born = 144);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ActionReply, Header, Str};
 ///
 /// let reply = ActionReply { header: Header::of::<ActionReply>(), done: 1, text: Str::new("2 online") };
@@ -130,7 +128,6 @@ pub const WINDOW_UPDATE: u32 = 2;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{CommandInfo, Header, Str};
 ///
 /// let tools = CommandInfo {
@@ -164,7 +161,6 @@ impl_headed!(CommandInfo);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ActionTarget, Header};
 ///
 /// let chest = ActionTarget {
@@ -212,7 +208,6 @@ impl ActionTarget {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::ActionTarget;
     ///
     /// let unknown = ActionTarget { flags: ActionTarget::ENTITY | 8, ..ActionTarget::NONE };
@@ -243,7 +238,6 @@ impl ActionTarget {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::{ActionTarget, Status};
     ///
     /// let mut short = ActionTarget { flags: ActionTarget::ENTITY, ..ActionTarget::NONE };
@@ -331,7 +325,6 @@ pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PlayerInfo, RenameCall, Str};
 ///
 /// let call = RenameCall {

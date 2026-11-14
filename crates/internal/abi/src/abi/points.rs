@@ -11,7 +11,6 @@ use crate::abi::{Header, Layout, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::PointMode;
 ///
 /// assert_ne!(PointMode::OBSERVE, PointMode::OVERRIDE);
@@ -34,7 +33,6 @@ impl PointMode {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::PointFlags;
 ///
 /// assert!(PointFlags::REFUSE.contains(PointFlags::REFUSE));
@@ -66,7 +64,6 @@ impl PointFlags {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Layout, PointFlags, PointMode, PointSpec, Str};
 ///
 /// let empty = Layout { fields: core::ptr::null(), count: 0, size: 0 };
@@ -105,7 +102,6 @@ impl_headed!(PointSpec);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PointLink};
 ///
 /// let link = PointLink {
@@ -145,7 +141,6 @@ impl_headed!(PointLink);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::PointHandle;
 ///
 /// assert!(PointHandle::EMPTY.live.is_null());
@@ -179,7 +174,6 @@ impl PointHandle {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::PointVerdict;
 ///
 /// assert_ne!(PointVerdict::PASS, PointVerdict::SET);

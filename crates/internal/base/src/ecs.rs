@@ -25,11 +25,9 @@ type MarkChanged = unsafe extern "system" fn(
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Ecs, enshwick::Off> {
 ///     enshwick::ecs::Ecs::resolve(load)
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Ecs {
@@ -108,7 +106,6 @@ impl Ecs {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// /// Counts the rows of a system's query.
     /// unsafe fn rows(ecs: &enshwick::ecs::Ecs, ctx: *mut u64) -> usize {
     ///     // SAFETY: called from the system's hook with its context.
@@ -144,7 +141,6 @@ impl Ecs {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// /// Walks the query again from its first row, leaving the counter as found.
     /// unsafe fn again(ecs: &enshwick::ecs::Ecs, ctx: *mut u64) {
     ///     // SAFETY: called from the system's hook with its live context.
@@ -192,7 +188,6 @@ impl Ecs {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// unsafe fn current(ecs: &enshwick::ecs::Ecs, ctx: *mut u64) -> Option<enshwick::Entity> {
     ///     // SAFETY: called from the system's hook with its context.
     ///     unsafe { ecs.entity(ctx) }
@@ -233,7 +228,6 @@ impl Ecs {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// unsafe fn mark(ecs: &enshwick::ecs::Ecs, words: &[u64; 10]) {
     ///     // SAFETY: the words of a writing system's current row.
     ///     unsafe { ecs.mark_changed(words[7], words[3], words[4], words[5], words[6]) };
@@ -320,13 +314,11 @@ type SlotRoot = unsafe extern "system" fn(
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::ecs::ComponentType;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<ComponentType, enshwick::Off> {
 ///     ComponentType::resolve(load, "keen::ecs::UsedItem")
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct ComponentType(u32);
@@ -367,11 +359,9 @@ impl ComponentType {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// fn hash(load: &enshwick::Load<'_>) -> Result<u32, enshwick::Off> {
     ///     Ok(enshwick::ecs::ComponentType::resolve(load, "keen::ecs::UsedItem")?.hash())
     /// }
-    /// # }
     /// ```
     #[must_use]
     pub const fn hash(self) -> u32 {
@@ -396,11 +386,9 @@ impl ComponentType {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Components, enshwick::Off> {
 ///     enshwick::ecs::Components::resolve(load)
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Components {
@@ -465,7 +453,6 @@ impl Components {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::ecs::{ComponentType, Components};
     /// use enshwick::raw::read_at;
     ///
@@ -535,7 +522,6 @@ impl Components {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// unsafe fn root(c: &enshwick::ecs::Components, ctx: *mut u64, slot: u64, index: u64) {
     ///     // SAFETY: the inventory system's live context and index, inside its hook.
     ///     let _ = unsafe { c.slot_root(ctx, slot, index) };
@@ -570,7 +556,6 @@ impl Components {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::abi::Side;
 /// use enshwick::ecs::server_role;
 ///
@@ -593,11 +578,9 @@ pub fn server_role(process: Side, context_world: u64, server_world: u64) -> bool
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Worlds, enshwick::Off> {
 ///     enshwick::ecs::Worlds::resolve(load)
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Worlds {
@@ -633,7 +616,6 @@ impl Worlds {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// fn acts(worlds: &enshwick::ecs::Worlds) -> bool {
     ///     worlds.hosting()
     /// }
@@ -655,7 +637,6 @@ impl Worlds {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// unsafe fn mine(worlds: &enshwick::ecs::Worlds, ctx: *mut u64) -> bool {
     ///     // SAFETY: called from a system's hook with its context.
     ///     unsafe { worlds.is_server(ctx) }
@@ -690,7 +671,6 @@ impl Worlds {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::ecs::FIXED_PER_METRE;
 ///
 /// let half_metre = (0.5 * FIXED_PER_METRE) as i64;
@@ -704,7 +684,6 @@ pub const FIXED_PER_METRE: f64 = 4_294_967_296.0;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// assert_eq!(enshwick::ecs::metres([3_i64 << 32, -(1_i64 << 31), 0]), [3.0, -0.5, 0.0]);
 /// ```
 #[must_use]
@@ -720,7 +699,6 @@ pub fn metres(fixed: [i64; 3]) -> [f64; 3] {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::ecs::{fixed, metres};
 ///
 /// assert_eq!(fixed([3.0, -0.5, 0.0]), [3_i64 << 32, -(1_i64 << 31), 0]);
@@ -788,7 +766,6 @@ impl EcsFns {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::ecs::transform_position;
 ///
 /// let transform: [i64; 3] = [2_i64 << 32, 1 << 31, -(3_i64 << 32)];
@@ -811,11 +788,9 @@ type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, re
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Attributes, enshwick::Off> {
 ///     enshwick::ecs::Attributes::resolve(load)
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Attributes {
@@ -866,7 +841,6 @@ impl Attributes {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// unsafe fn level(a: &enshwick::ecs::Attributes, registry: u64, set: *const u8) -> Option<u32> {
     ///     // SAFETY: the row's Level component and attribute registry.
     ///     unsafe { a.value(registry, set, 0x724b_f568) }
@@ -899,7 +873,6 @@ impl Attributes {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// unsafe fn reset(a: &enshwick::ecs::Attributes, registry: u64, set: *mut u8) -> bool {
     ///     // SAFETY: a set the hooked system writes, and its row's registry.
     ///     unsafe { a.set(registry, set, 0x1d7d_d102, 0) }

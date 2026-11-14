@@ -5,12 +5,10 @@ use crate::abi::ResourceKey;
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::content::Guid;
 ///
 /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 /// assert_eq!(enshwick::ItemId::from_guid(CHEST).get(), 1_302_084_846);
-/// # }
 /// ```
 #[repr(transparent)]
 #[derive(
@@ -60,7 +58,6 @@ impl Guid {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// let text = "6943053a-32c1-4718-ae22-e61427ddf54d";
@@ -89,7 +86,6 @@ impl Guid {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// let hash = [0x1_5570, 0xfa5b_71ba, 0x1c35_6c97, 0x170c_1f07];
@@ -150,7 +146,6 @@ impl Guid {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// let key = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").key_by_hash(7);
@@ -179,7 +174,6 @@ impl Guid {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// const LOCKER: Guid = Guid::named("you.lockers:locker");
@@ -198,7 +192,6 @@ impl Guid {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// assert_eq!(Guid::try_named("you.lockers:locker"), Some(Guid::named("you.lockers:locker")));
@@ -258,7 +251,6 @@ impl Guid {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::content::NAMESPACE;
 ///
 /// assert_eq!(NAMESPACE.to_string(), "e2185889-0e5e-4977-9edd-d6e7bcd1393f");
@@ -278,7 +270,6 @@ const NAMESPACE_BYTES: [u8; 16] = [
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::content::is_id;
 ///
 /// assert!(is_id("you.lockers:locker"));
@@ -358,7 +349,6 @@ const fn all_of(bytes: &[u8], slash: bool) -> bool {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::content::{Guid, Id};
 ///
 /// const LOCKER: Id = Id::new("you.lockers:locker");
@@ -408,7 +398,6 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Id;
     ///
     /// assert!(Id::try_new("pack:lantern").is_some());
@@ -439,7 +428,6 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Id;
     ///
     /// const LOCKER: Id = Id::of("you.lockers", "locker");
@@ -466,7 +454,6 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Id;
     ///
     /// assert!(Id::try_of("you.lockers", "locker").is_some());
@@ -504,7 +491,6 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::{Guid, Id};
     ///
     /// const LOCKER: Id = Id::new("you.lockers:locker");
@@ -529,7 +515,6 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Id;
     ///
     /// let lantern = Id::new("pack:lantern");
@@ -556,7 +541,6 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// assert_eq!(enshwick::content::Id::new("you.lockers:locker").namespace(), "you.lockers");
     /// ```
     #[must_use]
@@ -579,7 +563,6 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Id;
     ///
     /// let key = Id::new("you.lockers:locker").key_by_hash(7);
@@ -598,7 +581,6 @@ impl Id {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::content::DebugName;
 ///
 /// let torch = DebugName("Tool_Torch01_T0");
@@ -633,7 +615,6 @@ impl core::fmt::Display for Id {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Id;
     ///
     /// assert_eq!(Id::new("a:b").to_string(), "a:b");
@@ -674,7 +655,6 @@ impl core::fmt::Display for Guid {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// let text = "6943053a-32c1-4718-ae22-e61427ddf54d";

@@ -29,7 +29,6 @@ const VARIANT_SIZE: usize = 8;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::{Kind, Registry, Type, Value};
 ///
 /// let registry = Registry::new([Type::new("demo::uint8", Kind::Uint8, 1, 1)]);
@@ -71,7 +70,6 @@ impl CodecError {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Field, Kind, Registry, Type, Value};
     ///
     /// let registry = Registry::new([
@@ -205,7 +203,6 @@ impl<'a> Registry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Field, Kind, Registry, Type, Value};
     ///
     /// let registry = Registry::new([
@@ -241,7 +238,6 @@ impl<'a> Registry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Field, Kind, Registry, Type, Value};
     ///
     /// let registry = Registry::new([

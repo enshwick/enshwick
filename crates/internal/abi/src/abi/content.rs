@@ -15,7 +15,6 @@ pub use enshwick_values::abi::ResourceKey;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::ContentRename;
 ///
 /// let rename = ContentRename { from: [1; 16], to: [2; 16] };
@@ -66,7 +65,6 @@ pub type ResourcePatchFn = unsafe extern "system" fn(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::RecipeRuleKind;
 ///
 /// assert_ne!(RecipeRuleKind::RECIPE, RecipeRuleKind::OUTPUT);
@@ -93,7 +91,6 @@ impl RecipeRuleKind {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::RecipeKind;
 ///
 /// assert_ne!(RecipeKind::ROOF, RecipeKind::BUILDING_BLOCK);
@@ -128,7 +125,6 @@ impl RecipeKind {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::DataField;
 ///
 /// assert_ne!(DataField::MAX_STACK, DataField(0));
@@ -182,7 +178,6 @@ impl DataField {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::ChangeOp;
 ///
 /// assert_ne!(ChangeOp::SET, ChangeOp::TIMES);
@@ -209,7 +204,6 @@ impl ChangeOp {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::ChangeId;
 ///
 /// assert_ne!(ChangeId(1), ChangeId(2));
@@ -225,7 +219,6 @@ pub struct ChangeId(pub u32);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
 ///
 /// let change = DataChange {
@@ -277,7 +270,6 @@ impl_headed!(DataChange);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::DataSelect;
 ///
 /// assert_ne!(DataSelect::ENTRY, DataSelect::STACKABLE);
@@ -310,7 +302,6 @@ impl DataSelect {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::EntityDataFlags;
 ///
 /// assert_ne!(EntityDataFlags::SENT, EntityDataFlags::NONE);
@@ -336,7 +327,6 @@ impl EntityDataFlags {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Str, TypeAttribute};
 ///
 /// let tooltip = TypeAttribute { name: Str::new("tooltip"), value_type: Str::EMPTY, value: Str::new("Damage") };
@@ -361,7 +351,6 @@ pub struct TypeAttribute {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Str, TypeConstant};
 ///
 /// let invalid = TypeConstant { name: Str::new("Invalid"), value: 0 };
@@ -384,7 +373,6 @@ pub struct TypeConstant {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Str, TypeField};
 ///
 /// let health = TypeField {
@@ -422,7 +410,6 @@ pub struct TypeField {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, TypeEntry};
 ///
 /// let entry = TypeEntry::EMPTY;

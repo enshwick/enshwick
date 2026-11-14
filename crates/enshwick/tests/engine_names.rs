@@ -20,7 +20,6 @@ mod tests {
         ("base:game_events.rs", "inherited_field", EVENT),
         ("base:game_events.rs", "offset", EVENT),
         ("base:game_events.rs", "size", EVENT),
-        ("lower_examples/base.rs", "module", COPIES),
         ("load/build.rs", "field_offset", FIELD),
         ("load/build.rs", "type_size", FIELD),
         ("fake:test/base/hooks.rs", "field_offset", FAKE),
@@ -33,7 +32,6 @@ mod tests {
 
     const EVENT: &str = "`Load::game_event_type` takes any reflected event type by name";
     const FIELD: &str = "`Load::field_offset` and `type_size` read any reflected type";
-    const COPIES: &str = "the copies of the base's examples above, compiled here";
     const COMPONENT: &str =
         "`ComponentType::resolve` and `WritableType::resolve` take any component";
     const FAKE: &str = "the fake host answers the low level names a mod asks for";

@@ -214,7 +214,6 @@ impl Registry<'static> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::Registry;
     ///
     /// if let Ok(registry) = Registry::game() {
@@ -274,7 +273,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::Registry;
     ///
     /// if let (Some(host), Ok(registry)) = (enshwick::host(), Registry::game()) {
@@ -327,7 +325,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     let hashes = host.content_hashes().unwrap_or_default();
     ///     assert!(hashes.first().is_none_or(|hash| host.game_content(*hash).is_some()));
@@ -393,7 +390,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     if let Ok(version) = host.game_version() {
     ///         assert!(version.contains('|'));
@@ -420,7 +416,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     let hash = host.serve_content(&[0, 0, 0, 255])?;
     ///     assert_eq!(hash[0], 4, "a hash starts with its size");
@@ -446,7 +441,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::Registry;
     ///
     /// if let (Some(host), Ok(registry)) = (enshwick::host(), Registry::game()) {
@@ -481,7 +475,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use enshwick::content::{Guid, types};
     ///
     /// if let Some(host) = enshwick::host() {
@@ -490,7 +483,6 @@ impl Host {
     ///         let _value = host.served_value(key);
     ///     }
     /// }
-    /// # }
     /// ```
     pub fn served_value(&self, key: crate::abi::ResourceKey) -> Result<super::Value, Off> {
         decode(key, &self.served_resource(key)?)

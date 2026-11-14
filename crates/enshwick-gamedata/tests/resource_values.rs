@@ -6,6 +6,9 @@
 
 #[cfg(test)]
 mod tests {
+    #[path = "../support/parallel.rs"]
+    mod parallel;
+
     use std::collections::BTreeMap;
     use std::path::Path;
 
@@ -271,22 +274,13 @@ mod tests {
             "{version}"
         );
         let keys = archive.keys();
-        let mut failed: BTreeMap<String, (usize, String)> = BTreeMap::new();
-        let mut unknown = 0usize;
-        let mut shared: Vec<String> = Vec::new();
-        let mut unwalked: Vec<&str> = Vec::new();
-        for key in &keys {
-            let Some(ty) = registry.hashed(key.type_hash) else {
-                unknown += 1;
-                continue;
-            };
+        // Per resource: its type's name, its blocks' check and its round
+        // trip's error; `None` for a type the executable lacks.
+        let checked = parallel::map(&keys, |key| {
+            let ty = registry.hashed(key.type_hash)?;
             let name = ty.qualified_name();
             let base = archive.resource(key).unwrap();
-            match shared_blocks(&registry, ty, &base) {
-                Some(pairs) if pairs.is_empty() => {}
-                Some(pairs) => shared.push(format!("{name}: headers at {pairs:?}")),
-                None => unwalked.push(name),
-            }
+            let blocks = shared_blocks(&registry, ty, &base);
             let outcome = registry.decode(name, &base).and_then(|value| {
                 let again = registry.encode(name, &value, Some(&base))?;
                 Ok((again == base).then_some(()).ok_or_else(|| {
@@ -295,12 +289,30 @@ mod tests {
                 }))
             });
             let error = match outcome {
-                Ok(Ok(())) => continue,
-                Ok(Err(differ)) => differ,
-                Err(error) => error.to_string(),
+                Ok(Ok(())) => None,
+                Ok(Err(differ)) => Some(differ),
+                Err(error) => Some(error.to_string()),
             };
-            let entry = failed.entry(name.to_owned()).or_insert((0, error));
-            entry.0 += 1;
+            Some((name, blocks, error))
+        });
+        let mut failed: BTreeMap<String, (usize, String)> = BTreeMap::new();
+        let mut unknown = 0usize;
+        let mut shared: Vec<String> = Vec::new();
+        let mut unwalked: Vec<&str> = Vec::new();
+        for resource in checked {
+            let Some((name, blocks, error)) = resource else {
+                unknown += 1;
+                continue;
+            };
+            match blocks {
+                Some(pairs) if pairs.is_empty() => {}
+                Some(pairs) => shared.push(format!("{name}: headers at {pairs:?}")),
+                None => unwalked.push(name),
+            }
+            if let Some(error) = error {
+                let entry = failed.entry(name.to_owned()).or_insert((0, error));
+                entry.0 += 1;
+            }
         }
         let report: Vec<String> = failed
             .iter()

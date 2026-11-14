@@ -28,8 +28,7 @@ use super::Config;
 ///
 /// # Examples
 ///
-/// ```
-/// # extern crate enshwick_base as enshwick;
+/// ```standalone_crate
 /// use enshwick::config::{self, SetSettingError};
 ///
 /// /// Remote console settings.
@@ -82,7 +81,6 @@ pub(super) fn write(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::config::SetSettingError;
 ///
 /// let why = SetSettingError::NoWorld;

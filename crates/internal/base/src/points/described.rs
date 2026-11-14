@@ -50,7 +50,6 @@ impl DescribedField {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::points::{DescribedField, DescribedPoint, DescribedVerdict, Mode, Order};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -66,7 +65,6 @@ impl DescribedField {
 ///         })
 ///     }
 /// }
-/// # }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -135,7 +133,6 @@ impl DescribedPoint {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::points::{DescribedPoint, Mode};
     ///
     /// assert!(DescribedPoint::new("you.post:price", Mode::Override).refusable(true).refusable);
@@ -319,7 +316,6 @@ impl DescribedPoint {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::points::{DescribedField, DescribedPoint, Mode};
 /// use enshwick::services::layout_hash;
 /// use enshwick::Shape as _;
@@ -335,7 +331,6 @@ impl DescribedPoint {
 ///     enshwick::info!("item 7: {decision:?}, {} coins", u32::from_le_bytes(coins));
 ///     Ok(())
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy)]
 pub struct DescribedOwnedPoint {

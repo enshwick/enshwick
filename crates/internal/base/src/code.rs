@@ -15,7 +15,6 @@ pub use each::find_each_unique;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::code::Pattern;
 ///
 /// let pattern = Pattern::parse("B9 ?? 02 00 00")?;
@@ -36,7 +35,6 @@ pub struct Pattern {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::code::Pattern;
 ///
 /// assert!(Pattern::parse("B9 0").is_err());
@@ -59,7 +57,6 @@ crate::load::off_from!(PatternError);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::code::{Pattern, FindError};
 ///
 /// let pattern = Pattern::parse("C3")?;
@@ -114,7 +111,6 @@ impl Pattern {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::code::Pattern;
     ///
     /// let pattern = Pattern::parse("E8 ?? C3")?;
@@ -133,7 +129,6 @@ impl Pattern {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::code::Pattern;
     ///
     /// assert_eq!(Pattern::parse("0F 84 ?? ?? ?? ??")?.len(), 6);
@@ -149,7 +144,6 @@ impl Pattern {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::code::Pattern;
     ///
     /// assert!(!Pattern::parse("C3")?.is_empty());
@@ -165,7 +159,6 @@ impl Pattern {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::code::Pattern;
     ///
     /// let pattern = Pattern::parse("48 ?? 05")?;
@@ -188,7 +181,6 @@ impl Pattern {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::code::Pattern;
     ///
     /// let pattern = Pattern::parse("CC ?? CC")?;

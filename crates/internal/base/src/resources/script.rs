@@ -22,7 +22,6 @@ use enshwick_values::content::Guid;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// let bytes = enshwick::resources::Bytes(vec![1, 2, 3]);
 /// assert_eq!(bytes.0.len(), 3);
 /// ```

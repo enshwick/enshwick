@@ -67,7 +67,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```standalone_crate
     /// use std::sync::atomic::{AtomicU32, Ordering};
     ///
     /// /// Comfort settings.

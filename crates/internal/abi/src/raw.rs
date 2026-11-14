@@ -12,7 +12,6 @@
 //! be read: read the integer and compare it.
 //!
 //! ```
-//! # extern crate enshwick_abi as enshwick;
 //! use enshwick::raw::read_at;
 //!
 //! let state = [0u8, 1];
@@ -37,7 +36,6 @@ pub use bytemuck::{AnyBitPattern, NoUninit, Zeroable};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::read_at;
 ///
 /// let record = [0u8, 0, 0, 0, 0x2a, 0, 0, 0];
@@ -49,7 +47,6 @@ pub use bytemuck::{AnyBitPattern, NoUninit, Zeroable};
 /// A `bool` is refused at compile time, since a byte of 2 is no `bool`:
 ///
 /// ```compile_fail
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::read_at;
 ///
 /// let state = [2u8];
@@ -77,7 +74,6 @@ pub unsafe fn read_at<T: AnyBitPattern>(base: *const u8, offset: usize) -> T {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::read_ptr_at;
 ///
 /// let value = 7u32;
@@ -107,7 +103,6 @@ pub unsafe fn read_ptr_at<T>(base: *const u8, offset: usize) -> *mut T {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::{read_at, write_at};
 ///
 /// let mut record = [0u8; 8];
@@ -135,7 +130,6 @@ pub unsafe fn write_at<T: NoUninit>(base: *mut u8, offset: usize, value: T) {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::{read_ptr_at, write_ptr_at};
 ///
 /// let mut value = 7u32;
@@ -168,7 +162,6 @@ pub unsafe fn write_ptr_at<T>(base: *mut u8, offset: usize, value: *mut T) {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::read_u32_atomic_at;
 ///
 /// let words = [7u32, 9];
@@ -206,7 +199,6 @@ pub unsafe fn read_u32_atomic_at(base: *const u8, offset: usize) -> Option<u32> 
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::read_bytes_at;
 ///
 /// let record = *b"..name";
@@ -236,7 +228,6 @@ pub unsafe fn read_bytes_at(base: *const u8, offset: usize, out: &mut [u8]) {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::raw::write_bytes_at;
 ///
 /// let mut record = [0u8; 6];

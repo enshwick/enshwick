@@ -2,10 +2,11 @@
 //! merges; the git hooks run only the checks that compile nothing.
 //!
 //! Nothing runs when no package changed since the branch left `origin/main`.
-//! Otherwise the tree's own rules run ([`crate::check`]), then clippy, the
-//! doctests and rustdoc over the workspace, where unchanged packages are
-//! already fresh, and nextest runs the tests of the changed packages and of
-//! every package that depends on them. Off Windows the workspace is also
+//! Otherwise the tree's own rules run ([`crate::check`]), then clippy and
+//! rustdoc over the workspace, where unchanged packages are already fresh,
+//! and nextest and the doctests run for the changed packages and every
+//! package that depends on them; a local check leaves the widest part of
+//! that to CI ([`affected::Lane`]). Off Windows the workspace is also
 //! linted for Windows through `cargo xwin`, beside the host checks.
 //! `--windows` also runs the Windows tests of the crates marked
 //! `windows-tests` or `windows-only`, under Wine on an amd64 Linux host.
@@ -22,7 +23,7 @@ use std::process::Command;
 use std::thread;
 use std::time::Instant;
 
-use crate::affected::{self, Package, Scope};
+use crate::affected::{self, Lane, Package, Scope};
 use crate::commands::{fuzz, header, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 
@@ -132,6 +133,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
                 merge_base,
                 root: &root,
             },
+            Lane::current(),
         )
     } else {
         say(&format!(
@@ -145,7 +147,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         .filter(|p| p.windows_tests)
         .filter(|p| match &scope {
             Scope::All => true,
-            Scope::Some { code, docs } => code.contains(&p.name) || docs.contains(&p.name),
+            Scope::Some { code, docs, .. } => code.contains(&p.name) || docs.contains(&p.name),
         })
         .map(|p| p.name.as_str())
         .collect();
@@ -409,6 +411,25 @@ impl Step {
     }
 }
 
+/// The libtest filters that pick the examples of `names` out of a workspace
+/// doctest run: rustdoc names each example after its file, so a package's
+/// directory with a trailing separator, in either form, matches its own
+/// examples and the book chapters it includes, and no other package's.
+fn doctest_filters<'a>(
+    names: impl Iterator<Item = &'a String>,
+    packages: &[Package],
+) -> Vec<String> {
+    let mut filters = Vec::new();
+    for package in names.filter_map(|name| packages.iter().find(|p| &p.name == name)) {
+        let dir = format!("{}/", package.dir);
+        filters.push(dir.replace('/', "\\"));
+        filters.push(dir);
+    }
+    filters.sort();
+    filters.dedup();
+    filters
+}
+
 /// The checks of the API crate's stable surface, built without `unstable`:
 /// its lints when its code changed, its examples and its rustdoc whenever
 /// it changed. `stable` names the crates and features ([`stable_api`]).
@@ -421,19 +442,29 @@ fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
                 .then(&["--", "-D", "warnings"]),
         );
     }
-    // The script binding, the rates and item data are public only with
-    // `unstable`, so their examples fail to build without it. They are
-    // marked `standalone_crate` and skipped here: one example that fails
-    // in the merged build makes rustdoc build the rest one by one, which
-    // takes minutes; merged they share one binary and take seconds. The
-    // test names carry the source path with the host's separator.
+    // The script binding, the rates, item data and base's described calls
+    // are public only with `unstable`, so their examples fail to build
+    // without it. They are marked `standalone_crate` and skipped here: one
+    // example that fails in the merged build makes rustdoc build the rest
+    // one by one, which takes minutes; merged they share one binary and take
+    // seconds. The test names carry the source path with the host's
+    // separator.
     let mut doctests = Step::new(&["test", "--doc"])
         .then_owned(stable)
         .then(&["--"]);
-    for module in ["src/script", "src/rates.rs", "src/item_data.rs"] {
+    for module in [
+        "src/script",
+        "src/rates.rs",
+        "src/item_data.rs",
+        "src/services/calls.rs",
+    ] {
         let windows = module.replace('/', "\\");
         doctests = doctests.then(&["--skip", module, "--skip", &windows]);
     }
+    // Without `unstable` the examples of the unstable surface skipped above
+    // still keep content, core and inventory from merging; the sentinels hold
+    // the workspace's run, where every crate merges.
+    doctests = doctests.then(&["--skip", crate::check::SENTINEL_NAME]);
     steps.push(doctests);
     // A link into an unstable module breaks only this build, and the
     // crate's own rustdoc takes seconds once the examples above built
@@ -485,15 +516,18 @@ pub(crate) fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
 }
 
 /// The host steps of `parts`, one after another, in the order a check of
-/// every part runs them: `code` and `docs` say what changed, and `tests` is
-/// the nextest filter of the changed packages (`None`: every test);
-/// `workspace` and `stable` are the arguments of a workspace build and of
-/// the stable API's ([`host_args`], [`stable_api`]).
+/// every part runs them: `lint`, `code` and `docs` say what to build and
+/// lint, what changed and whose examples changed; `tests` is the nextest
+/// filter of the packages to test (`None`: every test) and `doctests` the
+/// test name filters of the packages whose examples run (none: every
+/// example); `workspace` and `stable` are the arguments of a workspace
+/// build and of the stable API's ([`host_args`], [`stable_api`]).
 fn host_steps(
     scope: &Scope,
     (workspace, stable): (&[String], &[String]),
-    (code, docs): (bool, bool),
+    (lint, code, docs): (bool, bool, bool),
     tests: Option<&str>,
+    doctests: &[String],
     full: bool,
     parts: &[Part],
 ) -> Vec<Step> {
@@ -504,7 +538,7 @@ fn host_steps(
     if full && run_host {
         steps.push(Step::new(&["fmt", "--all", "--check"]));
     }
-    if code && run_host {
+    if lint && run_host {
         steps.push(host(&["clippy", "--all-targets"]).then(&["--", "-D", "warnings"]));
         // CI runs each part in a job of its own, so the host part never
         // runs the trybuild test, whatever other parts this command runs.
@@ -533,7 +567,13 @@ fn host_steps(
         ]));
     }
     if docs && run_docs {
-        steps.push(host(&["test", "--doc"]));
+        // A name filter, not `--package`: the build keeps the workspace's
+        // features, so nothing builds twice.
+        let mut step = host(&["test", "--doc"]);
+        if !doctests.is_empty() {
+            step = step.then(&["--"]).then_owned(doctests);
+        }
+        steps.push(step);
     }
     // The API crate's examples, the book's among them, change with its
     // documents as well as with its code.
@@ -545,6 +585,7 @@ fn host_steps(
         steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, full) {
+        // `code` alone: a package whose version alone moved needs no docs.
         steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
         steps.push(doc_links_step());
     }
@@ -556,7 +597,11 @@ fn host_steps(
 
 /// Runs the checks of `scope`. Every build selects the whole workspace, so
 /// features unify the same way on every run and nothing builds twice; only
-/// the tests run are narrowed to the changed packages. Host steps run one
+/// the tests and examples run are narrowed to the scope's packages. A
+/// narrowed `cargo doc --package` would unify features differently and
+/// rebuild their dependencies on each switch (an `xtask` alone 34 s, then the
+/// workspace 64 s, 2026-11-14), while the workspace's rustdoc redoes only the
+/// changed packages and their dependents. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
 /// them.
 fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
@@ -568,25 +613,39 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     let on_windows = cfg!(windows);
     let host_ok =
         |name: &String| on_windows || packages.iter().any(|p| &p.name == name && !p.windows_only);
-    let (code, docs, tests) = match scope {
-        Scope::All => (true, true, None),
-        Scope::Some { code, docs } => {
-            if code.is_empty() && docs.is_empty() {
+    let (flags, tests, doctests) = match scope {
+        Scope::All => ((true, true, true), None, Vec::new()),
+        Scope::Some { code, docs, built } => {
+            if code.is_empty() && docs.is_empty() && built.is_empty() {
                 say("no package changed; nothing to check");
                 return true;
             }
             let names: Vec<&str> = code.iter().chain(docs).map(String::as_str).collect();
-            say(&format!("checking {}", names.join(", ")));
+            if !names.is_empty() {
+                say(&format!("checking {}", names.join(", ")));
+            }
+            if !built.is_empty() {
+                let built: Vec<&str> = built.iter().map(String::as_str).collect();
+                say(&format!(
+                    "only building and linting {}: CI and the merge queue test them",
+                    built.join(", ")
+                ));
+            }
             let host: Vec<&String> = code.iter().filter(|name| host_ok(name)).collect();
             let filter = host
                 .iter()
                 .map(|name| format!("package({name})"))
                 .collect::<Vec<_>>()
                 .join(" | ");
+            let doctests = doctest_filters(host.into_iter().chain(docs), packages);
             (
-                !code.is_empty(),
-                !host.is_empty() || !docs.is_empty(),
+                (
+                    !code.is_empty() || !built.is_empty(),
+                    !code.is_empty(),
+                    !doctests.is_empty(),
+                ),
                 Some(filter),
+                doctests,
             )
         }
     };
@@ -598,14 +657,15 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     let host_steps = host_steps(
         scope,
         (&workspace, &stable),
-        (code, docs),
+        flags,
         tests.as_deref(),
+        &doctests,
         full,
         parts,
     );
     // Off Windows the whole workspace is also linted for Windows, where the
     // `cfg(windows)` code builds.
-    let windows = (!on_windows && code && parts.contains(&Part::WindowsLint)).then(|| {
+    let windows = (!on_windows && flags.0 && parts.contains(&Part::WindowsLint)).then(|| {
         Step::new(&[
             "xwin",
             "clippy",
@@ -634,258 +694,4 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::BTreeSet;
-
-    use clap::ValueEnum as _;
-
-    use super::*;
-
-    #[test]
-    fn the_docs_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
-        assert_eq!(Part::from_str("docs", false), Ok(Part::Docs));
-        assert_eq!(
-            Part::from_str("windows-tests", false),
-            Ok(Part::WindowsTests)
-        );
-        assert_eq!(Part::from_str("trybuild", false), Ok(Part::Trybuild));
-        assert_eq!(Part::from_str("semver", false), Ok(Part::Semver));
-        for part in [Part::Docs, Part::Trybuild, Part::Semver] {
-            assert!(Part::every(false).contains(&part), "{part:?}");
-            assert!(Part::every(true).contains(&part), "{part:?}");
-        }
-        assert!(Part::from_str("doc", false).is_err());
-    }
-
-    /// The step lines `parts` plan for a change to the packages `code`.
-    fn planned_for(code: &[&str], parts: &[Part]) -> Vec<String> {
-        let scope = Scope::Some {
-            code: code.iter().map(|name| (*name).to_owned()).collect(),
-            docs: BTreeSet::new(),
-        };
-        let filter = code
-            .iter()
-            .map(|name| format!("package({name})"))
-            .collect::<Vec<_>>()
-            .join(" | ");
-        host_steps(
-            &scope,
-            (&[], &[]),
-            (true, false),
-            Some(&filter),
-            false,
-            parts,
-        )
-        .iter()
-        .map(Step::line)
-        .collect()
-    }
-
-    #[test]
-    fn the_trybuild_part_runs_the_test_only_when_the_api_crate_s_tests_are_in_scope() {
-        let trybuild = format!(
-            "cargo nextest run --package enshwick --test main --features {TRYBUILD_FEATURES} --no-tests=fail -E {TRYBUILD}"
-        );
-        assert_eq!(
-            planned_for(&["enshwick-core", "enshwick"], &[Part::Trybuild]),
-            [trybuild.as_str()]
-        );
-        assert!(planned_for(&["cargo-enshwick"], &[Part::Trybuild]).is_empty());
-        assert_eq!(planned(&[Part::Trybuild]), [trybuild.as_str()]);
-    }
-
-    #[test]
-    fn the_host_part_never_runs_the_trybuild_test_whatever_parts_run_beside_it() {
-        let nextest = |steps: Vec<String>| {
-            steps
-                .into_iter()
-                .find(|step| step.starts_with("cargo nextest run --no-tests=pass"))
-                .unwrap()
-        };
-        let in_scope = format!("-E (package(enshwick)) & not ({TRYBUILD})");
-        for parts in [&[Part::Host][..], &[Part::Host, Part::Trybuild]] {
-            let step = nextest(planned_for(&["enshwick"], parts));
-            assert!(step.ends_with(&in_scope), "{parts:?}: {step}");
-        }
-        let everything = format!("-E not ({TRYBUILD})");
-        assert!(nextest(planned(&Part::every(false))).ends_with(&everything));
-        assert!(nextest(planned(&[Part::Host])).ends_with(&everything));
-    }
-
-    #[test]
-    fn the_semver_part_checks_each_package_it_is_given_and_none_without() {
-        assert!(semver_step(&[]).is_none());
-        let step = semver_step(&["enshwick".to_owned(), "enshwick-core".to_owned()]).unwrap();
-        assert_eq!(
-            step.line(),
-            "cargo semver-checks --package enshwick --package enshwick-core"
-        );
-    }
-
-    fn planned(parts: &[Part]) -> Vec<String> {
-        host_steps(
-            &Scope::All,
-            (&[], &stable()),
-            (true, true),
-            None,
-            true,
-            parts,
-        )
-        .iter()
-        .map(Step::line)
-        .collect()
-    }
-
-    #[test]
-    fn the_host_and_docs_parts_split_the_steps_a_check_of_every_part_runs_in_order() {
-        let host = planned(&[Part::Host, Part::Trybuild]);
-        let docs = planned(&[Part::Docs]);
-        let starts = |steps: &[String], with: &str| steps.iter().any(|s| s.starts_with(with));
-        assert!(starts(&host, "cargo nextest") && starts(&host, "cargo deny"));
-        assert!(!starts(&host, "cargo test --doc") && !starts(&host, "cargo doc"));
-        assert!(starts(&docs, "cargo test --doc") && starts(&docs, "cargo doc"));
-        assert!(!starts(&docs, "cargo nextest") && !starts(&docs, "cargo fmt"));
-        let every = planned(&Part::every(false));
-        // A step that runs twice, such as the link check after each docs
-        // build, takes its next place in the full run.
-        let order = |steps: &[String]| -> Vec<usize> {
-            let mut taken: Vec<usize> = Vec::new();
-            for step in steps {
-                let at = (0..every.len())
-                    .find(|at| every[*at] == *step && !taken.contains(at))
-                    .unwrap();
-                taken.push(at);
-            }
-            taken
-        };
-        assert_eq!(every.len(), host.len() + docs.len());
-        assert!(order(&host).is_sorted() && order(&docs).is_sorted());
-    }
-
-    #[test]
-    fn a_change_to_the_api_docs_alone_plans_the_stable_steps_in_the_docs_part() {
-        let docs_of = |name: &str| Scope::Some {
-            code: BTreeSet::new(),
-            docs: [name.to_owned()].into(),
-        };
-        let args = stable();
-        let plans_stable = |scope: &Scope| {
-            host_steps(
-                scope,
-                (&[], &args),
-                (false, true),
-                Some(""),
-                false,
-                &[Part::Docs],
-            )
-            .iter()
-            .any(|step| step.args.ends_with(&args))
-        };
-        assert!(plans_stable(&docs_of("enshwick")));
-        assert!(!plans_stable(&docs_of("enshwick-luau")));
-    }
-
-    fn runs_stable_rustdoc(steps: &[Step], stable: &[String]) -> bool {
-        steps.iter().any(|step| {
-            step.args
-                .starts_with(&["doc".to_owned(), "--no-deps".to_owned()])
-                && step.args.ends_with(stable)
-                && step
-                    .env
-                    .iter()
-                    .any(|(name, value)| *name == "RUSTDOCFLAGS" && value == "-D warnings")
-        })
-    }
-
-    /// The stable API's arguments for this workspace.
-    fn stable() -> Vec<String> {
-        stable_api(&packages().unwrap())
-    }
-
-    #[test]
-    fn the_stable_api_is_the_facade_and_each_internal_crate_whose_examples_name_it() {
-        let stable = stable();
-        let named = |name: &str| stable.iter().any(|arg| arg == name);
-        for name in [
-            "enshwick",
-            "enshwick-core",
-            "enshwick-base",
-            "enshwick-content",
-            "enshwick-world",
-            "enshwick-fake",
-        ] {
-            assert!(named(name), "{name}");
-        }
-        for name in ["enshwick-values", "enshwick-abi", "enshwick-luau", "xtask"] {
-            assert!(!named(name), "{name}");
-        }
-        assert!(stable.ends_with(&["--features".to_owned(), "enshwick/test".to_owned()]));
-    }
-
-    #[test]
-    fn a_tool_step_runs_its_program_and_an_xtask_step_this_binary() {
-        assert_eq!(Step::tool("typos", &[]).program.as_deref(), Some("typos"));
-        let exe = std::env::current_exe().unwrap().display().to_string();
-        let step = Step::xtask(&["doc-links"]);
-        assert_eq!(step.program.as_deref(), Some(exe.as_str()));
-        assert_eq!(step.args, ["doc-links"]);
-    }
-
-    #[test]
-    fn host_args_leave_out_windows_only_crates_only_off_windows() {
-        let package = |name: &str, windows_only| Package {
-            name: name.to_owned(),
-            version: "0.0.0-dev".to_owned(),
-            dir: name.to_owned(),
-            deps: Vec::new(),
-            lib: None,
-            windows_only,
-            windows_tests: windows_only,
-            unstable: false,
-        };
-        let packages = [package("api", false), package("loader", true)];
-        let base = ["--workspace", "--features", TEST_FEATURE];
-        assert_eq!(host_args(&packages, true), base);
-        assert_eq!(
-            host_args(&packages, false),
-            [&base[..], &["--exclude", "loader"]].concat()
-        );
-    }
-
-    #[test]
-    fn a_change_to_the_api_code_builds_its_stable_rustdoc() {
-        let args = stable();
-        assert!(runs_stable_rustdoc(&stable_api_steps(true, &args), &args));
-    }
-
-    #[test]
-    fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
-        let args = stable();
-        assert!(runs_stable_rustdoc(&stable_api_steps(false, &args), &args));
-    }
-
-    #[test]
-    fn a_change_to_code_builds_the_workspace_rustdoc_outside_the_full_suite() {
-        assert!(workspace_rustdoc(true, false));
-        assert!(workspace_rustdoc(false, true));
-        assert!(!workspace_rustdoc(false, false));
-    }
-
-    #[test]
-    fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
-        let steps = stable_api_steps(false, &stable());
-        let skipped = |name: &str| {
-            steps.iter().any(|step| {
-                step.args
-                    .windows(2)
-                    .any(|pair| pair[0] == "--skip" && name.contains(pair[1].as_str()))
-            })
-        };
-        for file in ["src/script/mod.rs", "src/rates.rs", "src/item_data.rs"] {
-            let name = format!("crates/internal/core/{file} - item (line 1)");
-            assert!(skipped(&name), "{name}");
-            assert!(skipped(&name.replace('/', "\\")), "{name}");
-        }
-        assert!(!skipped("crates\\enshwick\\src\\lib.rs - item (line 1)"));
-    }
-}
+mod tests;

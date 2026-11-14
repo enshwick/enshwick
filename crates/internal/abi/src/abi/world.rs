@@ -10,7 +10,6 @@ use crate::abi::{Entity, Header, ItemId, KnowledgeId, RecipeId, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{GameEventData, Header};
 ///
 /// let payload = [0u8; 16];
@@ -45,7 +44,6 @@ impl_headed!(GameEventData);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{EventTypeInfo, Header, Str};
 ///
 /// let info = EventTypeInfo {
@@ -87,7 +85,6 @@ pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, us
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::EntityPlace;
 ///
 /// let chest = EntityPlace { entity: enshwick::Entity(4096), reserved: 0, position: [1 << 32, 0, 0] };
@@ -109,7 +106,6 @@ pub struct EntityPlace {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, TeleportRequest};
 ///
 /// let to_spawn = TeleportRequest {
@@ -153,7 +149,6 @@ impl TeleportRequest {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, SpawnRequest};
 ///
 /// let wolf = SpawnRequest {
@@ -207,7 +202,6 @@ impl SpawnRequest {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{CraftCheck, Header};
 ///
 /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), crafting_operator_id: enshwick::Entity(2), crafting_station_id: enshwick::Entity(0), recipe_id: enshwick::RecipeId::new(0x51), recipe_amount: 3, reserved: 0 };
@@ -246,7 +240,6 @@ pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user:
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{BuildCheck, Header};
 ///
 /// let wall = BuildCheck {
@@ -294,7 +287,6 @@ pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user:
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{DaytimeInfo, Header};
 ///
 /// let noon = DaytimeInfo {
@@ -348,7 +340,6 @@ pub const DAMAGE_TYPES: usize = 13;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{DamageCheck, Header};
 ///
 /// let mut fall = DamageCheck {
@@ -428,7 +419,6 @@ pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, use
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{Header, KnowledgeInfo};
 ///
 /// let recipe = KnowledgeInfo {
@@ -441,7 +431,6 @@ pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, use
 ///     flags: 3,
 /// };
 /// assert_eq!(recipe.value & 1, 1);
-/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -484,7 +473,6 @@ impl KnowledgeInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, WeatherFront};
 ///
 /// let storm = WeatherFront {
@@ -536,7 +524,6 @@ impl_headed!(WeatherFront, born = 56);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, SaveInfo};
 ///
 /// let info = SaveInfo {
@@ -584,7 +571,6 @@ impl WeatherFront {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{BuildRights, Header};
 ///
 /// let check = BuildRights {
@@ -633,7 +619,6 @@ impl BuildRights {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::MapMarkerInfo;
 ///
 /// let marker = MapMarkerInfo::EMPTY;
@@ -672,7 +657,6 @@ impl MapMarkerInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::MapFrameInfo;
 ///
 /// let frame = MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY };
@@ -709,7 +693,6 @@ impl MapFrameInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::AccountActionType;
 ///
 /// assert_ne!(AccountActionType::BAN, AccountActionType::UN_BAN);

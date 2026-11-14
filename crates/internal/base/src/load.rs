@@ -57,13 +57,11 @@ pub(crate) use __off_from as off_from;
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::ecs::ComponentType;
 ///
 /// fn used_item(load: &mut enshwick::Load<'_>) -> Result<u32, enshwick::Off> {
 ///     Ok(ComponentType::resolve(load, "keen::ecs::UsedItem")?.hash())
 /// }
-/// # }
 /// ```
 pub trait Loading: sealed::Sealed {
     /// The base handle.

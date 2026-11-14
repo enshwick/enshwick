@@ -36,7 +36,6 @@ pub(crate) mod sealed {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::events::{Kind, PlayerJoined};
 /// use enshwick::game_events::EntityDiedEvent;
 ///
@@ -48,7 +47,6 @@ pub(crate) mod sealed {
 ///     watch::<PlayerJoined>(load)?;
 ///     watch::<EntityDiedEvent>(load)
 /// }
-/// # }
 /// ```
 pub trait Kind: sealed::Sealed + 'static {
     /// What a handler gets: an ABI struct or `()` for a loader event, the
@@ -68,7 +66,6 @@ pub trait Kind: sealed::Sealed + 'static {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::abi::Event;
 /// use enshwick::events::{LoaderEvent, PlayerJoined};
 ///
@@ -310,7 +307,6 @@ impl Ticked {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use std::time::Duration;
     ///
     /// assert_eq!(enshwick::events::Ticked::DEFAULT_EVERY, Duration::from_millis(100));
@@ -333,14 +329,12 @@ where
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use std::time::Duration;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let period = load.on_tick(Duration::from_secs(1), |_| enshwick::debug!("a second"))?;
 ///     period.set_every(Duration::from_millis(250))
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct TickPeriod {

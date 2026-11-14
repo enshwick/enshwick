@@ -18,7 +18,6 @@ use crate::{BaseLoad, Host, Off};
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::points::DescribedField;
 /// use enshwick::services::DescribedEvent;
 ///
@@ -26,7 +25,6 @@ use crate::{BaseLoad, Host, Off};
 ///     let sold = DescribedEvent::new("you.trading-post:sold", vec![DescribedField::new("item", 1)], 4);
 ///     load.on_described_mod_event(&sold, |data| enshwick::debug!("{} bytes", data.len()))
 /// }
-/// # }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -84,7 +82,6 @@ impl DescribedEvent {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::points::DescribedField;
 /// use enshwick::services::DescribedEvent;
 ///
@@ -95,7 +92,6 @@ impl DescribedEvent {
 ///     send.send(&7u64.to_le_bytes());
 ///     Ok(())
 /// }
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct DescribedEmitter {

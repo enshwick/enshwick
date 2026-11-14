@@ -16,6 +16,12 @@ publish = true
 enshwick-values.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+# The examples name the API as a mod does, through the facade, so they build
+# as one binary; cargo drops a dev-dependency without a version when it
+# publishes.
+enshwick = { path = "../../enshwick", features = ["test"] }
+
 [features]
 # The compiled conversions the tests hold every generated type's shape to.
 test = []

@@ -30,7 +30,6 @@ use core::ptr::NonNull;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::Shape;
 ///
 /// #[derive(Clone, Copy, Debug, Shape)]
@@ -66,7 +65,6 @@ pub unsafe trait Shape {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::shape::ShapeHasher;
 ///
 /// let a = ShapeHasher::new("enum").text("Coin").number(1).finish();
@@ -129,7 +127,6 @@ impl ShapeHasher {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::shape::ShapeHasher;
     ///
     /// let a = ShapeHasher::new("struct").layout::<u32>().finish();
@@ -146,7 +143,6 @@ impl ShapeHasher {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::shape::ShapeHasher;
     ///
     /// let a = ShapeHasher::new("struct").offset(0).finish();
@@ -162,7 +158,6 @@ impl ShapeHasher {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::shape::ShapeHasher;
     ///
     /// let a = ShapeHasher::new("enum").value(-1).finish();

@@ -42,7 +42,6 @@ pub use script::I18nFns;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::i18n::{Texts, language};
 ///
 /// let texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n")?;
@@ -61,7 +60,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// if let Some(host) = enshwick::host() {
     ///     enshwick::info!("texts in {}", host.language().code());
     /// }
@@ -84,7 +82,6 @@ impl Host {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::i18n::game_text;
 ///
 /// if let Some(text) = game_text(0x8f21_95d5) {
@@ -102,7 +99,6 @@ pub fn game_text(id: u32) -> Option<&'static str> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::i18n::{Language, game_text_in};
 ///
 /// let name = game_text_in(0x8f21_95d5, Language::UK_UA);
@@ -119,7 +115,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::Language;
     ///
     /// if let Some(host) = enshwick::host() {
@@ -143,7 +138,6 @@ impl Host {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::i18n::Language;
 ///
 /// assert_eq!(Language::from_code("uk"), Some(Language::UK_UA));
@@ -282,7 +276,6 @@ impl Language {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::Language;
     ///
     /// assert!(Language::REQUIRED.iter().all(|l| Language::OFFERED.contains(l)));
@@ -296,7 +289,6 @@ impl Language {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::Language;
     ///
     /// let order: Vec<Language> = Language::PT_BR.lookup_order().collect();
@@ -327,7 +319,6 @@ const _: () = {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::i18n::{Language, MOD_NAME, Texts};
 ///
 /// let texts = Texts::parse("[en]\n\"mod.name\" = \"Better Altars\"\n[uk]\n\"mod.name\" = \"Кращі олтарі\"\n")?;
@@ -342,7 +333,6 @@ pub const MOD_NAME: &str = "mod.name";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// assert_eq!(enshwick::i18n::MOD_DESCRIPTION, "mod.description");
 /// ```
 pub const MOD_DESCRIPTION: &str = "mod.description";
@@ -370,7 +360,6 @@ impl crate::script::FromScript for Language {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::i18n::{Language, Texts};
 ///
 /// let texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n")?;
@@ -415,7 +404,6 @@ impl Texts {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::{Language, Texts};
     ///
     /// let mut texts = Texts::parse("[en]\na = \"A\"\n")?;
@@ -455,7 +443,6 @@ impl Texts {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::{Language, Texts};
     ///
     /// let texts = Texts::parse("[en]\nupdate = \"{name}: {from} to {to}\"\n")?;
@@ -506,7 +493,6 @@ impl Texts {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::Texts;
     ///
     /// let texts = Texts::parse("[uk]\ngreeting = \"Привіт\"\n")?;
@@ -528,7 +514,6 @@ impl Texts {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::Texts;
     ///
     /// let texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n")?;
@@ -555,7 +540,6 @@ impl Texts {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::{Language, Texts};
     ///
     /// let texts = Texts::parse("[uk]\na = \"А\"\n[en]\na = \"A\"\n")?;
@@ -579,7 +563,6 @@ impl Texts {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::{Language, Texts};
     ///
     /// let texts = Texts::parse("[en]\na = \"A\"\n[uk]\na = \"А\"\n")?;
@@ -621,7 +604,6 @@ impl Texts {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::i18n::{Language, Texts};
     ///
     /// let texts = Texts::parse("[en]\na = \"A\"\nb = \"B\"\n[uk]\na = \"А\"\n")?;

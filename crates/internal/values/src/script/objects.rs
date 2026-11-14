@@ -12,7 +12,6 @@ use super::{Declared, Error, FromScript, Function, IntoScript, Ty, Typed, Value,
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{Class, Function, IntoScript, Object, Value};
 ///
 /// #[derive(Clone, Copy, Debug)]
@@ -85,7 +84,6 @@ impl Class {
     /// # Examples
     ///
     /// ```rust,standalone_crate
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::script::{Class, Function, Object};
     ///
     /// #[derive(Clone, Copy, Debug)]
@@ -222,7 +220,6 @@ impl Handle {
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use std::sync::Arc;
 ///
 /// use enshwick::script::{Class, FromScript, Function, IntoScript, Object};

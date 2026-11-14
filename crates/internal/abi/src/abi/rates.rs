@@ -7,7 +7,6 @@
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::RateId;
 ///
 /// assert_ne!(RateId::EXPERIENCE_COMBAT, RateId::FACTORY_PRODUCTION_SPEED);
@@ -41,7 +40,6 @@ impl RateId {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::{RateId, RecipeKind};
     ///
     /// assert_ne!(RateId::recipe_output(RecipeKind::ROOF), RateId::recipe_output(RecipeKind::OTHER));

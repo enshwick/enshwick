@@ -10,7 +10,6 @@
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::Kind;
 ///
 /// assert_eq!(Kind::from_byte(0x12), Kind::Struct);
@@ -152,7 +151,6 @@ impl Kind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::Kind;
     ///
     /// assert_eq!(Kind::Bitmask16.width(), Some(2));

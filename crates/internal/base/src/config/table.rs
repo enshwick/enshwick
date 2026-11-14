@@ -23,7 +23,6 @@ const FILE: &str = "settings";
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::config::{Field, Schema};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -32,7 +31,6 @@ const FILE: &str = "settings";
 ///     assert_eq!(defaults["limit"].as_integer(), Some(4));
 ///     settings.on_change(load, |values| enshwick::info!("limit {}", values["limit"]))
 /// }
-/// # }
 /// ```
 #[derive(Clone, Debug)]
 pub struct TableConfig {
@@ -47,7 +45,6 @@ impl Schema {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::{Field, Schema};
     ///
     /// let limit = Field::new("limit", &4).with_doc("How many.", "");
@@ -151,7 +148,6 @@ impl TableConfig {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::{SetSettingError, TableConfig};
     ///
     /// fn first_start(settings: &TableConfig, generated: &str) -> Result<(), SetSettingError> {

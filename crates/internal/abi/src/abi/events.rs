@@ -11,7 +11,6 @@ use crate::abi::{Entity, Header, ItemId, KnowledgeId, PlayerKey};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Event;
 ///
 /// assert_ne!(Event::SETTINGS_CHANGED, Event::LOADER_SETTINGS_CHANGED);
@@ -155,7 +154,6 @@ impl Event {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PlayerDeathData};
 ///
 /// let fell = PlayerDeathData {
@@ -227,12 +225,10 @@ impl PlayerDeathData {
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{Header, KnowledgeData};
 ///
 /// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 };
 /// assert_eq!(learnt.value, 3);
-/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
@@ -254,12 +250,10 @@ impl_headed!(KnowledgeData);
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{Header, QuestData};
 ///
 /// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) };
 /// assert_eq!(done.entity, enshwick::Entity(2));
-/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
@@ -281,7 +275,6 @@ impl_headed!(QuestData);
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
 ///
 /// let seen = KnowledgeInput {
@@ -296,7 +289,6 @@ impl_headed!(QuestData);
 ///     allowed: 1,
 /// };
 /// assert_eq!(seen.allowed, 1);
-/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -367,7 +359,6 @@ pub type KnowledgeInputFn =
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ChunkData, Header};
 ///
 /// let chunk = ChunkData { header: Header::of::<ChunkData>(), index: 41, x: 1, z: 1, size: 256 };
@@ -399,7 +390,6 @@ impl_headed!(ChunkData);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, TerrainPageData};
 ///
 /// let page = TerrainPageData { header: Header::of::<TerrainPageData>(), x: 3, z: 1, size: 128 };
@@ -430,7 +420,6 @@ impl_headed!(TerrainPageData);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{BuildingData, Header};
 ///
 /// let placed = BuildingData {
@@ -491,7 +480,6 @@ impl BuildingData {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PlayerInfo};
 ///
 /// let mut name = [0u8; 64];
@@ -558,7 +546,6 @@ impl PlayerInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use std::time::Duration;
 ///
 /// use enshwick::abi::TickData;
@@ -605,7 +592,6 @@ impl TickData {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// let tick = enshwick::abi::TickData::new(1);
     /// assert_eq!((tick.elapsed_steps, tick.game), (1, 1));
     /// ```
@@ -655,7 +641,6 @@ impl TickData {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// use std::time::Duration;
     ///
     /// let tick = enshwick::abi::TickData::new(9).with_elapsed(2, Duration::from_millis(100));
@@ -676,7 +661,6 @@ impl TickData {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// assert_eq!(enshwick::abi::TickData::new(1).cost(), None);
     /// ```
     #[must_use]
@@ -697,7 +681,6 @@ impl TickData {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::TickHandle;
 ///
 /// assert_ne!(TickHandle(0), TickHandle(1));
@@ -712,7 +695,6 @@ pub struct TickHandle(pub u32);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PlayerData};
 ///
 /// let player = PlayerData { header: Header::of::<PlayerData>(), slot: 0, entity: enshwick::Entity(7), key: enshwick::PlayerKey::new(42) };

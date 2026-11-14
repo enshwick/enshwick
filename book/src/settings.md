@@ -14,7 +14,7 @@ loads.
 A settings type is a struct with named fields and a `Default`. Mark it with
 `#[enshwick::config]`:
 
-```rust
+```rust,standalone_crate
 use enshwick::config::Config;
 
 /// Furniture comfort settings.
@@ -87,7 +87,7 @@ name and the key, such as `altars.per_level`.
 Field attributes set what a value accepts and how the Mods screen labels
 it:
 
-```rust
+```rust,standalone_crate
 use enshwick::config::Config;
 
 /// Locker settings.
@@ -135,7 +135,7 @@ implements `Display`.
 A field marked `group` holds settings of its own. The file writes them as a
 table, and the Mods screen shows them together under the group's title:
 
-```rust
+```rust,standalone_crate
 use enshwick::config::Config;
 
 /// Comfort rules.
@@ -177,7 +177,7 @@ again with the world's values each time a world loads, before
 [`WorldLoaded`](events.md). When the world stops, the handler gets the
 defaults again:
 
-```rust
+```rust,standalone_crate
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Comfort settings.
@@ -220,7 +220,7 @@ A mod writes one of its settings with
 for a value it makes itself, such as a password it generates on the first
 start:
 
-```rust
+```rust,standalone_crate
 use enshwick::config::{self, SetSettingError};
 
 /// Remote console settings.

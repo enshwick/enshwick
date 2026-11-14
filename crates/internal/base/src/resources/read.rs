@@ -11,7 +11,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use enshwick::content::{Guid, types};
     ///
     /// if let Some(host) = enshwick::host() {
@@ -20,7 +19,6 @@ impl Host {
     ///         let _ = host.game_resource(key);
     ///     }
     /// }
-    /// # }
     /// ```
     #[must_use]
     pub fn game_resource(&self, key: ResourceKey) -> Option<Vec<u8>> {
@@ -47,7 +45,6 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use enshwick::content::{Guid, types};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -63,7 +60,6 @@ impl Host {
     ///         Some(resin.to_vec())
     ///     })
     /// }
-    /// # }
     /// ```
     pub fn served_resource(&self, key: ResourceKey) -> Result<Vec<u8>, Off> {
         self.read_resource(self.api().resource_served, key)

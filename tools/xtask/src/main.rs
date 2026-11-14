@@ -57,23 +57,11 @@ enum Task {
     Header,
     /// Checks the links rustdoc leaves unchecked in the API crate's pages.
     DocLinks,
-    /// Writes the line that names an internal crate `enshwick` into its doc
-    /// examples.
-    AliasExamples,
     /// Peels a module's `Load` methods into forwarders, `<from>=<into>` each.
     PeelLoad {
         /// The modules, each `<from>=<into>`.
         #[arg(required = true)]
         pairs: Vec<String>,
-    },
-    /// Wraps the examples a doctest log names as failed and copies them
-    /// into the facade.
-    WrapExamples {
-        /// The doctest log.
-        log: PathBuf,
-        /// The feature the copies are built with.
-        #[arg(long)]
-        cfg: Option<String>,
     },
     /// Prints the cargo arguments of a host build, one a line, for CI.
     HostArgs,
@@ -109,11 +97,7 @@ fn run(task: Task) -> Result<ExitCode, String> {
         Task::TagLines => commands::tag_lines::run()?,
         Task::Header => commands::header::run(&root)?,
         Task::DocLinks => commands::doc_links::run(&root)?,
-        Task::AliasExamples => commands::lower_examples::run(&root, &packages()?)?,
         Task::PeelLoad { pairs } => commands::peel::run(&root, &pairs)?,
-        Task::WrapExamples { log, cfg } => {
-            commands::lower_examples::wrap(&root, &packages()?, &log, cfg.as_deref())?
-        }
         Task::HostArgs => {
             // One argument a line, for CI runs that test the host as the check does.
             for arg in commands::check::host_args(&packages()?, cfg!(windows)) {

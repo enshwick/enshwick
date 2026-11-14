@@ -461,6 +461,7 @@ name = "enshwick-abi"
 version = "1.0.0-alpha.15"
 dependencies = [
  "bytemuck",
+ "enshwick",
  "enshwick-values",
  "postcard",
  "proptest",
@@ -491,6 +492,7 @@ dependencies = [
  "aho-corasick",
  "bytemuck",
  "const_format",
+ "enshwick",
  "enshwick-abi",
  "enshwick-macros",
  "enshwick-values",
@@ -764,6 +766,7 @@ dependencies = [
 name = "enshwick-typed"
 version = "1.0.0-alpha.15"
 dependencies = [
+ "enshwick",
  "enshwick-values",
  "thiserror",
 ]
@@ -790,6 +793,7 @@ version = "1.0.0-alpha.15"
 dependencies = [
  "const-sha1",
  "const_format",
+ "enshwick",
  "enshwick-macros",
  "rustc-hash",
  "serde",

@@ -10,7 +10,6 @@ use super::Ty;
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{FromScript, IntoScript, Ty, Typed, Value};
 ///
 /// /// How a number changes.

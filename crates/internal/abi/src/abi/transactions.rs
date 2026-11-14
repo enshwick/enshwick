@@ -14,7 +14,6 @@ use crate::abi::{Entity, Header, ItemId, Status, Voxel};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, TerrainEdit, TransactionOp};
 ///
 /// let dig = TerrainEdit {
@@ -66,7 +65,6 @@ impl TransactionOp {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PropPlace};
 ///
 /// let chest = PropPlace {
@@ -100,7 +98,6 @@ impl_headed!(PropPlace);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, PropRemove};
 ///
 /// let gone = PropRemove { header: Header::of::<PropRemove>(), entity: enshwick::Entity(77), flags: 0 };
@@ -131,7 +128,6 @@ impl PropRemove {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Voxel, VoxelWrite};
 ///
 /// let stone = [Voxel { kind: Voxel::BUILDING, material: 0x83, fill: 0, reserved: 0 }; 8];
@@ -168,7 +164,6 @@ impl_headed!(VoxelWrite);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, VoxelRegion};
 ///
 /// let region = VoxelRegion { header: Header::of::<VoxelRegion>(), min: [200, 80, 200], size: [8, 4, 8] };
@@ -193,7 +188,6 @@ impl_headed!(VoxelRegion);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{BlockPlace, Header};
 ///
 /// let block = BlockPlace {
@@ -230,7 +224,6 @@ impl_headed!(BlockPlace);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Status, TransactionInfo};
 ///
 /// let info = TransactionInfo {

@@ -8,7 +8,6 @@ use core::sync::atomic::AtomicUsize;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::HookFlags;
 ///
 /// let flags = HookFlags(HookFlags::EXCLUSIVE.0 | HookFlags::CALLER_FRAME.0);
@@ -47,7 +46,6 @@ impl HookFlags {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use core::sync::atomic::{AtomicU32, AtomicUsize};
 /// use enshwick::abi::{HookFlags, HookSpec};
 ///
@@ -84,7 +82,6 @@ pub struct HookSpec {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::CallerFrame;
 ///
 /// let frame = CallerFrame { rsp: 0x1000, ..CallerFrame::default() };
@@ -136,7 +133,6 @@ impl CallerFrame {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::CallerFrame;
     ///
     /// let stack = [0x1_4004_05cb_u64, 0];
@@ -163,7 +159,6 @@ impl CallerFrame {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Registers;
 ///
 /// let mut registers = Registers { rcx: 7, ..Registers::default() };
@@ -226,7 +221,6 @@ pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: 
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{HookFlags, MidHookSpec, Registers};
 ///
 /// unsafe extern "system" fn handler(registers: *mut Registers, _user: *mut core::ffi::c_void) {

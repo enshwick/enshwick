@@ -214,7 +214,6 @@ impl Field {
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{Ty, Typed};
 ///
 /// /// Where a notice went.
@@ -404,7 +403,6 @@ pub type Call<T> = fn(&T, &mut [Value]) -> Result<Value, Error>;
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::script::{Bound, Value};
 ///
 /// #[derive(Clone, Copy, Debug)]
@@ -434,7 +432,6 @@ pub type Call<T> = fn(&T, &mut [Value]) -> Result<Value, Error>;
 /// assert_eq!(roll.signature().params()[0].name(), "count");
 /// let Ok(Value::Number(sum)) = roll.call(&Dice, &mut [Value::Number(2.0)]) else { unreachable!() };
 /// assert_eq!(sum, 8.0);
-/// # }
 /// ```
 pub struct Function<T: 'static> {
     name: &'static str,
@@ -531,7 +528,6 @@ impl<T> Function<T> {
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{Context, Error, Ty, Typed, Value};
 ///
 /// struct Price(u32);
@@ -657,7 +653,6 @@ where
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{Callback, Value};
 ///
 /// let double = Callback::new(|args| match args.first() {
@@ -704,7 +699,6 @@ impl Callback {
     /// # Examples
     ///
     /// ```rust,standalone_crate
-    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::script::{Callback, Error, Value};
     ///
     /// let told = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -750,7 +744,6 @@ impl Callback {
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// let error = enshwick::script::Error::new("count: expected a number");
 /// assert_eq!(error.to_string(), "count: expected a number");
 /// ```
@@ -787,7 +780,6 @@ impl From<Error> for crate::Off {
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{Ty, Typed};
 ///
 /// assert!(matches!(<Option<u32> as Typed>::TY, Ty::Optional(Ty::Number)));
@@ -812,7 +804,6 @@ pub trait IntoScript: Typed {
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{FromScript, Value};
 ///
 /// assert_eq!(u8::from_value(Value::Number(7.0))?, 7);
@@ -835,7 +826,6 @@ pub trait FromScript: Typed + Sized {
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_values as enshwick;
 /// use std::ops::ControlFlow;
 ///
 /// use enshwick::script::{Answer, Value};

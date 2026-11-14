@@ -69,13 +69,15 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   turns on, so a mod's release build holds no test support. Core asks the
   fake about a mod's manifest through one check the fake hands down at
   install. The fake's code names core as `enshwick_core`.
-- `enshwick-core`, the domains' crates and `enshwick-fake` take `enshwick` as a dev-dependency,
-  so their doc examples name the real facade and build as one binary; cargo
-  drops a dev-dependency without a version when it publishes. Another
-  internal part's doc example names its own crate `enshwick` by a hidden
-  `# extern crate <crate> as enshwick;` line. One that names items above its
-  crate sits in a hidden wrapper, and `crates/enshwick/src/lower_examples.rs`
-  compiles its copy; `cargo xtask check` holds both.
+- Every internal part with doc examples takes `enshwick` as a dev-dependency,
+  so its examples name the real facade and build as one binary; cargo
+  drops a dev-dependency without a version when it publishes. Its own code
+  keeps naming itself through `extern crate self as enshwick;`, so its unit
+  tests never reach the facade's copy of its types. rustdoc builds a crate's
+  examples one by one, without a word, when one of them does not merge, so
+  each library's root holds a sentinel example that fails then, and
+  `cargo xtask check` refuses a library with merged examples and no
+  sentinel.
 - Only mods depend on `enshwick`. The loader, `enshwick-luau`,
   `enshwick-gamedata` and `cargo-enshwick` name the internal parts they need,
   `enshwick-core` (`enshwick-gamedata` only `enshwick-base` and
@@ -257,11 +259,9 @@ its own; these steps hold for one that grows inside core first.
    deeper on a nested public module's own docs, never in a
    module's first paragraph, which the crate's index shows one folder up;
    `cargo xtask doc-links` checks each one in the facade's rendered docs.
-6. Give each doc example the alias line with `cargo xtask alias-examples`,
-   run the crate's doctests without its features and with them, and feed
-   each log to `cargo xtask wrap-examples <log> [--cfg <feature>]`, which
-   wraps the examples that name items above the crate and writes their
-   copies into `crates/enshwick/src/lower_examples/<crate>[_<feature>].rs`.
+6. The crate takes `enshwick` as a dev-dependency without a version, and
+   its root holds the merged-examples sentinel, so its examples name the
+   facade as a mod does and build as one binary.
 7. A domain gets a cargo feature only when the API above works without it:
    base, content, world and inventory, without which the domains above them
    do not build, have none. A domain's feature, on by default, is an optional dependency on its
