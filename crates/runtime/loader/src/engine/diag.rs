@@ -31,16 +31,10 @@ use enshwick_base::Relock;
 pub const SAMPLE_EVERY: u64 = 256;
 /// Mods turned off that the summary remembers; older ones are dropped.
 const HISTORY: usize = 64;
-/// Loader parts off that the summary remembers: [`HISTORY`], but in a test
-/// process, where CI runs the Windows tests one after another and every
-/// test lists its parts in the one list, which [`HISTORY`] would fill
-/// before the later tests' parts. [`keep_part`]'s own test holds the
-/// shipped [`HISTORY`].
-const PARTS_HISTORY: usize = if cfg!(test) { 4096 } else { HISTORY };
-
 /// Counting and timing, fixed by the settings read at start.
 static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
 static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
+#[cfg(not(test))]
 static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
 static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
 static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
@@ -118,14 +112,10 @@ pub struct PartOff {
 
 /// Remembers that the loader's `part` is off for `reason`, for the status
 /// summary and the Mods screen. A part keeps its first reason; past
-/// [`PARTS_HISTORY`] parts, later ones reach only the log.
+/// [`HISTORY`] parts, later ones reach only the log.
 pub fn part_off(part: &str, reason: &str) {
-    keep_part(
-        &mut PARTS_OFF.relock(),
-        PARTS_HISTORY,
-        (part, reason),
-        now(),
-    );
+    let at = now();
+    with_parts_off(|parts| keep_part(parts, HISTORY, (part, reason), at));
     ANY_PART_OFF.store(true, Ordering::Release);
 }
 
@@ -151,7 +141,21 @@ fn keep_part(parts: &mut Vec<PartOff>, cap: usize, (part, reason): (&str, &str),
 /// The loader's parts that are off, in the order they went off.
 #[must_use]
 pub fn parts_off() -> Vec<PartOff> {
-    PARTS_OFF.relock().clone()
+    with_parts_off(|parts| parts.clone())
+}
+
+/// Runs `work` on the parts off.
+#[cfg(not(test))]
+fn with_parts_off<R>(work: impl FnOnce(&mut Vec<PartOff>) -> R) -> R {
+    work(&mut PARTS_OFF.relock())
+}
+
+/// Runs `work` on the parts off the calling test listed, as its fuses are
+/// kept: each test finds the reasons its own parts went off for, never
+/// another test's first reason for the same part.
+#[cfg(test)]
+fn with_parts_off<R>(work: impl FnOnce(&mut Vec<PartOff>) -> R) -> R {
+    crate::engine::per_test::with(|turned| work(&mut turned.parts))
 }
 
 /// Remembers that `address` was found as `name`, a symbol or a system, so the

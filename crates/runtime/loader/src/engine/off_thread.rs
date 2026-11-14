@@ -23,12 +23,12 @@ pub(crate) fn read<T: Send + 'static, E: ReadFailure>(
 ) {
     let finish = Arc::new(finish);
     let on_thread = Arc::clone(&finish);
-    let work = move || {
+    let work = crate::engine::per_test::carried(move || {
         let began = std::time::Instant::now();
         let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
             .unwrap_or(Err(E::PANICKED));
         on_thread(found, began.elapsed());
-    };
+    });
     if let Err(why) = std::thread::Builder::new()
         .name(format!("enshwick {what}"))
         .spawn(work)

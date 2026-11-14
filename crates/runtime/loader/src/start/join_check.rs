@@ -151,33 +151,34 @@ pub(super) fn names(loader: &Loader) -> Vec<(String, String)> {
 mod tests {
     use super::*;
 
-    // One test for both: the join check's fuse is one per process, and
-    // `cargo test` runs every test in one.
     #[test]
-    fn the_join_links_and_once_off_it_lists_why_and_holds_back_no_game_dialog() {
+    fn the_join_check_and_its_dialog_hold_link_on_the_functions_they_are_given() {
         use crate::base::join::interaction;
         use crate::engine::mod_index::ModIndex;
         use enshwick_base::Relock;
-        const JOIN_FAILED: u8 = 7;
-        unsafe extern "system" fn game(_: *mut u8, _: *const u8) -> u32 {
-            9
-        }
         let loader = crate::start::tests::bare_loader();
         assert!(crate::base::join::link(&loader, 0x7100));
         assert!(interaction::link(&loader, 0x7200));
-        {
-            let chains = loader.chains.relock();
-            assert_eq!(chains.owners(0x7100), [ModIndex::LOADER]);
-            assert_eq!(chains.owners(0x7200), [ModIndex::LOADER]);
-            let fuses: Vec<_> = [0x7100, 0x7200]
-                .iter()
-                .flat_map(|&at| chains.features_at(at))
-                .map(Fuse::feature)
-                .collect();
-            assert_eq!(
-                fuses,
-                [JOIN_FUSE.feature(), interaction::HOLD_FUSE.feature()]
-            );
+        let chains = loader.chains.relock();
+        assert_eq!(chains.owners(0x7100), [ModIndex::LOADER]);
+        assert_eq!(chains.owners(0x7200), [ModIndex::LOADER]);
+        let fuses: Vec<_> = [0x7100, 0x7200]
+            .iter()
+            .flat_map(|&at| chains.features_at(at))
+            .map(Fuse::feature)
+            .collect();
+        assert_eq!(
+            fuses,
+            [JOIN_FUSE.feature(), interaction::HOLD_FUSE.feature()]
+        );
+    }
+
+    #[test]
+    fn a_build_without_the_join_target_layout_lists_the_check_off_and_holds_back_no_game_dialog() {
+        use crate::base::join::interaction;
+        const JOIN_FAILED: u8 = 7;
+        unsafe extern "system" fn game(_: *mut u8, _: *const u8) -> u32 {
+            9
         }
         link_check(&crate::start::tests::bare_loader());
         assert!(JOIN_FUSE.is_off());

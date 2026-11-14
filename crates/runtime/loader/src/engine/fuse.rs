@@ -81,11 +81,20 @@ impl Off {
     }
 }
 
+/// Whether a fuse is off: one atomic for the process.
+#[cfg(not(test))]
+type Switch = AtomicBool;
+
+/// Whether a fuse is off, kept per thread in the loader's own tests, so a
+/// test that blows a static fuse leaves every other test's alone.
+#[cfg(test)]
+type Switch = test_switch::Switch;
+
 /// A feature's switch, read by every detour of the feature.
 #[derive(Debug)]
 pub struct Fuse {
     feature: &'static str,
-    off: AtomicBool,
+    off: Switch,
     /// Whether a live check of `Fuse::verify` held in this process.
     #[cfg_attr(
         not(windows),
@@ -100,7 +109,7 @@ impl Fuse {
     pub const fn new(feature: &'static str) -> Self {
         Self {
             feature,
-            off: AtomicBool::new(false),
+            off: Switch::new(false),
             checked: AtomicBool::new(false),
         }
     }
@@ -330,9 +339,162 @@ impl Fuse {
     }
 }
 
+/// The fuse switch of the loader's own tests, kept in the scope of the test
+/// that reads it ([`crate::engine::per_test`]): a test that blows a
+/// process-wide fuse, through the code it tests, never turns that feature
+/// off for another test in the process.
+#[cfg(test)]
+mod test_switch {
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+    use super::Fuse;
+    use crate::engine::per_test;
+
+    impl Fuse {
+        /// A fuse on the loader's own storage, one switch for the process,
+        /// for a test of what a fuse does across threads; every other fuse
+        /// of a test is kept per test.
+        pub(crate) const fn process_wide(feature: &'static str) -> Self {
+            Self {
+                feature,
+                off: Switch::process_wide(),
+                checked: AtomicBool::new(false),
+            }
+        }
+    }
+
+    /// The last identity handed to a switch; 0 is none yet.
+    static LAST: AtomicU64 = AtomicU64::new(0);
+
+    /// A switch named by an identity it takes when first read, which moves
+    /// with the fuse, unlike its address, which a later fuse may reuse.
+    /// One made by [`Switch::process_wide`] keeps the loader's own storage
+    /// instead, so a test proves what a fuse does across threads in the game.
+    #[derive(Debug)]
+    pub(super) struct Switch {
+        id: AtomicU64,
+        process: Option<AtomicBool>,
+    }
+
+    impl Switch {
+        pub(super) const fn new(off: bool) -> Self {
+            assert!(!off, "a fuse starts on");
+            Self {
+                id: AtomicU64::new(0),
+                process: None,
+            }
+        }
+
+        /// A switch on the storage the loader runs with: one atomic for the
+        /// process.
+        pub(super) const fn process_wide() -> Self {
+            Self {
+                id: AtomicU64::new(0),
+                process: Some(AtomicBool::new(false)),
+            }
+        }
+
+        fn id(&self) -> u64 {
+            let id = self.id.load(Ordering::Acquire);
+            if id != 0 {
+                return id;
+            }
+            let new = LAST.fetch_add(1, Ordering::Relaxed) + 1;
+            match self
+                .id
+                .compare_exchange(0, new, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => new,
+                Err(taken) => taken,
+            }
+        }
+
+        pub(super) fn load(&self, order: Ordering) -> bool {
+            if let Some(process) = &self.process {
+                return process.load(order);
+            }
+            let id = self.id();
+            per_test::with(|turned| turned.fuses.contains(&id))
+        }
+
+        pub(super) fn swap(&self, off: bool, order: Ordering) -> bool {
+            if let Some(process) = &self.process {
+                return process.swap(off, order);
+            }
+            let id = self.id();
+            per_test::with(|turned| {
+                if off {
+                    !turned.fuses.insert(id)
+                } else {
+                    turned.fuses.remove(&id)
+                }
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One of the process's fuses, which the next two tests each blow: in
+    /// one process, in either order, each finds it on at its start.
+    static SHARED: Fuse = Fuse::new("shared lamp");
+
+    fn blows_the_shared_fuse() {
+        assert!(!SHARED.is_off(), "another test's blow reached this one");
+        let _caught = SHARED.run("a test", || -> u32 { panic!("broken") });
+        assert!(SHARED.is_off());
+    }
+
+    #[test]
+    fn a_test_that_blows_a_static_fuse_leaves_it_on_for_the_next_test() {
+        blows_the_shared_fuse();
+    }
+
+    #[test]
+    fn another_test_finds_the_static_fuse_on_after_one_blew_it() {
+        blows_the_shared_fuse();
+    }
+
+    #[test]
+    fn a_fuse_blown_on_a_test_thread_stays_on_for_other_threads() {
+        static OTHER: Fuse = Fuse::new("other thread lamp");
+        OTHER.blow("a test");
+        assert!(OTHER.is_off());
+        let seen = std::thread::spawn(|| OTHER.is_off()).join();
+        assert_eq!(seen.ok(), Some(false));
+    }
+
+    #[test]
+    fn a_fuse_on_the_loader_s_storage_blown_on_one_thread_is_off_on_every_thread() {
+        static LAMP: Fuse = Fuse::process_wide("process lamp");
+        assert!(!LAMP.is_off());
+        let blown =
+            std::thread::spawn(|| LAMP.run("another thread", || -> u32 { panic!("broken") }))
+                .join();
+        assert_eq!(blown.ok(), Some(None));
+        assert!(
+            LAMP.is_off(),
+            "a blow on one thread turns the feature off for all"
+        );
+        assert_eq!(LAMP.run("this thread", || 1), None);
+        let seen = std::thread::spawn(|| LAMP.is_off()).join();
+        assert_eq!(seen.ok(), Some(true));
+    }
+
+    #[test]
+    fn a_moved_fuse_keeps_its_state_and_a_new_one_starts_on() {
+        let fuse = Fuse::new("moved lamp");
+        fuse.blow("a test");
+        let moved = [fuse];
+        assert!(moved[0].is_off(), "the state moves with the fuse");
+        for _ in 0..2 {
+            let fresh = Fuse::new("moved lamp");
+            assert!(!fresh.is_off(), "a fuse made where another was starts on");
+            fresh.blow("a test");
+        }
+    }
 
     #[test]
     fn a_panic_turns_the_feature_off_and_later_work_never_runs() {

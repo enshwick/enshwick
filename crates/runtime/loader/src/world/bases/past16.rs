@@ -668,11 +668,8 @@ mod tests {
         assert_eq!(off_after_arming(false, false, &[], true), None);
     }
 
-    /// One test, in order: the steps share the window's two fuses, which
-    /// are the process's own, and nextest runs each test in a process of
-    /// its own.
     #[test]
-    fn the_window_arms_all_or_none_and_its_teardown_outlives_it() {
+    fn every_site_the_build_pins_links_under_its_own_fuse_the_client_s_on_a_client_only() {
         let sites = [
             (bases::SERVER_CREATE, &PAST16, false),
             (bases::CLIENT_CREATE, &PAST16, true),
@@ -689,10 +686,6 @@ mod tests {
             (bases::COMFORT_CLEANUP, &PAST16, false),
             (bases::PROPS_CLEANUP, &PAST16, false),
         ];
-        ARMED.store(true, Ordering::Release);
-        assert!(armed(), "armed with the window and its teardown on");
-        ARMED.store(false, Ordering::Release);
-        assert!(!armed());
         let ids: Vec<Symbol> = sites.iter().map(|&(id, ..)| id).collect();
         for client in [false, true] {
             let side = if client { Side::CLIENT } else { Side::SERVER };
@@ -714,7 +707,10 @@ mod tests {
                 );
             }
         }
+    }
 
+    #[test]
+    fn a_fault_in_the_window_leaves_its_teardown_linked() {
         let loader = crate::start::tests::bare_loader();
         assert!(loader.link_fused(
             &TEARDOWN,
@@ -726,6 +722,26 @@ mod tests {
         assert!(loader.link_fused(
             &PAST16,
             Target::Found("create", Some(0x2000)),
+            &SERVER_CREATE_NEXT,
+            create_server,
+            HookFlags::NONE,
+        ));
+        PAST16.blow("a test");
+        assert!(!TEARDOWN.is_off());
+        let chains = enshwick_base::Relock::relock(&loader.chains);
+        let at_destroy = chains.features_at(0x1000);
+        assert!(
+            at_destroy.len() == 1 && core::ptr::eq(at_destroy[0], &raw const TEARDOWN),
+            "the destroy keeps freeing the windows made before"
+        );
+    }
+
+    #[test]
+    fn bases_past_16_whose_later_link_fails_arm_none_of_their_links() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(loader.link_fused(
+            &PAST16,
+            Target::Found("create", Some(0x2000)),
             &CLIENT_CREATE_NEXT,
             create_client,
             HookFlags::NONE,
@@ -734,29 +750,30 @@ mod tests {
             !link_creates(&loader, false),
             "this build has no server create"
         );
-        assert!(
-            PAST16.is_off(),
-            "a later link that fails turns the window off"
-        );
-        assert!(!TEARDOWN.is_off());
+        assert!(PAST16.is_off());
         let mut chains = enshwick_base::Relock::relock(&loader.chains);
         chains.seal();
         assert!(
-            chains.features_at(0x2000).is_empty(),
-            "the first create went with the window, so its target is never patched"
+            chains.is_empty(),
+            "the first create went with the feature, so its target is never patched"
         );
-        let at_destroy = chains.features_at(0x1000);
-        assert!(
-            at_destroy.len() == 1 && core::ptr::eq(at_destroy[0], &raw const TEARDOWN),
-            "the destroy keeps freeing the windows made before"
-        );
-        drop(chains);
+    }
 
+    /// The only test that writes [`ARMED`], which is the process's own.
+    #[test]
+    fn the_window_makes_new_windows_only_while_it_and_its_teardown_are_on() {
         ARMED.store(true, Ordering::Release);
-        assert!(!armed(), "no window is made once the window is off");
+        assert!(armed(), "armed with the window and its teardown on");
         TEARDOWN.blow("a test");
-        assert!(TEARDOWN.is_off());
-        assert!(!armed(), "nor once the teardown is off");
+        assert!(!armed(), "no window is made that nothing would free");
+        ARMED.store(false, Ordering::Release);
+        assert!(!armed());
+    }
+
+    #[test]
+    fn a_fault_in_the_window_stops_new_windows() {
+        PAST16.blow("a test");
+        assert!(!armed());
     }
 
     /// Where the function that starts at an offset into the code at

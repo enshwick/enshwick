@@ -194,6 +194,14 @@ fn a_wanted_row_hook_that_did_not_arm_turns_the_requests_off_and_answers_the_que
     );
     assert!(!QUEUE.pending.load(Ordering::Acquire));
     assert_eq!(outcome_of(9), Some(InventoryResult::UNAVAILABLE));
+    WANTED.store(false, Ordering::Release);
+}
+
+#[test]
+fn an_unwanted_row_hook_leaves_the_requests_on_at_settling() {
+    let _turn = SHARED.relock();
+    settle(&crate::start::tests::bare_loader(), []);
+    assert!(!INVENTORY_FUSE.is_off());
 }
 
 #[test]

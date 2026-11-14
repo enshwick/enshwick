@@ -883,14 +883,24 @@ mod tests {
         );
     }
 
-    // Tests here share one process on some runners: none turns off a fuse
-    // of this module that another test reads.
+    #[test]
+    fn a_build_without_the_layout_lists_the_filters_actions_and_holds_off() {
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        link(loader);
+        assert!(INTERACTIONS_FUSE.is_off() && ACTIONS_FUSE.is_off() && HOLDS_FUSE.is_off());
+        assert!(!reads_inputs());
+        let listed = crate::engine::diag::parts_off();
+        let holds = listed.iter().find(|p| p.part == HOLDS_FUSE.feature());
+        assert!(
+            holds.is_some_and(|p| p.reason == "interaction filters is off"),
+            "{listed:?}"
+        );
+    }
 
     #[test]
     fn props_open_to_players_name_the_link_that_is_off_without_a_build_code() {
-        let held = Fuse::new("test prop holds");
         let turn = crate::engine::log::capture_turn();
-        held.turn_off(&holds_off(&ACTIONS_FUSE));
+        HOLDS_FUSE.turn_off(&holds_off(&ACTIONS_FUSE));
         let lines = crate::engine::log::captured();
         drop(turn);
         assert!(
