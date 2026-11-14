@@ -84,7 +84,7 @@ fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
         step: 0,
     };
     {
-        let mut state = STATE.relock();
+        let mut state = STATE.records.relock();
         let placed = Placed {
             position: [0; 3],
             orientation: [0.0, 0.0, 0.0, 1.0],
@@ -105,7 +105,8 @@ fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
         "sizing deadlocked"
     );
     assert!(
-        TARGETS
+        STATE
+            .targets
             .load()
             .as_ref()
             .is_some_and(|t| t.contains_key(&4096))
@@ -321,4 +322,41 @@ fn levels_are_read_after_vanilla_whenever_the_range_pass_writes_nothing() {
     );
     assert_eq!(run(true, false), ["write", "vanilla", "read"]);
     assert_eq!(run(false, true), ["vanilla", "read"]);
+}
+
+#[test]
+fn a_hosted_game_s_end_forgets_the_altars_and_their_pace() {
+    let state = State::new();
+    let placed = Placed {
+        position: [0; 3],
+        orientation: [0.0, 0.0, 0.0, 1.0],
+    };
+    let now = When {
+        at: Instant::now(),
+        step: 3,
+    };
+    let _ = state.records.relock().placed.merge([(4096, placed)], now);
+    state.targets.store(Some(Arc::new(Targets::new())));
+    state.step.store(3, Ordering::Relaxed);
+    state.sizing.asked.store(true, Ordering::Release);
+    state.sizing.running.store(2, Ordering::Release);
+    state.forget();
+    assert_eq!(state.records.relock().placed.iter().count(), 0);
+    assert!(state.targets.load().is_none());
+    assert_eq!(
+        state.step.load(Ordering::Relaxed),
+        3,
+        "a merge racing the forget never stamps an entry with a step from before a reset"
+    );
+    assert!(!state.sizing.asked.load(Ordering::Acquire));
+    assert_eq!(state.sizing.running.load(Ordering::Acquire), 0);
+    assert!(
+        state.changed.load(Ordering::Acquire),
+        "the next step sizes the zones and tells the mods"
+    );
+    assert_eq!(
+        state.world.load(Ordering::Acquire),
+        1,
+        "threads drop what they held back from the world that went"
+    );
 }

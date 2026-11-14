@@ -80,7 +80,7 @@ impl Side {
 
     /// The side table of a `kind` object.
     pub(super) fn of(kind: Kind) -> &'static Self {
-        &SIDES[usize::from(kind == Kind::Server)]
+        &STATE.sides[usize::from(kind == Kind::Server)]
     }
 
     fn set(&self, i: usize) -> ZoneSet {
@@ -118,16 +118,33 @@ impl Side {
 /// object made later at the same address reads its own masks until its
 /// first grouping.
 pub(super) fn forget_object(obj: *const u8) {
-    for side in &SIDES {
+    for side in &STATE.sides {
         let _gone = side
             .owner
             .compare_exchange(obj.addr(), 0, Ordering::AcqRel, Ordering::Relaxed);
     }
 }
 
-/// The side tables of the client's object and the server's, which a
-/// hosting client runs both of.
-static SIDES: [Side; 2] = [Side::new(), Side::new()];
+/// What the grouping keeps while the game runs.
+struct State {
+    /// The side tables of the client's object and the server's, which a
+    /// hosting client runs both of.
+    sides: [Side; 2],
+    /// Set while the grouping lends the count to the game's new base code
+    /// for a window record.
+    count_lent: AtomicBool,
+    /// How often a whole-array function was entered while the count was
+    /// lent, which must stay 0.
+    entered_while_lent: AtomicU32,
+}
+
+// A literal, not a `const fn new` a test could call: built at run time, the
+// side tables pass the stack's limit.
+static STATE: State = State {
+    sides: [Side::new(), Side::new()],
+    count_lent: AtomicBool::new(false),
+    entered_while_lent: AtomicU32::new(0),
+};
 
 /// One bases object of the game as the lookups read it.
 pub(super) struct Game {
@@ -147,7 +164,8 @@ impl Game {
     pub(super) unsafe fn new(obj: *const u8, fields: Fields) -> Self {
         // SAFETY: the caller guarantees a live bases object.
         let kind = unsafe { kind(obj, &fields) };
-        let side = SIDES
+        let side = STATE
+            .sides
             .get(kind)
             .filter(|side| side.owner.load(Ordering::Acquire) == obj.addr());
         Self { obj, fields, side }
@@ -292,23 +310,17 @@ fn plan(game: &Game, cap: usize) -> Grouped {
     grouping::group(&boxes, cap)
 }
 
-/// Set while the grouping lends the count to the game's new base code for a
-/// window record, and how often a whole-array function was entered
-/// meanwhile, which must stay 0.
-static COUNT_LENT: AtomicBool = AtomicBool::new(false);
-static ENTERED_WHILE_LENT: AtomicU32 = AtomicU32::new(0);
-
 /// Counts an entry of a whole-array function, when the count is lent.
 pub(super) fn note_entry() {
-    if COUNT_LENT.load(Ordering::Relaxed) {
-        ENTERED_WHILE_LENT.fetch_add(1, Ordering::Relaxed);
+    if STATE.count_lent.load(Ordering::Relaxed) {
+        STATE.entered_while_lent.fetch_add(1, Ordering::Relaxed);
     }
 }
 
 /// How many whole-array functions were entered while the count was lent,
 /// since the last call.
 pub(super) fn take_entries_while_lent() -> u32 {
-    ENTERED_WHILE_LENT.swap(0, Ordering::Relaxed)
+    STATE.entered_while_lent.swap(0, Ordering::Relaxed)
 }
 
 /// Gives the bases the grouping on `obj` left our boxes and zones, starting
@@ -362,7 +374,7 @@ pub(super) unsafe fn settle(
         // SAFETY: the caller guarantees a live object; its u32 count sits at
         // the build table's `bases.count`.
         let count = unsafe { read_at::<u32>(obj, fields.count) };
-        COUNT_LENT.store(true, Ordering::Relaxed);
+        STATE.count_lent.store(true, Ordering::Relaxed);
         // SAFETY: the live object's u32 count at `bases.count`. No reader
         // sees the lent value: the game runs its grouping in the world's
         // serial update beside no system (server 399 and client 426, medium
@@ -377,7 +389,7 @@ pub(super) unsafe fn settle(
         // SAFETY: the live object's u32 count at `bases.count`, back to the
         // array's.
         unsafe { write_at(obj, fields.count, count) };
-        COUNT_LENT.store(false, Ordering::Relaxed);
+        STATE.count_lent.store(false, Ordering::Relaxed);
     }
     for (n, base) in bases.iter().enumerate() {
         let i = window::index(n)?;
@@ -398,11 +410,14 @@ pub(super) unsafe fn settle(
     Some(bases)
 }
 
-/// Forgets every side table, when a world closes.
+/// Forgets every side table and the lent count's tally, when a world
+/// closes.
 pub(super) fn forget() {
-    for side in &SIDES {
-        side.owner.store(0, Ordering::Release);
+    for side in &STATE.sides {
+        side.forget();
     }
+    STATE.count_lent.store(false, Ordering::Relaxed);
+    STATE.entered_while_lent.store(0, Ordering::Relaxed);
 }
 
 /// Writes the lookups' answer at `out`, laid out as `a`: the error byte and
@@ -895,5 +910,27 @@ mod tests {
             32,
             "the mask after a forget"
         );
+    }
+
+    #[test]
+    fn a_world_s_end_forgets_every_side_table_and_the_lent_count() {
+        let _shared = shared();
+        // Put back however the test ends, so a failure here fails no other.
+        let _forget = crate::engine::undo::Undo::new(forget);
+        let obj = 0x1000;
+        for side in &STATE.sides {
+            side.owner.store(obj, Ordering::Release);
+        }
+        STATE.count_lent.store(true, Ordering::Relaxed);
+        note_entry();
+        forget();
+        assert!(
+            STATE
+                .sides
+                .iter()
+                .all(|side| side.owner.load(Ordering::Acquire) == 0)
+        );
+        assert!(!STATE.count_lent.load(Ordering::Relaxed));
+        assert_eq!(take_entries_while_lent(), 0, "the next world counts from 0");
     }
 }

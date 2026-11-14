@@ -3,7 +3,7 @@
 
 use enshwick_core::raw::{read_at, write_at};
 
-use super::{ASKED, SITES, known};
+use super::{SITES, STATE, known};
 use crate::world::base_groups::limit::{self, MAX_BASES};
 use crate::world::base_groups::window::Kind;
 
@@ -37,7 +37,7 @@ pub(super) unsafe fn refuse_past_limit(
     if !altar || reached != 0 {
         return;
     }
-    let most = u32::try_from(ASKED.bases(Kind::Server)).unwrap_or(MAX_BASES);
+    let most = u32::try_from(STATE.asked.bases(Kind::Server)).unwrap_or(MAX_BASES);
     if zones.bases < most {
         return;
     }

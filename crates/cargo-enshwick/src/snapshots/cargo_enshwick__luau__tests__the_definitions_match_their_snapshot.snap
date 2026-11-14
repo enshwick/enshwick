@@ -512,7 +512,7 @@ export type ChunkData = {
 
 --- The mod's factor on how fast the server's clock runs.
 export type ClockSpeed = {
-	--- Sets the mod's factor on the clock's speed: 1 leaves it, 2 makes the days pass twice as fast, 0 stops the clock. Clients follow after the next step.
+	--- Sets the mod's factor on the clock's speed: 1 leaves it, 2 makes the days pass twice as fast, 0 stops the clock. Clients follow after the next step. A hosted game's end puts every factor back at 1.
 	set: (self: ClockSpeed, factor: number) -> (),
 }
 

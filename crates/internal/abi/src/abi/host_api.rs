@@ -494,7 +494,8 @@ pub struct HostApi {
     /// the clock runs at the game's own speed times every mod's factor.
     /// [`Status::REFUSED`] for a mod without
     /// [`HostApi::time_speed_control`], [`Status::BAD_ARGS`] for a factor
-    /// out of range. On the server's game thread only.
+    /// out of range. A hosted game's end puts every factor back at 1. On
+    /// the server's game thread only.
     pub set_time_speed: extern "system" fn(me: ModHandle, factor: f32) -> Status,
     /// Copies the server's live game settings, `keen::ecs::GameSettings`,
     /// into `out`, `size` bytes, which must be the type's reflected size
@@ -1551,7 +1552,8 @@ pub struct HostApi {
     /// past it is refused. Each call replaces the mod's own cap, and the
     /// lowest cap of every mod holds, so a mod asks for its most at init
     /// and sets each world's cap from its settings as the world loads; a
-    /// cap at or past the request leaves the request. [`HostApi::base_limit`]
+    /// cap at or past the request leaves the request; a hosted game's end
+    /// drops every cap. [`HostApi::base_limit`]
     /// reads the capped bases. [`Status::BAD_ARGS`] below the game's 16.
     /// Any time, any thread. A panic in the loader returns
     /// [`Status::REFUSED`].

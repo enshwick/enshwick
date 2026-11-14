@@ -12,15 +12,9 @@ static-is-registry-fuse-or-state crates/internal/base/src/i18n.rs static HANDED:
 static-is-registry-fuse-or-state crates/internal/base/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
 # The actions mods register during init; they move into a `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/actions/player_actions.rs static REGISTERED: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
-# The mods that asked to open the altars, a mod registration; it moves
-# into a `Registry<T>` or the altars' `State`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/world/altars.rs static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 # The code patches mods ask for during init, sealed at its end; they move
 # into a `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/code.rs static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
-# The mods that asked to change the day's speed, a mod registration; it
-# moves into a `Registry<T>`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/world/daytime.rs static SPEED_MODS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 # The near-memory blocks detours write into, the loader's own bookkeeping;
 # they move into the detour engine's state struct.
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/detour.rs static BLOCKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
@@ -29,9 +23,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/engine/detour.rs stat
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
-# The mods that opened the fog, a mod registration; it moves into a
-# `Registry<T>` or one fog state struct with `MIRROR`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/world/fog.rs static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 # The game event subscriptions mods make during init; they move into a
 # `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/game_events.rs static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
@@ -136,22 +127,3 @@ loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static MA
 loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static NODE: AtomicU64 = AtomicU64::new(0);
 loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static OPEN: AtomicU8 = AtomicU8::new(0);
 loader-flag-is-in-state crates/runtime/loader/src/ui/interface/mods.rs static PAUSE_SEEN: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/world/altars.rs static CHANGED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/altars.rs static STEP: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/world/altars.rs static WANTED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/altars.rs static WORLD: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/world/bases.rs static PLANNED: [AtomicUsize; 2] = [const { AtomicUsize::new(window::VANILLA) }; 2];
-loader-flag-is-in-state crates/runtime/loader/src/world/bases.rs static RAISED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/bases.rs static ZONE_COUNT: [AtomicU32; 2] = [const { AtomicU32::new(u32::MAX) }; 2];
-loader-flag-is-in-state crates/runtime/loader/src/world/bases/members.rs static COUNT_LENT: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/bases/members.rs static ENTERED_WHILE_LENT: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/world/bases/past16.rs static ARMED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/bases/past16.rs static LINKED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/bases/past16.rs static SETTLED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/bases/past16.rs static SKIPPED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/daytime.rs static GAME_SPEED: AtomicU32 = AtomicU32::new(0x3f80_0000);
-loader-flag-is-in-state crates/runtime/loader/src/world/daytime.rs static WAS_DAY: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/world/fog.rs static SESSIONS: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/world/fog.rs static SKIPPED: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/world/fog.rs static WANTED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/world/game_settings.rs static PENDING: AtomicBool = AtomicBool::new(false);
