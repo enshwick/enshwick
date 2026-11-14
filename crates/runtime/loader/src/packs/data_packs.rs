@@ -46,11 +46,19 @@ fn scripts_of(files: &PackFiles) -> Option<enshwick_luau::Scripts> {
     scripts.has_main().then_some(scripts)
 }
 
-static PACKS: Mutex<Option<FxHashMap<String, Loaded>>> = Mutex::new(None);
+/// The packs domain's state: the packs `discover` found, by id. It lives for
+/// the process, not a hosted game: packs load once at the start, and one
+/// that turns off stays off until a restart, so no part's `forget` drops it.
+struct State {
+    packs: Mutex<FxHashMap<String, Loaded>>,
+}
+
+static STATE: State = State {
+    packs: Mutex::new(FxHashMap::with_hasher(rustc_hash::FxBuildHasher)),
+};
 
 fn with<R>(f: impl FnOnce(&mut FxHashMap<String, Loaded>) -> R) -> R {
-    let mut packs = PACKS.relock();
-    f(packs.get_or_insert_with(FxHashMap::default))
+    f(&mut STATE.packs.relock())
 }
 
 /// A string for the process.
@@ -334,6 +342,28 @@ mod tests {
     use enshwick_core::abi::Relation;
 
     use super::*;
+
+    #[test]
+    fn a_found_pack_is_kept_until_it_turns_off() {
+        let id = "test.kept-pack";
+        let mods = std::env::temp_dir().join(format!("enshwick-packs-{}", std::process::id()));
+        let dir = mods.join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(MANIFEST_FILE),
+            format!("id = \"{id}\"\nversion = \"1.0.0\"\n"),
+        )
+        .unwrap();
+        let found = discover(&mods);
+        std::fs::remove_dir_all(&mods).unwrap();
+        assert_eq!(
+            found.iter().map(|f| f.file.as_str()).collect::<Vec<_>>(),
+            [format!("{id}/{MANIFEST_FILE}")]
+        );
+        assert_eq!(hash_of(id).map(|hash| hash.len()), Some(8));
+        forget(id);
+        assert_eq!(hash_of(id), None);
+    }
 
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {
