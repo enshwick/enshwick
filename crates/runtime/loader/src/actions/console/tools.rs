@@ -14,8 +14,7 @@ use super::answers::{self, Loaded, Online, Seen};
 
 /// A player's name as the client sent it, safe for one line.
 pub(crate) fn name(player: &PlayerInfo) -> String {
-    let len = usize::from(player.name_len).min(player.name.len());
-    accounts::shown(&String::from_utf8_lossy(&player.name[..len]))
+    accounts::shown(&player.name_text())
 }
 
 fn position(loader: &Loader, entity: u32) -> Option<[f64; 3]> {

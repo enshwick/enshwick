@@ -22,7 +22,7 @@ pub fn reply_by(text: &str, done: bool, in_chat: bool) -> Reply<'_> {
     if text.is_empty() {
         Reply::None
     } else if done && text.lines().nth(1).is_none() {
-        Reply::Notice(text.into())
+        Reply::Notice(text.trim_end_matches(['\r', '\n']).into())
     } else if in_chat {
         Reply::Chat(text)
     } else {
@@ -96,6 +96,16 @@ mod tests {
         );
         assert_eq!(reply_by("", true, false), Reply::None);
         assert_eq!(reply_by("", false, true), Reply::None);
+    }
+
+    #[test]
+    fn a_one_line_notice_leaves_its_line_ending_behind() {
+        for text in ["Gate opened\n", "Gate opened\r\n"] {
+            assert_eq!(
+                reply_by(text, true, false),
+                Reply::Notice("Gate opened".into())
+            );
+        }
     }
 
     #[test]

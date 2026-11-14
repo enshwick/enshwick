@@ -158,17 +158,17 @@ fn owner_of<'a>(loader: &Loader, text: &'a str) -> Option<(ModIndex, &'a str)> {
 /// Takes the line `text` the player of account `key` typed when it is a
 /// mod's command, a `/` and its name or alias first, and queues it for the
 /// end of the step past the [admission](admission) of chat; false for any
-/// other line. A command of a mod that is off is taken and runs nowhere; one
-/// the admission refuses, over the rate or a full queue, is answered at the
-/// end of the step.
+/// other line. A command of a mod that is off is taken, runs nowhere and is
+/// answered as unavailable, without its words; one the admission refuses,
+/// over the rate or a full queue, is answered at the end of the step.
 pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
     let Some(named) = NAMED.sealed() else {
         return false;
     };
-    let (owner, rest) = match typed(named, text, |owner| running_mod(loader, owner)) {
+    let (owner, rest, off) = match typed(named, text, |owner| running_mod(loader, owner)) {
         Typed::Chat => return false,
-        Typed::Off => return true,
-        Typed::Run(owner, rest) => (owner, rest),
+        Typed::Off(owner) => (owner, "", true),
+        Typed::Run(owner, rest) => (owner, rest, false),
     };
     let command = || Queued {
         key,
@@ -177,6 +177,7 @@ pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
         rest: rest.to_owned(),
     };
     let refusal = match admission::admit(loader, Path::Chat, key) {
+        Verdict::Run if off => Some(admission::Refusal::Unavailable),
         Verdict::Run => {
             if STATE
                 .pending
@@ -193,6 +194,9 @@ pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
         let _answered = STATE
             .refused
             .push_within(MAX_PENDING, core::iter::once_with(|| (command(), refusal)));
+    }
+    if off {
+        return true;
     }
     let dropped = STATE.dropped.fetch_add(1, Ordering::Relaxed);
     if dropped.is_multiple_of(100) {
@@ -212,20 +216,11 @@ pub(crate) fn forget() {
     STATE.refused.clear();
 }
 
-/// Answers the chat commands refused during the step, then runs the queued
-/// ones and gives each player the reply the one way replies go; on the
-/// server's game thread, after the step.
+/// Runs the chat commands queued during the step and gives each player the
+/// reply the one way replies go, then answers the ones refused, which came
+/// after them; on the server's game thread, after the step.
 pub(crate) fn after_step(loader: &Loader) {
-    for (command, refusal) in STATE.refused.take() {
-        crate::actions::player_actions::refuse(
-            loader,
-            Path::Chat,
-            command.key,
-            refusal,
-            Some(command.owner),
-            (&command.rest, "", &command.word),
-        );
-    }
+    let refused = STATE.refused.take();
     for command in STATE.pending.take() {
         let Some(player) = crate::actions::player_actions::player(loader, command.key) else {
             continue;
@@ -248,6 +243,16 @@ pub(crate) fn after_step(loader: &Loader) {
             if reply.done { "done" } else { "refused" }
         );
         crate::actions::reply::answer(loader, Path::Chat, command.key, reply.done, &reply.text);
+    }
+    for (command, refusal) in refused {
+        crate::actions::player_actions::refuse(
+            loader,
+            Path::Chat,
+            command.key,
+            refusal,
+            Some(command.owner),
+            (&command.rest, "", &command.word),
+        );
     }
 }
 

@@ -304,11 +304,15 @@ pub(crate) fn run(
     args: &str,
     target: Option<ActionTarget>,
 ) {
-    let registered = running(loader)
-        .into_iter()
-        .find(|r| loader.mods.get(r.owner.get()).is_some_and(|m| m.id == id));
-    let refused = |refusal| {
+    // Looked up past the rate, so the rest of a flood costs no lock or scan.
+    let registered = || {
+        running(loader)
+            .into_iter()
+            .find(|r| loader.mods.get(r.owner.get()).is_some_and(|m| m.id == id))
+    };
+    let refused = |registered: Option<Registered>, refusal| {
         let owner = registered.map(|r| r.owner);
+        let (action, args) = admission::heard_of_client(action, args);
         refuse(
             loader,
             Path::Interface,
@@ -320,12 +324,13 @@ pub(crate) fn run(
     };
     match admission::admit(loader, Path::Interface, key) {
         Verdict::Run => {}
-        Verdict::Refuse(refusal) => return refused(refusal),
+        Verdict::Refuse(refusal) => return refused(registered(), refusal),
         Verdict::Drop => return,
     }
+    let registered = registered();
     if let Err(refusal) = admitted_run(loader, key, registered, (id, action, args), target) {
-        crate::log!(DEBUG, "{key:016x} ran {id}:{action}: {refusal:?}");
-        refused(refusal);
+        crate::log!(DEBUG, "{key:016x} ran {id:?}:{action:?}: {refusal:?}");
+        refused(registered, refusal);
     }
 }
 

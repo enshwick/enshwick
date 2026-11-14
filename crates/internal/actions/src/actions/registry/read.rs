@@ -195,7 +195,14 @@ impl Registry {
             Some((last, plain)) if takes_line(last) => (Some(last), plain),
             _ => (None, optional),
         };
-        let default = |arg: &Arg| arg.default.clone().ok_or(ReadArgsError::Usage);
+        let default = |arg: &Arg| match arg.default.clone() {
+            Some(Value::Item(item)) if !self.knows_item(item) => Err(ReadArgsError::NoItem {
+                name: item.to_string(),
+                near: Vec::new(),
+            }),
+            Some(value) => Ok(value),
+            None => Err(ReadArgsError::Usage),
+        };
         let mut values = Vec::with_capacity(optional.len());
         let mut rest = words;
         let mut text_began = false;

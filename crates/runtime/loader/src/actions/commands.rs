@@ -50,9 +50,9 @@ pub fn parse<'a>(named: &[Named], line: &'a str) -> Option<(ModIndex, &'a str)> 
 pub enum Typed<'a> {
     /// No command: the chat posts it.
     Chat,
-    /// A command of a mod that is off: it leaves the chat, so its words
+    /// A command of mod `0`, which is off: it leaves the chat, so its words
     /// reach no other player, and runs nowhere.
-    Off,
+    Off(ModIndex),
     /// A command of a running mod, and the rest of the line.
     Run(ModIndex, &'a str),
 }
@@ -66,7 +66,7 @@ pub fn typed<'a>(named: &[Named], text: &'a str, running: impl Fn(ModIndex) -> b
     match parse(named, text) {
         None => Typed::Chat,
         Some((owner, rest)) if running(owner) => Typed::Run(owner, rest),
-        Some(_) => Typed::Off,
+        Some((owner, _)) => Typed::Off(owner),
     }
 }
 
@@ -114,7 +114,7 @@ mod tests {
         let running = |owner: ModIndex| owner.get() == 5;
         assert_eq!(
             typed(&all, "/adm password hunter2", running),
-            Typed::Off,
+            Typed::Off(ModIndex::new(3)),
             "never posted for every player to read"
         );
         assert_eq!(

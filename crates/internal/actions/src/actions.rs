@@ -873,9 +873,10 @@ impl Actions {
     /// reach. It runs on the server's game thread after the caller got the
     /// refusal, once for each refused run: the platform answers the rest of a
     /// player's flood unheard, and the console and remote callers are
-    /// trusted. A panic in it turns off only the mod's actions, as in a
-    /// handler. Without it a refused run is only answered. One function at a
-    /// time: a second call replaces the first.
+    /// trusted. A panic in it turns off only this function, with a warning,
+    /// so a player cannot turn the mod off by being refused. Without it a
+    /// refused run is only answered. One function at a time: a second call
+    /// replaces the first.
     ///
     /// # Examples
     ///

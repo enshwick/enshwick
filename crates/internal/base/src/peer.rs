@@ -203,14 +203,20 @@ impl Bucket {
     /// assert!(bucket.admit_at(now + Duration::from_secs(1), Rate::new(1.0, 1.0)));
     /// ```
     pub fn admit_at(&mut self, now: Instant, rate: Rate) -> bool {
-        let gained = now.saturating_duration_since(self.seen).as_secs_f64() * rate.per_second;
+        self.tokens = self.refilled(now, rate);
         self.seen = now;
-        self.tokens = (self.tokens + gained).min(rate.burst);
         if self.tokens < 1.0 {
             return false;
         }
         self.tokens -= 1.0;
         true
+    }
+
+    /// What the bucket holds at `now` with what `rate` gave back since the
+    /// last time, up to its burst, without taking one.
+    fn refilled(&self, now: Instant, rate: Rate) -> f64 {
+        let gained = now.saturating_duration_since(self.seen).as_secs_f64() * rate.per_second;
+        (self.tokens + gained).min(rate.burst)
     }
 
     /// Gives back one taken for something that did not go, up to the burst
@@ -310,6 +316,37 @@ impl Rated {
         }
     }
 
+    /// Takes one input of account `key` at `now` as [`admit`](Self::admit)
+    /// does, but lets one over the rate through when `exempt` says so; the
+    /// one admin rule of every rated path. `exempt` is asked only of an
+    /// input over the rate, so a player lookup costs nothing within it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Instant;
+    /// use enshwick_base::peer::{Admitted, Rate, Rated};
+    ///
+    /// let mut rated = Rated::new(Rate::new(1.0, 1.0));
+    /// let now = Instant::now();
+    /// assert_eq!(rated.admit_or(7, now, || true), Admitted::Yes);
+    /// assert_eq!(rated.admit_or(7, now, || true), Admitted::Yes, "exempt");
+    /// assert_eq!(rated.admit_or(7, now, || false), Admitted::First);
+    /// ```
+    pub fn admit_or(&mut self, key: u64, now: Instant, exempt: impl FnOnce() -> bool) -> Admitted {
+        match self.admit(key, now) {
+            Admitted::Yes => Admitted::Yes,
+            _ if exempt() => {
+                // Let through, so the account's next refusal opens a new flood.
+                if let Some((_, refused)) = self.buckets.get_mut(&key) {
+                    *refused = false;
+                }
+                Admitted::Yes
+            }
+            over => over,
+        }
+    }
+
     /// Forgets account `key`, which left.
     ///
     /// # Examples
@@ -351,11 +388,8 @@ impl Rated {
     #[cold]
     fn forget_full(&mut self, now: Instant) {
         let rate = self.rate;
-        self.buckets.retain(|_, (bucket, _)| {
-            let mut probe = *bucket;
-            let _taken = probe.admit_at(now, rate);
-            probe.tokens + 1.0 < rate.burst
-        });
+        self.buckets
+            .retain(|_, (bucket, _)| bucket.refilled(now, rate) < rate.burst);
     }
 }
 
@@ -409,6 +443,21 @@ mod tests {
         let rested = start + Duration::from_secs(10);
         assert_eq!(rated.admit(u64::MAX, rested), Admitted::Yes);
         assert_eq!(rated.buckets.len(), 1, "every rested account was dropped");
+    }
+
+    #[test]
+    fn a_spent_account_is_kept_at_a_burst_of_one() {
+        let mut rated = Rated::new(Rate::new(4.0, 1.0));
+        let start = Instant::now();
+        for key in 0..u64::try_from(RATED_ACCOUNTS).unwrap_or(u64::MAX) {
+            rated.admit(key, start);
+        }
+        assert_eq!(rated.admit(u64::MAX, start), Admitted::Again);
+        assert_eq!(
+            rated.admit(0, start),
+            Admitted::First,
+            "a spent account was not forgotten, so it gets no fresh bucket"
+        );
     }
 
     #[test]

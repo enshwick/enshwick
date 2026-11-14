@@ -82,8 +82,14 @@ impl Registry {
     /// refused before its handler with `outcome`; the outcome.
     pub(super) fn refused(&self, refused: &Refused<'_>, outcome: Outcome) -> Outcome {
         let heard = self.refused.relock_read().clone();
-        if let Some(heard) = heard {
-            heard(refused);
+        if let Some(heard) = heard
+            && let Err(panicked) = crate::host::caught(|| heard(refused))
+        {
+            *self.refused.relock_write() = None;
+            crate::warn!(
+                "refused runs unheard: their function panicked: {}",
+                panicked.text()
+            );
         }
         outcome
     }

@@ -535,10 +535,12 @@ pub struct Refused<'a> {
     /// one, empty when the line held none.
     pub action: &'a str,
     /// What the caller gave: the line typed after the command or the
-    /// console's mod id, or the arguments the interface sent.
+    /// console's mod id, or the arguments the interface sent; empty for
+    /// arguments out of the platform's bounds, which only a changed client
+    /// sends.
     pub text: &'a str,
-    /// The values read before the refusal, in the order of the arguments;
-    /// empty when none were.
+    /// From the interface, the values read before the refusal, in the order
+    /// of the arguments; empty for a typed line, whose `text` holds them.
     pub values: &'a [Value],
     /// Why it was refused.
     pub reason: RefusedReason,

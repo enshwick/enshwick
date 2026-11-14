@@ -4,9 +4,10 @@
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
-    use enshwick::actions::{Action, Arg, Outcome, RefusedReason, Via};
+    use enshwick::actions::{Action, Arg, Outcome, RefusedReason, Value, Via};
     use enshwick::content::Guid;
     use enshwick::i18n::Texts;
     use enshwick::{ItemId, Load, Mod, Off, PlayerKey};
@@ -17,6 +18,7 @@ mod tests {
 
     static HEARD: Mutex<Vec<Heard>> = Mutex::new(Vec::new());
     static RAN: Mutex<u32> = Mutex::new(0);
+    static PANICS: AtomicBool = AtomicBool::new(false);
 
     const TORCH: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const UNKNOWN: Guid = Guid::parse("00000000-0000-4000-8000-000000000001");
@@ -36,7 +38,15 @@ mod tests {
                     Outcome::done("given")
                 },
             )?;
+            actions.add(
+                Action::new("spawn", "Spawn").arg(Arg::item("Item").optional(Value::Item(UNKNOWN))),
+                |_request| {
+                    *RAN.lock().unwrap() += 1;
+                    Outcome::done("spawned")
+                },
+            )?;
             actions.on_refused(|refused| {
+                assert!(!PANICS.load(Ordering::Relaxed), "the mod's own panic");
                 HEARD.lock().unwrap().push((
                     refused.player.name.clone(),
                     refused.via,
@@ -190,5 +200,72 @@ mod tests {
             "a reason or question this build does not know"
         );
         assert_eq!(*RAN.lock().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_default_item_the_server_s_game_does_not_know_is_refused_on_a_typed_line() {
+        let loader = start();
+        let reply = loader.type_in_chat(&ann(), 0, "/g spawn").unwrap();
+        assert!(reply.starts_with('0'), "{reply}");
+        let (_, via, action, _, _, reason) = heard().remove(0);
+        assert_eq!(
+            (via, action.as_str(), reason),
+            (Via::Chat, "spawn", RefusedReason::UnknownItem)
+        );
+        assert_eq!(*RAN.lock().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_run_out_of_the_peer_bounds_reaches_the_mod_as_bounds_without_its_text() {
+        let loader = start();
+        let forged = "t\n[INFO] Root gave Ann 999 gold";
+        let reply = loader.ask_actions(ActionCall::RUN, &root(), 0, "give", forged);
+        assert!(reply.unwrap().starts_with('0'));
+        let chest = enshwick::actions::ActionTarget::at([1.0, 2.0, 3.0]);
+        let at = loader.ask_action_at(&root(), 0, "give", forged, chest);
+        assert!(at.unwrap().starts_with('0'));
+        assert_eq!(
+            heard(),
+            [
+                (
+                    "Root".into(),
+                    Via::Interface,
+                    "give".into(),
+                    String::new(),
+                    0,
+                    RefusedReason::Bounds
+                ),
+                (
+                    "Root".into(),
+                    Via::Interface,
+                    "give".into(),
+                    String::new(),
+                    0,
+                    RefusedReason::Bounds
+                ),
+            ]
+        );
+        assert_eq!(*RAN.lock().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_panic_in_the_mod_s_function_turns_off_only_that_function() {
+        let loader = start();
+        PANICS.store(true, Ordering::Relaxed);
+        assert!(loader.refuse_run(
+            &ann(),
+            ActionCall::RUN,
+            ActionCall::REFUSED_RATE,
+            "give",
+            "",
+        ));
+        PANICS.store(false, Ordering::Relaxed);
+        let args = format!("p0000000000000007\ti{TORCH}");
+        let reply = loader.ask_actions(ActionCall::RUN, &root(), 0, "give", &args);
+        assert!(reply.unwrap().starts_with('1'), "{:?}", loader.logs());
+        assert_eq!(*RAN.lock().unwrap(), 1, "the mod's actions still run");
+        let typed = loader.type_in_chat(&ann(), 0, &format!("/g give Ann {TORCH}"));
+        assert!(typed.unwrap().starts_with('0'));
+        assert!(heard().is_empty(), "refused runs are only answered now");
     }
 }

@@ -543,7 +543,7 @@ fn queries_and_edits_are_rated_and_answers_and_action_runs_are_not() {
 }
 
 #[test]
-fn a_flood_over_the_rate_is_answered_busy_once_and_then_dropped() {
+fn every_query_or_edit_over_the_rate_is_answered_busy_so_no_client_waits() {
     let mut queries = Queries::default();
     let now = Instant::now();
     let edit = Message::Edit {
@@ -557,25 +557,26 @@ fn a_flood_over_the_rate_is_answered_busy_once_and_then_dropped() {
     let burst = (0_u32..1_000)
         .take_while(|&n| f64::from(n) < QUERY_RATE.burst)
         .count();
+    let busy = Gate::Busy(Message::Result {
+        ok: false,
+        text: texts::fill("remote.slow", &[]),
+    });
     assert!(gates[..burst].iter().all(|g| *g == Gate::Pass));
-    assert_eq!(
-        gates[burst],
-        Gate::Busy(Message::Result {
-            ok: false,
-            text: texts::fill("remote.slow", &[]),
-        })
-    );
-    assert!(gates[burst + 1..].iter().all(|g| *g == Gate::Drop));
-    assert_eq!(queries.gate(7, || false, &query(), now), Gate::Drop);
+    assert!(gates[burst..].iter().all(|g| *g == busy));
+    assert_eq!(queries.gate(7, || false, &query(), now), busy);
 }
 
 #[test]
-fn a_language_message_over_the_rate_gets_no_answer_at_all() {
+fn a_language_message_over_the_rate_gets_no_answer_and_leaves_the_next_query_answered() {
     let mut queries = Queries::default();
     let now = Instant::now();
     passed(&mut queries, 7, &query(), now);
     let message = Message::ActionsLanguage { language: 0 };
     assert_eq!(queries.gate(7, || false, &message, now), Gate::Drop);
+    assert!(matches!(
+        queries.gate(7, || false, &query(), now),
+        Gate::Busy(_)
+    ));
 }
 
 #[test]

@@ -4,12 +4,12 @@ use enshwick_base::Relock;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use enshwick_core::abi::PlayerInfo;
 use enshwick_core::config::Schema;
 
 use enshwick_base::peer::Rated;
 
 use super::{AdmitEditError, EDIT_RATE, Gate, Message, Queries, admit, redacted, texts};
+use crate::actions::player_actions::player;
 use crate::engine::loader::Loader;
 
 /// The server's rates of its clients' messages.
@@ -139,14 +139,6 @@ pub(crate) fn client(message: Message) {
         | Message::ActionsLanguage { .. }
         | Message::ActionRun { .. } => {}
     }
-}
-
-/// The connected player with account key `key`.
-fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
-    crate::engine::world::players(loader)
-        .ok()?
-        .into_iter()
-        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
 }
 
 /// Takes a message a client sent, on the server's game thread; the

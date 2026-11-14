@@ -136,9 +136,8 @@ impl Runs {
         if !path.is_rated() {
             return Verdict::Run;
         }
-        match self.rated.admit(key, now) {
+        match self.rated.admit_or(key, now, is_admin) {
             Admitted::Yes => Verdict::Run,
-            _ if is_admin() => Verdict::Run,
             Admitted::First => Verdict::Refuse(Refusal::Rate),
             Admitted::Again => Verdict::Drop,
         }
@@ -151,6 +150,23 @@ impl Runs {
 }
 
 pub use enshwick_base::peer::args_in_bounds;
+
+/// The action id and arguments of a client's refused run as its mod hears them.
+///
+/// Each is blank unless it passes the peer bounds: a run refused for its rate
+/// or bounds was never checked, so no forged log line or oversize text may
+/// reach a mod's audit.
+#[must_use]
+pub fn heard_of_client<'a>(action: &'a str, args: &'a str) -> (&'a str, &'a str) {
+    (
+        if enshwick_core::actions::is_valid_id(action) {
+            action
+        } else {
+            ""
+        },
+        if args_in_bounds(args) { args } else { "" },
+    )
+}
 
 #[cfg(windows)]
 pub(crate) use live::{admit, forget, refuse};
@@ -282,6 +298,17 @@ mod tests {
             let key = refusal.text_key();
             assert_ne!(crate::engine::texts::text(key), key, "{refusal:?}");
         }
+    }
+
+    #[test]
+    fn a_mod_hears_a_client_s_action_and_arguments_only_within_the_peer_bounds() {
+        assert_eq!(heard_of_client("give", "tAnn"), ("give", "tAnn"));
+        let forged = "t\n[INFO] Root gave Ann 999 gold";
+        assert_eq!(heard_of_client("give", forged), ("give", ""));
+        let long = "t".repeat(enshwick_base::peer::MAX_ARGS + 1);
+        assert_eq!(heard_of_client("give", &long), ("give", ""));
+        assert_eq!(heard_of_client("give\nlog", "tAnn"), ("", "tAnn"));
+        assert_eq!(heard_of_client(&"g".repeat(100_000), ""), ("", ""));
     }
 
     #[test]

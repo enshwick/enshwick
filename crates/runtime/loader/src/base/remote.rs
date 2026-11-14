@@ -700,9 +700,10 @@ impl Queries {
     /// Decides whether the server serves `message` of the player with
     /// account key `key` at `now`. Only [rated](Message::is_rated) messages
     /// spend the player's [`QUERY_RATE`], and `admin` is asked only of one
-    /// over it, since an administrator's messages are not rated. The first
-    /// message over the rate is answered busy, and the rest of the flood,
-    /// like a language message over it, get no answer at all.
+    /// over it, since an administrator's messages are not rated. Every query
+    /// or edit over the rate is answered busy, since its client waits for an
+    /// answer and the wire's own rate bounds the answers; a language message
+    /// over it gets none.
     pub fn gate(
         &mut self,
         key: u64,
@@ -713,16 +714,13 @@ impl Queries {
         if !message.is_rated() {
             return Gate::Pass;
         }
-        match self.rated.admit(key, now) {
+        match self.rated.admit_or(key, now, admin) {
             Admitted::Yes => Gate::Pass,
-            _ if admin() => Gate::Pass,
-            Admitted::First if !matches!(message, Message::ActionsLanguage { .. }) => {
-                Gate::Busy(Message::Result {
-                    ok: false,
-                    text: texts::fill("remote.slow", &[]),
-                })
-            }
-            Admitted::First | Admitted::Again => Gate::Drop,
+            _ if matches!(message, Message::ActionsLanguage { .. }) => Gate::Drop,
+            Admitted::First | Admitted::Again => Gate::Busy(Message::Result {
+                ok: false,
+                text: texts::fill("remote.slow", &[]),
+            }),
         }
     }
 

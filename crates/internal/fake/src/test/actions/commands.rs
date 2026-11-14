@@ -82,7 +82,9 @@ impl Installed {
     /// [`ActionCall::RUN`](enshwick_core::abi::ActionCall::RUN) or
     /// [`ActionCall::CONSOLE`](enshwick_core::abi::ActionCall::CONSOLE), for
     /// `player` reading `language`; `action` and `args` for a run. `None` when the
-    /// mod has no actions.
+    /// mod has no actions. A run out of the peer bounds is refused as the
+    /// loader refuses it; runs are not rated, so a test hears a rate refusal
+    /// through `refuse_run`.
     ///
     /// # Examples
     ///
@@ -111,10 +113,11 @@ impl Installed {
         args: &str,
     ) -> Option<String> {
         let actions = table::with(None, |s| s.actions)?;
-        let run = enshwick_core::abi::ActionCall::RUN;
-        if kind == run && !enshwick_core::peer::args_in_bounds(args) {
-            // The loader answers its own text and never asks the mod.
-            return Some("0".to_owned());
+        // Mods declare actions only with `unstable`, so without it no run gets here.
+        #[cfg(feature = "unstable")]
+        if kind == enshwick_core::abi::ActionCall::RUN && !enshwick_core::peer::args_in_bounds(args)
+        {
+            return Some(out_of_bounds(actions, player, action));
         }
         let reply = ask(
             actions,
@@ -423,6 +426,9 @@ impl Installed {
     ) -> Option<String> {
         let actions = table::with(None, |s| s.actions)?;
         let run = enshwick_core::abi::ActionCall::RUN;
+        if !enshwick_core::peer::args_in_bounds(args) {
+            return Some(out_of_bounds(actions, player, action));
+        }
         Some(ask(
             actions,
             run,
@@ -485,24 +491,58 @@ impl Installed {
         let Some(actions) = table::with(None, |s| s.actions) else {
             return false;
         };
-        let _heard = ask_call(
-            actions,
-            enshwick_core::abi::ActionCall {
-                header: Header::of::<enshwick_core::abi::ActionCall>(),
-                kind: enshwick_core::abi::ActionCall::REFUSED,
-                language: 0,
-                player: *player,
-                action: Str::new(action),
-                args: Str::new(args),
-                target: enshwick_core::abi::ActionTarget::NONE,
-                reply: core::ptr::null_mut(),
-                word: Str::EMPTY,
-                via,
-                reason,
-            },
-        );
+        tell_refused(actions, player, (via, reason), action, args);
         true
     }
+}
+
+/// Refuses `player`'s interface run of `action` whose arguments are out of
+/// the peer bounds as the loader does: never asks the mod to run it, tells
+/// it of the refusal without the arguments, and answers a refusal.
+#[cfg(feature = "unstable")]
+fn out_of_bounds(
+    actions: table::Registered<enshwick_core::abi::ActionFn>,
+    player: &PlayerInfo,
+    action: &str,
+) -> String {
+    let action = if enshwick_core::actions::is_valid_id(action) {
+        action
+    } else {
+        ""
+    };
+    let run = enshwick_core::abi::ActionCall::RUN;
+    let bounds = enshwick_core::abi::ActionCall::REFUSED_BOUNDS;
+    tell_refused(actions, player, (run, bounds), action, "");
+    "0".to_owned()
+}
+
+/// Tells the mod's actions callback, as the loader does, of `player`'s run
+/// refused before asking the mod: the run's question and the reason, then
+/// the action or line and arguments it would have held.
+#[cfg(feature = "unstable")]
+fn tell_refused(
+    actions: table::Registered<enshwick_core::abi::ActionFn>,
+    player: &PlayerInfo,
+    (via, reason): (u32, u32),
+    action: &str,
+    args: &str,
+) {
+    let _heard = ask_call(
+        actions,
+        enshwick_core::abi::ActionCall {
+            header: Header::of::<enshwick_core::abi::ActionCall>(),
+            kind: enshwick_core::abi::ActionCall::REFUSED,
+            language: 0,
+            player: *player,
+            action: Str::new(action),
+            args: Str::new(args),
+            target: enshwick_core::abi::ActionTarget::NONE,
+            reply: core::ptr::null_mut(),
+            word: Str::EMPTY,
+            via,
+            reason,
+        },
+    );
 }
 
 /// The server's console as a player: an administrator with no character.

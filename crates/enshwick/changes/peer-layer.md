@@ -24,10 +24,10 @@
   notice with its lines joined by ` / `, as a command's reply outside chat
   does (#1094).
 - Loader: a settings change and a query over the rate of an administrator's
-  client are refused by the same token bucket as every other rate, and only
-  the first message of a flood over the query rate is answered busy (#1094).
+  client are refused by the same token bucket as every other rate (#1094).
 - Fake host: an interface run with arguments out of the loader's bounds is
-  refused before the mod, as the loader refuses it (#1094).
+  refused before the mod and tells the mod's `on_refused` without the
+  arguments, as the loader does, from `ask_action_at` too (#1094).
 
 ### Fixed
 
@@ -37,3 +37,7 @@
   before, the later call replaced the earlier one (#1094).
 - Loader: a run from a control or panel dropped for its rate, its bounds or
   an unknown mod id now answers the player instead of saying nothing (#1094).
+- Loader: a chat command of a mod that is off answers that the action is not
+  available, as a control does, instead of vanishing (#1094).
+- A one-line reply that ends in a line break shows as a notice without it
+  (#1094).

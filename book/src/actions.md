@@ -418,8 +418,8 @@ function gets a `Refused` that holds:
 | `player` | who ran it; the account key alone for a caller who left |
 | `via` | where it came from, its `Via` |
 | `action` | the action's id, or the word a typed line named it by |
-| `text` | the line typed after the command, or the values the interface sent |
-| `values` | the values read before the refusal, empty when none were |
+| `text` | the line typed after the command, or the values the interface sent; empty for values out of the platform's bounds |
+| `values` | from the interface, the values read before the refusal; empty for a typed line, whose `text` holds them |
 | `reason` | why, a `RefusedReason` |
 
 | `RefusedReason` | The run |
@@ -438,8 +438,8 @@ function gets a `Refused` that holds:
 
 An audit log keeps refused attempts this way. The function runs once per
 refused run on the server's game thread. The rest of a flood reaches the mod
-no more than the caller. A panic in it turns off the mod's actions, as in a
-handler.
+no more than the caller. A panic in it turns off only the function, with a
+warning in the log, and refused runs are then only answered.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
