@@ -186,6 +186,8 @@ fn requests_queued_when_the_feature_turns_off_are_answered_unavailable_at_the_ne
 #[test]
 fn a_wanted_row_hook_that_did_not_arm_turns_the_requests_off_and_answers_the_queue() {
     let _turn = SHARED.relock();
+    // Put back however the test ends, so a failure here fails no other.
+    let _unwanted = crate::engine::undo::Undo::new(|| WANTED.store(false, Ordering::Release));
     WANTED.store(true, Ordering::Release);
     QUEUE.push(request(9));
     settle(&crate::start::tests::bare_loader(), []);
@@ -195,7 +197,6 @@ fn a_wanted_row_hook_that_did_not_arm_turns_the_requests_off_and_answers_the_que
     );
     assert!(!QUEUE.pending.load(Ordering::Acquire));
     assert_eq!(outcome_of(9), Some(InventoryResult::UNAVAILABLE));
-    WANTED.store(false, Ordering::Release);
 }
 
 #[test]
