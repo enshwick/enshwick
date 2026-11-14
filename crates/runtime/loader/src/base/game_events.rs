@@ -51,10 +51,10 @@ const CLIENT_EVENTS: usize = 256;
 const CLIENT_BYTES: usize = 64 * 1024;
 /// The most records one move of the client's own world reads, copied or not.
 const CLIENT_RECORDS: usize = 65_536;
-/// The most streams one move of either world reads. The engine's stream
-/// count is the popcount of a 64-bit worker mask, clamped to 8 workers
-/// (`FUN_140983140`, client 26430625 and server 26430253), so a larger count
-/// is a corrupted one.
+/// The most streams a world's move may claim. The engine gives each world
+/// one stream per worker of its task queue, counted from a 64-bit worker
+/// mask that the world's creator clamps to 8 workers (client 26430625,
+/// server 26430253), so a larger count is a corrupted one.
 const STREAMS: usize = 64;
 
 /// Tells the log, once, that a move of the client's own world held more
@@ -74,8 +74,8 @@ fn client_drop() {
 fn too_many_streams(count: usize) {
     crate::log_once!(
         WARN,
-        "game events: a world claimed {count} event streams, more than {STREAMS}; only the first \
-         {STREAMS} are read"
+        "game events: a world claimed {count} event streams, more than {STREAMS}; such a move is \
+         not read"
     );
 }
 
@@ -570,13 +570,14 @@ unsafe fn copy<S: Scope>(sealed: &Sealed, layout: &Layout, entity_world: *mut u8
     // SAFETY: `world` is the live entity world of `S` on its thread (the
     // caller's contract); the table's `ecs.event_stream_count` offset holds
     // its stream count, which `ecs.event_merge` walks (client 26430625).
-    let mut count: usize = unsafe { crate::engine::memory::read(world, layout.stream_count) };
+    let count: usize = unsafe { crate::engine::memory::read(world, layout.stream_count) };
     if streams == 0 {
         return;
     }
     if count > STREAMS {
+        // A corrupted count: the array holds fewer streams, so none is read.
         too_many_streams(count);
-        count = STREAMS;
+        return;
     }
     let mut batch = S::batch().take();
     let mut records = 0;

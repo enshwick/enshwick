@@ -237,6 +237,9 @@ struct State {
     /// The worlds that ended, counted, so a world's dialog on screen sees
     /// its world went.
     ended: AtomicU64,
+    /// The count of `ended` whose waiting dialogs the interface thread
+    /// closed.
+    closed: AtomicU64,
 }
 
 static STATE: State = State {
@@ -246,6 +249,7 @@ static STATE: State = State {
     next_slot: AtomicUsize::new(0),
     in_world: AtomicBool::new(false),
     ended: AtomicU64::new(0),
+    closed: AtomicU64::new(0),
 };
 
 thread_local! {
@@ -320,19 +324,28 @@ pub(crate) fn queue(dialog: Pending) -> Status {
 }
 
 /// Notes, each frame on the interface thread, whether the client shows a
-/// world, loading included.
+/// world, loading included, and closes the dialogs of every world that went
+/// since the last frame: leaving a world for the menu ends it too. Each
+/// waiting one answers as closed here, on the thread a mod's answer comes
+/// on, so no mod waits for it; one on screen closes at its next draw.
 pub(super) fn note_world(in_world: bool) {
-    STATE.in_world.store(in_world, Ordering::Release);
-}
-
-/// Closes the dialogs of the world that went, when a client's hosted game
-/// ends or it changes servers: each waiting one answers as closed, so no
-/// mod waits for it, and one on screen closes at its next frame.
-pub(crate) fn close_world_dialogs() {
-    STATE.ended.fetch_add(1, Ordering::AcqRel);
+    if STATE.in_world.swap(in_world, Ordering::AcqRel) && !in_world {
+        close_world_dialogs();
+    }
+    let ended = STATE.ended.load(Ordering::Acquire);
+    if STATE.closed.swap(ended, Ordering::AcqRel) == ended {
+        return;
+    }
     for dialog in STATE.waiting.take_world() {
         dialog.answerer.answer(UiDialog::CLOSED);
     }
+}
+
+/// Ends the world the dialogs belong to, when a client's hosted game ends,
+/// it leaves for the menu or it changes servers, from any thread: the next
+/// frame closes that world's dialogs ([`note_world`]).
+pub(crate) fn close_world_dialogs() {
+    STATE.ended.fetch_add(1, Ordering::AcqRel);
 }
 
 /// Shows the loader's own dialog, with `on_answer` hearing the answer, or
@@ -467,8 +480,9 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
-    // Read before the pop: a world that ends in between closes the dialog.
-    let ended = STATE.ended.load(Ordering::Acquire);
+    // The worlds whose dialogs were closed, read before the pop: a world that
+    // ended since, its dialogs still waiting, closes the dialog at its next draw.
+    let ended = STATE.closed.load(Ordering::Acquire);
     let dialog = STATE.waiting.pop()?;
     let slot = STATE.next_slot.fetch_add(1, Ordering::Relaxed) % KEPT;
     let texts = Arc::new(Shown {
@@ -635,13 +649,14 @@ mod tests {
     }
 
     #[test]
-    fn a_world_s_waiting_dialogs_close_at_its_end_and_at_a_change_of_servers() {
+    fn a_world_s_waiting_dialogs_close_on_the_next_frame_after_it_ends_however_it_ends() {
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-        let ends: [(&str, &dyn Fn()); 2] = [
+        let ends: [(&str, &dyn Fn()); 3] = [
             ("a hosted game's end", &|| {
                 crate::engine::parts::Part::forget_in(crate::ui::PARTS, "ui", loader);
             }),
             ("a change of servers", &|| crate::base::net::joining(false)),
+            ("leaving a world for the menu", &|| note_world(true)),
         ];
         for (end, run) in ends {
             let answers = Arc::new(Mutex::new(Vec::new()));
@@ -659,6 +674,14 @@ mod tests {
                 STATE.waiting.push(&mut waiting, menu);
             }
             run();
+            // The third end is itself a frame, which may close a world another test ended.
+            if !end.starts_with("leaving") {
+                assert!(
+                    answers.relock().is_empty(),
+                    "{end}: answered on the interface thread only"
+                );
+            }
+            note_world(false);
             assert_eq!(*answers.relock(), [("test world", None)], "{end}");
             let mut waiting = STATE.waiting.dialogs.relock();
             let titles: Vec<&str> = waiting.iter().map(|d| d.title.as_str()).collect();
@@ -689,6 +712,27 @@ mod tests {
         close_world_dialogs();
         assert!(world.outlived());
         assert!(!menu.outlived());
+    }
+
+    #[test]
+    fn a_world_s_dialog_that_shows_after_its_end_but_before_the_next_frame_still_closes() {
+        close_world_dialogs();
+        let shown_late = Current {
+            answerer: Answerer::Loader(Box::new(|_| {})),
+            buttons: 1 << UiDialog::OK,
+            state: Box::new(Buf::zeroed()),
+            texts: Arc::new(Shown {
+                slot: 0,
+                title: "".into(),
+                message: "".into(),
+                detail: "".into(),
+                read: AtomicBool::new(false),
+            }),
+            world: true,
+            // What take_next records for a dialog it pops.
+            ended: STATE.closed.load(Ordering::Acquire),
+        };
+        assert!(shown_late.outlived());
     }
 
     #[test]

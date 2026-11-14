@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn every_built_in_stat_kind_has_a_name_in_english_and_ukrainian() {
+    fn every_built_in_stat_kind_has_the_game_s_own_name_in_every_language_it_offers() {
         let texts = shipped();
         for (id, _) in enshwick_core::stats::builtin::ALL {
             let key = enshwick_core::stats::name_key(&id.to_string()).unwrap();
@@ -348,7 +348,7 @@ mod tests {
                 .translations(&key)
                 .map(|(language, _)| language)
                 .collect();
-            for &language in Language::REQUIRED {
+            for &language in Language::OFFERED {
                 assert!(named.contains(&language), "{key} in {}", language.code());
             }
         }

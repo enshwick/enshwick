@@ -209,9 +209,8 @@ The crate holds:
   [manifest](concepts/loader-and-abi.md#the-manifest). Alphas are not on
   crates.io, so the API comes from git, at the tag of the alpha the tool is
   from;
-- `src/lib.rs`, a mod with one setting, `enabled`, and two tests: every
-  text exists in English and Ukrainian, and the mod starts on the
-  [fake loader](testing.md);
+- `src/lib.rs`, a mod with one setting, `enabled`, and a test that it starts
+  on the [fake loader](testing.md);
 - `src/texts.toml`, the mod's name, description and setting labels in
   English and Ukrainian ([Texts](content/texts.md));
 - `rust-toolchain.toml` and `.cargo/config.toml`, which set the Windows

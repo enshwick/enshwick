@@ -68,10 +68,8 @@ pub(crate) use runtime::{discovery_on, forget, host_runs_enshwick, left, poll, r
 mod runtime {
     use core::ffi::{CStr, c_char, c_void};
     use std::ffi::CString;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Mutex, OnceLock};
-
-    use enshwick_base::Relock;
+    use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
     use enshwick_core::abi::UiDialog;
 
@@ -127,19 +125,15 @@ mod runtime {
         api: OnceLock<Api>,
         /// The lobby the client last entered, 0 for none.
         lobby: AtomicU64,
-        /// The joins the client started from the game's menus, each of which
-        /// leaves the lobby it was in.
-        joins: AtomicU64,
-        /// The lobby whose entry was handled and the join it came in, so a
-        /// second notice of one entry turns nothing off twice while a new
-        /// entry into the same lobby is checked again.
-        handled: Mutex<(u64, u64)>,
+        /// The lobby whose entry was handled since the last join, 0 for
+        /// none, so a second notice of one entry turns nothing off twice
+        /// while a new entry into the same lobby is checked again.
+        handled: AtomicU64,
         /// The lobby the hosting client put its data into.
         published: AtomicU64,
-        /// Whether the lobby the client entered names a host with Enshwick,
-        /// in bit 0, and the join it entered in, above: it holds only until
-        /// the next join.
-        host_runs: AtomicU64,
+        /// Set while the lobby the client entered since its last join names
+        /// a host with Enshwick.
+        host_runs: AtomicBool,
     }
 
     impl State {
@@ -147,34 +141,30 @@ mod runtime {
             Self {
                 api: OnceLock::new(),
                 lobby: AtomicU64::new(0),
-                joins: AtomicU64::new(0),
-                handled: Mutex::new((0, 0)),
+                handled: AtomicU64::new(0),
                 published: AtomicU64::new(0),
-                host_runs: AtomicU64::new(0),
+                host_runs: AtomicBool::new(false),
             }
         }
 
         /// The client starts a join, leaving its lobby.
         fn left(&self) {
-            self.joins.fetch_add(1, Ordering::AcqRel);
+            self.host_runs.store(false, Ordering::Release);
+            self.handled.store(0, Ordering::Release);
         }
 
         /// Notes the client's entry into `lobby`, whose host runs Enshwick
         /// when `host_runs`; true when the host's mods are to be checked,
         /// false for a second notice of the same entry.
         fn note_entry(&self, lobby: u64, host_runs: bool) -> bool {
-            let join = self.joins.load(Ordering::Acquire);
-            self.host_runs
-                .store(join << 1 | u64::from(host_runs), Ordering::Release);
-            host_runs
-                && core::mem::replace(&mut *self.handled.relock(), (lobby, join)) != (lobby, join)
+            self.host_runs.store(host_runs, Ordering::Release);
+            host_runs && self.handled.swap(lobby, Ordering::AcqRel) != lobby
         }
 
         /// Whether the lobby the client entered since its last join names a
         /// host with Enshwick.
         fn host_runs(&self) -> bool {
-            let noted = self.host_runs.load(Ordering::Acquire);
-            noted & 1 == 1 && noted >> 1 == self.joins.load(Ordering::Acquire)
+            self.host_runs.load(Ordering::Acquire)
         }
 
         /// Forgets the lobby the hosting client published into; the Steam

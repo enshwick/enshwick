@@ -627,7 +627,10 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     if context == 0 || state.is_null() {
         return;
     }
-    dialog::note_world(screen(engine.app_state(context)) != UiFrame::MENU);
+    let shown = READS_FUSE
+        .run("the frame's screen", || screen(engine.app_state(context)))
+        .unwrap_or(UiFrame::MENU);
+    dialog::note_world(shown != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
     crate::actions::controls::frame(context);
@@ -652,6 +655,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     let drawn = Drawn {
         engine,
         context,
+        screen: shown,
         reads,
         frame,
         next,
@@ -689,6 +693,8 @@ unsafe fn frame_reads(engine: &Engine, context: usize, asked: bool) -> extension
 struct Drawn<'frame> {
     engine: &'frame Engine,
     context: usize,
+    /// The frame's screen, a [`UiFrame`] screen constant.
+    screen: u32,
     reads: extensions::FrameReads,
     /// The count [`mods::next_frame`] gave this frame.
     frame: u64,
@@ -719,7 +725,7 @@ static DRAWS: [Draw; 6] = [
     Draw {
         fuse: &FRAMES_FUSE,
         site: "the mods' frames",
-        run: |drawn| frames(drawn.engine, drawn.context, drawn.reads),
+        run: |drawn| frames(drawn.engine, drawn.context, drawn.screen, drawn.reads),
     },
     Draw {
         fuse: &EXTENSIONS_FUSE,
@@ -946,11 +952,10 @@ fn screen(state: u8) -> u32 {
     }
 }
 
-fn frames(engine: &Engine, context: usize, reads: extensions::FrameReads) {
+fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::FrameReads) {
     let Some(frames) = FRAMES.sealed() else {
         return;
     };
-    let screen = screen(engine.app_state(context));
     for registered in frames.iter().filter(|r| r.live()) {
         let token = next_token();
         DRAWING.set(Some(Drawing {

@@ -46,15 +46,8 @@ enshwick::declare_mod!({type});
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
-    use enshwick::i18n::{Language, Texts};
 
     use super::*;
-
-    #[test]
-    fn every_text_exists_in_english_and_ukrainian() {
-        let texts = Texts::parse(texts::TOML).unwrap();
-        assert_eq!(texts.missing_in(Language::REQUIRED), []);
-    }
 
     #[test]
     fn runs_on_the_settings_of_the_world_that_loads() {

@@ -557,8 +557,9 @@ impl Texts {
     /// Each of `languages` paired with each key some language has a text
     /// for and it lacks, in the order of `languages`, then by key; a text of
     /// its main variety counts (`pt` for `pt-br`), English only for
-    /// [`Language::FALLBACK`] itself. A mod's test checks its texts against
-    /// [`Language::OFFERED`] with it.
+    /// [`Language::FALLBACK`] itself. Texts read at run time, such as a data
+    /// pack's, are checked against [`Language::REQUIRED`] with it; a mod's
+    /// own file is checked when it builds, by `texts!()`.
     ///
     /// # Examples
     ///
@@ -567,7 +568,7 @@ impl Texts {
     ///
     /// let texts = Texts::parse("[en]\na = \"A\"\n[uk]\na = \"А\"\n")?;
     /// assert_eq!(texts.missing_in(&[Language::UK_UA, Language::DE_DE]), [(Language::DE_DE, "a")]);
-    /// // In a mod's test: assert_eq!(texts.missing_in(Language::OFFERED), []);
+    /// assert_eq!(texts.missing_in(Language::REQUIRED), []);
     /// # Ok::<(), enshwick::Off>(())
     /// ```
     #[must_use]

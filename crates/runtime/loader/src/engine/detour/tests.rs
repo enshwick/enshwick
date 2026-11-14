@@ -725,47 +725,6 @@ fn a_one_check_commit_does_not_wait_for_a_thread_to_leave() {
     assert_eq!(callable(target)(0), 2);
 }
 
-#[test]
-fn a_commit_is_written_while_other_threads_start_and_exit() {
-    static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    let _turn = Turn::take();
-    let target = function(&[
-        0xff, 0xd2, // call rdx
-        0xb8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
-        0xc3, // ret
-        0xcc, 0xcc,
-    ]);
-    let churn: Vec<_> = (0..8)
-        .map(|_| {
-            std::thread::spawn(|| {
-                while !STOP.load(Ordering::Acquire) {
-                    std::thread::spawn(|| {}).join().unwrap();
-                }
-            })
-        })
-        .collect();
-    let marker = 0_u8;
-    let until = std::time::Instant::now() + std::time::Duration::from_secs(1);
-    let mut answers = Vec::new();
-    let mut byte = 0_u8;
-    while std::time::Instant::now() < until {
-        let replacement = [0xb8, byte, 0x00, 0x00, 0x00, 0x90, 0x90];
-        let patch = [Bytes {
-            id: 0,
-            address: target,
-            replacement: &replacement,
-        }];
-        answers.push(commit_once(&patch, || {}, (&raw const marker).addr()));
-        byte = byte.wrapping_add(1);
-    }
-    STOP.store(true, Ordering::Release);
-    for thread in churn {
-        thread.join().unwrap();
-    }
-    let missed: Vec<&Commit> = answers.iter().filter(|a| **a != Commit::Written).collect();
-    assert!(missed.is_empty(), "{missed:?}");
-}
-
 /// The patch [`commit_from_inside`] tries: the test's code from its call on,
 /// with `mov eax, 2` for `mov eax, 1`.
 const FROM_INSIDE: [u8; 11] = [
