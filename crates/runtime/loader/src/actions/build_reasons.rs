@@ -90,14 +90,43 @@ struct State {
     told: Mutex<Vec<Told>>,
 }
 
-static STATE: State = State {
-    start: OnceLock::new(),
-    any: AtomicBool::new(false),
-    local_at: AtomicU64::new(0),
-    seen: Mutex::new([None; SLOTS]),
-    local: Mutex::new(None),
-    told: Mutex::new(Vec::new()),
-};
+impl State {
+    const fn new() -> Self {
+        Self {
+            start: OnceLock::new(),
+            any: AtomicBool::new(false),
+            local_at: AtomicU64::new(0),
+            seen: Mutex::new([None; SLOTS]),
+            local: Mutex::new(None),
+            told: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Forgets the refusals of a hosted game that ended and the players it
+    /// told, whose entities the next world may reuse; the clock stays.
+    fn forget(&self) {
+        // Each flag under its slots' lock, as a refusal writes them, so none
+        // written meanwhile is left without its flag.
+        {
+            let mut seen = self.seen.relock();
+            *seen = [None; SLOTS];
+            self.any.store(false, Ordering::Release);
+        }
+        {
+            let mut local = self.local.relock();
+            *local = None;
+            self.local_at.store(0, Ordering::Release);
+        }
+        self.told.relock().clear();
+    }
+}
+
+static STATE: State = State::new();
+
+/// Forgets the refusals and notices of a hosted game that ended.
+pub(crate) fn forget() {
+    STATE.forget();
+}
 
 fn now_ms() -> u64 {
     let start = STATE.start.get_or_init(Instant::now);
@@ -337,6 +366,31 @@ mod tests {
             STATE.seen.relock().iter().flatten().count(),
             1,
             "a client world's entity never reaches the server's notices"
+        );
+    }
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_its_refusals_and_the_players_it_told() {
+        let state = State::new();
+        let reason = Reason::new(ModIndex::new(1), "low");
+        let seen = Seen {
+            player: Entity(40),
+            reason,
+            at_ms: 5000,
+        };
+        state.seen.relock()[0] = Some(seen);
+        state.any.store(true, Ordering::Release);
+        *state.local.relock() = Some(seen);
+        state.local_at.store(5001, Ordering::Release);
+        state.told.relock().push(told("low", Some(5000), 5000));
+        state.forget();
+        assert!(state.seen.relock().iter().all(Option::is_none));
+        assert!(!state.any.load(Ordering::Acquire), "the next step skips");
+        assert!(state.local.relock().is_none());
+        assert_eq!(state.local_at.load(Ordering::Acquire), 0);
+        assert!(
+            state.told.relock().is_empty(),
+            "a reused entity in the next world hears its first refusal"
         );
     }
 

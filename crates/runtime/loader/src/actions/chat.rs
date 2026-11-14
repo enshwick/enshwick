@@ -16,7 +16,7 @@ use std::sync::{Mutex, OnceLock};
 
 mod said;
 
-pub(crate) use said::register;
+pub(crate) use said::{register, seal};
 
 use enshwick_core::abi::{ChatLine, HookFlags, Status};
 
@@ -169,19 +169,17 @@ fn linked() -> Option<(&'static Loader, &'static Layout)> {
 // uses this slot only as the `next` of `post`, its link on that function.
 static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
 
-/// The lines waiting for the game thread; replies to typed commands have
-/// less room than other lines, so they cannot fill it.
-struct Outgoing {
+/// The chat's state while the game runs: the lines waiting for the game
+/// thread, where replies to typed commands have less room than other lines,
+/// so they cannot fill it, and what became of the lines for one player.
+struct State {
     /// Set, under the lock of `lines`, while it holds anything, so an idle
     /// step takes no lock.
     any: AtomicBool,
     lines: Mutex<Outbox<Line>>,
+    /// Counts for the process, which a hosted game's end keeps.
+    delivery: Delivery,
 }
-
-static OUTGOING: Outgoing = Outgoing {
-    any: AtomicBool::new(false),
-    lines: Mutex::new(Outbox::new(MAX_WAITING)),
-};
 
 /// What became of the lines for one player.
 #[derive(Debug)]
@@ -196,11 +194,83 @@ struct Delivery {
     foreign: Drops,
 }
 
-static DELIVERY: Delivery = Delivery {
-    dropped: Drops::new(),
-    strayed: Drops::new(),
-    foreign: Drops::new(),
-};
+impl State {
+    const fn new() -> Self {
+        Self {
+            any: AtomicBool::new(false),
+            lines: Mutex::new(Outbox::new(MAX_WAITING)),
+            delivery: Delivery {
+                dropped: Drops::new(),
+                strayed: Drops::new(),
+                foreign: Drops::new(),
+            },
+        }
+    }
+
+    /// Queues `lines`, each a chat line, while fewer than `room` lines wait;
+    /// how many it left out.
+    fn queue<'a>(&self, to: To, lines: impl Iterator<Item = &'a str>, room: usize) -> usize {
+        let mut outbox = self.lines.relock();
+        let mut left_out = 0;
+        for line in lines {
+            let line = Line {
+                to,
+                text: line.to_owned(),
+            };
+            if left_out > 0 || outbox.len() >= room || !outbox.push_whole([line]) {
+                left_out += 1;
+            }
+        }
+        self.any.store(!outbox.is_empty(), Ordering::Release);
+        left_out
+    }
+
+    /// Takes at most `count` waiting lines, oldest first.
+    fn take(&self, count: usize) -> Vec<Line> {
+        let mut outbox = self.lines.relock();
+        let lines = outbox.take(count).collect();
+        self.any.store(!outbox.is_empty(), Ordering::Release);
+        lines
+    }
+
+    /// Counts `count` lines for one player dropped, and logs the first and
+    /// every hundredth.
+    fn dropped(&self, count: usize) {
+        if let Some(total) = self.delivery.dropped.add(count as u64) {
+            crate::log!(
+                WARN,
+                "mod messages: {total} lines for one player dropped: the line queue was full, the player was gone, or such lines are off"
+            );
+        }
+    }
+
+    /// A line for one player reached `others` other players as well: counts
+    /// it and keeps lines for one player off from then on.
+    #[cold]
+    fn strayed(&self, others: u32) {
+        let _total = self.delivery.strayed.add(1);
+        if !ONE_FUSE.is_off() {
+            // Neither a loader fault nor vanilla: the build's chat strays, and
+            // such lines are dropped from now on.
+            let why = format!(
+                "a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
+            );
+            ONE_FUSE.turn_off(&Off::reported(
+                format!("{} off: {why}", ONE_FUSE.feature()),
+                why,
+            ));
+        }
+    }
+
+    /// Drops the lines waiting for a hosted game that stops.
+    fn forget(&self) {
+        let mut lines = self.lines.relock();
+        lines.clear();
+        self.any.store(false, Ordering::Release);
+    }
+}
+
+static STATE: State = State::new();
 
 /// The switch of the lines for one player: off on a build without a usable
 /// handle mask or line overhead, or once a line for one player reached
@@ -210,7 +280,10 @@ static ONE_FUSE: Fuse = Fuse::new("chat lines to one player");
 /// The lines for one player dropped and those that reached
 /// others, for the status summary.
 pub(crate) fn delivery() -> (u64, u64) {
-    (DELIVERY.dropped.total(), DELIVERY.strayed.total())
+    (
+        STATE.delivery.dropped.total(),
+        STATE.delivery.strayed.total(),
+    )
 }
 
 /// Whether lines for one player go out: off once one reached others.
@@ -224,7 +297,7 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
         return Status::MISSING;
     }
     let to = if to == 0 { To::All } else { To::Key(to) };
-    let _left_out = queue(to, replied(text), MAX_WAITING);
+    let _left_out = STATE.queue(to, replied(text), MAX_WAITING);
     Status::OK
 }
 
@@ -236,40 +309,11 @@ pub(crate) fn reply(to: u64, text: &str) -> Status {
     if LINKED.get().is_none() {
         return Status::MISSING;
     }
-    let left_out = queue(To::Key(to), shown(text), MAX_REPLY_WAITING);
+    let left_out = STATE.queue(To::Key(to), shown(text), MAX_REPLY_WAITING);
     if left_out > 0 {
-        dropped(left_out);
+        STATE.dropped(left_out);
     }
     Status::OK
-}
-
-/// Counts `count` lines for one player dropped, and logs the first and every
-/// hundredth.
-fn dropped(count: usize) {
-    if let Some(total) = DELIVERY.dropped.add(count as u64) {
-        crate::log!(
-            WARN,
-            "mod messages: {total} lines for one player dropped: the line queue was full, the player was gone, or such lines are off"
-        );
-    }
-}
-
-/// A line for one player reached `others` other players as well: counts
-/// it and keeps lines for one player off from then on.
-#[cold]
-fn strayed(others: u32) {
-    let _total = DELIVERY.strayed.add(1);
-    if !ONE_FUSE.is_off() {
-        // Neither a loader fault nor vanilla: the build's chat strays, and
-        // such lines are dropped from now on.
-        let why = format!(
-            "a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
-        );
-        ONE_FUSE.turn_off(&Off::reported(
-            format!("{} off: {why}", ONE_FUSE.feature()),
-            why,
-        ));
-    }
 }
 
 /// `text` cut to at most `max` bytes at a character boundary.
@@ -279,24 +323,6 @@ fn cut(text: &str, max: usize) -> &str {
         end -= 1;
     }
     &text[..end]
-}
-
-/// Queues `lines`, each a chat line, while fewer than `room` lines wait;
-/// how many it left out.
-fn queue<'a>(to: To, lines: impl Iterator<Item = &'a str>, room: usize) -> usize {
-    let mut outbox = OUTGOING.lines.relock();
-    let mut left_out = 0;
-    for line in lines {
-        let line = Line {
-            to,
-            text: line.to_owned(),
-        };
-        if left_out > 0 || outbox.len() >= room || !outbox.push_whole([line]) {
-            left_out += 1;
-        }
-    }
-    OUTGOING.any.store(!outbox.is_empty(), Ordering::Release);
-    left_out
 }
 
 /// The lines of `text` the chat shows: none empty.
@@ -313,7 +339,6 @@ fn replied(text: &str) -> impl Iterator<Item = &str> {
 /// Links the chat post on the server; without it mods' chat lines and the
 /// messages clients send stay off, reported by [`CHAT_FUSE`].
 pub(crate) fn link(loader: &'static Loader) {
-    said::seal();
     let layout = match layout(loader) {
         Ok(found) => found,
         Err((id, reason)) => {
@@ -515,7 +540,7 @@ unsafe extern "system" fn post(
             Some(loader) => unsafe { judge(loader, kind, text, hash) },
         };
         if judged == Verdict::Drop {
-            if !sent_by_clients(kind) && DELIVERY.foreign.add(1).is_some() {
+            if !sent_by_clients(kind) && STATE.delivery.foreign.add(1).is_some() {
                 // shortcut: logs the first drop and every 100th, not once per player; a per-player set when the console needs it.
                 crate::log!(
                     DEBUG,
@@ -775,13 +800,9 @@ const fn sent_by_clients(kind: u8) -> bool {
     kind == TYPED || kind == EMOTE
 }
 
-/// Drops the lines waiting for a hosted game that stops.
+/// Drops the lines waiting for a hosted game that stops, and those heard.
 pub(crate) fn forget() {
-    {
-        let mut lines = OUTGOING.lines.relock();
-        lines.clear();
-        OUTGOING.any.store(false, Ordering::Release);
-    }
+    STATE.forget();
     said::forget();
 }
 
@@ -791,7 +812,7 @@ pub(crate) fn drain() {
     if let Some((loader, _)) = linked() {
         said::raise(loader);
     }
-    if !OUTGOING.any.load(Ordering::Acquire) {
+    if !STATE.any.load(Ordering::Acquire) {
         return;
     }
     let (Some((loader, layout)), Some(post)) = (linked(), next()) else {
@@ -807,12 +828,7 @@ pub(crate) fn drain() {
     if store == 0 {
         return;
     }
-    let lines: Vec<Line> = {
-        let mut outbox = OUTGOING.lines.relock();
-        let lines = outbox.take(LINES_PER_DRAIN).collect();
-        OUTGOING.any.store(!outbox.is_empty(), Ordering::Release);
-        lines
-    };
+    let lines = STATE.take(LINES_PER_DRAIN);
     let machines = if lines.iter().any(|l| matches!(l.to, To::Key(_))) {
         crate::engine::world::machines(loader).unwrap_or_default()
     } else {
@@ -821,12 +837,12 @@ pub(crate) fn drain() {
     for line in lines {
         let to = match line.to {
             To::Key(_) if ONE_FUSE.is_off() => {
-                dropped(1);
+                STATE.dropped(1);
                 continue;
             }
             To::Key(key) => {
                 let Some(&(_, machine)) = machines.iter().find(|&&(k, _)| k == key) else {
-                    dropped(1);
+                    STATE.dropped(1);
                     continue;
                 };
                 To::Machine(machine, key)
@@ -852,12 +868,12 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
     let (handle, key, target) = match to {
         To::Machine(handle, key) => {
             let Ok(one) = layout.one else {
-                dropped(1);
+                STATE.dropped(1);
                 return;
             };
             let target = (handle & one.handle_slot) as usize;
             if target >= layout.slot_count {
-                dropped(1);
+                STATE.dropped(1);
                 return;
             }
             (handle, key, Some((target, one)))
@@ -889,7 +905,7 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
         return;
     };
     if result[0] != POSTED {
-        dropped(1);
+        STATE.dropped(1);
         return;
     }
     let active = (0..layout.slot_count)
@@ -943,7 +959,7 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
     });
     let others = strays(active, target, delivered);
     if others != 0 {
-        strayed(others.count_ones());
+        STATE.strayed(others.count_ones());
     }
 }
 

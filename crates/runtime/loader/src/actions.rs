@@ -46,6 +46,7 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Input, "console lines", |s| console::after_step(
             s.loader
         ))],
+        forget: Some(|_| console::forget()),
         ..part!("console", console)
     },
     &Part {
@@ -60,6 +61,7 @@ pub(crate) static PARTS: &[&Part] = &[
     // in the same step, before the step's output.
     &Part {
         table_ids: chat::TABLE_IDS,
+        seal: Some(|_| chat::seal()),
         link: Some(chat::link),
         steps: &[step!(Input, "chat sending", |_| chat::drain())],
         forget: Some(|_| chat::forget()),
@@ -67,6 +69,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: interactions::TABLE_IDS,
+        seal: Some(|_| interactions::seal()),
         link: Some(interactions::link),
         steps: &[step!(Follow, "interaction steps", |s| {
             interactions::after_step(s.loader, s.step);
@@ -100,6 +103,7 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("controls", controls)
     },
     &Part {
+        seal: Some(|_| player_actions::seal()),
         forget: Some(|_| admission::forget()),
         ..part!("player_actions", player_actions)
     },
@@ -107,6 +111,7 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "build refusals", |s| {
             build_reasons::after_step(s.loader);
         })],
+        forget: Some(|_| build_reasons::forget()),
         ..part!("build_reasons", build_reasons)
     },
     &Part {

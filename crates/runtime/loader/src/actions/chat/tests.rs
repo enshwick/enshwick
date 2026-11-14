@@ -96,10 +96,10 @@ fn a_build_without_the_chat_layout_lists_the_chat_lines_off_and_refuses_mods_lin
 
 #[test]
 fn a_line_for_one_player_that_reached_others_lists_those_lines_off_with_no_fault_code() {
-    let before = delivery().1;
+    let state = State::new();
     assert!(to_one_player());
     let turn = crate::engine::log::capture_turn();
-    strayed(2);
+    state.strayed(2);
     let lines = crate::engine::log::captured();
     drop(turn);
     let line = lines
@@ -110,9 +110,9 @@ fn a_line_for_one_player_that_reached_others_lists_those_lines_off_with_no_fault
         line.is_some_and(|line| !line.contains("vanilla") && !line.contains('(')),
         "neither a loader fault nor vanilla: {lines:?}"
     );
-    strayed(1);
+    state.strayed(1);
     assert!(!to_one_player());
-    assert_eq!(delivery().1 - before, 2, "every stray counts");
+    assert_eq!(state.delivery.strayed.total(), 2, "every stray counts");
     let listed = crate::engine::diag::parts_off();
     let off = listed.iter().find(|p| p.part == "chat lines to one player");
     assert!(
@@ -147,13 +147,17 @@ fn a_reply_keeps_its_lines_that_are_not_empty_up_to_a_bound() {
 
 #[test]
 fn replies_to_typed_commands_leave_half_the_waiting_lines_to_the_mods() {
+    let state = State::new();
     let help = "x\n".repeat(MAX_WAITING);
-    assert_eq!(queue(To::All, replied("a mod's line"), MAX_WAITING), 0);
+    assert_eq!(
+        state.queue(To::All, replied("a mod's line"), MAX_WAITING),
+        0
+    );
     let left_out: Vec<usize> = (1..=4)
-        .map(|player| queue(To::Key(player), shown(&help), MAX_REPLY_WAITING))
+        .map(|player| state.queue(To::Key(player), shown(&help), MAX_REPLY_WAITING))
         .collect();
     assert_eq!(
-        OUTGOING.lines.relock().len(),
+        state.lines.relock().len(),
         MAX_REPLY_WAITING,
         "replies stop at half"
     );
@@ -168,14 +172,13 @@ fn replies_to_typed_commands_leave_half_the_waiting_lines_to_the_mods() {
         "every line left out is counted"
     );
     for _ in 0..MAX_WAITING {
-        queue(To::All, replied("a mod's line"), MAX_WAITING);
+        state.queue(To::All, replied("a mod's line"), MAX_WAITING);
     }
     assert_eq!(
-        OUTGOING.lines.relock().len(),
+        state.lines.relock().len(),
         MAX_WAITING,
         "the mods' lines still fill the rest"
     );
-    forget();
 }
 
 #[test]
@@ -235,9 +238,13 @@ fn lines_the_server_posts_itself_keep_their_chat_type() {
 
 #[test]
 fn a_hosted_game_s_end_drops_the_lines_waiting_to_post() {
-    assert_eq!(queue(To::All, replied("a mod's line"), MAX_WAITING), 0);
-    assert!(OUTGOING.any.load(Ordering::Acquire));
-    forget();
-    assert!(!OUTGOING.any.load(Ordering::Acquire));
-    assert!(OUTGOING.lines.relock().is_empty());
+    let state = State::new();
+    assert_eq!(
+        state.queue(To::All, replied("a mod's line"), MAX_WAITING),
+        0
+    );
+    assert!(state.any.load(Ordering::Acquire));
+    state.forget();
+    assert!(!state.any.load(Ordering::Acquire));
+    assert!(state.lines.relock().is_empty());
 }

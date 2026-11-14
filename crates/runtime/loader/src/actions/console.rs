@@ -65,12 +65,50 @@ enum FindGameCodeError {
     Layout { ty: &'static str },
 }
 
-static STATE: State = State {
-    pending: Pending::new(),
-    placed: Mutex::new(VecDeque::new()),
-    #[cfg(windows)]
-    handler: std::sync::OnceLock::new(),
-};
+impl State {
+    const fn new() -> Self {
+        Self {
+            pending: Pending::new(),
+            placed: Mutex::new(VecDeque::new()),
+            #[cfg(windows)]
+            handler: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// Keeps the pieces placed among `built` among the
+    /// [`answers::REMEMBERED`] placed lately.
+    fn remember(&self, built: &[BuildingData]) {
+        if built.is_empty() {
+            return;
+        }
+        let pieces = built
+            .iter()
+            .filter(|data| data.kind == BuildingData::PLACED)
+            .map(|data| answers::Placed {
+                entity: data.entity.0,
+                item: data.item.get(),
+                template: data.template,
+                position: data.position,
+            });
+        let mut placed = self.placed.relock();
+        for piece in pieces {
+            if placed.len() == answers::REMEMBERED {
+                placed.pop_front();
+            }
+            placed.push_back(piece);
+        }
+    }
+
+    /// Forgets the lines a hosted game that ended left waiting and the
+    /// pieces placed in its world, whose entities the next world may reuse.
+    #[cfg(any(windows, test))]
+    fn forget(&self) {
+        self.pending.clear();
+        self.placed.relock().clear();
+    }
+}
+
+static STATE: State = State::new();
 
 /// Queues `line`, typed in the console, for the game thread.
 pub fn submit(line: String) {
@@ -80,25 +118,14 @@ pub fn submit(line: String) {
 /// Keeps the pieces placed among `built`, one step's building events, among
 /// the [`answers::REMEMBERED`] placed lately.
 pub fn remember(built: &[BuildingData]) {
-    if built.is_empty() {
-        return;
-    }
-    let pieces = built
-        .iter()
-        .filter(|data| data.kind == BuildingData::PLACED)
-        .map(|data| answers::Placed {
-            entity: data.entity.0,
-            item: data.item.get(),
-            template: data.template,
-            position: data.position,
-        });
-    let mut placed = STATE.placed.relock();
-    for piece in pieces {
-        if placed.len() == answers::REMEMBERED {
-            placed.pop_front();
-        }
-        placed.push_back(piece);
-    }
+    STATE.remember(built);
+}
+
+/// Forgets the console's lines and placed pieces of a hosted game that
+/// ended.
+#[cfg(windows)]
+pub(crate) fn forget() {
+    STATE.forget();
 }
 
 /// The `count` pieces placed last, newest first.
@@ -249,6 +276,24 @@ pub struct ParseLogQueryError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_the_lines_waiting_and_the_pieces_placed() {
+        let state = State::new();
+        state.pending.push("enshwick mods".to_owned());
+        let piece = BuildingData {
+            kind: BuildingData::PLACED,
+            ..bytemuck::Zeroable::zeroed()
+        };
+        state.remember(&[piece]);
+        assert_eq!(state.placed.relock().len(), 1);
+        state.forget();
+        assert!(
+            state.pending.take().is_empty(),
+            "no line runs in the next world"
+        );
+        assert!(state.placed.relock().is_empty());
+    }
 
     #[test]
     fn the_loader_s_word_reaches_its_tools_and_any_other_names_a_mod() {

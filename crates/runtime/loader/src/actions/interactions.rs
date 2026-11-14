@@ -96,8 +96,38 @@ fn linked() -> Option<(&'static Loader, &'static Layout, &'static Components)> {
     let (loader, (layout, components)) = crate::engine::loader::linked(&LINKED)?;
     Some((loader, layout, components))
 }
-/// The players' character entities, read on the game thread now and then.
-static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
+
+/// What the interactions follow while the game runs.
+struct State {
+    /// Whether the link on [`ACTIONS_SYSTEM`] was made at link time, which
+    /// reads the players' input for the controls that follow game actions;
+    /// a fact of the process, which a hosted game's end keeps.
+    reads_inputs: AtomicBool,
+    /// The players' character entities, read on the game thread now and then.
+    players: ArcSwapOption<Vec<u32>>,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            reads_inputs: AtomicBool::new(false),
+            players: ArcSwapOption::const_empty(),
+        }
+    }
+
+    /// Whether the players' input is read each step: the link is made and
+    /// its `fuse` still on.
+    fn reads_inputs(&self, fuse: &Fuse) -> bool {
+        still_linked(self.reads_inputs.load(Ordering::Acquire), fuse)
+    }
+
+    /// Forgets the players of a hosted game that ended.
+    fn forget(&self) {
+        self.players.store(None);
+    }
+}
+
+static STATE: State = State::new();
 
 /// The switch of the interaction filters and of every link they make: a
 /// link this build cannot make turns them all off, and so does a panic in
@@ -182,16 +212,18 @@ pub(crate) fn register(
         .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
+/// Seals the filters once every mod's init ran, before the links.
+pub(crate) fn seal() {
+    let _filters = FILTERS.seal();
+}
+
 /// The system that runs players' inventory actions.
 pub(crate) const ACTIONS_SYSTEM: &str = "inventory_actions";
-/// Whether the link on [`ACTIONS_SYSTEM`] is made, which reads the players'
-/// input for the controls that follow game actions.
-static READS_INPUTS: AtomicBool = AtomicBool::new(false);
 
 /// Whether the players' input is read each step, for the controls that
 /// follow game actions: the link is made and still on.
 pub(crate) fn reads_inputs() -> bool {
-    still_linked(READS_INPUTS.load(Ordering::Acquire), &ACTIONS_FUSE)
+    STATE.reads_inputs(&ACTIONS_FUSE)
 }
 
 /// Whether a link `made` at link time still runs: its `fuse` did not turn
@@ -209,7 +241,15 @@ fn holds_off(off: &Fuse) -> Off {
 }
 
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = FILTERS.seal();
+    let hold_ready = link_in(loader, &STATE);
+    let filters = FILTERS.sealed().map_or(0, <[_]>::len);
+    crate::world::transactions::holds().linked(filters, hold_ready);
+}
+
+/// Links the filters and the inventory actions, keeping in `state` whether
+/// the players' input is read; whether a transaction's hold is ready, its
+/// links all made.
+fn link_in(loader: &'static Loader, state: &State) -> bool {
     // Linked on every side, as any can host a world whose transactions hold
     // props; the detours act only in a server's world.
     let found = layout(loader).and_then(|layout| {
@@ -247,7 +287,7 @@ pub(crate) fn link(loader: &'static Loader) {
             (false, false)
         }
     };
-    READS_INPUTS.store(actions, Ordering::Release);
+    state.reads_inputs.store(actions, Ordering::Release);
     let hold_ready = filtered && actions;
     if !hold_ready {
         let off = if filtered {
@@ -257,10 +297,10 @@ pub(crate) fn link(loader: &'static Loader) {
         };
         HOLDS_FUSE.turn_off(&holds_off(off));
     }
-    crate::world::transactions::holds().linked(filters.len(), hold_ready);
     if filtered {
         crate::log!(INFO, "interaction filters on");
     }
+    hold_ready
 }
 
 /// Links every hook the filters screen under [`INTERACTIONS_FUSE`], each
@@ -304,7 +344,7 @@ pub(crate) fn filter_off() -> bool {
 
 pub(crate) fn after_step(loader: &Loader, step: u64) {
     crate::world::transactions::holds().after_step(step);
-    if read_due(step, PLAYERS.load().is_some()) {
+    if read_due(step, STATE.players.load().is_some()) {
         read_players(loader);
     }
 }
@@ -326,20 +366,22 @@ fn read_players(loader: &Loader) {
         return;
     }
     if let Ok(entities) = crate::engine::world::player_entities(loader)
-        && PLAYERS.load().as_deref().map(Vec::as_slice) != Some(entities.as_slice())
+        && STATE.players.load().as_deref().map(Vec::as_slice) != Some(entities.as_slice())
     {
-        PLAYERS.store(Some(std::sync::Arc::new(entities.to_vec())));
+        STATE
+            .players
+            .store(Some(std::sync::Arc::new(entities.to_vec())));
     }
 }
 
 /// The players' character entities as last read on the game thread, for
 /// the systems that act on each player's input.
 pub(crate) fn players() -> arc_swap::Guard<Option<std::sync::Arc<Vec<u32>>>> {
-    PLAYERS.load()
+    STATE.players.load()
 }
 
 pub(crate) fn forget() {
-    PLAYERS.store(None);
+    STATE.forget();
 }
 
 fn allowed(call: &Interaction) -> bool {
@@ -743,7 +785,7 @@ unsafe fn player_inputs(ctx: *mut u64) {
     if !unsafe { server_world(loader, engine, ctx) } {
         return;
     }
-    let players = PLAYERS.load();
+    let players = STATE.players.load();
     let players = players.as_deref().map_or(&[][..], Vec::as_slice);
     let input = |player: enshwick_core::Entity| {
         // SAFETY: the caller guarantees the system's live context, at its
@@ -773,7 +815,7 @@ unsafe fn refuse_pending(ctx: *mut u64) {
     if !unsafe { server_world(loader, engine, ctx) } {
         return;
     }
-    let players = PLAYERS.load();
+    let players = STATE.players.load();
     let Some(players) = players.as_deref() else {
         return;
     };
@@ -828,101 +870,4 @@ unsafe fn refuse_pending(ctx: *mut u64) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_players_are_read_on_every_step_without_a_list_and_every_thirty_with_one() {
-        assert!(read_due(1, false), "the first step after a world loads");
-        assert!(read_due(7, false));
-        assert!(!read_due(7, true));
-        assert!(read_due(PLAYERS_EVERY, true));
-        assert!(read_due(2 * PLAYERS_EVERY, true));
-    }
-
-    #[test]
-    fn the_filters_are_wholly_off_when_their_stock_link_fails() {
-        use enshwick_base::Relock;
-
-        let loader = crate::start::tests::bare_loader();
-        let found = [
-            (pinned::access::OFFER_TEST, 0x1000),
-            (pinned::access::TRANSFER, 0x2000),
-            (pinned::access::SORT, 0x3000),
-            (pinned::access::DISMANTLE_METHOD, 0x4000),
-        ];
-        let at = |symbol: Symbol| {
-            let address = found
-                .iter()
-                .find(|(s, _)| s.id() == symbol.id())
-                .map(|&(_, address)| address);
-            Target::Found(symbol.id(), address)
-        };
-        assert!(
-            !filter_off(),
-            "a hold keeps players out while the filters run"
-        );
-        assert!(!link_filters(&loader, at, HookFlags::NONE));
-        assert!(INTERACTIONS_FUSE.is_off());
-        assert!(filter_off(), "a hold keeps no one out");
-        {
-            let mut chains = loader.chains.relock();
-            chains.seal();
-            assert!(
-                chains.is_empty(),
-                "the offer, transfer and sort links go with the stock's, never patched"
-            );
-        }
-        let listed = crate::engine::diag::parts_off();
-        let off = listed.iter().find(|p| p.part == "interaction filters");
-        assert!(
-            off.is_some_and(|p| p.reason.starts_with("access.base_stock ")),
-            "{listed:?}"
-        );
-    }
-
-    #[test]
-    fn a_build_without_the_component_reads_names_the_first_entry_it_lacks() {
-        let loader = crate::start::tests::bare_loader();
-        assert_eq!(
-            Components::found(&loader).err(),
-            Some(pinned::ecs::TYPE_INDEX.id())
-        );
-    }
-
-    #[test]
-    fn a_build_without_the_layout_lists_the_filters_actions_and_holds_off() {
-        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-        link(loader);
-        assert!(INTERACTIONS_FUSE.is_off() && ACTIONS_FUSE.is_off() && HOLDS_FUSE.is_off());
-        assert!(!reads_inputs());
-        assert_eq!(
-            crate::base::off_reason(&HOLDS_FUSE).as_deref(),
-            Some("interaction filters is off")
-        );
-    }
-
-    #[test]
-    fn props_open_to_players_name_the_link_that_is_off_without_a_build_code() {
-        let turn = crate::engine::log::capture_turn();
-        HOLDS_FUSE.turn_off(&holds_off(&ACTIONS_FUSE));
-        let lines = crate::engine::log::captured();
-        drop(turn);
-        assert!(
-            lines
-                .iter()
-                .any(|(_, _, line)| line
-                    == "prop removal by transactions off: inventory actions is off"),
-            "{lines:?}"
-        );
-    }
-
-    #[test]
-    fn a_link_made_at_link_time_counts_only_while_its_fuse_is_on() {
-        let fuse = Fuse::new("test inventory actions");
-        assert!(!still_linked(false, &fuse), "never made");
-        assert!(still_linked(true, &fuse));
-        fuse.blow("a test");
-        assert!(!still_linked(true, &fuse), "turned off after it was made");
-    }
-}
+mod tests;
