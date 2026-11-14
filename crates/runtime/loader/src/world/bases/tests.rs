@@ -353,11 +353,11 @@ fn the_raised_limit_links_every_site_and_once_off_keeps_the_cap_and_reports_the_
     drop(chains);
 
     let more = VANILLA_ZONES + 8;
-    ASKED.take(Limits {
+    STATE.asked.take(Limits {
         zones: more,
         bases: MAX_BASES,
     });
-    RAISED.store(true, Ordering::Release);
+    STATE.raised.store(true, Ordering::Release);
     assert_eq!(base_limit().zones, more);
     assert_eq!(detours::plan_bases(|| 20), 20);
     assert_eq!(
@@ -426,4 +426,47 @@ fn a_zone_list_lookup_that_panics_leaves_the_game_the_boxes_it_had() {
     guard.keep();
     // SAFETY: `room` holds the container's u64 length.
     assert_eq!(unsafe { members::list_len(list, &container) }, 4);
+}
+
+#[test]
+fn a_hosted_game_s_end_forgets_the_zones_and_caps_but_keeps_the_arming_and_requests() {
+    let state = State::new();
+    state.asked.take(Limits {
+        zones: 64,
+        bases: 40,
+    });
+    state.asked.cap(ModIndex::new(0), 20);
+    let grouped = || {
+        ArcSwap::from_pointee(Zones {
+            zones: Vec::new(),
+            bases: 3,
+        })
+    };
+    let _first = state.zones.set([grouped(), grouped()]);
+    for at in 0..2 {
+        state.zone_count[at].store(5, Ordering::Relaxed);
+    }
+    state.raised.store(true, Ordering::Release);
+    state.forget();
+    assert_eq!(
+        state.asked.limits(),
+        Limits {
+            zones: 64,
+            bases: 40
+        },
+        "a mod off in the next world caps nothing there; the init requests stay"
+    );
+    for at in 0..2 {
+        assert_eq!(state.zone_count[at].load(Ordering::Relaxed), u32::MAX);
+        assert!(
+            state
+                .zones
+                .get()
+                .is_some_and(|zones| zones[at].load().bases == 0)
+        );
+    }
+    assert!(
+        state.raised.load(Ordering::Acquire),
+        "the hooks stay armed for the next world"
+    );
 }

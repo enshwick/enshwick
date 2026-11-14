@@ -73,7 +73,9 @@ while players sleep. A mod sets a factor on top with `ClockSpeed::set`, up to
 `ClockSpeed::MAX`. A factor of 2 makes days pass twice as fast, 0.5 half as
 fast, and 0 stops the clock. The clock runs at the game's speed times every mod's
 factor, so mods compose, and sleeping still speeds the night up. The loader
-sends a new speed to the clients only when it changes.
+sends a new speed to the clients only when it changes. When a hosted game
+ends, every factor goes back to 1, so a mod sets its factor again in the next
+world.
 
 ```rust
 use enshwick::events::{DayStarted, NightStarted};

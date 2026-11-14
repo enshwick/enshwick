@@ -200,7 +200,7 @@ impl ClockSpeed {
 
     /// Sets the mod's factor on the clock's speed: 1 leaves it, 2 makes the
     /// days pass twice as fast, 0 stops the clock. Clients follow after the
-    /// next step.
+    /// next step. A hosted game's end puts every factor back at 1.
     ///
     /// # Errors
     ///

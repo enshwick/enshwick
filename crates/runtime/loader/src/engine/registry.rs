@@ -101,6 +101,32 @@ impl<T> Registry<T> {
             .get_or_init(|| finish(std::mem::take(&mut *open)).into_boxed_slice())
     }
 
+    /// Whether any item registered so far, sealed or not, matches `matches`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::engine::registry::Registry;
+    ///
+    /// let registry: Registry<u32> = Registry::new();
+    /// registry.add(7)?;
+    /// assert!(registry.any(|&item| item == 7));
+    /// registry.seal();
+    /// assert!(registry.any(|&item| item == 7));
+    /// assert!(!registry.any(|&item| item == 8));
+    /// # Ok::<(), enshwick_loader::engine::registry::Sealed>(())
+    /// ```
+    pub fn any(&self, matches: impl Fn(&T) -> bool) -> bool {
+        let any = |items: &[T]| items.iter().any(&matches);
+        match self.sealed() {
+            Some(items) => any(items),
+            // Sealed meanwhile: the sealed slice has every item.
+            None => self
+                .edit(|items| any(items))
+                .unwrap_or_else(|Sealed| self.sealed().is_some_and(any)),
+        }
+    }
+
     /// The sealed items; `None` while the registry is open.
     #[inline]
     #[must_use]

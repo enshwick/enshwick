@@ -25,6 +25,11 @@ pub(crate) mod game_settings;
 pub(crate) mod label;
 pub mod map_frame;
 pub mod map_marker_types;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build's parts open to mods")
+)]
+pub(crate) mod openers;
 pub mod prop_holds;
 #[cfg_attr(
     not(windows),
@@ -85,6 +90,7 @@ pub(crate) static PARTS: &[&Part] = &[
         world_event: Some(fused!("game settings at world events", |loader, event| {
             game_settings::world_event(loader, event);
         })),
+        forget: Some(|_| game_settings::forget_world()),
         ..part!("game_settings", game_settings)
     },
     &Part {

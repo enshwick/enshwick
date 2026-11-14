@@ -618,7 +618,8 @@ pub fn base_limit() -> Option<BaseLimit> {
 /// An altar that would start a base past the cap is refused. Each call replaces the mod's own cap, the lowest cap of every
 /// mod holds, and a cap at or past the request leaves the request; so a mod
 /// asks for its most at init and sets each world's cap from its settings as
-/// the world loads. [`base_limit`] reads the capped bases. Any thread.
+/// the world loads; a hosted game's end drops every cap. [`base_limit`]
+/// reads the capped bases. Any thread.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///

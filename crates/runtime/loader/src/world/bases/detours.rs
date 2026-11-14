@@ -9,9 +9,8 @@ use enshwick_core::raw::read_at;
 
 use super::members::{Game, Side, side_of};
 use super::{
-    ALTAR_LIMIT, ASKED, BASE_CAP, Container, Fields, LIMITS, LimitFilter, PLANNED, RAISED_FUSE,
-    RAISED_ZONES, SITES, Sites, ZONE_COUNT, ZONES, base_limit, cursor, kind_index, lifecycle,
-    members, past16, raised,
+    ALTAR_LIMIT, BASE_CAP, Container, Fields, LIMITS, LimitFilter, RAISED_FUSE, RAISED_ZONES,
+    SITES, STATE, Sites, base_limit, cursor, kind_index, lifecycle, members, past16, raised,
 };
 use crate::engine::fuse::Off;
 use crate::engine::loader::{Loader, Target};
@@ -146,7 +145,7 @@ crate::engine::chains::chain_detour! {
             // by the filter.
             .map(|sites| unsafe { side_of(bases, &sites.fields) });
         if let Some(kind) = kind {
-            PLANNED[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
+            STATE.planned[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
         }
         if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null())
             && let Some(loader) = crate::engine::loader::loader()
@@ -210,7 +209,7 @@ unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> 
         members::settle(
             bases,
             sites.fields,
-            ASKED.bases(kind),
+            STATE.asked.bases(kind),
             new_base,
             ready.as_ref().map(|f| f as &dyn Fn(usize)),
         )
@@ -224,7 +223,7 @@ unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> 
 /// - `bases` is the non-null bases object the grouping has just filled,
 ///   live for the call, on the grouping's thread.
 unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) {
-    let Some(known) = ZONES.get().map(|zones| &zones[kind_index(kind)]) else {
+    let Some(known) = STATE.zones.get().map(|zones| &zones[kind_index(kind)]) else {
         return;
     };
     // SAFETY: `keep`'s caller guarantees a live object just grouped, on the
@@ -236,7 +235,7 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
         based: grouped.iter().any(|base| base.zones.contains(i)),
     };
     let count = u32::try_from(grouped.len()).unwrap_or(u32::MAX);
-    ZONE_COUNT[kind_index(kind)].store(
+    STATE.zone_count[kind_index(kind)].store(
         u32::try_from(listed).unwrap_or(u32::MAX - 1),
         Ordering::Relaxed,
     );
@@ -265,7 +264,7 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
             crate::log!(
                 WARN,
                 "{listed} altar zones in {count} bases: {apart} stand apart from every base, since the game holds {} bases; they allow building but no base features until they touch a base's zone",
-                ASKED.bases(kind)
+                STATE.asked.bases(kind)
             );
         } else {
             crate::log!(INFO, "{listed} altar zones in {count} bases");
@@ -292,8 +291,8 @@ crate::engine::chains::chain_detour! {
             let kind = unsafe { side_of(bases, &fields) };
             // SAFETY: the game's grouping calls the new base code only after
             // it refilled the object's zone list, on its own thread.
-            let plan = || plan_bases(|| unsafe { members::planned(bases, fields, ASKED.bases(kind)) });
-            if !may_start(started, &PLANNED[kind_index(kind)], plan) {
+            let plan = || plan_bases(|| unsafe { members::planned(bases, fields, STATE.asked.bases(kind)) });
+            if !may_start(started, &STATE.planned[kind_index(kind)], plan) {
                 return;
             }
         }

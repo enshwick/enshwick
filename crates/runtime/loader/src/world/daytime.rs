@@ -20,18 +20,18 @@
 //! what the game asks for by every mod's factor, and skips a call that would
 //! change nothing, so the version moves only when the speed does.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::{Loader, Target, is_off, take};
+use crate::engine::loader::{Loader, Target, is_off};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Symbol;
-use enshwick_base::Relock;
+use crate::world::openers::Openers;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -83,15 +83,44 @@ struct Layout {
     is_day: usize,
 }
 
+/// 1.0 as `f32` bits: the speed and the factor of a clock nobody changed.
+const ONE: u32 = 0x3f80_0000;
+
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
-/// Mods that asked to change the speed, during init.
-static SPEED_MODS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
-/// Each speed mod and its factor, as `f32` bits; sealed at link.
-static FACTORS: OnceLock<Box<[(ModIndex, AtomicU32)]>> = OnceLock::new();
-/// The speed the game itself last asked for, as `f32` bits.
-static GAME_SPEED: AtomicU32 = AtomicU32::new(0x3f80_0000);
-/// Whether it was day after the last step: 0 unknown, 1 night, 2 day.
-static WAS_DAY: AtomicU32 = AtomicU32::new(0);
+/// What the clock keeps while the game runs.
+struct State {
+    /// Mods that asked to change the speed, during init.
+    speeders: Openers,
+    /// Each speed mod and its factor, as `f32` bits; made at link.
+    factors: OnceLock<Box<[(ModIndex, AtomicU32)]>>,
+    /// The speed the game itself last asked for, as `f32` bits.
+    game_speed: AtomicU32,
+    /// Whether it was day after the last step: 0 unknown, 1 night, 2 day.
+    was_day: AtomicU32,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            speeders: Openers::new(),
+            factors: OnceLock::new(),
+            game_speed: AtomicU32::new(ONE),
+            was_day: AtomicU32::new(0),
+        }
+    }
+
+    /// Forgets the world that went: its turn, its speed and the mods'
+    /// factors on it.
+    fn forget(&self) {
+        self.was_day.store(0, Ordering::Relaxed);
+        self.game_speed.store(ONE, Ordering::Relaxed);
+        for (_, factor) in self.factors.get().into_iter().flatten() {
+            factor.store(ONE, Ordering::Relaxed);
+        }
+    }
+}
+
+static STATE: State = State::new();
 // SAFETY: `SetSpeedFn` is the signature of the table's `daytime.set_speed`,
 // and this slot is the `next` of the one link `link` makes on it, whose
 // detour `speed` calls `get`; `set_speed` calls through `wired` only.
@@ -278,17 +307,16 @@ fn forward(before: i64, within: i64, cycle: i64) -> i64 {
 
 /// Registers mod `owner` as one that changes the speed.
 pub(crate) fn register_speed(loader: &Loader, owner: ModIndex) -> Status {
-    if FACTORS.get().is_some() {
+    if STATE.factors.get().is_some() {
         return Status::TOO_LATE;
     }
     if layout(loader).is_none() || loader.address(pinned::daytime::SET_SPEED).is_none() {
         return Status::MISSING;
     }
-    let mut mods = SPEED_MODS.relock();
-    if !mods.contains(&owner) {
-        mods.push(owner);
-    }
-    Status::OK
+    STATE
+        .speeders
+        .open(owner)
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Sets mod `owner`'s factor on the speed and applies the product at once.
@@ -296,7 +324,8 @@ pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result
     if !(0.0..=MAX_FACTOR).contains(&factor) {
         return Err(Status::BAD_ARGS);
     }
-    let slot = FACTORS
+    let slot = STATE
+        .factors
         .get()
         .and_then(|factors| factors.iter().find(|(id, _)| *id == owner))
         .ok_or(Status::REFUSED)?;
@@ -307,7 +336,7 @@ pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result
     let (layout, world, daytime) = daytime(loader)?;
     let next = SPEED_NEXT.wired().ok_or(Status::MISSING)?;
     slot.1.store(factor.to_bits(), Ordering::Relaxed);
-    let wanted = f32::from_bits(GAME_SPEED.load(Ordering::Relaxed)) * product();
+    let wanted = f32::from_bits(STATE.game_speed.load(Ordering::Relaxed)) * product();
     // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
     // the game thread that alone writes it; the table's `daytime.speed`
     // offset holds its `f32` speed.
@@ -328,7 +357,7 @@ pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result
 
 /// The product of the factors of every speed mod still running.
 fn product() -> f32 {
-    FACTORS.get().map_or(1.0, |factors| {
+    STATE.factors.get().map_or(1.0, |factors| {
         factors
             .iter()
             .filter(|(owner, _)| !is_off(ModIndex::new((*owner).get())))
@@ -344,11 +373,11 @@ fn same(a: f32, b: f32) -> bool {
 
 /// Seals the speed mods and links the speed setter when any asked.
 pub(crate) fn link(loader: &'static Loader) {
-    let mods = take(&SPEED_MODS);
+    let mods = STATE.speeders.seal();
     let wanted = !mods.is_empty();
-    let _first = FACTORS.set(
-        mods.into_iter()
-            .map(|owner| (owner, AtomicU32::new(1.0f32.to_bits())))
+    let _first = STATE.factors.set(
+        mods.iter()
+            .map(|&owner| (owner, AtomicU32::new(ONE)))
             .collect(),
     );
     if wanted
@@ -368,7 +397,7 @@ pub(crate) fn link(loader: &'static Loader) {
 /// the mods' factors, not the game's own, and skips a call that would
 /// change nothing.
 unsafe extern "system" fn speed(daytime: *mut u8, game: f32, now: i64) {
-    GAME_SPEED.store(game.to_bits(), Ordering::Relaxed);
+    STATE.game_speed.store(game.to_bits(), Ordering::Relaxed);
     let factor = SPEED_FUSE.run("the speed", product).unwrap_or(1.0);
     let mut speed = game;
     if !same(factor, 1.0) && !daytime.is_null() {
@@ -402,8 +431,8 @@ pub(crate) fn after_step(loader: &Loader) {
         && !crate::engine::loader::handles(Event::NIGHT_STARTED)
     {
         // A handler that arrives later starts from its first look, as at start.
-        if WAS_DAY.load(Ordering::Relaxed) != 0 {
-            WAS_DAY.store(0, Ordering::Relaxed);
+        if STATE.was_day.load(Ordering::Relaxed) != 0 {
+            STATE.was_day.store(0, Ordering::Relaxed);
         }
         return;
     }
@@ -415,7 +444,7 @@ pub(crate) fn after_step(loader: &Loader) {
     } else {
         2
     };
-    let before = WAS_DAY.swap(now, Ordering::Relaxed);
+    let before = STATE.was_day.swap(now, Ordering::Relaxed);
     if before == 0 || before == now {
         return;
     }
@@ -429,8 +458,7 @@ pub(crate) fn after_step(loader: &Loader) {
 
 /// Forgets the last turn when a hosted game ends, so the next starts clean.
 pub(crate) fn forget() {
-    WAS_DAY.store(0, Ordering::Relaxed);
-    GAME_SPEED.store(1.0f32.to_bits(), Ordering::Relaxed);
+    STATE.forget();
 }
 
 #[cfg(test)]
@@ -457,7 +485,9 @@ mod tests {
     fn a_speed_set_once_the_time_speed_is_off_is_missing_for_its_mods_and_refused_for_others() {
         let loader = crate::start::tests::bare_loader();
         let speeder = ModIndex::new(0);
-        let _first = FACTORS.set(Box::new([(speeder, AtomicU32::new(1.0f32.to_bits()))]));
+        let _first = STATE
+            .factors
+            .set(Box::new([(speeder, AtomicU32::new(ONE))]));
         SPEED_FUSE.blow("a test");
         assert_eq!(set_speed(&loader, speeder, 2.0), Err(Status::MISSING));
         assert_eq!(
@@ -471,5 +501,24 @@ mod tests {
     #[test]
     fn without_speed_mods_the_factor_is_one() {
         assert!((product() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_the_turn_the_speed_and_every_factor() {
+        let state = State::new();
+        let factors = Box::new([(ModIndex::new(0), AtomicU32::new(2.0f32.to_bits()))]);
+        let _first = state.factors.set(factors);
+        state.game_speed.store(8.0f32.to_bits(), Ordering::Relaxed);
+        state.was_day.store(2, Ordering::Relaxed);
+        state.forget();
+        assert_eq!(ONE, 1.0f32.to_bits());
+        assert_eq!(state.was_day.load(Ordering::Relaxed), 0);
+        assert_eq!(state.game_speed.load(Ordering::Relaxed), ONE);
+        let factors = state.factors.get().into_iter().flatten();
+        assert!(
+            factors
+                .into_iter()
+                .all(|(_, f)| f.load(Ordering::Relaxed) == ONE)
+        );
     }
 }

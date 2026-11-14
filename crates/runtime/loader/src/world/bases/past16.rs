@@ -166,15 +166,26 @@ impl Sites {
 }
 
 static SITES: OnceLock<Sites> = OnceLock::new();
-/// Set at link when every site of ours is linked and every patch
-/// registered: a target another owner hooks does not stand for ours.
-static LINKED: AtomicBool = AtomicBool::new(false);
-/// Set at arming when every site is linked, hooked and patched.
-static ARMED: AtomicBool = AtomicBool::new(false);
-/// Set at arming, armed or not.
-static SETTLED: AtomicBool = AtomicBool::new(false);
-/// Set at arming when a size patch is skipped for good, not waiting.
-static SKIPPED: AtomicBool = AtomicBool::new(false);
+/// How the window's links and arming went, once at the start; a world's end
+/// leaves it, as the hooks stay.
+struct State {
+    /// Set at link when every site of ours is linked and every patch
+    /// registered: a target another owner hooks does not stand for ours.
+    linked: AtomicBool,
+    /// Set at arming when every site is linked, hooked and patched.
+    armed: AtomicBool,
+    /// Set at arming, armed or not.
+    settled: AtomicBool,
+    /// Set at arming when a size patch is skipped for good, not waiting.
+    skipped: AtomicBool,
+}
+
+static STATE: State = State {
+    linked: AtomicBool::new(false),
+    armed: AtomicBool::new(false),
+    settled: AtomicBool::new(false),
+    skipped: AtomicBool::new(false),
+};
 /// Bases past 16: the creates that fill windows and the loops that walk
 /// them, linked all or none. A fault in any of them turns them all off, and
 /// no window is made from then on.
@@ -187,12 +198,12 @@ static TEARDOWN: Fuse = Fuse::new("bases past 16 teardown");
 /// Whether bases past 16 are armed, and neither the window nor its teardown
 /// turned off.
 pub(super) fn armed() -> bool {
-    ARMED.load(Ordering::Acquire) && !PAST16.is_off() && !TEARDOWN.is_off()
+    STATE.armed.load(Ordering::Acquire) && !PAST16.is_off() && !TEARDOWN.is_off()
 }
 
 /// Whether arming has settled the window, armed or not.
 pub(super) fn settled() -> bool {
-    SETTLED.load(Ordering::Acquire)
+    STATE.settled.load(Ordering::Acquire)
 }
 
 /// The window's sites once found, armed or not.
@@ -357,7 +368,7 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
         let _off = loader.fuse_off(&PAST16, "the size patches", &why);
         return;
     }
-    LINKED.store(true, Ordering::Release);
+    STATE.linked.store(true, Ordering::Release);
 }
 
 /// Links the creates under [`PAST16`]; true when every link is made.
@@ -413,7 +424,7 @@ pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
             .map(|(_, v)| v)
     };
     let sites = SITES.get();
-    let armed = LINKED.load(Ordering::Acquire)
+    let armed = STATE.linked.load(Ordering::Acquire)
         && sites.is_some_and(|sites| {
             sites.targets().all(|at| hooked.contains(&at))
                 && sites
@@ -427,9 +438,9 @@ pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
             .iter()
             .any(|mine| matches!(verdict(mine), Some(Verdict::Skip(_))))
     });
-    ARMED.store(armed, Ordering::Release);
-    SKIPPED.store(skipped, Ordering::Release);
-    SETTLED.store(true, Ordering::Release);
+    STATE.armed.store(armed, Ordering::Release);
+    STATE.skipped.store(skipped, Ordering::Release);
+    STATE.settled.store(true, Ordering::Release);
 }
 
 /// Tells once, after the hooks are armed, that bases past 16 are off, unless
@@ -440,7 +451,7 @@ pub(super) fn report(loader: &Loader, already: &[&str]) {
         SITES.get().is_some(),
         armed(),
         already,
-        SKIPPED.load(Ordering::Acquire),
+        STATE.skipped.load(Ordering::Acquire),
     );
     if let Some((id, why)) = off {
         let _off = loader.fuse_off(&PAST16, id, why);
@@ -470,7 +481,7 @@ fn off_after_arming(
 /// Turns off bases past 16 with a plain store, while the other threads may
 /// stand still: see [`crate::engine::code::disarm`].
 pub(super) fn disarm() {
-    ARMED.store(false, Ordering::Release);
+    STATE.armed.store(false, Ordering::Release);
 }
 
 /// Fills the window of an object a create has just made.
@@ -764,12 +775,13 @@ mod tests {
         );
     }
 
-    /// The only test that writes [`ARMED`], which is the process's own.
+    /// The only test that writes `STATE.armed`, which is the process's own.
     #[test]
     fn the_window_makes_new_windows_only_while_it_and_its_teardown_are_on() {
         // Put back however the test ends, so a failure here fails no other.
-        let _disarm = crate::engine::undo::Undo::new(|| ARMED.store(false, Ordering::Release));
-        ARMED.store(true, Ordering::Release);
+        let _disarm =
+            crate::engine::undo::Undo::new(|| STATE.armed.store(false, Ordering::Release));
+        STATE.armed.store(true, Ordering::Release);
         assert!(armed(), "armed with the window and its teardown on");
         // A thread not carried keeps fuses of its own, so this test's stay on.
         let after_fault = std::thread::spawn(|| {

@@ -6,10 +6,9 @@ use crate::engine::live;
 use super::geometry::Placed;
 use super::{BUILT, LEVELS, PLACED, RANGES_FUSE};
 use super::{
-    FIELDS, HALF, MAX_LEVELS, Sizes, TARGETS, UPGRADE_ATTRIBUTES, UPGRADE_BALANCING,
-    UPGRADE_ENTITY, UPGRADE_KIND, UPGRADE_LEVEL, UPGRADE_SHAPE, UPGRADE_STAMP_A, UPGRADE_STAMP_B,
-    UPGRADE_TRACKER, UPGRADE_WORDS, ZONES_SHAPE, ZONES_TRANSFORM, ZONES_WORDS, drop_stale_buffers,
-    merge,
+    FIELDS, HALF, MAX_LEVELS, STATE, Sizes, UPGRADE_ATTRIBUTES, UPGRADE_BALANCING, UPGRADE_ENTITY,
+    UPGRADE_KIND, UPGRADE_LEVEL, UPGRADE_SHAPE, UPGRADE_STAMP_A, UPGRADE_STAMP_B, UPGRADE_TRACKER,
+    UPGRADE_WORDS, ZONES_SHAPE, ZONES_TRANSFORM, ZONES_WORDS, drop_stale_buffers, merge,
 };
 
 /// Learns positions, orientations and built zones, after vanilla built them.
@@ -202,7 +201,7 @@ pub(super) unsafe fn write_ranges_into(
     if RANGES_FUSE.is_off() {
         return false;
     }
-    let targets = TARGETS.load();
+    let targets = STATE.targets.load();
     // SAFETY: the caller guarantees the system's live context on its thread;
     // its iterator is `UPGRADE_WORDS` words, checked against the system's
     // reflected components at link; the query ends inside this call.

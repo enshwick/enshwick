@@ -15,6 +15,7 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
 use crate::engine::registry::Registry;
+use crate::world::openers::Openers;
 use enshwick_base::Relock;
 
 mod geometry;
@@ -154,22 +155,75 @@ impl<T: PartialEq> Seen<T> {
     }
 }
 
+/// What the passes saw of every altar, merged.
 #[derive(Debug)]
-struct State {
+struct Records {
     placed: Seen<Placed>,
     levels: Seen<Sizes>,
     built: Seen<[f32; 3]>,
 }
 
-static STATE: Mutex<State> = Mutex::new(State {
-    placed: Seen::new(),
-    levels: Seen::new(),
-    built: Seen::new(),
-});
+impl Records {
+    const fn new() -> Self {
+        Self {
+            placed: Seen::new(),
+            levels: Seen::new(),
+            built: Seen::new(),
+        }
+    }
+}
+
+/// What the altars keep while the game runs.
+#[derive(Debug)]
+struct State {
+    /// The mods that opened the altars.
+    openers: Openers,
+    records: Mutex<Records>,
+    sizing: Sizing,
+    /// The zones the filters asked for, by altar, for the range pass.
+    targets: ArcSwapOption<Targets>,
+    /// Set when the records changed since the last step.
+    changed: AtomicBool,
+    /// The server steps the post-step counted; never reset, since only the
+    /// age between two steps counts and a merge racing a reset would stamp
+    /// an entry with the old step.
+    step: AtomicU64,
+    /// Bumped when the world goes, so threads drop what they held back from
+    /// it; never reset, so no thread mistakes a later world for its own.
+    world: AtomicU64,
+}
+
+impl State {
+    /// Forgets the world that went: its records, targets and sizing.
+    fn forget(&self) {
+        self.world.fetch_add(1, Ordering::AcqRel);
+        *self.records.relock() = Records::new();
+        self.targets.store(None);
+        self.sizing.asked.store(false, Ordering::Release);
+        self.sizing.running.store(0, Ordering::Release);
+        self.changed.store(true, Ordering::Release);
+    }
+
+    const fn new() -> Self {
+        Self {
+            openers: Openers::new(),
+            records: Mutex::new(Records::new()),
+            sizing: Sizing {
+                asked: AtomicBool::new(false),
+                running: AtomicUsize::new(0),
+            },
+            targets: ArcSwapOption::const_empty(),
+            changed: AtomicBool::new(false),
+            step: AtomicU64::new(0),
+            world: AtomicU64::new(0),
+        }
+    }
+}
+
+static STATE: State = State::new();
 
 type Targets = BTreeMap<u32, (usize, [f32; 3])>;
 
-static WANTED: AtomicBool = AtomicBool::new(false);
 static FIELDS: OnceLock<Fields> = OnceLock::new();
 
 /// Where a trigger shape keeps its half extents and a current transform its
@@ -214,7 +268,6 @@ enum LinkAltarsError {
     Components(#[from] crate::engine::ecs::MatchComponentsError),
 }
 
-static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 /// The mods' altar zone filters, in load order.
 static SIZERS: Registry<Sizer> = Registry::new();
 /// When the zones need sizing again.
@@ -227,16 +280,6 @@ struct Sizing {
     running: AtomicUsize,
 }
 
-static SIZING: Sizing = Sizing {
-    asked: AtomicBool::new(false),
-    running: AtomicUsize::new(0),
-};
-static TARGETS: ArcSwapOption<Targets> = ArcSwapOption::const_empty();
-static CHANGED: AtomicBool = AtomicBool::new(false);
-/// The server steps the post-step counted.
-static STEP: AtomicU64 = AtomicU64::new(0);
-/// Bumped when the world goes, so threads drop what they held back from it.
-static WORLD: AtomicU64 = AtomicU64::new(0);
 /// The altars' switch: both system links arm together or not at all, and a
 /// panic in either pass turns both off.
 static ALTARS: Fuse = Fuse::new("altars");
@@ -279,7 +322,7 @@ thread_local! {
 /// Empties this thread's buffers when they hold entries of a world gone
 /// since; before a pass adds to them.
 fn drop_stale_buffers() {
-    let world = WORLD.load(Ordering::Acquire);
+    let world = STATE.world.load(Ordering::Acquire);
     if BUFFERED_WORLD.replace(world) != world {
         PLACED.with_borrow_mut(Vec::clear);
         BUILT.with_borrow_mut(Vec::clear);
@@ -295,12 +338,10 @@ pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Status {
     if crate::engine::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    let mut openers = OPENERS.relock();
-    if !openers.contains(&owner) {
-        openers.push(owner);
-    }
-    WANTED.store(true, Ordering::Release);
-    Status::OK
+    STATE
+        .openers
+        .open(owner)
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Adds mod `owner`'s altar zone filter; it opens altars too. During init
@@ -323,23 +364,15 @@ pub(crate) fn add_sizer(
 /// Has the zones sized again on the server's next step, for mod `owner`,
 /// which must have a filter.
 pub(crate) fn resize(owner: ModIndex) -> Status {
-    let has_filter = |sizers: &[Sizer]| sizers.iter().any(|s| s.owner == owner);
-    let has_filter = match SIZERS.sealed() {
-        Some(sizers) => has_filter(sizers),
-        // Sealed meanwhile: the sealed list has it.
-        None => SIZERS
-            .edit(|sizers| has_filter(sizers))
-            .unwrap_or_else(|_| SIZERS.sealed().is_some_and(has_filter)),
-    };
-    if !has_filter {
+    if !SIZERS.any(|sizer| sizer.owner == owner) {
         return Status::REFUSED;
     }
-    SIZING.asked.store(true, Ordering::Release);
+    STATE.sizing.asked.store(true, Ordering::Release);
     Status::OK
 }
 
 pub(crate) fn opened(owner: ModIndex) -> bool {
-    OPENERS.relock().contains(&owner)
+    STATE.openers.opened(owner)
 }
 
 /// The filters of mods that run.
@@ -391,7 +424,7 @@ fn chain(
 /// [`size_zones_with`].
 fn size_zones() {
     let running: Vec<&Sizer> = running_sizers().collect();
-    SIZING.running.store(running.len(), Ordering::Release);
+    STATE.sizing.running.store(running.len(), Ordering::Release);
     size_zones_with(&running);
 }
 
@@ -400,11 +433,11 @@ fn size_zones() {
 /// they may read the altars.
 fn size_zones_with(sizers: &[&Sizer]) {
     if sizers.is_empty() {
-        TARGETS.store(None);
+        STATE.targets.store(None);
         return;
     }
     let vanilla: Vec<Vanilla> = {
-        let state = STATE.relock();
+        let state = STATE.records.relock();
         state
             .placed
             .iter()
@@ -443,11 +476,11 @@ fn size_zones_with(sizers: &[&Sizer]) {
             );
         }
     }
-    TARGETS.store(Some(Arc::new(targets)));
+    STATE.targets.store(Some(Arc::new(targets)));
 }
 
 pub(crate) fn list() -> Vec<AltarInfo> {
-    let state = STATE.relock();
+    let state = STATE.records.relock();
     state
         .placed
         .iter()
@@ -483,27 +516,27 @@ fn info(id: u32, placed: &Placed, built: Option<&[f32; 3]>, levels: Option<&Size
 fn now() -> When {
     When {
         at: Instant::now(),
-        step: STEP.load(Ordering::Relaxed),
+        step: STATE.step.load(Ordering::Relaxed),
     }
 }
 
 pub(crate) fn after_step(loader: &Loader, now: Instant) {
-    let step = STEP.fetch_add(1, Ordering::Relaxed) + 1;
+    let step = STATE.step.fetch_add(1, Ordering::Relaxed) + 1;
     // Only the post-step forgets: passes run many times a step, and none
     // runs once the last altar is gone.
     if step.is_multiple_of(EXPIRE_EVERY)
-        && let Some(mut state) = STATE.try_relock()
+        && let Some(mut state) = STATE.records.try_relock()
     {
         let now = When { at: now, step };
         let state = &mut *state;
         let gone = state.placed.expire(now) | state.built.expire(now) | state.levels.expire(now);
         if gone {
-            CHANGED.store(true, Ordering::Release);
+            STATE.changed.store(true, Ordering::Release);
         }
     }
-    let changed = CHANGED.swap(false, Ordering::AcqRel);
-    let gone = SIZING.running.load(Ordering::Acquire) != running_sizers().count();
-    if changed | SIZING.asked.swap(false, Ordering::AcqRel) | gone {
+    let changed = STATE.changed.swap(false, Ordering::AcqRel);
+    let gone = STATE.sizing.running.load(Ordering::Acquire) != running_sizers().count();
+    if changed | STATE.sizing.asked.swap(false, Ordering::AcqRel) | gone {
         size_zones();
     }
     if changed {
@@ -512,14 +545,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
 }
 
 pub(crate) fn forget() {
-    WORLD.fetch_add(1, Ordering::AcqRel);
-    let mut state = STATE.relock();
-    state.placed = Seen::new();
-    state.levels = Seen::new();
-    state.built = Seen::new();
-    drop(state);
-    TARGETS.store(None);
-    CHANGED.store(true, Ordering::Release);
+    STATE.forget();
 }
 
 pub(crate) fn register(
@@ -538,7 +564,7 @@ pub(crate) fn register(
 pub(crate) fn link(loader: &'static Loader) {
     let controlled = !SIZERS.seal().is_empty();
     link_seam(loader);
-    if !WANTED.load(Ordering::Acquire) {
+    if STATE.openers.seal().is_empty() {
         return;
     }
     if crate::engine::ecs::engine(loader).is_none() {
@@ -753,10 +779,10 @@ fn merge(
     built: &mut Vec<(u32, [f32; 3])>,
     levels: &mut Vec<(u32, Sizes)>,
 ) {
-    let mut state = match STATE.try_relock() {
+    let mut state = match STATE.records.try_relock() {
         Some(state) => state,
         None if placed.len() + built.len() + levels.len() < HELD_BACK => return,
-        None => STATE.relock(),
+        None => STATE.records.relock(),
     };
     let now = now();
     let mut changed = false;
@@ -770,7 +796,7 @@ fn merge(
         changed |= state.levels.merge(levels.drain(..), now);
     }
     if changed {
-        CHANGED.store(true, Ordering::Release);
+        STATE.changed.store(true, Ordering::Release);
     }
 }
 

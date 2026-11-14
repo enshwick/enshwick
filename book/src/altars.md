@@ -279,7 +279,8 @@ asks for its most at init. It then calls `altars::set_base_cap(bases)` from
 its settings handler, and the server refuses an altar that would start a base
 past the cap. Each call replaces the mod's own cap. The lowest cap of every
 mod holds. A cap at or past the request leaves the request, and a cap below 16
-is refused.
+is refused. When a hosted game ends, every cap goes, so the next world holds
+only the caps its own mods set.
 
 `altars::grouping()` tells how many zones and bases the last grouping found.
 `altars::base_limit()` tells the most the game groups now.

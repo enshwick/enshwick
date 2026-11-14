@@ -72,13 +72,39 @@ struct Kept {
     loaded: Option<Vec<u8>>,
 }
 
-static KEPT: Mutex<Kept> = Mutex::new(Kept {
-    key: None,
-    fields: BTreeMap::new(),
-    loaded: None,
-});
-/// A world loaded and its first step has not ended yet.
-static PENDING: AtomicBool = AtomicBool::new(false);
+impl Kept {
+    const fn new() -> Self {
+        Self {
+            key: None,
+            fields: BTreeMap::new(),
+            loaded: None,
+        }
+    }
+}
+
+/// What the game settings keep while a world runs.
+struct State {
+    kept: Mutex<Kept>,
+    /// A world loaded and its first step has not ended yet.
+    pending: AtomicBool,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            kept: Mutex::new(Kept::new()),
+            pending: AtomicBool::new(false),
+        }
+    }
+
+    /// Forgets the world that went: its kept fields and its first step.
+    fn forget(&self) {
+        self.pending.store(false, Ordering::Release);
+        *self.kept.relock() = Kept::new();
+    }
+}
+
+static STATE: State = State::new();
 
 /// The kept fields' file, by field name and the bytes as hex.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
@@ -393,18 +419,15 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 }
                 None => BTreeMap::new(),
             };
-            *KEPT.relock() = Kept {
+            *STATE.kept.relock() = Kept {
                 key,
                 fields,
                 loaded: None,
             };
-            PENDING.store(true, Ordering::Release);
+            STATE.pending.store(true, Ordering::Release);
             settle(loader);
         }
-        Event::SHUTDOWN_STARTED => {
-            PENDING.store(false, Ordering::Release);
-            *KEPT.relock() = Kept::default();
-        }
+        Event::SHUTDOWN_STARTED => STATE.forget(),
         _ => {}
     }
 }
@@ -412,7 +435,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// At the end of a loaded world's first step: takes the values it loaded
 /// with and writes the kept fields over them.
 pub(crate) fn after_step(loader: &Loader) {
-    if !PENDING.load(Ordering::Acquire) {
+    if !STATE.pending.load(Ordering::Acquire) {
         return;
     }
     settle(loader);
@@ -421,15 +444,15 @@ pub(crate) fn after_step(loader: &Loader) {
 #[cold]
 fn settle(loader: &Loader) {
     let Some(layout) = layout(loader) else {
-        PENDING.store(false, Ordering::Release);
+        STATE.pending.store(false, Ordering::Release);
         return;
     };
     let mut bytes = vec![0u8; layout.size];
     if read(loader, &mut bytes).is_err() {
         return;
     }
-    PENDING.store(false, Ordering::Release);
-    let mut kept = KEPT.relock();
+    STATE.pending.store(false, Ordering::Release);
+    let mut kept = STATE.kept.relock();
     kept.loaded = Some(bytes.clone());
     if kept.fields.is_empty() {
         return;
@@ -448,7 +471,7 @@ pub(crate) fn keep(loader: &Loader, data: &[u8], mask: &[u8]) -> Result<(), Stat
     if mask.len() != data.len() {
         return Err(Status::BAD_ARGS);
     }
-    let mut kept = KEPT.relock();
+    let mut kept = STATE.kept.relock();
     let key = kept.key.clone().ok_or(Status::MISSING)?;
     write(loader, data)?;
     let fields = masked(layout, data, mask);
@@ -460,11 +483,17 @@ pub(crate) fn keep(loader: &Loader, data: &[u8], mask: &[u8]) -> Result<(), Stat
     Ok(())
 }
 
+/// Drops the kept fields of a hosted game that ended, whether or not its
+/// shutdown was seen; the file keeps them for the world's next load.
+pub(crate) fn forget_world() {
+    STATE.forget();
+}
+
 /// Forgets the running world's kept fields and puts back the values it
 /// loaded with.
 pub(crate) fn forget(loader: &Loader) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let mut kept = KEPT.relock();
+    let mut kept = STATE.kept.relock();
     let key = kept.key.clone().ok_or(Status::MISSING)?;
     if kept.fields.is_empty() {
         return Ok(());
@@ -561,5 +590,20 @@ mod tests {
         assert_eq!(unhex(&hex(&[0, 0x80, 0x3f])), Some(vec![0, 0x80, 0x3f]));
         assert_eq!(unhex("abc"), None);
         assert_eq!(unhex("zz"), None);
+    }
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_its_kept_fields_and_first_step() {
+        let state = State::new();
+        *state.kept.relock() = Kept {
+            key: Some("world".to_owned()),
+            fields: BTreeMap::from([("a".to_owned(), vec![1])]),
+            loaded: Some(vec![0; 4]),
+        };
+        state.pending.store(true, Ordering::Release);
+        state.forget();
+        assert!(!state.pending.load(Ordering::Acquire));
+        let kept = state.kept.relock();
+        assert!(kept.key.is_none() && kept.fields.is_empty() && kept.loaded.is_none());
     }
 }
