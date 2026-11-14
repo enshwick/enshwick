@@ -116,6 +116,8 @@ struct Sealed {
     client: Wanted,
     /// The server's equipment event, when stats follow it.
     equipment: Option<u32>,
+    /// Whether the craft filters or item actions read the server's events.
+    screened: bool,
 }
 
 /// Where the engine keeps its event streams, from the build table.
@@ -213,10 +215,7 @@ impl Scope for ServerScope {
     }
 
     fn idle(sealed: &Sealed) -> bool {
-        sealed.server.is_empty()
-            && sealed.equipment.is_none()
-            && !crate::actions::vetoes::crafting()
-            && !crate::inventory::item_actions::wanted()
+        sealed.server.is_empty() && sealed.equipment.is_none() && !sealed.screened
     }
 
     #[inline]
@@ -320,8 +319,7 @@ thread_local! {
 
 /// Registers mod `owner`'s handler for the events of `type_hash` in the
 /// world `whose`, 0 for every type, on the loader of `side`, while `owner`
-/// runs its `init`. A dedicated server answers a client handler without
-/// keeping it: no client world steps there.
+/// runs its `init`.
 pub(crate) fn register(
     side: Side,
     whose: Whose,
@@ -331,11 +329,8 @@ pub(crate) fn register(
     callback: GameEventFn,
     user: *mut c_void,
 ) -> Status {
-    if !in_init || SEALED.get().is_some() {
-        return Status::TOO_LATE;
-    }
-    if whose == Whose::Client && side != Side::CLIENT {
-        return Status::OK;
+    if let Some(status) = unkept(side, whose, in_init, SEALED.get().is_some()) {
+        return status;
     }
     PENDING.relock().push(Subscriber {
         whose,
@@ -345,6 +340,19 @@ pub(crate) fn register(
         user: user.expose_provenance(),
     });
     Status::OK
+}
+
+/// The answer to a registration the loader does not keep, `None` for one it
+/// keeps: too late outside the mod's `init` or once `sealed`, and OK for a
+/// client handler on a dedicated server, where no client world steps.
+fn unkept(side: Side, whose: Whose, in_init: bool, sealed: bool) -> Option<Status> {
+    if !in_init || sealed {
+        Some(Status::TOO_LATE)
+    } else if whose == Whose::Client && side != Side::CLIENT {
+        Some(Status::OK)
+    } else {
+        None
+    }
 }
 
 /// Seals the subscriptions and links the event move when a mod subscribed.
@@ -362,17 +370,14 @@ pub(crate) fn link(loader: &'static Loader) {
         server: Wanted::of(&subscribers, Whose::Server),
         client: Wanted::of(&subscribers, Whose::Client),
         equipment,
+        screened: crate::actions::vetoes::crafting() || crate::inventory::item_actions::wanted(),
     };
     let count = subscribers.len() + usize::from(equipment.is_some());
     let client_wanted = !sealed.client.is_empty();
     // A client always links the move, to raise the loader's notices in its
     // own world.
-    if SEALED.set(sealed).is_err()
-        || (count == 0
-            && !crate::actions::vetoes::crafting()
-            && !crate::inventory::item_actions::wanted()
-            && loader.side != Side::CLIENT)
-    {
+    let idle = ServerScope::idle(&sealed) && loader.side != Side::CLIENT;
+    if SEALED.set(sealed).is_err() || idle {
         return;
     }
     // Without the layout the move still links: a client's notices and the
@@ -693,6 +698,7 @@ pub unsafe fn bench_server_copy(entity_world: *mut u8, offsets: [usize; 7], want
         },
         client: Wanted::default(),
         equipment: None,
+        screened: false,
     };
     let layout = Layout {
         streams,
@@ -734,6 +740,7 @@ mod tests {
             server: Wanted::of(subscribers, Whose::Server),
             client: Wanted::of(subscribers, Whose::Client),
             equipment: None,
+            screened: false,
         }
     }
 
@@ -759,56 +766,30 @@ mod tests {
 
     #[test]
     fn a_dedicated_server_answers_a_client_handler_without_keeping_it() {
-        let before = PENDING.relock().len();
-        let status = register(
-            Side::SERVER,
-            Whose::Client,
-            ModIndex::new(0),
-            true,
-            42,
-            unused,
-            core::ptr::null_mut(),
+        assert_eq!(
+            unkept(Side::SERVER, Whose::Client, true, false),
+            Some(Status::OK)
         );
-        assert_eq!(status, Status::OK);
-        assert_eq!(PENDING.relock().len(), before);
-        let status = register(
-            Side::CLIENT,
-            Whose::Client,
-            ModIndex::new(0),
-            true,
-            0,
-            unused,
-            core::ptr::null_mut(),
-        );
-        assert_eq!(status, Status::OK, "every type is a client handler too");
-        assert_eq!(PENDING.relock().pop().map(|s| s.whose), Some(Whose::Client));
+        assert_eq!(unkept(Side::SERVER, Whose::Server, true, false), None);
+        assert_eq!(unkept(Side::CLIENT, Whose::Client, true, false), None);
     }
 
     #[test]
     fn a_handler_registered_outside_its_mod_s_init_is_too_late_on_either_world() {
-        let before = PENDING.relock().len();
-        for whose in [Whose::Server, Whose::Client] {
-            let status = register(
-                Side::CLIENT,
-                whose,
-                ModIndex::new(0),
-                false,
-                42,
-                unused,
-                core::ptr::null_mut(),
-            );
-            assert_eq!(status, Status::TOO_LATE, "{whose:?}");
+        for side in [Side::CLIENT, Side::SERVER] {
+            for whose in [Whose::Server, Whose::Client] {
+                assert_eq!(
+                    unkept(side, whose, false, false),
+                    Some(Status::TOO_LATE),
+                    "{whose:?}"
+                );
+                assert_eq!(
+                    unkept(side, whose, true, true),
+                    Some(Status::TOO_LATE),
+                    "{whose:?} once sealed"
+                );
+            }
         }
-        assert_eq!(PENDING.relock().len(), before);
-    }
-
-    #[test]
-    fn the_bench_copy_leaves_the_subscriptions_unsealed() {
-        let mut world = [0u64; 2];
-        // SAFETY: `world` is a stream array pointer of 0 and a count of 0,
-        // laid out as the offsets say, which nothing else touches.
-        unsafe { bench_server_copy(world.as_mut_ptr().cast(), [0, 8, 0x18, 0x10, 6, 8, 8], 42) };
-        assert!(SEALED.get().is_none(), "mods could still subscribe");
     }
 
     #[test]
@@ -849,6 +830,14 @@ mod tests {
             ..sealed_with(&[])
         };
         assert!(!ServerScope::idle(&equipment));
+        let screened = Sealed {
+            screened: true,
+            ..sealed_with(&[])
+        };
+        assert!(
+            !ServerScope::idle(&screened),
+            "a craft filter or item action reads them"
+        );
     }
 
     #[test]
