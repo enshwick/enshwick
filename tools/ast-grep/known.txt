@@ -46,10 +46,6 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.r
 # The survivor a staff moves, runtime state; it moves into the survivors'
 # state struct.
 static-is-registry-fuse-or-state crates/runtime/loader/src/inventory/survivors.rs static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
-# The UI demo's answer, HUD samples and position, a developer tool's
-# state; they move into the thread-local `Demo` or one demo state struct.
-# The dialogs shown, UI state; they move into one dialog state struct with
-# `MODE` and `WAITING`.
 # The files the loader wrote itself, the watcher's state; they move into
 # the watcher's state struct.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/watch.rs static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());

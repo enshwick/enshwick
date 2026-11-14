@@ -16,7 +16,7 @@ use crate::engine::pinned;
 use crate::engine::registry::Registry;
 
 pub(crate) mod carried;
-mod demo;
+pub(crate) mod demo;
 mod dialog;
 mod engine;
 mod extensions;
@@ -272,6 +272,7 @@ fn next_token() -> u64 {
 pub(crate) fn forget(_loader: &'static Loader) {
     demo::forget();
 }
+
 // Each of the loader's windows turns off at its first panic: a panic
 // between a window's begin and end would leave the game's window stack
 // unbalanced every frame.

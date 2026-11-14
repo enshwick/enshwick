@@ -16,11 +16,12 @@ use enshwick_base::Relock;
 use super::engine::{Engine, Window};
 use super::{Painter, Widgets};
 
-/// What the demo's threads hand each other: the server's chat thread, the
-/// dialog's answer and the interface's frames.
+/// What other threads hand the interface's frames: the server's chat thread
+/// a request to open, the dialog's thread its answer.
 #[derive(Debug)]
 struct State {
-    /// Asked to open, from the thread that takes the server's chat.
+    /// Asked to open: read without the lock each frame, set and cleared
+    /// only under it, so a request and its place change together.
     open: AtomicBool,
     shared: Mutex<Shared>,
 }
@@ -31,37 +32,17 @@ struct Shared {
     /// Where the administrator stood when they asked, in 32.32 fixed-point
     /// metres.
     at: Option<[i64; 3]>,
-    /// The HUD samples show, and how full their bar is, for the HUD's frame.
-    hud_samples: Option<f32>,
     /// The answer to the demo's dialog, waiting for the thread that draws.
     answer: Option<&'static str>,
 }
 
-impl State {
-    const fn new() -> Self {
-        Self {
-            open: AtomicBool::new(false),
-            shared: Mutex::new(Shared {
-                at: None,
-                hud_samples: None,
-                answer: None,
-            }),
-        }
-    }
-
-    /// Forgets the request of a world that went: an open not drawn yet, the
-    /// administrator's place in it, the HUD samples and an unread answer.
-    /// A demo window already open stays, without its marker toggle.
-    fn forget(&self) {
-        self.open.store(false, Ordering::Release);
-        let mut shared = self.shared.relock();
-        shared.at = None;
-        shared.hud_samples = None;
-        shared.answer = None;
-    }
-}
-
-static STATE: State = State::new();
+static STATE: State = State {
+    open: AtomicBool::new(false),
+    shared: Mutex::new(Shared {
+        at: None,
+        answer: None,
+    }),
+};
 
 /// The demo's widget state.
 struct Demo {
@@ -73,6 +54,8 @@ struct Demo {
     answer: Option<&'static str>,
     hud: bool,
     marker: bool,
+    /// Where the administrator stood when they opened this demo.
+    at: Option<[i64; 3]>,
     window: Window,
 }
 
@@ -82,19 +65,74 @@ thread_local! {
 
 /// Opens the demo at its next frame; `at` is where the administrator stood.
 pub(crate) fn open(at: Option<[i64; 3]>) {
-    STATE.shared.relock().at = at;
+    let mut shared = STATE.shared.relock();
+    shared.at = at;
     STATE.open.store(true, Ordering::Release);
 }
 
-/// Forgets the demo's request, as a hosted game's end does.
-pub(super) fn forget() {
-    STATE.forget();
+/// Forgets a request to open that no frame drew yet, with the place it was
+/// asked from, when the client changes servers or a hosted game ends; an
+/// open demo keeps its own place and marker toggle.
+pub(crate) fn forget() {
+    let mut shared = STATE.shared.relock();
+    STATE.open.store(false, Ordering::Release);
+    shared.at = None;
+}
+
+/// A request to open the demo that a frame took.
+#[derive(Debug, PartialEq, Eq)]
+struct Opening {
+    /// Where the administrator stood when they asked.
+    at: Option<[i64; 3]>,
+}
+
+/// Takes a request to open with its place, dropping an answer meant for an
+/// earlier demo's dialog.
+fn take_open() -> Option<Opening> {
+    if !STATE.open.load(Ordering::Acquire) {
+        return None;
+    }
+    let mut shared = STATE.shared.relock();
+    if !STATE.open.swap(false, Ordering::AcqRel) {
+        return None;
+    }
+    shared.answer = None;
+    Some(Opening {
+        at: shared.at.take(),
+    })
+}
+
+/// Starts a fresh demo at `at`; true when the demo it replaced had its map
+/// marker on, which the caller then clears.
+fn start(at: Option<[i64; 3]>) -> bool {
+    let old = DEMO.replace(Some(Demo {
+        page: 0,
+        on: true,
+        stops: 5.0,
+        smooth: 0.25,
+        pick: 0,
+        answer: None,
+        hud: false,
+        marker: false,
+        at,
+        window: Window::new(),
+    }));
+    old.is_some_and(|old| old.marker)
 }
 
 /// The HUD samples while they show, for the HUD's frame: a label at the top
 /// right, a bar under it, and a label at the bottom left.
 pub(super) fn hud_samples(items: &mut Vec<super::HudItem>) {
-    let Some(fill) = STATE.shared.relock().hud_samples else {
+    // The HUD draws under its own fuse: a demo turned off by a panic must not
+    // leave its samples on the HUD.
+    if super::DEMO_FUSE.is_off() {
+        return;
+    }
+    let Some(fill) = DEMO.with_borrow(|demo| {
+        demo.as_ref()
+            .filter(|demo| demo.hud)
+            .map(|demo| demo.smooth)
+    }) else {
         return;
     };
     let label = |anchor: u32, key: &str, style: u32| super::HudItem {
@@ -168,18 +206,10 @@ fn answer_key(name: &str) -> &'static str {
 /// - `context` is the non-zero context `Engine::context` read in this frame.
 /// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize) {
-    if STATE.open.swap(false, Ordering::AcqRel) {
-        DEMO.set(Some(Demo {
-            page: 0,
-            on: true,
-            stops: 5.0,
-            smooth: 0.25,
-            pick: 0,
-            answer: None,
-            hud: false,
-            marker: false,
-            window: Window::new(),
-        }));
+    if let Some(opening) = take_open() {
+        if start(opening.at) {
+            let _cleared = super::map::set(ModIndex::LOADER, &[]);
+        }
         crate::log!(INFO, "interface: the demo opened");
     }
     DEMO.with_borrow_mut(|slot| {
@@ -192,7 +222,6 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window, which `page` asks for.
         let close = unsafe { page(engine, context, demo) };
-        STATE.shared.relock().hud_samples = (demo.hud && !close).then_some(demo.smooth);
         if close {
             if demo.marker {
                 let _cleared = super::map::set(ModIndex::LOADER, &[]);
@@ -343,8 +372,7 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
     if let Some(on) = paint.toggle(words("demo.hud.show").as_bytes(), demo.hud, false) {
         demo.hud = on;
     }
-    let at = STATE.shared.relock().at;
-    let Some(position) = at else {
+    let Some(position) = demo.at else {
         paint.label(
             words("demo.marker.none").as_bytes(),
             UiWidget::STYLE_WARNING,
@@ -427,6 +455,9 @@ fn buttons_page(paint: &Painter<'_>, demo: &Demo) {
 mod tests {
     use super::*;
 
+    /// One test at a time on the demo's process-wide request.
+    static SHARED: Mutex<()> = Mutex::new(());
+
     #[test]
     fn answers_are_named() {
         assert_eq!(answer_name(Some(UiDialog::OK)), "OK");
@@ -435,24 +466,62 @@ mod tests {
     }
 
     #[test]
-    fn a_hosted_games_end_forgets_the_demos_request_and_answer() {
+    fn a_hosted_games_end_forgets_the_demos_request_and_its_place() {
+        let _shared = SHARED.relock();
         open(Some([1, 2, 3]));
-        {
-            let mut shared = STATE.shared.relock();
-            shared.hud_samples = Some(0.5);
-            shared.answer = Some("OK");
-        }
         let loader: &'static crate::engine::loader::Loader =
             Box::leak(Box::new(crate::start::tests::bare_loader()));
         crate::engine::parts::Part::forget_in(crate::ui::PARTS, "ui", loader);
-        assert!(
-            !STATE.open.load(Ordering::Acquire),
-            "no open is left to draw"
+        assert_eq!(take_open(), None, "no open is left to draw");
+        assert_eq!(
+            STATE.shared.relock().at,
+            None,
+            "the old world's place went with it"
         );
-        let shared = STATE.shared.relock();
-        assert_eq!(shared.at, None, "the old world's place went with it");
-        assert_eq!(shared.hud_samples, None);
-        assert_eq!(shared.answer, None);
+    }
+
+    #[test]
+    fn joining_another_server_forgets_the_demos_request_and_its_place() {
+        let _shared = SHARED.relock();
+        open(Some([1, 2, 3]));
+        crate::base::net::joining(false);
+        assert_eq!(take_open(), None, "no open is left to draw");
+        assert_eq!(
+            STATE.shared.relock().at,
+            None,
+            "the old server's place went with it"
+        );
+    }
+
+    #[test]
+    fn a_new_demo_takes_its_place_and_drops_an_earlier_demos_answer() {
+        let _shared = SHARED.relock();
+        STATE.shared.relock().answer = Some("OK");
+        open(Some([4, 5, 6]));
+        assert_eq!(
+            take_open(),
+            Some(Opening {
+                at: Some([4, 5, 6])
+            })
+        );
+        assert_eq!(
+            STATE.shared.relock().answer,
+            None,
+            "the old answer is not shown"
+        );
+        assert_eq!(take_open(), None, "a request opens one demo");
+    }
+
+    #[test]
+    fn a_new_demo_over_one_with_its_marker_on_asks_to_clear_the_marker() {
+        assert!(!start(Some([1, 2, 3])), "no demo was open");
+        DEMO.with_borrow_mut(|demo| demo.as_mut().map(|demo| demo.marker = true));
+        assert!(start(None), "the old demo's marker is cleared");
+        assert!(
+            DEMO.with_borrow(|demo| demo.as_ref().is_some_and(|d| !d.marker && d.at.is_none())),
+            "the new demo has no marker and no place"
+        );
+        DEMO.set(None);
     }
 
     #[test]
