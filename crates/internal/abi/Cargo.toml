@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-abi"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 description = "Internal part of enshwick; depend on enshwick: the binary interface between the loader and a mod"
 keywords = ["enshrouded", "modding", "game", "ffi"]
 categories = ["game-development"]

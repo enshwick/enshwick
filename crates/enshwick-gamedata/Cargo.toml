@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-gamedata"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 description = "Shared game data for the Enshwick loader and its tools, not a dependency of a mod: the anchors and engine routes the Enshwick loader finds its entries by on every game build, and the reader of the engine's reflection data"
 keywords = ["enshrouded", "modding", "address-library", "reflection"]
 categories = ["game-development"]

@@ -36,24 +36,24 @@ aho-corasick = { version = "1.1.5", default-features = false, features = ["std",
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
 cbindgen = { version = "0.29.4", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }
-enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.14" }
-enshwick-luau = { path = "crates/runtime/luau", version = "=1.0.0-alpha.14" }
-enshwick-loader-start = { path = "crates/runtime/start", version = "=1.0.0-alpha.14" }
-enshwick-abi = { path = "crates/internal/abi", version = "=1.0.0-alpha.14" }
-enshwick-base = { path = "crates/internal/base", version = "=1.0.0-alpha.14" }
-enshwick-content = { path = "crates/internal/content", version = "=1.0.0-alpha.14" }
-enshwick-world = { path = "crates/internal/world", version = "=1.0.0-alpha.14" }
-enshwick-inventory = { path = "crates/internal/inventory", version = "=1.0.0-alpha.14" }
-enshwick-knowledge = { path = "crates/internal/knowledge", version = "=1.0.0-alpha.14" }
-enshwick-actions = { path = "crates/internal/actions", version = "=1.0.0-alpha.14" }
-enshwick-ui = { path = "crates/internal/ui", version = "=1.0.0-alpha.14" }
-enshwick-packs = { path = "crates/internal/packs", version = "=1.0.0-alpha.14" }
-enshwick-core = { path = "crates/internal/core", version = "=1.0.0-alpha.14" }
-enshwick-fake = { path = "crates/internal/fake", version = "=1.0.0-alpha.14" }
-enshwick-values = { path = "crates/internal/values", version = "=1.0.0-alpha.14" }
-enshwick-typed = { path = "crates/internal/typed", version = "=1.0.0-alpha.14" }
-enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "=1.0.0-alpha.14" }
-cargo-enshwick = { path = "crates/cargo-enshwick", version = "=1.0.0-alpha.14", default-features = false }
+enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.15" }
+enshwick-luau = { path = "crates/runtime/luau", version = "=1.0.0-alpha.15" }
+enshwick-loader-start = { path = "crates/runtime/start", version = "=1.0.0-alpha.15" }
+enshwick-abi = { path = "crates/internal/abi", version = "=1.0.0-alpha.15" }
+enshwick-base = { path = "crates/internal/base", version = "=1.0.0-alpha.15" }
+enshwick-content = { path = "crates/internal/content", version = "=1.0.0-alpha.15" }
+enshwick-world = { path = "crates/internal/world", version = "=1.0.0-alpha.15" }
+enshwick-inventory = { path = "crates/internal/inventory", version = "=1.0.0-alpha.15" }
+enshwick-knowledge = { path = "crates/internal/knowledge", version = "=1.0.0-alpha.15" }
+enshwick-actions = { path = "crates/internal/actions", version = "=1.0.0-alpha.15" }
+enshwick-ui = { path = "crates/internal/ui", version = "=1.0.0-alpha.15" }
+enshwick-packs = { path = "crates/internal/packs", version = "=1.0.0-alpha.15" }
+enshwick-core = { path = "crates/internal/core", version = "=1.0.0-alpha.15" }
+enshwick-fake = { path = "crates/internal/fake", version = "=1.0.0-alpha.15" }
+enshwick-values = { path = "crates/internal/values", version = "=1.0.0-alpha.15" }
+enshwick-typed = { path = "crates/internal/typed", version = "=1.0.0-alpha.15" }
+enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "=1.0.0-alpha.15" }
+cargo-enshwick = { path = "crates/cargo-enshwick", version = "=1.0.0-alpha.15", default-features = false }
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 insta = { version = "1.49.0", default-features = false }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }

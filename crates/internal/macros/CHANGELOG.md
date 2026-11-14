@@ -6,6 +6,24 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.15] - 2026-11-14
+
+### Added
+
+- Every attribute and derive macro takes the hidden argument
+  `crate = "path"`, which names the crate its expansion reaches in place of
+  `::enshwick`, for the API's internal crates (#1044).
+
+### Fixed
+
+- `derive(Script)` badges the impls it writes in the API's own crates with
+  the `unstable` feature when they build with `--cfg enshwick_docs`; a mod's
+  crate gets no badge (#1077).
+- `#[hook]` catches its body's panic through `host::caught`, so a panic
+  whose payload panics again on drop no longer reaches the game (#1075).
+- `#[hook]` and `detour!` run their body through one helper, so both keep
+  the same panic policy (#1075).
+
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Changed

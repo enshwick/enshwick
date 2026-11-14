@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-values"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 description = "Internal part of enshwick; depend on enshwick: the value types its layers share"
 keywords = ["enshrouded", "modding", "game"]
 categories = ["game-development"]
@@ -13,7 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.15" }
 const-sha1.workspace = true
 const_format.workspace = true
 rustc-hash.workspace = true

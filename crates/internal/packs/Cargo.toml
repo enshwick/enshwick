@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-packs"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 description = "Internal part of enshwick; depend on enshwick: data packs"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]

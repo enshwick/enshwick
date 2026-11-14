@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-typed"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 description = "Internal part of enshwick; depend on enshwick: the game's reflected types as generated Rust items"
 keywords = ["enshrouded", "modding", "game"]
 categories = ["game-development"]

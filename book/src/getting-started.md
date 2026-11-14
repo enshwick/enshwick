@@ -25,14 +25,14 @@ the tool of this alpha downloads in seconds:
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
-cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.14
+cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.15
 ```
 
 Without cargo-binstall, Cargo builds the tool from source in a few
 minutes:
 
 ```bash
-cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.14 cargo-enshwick
+cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.15 cargo-enshwick
 ```
 
 The tool says when a newer release of itself is out, at most once a day.

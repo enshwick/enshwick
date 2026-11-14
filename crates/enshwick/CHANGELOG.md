@@ -6,6 +6,590 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.15] - 2026-11-14
+
+### Added
+
+- `Load::on_every_client_raw_game_event`, and in Luau
+  `enshwick.on_client_game_type`, for the events of the client's own world
+  (#1081).
+- Observe client-world events through raw or generated typed handlers, without claiming persistent UI selection state (#1078).
+- Append ABI 11.28 client subscriptions and model their independent delivery and per-mod limits in the fake host (#1078).
+- Copy client events under a separate loader batch and fuse with bounded copying and traversal (#1078).
+- `world`: `World::set_level`, `set_experience` and `add_experience` write
+  a player's level and experience in the server's next level step, as the
+  game raises levels: a set level starts empty with what the game asks of
+  it and raises no level-up event, given experience levels up as a kill's
+  does, and skill points follow the level; Luau `enshwick.world` (#1036).
+- `world`: `World::revive` stands a dead character up where it lies with
+  the health asked, kept between 1 and its maximum; a living character is
+  refused (#1036).
+- `effects`: `Effects::drop_items` drops a stack of new items on the
+  ground as one pickup any player can take, with a level and a rarity
+  (`ItemDrop`); Luau `enshwick.effects.drop_items` (#1036).
+- `abi`: `HostApi::progress_write` and `HostApi::drop_items`, ABI 11.24,
+  with `DropRequest` and the `PROGRESS_*` values (#1036).
+- `test`: `Installed::progress_writes` and `Installed::drops` list the
+  writes and drops a mod asked the fake host for (#1036).
+- `actions`: `Arg::item` and `Value::Item`. A window lists the game's
+  vanilla items by the names the player's own game shows, with a search,
+  and sends the picked item's GUID; a name several items share is followed
+  by each one's debug name. A typed line takes a debug name, GUID, content
+  id or shown name. The server refuses an item its game does not know before
+  the handler runs. Luau `enshwick.actions.item` (#1033).
+- `actions`: a window opens an optional argument's field with its default
+  and runs while only optional fields are empty, and shows an action's
+  group over it. The sheet carries both in new line kinds, which an older
+  client skips (`Entry::group`, `ArgView::default`) (#1033).
+- `content`: `Vanilla::items` lists the items with their name tags and
+  reads each tag once; `vanilla::items` no longer reads the archive on each
+  call, and an item registry that does not read yet is read again later
+  (#1033).
+- book: the ABI test coverage chapter lists how each `HostApi` entry is
+  tested on the fake host, on a server copy and in game; a test fails when
+  an entry is missing from it (#1035).
+- `abi`: `HostApi::resource_buffer`, ABI 11.20, lends a resource patch
+  bytes for its output that the loader owns: the game's first build keeps
+  the last patch's output for the process, and the loader frees every other
+  output. `ResourcePatchFn` still takes bytes of the patch's own, which stay
+  for the process (#1006).
+- `test`: `Installed::kept_outputs` counts the patch outputs the fake host
+  got as a patch's own bytes rather than in a buffer it lent (#1006).
+- `quests`: `Load::quests` reads every quest and lore page of the journal
+  as the game built it, mods' included, with their steps, queries and
+  rewards (`Quests::all`, `quest`, `pages`), and where a player or the
+  world stands in each quest (`Quests::state`, `world_state`); Luau
+  `enshwick.quests` (#1015).
+- `abi`: `HostApi::game_query`, ABI 11.21, answers whether one of the
+  game's queries holds for a player or the world, as the game reads it
+  when it pays a quest (#1015).
+- `content`: `KnowledgeTest::Equals`, `Below`, `HasFlag`, `Holds` and
+  `Fails`, `KnowledgeQuery::not` and `KnowledgeQuery::game` with
+  `GameQuery`, so a step, page or skill node tests a count exactly, below
+  a count, any of a set of flags, or one of the game's queries;
+  `KnowledgeTest::Unknown` marks a form enshwick does not read, and a
+  quest step reads as unknown when its knowledge cannot be read (#1015).
+- `test`: `Installed::set_game_queries` sets the fake host's answers to
+  game queries (#1015).
+- `actions`: `Actions::show` and `Actions::close` show, update and close a
+  `Window` of lines, rows with buttons (`Row`) and whole actions on
+  players' clients, where the loader draws it with the game's widgets, so
+  a mod of side server needs only Enshwick on the client. The server
+  renders it for each player in their language, only for players who may
+  run every action it names, in hosted and single-player games as on a
+  dedicated server. Each player keeps the window shown to them, so two
+  players may hold different windows under one id; Luau `actions:show` and
+  `actions:close` (#1022).
+- `actions`: `Arg::text` and `Value::Text`, a line of free text of at most
+  `MAX_TEXT` (256) bytes without control characters. A console or command
+  line gives the last text argument the rest of the line and an earlier
+  one a word or a quoted run; Luau `enshwick.actions.text` (#1022).
+- `actions`: `Action::known` names up to `MAX_KNOWN` accounts a mod knows
+  while they are offline, so player arguments and lists offer them and a
+  typed name finds them; Luau `known` (#1022).
+- `abi`: `HostApi::action_window` and `ActionCall::WINDOW`, ABI 11.22,
+  show or close a mod's window on players' clients and ask the mod for it
+  as each player sees it (#1022).
+- `test`: `Installed::carried_windows` reads the windows a player's client
+  holds after the mod's shows and closes (#1022).
+- `actions`: `Action::group` names the group an action's line stands
+  under in the help of a typed line, and `help <action>` answers an
+  action's usage and the text of `Action::help`; Luau `group` (#1027).
+- `actions`: `Arg::optional(default)` lets a typed line leave out the last
+  arguments of an action, each taking its default. A text or a player
+  before them takes the rest of the line up to the words that read as the
+  optional arguments, so `give Ann Stone Axe` gives one and
+  `give Ann Stone Axe 5` gives five; the help shows such an argument in
+  square brackets, and a run from the interface that leaves values out at
+  the end takes the defaults too; Luau `arg:optional(value)` (#1027).
+- `actions`: `Action::with_self` offers the player who looks at an action
+  among its players, first in a list and in a player argument's picker;
+  Luau `with_self` (#1027).
+- `actions`: `Actions::update` puts a window in place of the one of its id
+  only on the clients that still show it and opens it for no one, and
+  `Actions::on_closed` tells the mod when a client closed a window, let
+  its oldest go for a ninth, or its player left, and when a window closed
+  there because it rendered nothing for the player; the mod forgets such a
+  window by itself; Luau
+  `actions:update` and `actions:on_closed` (#1027).
+- `abi`: ABI 11.23. `ActionCall::word` is the word that named the mod in a
+  typed line, so its help and refusals name the command as typed;
+  `ActionCall::WINDOW_CLOSED` tells a mod that a client closed its window
+  or a player left; `HostApi::action_window` takes 2 as `close`
+  (`WINDOW_UPDATE`, beside `WINDOW_SHOW` and `WINDOW_CLOSE`) for an update
+  only where the window shows, which a loader before it answers with
+  `Status::BAD_ARGS` (#1027).
+- `content`: `vanilla::item_by_display_name` finds a vanilla item by the
+  name the game shows, in any language it ships and whatever the case,
+  with the names that look like it when none matches; `vanilla::items`
+  lists every item with its debug name and the tag of its shown name, and
+  `vanilla::recipes` every recipe with its debug name and the item it
+  makes; Luau `enshwick.content.item_by_display_name`, `items` and
+  `recipes`. The names come from the game's texts, which only a client's
+  archive holds: the lookup answers `Unreadable` on a dedicated server
+  (#1027).
+- `test`: `FakeHost::later_mod_commands` adds a mod loaded after the one
+  under test, `FakeHost::vanilla_item_names` gives vanilla items the tags
+  of their names, and `Installed::close_window` and
+  `Installed::player_left` close a window as a client does and make a
+  player leave (#1027).
+- `inventory`: `Inventories::give_what_fits` gives as many of a count of
+  items as the inventory has room for and tells the caller how many were
+  not given and the request's outcome, for a mod that gives its own
+  quest's items on `QuestCompleted`;
+  Luau `enshwick.inventory.give_what_fits` (#1028).
+- `content`: `journal::lore_category` names the game's 13 lore categories
+  by their cards' texts, for `NewJournalPage::category`; behind the
+  `unstable` feature until a mod's page is seen on its card (#1028).
+- `test`: `LORE_CATEGORY`, the category of the fake journal's one lore
+  page; `FakeHost::inventory_requests`, the inventory preset with what a
+  request needs to run (#1028).
+- `abi`: `HostApi::language_of`, ABI 11.27 (#1067).
+- Loader: the server gives each player's language, as their game named it
+  when they joined, to `HostApi::language_of` (#1067).
+- Loader: `i18n::language()` gives the language of the player whose
+  character placed or removed the building while a mod handles
+  `BuildingPlaced` or `BuildingRemoved` (#1067).
+- `test`: `FakeHost::player_language`, read by `World::language_of` and by
+  a building event of that player's character (#1067).
+- `test`: `FakeHost::pack` names a data pack's side, by which the fake
+  refuses the pack's rates, live changes, crafting props and net channels
+  as the loader does; a handle neither the mod's nor named counts as a
+  pack of side server (#1067).
+- `abi`: `HostApi::config_set`, `server_stop`, `fog_uncover` and
+  `content_name`, ABI 11.26 (#1068).
+- Loader: a mod writes a value of its own world settings, a secret too,
+  through the console's checks; the log never shows a secret's value
+  (#1068).
+- Loader: a mod stops a dedicated server through the game's own Ctrl+C
+  path, found by the engine route `server.console_handler` on every kept
+  server build (#1068).
+- Loader: the server sends a circle of a player's fog of war to uncover to
+  the loader on the player's client, which hands it to the game's reveal
+  (#1068).
+- Loader: the item picker of an action's item argument lists the items
+  mods serve, by the names their texts give (#1068).
+- `test`: `FakeHost::declared_content`, `Installed::settings_text`,
+  `Installed::stop_asked` and `Installed::fog_uncovers` (#1068).
+- `abi`: `Event::PROGRESS_WRITTEN` and `ProgressWriteData`, ABI 11.25.
+  After the level step, the mod that asked for a level or experience write
+  hears whether it was applied, with the level and experience it left, or
+  why it was dropped (#1064).
+- Loader: error code E1010 names a loader feature that turned itself off
+  while the game ran; the log line, the status summary and the Mods screen
+  name the feature (#1062).
+
+### Changed
+
+- `Load::on_client_raw_game_event` and `EventType::on_client` need the
+  `unstable` feature (#1081).
+- A client game event subscription takes 0 for every type and has no cap per
+  mod (#1081).
+- **Breaking:** internals that were public only for the API's own crates
+  are out of a mod's reach: `Host::install`, `Host::scope`,
+  `schedule::Scheduler::get` and `run_due`, `ecs::ComponentType::read` and
+  `game_events::CraftRecipeEvent::new`. They were hidden and never part of
+  the API (#1047).
+- A misspelt name gets its suggestions by one rule in a data pack's
+  problems, a vanilla lookup and the loader's recipe file: names that start
+  with what was typed, then names that hold it, then names within a third
+  of its length in edits, at least one, ignoring case, five at most (#1047).
+- The loader, `enshwick-gamedata` and the API take locks under one poison
+  policy, `enshwick-base`'s; the loader writes a poisoned lock's place to
+  its own log as before (#1047).
+- The crates behind the facade, the macros among them, sit in
+  `crates/internal/`, and the loader, its stub and the Luau runtime in
+  `crates/runtime/`; package names stay (#1047).
+- **Breaking:** the API's functions outside `Load` that took the mod's
+  loader take `&impl Loading` or `&mut impl Loading`, which `Load`
+  implements, so a mod passes its `Load` as before: `ecs::Ecs::resolve`,
+  `ComponentType::resolve`, `Components::resolve`, `Worlds::resolve`,
+  `Attributes::resolve`, `game_events::EventType::field` and
+  `inherited_field`, `config::TableConfig::on_change` and
+  `script::GameEventKind::subscribe`. `Loading` is new, sealed, at the root
+  (#1046).
+- The world domain (`world`, `map`, `altars`, `buffs`, `daytime`,
+  `game_settings`, `terrain`, `voxels`, `weather`, `WorldError` and the
+  typed handles of `typed`) is the internal crate `enshwick-world`, between
+  `enshwick-content` and `enshwick-core`; every path stays (#1050).
+- **Breaking:** the world domain's functions outside `Load` that took the
+  mod's loader take `&impl Loading` or `&mut impl Loading`, so a mod passes
+  its `Load` as before: `world::WritableType::resolve` and `field`, and
+  `resolve`, `on` and `serve` of `typed::ComponentType`, `EventType` and
+  `ResourceType` (#1050).
+- The inventory domain (`inventory`, `items`, `item_data`, `entity_data`,
+  `affixes`, `stats`, `damage`, `effects`, `survivors` and `loot`) is the
+  internal crate `enshwick-inventory`, between `enshwick-world` and
+  `enshwick-core`; every path stays (#1052).
+- **Breaking:** `loot::Containers::resolve` takes `&mut impl Loading`, so a
+  mod passes its `Load` as before (#1052).
+- The ui domain (`ui` and `sound`) is the internal crate `enshwick-ui`,
+  between `enshwick-actions` and `enshwick-core`, and the packs domain
+  (`packs`) the internal crate `enshwick-packs` above it; `enshwick-core`
+  keeps only `Load` and the script binding's namespace lists, and every
+  path stays (#1055).
+- The actions domain (`actions`, `chat`, `commands`, `console`,
+  `controls`, `input`, `interactions` and `vetoes`) is the internal crate
+  `enshwick-actions`, between `enshwick-knowledge` and `enshwick-core`;
+  every path stays (#1054).
+- The knowledge domain (`knowledge`, `progress`, `quests` and `rewards`) is
+  the internal crate `enshwick-knowledge`, between `enshwick-inventory` and
+  `enshwick-core`; every path stays (#1053).
+- **Breaking:** `script::Bound::resolve` takes `&mut impl Loading` instead
+  of `&mut Load`, so each domain's crate implements `Bound` beside its own
+  types (#1053).
+- The content domain (`content`, `rates`, and the shape samples of the
+  generated `typed` items) is the internal crate
+  `enshwick-content`, between `enshwick-base` and `enshwick-core`; every
+  path stays, and the Luau definitions list `typed` after `content`
+  (#1049).
+- What every domain of the API shares is the internal crate
+  `enshwick-base` below `enshwick-core`; every path stays (#1046).
+- `content`: **breaking.** A resource key comes from its type:
+  `types::ITEM_INFO.key(guid)` (`ResourceType::key`) replaces
+  `guid.key(types::ITEM_INFO)` and `id.key(..)`, which are gone; a content
+  id passes `id.guid()` (#1044).
+- `script`: **breaking.** `Result<T, script::Error>` answers a callback for
+  every `T` a script can pass (`FromScript`), not only game data; a return
+  that is not a `T` is the error. `Namespace` is `Copy` (#1044).
+- `actions`: **breaking.** `sheet::Entry` has the field `group` and
+  `sheet::ArgView` the field `default`, so a struct literal of either names
+  them or ends in `..Default::default()`. An optional item, like an
+  optional text, must be an action's last argument, and takes the rest of a
+  typed line (#1033).
+- `commands`: **breaking.** A mod's command is named after its id, the
+  part after the author: `you.admin-tools` gets `/admin-tools`.
+  `Actions::commands` takes only the alias, in Rust and in Luau, and
+  `HostApi::commands` keeps its `name` parameter, which the loader no
+  longer reads. An alias goes to the first mod that asks for it; a later
+  mod keeps its full name, and the log and the Mods screen name both mods
+  once. An alias is never another mod's id or name, so a mod's full name
+  always reaches it, and a name that is another mod's whole id stays that
+  mod's. A mod built before ABI 11.23 whose alias is not shorter than the
+  name in its id runs its commands by that name alone instead of failing
+  its init. `CommandSet::alias` is an `Option`, and
+  `FakeHost::other_mod_commands` takes the mod's id and alias (#1027).
+- `actions`: the help of a typed line names the mod and the command as
+  typed, then lists one line for each action the caller may run, under the
+  groups the mod names. An unknown action is refused with the closest ids
+  the caller may run and how to list them all (#1027).
+- `commands`: the refusal of a command typed in chat goes into that
+  player's chat instead of a notice, and a reply of more than 16 lines
+  reaches the chat whole while replies to typed commands fill at most half
+  of the lines waiting to be posted (#1027).
+- `content`: the names `VanillaError::Unknown` and its like suggest are
+  those that start with or hold what was asked, then those within a third
+  of its length in edits (#1027).
+- `content`: a builder of `Load::serve`, and the loader's own patches,
+  build into a lent buffer, so `Host::served_resource`,
+  `Host::served_value`, Luau `enshwick.resources.served_value` and each
+  rebuild free what they build instead of keeping every patch's output for
+  the process (#1006).
+- `content`: a served resource whose build read another served key, such
+  as an item `Load::rekey_item` re-keys, is built again whenever that key
+  is rebuilt, so a re-keyed item follows a world's changed values of
+  its new item; the loader keeps its base for it (#1006).
+- `content`: one patch per resource serves all of a mod's knowledge
+  entries, and one all of its quests, journal pages and quest changes, so
+  100 entries and 50 quests build the knowledge in 4,464 bytes and 0.40 ms
+  instead of 321,536 bytes and 85 ms, and the journal in 6,000 bytes and
+  0.46 ms instead of 62,056 bytes and 20.5 ms; a change that fails is
+  logged and left out, and the rest are made (#1015).
+- `actions`: a console or command line reads a run in double quotes as
+  one value (#1022).
+- `packs`: a misspelt or unknown field in a pack's data is named with the
+  fields its place takes and the one it is near, such as
+  ``unknown field `cout`, expected `item` or `count`; near: count``, with
+  its file, line and column, where a gift, a value, a scale or a
+  dependency used to answer that the data matched no variant of an
+  untagged enum (#1017).
+- `rewards`: `Give::Items`, and an item gift of a pack's `rewards.toml`,
+  gives as many items as fit and logs how many did not, or why none were
+  given, where a full inventory got none (#1028).
+- `content`: **Breaking.** `Load::add_journal_page` refuses a page whose
+  `category` is not one of the game's own lore categories and names the
+  categories of the running game: the journal has a card only for those
+  and dropped any other page without a word. It needs the `unstable`
+  feature until a mod's page is seen on its card (#1028).
+- The book's new chapter "Performance" gives what Rust, C, C++ and Luau
+  mods cost at run time, with each measured cost and its source; the Luau
+  chapter says a script runs in an interpreter (#1034).
+- The book says Enshwick supports the latest game version, and the alpha
+  release notes name only the game version an alpha was checked against; the
+  repository has a name policy, `NAME-POLICY.md` (#1034).
+- The value types the API's layers share and the generated typed layer are
+  now the internal crates `enshwick-values` and `enshwick-typed`, which
+  `enshwick` re-exports under its own paths: a mod still depends on
+  `enshwick` alone and names every item as before. In docs built with
+  `docsrs`, the `unstable` badge no longer shows on the script impls of
+  types that derive `Script` (#1038).
+- The ABI types and the game memory reads and writes are now the internal
+  crate `enshwick-abi`, which `enshwick` re-exports as `enshwick::abi` and
+  `enshwick::raw`: a mod still depends on `enshwick` alone and names every
+  item as before, and `enshwick.h` is unchanged (#1039).
+- Every other module, from `Load` to the fake host, now lives in the
+  internal crate `enshwick-core`; `enshwick` is a facade that re-exports
+  each at its own path and keeps the crate docs, the macros' docs and the
+  features. A mod still depends on `enshwick` alone and names every item as
+  before (#1040).
+- `packs::schemas`: a description in a pack file's JSON Schema leaves out the
+  hidden lines of its examples, as the API docs do, so an editor no longer
+  shows lines such as `# Ok::<(), PackError>(())` (#1040).
+- The fake host now lives in the internal crate `enshwick-fake`, which
+  `enshwick` re-exports as `enshwick::test` behind its `test` feature: a
+  mod's tests still turn that feature on and name every item as before, and
+  a build without it holds no test support (#1041).
+- The loader, `enshwick-luau`, `enshwick-gamedata` and `cargo-enshwick`
+  depend on the internal crates `enshwick-core` and `enshwick-abi` instead
+  of `enshwick`, so a change to `enshwick` alone no longer rebuilds them;
+  mods still depend on `enshwick` alone (#1043).
+- Luau: a call into the API with a record, string or function argument
+  costs less: a record's fields are read by interned names, a `&str`
+  parameter's text lands in a buffer the runtime keeps, and a function
+  argument is one allocation (#1063).
+- Luau: a function the API hands a script raises its error as
+  `function: <error>`, as its argument errors already did (#1063).
+- Loader: the item drop's pickup is read on a thread of its own as the
+  server starts, before its world loads, so the first drop no longer holds
+  a server frame; only a drop asked for during that read, about a tenth of
+  a second, waits for the rest of it (#1064).
+- Loader: served resources and mod textures each arm all their hooks or
+  none; the key listing belongs to mod templates, so a fault in the
+  textures leaves served templates listed (#1076).
+- Loader: the knowledge guard checks the game's code at its site before it
+  hooks it (#1076).
+- Loader: the damage filters arm at all nine sites or none, also when one
+  site fails while the hooks arm, and a hit no filter or stat factor watches
+  is no longer read; stat factors on hits need only the hit site (#1069).
+- Loader: a build without the equipment system turns off only the item
+  equips, not the item use filters and events (#1069).
+- Loader: inventory requests already queued when inventory requests turn
+  off are answered as unavailable at the next step, not timed out 30 s
+  later (#1069).
+- Loader: the main menu's Enshwick line and both menus' Mods entries turn
+  off with their parts, at their hooks too (#1072).
+
+### Fixed
+
+- Test fake: `Load::on_survivor_status` answers as the loader does. It is
+  missing off the client, refused only while another mod holds the merge,
+  accepted again for the mod that holds it, and too late after init (#1065).
+- Loader: while a hosted game starts, and after it ends until its server is
+  torn down, the events of its server's world no longer reach the client's
+  handlers (#1081).
+- Loader: the client's notices are raised before its world's events move,
+  also while client game events are off, and never reach the client's
+  handlers as game events (#1081).
+- Loader: on a build without the event stream layout, a client lists client
+  game events as off when a mod subscribed to them (#1081).
+- A client game event subscription on a dedicated server answers without an
+  error and is not kept, so a `both` mod no longer turns off there (#1081).
+- The loader and the fake host refuse a game event subscription outside the
+  mod's init (#1081).
+- Loader: a crash line names the module a fault lies in when no mod or the
+  loader holds the address, and says `the game itself crashed` only when it
+  searched the whole stack and found no mod's or loader's code, in a module's
+  code; an overflowed stack, a deeper one or a fault in generated code says
+  so instead of blaming the game; the next start's warning and the
+  status summary open such a crash with `the game crashed in the last
+  session`. Under Wine 11 every server stop writes one, after the save
+  (#1029).
+- `content`: a served read of a changed vanilla resource whose every patch
+  fails reads it as the archive has it, instead of failing as missing
+  (#1006).
+- `HostApi::resource_served` keeps no bytes for a call that only asks the
+  length, and answers no retry from bytes kept before a build began on that
+  thread, so a later read there no longer gets stale bytes (#1006).
+- `files`: `write_atomically` keeps the `.bak` when another writer replaces
+  the file while the backup is linked, which Linux answers as not found,
+  and waits up to about a second per step, not 50 ms, for a file that is held
+  (#1025).
+- `actions`: a run naming an account no one online or known has is
+  answered "That player is no longer here." instead of with its account
+  key (#1022).
+- Mods screen: each mod is one row with its plain name as the title, its
+  version and credits on one dimmed line, and a small Settings button at
+  the row's right instead of a button across the window; a thin line parts
+  the mods. A game build without the row frame stacks the row's parts
+  (#1023).
+- Mods screen: a mod's key bindings sit on its own settings page, after
+  the world's settings, and say that they belong to the player on this
+  computer; the Controls button and its page for every mod are gone. Back
+  ends a key capture before it leaves the page (#1023).
+- Mods screen: a text setting draws as an input box with its text at the
+  left and an outline while it has the caret, and an integer setting's
+  slider shows no decimals (#1023).
+- Mods screen: what is off shows in red: a mod's off reason, each feature
+  that is off, the loader's parts off and the features this game build
+  lacks. A world store whose file does not read has its own line in the
+  player's language, with the mod, the store, the file and the parser's
+  words last (#1023).
+- Chat: a line a client sends with a type other than typed text or an
+  emote is dropped with a debug log line, instead of showing as an empty
+  line under the player's name; emotes keep their look, pass the chat
+  filters like typed text and are heard as `ChatKind::Emote` (#1023).
+- Mods screen: a mod that is off or waiting says so in words under its
+  name, not by colour alone; a key capture ends when a text setting takes
+  the caret; key bindings page on a game build without the scroll area
+  (#1023).
+- Mods screen: a mod the loader did not start, such as one whose required
+  mod is missing, shows as off with the reason in the player's language,
+  and the main menu line and the chat line at world load count it as off
+  (#1032).
+- Mods screen: a mod's name is the row's title; one dimmed line under it
+  holds the version and authors; the licence, homepage and extension points
+  are on the mod's page. Each row has two small buttons at its right, the
+  game's own: an info button that opens the mod's page and, under it, a gear
+  for a mod with settings or key bindings here. A game build where the icons
+  do not read shows the buttons as text (#1032).
+- Interface: two dropdowns with the same label and number of options, such
+  as two player arguments of one window, open alone instead of together
+  (#1032).
+- `content`: the docs of `QuestReward`, `NewQuest` and `Load::add_quest`
+  no longer say the game pays a quest's items: it gives the experience and
+  only draws the item (#1028).
+- `loader`: a knowledge query the game's wrapper leaves unanswered reads as
+  missing, where it read as false (#1028).
+- A data pack with `side = "both"` declares a live change of a field
+  players' games read and a rate clients count, as a mod of that side does
+  (#1067).
+- The loader no longer logs a selection of a mod that is off as changing
+  vanilla items, nor counts its items as changed, nor warns per item for
+  its fields (#1067).
+- Loader: a language a client names for its action replies counts only
+  when the game knows it, and every reader of a player's language sees the
+  same one; a building event of a player whose game runs no Enshwick reads
+  the fallback, also in a hosted game (#1067).
+- `test`: the fake keeps the reader's language around a nested event and
+  puts it back after a panic, as the loader does (#1067).
+- An item argument's GUID is checked exactly for a mod's item too: a GUID
+  that only shares a mod item's game id is refused before the handler runs
+  (#1068).
+- Loader: level and experience writes still waiting when a hosted game
+  ends are dropped with it, and their mods hear so; none applies to a
+  character of the next game (#1064).
+- Docs: the script impls of the API's types show the `unstable` badge again
+  on docs.rs (#1077).
+- Test fake: `Knowledge::grant`, `grant_world`, `revoke`, `revoke_world`,
+  `grant_account` and `revoke_account` answer as the loader does. An unknown
+  id or a change of the wrong kind is refused, and so is an account change
+  of a world id, a change on the world of a character's id, and a flag past
+  the 32 a value holds or, in a grant, outside the flags the id lists
+  (#1077).
+- Loader: the interaction filters arm all their hooks or none; when one of
+  them, such as the base stock, does not link on a build, every filter is
+  off and the Mods screen says why, instead of the rest running without it
+  (#1070).
+- Loader: these parts are listed off on the Mods screen and in the status
+  summary when the game build lacks what they need, where only the log
+  named them before: chat lines, chat lines to one player, interaction
+  filters, prop removal by transactions, craft filters, mod control keys
+  and the controls that follow game actions (#1070).
+- Loader: a panic while screening a craft request turns off only the craft
+  filters (#1070).
+- Loader: the status summary and the Mods screen list each base feature a
+  game build or the game's Steam library turns off, not only the log: game
+  event delivery, world keys, the own channel to other machines, the join
+  check, the join dialog hold, the join check's kicks, the hosted lobby and
+  the mod set advertisement (#1074).
+- Loader: a panic in the hosted lobby or the mod set advertisement turns
+  that feature off and lists it, where before it was only logged (#1074).
+- Loader: a panic in the join check turns it off for the rest of the game
+  and lists it; before, that join went on unchecked and the next join was
+  checked again (#1074).
+- Loader: once the join check is off, a join it lets through shows the
+  game's own "could not join" dialog again (#1074).
+- Loader: on a build without the event stream layout, a client still gets
+  its server's notices and frees what it handed the game (#1074).
+- Loader: the altars, the altar zone checks, the altar limit, the raised
+  altar zones and bases past 16 each arm all their detours or none, and
+  every way one of them turns off is listed in the status summary and on
+  the Mods screen, not only in the log (#1071).
+- Loader: a fault in bases past 16 still frees the windows of bases made
+  before it, and an arm that misses one of its hooks writes none of its
+  size patches (#1071).
+- Loader: altars keep their levels when the range pass's live check fails
+  (#1071).
+- Loader: the altar zone limit reads as the game's own once the raised
+  altar zones turn off, and the game still starts no 17th base from the
+  zone list they let grow (#1071).
+- Loader: a skipped size patch turns bases past 16 off with all its
+  detours, not only by name (#1071).
+- Loader: mod texts, mod textures, mod templates, disabled recipes,
+  recipe output rates, the knowledge guard, experience filters, and the
+  data changes of containers, loot, recipes, crafting
+  menu stations and selected items and recipes that a build lacks are
+  listed as off on the Mods screen and in the status summary, not only in
+  the log (#1076).
+- Loader: a panic in the loot rate turns off the loot rate alone, not the
+  factors of every game rate (#1076).
+- Loader: a stand-in item or the data change of one item, container or
+  loot table whose build panics is refused alone and listed as off, where
+  before the build was skipped without a word; the others keep their
+  changes (#1076).
+- Loader: once disabled recipes turn off, the crafting menus and the
+  craft veto stop applying the last world's rules (#1076).
+- Loader: damage filters, player deaths, item drops, the survivor menu,
+  inventory requests and stat maxima that a build lacks are listed as off
+  on the Mods screen and in the status summary, not only in the log
+  (#1069).
+- Loader: a panic in a survivor feature turns off that feature and every
+  hook of it, and the other survivor features keep running (#1069).
+- Loader: a panic in the HUD or the map markers' work turns off that
+  feature and wires the game past its hook; the hook kept running before
+  (#1072).
+- Loader: map markers a build lacks, and the screen reads, screen
+  extensions, open screen names and interaction prompt it lacks while a mod
+  reads them, are listed as off on the Mods screen and in the status
+  summary, not only in the log (#1072).
+- Loader: when the interface or its dialogs turn off, the dialog on screen
+  and those waiting show as system message boxes, where they waited for good
+  (#1072).
+- Loader: when the interface turns off, the menus' Mods entries, the Mods
+  screen and the mod control keys turn off with it and are listed off; a
+  join refusal no longer goes to a Mods screen that never draws (#1072).
+- API: `Ui::set_markers` returns `UiError::Unavailable` while the map
+  markers are off, where it reported success (#1072).
+- Loader: the HUD stops reading the open screen once a panic turned the
+  screen reads off (#1072).
+- Loader: the fog of war, its copy, rename filters, chunk events and the
+  scene's map markers and frame on a build without their entries show off
+  on the Mods screen and in the status summary with the entry they lack,
+  not only in the log (#1073).
+- Loader: the scene's map markers, the map frame and map marker types
+  turn off when their read panics; a scene that lacks its own data, or
+  whose read thread does not start, answers missing for that scene only.
+  The scene's markers show as world map markers, apart from the
+  interface's map markers (#1073).
+- Loader: a panic in the fog of war copy turns off the copy alone; the
+  uncovers the server asks for run on (#1073).
+- Loader: a panic in the time speed link wires the game's speed setter
+  past the loader, and `HostApi::set_time_speed` answers
+  `Status::MISSING` while the time speed is off (#1073).
+- Loader: every world feature arms all its links or none, so a fog of
+  war whose reveal fails to link leaves its destroy unpatched (#1073).
+- Loader: a feature arms all its detours or none. When one of its links
+  fails to link or to arm, its other links are dropped or wired past, and
+  once a feature turns off the game runs past every detour of it. A
+  feature that turns off logs once and is listed in the status summary and
+  on the Mods screen (#1062).
+- Loader: a mod's panic whose payload panics again when dropped no longer
+  aborts the game from a served call, a point or a detour (#1062).
+- Loader: a mod skipped at start for another mod (a requirement, a
+  conflict, a cycle) is listed in the status summary and in the console's
+  `enshwick mods` with its file and reason, as on the Mods screen (#1066).
+- Loader: a second file of a mod id, which was only logged, shows on the
+  Mods screen, in the status summary and in `enshwick mods` with its file
+  and a reason that says another copy loads instead; it is not counted as
+  off while that copy runs (#1066).
+- Loader: the Mods screen's icon buttons take the word that picks their
+  look from the game build's route instead of a fixed offset; on a build
+  where it is not found, or where it or the icon would overlap another
+  button field or lie past the part of the config the game takes, they
+  show their text (#1066).
+- Loader: a row leaves the scrollbar's width free at its right only in a
+  list that scrolls, not in one that pages (#1066).
+
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Added

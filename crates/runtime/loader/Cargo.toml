@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader"
-version = "1.0.0-alpha.14"
+version = "1.0.0-alpha.15"
 description = "Runtime of Enshwick, shipped in enshwick.zip, not a dependency of a mod: the Enshwick loader DLL that finds the game build, loads mods and links their hooks inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "hooks"]
 categories = ["game-development"]
