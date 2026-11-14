@@ -228,13 +228,10 @@ mod runtime {
         let configured = config
             .and_then(|json| super::configured_name(&json))
             .unwrap_or_else(|| "Enshrouded Server".to_owned());
-        let spawned = std::thread::Builder::new()
-            .name("enshwick-advertise".into())
-            .spawn(move || {
-                let _first = THREAD.set(std::thread::current());
-                advertise(&configured, mods, run);
-            });
-        drop(spawned);
+        let _started = crate::engine::off_thread::start("advertise", move || {
+            let _first = THREAD.set(std::thread::current());
+            advertise(&configured, mods, run);
+        });
     }
 
     /// Runs `run`, the advertising thread's work, under the advertisement's

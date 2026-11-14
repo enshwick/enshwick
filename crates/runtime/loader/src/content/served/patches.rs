@@ -19,8 +19,8 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::{ResourceKey, Status};
 
 use super::{
-    LOADED, OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, SERVING_FUSE, Served,
-    State, hex, key_name, mod_on, route,
+    OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, SERVING_FUSE, Served, State,
+    hex, key_name, mod_on, route,
 };
 use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
@@ -50,8 +50,13 @@ pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Status {
 
 /// Builds `entry` of `list` again, then the keys whose builds read it when
 /// its served value may have changed: it changed, or the game never built
-/// it, so only served reads saw it.
+/// it, so only served reads saw it. [`Status::BUILDING`] while `entry`'s
+/// patches run on this thread: a patch asking to rebuild its own key would
+/// wait on its own build.
 fn rebuild_entry(list: &[Served], entry: &Served) -> Status {
+    if building(&entry.key) {
+        return Status::BUILDING;
+    }
     match rebuild_one(entry) {
         Ok(Some(0)) => Status::OK,
         Ok(_) => {
@@ -620,7 +625,7 @@ pub(super) fn run_patches(
                     "the loader's own patch of {} failed to build",
                     key_name(&entry.key)
                 );
-            } else if let Some(loader) = LOADED.get() {
+            } else if let Some(loader) = crate::engine::loader::loader() {
                 loader.turn_off(
                     patch.owner,
                     &format!(

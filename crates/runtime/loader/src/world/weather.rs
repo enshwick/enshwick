@@ -21,7 +21,7 @@
 
 mod check;
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use enshwick_core::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
 use enshwick_core::raw::read_at;
@@ -29,9 +29,9 @@ use enshwick_core::raw::read_at;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::{BlobArray, read, write};
+use crate::engine::pending::Pending;
 use crate::engine::pinned::{self, Symbol};
 use check::writable;
-use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -821,7 +821,7 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
 }
 
 static CHUNKS: OnceLock<ChunkLayout> = OnceLock::new();
-static CHUNK_EVENTS: Mutex<Vec<(Event, ChunkData)>> = Mutex::new(Vec::new());
+static CHUNK_EVENTS: Pending<(Event, ChunkData)> = Pending::new();
 
 /// Where a chunk keeps its state and index, and the manager its width.
 #[derive(Debug, Clone, Copy)]
@@ -955,7 +955,7 @@ unsafe fn record(event: Event, entities: *mut u8, chunk: *mut u8) {
         z: index / width,
         size: CHUNK_METRES,
     };
-    CHUNK_EVENTS.relock().push((event, data));
+    CHUNK_EVENTS.push((event, data));
 }
 
 /// Raises the chunk turns of the last step, on the game thread after it.
@@ -963,7 +963,7 @@ pub(crate) fn after_step(loader: &Loader) {
     if CHUNKS.get().is_none() {
         return;
     }
-    let events = std::mem::take(&mut *CHUNK_EVENTS.relock());
+    let events = CHUNK_EVENTS.take();
     for (event, data) in &events {
         loader.emit(*event, None, (&raw const *data).cast());
     }
@@ -971,7 +971,7 @@ pub(crate) fn after_step(loader: &Loader) {
 
 /// Drops the chunk turns of a hosted game that stopped.
 pub(crate) fn forget() {
-    CHUNK_EVENTS.relock().clear();
+    CHUNK_EVENTS.clear();
 }
 
 #[cfg(test)]

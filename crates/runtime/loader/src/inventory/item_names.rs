@@ -146,19 +146,17 @@ pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>
         return Some(list);
     }
     if !STATE.building.swap(true, Ordering::AcqRel) {
-        let built = std::thread::Builder::new()
-            .name("enshwick-item-names".into())
-            .spawn(move || {
-                for _ in 0..BUILD_TRIES {
-                    if let Some(list) = build(language, mods) {
-                        STATE.list.store(Some(Arc::new(list)));
-                        break;
-                    }
-                    std::thread::sleep(BUILD_RETRY);
+        let built = crate::engine::off_thread::start("item names", move || {
+            for _ in 0..BUILD_TRIES {
+                if let Some(list) = build(language, mods) {
+                    STATE.list.store(Some(Arc::new(list)));
+                    break;
                 }
-                STATE.building.store(false, Ordering::Release);
-            });
-        if built.is_err() {
+                std::thread::sleep(BUILD_RETRY);
+            }
+            STATE.building.store(false, Ordering::Release);
+        });
+        if !built {
             STATE.building.store(false, Ordering::Release);
         }
     }

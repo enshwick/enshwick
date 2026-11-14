@@ -10,7 +10,7 @@ use enshwick_core::abi::HookFlags;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 
-use super::{LOADED, SEALED, STAFFS_FUSE, layout};
+use super::{SEALED, STAFFS_FUSE, layout};
 
 /// Links the staffs' spawn; false once they are off.
 pub(super) fn link(loader: &Loader) -> bool {
@@ -94,7 +94,7 @@ pub(super) fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
 /// - The call runs before the spawn reads the request, on its thread, so
 ///   nothing else reads or writes it during the call.
 pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
-    let (Some(loader), Some(sealed)) = (LOADED.get(), SEALED.get()) else {
+    let (Some(loader), Some(sealed)) = (crate::engine::loader::loader(), SEALED.get()) else {
         return None;
     };
     let layout = layout(loader)?;

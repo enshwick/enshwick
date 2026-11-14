@@ -25,6 +25,7 @@ use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::write;
+use crate::engine::pending::Pending;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use enshwick_base::Relock;
@@ -149,7 +150,7 @@ pub(crate) fn character_loaded(loader: &Loader, entity: Entity) -> bool {
 }
 
 /// Changes raised after the next step, by character (0 for the world).
-static RAISED: Mutex<Vec<KnowledgeData>> = Mutex::new(Vec::new());
+static RAISED: Pending<KnowledgeData> = Pending::new();
 
 /// Takes knowledge `id` of `kind` back from the character `entity`, or
 /// from the world.
@@ -251,7 +252,7 @@ pub(crate) fn revoke(
             }
         }
     }
-    RAISED.relock().push(KnowledgeData {
+    RAISED.push(KnowledgeData {
         header: Header::of::<KnowledgeData>(),
         entity: if player { Entity(entity) } else { Entity(0) },
         id: enshwick_core::abi::KnowledgeId::new(id),
@@ -443,7 +444,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         Event::SHUTDOWN_STARTED => {
             WAITING.store(false, Ordering::Release);
             *QUEUE.relock() = Queue::default();
-            RAISED.relock().clear();
+            RAISED.clear();
         }
         _ => {}
     }
@@ -452,7 +453,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// After a step: raises the revokes of the step before and, now and then,
 /// applies what waits for accounts now in the game.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
-    let raised = std::mem::take(&mut *RAISED.relock());
+    let raised = RAISED.take();
     for data in &raised {
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const *data).cast());
     }

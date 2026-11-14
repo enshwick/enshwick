@@ -26,32 +26,27 @@ pub fn running() -> Version {
 /// logged once.
 #[cfg(windows)]
 pub(crate) fn start(loader: &'static crate::engine::loader::Loader) {
-    let spawned = std::thread::Builder::new()
-        .name("enshwick-releases".into())
-        .spawn(move || {
-            let running = running();
-            match fetch::answer(path(&running)) {
-                Ok(answer) => match newer(&answer, &running, LOADER_TAGS) {
-                    Ok(Some(release)) => {
-                        crate::log!(
-                            INFO,
-                            "Enshwick {} is available, this is {running}: {}",
-                            release.version(),
-                            release.page()
-                        );
-                        let _first = loader.newer_release.set(release);
-                    }
-                    Ok(None) => crate::log!(INFO, "Enshwick {running} is the newest release"),
-                    Err(e) => {
-                        crate::log!(INFO, "release check: GitHub's answer does not read: {e}");
-                    }
-                },
-                Err(e) => crate::log!(INFO, "release check: {e}"),
-            }
-        });
-    if let Err(e) = spawned {
-        crate::log!(INFO, "release check: no thread for it: {e}");
-    }
+    let _started = crate::engine::off_thread::start("releases", move || {
+        let running = running();
+        match fetch::answer(path(&running)) {
+            Ok(answer) => match newer(&answer, &running, LOADER_TAGS) {
+                Ok(Some(release)) => {
+                    crate::log!(
+                        INFO,
+                        "Enshwick {} is available, this is {running}: {}",
+                        release.version(),
+                        release.page()
+                    );
+                    let _first = loader.newer_release.set(release);
+                }
+                Ok(None) => crate::log!(INFO, "Enshwick {running} is the newest release"),
+                Err(e) => {
+                    crate::log!(INFO, "release check: GitHub's answer does not read: {e}");
+                }
+            },
+            Err(e) => crate::log!(INFO, "release check: {e}"),
+        }
+    });
 }
 
 #[cfg(windows)]

@@ -32,8 +32,13 @@ fn ids_take_the_mod_s_namespace_unless_they_name_one() {
     assert_eq!(full_id("you.lanterns", ":x"), None);
 }
 
+/// One test at a time over the destroy requests, which are the process's
+/// own.
+static DESTROYS: Mutex<()> = Mutex::new(());
+
 #[test]
 fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
+    let _turn = DESTROYS.relock();
     let record = |item| Record {
         item,
         anchor: None,
@@ -727,4 +732,38 @@ fn a_failed_write_marks_the_same_world_changed_again() {
     let mut none = None;
     unwritten(&mut none, "w");
     assert!(none.is_none());
+}
+
+/// The only test that sets the server's records and their flags, which
+/// are the process's own.
+#[cfg(windows)]
+#[test]
+fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_clean() {
+    let _turn = DESTROYS.relock();
+    *SERVER.relock() = Some(server(Vec::new(), vec!["old:kind".to_owned()]));
+    KEPT.store(true, Ordering::Relaxed);
+    FINDING.store(true, Ordering::Relaxed);
+    UNREAD.store(true, Ordering::Relaxed);
+    let part = crate::inventory::PARTS
+        .iter()
+        .find(|part| part.name == "item_data")
+        .unwrap();
+    let forget = part
+        .forget
+        .expect("item data forgets its server at the end");
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    forget(loader);
+    assert!(
+        SERVER.relock().is_none(),
+        "the records went with their world"
+    );
+    assert!(
+        !KEPT.load(Ordering::Relaxed),
+        "no destroy request is noted for them"
+    );
+    assert!(!FINDING.load(Ordering::Relaxed));
+    assert!(
+        !UNREAD.load(Ordering::Relaxed),
+        "the next world takes values"
+    );
 }

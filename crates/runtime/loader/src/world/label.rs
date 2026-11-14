@@ -80,7 +80,6 @@ struct Filter {
 }
 
 static LAYOUT: OnceLock<Result<Layout, &'static str>> = OnceLock::new();
-static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 /// The switch of the mods' rename filters.
 static FUSE: Fuse = Fuse::new("rename filters");
 static FILTERS: Registry<Filter> = Registry::new();
@@ -160,7 +159,6 @@ pub(crate) fn register(owner: ModIndex, callback: RenameCallFn, user: *mut c_voi
 pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
     let wanted = !filters.is_empty();
-    let _first = LOADED.set(loader);
     if !wanted {
         return;
     }
@@ -289,7 +287,7 @@ crate::engine::chains::chain_detour! {
 /// - The call runs at the entry of the string swap chain, on the thread the
 ///   game called the swap on, so the loader's caller frame is the swap's.
 unsafe fn refused(text: *const [usize; 2]) -> bool {
-    let (Some(loader), Some(filters)) = (LOADED.get(), FILTERS.sealed()) else {
+    let (Some(loader), Some(filters)) = (crate::engine::loader::loader(), FILTERS.sealed()) else {
         return false;
     };
     let Some(layout) = layout(loader) else {

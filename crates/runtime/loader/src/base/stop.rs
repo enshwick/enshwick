@@ -126,22 +126,18 @@ pub(crate) fn request(loader: &Loader, who: &str) -> Status {
     // build hands `SetConsoleCtrlHandler` (route `server.console_handler`,
     // server 26430253), whose signature `HandlerFn` states.
     let handler = unsafe { core::mem::transmute::<usize, HandlerFn>(handler) };
-    let started = std::thread::Builder::new()
-        .name("enshwick server stop".to_owned())
+    let started = crate::engine::off_thread::start("server stop", move || {
         // SAFETY: as Windows calls a console control handler: with a control
         // event, on a thread of its own, once, and only for a running
         // application with no exit reason, read just now.
-        .spawn(move || unsafe { handler(CTRL_C_EVENT) });
-    match started {
-        Ok(_) => {
-            crate::log!(INFO, "{who} asked the server to stop; the game shuts down");
-            Status::OK
-        }
-        Err(error) => {
-            STOP.asked.store(false, Ordering::Release);
-            crate::log!(WARN, "the server stop did not start: {error}");
-            Status::REFUSED
-        }
+        let _handled = unsafe { handler(CTRL_C_EVENT) };
+    });
+    if started {
+        crate::log!(INFO, "{who} asked the server to stop; the game shuts down");
+        Status::OK
+    } else {
+        STOP.asked.store(false, Ordering::Release);
+        Status::REFUSED
     }
 }
 

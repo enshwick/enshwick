@@ -140,6 +140,9 @@ const SYSTEM: u8 = 2;
 
 static MODE: AtomicU8 = AtomicU8::new(QUEUED);
 static WAITING: Mutex<VecDeque<Pending>> = Mutex::new(VecDeque::new());
+/// Set, under [`WAITING`]'s lock, while it may hold a dialog, so a frame
+/// with none waiting takes no lock.
+static ANY_WAITING: AtomicBool = AtomicBool::new(false);
 static SHOWN: Mutex<VecDeque<Arc<Shown>>> = Mutex::new(VecDeque::new());
 static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
 
@@ -211,6 +214,7 @@ pub(crate) fn queue(dialog: Pending) -> Status {
         return Status::REFUSED;
     }
     waiting.push_back(dialog);
+    ANY_WAITING.store(true, Ordering::Release);
     Status::OK
 }
 
@@ -241,7 +245,11 @@ pub(crate) fn show(
 pub(crate) fn armed(in_game: bool) {
     MODE.store(if in_game { IN_GAME } else { SYSTEM }, Ordering::Release);
     if !in_game {
-        let waiting = std::mem::take(&mut *WAITING.relock());
+        let waiting = {
+            let mut waiting = WAITING.relock();
+            ANY_WAITING.store(false, Ordering::Release);
+            std::mem::take(&mut *waiting)
+        };
         for dialog in waiting {
             system_box(dialog);
         }
@@ -257,7 +265,11 @@ pub(super) fn fall_back() {
         return;
     }
     let on_screen = CURRENT.take();
-    let dialogs = stranded(on_screen, &mut WAITING.relock());
+    let dialogs = {
+        let mut waiting = WAITING.relock();
+        ANY_WAITING.store(false, Ordering::Release);
+        stranded(on_screen, &mut waiting)
+    };
     for dialog in dialogs {
         system_box(dialog);
     }
@@ -338,7 +350,15 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
-    let dialog = WAITING.relock().pop_front()?;
+    if !ANY_WAITING.load(Ordering::Acquire) {
+        return None;
+    }
+    let dialog = {
+        let mut waiting = WAITING.relock();
+        let next = waiting.pop_front();
+        ANY_WAITING.store(!waiting.is_empty(), Ordering::Release);
+        next
+    }?;
     let slot = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % KEPT;
     let texts = Arc::new(Shown {
         slot,
@@ -419,39 +439,34 @@ fn box_style(buttons: u32) -> (u32, [(i32, u32); 3]) {
 
 /// Shows `dialog` as a system message box on a thread of its own.
 fn system_box(dialog: Pending) {
-    let spawned = std::thread::Builder::new()
-        .name("enshwick-dialog".into())
-        .spawn(move || {
-            use windows_sys::Win32::UI::WindowsAndMessaging::{
-                MB_ICONINFORMATION, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
-            };
-            let (style, answers) = box_style(dialog.buttons);
-            let mut body = dialog.message.clone();
-            if !dialog.detail.is_empty() {
-                body.push_str("\n\n");
-                body.push_str(&dialog.detail);
-            }
-            let text: Vec<u16> = body.encode_utf16().chain([0]).collect();
-            let title: Vec<u16> = dialog.title.encode_utf16().chain([0]).collect();
-            // SAFETY: `text` and `title` are live NUL-terminated UTF-16
-            // buffers built above, and a null owner window is allowed.
-            let result = unsafe {
-                MessageBoxW(
-                    core::ptr::null_mut(),
-                    text.as_ptr(),
-                    title.as_ptr(),
-                    style | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
-                )
-            };
-            let answer = answers
-                .iter()
-                .find(|(id, _)| *id == result)
-                .map_or(UiDialog::CLOSED, |&(_, answer)| answer);
-            dialog.answerer.answer(answer);
-        });
-    if let Err(e) = spawned {
-        crate::log!(WARN, "cannot show a dialog: {e}");
-    }
+    let _started = crate::engine::off_thread::start("dialog", move || {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            MB_ICONINFORMATION, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
+        };
+        let (style, answers) = box_style(dialog.buttons);
+        let mut body = dialog.message.clone();
+        if !dialog.detail.is_empty() {
+            body.push_str("\n\n");
+            body.push_str(&dialog.detail);
+        }
+        let text: Vec<u16> = body.encode_utf16().chain([0]).collect();
+        let title: Vec<u16> = dialog.title.encode_utf16().chain([0]).collect();
+        // SAFETY: `text` and `title` are live NUL-terminated UTF-16
+        // buffers built above, and a null owner window is allowed.
+        let result = unsafe {
+            MessageBoxW(
+                core::ptr::null_mut(),
+                text.as_ptr(),
+                title.as_ptr(),
+                style | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
+            )
+        };
+        let answer = answers
+            .iter()
+            .find(|(id, _)| *id == result)
+            .map_or(UiDialog::CLOSED, |&(_, answer)| answer);
+        dialog.answerer.answer(answer);
+    });
 }
 
 #[cfg(test)]

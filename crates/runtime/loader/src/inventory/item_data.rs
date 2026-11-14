@@ -692,6 +692,16 @@ fn keep(values: &mut Values, bytes: &[u8]) -> bool {
     kept_all
 }
 
+/// Forgets the server's records and what follows them, as when its world
+/// goes away, so the next world starts from its own file alone.
+pub(crate) fn forget_server() {
+    *SERVER.relock() = None;
+    KEPT.store(false, Ordering::Relaxed);
+    FINDING.store(false, Ordering::Relaxed);
+    UNREAD.store(false, Ordering::Relaxed);
+    drop(take_destroyed());
+}
+
 /// Forgets what the client got, when it changes servers.
 pub(crate) fn forget_client() {
     *CLIENT.relock() = None;

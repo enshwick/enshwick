@@ -384,6 +384,26 @@ fn a_rebuild_leaves_a_reader_whose_build_runs_on_this_thread() {
 }
 
 #[test]
+fn a_rebuild_a_patch_asks_for_of_its_own_key_is_refused_instead_of_waited_on() {
+    let list = read_and_reader();
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        // The game's first build of the reader, whose patch asks to rebuild
+        // the key it builds.
+        let _game = list[1].state.relock();
+        let _building = Building::enter(list[1].key, Build::Game);
+        let _sent = done.send(rebuild_entry(list, &list[1]));
+    });
+    assert_eq!(
+        finished
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .ok(),
+        Some(Status::BUILDING),
+        "the patch's thread holds the key's build"
+    );
+}
+
+#[test]
 fn a_served_read_whose_every_patch_fails_reads_a_vanilla_key_from_another_base_as_archived() {
     let other = ResourceKey { part: 1, ..KEY };
     let entry = Served::new(KEY, other, vec![by_loader(fail)], false);

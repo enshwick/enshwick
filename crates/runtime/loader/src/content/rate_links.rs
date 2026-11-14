@@ -41,8 +41,6 @@ static LOOT_FUSE: Fuse = Fuse::new("the loot rate");
 
 /// What the detours read, set when they link.
 struct Linked {
-    /// The loader, for the item lookups of the loot rate.
-    loader: &'static Loader,
     /// The experience rate of each of the game's experience source values.
     experience: [Option<RateId>; 256],
     /// Where a rolled loot slot keeps its item and count, from reflection;
@@ -50,7 +48,7 @@ struct Linked {
     slot: Option<SlotFields>,
 }
 
-static LOADED: OnceLock<Linked> = OnceLock::new();
+static LINKED: OnceLock<Linked> = OnceLock::new();
 
 /// The switch of the factors in force, which every rate reads: a fault
 /// there leaves every rate at 1.
@@ -78,8 +76,7 @@ pub(crate) fn wanted(symbol: Symbol) -> bool {
 pub(crate) fn link(loader: &'static Loader) {
     RATES.seal();
     let slot = SlotFields::reflect(&loader.reflection);
-    let _first = LOADED.set(Linked {
-        loader,
+    let _first = LINKED.set(Linked {
         experience: experience_rates(|id| {
             crate::engine::catalogue::constant(id, &loader.reflection)
         }),
@@ -193,7 +190,7 @@ crate::engine::chains::chain_detour! {
     fuse &EXPERIENCE_FUSE, "the experience rates";
     |onward| {
         let vanilla = onward.call();
-        LOADED
+        LINKED
             .get()
             .and_then(|linked| linked.experience[usize::from(source)])
             .map_or(vanilla, |rate| vanilla * factor(rate))
@@ -250,9 +247,8 @@ crate::engine::chains::chain_detour! {
 ///   reflected size, which no other thread touches during the call.
 #[cold]
 unsafe fn scale_slot(slot: *mut u8, rate: f32) {
-    let Some((loader, fields)) = LOADED
-        .get()
-        .and_then(|linked| Some((linked.loader, linked.slot?)))
+    let Some((loader, fields)) =
+        crate::engine::loader::loader().zip(LINKED.get().and_then(|linked| linked.slot))
     else {
         return;
     };

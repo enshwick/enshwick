@@ -16,8 +16,8 @@ use crate::engine::pinned;
 use enshwick_base::Relock;
 
 use super::{
-    LOADED, LOOKUP_FUSE, Layout, MOVE_ACTIVE, MOVING, NPC_COMMON_TYPE, SEALED, SKIP_UPDATE,
-    TRANSFORM_TYPE, layout,
+    LOOKUP_FUSE, Layout, MOVE_ACTIVE, MOVING, NPC_COMMON_TYPE, SEALED, SKIP_UPDATE, TRANSFORM_TYPE,
+    layout,
 };
 
 /// Asks the registered lookup; `None` for the game's own answer.
@@ -110,7 +110,7 @@ crate::engine::chains::chain_detour! {
 /// - The call runs at the chain's entry, on the thread the game called the
 ///   lookup on, so the loader's caller frame is the lookup's.
 unsafe fn lookup(onward: &Onward<u32, impl Fn() -> u32>, npc: *const u32) -> u32 {
-    let Some(loader) = LOADED.get() else {
+    let Some(loader) = crate::engine::loader::loader() else {
         return onward.call();
     };
     // Read the frame before the chain runs: a deeper hook takes its own.

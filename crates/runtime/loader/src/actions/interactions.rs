@@ -88,7 +88,14 @@ struct Layout {
 type Filter = Registered<InteractionFn>;
 
 static FILTERS: Registry<Filter> = Registry::new();
-static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new();
+/// The layout and components the links read, once linked.
+static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
+
+/// The loader with what the links read, once linked.
+fn linked() -> Option<(&'static Loader, &'static Layout, &'static Components)> {
+    let (layout, components) = LINKED.get()?;
+    Some((crate::engine::loader::loader()?, layout, components))
+}
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
 
@@ -211,7 +218,7 @@ pub(crate) fn link(loader: &'static Loader) {
     });
     let (filtered, actions) = match found {
         Ok((layout, components)) => {
-            let _first = LOADED.set((loader, layout, components));
+            let _first = LINKED.set((layout, components));
             let stock_flags = if layout.stock_ui_return == 0 {
                 HookFlags::NONE
             } else {
@@ -315,7 +322,7 @@ const fn read_due(step: u64, listed: bool) -> bool {
 }
 
 fn read_players(loader: &Loader) {
-    if LOADED.get().is_none() && !crate::inventory::item_actions::wanted() {
+    if LINKED.get().is_none() && !crate::inventory::item_actions::wanted() {
         return;
     }
     if let Ok(entities) = crate::engine::world::player_entities(loader)
@@ -372,7 +379,7 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
         reserved: [0; 3],
         position: [0.0; 3],
     };
-    if let Some((_, layout, components)) = LOADED.get()
+    if let Some((_, layout, components)) = linked()
         && !ctx.is_null()
     {
         // SAFETY: `ctx` is non-null by the check before it and, by the caller's
@@ -415,7 +422,7 @@ unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool 
 /// - `ctx` is null or the live context of a running system, used on its
 ///   thread.
 unsafe fn server_player(ctx: *mut u64) -> Option<u32> {
-    let (loader, _, _) = LOADED.get()?;
+    let (loader, _, _) = linked()?;
     let engine = crate::engine::ecs::resolved()?;
     if ctx.is_null() {
         return None;
@@ -449,7 +456,7 @@ crate::engine::chains::chain_detour! {
         if crate::world::transactions::holds().quiet() || out.is_null() || query.is_null() {
             return onward.call();
         }
-        let Some((_, layout, _)) = LOADED.get() else {
+        let Some((_, layout, _)) = linked() else {
             return onward.call();
         };
         // SAFETY: `query` is non-null by the check before it and is the
@@ -501,7 +508,7 @@ unsafe fn may_touch(
     targets: &[u32],
     slots: &[u64],
 ) -> bool {
-    let Some((_, layout, components)) = LOADED.get() else {
+    let Some((_, layout, components)) = linked() else {
         return true;
     };
     // SAFETY: the caller guarantees a null or live system context on its
@@ -556,7 +563,7 @@ unsafe fn transfer_refused(ctx: *mut u64, state: *mut u8) -> bool {
     if crate::world::transactions::holds().quiet() || state.is_null() {
         return false;
     }
-    let Some((_, layout, _)) = LOADED.get() else {
+    let Some((_, layout, _)) = linked() else {
         return false;
     };
     // SAFETY: `state` is non-null by the check before it and is the
@@ -617,7 +624,7 @@ unsafe fn sort_refused(ctx: *mut u64, state: *mut u8) -> bool {
     if crate::world::transactions::holds().quiet() || state.is_null() {
         return false;
     }
-    let Some((_, layout, _)) = LOADED.get() else {
+    let Some((_, layout, _)) = linked() else {
         return false;
     };
     // SAFETY: `state` is non-null by the check before it and is the sort's
@@ -651,7 +658,7 @@ crate::engine::chains::chain_detour! {
         {
             return method;
         }
-        let Some((_, layout, _)) = LOADED.get() else {
+        let Some((_, layout, _)) = linked() else {
             return method;
         };
         // SAFETY: `object` is non-null by the check before it and is the
@@ -701,7 +708,7 @@ crate::engine::chains::chain_detour! {
         // system, at its entry on its thread, which is all `screen_uses`
         // asks.
         unsafe { crate::inventory::item_actions::screen_uses(ctx) };
-        if ctx.is_null() || LOADED.get().is_none() {
+        if ctx.is_null() || LINKED.get().is_none() {
             return onward.call();
         }
         if !crate::world::transactions::holds().quiet() {
@@ -728,7 +735,7 @@ crate::engine::chains::chain_detour! {
 ///   on its thread.
 unsafe fn player_inputs(ctx: *mut u64) {
     let (Some((loader, layout, components)), Some(engine)) =
-        (LOADED.get(), crate::engine::ecs::resolved())
+        (linked(), crate::engine::ecs::resolved())
     else {
         return;
     };
@@ -758,7 +765,7 @@ unsafe fn player_inputs(ctx: *mut u64) {
 ///   on its thread.
 unsafe fn refuse_pending(ctx: *mut u64) {
     let (Some((loader, layout, components)), Some(engine)) =
-        (LOADED.get(), crate::engine::ecs::resolved())
+        (linked(), crate::engine::ecs::resolved())
     else {
         return;
     };

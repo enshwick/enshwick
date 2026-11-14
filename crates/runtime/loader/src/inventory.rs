@@ -109,6 +109,7 @@ pub(crate) static PARTS: &[&Part] = &[
             item_data::world_event(loader, event);
         })),
         follows: Some(|_| item_data::wanted()),
+        forget: Some(|_| item_data::forget_server()),
         ..part!("item_data", item_data)
     },
     &Part {

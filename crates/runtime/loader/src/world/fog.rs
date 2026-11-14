@@ -237,6 +237,18 @@ fn forget(fog: usize) {
         SKIPPED.store(0, Ordering::Release);
     }
     drop(mirror);
+    forget_uncovers();
+}
+
+/// Drops the copy and the circles waiting to uncover when a hosted game
+/// ends, whether or not the free of its fog was seen.
+pub(crate) fn forget_world() {
+    *MIRROR.relock() = None;
+    SKIPPED.store(0, Ordering::Release);
+    forget_uncovers();
+}
+
+fn forget_uncovers() {
     UNCOVERS.circles.relock().clear();
     UNCOVERS.waiting.store(false, Ordering::Release);
     UNCOVERS.warned.store(false, Ordering::Release);
@@ -510,6 +522,24 @@ mod tests {
             .into_iter()
             .find(|p| p.part == part)
             .map(|p| p.reason)
+    }
+
+    /// The only test that queues uncovers, which are the process's own.
+    #[test]
+    fn a_hosted_game_s_end_drops_its_skipped_tiles_and_waiting_uncovers() {
+        UNCOVERS.circles.relock().push(([1.0, 2.0], 3.0));
+        UNCOVERS.waiting.store(true, Ordering::Release);
+        UNCOVERS.warned.store(true, Ordering::Release);
+        SKIPPED.store(7, Ordering::Release);
+        forget_world();
+        assert!(MIRROR.relock().is_none());
+        assert_eq!(SKIPPED.load(Ordering::Acquire), 0);
+        assert!(UNCOVERS.circles.relock().is_empty());
+        assert!(!UNCOVERS.waiting.load(Ordering::Acquire));
+        assert!(
+            !UNCOVERS.warned.load(Ordering::Acquire),
+            "the next world warns again"
+        );
     }
 
     #[test]

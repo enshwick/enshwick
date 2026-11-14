@@ -161,7 +161,6 @@ struct Layout {
     offsets: Offsets,
 }
 
-static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static ITEM_MAP: OnceLock<Option<ItemMap>> = OnceLock::new();
 static MENU: OnceLock<Option<Menu>> = OnceLock::new();
@@ -474,7 +473,6 @@ pub(crate) fn link(loader: &'static Loader) {
         sealed.status.is_some(),
     );
     let _first = SEALED.set(sealed);
-    let _first = LOADED.set(loader);
     let wanted = lookup || beds || summons || items || status;
     let lookup = lookup && lookup::link(loader) && moves::link_moves(loader);
     let beds = beds && moves::link_bed_checks(loader);
@@ -493,7 +491,7 @@ pub(crate) fn link(loader: &'static Loader) {
 /// Looks up the registry indexes of the component types the lookups read,
 /// once per hosted world, on the game thread after a step.
 pub(crate) fn after_step(loader: &Loader) {
-    if LOADED.get().is_none()
+    if SEALED.get().is_none()
         || (TRANSFORM_TYPE.load(Ordering::Relaxed) != u16::MAX
             && NPC_COMMON_TYPE.load(Ordering::Relaxed) != u16::MAX)
     {

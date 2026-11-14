@@ -193,23 +193,18 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
 /// Starts the housekeeping thread: it puts the crash filter back on top and
 /// keeps the measured clock rate for the profile.
 pub(crate) fn start() {
-    let started = std::thread::Builder::new()
-        .name("enshwick-status".into())
-        .spawn(|| {
-            loop {
-                std::thread::sleep(POLL);
-                crate::engine::crash::reassert();
-                if crate::engine::diag::counting()
-                    && !crate::engine::profile::tsc_hz_kept()
-                    && let Some(hz) = crate::engine::patch::tsc_hz()
-                {
-                    crate::engine::profile::keep_tsc_hz(hz);
-                }
+    let _started = crate::engine::off_thread::start("housekeeping", || {
+        loop {
+            std::thread::sleep(POLL);
+            crate::engine::crash::reassert();
+            if crate::engine::diag::counting()
+                && !crate::engine::profile::tsc_hz_kept()
+                && let Some(hz) = crate::engine::patch::tsc_hz()
+            {
+                crate::engine::profile::keep_tsc_hz(hz);
             }
-        });
-    if let Err(e) = started {
-        crate::log!(WARN, "no housekeeping thread: {e}");
-    }
+        }
+    });
 }
 
 /// The readings a profile window starts from: when, every timed thunk's

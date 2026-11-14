@@ -53,7 +53,6 @@ pub(crate) mod mid;
 pub mod mod_index;
 #[cfg(windows)]
 pub(crate) mod module;
-#[cfg(windows)]
 pub(crate) mod off_thread;
 #[cfg_attr(
     all(not(windows), not(test)),
@@ -73,10 +72,7 @@ pub(crate) mod patch;
     expect(dead_code, reason = "only the loader's start reads executables")
 )]
 pub(crate) mod pe;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "reads off the game thread run on Windows")
-)]
+pub mod pending;
 pub(crate) mod per_test;
 #[cfg_attr(
     not(windows),

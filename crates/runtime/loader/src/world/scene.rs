@@ -492,9 +492,40 @@ fn read_marker_types(loader: &Loader) -> Result<Vec<MapMarkerTypeInfo>, ReadType
     types(&layout, &groups, &registry)
 }
 
+/// Forgets the markers and the frame read for the last scene, when a hosted
+/// game ends: the next world's served data may differ. A read still under
+/// way finds its scene gone and is dropped; the build's layouts stay.
+pub(crate) fn forget() {
+    let mut state = STATE.relock();
+    state.markers = SceneCache::new();
+    state.frame = SceneCache::new();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One test at a time over the scene caches, which are the process's own.
+    static TURN: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn a_scene_read_once_its_hosted_game_ended_is_dropped_and_read_again() {
+        let _turn = TURN.relock();
+        let key = SceneKey::new([7; 16], 3).unwrap();
+        let mut state = STATE.relock();
+        assert!(matches!(state.frame.lookup(key), Lookup::Start));
+        drop(state);
+        forget();
+        let mut state = STATE.relock();
+        assert!(
+            !state.frame.finish(key, Err(ReadFrameError::Scene)),
+            "the read of the ended game's scene is dropped"
+        );
+        assert!(
+            matches!(state.frame.lookup(key), Lookup::Start),
+            "and asked again"
+        );
+    }
 
     /// Asks `cache` for `key` under `fuse` until the read is done.
     fn settled<V: Described, E: SceneFailure>(
@@ -517,6 +548,7 @@ mod tests {
     #[test]
     fn a_scene_read_that_panics_turns_its_feature_off_and_starts_no_other_read() {
         static MARKS: Fuse = Fuse::new("test scene marks");
+        let _turn = TURN.relock();
         let key = SceneKey::new([1; 16], 2).unwrap();
         let read = || -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> { panic!("a broken read") };
         assert_eq!(
@@ -545,6 +577,7 @@ mod tests {
     #[test]
     fn a_scene_without_its_biome_map_leaves_the_map_frame_on_for_the_next_scene() {
         static FRAMES: Fuse = Fuse::new("test scene frames");
+        let _turn = TURN.relock();
         let key = SceneKey::new([3; 16], 2).unwrap();
         let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::NoBiomeMap) };
         assert_eq!(
@@ -567,6 +600,7 @@ mod tests {
     #[test]
     fn a_scene_read_whose_thread_does_not_start_leaves_its_feature_on() {
         static FRAMES: Fuse = Fuse::new("test scene threads");
+        let _turn = TURN.relock();
         let key = SceneKey::new([4; 16], 2).unwrap();
         let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::Thread) };
         assert_eq!(

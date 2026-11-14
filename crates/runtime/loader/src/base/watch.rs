@@ -115,60 +115,55 @@ pub(crate) fn start(loader: &'static Loader) {
         path: own,
     }];
     let mut worlds: Vec<WorldWatched> = Vec::new();
-    let started = std::thread::Builder::new()
-        .name("enshwick-settings".into())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(PERIOD);
-                for file in &mut files {
-                    let now = stamp(&file.path);
-                    if now == file.seen {
-                        continue;
-                    }
-                    file.seen = now;
-                    if now.is_none() || ours(&file.path, now) {
-                        continue;
-                    }
-                    changed(loader, file.owner);
+    let _started = crate::engine::off_thread::start("settings watch", move || {
+        loop {
+            std::thread::sleep(PERIOD);
+            for file in &mut files {
+                let now = stamp(&file.path);
+                if now == file.seen {
+                    continue;
                 }
-                // A mod may declare a settings file after the watch started.
-                for (owner, record) in loader.mods.iter().enumerate() {
-                    for declared in record.settings_files.relock().iter() {
-                        let known = worlds
-                            .iter()
-                            .any(|w| w.owner.get() == owner && w.file == declared.file);
-                        if !known {
-                            worlds.push(WorldWatched {
-                                owner: ModIndex::new(owner),
-                                file: declared.file.clone(),
-                                key: None,
-                                seen: None,
-                            });
-                        }
-                    }
+                file.seen = now;
+                if now.is_none() || ours(&file.path, now) {
+                    continue;
                 }
-                let key = crate::base::worlds::current();
-                let mut edited = Vec::new();
-                for file in &mut worlds {
-                    let path = key.as_deref().and_then(|key| {
-                        let record = loader.mods.get(file.owner.get())?;
-                        Some(crate::base::worlds::world_file(&record.id, &file.file, key))
-                    });
-                    let now = path.as_deref().and_then(stamp);
-                    if file.changed(key.as_deref(), path.as_deref(), now) {
-                        edited.push(file.owner.get());
-                    }
-                }
-                edited.dedup();
-                for index in edited {
-                    crate::base::worlds::changed(loader, index);
-                }
-                crate::content::recipes::poll(loader);
+                changed(loader, file.owner);
             }
-        });
-    if let Err(e) = started {
-        crate::log!(WARN, "settings are not watched: {e}");
-    }
+            // A mod may declare a settings file after the watch started.
+            for (owner, record) in loader.mods.iter().enumerate() {
+                for declared in record.settings_files.relock().iter() {
+                    let known = worlds
+                        .iter()
+                        .any(|w| w.owner.get() == owner && w.file == declared.file);
+                    if !known {
+                        worlds.push(WorldWatched {
+                            owner: ModIndex::new(owner),
+                            file: declared.file.clone(),
+                            key: None,
+                            seen: None,
+                        });
+                    }
+                }
+            }
+            let key = crate::base::worlds::current();
+            let mut edited = Vec::new();
+            for file in &mut worlds {
+                let path = key.as_deref().and_then(|key| {
+                    let record = loader.mods.get(file.owner.get())?;
+                    Some(crate::base::worlds::world_file(&record.id, &file.file, key))
+                });
+                let now = path.as_deref().and_then(stamp);
+                if file.changed(key.as_deref(), path.as_deref(), now) {
+                    edited.push(file.owner.get());
+                }
+            }
+            edited.dedup();
+            for index in edited {
+                crate::base::worlds::changed(loader, index);
+            }
+            crate::content::recipes::poll(loader);
+        }
+    });
 }
 
 fn changed(loader: &Loader, owner: Option<usize>) {

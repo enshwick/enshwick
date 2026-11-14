@@ -147,7 +147,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                         WARN,
                         "mod data: {why}; it stays as it is and this world keeps no mod data"
                     );
-                    *SERVER.relock() = None;
+                    super::forget_server();
                     return;
                 }
             };

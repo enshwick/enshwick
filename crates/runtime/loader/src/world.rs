@@ -114,6 +114,7 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: fog::TABLE_IDS,
         link: Some(fog::link),
+        forget: Some(|_| fog::forget_world()),
         ..part!("fog", fog)
     },
     &Part {
@@ -155,6 +156,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: scene::TABLE_IDS,
+        forget: Some(|_| scene::forget()),
         ..part!("scene", scene)
     },
     &Part {

@@ -12,6 +12,7 @@ use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_
 use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
+use crate::engine::pending::Pending;
 use crate::engine::registry::Registry;
 use enshwick_base::Relock;
 
@@ -20,7 +21,7 @@ const MAX_PENDING: usize = 64;
 
 /// A command a player typed, waiting for the end of the step.
 #[derive(Debug)]
-struct Pending {
+struct Queued {
     key: u64,
     owner: ModIndex,
     /// The word that named the mod, as [`word`] reads it.
@@ -30,10 +31,7 @@ struct Pending {
 
 /// What the commands keep while the game runs.
 struct State {
-    pending: Mutex<Vec<Pending>>,
-    /// Set while `pending` holds a command, so a step with none takes no
-    /// lock.
-    waiting: AtomicBool,
+    pending: Pending<Queued>,
     /// Set once a mod named commands, so a chat line takes one load while
     /// none did.
     any: AtomicBool,
@@ -47,8 +45,7 @@ struct State {
 
 static NAMED: Registry<Named> = Registry::new();
 static STATE: State = State {
-    pending: Mutex::new(Vec::new()),
-    waiting: AtomicBool::new(false),
+    pending: Pending::new(),
     any: AtomicBool::new(false),
     rate: Mutex::new(Vec::new()),
     dropped: AtomicU32::new(0),
@@ -174,20 +171,16 @@ pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
     };
     let admitted =
         crate::actions::chat::admit(&mut STATE.rate.relock(), key, std::time::Instant::now());
-    let queued = admitted && {
-        let mut pending = STATE.pending.relock();
-        let room = pending.len() < MAX_PENDING;
-        if room {
-            pending.push(Pending {
+    let queued = admitted
+        && STATE.pending.push_within(
+            MAX_PENDING,
+            core::iter::once(Queued {
                 key,
                 owner,
                 word: word(text),
                 rest: rest.to_owned(),
-            });
-            STATE.waiting.store(true, Ordering::Release);
-        }
-        room
-    };
+            }),
+        );
     if !queued {
         let dropped = STATE.dropped.fetch_add(1, Ordering::Relaxed);
         if dropped.is_multiple_of(100) {
@@ -204,8 +197,7 @@ pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
 /// Forgets the commands waiting and each account's rate, when a hosted game
 /// ends, so none runs in the next one.
 pub(crate) fn forget() {
-    STATE.pending.relock().clear();
-    STATE.waiting.store(false, Ordering::Release);
+    STATE.pending.clear();
     STATE.rate.relock().clear();
 }
 
@@ -213,15 +205,7 @@ pub(crate) fn forget() {
 /// reply as [`reply_by`] sends it; on the server's game thread, after the
 /// step.
 pub(crate) fn after_step(loader: &Loader) {
-    if !STATE.waiting.load(Ordering::Acquire) {
-        return;
-    }
-    let pending = {
-        let mut pending = STATE.pending.relock();
-        STATE.waiting.store(false, Ordering::Release);
-        core::mem::take(&mut *pending)
-    };
-    for command in pending {
+    for command in STATE.pending.take() {
         let Some((player, language)) =
             crate::actions::player_actions::commander(loader, command.key)
         else {
@@ -344,15 +328,14 @@ mod tests {
 
     #[test]
     fn a_command_typed_in_one_hosted_game_never_runs_in_the_next() {
-        STATE.pending.relock().push(Pending {
+        STATE.pending.push(Queued {
             key: 7,
             owner: ModIndex::new(0),
             word: "adm".to_owned(),
             rest: "tp spawn".to_owned(),
         });
-        STATE.waiting.store(true, Ordering::Release);
         forget();
-        assert!(STATE.pending.relock().is_empty());
-        assert!(!STATE.waiting.load(Ordering::Acquire));
+        assert!(!STATE.pending.any());
+        assert!(STATE.pending.take().is_empty());
     }
 }

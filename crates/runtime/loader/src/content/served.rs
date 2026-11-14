@@ -180,7 +180,6 @@ fn add(pending: &mut Vec<Served>, key: ResourceKey, base: ResourceKey, patch: Pa
 
 /// Ends registration and links the database when anything is served.
 pub(crate) fn seal_and_link(loader: &'static Loader) {
-    LOADED.get_or_init(|| loader);
     crate::content::item_kinds::seal(&loader.reflection);
     let renames = crate::content::content_renames::renamed(|owner| {
         loader
@@ -480,7 +479,6 @@ fn alias(key: &ResourceKey) -> Option<ResourceKey> {
     })
 }
 
-static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 /// Content mods renamed, old GUID to new.
 static RENAMES: OnceLock<&'static rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
 
@@ -572,8 +570,7 @@ fn served(handle: u32) -> Option<&'static Served> {
 
 fn mod_on(owner: ModIndex) -> bool {
     owner == ModIndex::LOADER
-        || LOADED
-            .get()
+        || crate::engine::loader::loader()
             .and_then(|loader| loader.mods.get(owner.get()))
             .is_some_and(|m| !m.off.load(Ordering::Acquire))
 }
@@ -764,7 +761,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     if crate::engine::log::enabled(
         enshwick_core::abi::Level::DEBUG,
         crate::engine::settings::LOADER_ID,
-    ) && let Some(loader) = LOADED.get()
+    ) && let Some(loader) = crate::engine::loader::loader()
     {
         let by: Vec<&str> = state
             .built_by

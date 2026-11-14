@@ -163,10 +163,11 @@ fn late_requests_drain_and_the_rest_stay_in_order() {
 /// use them in one process.
 static SHARED: Mutex<()> = Mutex::new(());
 
-/// The outcome the results hold for the request with `user`.
+/// The outcome the results hold for the request with `user`, taking them
+/// as the step's delivery would.
 fn outcome_of(user: usize) -> Option<u32> {
     FINISHED
-        .relock()
+        .take()
         .iter()
         .find(|f| f.user == user)
         .map(|f| f.outcome)
