@@ -22,6 +22,7 @@ mod interaction_targets;
 mod interactions;
 mod inventory;
 mod items;
+mod joins;
 mod knowledge;
 mod map;
 mod mods;

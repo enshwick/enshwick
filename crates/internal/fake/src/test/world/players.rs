@@ -1,7 +1,8 @@
-//! The world's players: who is in it, the world's key, and the chat lines,
-//! notices and renames the mod sends them.
+//! The world's players: who is in it, the world's key, the accounts that
+//! join, and the chat lines, notices and renames the mod sends them.
 
 use enshwick_core::abi::Header;
+use enshwick_core::abi::JoinCall;
 use enshwick_core::abi::PlayerInfo;
 use enshwick_core::abi::RenameCall;
 use enshwick_core::abi::Str;
@@ -120,6 +121,29 @@ impl Installed {
         filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
             filter.run(|callback, user| unsafe { callback(&raw const call, user) }) != 0
+        })
+    }
+
+    /// Asks the mod's join rules about an account joining, as the server asks
+    /// them before the account's player enters the world; whether every rule
+    /// lets it in. `None` stands for an account the game gives no key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.join(Some(enshwick::PlayerKey::new(7))));
+    /// ```
+    #[must_use]
+    pub fn join(&self, player: Option<enshwick_core::PlayerKey>) -> bool {
+        let rules = table::with(Vec::new(), |s| s.join_rules.clone());
+        let call = JoinCall {
+            header: Header::of::<JoinCall>(),
+            player: player.unwrap_or(enshwick_core::PlayerKey::new(0)),
+        };
+        rules.iter().all(|rule| {
+            // SAFETY: a valid call; `user` is the pointer the mod registered with.
+            rule.run(|callback, user| unsafe { callback(&raw const call, user) }) != 0
         })
     }
 }

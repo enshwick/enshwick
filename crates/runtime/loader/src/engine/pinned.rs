@@ -146,6 +146,7 @@ pub(crate) const HOOKED: &[Symbol] = &[
     server::POST_STEP,
     server::SAVE_STEP,
     server::SET_STATE,
+    session::JOIN_GAME,
     settings::FACTORY_SPEED,
     settings::RESOURCE_DROPS,
     skill::NODE_UNLOCKED,

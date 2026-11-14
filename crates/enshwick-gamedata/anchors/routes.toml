@@ -8983,3 +8983,120 @@ in = "server.console_handler"
 shape = ["cmp byte [rax+*],0x0"]
 take = "value"
 range = [0x100, 0x4000]
+
+[[route]]
+id = "session.join_game"
+loads = ["[session] processJoinGameMessage gets an empty list."]
+check = ["mov [rsp+0x18],r8w", "mov [rsp+0x10],rdx"]
+
+[[route]]
+id = "session.join_reply"
+in = "session.join_game"
+shape = ["movzx edx,word [rbp+?]", "lea r9,[rbp+?]", "mov rcx,r14", "call *", "jmp ?b"]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi"]
+
+[[route]]
+id = "session.find_machine"
+in = "session.join_game"
+shape = ["mov r14,rcx", "movzx edx,r8w", "call *", "test rax,rax"]
+take = "address"
+check = ["mov [rsp+0x10],dx", "sub rsp,0x58"]
+
+[[route]]
+id = "session.peer_slots"
+in = "session.join_game"
+shape = ["and ecx,0x3f", "add rcx,rcx", "mov [r14+rcx*8+*],ax", "mov byte [r14+rcx*8+?],0x0", "mov qword [r14+rcx*8+?],0x3b9aca00"]
+take = "value"
+range = [0x8a0c, 0x23310]
+
+[[route]]
+id = "session.peer_slot_size"
+in = "session.join_game"
+shape = ["add rcx,rcx", "mov [r14+rcx*8+?],ax"]
+take = "scale"
+range = [0x8, 0x20]
+
+[[route]]
+id = "session.peer_slot_open"
+in = "session.join_game"
+shape = ["mov [r14+rcx*8+?],ax", "mov byte [r14+rcx*8+*],0x0"]
+take = "value"
+range = [0x8a0d, 0x23314]
+
+[[route]]
+id = "session.peer_slot_close"
+in = "session.join_game"
+shape = ["mov byte [r14+rcx*8+?],0x0", "mov qword [r14+rcx*8+*],0x3b9aca00"]
+take = "value"
+range = [0x8a10, 0x23320]
+
+[[route]]
+id = "session.message_size"
+in = "session.join_game"
+shape = ["mov ecx,eax", "mov r8d,*", "and ecx,0x3f"]
+take = "value"
+range = [0x248, 0x920]
+
+[[route]]
+id = "session.reply_frame"
+in = "session.join_game"
+shape = ["mov qword [r14+rcx*8+?],0x3b9aca00", "lea rcx,[rbp+*]", "call ?b"]
+take = "value"
+range = [0x128, 0x4a0]
+
+[[route]]
+id = "session.reply_banned_a"
+in = "session.join_game"
+shape = ["call ?b", "mov r8d,0x8", "mov byte [rbp+*],0x1", "mov byte [rbp+?],0x1", "jmp ?b"]
+take = "value"
+range = [0x156, 0x558]
+
+[[route]]
+id = "session.reply_banned_b"
+in = "session.join_game"
+shape = ["call ?b", "mov r8d,0x8", "mov byte [rbp+?],0x1", "mov byte [rbp+*],0x1", "jmp ?b"]
+take = "value"
+range = [0x152, 0x548]
+
+[[route]]
+id = "session.join_count"
+in = "session.join_game"
+shape = ["cmp [r13+*],r10d", "jbe ?b", "lea rsi,[r13+?]"]
+take = "value"
+range = [0x1c, 0x70]
+
+[[route]]
+id = "session.join_accounts"
+in = "session.join_game"
+shape = ["jbe ?b", "lea rsi,[r13+*]", "mov [rsp+?],rsi", "cmp byte [rsi+?],0x0"]
+take = "value"
+range = [0x1e, 0x78]
+
+[[route]]
+id = "session.join_account_kind"
+in = "session.join_game"
+shape = ["lea rsi,[r13+?]", "mov [rsp+?],rsi", "cmp byte [rsi+*],0x0"]
+take = "value"
+range = [0x6, 0x18]
+
+[[route]]
+id = "session.join_account_id"
+in = "session.join_game"
+shape = ["mov r8d,[rsi]", "lea rdx,[rsi+*]", "lea rcx,[rsp+?]", "call ?b"]
+take = "value"
+range = [0x2, 0x10]
+
+[[route]]
+id = "session.join_account_size"
+in = "session.join_game"
+shape = ["inc r15", "add rsi,*", "mov [rbp+?],r15"]
+take = "value"
+range = [0x8, 0x20]
+
+[[route]]
+id = "session.platform"
+in = "session.join_game"
+shape = ["je ?b", "cmp byte [r14+*],0x3", "jne ?b", "mov r8d,[rsi]"]
+take = "value"
+range = [0x40, 0x100]

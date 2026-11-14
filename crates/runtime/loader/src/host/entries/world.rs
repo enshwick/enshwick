@@ -84,6 +84,18 @@ entries! {
         )
     }
 
+    fn join_rule(
+        me as Mod,
+        callback: api_frame::JoinRuleFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        me.claim(
+            "join rule",
+            Mode::Chained,
+            checked(crate::world::join_gate::register(me.loader, me.index, callback, user)),
+        )
+    }
+
     fn entities(
         loader as Caller,
         type_hash: u32,

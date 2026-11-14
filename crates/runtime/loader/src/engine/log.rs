@@ -572,6 +572,27 @@ macro_rules! log_once {
     }};
 }
 
+/// Logs a line from the loader itself as [`log!`] does, at most once per
+/// `period` from this call site, noting how many it skipped since the last;
+/// for lines a peer can make the loader write.
+#[macro_export]
+macro_rules! log_every {
+    ($level:ident, $period:expr, $($arg:tt)+) => {{
+        static EVERY: ::enshwick_base::__private::Every = ::enshwick_base::__private::Every::new();
+        let level = ::enshwick_core::abi::Level::$level;
+        if $crate::engine::log::enabled(level, $crate::engine::settings::LOADER_ID)
+            && let ::core::option::Option::Some(skipped) = EVERY.due($period)
+        {
+            let line = ::std::format!($($arg)+);
+            let line = match skipped {
+                0 => line,
+                skipped => ::std::format!("{line} ({skipped} more since the last)"),
+            };
+            $crate::engine::log::write(level, $crate::engine::settings::LOADER_ID, &line);
+        }
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 29
+#define ENSHWICK_ABI_MINOR 30
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -3446,6 +3446,31 @@ typedef struct EnshwickSaveInfo {
   uint32_t reserved;
 } EnshwickSaveInfo;
 
+// An account joining the game, handed to the rules registered with
+// `HostApi::join_rule`.
+//
+// The rules see it before any player of its machine enters the world.
+// Layout grows only by appending; read a later field after
+// `Header::covers`.
+typedef struct EnshwickJoinCall {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The joining account's key, the one its player and the server's ban
+  // list carry; zero for an account the game gives no key.
+  EnshwickPlayerKey player;
+} EnshwickJoinCall;
+
+// A mod's join rule, registered with
+// `HostApi::join_rule`.
+//
+// It is called on the thread the session reads its messages on, not the
+// game thread, once for each account a joining machine brings; it returns
+// 1 to let the account in and 0 to refuse it, any other answer letting it
+// in. `call` is borrowed for the call and never null; `user` is the
+// pointer given at registration, passed as it is. Never re-entered; it must
+// not unwind.
+typedef uint8_t (*EnshwickJoinRuleFn)(const struct EnshwickJoinCall *call, void *user);
+
 // The table of services the loader offers a mod.
 //
 // A function appended at its end is a new
@@ -5351,6 +5376,21 @@ typedef struct EnshwickHostApi {
                                       uint32_t type_hash,
                                       EnshwickGameEventFn callback,
                                       void *user);
+  // Adds `callback` with `user` to the join rules, which the server asks
+  // in load order, on the thread the game reads a machine's join on, once
+  // for each account the machine brings and before any of its players is
+  // added. The first 0 refuses the machine: it gets the game's own reply
+  // for an account on the ban list, which its player reads as the host
+  // denying access, and loads no world. The loader writes nothing to the
+  // ban list, and the rules of a mod that is off are not asked. A machine
+  // that already joined keeps playing: the game drops its join message.
+  // Server only: on a client it runs while it hosts a game. A build
+  // without the join path answers `Status::MISSING`. Allowed during
+  // `enshwick_mod_init` only (`Status::TOO_LATE` after it);
+  // `callback` and `user` are kept for the life of the process and never
+  // freed by the loader. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.30.
+  EnshwickStatus (*join_rule)(EnshwickModHandle me, EnshwickJoinRuleFn callback, void *user);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

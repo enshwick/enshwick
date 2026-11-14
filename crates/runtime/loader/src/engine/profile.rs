@@ -66,10 +66,12 @@ pub enum Feature {
     Chat,
     /// Mid-function hooks, the pacing waits among them.
     Hooks,
+    /// Join rules.
+    Joins,
 }
 
 /// How many features there are.
-pub const FEATURES: usize = 23;
+pub const FEATURES: usize = 24;
 
 impl Feature {
     /// The feature in the report.
@@ -99,6 +101,7 @@ impl Feature {
             Self::Items => "item filters",
             Self::Chat => "chat filters",
             Self::Hooks => "mid hooks",
+            Self::Joins => "join rules",
         }
     }
 
@@ -126,6 +129,7 @@ impl Feature {
         Self::Items,
         Self::Chat,
         Self::Hooks,
+        Self::Joins,
     ];
 }
 

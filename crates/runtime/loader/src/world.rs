@@ -22,6 +22,13 @@ pub mod fog_image;
 #[cfg(windows)]
 pub(crate) mod game_settings;
 #[cfg(windows)]
+pub(crate) mod join_gate;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build answers the game's joins")
+)]
+pub(crate) mod join_message;
+#[cfg(windows)]
 pub(crate) mod label;
 pub mod map_frame;
 pub mod map_marker_types;
@@ -110,6 +117,11 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: label::TABLE_IDS,
         link: Some(label::link),
         ..part!("label", label)
+    },
+    &Part {
+        table_ids: join_gate::TABLE_IDS,
+        link: Some(join_gate::link),
+        ..part!("join_gate", join_gate)
     },
     &Part {
         table_ids: bases::TABLE_IDS,
