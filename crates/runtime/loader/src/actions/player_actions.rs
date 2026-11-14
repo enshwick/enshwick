@@ -7,8 +7,6 @@
 //! the mod's handler answers. The reply reaches the player as one of the
 //! game's notices, in the language the client named when it joined.
 
-use std::sync::Mutex;
-
 use enshwick_core::abi::{
     ActionCall, ActionFn, ActionReply, ActionTarget, Header, PlayerInfo, Status, Str,
 };
@@ -17,7 +15,7 @@ use crate::actions::admission::{self, Path, Refusal, Verdict};
 use crate::base::remote::Message;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use enshwick_base::Relock;
+use crate::engine::registry::Registry;
 
 /// A mod's actions callback.
 #[derive(Clone, Copy)]
@@ -27,39 +25,56 @@ struct Registered {
     user: usize,
 }
 
-static REGISTERED: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
+static REGISTERED: Registry<Registered> = Registry::new();
 
-/// Registers mod `owner`'s actions callback; a second one is refused.
+/// Registers mod `owner`'s actions callback; a second one is refused, and
+/// any after the seal.
 pub(crate) fn register(
     owner: ModIndex,
     callback: ActionFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let mut registered = REGISTERED.relock();
-    if registered.iter().any(|r| r.owner == owner) {
-        return Status::REFUSED;
-    }
-    registered.push(Registered {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    });
-    Status::OK
+    REGISTERED
+        .edit(|registered| {
+            if registered.iter().any(|r| r.owner == owner) {
+                return Status::REFUSED;
+            }
+            registered.push(Registered {
+                owner,
+                callback,
+                user: user.expose_provenance(),
+            });
+            Status::OK
+        })
+        .unwrap_or_else(Status::from)
+}
+
+/// Seals the actions callbacks once every mod's init ran.
+pub(crate) fn seal() {
+    let _registered = REGISTERED.seal();
 }
 
 /// The registered mods that are running.
-fn running(loader: &Loader) -> Vec<Registered> {
-    let registered = REGISTERED.relock();
-    registered
-        .iter()
-        .copied()
-        .filter(|r| {
-            loader
-                .mods
-                .get(r.owner.get())
-                .is_some_and(|m| !m.off.load(core::sync::atomic::Ordering::Acquire))
-        })
-        .collect()
+fn running(loader: &Loader) -> impl Iterator<Item = Registered> {
+    running_in(&REGISTERED, loader).into_iter()
+}
+
+/// The mods among `registered` that are running, before the seal too, since
+/// a mod's init may ask about the actions it just registered; copied out, so
+/// no lock is held while a mod answers.
+fn running_in(registered: &Registry<Registered>, loader: &Loader) -> Vec<Registered> {
+    registered.with(|registered| {
+        registered
+            .iter()
+            .copied()
+            .filter(|r| {
+                loader
+                    .mods
+                    .get(r.owner.get())
+                    .is_some_and(|m| !m.off.load(core::sync::atomic::Ordering::Acquire))
+            })
+            .collect()
+    })
 }
 
 /// A question the loader asks a mod: its kind, and for
@@ -170,7 +185,7 @@ pub(crate) fn window(
     language: u32,
     id: &str,
 ) -> Option<String> {
-    let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
+    let registered = running(loader).find(|r| r.owner == owner)?;
     let answer = ask(
         registered,
         Question::of(ActionCall::WINDOW),
@@ -218,7 +233,7 @@ pub(crate) fn command(
     language: u32,
     (word, rest): (&str, &str),
 ) -> Option<Answer> {
-    let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
+    let registered = running(loader).find(|r| r.owner == owner)?;
     Some(ask(
         registered,
         Question::of(path.kind()),
@@ -254,7 +269,7 @@ pub(crate) fn window_closed(loader: &Loader, key: u64, closed: Option<(ModIndex,
 
 /// The running mods that declared actions, by index.
 pub(crate) fn declaring(loader: &Loader) -> Vec<ModIndex> {
-    running(loader).into_iter().map(|r| r.owner).collect()
+    running(loader).map(|r| r.owner).collect()
 }
 
 /// The ids of mod `owner`'s actions `player` may run now, from the sheet
@@ -265,7 +280,7 @@ pub(crate) fn allowed(
     owner: ModIndex,
     player: &PlayerInfo,
 ) -> Option<Vec<String>> {
-    let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
+    let registered = running(loader).find(|r| r.owner == owner)?;
     let sheet = ask(
         registered,
         Question::of(ActionCall::SHEET),
@@ -350,8 +365,7 @@ pub(crate) fn refuse(
     let Some(reason) = refusal.abi_reason() else {
         return;
     };
-    let Some(registered) =
-        owner.and_then(|owner| running(loader).into_iter().find(|r| r.owner == owner))
+    let Some(registered) = owner.and_then(|owner| running(loader).find(|r| r.owner == owner))
     else {
         return;
     };
@@ -476,6 +490,39 @@ pub(crate) fn joined() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    unsafe extern "system" fn answer(_: *const ActionCall, _: *mut core::ffi::c_void, _: *mut Str) {
+    }
+
+    #[test]
+    fn a_mod_s_init_finds_the_actions_it_registered_before_the_seal() {
+        let loader = crate::start::tests::loader_running(&["you.safes"]);
+        let registered = Registry::new();
+        let owner = ModIndex::new(0);
+        let entry = Registered {
+            owner,
+            callback: answer,
+            user: 0,
+        };
+        assert_eq!(registered.add(entry), Ok(()));
+        let owners = |registered: &Registry<Registered>| -> Vec<ModIndex> {
+            running_in(registered, &loader)
+                .iter()
+                .map(|r| r.owner)
+                .collect()
+        };
+        assert_eq!(
+            owners(&registered),
+            [owner],
+            "rules_changed and a window during init"
+        );
+        let _sealed = registered.seal();
+        assert_eq!(owners(&registered), [owner]);
+        loader.mods[0]
+            .off
+            .store(true, core::sync::atomic::Ordering::Release);
+        assert!(owners(&registered).is_empty(), "a mod turned off");
+    }
 
     #[test]
     fn the_actions_a_sheet_lists_are_the_ones_carried() {

@@ -40,17 +40,39 @@ struct Heard {
     waiting: Pending<Said>,
     /// Each account's rate of lines raised.
     rate: Mutex<Rated>,
+    /// Lines not raised: the queue was full, or their account was over its
+    /// rate; a count for the process, which a hosted game's end keeps.
+    skipped: Drops,
+    /// Whether a mod listens for `Event::CHAT_SAID`; fixed once mods are in,
+    /// since they subscribe only during init, so a hosted game's end keeps it.
+    wanted: OnceLock<bool>,
 }
 
-static HEARD: Heard = Heard {
-    waiting: Pending::new(),
-    rate: Mutex::new(Rated::new(CHAT_LINE_RATE)),
-};
-/// Whether a mod listens for `Event::CHAT_SAID`; fixed once mods are in,
-/// since they subscribe only during init.
-static WANTED: OnceLock<bool> = OnceLock::new();
-/// Lines not raised: the queue was full, or their account was over its rate.
-static SKIPPED: Drops = Drops::new();
+impl Heard {
+    const fn new() -> Self {
+        Self {
+            waiting: Pending::new(),
+            rate: Mutex::new(Rated::new(CHAT_LINE_RATE)),
+            skipped: Drops::new(),
+            wanted: OnceLock::new(),
+        }
+    }
+
+    /// Whether a mod listens for lines.
+    fn wanted(&self, loader: &Loader) -> bool {
+        *self
+            .wanted
+            .get_or_init(|| loader.subscribed(Event::CHAT_SAID))
+    }
+
+    /// Drops the lines waiting and the accounts' rates.
+    fn forget(&self) {
+        self.waiting.clear();
+        self.rate.relock().clear();
+    }
+}
+
+static HEARD: Heard = Heard::new();
 
 /// Registers mod `owner`'s chat filter.
 pub(crate) fn register(
@@ -79,14 +101,9 @@ pub(crate) fn seal() {
     let _filters = FILTERS.seal();
 }
 
-/// Whether a mod listens for lines.
-fn wanted(loader: &Loader) -> bool {
-    *WANTED.get_or_init(|| loader.subscribed(Event::CHAT_SAID))
-}
-
 /// Whether no mod filters or hears the chat, so a line needs nothing more.
 pub(crate) fn idle(loader: &Loader) -> bool {
-    FILTERS.sealed().is_none_or(<[_]>::is_empty) && !wanted(loader)
+    FILTERS.sealed().is_none_or(<[_]>::is_empty) && !HEARD.wanted(loader)
 }
 
 /// Runs every live filter on `text`, a line the player of account `player`
@@ -156,7 +173,7 @@ fn character(player: u64) -> Entity {
 /// Keeps a line that reached the chat for the end of the step, when a mod
 /// listens; a player's line counts against its account's rate.
 pub(crate) fn heard(loader: &Loader, said: Said) {
-    if !wanted(loader) {
+    if !HEARD.wanted(loader) {
         return;
     }
     let over =
@@ -179,7 +196,7 @@ const fn rated(kind: u32) -> bool {
 /// Counts a line not raised and logs the first and every hundredth.
 #[cold]
 fn skipped() {
-    if let Some(total) = SKIPPED.add(1) {
+    if let Some(total) = HEARD.skipped.add(1) {
         crate::log!(
             WARN,
             "chat lines: {total} not raised to mods, over a player's {} a second or a full queue",
@@ -215,8 +232,7 @@ pub(crate) fn raise(loader: &Loader) {
 
 /// Drops the lines waiting for a hosted game that stops.
 pub(crate) fn forget() {
-    HEARD.waiting.clear();
-    HEARD.rate.relock().clear();
+    HEARD.forget();
 }
 
 /// The kind of a line the game posted itself, by its chat type: 1 is an
@@ -236,6 +252,7 @@ mod tests {
 
     #[test]
     fn a_hosted_game_s_end_drops_the_lines_it_heard_and_its_rates() {
+        let heard = Heard::new();
         let said = Said {
             player: 7,
             kind: ChatLine::PLAYER,
@@ -243,25 +260,34 @@ mod tests {
             text: "hello".to_owned(),
         };
         assert!(
-            HEARD
+            heard
                 .waiting
                 .push_within(MAX_WAITING, core::iter::once(said))
         );
         let now = Instant::now();
         let spent = (0..20)
-            .take_while(|_| HEARD.rate.relock().admit(7, now) == Admitted::Yes)
+            .take_while(|_| heard.rate.relock().admit(7, now) == Admitted::Yes)
             .count();
         assert_eq!(
             f64::from(u32::try_from(spent).unwrap()),
             CHAT_LINE_RATE.burst
         );
-        forget();
-        assert!(HEARD.waiting.take().is_empty());
+        heard.forget();
+        assert!(heard.waiting.take().is_empty());
         assert_eq!(
-            HEARD.rate.relock().admit(7, now),
+            heard.rate.relock().admit(7, now),
             Admitted::Yes,
             "the next game starts with a full rate"
         );
+    }
+
+    #[test]
+    fn whether_a_mod_hears_lines_is_asked_once_and_outlives_a_hosted_game() {
+        let heard = Heard::new();
+        let loader = crate::start::tests::bare_loader();
+        assert!(!heard.wanted(&loader), "no mod subscribed");
+        heard.forget();
+        assert_eq!(heard.wanted.get(), Some(&false), "kept for the process");
     }
 
     #[test]

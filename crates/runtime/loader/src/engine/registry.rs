@@ -117,13 +117,32 @@ impl<T> Registry<T> {
     /// # Ok::<(), enshwick_loader::engine::registry::Sealed>(())
     /// ```
     pub fn any(&self, matches: impl Fn(&T) -> bool) -> bool {
-        let any = |items: &[T]| items.iter().any(&matches);
+        self.with(|items| items.iter().any(&matches))
+    }
+
+    /// Runs `read` on the items registered so far, sealed or not, as a mod's
+    /// init asking about what it registered needs; `read` runs under the
+    /// registry's lock while it is open, so it must not use this registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::engine::registry::Registry;
+    ///
+    /// let registry: Registry<u32> = Registry::new();
+    /// registry.add(7)?;
+    /// assert_eq!(registry.with(<[u32]>::len), 1);
+    /// registry.seal();
+    /// assert_eq!(registry.with(<[u32]>::to_vec), [7]);
+    /// # Ok::<(), enshwick_loader::engine::registry::Sealed>(())
+    /// ```
+    pub fn with<R>(&self, read: impl Fn(&[T]) -> R) -> R {
         match self.sealed() {
-            Some(items) => any(items),
+            Some(items) => read(items),
             // Sealed meanwhile: the sealed slice has every item.
             None => self
-                .edit(|items| any(items))
-                .unwrap_or_else(|Sealed| self.sealed().is_some_and(any)),
+                .edit(|items| read(items))
+                .unwrap_or_else(|Sealed| read(self.sealed().unwrap_or_default())),
         }
     }
 

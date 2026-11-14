@@ -132,6 +132,13 @@ pub(crate) fn bare_loader() -> Loader {
     loader(&[], false).0
 }
 
+/// A server's loader with no game running the plain mods `ids`, in that
+/// order, for the tests of other parts that ask about a mod.
+pub(crate) fn loader_running(ids: &[&'static str]) -> Loader {
+    let mods: Vec<TestMod> = ids.iter().map(|&id| TestMod::plain(id)).collect();
+    loader(&mods, false).0
+}
+
 /// A loader of `side` with no game and no mods whose build pins every
 /// symbol of `ids` and every one of `constants`, for the tests of a part's
 /// links.
