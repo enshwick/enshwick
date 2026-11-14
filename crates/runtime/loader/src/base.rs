@@ -21,7 +21,7 @@ pub(crate) mod discovery;
 #[cfg(windows)]
 pub(crate) mod emits;
 #[cfg(windows)]
-pub(crate) mod game_events;
+pub mod game_events;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "players read the greeting only in the game")

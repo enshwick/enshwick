@@ -612,6 +612,14 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         // function's server instance entry; its u8 state sits at the build
         // table's `server.entry_state` offset.
         .map(|(_, offsets)| unsafe { read_at::<u8>(entry, offsets.entry_state) });
+    // Before the game's own change: loading the new server's world may
+    // already move its events.
+    if state == STATE_INITIALIZE
+        && old.is_some_and(|old| old != STATE_INITIALIZE)
+        && loaded().is_some_and(|(loader, _)| loader.side == Side::CLIENT)
+    {
+        crate::engine::world::server_starts();
+    }
     // SAFETY: this detour runs only as the `server.set_state` link, so the
     // slot holds the next function of that signature; the game's arguments
     // pass unchanged.

@@ -73,11 +73,7 @@ pub(crate) extern "system" fn game_event(
     callback: GameEventFn,
     user: *mut c_void,
 ) -> Status {
-    with(Status::MISSING, |s| {
-        s.game_events
-            .push((type_hash, Registered::new(callback, user, me)));
-        Status::OK
-    })
+    keep_game_event(me, type_hash, callback, user, false)
 }
 
 pub(crate) extern "system" fn client_game_event(
@@ -86,24 +82,31 @@ pub(crate) extern "system" fn client_game_event(
     callback: GameEventFn,
     user: *mut c_void,
 ) -> Status {
+    keep_game_event(me, type_hash, callback, user, true)
+}
+
+/// Keeps a game event handler as the loader does: only during init, 0 for
+/// every type, and a client handler only where a client world steps, a
+/// dedicated server answering it without keeping it.
+fn keep_game_event(
+    me: ModHandle,
+    type_hash: u32,
+    callback: GameEventFn,
+    user: *mut c_void,
+    client: bool,
+) -> Status {
     with(Status::MISSING, |s| {
-        if s.host.side != Side::CLIENT {
-            return Status::UNAVAILABLE;
-        }
         if s.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        if type_hash == 0
-            || s.client_game_events
-                .iter()
-                .filter(|(_, handler)| handler.owner() == Some(me))
-                .count()
-                >= 32
-        {
-            return Status::BAD_ARGS;
-        }
-        s.client_game_events
-            .push((type_hash, Registered::new(callback, user, me)));
+        let kept = if !client {
+            &mut s.game_events
+        } else if s.host.side == Side::CLIENT {
+            &mut s.client_game_events
+        } else {
+            return Status::OK;
+        };
+        kept.push((type_hash, Registered::new(callback, user, me)));
         Status::OK
     })
 }

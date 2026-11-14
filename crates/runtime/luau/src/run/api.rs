@@ -175,7 +175,8 @@ impl Inner {
         )
     }
 
-    /// Puts `extend`, `refuse`, `on_game_type`, `game_event_types` and `on`
+    /// Puts `extend`, `refuse`, `on_game_type`, `on_client_game_type`,
+    /// `game_event_types` and `on`
     /// into `api`, the subscriptions `vm`'s scripts make at start.
     fn subscription_functions(&self, vm: &Arc<Vm>, api: &Table) -> mlua::Result<()> {
         let lua = &vm.lua;
@@ -209,19 +210,27 @@ impl Inner {
                 vm.subscribe("enshwick.on_mod_event", sub, handler)
             })?,
         )?;
-        let weak = Arc::downgrade(vm);
-        api.raw_set(
-            "on_game_type",
-            lua.create_function(
-                move |_, (name, fields, handler): (String, Table, Function)| {
-                    let vm = weak
-                        .upgrade()
-                        .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
-                    let sub = Subscription::raw(name, &fields)?;
-                    vm.subscribe("enshwick.on_game_type", sub, handler)
-                },
-            )?,
-        )?;
+        for (name, client) in [("on_game_type", false), ("on_client_game_type", true)] {
+            let weak = Arc::downgrade(vm);
+            let what = format!("enshwick.{name}");
+            api.raw_set(
+                name,
+                lua.create_function(
+                    move |_, (type_name, fields, handler): (String, Table, Function)| {
+                        let vm = weak
+                            .upgrade()
+                            .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                        let spec = Subscription::raw(&what, type_name, &fields)?;
+                        let sub = if client {
+                            Subscription::ClientRaw(spec)
+                        } else {
+                            Subscription::Raw(spec)
+                        };
+                        vm.subscribe(&what, sub, handler)
+                    },
+                )?,
+            )?;
+        }
         let types = self.event_types.clone();
         api.raw_set(
             "game_event_types",

@@ -247,4 +247,4 @@ names every entry of the golden layout once, in that order.
 | `fog_uncover` | game | — | with a player |
 | `content_name` | loader | — | — |
 | `language_of` | game | — | with a player |
-| `client_game_event` | game | — | client |
+| `client_game_event` | game | — | on a client, hosting and joined |

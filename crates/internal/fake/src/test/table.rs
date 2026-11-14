@@ -77,6 +77,8 @@ pub(crate) struct State {
     pub(crate) subscriptions: Vec<(Event, Registered<EventFn>)>,
     /// Game event handlers, by type hash (0 for every type).
     pub(crate) game_events: Vec<(u32, Registered<GameEventFn>)>,
+    /// Game event handlers of the client's own world, by type hash (0 for
+    /// every type); none on a dedicated server.
     pub(crate) client_game_events: Vec<(u32, Registered<GameEventFn>)>,
     pub(crate) served: Vec<(ServedResource, Registered<ResourcePatchFn>)>,
     /// Every rebuild of a served resource the mod asked for, at init and

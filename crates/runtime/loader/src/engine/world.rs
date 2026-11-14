@@ -26,6 +26,9 @@ use crate::engine::players::{CharacterId, MAX_PLAYERS};
 pub(crate) use crate::engine::server_pin::ServerAccess;
 use crate::engine::server_pin::{Place, ServerCell};
 
+mod whose;
+pub(crate) use whose::{Whose, server_starts, whose};
+
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::COMPONENT_READ_RAW.id(),
@@ -87,6 +90,9 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
     };
     let entity_world = if world == 0 { 0 } else { world + entities };
     SERVER_WORLD.store(entity_world, Ordering::Release);
+    if entity_world != 0 {
+        whose::server_seen(thread);
+    }
 }
 
 /// Begins the server's end at its shutdown, on its game thread: no reader
@@ -130,9 +136,11 @@ pub(crate) fn tear_down() {
     });
     SERVER_WORLD.store(0, Ordering::Release);
     GAME_THREAD.store(0, Ordering::Release);
+    whose::server_gone();
 }
 
-/// Forgets the server of a hosted game that stopped, after [`retire`].
+/// Forgets the server of a hosted game that stopped, after [`retire`]; its
+/// thread still steps it for the final save until [`tear_down`].
 pub(crate) fn release() {
     SERVER.publish(0);
     SERVER_WORLD.store(0, Ordering::Release);

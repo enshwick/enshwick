@@ -1,3 +1,6 @@
+// Long file: every scenario runs through the one `declare_mod!(Luau)` of
+// this test binary and its harness, which a second binary would copy.
+
 //! Luau mods through the fake host: the API they reach, the sandbox, the
 //! budgets, and faults that turn one mod off.
 
@@ -592,6 +595,45 @@ mod tests {
         bytes[8..12].copy_from_slice(&4096u32.to_le_bytes());
         assert_eq!(loader.raise_game_event(DIED, &bytes), 1);
         assert!(logged(&loader, "died 4096"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_client_event_by_type_reaches_only_the_client_handler() {
+        let (loader, status) = run_full(
+            r#"enshwick.on_client_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
+                enshwick.log.info(`client saw {event.deadEntityId}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host().side(enshwick::abi::Side::CLIENT),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let mut bytes = [0u8; 16];
+        bytes[8..12].copy_from_slice(&4096u32.to_le_bytes());
+        assert_eq!(loader.raise_game_event(DIED, &bytes), 0);
+        assert_eq!(loader.raise_client_game_event(DIED, &bytes), 1);
+        assert!(logged(&loader, "client saw 4096"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn an_unknown_client_event_type_names_the_call_that_asked_for_it() {
+        let (loader, status) = run_full(
+            r#"enshwick.on_client_game_type("keen::ecs::NoSuchEvent", {}, function() end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host().side(enshwick::abi::Side::CLIENT),
+        );
+        assert_ne!(status, Status::OK);
+        assert!(
+            logged(
+                &loader,
+                "enshwick.on_client_game_type: this game build has no game event type keen::ecs::NoSuchEvent"
+            ),
+            "{:?}",
+            loader.logs()
+        );
     }
 
     #[test]
