@@ -147,7 +147,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                         WARN,
                         "mod data: {why}; it stays as it is and this world keeps no mod data"
                     );
-                    *SERVER.relock() = None;
+                    super::forget_server();
                     return;
                 }
             };
@@ -295,6 +295,46 @@ fn refresh_carried(loader: &Loader, server: &mut Server) {
     server.changed |= changed;
 }
 
+/// Sets aside each waiting record on a slot a value of its kind now holds:
+/// written so, the next load would name the slot twice.
+fn set_aside_overwritten(server: &mut Server) {
+    let newer = server
+        .values
+        .iter()
+        .filter_map(|(&(kind, _), record)| record.anchor.map(|anchor| (kind, anchor)));
+    server.changed |= set_aside_older(&mut server.pending, newer) > 0;
+}
+
+/// The world key and file bytes of `server` as its world goes away, when
+/// values changed since its last save; the anchors stand as last read, since
+/// the world is gone.
+pub(super) fn last_write(mut server: Server) -> Option<(String, Vec<u8>)> {
+    if !FINDING.load(Ordering::Relaxed) {
+        set_aside_overwritten(&mut server);
+    }
+    if !server.changed {
+        return None;
+    }
+    let bytes = write_file(&server);
+    Some((server.key?, bytes))
+}
+
+/// Writes what `server` set after its world's last save, such as values mods
+/// set in their `ShutdownStarted` handlers, which run after the parts save.
+pub(super) fn save_last(server: Server) {
+    let Some((key, bytes)) = last_write(server) else {
+        return;
+    };
+    let path = file(&key);
+    if let Err(error) = enshwick_core::files::write_atomically(&path, &bytes) {
+        crate::log!(
+            WARN,
+            "mod data: {} not written as its world ended: {error}",
+            path.display()
+        );
+    }
+}
+
 /// Writes the values when they changed, under their anchors as the world
 /// holds them now.
 fn save(loader: &Loader, after_game_save: bool) {
@@ -326,11 +366,7 @@ fn save(loader: &Loader, after_game_save: bool) {
                     }) > 0;
                 }
             }
-            let newer = server
-                .values
-                .iter()
-                .filter_map(|(&(kind, _), record)| record.anchor.map(|anchor| (kind, anchor)));
-            server.changed |= set_aside_older(&mut server.pending, newer) > 0;
+            set_aside_overwritten(server);
         }
         if !server.changed {
             return;

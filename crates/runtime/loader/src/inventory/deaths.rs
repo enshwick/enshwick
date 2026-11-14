@@ -10,15 +10,15 @@
 //! Deaths no system records, such as freezing or an administrator's kill,
 //! raise nothing here.
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{Event, Header, HookFlags, PlayerDeathData};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
+use crate::engine::pending::Pending;
 use crate::engine::pinned;
-use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[pinned::player::DEATH_SINK.id()];
@@ -107,7 +107,7 @@ impl History {
 static RECORD: OnceLock<Record> = OnceLock::new();
 static HISTORY: OnceLock<Option<History>> = OnceLock::new();
 /// Deaths seen since the last step, as the records' bytes.
-static SEEN: Mutex<Vec<[u8; 64]>> = Mutex::new(Vec::new());
+static SEEN: Pending<[u8; 64]> = Pending::new();
 
 /// The record the sink takes.
 const DEATH_RECORD: &str = "keen::PlayerDeath";
@@ -188,10 +188,7 @@ crate::engine::chains::chain_detour! {
                 // call, and `at` is below that size.
                 *byte = unsafe { enshwick_core::raw::read_at(death, at) };
             }
-            let mut seen = SEEN.relock();
-            if seen.len() < MOST {
-                seen.push(bytes);
-            }
+            let _kept = SEEN.push_within(MOST, core::iter::once(bytes));
         }
         onward.call()
     }
@@ -237,7 +234,7 @@ pub(crate) fn after_step(loader: &Loader) {
     let Some(layout) = RECORD.get() else {
         return;
     };
-    let seen = std::mem::take(&mut *SEEN.relock());
+    let seen = SEEN.take();
     if seen.is_empty() {
         return;
     }
@@ -258,6 +255,12 @@ pub(crate) fn after_step(loader: &Loader) {
         }
         loader.emit(Event::PLAYER_DIED, None, (&raw const death).cast());
     }
+}
+
+/// Drops the deaths no step raised before a hosted game ended: their records
+/// name the old world's players.
+pub(crate) fn forget() {
+    SEEN.clear();
 }
 
 #[cfg(test)]
@@ -288,5 +291,12 @@ mod tests {
         assert!((death.position[0] - 1.5).abs() < f32::EPSILON);
         assert_eq!(death.cause_guid[0], 0xab);
         assert_eq!((death.was_deadly_fog, death.drowned), (0, 1));
+    }
+
+    #[test]
+    fn a_death_no_step_raised_before_the_game_ended_is_not_raised_in_the_next() {
+        let _kept = SEEN.push_within(MOST, core::iter::once([7; 64]));
+        forget();
+        assert!(SEEN.take().is_empty());
     }
 }

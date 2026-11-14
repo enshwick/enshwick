@@ -767,6 +767,8 @@ mod tests {
     /// The only test that writes [`ARMED`], which is the process's own.
     #[test]
     fn the_window_makes_new_windows_only_while_it_and_its_teardown_are_on() {
+        // Put back however the test ends, so a failure here fails no other.
+        let _disarm = crate::engine::undo::Undo::new(|| ARMED.store(false, Ordering::Release));
         ARMED.store(true, Ordering::Release);
         assert!(armed(), "armed with the window and its teardown on");
         // A thread not carried keeps fuses of its own, so this test's stay on.
@@ -783,8 +785,6 @@ mod tests {
         assert!(armed());
         TEARDOWN.blow("a test");
         assert!(!armed(), "no window is made that nothing would free");
-        ARMED.store(false, Ordering::Release);
-        assert!(!armed());
     }
 
     /// Where the function that starts at an offset into the code at

@@ -7,8 +7,8 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 
 use super::{
-    FILED_FUSE, ItemMap, LOADED, MENU_FUSE, Menu, SEALED, STATUS_ROWS, UI_PLAY_DATA, UI_STATE,
-    UI_WORDS, item_map, menu,
+    FILED_FUSE, ItemMap, MENU_FUSE, Menu, SEALED, STATUS_ROWS, UI_PLAY_DATA, UI_STATE, UI_WORDS,
+    item_map, menu,
 };
 
 /// Links the registry load that files the staff items; false once it is
@@ -49,9 +49,8 @@ crate::engine::chains::chain_detour! {
 /// - `registry` is the game's own argument to the load, null or live for
 ///   the call, on the load's thread.
 unsafe fn load_registry(onward: &Onward<(), impl Fn()>, registry: *mut u8) {
-    let ready = LOADED
-        .get()
-        .and_then(|loader| item_map(loader))
+    let ready = crate::engine::loader::loader()
+        .and_then(item_map)
         .zip(SEALED.get())
         .filter(|_| !registry.is_null());
     // The game calls this often and builds only once: a registry that holds
@@ -165,9 +164,11 @@ crate::engine::chains::chain_detour! {
 ///   [`UI_WORDS`] words over [`UI_READS`].
 /// - The call runs on the system's thread while the system runs.
 pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
-    let (Some(loader), Some(engine), Some(sealed)) =
-        (LOADED.get(), crate::engine::ecs::resolved(), SEALED.get())
-    else {
+    let (Some(loader), Some(engine), Some(sealed)) = (
+        crate::engine::loader::loader(),
+        crate::engine::ecs::resolved(),
+        SEALED.get(),
+    ) else {
         return;
     };
     let (Some(menu), Some(merge)) = (menu(loader), sealed.status) else {

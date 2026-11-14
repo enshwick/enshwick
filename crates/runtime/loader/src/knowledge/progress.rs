@@ -86,7 +86,6 @@ static SKILLS: Mutex<Vec<(u32, Registered<SkillCheckFn>)>> = Mutex::new(Vec::new
 static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());
 static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperiencePassFn>>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
-static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 /// Where the fly mode gate's call returns to; 0 when the build lacks it.
 static FLY_MODE: AtomicUsize = AtomicUsize::new(0);
 static LEVELS: OnceLock<Option<Levels>> = OnceLock::new();
@@ -219,7 +218,6 @@ pub(crate) fn link(loader: &'static Loader) {
         filters || writers,
     ];
     let _first = SEALED.set(sealed);
-    let _first = LOADED.set(loader);
     FLY_MODE.store(
         symbol(loader, pinned::skill::FLY_MODE_GATE_RETURN).unwrap_or(0),
         Ordering::Relaxed,
@@ -332,7 +330,7 @@ crate::engine::chains::chain_detour! {
 ///   inside the chain whose caller frame the link took.
 #[cold]
 unsafe fn override_skill(onward: &Onward<u8, impl Fn() -> u8>, node: u32) -> u8 {
-    let gate = LOADED.get().map_or(SkillCheck::OTHER, |loader| {
+    let gate = crate::engine::loader::loader().map_or(SkillCheck::OTHER, |loader| {
         let frame = (loader.caller_frame)();
         let fly_mode = FLY_MODE.load(Ordering::Relaxed) as u64;
         // SAFETY: the link takes `CALLER_FRAME`, so `frame` was taken at the
@@ -469,7 +467,7 @@ crate::engine::chains::chain_detour! {
 /// - `ctx` is null or the live context the game passed to `player_level`,
 ///   used on its thread while the system runs, before vanilla's pass.
 unsafe fn level_pass(ctx: *mut u64, filtered: bool, writes: bool) {
-    if let (Some(loader), Some(engine)) = (LOADED.get(), crate::engine::ecs::resolved())
+    if let (Some(loader), Some(engine)) = (crate::engine::loader::loader(), crate::engine::ecs::resolved())
         && !ctx.is_null()
         // SAFETY: `ctx` is non-null (the `is_null` condition) and the live
         // context the game passed to `player_level`, used on its thread while

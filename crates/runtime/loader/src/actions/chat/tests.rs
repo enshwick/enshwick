@@ -153,7 +153,7 @@ fn replies_to_typed_commands_leave_half_the_waiting_lines_to_the_mods() {
         .map(|player| queue(To::Key(player), shown(&help), MAX_REPLY_WAITING))
         .collect();
     assert_eq!(
-        OUTBOX.relock().len(),
+        OUTGOING.lines.relock().len(),
         MAX_REPLY_WAITING,
         "replies stop at half"
     );
@@ -171,7 +171,7 @@ fn replies_to_typed_commands_leave_half_the_waiting_lines_to_the_mods() {
         queue(To::All, replied("a mod's line"), MAX_WAITING);
     }
     assert_eq!(
-        OUTBOX.relock().len(),
+        OUTGOING.lines.relock().len(),
         MAX_WAITING,
         "the mods' lines still fill the rest"
     );
@@ -231,4 +231,13 @@ fn lines_the_server_posts_itself_keep_their_chat_type() {
     for kind in [0, 1, 4, 255] {
         assert_eq!(verdict(false, kind, true, true), Verdict::Pass);
     }
+}
+
+#[test]
+fn a_hosted_game_s_end_drops_the_lines_waiting_to_post() {
+    assert_eq!(queue(To::All, replied("a mod's line"), MAX_WAITING), 0);
+    assert!(OUTGOING.any.load(Ordering::Acquire));
+    forget();
+    assert!(!OUTGOING.any.load(Ordering::Acquire));
+    assert!(OUTGOING.lines.relock().is_empty());
 }

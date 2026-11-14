@@ -181,6 +181,8 @@ mod rates;
 mod rates_comfort;
 #[cfg(feature = "unstable")]
 mod rates_join;
+#[cfg(feature = "typed")]
+mod rebuild_own_key;
 mod recipe_changes;
 #[cfg(feature = "unstable")]
 mod recipe_kinds;

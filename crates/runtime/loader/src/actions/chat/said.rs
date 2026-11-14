@@ -4,7 +4,6 @@
 //! is raised as `Event::CHAT_SAID`.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -15,6 +14,7 @@ use enshwick_core::abi::{
 use crate::base::wire::Drops;
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::pending::Pending;
 use crate::engine::registry::Registry;
 use enshwick_base::Relock;
 
@@ -44,20 +44,18 @@ pub(crate) struct Said {
 /// One account's rate: its key, the start of its window, lines in it.
 pub(crate) type Rate = (u64, Instant, u32);
 
-/// The waiting lines and the rate of each account; at most
-/// [`RATE_ACCOUNTS`] accounts, scanned, so no peer key is hashed.
-#[derive(Debug)]
+/// The lines heard while the game runs, and who said them.
 struct Heard {
-    waiting: Vec<Said>,
-    rate: Vec<Rate>,
+    waiting: Pending<Said>,
+    /// Each account's rate; at most [`RATE_ACCOUNTS`] accounts, scanned, so
+    /// no peer key is hashed.
+    rate: Mutex<Vec<Rate>>,
 }
 
-static HEARD: Mutex<Heard> = Mutex::new(Heard {
-    waiting: Vec::new(),
-    rate: Vec::new(),
-});
-/// Set while lines wait, so an idle step takes no lock.
-static WAITING: AtomicBool = AtomicBool::new(false);
+static HEARD: Heard = Heard {
+    waiting: Pending::new(),
+    rate: Mutex::new(Vec::new()),
+};
 /// Whether a mod listens for `Event::CHAT_SAID`; fixed once mods are in,
 /// since they subscribe only during init.
 static WANTED: OnceLock<bool> = OnceLock::new();
@@ -171,16 +169,14 @@ pub(crate) fn heard(loader: &Loader, said: Said) {
     if !wanted(loader) {
         return;
     }
-    let mut heard = HEARD.relock();
-    let now = Instant::now();
-    let over = rated(said.kind) && !admit(&mut heard.rate, said.player, now);
-    if over || heard.waiting.len() >= MAX_WAITING {
-        drop(heard);
+    let over = rated(said.kind) && !admit(&mut HEARD.rate.relock(), said.player, Instant::now());
+    if over
+        || !HEARD
+            .waiting
+            .push_within(MAX_WAITING, core::iter::once(said))
+    {
         skipped();
-        return;
     }
-    heard.waiting.push(said);
-    WAITING.store(true, Ordering::Release);
 }
 
 /// Whether lines of `kind` count against their account's rate: those a
@@ -227,14 +223,10 @@ fn skipped() {
 /// Raises the lines that reached the chat during the step; on the game
 /// thread, outside the game's systems.
 pub(crate) fn raise(loader: &Loader) {
-    if !WAITING.load(Ordering::Acquire) {
+    let lines = HEARD.waiting.take();
+    if lines.is_empty() {
         return;
     }
-    let lines = {
-        let mut heard = HEARD.relock();
-        WAITING.store(false, Ordering::Release);
-        core::mem::take(&mut heard.waiting)
-    };
     let players = crate::engine::world::players(loader).unwrap_or_default();
     for said in lines {
         let entity = players
@@ -255,10 +247,8 @@ pub(crate) fn raise(loader: &Loader) {
 
 /// Drops the lines waiting for a hosted game that stops.
 pub(crate) fn forget() {
-    let mut heard = HEARD.relock();
-    heard.waiting.clear();
-    heard.rate.clear();
-    WAITING.store(false, Ordering::Release);
+    HEARD.waiting.clear();
+    HEARD.rate.relock().clear();
 }
 
 /// The kind of a line the game posted itself, by its chat type: 1 is an
@@ -275,6 +265,25 @@ pub(crate) const fn kind_of(chat_type: u8) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hosted_game_s_end_drops_the_lines_it_heard_and_its_rates() {
+        let said = Said {
+            player: 7,
+            kind: ChatLine::PLAYER,
+            loca: [0; 2],
+            text: "hello".to_owned(),
+        };
+        assert!(
+            HEARD
+                .waiting
+                .push_within(MAX_WAITING, core::iter::once(said))
+        );
+        assert!(admit(&mut HEARD.rate.relock(), 7, Instant::now()));
+        forget();
+        assert!(HEARD.waiting.take().is_empty());
+        assert!(HEARD.rate.relock().is_empty());
+    }
 
     #[test]
     fn an_account_gets_eight_lines_a_second_and_a_new_window_starts_afresh() {

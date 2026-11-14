@@ -54,6 +54,9 @@ struct SceneState {
     frame: SceneCache<MapFrameInfo, ReadFrameError>,
     /// The client's marker types, once read; `None` when they do not read.
     marker_types: OnceLock<Option<Arc<[MapMarkerTypeInfo]>>>,
+    /// The hosted game the caches belong to; [`forget`] moves it on, so a
+    /// read started in an ended game cannot land in the next one's cache.
+    generation: u64,
 }
 
 static STATE: Mutex<SceneState> = Mutex::new(SceneState {
@@ -62,6 +65,7 @@ static STATE: Mutex<SceneState> = Mutex::new(SceneState {
     markers: SceneCache::new(),
     frame: SceneCache::new(),
     marker_types: OnceLock::new(),
+    generation: 0,
 });
 
 /// The API's marker type groups, by the catalogue's id of the game's
@@ -359,11 +363,14 @@ fn cached<V: Described, E: SceneFailure>(
     if fuse.is_off() {
         return Err(Status::MISSING);
     }
-    match cache(&mut STATE.relock()).lookup(key) {
+    let mut state = STATE.relock();
+    let generation = state.generation;
+    match cache(&mut state).lookup(key) {
         Lookup::Ready(found) => return found.map_err(|_| Status::MISSING),
         Lookup::Pending => return Err(Status::NOT_LOADED),
         Lookup::Start => {}
     }
+    drop(state);
     let what = fuse.feature();
     crate::engine::off_thread::read(what, read, move |found, took| {
         match &found {
@@ -371,9 +378,21 @@ fn cached<V: Described, E: SceneFailure>(
             Err(why) if why.is_fault() => fuse.turn_off(&Off::fault(what, &why.to_string())),
             Err(why) => crate::log!(WARN, "{what}: this scene does not read: {why}"),
         }
-        let _kept = cache(&mut STATE.relock()).finish(key, found);
+        let _kept = land(key, generation, cache, found);
     });
     Err(Status::NOT_LOADED)
+}
+
+/// Keeps the read of `key` started in `generation`, unless its hosted game
+/// has ended since; whether it was kept.
+fn land<V: Described, E: SceneFailure>(
+    key: SceneKey,
+    generation: u64,
+    cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
+    found: Result<V, E>,
+) -> bool {
+    let mut state = STATE.relock();
+    state.generation == generation && cache(&mut state).finish(key, found)
 }
 
 /// The markers of the scene the server runs; on its game thread at a quiet
@@ -492,9 +511,67 @@ fn read_marker_types(loader: &Loader) -> Result<Vec<MapMarkerTypeInfo>, ReadType
     types(&layout, &groups, &registry)
 }
 
+/// Forgets the markers and the frame read for the last scene, when a hosted
+/// game ends: the next world's served data may differ. A read still under
+/// way is dropped, even when the next game asks for the same scene; the
+/// build's layouts stay.
+pub(crate) fn forget() {
+    let mut state = STATE.relock();
+    state.markers = SceneCache::new();
+    state.frame = SceneCache::new();
+    state.generation = state.generation.wrapping_add(1);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One test at a time over the scene caches, which are the process's own.
+    static TURN: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn a_scene_read_once_its_hosted_game_ended_is_dropped_and_read_again() {
+        let _turn = TURN.relock();
+        let key = SceneKey::new([7; 16], 3).unwrap();
+        let mut state = STATE.relock();
+        assert!(matches!(state.frame.lookup(key), Lookup::Start));
+        drop(state);
+        forget();
+        let mut state = STATE.relock();
+        assert!(
+            !state.frame.finish(key, Err(ReadFrameError::Scene)),
+            "the read of the ended game's scene is dropped"
+        );
+        assert!(
+            matches!(state.frame.lookup(key), Lookup::Start),
+            "and asked again"
+        );
+    }
+
+    #[test]
+    fn a_read_of_an_ended_game_does_not_land_when_the_next_game_asks_for_the_same_scene() {
+        let _turn = TURN.relock();
+        let key = SceneKey::new([8; 16], 3).unwrap();
+        let ended = STATE.relock().generation;
+        assert!(matches!(STATE.relock().frame.lookup(key), Lookup::Start));
+        forget();
+        let next = STATE.relock().generation;
+        assert!(matches!(STATE.relock().frame.lookup(key), Lookup::Start));
+        let frame: fn(&mut SceneState) -> &mut SceneCache<MapFrameInfo, ReadFrameError> =
+            |state| &mut state.frame;
+        assert!(
+            !land(key, ended, frame, Err(ReadFrameError::Scene)),
+            "the ended game's read is dropped"
+        );
+        assert!(
+            land(key, next, frame, Err(ReadFrameError::BiomeMap)),
+            "the next game's read lands"
+        );
+        assert!(matches!(
+            STATE.relock().frame.lookup(key),
+            Lookup::Ready(Err(ReadFrameError::BiomeMap))
+        ));
+    }
 
     /// Asks `cache` for `key` under `fuse` until the read is done.
     fn settled<V: Described, E: SceneFailure>(
@@ -517,6 +594,7 @@ mod tests {
     #[test]
     fn a_scene_read_that_panics_turns_its_feature_off_and_starts_no_other_read() {
         static MARKS: Fuse = Fuse::new("test scene marks");
+        let _turn = TURN.relock();
         let key = SceneKey::new([1; 16], 2).unwrap();
         let read = || -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> { panic!("a broken read") };
         assert_eq!(
@@ -545,6 +623,7 @@ mod tests {
     #[test]
     fn a_scene_without_its_biome_map_leaves_the_map_frame_on_for_the_next_scene() {
         static FRAMES: Fuse = Fuse::new("test scene frames");
+        let _turn = TURN.relock();
         let key = SceneKey::new([3; 16], 2).unwrap();
         let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::NoBiomeMap) };
         assert_eq!(
@@ -567,6 +646,7 @@ mod tests {
     #[test]
     fn a_scene_read_whose_thread_does_not_start_leaves_its_feature_on() {
         static FRAMES: Fuse = Fuse::new("test scene threads");
+        let _turn = TURN.relock();
         let key = SceneKey::new([4; 16], 2).unwrap();
         let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::Thread) };
         assert_eq!(

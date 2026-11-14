@@ -8,7 +8,7 @@ use enshwick_core::raw::{read_at, write_at};
 
 use enshwick_core::abi::HookFlags;
 
-use super::{INTERACTIONS_FUSE, LOADED, allowed, interaction};
+use super::{INTERACTIONS_FUSE, allowed, interaction, linked};
 use crate::engine::loader::{Loader, Target};
 
 /// Links the base stock at `target` as one of the interaction filters'
@@ -78,7 +78,7 @@ crate::engine::chains::chain_detour! {
         }
         // Asked by the client's own interface, which sees the client's
         // world; read before the chain calls on.
-        let ui = LOADED.get().is_some_and(|(loader, layout, _)| {
+        let ui = linked().is_some_and(|(loader, layout, _)| {
             if layout.stock_ui_return == 0 {
                 return false;
             }

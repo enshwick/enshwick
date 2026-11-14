@@ -62,6 +62,7 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "death steps", |s| deaths::after_step(
             s.loader
         ))],
+        forget: Some(|_| deaths::forget()),
         ..part!("deaths", deaths)
     },
     &Part {
@@ -109,6 +110,7 @@ pub(crate) static PARTS: &[&Part] = &[
             item_data::world_event(loader, event);
         })),
         follows: Some(|_| item_data::wanted()),
+        forget: Some(|_| item_data::forget_server()),
         ..part!("item_data", item_data)
     },
     &Part {

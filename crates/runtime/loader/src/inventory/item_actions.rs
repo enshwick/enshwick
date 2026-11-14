@@ -40,7 +40,14 @@ use uses::{moves, taken, watch};
 const EQUIPMENT_SYSTEM: &str = "equipment_actions";
 
 static FILTERS: Registry<Registered<ItemActionFn>> = Registry::new();
-static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new();
+/// The layout and components the links read, once linked.
+static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
+
+/// The loader with what the links read, once linked.
+fn linked() -> Option<(&'static Loader, &'static Layout, &'static Components)> {
+    let (loader, (layout, components)) = crate::engine::loader::linked(&LINKED)?;
+    Some((loader, layout, components))
+}
 static EVENTS: OnceLock<Events> = OnceLock::new();
 
 /// The switch of the item filters.
@@ -285,7 +292,7 @@ pub(crate) fn link(loader: &'static Loader) {
             "item filters hear no consumed: this build does not reflect the players' handled actions"
         );
     }
-    let _first = LOADED.set((loader, layout, components));
+    let _first = LINKED.set((layout, components));
     let _events = EVENTS.set(events(loader));
     let entry = |name: &str| {
         loader
@@ -355,7 +362,7 @@ unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool 
 /// - `ctx` is null or the live context of the `inventory_actions` system,
 ///   at its entry on its thread.
 pub(crate) unsafe fn screen_uses(ctx: *mut u64) {
-    if !ctx.is_null() && LOADED.get().is_some() {
+    if !ctx.is_null() && LINKED.get().is_some() {
         // SAFETY: `ctx` is non-null by the check before it and, by the
         // caller's contract, the system's own context at its entry on its
         // thread.
@@ -389,7 +396,7 @@ crate::engine::chains::chain_detour! {
 ///   true), at its entry on its thread.
 unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
     let (Some((loader, layout, components)), Some(engine)) =
-        (LOADED.get(), crate::engine::ecs::resolved())
+        (linked(), crate::engine::ecs::resolved())
     else {
         return;
     };

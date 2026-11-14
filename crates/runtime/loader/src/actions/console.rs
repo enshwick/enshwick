@@ -11,10 +11,10 @@
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{BuildingData, Level};
 
+use crate::engine::pending::Pending;
 use crate::engine::settings::LOADER_ID;
 use enshwick_base::Relock;
 
@@ -37,9 +37,7 @@ pub(crate) use tools::is_admin as player_is_admin;
 /// What the console keeps while the game runs.
 struct State {
     /// Lines typed, waiting for the game thread.
-    pending: Mutex<Vec<String>>,
-    /// Set while `pending` holds a line, so a step with none takes no lock.
-    waiting: AtomicBool,
+    pending: Pending<String>,
     /// The pieces placed lately, newest last.
     placed: Mutex<VecDeque<answers::Placed>>,
     /// The game's account action handler and its action's layout, or why
@@ -70,8 +68,7 @@ enum FindGameCodeError {
 }
 
 static STATE: State = State {
-    pending: Mutex::new(Vec::new()),
-    waiting: AtomicBool::new(false),
+    pending: Pending::new(),
     placed: Mutex::new(VecDeque::new()),
     #[cfg(windows)]
     handler: std::sync::OnceLock::new(),
@@ -79,9 +76,7 @@ static STATE: State = State {
 
 /// Queues `line`, typed in the console, for the game thread.
 pub fn submit(line: String) {
-    let mut pending = STATE.pending.relock();
-    pending.push(line);
-    STATE.waiting.store(true, Ordering::Release);
+    STATE.pending.push(line);
 }
 
 /// Keeps the pieces placed among `built`, one step's building events, among
@@ -124,12 +119,7 @@ pub fn newest(count: usize) -> Vec<answers::Placed> {
 /// The lines queued since the last call, oldest first.
 #[must_use]
 pub fn take() -> Vec<String> {
-    if !STATE.waiting.load(Ordering::Acquire) {
-        return Vec::new();
-    }
-    let mut pending = STATE.pending.relock();
-    STATE.waiting.store(false, Ordering::Release);
-    std::mem::take(&mut *pending)
+    STATE.pending.take()
 }
 
 /// The most log lines `enshwick log` shows.

@@ -15,8 +15,8 @@
 //! queue what happened; the post-step link raises it on the game thread.
 
 use core::ffi::c_void;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use enshwick_core::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
@@ -26,11 +26,14 @@ use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::parts::{Part, PlayerCall, Stage, Stepping};
+use crate::engine::pending::Pending;
+use session::{SESSION, Session, Step};
+
+mod session;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::ticks::{StepTime, TICKS};
 use crate::{actions, world};
-use enshwick_base::Relock;
 
 /// The step's own part: its build table ids and its links, which the
 /// domains' links rely on.
@@ -95,72 +98,6 @@ struct Offsets {
     entities: usize,
 }
 
-/// The server session the post-step link follows: the server and its thread.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Session {
-    server: usize,
-    thread: u32,
-    /// Set when the session stopped; its last steps no longer count.
-    ended: bool,
-    /// The hosted games that ended, which a new session keeps.
-    games_ended: u64,
-}
-
-/// What a step means for the session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Step {
-    /// The session seen so far goes on.
-    Same,
-    /// Another server or thread: a new session.
-    New,
-    /// A step of a session that already stopped.
-    Ended,
-}
-
-impl Session {
-    /// Follows a step of `server` on `thread`.
-    pub(crate) fn step(&mut self, server: usize, thread: u32) -> Step {
-        if (server, thread) == (self.server, self.thread) {
-            return if self.ended { Step::Ended } else { Step::Same };
-        }
-        *self = Self {
-            server,
-            thread,
-            ended: false,
-            games_ended: self.games_ended,
-        };
-        Step::New
-    }
-
-    /// Marks the session stopped: the hosted game ended.
-    pub(crate) fn stop(&mut self) {
-        if !self.ended {
-            self.games_ended += 1;
-        }
-        self.ended = true;
-    }
-
-    /// A hosted game starts: its first step is a new session even on the
-    /// server and thread of the one that stopped.
-    pub(crate) fn begin(&mut self) {
-        *self = Self {
-            games_ended: self.games_ended,
-            ..Self::default()
-        };
-    }
-
-    /// The game the server steps, from 1, as
-    /// [`TickData::game`](enshwick_core::abi::TickData::game) counts it.
-    pub(crate) const fn game(&self) -> u64 {
-        self.games_ended + 1
-    }
-
-    /// Follows a step as [`Session::step`] does; with the game it is in.
-    pub(crate) fn step_in_game(&mut self, server: usize, thread: u32) -> (Step, u64) {
-        (self.step(server, thread), self.game())
-    }
-}
-
 /// The data of the every-step [`Event::TICKED`] for step `step` of `game`.
 fn tick_data(step: u64, time: StepTime, game: u64) -> TickData {
     TickData {
@@ -171,14 +108,8 @@ fn tick_data(step: u64, time: StepTime, game: u64) -> TickData {
     }
 }
 
-static SESSION: Mutex<Session> = Mutex::new(Session {
-    server: 0,
-    thread: 0,
-    ended: false,
-    games_ended: 0,
-});
-
-static LOADED: OnceLock<(&'static Loader, Offsets)> = OnceLock::new();
+/// The server layout the links read, once linked.
+static OFFSETS: OnceLock<Offsets> = OnceLock::new();
 // SAFETY: `StepFn` is the signature of the build table's `server.post_step`,
 // and `link` uses this slot only as that function's next.
 static STEP_NEXT: Next<StepFn> = unsafe { Next::new() };
@@ -200,7 +131,7 @@ static PLACE_NEXT: Next<PlaceFn> = unsafe { Next::new() };
 // and `link` uses this slot only as that function's next.
 static PICKUP_NEXT: Next<PickupFn> = unsafe { Next::new() };
 /// Building events from worker threads, raised after the step.
-static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
+static BUILDING: Pending<BuildingData> = Pending::new();
 /// The handle of the player seen joining in each slot, 0 for none.
 static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
 /// One fuse per link: a panic in the loader's own work of a link turns off
@@ -212,8 +143,8 @@ static REMOVE_FUSE: Fuse = Fuse::new("player left events");
 static BUILDING_FUSE: Fuse = Fuse::new("building events");
 
 /// The links' state once linked.
-fn loaded() -> Option<&'static (&'static Loader, Offsets)> {
-    LOADED.get()
+fn loaded() -> Option<(&'static Loader, &'static Offsets)> {
+    crate::engine::loader::linked(&OFFSETS)
 }
 
 /// Runs a link's own work under its fuse; a panic in it turns that link off
@@ -288,7 +219,7 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(WARN, "game events off: this build has no server layout");
         return;
     };
-    if LOADED.set((loader, offsets)).is_err() {
+    if OFFSETS.set(offsets).is_err() {
         return;
     }
     let leaves = loader.parts.iter().any(|part| part.left.is_some());
@@ -390,9 +321,7 @@ unsafe extern "system" fn step(server: *mut u8) {
 unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8, now: Instant) {
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    let (seen, game) = SESSION
-        .relock()
-        .step_in_game(server.expose_provenance(), thread);
+    let (seen, game) = SESSION.step(server.expose_provenance(), thread);
     match seen {
         Step::Ended => return,
         Step::New if loader.side == Side::CLIENT => {
@@ -410,7 +339,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         offsets.server_world,
         offsets.entities,
     );
-    let built = std::mem::take(&mut *BUILDING.relock());
+    let built = BUILDING.take();
     if !BUILDING_FUSE.is_off() {
         guarded(&BUILDING_FUSE, "the post-step link", || {
             actions::console::remember(&built);
@@ -575,11 +504,11 @@ fn forget_joined() {
 /// server; each part forgets its server after it is gone.
 fn end_session(loader: &'static Loader) {
     crate::base::worlds::unload(loader);
-    SESSION.relock().stop();
+    SESSION.change(Session::stop);
     crate::engine::world::release();
     loader.parts.end(loader);
     forget_joined();
-    BUILDING.relock().clear();
+    BUILDING.clear();
     crate::log!(
         INFO,
         "the hosted game stopped; server mods rest until the next"
@@ -638,7 +567,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         }
         STATE_RUN if old != STATE_RUN => {
             if loader.side == Side::CLIENT {
-                SESSION.relock().begin();
+                SESSION.change(Session::begin);
             }
             crate::base::worlds::load(loader);
             crate::start::record::write_for_world();
@@ -730,7 +659,7 @@ fn queue(data: BuildingData) {
         return;
     }
     guarded(&BUILDING_FUSE, "a building link", || {
-        BUILDING.relock().push(data);
+        BUILDING.push(data);
     });
 }
 
@@ -908,39 +837,5 @@ mod tests {
         assert!(!own_link(pinned::server::PLAYER_REMOVE, false));
         let parts = crate::engine::parts::Parts::new(crate::parts::LAYERS);
         assert!(parts.iter().any(|part| part.left.is_some()));
-    }
-
-    #[test]
-    fn a_session_follows_its_server_and_thread() {
-        let mut session = Session::default();
-        assert_eq!(session.step(0x1000, 7), Step::New);
-        assert_eq!(session.step(0x1000, 7), Step::Same);
-        session.stop();
-        assert_eq!(session.step(0x1000, 7), Step::Ended);
-        session.begin();
-        assert_eq!(session.step(0x1000, 7), Step::New);
-        assert_eq!(session.step(0x1000, 7), Step::Same);
-        // The next hosted game: a new server on a new thread.
-        assert_eq!(session.step(0x2000, 9), Step::New);
-        assert_eq!(session.step(0x2000, 9), Step::Same);
-        // The same address again, on another thread, is another game.
-        session.stop();
-        assert_eq!(session.step(0x2000, 11), Step::New);
-    }
-
-    #[test]
-    fn each_hosted_game_that_ends_makes_the_next_steps_another_game() {
-        let mut session = Session::default();
-        assert_eq!(session.step(0x1000, 7), Step::New);
-        assert_eq!(session.game(), 1);
-        session.begin();
-        assert_eq!(session.step(0x1000, 7), Step::New);
-        assert_eq!(session.game(), 1, "the game's own start is the same game");
-        session.stop();
-        session.stop();
-        assert_eq!(session.game(), 2, "one game ended, once");
-        session.begin();
-        assert_eq!(session.step(0x2000, 9), Step::New);
-        assert_eq!(session.game(), 2);
     }
 }

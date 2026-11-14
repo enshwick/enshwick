@@ -14,7 +14,7 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
-use core::sync::atomic::AtomicU64;
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
@@ -69,6 +69,7 @@ static STATE: State = State {
     start: OnceLock::new(),
     kept: Mutex::new(None),
     players: Mutex::new(Players::new()),
+    firing: AtomicBool::new(false),
     rights: Mutex::new(None),
     next_look: AtomicU64::new(0),
 };
@@ -94,6 +95,9 @@ struct State {
     /// The server's players' trackers and the firings that wait for the
     /// step's end.
     players: Mutex<Players>,
+    /// Set while firings may wait in `players`, so the step's end with none
+    /// takes no lock.
+    firing: AtomicBool,
     /// The permissions the server's clients got their carried controls for.
     rights: Mutex<Option<rights::Rights>>,
     /// The [`now_ms`] at which the server next compares its players'
@@ -550,8 +554,7 @@ fn fires_here(control: &Declared, hosting: bool) -> bool {
     crate::engine::loader::loader()
         .and_then(|loader| loader.mods.get(control.owner.get()))
         .is_some_and(|m| {
-            !m.off.load(core::sync::atomic::Ordering::Acquire)
-                && (hosting || m.manifest.side != Side::SERVER)
+            !m.off.load(Ordering::Acquire) && (hosting || m.manifest.side != Side::SERVER)
         })
 }
 
@@ -559,7 +562,7 @@ fn fires_here(control: &Declared, hosting: bool) -> bool {
 fn control_off(control: &Declared) -> bool {
     crate::engine::loader::loader()
         .and_then(|loader| loader.mods.get(control.owner.get()))
-        .is_none_or(|m| m.off.load(core::sync::atomic::Ordering::Acquire))
+        .is_none_or(|m| m.off.load(Ordering::Acquire))
 }
 
 /// Whether the interface's current HUD screen is the world with no window
@@ -625,6 +628,9 @@ pub(crate) unsafe fn step(players: &[Entity], input: impl Fn(Entity) -> Option<*
             // reflected `fromClient.digitalInput`.
             Some(unsafe { enshwick_core::raw::read_at::<u64>(input, linked.digital) })
         });
+        if tracked.waiting() {
+            STATE.firing.store(true, Ordering::Release);
+        }
     });
 }
 
@@ -635,14 +641,16 @@ pub(crate) fn after_step(loader: &Loader) {
     let (Some(_), Some(declared)) = (STATE.linked.get(), DECLARED.sealed()) else {
         return;
     };
-    if !STATE.players.relock().waiting() {
+    if !STATE.firing.load(Ordering::Acquire) {
         return;
     }
     let found = crate::engine::world::players(loader).unwrap_or_default();
-    let ready = STATE
-        .players
-        .relock()
-        .settle(|entity| found.iter().find(|p| p.entity == entity).copied());
+    let ready = {
+        let mut players = STATE.players.relock();
+        let ready = players.settle(|entity| found.iter().find(|p| p.entity == entity).copied());
+        STATE.firing.store(players.waiting(), Ordering::Release);
+        ready
+    };
     let _ran = LINKED_FUSE.run("the controls that follow game actions", || {
         for (firing, player) in &ready {
             let Some(control) = declared.get(firing.index) else {
@@ -661,7 +669,11 @@ pub(crate) fn after_step(loader: &Loader) {
 /// Forgets the players' trackers and waiting firings, as when the server's
 /// world goes away.
 pub(crate) fn forget() {
-    STATE.players.relock().forget();
+    let mut players = STATE.players.relock();
+    players.forget();
+    // Under the lock, as every writer of `firing`.
+    STATE.firing.store(players.waiting(), Ordering::Release);
+    drop(players);
     *STATE.rights.relock() = None;
 }
 
@@ -942,6 +954,14 @@ mod tests {
             callback: fired,
             user: 0,
         }
+    }
+
+    #[test]
+    fn a_game_s_end_leaves_no_firing_waiting_for_the_next() {
+        STATE.firing.store(true, Ordering::Release);
+        forget();
+        assert!(!STATE.firing.load(Ordering::Acquire));
+        assert!(!STATE.players.relock().waiting());
     }
 
     #[test]

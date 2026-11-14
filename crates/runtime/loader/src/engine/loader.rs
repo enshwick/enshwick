@@ -243,6 +243,12 @@ pub(crate) fn loader() -> Option<&'static Loader> {
     LOADER.get()
 }
 
+/// The running loader with what a part's link found of the build, kept in
+/// `found`; `None` until both are there.
+pub(crate) fn linked<T>(found: &'static OnceLock<T>) -> Option<(&'static Loader, &'static T)> {
+    Some((loader()?, found.get()?))
+}
+
 /// Where one of the loader's detours goes, and how the code there is
 /// checked before [`Loader::link_feature`] links it.
 #[derive(Debug, Clone, Copy)]

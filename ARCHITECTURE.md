@@ -354,6 +354,26 @@ its own; these steps hold for one that grows inside core first.
 - What mods register during `init` goes into a `Registry`. The registry is
   sealed before the game runs, and hot paths read the sealed slice without a
   lock.
+- Every module reaches the `Loader` through `engine::loader::loader()`; a
+  module keeps only what its links found of the build, such as a layout, in
+  a `OnceLock` of its own, and reads both at once through
+  `engine::loader::linked`.
+- Work a hook queues for a later pass (a step, a frame, a world event) goes
+  into an `engine::pending::Pending`: a pass with nothing queued reads one
+  atomic and takes no lock. Any other state a step reads every time is
+  gated by an atomic the same way. The loader's own threads start through
+  `engine::off_thread`, which names them and logs one that does not start.
+- What a hosted game leaves behind (records, caches, queues) is dropped by
+  its part's `forget`, which `Parts::end` runs when a client's hosted game
+  ends. A dedicated server's world ends with its process.
+- Locks nest in one order, outer first: the hook chains, then the mid hooks
+  (arming); the status baseline, then the chains; terrain pages' pairing,
+  then their waiting turns; data changes' declared list, then the live one;
+  a served key's rebuild, then its state; chat mute's write, then the told
+  keys. `Fuse::turn_off` takes the chains, so it is never called with them
+  held. No loader lock is held while mod code runs, but for one: a served
+  key's rebuild lock spans its patches, so two rebuilds of a key never
+  overlap, and a patch that asks to rebuild its own key is refused.
 - Memory the loader hands the game, such as filtered lists or texts, goes
   through `retire`: it is freed only once the game's own world has stepped past
   the callers that read it.

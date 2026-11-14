@@ -138,8 +138,49 @@ const QUEUED: u8 = 0;
 const IN_GAME: u8 = 1;
 const SYSTEM: u8 = 2;
 
+/// The dialogs waiting to show, oldest first.
+struct Waiting {
+    /// Set, under the lock of `dialogs`, while it may hold a dialog, so a
+    /// frame with none waiting takes no lock.
+    any: AtomicBool,
+    dialogs: Mutex<VecDeque<Pending>>,
+}
+
+impl Waiting {
+    const fn new() -> Self {
+        Self {
+            any: AtomicBool::new(false),
+            dialogs: Mutex::new(VecDeque::new()),
+        }
+    }
+
+    /// Queues `dialog` behind `dialogs`, the queue's own guard.
+    fn push(&self, dialogs: &mut VecDeque<Pending>, dialog: Pending) {
+        dialogs.push_back(dialog);
+        self.any.store(true, Ordering::Release);
+    }
+
+    /// The oldest dialog waiting; no lock when none waits.
+    fn pop(&self) -> Option<Pending> {
+        if !self.any.load(Ordering::Acquire) {
+            return None;
+        }
+        let mut dialogs = self.dialogs.relock();
+        let next = dialogs.pop_front();
+        self.any.store(!dialogs.is_empty(), Ordering::Release);
+        next
+    }
+
+    /// Takes every dialog waiting, oldest first.
+    fn take_all(&self) -> VecDeque<Pending> {
+        let mut dialogs = self.dialogs.relock();
+        self.any.store(false, Ordering::Release);
+        std::mem::take(&mut *dialogs)
+    }
+}
+
 static MODE: AtomicU8 = AtomicU8::new(QUEUED);
-static WAITING: Mutex<VecDeque<Pending>> = Mutex::new(VecDeque::new());
+static WAITING: Waiting = Waiting::new();
 static SHOWN: Mutex<VecDeque<Arc<Shown>>> = Mutex::new(VecDeque::new());
 static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
 
@@ -201,7 +242,7 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 /// so. The mode is read under the queue's lock, so a dialog queued while
 /// [`fall_back`] runs is either drained by it or shows as a box itself.
 pub(crate) fn queue(dialog: Pending) -> Status {
-    let mut waiting = WAITING.relock();
+    let mut waiting = WAITING.dialogs.relock();
     if MODE.load(Ordering::Acquire) == SYSTEM {
         drop(waiting);
         system_box(dialog);
@@ -210,7 +251,7 @@ pub(crate) fn queue(dialog: Pending) -> Status {
     if waiting.len() >= MAX_WAITING {
         return Status::REFUSED;
     }
-    waiting.push_back(dialog);
+    WAITING.push(&mut waiting, dialog);
     Status::OK
 }
 
@@ -241,8 +282,7 @@ pub(crate) fn show(
 pub(crate) fn armed(in_game: bool) {
     MODE.store(if in_game { IN_GAME } else { SYSTEM }, Ordering::Release);
     if !in_game {
-        let waiting = std::mem::take(&mut *WAITING.relock());
-        for dialog in waiting {
+        for dialog in WAITING.take_all() {
             system_box(dialog);
         }
     }
@@ -257,8 +297,7 @@ pub(super) fn fall_back() {
         return;
     }
     let on_screen = CURRENT.take();
-    let dialogs = stranded(on_screen, &mut WAITING.relock());
-    for dialog in dialogs {
+    for dialog in stranded(on_screen, &mut WAITING.take_all()) {
         system_box(dialog);
     }
 }
@@ -338,7 +377,7 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
-    let dialog = WAITING.relock().pop_front()?;
+    let dialog = WAITING.pop()?;
     let slot = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % KEPT;
     let texts = Arc::new(Shown {
         slot,
@@ -419,39 +458,34 @@ fn box_style(buttons: u32) -> (u32, [(i32, u32); 3]) {
 
 /// Shows `dialog` as a system message box on a thread of its own.
 fn system_box(dialog: Pending) {
-    let spawned = std::thread::Builder::new()
-        .name("enshwick-dialog".into())
-        .spawn(move || {
-            use windows_sys::Win32::UI::WindowsAndMessaging::{
-                MB_ICONINFORMATION, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
-            };
-            let (style, answers) = box_style(dialog.buttons);
-            let mut body = dialog.message.clone();
-            if !dialog.detail.is_empty() {
-                body.push_str("\n\n");
-                body.push_str(&dialog.detail);
-            }
-            let text: Vec<u16> = body.encode_utf16().chain([0]).collect();
-            let title: Vec<u16> = dialog.title.encode_utf16().chain([0]).collect();
-            // SAFETY: `text` and `title` are live NUL-terminated UTF-16
-            // buffers built above, and a null owner window is allowed.
-            let result = unsafe {
-                MessageBoxW(
-                    core::ptr::null_mut(),
-                    text.as_ptr(),
-                    title.as_ptr(),
-                    style | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
-                )
-            };
-            let answer = answers
-                .iter()
-                .find(|(id, _)| *id == result)
-                .map_or(UiDialog::CLOSED, |&(_, answer)| answer);
-            dialog.answerer.answer(answer);
-        });
-    if let Err(e) = spawned {
-        crate::log!(WARN, "cannot show a dialog: {e}");
-    }
+    let _started = crate::engine::off_thread::start("dialog", move || {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            MB_ICONINFORMATION, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
+        };
+        let (style, answers) = box_style(dialog.buttons);
+        let mut body = dialog.message.clone();
+        if !dialog.detail.is_empty() {
+            body.push_str("\n\n");
+            body.push_str(&dialog.detail);
+        }
+        let text: Vec<u16> = body.encode_utf16().chain([0]).collect();
+        let title: Vec<u16> = dialog.title.encode_utf16().chain([0]).collect();
+        // SAFETY: `text` and `title` are live NUL-terminated UTF-16
+        // buffers built above, and a null owner window is allowed.
+        let result = unsafe {
+            MessageBoxW(
+                core::ptr::null_mut(),
+                text.as_ptr(),
+                title.as_ptr(),
+                style | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
+            )
+        };
+        let answer = answers
+            .iter()
+            .find(|(id, _)| *id == result)
+            .map_or(UiDialog::CLOSED, |&(_, answer)| answer);
+        dialog.answerer.answer(answer);
+    });
 }
 
 #[cfg(test)]
@@ -502,6 +536,25 @@ mod tests {
         assert_eq!(dialogs[0].buttons, 1 << UiDialog::CANCEL);
         assert!(waiting.is_empty(), "none is left waiting");
         assert!(stranded(None, &mut waiting).is_empty());
+    }
+
+    #[test]
+    fn waiting_dialogs_pop_oldest_first_and_the_flag_follows_the_queue() {
+        let loader = || Answerer::Loader(Box::new(|_| {}));
+        let waiting = Waiting::new();
+        assert!(waiting.pop().is_none());
+        for title in ["first", "second", "third"] {
+            waiting.push(
+                &mut waiting.dialogs.relock(),
+                Pending::new(title, "", "", 0, loader()),
+            );
+        }
+        assert_eq!(waiting.pop().map(|d| d.title), Some("first".to_owned()));
+        assert!(waiting.any.load(Ordering::Acquire), "two still wait");
+        let rest: Vec<_> = waiting.take_all().into_iter().map(|d| d.title).collect();
+        assert_eq!(rest, ["second", "third"]);
+        assert!(!waiting.any.load(Ordering::Acquire));
+        assert!(waiting.pop().is_none());
     }
 
     #[test]

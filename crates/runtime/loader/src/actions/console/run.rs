@@ -14,15 +14,12 @@ use super::{Line, Tool, log_query, parse, submit, take};
 
 /// Starts reading the console input of a dedicated server.
 pub(crate) fn start() {
-    let started = std::thread::Builder::new()
-        .name("enshwick-console-input".into())
-        .spawn(|| match input::read(std::io::stdin().lock(), submit) {
+    let _started = crate::engine::off_thread::start("console input", || {
+        match input::read(std::io::stdin().lock(), submit) {
             End::Closed => crate::log!(DEBUG, "the console has no more input"),
             End::Failed(why) => crate::log!(WARN, "the console input stopped: {why}"),
-        });
-    if let Err(e) = started {
-        crate::log!(WARN, "the console input is not read: {e}");
-    }
+        }
+    });
 }
 
 /// Runs the console lines queued since the last step, logs each answer and

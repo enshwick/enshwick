@@ -158,45 +158,45 @@ pub fn open(dir: &Path) {
     let stamp = crate::engine::early::log_stamp(now() / 1000);
     let _first = LOADER_FILE.set(run_path(&dir, LOADER_ID, &stamp));
     let (send, receive) = sync_channel::<Line>(QUEUE);
-    let started = std::thread::Builder::new()
-        .name("enshwick-log".into())
-        .spawn(move || {
-            // On the writer's thread: the game's start never waits on the
-            // disk, and lines sent meanwhile wait in the channel.
-            let mut files: rustc_hash::FxHashMap<String, Option<Capped>> =
-                rustc_hash::FxHashMap::default();
-            let mut loader = Capped::open(&dir, LOADER_ID, &stamp);
-            if let Some(file) = &mut loader {
-                take_start_lines(&dir, file);
+    let started = crate::engine::off_thread::spawn("log", move || {
+        // On the writer's thread: the game's start never waits on the
+        // disk, and lines sent meanwhile wait in the channel.
+        let mut files: rustc_hash::FxHashMap<String, Option<Capped>> =
+            rustc_hash::FxHashMap::default();
+        let mut loader = Capped::open(&dir, LOADER_ID, &stamp);
+        if let Some(file) = &mut loader {
+            take_start_lines(&dir, file);
+        }
+        files.insert(LOADER_ID.to_owned(), loader);
+        for line in receive {
+            let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
+            if dropped > 0 {
+                let note = Line::new(
+                    now(),
+                    Level::WARN,
+                    LOADER_ID,
+                    &format!(
+                        "{dropped} log lines were dropped: they came faster than the disk took them"
+                    ),
+                );
+                if let Some(Some(file)) = files.get_mut(LOADER_ID) {
+                    file.write(note.text.as_bytes());
+                }
+                keep(note);
             }
-            files.insert(LOADER_ID.to_owned(), loader);
-            for line in receive {
-                let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
-                if dropped > 0 {
-                    let note = Line::new(
-                        now(),
-                        Level::WARN,
-                        LOADER_ID,
-                        &format!("{dropped} log lines were dropped: they came faster than the disk took them"),
-                    );
-                    if let Some(Some(file)) = files.get_mut(LOADER_ID) {
-                        file.write(note.text.as_bytes());
-                    }
-                    keep(note);
-                }
-                let source = line.source();
-                if !files.contains_key(source) {
-                    files.insert(source.to_owned(), Capped::open(&dir, source, &stamp));
-                }
-                if let Some(Some(file)) = files.get_mut(source) {
-                    file.write(line.text.as_bytes());
-                }
-                keep(line);
-                COUNTS.taken.fetch_add(1, Ordering::Release);
+            let source = line.source();
+            if !files.contains_key(source) {
+                files.insert(source.to_owned(), Capped::open(&dir, source, &stamp));
             }
-        });
+            if let Some(Some(file)) = files.get_mut(source) {
+                file.write(line.text.as_bytes());
+            }
+            keep(line);
+            COUNTS.taken.fetch_add(1, Ordering::Release);
+        }
+    });
     match started {
-        Ok(_) => {
+        Ok(()) => {
             let _first = LINES.set(send);
         }
         Err(e) => crate::engine::early::note(&format!("no log: its thread did not start: {e}")),

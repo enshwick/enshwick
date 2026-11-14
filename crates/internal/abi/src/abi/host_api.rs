@@ -1006,7 +1006,9 @@ pub struct HostApi {
     /// `key` as served is built again the same way. Any thread.
     /// [`Status::MISSING`] when its base was not kept, [`Status::REFUSED`]
     /// when the new build differs in length, which the game's copy cannot
-    /// take, [`Status::BAD_ARGS`] for a key the mod does not serve. The
+    /// take, [`Status::BAD_ARGS`] for a key the mod does not serve,
+    /// [`Status::BUILDING`] from a patch of `key` itself, whose build would
+    /// wait on its own. The
     /// loader frees what each rebuild's patches built in a
     /// [`resource_buffer`](Self::resource_buffer).
     pub rebuild_resource: extern "system" fn(me: ModHandle, key: *const ResourceKey) -> Status,

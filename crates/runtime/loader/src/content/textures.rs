@@ -85,7 +85,6 @@ static TEMPLATES: OnceLock<Combined> = OnceLock::new();
 /// The game's array, as its address and count, and the listing with the
 /// served keys after it.
 type Combined = ((usize, usize), &'static [[u8; KEY]]);
-static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 
 // SAFETY: `RequestFn` is the signature of the build table's
 // `textures.request`, and `link` uses this slot only as that function's next.
@@ -309,7 +308,6 @@ pub(crate) fn link(loader: &'static Loader) {
         let _off = loader.fuse_off(&TEXTURES_FUSE, TEMPLATES_FUSE.feature(), why);
         return;
     }
-    let _first = LOADED.set(loader);
     if link_textures(loader) {
         crate::log!(INFO, "mod textures: linked for the served UI images");
     }

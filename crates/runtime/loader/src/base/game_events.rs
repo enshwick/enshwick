@@ -297,8 +297,8 @@ fn give_back<S: Scope>(mut batch: Batch) {
 
 static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
-/// The loader, and the build's stream layout when it has one.
-static LOADED: OnceLock<(&'static Loader, Option<Layout>)> = OnceLock::new();
+/// The build's stream layout when it has one, once linked.
+static LINKED: OnceLock<Option<Layout>> = OnceLock::new();
 /// The event move's link, off only when this build cannot link it or its
 /// own checks panicked: the features it runs have fuses of their own, so
 /// one of them failing leaves the others running.
@@ -382,7 +382,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     // Without the layout the move still links: a client's notices and the
     // freeing of handed lists need no stream.
-    let _first = LOADED.set((loader, stream_layout(loader, client_wanted)));
+    let _first = LINKED.set(stream_layout(loader, client_wanted));
     let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
     if loader.link_fused(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "game events: {count} subscriptions");
@@ -432,7 +432,7 @@ crate::engine::chains::chain_detour! {
     next MERGE_NEXT;
     fuse &EVENTS_FUSE, "the event move";
     |onward| {
-        let Some(&(loader, layout)) = LOADED.get() else {
+        let Some((loader, &layout)) = crate::engine::loader::linked(&LINKED) else {
             return onward.call();
         };
         match crate::engine::world::whose(loader.side, entity_world.expose_provenance()) {

@@ -10,7 +10,7 @@ use enshwick_core::abi::HookFlags;
 
 use super::lookup::{home, position_of};
 use super::{
-    BEDS_FUSE, LOADED, LOOKUP_FUSE, MOVE_ACTIVE, MOVE_WINDOW, MOVING, SEALED, SKIP_UPDATE, layout,
+    BEDS_FUSE, LOOKUP_FUSE, MOVE_ACTIVE, MOVE_WINDOW, MOVING, SEALED, SKIP_UPDATE, layout,
 };
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
@@ -89,7 +89,10 @@ crate::engine::chains::chain_detour! {
 ///   `survivors.move_survivor`.
 /// - The call runs on the behaviour system's thread while it runs.
 pub(super) unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
-    let (Some(loader), Some(engine)) = (LOADED.get(), crate::engine::ecs::resolved()) else {
+    let (Some(loader), Some(engine)) = (
+        crate::engine::loader::loader(),
+        crate::engine::ecs::resolved(),
+    ) else {
         return false;
     };
     let Some(layout) = layout(loader) else {
@@ -157,9 +160,11 @@ crate::engine::chains::chain_detour! {
 ///   `survivors.npc_*` offsets.
 /// - The call runs on the behaviour system's thread while it runs.
 pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
-    let (Some(loader), Some(engine), Some(sealed)) =
-        (LOADED.get(), crate::engine::ecs::resolved(), SEALED.get())
-    else {
+    let (Some(loader), Some(engine), Some(sealed)) = (
+        crate::engine::loader::loader(),
+        crate::engine::ecs::resolved(),
+        SEALED.get(),
+    ) else {
         return true;
     };
     let Some(layout) = layout(loader) else {

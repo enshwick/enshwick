@@ -158,13 +158,30 @@ type PostFn = unsafe extern "system" fn(
 ) -> *mut u8;
 type MarkFn = unsafe extern "system" fn(store: *mut u8, node: *mut u8, slot: u32, bytes: u32);
 
-static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
+/// What chat reads of the build, once linked.
+static LINKED: OnceLock<Layout> = OnceLock::new();
+
+/// The loader with what chat reads of the build, once linked.
+fn linked() -> Option<(&'static Loader, &'static Layout)> {
+    crate::engine::loader::linked(&LINKED)
+}
 // SAFETY: `PostFn` is the signature of the game's `chat.post`, and `link`
 // uses this slot only as the `next` of `post`, its link on that function.
 static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
-static OUTBOX: Mutex<Outbox<Line>> = Mutex::new(Outbox::new(MAX_WAITING));
-/// Set while the outbox holds anything, so an idle step takes no lock.
-static WAITING: AtomicBool = AtomicBool::new(false);
+
+/// The lines waiting for the game thread; replies to typed commands have
+/// less room than other lines, so they cannot fill it.
+struct Outgoing {
+    /// Set, under the lock of `lines`, while it holds anything, so an idle
+    /// step takes no lock.
+    any: AtomicBool,
+    lines: Mutex<Outbox<Line>>,
+}
+
+static OUTGOING: Outgoing = Outgoing {
+    any: AtomicBool::new(false),
+    lines: Mutex::new(Outbox::new(MAX_WAITING)),
+};
 
 /// What became of the lines for one player.
 #[derive(Debug)]
@@ -203,7 +220,7 @@ pub(crate) fn to_one_player() -> bool {
 
 /// Queues `text` for the player with account key `to`, or for everyone.
 pub(crate) fn send(to: u64, text: &str) -> Status {
-    if LOADED.get().is_none() {
+    if LINKED.get().is_none() {
         return Status::MISSING;
     }
     let to = if to == 0 { To::All } else { To::Key(to) };
@@ -216,7 +233,7 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
 /// message a mod sends, so a long help arrives whole, while fewer than
 /// [`MAX_REPLY_WAITING`] lines wait.
 pub(crate) fn reply(to: u64, text: &str) -> Status {
-    if LOADED.get().is_none() {
+    if LINKED.get().is_none() {
         return Status::MISSING;
     }
     let left_out = queue(To::Key(to), shown(text), MAX_REPLY_WAITING);
@@ -267,7 +284,7 @@ fn cut(text: &str, max: usize) -> &str {
 /// Queues `lines`, each a chat line, while fewer than `room` lines wait;
 /// how many it left out.
 fn queue<'a>(to: To, lines: impl Iterator<Item = &'a str>, room: usize) -> usize {
-    let mut outbox = OUTBOX.relock();
+    let mut outbox = OUTGOING.lines.relock();
     let mut left_out = 0;
     for line in lines {
         let line = Line {
@@ -278,7 +295,7 @@ fn queue<'a>(to: To, lines: impl Iterator<Item = &'a str>, room: usize) -> usize
             left_out += 1;
         }
     }
-    WAITING.store(!outbox.is_empty(), Ordering::Release);
+    OUTGOING.any.store(!outbox.is_empty(), Ordering::Release);
     left_out
 }
 
@@ -304,7 +321,7 @@ pub(crate) fn link(loader: &'static Loader) {
             return;
         }
     };
-    if LOADED.get().is_some() {
+    if LINKED.get().is_some() {
         return;
     }
     if let Err(id) = layout.one {
@@ -319,7 +336,7 @@ pub(crate) fn link(loader: &'static Loader) {
         &POST_NEXT,
         post,
         HookFlags::CALLER_FRAME,
-    ) || LOADED.set((loader, layout)).is_err()
+    ) || LINKED.set(layout).is_err()
     {
         return;
     }
@@ -386,7 +403,7 @@ static COMMANDS_FUSE: Fuse = Fuse::new("chat commands");
 /// - `text` is null or the game's span of pointer and byte length, its bytes
 ///   readable and unchanged for the call.
 unsafe fn command(loader: &'static Loader, text: *const [usize; 2], key: u64) -> bool {
-    let Some(&(_, layout)) = LOADED.get() else {
+    let Some((_, layout)) = linked() else {
         return false;
     };
     let mut first = [0u8; 1];
@@ -611,7 +628,7 @@ unsafe fn for_mods(
     key: u64,
     loca: [u32; 2],
 ) -> Heard {
-    let Some(&(loader, layout)) = LOADED.get() else {
+    let Some((loader, layout)) = linked() else {
         return Heard::Keep;
     };
     if said::idle(loader) {
@@ -713,7 +730,7 @@ unsafe fn judge(loader: &'static Loader, kind: u8, text: *const [usize; 2], key:
 /// - Called at the entry of the loader's link on `chat.post`, on the game's
 ///   calling thread.
 unsafe fn typed_line(out: *mut u8) -> Option<&'static Loader> {
-    let (loader, layout) = LOADED.get()?;
+    let (loader, layout) = linked()?;
     if out.is_null() {
         return None;
     }
@@ -722,7 +739,7 @@ unsafe fn typed_line(out: *mut u8) -> Option<&'static Loader> {
     // took the frame at the entry of this chain on this thread, linked with
     // `HookFlags::CALLER_FRAME`, so it points at the live return address.
     let typed = frame.rsp != 0 && unsafe { frame.return_address() } == layout.post_return;
-    typed.then_some(*loader)
+    typed.then_some(loader)
 }
 
 /// What the loader's link on `chat.post` does with a line.
@@ -760,21 +777,24 @@ const fn sent_by_clients(kind: u8) -> bool {
 
 /// Drops the lines waiting for a hosted game that stops.
 pub(crate) fn forget() {
-    OUTBOX.relock().clear();
-    WAITING.store(false, Ordering::Release);
+    {
+        let mut lines = OUTGOING.lines.relock();
+        lines.clear();
+        OUTGOING.any.store(false, Ordering::Release);
+    }
     said::forget();
 }
 
 /// Raises the lines mods hear, then posts waiting lines; on the game
 /// thread, outside the game's systems.
 pub(crate) fn drain() {
-    if let Some(&(loader, _)) = LOADED.get() {
+    if let Some((loader, _)) = linked() {
         said::raise(loader);
     }
-    if !WAITING.load(Ordering::Acquire) {
+    if !OUTGOING.any.load(Ordering::Acquire) {
         return;
     }
-    let (Some((loader, layout)), Some(post)) = (LOADED.get(), next()) else {
+    let (Some((loader, layout)), Some(post)) = (linked(), next()) else {
         return;
     };
     let Ok(server) = crate::engine::world::server() else {
@@ -788,9 +808,9 @@ pub(crate) fn drain() {
         return;
     }
     let lines: Vec<Line> = {
-        let mut outbox = OUTBOX.relock();
+        let mut outbox = OUTGOING.lines.relock();
         let lines = outbox.take(LINES_PER_DRAIN).collect();
-        WAITING.store(!outbox.is_empty(), Ordering::Release);
+        OUTGOING.any.store(!outbox.is_empty(), Ordering::Release);
         lines
     };
     let machines = if lines.iter().any(|l| matches!(l.to, To::Key(_))) {

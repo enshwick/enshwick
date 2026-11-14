@@ -2,7 +2,7 @@
 
 use super::attach::attach;
 use super::carried::*;
-use super::world_file::{read_file, read_world, unwritten, write_file};
+use super::world_file::{last_write, read_file, read_world, unwritten, write_file};
 use super::*;
 use crate::inventory::item_records::anchor::{CharacterId, Index};
 
@@ -32,8 +32,13 @@ fn ids_take_the_mod_s_namespace_unless_they_name_one() {
     assert_eq!(full_id("you.lanterns", ":x"), None);
 }
 
+/// One test at a time over the destroy requests, which are the process's
+/// own.
+static DESTROYS: Mutex<()> = Mutex::new(());
+
 #[test]
 fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
+    let _turn = DESTROYS.relock();
     let record = |item| Record {
         item,
         anchor: None,
@@ -718,6 +723,30 @@ fn only_a_missing_world_file_starts_the_world_empty() {
 }
 
 #[test]
+fn a_value_set_after_the_world_s_last_save_is_written_as_the_world_ends() {
+    let _turn = DESTROYS.relock();
+    kinds();
+    FINDING.store(false, Ordering::Relaxed);
+    assert_eq!(
+        last_write(server(Vec::new(), Vec::new())),
+        None,
+        "nothing set since the save"
+    );
+    let mut set = server(Vec::new(), Vec::new());
+    set.values.insert(
+        key(1, 1027),
+        Record {
+            item: 9,
+            anchor: Some(Anchor::Placed(chest(1))),
+            value: Box::new([6]),
+        },
+    );
+    set.changed = true;
+    let expected = write_file(&set);
+    assert_eq!(last_write(set), Some(("w".to_owned(), expected)));
+}
+
+#[test]
 fn a_failed_write_marks_the_same_world_changed_again() {
     let mut kept = Some(server(Vec::new(), Vec::new()));
     unwritten(&mut kept, "other");
@@ -727,4 +756,38 @@ fn a_failed_write_marks_the_same_world_changed_again() {
     let mut none = None;
     unwritten(&mut none, "w");
     assert!(none.is_none());
+}
+
+/// Sets the server's records and their flags, which are the process's own,
+/// under the same turn as every test that reads them.
+#[cfg(windows)]
+#[test]
+fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_clean() {
+    let _turn = DESTROYS.relock();
+    *SERVER.relock() = Some(server(Vec::new(), vec!["old:kind".to_owned()]));
+    KEPT.store(true, Ordering::Relaxed);
+    FINDING.store(true, Ordering::Relaxed);
+    UNREAD.store(true, Ordering::Relaxed);
+    let part = crate::inventory::PARTS
+        .iter()
+        .find(|part| part.name == "item_data")
+        .unwrap();
+    let forget = part
+        .forget
+        .expect("item data forgets its server at the end");
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    forget(loader);
+    assert!(
+        SERVER.relock().is_none(),
+        "the records went with their world"
+    );
+    assert!(
+        !KEPT.load(Ordering::Relaxed),
+        "no destroy request is noted for them"
+    );
+    assert!(!FINDING.load(Ordering::Relaxed));
+    assert!(
+        !UNREAD.load(Ordering::Relaxed),
+        "the next world takes values"
+    );
 }

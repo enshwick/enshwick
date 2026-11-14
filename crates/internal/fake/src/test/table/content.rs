@@ -236,6 +236,10 @@ pub(crate) extern "system" fn rebuild_resource(_me: ModHandle, key: *const Resou
     let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
+    // As the loader: a patch rebuilding its own key would wait on its build.
+    if building(&key) {
+        return Status::BUILDING;
+    }
     with(Status::MISSING, |s| {
         if !s.served.iter().any(|served| served.0.key == key) {
             return Status::BAD_ARGS;
@@ -659,6 +663,11 @@ thread_local! {
         const { core::cell::RefCell::new(Vec::new()) };
 }
 
+/// Whether `key`'s patches run on this thread.
+fn building(key: &ResourceKey) -> bool {
+    BUILDING.with_borrow(|frames| frames.iter().any(|(at, _)| at == key))
+}
+
 pub(crate) extern "system" fn resource_buffer(
     _me: ModHandle,
     len: u32,
@@ -690,7 +699,7 @@ pub(crate) extern "system" fn resource_buffer(
 /// skipped, and [`Status::MISSING`] when none built. As the loader,
 /// [`Status::BUILDING`] for a key whose patches already run on this thread.
 pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
-    if BUILDING.with_borrow(|building| building.iter().any(|(at, _)| at == key)) {
+    if building(key) {
         return Err(Status::BUILDING);
     }
     let patches: Vec<_> = with(Vec::new(), |s| {

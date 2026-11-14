@@ -36,6 +36,7 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::read_ptr;
 use crate::engine::mid::mid_handler;
 use crate::engine::mod_index::ModIndex;
+use crate::engine::pending::Pending;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::world::ServerAccess;
@@ -334,7 +335,8 @@ impl Drop for Turn<'_> {
 static EXECUTOR: OnceLock<Option<Executor>> = OnceLock::new();
 static QUEUE: Queue = Queue::new();
 static BUSY: AtomicBool = AtomicBool::new(false);
-static FINISHED: Mutex<Vec<Finished>> = Mutex::new(Vec::new());
+/// Results for the mods, handed out after the step.
+static FINISHED: Pending<Finished> = Pending::new();
 /// A mod asked for inventories during init, or a dedicated server runs,
 /// whose console gives items.
 static WANTED: AtomicBool = AtomicBool::new(false);
@@ -630,7 +632,7 @@ pub(crate) fn forget() {
 }
 
 fn finish(results: impl IntoIterator<Item = Finished>) {
-    FINISHED.relock().extend(results);
+    FINISHED.extend(results);
 }
 
 /// Queues a request of the mod `owner`.
@@ -734,14 +736,7 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
 /// the game thread after each step.
 pub(crate) fn deliver(now: Instant) {
     expire(now);
-    let finished = {
-        let mut finished = FINISHED.relock();
-        if finished.is_empty() {
-            return;
-        }
-        std::mem::take(&mut *finished)
-    };
-    for result in finished {
+    for result in FINISHED.take() {
         if crate::engine::loader::is_off(result.owner) {
             continue;
         }

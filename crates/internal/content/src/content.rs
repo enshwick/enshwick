@@ -346,7 +346,8 @@ impl Blob {
 ///
 /// [`Off`] for a key the mod does not serve, or whose base the loader did
 /// not keep: the mod did not allow to rebuild it and no build read a served
-/// key; and when the new build differs in length.
+/// key; when the new build differs in length; and from a patch of `key`
+/// itself, whose rebuild would wait on its own build.
 ///
 /// # Examples
 ///

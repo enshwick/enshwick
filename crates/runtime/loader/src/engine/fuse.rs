@@ -5,7 +5,7 @@
 //! summary and the Mods screen, and wired past in every chain it linked, so
 //! the game runs that part vanilla.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::Level;
 
@@ -83,7 +83,7 @@ impl Off {
 
 /// Whether a fuse is off: one atomic for the process.
 #[cfg(not(test))]
-type Switch = AtomicBool;
+type Switch = std::sync::atomic::AtomicBool;
 
 /// Whether a fuse is off, kept per thread in the loader's own tests, so a
 /// test that blows a static fuse leaves every other test's alone.
@@ -95,12 +95,13 @@ type Switch = test_switch::Switch;
 pub struct Fuse {
     feature: &'static str,
     off: Switch,
-    /// Whether a live check of `Fuse::verify` held in this process.
+    /// Whether a live check of `Fuse::verify` held in this process, kept per
+    /// test as `off` is in the loader's own tests.
     #[cfg_attr(
         not(windows),
         expect(dead_code, reason = "live checks read game memory on Windows only")
     )]
-    checked: AtomicBool,
+    checked: Switch,
 }
 
 impl Fuse {
@@ -110,7 +111,7 @@ impl Fuse {
         Self {
             feature,
             off: Switch::new(false),
-            checked: AtomicBool::new(false),
+            checked: Switch::new(false),
         }
     }
 
@@ -147,7 +148,7 @@ impl Fuse {
         }
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(check)) {
             Ok(Ok(())) => {
-                self.checked.store(true, Ordering::Release);
+                let _was = self.checked.swap(true, Ordering::Release);
                 crate::log!(
                     INFO,
                     "{}: its live object holds what {build} found",
@@ -358,7 +359,7 @@ mod test_switch {
             Self {
                 feature,
                 off: Switch::process_wide(),
-                checked: AtomicBool::new(false),
+                checked: Switch::process_wide(),
             }
         }
     }
@@ -414,7 +415,7 @@ mod test_switch {
                 return process.load(order);
             }
             let id = self.id();
-            per_test::with(|turned| turned.fuses.contains(&id))
+            per_test::with(|turned| turned.switches.contains(&id))
         }
 
         pub(super) fn swap(&self, off: bool, order: Ordering) -> bool {
@@ -424,9 +425,9 @@ mod test_switch {
             let id = self.id();
             per_test::with(|turned| {
                 if off {
-                    !turned.fuses.insert(id)
+                    !turned.switches.insert(id)
                 } else {
-                    turned.fuses.remove(&id)
+                    turned.switches.remove(&id)
                 }
             })
         }
@@ -659,6 +660,21 @@ mod tests {
             let fuse = Fuse::new("panicking check");
             assert!(!fuse.verify("build 1", || panic!("bad read")));
             assert!(fuse.is_off());
+        }
+
+        /// A static fuse two tests verify, one with a check that holds and
+        /// one with a check that fails.
+        static CHECKED: Fuse = Fuse::new("checked lamp");
+
+        #[test]
+        fn a_check_that_held_in_one_test_leaves_the_next_test_s_check_to_run() {
+            assert!(CHECKED.verify("build 1", || Ok(())));
+        }
+
+        #[test]
+        fn a_failing_check_in_another_test_still_turns_the_static_fuse_off() {
+            assert!(!CHECKED.verify("build 1", || Err(failed("a flag, 0 or 1"))));
+            assert!(CHECKED.is_off());
         }
     }
 }
