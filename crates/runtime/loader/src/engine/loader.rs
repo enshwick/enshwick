@@ -217,19 +217,31 @@ pub(crate) fn rewire() {
 
 static LOADER: OnceLock<Loader> = OnceLock::new();
 
-/// The events some mod handles, a bit per event id.
-static HANDLED: AtomicU64 = AtomicU64::new(0);
+/// What the loader keeps of its mods' start. Mods subscribe and run their
+/// `init` once per process, so no part forgets it.
+#[derive(Debug)]
+struct State {
+    /// The events some mod handles, a bit per event id.
+    handled: AtomicU64,
+    /// The index of the mod whose `init` runs now, `usize::MAX` for none.
+    initialising: AtomicUsize,
+}
+
+static STATE: State = State {
+    handled: AtomicU64::new(0),
+    initialising: AtomicUsize::new(usize::MAX),
+};
 
 /// Whether a mod's handler takes `event`, so work that only raises it may
 /// be skipped otherwise. One load, for the game's hot paths.
 pub(crate) fn handles(event: Event) -> bool {
     1u64.checked_shl(event.0)
-        .is_none_or(|bit| HANDLED.load(Ordering::Relaxed) & bit != 0)
+        .is_none_or(|bit| STATE.handled.load(Ordering::Relaxed) & bit != 0)
 }
 
 fn mark_handled(event: Event) {
     if let Some(bit) = 1u64.checked_shl(event.0) {
-        HANDLED.fetch_or(bit, Ordering::Relaxed);
+        STATE.handled.fetch_or(bit, Ordering::Relaxed);
     }
 }
 
@@ -647,20 +659,17 @@ fn is_world_event(event: Event) -> bool {
     )
 }
 
-/// The index of the mod whose `init` runs now, `usize::MAX` for none.
-static INITIALISING: AtomicUsize = AtomicUsize::new(usize::MAX);
-
 /// Runs `init` of mod `index`, which [`in_init`] then answers for.
 pub(crate) fn initialising<R>(index: usize, init: impl FnOnce() -> R) -> R {
-    INITIALISING.store(index, Ordering::Release);
+    STATE.initialising.store(index, Ordering::Release);
     let outcome = init();
-    INITIALISING.store(usize::MAX, Ordering::Release);
+    STATE.initialising.store(usize::MAX, Ordering::Release);
     outcome
 }
 
 /// Whether mod `index` is running its `init` now.
 pub(crate) fn in_init(index: usize) -> bool {
-    INITIALISING.load(Ordering::Acquire) == index
+    STATE.initialising.load(Ordering::Acquire) == index
 }
 
 impl core::ops::Index<ModIndex> for [ModRecord] {

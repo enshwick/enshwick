@@ -15,7 +15,9 @@ fn a_filter_that_chains_back_runs_once() {
         // SAFETY: the test's own null pointers, passed on unchanged.
         unsafe { filter(pointers) }
     }
-    NEXT.store(other as *const () as usize, Ordering::Release);
+    STATE
+        .next
+        .store(other as *const () as usize, Ordering::Release);
     // SAFETY: no pointers: the report stops at once.
     assert_eq!(unsafe { filter(core::ptr::null()) }, CONTINUE_SEARCH);
     assert_eq!(CALLS.load(Ordering::Relaxed), 1);

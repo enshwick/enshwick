@@ -133,8 +133,18 @@ pub(crate) struct Pending {
     moved: Vec<(usize, usize)>,
 }
 
-/// Blocks of near memory, each written once and then sealed.
-static BLOCKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+/// The detour engine's own bookkeeping. It lasts the process: the blocks
+/// hold the relays of hooks that stay armed, so no part forgets it.
+#[derive(Debug)]
+struct State {
+    /// Blocks of near memory, each written once and then sealed: their base
+    /// and the bytes used.
+    blocks: Mutex<Vec<(usize, usize)>>,
+}
+
+static STATE: State = State {
+    blocks: Mutex::new(Vec::new()),
+};
 
 /// Why a target is left alone instead of hooked.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -554,7 +564,7 @@ fn far_jump(destination: usize) -> [u8; FAR_JUMP] {
 /// `ENTRY` bytes within `rel32` reach of `target`, and the base of the block
 /// they sit in, both from a block allocated in this batch.
 fn near(target: usize, fresh: &mut Vec<usize>) -> Result<(usize, usize), PrepareError> {
-    let mut blocks = BLOCKS.relock();
+    let mut blocks = STATE.blocks.relock();
     let reaches = |base: usize| base.abs_diff(target) < REACH;
     if let Some((base, used)) = blocks
         .iter_mut()

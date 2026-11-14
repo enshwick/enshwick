@@ -10,23 +10,9 @@ static-is-registry-fuse-or-state crates/internal/base/src/i18n.rs static HANDED:
 # Each mod's task queue, kept for the process; it moves into a
 # `Registry<T>` by mod handle.
 static-is-registry-fuse-or-state crates/internal/base/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
-# The code patches mods ask for during init, sealed at its end; they move
-# into a `Registry<T>`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/engine/code.rs static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
-# The near-memory blocks detours write into, the loader's own bookkeeping;
-# they move into the detour engine's state struct.
-static-is-registry-fuse-or-state crates/runtime/loader/src/engine/detour.rs static BLOCKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
-# What the loader turned off and the names it reports, diagnostics state;
-# they move into one diagnostics state struct with `COUNTING`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
-static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
-static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
 # The game event subscriptions mods make during init; they move into a
 # `Registry<T>`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/game_events.rs static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
-# The dry run's captured lines, kept off the poison policy on purpose; they
-# move into the log's state struct with `CAPTURING`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/engine/log.rs static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
 # The notices waiting for a slot, runtime state; they move into the
 # notices' state struct with the slots.
 static-is-registry-fuse-or-state crates/runtime/loader/src/base/notices.rs static WAITING: Mutex<(Waiting, bool)> = Mutex::new((Vec::new(), false));
@@ -60,29 +46,6 @@ loader-flag-is-in-state crates/runtime/loader/src/base/net.rs static SERVER_RUNS
 loader-flag-is-in-state crates/runtime/loader/src/base/notices.rs static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
 loader-flag-is-in-state crates/runtime/loader/src/base/saves.rs static UNDER_WAY: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/base/saves/holds.rs static HOLDING: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/builds.rs static PATTERNS: AtomicBool = AtomicBool::new(true);
-loader-flag-is-in-state crates/runtime/loader/src/engine/code.rs static LIFTED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/code.rs static SEALED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/crash.rs static HANDED_ON: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/crash.rs static INSIDE: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/crash.rs static NEXT: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/crash.rs static NEXT_NOTE: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/diag.rs static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/diag.rs static PATCHES: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
-loader-flag-is-in-state crates/runtime/loader/src/engine/loader.rs static HANDLED: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/loader.rs static INITIALISING: AtomicUsize = AtomicUsize::new(usize::MAX);
-loader-flag-is-in-state crates/runtime/loader/src/engine/log.rs static CAPTURING: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/pages.rs static FORGOTTEN: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/profile.rs static TSC_HZ: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/retire.rs static STEP: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/ticks.rs static STEPPED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/ticks.rs static STEPS: AtomicU64 = AtomicU64::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/world.rs pub(crate) static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/world.rs static RETIRED_ON: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/world.rs static SERVER_WORLD: AtomicUsize = AtomicUsize::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/world.rs static STEP_LINKED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/engine/world/whose.rs static HOSTED_THREAD: AtomicU32 = AtomicU32::new(0);
-loader-flag-is-in-state crates/runtime/loader/src/engine/world/whose.rs static STARTING: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/events.rs static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
 loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static CLIENT_FULL: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/inventory/item_data.rs static DESTROYED: [AtomicU64; DESTROYED_CAP] = [const { AtomicU64::new(0) }; DESTROYED_CAP];
@@ -101,4 +64,3 @@ loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs stat
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static REGISTRY: AtomicUsize = AtomicUsize::new(0);
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static SETTLED: AtomicBool = AtomicBool::new(false);
 loader-flag-is-in-state crates/runtime/loader/src/inventory/transactions.rs static WANTED: AtomicBool = AtomicBool::new(false);
-loader-flag-is-in-state crates/runtime/loader/src/start.rs static STARTED: AtomicBool = AtomicBool::new(false);

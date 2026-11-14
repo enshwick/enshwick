@@ -380,7 +380,7 @@ pub(crate) fn describe(
 }
 
 /// What the filter needs, set up at start.
-struct State {
+struct Setup {
     ranges: Box<[Range]>,
     /// The loader's log file of this run, opened for appending.
     log: usize,
@@ -391,30 +391,57 @@ struct State {
     last: usize,
 }
 
-static STATE: OnceLock<State> = OnceLock::new();
-/// The last crash of the session before, read at start.
-static LAST: OnceLock<String> = OnceLock::new();
-/// The filter the loader's replaced, called after it.
-static NEXT: AtomicUsize = AtomicUsize::new(0);
-/// Set while the filter runs: a fault inside it goes to the next filter.
-static INSIDE: AtomicBool = AtomicBool::new(false);
-/// The thread the filter handed on to the next filter, 0 before: a filter
-/// set after the loader's chains back to it, which must not call that one
-/// again.
-static HANDED_ON: AtomicU32 = AtomicU32::new(0);
+/// What crash reports keep for the process: a crash ends it, so no part
+/// forgets any of it. Read by the filter and the first-chance handler, so
+/// it neither allocates nor locks.
+struct State {
+    setup: OnceLock<Setup>,
+    /// The last crash of the session before, read at start.
+    last: OnceLock<String>,
+    /// The filter the loader's replaced, called after it.
+    next: AtomicUsize,
+    /// Set while the filter runs: a fault inside it goes to the next filter.
+    inside: AtomicBool,
+    /// The thread the filter handed on to the next filter, 0 before: a
+    /// filter set after the loader's chains back to it, which must not call
+    /// that one again.
+    handed_on: AtomicU32,
+    /// The filter's line.
+    line: Shared,
+    /// The latest faults the first-chance handler saw, oldest overwritten.
+    noted: [Noted; 8],
+    /// The slot of `noted` the next fault takes, modulo its length.
+    next_note: AtomicUsize,
+}
 
-/// The filter's line, used by one thread at a time under [`INSIDE`].
+static STATE: State = State {
+    setup: OnceLock::new(),
+    last: OnceLock::new(),
+    next: AtomicUsize::new(0),
+    inside: AtomicBool::new(false),
+    handed_on: AtomicU32::new(0),
+    line: Shared(UnsafeCell::new(Line {
+        bytes: [0; LINE],
+        len: 0,
+    })),
+    noted: [const {
+        Noted {
+            thread: AtomicU32::new(0),
+            address: AtomicUsize::new(0),
+            marker: AtomicU32::new(0),
+        }
+    }; 8],
+    next_note: AtomicUsize::new(0),
+};
+
+/// The filter's line, used by one thread at a time under the state's
+/// `inside` flag.
 struct Shared(UnsafeCell<Line>);
 
-// SAFETY: `report` touches the line only after its `INSIDE.swap(true)`
+// SAFETY: `report` touches the line only after its `inside.swap(true)`
 // returned false, which one thread in the process ever sees, so the line is
 // never shared.
 unsafe impl Sync for Shared {}
-
-static SHARED: Shared = Shared(UnsafeCell::new(Line {
-    bytes: [0; LINE],
-    len: 0,
-}));
 
 /// What the first-chance handler noted of a fault: the thread, the address
 /// and the mod callback the thread ran, as [`crate::engine::profile::marker`] gives
@@ -425,16 +452,6 @@ struct Noted {
     marker: AtomicU32,
 }
 
-/// The latest faults the first-chance handler saw, oldest overwritten.
-static NOTED: [Noted; 8] = [const {
-    Noted {
-        thread: AtomicU32::new(0),
-        address: AtomicUsize::new(0),
-        marker: AtomicU32::new(0),
-    }
-}; 8];
-static NEXT_NOTE: AtomicUsize = AtomicUsize::new(0);
-
 /// The callback the thread `thread` ran when it faulted at `at`: read here
 /// when this is the thread, else from what the first-chance handler noted.
 fn noted(thread: u32, at: usize) -> Option<(usize, crate::engine::profile::Feature)> {
@@ -443,7 +460,8 @@ fn noted(thread: u32, at: usize) -> Option<(usize, crate::engine::profile::Featu
     if thread == unsafe { GetCurrentThreadId() } {
         return crate::engine::profile::current_callback();
     }
-    NOTED
+    STATE
+        .noted
         .iter()
         .find(|n| {
             n.thread.load(Ordering::Acquire) == thread && n.address.load(Ordering::Acquire) == at
@@ -464,7 +482,8 @@ unsafe extern "system" fn first_chance(pointers: *mut EXCEPTION_POINTERS) -> i32
     if let Some(record) = record
         && FATAL.contains(&record.ExceptionCode)
     {
-        let slot = &NOTED[NEXT_NOTE.fetch_add(1, Ordering::Relaxed) % NOTED.len()];
+        let slot =
+            &STATE.noted[STATE.next_note.fetch_add(1, Ordering::Relaxed) % STATE.noted.len()];
         slot.marker
             .store(crate::engine::profile::marker(), Ordering::Relaxed);
         slot.address
@@ -721,7 +740,7 @@ fn crash_file_name(prefix: &[u16], time: &SYSTEMTIME, out: &mut [u16]) -> Option
 
 /// The last crash of the session before, if it crashed.
 pub(crate) fn last() -> Option<&'static str> {
-    LAST.get().map(String::as_str)
+    STATE.last.get().map(String::as_str)
 }
 
 /// Starts blaming crashes on `modules`, `(index, id, start, end)`, writing
@@ -741,7 +760,7 @@ pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path
             "{}: {text}",
             crate::engine::diag::crash_heading(&text)
         );
-        let _first = LAST.set(text);
+        let _first = STATE.last.set(text);
     }
     let _cleared = std::fs::write(&last_path, "");
     crate::engine::log::prune(logs_dir, CRASH_SOURCE, KEPT_CRASHES);
@@ -749,13 +768,13 @@ pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path
         .iter()
         .map(|(owner, id, start, end)| Range::new(*start, *end, ModIndex::new(*owner), id))
         .collect();
-    let state = State {
+    let state = Setup {
         ranges,
         log: crate::engine::log::loader_file().map_or(0, |path| open(path, FILE_APPEND_DATA)),
         crash_file: wide(&logs_dir.join(format!("{CRASH_SOURCE}_"))).into_boxed_slice(),
         last: open(&last_path, GENERIC_READ | GENERIC_WRITE),
     };
-    if STATE.set(state).is_err() {
+    if STATE.setup.set(state).is_err() {
         return;
     }
     // SAFETY: `first_chance` has the `PVECTORED_EXCEPTION_HANDLER` signature,
@@ -772,7 +791,7 @@ pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path
 /// Puts the loader's filter back on top when another took its place, and
 /// calls that one after it.
 pub(crate) fn reassert() {
-    if STATE.get().is_none() {
+    if STATE.setup.get().is_none() {
         return;
     }
     // SAFETY: `filter` has the `LPTOP_LEVEL_EXCEPTION_FILTER` signature,
@@ -783,7 +802,7 @@ pub(crate) fn reassert() {
         && previous as *const () as usize != ours
     {
         let next = previous as *const () as usize;
-        if NEXT.swap(next, Ordering::AcqRel) != next {
+        if STATE.next.swap(next, Ordering::AcqRel) != next {
             crate::log!(
                 INFO,
                 "crash blame runs before the crash filter at {next:#x}, which another module set"
@@ -800,10 +819,10 @@ pub(crate) fn reassert() {
 ///   `EXCEPTION_POINTERS` in this process, whose records are null or valid.
 /// - The thread `thread` is stopped in the fault or is the one running this.
 unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
-    if INSIDE.swap(true, Ordering::AcqRel) {
+    if STATE.inside.swap(true, Ordering::AcqRel) {
         return;
     }
-    let Some(state) = STATE.get() else {
+    let Some(state) = STATE.setup.get() else {
         return;
     };
     // SAFETY: the caller's contract makes `pointers` null or the fault's
@@ -811,9 +830,9 @@ unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
     let Some(pointers) = (unsafe { pointers.as_ref() }) else {
         return;
     };
-    // SAFETY: this thread's `INSIDE.swap(true)` returned false, which one
+    // SAFETY: this thread's `inside.swap(true)` returned false, which one
     // thread in the process ever sees, so nothing else borrows the line.
-    let line = unsafe { &mut *SHARED.0.get() };
+    let line = unsafe { &mut *STATE.line.0.get() };
     line.len = 0;
     // SAFETY: the caller's contract, passed on: the fault's valid pointers,
     // and `thread` stopped in the fault or running this.
@@ -843,14 +862,14 @@ unsafe extern "system" fn filter(pointers: *const EXCEPTION_POINTERS) -> i32 {
     // SAFETY: `GetCurrentThreadId` takes no arguments and has no
     // preconditions.
     let thread = unsafe { GetCurrentThreadId() };
-    if HANDED_ON.load(Ordering::Acquire) == thread {
+    if STATE.handed_on.load(Ordering::Acquire) == thread {
         return CONTINUE_SEARCH;
     }
     // SAFETY: Windows calls an unhandled exception filter on the faulting
     // thread with null or the fault's valid `EXCEPTION_POINTERS`.
     unsafe { report(pointers, thread) };
-    HANDED_ON.store(thread, Ordering::Release);
-    let next = NEXT.load(Ordering::Acquire);
+    STATE.handed_on.store(thread, Ordering::Release);
+    let next = STATE.next.load(Ordering::Acquire);
     if next == 0 {
         return CONTINUE_SEARCH;
     }
@@ -872,7 +891,7 @@ unsafe extern "system" fn filter(pointers: *const EXCEPTION_POINTERS) -> i32 {
 ///
 /// - `pointers` are the fault's, with records null or valid for the call.
 /// - The thread `thread` is stopped in the fault or is the one running this.
-unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line: &mut Line) {
+unsafe fn record(state: &Setup, pointers: &EXCEPTION_POINTERS, thread: u32, line: &mut Line) {
     // SAFETY: the caller's contract makes both records null or valid for the
     // call.
     let (Some(record), Some(context)) = (unsafe { pointers.ExceptionRecord.as_ref() }, unsafe {

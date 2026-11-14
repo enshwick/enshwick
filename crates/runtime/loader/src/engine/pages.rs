@@ -123,7 +123,7 @@ pub(crate) fn query(address: usize) -> Option<Region> {
 /// and mapped views, which another view may write, are asked afresh.
 #[must_use]
 pub fn read_only(address: usize, max: usize) -> usize {
-    let forgotten = FORGOTTEN.load(Ordering::Acquire);
+    let forgotten = STATE.forgotten.load(Ordering::Acquire);
     FOUND
         .try_with(|found| found.read_only(forgotten, address, max))
         .unwrap_or_else(|_| Found::new().read_only(forgotten, address, max))
@@ -132,12 +132,22 @@ pub fn read_only(address: usize, max: usize) -> usize {
 /// Drops the runs of read-only pages every thread remembers, when a world
 /// goes away and may free them.
 pub fn forget() {
-    FORGOTTEN.fetch_add(1, Ordering::Release);
+    STATE.forgotten.fetch_add(1, Ordering::Release);
 }
 
-/// How many times a world went away and may have freed the runs any
-/// thread remembers.
-static FORGOTTEN: AtomicUsize = AtomicUsize::new(0);
+/// What the page queries share across threads; each thread keeps its runs
+/// in its own `FOUND`.
+#[derive(Debug)]
+struct State {
+    /// How many times a world went away and may have freed the runs any
+    /// thread remembers; never reset, so no thread mistakes a later world's
+    /// count for the one its runs were found under.
+    forgotten: AtomicUsize,
+}
+
+static STATE: State = State {
+    forgotten: AtomicUsize::new(0),
+};
 
 thread_local! {
     static FOUND: Found = const { Found::new() };

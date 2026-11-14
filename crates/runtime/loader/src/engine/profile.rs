@@ -313,8 +313,17 @@ pub fn events_reading(owner: ModIndex) -> Option<(u64, u64)> {
     ))
 }
 
-/// The time-stamp counter's rate in ticks a second, once measured.
-static TSC_HZ: AtomicU64 = AtomicU64::new(0);
+/// What the profiler measured of the machine; it lasts the process, so no
+/// part forgets it.
+#[derive(Debug)]
+struct State {
+    /// The time-stamp counter's rate in ticks a second, 0 until measured.
+    tsc_hz: AtomicU64,
+}
+
+static STATE: State = State {
+    tsc_hz: AtomicU64::new(0),
+};
 
 /// Keeps the time-stamp counter's rate, measured off the game thread, for
 /// [`nanos`].
@@ -325,21 +334,21 @@ pub fn keep_tsc_hz(hz: f64) {
             clippy::cast_sign_loss,
             reason = "a positive finite rate, far below u64::MAX"
         )]
-        TSC_HZ.store(hz as u64, Ordering::Relaxed);
+        STATE.tsc_hz.store(hz as u64, Ordering::Relaxed);
     }
 }
 
 /// Whether the time-stamp counter's rate is kept.
 #[must_use]
 pub fn tsc_hz_kept() -> bool {
-    TSC_HZ.load(Ordering::Relaxed) != 0
+    STATE.tsc_hz.load(Ordering::Relaxed) != 0
 }
 
 /// `ticks` of the time-stamp counter in nanoseconds; `None` before its rate
 /// is kept.
 #[must_use]
 pub fn nanos(ticks: u64) -> Option<u64> {
-    match TSC_HZ.load(Ordering::Relaxed) {
+    match STATE.tsc_hz.load(Ordering::Relaxed) {
         0 => None,
         hz => u64::try_from(u128::from(ticks) * 1_000_000_000 / u128::from(hz)).ok(),
     }

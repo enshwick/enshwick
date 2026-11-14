@@ -1,7 +1,8 @@
 //! What one of the loader's own tests turned off, kept apart from every
-//! other test in the process: the fuses it blew or checked and the parts it
-//! listed off. libtest runs every test on a thread of its own, even with one test
-//! thread, so a test's scope is its thread's, and work it hands another
+//! other test in the process: the fuses it blew or checked, the parts it
+//! listed off and the mods it turned off. libtest runs every test on a thread
+//! of its own, even with one test thread, so a test's scope is its thread's,
+//! and work it hands another
 //! thread through [`carried`] joins it. Outside the loader's tests the
 //! loader keeps one process-wide state and [`carried`] is the work itself.
 
@@ -35,7 +36,7 @@ mod scope {
     use enshwick_base::Relock;
     use rustc_hash::FxHashSet;
 
-    use crate::engine::diag::PartOff;
+    use crate::engine::diag::{PartOff, TurnedOff};
 
     /// What one test turned off or checked.
     #[derive(Debug, Default)]
@@ -45,6 +46,8 @@ mod scope {
         pub(crate) switches: FxHashSet<u64>,
         /// The parts it listed off, in order.
         pub(crate) parts: Vec<PartOff>,
+        /// The mods it turned off, oldest first.
+        pub(crate) mods: Vec<TurnedOff>,
     }
 
     type Scope = Arc<Mutex<Turned>>;

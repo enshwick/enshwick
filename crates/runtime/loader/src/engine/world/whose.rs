@@ -11,11 +11,51 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick_core::abi::Side;
 
-/// A hosted server started on this client and its world is not seen yet.
-static STARTING: AtomicBool = AtomicBool::new(false);
-/// The hosted server's game thread, from its world's first sight until its
-/// teardown; 0 for none.
-static HOSTED_THREAD: AtomicU32 = AtomicU32::new(0);
+/// The hosted server a client runs, as far as its engine passes need it.
+#[derive(Debug)]
+pub(super) struct Hosted {
+    /// A hosted server started on this client and its world is not seen yet.
+    starting: AtomicBool,
+    /// The hosted server's game thread, from its world's first sight until
+    /// its teardown; 0 for none.
+    thread: AtomicU32,
+}
+
+impl Hosted {
+    pub(super) const fn new() -> Self {
+        Self {
+            starting: AtomicBool::new(false),
+            thread: AtomicU32::new(0),
+        }
+    }
+
+    /// The server's world is seen, stepped on `thread`.
+    pub(super) fn server_seen(&self, thread: u32) {
+        self.thread.store(thread, Ordering::Release);
+        self.starting.store(false, Ordering::Release);
+    }
+
+    /// The server is torn down.
+    pub(super) fn server_gone(&self) {
+        self.thread.store(0, Ordering::Release);
+        self.starting.store(false, Ordering::Release);
+    }
+
+    /// A hosted server starts; its world is not seen yet.
+    fn starts(&self) {
+        self.starting.store(true, Ordering::Release);
+    }
+
+    /// Whether a hosted server started and its world is not seen yet.
+    fn starting(&self) -> bool {
+        self.starting.load(Ordering::Acquire)
+    }
+
+    /// Whether `thread` steps a server seen and not yet torn down.
+    fn steps_on(&self, thread: u32) -> bool {
+        self.thread.load(Ordering::Acquire) == thread
+    }
+}
 
 /// Whose world a pass over an entity world is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,19 +68,7 @@ pub(crate) enum Whose {
 
 /// A hosted server starts on this client; its world is not seen yet.
 pub(crate) fn server_starts() {
-    STARTING.store(true, Ordering::Release);
-}
-
-/// The server's world is seen, stepped on `thread`.
-pub(super) fn server_seen(thread: u32) {
-    HOSTED_THREAD.store(thread, Ordering::Release);
-    STARTING.store(false, Ordering::Release);
-}
-
-/// The server is torn down.
-pub(super) fn server_gone() {
-    HOSTED_THREAD.store(0, Ordering::Release);
-    STARTING.store(false, Ordering::Release);
+    super::STATE.hosted.starts();
 }
 
 /// Whose `entity_world` is, passed on this thread to the loader of `side`;
@@ -48,13 +76,14 @@ pub(super) fn server_gone() {
 pub(crate) fn whose(side: Side, entity_world: usize) -> Option<Whose> {
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    let state = &super::STATE;
     tell(Seen {
         side,
         world: entity_world,
         server: usize::try_from(super::server_world()).unwrap_or(0),
-        on_game_thread: super::hosting() && me == super::GAME_THREAD.load(Ordering::Acquire),
-        on_hosted_thread: me == HOSTED_THREAD.load(Ordering::Acquire),
-        starting: STARTING.load(Ordering::Acquire),
+        on_game_thread: super::hosting() && me == state.game_thread.load(Ordering::Acquire),
+        on_hosted_thread: state.hosted.steps_on(me),
+        starting: state.hosted.starting(),
     })
 }
 
@@ -91,6 +120,21 @@ mod tests {
 
     const SERVER: usize = 0x1000; // bound, not a game offset: a test's own world address
     const CLIENT: usize = 0x2000; // bound, not a game offset: a test's own world address
+
+    #[test]
+    fn a_hosted_server_is_starting_until_seen_and_its_thread_counts_until_gone() {
+        let hosted = Hosted::new();
+        hosted.starts();
+        assert!(hosted.starting());
+        hosted.server_seen(7);
+        assert!(!hosted.starting());
+        assert!(hosted.steps_on(7));
+        assert!(!hosted.steps_on(8));
+        hosted.starts();
+        hosted.server_gone();
+        assert!(!hosted.starting());
+        assert!(!hosted.steps_on(7));
+    }
 
     fn seen(side: Side, world: usize, server: usize, starting: bool) -> Seen {
         Seen {
