@@ -76,6 +76,20 @@ impl Part {
             follows: None,
         }
     }
+
+    /// Runs the `forget` of the part named `name` in `parts`, as a hosted
+    /// game's end does.
+    #[cfg(test)]
+    pub(crate) fn forget_in(parts: &[&Self], name: &str, loader: &'static Loader) {
+        let Some(forget) = parts
+            .iter()
+            .find(|part| part.name == name)
+            .and_then(|part| part.forget)
+        else {
+            panic!("no part {name} forgets anything");
+        };
+        forget(loader);
+    }
 }
 
 /// A call the game's threads make into a part, under a fuse of its own: a

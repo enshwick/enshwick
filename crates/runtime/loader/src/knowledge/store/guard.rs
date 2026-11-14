@@ -35,11 +35,41 @@ use super::{Layout, definition, layout, quest_set, read};
 
 static FILTERS: Registry<Registered<KnowledgeInputFn>> = Registry::new();
 static SITE: OnceLock<Site> = OnceLock::new();
-/// Requests refused, by the guard enforcing or by a filter.
-static REFUSED: AtomicU32 = AtomicU32::new(0);
-/// Lines logged so far; the log stops at [`LOGGED`].
-static LINES: AtomicU32 = AtomicU32::new(0);
 const LOGGED: u32 = 64;
+
+/// What the guard counted of the running game, forgotten when a hosted game
+/// ends.
+#[derive(Debug)]
+struct State {
+    /// Requests refused, by the guard enforcing or by a filter.
+    refused: AtomicU32,
+    /// Lines logged so far; the log stops at [`LOGGED`].
+    lines: AtomicU32,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            refused: AtomicU32::new(0),
+            lines: AtomicU32::new(0),
+        }
+    }
+
+    /// Back to where a fresh process starts.
+    fn forget(&self) {
+        // Destructured so a new field cannot be left out of the reset.
+        let Self { refused, lines } = self;
+        refused.store(0, Ordering::Relaxed);
+        lines.store(0, Ordering::Relaxed);
+    }
+}
+
+static STATE: State = State::new();
+
+/// Forgets what the guard counted of a hosted game that ended.
+pub(crate) fn forget() {
+    STATE.forget();
+}
 
 /// Where the site keeps the request and what the guard reads of a
 /// definition.
@@ -64,7 +94,7 @@ pub(crate) fn status() -> Option<String> {
     SITE.get()?;
     Some(format!(
         "enforcing; {} refused",
-        REFUSED.load(Ordering::Relaxed)
+        STATE.refused.load(Ordering::Relaxed)
     ))
 }
 
@@ -103,10 +133,13 @@ fn site(loader: &Loader) -> Option<Site> {
     })
 }
 
-/// Seals the filters and links the site, once the build has what the guard
-/// reads there.
-pub(crate) fn link(loader: &Loader) {
+/// Ends the knowledge input filters mods registered during init.
+pub(crate) fn seal() {
     let _filters = FILTERS.seal();
+}
+
+/// Links the site, once the build has what the guard reads there.
+pub(crate) fn link(loader: &Loader) {
     let unknown = "is not found on this build";
     let Some(site) = site(loader) else {
         let _off = loader.fuse_off(&GUARD_FUSE, "the knowledge request layout", unknown);
@@ -224,8 +257,8 @@ fn decide(call: &mut KnowledgeInput) -> bool {
 /// Counts and logs a refused request.
 #[cold]
 fn note(call: &KnowledgeInput) {
-    let _count = REFUSED.fetch_add(1, Ordering::Relaxed);
-    let line = LINES.fetch_add(1, Ordering::Relaxed);
+    let _count = STATE.refused.fetch_add(1, Ordering::Relaxed);
+    let line = STATE.lines.fetch_add(1, Ordering::Relaxed);
     if line < LOGGED {
         crate::log!(
             INFO,
@@ -429,6 +462,30 @@ mod tests {
         for (def, kind, value, want) in cases {
             assert_eq!(refusal(def, kind, value), want, "{def:?} {kind} {value}");
         }
+    }
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_the_refusals_and_logged_lines() {
+        let call = KnowledgeInput {
+            header: Header::of::<KnowledgeInput>(),
+            player: enshwick_core::Entity(1),
+            id: enshwick_core::abi::KnowledgeId::new(2),
+            kind: KnowledgeInfo::COUNTER,
+            scope: KnowledgeInfo::PLAYER,
+            reserved: 0,
+            value: 1,
+            refusal: KnowledgeInput::COUNTER,
+            allowed: 0,
+        };
+        note(&call);
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        crate::engine::parts::Part::forget_in(crate::knowledge::PARTS, "knowledge", loader);
+        assert_eq!(STATE.refused.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            STATE.lines.load(Ordering::Relaxed),
+            0,
+            "a new game logs anew"
+        );
     }
 
     #[test]

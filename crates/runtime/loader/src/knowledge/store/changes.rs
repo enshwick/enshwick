@@ -149,9 +149,6 @@ pub(crate) fn character_loaded(loader: &Loader, entity: Entity) -> bool {
         .is_some_and(|slot| loaded(parts, game, slot))
 }
 
-/// Changes raised after the next step, by character (0 for the world).
-static RAISED: Pending<KnowledgeData> = Pending::new();
-
 /// Takes knowledge `id` of `kind` back from the character `entity`, or
 /// from the world.
 pub(crate) fn revoke(
@@ -252,7 +249,7 @@ pub(crate) fn revoke(
             }
         }
     }
-    RAISED.push(KnowledgeData {
+    STATE.raised.push(KnowledgeData {
         header: Header::of::<KnowledgeData>(),
         entity: if player { Entity(entity) } else { Entity(0) },
         id: enshwick_core::abi::KnowledgeId::new(id),
@@ -286,12 +283,55 @@ struct Queue {
     waiting: Vec<Waiting>,
 }
 
-static QUEUE: Mutex<Queue> = Mutex::new(Queue {
-    key: None,
-    waiting: Vec::new(),
-});
-/// Whether changes wait for accounts.
-static WAITING: AtomicBool = AtomicBool::new(false);
+/// What the changes follow of the running world, forgotten when it shuts
+/// down or a hosted game ends.
+#[derive(Debug)]
+struct State {
+    /// The running world's key and the changes waiting in it.
+    queue: Mutex<Queue>,
+    /// Whether changes wait for accounts, read each step without the lock.
+    waiting: AtomicBool,
+    /// Changes raised after the next step, by character (0 for the world).
+    raised: Pending<KnowledgeData>,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            queue: Mutex::new(Queue {
+                key: None,
+                waiting: Vec::new(),
+            }),
+            waiting: AtomicBool::new(false),
+            raised: Pending::new(),
+        }
+    }
+
+    /// Back to where a fresh process starts.
+    fn forget(&self) {
+        // Destructured so a new field cannot be left out of the reset.
+        let Self {
+            queue,
+            waiting,
+            raised,
+        } = self;
+        // Under the lock, as `settle` writes the flag, so a settle in
+        // progress cannot set it again over the emptied queue.
+        let mut queue = queue.relock();
+        *queue = Queue::default();
+        waiting.store(false, Ordering::Release);
+        drop(queue);
+        raised.clear();
+    }
+}
+
+static STATE: State = State::new();
+
+/// Forgets the world's queue and the changes not raised yet when a hosted
+/// game ends.
+pub(crate) fn forget() {
+    STATE.forget();
+}
 
 fn file(key: &str) -> PathBuf {
     crate::base::world_folders::loader_data(key, FILE)
@@ -405,14 +445,14 @@ pub(crate) fn for_account(
     if let Some(entity) = character_of(loader, key) {
         return apply(loader, entity, &change);
     }
-    let mut queue = QUEUE.relock();
+    let mut queue = STATE.queue.relock();
     let world = queue.key.clone().ok_or(Status::MISSING)?;
     if queue.waiting.contains(&change) {
         return Ok(());
     }
     queue.waiting.push(change);
     write_queue(&world, &queue.waiting);
-    WAITING.store(true, Ordering::Release);
+    STATE.waiting.store(true, Ordering::Release);
     Ok(())
 }
 
@@ -431,7 +471,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 }
                 None => Vec::new(),
             };
-            WAITING.store(!waiting.is_empty(), Ordering::Release);
+            STATE.waiting.store(!waiting.is_empty(), Ordering::Release);
             if !waiting.is_empty() {
                 crate::log!(
                     INFO,
@@ -439,13 +479,9 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                     waiting.len()
                 );
             }
-            *QUEUE.relock() = Queue { key, waiting };
+            *STATE.queue.relock() = Queue { key, waiting };
         }
-        Event::SHUTDOWN_STARTED => {
-            WAITING.store(false, Ordering::Release);
-            *QUEUE.relock() = Queue::default();
-            RAISED.clear();
-        }
+        Event::SHUTDOWN_STARTED => STATE.forget(),
         _ => {}
     }
 }
@@ -453,11 +489,11 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// After a step: raises the revokes of the step before and, now and then,
 /// applies what waits for accounts now in the game.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
-    let raised = RAISED.take();
+    let raised = STATE.raised.take();
     for data in &raised {
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const *data).cast());
     }
-    if WAITING.load(Ordering::Acquire) && step.is_multiple_of(LOOK_EVERY) {
+    if STATE.waiting.load(Ordering::Acquire) && step.is_multiple_of(LOOK_EVERY) {
         settle(loader);
     }
 }
@@ -467,7 +503,7 @@ fn settle(loader: &Loader) {
     let Ok(players) = crate::engine::world::players(loader) else {
         return;
     };
-    let mut queue = QUEUE.relock();
+    let mut queue = STATE.queue.relock();
     let before = queue.waiting.len();
     queue.waiting.retain(|change| {
         let Ok(key) = u64::from_str_radix(&change.account, 16) else {
@@ -506,7 +542,9 @@ fn settle(loader: &Loader) {
         if let Some(world) = queue.key.clone() {
             write_queue(&world, &queue.waiting);
         }
-        WAITING.store(!queue.waiting.is_empty(), Ordering::Release);
+        STATE
+            .waiting
+            .store(!queue.waiting.is_empty(), Ordering::Release);
     }
 }
 
@@ -522,6 +560,69 @@ mod tests {
         assert_eq!(lowered(KnowledgeInfo::FLAGS, 0b111, 1), Some(0b101));
         assert_eq!(lowered(KnowledgeInfo::FLAGS, 1, 32), None);
         assert_eq!(lowered(9, 1, 0), None);
+    }
+
+    fn change() -> Waiting {
+        Waiting {
+            account: format!("{:016x}", 1),
+            id: 7,
+            kind: KnowledgeInfo::BOOL,
+            value: 1,
+            revoke: false,
+        }
+    }
+
+    fn assert_forgotten() {
+        assert!(!STATE.waiting.load(Ordering::Acquire));
+        let queue = STATE.queue.relock();
+        assert!(queue.key.is_none() && queue.waiting.is_empty(), "{queue:?}");
+        drop(queue);
+        assert!(STATE.raised.take().is_empty());
+    }
+
+    /// Fills the state as a world with a queued change and a revoke not
+    /// raised yet leaves it.
+    fn follow_a_world() {
+        *STATE.queue.relock() = Queue {
+            key: Some("world".to_owned()),
+            waiting: vec![change()],
+        };
+        STATE.waiting.store(true, Ordering::Release);
+        STATE.raised.push(KnowledgeData {
+            header: Header::of::<KnowledgeData>(),
+            entity: Entity(1),
+            id: enshwick_core::abi::KnowledgeId::new(7),
+            value: 0,
+        });
+    }
+
+    /// Held by every test that fills [`STATE`], which is the process's own.
+    static SHARED: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn a_reset_during_a_settle_leaves_no_wait_flag_over_the_emptied_queue() {
+        let _turn = SHARED.relock();
+        follow_a_world();
+        let settling = STATE.queue.relock();
+        let forgetting = std::thread::spawn(|| STATE.forget());
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        // As `settle` ends with one change still waiting for its account.
+        STATE.waiting.store(true, Ordering::Release);
+        drop(settling);
+        assert!(forgetting.join().is_ok());
+        assert_forgotten();
+    }
+
+    #[test]
+    fn a_hosted_game_s_end_and_a_world_s_shutdown_forget_the_queue_and_the_revokes() {
+        let _turn = SHARED.relock();
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        follow_a_world();
+        crate::engine::parts::Part::forget_in(crate::knowledge::PARTS, "knowledge changes", loader);
+        assert_forgotten();
+        follow_a_world();
+        world_event(loader, Event::SHUTDOWN_STARTED);
+        assert_forgotten();
     }
 
     #[test]

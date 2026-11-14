@@ -168,10 +168,35 @@ const fn entry_holds(size: usize, id: usize, value: usize) -> bool {
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The quest ids, read once from the journal.
 static QUESTS: OnceLock<FxHashSet<u32>> = OnceLock::new();
-/// The knowledge update last seen after a step.
-static SEEN_STEP: AtomicU32 = AtomicU32::new(0);
-/// Set while nobody handles the changes: [`SEEN_STEP`] is stale.
-static UNSEEN: AtomicBool = AtomicBool::new(false);
+
+/// What the store follows of the running game, forgotten when a hosted game
+/// ends.
+#[derive(Debug)]
+struct State {
+    /// The knowledge update last seen after a step.
+    seen_step: AtomicU32,
+    /// Set while nobody handles the changes: `seen_step` is stale.
+    unseen: AtomicBool,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            seen_step: AtomicU32::new(0),
+            unseen: AtomicBool::new(false),
+        }
+    }
+
+    /// Back to where a fresh process starts.
+    fn forget(&self) {
+        // Destructured so a new field cannot be left out of the reset.
+        let Self { seen_step, unseen } = self;
+        seen_step.store(0, Ordering::Relaxed);
+        unseen.store(false, Ordering::Relaxed);
+    }
+}
+
+static STATE: State = State::new();
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
@@ -568,8 +593,8 @@ pub(crate) fn after_step(loader: &Loader) {
         && !crate::engine::loader::handles(Event::QUEST_COMPLETED)
     {
         // A handler that arrives later hears the updates after its first look.
-        if !UNSEEN.load(Ordering::Relaxed) {
-            UNSEEN.store(true, Ordering::Relaxed);
+        if !STATE.unseen.load(Ordering::Relaxed) {
+            STATE.unseen.store(true, Ordering::Relaxed);
         }
         return;
     }
@@ -583,11 +608,11 @@ pub(crate) fn after_step(loader: &Loader) {
     // its u32 update counter sits at the build table's `knowledge.step`
     // offset.
     let step: u32 = unsafe { read(state, layout.step) };
-    let first_look = UNSEEN.load(Ordering::Relaxed);
+    let first_look = STATE.unseen.load(Ordering::Relaxed);
     if first_look {
-        UNSEEN.store(false, Ordering::Relaxed);
+        STATE.unseen.store(false, Ordering::Relaxed);
     }
-    if SEEN_STEP.swap(step, Ordering::Relaxed) == step || first_look {
+    if STATE.seen_step.swap(step, Ordering::Relaxed) == step || first_look {
         return;
     }
     // SAFETY: `state` is the live store `store` found on the game thread;
@@ -673,9 +698,11 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
     }
 }
 
-/// Forgets the last update seen when a hosted game ends.
+/// Forgets what the store and its guard followed of a hosted game that
+/// ended.
 pub(crate) fn forget() {
-    SEEN_STEP.store(0, Ordering::Relaxed);
+    STATE.forget();
+    guard::forget();
 }
 
 #[cfg(test)]
@@ -755,6 +782,16 @@ mod tests {
         assert_eq!(null.entry, pinned::knowledge::RECORDS.id());
         let lost = store_holds(&layout, 0x10).unwrap_err();
         assert_eq!(lost.entry, pinned::server::PLAYER_INFOS.id());
+    }
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_the_update_last_seen() {
+        STATE.seen_step.store(7, Ordering::Relaxed);
+        STATE.unseen.store(true, Ordering::Relaxed);
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        crate::engine::parts::Part::forget_in(crate::knowledge::PARTS, "knowledge", loader);
+        assert_eq!(STATE.seen_step.load(Ordering::Relaxed), 0);
+        assert!(!STATE.unseen.load(Ordering::Relaxed));
     }
 
     #[test]

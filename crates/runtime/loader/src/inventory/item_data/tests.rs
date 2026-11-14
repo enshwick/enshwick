@@ -768,15 +768,8 @@ fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_cle
     KEPT.store(true, Ordering::Relaxed);
     FINDING.store(true, Ordering::Relaxed);
     UNREAD.store(true, Ordering::Relaxed);
-    let part = crate::inventory::PARTS
-        .iter()
-        .find(|part| part.name == "item_data")
-        .unwrap();
-    let forget = part
-        .forget
-        .expect("item data forgets its server at the end");
     let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-    forget(loader);
+    crate::engine::parts::Part::forget_in(crate::inventory::PARTS, "item_data", loader);
     assert!(
         SERVER.relock().is_none(),
         "the records went with their world"

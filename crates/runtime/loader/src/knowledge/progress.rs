@@ -3,8 +3,8 @@
 
 use core::ffi::c_void;
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
+use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::{
     Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
@@ -14,12 +14,12 @@ use enshwick_core::abi::{
 use crate::engine::chains::{Next, Onward};
 use crate::engine::ecs::Engine;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::Registered;
 use crate::engine::loader::{Loader, Target};
-use crate::engine::loader::{Registered, take};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
-use enshwick_base::Relock;
+use crate::engine::registry::Registry;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -64,13 +64,6 @@ mod writes;
 use writes::{PENDING, WRITERS, WRITES_FUSE};
 pub(crate) use writes::{after_step, game_ended, write};
 
-#[derive(Debug, Default)]
-struct Sealed {
-    skills: Box<[(u32, Registered<SkillCheckFn>)]>,
-    comfort: Box<[Registered<ComfortFn>]>,
-    experience: Box<[Registered<ExperiencePassFn>]>,
-}
-
 /// The engine pieces experience needs.
 #[derive(Debug, Clone, Copy)]
 struct Levels {
@@ -82,12 +75,13 @@ struct Levels {
     need: u32,
 }
 
-static SKILLS: Mutex<Vec<(u32, Registered<SkillCheckFn>)>> = Mutex::new(Vec::new());
-static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());
-static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperiencePassFn>>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Sealed> = OnceLock::new();
-/// Where the fly mode gate's call returns to; 0 when the build lacks it.
-static FLY_MODE: AtomicUsize = AtomicUsize::new(0);
+/// The skill checks mods register, each with the node it answers for.
+static SKILLS: Registry<(u32, Registered<SkillCheckFn>)> = Registry::new();
+static COMFORT: Registry<Registered<ComfortFn>> = Registry::new();
+static EXPERIENCE_FILTERS: Registry<Registered<ExperiencePassFn>> = Registry::new();
+/// Where the fly mode gate's call returns to, once the link found it on
+/// this build.
+static FLY_MODE: OnceLock<usize> = OnceLock::new();
 static LEVELS: OnceLock<Option<Levels>> = OnceLock::new();
 
 // SAFETY: `RegisterFn` is the signature of the table's
@@ -140,8 +134,17 @@ fn levels(loader: &Loader) -> Option<&'static Levels> {
         .as_ref()
 }
 
-fn too_late(loader: &Loader) -> bool {
-    loader.delivery.get().is_some() || SEALED.get().is_some()
+fn too_late<T>(loader: &Loader, registry: &Registry<T>) -> bool {
+    loader.delivery.get().is_some() || registry.is_sealed()
+}
+
+/// Ends the skill checks, comfort and experience filters and level writers
+/// mods registered during init.
+pub(crate) fn seal() {
+    let _skills = SKILLS.seal();
+    let _comfort = COMFORT.seal();
+    let _filters = EXPERIENCE_FILTERS.seal();
+    let _writers = WRITERS.seal();
 }
 
 pub(crate) fn register_skill(
@@ -151,16 +154,15 @@ pub(crate) fn register_skill(
     callback: SkillCheckFn,
     user: *mut c_void,
 ) -> Status {
-    if too_late(loader) {
+    if too_late(loader, &SKILLS) {
         return Status::TOO_LATE;
     }
     if symbol(loader, pinned::skill::NODE_UNLOCKED).is_none() {
         return Status::MISSING;
     }
     SKILLS
-        .relock()
-        .push((node, Registered::new(owner, callback, user)));
-    Status::OK
+        .add((node, Registered::new(owner, callback, user)))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 pub(crate) fn register_comfort(
@@ -169,16 +171,15 @@ pub(crate) fn register_comfort(
     callback: ComfortFn,
     user: *mut c_void,
 ) -> Status {
-    if too_late(loader) {
+    if too_late(loader, &COMFORT) {
         return Status::TOO_LATE;
     }
     if symbol(loader, pinned::comfort::BASE_REGISTER).is_none() {
         return Status::MISSING;
     }
     COMFORT
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 pub(crate) fn register_experience(
@@ -187,41 +188,34 @@ pub(crate) fn register_experience(
     callback: ExperiencePassFn,
     user: *mut c_void,
 ) -> Status {
-    if too_late(loader) {
+    if too_late(loader, &EXPERIENCE_FILTERS) {
         return Status::TOO_LATE;
     }
     if levels(loader).is_none() || crate::engine::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
     EXPERIENCE_FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// The system that levels players up from their experience.
 const LEVEL_SYSTEM: &str = "player_level";
 
 pub(crate) fn link(loader: &'static Loader) {
-    let sealed = Sealed {
-        skills: take(&SKILLS).into_boxed_slice(),
-        comfort: take(&COMFORT).into_boxed_slice(),
-        experience: take(&EXPERIENCE_FILTERS).into_boxed_slice(),
-    };
-    // Sealed whatever else is wanted: a write checks its mod in the seal.
-    let writers = !WRITERS.seal().is_empty();
-    let filters = !sealed.experience.is_empty();
+    let writers = WRITERS.sealed().is_some_and(|mods| !mods.is_empty());
+    let filters = EXPERIENCE_FILTERS
+        .sealed()
+        .is_some_and(|filters| !filters.is_empty());
     let wants = [
-        !sealed.skills.is_empty(),
-        !sealed.comfort.is_empty()
+        SKILLS.sealed().is_some_and(|skills| !skills.is_empty()),
+        COMFORT.sealed().is_some_and(|filters| !filters.is_empty())
             || crate::content::rate_links::wanted(pinned::comfort::BASE_REGISTER),
         filters || writers,
     ];
-    let _first = SEALED.set(sealed);
-    FLY_MODE.store(
-        symbol(loader, pinned::skill::FLY_MODE_GATE_RETURN).unwrap_or(0),
-        Ordering::Relaxed,
-    );
+    if let Some(gate) = symbol(loader, pinned::skill::FLY_MODE_GATE_RETURN) {
+        let _first = FLY_MODE.set(gate);
+    }
     let player_level =
         match crate::engine::ecs::components_match(loader, LEVEL_SYSTEM, &READS, &WRITES) {
             Ok(()) => Some(Target::Found(
@@ -306,9 +300,9 @@ crate::engine::chains::chain_detour! {
     fn node_unlocked(node: u32, bits: *const u64, tree: *const u8) -> u8;
     next SKILL_NEXT;
     |onward| {
-        let ours = SEALED
-            .get()
-            .is_some_and(|s| s.skills.iter().any(|(n, _)| *n == node));
+        let ours = SKILLS
+            .sealed()
+            .is_some_and(|skills| skills.iter().any(|(n, _)| *n == node));
         if !ours {
             return onward.call();
         }
@@ -332,11 +326,14 @@ crate::engine::chains::chain_detour! {
 unsafe fn override_skill(onward: &Onward<u8, impl Fn() -> u8>, node: u32) -> u8 {
     let gate = crate::engine::loader::loader().map_or(SkillCheck::OTHER, |loader| {
         let frame = (loader.caller_frame)();
-        let fly_mode = FLY_MODE.load(Ordering::Relaxed) as u64;
-        // SAFETY: the link takes `CALLER_FRAME`, so `frame` was taken at the
-        // entry of the running chain (the caller's contract) and its `rsp`,
-        // non-zero (checked first), points at the live return address.
-        if fly_mode != 0 && frame.rsp != 0 && unsafe { frame.return_address() } == fly_mode {
+        if let Some(&fly_mode) = FLY_MODE.get()
+            && frame.rsp != 0
+            // SAFETY: the link takes `CALLER_FRAME`, so `frame` was taken at
+            // the entry of the running chain (the caller's contract) and its
+            // `rsp`, non-zero (checked first), points at the live return
+            // address.
+            && unsafe { frame.return_address() } == fly_mode as u64
+        {
             SkillCheck::FLY_MODE
         } else {
             SkillCheck::OTHER
@@ -350,11 +347,10 @@ unsafe fn override_skill(onward: &Onward<u8, impl Fn() -> u8>, node: u32) -> u8 
         unlocked: u8::from(vanilla != 0),
         reserved: [0; 3],
     };
-    let Some(sealed) = SEALED.get() else {
+    let Some(skills) = SKILLS.sealed() else {
         return vanilla;
     };
-    for (_, r) in sealed
-        .skills
+    for (_, r) in skills
         .iter()
         .filter(|(n, r)| *n == node && !crate::engine::loader::is_off(r.owner))
     {
@@ -386,7 +382,7 @@ unsafe extern "system" fn register(
     comfort: i32,
     position: *const f32,
 ) -> u64 {
-    let filtered = |sealed: &Sealed| {
+    let filtered = |filters: &[Registered<ComfortFn>]| {
         let at = if position.is_null() {
             [0.0; 3]
         } else {
@@ -396,8 +392,7 @@ unsafe extern "system" fn register(
             // the call.
             unsafe { enshwick_core::raw::read_at::<[f32; 3]>(position.cast(), 0) }
         };
-        sealed
-            .comfort
+        filters
             .iter()
             .filter(|r| !crate::engine::loader::is_off(r.owner))
             .fold(comfort, |value, r| {
@@ -419,9 +414,9 @@ unsafe extern "system" fn register(
                 )
             })
     };
-    let filtered = SEALED
-        .get()
-        .and_then(|sealed| COMFORT_FILTERS_FUSE.run("a comfort provider", || filtered(sealed)))
+    let filtered = COMFORT
+        .sealed()
+        .and_then(|filters| COMFORT_FILTERS_FUSE.run("a comfort provider", || filtered(filters)))
         .unwrap_or(comfort);
     let comfort = COMFORT_FUSE
         .run("the comfort rate", || {
@@ -443,7 +438,7 @@ crate::engine::chains::chain_detour! {
     fn player_level_link(ctx: *mut u64) -> ();
     next LEVEL_NEXT;
     |onward| {
-        let filtered = SEALED.get().is_some_and(|s| !s.experience.is_empty());
+        let filtered = EXPERIENCE_FILTERS.sealed().is_some_and(|f| !f.is_empty());
         let writes = PENDING.any.load(Ordering::Acquire);
         if filtered || writes {
             onward.run(&LEVEL_FUSE, "the player level pass", |onward| {
@@ -531,7 +526,7 @@ unsafe extern "system" fn need_for(token: *mut c_void, level: u32) -> u32 {
 /// - `ctx` is the live query context the game passed to `player_level`,
 ///   used on that system's thread while it runs, before vanilla runs.
 unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
-    let (Some(levels), Some(sealed)) = (levels(loader), SEALED.get()) else {
+    let (Some(levels), Some(filters)) = (levels(loader), EXPERIENCE_FILTERS.sealed()) else {
         return;
     };
     ROWS.with_borrow_mut(|rows| {
@@ -569,8 +564,7 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
             // registry of a live `player_level` row, on that system's thread
             // while it runs.
             let level_cap = unsafe { (levels.level_cap)(balancing) };
-            for r in sealed
-                .experience
+            for r in filters
                 .iter()
                 .filter(|r| !crate::engine::loader::is_off(r.owner))
             {
@@ -691,4 +685,36 @@ unsafe fn read_row(
         need,
         gained,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe extern "system" fn no_skill(_check: *const SkillCheck, _user: *mut c_void) -> u8 {
+        0
+    }
+
+    unsafe extern "system" fn no_comfort(_comfort: *const Comfort, _user: *mut c_void) -> i32 {
+        0
+    }
+
+    /// Seals only the skill and comfort registries: the writes tests add
+    /// experience filters and writers before their own seal.
+    #[test]
+    fn a_skill_check_or_comfort_filter_registered_after_the_seal_is_too_late() {
+        let loader = crate::start::tests::bare_loader();
+        let _skills = SKILLS.seal();
+        let _comfort = COMFORT.seal();
+        let owner = ModIndex::new(0);
+        let user = core::ptr::null_mut();
+        assert_eq!(
+            register_skill(&loader, owner, 1, no_skill, user),
+            Status::TOO_LATE
+        );
+        assert_eq!(
+            register_comfort(&loader, owner, no_comfort, user),
+            Status::TOO_LATE
+        );
+    }
 }
