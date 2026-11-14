@@ -12,6 +12,9 @@ use crate::{Host, Load, Mod};
 pub mod rules {
     pub use enshwick_base::rules::*;
 
+    pub use enshwick_inventory::__internal::inventory_checks;
+    pub use enshwick_world::__internal::terrain_edit_valid;
+
     pub use crate::rates::may_declare_rate;
 }
 

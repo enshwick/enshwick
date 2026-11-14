@@ -24,6 +24,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use enshwick_core::__private::rules::inventory_checks as checks;
 use enshwick_core::abi::{
     Header, HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
     InventoryResultFn, ItemData, Registers, Side, Status,
@@ -649,16 +650,17 @@ pub(crate) fn submit(
     if loader.side != Side::SERVER && !crate::engine::world::hosting() {
         return Status::MISSING;
     }
-    let count = request.op_count as usize;
-    if request.ops.is_null() || count == 0 || count > enshwick_core::inventory::MAX_OPS {
+    // SAFETY: the mod's request carries `op_count` operations at `ops`,
+    // borrowed for this call and copied here.
+    let Some(ops) = (unsafe {
+        enshwick_base::__private::copy::list_in(request.ops, request.op_count as usize)
+    }) else {
+        return Status::BAD_ARGS;
+    };
+    if checks::refused(ops) {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the mod's request carries a non-null `ops` (checked earlier) of
-    // `op_count` operations, borrowed for this call and copied here.
-    let ops = unsafe { core::slice::from_raw_parts(request.ops, count) }.to_vec();
-    if ops.iter().any(|op| !valid(op)) {
-        return Status::BAD_ARGS;
-    }
+    let ops = ops.to_vec();
     QUEUE.push(Request {
         owner,
         flags: request.flags,
@@ -669,62 +671,6 @@ pub(crate) fn submit(
         queued: Instant::now(),
     });
     Status::OK
-}
-
-/// Whether an operation names what its kind needs.
-fn valid(op: &InventoryOp) -> bool {
-    let entity = |v: u64| u32::try_from(v).is_ok_and(|v| v != 0);
-    match op.kind {
-        InventoryOp::GIVE | InventoryOp::TAKE => {
-            entity(op.target)
-                && op.item != enshwick_core::ItemId::new(0)
-                && op.count != 0
-                && i32::try_from(op.count).is_ok()
-                && (op.kind == InventoryOp::TAKE || fill(op).is_some())
-        }
-        InventoryOp::DESTROY_SLOT => op.target & 0xffff_ffff != 0,
-        InventoryOp::RENEW => {
-            op.target & 0xffff_ffff != 0
-                && op.other & 0xffff_ffff != 0
-                && op.item != enshwick_core::ItemId::new(0)
-                && op.count != 0
-                && i32::try_from(op.count).is_ok()
-                && fill(&renew_give(op)).is_some()
-        }
-        InventoryOp::MOVE_SLOT => {
-            op.target & 0xffff_ffff != 0 && entity(op.other) && u16::try_from(op.count).is_ok()
-        }
-        InventoryOp::MOVE_ALL => entity(op.target) && entity(op.other) && op.target != op.other,
-        _ => false,
-    }
-}
-
-/// The give a renewal makes: its inventory and fill from `other`.
-fn renew_give(op: &InventoryOp) -> InventoryOp {
-    InventoryOp {
-        kind: InventoryOp::GIVE,
-        flags: InventoryOp::FILLED,
-        target: op.other & 0xffff_ffff,
-        other: op.other >> 32,
-        item: op.item,
-        count: op.count,
-    }
-}
-
-/// The game's optional fill of a give: the fill as `f32`, then a byte that
-/// says it is there; all zero for none. `None` for a fill outside 0 to 1.
-fn fill(op: &InventoryOp) -> Option<[u8; 16]> {
-    let mut option = [0u8; 16];
-    if op.flags & InventoryOp::FILLED == 0 {
-        return Some(option);
-    }
-    let fill = f32::from_bits(u32::try_from(op.other).ok()?);
-    if !(0.0..=1.0).contains(&fill) {
-        return None;
-    }
-    option[..4].copy_from_slice(&fill.to_le_bytes());
-    option[4] = 1;
-    Some(option)
 }
 
 /// The game's static data of `item`, its `ItemInfo`, which lives as long

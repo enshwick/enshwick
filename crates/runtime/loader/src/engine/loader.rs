@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Event, EventFn, HookFlags, Level, Manifest, Side, Str};
+use enshwick_core::abi::{Event, EventFn, HookFlags, Level, Manifest, Side};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::engine::builds::KnownBuild;
@@ -39,8 +39,10 @@ pub(crate) struct ModRecord {
     /// Set while one of its code patches waits for a thread to leave it: its
     /// detours and mid-function hooks are bypassed, the rest of it runs.
     pub(crate) waiting: AtomicBool,
-    /// The settings texts handed to the mod.
-    pub(crate) settings: Kept,
+    /// The settings texts handed to the mod, kept for the process: the mod
+    /// may still read one on a thread of its own while another thread asks
+    /// for a newer one, and a file read over and over keeps one copy.
+    pub(crate) settings: Mutex<crate::engine::kept_text::KeptText>,
     /// On a client in another's world, the settings its server sent for the
     /// mod, every file seen as one.
     pub(crate) server_values: Mutex<Option<String>>,
@@ -146,27 +148,6 @@ impl ModRecord {
             Some(hash) => format!("{}+{hash}", self.version),
             None => self.version.clone(),
         }
-    }
-}
-
-/// Texts handed to a mod, kept for the life of the process: the mod may still
-/// read one on a thread of its own while another thread asks for a newer one.
-/// An equal text handed out before is handed out again, so a file read over
-/// and over keeps one copy.
-#[derive(Debug, Default)]
-pub(crate) struct Kept(Mutex<Vec<Box<str>>>);
-
-impl Kept {
-    /// `text`, kept for good.
-    pub(crate) fn keep(&self, text: &str) -> Str {
-        let mut kept = self.0.relock();
-        let at = kept.iter().position(|k| **k == *text).unwrap_or_else(|| {
-            kept.push(text.into());
-            kept.len() - 1
-        });
-        // The box's heap text never moves or drops while the store lives,
-        // whatever the vector does with the boxes.
-        Str::new(&kept[at])
     }
 }
 

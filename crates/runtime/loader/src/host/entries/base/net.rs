@@ -1,72 +1,36 @@
 //! Host functions for mod messages between server and client.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{ModHandle, Status, Str};
+use enshwick_core::abi::Status;
 
-use crate::host::memory::put;
-use crate::host::{caller, caller_index, entry};
+use crate::host::layer::{Caller, List, Mod, Out, Text, entries};
 
-pub(crate) extern "system" fn net_channel(
-    me: ModHandle,
-    name: Str,
-    callback: api_frame::NetMessageFn,
-    user: *mut core::ffi::c_void,
-    out: *mut u32,
-) -> Status {
-    entry("net_channel", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: the name is borrowed for the call.
-        let Some(name) = (unsafe { name.as_str() }) else {
-            return Status::BAD_ARGS;
-        };
-        match crate::base::net::open(loader, index, name, callback, user) {
-            // SAFETY: `HostApi::net_channel` has the mod pass `out` null or
-            // pointing at a writable, aligned `u32` that no other thread
-            // touches during the call.
-            Ok(id) => unsafe { put(out, id) },
-            Err(status) => status,
-        }
-    })
-}
+entries! {
+    fn net_channel(
+        me as Mod,
+        name as Text,
+        callback: api_frame::NetMessageFn,
+        user: *mut core::ffi::c_void,
+        out as Out<u32>,
+    ) -> Status {
+        out.put(crate::base::net::open(me.loader, me.index, name, callback, user)?)
+    }
 
-pub(crate) extern "system" fn net_send(
-    me: ModHandle,
-    channel: u32,
-    peer: enshwick_core::PlayerKey,
-    data: *const u8,
-    size: u32,
-) -> Status {
-    entry("net_send", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        let Ok(len) = usize::try_from(size) else {
-            return Status::BAD_ARGS;
-        };
-        if data.is_null() && len != 0 {
-            return Status::BAD_ARGS;
-        }
-        let bytes = if len == 0 {
-            &[][..]
+    fn net_send(
+        me as Mod,
+        channel: u32,
+        peer: enshwick_core::PlayerKey,
+        [data, size] as List<u8>,
+    ) -> Status {
+        crate::base::net::send(me.loader, me.index, channel, peer.get(), data)?;
+        Ok(())
+    }
+
+    fn net_ready(_loader as Caller, peer: enshwick_core::PlayerKey) -> Status {
+        if crate::base::net::ready(peer.get()) {
+            Ok(())
         } else {
-            // SAFETY: the caller passes `size` bytes at `data` for the call.
-            unsafe { core::slice::from_raw_parts(data, len) }
-        };
-        match crate::base::net::send(loader, index, channel, peer.get(), bytes) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
+            Err(Status::MISSING.into())
         }
-    })
-}
-
-pub(crate) extern "system" fn net_ready(me: ModHandle, peer: enshwick_core::PlayerKey) -> Status {
-    entry("net_ready", || match caller(me) {
-        Ok(_) if crate::base::net::ready(peer.get()) => Status::OK,
-        Ok(_) => Status::MISSING,
-        Err(status) => status,
-    })
+    }
 }

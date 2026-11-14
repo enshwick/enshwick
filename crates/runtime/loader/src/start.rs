@@ -276,7 +276,7 @@ fn records(
             off: AtomicBool::new(false),
             off_reason: Mutex::new(None),
             waiting: AtomicBool::new(false),
-            settings: crate::engine::loader::Kept::default(),
+            settings: Mutex::new(crate::engine::kept_text::KeptText::new(usize::MAX)),
             server_values: Mutex::new(None),
             settings_files: Mutex::new(Vec::new()),
             checks: Mutex::new(Vec::new()),

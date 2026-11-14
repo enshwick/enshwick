@@ -1,5 +1,3 @@
-use enshwick_core::abi::Str;
-
 use super::*;
 
 type Lit = unsafe extern "system" fn(u32) -> u32;
@@ -226,11 +224,6 @@ fn a_raise_walks_its_event_s_subscriptions_in_their_order() {
     assert!(owners(Event::SHUTDOWN_STARTED).is_empty());
 }
 
-fn read(text: Str) -> Option<&'static str> {
-    // SAFETY: the tests read texts of stores that live to their end.
-    unsafe { text.as_str() }
-}
-
 #[test]
 fn a_poisoned_lock_is_taken_over_with_its_state() {
     let mutex = std::sync::Arc::new(Mutex::new(vec![1]));
@@ -245,42 +238,6 @@ fn a_poisoned_lock_is_taken_over_with_its_state() {
     mutex.relock().push(3);
     assert!(!mutex.is_poisoned());
     assert_eq!(*mutex.relock(), [1, 2, 3]);
-}
-
-#[test]
-fn a_kept_text_outlives_newer_ones_and_an_equal_text_is_kept_once() {
-    let kept = Kept::default();
-    let first = kept.keep("limit = 1");
-    for n in 2..100 {
-        kept.keep(&format!("limit = {n}"));
-    }
-    let again = kept.keep("limit = 1");
-    assert_eq!(read(first), Some("limit = 1"));
-    assert_eq!(read(again), read(first));
-    assert_eq!(kept.0.lock().unwrap().len(), 99);
-}
-
-#[test]
-fn texts_kept_on_other_threads_leave_earlier_ones_readable() {
-    let kept = std::sync::Arc::new(Kept::default());
-    let first = kept.keep("a = 0");
-    let writers: Vec<_> = (0..4)
-        .map(|t| {
-            let kept = std::sync::Arc::clone(&kept);
-            std::thread::spawn(move || {
-                for n in 0..200 {
-                    kept.keep(&format!("a = {t}{n}"));
-                }
-            })
-        })
-        .collect();
-    for _ in 0..200 {
-        assert_eq!(read(first), Some("a = 0"));
-    }
-    for writer in writers {
-        writer.join().unwrap();
-    }
-    assert_eq!(read(first), Some("a = 0"));
 }
 
 /// The world events each follower of [`FOLLOWING`] heard, a bit per event.

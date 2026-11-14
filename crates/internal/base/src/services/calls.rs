@@ -93,13 +93,13 @@ pub enum CallError {
     Failed,
 }
 
-/// The error a call's status stands for, or `None` for success.
-fn error_of(status: Status) -> Option<CallError> {
-    match status {
-        Status::OK => None,
-        Status::MISSING => Some(CallError::Unmatched),
-        Status::REFUSED => Some(CallError::Off),
-        _ => Some(CallError::Failed),
+impl crate::load::StatusError for CallError {
+    fn of(status: Status) -> Self {
+        match status {
+            Status::MISSING => Self::Unmatched,
+            Status::REFUSED => Self::Off,
+            _ => Self::Failed,
+        }
     }
 }
 
@@ -173,13 +173,11 @@ impl<C: Call> Caller<C> {
             core::ptr::from_ref(input).cast(),
             answer.as_mut_ptr().cast(),
         );
-        match error_of(status) {
-            // SAFETY: an OK status means the server's handler wrote an
-            // answer of the matched type, the same as `C::Output` field by
-            // field and in size.
-            None => Ok(unsafe { answer.assume_init() }),
-            Some(error) => Err(error),
-        }
+        crate::load::outcome::<CallError>(status)?;
+        // SAFETY: an OK status means the server's handler wrote an answer of
+        // the matched type, the same as `C::Output` field by field and in
+        // size.
+        Ok(unsafe { answer.assume_init() })
     }
 }
 
@@ -334,7 +332,7 @@ impl DescribedCaller {
             output.as_mut_ptr().cast()
         };
         let status = (self.host.api().call)(self.host.handle(), self.id, input_ptr, output_ptr);
-        error_of(status).map_or(Ok(()), Err)
+        crate::load::outcome(status)
     }
 }
 

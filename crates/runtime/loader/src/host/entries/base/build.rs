@@ -4,223 +4,107 @@ use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{BuildInfo, Header, Level, ModHandle, Status, Str};
 
 use crate::engine::kept_text::keep;
-use crate::engine::loader::loader;
-use crate::host::entry;
-use crate::host::memory::{put, put_headed, text};
+use crate::host::layer::{AnyMod, HeadedOut, Out, Text, entries, loaded};
 
-pub(crate) extern "system" fn build(out: *mut BuildInfo) {
-    entry("build", || {
-        let Some(loader) = loader() else {
-            return;
-        };
-        // SAFETY: `HostApi::build` has the mod pass `out` null or pointing at
-        // its version of `BuildInfo`, writable for the size its header states,
-        // that no other thread touches during the call.
-        let _written = unsafe {
-            put_headed(
-                out,
-                BuildInfo {
-                    header: Header::of::<BuildInfo>(),
-                    side: loader.side,
-                    base: loader.base,
-                    fingerprint: enshwick_core::abi::Fingerprint {
-                        guid: loader.fingerprint.guid(),
-                        age: loader.fingerprint.age(),
-                    },
-                    table: if loader.build.complete() {
-                        enshwick_core::abi::BuildTable::EXACT
-                    } else {
-                        enshwick_core::abi::BuildTable::PATTERNS
-                    },
-                },
-            )
-        };
-    });
-}
-
-pub(crate) extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) -> Status {
-    entry("symbol", || {
-        let (Some(loader), Some(name)) = (loader(), text(name)) else {
-            return Status::BAD_ARGS;
-        };
-        let Some(index) = loader.rows_of(me) else {
-            return Status::BAD_ARGS;
-        };
-        loader
-            .resolve_symbol(index.get(), name)
-            .map_or(Status::MISSING, |address| {
-                crate::engine::diag::name(address, name);
-                // SAFETY: `HostApi::symbol` has the mod pass `out` null or
-                // pointing at a writable, aligned `u64` that no other thread
-                // touches during the call.
-                unsafe { put(out, address) }
-            })
-    })
-}
-
-pub(crate) fn lookup(error: &enshwick_gamedata::reflect::LookupError) -> Status {
-    match error {
-        enshwick_gamedata::reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
-        _ => Status::MISSING,
+entries! {
+    fn build(out as HeadedOut<BuildInfo>) {
+        let loader = loaded()?;
+        out.put(BuildInfo {
+            header: Header::of::<BuildInfo>(),
+            side: loader.side,
+            base: loader.base,
+            fingerprint: enshwick_core::abi::Fingerprint {
+                guid: loader.fingerprint.guid(),
+                age: loader.fingerprint.age(),
+            },
+            table: if loader.build.complete() {
+                enshwick_core::abi::BuildTable::EXACT
+            } else {
+                enshwick_core::abi::BuildTable::PATTERNS
+            },
+        })
     }
-}
 
-pub(crate) extern "system" fn system(name: Str, out: *mut u64) -> Status {
-    entry("system", || {
-        let (Some(loader), Some(name)) = (loader(), text(name)) else {
-            return Status::BAD_ARGS;
-        };
-        match loader.reflection.system(name) {
-            Ok(found) if found.entry() != 0 => {
-                crate::engine::diag::name(found.entry(), name);
-                // SAFETY: `HostApi::system` has the mod pass `out` null or
-                // pointing at a writable, aligned `u64` that no other thread
-                // touches during the call.
-                unsafe { put(out, found.entry()) }
-            }
-            Ok(_) => Status::MISSING,
-            Err(error) => lookup(&error),
+    fn symbol(me: ModHandle, name as Text, out as Out<u64>) -> Status {
+        let loader = loaded()?;
+        let index = loader.rows_of(me).ok_or(Status::BAD_ARGS)?;
+        let address = loader
+            .resolve_symbol(index.get(), name)
+            .ok_or(Status::MISSING)?;
+        crate::engine::diag::name(address, name);
+        out.put(address)
+    }
+
+    fn system(name as Text, out as Out<u64>) -> Status {
+        let found = loaded()?.reflection.system(name)?;
+        if found.entry() == 0 {
+            return Err(Status::MISSING.into());
         }
-    })
-}
+        crate::engine::diag::name(found.entry(), name);
+        out.put(found.entry())
+    }
 
-pub(crate) extern "system" fn field_offset(type_name: Str, field: Str, out: *mut u64) -> Status {
-    entry("field_offset", || {
-        let (Some(loader), Some(type_name), Some(field)) = (loader(), text(type_name), text(field))
-        else {
-            return Status::BAD_ARGS;
-        };
-        match loader
+    fn field_offset(type_name as Text, field as Text, out as Out<u64>) -> Status {
+        let offset = loaded()?
             .reflection
-            .field_offset(crate::engine::catalogue::type_name(type_name), field)
-        {
-            // SAFETY: `HostApi::field_offset` has the mod pass `out` null or
-            // pointing at a writable, aligned `u64` that no other thread
-            // touches during the call.
-            Ok(offset) => unsafe { put(out, offset) },
-            Err(error) => lookup(&error),
-        }
-    })
-}
+            .field_offset(crate::engine::catalogue::type_name(type_name), field)?;
+        out.put(offset)
+    }
 
-pub(crate) extern "system" fn type_size(type_name: Str, out: *mut u32) -> Status {
-    entry("type_size", || {
-        let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
-            return Status::BAD_ARGS;
-        };
-        match loader
+    fn type_size(type_name as Text, out as Out<u32>) -> Status {
+        let info = loaded()?
             .reflection
-            .type_info(crate::engine::catalogue::type_name(type_name))
-        {
-            // SAFETY: `HostApi::type_size` has the mod pass `out` null or
-            // pointing at a writable, aligned `u32` that no other thread
-            // touches during the call.
-            Ok(info) => unsafe { put(out, info.size()) },
-            Err(error) => lookup(&error),
-        }
-    })
-}
+            .type_info(crate::engine::catalogue::type_name(type_name))?;
+        out.put(info.size())
+    }
 
-pub(crate) extern "system" fn caller_frame(out: *mut api_frame::CallerFrame) {
-    entry("caller_frame", || {
-        let frame = loader()
+    fn caller_frame(out as Out<api_frame::CallerFrame>) {
+        let frame = crate::engine::loader::loader()
             .map(|loader| (loader.caller_frame)())
             .unwrap_or_default();
-        // SAFETY: `HostApi::caller_frame` has the mod pass `out` null or
-        // pointing at a writable, aligned `CallerFrame` that no other thread
-        // touches during the call.
-        let _written = unsafe { put(out, frame) };
-    });
-}
+        out.put(frame)
+    }
 
-pub(crate) extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) -> Status {
-    entry("constant", || {
-        let (Some(loader), Some(name)) = (loader(), text(name)) else {
-            return Status::BAD_ARGS;
-        };
-        let Some(index) = loader.rows_of(me) else {
-            return Status::BAD_ARGS;
-        };
-        loader
-            .resolve_constant(index.get(), name)
-            // SAFETY: `HostApi::constant` has the mod pass `out` null or
-            // pointing at a writable, aligned `u64` that no other thread
-            // touches during the call.
-            .map_or(Status::MISSING, |value| unsafe { put(out, value) })
-    })
-}
+    fn constant(me: ModHandle, name as Text, out as Out<u64>) -> Status {
+        let loader = loaded()?;
+        let index = loader.rows_of(me).ok_or(Status::BAD_ARGS)?;
+        out.put(
+            loader
+                .resolve_constant(index.get(), name)
+                .ok_or(Status::MISSING)?,
+        )
+    }
 
-pub(crate) extern "system" fn data_dir(me: ModHandle, out: *mut Str) -> Status {
-    entry("data_dir", || {
-        let Some(loader) = loader() else {
-            return Status::BAD_ARGS;
-        };
-        let Some((_, record)) = loader.record(me) else {
-            return Status::BAD_ARGS;
-        };
-        let Some(key) = crate::base::saves::world_key(loader) else {
-            return Status::MISSING;
-        };
-        let dir = crate::base::world_folders::data_of(key).join(&record.id);
-        if std::fs::create_dir_all(&dir).is_err() {
-            return Status::REFUSED;
-        }
+    fn data_dir(me as AnyMod, out as Out<Str>) -> Status {
+        let key = crate::base::saves::world_key(me.loader).ok_or(Status::MISSING)?;
+        let dir = crate::base::world_folders::data_of(key).join(&me.record.id);
+        std::fs::create_dir_all(&dir).map_err(|_| Status::REFUSED)?;
         // The path lives for the process: the mod keeps it as long as it likes.
-        // SAFETY: `HostApi::data_dir` has the mod pass `out` null or pointing
-        // at a writable, aligned `Str` that no other thread touches during the
-        // call.
-        unsafe { put(out, Str::new(keep(&dir.to_string_lossy()))) }
-    })
-}
+        out.put(Str::new(keep(&dir.to_string_lossy())))
+    }
 
-pub(crate) extern "system" fn mod_dir(me: ModHandle, out: *mut Str) -> Status {
-    entry("mod_dir", || {
-        let Some(loader) = loader() else {
-            return Status::BAD_ARGS;
-        };
-        let Some((_, record)) = loader.record(me) else {
-            return Status::BAD_ARGS;
-        };
-        let dir = loader.mods_dir.join(record.folder());
+    fn mod_dir(me as AnyMod, out as Out<Str>) -> Status {
+        let dir = me.loader.mods_dir.join(me.record.folder());
         // The path lives for the process: the mod keeps it as long as it likes.
-        // SAFETY: `HostApi::mod_dir` has the mod pass `out` null or pointing
-        // at a writable, aligned `Str` that no other thread touches during the
-        // call.
-        unsafe { put(out, Str::new(keep(&dir.to_string_lossy()))) }
-    })
-}
+        out.put(Str::new(keep(&dir.to_string_lossy())))
+    }
 
-pub(crate) extern "system" fn log_level(me: ModHandle) -> Level {
-    entry("log_level", || {
+    fn log_level(me: ModHandle) -> Level {
         // The loader's own copy of the API, as `log` names it.
         if me == crate::host::LOADER_HANDLE {
-            return crate::engine::log::level(crate::engine::settings::LOADER_ID);
+            return Ok(crate::engine::log::level(crate::engine::settings::LOADER_ID));
         }
-        loader()
+        Ok(crate::engine::loader::loader()
             .and_then(|loader| loader.record(me))
-            .map_or(Level::INFO, |(_, record)| {
-                crate::engine::log::level(&record.id)
-            })
-    })
-}
+            .map_or(Level::INFO, |(_, record)| crate::engine::log::level(&record.id)))
+    }
 
-pub(crate) extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
-    entry("type_hash", || {
-        let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
-            return Status::BAD_ARGS;
-        };
-        match loader
+    fn type_hash(type_name as Text, out as Out<u32>) -> Status {
+        let info = loaded()?
             .reflection
-            .type_info(crate::engine::catalogue::type_name(type_name))
-        {
-            // SAFETY: `HostApi::type_hash` has the mod pass `out` null or
-            // pointing at a writable, aligned `u32` that no other thread
-            // touches during the call.
-            Ok(info) => crate::engine::world::type_hash(info.va())
-                .map_or(Status::MISSING, |h| unsafe { put(out, h) }),
-            Err(error) => lookup(&error),
-        }
-    })
+            .type_info(crate::engine::catalogue::type_name(type_name))?;
+        out.put(crate::engine::world::type_hash(info.va()).ok_or(Status::MISSING)?)
+    }
 }
 
 #[cfg(test)]

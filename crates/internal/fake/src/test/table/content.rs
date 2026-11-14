@@ -820,7 +820,7 @@ pub(crate) extern "system" fn types(
     let Some(table) = with(None, |s| s.host.types.clone()) else {
         return Status::MISSING;
     };
-    crate::test::table::base::mods::list(table.entries(), out, entry_size, capacity, count)
+    crate::test::table::base::io::list(table.entries(), out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn game_version(_me: ModHandle, out: *mut Str) -> Status {

@@ -248,13 +248,12 @@ pub enum FogError {
     Refused,
 }
 
-impl FogError {
-    fn check(status: Status) -> Result<(), Self> {
+impl enshwick_base::load::StatusError for FogError {
+    fn of(status: Status) -> Self {
         match status {
-            Status::OK => Ok(()),
-            Status::MISSING => Err(Self::Missing),
-            Status::OUTSIDE_WORLD => Err(Self::Outside),
-            _ => Err(Self::Refused),
+            Status::MISSING => Self::Missing,
+            Status::OUTSIDE_WORLD => Self::Outside,
+            _ => Self::Refused,
         }
     }
 }
@@ -296,7 +295,7 @@ impl FogOfWar {
             core::ptr::null_mut(),
             0,
         );
-        FogError::check(status)?;
+        enshwick_base::load::outcome::<FogError>(status)?;
         Ok(info)
     }
 
@@ -331,7 +330,7 @@ impl FogOfWar {
             coverage.as_mut_ptr(),
             capacity,
         );
-        FogError::check(status)?;
+        enshwick_base::load::outcome::<FogError>(status)?;
         Ok(FogImage {
             state: FogState::from_abi(&info),
             min,

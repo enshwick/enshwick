@@ -1,178 +1,97 @@
 //! Host functions for altars, their zones and the base limit.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{ModHandle, Status};
+use enshwick_core::abi::Status;
 
-use crate::host::memory::list;
-use crate::host::memory::{put, put_headed};
-use crate::host::{caller, caller_index, entry};
+use crate::engine::conflicts::Mode;
+use crate::host::layer::{Caller, HeadedOut, Mod, Out, SizedListOut, checked, entries};
 use crate::world::base_groups::limit::Limits;
 
-pub(crate) extern "system" fn altars_open(me: ModHandle) -> Status {
-    entry("altars_open", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        crate::world::altars::open(loader, index)
-    })
-}
+entries! {
+    fn altars_open(me as Mod) -> Status {
+        checked(crate::world::altars::open(me.loader, me.index))
+    }
 
-pub(crate) extern "system" fn altars(
-    me: ModHandle,
-    out: *mut api_frame::AltarInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("altars", || {
-        let (_, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if !crate::world::altars::opened(index) {
-            return Status::REFUSED;
+    fn altars(
+        me as Mod,
+        [out, entry_size, capacity, count] as SizedListOut<api_frame::AltarInfo>,
+    ) -> Status {
+        if !crate::world::altars::opened(me.index) {
+            return Err(Status::REFUSED.into());
         }
-        let altars = crate::world::altars::list();
-        // SAFETY: the ABI has the mod pass `out` null or writable for
-        // `capacity` entries of `entry_size` bytes and `count` null or a
-        // writable `u32`, untouched by the mod during the call.
-        unsafe { list(&altars, out, entry_size, capacity, count) }
-    })
-}
+        out.put(&crate::world::altars::list())
+    }
 
-pub(crate) extern "system" fn altar_zone_filter(
-    me: ModHandle,
-    callback: api_frame::AltarZoneFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("altar_zone_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::engine::conflicts::note(
+    fn altar_zone_filter(
+        me as Mod,
+        callback: api_frame::AltarZoneFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        me.claim(
             "altar zone filter",
-            index,
-            crate::engine::conflicts::Mode::Chained,
-            crate::world::altars::add_sizer(loader, index, callback, user),
-        ),
-        Err(status) => status,
-    })
-}
-
-pub(crate) extern "system" fn altar_zones_changed(me: ModHandle) -> Status {
-    entry("altar_zones_changed", || match caller_index(me) {
-        Ok((_, index)) => crate::world::altars::resize(index),
-        Err(status) => status,
-    })
-}
-
-pub(crate) extern "system" fn building_zone_check_filter(
-    me: ModHandle,
-    callback: api_frame::BuildingZoneCheckFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("building_zone_check_filter", || {
-        let (_, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        crate::engine::conflicts::note(
-            "altar zone check",
-            index,
-            crate::engine::conflicts::Mode::Chained,
-            crate::world::altars::register(index, callback, user),
+            Mode::Chained,
+            checked(crate::world::altars::add_sizer(me.loader, me.index, callback, user)),
         )
-    })
-}
+    }
 
-pub(crate) extern "system" fn altar_limit_filter(
-    me: ModHandle,
-    callback: api_frame::AltarLimitFilterFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("altar_limit_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::engine::conflicts::note(
+    fn altar_zones_changed(me as Mod) -> Status {
+        checked(crate::world::altars::resize(me.index))
+    }
+
+    fn building_zone_check_filter(
+        me as Mod,
+        callback: api_frame::BuildingZoneCheckFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        me.claim(
+            "altar zone check",
+            Mode::Chained,
+            checked(crate::world::altars::register(me.index, callback, user)),
+        )
+    }
+
+    fn altar_limit_filter(
+        me as Mod,
+        callback: api_frame::AltarLimitFilterFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        me.claim(
             "altar limit filter",
-            index,
-            crate::engine::conflicts::Mode::Chained,
-            crate::world::bases::add_limit(loader, index, callback, user),
-        ),
-        Err(status) => status,
-    })
-}
+            Mode::Chained,
+            checked(crate::world::bases::add_limit(me.loader, me.index, callback, user)),
+        )
+    }
 
-pub(crate) extern "system" fn base_limit(
-    me: ModHandle,
-    out: *mut api_frame::BaseLimitInfo,
-) -> Status {
-    entry("base_limit", || {
-        if let Err(status) = caller(me) {
-            return status;
-        }
+    fn base_limit(_loader as Caller, out as HeadedOut<api_frame::BaseLimitInfo>) -> Status {
         let now = crate::world::bases::base_limit();
         let (vanilla, most) = (Limits::VANILLA, crate::world::bases::most());
-        // SAFETY: `HostApi::base_limit` has the mod pass `out` null or
-        // readable for its header and writable for the size it names, with no
-        // other thread touching it during the call.
-        unsafe {
-            put_headed(
-                out,
-                api_frame::BaseLimitInfo {
-                    header: api_frame::Header::of::<api_frame::BaseLimitInfo>(),
-                    zones: now.zones,
-                    bases: now.bases,
-                    vanilla_zones: vanilla.zones,
-                    reserved: 0,
-                    vanilla_bases: vanilla.bases,
-                    max_zones: most.zones,
-                    max_bases: most.bases,
-                },
-            )
-        }
-    })
-}
+        out.put(api_frame::BaseLimitInfo {
+            header: api_frame::Header::of::<api_frame::BaseLimitInfo>(),
+            zones: now.zones,
+            bases: now.bases,
+            vanilla_zones: vanilla.zones,
+            reserved: 0,
+            vanilla_bases: vanilla.bases,
+            max_zones: most.zones,
+            max_bases: most.bases,
+        })
+    }
 
-pub(crate) extern "system" fn raise_base_limit(me: ModHandle) -> Status {
-    entry("raise_base_limit", || match caller_index(me) {
-        Ok((loader, _)) => crate::world::bases::request(loader, Limits::RAISED),
-        Err(status) => status,
-    })
-}
+    fn raise_base_limit(me as Mod) -> Status {
+        checked(crate::world::bases::request(me.loader, Limits::RAISED))
+    }
 
-pub(crate) extern "system" fn request_base_limits(me: ModHandle, zones: u32, bases: u32) -> Status {
-    entry("request_base_limits", || match caller_index(me) {
-        Ok((loader, _)) => crate::world::bases::request(loader, Limits { zones, bases }),
-        Err(status) => status,
-    })
-}
+    fn request_base_limits(me as Mod, zones: u32, bases: u32) -> Status {
+        checked(crate::world::bases::request(me.loader, Limits { zones, bases }))
+    }
 
-pub(crate) extern "system" fn set_base_cap(me: ModHandle, bases: u32) -> Status {
-    entry("set_base_cap", || match caller_index(me) {
-        Ok((_, owner)) => crate::world::bases::cap(owner, bases),
-        Err(status) => status,
-    })
-}
+    fn set_base_cap(me as Mod, bases: u32) -> Status {
+        checked(crate::world::bases::cap(me.index, bases))
+    }
 
-pub(crate) extern "system" fn base_zones(
-    me: ModHandle,
-    zones: *mut u32,
-    bases: *mut u32,
-) -> Status {
-    entry("base_zones", || {
-        if let Err(status) = caller(me) {
-            return status;
-        }
-        let Some((zone_count, base_count)) = crate::world::bases::zones() else {
-            return Status::MISSING;
-        };
-        // SAFETY: `HostApi::base_zones` has the mod pass `zones` null or
-        // pointing at a writable, aligned `u32` that no other thread touches
-        // during the call.
-        let status = unsafe { put(zones, zone_count) };
-        if !status.is_ok() {
-            return status;
-        }
-        // SAFETY: `HostApi::base_zones` has the mod pass `bases` null or
-        // pointing at a writable, aligned `u32` that no other thread touches
-        // during the call.
-        unsafe { put(bases, base_count) }
-    })
+    fn base_zones(_loader as Caller, zones as Out<u32>, bases as Out<u32>) -> Status {
+        let (zone_count, base_count) = crate::world::bases::zones().ok_or(Status::MISSING)?;
+        zones.put(zone_count)?;
+        bases.put(base_count)
+    }
 }

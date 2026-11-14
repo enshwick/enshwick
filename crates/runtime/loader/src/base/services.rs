@@ -121,7 +121,7 @@ pub(crate) enum DeclareServiceError {
 }
 
 /// Why a mod's lookup of a service finds nothing it can use; the mod reads
-/// the message beside [`FindServiceError::status`].
+/// the message beside the status of its call.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum FindServiceError {
     /// No running mod publishes the name.
@@ -144,19 +144,6 @@ pub(crate) enum FindServiceError {
     /// The publishing mod does not export the service to the asking mod.
     #[error("{reason}")]
     Unexported { reason: String },
-}
-
-impl FindServiceError {
-    /// The status the mod's call returns: missing while nothing usable
-    /// runs, refused when what runs does not fit or is not exported.
-    pub(crate) const fn status(&self) -> Status {
-        match self {
-            Self::Unpublished | Self::PublisherOff { .. } => Status::MISSING,
-            Self::OtherMajors { .. } | Self::Layout { .. } | Self::Unexported { .. } => {
-                Status::REFUSED
-            }
-        }
-    }
 }
 
 /// What the mod's author does about `mismatch` with the publisher `id`.
@@ -508,6 +495,7 @@ mod tests {
 
     use super::{Names, Registry};
     use crate::engine::mod_index::ModIndex;
+    use crate::host::layer::Refusal as _;
 
     struct Mods(Vec<(&'static str, &'static str, bool)>);
 

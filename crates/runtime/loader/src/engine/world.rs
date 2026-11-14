@@ -617,6 +617,23 @@ pub(crate) fn used_item(loader: &Loader, entity: Entity) -> Option<u32> {
 
 /// Every player in game, in slot order.
 pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
+    Ok(in_game(loader, |_| true)?.collect())
+}
+
+/// The player in game whose character is `entity`, as [`players`] lists it,
+/// read without the others.
+pub(crate) fn player(loader: &Loader, entity: Entity) -> Result<PlayerInfo, Status> {
+    in_game(loader, |found| found == entity)?
+        .next()
+        .ok_or(Status::MISSING)
+}
+
+/// The players in game whose character `wanted` takes, in slot order, each
+/// read only when the iterator reaches it.
+fn in_game(
+    loader: &Loader,
+    mut wanted: impl FnMut(Entity) -> bool,
+) -> Result<impl Iterator<Item = PlayerInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = reader()?;
     // SAFETY: `server` is the server `reader` returned on the game thread,
@@ -626,9 +643,8 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
     // SAFETY: `reader` returned the live server on its game thread, which
     // alone writes it; the table places its slots.
     Ok(unsafe { occupied(layout.player_slots(), server) }
-        .filter(|&(_, _, state, _)| state == SLOT_IN_GAME)
-        .map(|(index, slot, _, entity)| player_at(layout, slot, index, Entity(entity), infos))
-        .collect())
+        .filter(move |&(_, _, state, found)| state == SLOT_IN_GAME && wanted(Entity(found)))
+        .map(move |(index, slot, _, found)| player_at(layout, slot, index, Entity(found), infos)))
 }
 
 /// The character entity of each player in game, as [`players`] lists them,

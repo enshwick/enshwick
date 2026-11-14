@@ -184,6 +184,9 @@ pub(crate) fn call_as<R>(
 }
 
 /// Runs `f` marked as mod `owner`'s callback for `feature`, for crash blame.
+///
+/// The marker stays set when `f` unwinds, on purpose: `unwound` reads it
+/// to blame the mod whose callback panicked, then restores the outer one.
 #[inline]
 fn marked<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
     let marker = u32::try_from(owner.get())
@@ -195,6 +198,19 @@ fn marked<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
     let result = f();
     RUNNING.set(outer);
     result
+}
+
+/// After an unwind out of code that ran with the marker `outer`, the mod
+/// whose callback was running when it began, if a callback was: [`marked`]
+/// does not restore its marker on unwind, so the callback that panicked is
+/// still marked. Restores `outer`.
+#[cfg(windows)]
+pub(crate) fn unwound(outer: u32) -> Option<ModIndex> {
+    let inner = RUNNING.replace(outer);
+    if inner == outer {
+        return None;
+    }
+    decode(inner).map(|(owner, _)| ModIndex::new(owner))
 }
 
 /// Runs `f` with `owner` as the host of the loader's own copy of the API
@@ -331,11 +347,21 @@ pub fn nanos(ticks: u64) -> Option<u64> {
 
 #[inline(never)]
 fn timed<R>(bucket: &Bucket, f: impl FnOnce() -> R) -> R {
+    /// Sets the outer callback's inside time when `f` returns or unwinds.
+    struct Restore(u64);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            INSIDE.set(self.0);
+        }
+    }
     let outer = INSIDE.replace(0);
+    let mut restore = Restore(outer);
     let start = rdtsc();
     let result = f();
     let elapsed = rdtsc().wrapping_sub(start);
-    let inside = INSIDE.replace(outer.wrapping_add(elapsed));
+    let inside = INSIDE.get();
+    restore.0 = outer.wrapping_add(elapsed);
+    drop(restore);
     bucket.calls.fetch_add(1, Ordering::Relaxed);
     bucket
         .ticks
@@ -600,6 +626,29 @@ mod tests {
             samples,
             ticks,
         }
+    }
+
+    #[test]
+    fn a_callback_that_unwinds_stays_marked_for_the_entry_layer_to_blame() {
+        let outer = marker();
+        let unwound = std::panic::catch_unwind(|| {
+            marked(ModIndex::new(4), Feature::Calls, || {
+                panic!("the callback broke")
+            });
+        });
+        assert!(unwound.is_err());
+        assert_eq!(decode(marker()).map(|(owner, _)| owner), Some(4));
+        RUNNING.set(outer);
+    }
+
+    #[test]
+    fn a_timed_callback_that_unwinds_gives_the_outer_one_its_inside_time_back() {
+        INSIDE.set(42);
+        let bucket = Bucket::default();
+        let unwound = std::panic::catch_unwind(|| timed(&bucket, || panic!("the callback broke")));
+        assert!(unwound.is_err());
+        assert_eq!(INSIDE.get(), 42);
+        INSIDE.set(0);
     }
 
     #[test]

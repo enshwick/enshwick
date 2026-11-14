@@ -15,7 +15,6 @@
 use std::sync::OnceLock;
 
 use enshwick_core::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
-use enshwick_core::terrain::MAX_RADIUS;
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::{BlobArray, read};
@@ -359,13 +358,7 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
 pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let radius = request.radius;
-    if !(radius > 0.0 && radius <= MAX_RADIUS)
-        || request
-            .position
-            .iter()
-            .any(|axis| !axis.is_finite() || *axis < 0.0)
-        || request.shape > TerrainEdit::SQUARE
-    {
+    if !enshwick_core::__private::rules::terrain_edit_valid(request) {
         return Err(Status::BAD_ARGS);
     }
     let (editor, alloc, _) = editor(layout)?;
@@ -406,15 +399,12 @@ struct Site {
 
 fn add(layout: &Layout, site: &Site, request: &TerrainEdit) -> Result<f32, Status> {
     let material = terrain_material(request.material)?;
-    if !(request.height.is_finite() && request.height > 0.0 && request.height <= MAX_RADIUS) {
-        return Err(Status::BAD_ARGS);
-    }
     // SAFETY: `add` is the table's `terrain.add`, called on the server's
     // live, non-zero voxel editor and allocator (checked by `editor`) at a
     // quiet moment on the game thread (checked by `crate::engine::world::server`),
     // with no undo; `site.position` is a 16-byte aligned `Vector` for the
     // call, and the radius and height are positive and at most `MAX_RADIUS`
-    // (checked in `edit` and by the height check).
+    // (checked in `edit` by `terrain_edit_valid`).
     let voxels = unsafe {
         (layout.add)(
             site.editor,

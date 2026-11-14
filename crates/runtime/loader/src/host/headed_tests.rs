@@ -8,8 +8,9 @@ use std::sync::OnceLock;
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{Headed, Header};
 
-use super::memory::{get_headed, get_headed_list, put_headed, put_headed_list};
-use super::*;
+use enshwick_core::abi::Status;
+
+use super::memory::{headed_in, headed_list_in, put_headed, put_headed_list};
 
 /// The fill of a value's own bytes.
 const VALUE: u8 = 0xAB;
@@ -141,9 +142,9 @@ fn reads_from_born<T: Headed>(name: &str) {
     set_size(&mut from, 0, T::BORN);
     // SAFETY: `from` is readable for `full + 16` bytes and its header states
     // `T::BORN`, at most `full`.
-    let copy = unsafe { get_headed(from.as_ptr().cast::<T>(), T::BORN) }.expect(name);
+    let copy = unsafe { headed_in(from.as_ptr().cast::<T>(), T::BORN) }.expect(name);
     // SAFETY: `copy` is a live local `T`, readable for its `full` bytes, all
-    // copied or zeroed by `get_headed`.
+    // copied or zeroed by `headed_in`.
     let copied = unsafe { core::slice::from_raw_parts((&raw const copy).cast::<u8>(), full) };
     assert!(
         copied[T::BORN..].iter().all(|&b| b == 0),
@@ -152,7 +153,7 @@ fn reads_from_born<T: Headed>(name: &str) {
     set_size(&mut from, 0, T::BORN - 1);
     // SAFETY: `from` is readable for `full + 16` bytes and its header states
     // `T::BORN - 1`, fewer.
-    let short = unsafe { get_headed(from.as_ptr().cast::<T>(), T::BORN) };
+    let short = unsafe { headed_in(from.as_ptr().cast::<T>(), T::BORN) };
     assert!(short.is_none(), "{name}: short of what every writer knows");
 }
 
@@ -290,9 +291,9 @@ fn round_trip<T: Headed>(name: &str) {
     set_size(&mut from, 0, room);
     // SAFETY: `from` is readable for `full + 16` bytes and its header states
     // `room`, fewer.
-    let copy = unsafe { get_headed(from.as_ptr().cast::<T>(), room) }.expect(name);
+    let copy = unsafe { headed_in(from.as_ptr().cast::<T>(), room) }.expect(name);
     // SAFETY: `copy` is a live local `T`, readable for its `full` bytes; the
-    // read-back bytes are those `get_headed` copied or zeroed, all initialised.
+    // read-back bytes are those `headed_in` copied or zeroed, all initialised.
     let copied = unsafe { core::slice::from_raw_parts((&raw const copy).cast::<u8>(), full) };
     assert!(
         copied[8..room].iter().all(|&b| b == GUARD),
@@ -305,7 +306,7 @@ fn round_trip<T: Headed>(name: &str) {
     if room < full {
         // SAFETY: `from` is readable for `full + 16` bytes and its header
         // states `room`, fewer.
-        let short = unsafe { get_headed(from.as_ptr().cast::<T>(), full) };
+        let short = unsafe { headed_in(from.as_ptr().cast::<T>(), full) };
         assert!(
             short.is_none(),
             "{name}: a struct short of the required fields"
@@ -335,12 +336,12 @@ fn round_trip<T: Headed>(name: &str) {
 
     // SAFETY: `list` is readable for `room * capacity + 16` bytes: `capacity`
     // entries of `room` bytes, each with its header.
-    let read = unsafe { get_headed_list(list.as_ptr().cast::<T>(), 3, room) }.expect(name);
+    let read = unsafe { headed_list_in(list.as_ptr().cast::<T>(), 3, room) }.expect(name);
     assert_eq!(read.len(), capacity, "{name}");
     set_size(&mut list, room, room + 8);
     // SAFETY: `list` is readable for `room * capacity + 16` bytes, which
     // covers every entry at the stride its first header states.
-    let mixed = unsafe { get_headed_list(list.as_ptr().cast::<T>(), 3, room) };
+    let mixed = unsafe { headed_list_in(list.as_ptr().cast::<T>(), 3, room) };
     assert!(mixed.is_none(), "{name}: entries of different sizes");
 }
 
@@ -413,31 +414,59 @@ fn a_list_whose_first_header_is_shorter_than_a_header_is_refused() {
 }
 
 /// Every entry point that takes a pointer to a headed struct reads or writes
-/// it through a helper that knows the header.
+/// it through a parameter kind or a helper that knows the header, and never
+/// through the raw pointer itself.
 #[test]
 fn every_entry_point_passes_headed_pointers_through_a_sized_helper() {
-    const HELPERS: [&str; 7] = [
+    const HEADED_KINDS: [&str; 8] = [
+        "Headed<",
+        "HeadedOut<",
+        "HeadedInOut<",
+        "HeadedSince<",
+        "MaybeHeaded<",
+        "HeadedList<",
+        "HeadedListOut<",
+        "SizedListOut<",
+    ];
+    const HELPERS: [&str; 4] = [
         "ActionTarget::read(",
-        "get_headed(",
+        "headed_in(",
         "put_headed(",
-        "get_headed_list(",
-        "put_headed_list(",
         "read_headed(",
-        "list(",
     ];
     let headed = headed_in_abi();
     let mut checked = 0;
-    for chunk in host_source().split("extern \"system\" fn ").skip(1) {
-        let Some((signature, body)) = chunk.split_once('{') else {
+    for chunk in host_source().split("\n    fn ").skip(1) {
+        let Some((signature, body)) = chunk.split_once(") ") else {
             continue;
         };
         let name = signature.split('(').next().unwrap_or_default();
-        for param in signature.split(',') {
+        let params = signature.split_once('(').map_or("", |(_, params)| params);
+        for param in split_params(params) {
+            if let Some((param, kind)) = param.split_once(" as ") {
+                let Some(pointee) = kind
+                    .split_once('<')
+                    .and_then(|(_, inner)| inner.split([',', '>']).next())
+                    .map(|inner| inner.rsplit("::").next().unwrap_or_default().trim())
+                else {
+                    continue;
+                };
+                if !headed.contains(&pointee) {
+                    continue;
+                }
+                let kind_name = kind.trim();
+                assert!(
+                    HEADED_KINDS.iter().any(|k| kind_name.starts_with(k)),
+                    "{name}: `{param} as {kind_name}` does not read or write {pointee} by its header"
+                );
+                checked += 1;
+                continue;
+            }
             let Some((param, ty)) = param.split_once(": ") else {
                 continue;
             };
-            let param = param.rsplit(['(', ' ', '\n']).next().unwrap_or_default();
-            let ty = ty.split(')').next().unwrap_or_default().trim();
+            let param = param.trim();
+            let ty = ty.trim();
             let Some(pointee) = ty
                 .strip_prefix("*const ")
                 .or_else(|| ty.strip_prefix("*mut "))
@@ -448,7 +477,7 @@ fn every_entry_point_passes_headed_pointers_through_a_sized_helper() {
             if !headed.contains(&pointee) {
                 continue;
             }
-            let body = body.split("\nextern \"system\" fn ").next().unwrap_or(body);
+            let body = body.split("\n    fn ").next().unwrap_or(body);
             let routed = HELPERS.iter().any(|helper| {
                 body.match_indices(helper).any(|(at, _)| {
                     let args = &body[at + helper.len()..];
@@ -461,7 +490,7 @@ fn every_entry_point_passes_headed_pointers_through_a_sized_helper() {
                 routed,
                 "{name}: `{param}: {ty}` is not read or written by its header"
             );
-            for raw in [".as_ref()", ".as_mut()", ".write(", ".add("] {
+            for raw in [".as_ref()", ".as_mut()", ".read(", ".write(", ".add("] {
                 assert!(
                     !body.contains(&format!("{param}{raw}")),
                     "{name}: `{param}{raw}` ignores the mod's header"
@@ -471,4 +500,24 @@ fn every_entry_point_passes_headed_pointers_through_a_sized_helper() {
         }
     }
     assert!(checked >= 30, "only {checked} headed pointers found");
+}
+
+/// The parameters of an entry's signature, split at the commas outside
+/// brackets.
+fn split_params(params: &str) -> Vec<&str> {
+    let mut found = Vec::new();
+    let (mut depth, mut start) = (0i32, 0);
+    for (at, c) in params.char_indices() {
+        match c {
+            '<' | '[' | '(' => depth += 1,
+            '>' | ']' | ')' => depth -= 1,
+            ',' if depth == 0 => {
+                found.push(&params[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    found.push(&params[start..]);
+    found
 }

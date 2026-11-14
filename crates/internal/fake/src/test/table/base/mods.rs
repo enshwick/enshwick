@@ -3,7 +3,8 @@
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, State, TABLE, found, put, text, with};
+use super::io::list;
+use crate::test::table::{Registered, State, TABLE, found, text, with};
 use enshwick_core::abi::{
     ConfigCheckFn, ContentRename, HostApi, Level, ModHandle, ModInfo, Side, Status, Str,
 };
@@ -253,39 +254,6 @@ pub(crate) extern "system" fn join_missing(
 ) -> Status {
     let mods = with(Vec::new(), |s| s.host.join_missing.clone());
     list(&mods, out, entry_size, capacity, count)
-}
-
-/// Copies up to `capacity` of `items` to `out`, `entry_size` bytes apart, and
-/// writes how many there are; refuses a non-null `out` whose entries are
-/// shorter than a header, as the loader does.
-pub(crate) fn list<T: Copy>(
-    items: &[T],
-    out: *mut T,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let stride = usize::try_from(entry_size).unwrap_or(0);
-    let shared = stride.min(size_of::<T>());
-    let capacity = usize::try_from(capacity).unwrap_or(0);
-    if !out.is_null() {
-        if stride < size_of::<enshwick_core::abi::Header>() {
-            return Status::BAD_ARGS;
-        }
-        let size = u32::try_from(shared).unwrap_or(u32::MAX);
-        for (i, info) in items.iter().take(capacity).enumerate() {
-            let entry = out.cast::<u8>().wrapping_add(i * stride);
-            // SAFETY: the safe layer passes room for `capacity` entries of
-            // `stride` bytes; the fake fills what both sides know.
-            unsafe {
-                core::ptr::copy_nonoverlapping(core::ptr::from_ref(info).cast(), entry, shared);
-            }
-            // SAFETY: the header's `size` is the entry's first field, inside
-            // its `stride` bytes, at least a header as checked above.
-            unsafe { entry.cast::<u32>().write_unaligned(size) };
-        }
-    }
-    put(count, u32::try_from(items.len()).unwrap_or(u32::MAX))
 }
 
 pub(crate) extern "system" fn config_schema(

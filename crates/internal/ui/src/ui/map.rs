@@ -1,6 +1,6 @@
 //! Markers on the client's map.
 
-use crate::abi::{Header, MapMarkerTypeInfo, Status, Str, UiMarker};
+use crate::abi::{Header, MapMarkerTypeInfo, Str, UiMarker};
 use crate::map::{MapMarkerType, MapMarkerTypeId};
 
 use super::{Ui, UiError};
@@ -181,11 +181,7 @@ impl Ui {
             })
             .collect();
         let count = u32::try_from(raw.len()).map_err(|_| UiError::Refused)?;
-        match (api.ui_markers)(self.host.handle(), raw.as_ptr(), count) {
-            Status::OK => Ok(()),
-            Status::MISSING => Err(UiError::Unavailable),
-            _ => Err(UiError::Refused),
-        }
+        enshwick_base::load::outcome((api.ui_markers)(self.host.handle(), raw.as_ptr(), count))
     }
 
     /// Takes the mod's markers off the map.
@@ -237,11 +233,7 @@ impl Ui {
                 capacity,
                 &raw mut count,
             );
-            match status {
-                Status::OK => {}
-                Status::MISSING => return Err(UiError::Unavailable),
-                _ => return Err(UiError::Refused),
-            }
+            enshwick_base::load::outcome::<UiError>(status)?;
             if count <= capacity {
                 infos.truncate(count as usize);
                 break infos;

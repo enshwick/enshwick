@@ -72,6 +72,34 @@ mod tests {
     }
 
     #[test]
+    fn texts_kept_on_other_threads_leave_earlier_ones_readable() {
+        use enshwick_base::Relock as _;
+        let kept = std::sync::Arc::new(std::sync::Mutex::new(KeptText::new(usize::MAX)));
+        let first = kept.relock().keep("a = 0").unwrap();
+        let writers: Vec<_> = (0..4)
+            .map(|t| {
+                let kept = std::sync::Arc::clone(&kept);
+                std::thread::spawn(move || {
+                    for n in 0..200 {
+                        let _held = kept.relock().keep(&format!("a = {t}{n}"));
+                    }
+                })
+            })
+            .collect();
+        for _ in 0..200 {
+            assert_eq!(first, "a = 0");
+        }
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        assert_eq!(first, "a = 0");
+        assert_eq!(
+            kept.relock().keep("a = 0").map(str::as_ptr),
+            Some(first.as_ptr())
+        );
+    }
+
+    #[test]
     fn a_server_sending_new_text_on_every_join_cannot_grow_the_keep_past_its_budget() {
         let mut kept = KeptText::new(1024);
         let held = (0..10_000)
