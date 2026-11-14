@@ -20,15 +20,24 @@ const PERIOD: Duration = Duration::from_secs(1);
 /// What a settings file looked like when last seen: modified time and length.
 type Stamp = Option<(SystemTime, u64)>;
 
-/// Files the loader wrote itself and raised the event for already, with
-/// what they looked like after the write.
-static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
+/// What the settings watch keeps for the process.
+struct State {
+    /// Files the loader wrote itself and raised the event for already, with
+    /// what they looked like after the write. A game's end keeps them: each
+    /// file keeps only its latest write, which matches only that exact
+    /// look, and the loader's own settings outlive any game.
+    written: Mutex<Vec<(PathBuf, Stamp)>>,
+}
+
+static STATE: State = State {
+    written: Mutex::new(Vec::new()),
+};
 
 /// Notes that the loader wrote `path` and raised its event itself, so the
 /// watcher does not raise it again.
 pub(crate) fn wrote(path: &Path) {
     let now = stamp(path);
-    note(&mut WRITTEN.relock(), path, now);
+    note(&mut STATE.written.relock(), path, now);
 }
 
 /// Writes `path` with `write` and notes the write, holding the list of the
@@ -42,7 +51,7 @@ pub(crate) fn write_noted(
     path: &Path,
     write: impl FnOnce() -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    let mut written = WRITTEN.relock();
+    let mut written = STATE.written.relock();
     write()?;
     note(&mut written, path, stamp(path));
     Ok(())
@@ -57,7 +66,7 @@ fn note(written: &mut Vec<(PathBuf, Stamp)>, path: &Path, now: Stamp) {
 
 /// Whether the loader wrote `path` as it looks now; forgets the write.
 fn ours(path: &Path, now: Stamp) -> bool {
-    let mut written = WRITTEN.relock();
+    let mut written = STATE.written.relock();
     let found = written.iter().position(|(p, s)| p == path && *s == now);
     found.map(|at| written.swap_remove(at)).is_some()
 }
@@ -248,7 +257,7 @@ mod tests {
         assert!(!file.changed(Some("a"), Some(&path), at(1)), "untouched");
         assert!(file.changed(Some("a"), Some(&path), at(2)), "edited");
         // `enshwick config` writes it and raises the event itself.
-        WRITTEN.relock().push((path.clone(), at(3)));
+        STATE.written.relock().push((path.clone(), at(3)));
         assert!(
             !file.changed(Some("a"), Some(&path), at(3)),
             "the loader's own"

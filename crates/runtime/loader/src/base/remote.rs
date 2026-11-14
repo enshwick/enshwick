@@ -743,7 +743,9 @@ fn sync_messages(values: std::collections::BTreeMap<String, String>) -> Vec<Mess
 }
 
 #[cfg(windows)]
-pub(crate) use live::{client, forget, forget_player, heard, push_sync, server, sync_to};
+pub(crate) use live::{
+    client, forget, forget_game, forget_player, heard, push_sync, server, sync_to,
+};
 
 #[cfg(windows)]
 mod live;

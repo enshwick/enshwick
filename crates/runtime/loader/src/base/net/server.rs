@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use super::{State, deliver, dropped, item_data, remember_language, state};
+use super::{Links, deliver, dropped, item_data, remember_language, state};
 use crate::base::wire::{CONTROL, Peer, WELCOME, control, read_hello, remote_message};
 
 /// Tries to hand a client its join data, one a second, before the server
@@ -22,7 +22,7 @@ pub(super) struct Greeting {
 }
 
 /// Makes `key` a peer after its hello at `now`.
-pub(super) fn greet(state: &mut State, key: u64, now: Instant) -> Greeting {
+pub(super) fn greet(state: &mut Links, key: u64, now: Instant) -> Greeting {
     let pending = state.greeting.remove(&key);
     let (peer, fresh) = match state.peers.entry(key) {
         std::collections::hash_map::Entry::Vacant(entry) => {
@@ -42,7 +42,7 @@ pub(super) fn greet(state: &mut State, key: u64, now: Instant) -> Greeting {
 /// takes from the client's rate, but one `looped` from a hosting client's
 /// own half.
 pub(super) fn take_message(
-    state: &mut State,
+    state: &mut Links,
     key: u64,
     channel: u32,
     looped: bool,
@@ -75,7 +75,7 @@ pub(super) fn take_message(
 /// forgetting the clients whose key holds no live slot in `live`, read only
 /// then; nothing is forgotten when the slots do not read.
 pub(super) fn make_greeting_room(
-    state: &mut State,
+    state: &mut Links,
     key: u64,
     live: impl FnOnce() -> Option<Vec<u64>>,
 ) {
@@ -103,7 +103,7 @@ pub(crate) fn keep_greeting(live: &[u64]) {
 
 /// The clients still owed their join data: peers with a live slot in
 /// `live`; the rest are forgotten.
-pub(super) fn owed_in(state: &mut State, live: &[u64]) -> Vec<u64> {
+pub(super) fn owed_in(state: &mut Links, live: &[u64]) -> Vec<u64> {
     let peers = &state.peers;
     state
         .owed
@@ -123,7 +123,7 @@ pub(super) enum Handover {
 }
 
 /// Notes whether client `key`'s join data went `whole` at `now`.
-pub(super) fn handed(state: &mut State, key: u64, whole: bool, now: Instant) -> Handover {
+pub(super) fn handed(state: &mut Links, key: u64, whole: bool, now: Instant) -> Handover {
     let tries = state
         .owed
         .iter()
@@ -167,7 +167,7 @@ fn hand_data(key: u64) {
     }
 }
 
-pub(super) fn keep_greeting_in(state: &mut State, live: &[u64]) {
+pub(super) fn keep_greeting_in(state: &mut Links, live: &[u64]) {
     state.greeting.retain(|key, _| live.contains(key));
 }
 

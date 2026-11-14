@@ -107,10 +107,31 @@ impl Saving {
     }
 }
 
-static SAVING: Mutex<Saving> = Mutex::new(Saving::new());
-/// Set while a mod holds saves or the loader still has the block byte set,
-/// so a step without holds takes no lock.
-static HOLDING: AtomicBool = AtomicBool::new(false);
+/// What the save holds keep while a world runs.
+struct State {
+    saving: Mutex<Saving>,
+    /// Set while a mod holds saves or the loader still has the block byte
+    /// set, so a step without holds takes no lock.
+    holding: AtomicBool,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            saving: Mutex::new(Saving::new()),
+            holding: AtomicBool::new(false),
+        }
+    }
+
+    /// Forgets every mod's hold: a hold is on its world's saves, and carried
+    /// on, it would stop the next world's.
+    fn forget(&self) {
+        *self.saving.relock() = Saving::new();
+        self.holding.store(false, Ordering::Release);
+    }
+}
+
+static STATE: State = State::new();
 
 /// What the game's block byte, now `byte`, needs while mods hold saves
 /// (`holding`), with the byte the game had before the hold (`held`): the
@@ -137,14 +158,14 @@ pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
         return Status::UNAVAILABLE;
     }
     let id = mod_id(loader, owner);
-    let mut saving = SAVING.relock();
+    let mut saving = STATE.saving.relock();
     match saving.change(owner, hold, Instant::now()) {
         Change::Held => {
-            HOLDING.store(true, Ordering::Release);
+            STATE.holding.store(true, Ordering::Release);
             crate::log!(INFO, "world saves held by {id}");
         }
         Change::Refused => {
-            HOLDING.store(true, Ordering::Release);
+            STATE.holding.store(true, Ordering::Release);
             crate::log!(
                 WARN,
                 "world saves held by {id} as the game shuts down, so its final save does not run"
@@ -174,7 +195,7 @@ fn mod_id(loader: &Loader, owner: ModIndex) -> &str {
 /// - `server` is the live server, read and written on its game thread
 ///   outside a step, where nothing else writes it.
 pub(super) unsafe fn after_step(loader: &Loader, layout: &Layout, server: usize) {
-    if !HOLDING.load(Ordering::Acquire) {
+    if !STATE.holding.load(Ordering::Acquire) {
         return;
     }
     // SAFETY: `server` is the live server on its game thread outside a
@@ -207,7 +228,7 @@ fn blocked_holds(server: usize, blocked: usize) -> Result<(), crate::engine::liv
 ///   outside a step, where nothing else writes it.
 unsafe fn enforce(layout: &Layout, server: usize) -> Option<Vec<(ModIndex, Duration)>> {
     let now = Instant::now();
-    let mut saving = SAVING.relock();
+    let mut saving = STATE.saving.relock();
     saving
         .holds
         .retain(|h| !crate::engine::loader::is_off(h.owner));
@@ -229,7 +250,7 @@ unsafe fn enforce(layout: &Layout, server: usize) -> Option<Vec<(ModIndex, Durat
     }
     saving.held = held;
     if saving.holds.is_empty() && held.is_none() {
-        HOLDING.store(false, Ordering::Release);
+        STATE.holding.store(false, Ordering::Release);
     }
     due(&mut saving.warn_at, now).then(|| {
         saving
@@ -305,7 +326,7 @@ pub(crate) fn shut_down(loader: &Loader, announce: impl FnOnce()) {
         return;
     };
     let now = Instant::now();
-    for hold in SAVING.relock().shut_down() {
+    for hold in STATE.saving.relock().shut_down() {
         crate::log!(
             WARN,
             "world saves held by {} for {} s are let go as the game shuts down",
@@ -324,9 +345,9 @@ pub(crate) fn shut_down(loader: &Loader, announce: impl FnOnce()) {
         ),
     }
     announce();
-    SAVING.relock().shutdown = Shutdown::Over;
+    STATE.saving.relock().shutdown = Shutdown::Over;
     if let Ok(server) = server
-        && HOLDING.load(Ordering::Acquire)
+        && STATE.holding.load(Ordering::Acquire)
     {
         // SAFETY: `server` is `world::server`'s live server on its game
         // thread outside a step, and the mods heard of the shutdown on this
@@ -337,14 +358,12 @@ pub(crate) fn shut_down(loader: &Loader, announce: impl FnOnce()) {
 
 /// Whether the hosted game's shutdown began, as [`shut_down`] marks it.
 pub(crate) fn shutting_down() -> bool {
-    SAVING.relock().shutdown != Shutdown::Not
+    STATE.saving.relock().shutdown != Shutdown::Not
 }
 
 /// Forgets every mod's hold, when a hosted game ends.
 pub(super) fn forget() {
-    // A hold is on its world's saves; carried on, it would stop the next world's.
-    *SAVING.relock() = Saving::new();
-    HOLDING.store(false, Ordering::Release);
+    STATE.forget();
 }
 
 #[cfg(test)]
@@ -374,6 +393,22 @@ mod tests {
         assert_eq!(saving.change(a, false, now), Change::LetGo);
         assert!(saving.holds.is_empty() && saving.warn_at.is_none());
         assert_eq!(saving.change(a, false, now), Change::Same);
+    }
+
+    #[test]
+    fn a_hosted_game_s_end_lets_every_hold_go_and_ends_its_shutdown() {
+        let state = State::new();
+        {
+            let mut saving = state.saving.relock();
+            let _held = saving.change(ModIndex::new(0), true, Instant::now());
+            saving.shutdown = Shutdown::Over;
+        }
+        state.holding.store(true, Ordering::Release);
+        state.forget();
+        let saving = state.saving.relock();
+        assert!(saving.holds.is_empty() && saving.warn_at.is_none());
+        assert!(saving.held.is_none() && saving.shutdown == Shutdown::Not);
+        assert!(!state.holding.load(Ordering::Acquire));
     }
 
     #[test]

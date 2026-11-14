@@ -96,6 +96,10 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("calls", calls)
     },
     &Part {
+        seal: Some(status::seal),
+        ..part!("status", status)
+    },
+    &Part {
         table_ids: game_events::TABLE_IDS,
         link: Some(game_events::link),
         ..part!("game_events", game_events)
@@ -119,9 +123,14 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("net", net)
     },
     &Part {
+        forget: Some(|_| lobby::forget()),
+        ..part!("lobby", lobby)
+    },
+    &Part {
         left: Some(fused!("remote edits at leave", |_, player| {
             remote::forget_player(player.key.get());
         })),
+        forget: Some(|_| remote::forget_game()),
         ..part!("remote", remote)
     },
     &Part {
