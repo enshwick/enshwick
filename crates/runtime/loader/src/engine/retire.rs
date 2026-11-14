@@ -61,31 +61,39 @@ impl Retired {
     }
 }
 
-/// The steps seen so far, mirrored out of [`RETIRED`] for a cache that
-/// renews itself each step without taking the lock.
-static STEP: AtomicU64 = AtomicU64::new(0);
+/// What waits to be dropped. It lasts the process: the game may still read
+/// an answer handed over before a hosted game's end, so no part forgets it.
+struct State {
+    /// The steps seen so far, mirrored out of `retired` for a cache that
+    /// renews itself each step without taking the lock.
+    step: AtomicU64,
+    retired: Mutex<Retired>,
+}
 
-static RETIRED: Mutex<Retired> = Mutex::new(Retired::new());
+static STATE: State = State {
+    step: AtomicU64::new(0),
+    retired: Mutex::new(Retired::new()),
+};
 
 /// The world steps seen so far, for a cache that renews itself each step.
 pub(crate) fn current() -> u64 {
-    STEP.load(Ordering::Acquire)
+    STATE.step.load(Ordering::Acquire)
 }
 
 /// Keeps `answer` alive for at least [`GRACE`] more steps and [`MIN_AGE`],
 /// then drops it.
 pub(crate) fn retire(answer: impl Any + Send) {
     let answer: Box<dyn Any + Send> = Box::new(answer);
-    RETIRED.relock().retire(Instant::now(), answer);
+    STATE.retired.relock().retire(Instant::now(), answer);
 }
 
 /// Notes a step of the game's own world, on its game thread after the step,
 /// and drops what is old enough, outside the lock.
 pub(crate) fn step() {
     let gone = {
-        let mut retired = RETIRED.relock();
+        let mut retired = STATE.retired.relock();
         let gone = retired.step(Instant::now());
-        STEP.store(retired.step, Ordering::Release);
+        STATE.step.store(retired.step, Ordering::Release);
         gone
     };
     drop(gone);

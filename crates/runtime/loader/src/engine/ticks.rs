@@ -40,36 +40,47 @@ pub const fn due(now: u64, last: Option<u64>, every: u64) -> bool {
     }
 }
 
-/// The server steps run so far.
+/// The server's steps as the loader counts and links them, apart from the
+/// tick handlers.
 #[cfg(windows)]
-static STEPS: AtomicU64 = AtomicU64::new(0);
-/// Whether the link after the server's step is made.
+#[derive(Debug)]
+struct Steps {
+    /// The server steps run so far; never reset, since parts compare step
+    /// numbers across a hosted game's end.
+    count: AtomicU64,
+    /// Whether the link after the server's step is made.
+    linked: AtomicBool,
+}
+
 #[cfg(windows)]
-static STEPPED: AtomicBool = AtomicBool::new(false);
+static STEPS: Steps = Steps {
+    count: AtomicU64::new(0),
+    linked: AtomicBool::new(false),
+};
 
 /// The server steps run so far, for parts that act every few steps.
 #[cfg(windows)]
 pub(crate) fn steps() -> u64 {
-    STEPS.load(Ordering::Relaxed)
+    STEPS.count.load(Ordering::Relaxed)
 }
 
 /// Counts one more server step and gives its number, from 1.
 #[cfg(windows)]
 pub(crate) fn count_step() -> u64 {
-    STEPS.fetch_add(1, Ordering::Relaxed) + 1
+    STEPS.count.fetch_add(1, Ordering::Relaxed) + 1
 }
 
 /// Whether the loader's work after the server's step runs, as the controls
 /// that follow game actions need.
 #[cfg(windows)]
 pub(crate) fn stepped() -> bool {
-    STEPPED.load(Ordering::Acquire)
+    STEPS.linked.load(Ordering::Acquire)
 }
 
 /// Records whether the link after the server's step is made.
 #[cfg(windows)]
 pub(crate) fn set_stepped(stepped: bool) {
-    STEPPED.store(stepped, Ordering::Release);
+    STEPS.linked.store(stepped, Ordering::Release);
 }
 
 /// One periodic tick handler, leaked once and never freed, alone on its

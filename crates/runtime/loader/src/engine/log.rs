@@ -352,39 +352,52 @@ impl Capped {
     }
 }
 
-/// Whether lines go to [`CAPTURED`] instead of the files.
-static CAPTURING: AtomicBool = AtomicBool::new(false);
-/// Lines kept in memory instead of written, for a dry run. Its lock stays
-/// off the loader's poison policy: recovering it would log, and logging takes
-/// this lock, so a poisoned capture drops lines instead.
-static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
+/// The dry run's capture of the log, kept for the process: a dry run ends
+/// it, so no part forgets it.
+#[derive(Debug)]
+struct State {
+    /// Whether lines go to `lines` instead of the files.
+    on: AtomicBool,
+    /// Lines kept in memory instead of written. Its lock stays off the
+    /// loader's poison policy: recovering it would log, and logging takes
+    /// this lock, so a poisoned capture drops lines instead.
+    lines: Mutex<Option<Vec<(Level, String, String)>>>,
+    /// The turn of the one test that captures or reads the log files: the
+    /// capture is process-wide, so a test running beside one would lose its
+    /// lines.
+    #[cfg(test)]
+    turn: Mutex<()>,
+}
+
+static STATE: State = State {
+    on: AtomicBool::new(false),
+    lines: Mutex::new(None),
+    #[cfg(test)]
+    turn: Mutex::new(()),
+};
 
 /// Keeps every line from now on in memory, for [`captured`].
 pub fn capture() {
-    // Off the poison policy, as `CAPTURED` says.
+    // Off the poison policy, as `State::lines` says.
     // ast-grep-ignore: lock-through-relock
-    if let Ok(mut lines) = CAPTURED.lock() {
+    if let Ok(mut lines) = STATE.lines.lock() {
         *lines = Some(Vec::new());
     }
-    CAPTURING.store(true, Ordering::Release);
+    STATE.on.store(true, Ordering::Release);
 }
 
 /// The lines kept since [`capture`]: level, source and message.
 #[must_use]
 pub fn captured() -> Vec<(Level, String, String)> {
-    // Off the poison policy, as `CAPTURED` says.
+    // Off the poison policy, as `State::lines` says.
     // ast-grep-ignore: lock-through-relock
-    CAPTURED
+    STATE
+        .lines
         .lock()
         .ok()
         .and_then(|lines| lines.clone())
         .unwrap_or_default()
 }
-
-/// The turn of the one test that captures or reads the log files: capture
-/// is process-wide, so a test running beside a capture would lose its lines.
-#[cfg(test)]
-static CAPTURE_TURN: Mutex<()> = Mutex::new(());
 
 /// A test's turn over the log, from [`capture_turn`] or [`file_turn`].
 #[cfg(test)]
@@ -397,8 +410,8 @@ pub(crate) struct LogTurn {
 impl Drop for LogTurn {
     fn drop(&mut self) {
         if self.capturing {
-            CAPTURING.store(false, Ordering::Release);
-            if let Ok(mut lines) = CAPTURED.lock() {
+            STATE.on.store(false, Ordering::Release);
+            if let Ok(mut lines) = STATE.lines.lock() {
                 *lines = None;
             }
         }
@@ -409,7 +422,8 @@ impl Drop for LogTurn {
 fn take_turn() -> std::sync::MutexGuard<'static, ()> {
     // A test that panicked in its turn leaves nothing behind but the flag
     // its turn's drop already cleared.
-    CAPTURE_TURN
+    STATE
+        .turn
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
@@ -437,10 +451,10 @@ pub(crate) fn file_turn() -> LogTurn {
 
 /// Writes one line under `source`, the loader or a mod id.
 pub fn write(level: Level, source: &str, message: &str) {
-    if CAPTURING.load(Ordering::Acquire) {
-        // Off the poison policy, as `CAPTURED` says.
+    if STATE.on.load(Ordering::Acquire) {
+        // Off the poison policy, as `State::lines` says.
         // ast-grep-ignore: lock-through-relock
-        if let Ok(mut lines) = CAPTURED.lock()
+        if let Ok(mut lines) = STATE.lines.lock()
             && let Some(lines) = lines.as_mut()
         {
             lines.push((level, source.to_owned(), message.to_owned()));

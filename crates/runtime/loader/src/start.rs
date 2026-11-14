@@ -47,8 +47,20 @@ use library::{Library, Run, libraries};
 /// before it runs. The game opens its window only once its own code runs, so
 /// hooks wait for that window, and at most this long.
 const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
-static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
-static STARTED: AtomicBool = AtomicBool::new(false);
+
+/// What the start keeps: it runs once per process, so no part forgets it.
+#[derive(Debug)]
+struct State {
+    /// The caller frame's slot, taken first at the start.
+    frame: OnceLock<Option<FrameSlot>>,
+    /// Set by the first start, so a second does nothing.
+    started: AtomicBool,
+}
+
+static STATE: State = State {
+    frame: OnceLock::new(),
+    started: AtomicBool::new(false),
+};
 
 /// Stops the game when a mod that holds a world is not running.
 fn enforce_holds(loader: &Loader) {
@@ -74,12 +86,12 @@ fn link_features(loader: &'static Loader) {
 }
 
 pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32) {
-    if STARTED.swap(true, Ordering::AcqRel) {
+    if STATE.started.swap(true, Ordering::AcqRel) {
         return;
     }
     // The caller frame needs TLS indices below 64, which the client's own
     // start uses up within seconds, so they are taken before anything else.
-    let frame = *FRAME.get_or_init(FrameSlot::allocate);
+    let frame = *STATE.frame.get_or_init(FrameSlot::allocate);
     let began = std::time::Instant::now();
     let Some(game::Begun {
         mods_dir,
@@ -405,7 +417,8 @@ fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching
 
 /// The caller frame the frame slot holds now.
 fn read_frame() -> enshwick_core::abi::CallerFrame {
-    FRAME
+    STATE
+        .frame
         .get()
         .copied()
         .flatten()

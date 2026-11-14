@@ -59,26 +59,59 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::world::STEP.id(),
 ];
 
-/// The server object, seen by the post-step hook, and the pins of readers
-/// off its game thread.
-static SERVER: ServerCell = ServerCell::new();
 /// When the server's end first warns of a reader that still holds it;
 /// readers hold the server for microseconds.
 const STALL_FIRST_WARNING: Duration = Duration::from_secs(1);
 /// How often the warning repeats while the reader still holds it.
 const STALL_WARNING_EVERY: Duration = Duration::from_secs(5);
-/// The game thread at the server's shutdown, 0 once its teardown began.
-static RETIRED_ON: AtomicU32 = AtomicU32::new(0);
-/// The game thread's id, seen by the post-step hook.
-pub(crate) static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
-/// The server's entity world, seen by the post-step hook.
-static SERVER_WORLD: AtomicUsize = AtomicUsize::new(0);
+
+/// What the loader knows of the running server: the server's own lifecycle
+/// (its capture, release and teardown) sets and clears it, so a hosted
+/// game's end needs no `forget` here.
+#[derive(Debug)]
+struct State {
+    /// The server object, seen by the post-step hook, and the pins of
+    /// readers off its game thread.
+    server: ServerCell,
+    /// The game thread at the server's shutdown, 0 once its teardown began.
+    retired_on: AtomicU32,
+    /// The game thread's id, seen by the post-step hook.
+    game_thread: AtomicU32,
+    /// The server's entity world, seen by the post-step hook.
+    server_world: AtomicUsize,
+    /// Whether the world-step link is made; without it, writes are gated by
+    /// the thread alone. Set once by the link.
+    step_linked: AtomicBool,
+    /// Whose world a client's engine pass hands the loader.
+    hosted: whose::Hosted,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            server: ServerCell::new(),
+            retired_on: AtomicU32::new(0),
+            game_thread: AtomicU32::new(0),
+            server_world: AtomicUsize::new(0),
+            step_linked: AtomicBool::new(false),
+            hosted: whose::Hosted::new(),
+        }
+    }
+
+    /// Whether this thread may change the world now: outside a world step,
+    /// or in a quiet hand-over inside one.
+    fn quiet(&self) -> bool {
+        !self.step_linked.load(Ordering::Relaxed) || STEPPING.get() == 0 || QUIET.get() != 0
+    }
+}
+
+static STATE: State = State::new();
 
 /// Records the server seen after a step on `thread`, and its entity world
 /// from `world_offset` and `entities`.
 pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities: usize) {
-    SERVER.publish(server);
-    GAME_THREAD.store(thread, Ordering::Release);
+    STATE.server.publish(server);
+    STATE.game_thread.store(thread, Ordering::Release);
     let world = if server == 0 {
         0
     } else {
@@ -89,9 +122,9 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
         unsafe { read::<usize>(server, world_offset) }
     };
     let entity_world = if world == 0 { 0 } else { world + entities };
-    SERVER_WORLD.store(entity_world, Ordering::Release);
+    STATE.server_world.store(entity_world, Ordering::Release);
     if entity_world != 0 {
-        whose::server_seen(thread);
+        STATE.hosted.server_seen(thread);
     }
 }
 
@@ -100,8 +133,10 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
 /// reads it for the shutdown work. The game frees the server only in the
 /// teardown after [`tear_down`] (server 399, client 426).
 pub(crate) fn retire() {
-    RETIRED_ON.store(GAME_THREAD.load(Ordering::Acquire), Ordering::Release);
-    SERVER.retire();
+    STATE
+        .retired_on
+        .store(STATE.game_thread.load(Ordering::Acquire), Ordering::Release);
+    STATE.server.retire();
 }
 
 /// Ends the server as the game enters its teardown, on the game thread
@@ -113,7 +148,7 @@ pub(crate) fn retire() {
 pub(crate) fn tear_down() {
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    let retired_on = RETIRED_ON.swap(0, Ordering::AcqRel);
+    let retired_on = STATE.retired_on.swap(0, Ordering::AcqRel);
     if retired_on != 0 && retired_on != me {
         crate::log!(
             WARN,
@@ -122,7 +157,7 @@ pub(crate) fn tear_down() {
     }
     let start = Instant::now();
     let mut next_warning = start + STALL_FIRST_WARNING;
-    SERVER.tear_down(|place| {
+    STATE.server.tear_down(|place| {
         std::thread::yield_now();
         let now = Instant::now();
         if now >= next_warning {
@@ -134,17 +169,17 @@ pub(crate) fn tear_down() {
             );
         }
     });
-    SERVER_WORLD.store(0, Ordering::Release);
-    GAME_THREAD.store(0, Ordering::Release);
-    whose::server_gone();
+    STATE.server_world.store(0, Ordering::Release);
+    STATE.game_thread.store(0, Ordering::Release);
+    STATE.hosted.server_gone();
 }
 
 /// Forgets the server of a hosted game that stopped, after [`retire`]; its
 /// thread still steps it for the final save until [`tear_down`].
 pub(crate) fn release() {
-    SERVER.publish(0);
-    SERVER_WORLD.store(0, Ordering::Release);
-    GAME_THREAD.store(0, Ordering::Release);
+    STATE.server.publish(0);
+    STATE.server_world.store(0, Ordering::Release);
+    STATE.game_thread.store(0, Ordering::Release);
 }
 
 thread_local! {
@@ -153,10 +188,6 @@ thread_local! {
     /// Loader hand-overs to mods inside a step where no system runs.
     static QUIET: Cell<u32> = const { Cell::new(0) };
 }
-
-/// Whether the world-step link is made; without it, writes are gated by
-/// the thread alone.
-static STEP_LINKED: AtomicBool = AtomicBool::new(false);
 
 /// Links the world step, which runs every ECS system of a world, the
 /// server's on its game thread and on a client its own as well.
@@ -169,7 +200,7 @@ pub(crate) fn link(loader: &'static Loader) {
         world_step,
         HookFlags::NONE,
     );
-    STEP_LINKED.store(linked, Ordering::Release);
+    STATE.step_linked.store(linked, Ordering::Release);
     if !linked {
         crate::log!(WARN, "world writes are gated by the game thread only");
     }
@@ -205,15 +236,16 @@ impl Drop for Quiet {
     }
 }
 
-/// Whether this thread may change the world now: outside a world step, or
-/// in a quiet hand-over inside one.
-fn quiet() -> bool {
-    !STEP_LINKED.load(Ordering::Relaxed) || STEPPING.get() == 0 || QUIET.get() != 0
-}
-
 /// Whether a server has been seen and not released.
 pub(crate) fn hosting() -> bool {
-    SERVER.current() != 0
+    STATE.server.current() != 0
+}
+
+/// Whether the calling thread is the running server's game thread.
+fn on_game_thread() -> bool {
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
+    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    me == STATE.game_thread.load(Ordering::Acquire)
 }
 
 /// The running server for a read at `place` on any thread: on its game
@@ -222,14 +254,12 @@ pub(crate) fn hosting() -> bool {
 /// [`tear_down`] has seen every pin drop. `None` while no server runs,
 /// or off the game thread once its end began at shutdown.
 pub(crate) fn access(place: Place) -> Option<ServerAccess<'static>> {
-    // SAFETY: `GetCurrentThreadId` has no preconditions.
-    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    SERVER.access(place, me == GAME_THREAD.load(Ordering::Acquire))
+    STATE.server.access(place, on_game_thread())
 }
 
 /// The running server's entity world, 0 for none.
 pub(crate) fn server_world() -> u64 {
-    SERVER_WORLD.load(Ordering::Acquire) as u64
+    STATE.server_world.load(Ordering::Acquire) as u64
 }
 
 type TypeIndex = unsafe extern "system" fn(map: *const u8, hash: *const u32) -> *const u16;
@@ -328,13 +358,11 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 
 /// The server, when the caller is on the game thread.
 pub(crate) fn reader() -> Result<usize, Status> {
-    let server = SERVER.current();
+    let server = STATE.server.current();
     if server == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: `GetCurrentThreadId` has no preconditions.
-    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    if me != GAME_THREAD.load(Ordering::Acquire) {
+    if !on_game_thread() {
         return Err(Status::WRONG_THREAD);
     }
     Ok(server)
@@ -344,7 +372,7 @@ pub(crate) fn reader() -> Result<usize, Status> {
 /// where the world may change: [`Status::WRONG_THREAD`] inside a step.
 pub(crate) fn server() -> Result<usize, Status> {
     let server = reader()?;
-    if !quiet() {
+    if !STATE.quiet() {
         return Err(Status::WRONG_THREAD);
     }
     Ok(server)
@@ -902,17 +930,26 @@ mod tests {
 
     #[test]
     fn changes_wait_for_a_quiet_moment_inside_a_step() {
-        STEP_LINKED.store(true, Ordering::Relaxed);
-        assert!(quiet());
+        let state = State::new();
+        state.step_linked.store(true, Ordering::Relaxed);
+        assert!(state.quiet());
         STEPPING.set(1);
-        assert!(!quiet());
+        assert!(!state.quiet());
         {
             let _quiet = Quiet::enter();
-            assert!(quiet());
+            assert!(state.quiet());
         }
-        assert!(!quiet());
+        assert!(!state.quiet());
         STEPPING.set(0);
-        assert!(quiet());
+        assert!(state.quiet());
+    }
+
+    #[test]
+    fn without_the_step_link_the_thread_alone_gates_changes() {
+        let state = State::new();
+        STEPPING.set(1);
+        assert!(state.quiet());
+        STEPPING.set(0);
     }
 
     #[test]

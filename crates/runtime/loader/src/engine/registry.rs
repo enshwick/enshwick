@@ -1,7 +1,7 @@
 //! What mods register during init, open until the loader seals it and read
 //! without a lock after.
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 use enshwick_base::Relock;
 
@@ -41,9 +41,57 @@ impl From<Sealed> for enshwick_core::abi::Status {
 /// # Ok::<(), enshwick_loader::engine::registry::Sealed>(())
 /// ```
 #[derive(Debug)]
-pub struct Registry<T> {
+pub struct Registry<T: 'static> {
     open: Mutex<Vec<T>>,
-    sealed: OnceLock<Box<[T]>>,
+    sealed: SealedCell<T>,
+}
+
+/// The cell a shipped registry seals into; the loader's own tests seal into
+/// [`ReopenableCell`] instead.
+#[cfg(not(test))]
+type SealedCell<T> = OnceCell<T>;
+#[cfg(test)]
+type SealedCell<T> = ReopenableCell<T>;
+
+/// The sealed items: set once for the process.
+#[derive(Debug)]
+struct OnceCell<T>(std::sync::OnceLock<Box<[T]>>);
+
+impl<T> OnceCell<T> {
+    const fn new() -> Self {
+        Self(std::sync::OnceLock::new())
+    }
+
+    #[inline]
+    fn get(&self) -> Option<&[T]> {
+        self.0.get().map(|items| &**items)
+    }
+
+    fn get_or_init(&self, init: impl FnOnce() -> Box<[T]>) -> &[T] {
+        self.0.get_or_init(init)
+    }
+}
+
+/// The sealed items in the loader's own tests: a test may open the registry
+/// again for the next one, and what it sealed stays leaked for any reader
+/// still holding it.
+#[cfg(test)]
+#[derive(Debug)]
+struct ReopenableCell<T: 'static>(Mutex<Option<&'static [T]>>);
+
+#[cfg(test)]
+impl<T> ReopenableCell<T> {
+    const fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    fn get(&self) -> Option<&[T]> {
+        *self.0.relock()
+    }
+
+    fn get_or_init(&self, init: impl FnOnce() -> Box<[T]>) -> &[T] {
+        self.0.relock().get_or_insert_with(|| Box::leak(init()))
+    }
 }
 
 impl<T> Registry<T> {
@@ -52,8 +100,17 @@ impl<T> Registry<T> {
     pub const fn new() -> Self {
         Self {
             open: Mutex::new(Vec::new()),
-            sealed: OnceLock::new(),
+            sealed: SealedCell::new(),
         }
+    }
+
+    /// Opens the registry again, empty, so a test that sealed it leaves the
+    /// next test an open one.
+    #[cfg(test)]
+    pub(crate) fn reopen(&self) {
+        let mut open = self.open.relock();
+        open.clear();
+        *self.sealed.0.relock() = None;
     }
 
     /// Adds `item`.
@@ -150,7 +207,7 @@ impl<T> Registry<T> {
     #[inline]
     #[must_use]
     pub fn sealed(&self) -> Option<&[T]> {
-        self.sealed.get().map(|items| &**items)
+        self.sealed.get()
     }
 }
 
@@ -195,5 +252,26 @@ mod tests {
             "the late addition is refused"
         );
         assert_eq!(REGISTRY.seal_with(|_| vec![3]), [1, 2], "finish runs once");
+    }
+
+    #[test]
+    fn the_shipped_cell_keeps_the_first_seal_and_ignores_later_ones() {
+        let cell = OnceCell::new();
+        assert_eq!(cell.get(), None);
+        assert_eq!(cell.get_or_init(|| Box::new([1, 2])), [1, 2]);
+        assert_eq!(cell.get_or_init(|| Box::new([3])), [1, 2]);
+        assert_eq!(cell.get(), Some(&[1, 2][..]));
+    }
+
+    #[test]
+    fn a_reopened_registry_takes_additions_again_and_starts_empty() {
+        static REGISTRY: Registry<u32> = Registry::new();
+        assert_eq!(REGISTRY.add(1), Ok(()));
+        let first = REGISTRY.seal();
+        REGISTRY.reopen();
+        assert!(!REGISTRY.is_sealed());
+        assert_eq!(REGISTRY.add(2), Ok(()));
+        assert_eq!(REGISTRY.seal(), [2]);
+        assert_eq!(first, [1], "a reader of the first seal keeps it");
     }
 }

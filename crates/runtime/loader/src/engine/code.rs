@@ -8,8 +8,8 @@
 //! longer read as expected, that overlaps the bytes a hook replaces or whose
 //! hooks are not armed with it, turning its owner off.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::__private::rules::{patch_fits, spans_overlap as overlaps};
 use enshwick_core::abi::{HookFlags, Status};
@@ -18,7 +18,7 @@ use rustc_hash::FxHashMap;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use enshwick_base::Relock;
+use crate::engine::registry::Registry;
 
 use enshwick_core::content::recipes::WORKSHOP_RECIPES;
 
@@ -78,8 +78,21 @@ pub(crate) enum Verdict {
     Wait,
 }
 
-static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
-static SEALED: AtomicBool = AtomicBool::new(false);
+/// What the code patches keep while the game runs. Mods register patches
+/// during init and arming writes them, so nothing here belongs to one world
+/// and no part forgets it.
+#[derive(Debug)]
+struct State {
+    /// The patches mods and the loader registered, sealed at arming.
+    patches: Registry<CodePatch>,
+    /// Whether the workshop limit is lifted, settled at each arming round.
+    lifted: AtomicBool,
+}
+
+static STATE: State = State {
+    patches: Registry::new(),
+    lifted: AtomicBool::new(false),
+};
 static TEXT: OnceLock<Option<(usize, usize)>> = OnceLock::new();
 
 /// The `.text` section in PE `headers`: its offset from the image base and
@@ -353,7 +366,8 @@ pub(crate) fn register(patch: CodePatch, text: (usize, usize)) -> Status {
 /// the terms of [`register`]; patches of one set must not overlap each
 /// other either.
 pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Status {
-    if SEALED.load(Ordering::Acquire) {
+    // Sealed first: a late call hears TOO_LATE whatever its arguments.
+    if STATE.patches.is_sealed() {
         return Status::TOO_LATE;
     }
     if patches
@@ -362,7 +376,15 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
     {
         return Status::BAD_ARGS;
     }
-    let mut pending = PENDING.relock();
+    STATE
+        .patches
+        .edit(|pending| register_unclashed(pending, patches))
+        .unwrap_or(Status::TOO_LATE)
+}
+
+/// Adds `patches` to `pending` unless one overlaps a patch held or an
+/// earlier one of the set, noting the clash between two owners.
+fn register_unclashed(pending: &mut Vec<CodePatch>, patches: Vec<CodePatch>) -> Status {
     let clash = patches.iter().enumerate().find_map(|(i, patch)| {
         pending
             .iter()
@@ -392,10 +414,15 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
     Status::OK
 }
 
-/// Ends registration and hands over every patch.
+/// Ends registration and hands over every patch, once: the registry keeps
+/// none, since nothing reads them from it after arming.
 pub(crate) fn seal() -> Vec<CodePatch> {
-    SEALED.store(true, Ordering::Release);
-    std::mem::take(&mut *PENDING.relock())
+    let mut patches = Vec::new();
+    STATE.patches.seal_with(|registered| {
+        patches = registered;
+        Vec::new()
+    });
+    patches
 }
 
 /// What arming does with each patch, given the bytes the hooks being armed
@@ -555,7 +582,6 @@ struct Lift {
 }
 
 static LIFT: OnceLock<Lift> = OnceLock::new();
-static LIFTED: AtomicBool = AtomicBool::new(false);
 /// Full recipe lists of the workshops past the game's limit, as addresses.
 static WORKSHOPS: OnceLock<FxHashMap<u32, Box<[usize]>>> = OnceLock::new();
 
@@ -813,7 +839,7 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
                 .zip(verdicts)
                 .any(|(p, v)| p.address == lift.patch && *v == Verdict::Write)
     });
-    LIFTED.store(lifted, Ordering::Release);
+    STATE.lifted.store(lifted, Ordering::Release);
     crate::world::bases::arming(patches, verdicts, hooked);
 }
 
@@ -822,13 +848,13 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
 /// stand still: a round that leaves a patch out must not let them resume
 /// with its feature on. The next round's [`arming`] settles them again.
 pub(crate) fn disarm() {
-    LIFTED.store(false, Ordering::Release);
+    STATE.lifted.store(false, Ordering::Release);
     crate::world::bases::disarm();
 }
 
 /// Whether the workshop limit is lifted.
 pub(crate) fn lifted() -> bool {
-    LIFTED.load(Ordering::Acquire)
+    STATE.lifted.load(Ordering::Acquire)
 }
 
 /// The most recipes one workshop takes, as the API reports it.

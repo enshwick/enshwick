@@ -31,19 +31,47 @@ use enshwick_base::Relock;
 pub const SAMPLE_EVERY: u64 = 256;
 /// Mods turned off that the summary remembers; older ones are dropped.
 const HISTORY: usize = 64;
-/// Counting and timing, fixed by the settings read at start.
-static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
-static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
-#[cfg(not(test))]
-static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
-static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
-static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
-static PATCHES: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
+/// What the status summary keeps of the session. It lasts the process: a
+/// mod or part turned off stays off past a hosted game's end, and the names
+/// and patches are the build's, so no part forgets it.
+#[derive(Debug)]
+struct State {
+    /// Counting and timing, fixed by the settings read at start.
+    counting: OnceLock<(bool, bool)>,
+    #[cfg(not(test))]
+    turned_off: Mutex<Vec<TurnedOff>>,
+    #[cfg(not(test))]
+    parts_off: Mutex<Vec<PartOff>>,
+    /// Set once any part is off, for a read without the lock. Tests read
+    /// their own parts instead but still check that this flag is set.
+    any_part_off: AtomicBool,
+    /// The name each hooked address was first found under.
+    names: Mutex<BTreeMap<u64, String>>,
+    /// What became of the code patches, as [`Patches`] orders its fields.
+    patches: [AtomicUsize; 4],
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            counting: OnceLock::new(),
+            #[cfg(not(test))]
+            turned_off: Mutex::new(Vec::new()),
+            #[cfg(not(test))]
+            parts_off: Mutex::new(Vec::new()),
+            any_part_off: AtomicBool::new(false),
+            names: Mutex::new(BTreeMap::new()),
+            patches: [const { AtomicUsize::new(0) }; 4],
+        }
+    }
+}
+
+static STATE: State = State::new();
 
 /// Takes the diagnostics settings: counting and timing only at the first
 /// call, since thunks are written once.
 pub fn configure(settings: &Settings) {
-    let _first = COUNTING.set((
+    let _first = STATE.counting.set((
         settings.diagnostics,
         settings.diagnostics && settings.diagnostics_timing,
     ));
@@ -52,13 +80,13 @@ pub fn configure(settings: &Settings) {
 /// Whether hook calls are counted in this session.
 #[must_use]
 pub fn counting() -> bool {
-    COUNTING.get().is_some_and(|&(on, _)| on)
+    STATE.counting.get().is_some_and(|&(on, _)| on)
 }
 
 /// Whether every [`SAMPLE_EVERY`]th hook call is timed in this session.
 #[must_use]
 pub fn timing() -> bool {
-    COUNTING.get().is_some_and(|&(_, timed)| timed)
+    STATE.counting.get().is_some_and(|&(_, timed)| timed)
 }
 
 /// Seconds since the Unix epoch.
@@ -82,21 +110,36 @@ pub struct TurnedOff {
 
 /// Remembers that mod `id` was turned off for `reason`.
 pub fn turned_off(id: &str, reason: &str) {
-    let mut history = TURNED_OFF.relock();
-    if history.len() == HISTORY {
-        history.remove(0);
-    }
-    history.push(TurnedOff {
+    let off = TurnedOff {
         id: id.to_owned(),
         reason: reason.to_owned(),
         at: now(),
+    };
+    with_turned_off(|history| {
+        if history.len() == HISTORY {
+            history.remove(0);
+        }
+        history.push(off);
     });
 }
 
 /// The mods turned off so far, oldest first.
 #[must_use]
 pub fn history() -> Vec<TurnedOff> {
-    TURNED_OFF.relock().clone()
+    with_turned_off(|history| history.clone())
+}
+
+/// Runs `work` on the mods turned off.
+#[cfg(not(test))]
+fn with_turned_off<R>(work: impl FnOnce(&mut Vec<TurnedOff>) -> R) -> R {
+    work(&mut STATE.turned_off.relock())
+}
+
+/// Runs `work` on the mods the calling test turned off, kept apart as its
+/// parts off are.
+#[cfg(test)]
+fn with_turned_off<R>(work: impl FnOnce(&mut Vec<TurnedOff>) -> R) -> R {
+    crate::engine::per_test::with(|turned| work(&mut turned.mods))
 }
 
 /// A part of the loader turned off while the game runs, and why.
@@ -116,13 +159,21 @@ pub struct PartOff {
 pub fn part_off(part: &str, reason: &str) {
     let at = now();
     with_parts_off(|parts| keep_part(parts, HISTORY, (part, reason), at));
-    ANY_PART_OFF.store(true, Ordering::Release);
+    STATE.any_part_off.store(true, Ordering::Release);
 }
 
 /// Whether any part is off, read without the lock, for a per-frame check.
+#[cfg(not(test))]
 #[must_use]
 pub fn any_part_off() -> bool {
-    ANY_PART_OFF.load(Ordering::Acquire)
+    STATE.any_part_off.load(Ordering::Acquire)
+}
+
+/// Whether the calling test listed any part off.
+#[cfg(test)]
+#[must_use]
+pub fn any_part_off() -> bool {
+    with_parts_off(|parts| !parts.is_empty())
 }
 
 /// Adds `part` off for `reason` at `at` to `parts`, unless it is there or
@@ -147,7 +198,7 @@ pub fn parts_off() -> Vec<PartOff> {
 /// Runs `work` on the parts off.
 #[cfg(not(test))]
 fn with_parts_off<R>(work: impl FnOnce(&mut Vec<PartOff>) -> R) -> R {
-    work(&mut PARTS_OFF.relock())
+    work(&mut STATE.parts_off.relock())
 }
 
 /// Runs `work` on the parts off the calling test listed, as its fuses are
@@ -161,7 +212,8 @@ fn with_parts_off<R>(work: impl FnOnce(&mut Vec<PartOff>) -> R) -> R {
 /// Remembers that `address` was found as `name`, a symbol or a system, so the
 /// summary can name a hooked function.
 pub fn name(address: u64, name: &str) {
-    NAMES
+    STATE
+        .names
         .relock()
         .entry(address)
         .or_insert_with(|| name.to_owned());
@@ -170,7 +222,7 @@ pub fn name(address: u64, name: &str) {
 /// The name `address` was first found under.
 #[must_use]
 pub fn name_of(address: u64) -> Option<String> {
-    NAMES.relock().get(&address).cloned()
+    STATE.names.relock().get(&address).cloned()
 }
 
 /// What became of the code patches: written, left out for a mod that is off,
@@ -189,20 +241,22 @@ pub struct Patches {
 
 /// Records what became of the code patches at arming or a later try.
 pub fn record_patches(patches: Patches) {
-    PATCHES[0].store(patches.written, Ordering::Relaxed);
-    PATCHES[1].store(patches.off, Ordering::Relaxed);
-    PATCHES[2].store(patches.skipped, Ordering::Relaxed);
-    PATCHES[3].store(patches.waiting, Ordering::Relaxed);
+    let [written, off, skipped, waiting] = &STATE.patches;
+    written.store(patches.written, Ordering::Relaxed);
+    off.store(patches.off, Ordering::Relaxed);
+    skipped.store(patches.skipped, Ordering::Relaxed);
+    waiting.store(patches.waiting, Ordering::Relaxed);
 }
 
 /// What became of the code patches so far.
 #[must_use]
 pub fn patches() -> Patches {
+    let [written, off, skipped, waiting] = &STATE.patches;
     Patches {
-        written: PATCHES[0].load(Ordering::Relaxed),
-        off: PATCHES[1].load(Ordering::Relaxed),
-        skipped: PATCHES[2].load(Ordering::Relaxed),
-        waiting: PATCHES[3].load(Ordering::Relaxed),
+        written: written.load(Ordering::Relaxed),
+        off: off.load(Ordering::Relaxed),
+        skipped: skipped.load(Ordering::Relaxed),
+        waiting: waiting.load(Ordering::Relaxed),
     }
 }
 
@@ -641,6 +695,31 @@ conflicts:
                 .contains("map markers off: the loader panicked in the marker pass: boom"),
             "{}",
             s.short()
+        );
+    }
+
+    #[test]
+    fn a_test_sees_only_the_parts_and_mods_it_turned_off() {
+        assert!(!any_part_off());
+        assert!(history().is_empty());
+        let other = std::thread::spawn(|| {
+            part_off("another test's part", "off");
+            turned_off("another.mod", "off");
+        })
+        .join();
+        assert!(other.is_ok());
+        assert!(!any_part_off(), "another test's part stays its own");
+        assert!(history().is_empty(), "another test's mod stays its own");
+        part_off("own part", "off");
+        assert!(any_part_off());
+    }
+
+    #[test]
+    fn a_part_off_sets_the_flag_the_frame_check_reads_without_the_lock() {
+        part_off("flagged part", "off");
+        assert!(
+            STATE.any_part_off.load(Ordering::Acquire),
+            "the shipped any_part_off reads this flag"
         );
     }
 

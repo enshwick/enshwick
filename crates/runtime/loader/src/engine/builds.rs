@@ -15,14 +15,22 @@ use enshwick_core::abi::Side;
 use enshwick_gamedata::reflect::Fingerprint;
 use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Routing, SteamBuild};
 
-/// Whether a build no compatibility report covers runs; set from the
-/// settings.
-static PATTERNS: AtomicBool = AtomicBool::new(true);
+/// What the build check takes from the settings read at start; it lasts the
+/// process, so no part forgets it.
+#[derive(Debug)]
+struct State {
+    /// Whether a build no compatibility report covers runs.
+    patterns: AtomicBool,
+}
+
+static STATE: State = State {
+    patterns: AtomicBool::new(true),
+};
 
 /// Sets whether a build no compatibility report covers runs on its anchors
 /// and routes.
 pub fn configure(patterns: bool) {
-    PATTERNS.store(patterns, Ordering::Release);
+    STATE.patterns.store(patterns, Ordering::Release);
 }
 
 /// What the running build has of the entries the loader knows.
@@ -343,7 +351,7 @@ pub fn select(
     cell: impl Fn(u64) -> Option<u32> + Sync,
 ) -> Option<KnownBuild> {
     let reported = tables::reported(side(running)?, fingerprint);
-    if !reported && !PATTERNS.load(Ordering::Acquire) {
+    if !reported && !STATE.patterns.load(Ordering::Acquire) {
         return None;
     }
     by_patterns(running, name, code?, cell)
