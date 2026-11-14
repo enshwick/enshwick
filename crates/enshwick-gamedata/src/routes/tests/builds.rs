@@ -306,6 +306,9 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 server (26083076)", "session.reply_banned_a", 0x2ac),
     ("1.0 server (26083076)", "session.reply_banned_b", 0x2a4),
     ("1.0 server (26083076)", "session.reply_frame", 0x250),
+    // `player_ui`'s local player check reads the id at +4 of its iterator
+    // word; read in the decompiler, its live check is in-game.
+    ("1.0 client (26430625)", "ecs.local_player_id", 4),
 ];
 
 /// Entries no table pins, found only by their route, with the value the

@@ -247,6 +247,7 @@ entries = [
   "ecs.iterator_next",
   "ecs.level_data_offset",
   "ecs.level_flags",
+  "ecs.local_player_id",
   "ecs.mark_changed",
   "ecs.record_template",
   "ecs.registry_type_count",

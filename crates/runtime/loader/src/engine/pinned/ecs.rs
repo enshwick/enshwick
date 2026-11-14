@@ -71,3 +71,4 @@ pub(crate) const TEMPLATE_GUID: Symbol = Symbol::new("ecs.template_guid");
 pub(crate) const TYPE_INDEX: Symbol = Symbol::new("ecs.type_index");
 pub(crate) const TYPE_INFO_HASH: Constant = Constant::new("ecs.type_info_hash");
 pub(crate) const TYPE_RECORD_STATIC: Constant = Constant::new("ecs.type_record_static");
+pub(crate) const LOCAL_PLAYER_ID: Constant = Constant::new("ecs.local_player_id");
