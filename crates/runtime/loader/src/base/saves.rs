@@ -18,7 +18,7 @@
 
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi::{Event, HookFlags, Side};
@@ -128,6 +128,9 @@ impl Keys {
 /// What the saves keep.
 struct State {
     keys: Mutex<Keys>,
+    /// How many times the world a side picks changed, read without the
+    /// lock by the client's interface frame.
+    worlds: AtomicU64,
     /// Every world key seen, kept once for the process: a menu that builds
     /// the paths of several worlds sees each key again and again. A game's
     /// end keeps them, since each is leaked once.
@@ -143,15 +146,29 @@ impl State {
     const fn new() -> Self {
         Self {
             keys: Mutex::new(Keys::CLOSED),
+            worlds: AtomicU64::new(0),
             seen: Mutex::new(Vec::new()),
             under_way: AtomicBool::new(false),
             steam_folder: OnceLock::new(),
         }
     }
 
+    /// Changes the keys through `change`, counting in `worlds` each change
+    /// of the world a side picks.
+    fn rekey<T>(&self, change: impl FnOnce(&mut Keys) -> T) -> T {
+        let mut keys = self.keys.relock();
+        let picked = |keys: &Keys| [keys.pick(Side::SERVER), keys.pick(Side::CLIENT)];
+        let before = picked(&keys);
+        let out = change(&mut keys);
+        if picked(&keys) != before {
+            self.worlds.fetch_add(1, Ordering::Relaxed);
+        }
+        out
+    }
+
     /// Forgets the key of the world that went and its save under way.
     fn forget(&self) {
-        *self.keys.relock() = Keys::CLOSED;
+        self.rekey(|keys| *keys = Keys::CLOSED);
         self.under_way.store(false, Ordering::Relaxed);
     }
 }
@@ -292,7 +309,7 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
         return;
     }
     let Some(path) = full_path(path, side, steam) else {
-        STATE.keys.relock().unplace(side);
+        STATE.rekey(|keys| keys.unplace(side));
         if let Some(total) = UNPLACED.add(1) {
             crate::log!(
                 WARN,
@@ -306,13 +323,12 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
         return;
     };
     let key = intern(&key, &path);
-    let changed = {
-        let mut keys = STATE.keys.relock();
+    let changed = STATE.rekey(|keys| {
         let before = keys.pick(side);
         keys.note(side, key);
         let now = keys.pick(side);
         now.is_some() && now != before
-    };
+    });
     if changed && let Some(loader) = crate::engine::loader::loader() {
         arrive(key);
         crate::base::holds::enforce_world(loader, key);
@@ -372,7 +388,7 @@ fn intern(key: &str, path: &str) -> &'static str {
 /// A hosted game starts to initialise, before it reads its save: the world
 /// paths built from now on are its world's, the menu's before are not.
 pub(crate) fn hosting_begins() {
-    *STATE.keys.relock() = Keys::OPEN;
+    STATE.rekey(|keys| *keys = Keys::OPEN);
 }
 
 /// Forgets the key and every mod's hold on saves, when a hosted game ends.
@@ -483,6 +499,12 @@ fn steam_user_data() -> Option<PathBuf> {
         .to_str()
         .ok()?;
     (!text.is_empty()).then(|| PathBuf::from(text))
+}
+
+/// How many times the world a side runs changed in this process: a value
+/// read twice with no change between names one world. No lock.
+pub(crate) fn worlds() -> u64 {
+    STATE.worlds.load(Ordering::Relaxed)
 }
 
 /// The key of the world the server runs, once the engine has built its path.

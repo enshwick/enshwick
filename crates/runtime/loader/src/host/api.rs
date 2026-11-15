@@ -23,7 +23,7 @@ use super::entries::world::{altars::*, buffs::*, environment::*, saves::*, trans
 /// The table handed to every mod.
 pub(crate) static API: HostApi = HostApi {
     header: Header::of::<HostApi>(),
-    host_version: Str::new(env!("CARGO_PKG_VERSION")),
+    host_version: Str::new(crate::base::releases::STATED),
     build,
     symbol,
     system,
@@ -226,4 +226,9 @@ pub(crate) static API: HostApi = HostApi {
     map_marker_types,
     ui_extension,
     local_held,
+    local_input_status,
+    client_snapshot,
+    loader_off,
+    client_command,
+    client_command_status,
 };

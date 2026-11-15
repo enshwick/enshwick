@@ -119,6 +119,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::PROMPT_VALID.id(),
     pinned::ui::PROMPT_VERB.id(),
     pinned::ui::SCREEN_HOST.id(),
+    pinned::ui::RETURN_SCREEN.id(),
     pinned::ui::HUD_VISIBLE.id(),
     pinned::ui::INPUT_HINT.id(),
     pinned::ui::LABEL_ALIGN.id(),
@@ -283,9 +284,7 @@ pub(crate) fn forget(_loader: &'static Loader) {
 // unbalanced every frame.
 static FRAMES_FUSE: Fuse = Fuse::new("mods' windows");
 static EXTENSIONS_FUSE: Fuse = Fuse::new("screen extensions");
-/// Turns the screen, prompt and host reads off at their first panic; the
-/// frames then read as outside a game.
-static READS_FUSE: Fuse = Fuse::new("screen reads");
+use crate::engine::screens::READS_FUSE;
 static DEMO_FUSE: Fuse = Fuse::new("interface demo");
 static CARRIED_FUSE: Fuse = Fuse::new("carried windows");
 static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
@@ -604,6 +603,9 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
     crate::actions::controls::frame(context);
+    // SAFETY: inside the frame on the interface thread, `context` non-zero
+    // by the guard before it.
+    unsafe { snapshot::note(engine, context) };
     engine.restore_nav(context, nav);
     // SAFETY: `state` is non-null, checked by the guard before it, and is the
     // popup state the game passed to `ui.popup`; its active byte sits at the
@@ -961,6 +963,7 @@ fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::Frame
 mod painter;
 #[cfg(test)]
 mod recorder;
+mod snapshot;
 pub(crate) use painter::{Painter, widget};
 #[cfg(test)]
 mod tests;

@@ -171,4 +171,5 @@ pub(crate) const MENU_TAB: Constant = Constant::new("ui.menu_tab");
 pub(crate) const RECIPE_DIRECTORY: Symbol = Symbol::new("ui.recipe_directory");
 pub(crate) const RECIPE_HIGHLIGHTED: Constant = Constant::new("ui.recipe_highlighted");
 pub(crate) const RECIPE_SELECT: Constant = Constant::new("ui.recipe_select");
+pub(crate) const RETURN_SCREEN: Constant = Constant::new("ui.return_screen");
 pub(crate) const TOGGLE_HUD_SCREEN: Symbol = Symbol::new("ui.toggle_hud_screen");

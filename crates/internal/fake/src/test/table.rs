@@ -254,6 +254,14 @@ pub(crate) struct State {
     pub(crate) game_actions: Vec<(String, bool)>,
     /// The local player's held controls.
     pub(crate) local_held: Held,
+    pub(crate) local_input_info: enshwick_core::abi::LocalInputInfo,
+    /// The client snapshot the loader would write, as the test set it.
+    pub(crate) client_snapshot: enshwick_core::abi::ClientSnapshot,
+    /// The loader's parts and features off, as the test turned them off.
+    pub(crate) loader_off: Vec<enshwick_core::abi::LoaderOff>,
+    /// The client commands mods queued, each with its kind, target and
+    /// status, as the test drives them.
+    pub(crate) client_commands: Vec<(u64, u32, String, enshwick_core::abi::ClientCommandStatus)>,
     /// What the HUD drawing now drew, with each item's anchor, while one
     /// draws.
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
@@ -480,6 +488,15 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
             bits: None,
             asked: false,
         },
+        local_input_info: enshwick_core::abi::LocalInputInfo {
+            header: Header::of::<enshwick_core::abi::LocalInputInfo>(),
+            flags: 0,
+            reserved: 0,
+            age_ms: u64::MAX,
+        },
+        client_snapshot: enshwick_core::abi::ClientSnapshot::EMPTY,
+        loader_off: Vec::new(),
+        client_commands: Vec::new(),
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),
@@ -757,4 +774,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     map_marker_types,
     ui_extension,
     local_held,
+    local_input_status,
+    client_snapshot,
+    loader_off,
+    client_command,
+    client_command_status,
 };

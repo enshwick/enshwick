@@ -149,6 +149,7 @@ macro_rules! number_arrays {
 
 number_arrays!(
     (f32, 4),
+    (f32, 2),
     (u32, 3),
     (u32, 2),
     (u16, 2),

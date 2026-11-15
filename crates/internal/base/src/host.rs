@@ -496,6 +496,31 @@ mod tests {
     }
 
     #[test]
+    fn an_older_or_truncated_table_is_rejected_before_reading_appended_slots() {
+        for (minor, size) in [
+            (
+                crate::abi::ABI_MINOR - 1,
+                size_of::<HostApi>() - size_of::<usize>(),
+            ),
+            (crate::abi::ABI_MINOR, size_of::<Header>()),
+        ] {
+            let words = Box::leak(vec![0u64; size.div_ceil(8)].into_boxed_slice());
+            let header = Header {
+                size: u32::try_from(size).unwrap(),
+                abi_major: ABI_MAJOR,
+                abi_minor: minor,
+            };
+            let api = words.as_mut_ptr().cast::<HostApi>();
+            // SAFETY: the aligned allocation covers `size` bytes and is leaked;
+            // the header is written before Host reads only that valid prefix.
+            unsafe { api.cast::<Header>().write(header) };
+            // SAFETY: the allocation is aligned and readable for its stated size.
+            // Both headers must be rejected without reading any function slots.
+            assert!(unsafe { Host::new(api, ModHandle(0)) }.is_none());
+        }
+    }
+
+    #[test]
     fn a_table_serves_mods_of_its_major_up_to_its_minor() {
         assert!(serves(table(ABI_MAJOR, 1), 0));
         assert!(serves(table(ABI_MAJOR, 1), 1));

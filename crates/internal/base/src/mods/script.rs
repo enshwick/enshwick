@@ -75,6 +75,14 @@ impl Mods {
         super::join_missing()
     }
 
+    /// Every part and feature of the loader that is off, with why and when,
+    /// as [`loader_off`](super::loader_off) lists them.
+    #[script]
+    #[must_use]
+    pub fn loader_off(self) -> Vec<super::LoaderOff> {
+        super::loader_off()
+    }
+
     /// Whether this game runs the server now, so the mod's server logic
     /// acts: always on the dedicated server; on a client while it hosts a
     /// game, single player included, as mods run with server behaviour

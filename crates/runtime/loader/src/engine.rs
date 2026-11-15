@@ -12,6 +12,14 @@ pub mod chains;
 pub(crate) mod code;
 pub mod code_watch;
 pub mod conflicts;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(
+        dead_code,
+        reason = "only the Windows build copies the game's reads across threads"
+    )
+)]
+pub(crate) mod copied;
 #[cfg(windows)]
 pub(crate) mod crash;
 #[cfg(windows)]
@@ -103,6 +111,8 @@ pub(crate) mod retire;
     expect(dead_code, reason = "only the running game tries code patches again")
 )]
 pub(crate) mod retry;
+#[cfg(windows)]
+pub(crate) mod screens;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the Windows build reads the game's server")

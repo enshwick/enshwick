@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 0
+#define ENSHWICK_ABI_MINOR 1
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -951,6 +951,201 @@ typedef struct EnshwickChunkData {
   uint32_t size;
 } EnshwickChunkData;
 
+// A crafting recipe of the game by its recipe id, to grant, refuse or watch
+// the crafting of one recipe.
+typedef uint32_t EnshwickRecipeId;
+
+// A request to the client's own interface or input, which
+// `EnshwickHostApi.client_command` queues.
+//
+// The loader runs it in the interface's frame or the input builder's step,
+// never inside a mod's callback, and only while the client is still in
+// `session` on `expected_screen`. Its outcome is what
+// `EnshwickHostApi.client_command_status`
+// reports; the call itself answers only that it is queued.
+typedef struct EnshwickClientCommand {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_HIGHLIGHT_RECIPE`.
+  uint32_t kind;
+  // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`.
+  uint32_t hold_ms;
+  // The session the command belongs to, as
+  // `EnshwickClientSnapshot.session` names it; a command whose session ended
+  // is cancelled. 0, the session of a snapshot taken before the
+  // interface read a game, takes the session of the first frame that
+  // runs the command.
+  uint64_t session;
+  // The HUD screen the client must show, a `HudScreenType` member; empty
+  // for any screen.
+  struct EnshwickStr expected_screen;
+  // What the command opens or chooses: a screen for
+  // `EnshwickClientCommand_OPEN_SCREEN`, a tab for `EnshwickClientCommand_CHOOSE_TAB`, by the
+  // `HudScreenType` member it stands for.
+  struct EnshwickStr target;
+  // A look's turn in radians of yaw and pitch, before the player's
+  // camera sensitivity; each at most `EnshwickClientCommand_MAX_LOOK`. A positive yaw
+  // turns right.
+  float look[2];
+  // A move's direction, x right and y forward, of length at most 1.
+  float direction[2];
+  // The recipe to highlight.
+  EnshwickRecipeId recipe;
+  // Zero.
+  uint32_t reserved;
+  // The command `EnshwickClientCommand_CANCEL` cancels.
+  uint64_t cancels;
+} EnshwickClientCommand;
+// Opens `target`, one of the screens the game opens from a key in the
+// world.
+#define EnshwickClientCommand_OPEN_SCREEN 1
+// Closes the open screen, back to the world.
+#define EnshwickClientCommand_CLOSE_SCREEN 2
+// Shows the in-game menu's tab `target` while the menu shows.
+#define EnshwickClientCommand_CHOOSE_TAB 3
+// Cancels the mod's command `cancels`.
+#define EnshwickClientCommand_CANCEL 4
+// Turns the camera by `look` once.
+#define EnshwickClientCommand_LOOK 5
+// Holds `direction` for `hold_ms`.
+#define EnshwickClientCommand_MOVE 6
+// Highlights `recipe` in the open crafting menu, crafting nothing.
+#define EnshwickClientCommand_HIGHLIGHT_RECIPE 7
+// The longest move.
+#define EnshwickClientCommand_MAX_HOLD_MS 250
+// The largest turn of one look, in radians, a quarter turn.
+#define EnshwickClientCommand_MAX_LOOK 1.5707964
+
+// Where a `EnshwickClientCommand` stands, which
+// `EnshwickHostApi.client_command_status`
+// writes.
+//
+// A command is `EnshwickClientCommandStatus_PENDING` until the game took it
+// (`EnshwickClientCommandStatus_APPLIED`), then `EnshwickClientCommandStatus_OBSERVED` once the client's own state
+// shows its effect. It may end `EnshwickClientCommandStatus_CANCELLED` for `reason` or
+// `EnshwickClientCommandStatus_UNAVAILABLE` on a build that lacks what it needs. Nothing
+// answers a guessed success.
+typedef struct EnshwickClientCommandStatus {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // `EnshwickClientCommandStatus_PENDING` to `EnshwickClientCommandStatus_UNAVAILABLE`.
+  uint32_t state;
+  // Why a cancelled command ended: `EnshwickClientCommandStatus_SESSION_CHANGED` to
+  // `EnshwickClientCommandStatus_MOD_OFF`; 0 otherwise.
+  uint32_t reason;
+  // The command's kind.
+  uint32_t kind;
+  // Zero.
+  uint32_t reserved;
+  // Milliseconds since the command was queued.
+  uint64_t age_ms;
+} EnshwickClientCommandStatus;
+// Queued; the game has not taken it yet.
+#define EnshwickClientCommandStatus_PENDING 0
+// The game took it: its queue holds the screen change, the menu its
+// tab, or the input builder the look or move.
+#define EnshwickClientCommandStatus_APPLIED 1
+// The client's own state shows the effect: the screen or tab shows,
+// the look was written whole, the move's hold ran out, the recipe is
+// highlighted.
+#define EnshwickClientCommandStatus_OBSERVED 2
+// It ended without its effect, for `reason`.
+#define EnshwickClientCommandStatus_CANCELLED 3
+// The running build lacks what it needs, or the target is not there,
+// such as a recipe the open menu does not list.
+#define EnshwickClientCommandStatus_UNAVAILABLE 4
+// The client's session changed.
+#define EnshwickClientCommandStatus_SESSION_CHANGED 1
+// Another screen than the expected one shows.
+#define EnshwickClientCommandStatus_OTHER_SCREEN 2
+// The player pressed a control or moved the stick or mouse.
+#define EnshwickClientCommandStatus_PLAYER_INPUT 3
+// The mod cancelled it.
+#define EnshwickClientCommandStatus_BY_MOD 4
+// Two seconds passed without its effect.
+#define EnshwickClientCommandStatus_TIMED_OUT 5
+// The game blocks the player's input now.
+#define EnshwickClientCommandStatus_INPUT_BLOCKED 6
+// The mod or the feature turned off.
+#define EnshwickClientCommandStatus_MOD_OFF 7
+
+// The client's state in one copy, which
+// `EnshwickHostApi.client_snapshot` writes.
+//
+// It holds the
+// session and world, the open screens and the in-game menu's tab, read in
+// the interface's last frame, and the local player's held controls, read
+// in its last step.
+//
+// Each group of fields counts only while its bit of `available` is set; a
+// build that lacks what a group reads leaves its bit clear and the rest of
+// the copy whole. Names are the game's own: a screen or tab is a member of
+// its reflected `HudScreenType`, and empty while none is. The names are
+// static text, valid for the process.
+typedef struct EnshwickClientSnapshot {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // How old the interface's reads are: `EnshwickClientSnapshot_NEVER` to `EnshwickClientSnapshot_FRESH`.
+  uint32_t state;
+  // Which field groups count: `EnshwickClientSnapshot_SCREENS` and the other group bits.
+  uint32_t available;
+  // The loader's count of client sessions, from 1: it grows when the
+  // client's game object, the local player's entity or the world
+  // changes, so a value read twice names one session. 0 before the
+  // interface read a game.
+  uint64_t session;
+  // Milliseconds since the interface's last read; `UINT64_MAX` before
+  // the first.
+  uint64_t age_ms;
+  // The world's name, as `EnshwickHostApi.world_key`
+  // gives it; empty while none is known, as on a client joined to a
+  // server.
+  struct EnshwickStr scene;
+  // The open HUD screen; group `EnshwickClientSnapshot_SCREENS`.
+  struct EnshwickStr hud_screen;
+  // The screen the open one returns to when it closes, empty when it
+  // returns to the world; group `EnshwickClientSnapshot_SCREENS`.
+  struct EnshwickStr return_screen;
+  // The tab the in-game menu shows, as the screen it stands for
+  // (`Social`, `Map`, `Journal`, `PlayerCrafting`, `Backpack`,
+  // `Character` or `SkillTree`), empty while no menu shows; group
+  // `EnshwickClientSnapshot_MENU_TAB`.
+  struct EnshwickStr menu_tab;
+  // The local player's held controls, as
+  // `EnshwickHostApi.local_held` gives them; group
+  // `EnshwickClientSnapshot_HELD`.
+  uint64_t held;
+  // The local player's entity; group `EnshwickClientSnapshot_PLAYER`.
+  EnshwickEntity player;
+  // The open screen's host, such as the chest whose screen shows, or 0;
+  // group `EnshwickClientSnapshot_SCREENS`.
+  EnshwickEntity host;
+  // The recipe the crafting menu highlights, 0 for none; group
+  // `EnshwickClientSnapshot_RECIPE`.
+  EnshwickRecipeId highlighted_recipe;
+  // Zero.
+  uint32_t reserved;
+} EnshwickClientSnapshot;
+// No interface read yet.
+#define EnshwickClientSnapshot_NEVER 0
+// The interface's reads are off on this build or after a fault.
+#define EnshwickClientSnapshot_OFF 1
+// The last read is older than a second: no frame drew a game since,
+// as while loading.
+#define EnshwickClientSnapshot_STALE 2
+// The last read is at most a second old.
+#define EnshwickClientSnapshot_FRESH 3
+// `hud_screen`, `return_screen` and `host`.
+#define EnshwickClientSnapshot_SCREENS 1
+// `menu_tab`.
+#define EnshwickClientSnapshot_MENU_TAB 2
+// `held`, a read at most a second old.
+#define EnshwickClientSnapshot_HELD 4
+// `player`.
+#define EnshwickClientSnapshot_PLAYER 8
+// `highlighted_recipe`.
+#define EnshwickClientSnapshot_RECIPE 16
+
 // A comfort provider in a base registering its comfort for its category,
 // as `EnshwickHostApi.comfort_filter` hands it on.
 typedef struct EnshwickComfort {
@@ -1052,10 +1247,6 @@ typedef struct EnshwickControlSpec {
 // The control fires once when its key stayed down for
 // `EnshwickControlSpec.hold_ms`.
 #define EnshwickControlSpec_HOLD 4
-
-// A crafting recipe of the game by its recipe id, to grant, refuse or watch
-// the crafting of one recipe.
-typedef uint32_t EnshwickRecipeId;
 
 // A player's craft request, handed to the filters registered with
 // `EnshwickHostApi.craft_filter` before the server crafts.
@@ -2903,6 +3094,51 @@ typedef struct EnshwickUiExtension {
 // The most host templates one panel names.
 #define EnshwickUiExtension_MAX_HOSTS 64
 
+// Cached diagnostics of the client's local gameplay-input sampler.
+// Flags and age are weakly consistent observations, not world or session identity.
+// Reading this does not request sampling. ABI 12.1.
+typedef struct EnshwickLocalInputInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // A combination of this type's flag constants; unknown flags are ignored.
+  uint32_t flags;
+  // Reserved; 0.
+  uint32_t reserved;
+  // Age of the last cached sample in milliseconds; `UINT64_MAX` means never sampled.
+  uint64_t age_ms;
+} EnshwickLocalInputInfo;
+// A mod requested sampling through `local_held`.
+#define EnshwickLocalInputInfo_REQUESTED 1
+// The sampler's existing layout resolved.
+#define EnshwickLocalInputInfo_LAYOUT_AVAILABLE 2
+// The existing sampler link succeeded and its fuse remains on.
+#define EnshwickLocalInputInfo_LINK_AVAILABLE 4
+// The sampler's read fuse remains on; this alone does not mean reads can run.
+#define EnshwickLocalInputInfo_READ_ENABLED 8
+// At least one sample was cached, including a zero mask.
+#define EnshwickLocalInputInfo_SAMPLE_PRESENT 16
+// Requested, available, enabled and sampled within the existing 1000 ms window.
+#define EnshwickLocalInputInfo_FRESH 32
+
+// A part or feature of the loader that is off, which
+// `EnshwickHostApi.loader_off` lists.
+//
+// The loader turns off only what a build lacks or what faulted, and keeps
+// running the rest; every part or feature it does not list runs. The
+// names are the ones the log and the Mods screen show, and a new part of
+// a later loader appears with no new field.
+typedef struct EnshwickLoaderOff {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The part or feature, as its log line names it.
+  struct EnshwickStr name;
+  // Why it is off, as the log says: the build entry it lacks and why,
+  // or the fault that turned it off.
+  struct EnshwickStr reason;
+  // When it turned off, in seconds since the Unix epoch.
+  uint64_t at;
+} EnshwickLoaderOff;
+
 
 // A player about to interact with an entity, as
 // `EnshwickHostApi.interaction_filter` hands it
@@ -4135,7 +4371,11 @@ typedef struct EnshwickMidHookSpec {
 typedef struct EnshwickHostApi {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // The loader's own SemVer version, valid for the process.
+  // The loader's own SemVer version, valid for the process: a release's,
+  // or a development build's, such as `1.0.0-alpha.15+dev.5f647f46`,
+  // which sorts with the release it follows. Compatibility is the ABI
+  // version's alone (`EnshwickHeader.abi_major`, `EnshwickHeader.abi_minor`), never
+  // this text's.
   struct EnshwickStr host_version;
   // Writes the running game's identity, its side, image base, build
   // fingerprint and whether the loader found every entry it knows, as far as the
@@ -6045,6 +6285,54 @@ typedef struct EnshwickHostApi {
   // without the read; `EnshwickStatus_BAD_ARGS` for a null `out`. Any thread;
   // `out` is borrowed for the call.
   EnshwickStatus (*local_held)(EnshwickModHandle me, uint64_t *out);
+  // Copies the local input sampler's cached diagnostics without requesting reads.
+  // Client only (`EnshwickStatus_UNAVAILABLE` on a server); callable on any thread.
+  // No game memory is read. Flags are weakly consistent and age is not session identity.
+  // `out` is a headed, writable `EnshwickLocalInputInfo`. ABI 12.1.
+  EnshwickStatus (*local_input_status)(EnshwickModHandle me, struct EnshwickLocalInputInfo *out);
+  // Writes to `out`, a headed `EnshwickClientSnapshot`, the client's state in
+  // one copy: its session, the open screens and the in-game menu's tab
+  // from the interface's last frame, and the local player's held
+  // controls. The first call starts the interface's reads and the held
+  // controls' reads, so it answers `EnshwickClientSnapshot_NEVER`; every call
+  // after a frame drew a game answers its copy. Client only:
+  // `EnshwickStatus_UNAVAILABLE` on a server; `EnshwickStatus_BAD_ARGS` for a null
+  // or unheaded `out`. Any thread; it runs no mod callback, and `out` is
+  // borrowed for the call. ABI 12.1.
+  EnshwickStatus (*client_snapshot)(EnshwickModHandle me, struct EnshwickClientSnapshot *out);
+  // Up to `capacity` parts and features of the loader that are off, in
+  // the order they turned off, and how many there are. Entries are
+  // `entry_size` bytes apart, the caller's `sizeof(EnshwickLoaderOff)`; the
+  // loader fills what both sides know of each and its own `EnshwickHeader`.
+  // Everything it does not list runs. The strings stay valid for the
+  // process, since the loader keeps each entry's first reason and drops
+  // none. Any thread; it runs no mod callback. ABI 12.1.
+  EnshwickStatus (*loader_off)(EnshwickModHandle me,
+                               struct EnshwickLoaderOff *out,
+                               uint32_t entry_size,
+                               uint32_t capacity,
+                               uint32_t *count);
+  // Queues `spec`, a headed `EnshwickClientCommand`, and writes its id to `id`:
+  // the call answers only that it is queued, and
+  // `EnshwickHostApi.client_command_status` tells what came of it. One command
+  // of each kind waits per mod: a second answers `EnshwickStatus_REFUSED`
+  // until the first ends. `EnshwickStatus_BAD_ARGS` for an unknown kind, a
+  // target the kind does not take, a look past
+  // `EnshwickClientCommand_MAX_LOOK`, a direction longer than 1 or a hold past
+  // `EnshwickClientCommand_MAX_HOLD_MS`; `EnshwickStatus_UNAVAILABLE` on a server
+  // and on a build without what the kind needs. Any thread; the command
+  // runs later on the client's game thread, never inside a mod callback.
+  // ABI 12.1.
+  EnshwickStatus (*client_command)(EnshwickModHandle me,
+                                   const struct EnshwickClientCommand *spec,
+                                   uint64_t *id);
+  // Writes to `out`, a headed `EnshwickClientCommandStatus`, where the mod's
+  // command `id` stands. The loader keeps the last 64 commands' outcomes;
+  // `EnshwickStatus_UNAVAILABLE` for an id it no longer keeps or another mod's.
+  // Any thread. ABI 12.1.
+  EnshwickStatus (*client_command_status)(EnshwickModHandle me,
+                                          uint64_t id,
+                                          struct EnshwickClientCommandStatus *out);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -6272,6 +6560,43 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, header) == 0, "offset of Chun
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, x) == 8, "offset of ChunkData.x");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, z) == 12, "offset of ChunkData.z");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, size) == 16, "offset of ChunkData.size");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 88, "size of ClientCommand");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommand) == 8, "alignment of ClientCommand");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, header) == 0, "offset of ClientCommand.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, kind) == 8, "offset of ClientCommand.kind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, hold_ms) == 12, "offset of ClientCommand.hold_ms");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, session) == 16, "offset of ClientCommand.session");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, expected_screen) == 24, "offset of ClientCommand.expected_screen");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, target) == 40, "offset of ClientCommand.target");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, look) == 56, "offset of ClientCommand.look");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, direction) == 64, "offset of ClientCommand.direction");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, recipe) == 72, "offset of ClientCommand.recipe");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, reserved) == 76, "offset of ClientCommand.reserved");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, cancels) == 80, "offset of ClientCommand.cancels");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 32, "size of ClientCommandStatus");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, state) == 8, "offset of ClientCommandStatus.state");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reason) == 12, "offset of ClientCommandStatus.reason");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, kind) == 16, "offset of ClientCommandStatus.kind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reserved) == 20, "offset of ClientCommandStatus.reserved");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, age_ms) == 24, "offset of ClientCommandStatus.age_ms");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 120, "size of ClientSnapshot");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSnapshot) == 8, "alignment of ClientSnapshot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, header) == 0, "offset of ClientSnapshot.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, state) == 8, "offset of ClientSnapshot.state");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, available) == 12, "offset of ClientSnapshot.available");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, session) == 16, "offset of ClientSnapshot.session");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, age_ms) == 24, "offset of ClientSnapshot.age_ms");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, scene) == 32, "offset of ClientSnapshot.scene");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, hud_screen) == 48, "offset of ClientSnapshot.hud_screen");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, return_screen) == 64, "offset of ClientSnapshot.return_screen");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, menu_tab) == 80, "offset of ClientSnapshot.menu_tab");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, held) == 96, "offset of ClientSnapshot.held");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, player) == 104, "offset of ClientSnapshot.player");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, host) == 108, "offset of ClientSnapshot.host");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, highlighted_recipe) == 112, "offset of ClientSnapshot.highlighted_recipe");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved) == 116, "offset of ClientSnapshot.reserved");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickComfort) == 40, "size of Comfort");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickComfort) == 8, "alignment of Comfort");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickComfort, header) == 0, "offset of Comfort.header");
@@ -6445,7 +6770,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1640, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1680, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -6651,6 +6976,11 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, fog_read) == 1608, "offset of H
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, map_marker_types) == 1616, "offset of HostApi.map_marker_types");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_extension) == 1624, "offset of HostApi.ui_extension");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, local_held) == 1632, "offset of HostApi.local_held");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, local_input_status) == 1640, "offset of HostApi.local_input_status");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_snapshot) == 1648, "offset of HostApi.client_snapshot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, loader_off) == 1656, "offset of HostApi.loader_off");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command) == 1664, "offset of HostApi.client_command");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command_status) == 1672, "offset of HostApi.client_command_status");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -6767,6 +7097,18 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLayoutField, name) == 0, "offset of Layo
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLayoutField, hash) == 16, "offset of LayoutField.hash");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickLevel) == 1, "size of Level");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickLevel) == 1, "alignment of Level");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickLoaderOff) == 48, "size of LoaderOff");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickLoaderOff) == 8, "alignment of LoaderOff");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLoaderOff, header) == 0, "offset of LoaderOff.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLoaderOff, name) == 8, "offset of LoaderOff.name");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLoaderOff, reason) == 24, "offset of LoaderOff.reason");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLoaderOff, at) == 40, "offset of LoaderOff.at");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickLocalInputInfo) == 24, "size of LocalInputInfo");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickLocalInputInfo) == 8, "alignment of LocalInputInfo");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLocalInputInfo, header) == 0, "offset of LocalInputInfo.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLocalInputInfo, flags) == 8, "offset of LocalInputInfo.flags");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLocalInputInfo, reserved) == 12, "offset of LocalInputInfo.reserved");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLocalInputInfo, age_ms) == 16, "offset of LocalInputInfo.age_ms");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickLoopWaitData) == 24, "size of LoopWaitData");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickLoopWaitData) == 8, "alignment of LoopWaitData");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickLoopWaitData, header) == 0, "offset of LoopWaitData.header");

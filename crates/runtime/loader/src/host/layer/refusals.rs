@@ -332,6 +332,20 @@ impl Refusal for crate::actions::local_held::HeldError {
     }
 }
 
+/// A client command not queued: unavailable off a client and on a build
+/// without what it needs, a bad argument for a wrong spec, refused while
+/// one of its kind waits.
+impl Refusal for crate::actions::client_commands::CommandError {
+    fn status(&self) -> Status {
+        use crate::actions::client_commands::CommandError;
+        match self {
+            CommandError::NotClient | CommandError::Unavailable => Status::UNAVAILABLE,
+            CommandError::BadArgs => Status::BAD_ARGS,
+            CommandError::Waiting => Status::REFUSED,
+        }
+    }
+}
+
 /// An item rolled anew: unavailable while affixes are not open, a bad argument
 /// without an item, refused when no roll fits or the stats did not encode.
 impl Refusal for crate::inventory::stats::RollAffixesError {

@@ -221,6 +221,36 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## Which parts of the loader are off?
+
+The loader turns off its own parts the same way: only what the game build
+lacks, or what faulted. `enshwick::mods::loader_off()` lists each part and
+feature that is off, in the order it turned off. Each entry has its name and
+reason as the log and the Mods screen show them, and the time it turned off.
+Everything the list does not name runs. So a mod tells a read that failed from
+one that never ran, such as the local player's held controls on a build
+without them.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    for off in enshwick::mods::loader_off() {
+        enshwick::warn!("{} is off: {}", off.name, off.reason);
+    }
+    let _ = load;
+    Ok(())
+}
+```
+
+```luau
+for _, off in enshwick.mods.loader_off() do
+    enshwick.log.warn(`{off.name} is off: {off.reason}`)
+end
+```
+
+An entry keeps its first reason. A part that a later loader adds shows up in
+the list with no change to a mod. In Luau, `at` is a decimal string, as other
+64-bit values are.
+
 ## Hook diagnostics
 
 With `diagnostics = true` the loader counts the calls of every hooked

@@ -138,3 +138,7 @@ harness = false
 [[bench]]
 name = "content_detours"
 harness = false
+
+[[bench]]
+name = "client_build"
+harness = false

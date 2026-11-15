@@ -494,6 +494,134 @@ pub(crate) extern "system" fn fog_read(
     })
 }
 
+/// A cached client sampler status supplied by the test; no sampling is requested.
+pub(crate) extern "system" fn local_input_status(
+    _me: ModHandle,
+    out: *mut enshwick_core::abi::LocalInputInfo,
+) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::UNAVAILABLE;
+        }
+        super::put_headed(out, s.local_input_info)
+    })
+}
+
+/// Queues a client command as the loader does: unavailable on a server,
+/// a bad argument for an unknown kind, refused while one of its kind waits;
+/// the test drives its status.
+pub(crate) extern "system" fn client_command(
+    _me: ModHandle,
+    spec: *const enshwick_core::abi::ClientCommand,
+    id: *mut u64,
+) -> Status {
+    use enshwick_core::abi::{ClientCommand as Spec, ClientCommandStatus as Raw};
+    let Some(spec) = super::get_headed(spec) else {
+        return Status::BAD_ARGS;
+    };
+    if id.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::UNAVAILABLE;
+        }
+        let open = |status: &Raw| status.state == Raw::PENDING || status.state == Raw::APPLIED;
+        if spec.kind == Spec::CANCEL {
+            if let Some((.., status)) = s
+                .client_commands
+                .iter_mut()
+                .find(|(queued, .., status)| *queued == spec.cancels && open(status))
+            {
+                status.state = Raw::CANCELLED;
+                status.reason = Raw::BY_MOD;
+            }
+            // SAFETY: the safe layer passes a writable `u64`, non-null above.
+            unsafe { id.write(spec.cancels) };
+            return Status::OK;
+        }
+        if !(Spec::OPEN_SCREEN..=Spec::HIGHLIGHT_RECIPE).contains(&spec.kind)
+            || !spec.in_bounds()
+            || !named_as_the_loader_takes(&spec)
+        {
+            return Status::BAD_ARGS;
+        }
+        if s.client_commands
+            .iter()
+            .any(|(_, kind, _, status)| *kind == spec.kind && open(status))
+        {
+            return Status::REFUSED;
+        }
+        let next = s.client_commands.len() as u64 + 1;
+        // SAFETY: the mod's spec, its target borrowed for the call.
+        let target = unsafe { spec.target.as_str() }
+            .unwrap_or_default()
+            .to_owned();
+        s.client_commands.push((
+            next,
+            spec.kind,
+            target,
+            Raw {
+                kind: spec.kind,
+                ..Raw::EMPTY
+            },
+        ));
+        // SAFETY: the safe layer passes a writable `u64`, non-null above.
+        unsafe { id.write(next) };
+        Status::OK
+    })
+}
+
+/// Whether `spec`'s target and expected screen are ones the loader takes:
+/// an open of a screen the game opens from the world, a tab the menu has,
+/// and a look or move that expects only the world's screen.
+fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
+    // SAFETY: the mod's spec, its target borrowed for the call.
+    let target = unsafe { spec.target.as_str() };
+    // SAFETY: the mod's spec, its expected screen borrowed for the call.
+    let expected = unsafe { spec.expected_screen.as_str() };
+    target.zip(expected).is_some_and(|(target, expected)| {
+        enshwick_core::__fake::rules::client_command_names(spec.kind, target, expected)
+    })
+}
+
+/// Where a queued client command stands, as the test set it.
+pub(crate) extern "system" fn client_command_status(
+    _me: ModHandle,
+    id: u64,
+    out: *mut enshwick_core::abi::ClientCommandStatus,
+) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        match s.client_commands.iter().find(|(queued, ..)| *queued == id) {
+            Some((.., status)) => super::put_headed(out, *status),
+            None => Status::UNAVAILABLE,
+        }
+    })
+}
+
+/// The client snapshot the test set; the loader's answers: unavailable on
+/// a server.
+pub(crate) extern "system" fn client_snapshot(
+    _me: ModHandle,
+    out: *mut enshwick_core::abi::ClientSnapshot,
+) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::UNAVAILABLE;
+        }
+        super::put_headed(out, s.client_snapshot)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

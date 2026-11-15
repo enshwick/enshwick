@@ -187,6 +187,8 @@ impl Inventories {
             max_stack_size: out.max_stack,
             flags: out.flags,
             category: out.category,
+            placed_entity_template: (out.placed_entity != crate::content::Guid::NIL)
+                .then_some(out.placed_entity),
         })
     }
 

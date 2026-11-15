@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 
 use crate::abi::Metres;
-use crate::abi::{Header, Status, Str};
+use crate::abi::{Entity, Header, Status, Str};
 use crate::content::Guid;
 
 /// A frame of the client's interface, handed to the callbacks registered with
@@ -59,7 +59,7 @@ pub struct UiFrame {
     /// as the chest whose inventory shows; entity 0 for a screen of no
     /// object, outside a game and on a build where the
     /// loader does not find it.
-    pub screen_host: crate::Entity,
+    pub screen_host: Entity,
     /// The template GUID of `screen_host` in the client's world, as the
     /// client's last step read it; all zero for no host, before a step read
     /// this host, and on a build where the loader does not find it.

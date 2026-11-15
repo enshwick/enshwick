@@ -1,4 +1,4 @@
-abi 12.0
+abi 12.1
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -196,6 +196,40 @@ ChunkData size 20 align 4 born 20
     x at 8 size 4 type u32
     z at 12 size 4 type u32
     size at 16 size 4 type u32
+ClientCommand size 88 align 8 born 88
+    header at 0 size 8 type Header
+    kind at 8 size 4 type u32
+    hold_ms at 12 size 4 type u32
+    session at 16 size 8 type u64
+    expected_screen at 24 size 16 type Str
+    target at 40 size 16 type Str
+    look at 56 size 8 type [f32; 2]
+    direction at 64 size 8 type [f32; 2]
+    recipe at 72 size 4 type RecipeId
+    reserved at 76 size 4 type u32
+    cancels at 80 size 8 type u64
+ClientCommandStatus size 32 align 8 born 32
+    header at 0 size 8 type Header
+    state at 8 size 4 type u32
+    reason at 12 size 4 type u32
+    kind at 16 size 4 type u32
+    reserved at 20 size 4 type u32
+    age_ms at 24 size 8 type u64
+ClientSnapshot size 120 align 8 born 120
+    header at 0 size 8 type Header
+    state at 8 size 4 type u32
+    available at 12 size 4 type u32
+    session at 16 size 8 type u64
+    age_ms at 24 size 8 type u64
+    scene at 32 size 16 type Str
+    hud_screen at 48 size 16 type Str
+    return_screen at 64 size 16 type Str
+    menu_tab at 80 size 16 type Str
+    held at 96 size 8 type u64
+    player at 104 size 4 type Entity
+    host at 108 size 4 type Entity
+    highlighted_recipe at 112 size 4 type RecipeId
+    reserved at 116 size 4 type u32
 Comfort size 40 align 8 born 40
     header at 0 size 8 type Header
     category at 8 size 4 type u32
@@ -347,7 +381,7 @@ HookSpec size 40 align 8 born 40
     next at 24 size 8 type *const Atomic<usize>
     priority at 32 size 4 type i32
     flags at 36 size 4 type HookFlags
-HostApi size 1640 align 8
+HostApi size 1680 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(ModHandle, *mut BuildInfo) -> Status
@@ -552,6 +586,11 @@ HostApi size 1640 align 8
     map_marker_types at 1616 size 8 type extern "system" fn(ModHandle, *mut MapMarkerTypeInfo, u32, u32, *mut u32) -> Status
     ui_extension at 1624 size 8 type extern "system" fn(ModHandle, *const UiExtension, Option<unsafe extern "system" fn(*const UiFrame, *mut c_void)>, *mut c_void) -> Status
     local_held at 1632 size 8 type extern "system" fn(ModHandle, *mut u64) -> Status
+    local_input_status at 1640 size 8 type extern "system" fn(ModHandle, *mut LocalInputInfo) -> Status
+    client_snapshot at 1648 size 8 type extern "system" fn(ModHandle, *mut ClientSnapshot) -> Status
+    loader_off at 1656 size 8 type extern "system" fn(ModHandle, *mut LoaderOff, u32, u32, *mut u32) -> Status
+    client_command at 1664 size 8 type extern "system" fn(ModHandle, *const ClientCommand, *mut u64) -> Status
+    client_command_status at 1672 size 8 type extern "system" fn(ModHandle, u64, *mut ClientCommandStatus) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -653,6 +692,16 @@ LayoutField size 24 align 8
     hash at 16 size 8 type u64
 Level size 1 align 1
     0 at 0 size 1 type u8
+LoaderOff size 48 align 8 born 48
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    reason at 24 size 16 type Str
+    at at 40 size 8 type u64
+LocalInputInfo size 24 align 8 born 24
+    header at 0 size 8 type Header
+    flags at 8 size 4 type u32
+    reserved at 12 size 4 type u32
+    age_ms at 16 size 8 type u64
 LoopWaitData size 24 align 8 born 24
     header at 0 size 8 type Header
     ms at 8 size 4 type u32
@@ -1170,6 +1219,36 @@ const ChatLine::PLAYER = 0
 const ChatRewrite::DROP = 1
 const ChatRewrite::KEEP = 0
 const ChatRewrite::REWRITTEN = 2
+const ClientCommand::CANCEL = 4
+const ClientCommand::CHOOSE_TAB = 3
+const ClientCommand::CLOSE_SCREEN = 2
+const ClientCommand::HIGHLIGHT_RECIPE = 7
+const ClientCommand::LOOK = 5
+const ClientCommand::MAX_HOLD_MS = 250
+const ClientCommand::MAX_LOOK = 1.5707964
+const ClientCommand::MOVE = 6
+const ClientCommand::OPEN_SCREEN = 1
+const ClientCommandStatus::APPLIED = 1
+const ClientCommandStatus::BY_MOD = 4
+const ClientCommandStatus::CANCELLED = 3
+const ClientCommandStatus::INPUT_BLOCKED = 6
+const ClientCommandStatus::MOD_OFF = 7
+const ClientCommandStatus::OBSERVED = 2
+const ClientCommandStatus::OTHER_SCREEN = 2
+const ClientCommandStatus::PENDING = 0
+const ClientCommandStatus::PLAYER_INPUT = 3
+const ClientCommandStatus::SESSION_CHANGED = 1
+const ClientCommandStatus::TIMED_OUT = 5
+const ClientCommandStatus::UNAVAILABLE = 4
+const ClientSnapshot::FRESH = 3
+const ClientSnapshot::HELD = 4
+const ClientSnapshot::MENU_TAB = 2
+const ClientSnapshot::NEVER = 0
+const ClientSnapshot::OFF = 1
+const ClientSnapshot::PLAYER = 8
+const ClientSnapshot::RECIPE = 16
+const ClientSnapshot::SCREENS = 1
+const ClientSnapshot::STALE = 2
 const ControlSpec::HOLD = 4
 const ControlSpec::PRESS = 1
 const ControlSpec::RELEASE = 2
@@ -1296,6 +1375,12 @@ const Level::DEBUG = 3
 const Level::ERROR = 0
 const Level::INFO = 2
 const Level::WARN = 1
+const LocalInputInfo::FRESH = 32
+const LocalInputInfo::LAYOUT_AVAILABLE = 2
+const LocalInputInfo::LINK_AVAILABLE = 4
+const LocalInputInfo::READ_ENABLED = 8
+const LocalInputInfo::REQUESTED = 1
+const LocalInputInfo::SAMPLE_PRESENT = 16
 const LoopWaitSites::HANDLES = 1
 const LoopWaitSites::MESSAGES = 2
 const LoopWaitSites::NONE = 0

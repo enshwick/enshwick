@@ -9,7 +9,15 @@ pub(crate) mod build_reasons;
 pub(crate) mod chat;
 pub mod chat_mute;
 #[cfg(windows)]
+pub(crate) mod client_commands;
+#[cfg(windows)]
 pub(crate) mod client_control;
+#[cfg(windows)]
+pub(crate) mod client_input;
+#[cfg(windows)]
+pub(crate) mod client_recipes;
+#[cfg(windows)]
+pub(crate) mod client_snapshot;
 pub mod commands;
 pub mod console;
 #[cfg(windows)]
@@ -92,6 +100,20 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: local_held::TABLE_IDS,
         link: Some(local_held::link),
         ..part!("local_held", local_held)
+    },
+    &Part {
+        table_ids: client_control::TABLE_IDS,
+        link: Some(client_control::link),
+        ..part!("client_control", client_control)
+    },
+    // After client_control: each links only on the group it resolved.
+    &Part {
+        link: Some(client_input::link),
+        ..part!("client_input", client_input)
+    },
+    &Part {
+        link: Some(client_recipes::link),
+        ..part!("client_recipes", client_recipes)
     },
     &Part {
         link: Some(controls::link),

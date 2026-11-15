@@ -106,9 +106,67 @@ pub fn exports_name<S: AsRef<str>>(
         ) && name.match_indices('.').any(|(at, _)| exported(&name[..at])))
 }
 
+/// The screens a client command opens, by their `HudScreenType` names: the
+/// ones the game opens from a key in the world (client 26430625).
+pub const CLIENT_OPENS: [&str; 10] = [
+    "SystemMenu",
+    "InGameMenu",
+    "Map",
+    "Journal",
+    "Character",
+    "PlayerCrafting",
+    "Backpack",
+    "SkillTree",
+    "TextChat",
+    "Social",
+];
+
+/// The in-game menu's tabs a client command chooses, in the menu's index
+/// order (client 26430625, seen live).
+pub const MENU_TABS: [&str; 7] = [
+    "Social",
+    "Map",
+    "Journal",
+    "PlayerCrafting",
+    "Backpack",
+    "Character",
+    "SkillTree",
+];
+
+/// The world's own screen: the one a close returns to and the only one a
+/// look or a move may expect.
+pub const WORLD_SCREEN: &str = "InGame";
+
+/// Whether a client command of raw kind `kind` names a `target` and an
+/// `expected` screen the loader takes.
+///
+/// An open takes a screen in [`CLIENT_OPENS`], a tab one in [`MENU_TABS`],
+/// and a look or move expects only [`WORLD_SCREEN`] or nothing.
+#[must_use]
+pub fn client_command_names(kind: u32, target: &str, expected: &str) -> bool {
+    use crate::abi::ClientCommand as Spec;
+    match kind {
+        Spec::OPEN_SCREEN => CLIENT_OPENS.contains(&target),
+        Spec::CHOOSE_TAB => MENU_TABS.contains(&target),
+        Spec::LOOK | Spec::MOVE => expected.is_empty() || expected == WORLD_SCREEN,
+        _ => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_client_command_names_only_the_screens_and_tabs_the_loader_takes() {
+        use crate::abi::ClientCommand as Spec;
+        assert!(client_command_names(Spec::OPEN_SCREEN, "Backpack", ""));
+        assert!(!client_command_names(Spec::OPEN_SCREEN, "StorageChest", ""));
+        assert!(client_command_names(Spec::CHOOSE_TAB, "SkillTree", ""));
+        assert!(!client_command_names(Spec::CHOOSE_TAB, "Inventory", ""));
+        assert!(client_command_names(Spec::LOOK, "", WORLD_SCREEN));
+        assert!(!client_command_names(Spec::MOVE, "", "Backpack"));
+    }
     use crate::schema_section::Kind;
 
     #[test]

@@ -360,6 +360,13 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (1269579)", "ui.toggle_hud_screen", 0xd5_e7e0),
     ("1.0 client (1269579)", "ui.recipe_directory", 0xc6_0ec0),
     ("1.0 client (1269579)", "ui.menu_tab", 0x3_1e70),
+    // The input mapping's blocked byte, which the input builder checks
+    // first; read in the decompiler on 26430625 (`mapping+0xad5a == 1`),
+    // the older clients' by the same route.
+    ("1.0 client (26430625)", "input.blocked", 0xad5a),
+    ("1.0 client (26320373)", "input.blocked", 0xad5a),
+    ("1.0 client (26082781)", "input.blocked", 0xac42),
+    ("1.0 client (1269579)", "input.blocked", 0xac42),
 ];
 
 /// The client control reads: the input builder's stick and look and the
@@ -390,12 +397,15 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
 
 /// The interaction prompt's title, valid byte and verb in the interface's
 /// play data, and the open screen's host entity, the same on every kept
-/// client (static, research of 2026-11-06).
-const PLAY_DATA_READS: [(&str, u64); 4] = [
+/// client (static, research of 2026-11-06); the screen a stacked screen
+/// returns to, beside the HUD screen byte (`set_screen`, client 26430625,
+/// 2026-11-15).
+const PLAY_DATA_READS: [(&str, u64); 5] = [
     ("ui.prompt_title", 0x2bc0),
     ("ui.prompt_valid", 0x2bdd),
     ("ui.prompt_verb", 0x2bd8),
     ("ui.screen_host", 0x2c50),
+    ("ui.return_screen", 0x1cd9),
 ];
 
 /// The kept client tables, by name.
