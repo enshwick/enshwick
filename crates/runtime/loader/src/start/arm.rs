@@ -86,16 +86,16 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
 }
 
 /// Logs what became of each code patch and turns off the owners of skipped
-/// ones: a mod whole, a loader feature by its name. The loader features
+/// ones: a mod whole, a loader feature by its fuse. The loader features
 /// turned off or waiting, each once.
 fn report_patches(
     loader: &Loader,
     patches: &[crate::engine::code::CodePatch],
     verdicts: &[crate::engine::code::Verdict],
-) -> Vec<&'static str> {
+) -> Vec<&'static crate::engine::fuse::Fuse> {
     use crate::engine::code::Verdict;
 
-    let mut reported: Vec<&'static str> = Vec::new();
+    let mut reported = Vec::new();
     crate::engine::diag::record_patches(crate::engine::code::tally(verdicts));
     for (patch, verdict) in patches.iter().zip(verdicts) {
         let owner = crate::engine::code::owner_id(loader, patch.owner);
@@ -120,9 +120,9 @@ fn report_patches(
                     patch.address
                 );
                 if let Some(feature) = patch.feature.filter(|_| patch.owner.is_loader())
-                    && !reported.contains(&feature.feature())
+                    && !feature.among(&reported)
                 {
-                    reported.push(feature.feature());
+                    reported.push(feature);
                 }
             }
             Verdict::Skip(reason) => {

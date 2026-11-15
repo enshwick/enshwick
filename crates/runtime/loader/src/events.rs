@@ -125,23 +125,32 @@ static STATE: State = State {
     building: Pending::new(),
     joined: [const { AtomicU32::new(0) }; MAX_SLOTS],
 };
-/// One feature per link, named as its link: each serves its own events, so
-/// a target this build lacks or a panic in the loader's own work of a link
-/// turns off that link's events alone, and the chain runs past it.
+/// One feature per group of events: a target this build lacks, or a panic in
+/// the loader's work for those events, turns off that group alone.
 static STEP_FUSE: Fuse = Fuse::new("step events");
 static STATE_FUSE: Fuse = Fuse::new("world loaded and shutdown events");
 static SAVE_FUSE: Fuse = Fuse::new("world saved events");
 static REMOVE_FUSE: Fuse = Fuse::new("player left events");
 static PLACE_FUSE: Fuse = Fuse::new("building placed events");
 static PICKUP_FUSE: Fuse = Fuse::new("building removed events");
-/// The wait at the server's teardown for readers off the game thread, which
-/// the state link runs; a panic in it leaves the world's events on.
-static TEAR_DOWN_FUSE: Fuse = Fuse::new("the server's teardown wait");
+/// The links that also carry the engine's own work (the code patch tries,
+/// the server's lifetime, the parts that hear a player leave), each a
+/// feature apart from its events: a panic in an event's work turns off
+/// those events, and the link stays wired for the rest. The save and the
+/// building links carry only their events' work and link under the events'
+/// fuse.
+static STEP_LINK: Fuse = Fuse::new("the server's step link");
+static STATE_LINK: Fuse = Fuse::new("the server's state link");
+static REMOVE_LINK: Fuse = Fuse::new("the server's player removal link");
 
 /// The post-step work beside the parts' steps, each under a fuse of its
 /// own, so a panic in one leaves the others and the tick running.
 static TRIES: Fused<fn(&'static Loader, Instant)> = fused!("code patch tries", |loader, now| {
     crate::engine::retry::after_step(loader, now);
+});
+/// The console's list of the pieces placed, apart from the building events.
+static REMEMBERED: Fused<fn(&[BuildingData])> = fused!("the console's placed pieces", |built| {
+    actions::console::remember(built);
 });
 static TICK_EVENTS: Fused<fn(&'static Loader, &TickData)> =
     fused!("tick events", |loader, tick| loader.emit(
@@ -240,21 +249,29 @@ pub(crate) fn link(loader: &'static Loader) {
     if OFFSETS.set(offsets).is_err() {
         return;
     }
+    let stepped = link_server(loader, [step, state, save, remove]);
+    crate::engine::ticks::set_stepped(stepped);
+    link_building(loader, stepped, place, pickup);
+}
+
+/// Links the server's step, state change, save and player removal, each
+/// one `wanted`; whether the step linked. Each link that fails has turned
+/// its own feature off and said so.
+fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
+    let [step, state, save, remove] = wanted;
     let at = Target::Pinned;
     let none = HookFlags::NONE;
     let stepped = step
         && loader.link_fused(
-            &STEP_FUSE,
+            &STEP_LINK,
             at(pinned::server::POST_STEP),
             &STEP_NEXT,
             step_link,
             none,
         );
-    crate::engine::ticks::set_stepped(stepped);
-    // Each link that fails has turned its own feature off and said so.
     let _state = state
         && loader.link_fused(
-            &STATE_FUSE,
+            &STATE_LINK,
             at(pinned::server::SET_STATE),
             &STATE_NEXT,
             set_state,
@@ -270,13 +287,13 @@ pub(crate) fn link(loader: &'static Loader) {
         );
     let _remove = remove
         && loader.link_fused(
-            &REMOVE_FUSE,
+            &REMOVE_LINK,
             at(pinned::server::PLAYER_REMOVE),
             &REMOVE_NEXT,
             remove_link,
             none,
         );
-    link_building(loader, stepped, place, pickup);
+    stepped
 }
 
 /// Links the building events a mod subscribed to, `place` and `pickup`,
@@ -420,17 +437,12 @@ fn building_fuse(kind: u8) -> &'static Fuse {
 }
 
 /// Raises the building events `built` the links queued since the last
-/// step, each under the fuse of the link that queued it.
+/// step, each under the fuse of the link that queued it, which also covers
+/// the players read for their language.
 fn raise_building(loader: &'static Loader, built: &[BuildingData]) {
     let site = "the post-step link";
-    let _kept = PLACE_FUSE.run(site, || actions::console::remember(built));
-    let heard = crate::engine::loader::handles(Event::BUILDING_PLACED)
-        || crate::engine::loader::handles(Event::BUILDING_REMOVED);
-    let players = if heard {
-        crate::engine::world::players(loader).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let _kept = REMEMBERED.call(site, |remember| remember(built));
+    let players = core::cell::OnceCell::new();
     Fuse::run_each(
         built,
         site,
@@ -443,7 +455,13 @@ fn raise_building(loader: &'static Loader, built: &[BuildingData]) {
             };
             let emit = || loader.emit(event, None, core::ptr::from_ref(data).cast());
             // A handler fills its texts in the language of the player who built.
-            match players.iter().find(|p| p.entity == data.player) {
+            let builder = crate::engine::loader::handles(event)
+                .then(|| {
+                    players
+                        .get_or_init(|| crate::engine::world::players(loader).unwrap_or_default())
+                })
+                .and_then(|players: &Vec<_>| players.iter().find(|p| p.entity == data.player));
+            match builder {
                 Some(player) => crate::engine::texts::for_reader(
                     Some(
                         crate::base::net::language_of(player.key.get())
@@ -587,18 +605,33 @@ fn forget_pages_entering(state: u8) {
     }
 }
 
+/// Runs the engine's own `work` for the server's lifetime at `site`, on
+/// every state change, even after it panicked once: turned off, it would
+/// leave readers off the game thread a server the game frees, which crashes
+/// the game, so a panic is logged and the next change runs it again.
+fn each_change(site: &str, work: impl FnOnce()) {
+    if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)) {
+        crate::log!(
+            ERROR,
+            "the loader panicked in {site}: {}; the next state change runs it again",
+            crate::engine::early::panic_text(payload.as_ref())
+        );
+    }
+}
+
 crate::engine::chains::chain_detour! {
     /// The table's `server.set_state`: the world loads its settings and
     /// record when the server runs, and the shutdown and a hosted game's
     /// end reach the parts. The engine's own work around the change (the
     /// teardown wait, the pages forgotten, the server retired) runs on
-    /// every call the link sees.
+    /// every call the link sees, whatever became of the events.
     fn set_state(entry: *mut u8, state: u8) -> ();
     next STATE_NEXT;
     |onward| {
-        forget_pages_entering(state);
+        let site = "the server state link";
+        each_change(site, || forget_pages_entering(state));
         if state == STATE_TEAR_DOWN {
-            onward.before(&TEAR_DOWN_FUSE, "the state link", crate::engine::world::tear_down);
+            each_change(site, crate::engine::world::tear_down);
         }
         let linked = loaded().filter(|_| !entry.is_null());
         // SAFETY: `entry` is non-null by the filter before it and is the
@@ -611,18 +644,16 @@ crate::engine::chains::chain_detour! {
             && old.is_some_and(|old| old != STATE_INITIALIZE)
             && linked.is_some_and(|(loader, _)| loader.side == Side::CLIENT)
         {
-            crate::engine::world::server_starts();
+            each_change(site, crate::engine::world::server_starts);
         }
         onward.call();
         if state == STATE_SHUTDOWN {
-            crate::engine::world::retire();
+            each_change(site, crate::engine::world::retire);
         }
         let (Some((loader, _)), Some(old)) = (linked, old) else {
             return;
         };
-        onward.run(&STATE_FUSE, "the server state link", |_| {
-            state_changed(loader, old, state);
-        });
+        onward.run(&STATE_FUSE, site, |_| state_changed(loader, old, state));
     }
 }
 
@@ -694,7 +725,7 @@ crate::engine::chains::chain_detour! {
             && !server.is_null()
             && !slot.is_null()
         {
-            onward.before(&REMOVE_FUSE, "the player removal link", || {
+            onward.before(&REMOVE_LINK, "the player removal link", || {
                 // SAFETY: `server` and `slot` are non-null by the checks
                 // before them and are the removal's own arguments, intact on
                 // entry, on the thread the game removes the player on.
@@ -706,7 +737,8 @@ crate::engine::chains::chain_detour! {
 }
 
 /// Tells the parts and the mods that the player in `slot` of `server`
-/// leaves, when it was seen joining.
+/// leaves, when it was seen joining: the parts each under its own fuse, the
+/// player left event under the events' fuse.
 ///
 /// # Safety
 ///
@@ -734,13 +766,11 @@ unsafe fn player_leaves(
     // thread the game removes it on, by the caller's contract and the
     // filter before it.
     let data = unsafe { player(index, slot, offsets) };
-    run_fused(
-        loader,
-        "the player removal link",
-        |part| part.left.as_ref(),
-        &data,
-    );
-    loader.emit(Event::PLAYER_LEFT, None, core::ptr::from_ref(&data).cast());
+    let site = "the player removal link";
+    run_fused(loader, site, |part| part.left.as_ref(), &data);
+    let _raised = REMOVE_FUSE.run(site, || {
+        loader.emit(Event::PLAYER_LEFT, None, core::ptr::from_ref(&data).cast());
+    });
 }
 
 crate::engine::chains::chain_detour! {
@@ -851,124 +881,4 @@ crate::engine::chains::chain_detour! {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use enshwick_base::Relock;
-
-    #[test]
-    fn a_hosted_game_s_end_forgets_the_joined_players_and_the_queued_building_events() {
-        STATE.joined[3].store(42, Ordering::Relaxed);
-        STATE.building.push(bytemuck::Zeroable::zeroed());
-        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-        Part::forget_in(&[&PART], "events", loader);
-        assert!(
-            STATE
-                .joined
-                .iter()
-                .all(|joined| joined.load(Ordering::Relaxed) == 0)
-        );
-        assert!(STATE.building.take().is_empty());
-    }
-
-    #[test]
-    fn each_link_is_a_feature_of_its_own_named_once() {
-        let names = [
-            &STEP_FUSE,
-            &STATE_FUSE,
-            &SAVE_FUSE,
-            &REMOVE_FUSE,
-            &PLACE_FUSE,
-            &PICKUP_FUSE,
-            &TEAR_DOWN_FUSE,
-            TRIES.fuse,
-            TICK_EVENTS.fuse,
-            PERIODIC_TICKS.fuse,
-            JOINED_EVENTS.fuse,
-        ]
-        .map(Fuse::feature);
-        let unique: std::collections::BTreeSet<_> = names.iter().collect();
-        assert_eq!(unique.len(), names.len(), "{names:?}");
-    }
-
-    #[test]
-    fn a_build_without_the_server_layout_turns_off_each_link_it_would_make_with_its_entry() {
-        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::pinning_loader(
-            Side::SERVER,
-            &[pinned::server::POST_STEP, pinned::server::SET_STATE],
-            &[],
-        )));
-        link(loader);
-        assert!(STEP_FUSE.is_off() && STATE_FUSE.is_off());
-        assert!(
-            !SAVE_FUSE.is_off() && !PLACE_FUSE.is_off(),
-            "a link no mod asked for stays out of the list"
-        );
-        let listed = crate::engine::diag::parts_off();
-        let step = listed.iter().find(|p| p.part == STEP_FUSE.feature());
-        assert!(
-            step.is_some_and(|p| p.reason.starts_with(pinned::server::ENTRY_STATE.id())),
-            "{listed:?}"
-        );
-    }
-
-    #[test]
-    fn building_events_without_the_step_s_link_are_listed_off_for_the_step() {
-        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-        link_building(loader, false, true, false);
-        assert!(PLACE_FUSE.is_off());
-        assert!(!PICKUP_FUSE.is_off(), "no mod asked for the other");
-        let listed = crate::engine::diag::parts_off();
-        let place = listed.iter().find(|p| p.part == PLACE_FUSE.feature());
-        assert!(
-            place.is_some_and(|p| p.reason.starts_with(pinned::server::POST_STEP.id())),
-            "{listed:?}"
-        );
-        assert!(loader.chains.relock().is_empty(), "nothing linked");
-    }
-
-    #[test]
-    fn read_only_runs_found_after_the_shutdown_are_forgotten_at_the_teardown_and_the_next_start() {
-        use crate::engine::pages::LASTING;
-        use windows_sys::Win32::System::Memory::{
-            MEM_RELEASE, PAGE_READONLY, PAGE_READWRITE, VirtualFree,
-        };
-        let page = crate::engine::pages::allocate(None, LASTING).expect("fresh pages");
-        let start = page.as_ptr().expose_provenance();
-        for state in [STATE_TEAR_DOWN, STATE_INITIALIZE] {
-            // SAFETY: the pages are the test's own allocation, used by no one else.
-            unsafe { crate::engine::pages::protect(start, LASTING, PAGE_READONLY) }
-                .expect("read-only");
-            assert_eq!(
-                crate::engine::pages::read_only(start, 16),
-                16,
-                "found in the final save"
-            );
-            // SAFETY: the pages are the test's own allocation, used by no one else.
-            unsafe { crate::engine::pages::protect(start, LASTING, PAGE_READWRITE) }
-                .expect("read-write");
-            forget_pages_entering(state);
-            assert_eq!(
-                crate::engine::pages::read_only(start, 16),
-                0,
-                "state {state}"
-            );
-        }
-        // SAFETY: `page` is the test's own allocation, released once.
-        unsafe { VirtualFree(page.as_ptr().cast(), 0, MEM_RELEASE) };
-    }
-
-    #[test]
-    fn a_world_loads_its_settings_on_a_server_whose_mods_subscribe_to_nothing() {
-        assert!(own_link(pinned::server::SET_STATE, false));
-        assert!(own_link(pinned::server::POST_STEP, false));
-        assert!(!own_link(pinned::server::SAVE_STEP, true));
-    }
-
-    #[test]
-    fn a_player_leaving_reaches_the_parts_that_hear_it_with_no_mod_subscribed() {
-        assert!(own_link(pinned::server::PLAYER_REMOVE, true));
-        assert!(!own_link(pinned::server::PLAYER_REMOVE, false));
-        let parts = crate::parts::parts();
-        assert!(parts.iter().any(|part| part.left.is_some()));
-    }
-}
+mod tests;

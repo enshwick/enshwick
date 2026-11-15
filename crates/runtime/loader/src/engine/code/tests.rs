@@ -133,10 +133,31 @@ fn a_skipped_loader_patch_turns_off_its_feature_s_own_fuse_once() {
     skipped(&loader, &lift, (SkipCause::Build, "stuck"), &mut off);
     skipped(&loader, &second, (SkipCause::Build, "stuck"), &mut off);
     assert!(LIFT.is_off(), "the feature's links are wired past");
-    assert_eq!(off, ["test lift"]);
+    assert!(off.len() == 1 && LIFT.among(&off));
     let listed = crate::engine::diag::parts_off();
     let entries = listed.iter().filter(|p| p.part == "test lift").count();
     assert_eq!(entries, 1, "{listed:?}");
+}
+
+#[test]
+fn two_skipped_loader_features_that_share_a_name_both_turn_off() {
+    static ONE: Fuse = Fuse::new("test twins");
+    static TWO: Fuse = Fuse::new("test twins");
+    let loader = crate::start::tests::bare_loader();
+    let one = CodePatch {
+        feature: Some(&ONE),
+        ..patch(ModIndex::LOADER, 0x10, &[0x90], &[0xcc])
+    };
+    let two = CodePatch {
+        feature: Some(&TWO),
+        address: 0x20,
+        ..one.clone()
+    };
+    let mut off = Vec::new();
+    skipped(&loader, &one, (SkipCause::Build, "stuck"), &mut off);
+    skipped(&loader, &two, (SkipCause::Build, "stuck"), &mut off);
+    assert!(ONE.is_off() && TWO.is_off(), "a name is not a feature");
+    assert_eq!(off.len(), 2);
 }
 
 #[test]

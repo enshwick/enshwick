@@ -533,13 +533,13 @@ pub(crate) enum SkipCause {
 }
 
 /// Logs that `patch` is skipped for `reason`, for `cause`, and turns off its
-/// owner: a mod whole, a loader feature by its fuse, once, its name kept in
+/// owner: a mod whole, a loader feature by its fuse, once, the fuse kept in
 /// `off`.
 pub(crate) fn skipped(
     loader: &Loader,
     patch: &CodePatch,
     (cause, reason): (SkipCause, &str),
-    off: &mut Vec<&'static str>,
+    off: &mut Vec<&'static Fuse>,
 ) {
     let owner = owner_id(loader, patch.owner);
     crate::log!(
@@ -553,9 +553,9 @@ pub(crate) fn skipped(
             &format!("its code patch at {:#x} was skipped", patch.address),
         );
     } else if let Some(feature) = patch.feature
-        && !off.contains(&feature.feature())
+        && !feature.among(off)
     {
-        off.push(feature.feature());
+        off.push(feature);
         let at = format!("{:#x}", patch.address);
         match cause {
             SkipCause::Build => {

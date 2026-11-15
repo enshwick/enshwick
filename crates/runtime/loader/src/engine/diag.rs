@@ -16,12 +16,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use menu::{KeptLine, MenuNote, menu_line};
-pub(crate) use summary::clock;
 #[cfg(windows)]
 pub(crate) use summary::{GAME_CRASHED, crash_heading};
 pub use summary::{
     HookStat, ModStatus, Served, SkippedMod, Summary, duration, messages_line, part_line,
 };
+pub(crate) use summary::{clock, mod_named};
 
 use crate::engine::settings::Settings;
 use enshwick_base::Relock;
@@ -157,7 +157,7 @@ pub struct PartOff {
 /// summary and the Mods screen. A part keeps its first reason; past
 /// [`HISTORY`] parts, later ones reach only the log. Only
 /// [`Fuse::turn_off`](crate::engine::fuse::Fuse) lists a part, so every part
-/// off is also logged with its code and wired past.
+/// off is also logged, with its code when its cause has one, and wired past.
 pub(in crate::engine) fn part_off(part: &str, reason: &str) {
     let at = now();
     with_parts_off(|parts| keep_part(parts, HISTORY, (part, reason), at));

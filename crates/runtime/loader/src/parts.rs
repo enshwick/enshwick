@@ -306,18 +306,53 @@ mod tests {
             "label",
             "survivors",
         ];
+        // shortcut: a scan of each `fn link*` body, which misses a seal in a
+        // helper the link calls; a check in the registry's seal would see
+        // it, once registries know the phase they are sealed in.
         let mut sealing = Vec::new();
         for part in parts().iter().filter(|part| part.link.is_some()) {
-            let seals = sources(part.name).split("fn link").skip(1).any(|link| {
-                let body = link.split("\n}\n").next().unwrap_or(link);
-                body.contains(".seal()")
-            });
-            if seals {
+            if link_bodies(&sources(part.name)).any(|body| body.contains(".seal()")) {
                 sealing.push(part.name);
             }
         }
         sealing.sort_unstable();
         assert_eq!(sealing, SEALING_IN_LINK, "parts that seal in their link");
+    }
+
+    /// The bodies of the `fn link*` functions in `text`, each up to the
+    /// closing brace at its own indent, inside an `impl` or `mod` too.
+    fn link_bodies(text: &str) -> impl Iterator<Item = String> + '_ {
+        let lines: Vec<&str> = text.lines().collect();
+        let starts: Vec<usize> = (0..lines.len())
+            .filter(|&at| {
+                let line = lines[at].trim_start();
+                !line.starts_with("//")
+                    && (line.starts_with("fn link") || line.contains(" fn link"))
+            })
+            .collect();
+        starts.into_iter().map(move |at| {
+            let indent = lines[at].len() - lines[at].trim_start().len();
+            let close = format!("{}}}", &lines[at][..indent]);
+            lines[at..]
+                .iter()
+                .take_while(|line| line.trim_end() != close)
+                .copied()
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+    }
+
+    #[test]
+    fn a_link_s_body_ends_at_its_own_closing_brace() {
+        let text = "impl A {\n    fn link() {\n        open();\n    }\n    fn later() {\n        R.seal();\n    }\n}\n\
+                    pub(crate) fn link_seam() {\n    if x {\n    }\n    S.seal();\n}\n";
+        let bodies: Vec<_> = link_bodies(text).collect();
+        assert_eq!(bodies.len(), 2);
+        assert!(
+            !bodies[0].contains(".seal()"),
+            "a later function is not the link"
+        );
+        assert!(bodies[1].contains("S.seal()"), "{bodies:?}");
     }
 
     #[test]

@@ -120,10 +120,7 @@ impl Skipped {
     /// refused before its manifest read, as the console and the logs name it.
     #[must_use]
     pub fn named(&self) -> String {
-        match &self.version {
-            Some(version) => format!("{} {version}", self.id),
-            None => self.id.clone(),
-        }
+        crate::engine::diag::mod_named(&self.id, self.version.as_deref())
     }
 
     /// Whether its file was refused before its manifest read, so it has no

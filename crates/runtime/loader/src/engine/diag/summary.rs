@@ -123,6 +123,16 @@ pub struct SkippedMod {
     pub off: bool,
 }
 
+/// A skipped mod's `id` with its `version` after a space, or its id alone
+/// for a file refused before its manifest read, as the summary, the console
+/// and the logs name it.
+pub(crate) fn mod_named(id: &str, version: Option<&str>) -> String {
+    match version {
+        Some(version) => format!("{id} {version}"),
+        None => id.to_owned(),
+    }
+}
+
 /// What mods serve to the game.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Served {
@@ -303,15 +313,8 @@ impl Summary {
             m.render(&mut out);
         }
         for s in &self.skipped {
-            let version = s.version.as_deref().map(|v| format!(" {v}"));
-            let _w = writeln!(
-                out,
-                "  {}{} skipped, {}: {}",
-                s.id,
-                version.unwrap_or_default(),
-                s.file,
-                s.reason
-            );
+            let named = mod_named(&s.id, s.version.as_deref());
+            let _w = writeln!(out, "  {named} skipped, {}: {}", s.file, s.reason);
         }
         for line in &self.others {
             let _w = writeln!(out, "  {line}");

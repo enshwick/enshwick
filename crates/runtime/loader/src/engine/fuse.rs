@@ -200,6 +200,12 @@ impl Fuse {
         self.feature
     }
 
+    /// Whether this very fuse is one of `fuses`: two fuses may share a name,
+    /// so a list of features is told apart by fuse, never by name.
+    pub(crate) fn among(&self, fuses: &[&Self]) -> bool {
+        fuses.iter().any(|fuse| core::ptr::eq(*fuse, self))
+    }
+
     /// Whether a panic or a failed live check turned the feature off.
     #[inline]
     pub fn is_off(&self) -> bool {
