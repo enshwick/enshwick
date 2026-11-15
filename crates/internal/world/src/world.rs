@@ -792,8 +792,15 @@ impl World {
     }
 }
 
-/// The players connected now, from the loader.
+/// The players connected now, from the loader; none when it cannot list
+/// them.
 pub(crate) fn online(host: Host) -> Vec<Player> {
+    listed(host).unwrap_or_default()
+}
+
+/// The players connected now, or the loader's status when it cannot list
+/// them.
+pub(crate) fn listed(host: Host) -> Result<Vec<Player>, crate::abi::Status> {
     const MAX: usize = 64;
     let mut infos = [blank_info(); MAX];
     let mut count = 0u32;
@@ -805,11 +812,11 @@ pub(crate) fn online(host: Host) -> Vec<Player> {
         &raw mut count,
     );
     if !status.is_ok() {
-        return Vec::new();
+        return Err(status);
     }
-    infos
+    Ok(infos
         .iter()
         .take(usize::try_from(count).unwrap_or(0).min(MAX))
         .map(Player::from_info)
-        .collect()
+        .collect())
 }

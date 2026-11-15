@@ -8,7 +8,13 @@ pub(crate) mod clones;
     expect(dead_code, reason = "only the running game takes mods' renames")
 )]
 pub(crate) mod content_renames;
-#[cfg(windows)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(
+        dead_code,
+        reason = "only the running game reads the crafting prop mask"
+    )
+)]
 pub(crate) mod crafting_props;
 pub mod data_changes;
 pub mod item_kinds;

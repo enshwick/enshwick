@@ -473,10 +473,8 @@ impl Str {
 /// the call wrote, [`Status::BAD_ARGS`] an argument that is malformed, and
 /// [`Status::LOADER_FAULT`] a fault inside the loader itself.
 ///
-/// Values only append in later minors. A mod treats a status it does not
-/// know as a failure; the loader answers a mod of an older minor only with
-/// the statuses that minor knows, mapping a newer one to the nearest older
-/// one.
+/// Values only append in later minors, and a mod treats a status it does
+/// not know as a failure.
 ///
 /// # Examples
 ///

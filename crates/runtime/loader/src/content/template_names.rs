@@ -17,10 +17,15 @@ static TEMPLATES: Cache = Cache::new();
 
 /// Every template of the client's game and of the mods on, sorted by name;
 /// `None` while the list is built on a thread of its own, which reads every
-/// template's resource from the archive.
+/// template's resource from the archive. Built once for every language, as
+/// template names are the same in each.
 #[cfg(windows)]
-pub(crate) fn templates(language: enshwick_core::i18n::Language) -> Option<Arc<List>> {
-    TEMPLATES.current("template names", language, build)
+pub(crate) fn templates() -> Option<Arc<List>> {
+    TEMPLATES.current(
+        "template names",
+        enshwick_core::i18n::Language::FALLBACK,
+        build,
+    )
 }
 
 /// The list of every vanilla template by its name and every template mods

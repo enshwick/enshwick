@@ -111,8 +111,8 @@ entries! {
     }
 }
 
-/// Copies `key`'s bytes for `call` to `out`; [`Status::BAD_ARGS`] when `out`
-/// is null or short. A short buffer keeps the bytes for this thread's retry
+/// Copies `key`'s bytes for `call` to `out`; [`Status::TOO_SMALL`], with the
+/// length written, when `out` is null or short. A short buffer keeps the bytes for this thread's retry
 /// of the same `call` and key; a call that only asks the length keeps
 /// nothing, since it may never come back.
 fn copy_keeping(

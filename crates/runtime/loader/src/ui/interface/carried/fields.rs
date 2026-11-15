@@ -130,7 +130,7 @@ pub(super) fn field(paint: &impl Widgets, arg: &ArgView, state: &mut Field) -> b
             paint,
             label,
             state,
-            crate::content::template_names::templates(texts::language()),
+            crate::content::template_names::templates(),
             "windows.template",
         ),
         _ => {}

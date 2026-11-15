@@ -1581,10 +1581,8 @@ typedef struct EnshwickHookSpec {
 // the call wrote, `EnshwickStatus_BAD_ARGS` an argument that is malformed, and
 // `EnshwickStatus_LOADER_FAULT` a fault inside the loader itself.
 //
-// Values only append in later minors. A mod treats a status it does not
-// know as a failure; the loader answers a mod of an older minor only with
-// the statuses that minor knows, mapping a newer one to the nearest older
-// one.
+// Values only append in later minors, and a mod treats a status it does
+// not know as a failure.
 typedef uint32_t EnshwickStatus;
 // Success.
 #define EnshwickStatus_OK 0
@@ -3730,7 +3728,8 @@ typedef uint8_t (*EnshwickBedCheckFn)(const struct EnshwickBedCheck *check, void
 typedef uint8_t (*EnshwickBuildFilterFn)(const struct EnshwickBuildCheck *call, void *user);
 
 // A mod's zone check filter: the check and the pointer given at
-// registration; returns 1 to accept the placement after all.
+// registration; returns `FILTER_YES` to accept the
+// placement after all, and any other answer keeps the game's refusal.
 //
 // Null is never a callback: the loader refuses a null one with
 // `EnshwickStatus_BAD_ARGS` and keeps nothing.
@@ -4955,8 +4954,8 @@ typedef struct EnshwickHostApi {
                            uint32_t capacity,
                            uint32_t *count);
   // Calls `callback` with `user` when the game refuses a placement whose
-  // box does not lie in one building zone; any filter returning 1 accepts
-  // it after all. Runs on both sides, since a client predicts placement.
+  // box does not lie in one building zone; any filter returning
+  // `FILTER_YES` accepts it after all. Runs on both sides, since a client predicts placement.
   // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*building_zone_filter)(EnshwickModHandle me,
                                          EnshwickBuildingZoneFilterFn callback,

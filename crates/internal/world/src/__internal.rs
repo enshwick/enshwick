@@ -98,6 +98,16 @@ pub fn online(host: Host) -> Vec<crate::world::Player> {
     crate::world::online(host)
 }
 
+/// The players connected now, or the loader's status when it cannot list
+/// them.
+///
+/// # Errors
+///
+/// The loader's status of its players list.
+pub fn listed(host: Host) -> Result<Vec<crate::world::Player>, crate::abi::Status> {
+    crate::world::listed(host)
+}
+
 /// The map marker type `info` describes, as the loader lists them.
 #[cfg(feature = "unstable")]
 #[must_use]

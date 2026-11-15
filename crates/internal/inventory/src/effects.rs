@@ -38,7 +38,7 @@
 use crate::Entity;
 use crate::PlayerKey;
 use crate::WorldError;
-use crate::abi::{Header, PlayerInfo, SpawnRequest, TeleportRequest};
+use crate::abi::{Header, SpawnRequest, TeleportRequest};
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
@@ -671,26 +671,12 @@ impl Effects {
 
     /// The character of the connected player `key`.
     fn character(&self, key: PlayerKey) -> Result<Entity, WorldError> {
-        const MAX: usize = 64;
-        let blank = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
-            ..bytemuck::Zeroable::zeroed()
-        };
-        let mut infos = [blank; MAX];
-        let mut count = 0u32;
-        let status = (self.host.api().players)(
-            self.host.handle(),
-            infos.as_mut_ptr(),
-            u32::try_from(size_of::<PlayerInfo>()).unwrap_or(0),
-            u32::try_from(MAX).unwrap_or(0),
-            &raw mut count,
-        );
-        world_check(status, WorldError::Unavailable)?;
-        let count = usize::try_from(count).map_or(MAX, |count| count.min(MAX));
-        infos[..count]
-            .iter()
-            .find(|info| info.key == key && info.entity != Entity(0))
-            .map(|info| info.entity)
+        let players = enshwick_world::__internal::listed(self.host)
+            .or_else(|status| world_check(status, WorldError::Unavailable).map(|()| Vec::new()))?;
+        players
+            .into_iter()
+            .find(|player| player.key == key && player.entity != Entity(0))
+            .map(|player| player.entity)
             .ok_or(WorldError::Gone)
     }
 
