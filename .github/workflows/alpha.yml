@@ -4,9 +4,8 @@
 # Windows and Linux, their PDBs, SBOMs, SHA-256 checksums and build
 # provenance, and notes from `cargo xtask notes`. The pull request before it
 # moves the crates to that version and joins their change files into each
-# changelog with `cargo xtask close`; a version already released is refused. Nothing goes to
-# crates.io. The loader and each cargo-enshwick build in their own job, at
-# the same time, without secrets; `publish` gathers their files.
+# changelog with `cargo xtask close`; a version already released is refused.
+# Nothing goes to crates.io.
 name: alpha
 
 on:
@@ -32,7 +31,7 @@ concurrency:
 # branch builds write to.
 jobs:
   # A version released already, or one whose changelogs are not closed,
-  # fails this job in seconds, and `publish` needs it.
+  # fails this job in seconds.
   version:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
@@ -46,8 +45,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-        with:
-          gh: true
+      - uses: ./.github/actions/gh
 
       - name: Version and notes
         id: version
@@ -77,13 +75,14 @@ jobs:
           name: notes
           path: ${{ runner.temp }}/notes.md
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
   # The archive, and the PDB and SBOM of every DLL.
   loader:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    # Room for a Windows SDK cache miss, which downloads for 7 to 9 minutes.
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -111,7 +110,7 @@ jobs:
           name: files-loader
           path: ${{ runner.temp }}/alpha/*
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
   # The tool cargo-binstall installs, named as its metadata in
   # crates/cargo-enshwick/Cargo.toml expects, with its SBOM for that
@@ -125,27 +124,26 @@ jobs:
           - target: x86_64-unknown-linux-musl
             build: build
             binary: cargo-enshwick
+            asset: cargo-enshwick-x86_64-unknown-linux-musl
             sbom: cargo-enshwick.linux.cdx.json
           - target: x86_64-pc-windows-msvc
             build: xwin build
             binary: cargo-enshwick.exe
+            asset: cargo-enshwick-x86_64-pc-windows-msvc.exe
             sbom: cargo-enshwick.cdx.json
             pdb: cargo_enshwick.pdb
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    # Room for a Windows SDK cache miss, as in `loader`.
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
       TARGET: ${{ matrix.target }}
     steps:
-      - name: Where the files go
-        run: echo "OUT=$RUNNER_TEMP/alpha" >> "$GITHUB_ENV" # zizmor: ignore[github-env] a fixed path
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # As in `loader`.
       - name: Restore the Windows SDK
         if: matrix.target == 'x86_64-pc-windows-msvc'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -159,8 +157,10 @@ jobs:
 
       - name: Build
         env:
+          OUT: ${{ runner.temp }}/alpha
           BUILD: ${{ matrix.build }}
           BINARY: ${{ matrix.binary }}
+          ASSET: ${{ matrix.asset }}
           SBOM: ${{ matrix.sbom }}
           PDB: ${{ matrix.pdb }}
         run: |
@@ -168,7 +168,7 @@ jobs:
           read -ra build <<< "$BUILD"
           cargo auditable "${build[@]}" --release --locked -p cargo-enshwick --target "$TARGET"
           mkdir -p "$OUT"
-          cp "target/$TARGET/release/$BINARY" "$OUT/cargo-enshwick-$TARGET${BINARY#cargo-enshwick}"
+          cp "target/$TARGET/release/$BINARY" "$OUT/$ASSET"
           [ -z "$PDB" ] || cp "target/$TARGET/release/$PDB" "$OUT/cargo-enshwick.pdb"
           # The build's own SBOM, with only this target's dependencies.
           cargo cyclonedx --format json --target "$TARGET" --no-build-deps
@@ -176,21 +176,24 @@ jobs:
 
       - name: Run it
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: '"$OUT/cargo-enshwick-$TARGET" enshwick --version'
+        env:
+          BINARY: ${{ runner.temp }}/alpha/${{ matrix.asset }}
+        run: '"$BINARY" enshwick --version'
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: files-${{ matrix.target }}
           path: ${{ runner.temp }}/alpha/*
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
   publish:
     needs: [version, loader, cargo-enshwick]
     # The release environment admits main only.
     environment: release
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    # Room for slow uploads: a release cancelled halfway needs a person.
+    timeout-minutes: 15
     # The release itself is made with the app's token.
     permissions:
       contents: read
@@ -198,6 +201,10 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/gh
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: files-*
@@ -260,13 +267,13 @@ jobs:
             -X POST "$DOCS_DEPLOY_HOOK" ||
             echo "::warning title=docs::the docs site build did not start; start it from Cloudflare or with any docs merge"
 
-  # Beside `publish`, never before it: a flag or an outage only warns, and an
-  # analysis still running after two minutes leaves its link.
+  # Off the release's path: a flag, an outage or a slow scan only warns, and
+  # an analysis still running after eight minutes leaves its link.
   virustotal:
-    needs: loader
+    needs: [version, loader]
     environment: release
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -281,11 +288,14 @@ jobs:
         with:
           name: files-loader
           path: ${{ runner.temp }}/alpha
+      # The step's own limit, under the job's, so a stalled scan never turns
+      # the run red.
       - name: VirusTotal
         if: env.HAS_VIRUSTOTAL_KEY == 'true'
         continue-on-error: true
+        timeout-minutes: 10
         uses: ./.github/actions/virustotal
         with:
           dir: ${{ runner.temp }}/alpha
           api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
-          minutes: 2
+          minutes: 8
