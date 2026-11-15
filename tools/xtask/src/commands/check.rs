@@ -23,7 +23,7 @@ use std::process::Command;
 use std::thread;
 use std::time::Instant;
 
-use crate::affected::{self, Lane, MAX_LOCAL_DEPENDENTS, Package, Scope};
+use crate::affected::{self, Lane, MAX_LOCAL_PACKAGES, Package, Scope};
 use crate::commands::{fuzz, header, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 
@@ -37,6 +37,11 @@ const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask
 /// The nextest filter of the trybuild test, which builds the API crate again
 /// under `target/tests/trybuild`: only [`Part::Trybuild`] runs it.
 const TRYBUILD: &str = "binary_id(enshwick::main) & test(/^(config_files|internals)::/)";
+
+/// The nextest settings of the host tests, which start the slowest first;
+/// the workspace has no `.config/nextest.toml`, which a change to would
+/// make every check a check of the whole workspace.
+const NEXTEST_CONFIG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/nextest.toml");
 
 /// The API crate's features the trybuild test builds with: trybuild builds
 /// its cases with the features of the test, and none of them needs the
@@ -164,7 +169,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     if parts.contains(&Part::Trybuild) && (!touches(&scope, FACADE) || wide(&scope)) {
         say(&if touches(&scope, FACADE) {
             format!(
-                "the trybuild test is left to CI: the change reaches more than {MAX_LOCAL_DEPENDENTS} dependents"
+                "the trybuild test is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
             )
         } else if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
             format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
@@ -194,12 +199,12 @@ fn touches(scope: &Scope, package: &str) -> bool {
     }
 }
 
-/// Whether a local check of `scope` left the examples of the change's many
-/// dependents to CI ([`MAX_LOCAL_DEPENDENTS`]): it leaves the trybuild test
-/// and the stable surface's build there too, which alone kept
-/// a check of a facade change over ten minutes (669 s, 2026-11-14).
+/// Whether a local check of `scope` reaches more packages than
+/// [`MAX_LOCAL_PACKAGES`]: it leaves the trybuild test and the stable
+/// surface's build to CI, which alone kept a check of a facade change over
+/// ten minutes (669 s, 2026-11-14).
 fn wide(scope: &Scope) -> bool {
-    matches!(scope, Scope::Some { tested, .. } if !tested.is_empty())
+    matches!(scope, Scope::Some { wide: true, .. })
 }
 
 /// Whether `scope` checks, tests or only builds the code of `package`.
@@ -479,6 +484,7 @@ fn plan(
         docs,
         tested,
         built,
+        ..
     } = scope
     else {
         return ((true, true, true), None, Vec::new());
@@ -629,7 +635,12 @@ fn host_steps(
             None => Some(format!("not ({TRYBUILD})")),
         };
         if let Some(filter) = filter {
-            steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
+            steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&[
+                "--config-file",
+                NEXTEST_CONFIG,
+                "-E",
+                &filter,
+            ]));
         }
     }
     if parts.contains(&Part::Trybuild) && touches(scope, FACADE) && !wide(scope) {
@@ -699,6 +710,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         docs,
         tested,
         built,
+        wide,
     } = scope
     {
         if code.is_empty() && docs.is_empty() && tested.is_empty() && built.is_empty() {
@@ -712,13 +724,13 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         if !tested.is_empty() {
             let names: Vec<&str> = tested.iter().map(String::as_str).collect();
             say(&format!(
-                "running only the tests of {}: CI and the merge queue run their examples{}",
+                "running only the tests of {}: CI and the merge queue run their examples",
                 names.join(", "),
-                if tested.contains(FACADE) || code.contains(FACADE) {
-                    format!(" and {FACADE}'s stable surface")
-                } else {
-                    String::new()
-                }
+            ));
+        }
+        if *wide && reaches(scope, FACADE) {
+            say(&format!(
+                "{FACADE}'s stable surface is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
             ));
         }
         if !built.is_empty() {
