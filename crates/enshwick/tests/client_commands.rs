@@ -106,6 +106,119 @@ side = "both""#
         );
     }
 
+    fn walk(hold_ms: u32) -> ClientCommand {
+        let action = CommandAction::Move {
+            direction: [0.0, 1.0],
+            hold_ms,
+        };
+        ClientCommand::new(action, 1)
+    }
+
+    fn look(yaw: f32) -> ClientCommand {
+        ClientCommand::new(CommandAction::Look { yaw, pitch: 0.0 }, 1)
+    }
+
+    #[test]
+    fn a_move_holds_until_observed_and_frees_its_kind_once_it_ends() {
+        let (loader, input) = input(Side::CLIENT);
+        let id = input.client_command(&walk(250)).unwrap();
+        assert_eq!(loader.client_commands(), [(1, Raw::MOVE, String::new())]);
+        loader.set_command_status(1, Status::APPLIED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Applied,
+            "the builder holds the stick"
+        );
+        assert!(
+            matches!(input.client_command(&walk(100)), Err(WorldError::Refused)),
+            "one move at a time"
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed,
+            "the hold ran out"
+        );
+        assert!(input.client_command(&walk(100)).is_ok(), "released");
+    }
+
+    #[test]
+    fn a_look_or_move_past_its_bounds_is_refused() {
+        let (_loader, input) = input(Side::CLIENT);
+        for refused in [
+            walk(251),
+            walk(0),
+            look(Raw::MAX_LOOK * 2.0),
+            look(f32::NAN),
+            ClientCommand::new(
+                CommandAction::Move {
+                    direction: [1.0, 1.0],
+                    hold_ms: 100,
+                },
+                1,
+            ),
+        ] {
+            assert!(
+                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                "{refused:?}"
+            );
+        }
+        assert!(input.client_command(&look(Raw::MAX_LOOK)).is_ok());
+    }
+
+    #[test]
+    fn the_player_s_input_and_a_block_cancel_a_look_or_move() {
+        let (loader, input) = input(Side::CLIENT);
+        for (command, reason, expected) in [
+            (walk(250), Status::PLAYER_INPUT, CancelReason::PlayerInput),
+            (look(0.5), Status::PLAYER_INPUT, CancelReason::PlayerInput),
+            (walk(250), Status::INPUT_BLOCKED, CancelReason::InputBlocked),
+            (look(0.5), Status::OTHER_SCREEN, CancelReason::OtherScreen),
+            (
+                walk(250),
+                Status::SESSION_CHANGED,
+                CancelReason::SessionChanged,
+            ),
+            (look(0.5), Status::MOD_OFF, CancelReason::ModOff),
+        ] {
+            let id = input.client_command(&command).unwrap();
+            let raw = loader.client_commands().last().unwrap().0;
+            loader.set_command_status(raw, Status::CANCELLED, reason);
+            assert_eq!(
+                input.command_status(id).unwrap().state,
+                CommandState::Cancelled(expected),
+                "{command:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_recipe_is_highlighted_or_unavailable_when_the_menu_lacks_it() {
+        let (loader, input) = input(Side::CLIENT);
+        let torch = ClientCommand::new(
+            CommandAction::HighlightRecipe(enshwick::RecipeId(0x7cd8_0a04)),
+            1,
+        );
+        let id = input.client_command(&torch).unwrap();
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed
+        );
+        let other = input.client_command(&torch).unwrap();
+        loader.set_command_status(2, Status::UNAVAILABLE, 0);
+        assert_eq!(
+            input.command_status(other).unwrap().state,
+            CommandState::Unavailable,
+            "another workshop's recipe"
+        );
+        let none = ClientCommand::new(CommandAction::HighlightRecipe(enshwick::RecipeId(0)), 1);
+        assert!(matches!(
+            input.client_command(&none),
+            Err(WorldError::Refused)
+        ));
+    }
+
     #[test]
     fn a_server_runs_no_client_command() {
         let (_loader, input) = input(Side::SERVER);

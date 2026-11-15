@@ -334,6 +334,33 @@ mod tests {
     }
 
     #[test]
+    fn a_script_moves_looks_and_highlights_a_recipe_within_their_bounds() {
+        use enshwick::abi::ClientCommandStatus as Status;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local walk = enshwick.input.client_command({ kind = "move", session = "1", direction = { 0, 1 }, hold_ms = 250 })
+            local far = pcall(enshwick.input.client_command, { kind = "move", session = "1", direction = { 0, 1 }, hold_ms = 251 })
+            local spin = pcall(enshwick.input.client_command, { kind = "look", session = "1", look = { 4, 0 } })
+            local torch = enshwick.input.client_command({ kind = "highlight_recipe", session = "1", recipe = 0x7cd80a04 })
+            enshwick.log.info(`queued {walk} {torch} far {far} spin {spin}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.command_status(walk)
+                enshwick.log.info(`move {s.state} {s.reason}`)
+            end)
+            "#,
+        );
+        loader.set_command_status(1, Status::CANCELLED, Status::INPUT_BLOCKED);
+        let _drawn = loader.draw_frame();
+        for line in [
+            "queued 1 2 far false spin false",
+            "move cancelled input_blocked",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_reads_the_prompt_the_screen_s_host_and_the_local_held_controls() {
         let loader = run(
             FakeHost::new().side(Side::CLIENT).player_input(),

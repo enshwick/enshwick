@@ -165,6 +165,11 @@ the reads are: `Never` before the first frame, `Fresh` within a second,
 `Stale` after that, as while a world loads, and `Off` when the build lacks
 the reads. `age_ms()` gives the age in milliseconds.
 
+`highlighted_recipe()` names the recipe the crafting menu's details column
+shows. It follows a click on a tile and the arrow keys; the mouse pointer
+over a tile does not move it. It is `None` while no crafting menu draws,
+and while the open menu highlights no recipe.
+
 The first call starts the reads, so it returns `Never`. A part the running
 build lacks returns `None`, and `reads(part)` tells "none now" from
 "unread". The call returns `WorldError::Unavailable` on a server.
@@ -207,7 +212,7 @@ then tells what came of it:
 | `Applied` | the game took it, such as its interface queue the screen change |
 | `Observed` | the client's own state shows the screen or tab |
 | `Cancelled(reason)` | it ended without its effect |
-| `Unavailable` | the build lacks what it needs |
+| `Unavailable` | the build lacks what it needs, or the open menu lacks the recipe |
 
 A command belongs to one session and, if you name one, to one HUD screen.
 Take both from a [snapshot](#reading-the-clients-state-in-one-copy). The
@@ -245,4 +250,70 @@ local id = enshwick.input.client_command({
     expected_screen = "InGame",
     target = "Backpack",
 })
+```
+
+## Turning the camera and taking a short step
+
+`CommandAction::Look { yaw, pitch }` turns the camera once, and
+`CommandAction::Move { direction, hold_ms }` holds a direction for a short
+time. The loader writes both into the local player's input right after the
+game builds it, so they act through the game's own camera and movement.
+
+| Command | Bounds | Applied | Observed |
+| --- | --- | --- | --- |
+| `Look` | each turn at most a quarter turn, in radians | with Observed | the frame's look was written |
+| `Move` | x right and y forward, length above 0 and at most 1; 1 to 250 ms | the first step holds the direction | the hold ran out |
+
+A command outside its bounds returns `WorldError::Refused`. A look is in
+radians before the player's camera sensitivity: the camera turns by the
+look times the sensitivity, so a turn of an exact angle divides by it. A
+positive yaw turns right.
+
+Both run only on the world's own screen, `InGame`. The player's own input
+wins: a stick or mouse move, or a pressed control, cancels the command with
+`PlayerInput`. So do another screen, a new session, the game blocking input
+(`InputBlocked`) and the mod turning off. When a move ends for any reason,
+the stick is the game's own again in the same step. One look or move runs
+at a time across all mods; a second waits until the first ends.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn step_forward(input: enshwick::input::Input) {
+    let Ok(snapshot) = input.client_snapshot() else {
+        return;
+    };
+    let action = CommandAction::Move { direction: [0.0, 1.0], hold_ms: 250 };
+    let _queued = input.client_command(&ClientCommand::new(action, snapshot.session()));
+}
+```
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+enshwick.input.client_command({
+    kind = "move",
+    session = snapshot.session,
+    direction = { 0, 1 },
+    hold_ms = 250,
+})
+```
+
+## Highlighting a recipe
+
+`CommandAction::HighlightRecipe(recipe)` asks the open crafting menu to
+highlight a recipe, as a click on its tile does. It crafts nothing, pins
+nothing and moves no item. The command waits until a crafting menu draws.
+It is `Observed` once the snapshot's `highlighted_recipe()` names the
+recipe, and `Unavailable` when the open menu does not list it, such as a
+recipe of another workshop.
+
+```luau
+local function highlight(recipe: number)
+    local snapshot = enshwick.input.client_snapshot()
+    return enshwick.input.client_command({
+        kind = "highlight_recipe",
+        session = snapshot.session,
+        recipe = recipe,
+    })
+end
 ```

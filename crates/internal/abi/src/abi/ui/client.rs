@@ -189,7 +189,8 @@ pub struct ClientCommand {
     /// `HudScreenType` member it stands for.
     pub target: Str,
     /// A look's turn in radians of yaw and pitch, before the player's
-    /// camera sensitivity; each at most [`Self::MAX_LOOK`].
+    /// camera sensitivity; each at most [`Self::MAX_LOOK`]. A positive yaw
+    /// turns right.
     pub look: [f32; 2],
     /// A move's direction, x right and y forward, of length at most 1.
     pub direction: [f32; 2],

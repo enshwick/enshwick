@@ -32,7 +32,8 @@ pub enum CommandAction {
     /// it.
     ChooseTab(String),
     /// Turns the camera once by `yaw` and `pitch` radians, before the
-    /// player's camera sensitivity; each at most a quarter turn.
+    /// player's camera sensitivity; each at most a quarter turn. A positive
+    /// yaw turns right.
     Look {
         /// Radians of yaw.
         yaw: f32,
