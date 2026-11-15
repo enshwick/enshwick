@@ -13,6 +13,10 @@ pub(crate) mod client_commands;
 #[cfg(windows)]
 pub(crate) mod client_control;
 #[cfg(windows)]
+pub(crate) mod client_input;
+#[cfg(windows)]
+pub(crate) mod client_recipes;
+#[cfg(windows)]
 pub(crate) mod client_snapshot;
 pub mod commands;
 pub mod console;
@@ -101,6 +105,15 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: client_control::TABLE_IDS,
         link: Some(client_control::link),
         ..part!("client_control", client_control)
+    },
+    // After client_control: each links only on the group it resolved.
+    &Part {
+        link: Some(client_input::link),
+        ..part!("client_input", client_input)
+    },
+    &Part {
+        link: Some(client_recipes::link),
+        ..part!("client_recipes", client_recipes)
     },
     &Part {
         link: Some(controls::link),

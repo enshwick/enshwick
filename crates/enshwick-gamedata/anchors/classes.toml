@@ -282,6 +282,7 @@ entries = [
   "experience.progress",
   "experience.source_factor",
   "game.balancing",
+  "input.blocked",
   "input.camera_rotation",
   "input.client_build",
   "input.movement_stick",

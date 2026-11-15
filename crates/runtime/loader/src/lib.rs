@@ -45,6 +45,9 @@ mod start;
 
 #[cfg(windows)]
 #[doc(hidden)]
+pub use actions::client_input::bench_client_build;
+#[cfg(windows)]
+#[doc(hidden)]
 pub use content::{served::bench_text_lookup, textures::bench_texture_request};
 #[cfg(windows)]
 #[doc(hidden)]

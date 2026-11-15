@@ -360,6 +360,13 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (1269579)", "ui.toggle_hud_screen", 0xd5_e7e0),
     ("1.0 client (1269579)", "ui.recipe_directory", 0xc6_0ec0),
     ("1.0 client (1269579)", "ui.menu_tab", 0x3_1e70),
+    // The input mapping's blocked byte, which the input builder checks
+    // first; read in the decompiler on 26430625 (`mapping+0xad5a == 1`),
+    // the older clients' by the same route.
+    ("1.0 client (26430625)", "input.blocked", 0xad5a),
+    ("1.0 client (26320373)", "input.blocked", 0xad5a),
+    ("1.0 client (26082781)", "input.blocked", 0xac42),
+    ("1.0 client (1269579)", "input.blocked", 0xac42),
 ];
 
 /// The client control reads: the input builder's stick and look and the

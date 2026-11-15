@@ -33,6 +33,25 @@ pub(crate) struct FrameRead {
     pub(crate) host: u32,
     /// The in-game menu's shown tab.
     pub(crate) tab: TabRead,
+    /// The crafting menu's highlighted recipe.
+    pub(crate) recipe: RecipeRead,
+}
+
+/// What a frame read of the crafting menu's highlighted recipe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RecipeRead {
+    /// No recipe browser drew, or the build lacks the read.
+    Unread,
+    /// The browser drew, highlighting this recipe or none.
+    Shown(Option<RecipeId>),
+}
+
+/// The recipe word of `read`: the id with the read bit, 0 unread.
+fn pack_recipe(read: RecipeRead) -> u64 {
+    match read {
+        RecipeRead::Unread => 0,
+        RecipeRead::Shown(recipe) => 1 << 32 | u64::from(recipe.map_or(0, |r| r.0)),
+    }
 }
 
 /// What a frame read of the in-game menu's tab.
@@ -124,15 +143,23 @@ pub(crate) fn frame(read: impl FnOnce() -> Option<FrameRead>) {
         STATE.player.store(now.1, Ordering::Relaxed);
         STATE.worlds.store(now.2, Ordering::Relaxed);
         STATE.session.store(session, Ordering::Relaxed);
-        STATE
-            .copy
-            .write([session, pack(&read), 0, local_held::now_ms()]);
+        STATE.copy.write([
+            session,
+            pack(&read),
+            pack_recipe(read.recipe),
+            local_held::now_ms(),
+        ]);
     });
 }
 
 /// Starts the frame's reads, which a client command checks itself against.
 pub(crate) fn ask() {
     STATE.asked.store(true, Ordering::Relaxed);
+}
+
+/// Whether a mod asked for the frame's reads.
+pub(crate) fn asked() -> bool {
+    STATE.asked.load(Ordering::Relaxed)
 }
 
 /// The session the last frame counted, 0 before one; on the interface
@@ -263,7 +290,26 @@ mod tests {
             return_to: 0,
             host: 0,
             tab,
+            recipe: RecipeRead::Unread,
         }
+    }
+
+    #[test]
+    fn the_highlighted_recipe_counts_only_while_a_browser_drew() {
+        let torch = RecipeId(0x7cd8_0a04);
+        let words = |recipe| [1, pack(&read(8, TabRead::NoMenu)), pack_recipe(recipe), 100];
+        let shown = compose(kept(Some(words(RecipeRead::Shown(Some(torch))))), 150, name);
+        assert_ne!(shown.available & ClientSnapshot::RECIPE, 0);
+        assert_eq!(shown.highlighted_recipe, torch);
+        let none = compose(kept(Some(words(RecipeRead::Shown(None)))), 150, name);
+        assert_ne!(
+            none.available & ClientSnapshot::RECIPE,
+            0,
+            "a menu with none"
+        );
+        assert_eq!(none.highlighted_recipe, RecipeId(0));
+        let closed = compose(kept(Some(words(RecipeRead::Unread))), 150, name);
+        assert_eq!(closed.available & ClientSnapshot::RECIPE, 0);
     }
 
     #[test]

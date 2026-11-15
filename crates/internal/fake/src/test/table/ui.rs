@@ -543,7 +543,7 @@ pub(crate) extern "system" fn client_command(
             unsafe { id.write(spec.cancels) };
             return Status::OK;
         }
-        if !(Spec::OPEN_SCREEN..=Spec::HIGHLIGHT_RECIPE).contains(&spec.kind) {
+        if !(Spec::OPEN_SCREEN..=Spec::HIGHLIGHT_RECIPE).contains(&spec.kind) || !spec.in_bounds() {
             return Status::BAD_ARGS;
         }
         if s.client_commands

@@ -9163,6 +9163,21 @@ type = "keen::input_mapping::MultiDeviceDirectionalInput"
 range = [0x162, 0x588]
 
 [[route]]
+id = "~input_blocked"
+sides = ["client"]
+in = "input.client_build"
+shape = ["mov rsi,rcx", "mov rcx,r15", "call *", "xor edi,edi", "test al,al"]
+take = "address"
+
+[[route]]
+id = "input.blocked"
+sides = ["client"]
+in = "~input_blocked"
+shape = ["cmp byte [rcx+*],0x1", "sete al"]
+take = "value"
+range = [0x8000, 0x15000]
+
+[[route]]
 id = "ui.toggle_hud_screen"
 sides = ["client"]
 loads = ["[GameUi] toggleHudScreen to %k"]

@@ -7,11 +7,6 @@
 //! when the build lacks one of its entries, so a build without the recipe
 //! browser still reads the menu's tab.
 
-#![expect(
-    dead_code,
-    reason = "the client commands of the next entries drive the screens, the look and the recipes through these"
-)]
-
 use std::sync::OnceLock;
 
 use enshwick_core::RecipeId;
@@ -24,6 +19,7 @@ use crate::engine::pinned;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::input::BLOCKED.id(),
     pinned::input::CAMERA_ROTATION.id(),
     pinned::input::CLIENT_BUILD.id(),
     pinned::input::MOVEMENT_STICK.id(),
@@ -89,11 +85,6 @@ impl<T> Group<T> {
     pub(crate) fn get(&self) -> Option<&T> {
         self.layout.get().filter(|_| !self.fuse.is_off())
     }
-
-    /// The group's fuse, under which its readers run.
-    pub(crate) const fn fuse(&self) -> &Fuse {
-        &self.fuse
-    }
 }
 
 /// The client's control groups, one state per domain.
@@ -134,23 +125,25 @@ pub(crate) struct Toggle {
     pub(crate) toggle_hud_screen: usize,
 }
 
-/// Where the input builder runs and what it writes, code at its address in
-/// the running image, fields at their offset in `ClientPlayerInput`.
+/// What the input builder writes, at their offsets in `ClientPlayerInput`,
+/// and the mapping byte it checks first; the group needs the builder too,
+/// which `client_input` hooks.
 #[derive(Debug)]
 pub(crate) struct InputLayout {
-    /// The function that builds the local player's `ClientPlayerInput`.
-    pub(crate) client_build: u64,
     /// `ClientPlayerInput.data.movementStick`, a float pair.
     movement_stick: usize,
     /// `ClientPlayerInput.data.cameraRotationInput`.
     camera_rotation: usize,
+    /// The input mapping's byte that is 1 while the game blocks the
+    /// player's input, which the builder checks first.
+    blocked: usize,
 }
 
-/// The crafting menu's recipe browser.
+/// The crafting menu's recipe browser, whose block `client_recipes` takes
+/// at `doRecipeDirectoryColumn(node, book, browser, ctx)`, which the group
+/// needs too.
 #[derive(Debug)]
 pub(crate) struct Recipes {
-    /// `doRecipeDirectoryColumn(node, book, browser, ctx)`.
-    pub(crate) directory: u64,
     /// The browser's pointer to the highlighted recipe's record.
     highlighted: usize,
     /// The browser's recipe to bring into focus, 0 for none.
@@ -248,11 +241,48 @@ impl InputLayout {
         let inside = |id: pinned::Constant, size: usize| {
             offset(loader, id).and_then(|at| fits(at, size, input).then_some(at).ok_or(id.id()))
         };
+        address(loader, pinned::input::CLIENT_BUILD)?;
         Ok(Self {
-            client_build: address(loader, pinned::input::CLIENT_BUILD)?,
             movement_stick: inside(pinned::input::MOVEMENT_STICK, size_of::<[f32; 2]>())?,
             camera_rotation: inside(pinned::input::CAMERA_ROTATION, size_of::<Look>())?,
+            blocked: offset(loader, pinned::input::BLOCKED)?,
         })
+    }
+
+    /// Whether the game blocks the player's input, as the builder's own
+    /// first check reads it (1 is blocked, client 26430625).
+    ///
+    /// # Safety
+    ///
+    /// - `mapping` is the input mapping runtime the builder takes, valid
+    ///   for a read of a byte at the routed `input.blocked`.
+    pub(crate) unsafe fn blocked(&self, mapping: *const u8) -> bool {
+        // SAFETY: the caller's contract.
+        unsafe { enshwick_core::raw::read_at::<u8>(mapping, self.blocked) == 1 }
+    }
+
+    /// Writes the local player's movement stick.
+    ///
+    /// # Safety
+    ///
+    /// - `input` is valid for writes of the build's `ClientPlayerInput`,
+    ///   which nothing else touches during the call.
+    pub(crate) unsafe fn set_movement_stick(&self, input: *mut u8, stick: [f32; 2]) {
+        // SAFETY: the caller's record, which `resolve` checked holds the
+        // pair at `movement_stick`.
+        unsafe { enshwick_core::raw::write_at(input, self.movement_stick, stick) };
+    }
+
+    /// Writes the local player's look input.
+    ///
+    /// # Safety
+    ///
+    /// - `input` is valid for writes of the build's `ClientPlayerInput`,
+    ///   which nothing else touches during the call.
+    pub(crate) unsafe fn set_camera_rotation(&self, input: *mut u8, look: Look) {
+        // SAFETY: the caller's record, which `resolve` checked holds the
+        // look at `camera_rotation`.
+        unsafe { enshwick_core::raw::write_at(input, self.camera_rotation, look) };
     }
 
     /// The local player's movement stick in its `ClientPlayerInput`.
@@ -316,8 +346,8 @@ impl Toggle {
 
 impl Recipes {
     fn resolve(loader: &Loader) -> Result<Self, &'static str> {
+        address(loader, pinned::ui::RECIPE_DIRECTORY)?;
         Ok(Self {
-            directory: address(loader, pinned::ui::RECIPE_DIRECTORY)?,
             highlighted: offset(loader, pinned::ui::RECIPE_HIGHLIGHTED)?,
             select: offset(loader, pinned::ui::RECIPE_SELECT)?,
         })
@@ -355,11 +385,36 @@ impl Recipes {
         let id: u32 = unsafe { enshwick_core::raw::read_at(browser, self.select) };
         (id != 0).then_some(RecipeId(id))
     }
+
+    /// Asks the browser to bring `recipe` into focus, `None` for none: the
+    /// tile row focuses the tile of that id and zeroes the slot once the
+    /// tile is in the visible list (client 26430625, seen live).
+    ///
+    /// # Safety
+    ///
+    /// - `browser` is the recipe browser block, valid for a write of a
+    ///   `u32` at the routed `ui.recipe_select`, in the interface frame on
+    ///   its thread.
+    pub(crate) unsafe fn select(&self, browser: *mut u8, recipe: Option<RecipeId>) {
+        let id = recipe.map_or(0, |recipe| recipe.0);
+        // SAFETY: the caller's contract.
+        unsafe { enshwick_core::raw::write_at(browser, self.select, id) };
+    }
 }
 
 /// Whether `size` bytes at `at` lie inside a record of `record` bytes.
 fn fits(at: usize, size: usize, record: usize) -> bool {
     at.checked_add(size).is_some_and(|end| end <= record)
+}
+
+/// Links the input group with client 26430625's layout, for the builder's
+/// benchmark.
+pub(crate) fn bench_input() {
+    let _first = GROUPS.input.layout.set(InputLayout {
+        movement_stick: 0x2b8,
+        camera_rotation: 0x2c4,
+        blocked: 0xad5a,
+    });
 }
 
 pub(crate) fn link(loader: &Loader) {
@@ -466,9 +521,9 @@ mod tests {
         put(&mut input, 0x2b8, [0.5f32, -1.0]);
         put(&mut input, 0x2c4, look);
         let layout = InputLayout {
-            client_build: 0x1_4024_77d0,
             movement_stick: 0x2b8,
             camera_rotation: 0x2c4,
+            blocked: 0xad5a,
         };
         // SAFETY: the record above, of the build's size.
         let stick = unsafe { layout.movement_stick(input.as_ptr()) };
@@ -521,7 +576,6 @@ mod tests {
         let record = [0x1234_u32, 7];
         let mut browser = vec![0u8; 0xf0];
         let layout = Recipes {
-            directory: 0x1_40c7_5660,
             highlighted: 0xe8,
             select: 0x48,
         };

@@ -57,6 +57,8 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
     let read = OnceCell::new();
     // SAFETY: the caller's contract.
     let view = || *read.get_or_init(|| unsafe { view(engine, context) });
+    // The browser's draw since the last frame, taken once for both.
+    let recipe = crate::actions::client_recipes::take_drawn();
     crate::actions::client_snapshot::frame(|| {
         view().map(|(view, tab)| FrameRead {
             play: view.play,
@@ -64,6 +66,7 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
             return_to: view.return_to,
             host: view.host,
             tab,
+            recipe,
         })
     });
     crate::actions::client_commands::frame(
@@ -72,6 +75,7 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
                 session: crate::actions::client_snapshot::session(),
                 screen: view.screen,
                 tab,
+                recipe,
                 held: crate::actions::local_held::held().unwrap_or(0),
             })
         },
@@ -116,5 +120,7 @@ unsafe fn apply(context: usize, state: usize, kind: Kind) -> Applied {
             unsafe { layout.choose(core::ptr::with_exposed_provenance_mut(state), tab) };
             Applied::Taken
         }
+        // Handed to their detours by the commands, never applied here.
+        Kind::Look(_) | Kind::Move(..) | Kind::Highlight(_) => Applied::Unavailable,
     }
 }
