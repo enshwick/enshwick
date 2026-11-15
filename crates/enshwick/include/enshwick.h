@@ -951,6 +951,199 @@ typedef struct EnshwickChunkData {
   uint32_t size;
 } EnshwickChunkData;
 
+// A crafting recipe of the game by its recipe id, to grant, refuse or watch
+// the crafting of one recipe.
+typedef uint32_t EnshwickRecipeId;
+
+// A request to the client's own interface or input, which
+// `EnshwickHostApi.client_command` queues.
+//
+// The loader runs it in the interface's frame or the input builder's step,
+// never inside a mod's callback, and only while the client is still in
+// `session` on `expected_screen`. Its outcome is what
+// `EnshwickHostApi.client_command_status`
+// reports; the call itself answers only that it is queued.
+typedef struct EnshwickClientCommand {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_HIGHLIGHT_RECIPE`.
+  uint32_t kind;
+  // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`.
+  uint32_t hold_ms;
+  // The session the command belongs to, as
+  // `EnshwickClientSnapshot.session` names it; a command whose session ended
+  // is cancelled.
+  uint64_t session;
+  // The HUD screen the client must show, a `HudScreenType` member; empty
+  // for any screen.
+  struct EnshwickStr expected_screen;
+  // What the command opens or chooses: a screen for
+  // `EnshwickClientCommand_OPEN_SCREEN`, a tab for `EnshwickClientCommand_CHOOSE_TAB`, by the
+  // `HudScreenType` member it stands for.
+  struct EnshwickStr target;
+  // A look's turn in radians of yaw and pitch, before the player's
+  // camera sensitivity; each at most `EnshwickClientCommand_MAX_LOOK`. A positive yaw
+  // turns right.
+  float look[2];
+  // A move's direction, x right and y forward, of length at most 1.
+  float direction[2];
+  // The recipe to highlight.
+  EnshwickRecipeId recipe;
+  // Zero.
+  uint32_t reserved;
+  // The command `EnshwickClientCommand_CANCEL` cancels.
+  uint64_t cancels;
+} EnshwickClientCommand;
+// Opens `target`, one of the screens the game opens from a key in the
+// world.
+#define EnshwickClientCommand_OPEN_SCREEN 1
+// Closes the open screen, back to the world.
+#define EnshwickClientCommand_CLOSE_SCREEN 2
+// Shows the in-game menu's tab `target` while the menu shows.
+#define EnshwickClientCommand_CHOOSE_TAB 3
+// Cancels the mod's command `cancels`.
+#define EnshwickClientCommand_CANCEL 4
+// Turns the camera by `look` once.
+#define EnshwickClientCommand_LOOK 5
+// Holds `direction` for `hold_ms`.
+#define EnshwickClientCommand_MOVE 6
+// Highlights `recipe` in the open crafting menu, crafting nothing.
+#define EnshwickClientCommand_HIGHLIGHT_RECIPE 7
+// The longest move.
+#define EnshwickClientCommand_MAX_HOLD_MS 250
+// The largest turn of one look, in radians, a quarter turn.
+#define EnshwickClientCommand_MAX_LOOK 1.5707964
+
+// Where a `EnshwickClientCommand` stands, which
+// `EnshwickHostApi.client_command_status`
+// writes.
+//
+// A command is `EnshwickClientCommandStatus_PENDING` until the game took it
+// (`EnshwickClientCommandStatus_APPLIED`), then `EnshwickClientCommandStatus_OBSERVED` once the client's own state
+// shows its effect. It may end `EnshwickClientCommandStatus_CANCELLED` for `reason` or
+// `EnshwickClientCommandStatus_UNAVAILABLE` on a build that lacks what it needs. Nothing
+// answers a guessed success.
+typedef struct EnshwickClientCommandStatus {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // `EnshwickClientCommandStatus_PENDING` to `EnshwickClientCommandStatus_UNAVAILABLE`.
+  uint32_t state;
+  // Why a cancelled command ended: `EnshwickClientCommandStatus_SESSION_CHANGED` to
+  // `EnshwickClientCommandStatus_MOD_OFF`; 0 otherwise.
+  uint32_t reason;
+  // The command's kind.
+  uint32_t kind;
+  // Zero.
+  uint32_t reserved;
+  // Milliseconds since the command was queued.
+  uint64_t age_ms;
+} EnshwickClientCommandStatus;
+// Queued; the game has not taken it yet.
+#define EnshwickClientCommandStatus_PENDING 0
+// The game took it: its queue holds the screen change, the menu its
+// tab, or the input builder the look or move.
+#define EnshwickClientCommandStatus_APPLIED 1
+// The client's own state shows the effect: the screen or tab shows,
+// the look was written whole, the move's hold ran out, the recipe is
+// highlighted.
+#define EnshwickClientCommandStatus_OBSERVED 2
+// It ended without its effect, for `reason`.
+#define EnshwickClientCommandStatus_CANCELLED 3
+// The running build lacks what it needs, or the target is not there,
+// such as a recipe the open menu does not list.
+#define EnshwickClientCommandStatus_UNAVAILABLE 4
+// The client's session changed.
+#define EnshwickClientCommandStatus_SESSION_CHANGED 1
+// Another screen than the expected one shows.
+#define EnshwickClientCommandStatus_OTHER_SCREEN 2
+// The player pressed a control or moved the stick or mouse.
+#define EnshwickClientCommandStatus_PLAYER_INPUT 3
+// The mod cancelled it.
+#define EnshwickClientCommandStatus_BY_MOD 4
+// Two seconds passed without its effect.
+#define EnshwickClientCommandStatus_TIMED_OUT 5
+// The game blocks the player's input now.
+#define EnshwickClientCommandStatus_INPUT_BLOCKED 6
+// The mod or the feature turned off.
+#define EnshwickClientCommandStatus_MOD_OFF 7
+
+// The client's state in one copy, which
+// `EnshwickHostApi.client_snapshot` writes.
+//
+// It holds the
+// session and world, the open screens and the in-game menu's tab, read in
+// the interface's last frame, and the local player's held controls, read
+// in its last step.
+//
+// Each group of fields counts only while its bit of `available` is set; a
+// build that lacks what a group reads leaves its bit clear and the rest of
+// the copy whole. Names are the game's own: a screen or tab is a member of
+// its reflected `HudScreenType`, and empty while none is. The names are
+// static text, valid for the process.
+typedef struct EnshwickClientSnapshot {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // How old the interface's reads are: `EnshwickClientSnapshot_NEVER` to `EnshwickClientSnapshot_FRESH`.
+  uint32_t state;
+  // Which field groups count: `EnshwickClientSnapshot_SCREENS` and the other group bits.
+  uint32_t available;
+  // The loader's count of client sessions, from 1: it grows when the
+  // client's game object, the local player's entity or the world
+  // changes, so a value read twice names one session. 0 before the
+  // interface read a game.
+  uint64_t session;
+  // Milliseconds since the interface's last read; `UINT64_MAX` before
+  // the first.
+  uint64_t age_ms;
+  // The world's name, as `EnshwickHostApi.world_key`
+  // gives it; empty while none is known, as on a client joined to a
+  // server.
+  struct EnshwickStr scene;
+  // The open HUD screen; group `EnshwickClientSnapshot_SCREENS`.
+  struct EnshwickStr hud_screen;
+  // The screen the open one returns to when it closes, empty when it
+  // returns to the world; group `EnshwickClientSnapshot_SCREENS`.
+  struct EnshwickStr return_screen;
+  // The tab the in-game menu shows, as the screen it stands for
+  // (`Social`, `Map`, `Journal`, `PlayerCrafting`, `Backpack`,
+  // `Character` or `SkillTree`), empty while no menu shows; group
+  // `EnshwickClientSnapshot_MENU_TAB`.
+  struct EnshwickStr menu_tab;
+  // The local player's held controls, as
+  // `EnshwickHostApi.local_held` gives them; group
+  // `EnshwickClientSnapshot_HELD`.
+  uint64_t held;
+  // The local player's entity; group `EnshwickClientSnapshot_PLAYER`.
+  EnshwickEntity player;
+  // The open screen's host, such as the chest whose screen shows, or 0;
+  // group `EnshwickClientSnapshot_SCREENS`.
+  EnshwickEntity host;
+  // The recipe the crafting menu highlights, 0 for none; group
+  // `EnshwickClientSnapshot_RECIPE`.
+  EnshwickRecipeId highlighted_recipe;
+  // Zero.
+  uint32_t reserved;
+} EnshwickClientSnapshot;
+// No interface read yet.
+#define EnshwickClientSnapshot_NEVER 0
+// The interface's reads are off on this build or after a fault.
+#define EnshwickClientSnapshot_OFF 1
+// The last read is older than a second: no frame drew a game since,
+// as while loading.
+#define EnshwickClientSnapshot_STALE 2
+// The last read is at most a second old.
+#define EnshwickClientSnapshot_FRESH 3
+// `hud_screen`, `return_screen` and `host`.
+#define EnshwickClientSnapshot_SCREENS 1
+// `menu_tab`.
+#define EnshwickClientSnapshot_MENU_TAB 2
+// `held`, a read at most a second old.
+#define EnshwickClientSnapshot_HELD 4
+// `player`.
+#define EnshwickClientSnapshot_PLAYER 8
+// `highlighted_recipe`.
+#define EnshwickClientSnapshot_RECIPE 16
+
 // A comfort provider in a base registering its comfort for its category,
 // as `EnshwickHostApi.comfort_filter` hands it on.
 typedef struct EnshwickComfort {
@@ -1052,10 +1245,6 @@ typedef struct EnshwickControlSpec {
 // The control fires once when its key stayed down for
 // `EnshwickControlSpec.hold_ms`.
 #define EnshwickControlSpec_HOLD 4
-
-// A crafting recipe of the game by its recipe id, to grant, refuse or watch
-// the crafting of one recipe.
-typedef uint32_t EnshwickRecipeId;
 
 // A player's craft request, handed to the filters registered with
 // `EnshwickHostApi.craft_filter` before the server crafts.
@@ -2902,6 +3091,32 @@ typedef struct EnshwickUiExtension {
 #define EnshwickUiExtension_BOTTOM 3
 // The most host templates one panel names.
 #define EnshwickUiExtension_MAX_HOSTS 64
+
+// Cached diagnostics of the client's local gameplay-input sampler.
+// Flags and age are weakly consistent observations, not world or session identity.
+// Reading this does not request sampling. ABI 12.1.
+typedef struct EnshwickLocalInputInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // A combination of this type's flag constants; unknown flags are ignored.
+  uint32_t flags;
+  // Reserved; 0.
+  uint32_t reserved;
+  // Age of the last cached sample in milliseconds; `UINT64_MAX` means never sampled.
+  uint64_t age_ms;
+} EnshwickLocalInputInfo;
+// A mod requested sampling through `local_held`.
+#define EnshwickLocalInputInfo_REQUESTED 1
+// The sampler's existing layout resolved.
+#define EnshwickLocalInputInfo_LAYOUT_AVAILABLE 2
+// The existing sampler link succeeded and its fuse remains on.
+#define EnshwickLocalInputInfo_LINK_AVAILABLE 4
+// The sampler's read fuse remains on; this alone does not mean reads can run.
+#define EnshwickLocalInputInfo_READ_ENABLED 8
+// At least one sample was cached, including a zero mask.
+#define EnshwickLocalInputInfo_SAMPLE_PRESENT 16
+// Requested, available, enabled and sampled within the existing 1000 ms window.
+#define EnshwickLocalInputInfo_FRESH 32
 
 // A part or feature of the loader that is off, which
 // `EnshwickHostApi.loader_off` lists.
@@ -6072,7 +6287,7 @@ typedef struct EnshwickHostApi {
   // Client only (`EnshwickStatus_UNAVAILABLE` on a server); callable on any thread.
   // No game memory is read. Flags are weakly consistent and age is not session identity.
   // `out` is a headed, writable `EnshwickLocalInputInfo`. ABI 12.1.
-  EnshwickStatus (*local_input_status)(EnshwickModHandle me, EnshwickLocalInputInfo *out);
+  EnshwickStatus (*local_input_status)(EnshwickModHandle me, struct EnshwickLocalInputInfo *out);
   // Writes to `out`, a headed `EnshwickClientSnapshot`, the client's state in
   // one copy: its session, the open screens and the in-game menu's tab
   // from the interface's last frame, and the local player's held
@@ -6082,7 +6297,7 @@ typedef struct EnshwickHostApi {
   // `EnshwickStatus_UNAVAILABLE` on a server; `EnshwickStatus_BAD_ARGS` for a null
   // or unheaded `out`. Any thread; it runs no mod callback, and `out` is
   // borrowed for the call. ABI 12.1.
-  EnshwickStatus (*client_snapshot)(EnshwickModHandle me, EnshwickClientSnapshot *out);
+  EnshwickStatus (*client_snapshot)(EnshwickModHandle me, struct EnshwickClientSnapshot *out);
   // Up to `capacity` parts and features of the loader that are off, in
   // the order they turned off, and how many there are. Entries are
   // `entry_size` bytes apart, the caller's `sizeof(EnshwickLoaderOff)`; the
@@ -6107,7 +6322,7 @@ typedef struct EnshwickHostApi {
   // runs later on the client's game thread, never inside a mod callback.
   // ABI 12.1.
   EnshwickStatus (*client_command)(EnshwickModHandle me,
-                                   const EnshwickClientCommand *spec,
+                                   const struct EnshwickClientCommand *spec,
                                    uint64_t *id);
   // Writes to `out`, a headed `EnshwickClientCommandStatus`, where the mod's
   // command `id` stands. The loader keeps the last 64 commands' outcomes;
@@ -6115,7 +6330,7 @@ typedef struct EnshwickHostApi {
   // Any thread. ABI 12.1.
   EnshwickStatus (*client_command_status)(EnshwickModHandle me,
                                           uint64_t id,
-                                          EnshwickClientCommandStatus *out);
+                                          struct EnshwickClientCommandStatus *out);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.

@@ -62,9 +62,9 @@ impl LocalInputInfo {
 pub struct ClientSnapshot {
     /// Size and version of this struct.
     pub header: Header,
-    /// How old the interface's reads are: [`Self::NEVER`] to [`Self::FRESH`].
+    /// How old the interface's reads are: [`ClientSnapshot::NEVER`] to [`ClientSnapshot::FRESH`].
     pub state: u32,
-    /// Which field groups count: [`Self::SCREENS`] and the other group bits.
+    /// Which field groups count: [`ClientSnapshot::SCREENS`] and the other group bits.
     pub available: u32,
     /// The loader's count of client sessions, from 1: it grows when the
     /// client's game object, the local player's entity or the world
@@ -78,27 +78,27 @@ pub struct ClientSnapshot {
     /// gives it; empty while none is known, as on a client joined to a
     /// server.
     pub scene: Str,
-    /// The open HUD screen; group [`Self::SCREENS`].
+    /// The open HUD screen; group [`ClientSnapshot::SCREENS`].
     pub hud_screen: Str,
     /// The screen the open one returns to when it closes, empty when it
-    /// returns to the world; group [`Self::SCREENS`].
+    /// returns to the world; group [`ClientSnapshot::SCREENS`].
     pub return_screen: Str,
     /// The tab the in-game menu shows, as the screen it stands for
     /// (`Social`, `Map`, `Journal`, `PlayerCrafting`, `Backpack`,
     /// `Character` or `SkillTree`), empty while no menu shows; group
-    /// [`Self::MENU_TAB`].
+    /// [`ClientSnapshot::MENU_TAB`].
     pub menu_tab: Str,
     /// The local player's held controls, as
     /// [`HostApi::local_held`](super::HostApi::local_held) gives them; group
-    /// [`Self::HELD`].
+    /// [`ClientSnapshot::HELD`].
     pub held: u64,
-    /// The local player's entity; group [`Self::PLAYER`].
+    /// The local player's entity; group [`ClientSnapshot::PLAYER`].
     pub player: Entity,
     /// The open screen's host, such as the chest whose screen shows, or 0;
-    /// group [`Self::SCREENS`].
+    /// group [`ClientSnapshot::SCREENS`].
     pub host: Entity,
     /// The recipe the crafting menu highlights, 0 for none; group
-    /// [`Self::RECIPE`].
+    /// [`ClientSnapshot::RECIPE`].
     pub highlighted_recipe: RecipeId,
     /// Zero.
     pub reserved: u32,
@@ -116,15 +116,15 @@ impl ClientSnapshot {
     pub const STALE: u32 = 2;
     /// The last read is at most a second old.
     pub const FRESH: u32 = 3;
-    /// [`Self::hud_screen`], [`Self::return_screen`] and [`Self::host`].
+    /// [`hud_screen`](Self::hud_screen), [`return_screen`](Self::return_screen) and [`host`](Self::host).
     pub const SCREENS: u32 = 1;
-    /// [`Self::menu_tab`].
+    /// [`menu_tab`](Self::menu_tab).
     pub const MENU_TAB: u32 = 2;
-    /// [`Self::held`], a read at most a second old.
+    /// [`held`](Self::held), a read at most a second old.
     pub const HELD: u32 = 4;
-    /// [`Self::player`].
+    /// [`player`](Self::player).
     pub const PLAYER: u32 = 8;
-    /// [`Self::highlighted_recipe`].
+    /// [`highlighted_recipe`](Self::highlighted_recipe).
     pub const RECIPE: u32 = 16;
     /// Nothing read, its header set.
     pub const EMPTY: Self = Self {
@@ -173,9 +173,9 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`Self::OPEN_SCREEN`] to [`Self::HIGHLIGHT_RECIPE`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::HIGHLIGHT_RECIPE`].
     pub kind: u32,
-    /// A move's hold in milliseconds, 1 to [`Self::MAX_HOLD_MS`].
+    /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`].
     pub hold_ms: u32,
     /// The session the command belongs to, as
     /// [`ClientSnapshot::session`] names it; a command whose session ended
@@ -185,11 +185,11 @@ pub struct ClientCommand {
     /// for any screen.
     pub expected_screen: Str,
     /// What the command opens or chooses: a screen for
-    /// [`Self::OPEN_SCREEN`], a tab for [`Self::CHOOSE_TAB`], by the
+    /// [`ClientCommand::OPEN_SCREEN`], a tab for [`ClientCommand::CHOOSE_TAB`], by the
     /// `HudScreenType` member it stands for.
     pub target: Str,
     /// A look's turn in radians of yaw and pitch, before the player's
-    /// camera sensitivity; each at most [`Self::MAX_LOOK`]. A positive yaw
+    /// camera sensitivity; each at most [`ClientCommand::MAX_LOOK`]. A positive yaw
     /// turns right.
     pub look: [f32; 2],
     /// A move's direction, x right and y forward, of length at most 1.
@@ -198,7 +198,7 @@ pub struct ClientCommand {
     pub recipe: RecipeId,
     /// Zero.
     pub reserved: u32,
-    /// The command [`Self::CANCEL`] cancels.
+    /// The command [`ClientCommand::CANCEL`] cancels.
     pub cancels: u64,
 }
 
@@ -240,8 +240,8 @@ impl ClientCommand {
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
-    /// [`Self::MAX_LOOK`] each, a finite direction of length above 0 and
-    /// at most 1 held 1 to [`Self::MAX_HOLD_MS`] ms, a non-zero recipe.
+    /// [`ClientCommand::MAX_LOOK`] each, a finite direction of length above 0 and
+    /// at most 1 held 1 to [`ClientCommand::MAX_HOLD_MS`] ms, a non-zero recipe.
     ///
     /// # Examples
     ///
@@ -278,10 +278,10 @@ impl ClientCommand {
 /// [`HostApi::client_command_status`](super::HostApi::client_command_status)
 /// writes.
 ///
-/// A command is [`Self::PENDING`] until the game took it
-/// ([`Self::APPLIED`]), then [`Self::OBSERVED`] once the client's own state
-/// shows its effect. It may end [`Self::CANCELLED`] for `reason` or
-/// [`Self::UNAVAILABLE`] on a build that lacks what it needs. Nothing
+/// A command is [`ClientCommandStatus::PENDING`] until the game took it
+/// ([`ClientCommandStatus::APPLIED`]), then [`ClientCommandStatus::OBSERVED`] once the client's own state
+/// shows its effect. It may end [`ClientCommandStatus::CANCELLED`] for `reason` or
+/// [`ClientCommandStatus::UNAVAILABLE`] on a build that lacks what it needs. Nothing
 /// answers a guessed success.
 ///
 /// # Examples
@@ -297,10 +297,10 @@ impl ClientCommand {
 pub struct ClientCommandStatus {
     /// Size and version of this struct.
     pub header: Header,
-    /// [`Self::PENDING`] to [`Self::UNAVAILABLE`].
+    /// [`ClientCommandStatus::PENDING`] to [`ClientCommandStatus::UNAVAILABLE`].
     pub state: u32,
-    /// Why a cancelled command ended: [`Self::SESSION_CHANGED`] to
-    /// [`Self::MOD_OFF`]; 0 otherwise.
+    /// Why a cancelled command ended: [`ClientCommandStatus::SESSION_CHANGED`] to
+    /// [`ClientCommandStatus::MOD_OFF`]; 0 otherwise.
     pub reason: u32,
     /// The command's kind.
     pub kind: u32,

@@ -117,7 +117,7 @@ impl HostRead {
 
     /// The last whole read, or `None` while the writer stays mid-write.
     fn snapshot(&self) -> Option<(u32, [u8; 16], [i64; 3])> {
-        let [entity, lo, hi, x, y, z] = self.0.read()?;
+        let [entity, lo, hi, x, y, z] = self.0.load()?;
         let template = bytemuck::cast::<[u64; 2], [u8; 16]>([lo, hi]);
         let entity = u32::try_from(entity).unwrap_or(0);
         Some((entity, template, [x, y, z].map(u64::cast_signed)))

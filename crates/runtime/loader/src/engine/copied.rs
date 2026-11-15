@@ -33,7 +33,7 @@ impl<const N: usize> Copied<N> {
 
     /// The last whole write, or `None` while the writer stays mid-write
     /// through a few tries.
-    pub(crate) fn read(&self) -> Option<[u64; N]> {
+    pub(crate) fn load(&self) -> Option<[u64; N]> {
         for _ in 0..4 {
             let before = self.seq.load(Ordering::Acquire);
             if before % 2 == 1 {
@@ -63,11 +63,11 @@ mod tests {
     #[test]
     fn a_copy_comes_back_whole_and_none_while_a_write_stays_open() {
         let copied = Copied::<3>::new();
-        assert_eq!(copied.read(), Some([0; 3]), "never written");
+        assert_eq!(copied.load(), Some([0; 3]), "never written");
         copied.write([1, 2, 3]);
-        assert_eq!(copied.read(), Some([1, 2, 3]));
+        assert_eq!(copied.load(), Some([1, 2, 3]));
         copied.begin_write();
-        assert_eq!(copied.read(), None, "mid-write");
+        assert_eq!(copied.load(), None, "mid-write");
     }
 
     #[test]
@@ -82,7 +82,7 @@ mod tests {
             })
         };
         while !writer.is_finished() {
-            if let Some(words) = copied.read() {
+            if let Some(words) = copied.load() {
                 assert!(words.iter().all(|w| *w == words[0]), "{words:?}");
             }
         }

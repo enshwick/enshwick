@@ -676,7 +676,3 @@ impl FogInfo {
         uncovered_size: [0; 2],
     };
 }
-
-mod client;
-
-pub use client::*;

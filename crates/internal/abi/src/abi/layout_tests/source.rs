@@ -10,21 +10,8 @@ fn abi_sources() -> Vec<syn::File> {
     // The ABI types the ABI module re-exports from the value types' crate.
     let values = root.join("../../values/src/abi.rs");
     let mut files = vec![root.join("abi.rs"), values];
-    // A module split by domain keeps its types in a folder beside it.
-    let mut dirs = vec![root.join("abi")];
-    while let Some(dir) = dirs.pop() {
-        for path in std::fs::read_dir(dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-        {
-            if path.is_dir() {
-                dirs.push(path);
-            } else {
-                files.push(path);
-            }
-        }
+    if let Ok(dir) = std::fs::read_dir(root.join("abi")) {
+        files.extend(dir.filter_map(|entry| entry.ok().map(|entry| entry.path())));
     }
     files
         .iter()

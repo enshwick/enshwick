@@ -174,7 +174,7 @@ pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
     let off = FUSE.is_off() || crate::engine::screens::READS_FUSE.is_off();
     compose(
         Kept {
-            words: STATE.copy.read(),
+            words: STATE.copy.load(),
             off,
             held: local_held::sample(),
             player: local_held::player(),
