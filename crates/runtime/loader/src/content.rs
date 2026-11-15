@@ -30,7 +30,7 @@ pub(crate) mod served;
 #[cfg(windows)]
 pub(crate) mod standins;
 #[cfg_attr(
-    not(windows),
+    all(not(windows), not(test)),
     expect(dead_code, reason = "only the client's interface lists templates")
 )]
 pub(crate) mod template_names;
