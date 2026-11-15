@@ -12,6 +12,7 @@ pub mod chains;
 pub(crate) mod code;
 pub mod code_watch;
 pub mod conflicts;
+pub(crate) mod copied;
 #[cfg(windows)]
 pub(crate) mod crash;
 #[cfg(windows)]

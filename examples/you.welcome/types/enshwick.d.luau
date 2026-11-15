@@ -498,6 +498,54 @@ export type ChunkData = {
 	size: number,
 }
 
+--- `ClientCommand` as Luau gives it.
+export type ClientCommand = {
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"` or `"highlight_recipe"`.
+	kind: string,
+	--- The session, as `client_snapshot().session` gives it.
+	session: string,
+	--- The HUD screen the client must show.
+	expected_screen: string?,
+	--- The screen to open or the tab to choose.
+	target: string?,
+	--- A look's yaw and pitch in radians.
+	look: {number}?,
+	--- A move's direction.
+	direction: {number}?,
+	--- A move's hold in milliseconds.
+	hold_ms: number?,
+	--- The recipe to highlight.
+	recipe: number?,
+}
+
+--- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
+export type ClientSnapshot = {
+	--- `"never"`, `"off"`, `"stale"` or `"fresh"`.
+	state: string,
+	--- The session count, as a decimal string.
+	session: string,
+	--- Milliseconds since the last read, or nil before the first.
+	age_ms: string?,
+	--- The world's name.
+	scene: string?,
+	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"` and `"recipe"`.
+	reads: {string},
+	--- The open HUD screen.
+	hud_screen: string?,
+	--- The screen the open one returns to.
+	return_screen: string?,
+	--- The open screen's host.
+	host: number?,
+	--- The tab the in-game menu shows.
+	menu_tab: string?,
+	--- The held controls' names.
+	held: {string}?,
+	--- The local player's entity.
+	player: number?,
+	--- The highlighted recipe.
+	highlighted_recipe: number?,
+}
+
 --- The mod's factor on how fast the server's clock runs.
 export type ClockSpeed = {
 	--- Sets the mod's factor on the clock's speed: 1 leaves it, 2 makes the days pass twice as fast, 0 stops the clock. Clients follow after the next step. A hosted game's end puts every factor back at 1.
@@ -522,6 +570,16 @@ export type CommandSet = {
 	alias: string?,
 	--- The id of the mod that named them.
 	mod_id: string,
+}
+
+--- `CommandStatus` as Luau sees it.
+export type CommandStatus = {
+	--- `"pending"`, `"applied"`, `"observed"`, `"cancelled"` or `"unavailable"`.
+	state: string,
+	--- Why a cancelled command ended, such as `"timed_out"`.
+	reason: string?,
+	--- Milliseconds since the command was queued.
+	age_ms: string,
 }
 
 --- A change of one component of a template: `set` it whole, `edit` the fields a table names, or neither to remove it.
@@ -1166,6 +1224,8 @@ export type ItemInfo = {
 	flags: number,
 	--- The game's `ItemCategory`: 1 equipment (armour and rings), 2 weapons, 3 tools, and so on.
 	category: number,
+	--- The template a player places from the item, its `equipment.placedEntity`, the GUID's bytes in the game's file order; nil for an item that places nothing. It is not the template of the item's own entity (see `has_pide`), and does not say that a placement would succeed.
+	placed_entity_template: string?,
 }
 
 --- One item: its own entity and the item id it holds.
@@ -1342,6 +1402,34 @@ export type ListedPlayer = {
 	key: string,
 	--- The name the list shows.
 	name: string,
+}
+
+--- A part or feature of the loader that is off, from `loader_off`.
+export type LoaderOff = {
+	--- The part or feature, as the log and the Mods screen name it.
+	name: string,
+	--- Why it is off: the build entry it lacks and why, or the fault.
+	reason: string,
+	--- When it turned off, in seconds since the Unix epoch.
+	at: string,
+}
+
+--- Cached client sampler metadata. This is not world/session identity or proof of input execution.
+export type LocalInputStatus = {
+	--- Some mod requested sampling; this getter never requests it.
+	requested: boolean,
+	--- The sampler layout resolved.
+	layout_available: boolean,
+	--- The existing system link is available.
+	link_available: boolean,
+	--- The read fuse is enabled, independently of layout and link availability.
+	read_enabled: boolean,
+	--- A cached sample exists, including an empty held mask.
+	sample_present: boolean,
+	--- Sampling was requested, layout/link are available, the read is enabled, and the cached sample is no older than 1000 ms. This is not an input receipt.
+	fresh: boolean,
+	--- Age in milliseconds, or nil before any sample.
+	age_ms: string?,
 }
 
 --- A survivor lookup the game makes, for `on_survivor_lookup` to answer.
@@ -3351,6 +3439,8 @@ declare enshwick: {
 		all: () -> {ModEntry},
 		--- The server's mods that the last refused join found missing on this client or in another version, as `join_missing` lists them.
 		join_missing: () -> {ModEntry},
+		--- Every part and feature of the loader that is off, with why and when, as `loader_off` lists them.
+		loader_off: () -> {LoaderOff},
 		--- Whether this game runs the server now, so the mod's server logic acts: always on the dedicated server; on a client while it hosts a game, single player included, as mods run with server behaviour there.
 		hosting: () -> boolean,
 		--- The game executable the mod runs in: `server` for the dedicated server, `client` for the game, which may also host one (`hosting`).
@@ -4258,6 +4348,16 @@ declare enshwick: {
 		held: (player: number) -> {string}?,
 		--- The game's controls the local player holds, as this client's interface read them in its last step; nil on a server, outside a game and while no step ran for a second, as in the pause menu. Only the gameplay controls: the client-only ones, such as the menu and map keys, are not in it. Read on any thread.
 		local_held: () -> {string}?,
+		--- Observes only cached loader metadata on any thread, without starting sampling. Fields are weakly consistent; no world, session, player or current UI state is inferred. Requires a matching ABI 12.1 or newer loader; older loaders cannot load this SDK.
+		local_status: () -> LocalInputStatus,
+		--- The client's state in one copy, for any thread: its session and world, the open screens and menu tab, the local player and its held controls. The first ask starts the reads, so it answers `SnapshotState.Never`.
+		client_snapshot: () -> ClientSnapshot,
+		--- Queues `command` for the client's interface or input; its id. The call answers only that it is queued: `Input.command_status` tells what came of it. It runs later on the client's game thread, only while the client is still in the command's session on its screen. One command of each kind waits per mod.
+		client_command: (command: ClientCommand) -> string,
+		--- Cancels the mod's command `id` if it still waits.
+		cancel_command: (id: string) -> (),
+		--- Where the mod's command `id` stands.
+		command_status: (id: string) -> CommandStatus,
 	},
 	--- The client's interface, drawn with the game's own widgets.
 	ui: {

@@ -71,6 +71,9 @@ struct Linked {
     /// Where the play data keeps the open screen's `u32` host entity, on a
     /// build whose table has it.
     screen_host: Option<usize>,
+    /// Where the play data keeps the screen a stacked screen returns to, on
+    /// a build whose table has it.
+    return_screen: Option<usize>,
     /// A bit for each screen byte with no window open, as
     /// [`crate::actions::controls::open_screens`] reads them; 0 on a build without.
     open_screens: u64,
@@ -277,6 +280,7 @@ fn linked(loader: &Loader, off: OffFn<'_>) -> Result<Linked, &'static str> {
         names: screen_names(loader, off),
         prompt: prompt_at(loader, off),
         screen_host: loader.offset(pinned::ui::SCREEN_HOST),
+        return_screen: loader.offset(pinned::ui::RETURN_SCREEN),
         open_screens: crate::actions::controls::open_screens(loader).unwrap_or(0),
     })
 }
@@ -403,24 +407,15 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: b
         return FrameReads::NONE;
     };
     // SAFETY: the caller's contract.
-    let Some(data) = (unsafe { play(engine, context, linked) }) else {
+    let Some(view) = (unsafe { screen_view(engine, context) }) else {
         return FrameReads::NONE;
     };
-    // SAFETY: `data` is the non-null play data of this frame, on the
-    // interface thread, whose HUD screen byte sits at `ui.hud_screen`.
-    let screen = unsafe { crate::engine::memory::read::<u8>(data, linked.hud_screen) };
-    // SAFETY: `data` is the live play data of this frame, on the interface
-    // thread, with the prompt at the table's `ui.prompt_*`.
+    let (screen, host) = (view.screen, view.host);
+    // SAFETY: `view.play` is the live play data of this frame, on the
+    // interface thread, with the prompt at the table's `ui.prompt_*`.
     let (prompt_title, prompt_verb) = linked
         .prompt
-        .map_or((Str::EMPTY, 0), |at| unsafe { prompt(data, at) });
-    let host = open_host(screen, linked.open_screens, || {
-        // SAFETY: `data` is the live play data of this frame, whose screen
-        // host `u32` sits at the table's `ui.screen_host` (every kept client).
-        linked.screen_host.map_or(0, |at| unsafe {
-            crate::engine::memory::read::<u32>(data, at)
-        })
-    });
+        .map_or((Str::EMPTY, 0), |at| unsafe { prompt(view.play, at) });
     // Each step walks the host only for a mod that draws on frames.
     let (template, position) = if hosts_asked {
         crate::actions::local_held::screen_host(host).unwrap_or_default()
@@ -460,6 +455,70 @@ fn screen_name(linked: &Linked, screen: Option<u8>) -> Str {
     screen
         .and_then(|s| linked.names.get(usize::from(s)))
         .map_or(Str::EMPTY, |name| Str::new(name))
+}
+
+/// The game's name of screen byte `screen` on this build: empty for a byte
+/// no constant names, and before the screen reads link.
+pub(crate) fn screen_named(screen: u8) -> &'static str {
+    LINKED
+        .get()
+        .and_then(|linked| linked.names.get(usize::from(screen)).copied())
+        .unwrap_or_default()
+}
+
+/// One frame's open screens, read in the game the player is in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ScreenView {
+    /// The play data's address, inside the client's game object, so a new
+    /// object moves it.
+    pub(crate) play: usize,
+    /// The HUD screen byte.
+    pub(crate) screen: u8,
+    /// The screen byte a stacked screen returns to, 0 for the world and on
+    /// a build without the read.
+    pub(crate) return_to: u8,
+    /// The open screen's host entity, 0 for none.
+    pub(crate) host: u32,
+    /// The interface state the in-game menu draws from.
+    pub(crate) state: usize,
+}
+
+/// This frame's open screens; `None` outside a game and before the screen
+/// reads link.
+///
+/// # Safety
+///
+/// - `context` is 0 or the live interface context of the frame being
+///   drawn, on the interface thread.
+pub(super) unsafe fn screen_view(engine: &Engine, context: usize) -> Option<ScreenView> {
+    let linked = LINKED.get()?;
+    // SAFETY: the caller's contract.
+    let data = unsafe { play(engine, context, linked) }?;
+    // SAFETY: `data` is the non-null play data of this frame, on the
+    // interface thread, whose HUD screen byte sits at `ui.hud_screen`.
+    let screen = unsafe { crate::engine::memory::read::<u8>(data, linked.hud_screen) };
+    // SAFETY: the same play data, whose return-to byte sits at the table's
+    // `ui.return_screen` (every kept client).
+    let return_to = linked.return_screen.map_or(0, |at| unsafe {
+        crate::engine::memory::read::<u8>(data, at)
+    });
+    let host = open_host(screen, linked.open_screens, || {
+        // SAFETY: `data` is the live play data of this frame, whose screen
+        // host `u32` sits at the table's `ui.screen_host` (every kept client).
+        linked.screen_host.map_or(0, |at| unsafe {
+            crate::engine::memory::read::<u32>(data, at)
+        })
+    });
+    // SAFETY: `play` above read the context's state pointer at
+    // `map.context_state` of this live, non-zero context.
+    let state = unsafe { crate::engine::memory::read::<usize>(context, linked.context_state) };
+    Some(ScreenView {
+        play: data,
+        screen,
+        return_to,
+        host,
+        state,
+    })
 }
 
 /// The panels of `screen`, edge by edge and in registration order within

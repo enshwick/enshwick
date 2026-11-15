@@ -11,7 +11,7 @@ mod tests {
     use enshwick::abi::{
         InventoryOp, InventoryOpResult, InventoryResult, ItemTypeInfo, Status, TickData,
     };
-    use enshwick::content::EngineFacts;
+    use enshwick::content::{EngineFacts, Guid};
     use enshwick::events::Ticked;
     use enshwick::inventory::{
         Bar, Batch, BatchError, Done, Fill, Inventories, InventoryCategory, Op, Outcome, SlotRef,
@@ -23,6 +23,9 @@ mod tests {
     const PLAYER: u32 = 2;
     const SWORD: u32 = 0x5e01;
     const COIN: u32 = 0x0c01;
+    const LANTERN: u32 = 0x7701;
+    /// The GUID bytes the lantern places, in the game's file order.
+    const LANTERN_PLACES: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
     static INVENTORIES: OnceLock<Inventories> = OnceLock::new();
     static OUTCOMES: Mutex<Vec<Outcome>> = Mutex::new(Vec::new());
@@ -133,6 +136,8 @@ mod tests {
             .component(Entity(900), durability, &worn)
             .component(Entity(901), fuel, &lamp)
             .item(enshwick::ItemId::new(SWORD), 1, ItemTypeInfo::HAS_PIDE)
+            .item(enshwick::ItemId::new(LANTERN), 8, 0)
+            .item_places(enshwick::ItemId::new(LANTERN), Guid(LANTERN_PLACES))
     }
 
     fn record(outcome: &Outcome) {
@@ -183,6 +188,13 @@ mod tests {
                 .is_some_and(|i| i.has_pide() && i.max_stack_size == 1)
         );
         assert!(inventories.item_info(enshwick::ItemId::new(COIN)).is_none());
+        let sword = inventories.item_info(enshwick::ItemId::new(SWORD)).unwrap();
+        assert_eq!(sword.placed_entity_template, None, "places nothing");
+        let lantern = inventories
+            .item_info(enshwick::ItemId::new(LANTERN))
+            .unwrap();
+        assert_eq!(lantern.placed_entity_template, Some(Guid(LANTERN_PLACES)));
+        assert!(!lantern.has_pide(), "the placed template is not its own");
 
         let ticket = inventories.move_all(Entity(CORPSE), Entity(PLAYER), record);
         let requests = loader.inventory_requests();

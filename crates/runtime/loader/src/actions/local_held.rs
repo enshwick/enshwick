@@ -10,13 +10,14 @@
 //! as it runs.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering, fence};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{HookFlags, Side};
 use enshwick_gamedata::catalogue;
 
+use crate::engine::copied::Copied;
 use crate::engine::ecs::{Components, Engine};
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -41,7 +42,7 @@ const FEATURE: &str = "the local player's held controls";
 /// The host reads' own name in the log and on the Mods screen.
 const HOST_FEATURE: &str = "the open screen's host template and position";
 /// How long a read stays the answer: past it, no step ran, as in a menu.
-const FRESH_MS: u64 = 1000;
+pub(crate) const FRESH_MS: u64 = 1000;
 /// `player_ui`'s components, in the order its iterator lays them out.
 /// Found on client 26430625 and checked against the system's reflected
 /// components on every build.
@@ -98,55 +99,28 @@ struct HostLayout {
 }
 
 /// The open screen host's last read: its entity, then its template's two
-/// words and its fixed-point position, behind a sequence count that is odd
-/// while the game thread writes, so the interface thread never takes half
-/// of one read without a lock.
-struct HostRead {
-    seq: AtomicU32,
-    entity: AtomicU32,
-    words: [AtomicU64; 5],
-}
+/// words and its fixed-point position, copied whole, so the interface
+/// thread never takes half of one read without a lock.
+struct HostRead(Copied<6>);
 
 impl HostRead {
     const fn new() -> Self {
-        Self {
-            seq: AtomicU32::new(0),
-            entity: AtomicU32::new(0),
-            words: [const { AtomicU64::new(0) }; 5],
-        }
+        Self(Copied::new())
     }
 
     /// Stores a read; only the system's thread writes.
     fn write(&self, entity: u32, template: [u8; 16], position: [i64; 3]) {
-        let seq = self.seq.load(Ordering::Relaxed);
-        self.seq.store(seq.wrapping_add(1), Ordering::Relaxed);
-        fence(Ordering::Release);
-        self.entity.store(entity, Ordering::Relaxed);
         let [lo, hi] = bytemuck::cast::<[u8; 16], [u64; 2]>(template);
         let [x, y, z] = position.map(i64::cast_unsigned);
-        for (word, value) in self.words.iter().zip([lo, hi, x, y, z]) {
-            word.store(value, Ordering::Relaxed);
-        }
-        self.seq.store(seq.wrapping_add(2), Ordering::Release);
+        self.0.write([u64::from(entity), lo, hi, x, y, z]);
     }
 
     /// The last whole read, or `None` while the writer stays mid-write.
     fn snapshot(&self) -> Option<(u32, [u8; 16], [i64; 3])> {
-        for _ in 0..4 {
-            let before = self.seq.load(Ordering::Acquire);
-            if before % 2 == 1 {
-                core::hint::spin_loop();
-                continue;
-            }
-            let entity = self.entity.load(Ordering::Relaxed);
-            let [lo, hi, x, y, z] = self.words.each_ref().map(|w| w.load(Ordering::Relaxed));
-            fence(Ordering::Acquire);
-            if self.seq.load(Ordering::Relaxed) == before {
-                let template = bytemuck::cast::<[u64; 2], [u8; 16]>([lo, hi]);
-                return Some((entity, template, [x, y, z].map(u64::cast_signed)));
-            }
-        }
-        None
+        let [entity, lo, hi, x, y, z] = self.0.read()?;
+        let template = bytemuck::cast::<[u64; 2], [u8; 16]>([lo, hi]);
+        let entity = u32::try_from(entity).unwrap_or(0);
+        Some((entity, template, [x, y, z].map(u64::cast_signed)))
     }
 }
 
@@ -156,8 +130,11 @@ impl HostRead {
 struct State {
     layout: OnceLock<Layout>,
     asked: AtomicBool,
+    linked: AtomicBool,
     start: OnceLock<Instant>,
     bits: AtomicU64,
+    /// The local player's entity at the last mask read, 0 before one.
+    player: AtomicU32,
     read_ms: AtomicU64,
     /// Why the last step that tried found no mask, a [`Miss`], or 0 when
     /// it read one.
@@ -176,8 +153,10 @@ struct State {
 static STATE: State = State {
     layout: OnceLock::new(),
     asked: AtomicBool::new(false),
+    linked: AtomicBool::new(false),
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
+    player: AtomicU32::new(0),
     read_ms: AtomicU64::new(0),
     miss: AtomicU8::new(0),
     miss_ms: AtomicU64::new(0),
@@ -193,7 +172,7 @@ static HOST_FUSE: Fuse = Fuse::new(HOST_FEATURE);
 /// linked.
 static LINK_FUSE: Fuse = Fuse::new("the local player's interface reads");
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     let start = STATE.start.get_or_init(Instant::now);
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX - 1) + 1
 }
@@ -302,7 +281,9 @@ pub(crate) fn link(loader: &Loader) {
 /// both answer as stale. True when linked.
 fn link_system(loader: &Loader, entry: Option<u64>) -> bool {
     let target = Target::Found(SYSTEM, entry);
-    loader.link_fused(&LINK_FUSE, target, &NEXT, player_ui, HookFlags::NONE)
+    let linked = loader.link_fused(&LINK_FUSE, target, &NEXT, player_ui, HookFlags::NONE);
+    STATE.linked.store(linked, Ordering::Release);
+    linked
 }
 
 /// Reads the local player's mask from `player_ui`'s context.
@@ -332,6 +313,7 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     // inside the type.
     let bits: u64 = unsafe { enshwick_core::raw::read_at(input, layout.digital) };
     STATE.bits.store(bits, Ordering::Relaxed);
+    STATE.player.store(player.0, Ordering::Relaxed);
     STATE.miss.store(0, Ordering::Relaxed);
     STATE.read_ms.store(now_ms(), Ordering::Release);
 }
@@ -432,7 +414,7 @@ fn answer(
 
 /// Whether a read at `read` milliseconds is still the answer at `now`; 0 is
 /// never read.
-fn fresh(read: u64, now: u64) -> bool {
+pub(crate) fn fresh(read: u64, now: u64) -> bool {
     read != 0 && now.saturating_sub(read) <= FRESH_MS
 }
 
@@ -582,6 +564,12 @@ pub(crate) fn held() -> Result<u64, HeldError> {
     }
 }
 
+/// The local player's entity at the last mask read; `None` before one.
+pub(crate) fn player() -> Option<Entity> {
+    let player = STATE.player.load(Ordering::Relaxed);
+    (player != 0).then_some(Entity(player))
+}
+
 #[cold]
 fn log_miss(miss: Miss) {
     match miss {
@@ -596,9 +584,107 @@ fn log_miss(miss: Miss) {
     }
 }
 
+/// Cached loader metadata only; never starts sampling or accesses a game object.
+pub(crate) fn status() -> enshwick_core::abi::LocalInputInfo {
+    cached_status(
+        STATE.asked.load(Ordering::Relaxed),
+        STATE.layout.get().is_some(),
+        STATE.linked.load(Ordering::Acquire) && !LINK_FUSE.is_off(),
+        !FUSE.is_off(),
+        STATE.read_ms.load(Ordering::Acquire),
+        now_ms(),
+    )
+}
+
+#[expect(
+    clippy::fn_params_excessive_bools,
+    reason = "independent cached sampler gates are combined without inferring a game state"
+)]
+fn cached_status(
+    requested: bool,
+    layout: bool,
+    linked: bool,
+    enabled: bool,
+    read: u64,
+    now: u64,
+) -> enshwick_core::abi::LocalInputInfo {
+    use enshwick_core::abi::{Header, LocalInputInfo as Info};
+    let mut flags = 0;
+    for (present, flag) in [
+        (requested, Info::REQUESTED),
+        (layout, Info::LAYOUT_AVAILABLE),
+        (linked, Info::LINK_AVAILABLE),
+        (enabled, Info::READ_ENABLED),
+        (read != 0, Info::SAMPLE_PRESENT),
+        (
+            requested && layout && linked && enabled && fresh(read, now),
+            Info::FRESH,
+        ),
+    ] {
+        if present {
+            flags |= flag;
+        }
+    }
+    Info {
+        header: Header::of::<Info>(),
+        flags,
+        reserved: 0,
+        age_ms: if read == 0 {
+            u64::MAX
+        } else {
+            now.saturating_sub(read)
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_diagnostics_distinguish_never_read_stale_and_disabled_gates() {
+        use enshwick_core::abi::LocalInputInfo as Info;
+        let never = cached_status(false, true, true, true, 0, 100);
+        assert_eq!(
+            never.flags,
+            Info::LAYOUT_AVAILABLE | Info::LINK_AVAILABLE | Info::READ_ENABLED
+        );
+        assert_eq!(never.age_ms, u64::MAX);
+        let fresh = cached_status(true, true, true, true, 100, 1100);
+        assert_eq!(
+            fresh.flags,
+            Info::REQUESTED
+                | Info::LAYOUT_AVAILABLE
+                | Info::LINK_AVAILABLE
+                | Info::READ_ENABLED
+                | Info::SAMPLE_PRESENT
+                | Info::FRESH
+        );
+        assert_eq!(fresh.age_ms, 1000);
+        let stale = cached_status(true, true, true, true, 100, 1101);
+        assert_eq!(stale.flags & Info::FRESH, 0);
+        assert_eq!(stale.age_ms, 1001);
+        for (requested, layout, link, read) in [
+            (false, true, true, true),
+            (true, false, true, true),
+            (true, true, false, true),
+            (true, true, true, false),
+        ] {
+            let disabled = cached_status(requested, layout, link, read, 100, 101);
+            assert_eq!(disabled.flags & Info::FRESH, 0);
+            assert_ne!(disabled.flags & Info::SAMPLE_PRESENT, 0);
+            assert_eq!(disabled.age_ms, 1);
+        }
+    }
+
+    #[test]
+    fn diagnostics_neither_request_sampling_nor_read_game_state() {
+        assert!(!STATE.asked.load(Ordering::Relaxed));
+        let info = status();
+        assert_eq!(info.flags, enshwick_core::abi::LocalInputInfo::READ_ENABLED);
+        assert_eq!(info.age_ms, u64::MAX);
+        assert!(!STATE.asked.load(Ordering::Relaxed));
+    }
 
     #[test]
     fn a_panic_in_the_held_read_leaves_the_host_reads_linked() {
@@ -835,7 +921,7 @@ mod tests {
             read.snapshot(),
             Some((42, template, [1 << 32, -(5 << 32), 7]))
         );
-        read.seq.fetch_add(1, Ordering::Relaxed);
+        read.0.begin_write();
         assert_eq!(read.snapshot(), None, "mid-write");
     }
 

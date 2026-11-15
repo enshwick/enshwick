@@ -135,6 +135,12 @@ pub struct ItemInfo {
     /// The game's `ItemCategory`: 1 equipment (armour and rings), 2
     /// weapons, 3 tools, and so on.
     pub category: u8,
+    /// The template a player places from the item, its
+    /// `equipment.placedEntity`, the GUID's bytes in the game's file order;
+    /// `None` for an item that places nothing. It is not the template of
+    /// the item's own entity (see [`has_pide`](Self::has_pide)), and does
+    /// not say that a placement would succeed.
+    pub placed_entity_template: Option<crate::content::Guid>,
 }
 
 impl ItemInfo {

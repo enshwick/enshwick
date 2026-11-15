@@ -690,6 +690,7 @@ entries = [
   "ui.recipe_directory",
   "ui.recipe_highlighted",
   "ui.recipe_select",
+  "ui.return_screen",
   "ui.scroll_begin",
   "ui.scroll_config",
   "ui.scroll_config_extent",

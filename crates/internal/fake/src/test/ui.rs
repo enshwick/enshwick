@@ -297,6 +297,79 @@ impl Installed {
         table::with((), |s| s.local_held.bits = held);
     }
 
+    /// Sets cached local sampler diagnostics without changing held input.
+    pub fn set_local_input_status(&self, info: enshwick_core::abi::LocalInputInfo) {
+        table::with((), |s| s.local_input_info = info);
+    }
+
+    /// Sets the client snapshot the loader would write, as one
+    /// [`ClientSnapshot`](enshwick_core::abi::ClientSnapshot) with its
+    /// header set; a server still answers unavailable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{ClientSnapshot, Side, Str};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.set_client_snapshot(ClientSnapshot {
+    ///     state: ClientSnapshot::FRESH,
+    ///     available: ClientSnapshot::SCREENS,
+    ///     session: 1,
+    ///     age_ms: 16,
+    ///     hud_screen: Str::new("Backpack"),
+    ///     ..ClientSnapshot::EMPTY
+    /// });
+    /// ```
+    pub fn set_client_snapshot(&self, snapshot: enshwick_core::abi::ClientSnapshot) {
+        table::with((), |s| s.client_snapshot = snapshot);
+    }
+
+    /// The client commands mods queued, in order: each id, raw kind (such
+    /// as [`ClientCommand::OPEN_SCREEN`](enshwick_core::abi::ClientCommand))
+    /// and target.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.client_commands().is_empty());
+    /// ```
+    #[must_use]
+    pub fn client_commands(&self) -> Vec<(u64, u32, String)> {
+        table::with(Vec::new(), |s| {
+            s.client_commands
+                .iter()
+                .map(|(id, kind, target, _)| (*id, *kind, target.clone()))
+                .collect()
+        })
+    }
+
+    /// Moves client command `id` to `state` for `reason`, as the loader's
+    /// frame would ([`ClientCommandStatus`](enshwick_core::abi::ClientCommandStatus)
+    /// constants).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::ClientCommandStatus;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_command_status(1, ClientCommandStatus::OBSERVED, 0);
+    /// ```
+    pub fn set_command_status(&self, id: u64, state: u32, reason: u32) {
+        table::with((), |s| {
+            if let Some((.., status)) = s
+                .client_commands
+                .iter_mut()
+                .find(|(queued, ..)| *queued == id)
+            {
+                status.state = state;
+                status.reason = reason;
+            }
+        });
+    }
+
     /// The mod's markers on the map, as it set them last.
     ///
     /// # Examples

@@ -10,6 +10,35 @@ use crate::host::layer::{
 };
 
 entries! {
+    fn local_input_status(loader as Caller, out as HeadedOut<api_frame::LocalInputInfo>) -> Status {
+        on_client(loader)?;
+        out.put(crate::actions::local_held::status())
+    }
+
+    fn client_snapshot(loader as Caller, out as HeadedOut<api_frame::ClientSnapshot>) -> Status {
+        on_client(loader)?;
+        let scene = crate::base::saves::world_key(loader).map(crate::base::saves::stem);
+        out.put(crate::actions::client_snapshot::snapshot(scene))
+    }
+
+    fn client_command(
+        me as Mod,
+        spec as Headed<api_frame::ClientCommand>,
+        id as Out<u64>,
+    ) -> Status {
+        id.put(crate::actions::client_commands::queue(me.loader, me.index, &spec)?)
+    }
+
+    fn client_command_status(
+        me as Mod,
+        id: u64,
+        out as HeadedOut<api_frame::ClientCommandStatus>,
+    ) -> Status {
+        on_client(me.loader)?;
+        let status = crate::actions::client_commands::status(me.index, id).ok_or(Status::UNAVAILABLE)?;
+        out.put(status)
+    }
+
     fn local_held(loader as Caller, out as Out<u64>) -> Status {
         on_client(loader)?;
         out.put(crate::actions::local_held::held()?)

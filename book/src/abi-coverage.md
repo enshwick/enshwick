@@ -242,3 +242,6 @@ names every entry of the golden layout once, in that order.
 | `map_marker_types` | game | — | client |
 | `ui_extension` | game | — | client |
 | `local_held` | game | — | client |
+| `local_input_status` | loader | fake client/server and cached-state tests | not exercised |
+| `client_snapshot` | game | fake client/server, snapshot composition and session tests | client |
+| `loader_off` | loader | fake listing and kept-text tests | — |

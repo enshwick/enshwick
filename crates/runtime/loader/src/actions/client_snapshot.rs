@@ -1,0 +1,418 @@
+//! The client's state in one copy for any thread: the session, the open
+//! screens and the in-game menu's tab, kept by the interface frame, which
+//! alone may read the interface, and the local player's held controls from
+//! [`local_held`].
+//!
+//! Until a mod asks, the frame keeps nothing; the first ask starts it.
+
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+
+use enshwick_core::abi::{ClientSnapshot, Str};
+use enshwick_core::{Entity, RecipeId};
+
+use crate::actions::client_control::MenuTab;
+use crate::actions::local_held::{self, Sample};
+use crate::engine::copied::Copied;
+use crate::engine::fuse::Fuse;
+
+/// The feature's name in the log and on the Mods screen.
+const FEATURE: &str = "the client snapshot";
+/// The tab code of no tab.
+const NO_TAB: u64 = 0xff;
+
+/// What one interface frame read of the game the player is in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FrameRead {
+    /// The play data's address, which names the client's game object.
+    pub(crate) play: usize,
+    /// The HUD screen byte.
+    pub(crate) screen: u8,
+    /// The screen byte a stacked screen returns to, 0 for the world.
+    pub(crate) return_to: u8,
+    /// The open screen's host entity, 0 for none.
+    pub(crate) host: u32,
+    /// The in-game menu's shown tab.
+    pub(crate) tab: TabRead,
+}
+
+/// What a frame read of the in-game menu's tab.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TabRead {
+    /// The build lacks the tab read, or it is off.
+    Unread,
+    /// No menu screen is open.
+    NoMenu,
+    /// The menu shows this tab.
+    Shown(MenuTab),
+}
+
+/// What the frame keeps, written only on the interface thread.
+struct State {
+    asked: AtomicBool,
+    /// The session, the screens' packed word, the highlighted recipe's
+    /// word and the frame's time as [`local_held::now_ms`] counts.
+    copy: Copied<4>,
+    /// The play data, the local player and the world count the session was
+    /// counted on.
+    play: AtomicU64,
+    player: AtomicU32,
+    worlds: AtomicU64,
+    session: AtomicU64,
+}
+
+static STATE: State = State {
+    asked: AtomicBool::new(false),
+    copy: Copied::new(),
+    play: AtomicU64::new(0),
+    player: AtomicU32::new(0),
+    worlds: AtomicU64::new(0),
+    session: AtomicU64::new(0),
+};
+static FUSE: Fuse = Fuse::new(FEATURE);
+
+/// The screens of `read` in one word: the screen, the return-to screen,
+/// the tab code ([`NO_TAB`] for none) and the tab-read bit, then the host.
+fn pack(read: &FrameRead) -> u64 {
+    let (tab, tab_read) = match read.tab {
+        TabRead::NoMenu => (NO_TAB, 1),
+        TabRead::Shown(tab) => (tab.index(), 1),
+        TabRead::Unread => (NO_TAB, 0),
+    };
+    u64::from(read.screen)
+        | u64::from(read.return_to) << 8
+        | tab << 16
+        | tab_read << 24
+        | u64::from(read.host) << 32
+}
+
+/// The session for a frame on `play` with `player` in world count
+/// `worlds`, given the last counted; a new one when any of the three moved.
+fn next_session(last: (u64, u32, u64, u64), now: (u64, u32, u64)) -> u64 {
+    let (play, player, worlds, session) = last;
+    if session != 0 && (play, player, worlds) == now {
+        session
+    } else {
+        session + 1
+    }
+}
+
+/// Keeps the frame's `read` once a mod asked; on the interface thread,
+/// inside its frame. `read` runs only then.
+pub(crate) fn frame(read: impl FnOnce() -> Option<FrameRead>) {
+    if !STATE.asked.load(Ordering::Relaxed) {
+        return;
+    }
+    let _kept = FUSE.run(FEATURE, || {
+        let Some(read) = read() else {
+            return;
+        };
+        let now = (
+            read.play as u64,
+            local_held::player().map_or(0, |player| player.0),
+            crate::base::saves::worlds(),
+        );
+        let session = next_session(
+            (
+                STATE.play.load(Ordering::Relaxed),
+                STATE.player.load(Ordering::Relaxed),
+                STATE.worlds.load(Ordering::Relaxed),
+                STATE.session.load(Ordering::Relaxed),
+            ),
+            now,
+        );
+        STATE.play.store(now.0, Ordering::Relaxed);
+        STATE.player.store(now.1, Ordering::Relaxed);
+        STATE.worlds.store(now.2, Ordering::Relaxed);
+        STATE.session.store(session, Ordering::Relaxed);
+        STATE
+            .copy
+            .write([session, pack(&read), 0, local_held::now_ms()]);
+    });
+}
+
+/// Starts the frame's reads, which a client command checks itself against.
+pub(crate) fn ask() {
+    STATE.asked.store(true, Ordering::Relaxed);
+}
+
+/// The session the last frame counted, 0 before one; on the interface
+/// thread, after [`frame`].
+pub(crate) fn session() -> u64 {
+    STATE.session.load(Ordering::Relaxed)
+}
+
+/// The client's state now; asking starts the reads.
+pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
+    ask();
+    let off = FUSE.is_off() || crate::ui::interface::screen_reads_off();
+    compose(
+        Kept {
+            words: STATE.copy.read(),
+            off,
+            held: local_held::sample(),
+            player: local_held::player(),
+            scene,
+        },
+        local_held::now_ms(),
+        crate::ui::interface::screen_name,
+    )
+}
+
+/// What a snapshot is made of: the frame's last whole copy, whether the
+/// reads are off, the held controls' sample, the local player and the
+/// world's name.
+#[derive(Clone, Copy, Debug)]
+struct Kept {
+    words: Option<[u64; 4]>,
+    off: bool,
+    held: Sample,
+    player: Option<Entity>,
+    scene: Option<&'static str>,
+}
+
+/// The snapshot of `kept` at `now`, naming screen bytes with `name`.
+fn compose(kept: Kept, now: u64, name: impl Fn(u8) -> &'static str) -> ClientSnapshot {
+    let mut snapshot = ClientSnapshot {
+        scene: kept.scene.map_or(Str::EMPTY, Str::new),
+        ..ClientSnapshot::EMPTY
+    };
+    if let Sample::Fresh { bits, .. } = kept.held {
+        snapshot.held = bits;
+        snapshot.available |= ClientSnapshot::HELD;
+        if let Some(player) = kept.player {
+            snapshot.player = player;
+            snapshot.available |= ClientSnapshot::PLAYER;
+        }
+    }
+    // A copy mid-write through every try keeps the screens out of this one.
+    let [session, screens, recipe, read] = kept.words.unwrap_or_default();
+    snapshot.state = if kept.off {
+        ClientSnapshot::OFF
+    } else if read == 0 {
+        ClientSnapshot::NEVER
+    } else if local_held::fresh(read, now) {
+        ClientSnapshot::FRESH
+    } else {
+        ClientSnapshot::STALE
+    };
+    if kept.off || read == 0 {
+        return snapshot;
+    }
+    snapshot.session = session;
+    snapshot.age_ms = now.saturating_sub(read);
+    let byte = |shift: u32| u8::try_from(screens >> shift & 0xff).unwrap_or(0);
+    let named = |screen: u8| Str::new(name(screen));
+    snapshot.hud_screen = named(byte(0));
+    if byte(8) != 0 {
+        snapshot.return_screen = named(byte(8));
+    }
+    snapshot.host = Entity(u32::try_from(screens >> 32).unwrap_or(0));
+    snapshot.available |= ClientSnapshot::SCREENS;
+    if screens >> 24 & 1 == 1 {
+        snapshot.available |= ClientSnapshot::MENU_TAB;
+        if let Some(tab) = MenuTab::ALL
+            .into_iter()
+            .find(|tab| tab.index() == screens >> 16 & 0xff)
+        {
+            snapshot.menu_tab = Str::new(tab.name());
+        }
+    }
+    if recipe >> 32 & 1 == 1 {
+        snapshot.available |= ClientSnapshot::RECIPE;
+        snapshot.highlighted_recipe = RecipeId(u32::try_from(recipe & 0xffff_ffff).unwrap_or(0));
+    }
+    snapshot
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The text of a snapshot's name.
+    fn text(name: Str) -> Option<&'static str> {
+        // SAFETY: every name a snapshot holds is static text.
+        unsafe { name.as_str() }
+    }
+
+    /// The names of client 26430625's screens the tests use.
+    fn name(screen: u8) -> &'static str {
+        match screen {
+            1 => "InGame",
+            4 => "InGameMenu",
+            8 => "PlayerCrafting",
+            9 => "Backpack",
+            0x15 => "StorageChest",
+            _ => "",
+        }
+    }
+
+    fn kept(words: Option<[u64; 4]>) -> Kept {
+        Kept {
+            words,
+            off: false,
+            held: Sample::Never { miss: None },
+            player: None,
+            scene: None,
+        }
+    }
+
+    fn read(screen: u8, tab: TabRead) -> FrameRead {
+        FrameRead {
+            play: 0x1000,
+            screen,
+            return_to: 0,
+            host: 0,
+            tab,
+        }
+    }
+
+    #[test]
+    fn a_snapshot_before_any_frame_is_never_read_and_names_no_screen() {
+        let snapshot = compose(kept(None), 50, name);
+        assert_eq!(snapshot.state, ClientSnapshot::NEVER);
+        assert_eq!(snapshot.available, 0);
+        assert_eq!(snapshot.age_ms, u64::MAX);
+        assert_eq!(snapshot.session, 0);
+        let zero = compose(kept(Some([0; 4])), 50, name);
+        assert_eq!(zero.state, ClientSnapshot::NEVER, "a copy never written");
+    }
+
+    #[test]
+    fn the_menu_tab_shows_apart_from_the_screen_byte() {
+        let words = [3, pack(&read(4, TabRead::Shown(MenuTab::Backpack))), 0, 100];
+        let snapshot = compose(kept(Some(words)), 150, name);
+        assert_eq!(snapshot.state, ClientSnapshot::FRESH);
+        assert_eq!(snapshot.session, 3);
+        assert_eq!(snapshot.age_ms, 50);
+        assert_eq!(text(snapshot.hud_screen), Some("InGameMenu"));
+        assert_eq!(text(snapshot.menu_tab), Some("Backpack"));
+        assert_eq!(
+            snapshot.available,
+            ClientSnapshot::SCREENS | ClientSnapshot::MENU_TAB
+        );
+        let crafting = [3, pack(&read(8, TabRead::Shown(MenuTab::Backpack))), 0, 100];
+        let snapshot = compose(kept(Some(crafting)), 150, name);
+        assert_eq!(
+            (text(snapshot.hud_screen), text(snapshot.menu_tab)),
+            (Some("PlayerCrafting"), Some("Backpack")),
+            "V, then E"
+        );
+    }
+
+    #[test]
+    fn no_menu_names_no_tab_and_a_build_without_the_tab_read_leaves_its_bit_clear() {
+        let world = compose(
+            kept(Some([1, pack(&read(1, TabRead::NoMenu)), 0, 100])),
+            150,
+            name,
+        );
+        assert_eq!(text(world.menu_tab), Some(""));
+        assert_ne!(world.available & ClientSnapshot::MENU_TAB, 0);
+        let unread = compose(
+            kept(Some([1, pack(&read(4, TabRead::Unread)), 0, 100])),
+            150,
+            name,
+        );
+        assert_eq!(unread.available & ClientSnapshot::MENU_TAB, 0);
+        assert_eq!(text(unread.hud_screen), Some("InGameMenu"));
+    }
+
+    #[test]
+    fn a_stacked_screen_names_where_it_returns_and_its_host() {
+        let read = FrameRead {
+            return_to: 9,
+            host: 77,
+            ..read(0x15, TabRead::NoMenu)
+        };
+        let snapshot = compose(kept(Some([1, pack(&read), 0, 100])), 150, name);
+        assert_eq!(text(snapshot.hud_screen), Some("StorageChest"));
+        assert_eq!(text(snapshot.return_screen), Some("Backpack"));
+        assert_eq!(snapshot.host, Entity(77));
+        let world = compose(kept(Some([1, pack(&read_world()), 0, 100])), 150, name);
+        assert_eq!(text(world.return_screen), Some(""), "back to the world");
+    }
+
+    fn read_world() -> FrameRead {
+        read(1, TabRead::NoMenu)
+    }
+
+    #[test]
+    fn a_paused_game_reports_its_age_as_stale_not_as_absent() {
+        let snapshot = compose(kept(Some([2, pack(&read_world()), 0, 100])), 1200, name);
+        assert_eq!(snapshot.state, ClientSnapshot::STALE);
+        assert_eq!(snapshot.age_ms, 1100);
+        assert_eq!(snapshot.session, 2);
+        assert_eq!(text(snapshot.hud_screen), Some("InGame"));
+    }
+
+    #[test]
+    fn reads_turned_off_answer_off_with_no_screens() {
+        let snapshot = compose(
+            Kept {
+                off: true,
+                ..kept(Some([2, pack(&read_world()), 0, 100]))
+            },
+            150,
+            name,
+        );
+        assert_eq!(snapshot.state, ClientSnapshot::OFF);
+        assert_eq!(snapshot.available & ClientSnapshot::SCREENS, 0);
+    }
+
+    #[test]
+    fn the_held_controls_and_the_player_count_only_from_a_fresh_sample() {
+        let fresh = Kept {
+            held: Sample::Fresh {
+                bits: 1 << 30,
+                age_ms: 5,
+            },
+            player: Some(Entity(9)),
+            scene: Some("world1"),
+            ..kept(None)
+        };
+        let snapshot = compose(fresh, 150, name);
+        assert_eq!(snapshot.held, 1 << 30);
+        assert_eq!(snapshot.player, Entity(9));
+        assert_eq!(text(snapshot.scene), Some("world1"));
+        assert_eq!(
+            snapshot.available,
+            ClientSnapshot::HELD | ClientSnapshot::PLAYER
+        );
+        let stale = Kept {
+            held: Sample::Stale {
+                bits: 1,
+                age_ms: 2000,
+                miss: None,
+            },
+            ..fresh
+        };
+        assert_eq!(compose(stale, 150, name).available, 0);
+    }
+
+    #[test]
+    fn a_session_lasts_while_the_game_object_the_player_and_the_world_stay() {
+        assert_eq!(next_session((0, 0, 0, 0), (0x1000, 7, 1)), 1, "the first");
+        assert_eq!(next_session((0x1000, 7, 1, 1), (0x1000, 7, 1)), 1);
+        assert_eq!(next_session((0x1000, 7, 1, 1), (0x2000, 7, 1)), 2, "object");
+        assert_eq!(next_session((0x1000, 7, 1, 1), (0x1000, 8, 1)), 2, "player");
+        assert_eq!(next_session((0x1000, 7, 1, 1), (0x1000, 7, 2)), 2, "world");
+    }
+
+    #[test]
+    fn the_frame_keeps_nothing_until_a_mod_asks_and_then_counts_a_session() {
+        let mut ran = false;
+        frame(|| {
+            ran = true;
+            None
+        });
+        assert!(!ran, "no read before an ask");
+        let first = snapshot(None);
+        assert_eq!(first.state, ClientSnapshot::NEVER);
+        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))));
+        let second = snapshot(None);
+        assert_eq!(second.state, ClientSnapshot::FRESH);
+        assert_eq!(second.session, 1);
+        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))));
+        assert_eq!(snapshot(None).session, 1, "the same session");
+    }
+}

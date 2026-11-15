@@ -390,12 +390,15 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
 
 /// The interaction prompt's title, valid byte and verb in the interface's
 /// play data, and the open screen's host entity, the same on every kept
-/// client (static, research of 2026-11-06).
-const PLAY_DATA_READS: [(&str, u64); 4] = [
+/// client (static, research of 2026-11-06); the screen a stacked screen
+/// returns to, beside the HUD screen byte (`set_screen`, client 26430625,
+/// 2026-11-15).
+const PLAY_DATA_READS: [(&str, u64); 5] = [
     ("ui.prompt_title", 0x2bc0),
     ("ui.prompt_valid", 0x2bdd),
     ("ui.prompt_verb", 0x2bd8),
     ("ui.screen_host", 0x2c50),
+    ("ui.return_screen", 0x1cd9),
 ];
 
 /// The kept client tables, by name.

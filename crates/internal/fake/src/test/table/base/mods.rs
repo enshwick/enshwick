@@ -252,6 +252,17 @@ pub(crate) extern "system" fn mods(
     list(&mods, out, entry_size, capacity, count)
 }
 
+pub(crate) extern "system" fn loader_off(
+    _me: ModHandle,
+    out: *mut enshwick_core::abi::LoaderOff,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let off = with(Vec::new(), |s| s.loader_off.clone());
+    list(&off, out, entry_size, capacity, count)
+}
+
 pub(crate) extern "system" fn join_missing(
     _me: ModHandle,
     out: *mut ModInfo,

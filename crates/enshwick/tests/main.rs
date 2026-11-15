@@ -30,8 +30,10 @@ mod calls;
 mod capture;
 #[cfg(feature = "unstable")]
 mod chat;
+mod client_commands;
 #[cfg(all(feature = "unstable", feature = "typed"))]
 mod client_game_events;
+mod client_snapshot;
 #[cfg(feature = "unstable")]
 mod commands;
 mod config_check;
@@ -125,6 +127,9 @@ mod language_of;
 mod lifecycle;
 mod live_changes;
 mod live_changes_join;
+mod loader_off;
+#[cfg(feature = "unstable")]
+mod local_input_status;
 mod loot_drops;
 mod loot_table_changes;
 mod manifest_flags;

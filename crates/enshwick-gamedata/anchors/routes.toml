@@ -9182,6 +9182,14 @@ take = "value"
 range = [0x18f38, 0x63d10]
 
 [[route]]
+id = "ui.return_screen"
+sides = ["client"]
+in = "~in_game_menu"
+shape = ["movzx eax,[?+*]", "mov rcx,?r", "test al,al", "cmovne ?r,eax", "movzx edx,?r", "call {ui.toggle_hud_screen}"]
+take = "value"
+range = [0xe6c, 0x39b2]
+
+[[route]]
 id = "ui.recipe_directory"
 sides = ["client"]
 loads = ["doRecipeDirectoryColumn"]

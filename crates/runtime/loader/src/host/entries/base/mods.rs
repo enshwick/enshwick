@@ -20,7 +20,7 @@ pub(crate) fn loader_info() -> ModInfo {
     ModInfo {
         header: Header::of::<ModInfo>(),
         id: Str::new(crate::engine::settings::LOADER_ID),
-        version: Str::new(env!("CARGO_PKG_VERSION")),
+        version: Str::new(crate::base::releases::STATED),
         side: Side::BOTH,
         flags: ManifestFlags::NONE,
         off: 0,
@@ -110,6 +110,13 @@ entries! {
         out.put(&infos)
     }
 
+    fn loader_off(
+        _me as AnyMod,
+        [out, entry_size, capacity, count] as SizedListOut<api_frame::LoaderOff>,
+    ) -> Status {
+        out.put(&crate::engine::diag::parts_off_listed())
+    }
+
     fn join_missing(
         _me as AnyMod,
         [out, entry_size, capacity, count] as SizedListOut<ModInfo>,
@@ -188,5 +195,15 @@ entries! {
                 .filter(|loader| loader.side == Side::CLIENT)
                 .map_or(0, |_| crate::content::served::language().0),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_mods_screen_s_own_row_states_the_running_version() {
+        // SAFETY: the view points at the static text of `STATED`.
+        let version = unsafe { super::loader_info().version.as_str() };
+        assert_eq!(version, Some(crate::base::releases::STATED));
     }
 }

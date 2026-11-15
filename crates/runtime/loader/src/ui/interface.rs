@@ -119,6 +119,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::PROMPT_VALID.id(),
     pinned::ui::PROMPT_VERB.id(),
     pinned::ui::SCREEN_HOST.id(),
+    pinned::ui::RETURN_SCREEN.id(),
     pinned::ui::HUD_VISIBLE.id(),
     pinned::ui::INPUT_HINT.id(),
     pinned::ui::LABEL_ALIGN.id(),
@@ -604,6 +605,9 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
     crate::actions::controls::frame(context);
+    // SAFETY: inside the frame on the interface thread, `context` non-zero
+    // by the guard before it.
+    unsafe { snapshot::note(engine, context) };
     engine.restore_nav(context, nav);
     // SAFETY: `state` is non-null, checked by the guard before it, and is the
     // popup state the game passed to `ui.popup`; its active byte sits at the
@@ -959,6 +963,8 @@ fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::Frame
 }
 
 mod painter;
+mod snapshot;
+pub(crate) use snapshot::{screen_name, screen_reads_off};
 #[cfg(test)]
 mod recorder;
 pub(crate) use painter::{Painter, widget};

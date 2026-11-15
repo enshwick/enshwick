@@ -7,16 +7,17 @@ use crate::abi::{
     AccountActionType, ActionFn, ActionReply, ActionTarget, ActiveBuff, AffixRoll, AffixSpec,
     AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BedCheckFn, BuffRequest,
     BuffTypeInfo, BuildFilterFn, BuildInfo, BuildRights, BuildingZoneFilterFn, CallFn, CallSpec,
-    CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ComfortFilterFn, CommandInfo, ConfigCheckFn,
-    ContentRename, ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo,
-    DropRequest, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
-    ExperienceFilterFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFilterFn,
-    InventoryRequest, InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo, JoinRuleFn,
-    KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoopWaitFn, LoopWaitSites,
-    MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
-    RecipeKind, RecipeRuleKind, RenameFilterFn, ResourceKey, ResourcePatchFn, SaveInfo,
-    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn,
+    CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ClientCommand, ClientCommandStatus,
+    ClientSnapshot, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContentRename, ControlFn,
+    ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo, DropRequest,
+    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperienceFilterFn,
+    FogInfo, GameEventFn, Header, HookSpec, InteractionFilterFn, InventoryRequest,
+    InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo, JoinRuleFn, KnowledgeChange,
+    KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff, LocalInputInfo, LoopWaitFn,
+    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn,
+    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
+    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn, ResourceKey, ResourcePatchFn,
+    SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn,
     StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
     TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension,
@@ -75,7 +76,11 @@ use crate::content::Guid;
 pub struct HostApi {
     /// Size and version of this struct.
     pub header: Header,
-    /// The loader's own SemVer version, valid for the process.
+    /// The loader's own SemVer version, valid for the process: a release's,
+    /// or a development build's, such as `1.0.0-alpha.15+dev.5f647f46`,
+    /// which sorts with the release it follows. Compatibility is the ABI
+    /// version's alone ([`Header::abi_major`], [`Header::abi_minor`]), never
+    /// this text's.
     pub host_version: Str,
     /// Writes the running game's identity, its side, image base, build
     /// fingerprint and whether the loader found every entry it knows, as far as the
@@ -2096,6 +2101,54 @@ pub struct HostApi {
     /// without the read; [`Status::BAD_ARGS`] for a null `out`. Any thread;
     /// `out` is borrowed for the call.
     pub local_held: extern "system" fn(me: ModHandle, out: *mut u64) -> Status,
+    /// Copies the local input sampler's cached diagnostics without requesting reads.
+    /// Client only ([`Status::UNAVAILABLE`] on a server); callable on any thread.
+    /// No game memory is read. Flags are weakly consistent and age is not session identity.
+    /// `out` is a headed, writable `LocalInputInfo`. ABI 12.1.
+    pub local_input_status: extern "system" fn(me: ModHandle, out: *mut LocalInputInfo) -> Status,
+    /// Writes to `out`, a headed [`ClientSnapshot`], the client's state in
+    /// one copy: its session, the open screens and the in-game menu's tab
+    /// from the interface's last frame, and the local player's held
+    /// controls. The first call starts the interface's reads and the held
+    /// controls' reads, so it answers [`ClientSnapshot::NEVER`]; every call
+    /// after a frame drew a game answers its copy. Client only:
+    /// [`Status::UNAVAILABLE`] on a server; [`Status::BAD_ARGS`] for a null
+    /// or unheaded `out`. Any thread; it runs no mod callback, and `out` is
+    /// borrowed for the call. ABI 12.1.
+    pub client_snapshot: extern "system" fn(me: ModHandle, out: *mut ClientSnapshot) -> Status,
+    /// Up to `capacity` parts and features of the loader that are off, in
+    /// the order they turned off, and how many there are. Entries are
+    /// `entry_size` bytes apart, the caller's `size_of::<LoaderOff>()`; the
+    /// loader fills what both sides know of each and its own [`Header`].
+    /// Everything it does not list runs. The strings stay valid for the
+    /// process, since the loader keeps each entry's first reason and drops
+    /// none. Any thread; it runs no mod callback. ABI 12.1.
+    pub loader_off: extern "system" fn(
+        me: ModHandle,
+        out: *mut LoaderOff,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Queues `spec`, a headed [`ClientCommand`], and writes its id to `id`:
+    /// the call answers only that it is queued, and
+    /// [`HostApi::client_command_status`] tells what came of it. One command
+    /// of each kind waits per mod: a second answers [`Status::REFUSED`]
+    /// until the first ends. [`Status::BAD_ARGS`] for an unknown kind, a
+    /// target the kind does not take, a look past
+    /// [`ClientCommand::MAX_LOOK`], a direction longer than 1 or a hold past
+    /// [`ClientCommand::MAX_HOLD_MS`]; [`Status::UNAVAILABLE`] on a server
+    /// and on a build without what the kind needs. Any thread; the command
+    /// runs later on the client's game thread, never inside a mod callback.
+    /// ABI 12.1.
+    pub client_command:
+        extern "system" fn(me: ModHandle, spec: *const ClientCommand, id: *mut u64) -> Status,
+    /// Writes to `out`, a headed [`ClientCommandStatus`], where the mod's
+    /// command `id` stands. The loader keeps the last 64 commands' outcomes;
+    /// [`Status::UNAVAILABLE`] for an id it no longer keeps or another mod's.
+    /// Any thread. ABI 12.1.
+    pub client_command_status:
+        extern "system" fn(me: ModHandle, id: u64, out: *mut ClientCommandStatus) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2308,5 +2361,10 @@ const _: () = {
     assert!(offset_of!(HostApi, map_marker_types) == 24 + 199 * 8);
     assert!(offset_of!(HostApi, ui_extension) == 24 + 200 * 8);
     assert!(offset_of!(HostApi, local_held) == 24 + 201 * 8);
-    assert!(size_of::<HostApi>() == 24 + 202 * 8);
+    assert!(offset_of!(HostApi, local_input_status) == 24 + 202 * 8);
+    assert!(offset_of!(HostApi, client_snapshot) == 24 + 203 * 8);
+    assert!(offset_of!(HostApi, loader_off) == 24 + 204 * 8);
+    assert!(offset_of!(HostApi, client_command) == 24 + 205 * 8);
+    assert!(offset_of!(HostApi, client_command_status) == 24 + 206 * 8);
+    assert!(size_of::<HostApi>() == 24 + 207 * 8);
 };

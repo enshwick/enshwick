@@ -126,16 +126,55 @@ pub fn path(running: &Version) -> &'static str {
 /// ```
 #[must_use]
 pub fn stated(release: &Version, commit: Option<&str>) -> Version {
-    let Some(commit) = commit
-        .filter(|commit| !commit.is_empty() && commit.bytes().all(|b| b.is_ascii_hexdigit()))
-        .map(|commit| commit.get(..8).unwrap_or(commit))
-    else {
+    let Some(commit) = commit_tag(commit) else {
         return release.clone();
     };
     let mut dev = release.clone();
     // A hex commit after `dev.` is a valid identifier: it never falls back.
-    dev.build = BuildMetadata::new(&format!("dev.{commit}")).unwrap_or_default();
+    dev.build = BuildMetadata::new(&format!("{DEV}{commit}")).unwrap_or_default();
     dev
+}
+
+/// What a development build's version puts before its commit, after `+`.
+pub const DEV: &str = "dev.";
+
+/// The part of `commit` a development build states, as [`stated`] does.
+///
+/// It is the first eight hex digits; `None` for none, an empty one or one
+/// that is not hex. A `const fn`, so a version can be assembled at compile
+/// time.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::releases::commit_tag;
+///
+/// assert_eq!(commit_tag(Some("5f647f46c0ffee")), Some("5f647f46"));
+/// assert_eq!(commit_tag(Some("abc")), Some("abc"));
+/// assert_eq!(commit_tag(Some("main")), None);
+/// assert_eq!(commit_tag(None), None);
+/// ```
+#[must_use]
+pub const fn commit_tag(commit: Option<&str>) -> Option<&str> {
+    let Some(commit) = commit else {
+        return None;
+    };
+    let bytes = commit.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut at = 0;
+    while at < bytes.len() {
+        if !bytes[at].is_ascii_hexdigit() {
+            return None;
+        }
+        at += 1;
+    }
+    if bytes.len() <= 8 {
+        Some(commit)
+    } else {
+        Some(commit.split_at(8).0)
+    }
 }
 
 /// The line the loader and `cargo enshwick` state their version in, with
