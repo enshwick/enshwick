@@ -7,6 +7,12 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Changed
+
+- A sound and its playing are one kind of request (#1106).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Changed

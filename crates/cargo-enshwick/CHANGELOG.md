@@ -6,6 +6,22 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- The generated Luau definitions describe the sampler status, the client
+  snapshot, client commands and the list of loader parts that are off
+  (#1118).
+
+### Changed
+
+- The Luau definitions follow ABI 12.0: the renamed calls and fields,
+  `actions.template`, `content.templates` and the world module out of
+  `unstable` (#1106).
+- `cargo enshwick --version` names the ABI version its mods build for, and a
+  development build states its commit, as the loader does (#1114).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Added

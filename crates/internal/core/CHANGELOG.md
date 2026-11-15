@@ -7,6 +7,13 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Changed
+
+- `Load`'s forwarders follow the host entries of ABI 12.0, each taking the
+  mod handle and answering a status (#1106).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Added

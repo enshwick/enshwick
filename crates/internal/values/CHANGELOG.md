@@ -7,6 +7,17 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- A script reads and writes a pair of `f32` as a list of two numbers, as a
+  look or a move's direction (#1118).
+
+### Changed
+
+- `Guid` is the one GUID of the ABI, in the game's byte order (#1106).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Changed

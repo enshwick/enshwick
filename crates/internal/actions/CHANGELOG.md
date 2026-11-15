@@ -7,6 +7,21 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- `Input::local_status()`, `Input::client_snapshot()` with its
+  `highlighted_recipe()`, and `Input::client_command()`,
+  `cancel_command()` and `command_status()` with `CommandAction`,
+  `CommandState` and `CancelReason`, and their Luau mirrors (#1118).
+
+### Changed
+
+- `Arg::template` and `Value::Template` name a template, which a window
+  lists by name; a run answers `ActionCall::ALLOWED` from its rights alone,
+  and carried controls follow those rights (#1106).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Added
