@@ -452,13 +452,17 @@ mod tests {
             None
         });
         assert!(!ran, "no read before an ask");
-        let first = snapshot(None);
-        assert_eq!(first.state, ClientSnapshot::NEVER);
+        // The frame's own copy, composed as `snapshot` does, without asking
+        // for the held reads, which other tests in the process read as
+        // never asked.
+        let kept = || compose(kept(STATE.copy.load()), local_held::now_ms(), name);
+        ask();
+        assert_eq!(kept().state, ClientSnapshot::NEVER);
         frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))));
-        let second = snapshot(None);
+        let second = kept();
         assert_eq!(second.state, ClientSnapshot::FRESH);
         assert_eq!(second.session, 1);
         frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))));
-        assert_eq!(snapshot(None).session, 1, "the same session");
+        assert_eq!(kept().session, 1, "the same session");
     }
 }

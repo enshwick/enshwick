@@ -63,6 +63,13 @@ const STATED_BYTES: [u8; STATED_LEN] = {
 /// The running loader's version as static text, the same as [`running`]
 /// states it: what the host table's `host_version` and the Mods screen's
 /// own row give.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(
+        dead_code,
+        reason = "only the Windows build has a host table and a Mods screen"
+    )
+)]
 pub(crate) const STATED: &str = match core::str::from_utf8(&STATED_BYTES) {
     Ok(stated) => stated,
     Err(_) => RELEASE,
