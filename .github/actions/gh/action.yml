@@ -8,8 +8,8 @@ runs:
   steps:
     - shell: bash
       env:
-        GH_TAG: v2.103.3
-        GH_SHA256: 4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
+        GH_TAG: v2.104.0
+        GH_SHA256: 98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e
       run: | # zizmor: ignore[github-env] fixed paths only
         # The pin names the release tag, which Renovate looks releases up by.
         GH_VERSION="${GH_TAG#v}"
