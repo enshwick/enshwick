@@ -557,14 +557,18 @@ pub(crate) fn sample() -> Sample {
     if !STATE.asked.load(Ordering::Relaxed) {
         STATE.asked.store(true, Ordering::Relaxed);
     }
-    let raw = Raw {
+    sample_at(raw(), now_ms())
+}
+
+/// The reads' raw state now, without asking.
+fn raw() -> Raw {
+    Raw {
         off: FUSE.is_off() || LINK_FUSE.is_off(),
         read: STATE.read_ms.load(Ordering::Acquire),
         bits: STATE.bits.load(Ordering::Relaxed),
         miss: STATE.miss.load(Ordering::Relaxed),
         miss_ms: STATE.miss_ms.load(Ordering::Relaxed),
-    };
-    sample_at(raw, now_ms())
+    }
 }
 
 /// The local player's held mask, zero bits when none is held, or
@@ -810,7 +814,7 @@ mod tests {
         loader.side = Side::CLIENT;
         link(&loader);
         assert!(LINK_FUSE.is_off() && !FUSE.is_off());
-        assert_eq!(sample(), Sample::Off);
+        assert_eq!(sample_at(super::raw(), now_ms()), Sample::Off);
     }
 
     #[test]
