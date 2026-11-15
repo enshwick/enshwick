@@ -483,12 +483,21 @@ pub(crate) fn frame(seen: impl FnOnce() -> Option<Seen>, apply: impl FnMut(Kind)
     if !STATE.open.load(Ordering::Acquire) {
         return;
     }
-    let _ran = FUSE.run(FEATURE, || run(seen(), local_held::now_ms(), apply));
+    let _ran = FUSE.run(FEATURE, || {
+        let mut commands = STATE.commands.relock();
+        let open = run(&mut commands, seen(), local_held::now_ms(), apply);
+        STATE.open.store(open, Ordering::Release);
+    });
 }
 
-/// Runs the open commands at `now` with what the frame `seen`.
-fn run(seen: Option<Seen>, now: u64, mut apply: impl FnMut(Kind) -> Applied) {
-    let mut commands = STATE.commands.relock();
+/// Runs the open `commands` at `now` with what the frame `seen`; whether
+/// one is still open.
+fn run(
+    commands: &mut Commands,
+    seen: Option<Seen>,
+    now: u64,
+    mut apply: impl FnMut(Kind) -> Applied,
+) -> bool {
     for command in commands.kept.iter_mut().filter(|c| c.open()) {
         let off = crate::engine::loader::is_off(command.owner)
             || (command.kind.handed() && !runs(command.kind));
@@ -525,8 +534,7 @@ fn run(seen: Option<Seen>, now: u64, mut apply: impl FnMut(Kind) -> Applied) {
             }
         }
     }
-    let any_open = commands.kept.iter().any(Command::open);
-    STATE.open.store(any_open, Ordering::Release);
+    commands.kept.iter().any(Command::open)
 }
 
 #[cfg(test)]
@@ -852,28 +860,28 @@ mod tests {
         assert_eq!(next(&unread, &holding, None, 150), Next::Apply);
     }
 
-    /// Keeps `command` as the loader's own, which reads as on without a
-    /// loader running.
-    fn kept(command: Command) {
-        let mut commands = STATE.commands.relock();
-        commands.kept.push_back(Command {
-            owner: ModIndex::LOADER,
-            ..command
-        });
-        STATE.open.store(true, Ordering::Release);
-    }
-
-    fn first() -> Command {
-        STATE.commands.relock().kept[0]
+    /// Commands of their own for a test, apart from the process's, holding
+    /// `command` as the loader's own, which reads as on without a loader.
+    fn kept(command: Command) -> Commands {
+        Commands {
+            next_id: 2,
+            kept: VecDeque::from([Command {
+                owner: ModIndex::LOADER,
+                ..command
+            }]),
+        }
     }
 
     #[test]
     fn a_frame_that_reads_no_game_still_ends_a_command_past_its_timeout() {
-        kept(command(Kind::Tab(MenuTab::Map)));
-        run(None, 150, |_| Applied::Taken);
-        assert!(first().open(), "within its timeout");
-        run(None, 100 + TIMEOUT_MS + 1, |_| Applied::Taken);
-        let ended = first();
+        let mut commands = kept(command(Kind::Tab(MenuTab::Map)));
+        assert!(
+            run(&mut commands, None, 150, |_| Applied::Taken),
+            "within its timeout"
+        );
+        let late = 100 + TIMEOUT_MS + 1;
+        assert!(!run(&mut commands, None, late, |_| Applied::Taken));
+        let ended = commands.kept[0];
         assert_eq!(
             (ended.state, ended.reason),
             (Status::CANCELLED, Status::TIMED_OUT)
@@ -882,7 +890,7 @@ mod tests {
 
     #[test]
     fn a_command_of_session_0_takes_the_session_and_held_baseline_of_its_first_frame() {
-        kept(Command {
+        let mut commands = kept(Command {
             session: 0,
             held: None,
             ..command(Kind::Open(9))
@@ -892,24 +900,22 @@ mod tests {
             held: Some(1 << 3),
             ..seen(1, TabRead::NoMenu)
         };
-        run(Some(shown), 150, |_| Applied::Taken);
-        let running = first();
+        run(&mut commands, Some(shown), 150, |_| Applied::Taken);
+        let running = commands.kept[0];
         assert_eq!((running.session, running.held), (5, Some(1 << 3)));
         assert_eq!(running.state, Status::APPLIED, "not cancelled");
     }
 
     #[test]
-    fn no_kind_runs_while_the_screen_reads_or_the_commands_are_off() {
+    fn no_kind_runs_while_the_screen_reads_are_off() {
         crate::engine::screens::READS_FUSE.blow("a test");
         assert!(!runs(Kind::Open(9)));
         assert!(!runs(Kind::Tab(MenuTab::Map)));
     }
 
     #[test]
-    fn a_panic_in_the_commands_turns_off_only_the_commands() {
-        kept(command(Kind::Open(9)));
-        frame(|| panic!("a test"), |_| Applied::Taken);
-        assert!(FUSE.is_off(), "the panic stopped at the commands' fuse");
+    fn no_kind_runs_once_the_commands_panicked() {
+        FUSE.blow("a test");
         assert!(!runs(Kind::Open(9)), "queueing answers unavailable");
     }
 
