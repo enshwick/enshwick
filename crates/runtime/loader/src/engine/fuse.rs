@@ -202,6 +202,7 @@ impl Fuse {
 
     /// Whether this very fuse is one of `fuses`: two fuses may share a name,
     /// so a list of features is told apart by fuse, never by name.
+    #[cfg(windows)]
     pub(crate) fn among(&self, fuses: &[&Self]) -> bool {
         fuses.iter().any(|fuse| core::ptr::eq(*fuse, self))
     }
