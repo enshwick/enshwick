@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-fake"
-version = "1.0.0-alpha.15"
+version = "1.0.0-alpha.16"
 description = "Internal part of enshwick; depend on enshwick: the fake loader for a mod's unit tests"
 keywords = ["enshrouded", "modding", "game", "testing", "fake"]
 categories = ["game-development", "development-tools::testing"]
@@ -13,7 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.15" }
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.16" }
 enshwick-core = { workspace = true, features = ["fake"] }
 bytemuck.workspace = true
 postcard.workspace = true
