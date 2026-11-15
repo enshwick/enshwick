@@ -223,9 +223,8 @@ impl ClientSnapshot {
         self.raw.available & part.bit() != 0
     }
 
-    /// The open HUD screen, a member of the game's `HudScreenType`
-    /// ([`HudScreenType::from_name`](crate::ui) names it); `None` while
-    /// unread.
+    /// The open HUD screen, a member of the game's `HudScreenType`, as
+    /// `ui::HudScreenType::from_name` reads it; `None` while unread.
     ///
     /// # Examples
     ///
