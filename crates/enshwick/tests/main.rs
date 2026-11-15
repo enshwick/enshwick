@@ -80,8 +80,6 @@ mod game_event_kinds;
 mod game_events;
 mod game_names;
 mod game_settings;
-#[cfg(feature = "unstable")]
-mod held_samples;
 mod hook_macro;
 mod host_reads;
 #[cfg(feature = "unstable")]

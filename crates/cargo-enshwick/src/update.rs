@@ -177,7 +177,7 @@ fn running() -> Version {
 /// builds take.
 pub(crate) static VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     use enshwick_abi::abi::{ABI_MAJOR, ABI_MINOR};
-    format!("{} (ABI {ABI_MAJOR}.{ABI_MINOR})", running())
+    releases::version_line(&running(), ABI_MAJOR, ABI_MINOR)
 });
 
 /// Seconds since the Unix epoch; 0 on a clock set before it.

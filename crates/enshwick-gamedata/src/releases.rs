@@ -2,7 +2,7 @@
 //! answer: the loader and `cargo enshwick` ask the same question, each by
 //! the tags it is released under.
 
-use semver::{BuildMetadata, Prerelease, Version};
+use semver::{BuildMetadata, Version};
 
 /// The page of a release, without its tag.
 const PAGE: &str = "https://github.com/enshwick/enshwick/releases/tag/";
@@ -107,10 +107,11 @@ pub fn path(running: &Version) -> &'static str {
 /// The version a build of `release` states: `release` itself, or for a
 /// development build of `commit` one that no release takes.
 ///
-/// A development build sorts after the release it follows and before the
-/// next: `1.0.0-alpha.15` becomes `1.0.0-alpha.15.dev+<commit>`, and
-/// `1.0.0` becomes `1.0.1-dev+<commit>`. The commit keeps its first eight
-/// hex digits; one that is not hex, or empty, states `release`.
+/// A development build marks itself in the build metadata, which no release
+/// carries: `1.0.0-alpha.15` becomes `1.0.0-alpha.15+dev.<commit>`. SemVer
+/// ignores build metadata in precedence, so the build keeps its release's
+/// channel and is offered every newer release. The commit keeps its first
+/// eight hex digits; one that is not hex, or empty, states `release`.
 ///
 /// # Examples
 ///
@@ -119,7 +120,7 @@ pub fn path(running: &Version) -> &'static str {
 ///
 /// let release = semver::Version::parse("1.0.0-alpha.15")?;
 /// let dev = stated(&release, Some("5f647f46c0ffee"));
-/// assert_eq!(dev.to_string(), "1.0.0-alpha.15.dev+5f647f46");
+/// assert_eq!(dev.to_string(), "1.0.0-alpha.15+dev.5f647f46");
 /// assert_eq!(stated(&release, None), release);
 /// # Ok::<(), semver::Error>(())
 /// ```
@@ -132,16 +133,25 @@ pub fn stated(release: &Version, commit: Option<&str>) -> Version {
         return release.clone();
     };
     let mut dev = release.clone();
-    let pre = if release.pre.is_empty() {
-        dev.patch += 1;
-        Prerelease::new("dev")
-    } else {
-        Prerelease::new(&format!("{}.dev", release.pre))
-    };
-    // Both are valid identifiers, as is a hex commit: neither falls back.
-    dev.pre = pre.unwrap_or_else(|_| release.pre.clone());
-    dev.build = BuildMetadata::new(commit).unwrap_or_default();
+    // A hex commit after `dev.` is a valid identifier: it never falls back.
+    dev.build = BuildMetadata::new(&format!("dev.{commit}")).unwrap_or_default();
     dev
+}
+
+/// The line the loader and `cargo enshwick` state their version in, with
+/// the ABI version `major`.`minor` beside it.
+///
+/// # Examples
+///
+/// ```
+/// let version = semver::Version::parse("1.0.0-alpha.15")?;
+/// let line = enshwick_gamedata::releases::version_line(&version, 11, 30);
+/// assert_eq!(line, "1.0.0-alpha.15 (ABI 11.30)");
+/// # Ok::<(), semver::Error>(())
+/// ```
+#[must_use]
+pub fn version_line(version: &Version, major: u16, minor: u16) -> String {
+    format!("{version} (ABI {major}.{minor})")
 }
 
 /// The newest release in `answer`, GitHub's JSON answer to [`path`], tagged
@@ -409,20 +419,32 @@ mod tests {
     }
 
     #[test]
-    fn a_development_build_sorts_after_the_release_it_follows_and_before_the_next() {
-        for (release, dev, next) in [
-            (
-                "1.0.0-alpha.15",
-                "1.0.0-alpha.15.dev+5f647f46",
-                "1.0.0-alpha.16",
-            ),
-            ("1.0.0", "1.0.1-dev+5f647f46", "1.0.1"),
+    fn a_development_build_keeps_its_releases_precedence_and_channel() {
+        for (release, dev) in [
+            ("1.0.0-alpha.15", "1.0.0-alpha.15+dev.5f647f46"),
+            ("1.0.0", "1.0.0+dev.5f647f46"),
         ] {
             let stated = stated(&version(release), Some("5f647f46c0ffee00"));
             assert_eq!(stated, version(dev));
-            assert!(stated.cmp_precedence(&version(release)).is_gt(), "{dev}");
-            assert!(stated.cmp_precedence(&version(next)).is_lt(), "{dev}");
+            assert!(stated.cmp_precedence(&version(release)).is_eq(), "{dev}");
+            assert_eq!(path(&stated), path(&version(release)), "{dev}");
         }
+    }
+
+    #[test]
+    fn a_development_build_of_a_stable_release_is_offered_no_prerelease() {
+        let list = tags(&["enshwick-loader-v1.0.1", "enshwick-loader-v1.1.0-alpha.1"]);
+        let running = stated(&version("1.0.0"), Some("5f647f46"));
+        let found = newer(&list, &running, LOADER_TAGS).unwrap();
+        assert_eq!(found.map(|r| r.version), Some(version("1.0.1")));
+    }
+
+    #[test]
+    fn a_development_build_is_offered_a_hotfix_of_its_release() {
+        let list = listing(&[("v1.0.0-alpha.15.1", false)]);
+        let running = stated(&version("1.0.0-alpha.15"), Some("5f647f46"));
+        let found = newer(&list, &running, LOADER_TAGS).unwrap();
+        assert_eq!(found.map(|r| r.version), Some(version("1.0.0-alpha.15.1")));
     }
 
     #[test]
@@ -433,7 +455,7 @@ mod tests {
         }
         assert_eq!(
             stated(&release, Some("abc")).to_string(),
-            "1.0.0-alpha.15.dev+abc",
+            "1.0.0-alpha.15+dev.abc",
             "a short commit is kept whole"
         );
     }

@@ -363,8 +363,10 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
 ];
 
 /// The client control reads: the input builder's stick and look and the
-/// recipe browser's highlighted recipe and select slot, the same on every
-/// kept client (static, research of 2026-11-14).
+/// recipe browser's highlighted recipe and select slot, read in the
+/// decompiler on client 26430625 (research of 2026-11-14). On the other
+/// kept clients the routes found the same values, which pins them there
+/// but does not prove the routes matched the right code.
 const CLIENT_CONTROL_READS: [(&str, u64); 4] = [
     ("input.movement_stick", 0x2b8),
     ("input.camera_rotation", 0x2c4),

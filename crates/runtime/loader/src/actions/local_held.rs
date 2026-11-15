@@ -162,6 +162,8 @@ struct State {
     /// Why the last step that tried found no mask, a [`Miss`], or 0 when
     /// it read one.
     miss: AtomicU8,
+    /// When a step last found no mask, as `read_ms` counts.
+    miss_ms: AtomicU64,
     /// Where the host reads run, once linked on a build that has them.
     host_layout: OnceLock<HostLayout>,
     /// The open screen's host the interface asks about, 0 for none.
@@ -178,6 +180,7 @@ static STATE: State = State {
     bits: AtomicU64::new(0),
     read_ms: AtomicU64::new(0),
     miss: AtomicU8::new(0),
+    miss_ms: AtomicU64::new(0),
     host_layout: OnceLock::new(),
     host_wanted: AtomicU32::new(0),
     host: HostRead::new(),
@@ -316,12 +319,12 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     // SAFETY: the caller's live `player_ui` context at its entry on its
     // thread, its row counter set to 0 above.
     let Some(player) = (unsafe { local_player(ctx, layout) }) else {
-        STATE.miss.store(Miss::NoPlayer as u8, Ordering::Relaxed);
+        missed(Miss::NoPlayer);
         return;
     };
     // SAFETY: the caller's live context at the system's entry on its thread.
     let Some(input) = (unsafe { layout.components.component(ctx, player.0, layout.input) }) else {
-        STATE.miss.store(Miss::NoInput as u8, Ordering::Relaxed);
+        missed(Miss::NoInput);
         return;
     };
     // SAFETY: `input` is the player's live `ClientPlayerInput`, unwritten
@@ -331,6 +334,14 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     STATE.bits.store(bits, Ordering::Relaxed);
     STATE.miss.store(0, Ordering::Relaxed);
     STATE.read_ms.store(now_ms(), Ordering::Release);
+}
+
+/// Keeps why a step found no mask, logging a new cause once.
+fn missed(miss: Miss) {
+    STATE.miss_ms.store(now_ms(), Ordering::Relaxed);
+    if STATE.miss.swap(miss as u8, Ordering::Relaxed) != miss as u8 {
+        log_miss(miss);
+    }
 }
 
 /// The local player's entity: the row of `player_ui`'s query that passes
@@ -490,7 +501,8 @@ impl Miss {
 /// a sample of zero bits, and a stale one stays apart from none.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Sample {
-    /// The read is off on this build or after a panic.
+    /// The read, or the link both reads share, is off on this build or
+    /// after a panic.
     Off,
     /// No step read a mask yet; `miss` says why the last one that tried
     /// found none.
@@ -506,19 +518,37 @@ pub(crate) enum Sample {
     Fresh { bits: u64, age_ms: u64 },
 }
 
-/// The sample from the reads' raw state: `read` milliseconds as
+/// The reads' raw state: `read` and `miss_ms` in milliseconds as
 /// [`now_ms`] counts, 0 for never, the mask `bits` and the raw `miss`.
-fn sample_at(off: bool, read: u64, now: u64, bits: u64, miss: u8) -> Sample {
-    let miss = Miss::from_raw(miss);
-    let age_ms = now.saturating_sub(read);
-    if off {
+#[derive(Clone, Copy, Debug)]
+struct Raw {
+    off: bool,
+    read: u64,
+    bits: u64,
+    miss: u8,
+    miss_ms: u64,
+}
+
+/// The sample at `now` from `raw`; a miss counts only while recent, so
+/// one the last step left before the steps stopped names no cause.
+fn sample_at(raw: Raw, now: u64) -> Sample {
+    let miss = Miss::from_raw(raw.miss).filter(|_| fresh(raw.miss_ms, now));
+    let age_ms = now.saturating_sub(raw.read);
+    if raw.off {
         Sample::Off
-    } else if read == 0 {
+    } else if raw.read == 0 {
         Sample::Never { miss }
-    } else if age_ms > FRESH_MS {
-        Sample::Stale { bits, age_ms, miss }
+    } else if fresh(raw.read, now) {
+        Sample::Fresh {
+            bits: raw.bits,
+            age_ms,
+        }
     } else {
-        Sample::Fresh { bits, age_ms }
+        Sample::Stale {
+            bits: raw.bits,
+            age_ms,
+            miss,
+        }
     }
 }
 
@@ -527,14 +557,14 @@ pub(crate) fn sample() -> Sample {
     if !STATE.asked.load(Ordering::Relaxed) {
         STATE.asked.store(true, Ordering::Relaxed);
     }
-    let read = STATE.read_ms.load(Ordering::Acquire);
-    sample_at(
-        FUSE.is_off(),
-        read,
-        now_ms(),
-        STATE.bits.load(Ordering::Relaxed),
-        STATE.miss.load(Ordering::Relaxed),
-    )
+    let raw = Raw {
+        off: FUSE.is_off() || LINK_FUSE.is_off(),
+        read: STATE.read_ms.load(Ordering::Acquire),
+        bits: STATE.bits.load(Ordering::Relaxed),
+        miss: STATE.miss.load(Ordering::Relaxed),
+        miss_ms: STATE.miss_ms.load(Ordering::Relaxed),
+    };
+    sample_at(raw, now_ms())
 }
 
 /// The local player's held mask, zero bits when none is held, or
@@ -544,26 +574,21 @@ pub(crate) fn sample() -> Sample {
 pub(crate) fn held() -> Result<u64, HeldError> {
     match sample() {
         Sample::Fresh { bits, .. } => Ok(bits),
-        Sample::Never { miss } | Sample::Stale { miss, .. } => {
-            log_miss(miss);
-            Err(HeldError)
-        }
-        Sample::Off => Err(HeldError),
+        Sample::Never { .. } | Sample::Stale { .. } | Sample::Off => Err(HeldError),
     }
 }
 
 #[cold]
-fn log_miss(miss: Option<Miss>) {
+fn log_miss(miss: Miss) {
     match miss {
-        Some(Miss::NoPlayer) => crate::log_once!(
+        Miss::NoPlayer => crate::log_once!(
             INFO,
             "{FEATURE}: no row of {SYSTEM}'s query passed its local player check"
         ),
-        Some(Miss::NoInput) => crate::log_once!(
+        Miss::NoInput => crate::log_once!(
             INFO,
             "{FEATURE}: the local player's row has no ClientPlayerInput"
         ),
-        None => {}
     }
 }
 
@@ -703,10 +728,21 @@ mod tests {
         assert!(STATE.asked.load(Ordering::Relaxed));
     }
 
+    /// The raw state of a mask `bits` read at `read`, on and with no miss.
+    fn raw(read: u64, bits: u64) -> Raw {
+        Raw {
+            off: false,
+            read,
+            bits,
+            miss: 0,
+            miss_ms: 0,
+        }
+    }
+
     #[test]
     fn a_mask_read_with_no_control_held_is_a_fresh_sample_of_zero_bits() {
         assert_eq!(
-            sample_at(false, 100, 150, 0, 0),
+            sample_at(raw(100, 0), 150),
             Sample::Fresh {
                 bits: 0,
                 age_ms: 50
@@ -716,7 +752,13 @@ mod tests {
 
     #[test]
     fn a_stale_sample_keeps_its_mask_and_age_and_stays_apart_from_never_read() {
-        let stale = sample_at(false, 100, 101 + FRESH_MS, 1 << 30, Miss::NoPlayer as u8);
+        let now = 101 + FRESH_MS;
+        let missed = |read: u64, bits: u64, miss: Miss| Raw {
+            miss: miss as u8,
+            miss_ms: now,
+            ..raw(read, bits)
+        };
+        let stale = sample_at(missed(100, 1 << 30, Miss::NoPlayer), now);
         assert_eq!(
             stale,
             Sample::Stale {
@@ -726,17 +768,49 @@ mod tests {
             }
         );
         assert_eq!(
-            sample_at(false, 0, 5_000, 0, Miss::NoInput as u8),
+            sample_at(missed(0, 0, Miss::NoInput), now),
             Sample::Never {
                 miss: Some(Miss::NoInput)
             }
         );
-        assert_eq!(sample_at(false, 0, 5, 0, 0), Sample::Never { miss: None });
+        assert_eq!(sample_at(raw(0, 0), 5), Sample::Never { miss: None });
         assert_eq!(
-            sample_at(true, 100, 150, 1, 0),
+            sample_at(
+                Raw {
+                    off: true,
+                    ..raw(100, 1)
+                },
+                150
+            ),
             Sample::Off,
             "a read turned off answers off, however fresh"
         );
+    }
+
+    #[test]
+    fn a_miss_the_last_step_left_before_the_steps_stopped_names_no_cause() {
+        let left = Raw {
+            miss: Miss::NoPlayer as u8,
+            miss_ms: 200,
+            ..raw(100, 1)
+        };
+        assert_eq!(
+            sample_at(left, 201 + FRESH_MS),
+            Sample::Stale {
+                bits: 1,
+                age_ms: FRESH_MS + 101,
+                miss: None
+            }
+        );
+    }
+
+    #[test]
+    fn a_client_whose_shared_link_is_off_samples_off_not_never_read() {
+        let mut loader = crate::start::tests::bare_loader();
+        loader.side = Side::CLIENT;
+        link(&loader);
+        assert!(LINK_FUSE.is_off() && !FUSE.is_off());
+        assert_eq!(sample(), Sample::Off);
     }
 
     #[test]

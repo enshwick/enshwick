@@ -94,11 +94,6 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("local_held", local_held)
     },
     &Part {
-        table_ids: client_control::TABLE_IDS,
-        link: Some(client_control::link),
-        ..part!("client_control", client_control)
-    },
-    &Part {
         link: Some(controls::link),
         steps: &[
             step!(Follow, "control firings", |s| controls::after_step(

@@ -29,7 +29,7 @@ pub fn running() -> Version {
 #[must_use]
 pub fn running_with_abi() -> String {
     use enshwick_core::abi::{ABI_MAJOR, ABI_MINOR};
-    format!("{} (ABI {ABI_MAJOR}.{ABI_MINOR})", running())
+    enshwick_gamedata::releases::version_line(&running(), ABI_MAJOR, ABI_MINOR)
 }
 
 /// Asks GitHub for the releases on a thread of its own and keeps a newer one

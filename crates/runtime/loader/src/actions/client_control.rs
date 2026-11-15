@@ -4,7 +4,9 @@
 //! an engine route, so every kept client finds them.
 //!
 //! The layout is resolved once at link and read through the readers here;
-//! a build that lacks an entry turns the part off with a log line.
+//! a build that lacks an entry turns the part off with a log line. The part
+//! joins the loader's parts with the host entries that read it, so until
+//! then no build lists it off.
 #![expect(
     dead_code,
     reason = "the host API entries that drive the client's controls read the layout through these"
@@ -36,11 +38,12 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 const FEATURE: &str = "the client's own controls";
 
 /// `MultiDeviceDirectionalInput`: digital, analog, mouse, touch pad and
-/// gyro, a float pair each (client 26430625).
+/// gyro, a float pair each (client 26430625); `resolve` checks the
+/// reflected size against it.
 const LOOK_DEVICES: usize = 5;
 
-/// Where the client's controls live on this build, relative to the image
-/// for code and to their records for fields.
+/// Where the client's controls live on this build: code at its address in
+/// the running image, fields at their offset in their records.
 #[derive(Debug)]
 pub(crate) struct Layout {
     /// The function that builds the local player's `ClientPlayerInput`.
@@ -75,6 +78,16 @@ impl Layout {
             .map_err(|_| catalogue::ids::CLIENT_PLAYER_INPUT)?
             .size();
         let input = usize::try_from(input).unwrap_or(0);
+        let look = loader
+            .reflection
+            .type_info(catalogue::type_name(
+                catalogue::ids::MULTI_DEVICE_DIRECTIONAL_INPUT,
+            ))
+            .map_err(|_| catalogue::ids::MULTI_DEVICE_DIRECTIONAL_INPUT)?
+            .size();
+        if !same_size(look, size_of::<Look>()) {
+            return Err(catalogue::ids::MULTI_DEVICE_DIRECTIONAL_INPUT);
+        }
         let inside = |id: pinned::Constant, size: usize| {
             offset(id).and_then(|at| fits(at, size, input).then_some(at).ok_or(id.id()))
         };
@@ -89,6 +102,11 @@ impl Layout {
             recipe_select: offset(pinned::ui::RECIPE_SELECT)?,
         })
     }
+}
+
+/// Whether a reflected size of `reflected` bytes is the `ours` we read.
+fn same_size(reflected: u32, ours: usize) -> bool {
+    usize::try_from(reflected).is_ok_and(|reflected| reflected == ours)
 }
 
 /// Whether `size` bytes at `at` lie inside a record of `record` bytes.
@@ -173,7 +191,9 @@ impl Layout {
         unsafe { enshwick_core::raw::read_at(input, self.camera_rotation) }
     }
 
-    /// The in-game menu's tab, from the interface state.
+    /// The in-game menu's tab, from the interface state; the index names
+    /// the shown tab only while a menu screen is open, so a caller asks
+    /// only then.
     ///
     /// # Safety
     ///
@@ -194,14 +214,14 @@ impl Layout {
     ///   record whose first `u32` is its id.
     pub(crate) unsafe fn highlighted_recipe(&self, browser: *const u8) -> Option<RecipeId> {
         // SAFETY: the caller's contract.
-        let record: usize =
-            unsafe { enshwick_core::raw::read_at(browser, self.recipe_highlighted) };
-        if record == 0 {
+        let record: *const u8 =
+            unsafe { enshwick_core::raw::read_ptr_at(browser, self.recipe_highlighted) };
+        if record.is_null() {
             return None;
         }
         // SAFETY: a non-null record pointer the browser keeps, whose first
         // `u32` is the recipe's id, by the caller's contract.
-        let id: u32 = unsafe { enshwick_core::raw::read_at(record as *const u8, 0) };
+        let id: u32 = unsafe { enshwick_core::raw::read_at(record, 0) };
         (id != 0).then_some(RecipeId(id))
     }
 
@@ -222,18 +242,28 @@ impl Layout {
 mod tests {
     use super::*;
 
-    /// The layout of client 26430625.
+    /// The layout of client 26430625 at its preferred image base.
     fn client_26430625() -> Layout {
         Layout {
-            client_build: 0x24_77d0,
+            client_build: 0x1_4024_77d0,
             movement_stick: 0x2b8,
             camera_rotation: 0x2c4,
-            toggle_hud_screen: 0xd7_4850,
+            toggle_hud_screen: 0x1_40d7_4850,
             menu_tab: 0x3_1e88,
-            recipe_directory: 0xc7_5660,
+            recipe_directory: 0x1_40c7_5660,
             recipe_highlighted: 0xe8,
             recipe_select: 0x48,
         }
+    }
+
+    #[test]
+    fn the_look_counts_only_when_the_build_reflects_its_size() {
+        assert!(same_size(0x28, size_of::<Look>()));
+        assert!(
+            !same_size(0x8, size_of::<Look>()),
+            "a build that drops devices"
+        );
+        assert!(!same_size(0x30, size_of::<Look>()), "a build that adds one");
     }
 
     #[test]
@@ -303,6 +333,7 @@ mod tests {
             (Some(RecipeId(0x1234)), Some(RecipeId(0x99)))
         );
     }
+
     #[test]
     fn a_server_links_nothing_and_a_client_build_without_the_entries_turns_the_part_off() {
         let loader = crate::start::tests::bare_loader();
