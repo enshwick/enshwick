@@ -1,0 +1,8 @@
+# The loader's test on every game executable runs about 95 s and decides when
+# a run ends, so it starts first: started last, it held a run of 81 s of
+# work per thread to 147 s (2026-11-15). The other tests that read game
+# executables, 30 to 40 s each, start in their turn: started with it, they
+# all read the executables at once and the loader's took 127 s.
+[[profile.default.overrides]]
+filter = 'package(enshwick-loader) & test(=content::data_changes::game::tests::each_kind_of_selection_picks_vanilla_items_on_each_executable)'
+priority = 100

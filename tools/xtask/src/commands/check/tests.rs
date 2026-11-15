@@ -28,6 +28,7 @@ fn planned_for(code: &[&str], parts: &[Part]) -> Vec<String> {
         docs: BTreeSet::new(),
         tested: BTreeSet::new(),
         built: BTreeSet::new(),
+        wide: false,
     };
     let Scope::Some { code, .. } = &scope else {
         unreachable!()
@@ -76,6 +77,87 @@ fn the_host_part_never_runs_the_trybuild_test_whatever_parts_run_beside_it() {
     let everything = format!("-E not ({TRYBUILD})");
     assert!(nextest(planned(&Part::every(false))).ends_with(&everything));
     assert!(nextest(planned(&[Part::Host])).ends_with(&everything));
+}
+
+#[test]
+fn the_host_tests_take_the_xtask_nextest_settings_after_the_workspace_arguments() {
+    let workspace = ["--workspace".to_owned()];
+    let steps = host_steps(
+        &Scope::All,
+        (&workspace, &[]),
+        (true, true, true),
+        None,
+        &[],
+        false,
+        &[Part::Host],
+    );
+    let nextest = steps
+        .iter()
+        .map(Step::line)
+        .find(|step| step.starts_with("cargo nextest run"))
+        .unwrap();
+    assert!(
+        nextest.contains(&format!(
+            "--workspace --tool-config-file xtask:{NEXTEST_CONFIG} -E"
+        )),
+        "{nextest}"
+    );
+    assert!(Path::new(NEXTEST_CONFIG).is_file());
+    assert!(
+        NEXTEST_CONFIG
+            .replace('\\', "/")
+            .ends_with(affected::XTASK_NEXTEST)
+    );
+}
+
+#[test]
+fn the_test_the_host_tests_start_first_still_exists_in_the_loader() {
+    let settings = std::fs::read_to_string(NEXTEST_CONFIG).unwrap();
+    let name = settings
+        .split("test(=")
+        .nth(1)
+        .and_then(|rest| rest.split(')').next())
+        .unwrap();
+    let (module, function) = name.rsplit_once("::").unwrap();
+    let file = module.strip_suffix("::tests").unwrap().replace("::", "/");
+    let source = std::fs::read_to_string(
+        workspace_root().join(format!("crates/runtime/loader/src/{file}.rs")),
+    )
+    .unwrap();
+    assert!(source.contains(&format!("fn {function}()")), "{name}");
+}
+
+#[test]
+fn only_a_wide_check_that_would_check_the_stable_surface_says_it_left_it_to_ci() {
+    let set = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
+    let scope = |code: &[&str], docs: &[&str], built: &[&str], wide: bool| Scope::Some {
+        code: set(code),
+        docs: set(docs),
+        tested: BTreeSet::new(),
+        built: set(built),
+        wide,
+    };
+    let parts = [Part::Host, Part::StableApi];
+    assert!(stable_api_left_to_ci(
+        &scope(&[FACADE], &[], &[], true),
+        &parts
+    ));
+    assert!(stable_api_left_to_ci(
+        &scope(&["enshwick-abi"], &[FACADE], &[], true),
+        &parts
+    ));
+    assert!(!stable_api_left_to_ci(
+        &scope(&["enshwick-abi"], &[], &[FACADE], true),
+        &parts
+    ));
+    assert!(!stable_api_left_to_ci(
+        &scope(&[FACADE], &[], &[], true),
+        &[Part::Host]
+    ));
+    assert!(!stable_api_left_to_ci(
+        &scope(&[FACADE], &[], &[], false),
+        &parts
+    ));
 }
 
 #[test]
@@ -139,6 +221,7 @@ fn a_change_to_the_api_docs_alone_plans_the_stable_steps_in_their_part() {
         docs: [name.to_owned()].into(),
         tested: BTreeSet::new(),
         built: BTreeSet::new(),
+        wide: false,
     };
     let args = stable();
     let plans_stable = |scope: &Scope| {
@@ -177,6 +260,7 @@ fn the_doctests_run_only_the_examples_of_the_packages_they_are_given() {
         docs: BTreeSet::new(),
         tested: BTreeSet::new(),
         built: BTreeSet::new(),
+        wide: false,
     };
     let steps = host_steps(
         &scope,
@@ -214,6 +298,7 @@ fn a_package_only_built_is_linted_without_tests_examples_or_rustdoc() {
         docs: BTreeSet::new(),
         tested: BTreeSet::new(),
         built: ["enshwick-core".to_owned()].into(),
+        wide: false,
     };
     let steps: Vec<String> = host_steps(
         &scope,
@@ -292,6 +377,7 @@ fn a_package_only_built_is_reached_but_not_touched() {
         docs: BTreeSet::new(),
         tested: BTreeSet::new(),
         built: ["enshwick".to_owned()].into(),
+        wide: false,
     };
     assert!(reaches(&scope, "enshwick") && !touches(&scope, "enshwick"));
     assert!(reaches(&scope, "enshwick-abi") && touches(&scope, "enshwick-abi"));
@@ -311,6 +397,7 @@ fn a_package_whose_tests_alone_run_gets_no_examples_trybuild_or_stable_surface_s
         docs: BTreeSet::new(),
         tested: ["enshwick".to_owned(), "enshwick-loader".to_owned()].into(),
         built: BTreeSet::new(),
+        wide: true,
     };
     assert!(reaches(&scope, "enshwick") && !touches(&scope, "enshwick"));
     let (flags, filter, doctests) = plan(&scope, &packages, |name| name != "enshwick-loader");
@@ -348,6 +435,7 @@ fn a_facade_change_with_many_dependents_leaves_trybuild_and_the_stable_surface_t
         docs: BTreeSet::new(),
         tested: tested.iter().map(|name| (*name).to_owned()).collect(),
         built: BTreeSet::new(),
+        wide: !tested.is_empty(),
     };
     let steps = |scope: &Scope| -> Vec<String> {
         host_steps(
@@ -378,6 +466,19 @@ fn a_facade_change_with_many_dependents_leaves_trybuild_and_the_stable_surface_t
         &format!("cargo clippy --all-targets {stable_line}")
     ));
     assert!(has(&wide, "cargo nextest") && has(&wide, "cargo doc --no-deps"));
+    // Every package it reaches changed: no dependent is only tested, and it is wide all the same.
+    let changed = steps(&Scope::Some {
+        code: ["enshwick", "enshwick-abi", "enshwick-loader"]
+            .map(str::to_owned)
+            .into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: true,
+    });
+    assert!(!has(&changed, "--test main"), "{changed:?}");
+    assert!(!has(&changed, &format!("cargo test --doc {stable_line}")));
+    assert!(has(&changed, "cargo test --doc"));
 }
 
 /// A package at `dir`, with Windows tests when it builds only for Windows.
@@ -402,6 +503,7 @@ fn a_changed_package_with_windows_tests_runs_them() {
         docs: BTreeSet::new(),
         tested: BTreeSet::new(),
         built: BTreeSet::new(),
+        wide: false,
     };
     assert_eq!(windows_tests(&scope, &packages), ["enshwick-loader"]);
     assert_eq!(windows_tests(&Scope::All, &packages), ["enshwick-loader"]);
