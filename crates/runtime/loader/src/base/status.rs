@@ -169,7 +169,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         }
     };
     Summary {
-        version: env!("CARGO_PKG_VERSION").to_owned(),
+        version: crate::base::releases::running_with_abi(),
         game: loader.build.name.clone(),
         hosting: loader.side == Side::SERVER || crate::engine::world::hosting(),
         uptime: STATE.started.get().map_or(Duration::ZERO, Instant::elapsed),

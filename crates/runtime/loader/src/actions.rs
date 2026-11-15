@@ -8,6 +8,8 @@ pub(crate) mod build_reasons;
 #[cfg(windows)]
 pub(crate) mod chat;
 pub mod chat_mute;
+#[cfg(windows)]
+pub(crate) mod client_control;
 pub mod commands;
 pub mod console;
 #[cfg(windows)]
@@ -90,6 +92,11 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: local_held::TABLE_IDS,
         link: Some(local_held::link),
         ..part!("local_held", local_held)
+    },
+    &Part {
+        table_ids: client_control::TABLE_IDS,
+        link: Some(client_control::link),
+        ..part!("client_control", client_control)
     },
     &Part {
         link: Some(controls::link),

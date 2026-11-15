@@ -130,7 +130,7 @@ pub(super) fn begin(missing_forwards: u32) -> Option<Begun> {
     crate::log!(
         INFO,
         "Enshwick {} starting on {}, {} logical processors",
-        env!("CARGO_PKG_VERSION"),
+        crate::base::releases::running_with_abi(),
         system(),
         std::thread::available_parallelism().map_or(0, std::num::NonZero::get)
     );

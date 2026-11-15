@@ -31,7 +31,7 @@ enum Cargo {
 
 /// Start an Enshwick mod, build it and install it into the game.
 #[derive(Debug, clap::Args)]
-#[command(version)]
+#[command(version = update::VERSION.as_str())]
 struct Args {
     #[command(subcommand)]
     command: Command,

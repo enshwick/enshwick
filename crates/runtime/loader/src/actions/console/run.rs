@@ -164,7 +164,7 @@ fn answer(loader: &Loader, tool: Tool<'_>) -> String {
 /// `enshwick`: the loader's version and the mods running.
 fn mods(loader: &Loader) -> String {
     let mods: Vec<String> = loader.mods.iter().map(name).collect();
-    let version = env!("CARGO_PKG_VERSION");
+    let version = &crate::base::releases::running_with_abi();
     let mut sentences = vec![if mods.is_empty() {
         texts::fill("enshwick.mods.none", &[("version", version)])
     } else {

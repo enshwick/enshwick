@@ -165,10 +165,20 @@ fn ask() -> Answer {
     })
 }
 
-/// The running tool's version.
+/// The running tool's version: a development build's, built with
+/// `ENSHWICK_COMMIT` set, states its commit.
 fn running() -> Version {
-    Version::parse(env!("CARGO_PKG_VERSION")).unwrap_or_else(|_| Version::new(0, 0, 0))
+    let release =
+        Version::parse(env!("CARGO_PKG_VERSION")).unwrap_or_else(|_| Version::new(0, 0, 0));
+    releases::stated(&release, option_env!("ENSHWICK_COMMIT"))
 }
+
+/// What `--version` states: the running version and the ABI the mods it
+/// builds take.
+pub(crate) static VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    use enshwick_abi::abi::{ABI_MAJOR, ABI_MINOR};
+    format!("{} (ABI {ABI_MAJOR}.{ABI_MINOR})", running())
+});
 
 /// Seconds since the Unix epoch; 0 on a clock set before it.
 fn now() -> u64 {

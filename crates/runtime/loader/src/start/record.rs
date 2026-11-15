@@ -41,7 +41,7 @@ pub(super) fn take(loader: &'static Loader, folders: Vec<(String, String, String
             .join(crate::engine::settings::LOADER_ID)
             .join(format!("{}.dll", crate::engine::settings::LOADER_ID));
         record::set_taken(Record {
-            loader: env!("CARGO_PKG_VERSION").to_owned(),
+            loader: crate::base::releases::running().to_string(),
             loader_sha256: hash(&loader_dll),
             game: loader.build.name.clone(),
             mods,

@@ -10,7 +10,7 @@
 //! as it runs.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering, fence};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering, fence};
 use std::time::Instant;
 
 use enshwick_core::Entity;
@@ -159,6 +159,9 @@ struct State {
     start: OnceLock<Instant>,
     bits: AtomicU64,
     read_ms: AtomicU64,
+    /// Why the last step that tried found no mask, a [`Miss`], or 0 when
+    /// it read one.
+    miss: AtomicU8,
     /// Where the host reads run, once linked on a build that has them.
     host_layout: OnceLock<HostLayout>,
     /// The open screen's host the interface asks about, 0 for none.
@@ -174,6 +177,7 @@ static STATE: State = State {
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
     read_ms: AtomicU64::new(0),
+    miss: AtomicU8::new(0),
     host_layout: OnceLock::new(),
     host_wanted: AtomicU32::new(0),
     host: HostRead::new(),
@@ -312,10 +316,12 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     // SAFETY: the caller's live `player_ui` context at its entry on its
     // thread, its row counter set to 0 above.
     let Some(player) = (unsafe { local_player(ctx, layout) }) else {
+        STATE.miss.store(Miss::NoPlayer as u8, Ordering::Relaxed);
         return;
     };
     // SAFETY: the caller's live context at the system's entry on its thread.
     let Some(input) = (unsafe { layout.components.component(ctx, player.0, layout.input) }) else {
+        STATE.miss.store(Miss::NoInput as u8, Ordering::Relaxed);
         return;
     };
     // SAFETY: `input` is the player's live `ClientPlayerInput`, unwritten
@@ -323,6 +329,7 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     // inside the type.
     let bits: u64 = unsafe { enshwick_core::raw::read_at(input, layout.digital) };
     STATE.bits.store(bits, Ordering::Relaxed);
+    STATE.miss.store(0, Ordering::Relaxed);
     STATE.read_ms.store(now_ms(), Ordering::Release);
 }
 
@@ -461,17 +468,103 @@ crate::engine::chains::chain_detour! {
 #[error("the held controls are not read")]
 pub(crate) struct HeldError;
 
-/// The local player's held mask, or [`HeldError`] while it is unread. The
-/// first ask starts the reads, so it answers [`HeldError`].
-pub(crate) fn held() -> Result<u64, HeldError> {
+/// Why a step that tried to read the mask found none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum Miss {
+    /// No row of `player_ui`'s query passed its local player check.
+    NoPlayer = 1,
+    /// The local player's row had no `ClientPlayerInput`.
+    NoInput = 2,
+}
+
+impl Miss {
+    fn from_raw(raw: u8) -> Option<Self> {
+        [Self::NoPlayer, Self::NoInput]
+            .into_iter()
+            .find(|miss| *miss as u8 == raw)
+    }
+}
+
+/// The held mask as the reads keep it: a mask read with no control held is
+/// a sample of zero bits, and a stale one stays apart from none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Sample {
+    /// The read is off on this build or after a panic.
+    Off,
+    /// No step read a mask yet; `miss` says why the last one that tried
+    /// found none.
+    Never { miss: Option<Miss> },
+    /// The last mask read, older than [`FRESH_MS`], as in a menu; `miss`
+    /// says why the steps since found none, when one tried.
+    Stale {
+        bits: u64,
+        age_ms: u64,
+        miss: Option<Miss>,
+    },
+    /// A mask a step read within [`FRESH_MS`].
+    Fresh { bits: u64, age_ms: u64 },
+}
+
+/// The sample from the reads' raw state: `read` milliseconds as
+/// [`now_ms`] counts, 0 for never, the mask `bits` and the raw `miss`.
+fn sample_at(off: bool, read: u64, now: u64, bits: u64, miss: u8) -> Sample {
+    let miss = Miss::from_raw(miss);
+    let age_ms = now.saturating_sub(read);
+    if off {
+        Sample::Off
+    } else if read == 0 {
+        Sample::Never { miss }
+    } else if age_ms > FRESH_MS {
+        Sample::Stale { bits, age_ms, miss }
+    } else {
+        Sample::Fresh { bits, age_ms }
+    }
+}
+
+/// The held mask's sample now; asking starts the reads.
+pub(crate) fn sample() -> Sample {
     if !STATE.asked.load(Ordering::Relaxed) {
         STATE.asked.store(true, Ordering::Relaxed);
     }
     let read = STATE.read_ms.load(Ordering::Acquire);
-    if read == 0 || FUSE.is_off() || now_ms().saturating_sub(read) > FRESH_MS {
-        return Err(HeldError);
+    sample_at(
+        FUSE.is_off(),
+        read,
+        now_ms(),
+        STATE.bits.load(Ordering::Relaxed),
+        STATE.miss.load(Ordering::Relaxed),
+    )
+}
+
+/// The local player's held mask, zero bits when none is held, or
+/// [`HeldError`] while no fresh one is read. The first ask starts the
+/// reads, so it answers [`HeldError`]; a step that tries and finds no mask
+/// logs why, once per cause.
+pub(crate) fn held() -> Result<u64, HeldError> {
+    match sample() {
+        Sample::Fresh { bits, .. } => Ok(bits),
+        Sample::Never { miss } | Sample::Stale { miss, .. } => {
+            log_miss(miss);
+            Err(HeldError)
+        }
+        Sample::Off => Err(HeldError),
     }
-    Ok(STATE.bits.load(Ordering::Relaxed))
+}
+
+#[cold]
+fn log_miss(miss: Option<Miss>) {
+    match miss {
+        Some(Miss::NoPlayer) => crate::log_once!(
+            INFO,
+            "{FEATURE}: no row of {SYSTEM}'s query passed its local player check"
+        ),
+        Some(Miss::NoInput) => crate::log_once!(
+            INFO,
+            "{FEATURE}: the local player's row has no ClientPlayerInput"
+        ),
+        None => {}
+    }
 }
 
 #[cfg(test)]
@@ -608,6 +701,50 @@ mod tests {
         );
         assert_eq!(held(), Err(HeldError));
         assert!(STATE.asked.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn a_mask_read_with_no_control_held_is_a_fresh_sample_of_zero_bits() {
+        assert_eq!(
+            sample_at(false, 100, 150, 0, 0),
+            Sample::Fresh {
+                bits: 0,
+                age_ms: 50
+            }
+        );
+    }
+
+    #[test]
+    fn a_stale_sample_keeps_its_mask_and_age_and_stays_apart_from_never_read() {
+        let stale = sample_at(false, 100, 101 + FRESH_MS, 1 << 30, Miss::NoPlayer as u8);
+        assert_eq!(
+            stale,
+            Sample::Stale {
+                bits: 1 << 30,
+                age_ms: FRESH_MS + 1,
+                miss: Some(Miss::NoPlayer)
+            }
+        );
+        assert_eq!(
+            sample_at(false, 0, 5_000, 0, Miss::NoInput as u8),
+            Sample::Never {
+                miss: Some(Miss::NoInput)
+            }
+        );
+        assert_eq!(sample_at(false, 0, 5, 0, 0), Sample::Never { miss: None });
+        assert_eq!(
+            sample_at(true, 100, 150, 1, 0),
+            Sample::Off,
+            "a read turned off answers off, however fresh"
+        );
+    }
+
+    #[test]
+    fn an_unknown_raw_miss_reads_as_none() {
+        assert_eq!(Miss::from_raw(0), None);
+        assert_eq!(Miss::from_raw(1), Some(Miss::NoPlayer));
+        assert_eq!(Miss::from_raw(2), Some(Miss::NoInput));
+        assert_eq!(Miss::from_raw(3), None);
     }
 
     #[test]
