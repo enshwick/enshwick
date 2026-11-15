@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use crate::abi::StatModifierData;
+use crate::abi::StatModifier;
 use crate::buffs::BuffTypeId;
 use crate::inventory::ItemInstance;
 use crate::mods::ModIndex;
@@ -32,24 +32,24 @@ pub enum Op {
 }
 
 impl Op {
-    /// The operation's number in [`StatModifierData::op`].
+    /// The operation's number in [`StatModifier::op`].
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::StatModifierData;
+    /// use enshwick::abi::StatModifier;
     /// use enshwick::stats::Op;
     ///
-    /// assert_eq!(Op::Max.to_raw(), StatModifierData::MAX);
-    /// assert_eq!(Op::from_raw(StatModifierData::MAX), Some(Op::Max));
+    /// assert_eq!(Op::Max.to_raw(), StatModifier::MAX);
+    /// assert_eq!(Op::from_raw(StatModifier::MAX), Some(Op::Max));
     /// ```
     #[must_use]
     pub const fn to_raw(self) -> u8 {
         match self {
-            Self::Add => StatModifierData::ADD,
-            Self::Multiply => StatModifierData::MULTIPLY,
-            Self::Max => StatModifierData::MAX,
-            Self::Override => StatModifierData::OVERRIDE,
+            Self::Add => StatModifier::ADD,
+            Self::Multiply => StatModifier::MULTIPLY,
+            Self::Max => StatModifier::MAX,
+            Self::Override => StatModifier::OVERRIDE,
         }
     }
 
@@ -61,10 +61,10 @@ impl Op {
     #[must_use]
     pub const fn from_raw(raw: u8) -> Option<Self> {
         match raw {
-            StatModifierData::ADD => Some(Self::Add),
-            StatModifierData::MULTIPLY => Some(Self::Multiply),
-            StatModifierData::MAX => Some(Self::Max),
-            StatModifierData::OVERRIDE => Some(Self::Override),
+            StatModifier::ADD => Some(Self::Add),
+            StatModifier::MULTIPLY => Some(Self::Multiply),
+            StatModifier::MAX => Some(Self::Max),
+            StatModifier::OVERRIDE => Some(Self::Override),
             _ => None,
         }
     }
@@ -150,8 +150,8 @@ impl Modifier {
         Self { stat, op, value }
     }
 
-    pub(super) const fn to_data(self) -> StatModifierData {
-        StatModifierData {
+    pub(super) const fn to_data(self) -> StatModifier {
+        StatModifier {
             stat: self.stat.index,
             op: self.op.to_raw(),
             reserved: [0; 3],

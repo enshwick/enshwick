@@ -3,7 +3,7 @@
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, found, put_headed_list, text, with};
+use crate::test::table::{Registered, found, list, text, with};
 use enshwick_core::abi::{
     EventTypeInfo, GameEventFn, Header, ModHandle, Side, Status, StatusFn, Str,
 };
@@ -23,7 +23,7 @@ pub(crate) extern "system" fn component(
 pub(crate) extern "system" fn entity_template(
     _me: ModHandle,
     entity: enshwick_core::Entity,
-    out: *mut [u8; 16],
+    out: *mut enshwick_core::abi::Guid,
 ) -> Status {
     found(
         with(None, |s| s.host.templates.get(&entity.0).copied()),
@@ -31,14 +31,15 @@ pub(crate) extern "system" fn entity_template(
     )
 }
 
-pub(crate) extern "system" fn hosting() -> u8 {
-    with(0, |s| {
+pub(crate) extern "system" fn hosting(_me: ModHandle, out: *mut u8) -> Status {
+    let hosting = with(0, |s| {
         u8::from(s.host.side == Side::SERVER || s.host.hosting)
-    })
+    });
+    crate::test::table::put(out, hosting)
 }
 
-pub(crate) extern "system" fn server_world() -> u64 {
-    with(0, |s| s.host.server_world)
+pub(crate) extern "system" fn server_world(_me: ModHandle, out: *mut u64) -> Status {
+    crate::test::table::put(out, with(0, |s| s.host.server_world))
 }
 
 pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> Status {
@@ -58,30 +59,42 @@ pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> St
 
 pub(crate) extern "system" fn status(
     me: ModHandle,
-    callback: StatusFn,
+    callback: Option<StatusFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.status_sources.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
-pub(crate) extern "system" fn game_event(
+pub(crate) extern "system" fn subscribe_game_event(
     me: ModHandle,
     type_hash: u32,
-    callback: GameEventFn,
+    callback: Option<GameEventFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     keep_game_event(me, type_hash, callback, user, false)
 }
 
-pub(crate) extern "system" fn client_game_event(
+pub(crate) extern "system" fn subscribe_client_game_event(
     me: ModHandle,
     type_hash: u32,
-    callback: GameEventFn,
+    callback: Option<GameEventFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     keep_game_event(me, type_hash, callback, user, true)
 }
 
@@ -114,6 +127,7 @@ fn keep_game_event(
 pub(crate) extern "system" fn event_types(
     _me: ModHandle,
     out: *mut EventTypeInfo,
+    entry_size: u32,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -129,5 +143,5 @@ pub(crate) extern "system" fn event_types(
             })
             .collect()
     });
-    put_headed_list(&found, out, capacity, count)
+    list(&found, out, entry_size, capacity, count)
 }

@@ -19,7 +19,7 @@ fn reach_content(vanilla: &Vanilla, workshop: &NewWorkshop, guid: Guid) {
 
 fn reach_world(status: Status) {
     let _ = WorldError::from_status(status);
-    let _ = WorldError::check(status, WorldError::Missing);
+    let _ = WorldError::check(status, WorldError::Unavailable);
 }
 
 fn reach_inventory(host: Host) {

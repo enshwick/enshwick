@@ -283,7 +283,7 @@ impl crate::load::StatusError for SendError {
     fn of(status: Status) -> Self {
         match status {
             Status::MISSING => Self::NotReady,
-            Status::REFUSED => Self::OverRate,
+            Status::BUSY => Self::OverRate,
             _ => Self::Refused,
         }
     }
@@ -339,7 +339,7 @@ impl BaseLoad {
                 (host.api().net_channel)(
                     host.handle(),
                     Str::new(&full),
-                    deliver::<M, F>,
+                    Some(deliver::<M, F>),
                     user,
                     &raw mut id,
                 )

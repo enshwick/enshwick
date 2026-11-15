@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::Load;
-    use enshwick::abi::{Bounds, Status};
+    use enshwick::abi::{Extent, Status};
     use enshwick::altars::{Grouping, grouping};
     use enshwick::{Mod, Off};
 
@@ -15,8 +15,16 @@ mod tests {
             load.on_building_zone_check(|check| {
                 check.zones.len() >= 2
                     && (0..3).all(|a| {
-                        let low = check.zones.iter().map(|z| z.min[a]).min().unwrap_or(0);
-                        let high = check.zones.iter().map(|z| z.max[a]).max().unwrap_or(0);
+                        let low = check
+                            .zones
+                            .iter()
+                            .map(|z| z.min[a])
+                            .fold(f64::INFINITY, f64::min);
+                        let high = check
+                            .zones
+                            .iter()
+                            .map(|z| z.max[a])
+                            .fold(f64::NEG_INFINITY, f64::max);
                         low <= check.object.min[a] - check.margin
                             && check.object.max[a] + check.margin < high
                     })
@@ -33,8 +41,11 @@ mod tests {
         "#
     );
 
-    fn bounds(min: [i64; 3], max: [i64; 3]) -> Bounds {
-        Bounds { min, max }
+    fn bounds(min: [i32; 3], max: [i32; 3]) -> Extent {
+        Extent {
+            min: min.map(f64::from),
+            max: max.map(f64::from),
+        }
     }
 
     fn started() -> enshwick::test::Installed {
@@ -53,13 +64,13 @@ mod tests {
             bounds([0, 0, 0], [10, 10, 10]),
             bounds([10, 0, 0], [20, 10, 10]),
         ];
-        assert!(loader.building_zone_check(&zones, bounds([8, 1, 1], [12, 2, 2]), 0));
+        assert!(loader.building_zone_check(&zones, bounds([8, 1, 1], [12, 2, 2]), 0.0));
         assert!(
-            !loader.building_zone_check(&zones, bounds([8, 1, 1], [12, 2, 2]), 9),
+            !loader.building_zone_check(&zones, bounds([8, 1, 1], [12, 2, 2]), 9.0),
             "the margin reaches past the zones"
         );
-        assert!(!loader.building_zone_check(&zones, bounds([18, 1, 1], [22, 2, 2]), 0));
-        assert!(!loader.building_zone_check(&zones[..1], bounds([1, 1, 1], [2, 2, 2]), 0));
+        assert!(!loader.building_zone_check(&zones, bounds([18, 1, 1], [22, 2, 2]), 0.0));
+        assert!(!loader.building_zone_check(&zones[..1], bounds([1, 1, 1], [2, 2, 2]), 0.0));
     }
 
     #[test]

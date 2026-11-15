@@ -155,7 +155,7 @@ impl Targets {
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] before a world runs.
+    /// step; [`WorldError::Unavailable`] before a world runs.
     ///
     /// # Examples
     ///
@@ -211,7 +211,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().interaction_filter)(host.handle(), run_filter::<F>, user),
+            |user| (host.api().interaction_filter)(host.handle(), Some(run_filter::<F>), user),
             "interaction filter",
         )
     }
@@ -270,7 +270,7 @@ where
 {
     // SAFETY: the loader passes a valid call for the duration of this one.
     let Some(call) = (unsafe { call.as_ref() }) else {
-        return 1;
+        return crate::abi::FILTER_PASS;
     };
     let kind = match call.kind {
         RawInteraction::OPEN => Kind::Open,
@@ -280,22 +280,22 @@ where
         RawInteraction::DISMANTLE => Kind::Dismantle,
         RawInteraction::QUICK_STASH => Kind::QuickStash,
         RawInteraction::UPGRADE => Kind::Upgrade,
-        _ => return 1,
+        _ => return crate::abi::FILTER_PASS,
     };
-    if call.player.is_none() || call.target.is_none() {
-        return 1;
+    if call.character.is_none() || call.target.is_none() {
+        return crate::abi::FILTER_PASS;
     }
     let known = call.known != 0;
     let interaction = Interaction {
         kind,
-        player: call.player,
+        player: call.character,
         target: call.target,
         item: known.then_some(call.item),
         position: known.then_some(call.position),
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    u8::from(crate::host::guard(
+    crate::host::verdict(crate::host::guard(
         "panic in an interaction filter",
         || true,
         || filter(&interaction),

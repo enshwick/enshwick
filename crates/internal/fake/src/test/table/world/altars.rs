@@ -7,7 +7,7 @@ use crate::test::BaseCode;
 use crate::test::table::base::io::list;
 use crate::test::table::{Registered, put, with};
 use enshwick_core::abi::{
-    AltarInfo, AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BuildingZoneCheckFn, Header,
+    AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BuildingZoneFilterFn, Header,
     ModHandle, Status,
 };
 
@@ -26,13 +26,16 @@ pub(crate) struct BaseLimitState {
 #[derive(Debug, Default)]
 pub(crate) struct ZoneSizing {
     /// The filters and their pointers.
-    pub(crate) filters: Vec<Registered<AltarZoneFn>>,
+    pub(crate) filters: Vec<Registered<AltarZoneFilterFn>>,
     /// How often the mod asked for the zones to be sized again.
     pub(crate) resizes: usize,
 }
 
-pub(crate) extern "system" fn altars_open(_me: ModHandle) -> Status {
+pub(crate) extern "system" fn request_altars(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.altars_opened = true;
         Status::OK
     })
@@ -53,10 +56,16 @@ pub(crate) extern "system" fn altars(
 
 pub(crate) extern "system" fn altar_zone_filter(
     me: ModHandle,
-    callback: AltarZoneFn,
+    callback: Option<AltarZoneFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.altars_opened = true;
         s.zone_control = true;
         s.zone_sizing
@@ -76,12 +85,18 @@ pub(crate) extern "system" fn altar_zones_changed(_me: ModHandle) -> Status {
     })
 }
 
-pub(crate) extern "system" fn building_zone_check_filter(
+pub(crate) extern "system" fn building_zone_filter(
     me: ModHandle,
-    callback: BuildingZoneCheckFn,
+    callback: Option<BuildingZoneFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.zone_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -89,9 +104,12 @@ pub(crate) extern "system" fn building_zone_check_filter(
 
 pub(crate) extern "system" fn altar_limit_filter(
     me: ModHandle,
-    callback: AltarLimitFilterFn,
+    callback: Option<AltarLimitFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
         s.altar_limits.push(Registered::new(callback, user, me));
         Status::OK
@@ -103,8 +121,6 @@ pub(crate) extern "system" fn altar_limit_filter(
 const VANILLA: (u32, u32) = (16, 16);
 /// The most altar zones and bases a mod may ask for, as the loader's.
 const MOST: (u32, u32) = (255, 179);
-/// What raising the base limit asks for.
-const RAISED: (u32, u32) = (32, 16);
 
 /// The zones and bases the fake's game groups, as the loader's: the game's
 /// own, or the mod's largest request once its hooks are armed.
@@ -139,7 +155,7 @@ fn request(zones: u32, bases: u32) -> Status {
             return Status::TOO_LATE;
         }
         if s.host.base_code == BaseCode::Unknown {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         let (old_zones, old_bases) = s.base_limit.requested.unwrap_or(VANILLA);
         s.base_limit.requested = Some((
@@ -172,10 +188,6 @@ pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo
     }
 }
 
-pub(crate) extern "system" fn raise_base_limit(_me: ModHandle) -> Status {
-    request(RAISED.0, RAISED.1)
-}
-
 pub(crate) extern "system" fn request_base_limits(
     _me: ModHandle,
     zones: u32,
@@ -184,7 +196,7 @@ pub(crate) extern "system" fn request_base_limits(
     request(zones, bases)
 }
 
-pub(crate) extern "system" fn set_base_cap(_me: ModHandle, bases: u32) -> Status {
+pub(crate) extern "system" fn set_base_limit(_me: ModHandle, bases: u32) -> Status {
     if bases < VANILLA.1 {
         return Status::BAD_ARGS;
     }
@@ -200,7 +212,7 @@ pub(crate) extern "system" fn base_zones(
     bases: *mut u32,
 ) -> Status {
     let Some((zone_count, base_count)) = with(None, |s| s.grouping) else {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     };
     let status = put(zones, zone_count);
     if !status.is_ok() {

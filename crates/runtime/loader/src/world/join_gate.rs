@@ -249,14 +249,14 @@ fn refuser<'a>(
     join.keys(entries, steam).find_map(|player| {
         let call = JoinCall {
             header: Header::of::<JoinCall>(),
-            player: player.unwrap_or(PlayerKey::new(0)),
+            account: player.unwrap_or(PlayerKey::new(0)),
         };
         // SAFETY: the rule is the mod's registered `JoinRuleFn` in its DLL,
         // which stays loaded for the process, called with a `JoinCall` that
         // outlives the call and the mod's own `user` word; the mod's safe
         // layer catches its panics.
         rules
-            .refuser(|rule, user| unsafe { rule(&raw const call, user) } != 0)
+            .refuser(|rule, user| unsafe { rule(&raw const call, user) } != enshwick_core::abi::FILTER_REFUSE)
             .map(|r| (r, player))
     })
 }
@@ -316,14 +316,18 @@ mod tests {
     use super::*;
 
     unsafe extern "system" fn allow(_: *const JoinCall, _: *mut c_void) -> u8 {
-        1
+        enshwick_core::abi::FILTER_PASS
     }
 
     /// Refuses the account whose key is the `user` word.
     unsafe extern "system" fn refuse_key(call: *const JoinCall, user: *mut c_void) -> u8 {
         // SAFETY: the join check hands a valid call for this one.
-        let player = unsafe { (*call).player };
-        u8::from(player.get() != user.addr() as u64)
+        let player = unsafe { (*call).account };
+        if player.get() == user.addr() as u64 {
+            enshwick_core::abi::FILTER_REFUSE
+        } else {
+            enshwick_core::abi::FILTER_PASS
+        }
     }
 
     unsafe extern "system" fn no_machine(_: *mut u8, _: u16) -> *mut u8 {

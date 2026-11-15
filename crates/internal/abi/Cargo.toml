@@ -25,7 +25,7 @@ thiserror.workspace = true
 enshwick = { path = "../../enshwick", features = ["test"] }
 postcard.workspace = true
 proptest.workspace = true
-syn = { version = "=3.0.10", default-features = false, features = ["full", "parsing"] }
+syn = { version = "=3.0.10", default-features = false, features = ["full", "parsing", "extra-traits"] }
 
 [lints]
 workspace = true

@@ -14,28 +14,6 @@ const BRICKS_MAX: u64 = 65_536;
 
 pub(crate) extern "system" fn transaction_commit(
     me: ModHandle,
-    ops: *const TransactionOp,
-    count: u32,
-    id: *mut u64,
-) -> Status {
-    commit(me, enshwick_core::Entity(0), ops, count, id)
-}
-
-pub(crate) extern "system" fn transaction_commit_for(
-    me: ModHandle,
-    actor: enshwick_core::Entity,
-    ops: *const TransactionOp,
-    count: u32,
-    id: *mut u64,
-) -> Status {
-    if actor.is_none() {
-        return Status::BAD_ARGS;
-    }
-    commit(me, actor, ops, count, id)
-}
-
-fn commit(
-    me: ModHandle,
     actor: enshwick_core::Entity,
     ops: *const TransactionOp,
     count: u32,
@@ -67,7 +45,7 @@ fn commit(
     }
     with(Status::MISSING, |s| {
         if s.terrain.is_none() {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         let host = &s.host;
         for change in &changes {
@@ -78,7 +56,7 @@ fn commit(
                 let places = host
                     .items
                     .get(&prop.item.get())
-                    .is_some_and(|item| item.placed_entity != [0; 16]);
+                    .is_some_and(|item| item.placed_entity != enshwick_core::content::Guid::NIL);
                 if !places {
                     return Status::BAD_ARGS;
                 }
@@ -175,7 +153,7 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
             }?;
             let count =
                 Voxel::read_count(write.min, [1; 3]).and(box_count(write.min, write.size))?;
-            if write.voxels.is_null() || count != write.count {
+            if write.voxels.is_null() || count != u64::from(write.count) {
                 return None;
             }
             let len = usize::try_from(count).ok()?;

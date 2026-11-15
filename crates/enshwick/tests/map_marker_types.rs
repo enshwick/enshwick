@@ -41,7 +41,7 @@ mod tests {
     fn registry() -> Vec<MapMarkerTypeInfo> {
         vec![
             MapMarkerTypeInfo {
-                type_name: NAME.0,
+                type_name: NAME,
                 marker_id: DUNGEON,
                 sorting_category: RawSorting::DUNGEONS,
                 show_label: 1,
@@ -116,7 +116,7 @@ mod tests {
         assert_eq!(
             loader.markers()[1],
             FakeMarker {
-                position: [2 << 32, 0, 0],
+                position: [2.0, 0.0, 0.0],
                 label: String::new(),
                 color: UiMarker::WHITE,
                 marker_type: 0,

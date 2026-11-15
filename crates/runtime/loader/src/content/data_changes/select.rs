@@ -255,7 +255,7 @@ fn same_source(a: &Declared, b: &Declared) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::ItemData;
+    use enshwick_core::abi::ItemTypeInfo;
     use enshwick_core::content::categories::ItemCategoryMask;
     use enshwick_core::content::changes::{Change, Items, Recipes, Value};
     use enshwick_core::content::recipes::RecipeKind;
@@ -282,7 +282,7 @@ mod tests {
             (
                 guid(3),
                 ItemTraits {
-                    flags: ItemData::HAS_PIDE,
+                    flags: ItemTypeInfo::HAS_PIDE,
                     ..stack(1, 2)
                 },
             ),
@@ -485,7 +485,7 @@ mod tests {
         let mut bytes = vec![0u8; 0x620];
         bytes[0x14..0x16].copy_from_slice(&999u16.to_le_bytes());
         bytes[0xcc] = 9;
-        bytes[0x5d8..0x5dc].copy_from_slice(&ItemData::HAS_PIDE.to_le_bytes());
+        bytes[0x5d8..0x5dc].copy_from_slice(&ItemTypeInfo::HAS_PIDE.to_le_bytes());
         let traits = traits_of(&bytes, at, |_| Some(24)).unwrap();
         assert_eq!(
             (
@@ -494,7 +494,7 @@ mod tests {
                 traits.flags,
                 traits.slots
             ),
-            (999, 9, ItemData::HAS_PIDE, None)
+            (999, 9, ItemTypeInfo::HAS_PIDE, None)
         );
         bytes[0x600..0x610].copy_from_slice(&[7; 16]);
         let chest = traits_of(&bytes, at, |t| (t == guid(7)).then_some(24)).unwrap();

@@ -142,7 +142,12 @@ impl BaseLoad {
             hand_over(
                 handler,
                 |user| {
-                    (host.api().subscribe_event)(host.handle(), spec, deliver_described::<F>, user)
+                    (host.api().subscribe_mod_event)(
+                        host.handle(),
+                        spec,
+                        Some(deliver_described::<F>),
+                        user,
+                    )
                 },
                 &format!("event {}", event.name),
             )

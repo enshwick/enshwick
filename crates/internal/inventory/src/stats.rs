@@ -46,8 +46,8 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    Header, StatChange as StatChangeData, StatModifierData, StatModify, StatRef, StatSource,
-    Status, Str,
+    Header, StatChange as StatChangeData, StatModifier, StatModify, StatRef, StatSource, Status,
+    Str,
 };
 use crate::buffs::BuffTypeId;
 use crate::content::Id;
@@ -293,9 +293,9 @@ impl Stats {
     /// ```
     #[script]
     pub fn remove(&self, entity: Entity, key: &str, stat: Stat) -> Result<(), ModifyError> {
-        let data = StatModifierData {
+        let data = StatModifier {
             stat: stat.index,
-            ..StatModifierData::default()
+            ..StatModifier::default()
         };
         self.modify(entity, key, data, StatModify::REMOVE, 0)
     }
@@ -304,7 +304,7 @@ impl Stats {
         &self,
         entity: Entity,
         key: &str,
-        modifier: StatModifierData,
+        modifier: StatModifier,
         flags: u32,
         duration_ms: u64,
     ) -> Result<(), ModifyError> {
@@ -319,7 +319,7 @@ impl Stats {
         match (self.host.api().stat_modify)(self.host.handle(), &raw const request) {
             Status::OK => Ok(()),
             Status::REFUSED if flags & StatModify::SAVED != 0 => Err(ModifyError::NotPlayer),
-            Status::REFUSED | Status::WRONG_THREAD => Err(ModifyError::NotServer),
+            Status::UNAVAILABLE | Status::WRONG_THREAD => Err(ModifyError::NotServer),
             other => Err(ModifyError::Refused(other.0)),
         }
     }
@@ -480,13 +480,11 @@ impl Stats {
         if !status.is_ok() {
             return None;
         }
-        // SAFETY: `stat_info` returned OK and pointed `def.text` at a text the
-        // loader keeps alive and unchanged for the process; the text is copied.
-        let text = unsafe { def.text.as_str() }?.to_owned();
         let def = StatDef::from_data(&def)?;
         // SAFETY: `stat_info` returned OK and pointed `id` at an id the loader
         // keeps alive and unchanged for the process; the id is copied.
         let id = unsafe { id.as_str() }?.to_owned();
+        let text = name_key(&id)?;
         Some(StatInfo { id, text, def })
     }
 
@@ -603,7 +601,7 @@ impl LoadMethods for crate::BaseLoad {
 
     fn add_buff_modifiers(&mut self, buff: BuffTypeId, modifiers: &[Modifier]) -> Result<(), Off> {
         let host = self.host();
-        let data: Vec<StatModifierData> = modifiers.iter().map(|m| m.to_data()).collect();
+        let data: Vec<StatModifier> = modifiers.iter().map(|m| m.to_data()).collect();
         let status = (host.api().stat_buff)(
             host.handle(),
             buff.0,
@@ -620,7 +618,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             handler,
-            |user| (host.api().stats_changed)(host.handle(), run_changed::<F>, user),
+            |user| (host.api().stats_changed)(host.handle(), Some(run_changed::<F>), user),
             "stats handler",
         )
     }
@@ -638,7 +636,8 @@ impl LoadHelpers for crate::BaseLoad {
         let def_ptr = data.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
         let full = id.to_string();
         let mut out = StatRef::default();
-        let status = (host.api().stat_open)(host.handle(), Str::new(&full), def_ptr, &raw mut out);
+        let status =
+            (host.api().define_stat)(host.handle(), Str::new(&full), def_ptr, &raw mut out);
         crate::load::ok(status, Stat::from_ref(out), || format!("stat {full:?}"))
     }
 }

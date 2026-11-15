@@ -353,17 +353,17 @@ pub(crate) fn world_event(event: Event) {
 ///   are writable, as [`enshwick_core::abi::ResourcePatchFn`] says.
 unsafe extern "system" fn scale_recipes(
     base: *const u8,
-    len: usize,
+    len: u32,
     _user: *mut core::ffi::c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     if base.is_null() || out.is_null() || out_len.is_null() {
         return Status::BAD_ARGS;
     }
     // SAFETY: the loader's resource chain passes `len` readable bytes at
     // the non-null `base` (checked above) for the call.
-    let registry = unsafe { core::slice::from_raw_parts(base, len) };
+    let registry = unsafe { core::slice::from_raw_parts(base, len as usize) };
     let built = RECIPE_RATES
         .layout
         .get()

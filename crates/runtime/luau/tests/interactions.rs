@@ -12,7 +12,7 @@ mod tests {
         Interaction {
             header: Header::of::<Interaction>(),
             kind: Interaction::OPEN,
-            player: Entity(2),
+            character: Entity(2),
             target: Entity(9),
             item: ItemId::new(item),
             known: 1,

@@ -107,7 +107,7 @@ impl EventType {
     pub(crate) fn resolve(load: &BaseLoad, name: &'static str) -> Result<Self, Off> {
         let api = load.host().api();
         let mut hash = 0;
-        let status = (api.type_hash)(Str::new(name), &raw mut hash);
+        let status = (api.type_hash)(load.host().handle(), Str::new(name), &raw mut hash);
         crate::load::ok(status, (), || format!("event type {name}"))?;
         let size = load.type_size(name)?;
         Ok(Self { name, hash, size })
@@ -223,10 +223,11 @@ impl BaseLoad {
     /// As `Load::game_event_types`.
     #[doc(hidden)]
     pub fn game_event_types(&self) -> Result<Vec<EventType>, Off> {
+        let entry_size = u32::try_from(size_of::<EventTypeInfo>()).unwrap_or(u32::MAX);
         let api = self.host().api();
         let me = self.host().handle();
         let mut count = 0;
-        let status = (api.event_types)(me, core::ptr::null_mut(), 0, &raw mut count);
+        let status = (api.event_types)(me, core::ptr::null_mut(), entry_size, 0, &raw mut count);
         crate::load::ok(status, (), || "event types".to_owned())?;
         let empty = EventTypeInfo {
             header: Header::of::<EventTypeInfo>(),
@@ -237,7 +238,13 @@ impl BaseLoad {
         let mut infos = vec![empty; usize::try_from(count).unwrap_or(0)];
         let capacity = u32::try_from(infos.len()).unwrap_or(0);
         let mut written = 0;
-        let status = (api.event_types)(me, infos.as_mut_ptr(), capacity, &raw mut written);
+        let status = (api.event_types)(
+            me,
+            infos.as_mut_ptr(),
+            entry_size,
+            capacity,
+            &raw mut written,
+        );
         crate::load::ok(status, (), || "event types".to_owned())?;
         infos.truncate(usize::try_from(written).unwrap_or(0));
         Ok(infos
@@ -407,7 +414,6 @@ impl<T: Scalar> Field<T> {
     }
 
     /// The hash of the type the field belongs to.
-    #[cfg(feature = "unstable")]
     #[doc(hidden)]
     #[must_use]
     pub const fn type_hash(self) -> u32 {

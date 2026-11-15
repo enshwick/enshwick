@@ -20,10 +20,16 @@ pub(crate) struct Pacing {
 
 pub(crate) extern "system" fn loop_wait(
     me: ModHandle,
-    callback: LoopWaitFn,
+    callback: Option<LoopWaitFn>,
     user: *mut c_void,
     found: *mut LoopWaitSites,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let (side, first) = with((Side::SERVER, false), |s| {
         let first = s.pacing.loop_waits.is_empty();
         if first {
@@ -45,10 +51,16 @@ pub(crate) extern "system" fn loop_wait(
 
 pub(crate) extern "system" fn server_wait(
     me: ModHandle,
-    callback: ServerWaitFn,
+    callback: Option<ServerWaitFn>,
     user: *mut c_void,
-    found: *mut u32,
+    found: *mut u8,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let first = with(false, |s| {
         let first = s.pacing.server_waits.is_empty();
         if first {
@@ -58,15 +70,18 @@ pub(crate) extern "system" fn server_wait(
         }
         first
     });
-    put(found, u32::from(first))
+    put(found, u8::from(first))
 }
 
 pub(crate) extern "system" fn task_workers(
     _me: ModHandle,
     default: u32,
     background: u32,
-    found: *mut u32,
+    found: *mut u8,
 ) -> Status {
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let server = with(false, |s| {
         if s.host.side != Side::SERVER || (default, background) == (0, 0) {
             return false;
@@ -80,5 +95,5 @@ pub(crate) extern "system" fn task_workers(
         s.pacing.task_workers = Some((lowest(d, default), lowest(b, background)));
         true
     });
-    put(found, u32::from(server))
+    put(found, u8::from(server))
 }

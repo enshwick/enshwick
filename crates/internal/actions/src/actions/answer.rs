@@ -1,5 +1,5 @@
-//! Answers the loader's questions about a mod's actions: its sheet, a
-//! window, a run from the interface, or a typed line.
+//! Answers the loader's questions about a mod's actions: which a player may
+//! run, a window, a run from the interface, or a typed line.
 
 use core::ffi::c_void;
 use std::cell::RefCell;
@@ -12,7 +12,7 @@ use crate::world::Player;
 use super::registry::{Registry, Typed};
 use super::request::{ActionTarget, Outcome, Refused, RefusedReason, Via};
 
-/// What the mod answers the loader: a text, such as its sheet, or how a run
+/// What the mod answers the loader: a text, such as a window, or how a run
 /// went.
 enum Answered {
     Text(String),
@@ -129,7 +129,11 @@ pub(super) unsafe extern "system" fn answer(
     // `hand_over` leaked for the process, so it is aligned, alive and only
     // read through shared references.
     let registry = unsafe { &*user.cast::<Arc<Registry>>() };
-    let player = enshwick_world::__internal::player(&call.player);
+    // SAFETY: the loader passes the player of every question, valid for the call.
+    let Some(info) = (unsafe { call.player.as_ref() }) else {
+        return;
+    };
+    let player = enshwick_world::__internal::player(info);
     let language = Language(call.language);
     // SAFETY: the caller keeps the action's bytes alive and unchanged for
     // the call, and `action` is not used after it returns.
@@ -157,7 +161,7 @@ pub(super) unsafe extern "system" fn answer(
         "panic in an action",
         || Answered::Text(String::new()),
         || match call.kind {
-            ActionCall::SHEET => Answered::Text(registry.sheet(&player, language)),
+            ActionCall::ALLOWED => Answered::Text(registry.allowed_ids(&player)),
             ActionCall::WINDOW => Answered::Text(registry.window(&player, language, action)),
             ActionCall::WINDOW_CLOSED => {
                 registry.window_closed(player.key, action);
@@ -173,13 +177,8 @@ pub(super) unsafe extern "system" fn answer(
                 Answered::Text(String::new())
             }
             ActionCall::RUN => {
-                let covered = call.header.covers(
-                    core::mem::offset_of!(ActionCall, target)
-                        + size_of::<crate::abi::ActionTarget>(),
-                );
-                let target = covered
-                    .then(|| ActionTarget::from_raw(&call.target))
-                    .flatten();
+                // SAFETY: the loader passes null or the target, valid for the call.
+                let target = unsafe { call.target.as_ref() }.and_then(ActionTarget::from_raw);
                 Answered::Run(registry.run_from_interface(&player, action, args, language, target))
             }
             ActionCall::CONSOLE => Answered::Run(run_command(

@@ -2,7 +2,9 @@
 
 use core::ffi::c_void;
 
+use crate::abi::Metres;
 use crate::abi::{Entity, Header, ItemId, KnowledgeId, PlayerKey, RecipeId, Str};
+use crate::content::Guid;
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -72,6 +74,10 @@ impl_headed!(EventTypeInfo);
 /// A mod's handler for game events: the event and the pointer given at
 /// subscription. It must not unwind.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread that steps the event's world, at the start of a step.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on`](../struct.Load.html#method.on), for a game event's type.
@@ -79,26 +85,27 @@ pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, us
 
 /// An entity placed in the world, from [`HostApi::entities`](super::HostApi::entities).
 ///
-/// Like [`PlayerInfo`](super::PlayerInfo), its layout is frozen: [`HostApi::entities`](super::HostApi::entities) writes
-/// an array of it with no entry size.
+/// Frozen, written as an array by
+/// [`HostApi::entities`](super::HostApi::entities): an entity and its place
+/// are a plain value, as the list rule on [`HostApi`](super::HostApi) says.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::abi::EntityPlace;
 ///
-/// let chest = EntityPlace { entity: enshwick::Entity(4096), reserved: 0, position: [1 << 32, 0, 0] };
-/// assert_eq!(chest.position[0] >> 32, 1);
+/// let chest = EntityPlace { entity: enshwick::Entity(4096), reserved: 0, position: [1.0, 0.0, 0.0] };
+/// assert_eq!(chest.position[0], 1.0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct EntityPlace {
     /// The entity.
     pub entity: Entity,
     /// Zero.
     pub reserved: u32,
-    /// Where it is, in 32.32 fixed-point metres.
-    pub position: [i64; 3],
+    /// Where it is, in metres.
+    pub position: Metres,
 }
 
 /// A request to move an entity, for [`HostApi::teleport`](super::HostApi::teleport).
@@ -112,7 +119,7 @@ pub struct EntityPlace {
 ///     header: Header::of::<TeleportRequest>(),
 ///     entity: enshwick::Entity(2),
 ///     flags: TeleportRequest::BEST_SPAWN,
-///     position: [100 << 32, 40 << 32, -(20 << 32)],
+///     position: [100.0, 40.0, -20.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
 /// };
 /// assert_eq!(to_spawn.flags, TeleportRequest::BEST_SPAWN);
@@ -127,8 +134,8 @@ pub struct TeleportRequest {
     /// [`TeleportRequest::BEST_SPAWN`], [`TeleportRequest::ORIENTED`] or
     /// none.
     pub flags: u32,
-    /// Where to, in 32.32 fixed-point metres.
-    pub position: [i64; 3],
+    /// Where to, in metres.
+    pub position: Metres,
     /// The orientation to arrive in, a quaternion `x, y, z, w`, with
     /// [`TeleportRequest::ORIENTED`]; otherwise the entity keeps its own.
     pub orientation: [f32; 4],
@@ -153,11 +160,10 @@ impl TeleportRequest {
 ///
 /// let wolf = SpawnRequest {
 ///     header: Header::of::<SpawnRequest>(),
-///     template: [0x3a; 16],
-///     position: [100 << 32, 40 << 32, 0],
+///     template: enshwick::abi::Guid([0x3a; 16]),
+///     position: [100.0, 40.0, 0.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
 ///     level: 12,
-///     reserved: 0,
 ///     lifetime_ns: 0,
 ///     flags: 0,
 /// };
@@ -168,30 +174,28 @@ impl TeleportRequest {
 pub struct SpawnRequest {
     /// Size and version of this struct.
     pub header: Header,
-    /// The template GUID, in the order [`HostApi::entity_template`](super::HostApi::entity_template) writes.
-    pub template: [u8; 16],
-    /// Where, in 32.32 fixed-point metres.
-    pub position: [i64; 3],
+    /// The template GUID.
+    pub template: Guid,
+    /// Where, in metres.
+    pub position: Metres,
     /// The orientation, a quaternion `x, y, z, w`.
     pub orientation: [f32; 4],
     /// The level the entity spawns at, as the game scales enemies; 0 for
     /// the template's own.
     pub level: u32,
-    /// Zero.
-    pub reserved: u32,
+    /// [`SpawnRequest::DO_NOT_SAVE`], or 0.
+    pub flags: u32,
     /// Game time in nanoseconds after which the game removes the entity; 0
     /// to keep it.
     pub lifetime_ns: u64,
-    /// [`SpawnRequest::DO_NOT_SAVE`], or 0. ABI 11.6.
-    pub flags: u64,
 }
 
-impl_headed!(SpawnRequest, born = 80);
+impl_headed!(SpawnRequest);
 
 impl SpawnRequest {
     /// The entity stays out of the world's save, as the game's own passing
     /// animals do: it is gone once the world loads again.
-    pub const DO_NOT_SAVE: u64 = 1;
+    pub const DO_NOT_SAVE: u32 = 1;
 }
 
 /// A player's craft request, handed to the filters registered with
@@ -227,12 +231,17 @@ pub struct CraftCheck {
 impl_headed!(CraftCheck);
 
 /// A mod's craft filter: the request and the pointer given at registration;
-/// returns 1 to let it through, 0 to refuse it.
+/// returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse it, else [`FILTER_PASS`](super::FILTER_PASS).
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the server's game thread, at the start of a step.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_craft`](../struct.Load.html#method.on_craft).
-pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user: *mut c_void) -> u8;
+pub type CraftFilterFn =
+    unsafe extern "system" fn(call: *const CraftCheck, user: *mut c_void) -> u8;
 
 /// A placement the game's cursor check allows, handed to the filters
 /// registered with [`HostApi::build_filter`](super::HostApi::build_filter).
@@ -244,24 +253,24 @@ pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user:
 ///
 /// let wall = BuildCheck {
 ///     header: Header::of::<BuildCheck>(),
-///     player: enshwick::Entity(2),
+///     character: enshwick::Entity(2),
 ///     item: enshwick::ItemId::new(0x1d),
-///     position: [0; 3],
+///     position: [0.0; 3],
 ///     reason: core::ptr::null_mut(),
 /// };
 /// assert_eq!(wall.item, enshwick::ItemId::new(0x1d));
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct BuildCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The building player's character.
-    pub player: Entity,
+    pub character: Entity,
     /// The item placed: a building block, a prop or another placeable.
     pub item: ItemId,
-    /// Where, in 32.32 fixed-point metres.
-    pub position: [i64; 3],
+    /// Where, in metres.
+    pub position: Metres,
     /// Null, or where a filter that refuses writes why: a key of its mod's
     /// texts or plain words, which the builder reads. The text it points at
     /// stays valid until the filter's next call on the same thread; the
@@ -269,15 +278,21 @@ pub struct BuildCheck {
     pub reason: *mut Str,
 }
 
-impl_headed!(BuildCheck, born = 40);
+impl_headed!(BuildCheck);
 
 /// A mod's build filter: the placement and the pointer given at
-/// registration; returns 1 to let it through, 0 to refuse it.
+/// registration; returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse it, else [`FILTER_PASS`](super::FILTER_PASS).
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the worker threads of the game's cursor check, on the server and on
+/// a client for its own prediction, so several calls may run at once.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_build`](../struct.Load.html#method.on_build).
-pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user: *mut c_void) -> u8;
+pub type BuildFilterFn =
+    unsafe extern "system" fn(call: *const BuildCheck, user: *mut c_void) -> u8;
 
 /// The clock of the server's world, written by [`HostApi::time_of_day`](super::HostApi::time_of_day).
 ///
@@ -291,11 +306,11 @@ pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user:
 ///
 /// let noon = DaytimeInfo {
 ///     header: Header::of::<DaytimeInfo>(),
-///     time: 12 * 3_600_000_000_000,
-///     day_start: 6 * 3_600_000_000_000,
-///     day_end: 18 * 3_600_000_000_000,
-///     day_length: 1_800_000_000_000,
-///     night_length: 720_000_000_000,
+///     time_ns: 12 * 3_600_000_000_000,
+///     day_start_ns: 6 * 3_600_000_000_000,
+///     day_end_ns: 18 * 3_600_000_000_000,
+///     day_length_ns: 1_800_000_000_000,
+///     night_length_ns: 720_000_000_000,
 ///     speed: 1.0,
 ///     flags: DaytimeInfo::DAY,
 /// };
@@ -307,15 +322,15 @@ pub struct DaytimeInfo {
     /// Size and version of this struct.
     pub header: Header,
     /// The time of day.
-    pub time: i64,
+    pub time_ns: i64,
     /// The time of day the day starts at.
-    pub day_start: i64,
+    pub day_start_ns: i64,
     /// The time of day the night starts at.
-    pub day_end: i64,
+    pub day_end_ns: i64,
     /// How long the day lasts in real time at speed 1.
-    pub day_length: i64,
+    pub day_length_ns: i64,
     /// How long the night lasts in real time at speed 1.
-    pub night_length: i64,
+    pub night_length_ns: i64,
     /// How fast the clock runs: 1 normally, faster while players sleep, and
     /// times every mod's factor ([`HostApi::set_time_speed`](super::HostApi::set_time_speed)).
     pub speed: f32,
@@ -330,8 +345,9 @@ impl DaytimeInfo {
     pub const DAY: u32 = 1;
 }
 
-/// The damage types of a hit, one per value of the game's `DamageTypeNew`:
-/// the length of [`DamageCheck::amounts`].
+/// The damage types this ABI has names for, the values of the game's
+/// `DamageTypeNew` today. A hit may carry more on a later game build:
+/// [`DamageCheck::amount_count`] says how many.
 pub const DAMAGE_TYPES: usize = 13;
 
 /// Damage about to reach an entity's health, handed to the filters
@@ -348,8 +364,9 @@ pub const DAMAGE_TYPES: usize = 13;
 ///     target: enshwick::Entity(2),
 ///     source: enshwick::Entity(0),
 ///     attacker: enshwick::Entity(0),
-///     amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
 ///     total: 40.0,
+///     amount_count: 0,
+///     amounts: core::ptr::null_mut(),
 /// };
 /// fall.total *= 0.5;
 /// assert_eq!(fall.total, 20.0);
@@ -372,15 +389,19 @@ pub struct DamageCheck {
     /// Who dealt a hit, the root of the impact that hit (the archer for an
     /// arrow), or `source` when the game names none; 0 for other causes.
     pub attacker: Entity,
-    /// A hit's damage by type, in the game's order of its damage types
-    /// ([`DamageTypeNew::index`](../damage/enum.DamageTypeNew.html#method.index)), after
-    /// the target's resistances and before its armour; healing is what
-    /// heals. Zero for other causes.
-    pub amounts: [f32; DAMAGE_TYPES],
     /// The health the damage takes, for causes other than a hit; for a hit,
     /// the sum of its damage types but healing, which the loader does not
     /// read back.
     pub total: f32,
+    /// How many floats `amounts` points at: the values of the running
+    /// game's `DamageTypeNew`, read from its reflection; 0 for causes other
+    /// than a hit.
+    pub amount_count: u32,
+    /// A hit's damage by type, in the game's order of its damage types
+    /// (its `DamageTypeNew` enum), after the target's resistances and before
+    /// its armour; healing is what heals. The filter may change them; valid
+    /// for the call. Null for other causes.
+    pub amounts: *mut f32,
 }
 
 impl_headed!(DamageCheck);
@@ -408,6 +429,9 @@ impl DamageCheck {
 
 /// A mod's damage filter: the damage, which it may change, and the pointer
 /// given at registration. It runs on the game's worker threads.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
 ///
 /// # Examples
 ///
@@ -467,6 +491,65 @@ impl KnowledgeInfo {
     pub const PLAYER: u8 = 1;
 }
 
+/// One grant or revoke of a knowledge value, for
+/// [`HostApi::change_knowledge`](super::HostApi::change_knowledge): of the
+/// character `entity` in the game, of the account `account` whether it plays
+/// now or later, or of the world when both are 0.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, KnowledgeChange, KnowledgeInfo, PlayerKey};
+///
+/// let unflag = KnowledgeChange {
+///     header: Header::of::<KnowledgeChange>(),
+///     account: PlayerKey(7),
+///     entity: enshwick::Entity(0),
+///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
+///     value: 1,
+///     kind: KnowledgeInfo::FLAGS,
+///     op: KnowledgeChange::REVOKE,
+///     reserved: 0,
+/// };
+/// assert_eq!(unflag.op, KnowledgeChange::REVOKE);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct KnowledgeChange {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The account whose knowledge changes, by its
+    /// [`PlayerInfo::key`](super::PlayerInfo::key): now while its character
+    /// is in the game, else once its next character loads in this world; 0
+    /// for none.
+    pub account: PlayerKey,
+    /// The character of a player in the game whose knowledge changes now; 0
+    /// for none.
+    pub entity: Entity,
+    /// The knowledge id.
+    pub id: KnowledgeId,
+    /// Ignored for [`KnowledgeInfo::BOOL`], the count to add or take for
+    /// [`KnowledgeInfo::COUNTER`], the bit to set or clear for
+    /// [`KnowledgeInfo::FLAGS`].
+    pub value: u32,
+    /// The id's kind: [`KnowledgeInfo::BOOL`], [`KnowledgeInfo::COUNTER`]
+    /// or [`KnowledgeInfo::FLAGS`].
+    pub kind: u8,
+    /// [`KnowledgeChange::GRANT`] or [`KnowledgeChange::REVOKE`].
+    pub op: u8,
+    /// Zero.
+    pub reserved: u16,
+}
+
+impl_headed!(KnowledgeChange);
+
+impl KnowledgeChange {
+    /// Grants the value, as the game grants it.
+    pub const GRANT: u8 = 0;
+    /// Takes the value back.
+    pub const REVOKE: u8 = 1;
+}
+
 /// A front of weather in the server's world: the current phenomenon of one
 /// of its weather layers, written by [`HostApi::weather_fronts`](super::HostApi::weather_fronts).
 ///
@@ -479,11 +562,11 @@ impl KnowledgeInfo {
 ///     header: Header::of::<WeatherFront>(),
 ///     layer: 0,
 ///     effect: WeatherFront::RAIN,
-///     position: [0; 3],
+///     position: [0.0; 3],
 ///     radius: 900.0,
 ///     reserved: 0,
-///     remaining: 300_000_000_000,
-///     phenomenon: [0; 16],
+///     remaining_ns: 300_000_000_000,
+///     phenomenon: enshwick::abi::Guid::NIL,
 /// };
 /// assert_eq!(storm.effect, WeatherFront::RAIN);
 /// ```
@@ -497,29 +580,63 @@ pub struct WeatherFront {
     /// [`WeatherFront::NONE`], [`WeatherFront::RAIN`] or
     /// [`WeatherFront::BLIZZARD`].
     pub effect: u32,
-    /// Where it is, in 32.32 fixed-point metres.
-    pub position: [i64; 3],
+    /// Where it is, in metres.
+    pub position: Metres,
     /// How far it reaches, in metres.
     pub radius: f32,
     /// Zero.
     pub reserved: u32,
     /// How long it has left, in game nanoseconds.
-    pub remaining: i64,
+    pub remaining_ns: i64,
     /// The GUID of its phenomenon in the weather resource, all zero when
-    /// the loader did not find it. ABI 11.6.
-    pub phenomenon: [u8; 16],
+    /// the loader did not find it.
+    pub phenomenon: Guid,
 }
 
-impl_headed!(WeatherFront, born = 56);
+impl_headed!(WeatherFront);
+
+/// How the weather weighs at one place, as weights that add up to 1, written
+/// by [`HostApi::weather_at`](super::HostApi::weather_at).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, WeatherSample};
+///
+/// let sample = WeatherSample {
+///     header: Header::of::<WeatherSample>(),
+///     clear: 0.75,
+///     rain: 0.25,
+///     snow: 0.0,
+///     blizzard: 0.0,
+/// };
+/// assert_eq!(sample.clear + sample.rain, 1.0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct WeatherSample {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// How clear it is.
+    pub clear: f32,
+    /// How rainy it is.
+    pub rain: f32,
+    /// How snowy it is.
+    pub snow: f32,
+    /// How stormy it is, in a blizzard.
+    pub blizzard: f32,
+}
+
+impl_headed!(WeatherSample);
 
 /// A world's save on disk, written by
 /// [`HostApi::save_info`](super::HostApi::save_info).
 ///
 /// The mod owns it and passes it as `out`, its header set with
-/// [`Header::of`]; the loader writes it on the calling thread during the
+/// a header of its own size and ABI version; the loader writes it on the calling thread during the
 /// call, up to the size the header states, and keeps no pointer to it. It
 /// holds no pointers. Layout grows only by appending; read a later field
-/// after [`Header::covers`].
+/// once the header's `size` covers it.
 ///
 /// # Examples
 ///
@@ -528,7 +645,7 @@ impl_headed!(WeatherFront, born = 56);
 ///
 /// let info = SaveInfo {
 ///     header: Header::of::<SaveInfo>(),
-///     world: [7; 16],
+///     world: enshwick::abi::Guid([7; 16]),
 ///     saved_at: 1_762_300_000,
 ///     size: 4_096,
 ///     backups: 2,
@@ -542,7 +659,7 @@ pub struct SaveInfo {
     /// Size and version of this struct.
     pub header: Header,
     /// The world's GUID, which stays the same across its saves.
-    pub world: [u8; 16],
+    pub world: Guid,
     /// When the save was written, in seconds since the Unix epoch.
     pub saved_at: u64,
     /// The save file's size in bytes.
@@ -566,7 +683,7 @@ impl WeatherFront {
 
 /// Whether a player may edit a box of the server's world, for
 /// [`HostApi::build_rights`](crate::abi::HostApi::build_rights): the mod
-/// fills `player`, `min` and `max`, and the loader writes `refusal`.
+/// fills `character`, `min` and `max`, and the loader writes `refusal`.
 ///
 /// # Examples
 ///
@@ -575,7 +692,7 @@ impl WeatherFront {
 ///
 /// let check = BuildRights {
 ///     header: Header::of::<BuildRights>(),
-///     player: enshwick::Entity(2),
+///     character: enshwick::Entity(2),
 ///     refusal: BuildRights::ALLOWED,
 ///     min: [100.0, 40.0, 100.0],
 ///     max: [104.0, 44.0, 104.0],
@@ -588,14 +705,14 @@ pub struct BuildRights {
     /// Size and version of this struct.
     pub header: Header,
     /// The player's character entity.
-    pub player: Entity,
+    pub character: Entity,
     /// [`BuildRights::ALLOWED`] or why the server refuses, written by the
     /// loader.
     pub refusal: u32,
     /// The box's lowest corner, in metres.
-    pub min: [f64; 3],
+    pub min: Metres,
     /// The box's highest corner, in metres, at least `min` on every axis.
-    pub max: [f64; 3],
+    pub max: Metres,
 }
 
 impl_headed!(BuildRights);
@@ -622,7 +739,7 @@ impl BuildRights {
 /// use enshwick::abi::MapMarkerInfo;
 ///
 /// let marker = MapMarkerInfo::EMPTY;
-/// assert_eq!(marker.label, [0; 16]);
+/// assert_eq!(marker.label, enshwick::abi::Guid::NIL);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -630,12 +747,12 @@ pub struct MapMarkerInfo {
     /// Size and version of this struct.
     pub header: Header,
     /// Where it stands, in metres, y up.
-    pub position: [f64; 3],
-    /// Its `markerType` reference, a GUID in memory order; zero for none.
-    pub marker_type: [u8; 16],
-    /// Its label's text tag (`markerId`), a GUID in memory order; zero for
+    pub position: Metres,
+    /// Its `markerType` reference; zero for none.
+    pub marker_type: Guid,
+    /// Its label's text tag (`markerId`); zero for
     /// none.
-    pub label: [u8; 16],
+    pub label: Guid,
 }
 
 impl_headed!(MapMarkerInfo);
@@ -645,8 +762,8 @@ impl MapMarkerInfo {
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
         position: [0.0; 3],
-        marker_type: [0; 16],
-        label: [0; 16],
+        marker_type: Guid::NIL,
+        label: Guid::NIL,
     };
 }
 
@@ -695,7 +812,7 @@ impl MapFrameInfo {
 /// ```
 /// use enshwick::abi::AccountActionType;
 ///
-/// assert_ne!(AccountActionType::BAN, AccountActionType::UN_BAN);
+/// assert_ne!(AccountActionType::BAN, AccountActionType::UNBAN);
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -708,15 +825,15 @@ impl AccountActionType {
     /// online.
     pub const BAN: Self = Self(1);
     /// Takes the account off the ban list.
-    pub const UN_BAN: Self = Self(2);
+    pub const UNBAN: Self = Self(2);
 }
 
 /// An account joining the game, handed to the rules registered with
 /// [`HostApi::join_rule`](super::HostApi::join_rule).
 ///
 /// The rules see it before any player of its machine enters the world.
-/// Layout grows only by appending; read a later field after
-/// [`Header::covers`].
+/// Layout grows only by appending; read a later field once
+/// the header's `size` covers it.
 ///
 /// # Examples
 ///
@@ -725,9 +842,9 @@ impl AccountActionType {
 ///
 /// let call = JoinCall {
 ///     header: Header::of::<JoinCall>(),
-///     player: enshwick::PlayerKey::new(7),
+///     account: enshwick::PlayerKey::new(7),
 /// };
-/// assert_eq!(call.player.get(), 7);
+/// assert_eq!(call.account.get(), 7);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -736,7 +853,7 @@ pub struct JoinCall {
     pub header: Header,
     /// The joining account's key, the one its player and the server's ban
     /// list carry; zero for an account the game gives no key.
-    pub player: PlayerKey,
+    pub account: PlayerKey,
 }
 
 impl_headed!(JoinCall);
@@ -746,10 +863,13 @@ impl_headed!(JoinCall);
 ///
 /// It is called on the thread the session reads its messages on, not the
 /// game thread, once for each account a joining machine brings; it returns
-/// 1 to let the account in and 0 to refuse it, any other answer letting it
+/// [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse the account, any other answer letting it
 /// in. `call` is borrowed for the call and never null; `user` is the
 /// pointer given at registration, passed as it is. Never re-entered; it must
 /// not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
 ///
 /// # Examples
 ///

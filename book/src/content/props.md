@@ -44,6 +44,8 @@ the mod added before the call.
 
 The game keeps the crafting props of a base in one mask of 64 bits. Vanilla
 and every mod share it, and the game's own props take 51 of the bits. The loader
+reads the mask and the game's props from the running game. A game patch that
+adds a prop therefore needs no new build of the mod. The loader
 gives each new crafting prop the next free bit, in load order, and refuses one
 past the last, which turns its mod off. [Load order](../concepts/lifecycle.md#in-what-order-do-mods-load)
 follows mod ids and dependencies, so the same mods give the same bits. The server sends clients

@@ -20,7 +20,7 @@ pub enum AccountAction {
     /// removes the player.
     Ban,
     /// Takes the account off the server's ban list.
-    UnBan,
+    Unban,
 }
 
 impl AccountAction {
@@ -28,7 +28,7 @@ impl AccountAction {
         match self {
             Self::Kick => AccountActionType::KICK,
             Self::Ban => AccountActionType::BAN,
-            Self::UnBan => AccountActionType::UN_BAN,
+            Self::Unban => AccountActionType::UNBAN,
         }
     }
 }
@@ -45,7 +45,7 @@ impl World {
     /// [`WorldError::Refused`] for a kick or a ban of an administrator
     /// online, whom the game never removes, or of a hosted game's host, a
     /// kick or a ban of an account not online, and account 0; [`WorldError::WrongThread`] off the server's game
-    /// thread or inside a step; [`WorldError::Missing`] while no server
+    /// thread or inside a step; [`WorldError::Unavailable`] while no server
     /// runs or on a game build that lacks the action.
     ///
     /// # Examples
@@ -79,7 +79,7 @@ impl World {
     ///
     /// [`WorldError::Refused`] for account 0, for a mute of an administrator
     /// online or of a hosted game's host, and when the world's file is not
-    /// written; [`WorldError::Missing`] outside a server, the dedicated one
+    /// written; [`WorldError::Unavailable`] outside a server, the dedicated one
     /// or the one a client hosts, and while no world runs.
     ///
     /// # Examples
@@ -95,7 +95,7 @@ impl World {
     /// ```
     #[script]
     pub fn set_muted(self, key: PlayerKey, muted: bool) -> Result<(), WorldError> {
-        WorldError::from_status((self.0.host.api().chat_mute_set)(
+        WorldError::from_status((self.0.host.api().set_chat_mute)(
             self.0.host.handle(),
             key,
             u8::from(muted),
@@ -106,7 +106,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for account 0; [`WorldError::Missing`]
+    /// [`WorldError::Refused`] for account 0; [`WorldError::Unavailable`]
     /// outside a server, the dedicated one or the one a client hosts.
     ///
     /// # Examples
@@ -121,7 +121,7 @@ impl World {
     #[script]
     pub fn muted(self, key: PlayerKey) -> Result<bool, WorldError> {
         let mut muted = 0u8;
-        WorldError::from_status((self.0.host.api().chat_mute_has)(
+        WorldError::from_status((self.0.host.api().chat_muted)(
             self.0.host.handle(),
             key,
             &raw mut muted,

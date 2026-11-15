@@ -87,6 +87,7 @@ mod hud;
 mod icons;
 mod icons_hidden;
 mod init_off;
+mod init_only;
 #[cfg(feature = "unstable")]
 mod input;
 #[cfg(feature = "typed")]
@@ -142,6 +143,7 @@ mod no_mod_points;
 mod no_ui;
 #[cfg(feature = "unstable")]
 mod notices;
+mod null_callbacks;
 #[cfg(feature = "unstable")]
 mod open_screen;
 mod pacing;
@@ -244,6 +246,8 @@ mod survivor_lookup;
 mod symbols;
 mod table_config;
 mod task_workers;
+#[cfg(feature = "unstable")]
+mod template_arguments;
 #[cfg(feature = "typed")]
 mod templates;
 mod terrain;

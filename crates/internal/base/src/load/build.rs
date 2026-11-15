@@ -27,7 +27,7 @@ impl BaseLoad {
     #[doc(hidden)]
     pub fn system(&self, name: &str) -> Result<u64, Off> {
         let mut out = 0;
-        let status = (self.api().system)(Str::new(name), &raw mut out);
+        let status = (self.api().system)(self.host().handle(), Str::new(name), &raw mut out);
         ok(status, out, || format!("system {name}"))
     }
 
@@ -35,7 +35,12 @@ impl BaseLoad {
     #[doc(hidden)]
     pub fn field_offset(&self, type_name: &str, field: &str) -> Result<u64, Off> {
         let mut out = 0;
-        let status = (self.api().field_offset)(Str::new(type_name), Str::new(field), &raw mut out);
+        let status = (self.api().field_offset)(
+            self.host().handle(),
+            Str::new(type_name),
+            Str::new(field),
+            &raw mut out,
+        );
         ok(status, out, || format!("field {type_name}.{field}"))
     }
 
@@ -43,7 +48,8 @@ impl BaseLoad {
     #[doc(hidden)]
     pub fn type_size(&self, type_name: &str) -> Result<u32, Off> {
         let mut out = 0;
-        let status = (self.api().type_size)(Str::new(type_name), &raw mut out);
+        let status =
+            (self.api().type_size)(self.host().handle(), Str::new(type_name), &raw mut out);
         ok(status, out, || format!("type {type_name}"))
     }
 }

@@ -53,13 +53,13 @@ impl Installed {
             let last = changes.iter().map(|c| c.at[axis]).max().unwrap_or(0);
             (last / BRICK).saturating_add(1).saturating_mul(BRICK)
         });
-        let edit = abi::VoxelEditData {
-            header: Header::of::<abi::VoxelEditData>(),
+        let edit = abi::VoxelEditRequest {
+            header: Header::of::<abi::VoxelEditRequest>(),
             by,
             min,
             size: [0, 1, 2].map(|axis| end[axis] - min[axis]),
             changes: changes.as_ptr(),
-            count: changes.len() as u64,
+            count: u32::try_from(changes.len()).unwrap_or(u32::MAX),
         };
         // SAFETY: `edit` is the data of `VOXELS_CHANGED`, its `changes`
         // pointing at `count` changes, all living for the call.

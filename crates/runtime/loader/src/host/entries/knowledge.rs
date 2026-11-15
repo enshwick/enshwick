@@ -5,13 +5,13 @@ use enshwick_core::abi::{KnowledgeId, KnowledgeInfo, Status};
 use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::conflicts::Mode;
-use crate::host::layer::{Caller, HeadedOut, ListOut, Mod, Out, entries};
+use crate::host::layer::{Callback, Caller, Headed, HeadedOut, ListOut, Mod, Out, entries};
 
 entries! {
     fn skill_override(
         me as Mod,
         node: enshwick_core::abi::SkillNode,
-        callback: api_frame::SkillCheckFn,
+        callback as Callback<api_frame::SkillCheckFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -21,7 +21,7 @@ entries! {
         )
     }
 
-    fn comfort_filter(me as Mod, callback: api_frame::ComfortFn, user: *mut core::ffi::c_void) -> Status {
+    fn comfort_filter(me as Mod, callback as Callback<api_frame::ComfortFilterFn>, user: *mut core::ffi::c_void) -> Status {
         me.claim(
             "comfort filter",
             Mode::Chained,
@@ -31,7 +31,7 @@ entries! {
 
     fn experience_filter(
         me as Mod,
-        callback: api_frame::ExperiencePassFn,
+        callback as Callback<api_frame::ExperienceFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -43,7 +43,7 @@ entries! {
 
     fn knowledge_input_filter(
         me as Mod,
-        callback: enshwick_core::abi::KnowledgeInputFn,
+        callback as Callback<enshwick_core::abi::KnowledgeInputFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -61,32 +61,19 @@ entries! {
         holds.put(u32::from(crate::knowledge::store::query::holds(loader, entity, query)?))
     }
 
-    fn revoke_knowledge(loader as Caller, entity: Entity, id: KnowledgeId, kind: u32, value: u32) -> Status {
-        crate::knowledge::store::changes::revoke(loader, entity.0, id.get(), kind, value)?;
-        Ok(())
-    }
-
-    fn account_knowledge(
-        loader as Caller,
-        key: enshwick_core::PlayerKey,
-        id: KnowledgeId,
-        kind: u32,
-        value: u32,
-        revoke: u32,
-    ) -> Status {
-        crate::knowledge::store::changes::for_account(
-            loader,
-            key.get(),
-            id.get(),
-            kind,
-            value,
-            revoke != 0,
-        )?;
-        Ok(())
-    }
-
-    fn grant_knowledge(loader as Caller, entity: Entity, id: KnowledgeId, kind: u32, value: u32) -> Status {
-        crate::knowledge::store::grant(loader, entity.0, id.get(), kind, value)?;
+    fn change_knowledge(loader as Caller, change as Headed<api_frame::KnowledgeChange>) -> Status {
+        let revoke = match change.op {
+            api_frame::KnowledgeChange::GRANT => false,
+            api_frame::KnowledgeChange::REVOKE => true,
+            _ => return Err(Status::BAD_ARGS.into()),
+        };
+        let (id, kind, value) = (change.id.get(), u32::from(change.kind), change.value);
+        match (change.account.get(), change.entity.0) {
+            (0, entity) if revoke => crate::knowledge::store::changes::revoke(loader, entity, id, kind, value)?,
+            (0, entity) => crate::knowledge::store::grant(loader, entity, id, kind, value)?,
+            (account, 0) => crate::knowledge::store::changes::for_account(loader, account, id, kind, value, revoke)?,
+            _ => return Err(Status::BAD_ARGS.into()),
+        }
         Ok(())
     }
 

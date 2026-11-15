@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use super::super::loot_tables::template_table;
 use super::super::templates::TEMPLATE_COLLECTION;
-use super::{LootTable, Names, Vanilla, VanillaError, near};
+use super::{LootTable, Names, Vanilla, VanillaError, VanillaTemplate, near};
 use crate::content::{Blob, Guid};
 
 /// The fill tables containers roll: each container template's by its name,
@@ -39,18 +39,46 @@ impl Vanilla {
     /// }
     /// ```
     pub fn template(&self, name: &str) -> Result<Guid, VanillaError> {
-        let names = self
-            .template_names
-            .get_or_init(|| {
-                if crate::__private::initialised() {
-                    crate::warn_once!(
-                        "vanilla templates named after init: every template's name is read now, on this thread, about 139 ms on a dedicated server; name them in init"
-                    );
-                }
-                self.read_template_names()
+        self.template_named(name, true)
+    }
+
+    /// Every vanilla template with the name the template collection gives
+    /// it, sorted by name, as [`templates`](super::templates) lists them.
+    /// The first call reads every template's name once, as
+    /// [`Vanilla::template`] does, without its warning.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::Unreadable`] when the templates do not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let wolves = vanilla.templates()?.iter().filter(|t| t.name.contains("Wolf")).count();
+    ///     enshwick::info!("{wolves} wolf templates");
+    /// }
+    /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
+    /// ```
+    pub fn templates(&self) -> Result<Vec<VanillaTemplate>, VanillaError> {
+        Ok(self
+            .template_names(false)?
+            .iter()
+            .flat_map(|(name, guids)| {
+                guids.iter().map(|guid| VanillaTemplate {
+                    guid: *guid,
+                    name: name.clone(),
+                })
             })
-            .as_ref()
-            .ok_or(VanillaError::Unreadable("templates"))?;
+            .collect())
+    }
+
+    /// [`Vanilla::template`], warning a mod that reads the names after init
+    /// when `warn`.
+    pub(crate) fn template_named(&self, name: &str, warn: bool) -> Result<Guid, VanillaError> {
+        let names = self.template_names(warn)?;
         match names.get(name).map(Vec::as_slice) {
             Some([one]) => Ok(*one),
             Some(several) if !several.is_empty() => Err(VanillaError::AmbiguousTemplate {
@@ -62,6 +90,22 @@ impl Vanilla {
                 near: near(names, name),
             }),
         }
+    }
+
+    /// The template names, read once; a mod that reads them first after
+    /// init is warned when `warn`.
+    fn template_names(&self, warn: bool) -> Result<&Names, VanillaError> {
+        self.template_names
+            .get_or_init(|| {
+                if warn && crate::__private::initialised() {
+                    crate::warn_once!(
+                        "vanilla templates named after init: every template's name is read now, on this thread, about 139 ms on a dedicated server; name them in init"
+                    );
+                }
+                self.read_template_names()
+            })
+            .as_ref()
+            .ok_or(VanillaError::Unreadable("templates"))
     }
 
     fn read_template_names(&self) -> Option<Names> {

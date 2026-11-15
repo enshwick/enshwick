@@ -26,10 +26,10 @@ impl Target {
     /// `source`.
     fn to_abi(self, field: Field, source: &str) -> DataChange {
         let (entry, select, categories) = match self {
-            Self::Entry(entry) => (entry.0, DataSelect::ENTRY, 0),
+            Self::Entry(entry) => (entry, DataSelect::ENTRY, 0),
             Self::Items(items) => {
                 let (select, categories) = items.to_abi();
-                ([0; 16], select, categories)
+                (Guid::NIL, select, categories)
             }
         };
         DataChange {
@@ -39,7 +39,7 @@ impl Target {
             op: ChangeOp::TIMES,
             value: 1.0,
             source: Str::new(source),
-            item: [0; 16],
+            item: Guid::NIL,
             select,
             categories,
         }
@@ -216,7 +216,7 @@ impl LoadMethods for crate::BaseLoad {
         let raw = target.to_abi(field, source);
         let host = self.host();
         let mut id = ChangeId(0);
-        let status = (host.api().declare_change)(host.handle(), &raw const raw, &raw mut id);
+        let status = (host.api().change_data)(host.handle(), &raw const raw, &raw mut id);
         crate::load::ok(status, ChangeHandle { host, id, field }, what)
     }
 }
@@ -245,8 +245,11 @@ mod tests {
     #[test]
     fn a_target_names_its_entry_or_its_selection_in_the_abi() {
         let one = Target::Entry(Guid([3; 16])).to_abi(Field::MaxStackSize, "x");
-        assert_eq!((one.entry, one.select), ([3; 16], DataSelect::ENTRY));
+        assert_eq!((one.entry, one.select), (Guid([3; 16]), DataSelect::ENTRY));
         let many = Target::Items(Items::Containers).to_abi(Field::Slots, "x");
-        assert_eq!((many.entry, many.select), ([0; 16], DataSelect::CONTAINERS));
+        assert_eq!(
+            (many.entry, many.select),
+            (Guid([0; 16]), DataSelect::CONTAINERS)
+        );
     }
 }

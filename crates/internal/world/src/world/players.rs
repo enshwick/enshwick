@@ -71,7 +71,7 @@ impl World {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     load.on::<BuildingPlaced>(move |placed| {
-    ///         if let Some(player) = world.player(placed.player) {
+    ///         if let Some(player) = world.player(placed.character) {
     ///             let label = format!("Built by {}", player.name);
     ///             let _labelled = world.set_label(placed.entity, &label);
     ///         }
@@ -96,7 +96,7 @@ impl World {
     /// ```
     #[script]
     pub fn broadcast(self, text: &str) {
-        self.chat(PlayerKey::new(0), text);
+        let _queued = (self.0.host.api().chat_all)(self.0.host.handle(), Str::new(text));
     }
 
     /// The language the player of account `key` reads the game in, as their
@@ -120,7 +120,9 @@ impl World {
     #[must_use]
     #[script]
     pub fn language_of(self, key: PlayerKey) -> Language {
-        Language::known_or_fallback((self.0.host.api().language_of)(self.0.host.handle(), key))
+        let mut language = 0;
+        let _ = (self.0.host.api().language_of)(self.0.host.handle(), key, &raw mut language);
+        Language::known_or_fallback(language)
     }
 
     /// Sends `text` to `player`'s chat alone, after the next step; callable

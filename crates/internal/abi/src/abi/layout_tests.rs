@@ -11,6 +11,11 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use super::*;
+use crate::content::Guid;
+
+mod source;
+
+use source::{constants_in_source, structs_in_source};
 
 /// A type's size, alignment and fields in declaration order.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,11 +37,14 @@ struct Field {
 }
 
 /// The layout of the whole ABI at one version, with the
-/// [`Headed::BORN`](crate::abi::Headed::BORN) of each headed type.
+/// [`Headed::BORN`](crate::abi::Headed::BORN) of each headed type and the
+/// value of every constant, since a renumbered status or kind breaks a mod as
+/// surely as a moved field.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Snapshot {
     types: BTreeMap<String, Shape>,
     born: BTreeMap<String, usize>,
+    constants: BTreeMap<String, String>,
 }
 
 /// A type the macro `shapes!` asks for its [`Headed::BORN`](crate::abi::Headed::BORN): through
@@ -123,7 +131,7 @@ macro_rules! shapes {
                     born.insert(stringify!($ty).to_owned(), end);
                 }
             )*
-            Snapshot { types, born }
+            Snapshot { types, born, constants: constants_in_source() }
         }
 
         const LISTED: &[(&str, &[&str])] = &[$((stringify!($ty), &[$(stringify!($field)),*])),*];
@@ -145,26 +153,26 @@ shapes! {
         KnowledgeId { 0 },
         BuffTypeId { 0 },
         NpcId { 0 },
-        PlayerDeathData { header, entity, cause, key, position, cause_guid, was_deadly_fog, drowned, reserved, killer_entity, reserved_tail },
+        PlayerDeathData { header, entity, cause, key, position, cause_guid, killer_entity, reserved_tail },
         KnowledgeData { header, entity, id, value },
         QuestData { header, entity, quest },
-        KnowledgeInput { header, player, id, kind, scope, reserved, value, refusal, allowed },
-        ChunkData { header, index, x, z, size },
+        KnowledgeInput { header, character, id, kind, scope, reserved, value, refusal, allowed, reserved_tail },
+        ChunkData { header, x, z, size },
         TerrainPageData { header, x, z, size },
-        BuildingData { header, entity, player, item, kind, replay, template, position },
+        BuildingData { header, entity, character, item, kind, replay, template, position },
         PlayerInfo { header, slot, entity, key, permissions, name_len, name },
-        TickData { header, step, elapsed_steps, elapsed_nanos, step_nanos, cost_nanos, game },
+        TickData { header, step, elapsed_steps, elapsed_ns, step_ns, cost_ns, game },
         TickHandle { 0 },
         PlayerData { header, slot, entity, key },
         ActionCall { header, kind, language, player, action, args, target, reply, word, via, reason },
         ActionReply { header, done, text },
         ActionTarget { header, flags, entity, position },
         CommandInfo { header, name, alias, mod_id },
-        RenameCall { header, entity, known, player, text },
+        RenameCall { header, entity, player, text },
+        Guid { 0 },
         ResourceKey { guid, type_hash, part },
         Fingerprint { guid, age },
-        BuildInfo { header, side, base, fingerprint, table },
-        BuildTable { 0 },
+        BuildInfo { header, side, base, fingerprint, complete },
         Symbol { name, rva },
         BuildRow { side, fingerprint, symbols, symbol_count, constants, constant_count },
         Relation { 0 },
@@ -172,18 +180,19 @@ shapes! {
         ManifestFlags { 0 },
         Manifest { header, id, version, side, flags, dependencies, dependency_count, builds, build_count, name, description, authors, author_count, license, homepage, points, exports, export_count },
         HookFlags { 0 },
-        HookSpec { target, detour, next, priority, flags },
+        HookSpec { header, target, detour, next, priority, flags },
         CallerFrame { rsp, rbx, rbp, rdi, rsi, r12, r13, r14, r15 },
         ModInfo { header, id, version, side, flags, off, file, name, description, authors, author_count, license, homepage },
         ModHandle { 0 },
         Registers { rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rflags },
-        MidHookSpec { address, handler, user, priority, flags },
-        InventoryOp { kind, flags, target, other, item, count },
+        MidHookSpec { header, address, handler, user, priority, flags },
+        InventoryOp { kind, flags, target, slot, other, fill, item, count },
         InventoryRequest { header, flags, actor, ops, op_count, reserved },
         InventoryOpResult { error, remaining },
         InventoryResult { header, outcome, op_count, ops },
-        ItemData { header, id, max_stack, category, rarity, flags, placed_entity },
+        ItemTypeInfo { header, id, max_stack, category, rarity, flags, placed_entity },
         Bounds { min, max },
+        Extent { min, max },
         AltarInfo { header, entity, level, tilted, level_count, reserved, zone, levels, position },
         AltarLimit { header, flame_level, vanilla, allowed, reserved },
         BaseLimitInfo { header, zones, bases, vanilla_zones, reserved, vanilla_bases, max_zones, max_bases },
@@ -192,7 +201,7 @@ shapes! {
         SurvivorLookup { header, survivor, vanilla, purpose, entity, cell, bed_of, token },
         BedCheck { header, npc_id, entity, bed_id, home, bed_at },
         Summon { header, item, ammo, template, target, slot, pide, meter, consumed, reserved },
-        Interaction { header, kind, player, target, item, known, reserved, position },
+        Interaction { header, kind, character, target, item, known, reserved, position },
         SkillCheck { header, node, gate, unlocked, reserved },
         Comfort { header, category, value, position },
         ExperienceRow { entity, level, progress, need, gained },
@@ -200,35 +209,37 @@ shapes! {
         GameEventData { header, type_hash, size, data },
         EntityPlace { entity, reserved, position },
         TeleportRequest { header, entity, flags, position, orientation },
-        SpawnRequest { header, template, position, orientation, level, reserved, lifetime_ns, flags },
+        SpawnRequest { header, template, position, orientation, level, flags, lifetime_ns },
         DropRequest { header, item, count, position, level, rarity },
         ProgressWriteData { header, entity, what, value, outcome, level, experience, gained },
         CraftCheck { header, crafting_operator_id, crafting_station_id, recipe_id, recipe_amount, reserved },
-        BuildCheck { header, player, item, position, reason },
+        BuildCheck { header, character, item, position, reason },
         NetMessage { header, channel, reserved, peer, data, size, reserved_tail },
-        DaytimeInfo { header, time, day_start, day_end, day_length, night_length, speed, flags },
-        DamageCheck { header, cause, target, source, attacker, amounts, total },
-        StatDefData { header, ty, format, reserved, default, min, max, text },
+        DaytimeInfo { header, time_ns, day_start_ns, day_end_ns, day_length_ns, night_length_ns, speed, flags },
+        DamageCheck { header, cause, target, source, attacker, total, amount_count, amounts },
+        StatSpec { header, ty, format, reserved, default, min, max },
         StatRef { index, key },
-        StatModifierData { stat, op, reserved, value },
+        StatModifier { stat, op, reserved, value },
         StatModify { header, entity, key, modifier, flags, duration_ms },
         StatChange { header, entity, stat, old, new, reserved },
         StatSource { kind, op, reserved, stat, value, id, owner },
-        AffixDefData { header, text, group, modifiers, modifier_count, weight, categories, rarity, reserved },
-        AffixModifierData { stat, op, reserved, min, max, step },
+        AffixSpec { header, group, modifiers, modifier_count, weight, categories, rarity, reserved },
+        AffixModifierSpec { stat, op, reserved, min, max, step },
         AffixRoll { header, pide, item, min, max, max_rarity, flags, seed },
         ItemLine { modifier, affix },
-        BuffTypeInfo { header, id, slot, flags, name, duration },
-        ActiveBuff { header, id, entity, slot, level, duration, remaining },
-        BuffRequest { header, entity, id, level, reserved, duration },
+        BuffTypeInfo { header, id, slot, flags, name, duration_ns },
+        ActiveBuff { header, id, entity, slot, level, duration_ns, remaining_ns },
+        BuffRequest { header, entity, id, level, reserved, duration_ns },
         KnowledgeInfo { header, id, kind, scope, reserved, value, flags },
-        WeatherFront { header, layer, effect, position, radius, reserved, remaining, phenomenon },
+        KnowledgeChange { header, account, entity, id, value, kind, op, reserved },
+        WeatherFront { header, layer, effect, position, radius, reserved, remaining_ns, phenomenon },
+        WeatherSample { header, clear, rain, snow, blizzard },
         TerrainMaterialInfo { header, id, flags, hardness, reserved, item, health },
         TerrainEdit { header, kind, shape, flags, material, position, radius, height, protect },
         Voxel { kind, material, fill, reserved },
         VoxelChange { at, before, after },
-        VoxelEditData { header, by, min, size, changes, count },
-        BuildRights { header, player, refusal, min, max },
+        VoxelEditRequest { header, by, min, size, changes, count },
+        BuildRights { header, character, refusal, min, max },
         TransactionOp { kind, reserved, data },
         TransactionInfo { header, state, reason, ops, applied, bricks, refusal, reserved, holds, created },
         PropPlace { header, item, reserved, position, orientation },
@@ -249,16 +260,16 @@ shapes! {
         TypeConstant { name, value },
         TypeField { name, type_name, offset, attribute_count, attributes },
         TypeEntry { header, name, impact_name, qualified_name, inner, internal_hash, size, align, element_align, kind, flags, reserved, count, field_count, constant_count, attribute_count, fields, constants, attributes },
-        HostApi { header, host_version, build, symbol, system, field_offset, type_size, hook, caller_frame, fault, log, settings, publish, service, constant, data_dir, log_level, subscribe, type_hash, component, entity_template, player, players, serve_resource, add_text, mods, code_range, patch_code, workshop_recipes, hosting, server_world, chat, set_label, rename_filter, join_missing, hook_at, inventory_open, item_info, inventory_submit, status, run_console, altars_open, altars, building_zone_check_filter, survivor_lookup, survivor_bed_check, summon_filter, summon_item, survivor_status, interaction_filter, skill_override, comfort_filter, experience_filter, raise_base_limit, base_zones, game_event, entities, destroy, save_world, world_key, component_write, emit, teleport, spawn, craft_filter, build_filter, net_channel, net_send, net_ready, notify, time_of_day, set_time_of_day, time_speed_control, set_time_speed, game_settings, set_game_settings, damage_filter, buff_types, buffs, apply_buff, remove_buff, knowledge, grant_knowledge, quests, weather_at, weather_fronts, set_weather, terrain_materials, terrain_edit, config_schema, summoned, item_data_open, item_data_get, item_data_set, ui_frame, ui_widget, ui_dialog, ui_hud, ui_markers, config_check, texts, content_serve, content_read, icons_ready, stat_open, stat_info, stat_value, stat_modify, stat_buff, stats_changed, stat_sources, stat_watch, define_event, subscribe_event, send_event, affix_open, affix_roll, item_lines, affix_info, rename_content, declare_content, entity_data_open, mod_dir, knowledge_input_filter, language, keep_game_settings, forget_game_settings, revoke_knowledge, account_knowledge, resource_read, game_text, rebuild_resource, recipe_rule, recipe_disabled, define_point, attach_point, run_point, actions, event_types, recipe_kind, feature, rate, set_rate, change_data, loop_wait, server_wait, task_workers, altar_zone_filter, altar_zones_changed, altar_limit_filter, base_limit, voxel_read, declare_change, set_change, build_rights, transaction_commit, transaction_undo, transaction_status, transaction_commit_for, world_quiet, fog_open, fog_read, serve_call, find_call, call, transaction_entities, world_persists, map_markers, account_action, subscribe_tick, set_tick_every, map_frame, request_base_limits, map_marker_types, use_content, chat_mute_set, chat_mute_has, set_base_cap, resource_keys, content_hashes, types, game_version, control, run_action, ui_extension, item_filter, chat_filter, save_info, hold_saves, crafting_prop, set_saved, run_action_at, local_held, read_only, resource_served, commands, run_command, command_list, actions_changed, resource_buffer, game_query, action_window, progress_write, drop_items, config_set, server_stop, fog_uncover, content_name, language_of, client_game_event, join_rule },
+        HostApi { header, host_version, build, symbol, system, field_offset, type_size, hook, caller_frame, fault, log, settings, publish, service, constant, data_dir, log_level, subscribe, type_hash, component, entity_template, mods, code_range, patch_code, workshop_recipes, hosting, server_world, join_missing, hook_at, status, subscribe_game_event, net_channel, net_send, net_ready, config_schema, config_check, texts, define_event, subscribe_mod_event, send_event, rename_content, mod_dir, language, define_point, attach_point, run_point, event_types, feature, loop_wait, server_wait, task_workers, serve_call, find_call, call, subscribe_tick, set_tick_every, config_set, subscribe_client_game_event, serve_resource, add_text, define_item_data, item_data_get, item_data_set, content_serve, content_read, icons_ready, declare_content, define_entity_data, resource_read, game_text, rebuild_resource, recipe_rule, recipe_disabled, recipe_kind, rate, set_rate, change_data, set_change, use_content, resource_keys, content_hashes, types, game_version, crafting_prop, read_only, resource_served, resource_buffer, content_name, player, players, chat, chat_all, set_label, rename_filter, item_info, request_altars, altars, building_zone_filter, base_zones, entities, destroy, save_world, world_key, component_write, notify, time_of_day, set_time_of_day, request_time_speed, set_time_speed, game_settings, set_game_settings, buff_types, buffs, apply_buff, remove_buff, weather_at, weather_fronts, set_weather, terrain_materials, terrain_edit, altar_zone_filter, altar_zones_changed, altar_limit_filter, base_limit, voxel_read, build_rights, transaction_commit, transaction_undo, transaction_status, world_quiet, transaction_entities, world_persists, map_markers, account_action, map_frame, request_base_limits, set_chat_mute, chat_muted, set_base_limit, save_info, hold_saves, set_saved, progress_write, server_stop, fog_uncover, language_of, join_rule, request_inventory, inventory_submit, survivor_lookup, survivor_bed_check, summon_filter, summon_item, survivor_status, emit, teleport, spawn, damage_filter, summoned, define_stat, stat_info, stat_value, stat_modify, stat_buff, stats_changed, stat_sources, stat_watch, define_affix, affix_roll, item_lines, affix_info, item_filter, drop_items, skill_override, comfort_filter, experience_filter, knowledge, change_knowledge, quests, knowledge_input_filter, game_query, run_console, interaction_filter, craft_filter, build_filter, actions, control, run_action, chat_filter, commands, run_command, command_list, actions_changed, action_window, ui_frame, ui_widget, ui_dialog, ui_hud, ui_markers, request_fog, fog_read, map_marker_types, ui_extension, local_held },
         SaveInfo { header, world, saved_at, size, backups, reserved },
-        ChatLine { header, player, entity, kind, loca, text },
+        ChatLine { header, account, entity, kind, loca, text },
         ChatRewrite { header, buffer, capacity, len },
         UiExtension { header, screen, edge, reserved, hosts, host_count, reserved_hosts },
-        ItemAction { header, kind, player, item, count, inventory, slot },
+        ItemAction { header, kind, character, item, count, inventory, slot },
         ControlSpec { header, name, label, key, second, link, fires, hold_ms, action },
         ControlEvent { header, name, kind, server, reserved, player },
         AccountActionType { 0 },
-        JoinCall { header, player },
+        JoinCall { header, account },
         LoopWaitData { header, ms, reserved, left_ns },
         LoopWaitSites { 0 },
         EventTypeInfo { header, name, hash, size },
@@ -305,6 +316,9 @@ impl Snapshot {
                 let _ = writeln!(text, "    {name} at {offset} size {size} type {ty}");
             }
         }
+        for (name, value) in &self.constants {
+            let _ = writeln!(text, "const {name} = {value}");
+        }
         text
     }
 
@@ -312,11 +326,15 @@ impl Snapshot {
         let mut layout = Self {
             types: BTreeMap::new(),
             born: BTreeMap::new(),
+            constants: BTreeMap::new(),
         };
         let mut last = None;
         for line in text.lines() {
             let words: Vec<&str> = line.split_whitespace().collect();
-            if let Some(field) = line.strip_prefix("    ") {
+            if let Some(constant) = line.strip_prefix("const ") {
+                let (name, value) = constant.split_once(" = ")?;
+                layout.constants.insert(name.to_owned(), value.to_owned());
+            } else if let Some(field) = line.strip_prefix("    ") {
                 let (place, ty) = field.split_once(" type ")?;
                 let words: Vec<&str> = place.split_whitespace().collect();
                 let [name, "at", offset, "size", size] = words[..] else {
@@ -372,9 +390,14 @@ fn parse_golden(text: &str) -> Option<(Version, Snapshot)> {
 /// and its fields, a type grows only at its end and only when it starts with
 /// a [`Header`], which tells the reader its writer's size; new types are
 /// free. An appended field starts past the old size, since an older writer's
-/// header covers its padding.
+/// header covers its padding. Every old constant keeps its value; new ones are
+/// free.
 fn appends(old: &Snapshot, new: &Snapshot) -> bool {
-    old.types.iter().all(|(name, was)| {
+    let kept = old
+        .constants
+        .iter()
+        .all(|(name, value)| new.constants.get(name) == Some(value));
+    kept && old.types.iter().all(|(name, was)| {
         new.types.get(name).is_some_and(|now| {
             let headed = was.fields.first().is_some_and(|field| field.ty == "Header");
             let past_old_end = now.fields[now.fields.len().min(was.fields.len())..]
@@ -410,7 +433,7 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
         }
         return wrong_born(old, new, true);
     }
-    let needed = if old.types == new.types {
+    let needed = if old.types == new.types && old.constants == new.constants {
         minor
     } else if appends(old, new) {
         minor + 1
@@ -521,47 +544,6 @@ fn the_abi_layout_and_version_match_the_golden_file() {
     );
 }
 
-/// The structs of the ABI source, with their field names in order.
-fn structs_in_source() -> BTreeMap<String, Vec<String>> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    // The ABI types the ABI module re-exports from the value types' crate.
-    let values = root.join("../../values/src/abi.rs");
-    let mut files = vec![root.join("abi.rs"), values];
-    if let Ok(dir) = std::fs::read_dir(root.join("abi")) {
-        files.extend(dir.filter_map(|entry| entry.ok().map(|entry| entry.path())));
-    }
-    let mut found = BTreeMap::new();
-    for file in files
-        .iter()
-        .filter(|file| file.extension().is_some_and(|ext| ext == "rs"))
-    {
-        let source = std::fs::read_to_string(file).unwrap();
-        let parsed = syn::parse_file(&source).unwrap();
-        for item in parsed.items {
-            let syn::Item::Struct(item) = item else {
-                continue;
-            };
-            let has_repr = item.attrs.iter().any(|attr| attr.path().is_ident("repr"));
-            if !has_repr {
-                continue;
-            }
-            let fields = item
-                .fields
-                .iter()
-                .enumerate()
-                .map(|(index, field)| {
-                    field
-                        .ident
-                        .as_ref()
-                        .map_or_else(|| index.to_string(), ToString::to_string)
-                })
-                .collect();
-            found.insert(item.ident.to_string(), fields);
-        }
-    }
-    found
-}
-
 #[test]
 fn every_abi_type_and_field_is_listed() {
     let listed: BTreeMap<String, Vec<String>> = LISTED
@@ -664,6 +646,7 @@ fn layout(types: &[(&str, Shape)]) -> Snapshot {
             .map(|(name, shape)| ((*name).to_owned(), shape.clone()))
             .collect(),
         born: BTreeMap::new(),
+        constants: BTreeMap::new(),
     }
 }
 
@@ -812,6 +795,42 @@ fn a_new_type_needs_the_next_minor() {
     ]);
     assert_eq!(wrong_bump((5, 2), &old, &new, (5, 3)), None);
     assert!(wrong_bump((5, 2), &old, &new, (5, 2)).is_some());
+}
+
+#[test]
+fn a_renumbered_constant_needs_a_new_major_and_a_new_one_the_next_minor() {
+    let with = |pairs: &[(&str, &str)]| {
+        let mut snapshot = layout(&[("Headed", shape!(Headed { header, value }))]);
+        snapshot.constants = pairs
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+            .collect();
+        snapshot
+    };
+    let old = with(&[("Status::OK", "0")]);
+    let renumbered = with(&[("Status::OK", "1")]);
+    assert!(wrong_bump((5, 2), &old, &renumbered, (5, 3)).is_some());
+    assert!(wrong_bump((5, 2), &old, &renumbered, (5, 2)).is_some());
+    assert_eq!(wrong_bump((5, 2), &old, &renumbered, (6, 0)), None);
+    let added = with(&[("Status::OK", "0"), ("Status::BUSY", "16")]);
+    assert_eq!(wrong_bump((5, 2), &old, &added, (5, 3)), None);
+    assert!(wrong_bump((5, 2), &old, &added, (5, 2)).is_some());
+    assert!(
+        wrong_bump((5, 2), &old, &with(&[]), (5, 3)).is_some(),
+        "a removed constant breaks"
+    );
+}
+
+#[test]
+fn every_constant_of_the_abi_has_its_value_in_the_golden_file() {
+    let constants = constants_in_source();
+    assert_eq!(constants.get("Status::OK").map(String::as_str), Some("0"));
+    assert_eq!(constants.get("Side::BOTH").map(String::as_str), Some("3"));
+    assert!(
+        !constants.contains_key("ABI_MAJOR"),
+        "the version is no contract value"
+    );
+    assert!(constants.len() > 300, "{} constants found", constants.len());
 }
 
 #[test]

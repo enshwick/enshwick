@@ -28,12 +28,12 @@ pub(super) struct Field {
     number: f32,
     on: bool,
     pub(super) text: Box<TextBuffer>,
-    /// The item picked, for an item argument.
-    item: Option<Guid>,
-    /// The search the items in `found` match, and the language of their
+    /// The item or template picked, for an item or template argument.
+    guid: Option<Guid>,
+    /// The search the rows in `found` match, and the language of their
     /// list; `None` before the first.
     searched: Option<(String, u32)>,
-    /// The items of the list that match the search, at most
+    /// The rows of the list that match the search, at most
     /// [`MAX_OPTIONS`].
     found: Vec<usize>,
 }
@@ -54,7 +54,7 @@ impl Field {
             number: arg.min as f32,
             on: false,
             text: TextBuffer::new(),
-            item: None,
+            guid: None,
             searched: None,
             found: Vec::new(),
         };
@@ -63,7 +63,7 @@ impl Field {
             Some(Value::Number(number)) => field.number = *number as f32,
             Some(Value::Toggle(on)) => field.on = *on,
             Some(Value::Text(text)) => field.text.set(text),
-            Some(Value::Item(item)) => field.item = Some(*item),
+            Some(Value::Item(guid) | Value::Template(guid)) => field.guid = Some(*guid),
             _ => {}
         }
         field
@@ -119,7 +119,20 @@ pub(super) fn field(paint: &impl Widgets, arg: &ArgView, state: &mut Field) -> b
                 false,
             );
         }
-        ArgView::ITEM => item_field(paint, label, state),
+        ArgView::ITEM => named_field(
+            paint,
+            label,
+            state,
+            crate::inventory::item_names::items(texts::language()),
+            "windows.item",
+        ),
+        ArgView::TEMPLATE => named_field(
+            paint,
+            label,
+            state,
+            crate::content::template_names::templates(texts::language()),
+            "windows.template",
+        ),
         _ => {}
     }
     is_set(arg, state)
@@ -154,7 +167,8 @@ fn given<'a>(arg: &ArgView, state: &'a Field) -> Option<Given<'a>> {
         ArgView::NUMBER => owned(Value::Number(snapped(arg, f64::from(state.number)))),
         ArgView::TOGGLE => owned(Value::Toggle(state.on)),
         ArgView::TEXT => text_given(arg, state.text.text()),
-        ArgView::ITEM => owned(Value::Item(state.item?)),
+        ArgView::ITEM => owned(Value::Item(state.guid?)),
+        ArgView::TEMPLATE => owned(Value::Template(state.guid?)),
         _ => None,
     }
 }
@@ -182,17 +196,20 @@ fn picked(arg: &ArgView, pick: u32) -> Option<PlayerKey> {
     Some(*key)
 }
 
-/// Draws an item argument's field: a search over the items this client's
-/// game names in its language, and a list of those that match.
-fn item_field(paint: &impl Widgets, label: &[u8], state: &mut Field) {
+/// Draws an item or template argument's field: a search, with the text
+/// `hint` names, over `list`, which this client's game names, and a list of
+/// the rows that match.
+fn named_field(
+    paint: &impl Widgets,
+    label: &[u8],
+    state: &mut Field,
+    list: Option<std::sync::Arc<crate::content::names::List>>,
+    hint: &'static str,
+) {
     let search_field = |state: &mut Field| {
-        let _typed = paint.text_field(
-            &mut state.text,
-            texts::text("windows.item").as_bytes(),
-            false,
-        );
+        let _typed = paint.text_field(&mut state.text, texts::text(hint).as_bytes(), false);
     };
-    let Some(list) = crate::inventory::item_names::items(texts::language()) else {
+    let Some(list) = list else {
         paint.label(label, UiWidget::STYLE_SECONDARY, false, false);
         search_field(state);
         return;
@@ -203,13 +220,8 @@ fn item_field(paint: &impl Widgets, label: &[u8], state: &mut Field) {
         .as_ref()
         .is_none_or(|(text, language)| (text.as_str(), *language) != search)
     {
-        state.found = crate::inventory::item_names::matching(&list.items, search.0, MAX_OPTIONS);
-        crate::inventory::item_names::keep_pick(
-            &mut state.found,
-            &list.items,
-            state.item,
-            MAX_OPTIONS,
-        );
+        state.found = crate::content::names::matching(&list.items, search.0, MAX_OPTIONS);
+        crate::content::names::keep_pick(&mut state.found, &list.items, state.guid, MAX_OPTIONS);
         state.searched = Some((search.0.to_owned(), search.1));
     }
     let (names, count) = options(state.found.iter().map(|&at| list.items[at].name.as_str()));
@@ -217,9 +229,9 @@ fn item_field(paint: &impl Widgets, label: &[u8], state: &mut Field) {
         state
             .found
             .iter()
-            .position(|&at| list.items[at].item == item)
+            .position(|&at| list.items[at].guid == item)
     };
-    let pick = state.item.and_then(shown);
+    let pick = state.guid.and_then(shown);
     let index = pick
         .and_then(|at| u32::try_from(at).ok())
         .unwrap_or(NO_PICK);
@@ -234,7 +246,7 @@ fn item_field(paint: &impl Widgets, label: &[u8], state: &mut Field) {
         .and_then(|at| usize::try_from(at).ok())
         .and_then(|at| state.found.get(at))
     {
-        state.item = Some(list.items[at].item);
+        state.guid = Some(list.items[at].guid);
     }
     search_field(state);
 }
@@ -570,7 +582,7 @@ mod tests {
         assert_eq!(note.text.text(), "spam");
         let torch = Guid([7; 16]);
         assert_eq!(
-            Field::new(&with(ArgView::ITEM, Value::Item(torch))).item,
+            Field::new(&with(ArgView::ITEM, Value::Item(torch))).guid,
             Some(torch)
         );
         let plain = Field::new(&ArgView {

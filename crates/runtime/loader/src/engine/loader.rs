@@ -200,6 +200,9 @@ pub(crate) struct Loader {
     pub(crate) settings_problems: Vec<String>,
     /// A newer Enshwick release, once the release check found one.
     pub(crate) newer_release: OnceLock<crate::base::releases::Release>,
+    /// Set once the signature check finds a loader file without the release
+    /// signature.
+    pub(crate) unofficial: AtomicBool,
     /// The code patches a thread kept out at arming, tried again later.
     pub(crate) retry: crate::engine::retry::Retry,
     /// The mods that did not load, shown as off with their reason.

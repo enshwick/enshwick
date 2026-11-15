@@ -127,15 +127,17 @@ mod tests {
     #[test]
     fn a_pack_s_damage_filter_runs_as_the_pack() {
         let loader = installed(FakeHost::new(), |load| load.on_damage(|_| note()));
-        let _after = loader.damage(DamageCheck {
+        let fall = DamageCheck {
             header: Header::of::<DamageCheck>(),
             cause: DamageCheck::FALL_DAMAGE,
             target: Entity(2),
             source: Entity(0),
             attacker: Entity(0),
-            amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
             total: 10.0,
-        });
+            amount_count: 0,
+            amounts: core::ptr::null_mut(),
+        };
+        let _after = loader.damage(fall, &mut []);
         ran_as_the_pack();
     }
 
@@ -149,9 +151,9 @@ mod tests {
         });
         let placed = loader.build(&BuildCheck {
             header: Header::of::<BuildCheck>(),
-            player: Entity(2),
+            character: Entity(2),
             item: ItemId::new(7),
-            position: [0; 3],
+            position: [0.0; 3],
             reason: core::ptr::null_mut(),
         });
         assert_eq!(placed, Ok(()));
@@ -188,7 +190,7 @@ mod tests {
         assert!(loader.item_action(&ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::PICKUP,
-            player: Entity(1),
+            character: Entity(1),
             item: ItemId::new(0x5e01),
             count: 1,
             inventory: Entity(2),

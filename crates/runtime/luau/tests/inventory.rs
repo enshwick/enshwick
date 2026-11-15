@@ -123,7 +123,10 @@ mod tests {
         let requests = loader.inventory_requests();
         assert_eq!(requests.len(), 1);
         let op = requests[0].ops[0];
-        assert_eq!((op.kind, op.target), (InventoryOp::GIVE, 2));
+        assert_eq!(
+            (op.kind, op.target),
+            (InventoryOp::GIVE, enshwick::Entity(2))
+        );
         let ran = InventoryOpResult {
             error: 0,
             remaining: 0,

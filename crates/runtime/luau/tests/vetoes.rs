@@ -25,11 +25,11 @@ mod tests {
             end)
             "#,
         );
-        let build = |item, y: i64| BuildCheck {
+        let build = |item, y: i32| BuildCheck {
             header: Header::of::<BuildCheck>(),
-            player: Entity(2),
+            character: Entity(2),
             item: ItemId::new(item),
-            position: [0, y << 32, 0],
+            position: [0.0, f64::from(y), 0.0],
             reason: core::ptr::null_mut(),
         };
         assert_eq!(loader.build(&build(7, 5)), Ok(()));

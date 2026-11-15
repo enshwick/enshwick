@@ -33,7 +33,7 @@ mod tests {
     const BUILDER: u32 = 3;
     const GUEST: u32 = 4;
 
-    fn info(entity: u32, permissions: u8) -> PlayerInfo {
+    fn info(entity: u32, permissions: u32) -> PlayerInfo {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
@@ -41,7 +41,7 @@ mod tests {
             key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 

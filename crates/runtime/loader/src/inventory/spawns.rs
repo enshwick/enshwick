@@ -188,7 +188,7 @@ pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Spaw
         extra.push((hash, vec![0u8; size]));
     }
     let entity = spawn_with(loader, request, extra, 0)?;
-    note(loader, entity, request.template);
+    note(loader, entity, request.template.0);
     Ok(entity)
 }
 
@@ -208,7 +208,7 @@ pub(crate) fn spawn_with(
         .ok()
         .filter(|&world| world != 0)
         .ok_or(SpawnError::NoWorld)?;
-    if request.template == [0; 16] {
+    if request.template == enshwick_core::content::Guid::NIL {
         return Err(SpawnError::BadRequest);
     }
     // SAFETY: `world::server` checked the caller is on the server's game
@@ -220,8 +220,7 @@ pub(crate) fn spawn_with(
             world - layout.world_entities,
         ))
     };
-    let position: Vec<u8> = request
-        .position
+    let position: Vec<u8> = enshwick_core::ecs::fixed(request.position)
         .iter()
         .flat_map(|axis| axis.to_le_bytes())
         .collect();
@@ -283,7 +282,7 @@ pub(crate) fn spawn_with(
         .request
         .request(
             requester,
-            request.template,
+            request.template.0,
             entries.as_ptr().expose_provenance() as u64,
             starts.len() as u64,
         )

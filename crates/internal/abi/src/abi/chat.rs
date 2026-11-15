@@ -12,7 +12,7 @@ use crate::abi::{Entity, Header, PlayerKey, Str};
 /// [`ChatFilterFn`] for a player's line before anyone reads it. `text` is
 /// valid UTF-8 (bytes that are not are replaced), at most the game's own
 /// limit of 1024 bytes, and lives only for the call. Layout grows only by
-/// appending; read a later field after [`Header::covers`].
+/// appending; read a later field once the header's `size` covers it.
 ///
 /// # Examples
 ///
@@ -21,7 +21,7 @@ use crate::abi::{Entity, Header, PlayerKey, Str};
 ///
 /// let line = ChatLine {
 ///     header: Header::of::<ChatLine>(),
-///     player: enshwick::PlayerKey::new(7),
+///     account: enshwick::PlayerKey::new(7),
 ///     entity: enshwick::Entity(2),
 ///     kind: ChatLine::PLAYER,
 ///     loca: [0; 2],
@@ -35,7 +35,7 @@ pub struct ChatLine {
     /// Size and version of this struct.
     pub header: Header,
     /// The sender's account key; zero when the game names none.
-    pub player: PlayerKey,
+    pub account: PlayerKey,
     /// The sender's character, `Entity(0)` when it has none in the world.
     pub entity: Entity,
     /// [`ChatLine::PLAYER`], [`ChatLine::EMOTE`] or [`ChatLine::NOTICE`].
@@ -68,7 +68,7 @@ impl ChatLine {
 /// not UTF-8, keep the line as it was. The loader owns the struct too and
 /// hands it to one filter at a time on the game thread, never null; the
 /// filter keeps no pointer past the call. Layout grows only by appending;
-/// read a later field after [`Header::covers`].
+/// read a later field once the header's `size` covers it.
 ///
 /// # Examples
 ///
@@ -119,6 +119,9 @@ impl ChatRewrite {
 /// keeping the line. `line` and `rewrite` are borrowed for the call and
 /// never null; `line.text` is the text after the filters before this one.
 /// Never re-entered; it must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
 pub type ChatFilterFn = unsafe extern "system" fn(
     line: *const ChatLine,
     rewrite: *mut ChatRewrite,

@@ -123,6 +123,17 @@ cause = "Власний код Enshwick для однієї функції да�
 fix = "Грайте далі або перезапустіть гру, щоб знову увімкнути функцію. Повідомте про проблему й додайте звіт Enshwick. Журнал і екран Mods називають функцію."
 
 [[error]]
+code = "E1011"
+title = "This Enshwick is an unofficial build"
+cause = "Each official Enshwick release carries a signature made with the project's key. The signature of powrprof.dll or mods/enshwick/enshwick.dll is missing or does not match. So these files did not come from an official release, or something changed them. Enshwick still runs."
+fix = "If you built Enshwick yourself, nothing is wrong. Otherwise download Enshwick from its releases page on GitHub and extract it into the game's folder again. A bug report from an unofficial build must say so."
+
+[error.translations.uk]
+title = "Цей Enshwick — неофіційна збірка"
+cause = "Кожен офіційний випуск Enshwick має підпис, зроблений ключем проєкту. Підпису powrprof.dll або mods/enshwick/enshwick.dll немає, або він не збігається. Отже, ці файли не з офіційного випуску, або їх щось змінило. Enshwick усе одно працює."
+fix = "Якщо ви зібрали Enshwick самі, усе гаразд. Інакше завантажте Enshwick зі сторінки його випусків на GitHub і знову розпакуйте в теку гри. Звіт про помилку з неофіційної збірки має про це казати."
+
+[[error]]
 code = "E2001"
 title = "A mod is made for another Enshwick"
 cause = "The mod was built for another version of Enshwick. A mod starts with the Enshwick version it was built for and with later versions. A release that changes how mods talk to Enshwick needs the mod rebuilt. A mod built for a newer Enshwick does not start on an older one."

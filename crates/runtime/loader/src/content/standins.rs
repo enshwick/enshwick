@@ -29,9 +29,9 @@ pub(crate) type StandIn = (ResourceKey, ResourceKey, Builder);
 /// (`renamed`, whose new GUID the game reads instead).
 #[must_use]
 pub(crate) fn orphans(
-    recorded: &[([u8; 16], [u8; 16])],
+    recorded: &[(Guid, Guid)],
     served: &[ResourceKey],
-    renamed: impl Fn(&[u8; 16]) -> bool,
+    renamed: impl Fn(&Guid) -> bool,
 ) -> Vec<(Guid, Guid)> {
     recorded
         .iter()
@@ -41,7 +41,7 @@ pub(crate) fn orphans(
                 .any(|key| key.type_hash == types::ITEM_INFO && key.guid == *item)
                 && !renamed(item)
         })
-        .map(|&(item, vanilla)| (Guid(item), Guid(vanilla)))
+        .copied()
         .collect()
 }
 
@@ -101,21 +101,21 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
 mod tests {
     use super::*;
 
-    const ITEM: [u8; 16] = [1; 16];
-    const RENAMED: [u8; 16] = [2; 16];
-    const SERVED: [u8; 16] = [3; 16];
-    const CHEST: [u8; 16] = [9; 16];
+    const ITEM: Guid = Guid([1; 16]);
+    const RENAMED: Guid = Guid([2; 16]);
+    const SERVED: Guid = Guid([3; 16]);
+    const CHEST: Guid = Guid([9; 16]);
 
     #[test]
     fn only_items_no_mod_serves_get_a_stand_in() {
         let recorded = [(ITEM, CHEST), (RENAMED, CHEST), (SERVED, CHEST)];
         let served = [
-            Guid(SERVED).key_by_hash(types::ITEM_INFO),
+            SERVED.key_by_hash(types::ITEM_INFO),
             // Another type under the item's GUID does not count.
-            Guid(ITEM).key_by_hash(types::TEMPLATE),
+            ITEM.key_by_hash(types::TEMPLATE),
         ];
         let orphans = orphans(&recorded, &served, |guid| *guid == RENAMED);
-        assert_eq!(orphans, [(Guid(ITEM), Guid(CHEST))]);
+        assert_eq!(orphans, [(ITEM, CHEST)]);
     }
 
     #[test]

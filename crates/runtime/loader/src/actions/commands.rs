@@ -42,7 +42,7 @@ pub(crate) use run::{
 
 pub use enshwick_core::commands::MAX_LINE;
 /// Every permission bit the game gives, for the console's full rights.
-pub const ALL_PERMISSIONS: u8 = enshwick_core::world::PlayerPermissions::ALL_BITS;
+pub const ALL_PERMISSIONS: u32 = enshwick_core::world::PlayerPermissions::ALL_BITS;
 
 /// A mod's command name and alias, as the one rule of
 /// [`enshwick_core::command_names`] grants them.
@@ -96,7 +96,7 @@ pub fn typed<'a>(named: &[Named], text: &'a str, running: impl Fn(ModIndex) -> b
 pub fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
     PlayerInfo::without_character(
         enshwick_core::PlayerKey::new(0),
-        u8::try_from(permissions & u32::from(ALL_PERMISSIONS)).unwrap_or(0),
+        permissions & ALL_PERMISSIONS,
         label,
     )
 }
@@ -160,11 +160,11 @@ mod tests {
         assert_eq!(caller.entity, enshwick_core::Entity(0));
         assert_eq!(caller.permissions, ALL_PERMISSIONS);
         assert_eq!(
-            &caller.name[..usize::from(caller.name_len)],
+            &caller.name[..usize::try_from(caller.name_len).unwrap()],
             b"rcon 10.0.0.2"
         );
         let long = remote_caller(&"й".repeat(40), 0);
-        assert_eq!(long.name_len, 64);
-        assert!(core::str::from_utf8(&long.name[..64]).is_ok());
+        assert_eq!(long.name_len, 80);
+        assert!(core::str::from_utf8(&long.name[..80]).is_ok());
     }
 }

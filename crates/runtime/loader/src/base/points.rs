@@ -460,7 +460,7 @@ impl Sealed {
                     link.refusals.fetch_add(1, Ordering::Relaxed);
                     return PointVerdict::REFUSE;
                 }
-                PointVerdict::PANICKED if link.on.swap(false, Ordering::Relaxed) => {
+                PointVerdict::FAILED if link.on.swap(false, Ordering::Relaxed) => {
                     self.arm(&off);
                     panicked(self, link);
                 }

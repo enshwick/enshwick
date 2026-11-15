@@ -113,7 +113,8 @@ impl BaseLoad {
         let user = Arc::into_raw(Arc::clone(&schema))
             .cast_mut()
             .cast::<c_void>();
-        let checked = (host.api().config_check)(host.handle(), Str::new(FILE), check_table, user);
+        let checked =
+            (host.api().config_check)(host.handle(), Str::new(FILE), Some(check_table), user);
         if !checked.is_ok() {
             // SAFETY: the loader refused the check, so it keeps no copy of
             // `user`, which `Arc::into_raw` made just above.

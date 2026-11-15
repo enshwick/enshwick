@@ -65,7 +65,7 @@ pub(crate) struct RawComponent {
 /// How far past a component a read of its blob data reaches at most. On
 /// server 26430253 every blob of a live component lay within 0xc4 bytes of
 /// it; the cap keeps a damaged offset or count from reading on.
-const BLOB_REACH: usize = 1 << 20;
+const BLOB_REACH: u32 = 1 << 20;
 
 impl RawComponent {
     /// The component type `id` on the running build, its shape held to
@@ -126,7 +126,9 @@ impl RawComponent {
         }
         let host = world.host();
         let mut len = 0;
-        let status = (host.api().read_only)(host.handle(), data.addr(), BLOB_REACH, &raw mut len);
+        let status =
+            (host.api().read_only)(host.handle(), data.addr() as u64, BLOB_REACH, &raw mut len);
+        let len = len as usize;
         if status != crate::abi::Status::OK {
             return Err(Off::new(format!(
                 "typed {}: the loader refused to measure the component's set-up data ({status:?})",

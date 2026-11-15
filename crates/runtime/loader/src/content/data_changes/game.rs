@@ -308,7 +308,7 @@ fn items_in(
         .into_iter()
         .filter_map(|key| {
             let bytes = archive.resource(&key)?;
-            Some((Guid(key.guid), traits_of(&bytes, offsets, slots)?))
+            Some((key.guid, traits_of(&bytes, offsets, slots)?))
         })
         .collect();
     items.sort_unstable_by_key(|(item, _)| item.0);
@@ -611,7 +611,7 @@ pub(crate) enum ApplyChangesError {
 /// `keys` as `<guid>:<type hash>`, joined.
 fn shown(keys: &[ResourceKey]) -> String {
     keys.iter()
-        .map(|key| format!("{}:{:08x}", Guid(key.guid), key.type_hash))
+        .map(|key| format!("{}:{:08x}", key.guid, key.type_hash))
         .collect::<Vec<_>>()
         .join(", ")
 }

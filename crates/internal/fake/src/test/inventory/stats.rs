@@ -5,8 +5,8 @@ use core::ffi::c_void;
 use std::collections::{BTreeMap, BTreeSet};
 
 use enshwick_core::abi::{
-    AffixDefData, AffixRoll, Header, ItemLine, ModHandle, StatChange, StatChangeFn, StatDefData,
-    StatModifierData, StatModify, StatRef, StatSource, Status, Str,
+    AffixRoll, AffixSpec, Header, ItemLine, ModHandle, StatChange, StatChangeFn, StatModifier,
+    StatModify, StatRef, StatSource, StatSpec, Status, Str,
 };
 use enshwick_core::affixes::{
     AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll,
@@ -33,7 +33,7 @@ type Modifiers = BTreeMap<(u32, u32, u32), (u8, f32, u32, u64)>;
 pub(crate) struct FakeStats {
     kinds: Vec<Kind>,
     modifiers: Modifiers,
-    buffs: Vec<(u32, StatModifierData)>,
+    buffs: Vec<(u32, StatModifier)>,
     handlers: Vec<Registered<StatChangeFn>>,
     watched: BTreeSet<u32>,
     /// What each entity wears.
@@ -104,10 +104,10 @@ fn state_stats(s: &mut crate::test::table::State) -> &mut FakeStats {
     &mut s.stats
 }
 
-pub(crate) extern "system" fn stat_open(
+pub(crate) extern "system" fn define_stat(
     _me: ModHandle,
     id: Str,
-    def: *const StatDefData,
+    def: *const StatSpec,
     out: *mut StatRef,
 ) -> Status {
     // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
@@ -132,6 +132,9 @@ pub(crate) extern "system" fn stat_open(
         },
         None => None,
     };
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let opened = with(Err(Status::MISSING), |s| {
         let unexported = parsed.is_none()
             && s.manifest.as_ref().is_some_and(|manifest| {
@@ -181,17 +184,15 @@ pub(crate) extern "system" fn stat_open(
 pub(crate) extern "system" fn stat_info(
     _me: ModHandle,
     stat: u32,
-    def: *mut StatDefData,
+    def: *mut StatSpec,
     id: *mut Str,
 ) -> Status {
     let found = with(None, |s| {
         let kind = state_stats(s).kinds.get(stat as usize)?;
-        let (def, text) = kind.def.as_ref()?;
-        let mut data = def.to_data();
-        // The fake keeps the text and id while installed, as the loader
-        // keeps them for the process.
-        data.text = Str::new(text);
-        Some((data, Str::new(&kind.id)))
+        let (def, _) = kind.def.as_ref()?;
+        // The fake keeps the id while installed, as the loader keeps it for
+        // the process.
+        Some((def.to_data(), Str::new(&kind.id)))
     });
     let Some((data, name)) = found else {
         return Status::MISSING;
@@ -329,7 +330,7 @@ pub(crate) extern "system" fn stat_modify(_me: ModHandle, request: *const StatMo
 pub(crate) extern "system" fn stat_buff(
     _me: ModHandle,
     buff: u32,
-    modifiers: *const StatModifierData,
+    modifiers: *const StatModifier,
     count: u32,
 ) -> Status {
     if modifiers.is_null() && count != 0 {
@@ -343,6 +344,9 @@ pub(crate) extern "system" fn stat_buff(
         unsafe { core::slice::from_raw_parts(modifiers, count as usize) }.to_vec()
     };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         state_stats(s)
             .buffs
             .extend(list.into_iter().map(|m| (buff, m)));
@@ -352,10 +356,16 @@ pub(crate) extern "system" fn stat_buff(
 
 pub(crate) extern "system" fn stats_changed(
     me: ModHandle,
-    callback: StatChangeFn,
+    callback: Option<StatChangeFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         state_stats(s)
             .handlers
             .push(Registered::new(callback, user, me));
@@ -490,10 +500,10 @@ fn item_lines_of(s: &crate::test::table::State, record: &ItemStats) -> Vec<ItemL
     lines_of(record, &pool(&s.stats), stat)
 }
 
-pub(crate) extern "system" fn affix_open(
+pub(crate) extern "system" fn define_affix(
     _me: ModHandle,
     id: Str,
-    def: *const AffixDefData,
+    def: *const AffixSpec,
     out: *mut StatRef,
 ) -> Status {
     // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
@@ -504,6 +514,10 @@ pub(crate) extern "system" fn affix_open(
     let Some(data) = crate::test::table::get_headed(def) else {
         return Status::BAD_ARGS;
     };
+    // shortcut: the loader reads the definition before the phase, so a malformed one after init answers BAD_ARGS there; match it when a test needs that order.
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let opened = with(Err(Status::MISSING), |s| {
         let own = is_own(s, &id);
         let stats = state_stats(s);

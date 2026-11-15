@@ -57,7 +57,7 @@ pub struct ModInfo {
     /// The authors' names.
     pub authors: *const Str,
     /// How many names `authors` points at.
-    pub author_count: usize,
+    pub author_count: u32,
     /// An SPDX licence expression.
     pub license: Str,
     /// Where players read about the mod.

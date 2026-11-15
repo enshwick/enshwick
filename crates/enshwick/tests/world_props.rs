@@ -52,7 +52,7 @@ mod tests {
         let loader = host
             .world()
             .item(CHEST, 1, 0)
-            .item_places(CHEST, [0x3a; 16])
+            .item_places(CHEST, enshwick::content::Guid([0x3a; 16]))
             .item(PEBBLE, 99, 0)
             .prop(OLD_CHEST, CHEST, [50.0, 40.0, 50.0])
             .install();
@@ -324,7 +324,7 @@ mod tests {
         let (loader, world) = started_from(
             enshwick::test::FakeHost::new()
                 .item(PET, 1, 0)
-                .item_places(PET, [0x5e; 16])
+                .item_places(PET, enshwick::content::Guid([0x5e; 16]))
                 .item_not_a_prop(PET)
                 .prop(PET_ENTITY, PET, [60.0, 40.0, 60.0]),
         );
@@ -354,7 +354,7 @@ mod tests {
     fn a_placed_crop_goes_on_undo_until_it_grows() {
         let host = enshwick::test::FakeHost::new()
             .item(SEED, 1, 0)
-            .item_places(SEED, [0x5d; 16])
+            .item_places(SEED, enshwick::content::Guid([0x5d; 16]))
             .item_grows(SEED);
         let (loader, world) = started_from(host);
         let young = world
@@ -388,7 +388,7 @@ mod tests {
     fn a_crop_the_transaction_did_not_place_is_not_removed() {
         let host = enshwick::test::FakeHost::new()
             .item(SEED, 1, 0)
-            .item_places(SEED, [0x5d; 16])
+            .item_places(SEED, enshwick::content::Guid([0x5d; 16]))
             .item_grows(SEED)
             .prop(CROP, SEED, [70.0, 40.0, 70.0]);
         let (loader, world) = started_from(host);
@@ -437,7 +437,7 @@ mod tests {
                 key: enshwick::PlayerKey::new(u64::from(BUILDER)),
                 permissions: PlayerInfo::CAN_EDIT_WORLD,
                 name_len: 0,
-                name: [0; 64],
+                name: [0; PlayerInfo::NAME_MAX],
             })
             .building_area([0.0; 3], [1000.0; 3])
             .no_build_zone([104.0, 0.0, 0.0], [106.0, 1000.0, 1000.0], true);
@@ -480,7 +480,7 @@ mod tests {
         let (loader, world) = started_from(
             enshwick::test::FakeHost::new()
                 .item(ALTAR, 1, 0)
-                .item_places(ALTAR, [0xa1; 16])
+                .item_places(ALTAR, enshwick::content::Guid([0xa1; 16]))
                 .item_not_a_prop(ALTAR),
         );
         assert_eq!(

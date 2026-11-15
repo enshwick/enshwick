@@ -102,9 +102,9 @@ pub(super) fn chain_limit<'a>(
     let vanilla_limit = AltarLimit {
         header: enshwick_core::abi::Header::of::<AltarLimit>(),
         flame_level,
-        vanilla,
-        allowed: vanilla,
-        reserved: [0; 2],
+        vanilla: u32::from(vanilla),
+        allowed: u32::from(vanilla),
+        reserved: 0,
     };
     let mut limit = vanilla_limit;
     let _none: Option<(_, ())> =
@@ -120,7 +120,7 @@ pub(super) fn chain_limit<'a>(
             };
             core::ops::ControlFlow::Continue(())
         });
-    limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
+    u8::try_from(limit.allowed.min(zones)).unwrap_or(u8::MAX)
 }
 
 crate::engine::chains::chain_detour! {

@@ -286,7 +286,7 @@ pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> u
         // struct, which a building event's is a `BuildingData`, readable for
         // the call.
         unsafe { data.cast::<enshwick_core::abi::BuildingData>().as_ref() }
-            .and_then(|built| table::base::mods::language_of_character(built.player))
+            .and_then(|built| table::base::mods::language_of_character(built.character))
     } else {
         None
     };

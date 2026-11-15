@@ -3,13 +3,13 @@
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::Status;
 
-use crate::host::layer::{Caller, List, Mod, Out, Text, entries};
+use crate::host::layer::{Callback, Caller, List, Mod, Out, Text, entries};
 
 entries! {
     fn net_channel(
         me as Mod,
         name as Text,
-        callback: api_frame::NetMessageFn,
+        callback as Callback<api_frame::NetMessageFn>,
         user: *mut core::ffi::c_void,
         out as Out<u32>,
     ) -> Status {

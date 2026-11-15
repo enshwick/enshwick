@@ -18,7 +18,7 @@ mod tests {
         ItemAction {
             header: Header::of::<ItemAction>(),
             kind,
-            player: Entity(4096),
+            character: Entity(4096),
             item: ItemId::new(item),
             count: 1,
             inventory: Entity(4100),

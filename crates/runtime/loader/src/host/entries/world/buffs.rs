@@ -3,17 +3,17 @@
 use enshwick_core::Entity;
 use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeId, BuffTypeInfo, Status};
 
-use crate::host::layer::{Caller, Headed, HeadedListOut, Out, entries};
+use crate::host::layer::{Caller, Headed, Out, SizedListOut, entries};
 
 entries! {
-    fn buff_types(loader as Caller, [out, capacity, count] as HeadedListOut<BuffTypeInfo>) -> Status {
+    fn buff_types(loader as Caller, [out, entry_size, capacity, count] as SizedListOut<BuffTypeInfo>) -> Status {
         out.put(&crate::world::buffs::types(loader)?)
     }
 
     fn buffs(
         loader as Caller,
         entity: Entity,
-        [out, capacity, count] as HeadedListOut<ActiveBuff>,
+        [out, entry_size, capacity, count] as SizedListOut<ActiveBuff>,
     ) -> Status {
         out.put(&crate::world::buffs::of(loader, entity)?)
     }

@@ -268,11 +268,10 @@ pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Resu
     crate::inventory::transactions::item_info(loader, request.item.get())?;
     let spawn = SpawnRequest {
         header: Header::of::<SpawnRequest>(),
-        template: layout.template,
+        template: enshwick_core::content::Guid(layout.template),
         position: request.position,
         orientation: [0.0, 0.0, 0.0, 1.0],
         level: 0,
-        reserved: 0,
         lifetime_ns: 0,
         flags: 0,
     };
@@ -303,7 +302,7 @@ mod tests {
             header: Header::of::<DropRequest>(),
             item: enshwick_core::ItemId::new(0x2a),
             count,
-            position: [0; 3],
+            position: [0.0; 3],
             level: 9,
             rarity,
         }

@@ -146,9 +146,18 @@ fn settled<T>(
     }
 }
 
-pub fn ready<M: Mod>(slot: &'static Slot<M>) {
+/// Calls the mod's `ready`: [`Status::FAULTED`] when it panicked, or when
+/// init left no state to call it on.
+pub fn ready<M: Mod>(slot: &'static Slot<M>) -> Status {
     let (Some(state), Some(host)) = (slot.get(), crate::host()) else {
-        return;
+        return Status::FAULTED;
     };
-    crate::host::guard("panic in ready", || (), || state.ready(host));
+    crate::host::guard(
+        "panic in ready",
+        || Status::FAULTED,
+        || {
+            state.ready(host);
+            Status::OK
+        },
+    )
 }

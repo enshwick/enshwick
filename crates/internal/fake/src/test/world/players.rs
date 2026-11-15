@@ -40,7 +40,7 @@ impl FakeHost {
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: PlayerInfo::CAN_KICK_BAN,
     ///     name_len: 0,
-    ///     name: [0; 64],
+    ///     name: [0; 128],
     /// };
     /// let loader = enshwick::test::FakeHost::new().player(player).install();
     /// # let _ = loader;
@@ -106,21 +106,13 @@ impl Installed {
         let call = RenameCall {
             header: Header::of::<RenameCall>(),
             entity: enshwick_core::Entity(entity.0),
-            known: u8::from(player.is_some()),
-            player: player.copied().unwrap_or(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
-                slot: u32::MAX,
-                entity: enshwick_core::Entity(0),
-                key: enshwick_core::PlayerKey::new(0),
-                permissions: 0,
-                name_len: 0,
-                name: [0; 64],
-            }),
+            player: player.map_or(core::ptr::null(), core::ptr::from_ref),
             text: Str::new(text),
         };
         filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
-            filter.run(|callback, user| unsafe { callback(&raw const call, user) }) != 0
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) })
+                != enshwick_core::abi::FILTER_REFUSE
         })
     }
 
@@ -139,11 +131,12 @@ impl Installed {
         let rules = table::with(Vec::new(), |s| s.join_rules.clone());
         let call = JoinCall {
             header: Header::of::<JoinCall>(),
-            player: player.unwrap_or(enshwick_core::PlayerKey::new(0)),
+            account: player.unwrap_or(enshwick_core::PlayerKey::new(0)),
         };
         rules.iter().all(|rule| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
-            rule.run(|callback, user| unsafe { callback(&raw const call, user) }) != 0
+            rule.run(|callback, user| unsafe { callback(&raw const call, user) })
+                != enshwick_core::abi::FILTER_REFUSE
         })
     }
 }

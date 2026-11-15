@@ -1,4 +1,5 @@
 use enshwick_base::Relock;
+use enshwick_core::content::Guid;
 
 use enshwick_core::abi::Status;
 
@@ -7,28 +8,23 @@ use super::*;
 
 unsafe extern "system" fn add_one(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     _user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     // SAFETY: `base` holds `base_len` bytes for the call.
-    let mut built = unsafe { core::slice::from_raw_parts(base, base_len) }.to_vec();
+    let mut built = unsafe { core::slice::from_raw_parts(base, base_len as usize) }.to_vec();
     built.push(1);
-    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
-    // SAFETY: `run_patches` passes `out` pointing at a local
-    // `*const u8`, writable for the call.
-    unsafe { out.write(built.as_ptr()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local
-    // `usize`, writable for the call.
-    unsafe { out_len.write(built.len()) };
-    Status::OK
+    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
+    // writable for the call.
+    unsafe { hand_out(built, out, out_len) }
 }
 
 #[test]
 fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
     let key = ResourceKey {
-        guid: [0; 16],
+        guid: Guid([0; 16]),
         type_hash: 1,
         part: 0,
     };
@@ -52,7 +48,7 @@ fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
 #[test]
 fn a_change_of_a_new_resource_chains_onto_its_maker_in_either_order() {
     let key = |guid: u8| ResourceKey {
-        guid: [guid; 16],
+        guid: Guid([guid; 16]),
         type_hash: 1,
         part: 0,
     };
@@ -84,10 +80,10 @@ fn a_change_of_a_new_resource_chains_onto_its_maker_in_either_order() {
 
 unsafe extern "system" fn no_patch(
     _: *const u8,
-    _: usize,
+    _: u32,
     _: *mut c_void,
-    _: *mut *const u8,
-    _: *mut usize,
+    _: *mut *mut u8,
+    _: *mut u32,
 ) -> Status {
     Status::OK
 }
@@ -207,15 +203,17 @@ fn the_served_resources_link_all_three_or_none_and_say_why_they_are_off() {
     );
 }
 
-/// Builds `base` with the loader patch `apply` and its `user`.
+/// Builds `base` with the loader patch `apply` and its `user`, inside a
+/// game build that lends its output a buffer.
 fn build_with(apply: ResourcePatchFn, user: *mut c_void, base: &[u8]) -> Status {
-    let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+    let _build = enter_build(recipe_registry());
+    let (mut out, mut out_len) = (core::ptr::null_mut::<u8>(), 0u32);
     // SAFETY: `user` is the value `own_patch` made with `apply`, `base` is
     // readable for its length, and `out` and `out_len` are writable locals.
     unsafe {
         apply(
             base.as_ptr(),
-            base.len(),
+            u32::try_from(base.len()).unwrap(),
             user,
             &raw mut out,
             &raw mut out_len,

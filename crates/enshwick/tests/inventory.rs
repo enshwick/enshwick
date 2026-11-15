@@ -9,7 +9,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::abi::{
-        InventoryOp, InventoryOpResult, InventoryResult, ItemData, Status, TickData,
+        InventoryOp, InventoryOpResult, InventoryResult, ItemTypeInfo, Status, TickData,
     };
     use enshwick::content::EngineFacts;
     use enshwick::events::Ticked;
@@ -132,7 +132,7 @@ mod tests {
             .component(Entity(41), owner, &CORPSE.to_le_bytes())
             .component(Entity(900), durability, &worn)
             .component(Entity(901), fuel, &lamp)
-            .item(enshwick::ItemId::new(SWORD), 1, ItemData::HAS_PIDE)
+            .item(enshwick::ItemId::new(SWORD), 1, ItemTypeInfo::HAS_PIDE)
     }
 
     fn record(outcome: &Outcome) {
@@ -191,7 +191,7 @@ mod tests {
         let op = requests[0].ops[0];
         assert_eq!(
             (op.kind, op.target, op.other),
-            (InventoryOp::MOVE_ALL, 40, 2)
+            (InventoryOp::MOVE_ALL, Entity(40), Entity(2))
         );
         assert!(!ticket.is_done());
         let ran = InventoryOpResult {
@@ -213,7 +213,7 @@ mod tests {
             (op.kind, op.flags),
             (InventoryOp::GIVE, InventoryOp::FILLED)
         );
-        let fill = f32::from_bits(u32::try_from(op.other).unwrap());
+        let fill = op.fill;
         assert!((fill * 3.0 - 2.0).abs() < 1e-3);
         assert!(loader.finish_inventory(InventoryResult::COMMITTED, &[ran]));
 

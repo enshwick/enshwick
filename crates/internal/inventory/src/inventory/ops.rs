@@ -82,7 +82,6 @@ pub enum Op {
 
 impl Op {
     pub(super) fn raw(&self) -> InventoryOp {
-        let entity = |e: Entity| u64::from(e.0);
         match *self {
             Self::Give {
                 to,
@@ -96,27 +95,30 @@ impl Op {
                 } else {
                     0
                 },
-                target: entity(to),
-                other: fill.map_or(0, |f| u64::from(f.fraction().to_bits())),
+                target: to,
+                fill: fill.map_or(0.0, Fill::fraction),
                 item,
                 count,
+                ..InventoryOp::default()
             },
             Self::Take { from, item, count } => InventoryOp {
                 kind: InventoryOp::TAKE,
-                target: entity(from),
+                target: from,
                 item,
                 count,
                 ..InventoryOp::default()
             },
             Self::DestroySlot(slot) => InventoryOp {
                 kind: InventoryOp::DESTROY_SLOT,
-                target: slot.0,
+                target: slot.inventory(),
+                slot: u32::from(slot.index()),
                 ..InventoryOp::default()
             },
             Self::MoveSlot { slot, to, amount } => InventoryOp {
                 kind: InventoryOp::MOVE_SLOT,
-                target: slot.0,
-                other: entity(to),
+                target: slot.inventory(),
+                slot: u32::from(slot.index()),
+                other: to,
                 count: amount.map_or(0, u32::from),
                 ..InventoryOp::default()
             },
@@ -129,11 +131,14 @@ impl Op {
             } => InventoryOp {
                 kind: InventoryOp::RENEW,
                 flags: InventoryOp::FILLED,
-                target: slot.0,
-                other: entity(root) | u64::from(fill.fraction().to_bits()) << 32,
+                target: slot.inventory(),
+                slot: u32::from(slot.index()),
+                other: root,
+                fill: fill.fraction(),
                 item,
                 count,
             },
+
             Self::MoveAll {
                 from,
                 to,
@@ -145,8 +150,8 @@ impl Op {
                 } else {
                     0
                 },
-                target: entity(from),
-                other: entity(to),
+                target: from,
+                other: to,
                 ..InventoryOp::default()
             },
         }

@@ -418,17 +418,15 @@ mod tests {
         let mut death = PlayerDeathData {
             header: Header::of::<PlayerDeathData>(),
             entity: crate::Entity(3),
-            cause: PlayerDeathData::IMPACT,
+            cause: crate::abi::DamageCheck::IMPACT,
             key: crate::PlayerKey::new(7),
             position: [0.0; 3],
-            cause_guid: [1; 16],
-            was_deadly_fog: 0,
-            drowned: 0,
-            reserved: 0,
+            cause_guid: crate::content::Guid([1; 16]),
             killer_entity: crate::Entity(9),
             reserved_tail: 0,
         };
-        death.header.size = 56;
+        death.header.size =
+            u32::try_from(core::mem::offset_of!(PlayerDeathData, killer_entity)).unwrap();
         // SAFETY: `death` is a whole `PlayerDeathData` on this stack frame,
         // its header stating fewer bytes than it holds.
         let read = unsafe { PlayerDied::data((&raw const death).cast()) }.unwrap();

@@ -56,7 +56,7 @@ macro_rules! constant {
     }};
 }
 
-use enshwick::abi::PlayerDeathData;
+use enshwick::abi::{DamageCheck, PlayerDeathData};
 use enshwick::affixes::ItemRarity;
 
 use enshwick::buffs::{Buff, BuffSlotType, BuffType, BuffTypeId};
@@ -190,12 +190,10 @@ pub(crate) const GAME_NAMES: &[GameName] = &[
     field!(PlayerDeathData, cause => "keen::PlayerDeath"."cause"),
     field!(PlayerDeathData, position => "keen::PlayerDeath"."position"),
     field!(PlayerDeathData, cause_guid => "keen::PlayerDeath"."causeGuid"),
-    field!(PlayerDeathData, was_deadly_fog => "keen::PlayerDeath"."wasDeadlyFog"),
-    field!(PlayerDeathData, drowned => "keen::PlayerDeath"."drowned"),
-    constant!(PlayerDeathData::IMPACT => "keen::DeathCause"."Impact"),
-    constant!(PlayerDeathData::FALL_DAMAGE => "keen::DeathCause"."FallDamage"),
-    constant!(PlayerDeathData::FOG => "keen::DeathCause"."Fog"),
-    constant!(PlayerDeathData::SUFFOCATED => "keen::DeathCause"."Suffocated"),
+    constant!(DamageCheck::IMPACT => "keen::DeathCause"."Impact"),
+    constant!(DamageCheck::FALL_DAMAGE => "keen::DeathCause"."FallDamage"),
+    constant!(DamageCheck::FOG => "keen::DeathCause"."Fog"),
+    constant!(DamageCheck::SUFFOCATED => "keen::DeathCause"."Suffocated"),
     field!(BedCheck, npc_id => "keen::ecs::ActiveNpcState"."npcId"),
     field!(BedCheck, bed_id => "keen::ecs::NpcCommon"."bedId"),
 ];

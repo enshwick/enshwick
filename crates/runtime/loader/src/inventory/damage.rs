@@ -20,6 +20,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick_core::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, MidHookFn, Registers};
+use enshwick_gamedata::catalogue;
 
 use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
@@ -46,8 +47,14 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::damage::SHROUD_DEATH.id(),
 ];
 
-/// Damage types in a hit's vector.
+/// Damage types in a hit's vector, the values of the game's `DamageTypeNew`;
+/// [`types_match`] holds the running build to it.
 const TYPES: usize = enshwick_core::abi::DAMAGE_TYPES;
+/// [`TYPES`] as the ABI's count.
+const TYPE_COUNT: u32 = 13;
+const _: () = assert!(TYPE_COUNT as usize == TYPES);
+/// Why the filters stay off on a build whose damage types differ.
+const OTHER_TYPES: &str = "has another number of values than the loader's hit vector";
 /// The healing entry of a hit's vector.
 const HEALING: usize = enshwick_core::damage::DamageTypeNew::Healing.index();
 /// The carry flag in `rflags`.
@@ -94,7 +101,11 @@ pub(crate) fn register(
     callback: DamageFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
-    let available = || layout(loader).is_ok() && crate::engine::ecs::engine(loader).is_some();
+    let available = || {
+        layout(loader).is_ok()
+            && types_match(loader)
+            && crate::engine::ecs::engine(loader).is_some()
+    };
     FILTERS.register_when(available, owner, callback, user)
 }
 
@@ -106,6 +117,16 @@ fn layout(loader: &Loader) -> Result<Layout, Constant> {
         target: at(pinned::damage::HIT_TARGET)?,
         source: at(pinned::damage::HIT_SOURCE)?,
     })
+}
+
+/// Whether the running build's `DamageTypeNew`, read from its reflection,
+/// has the [`TYPES`] values a hit's vector holds: a build with another
+/// count lays the vector out otherwise.
+fn types_match(loader: &Loader) -> bool {
+    loader
+        .reflection
+        .type_info(catalogue::type_name(catalogue::ids::DAMAGE_TYPE))
+        .is_ok_and(|info| info.enum_values().len() == TYPES)
 }
 
 /// Seals the filters and links every site when a mod filters damage or
@@ -126,6 +147,14 @@ fn link_in(loader: &Loader, filters: &[Registered<DamageFilterFn>], stats: bool)
             return;
         }
     };
+    if !types_match(loader) {
+        let _off = loader.fuse_off(
+            &DAMAGE_FUSE,
+            catalogue::type_name(catalogue::ids::DAMAGE_TYPE),
+            OTHER_TYPES,
+        );
+        return;
+    }
     let _first = LAYOUT.set(layout);
     let sites = sites(!filters.is_empty());
     let linked = sites.iter().all(|&(site, handler)| {
@@ -172,8 +201,9 @@ fn blank(cause: u32, target: u32) -> DamageCheck {
         target: enshwick_core::Entity(target),
         source: enshwick_core::Entity(0),
         attacker: enshwick_core::Entity(0),
-        amounts: [0.0; TYPES],
         total: 0.0,
+        amount_count: 0,
+        amounts: core::ptr::null_mut(),
     }
 }
 
@@ -253,7 +283,7 @@ mid_handler! {
         // SAFETY: at the site the node's frame on this thread's stack holds
         // the hit's damage vector, `TYPES` floats, at the table's
         // `damage.hit_vector` offset below `rbp`; 1.0 build 1269579.
-        let amounts: [f32; TYPES] = unsafe { crate::engine::memory::read(vector, 0) };
+        let read: [f32; TYPES] = unsafe { crate::engine::memory::read(vector, 0) };
         let mut check = blank(DamageCheck::IMPACT, target);
         // At the site `r12d` holds the root of the hitting impact, the
         // attacker, worked out before it; 1.0 build 1269579.
@@ -261,20 +291,21 @@ mid_handler! {
         let attacker = if root == 0 { source } else { root };
         check.source = enshwick_core::Entity(source);
         check.attacker = enshwick_core::Entity(attacker);
-        check.amounts = amounts;
-        crate::inventory::stats::on_hit(&mut check.amounts, target, attacker);
-        check.total = check
-            .amounts
+        let mut amounts = read;
+        crate::inventory::stats::on_hit(&mut amounts, target, attacker);
+        check.total = amounts
             .iter()
             .enumerate()
             .filter(|&(i, _)| i != HEALING)
             .map(|(_, a)| *a)
             .sum();
+        check.amount_count = TYPE_COUNT;
+        check.amounts = amounts.as_mut_ptr();
         filter(&mut check);
-        let after = check.amounts.map(kept);
+        let after = amounts.map(kept);
         if after
             .iter()
-            .zip(&amounts)
+            .zip(&read)
             .any(|(a, b)| a.to_bits() != b.to_bits())
         {
             // SAFETY: at the site the node's frame on this thread's stack

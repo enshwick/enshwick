@@ -362,21 +362,21 @@ pub(super) fn draw(
             drawing.window_open = false;
             Ok(())
         }
-        UiWidget::SOUND => {
+        UiWidget::SOUND if raw.sound == enshwick_core::content::Guid::NIL => {
             // SAFETY: `widget` found this thread's `DRAWING`, set only while
             // a frame callback runs inside the frame on the interface thread,
             // with its non-zero `context`.
             unsafe { engine.sound(context, raw.style) };
             Ok(())
         }
-        UiWidget::PLAY => {
-            if !holds_sound(raw.sound) {
+        UiWidget::SOUND => {
+            if !holds_sound(raw.sound.0) {
                 return Err(WidgetError::Unavailable);
             }
             // SAFETY: `widget` found this thread's `DRAWING`, set only while
             // a frame callback runs inside the frame on the interface thread,
             // with its non-zero `context`.
-            unsafe { engine.play(context, &raw.sound) };
+            unsafe { engine.play(context, &raw.sound.0) };
             Ok(())
         }
         UiWidget::LABEL => {
@@ -456,7 +456,7 @@ fn holds_sound(guid: [u8; 16]) -> bool {
         return false;
     };
     let key = enshwick_core::abi::ResourceKey {
-        guid,
+        guid: enshwick_core::content::Guid(guid),
         type_hash,
         part: 0,
     };

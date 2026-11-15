@@ -514,7 +514,7 @@ impl GameSettings {
     ///
     /// [`WorldError::Refused`] for a negative or not finite factor or a day
     /// or night length of zero, [`WorldError::WrongThread`] off the game
-    /// thread and [`WorldError::Missing`] while no world runs.
+    /// thread and [`WorldError::Unavailable`] while no world runs.
     ///
     /// # Examples
     ///
@@ -522,8 +522,13 @@ impl GameSettings {
     #[script]
     pub fn change(&self, change: impl FnOnce(&mut Settings)) -> Result<Settings, WorldError> {
         let (bytes, settings) = self.changed(change)?;
-        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Missing)?;
-        let status = (self.host.api().set_game_settings)(self.host.handle(), bytes.as_ptr(), size);
+        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Unavailable)?;
+        let status = (self.host.api().set_game_settings)(
+            self.host.handle(),
+            bytes.as_ptr(),
+            core::ptr::null(),
+            size,
+        );
         WorldError::from_status(status).map(|()| settings)
     }
 
@@ -558,8 +563,8 @@ impl GameSettings {
             .zip(&bytes)
             .map(|(a, b)| if a == b { 0 } else { 0xff })
             .collect();
-        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Missing)?;
-        let status = (self.host.api().keep_game_settings)(
+        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Unavailable)?;
+        let status = (self.host.api().set_game_settings)(
             self.host.handle(),
             bytes.as_ptr(),
             mask.as_ptr(),
@@ -574,7 +579,7 @@ impl GameSettings {
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the game thread,
-    /// [`WorldError::Missing`] while no world runs.
+    /// [`WorldError::Unavailable`] while no world runs.
     ///
     /// # Examples
     ///
@@ -585,7 +590,12 @@ impl GameSettings {
     /// ```
     #[script]
     pub fn forget_kept(&self) -> Result<(), WorldError> {
-        WorldError::from_status((self.host.api().forget_game_settings)(self.host.handle()))
+        WorldError::from_status((self.host.api().set_game_settings)(
+            self.host.handle(),
+            core::ptr::null(),
+            core::ptr::null(),
+            0,
+        ))
     }
 
     /// The bytes of the settings in force after `change`, and the settings.
@@ -604,7 +614,7 @@ impl GameSettings {
 
     fn raw(&self) -> Result<(Vec<u8>, GameSettingsPreset), WorldError> {
         let mut bytes = vec![0u8; self.size];
-        let size = u32::try_from(self.size).map_err(|_| WorldError::Missing)?;
+        let size = u32::try_from(self.size).map_err(|_| WorldError::Unavailable)?;
         let mut preset = 0u32;
         let status = (self.host.api().game_settings)(
             self.host.handle(),

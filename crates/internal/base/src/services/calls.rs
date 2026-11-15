@@ -94,7 +94,7 @@ pub enum CallError {
 impl crate::load::StatusError for CallError {
     fn of(status: Status) -> Self {
         match status {
-            Status::MISSING => Self::Unmatched,
+            Status::MISSING | Status::UNAVAILABLE => Self::Unmatched,
             Status::REFUSED => Self::Off,
             _ => Self::Failed,
         }
@@ -348,7 +348,14 @@ impl BaseLoad {
         let spec = spec::<C>();
         hand_over(
             Served::new(C::NAME, handler),
-            |user| (host.api().serve_call)(host.handle(), &raw const spec, run_typed::<C, F>, user),
+            |user| {
+                (host.api().serve_call)(
+                    host.handle(),
+                    &raw const spec,
+                    Some(run_typed::<C, F>),
+                    user,
+                )
+            },
             &format!(
                 "call {} v{}: named after another mod or served twice",
                 C::NAME,
@@ -403,7 +410,7 @@ impl BaseLoad {
         call.with_spec(|spec| {
             hand_over(
                 server,
-                |user| (host.api().serve_call)(host.handle(), spec, run_described::<F>, user),
+                |user| (host.api().serve_call)(host.handle(), spec, Some(run_described::<F>), user),
                 &format!(
                     "call {} v{}: named after another mod or served twice",
                     call.name, call.major

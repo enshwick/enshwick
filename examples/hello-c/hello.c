@@ -13,7 +13,7 @@ static const EnshwickManifest MANIFEST = {
     .license = ENSHWICK_STR_INIT("MIT"),
 };
 
-uint32_t enshwick_mod_abi(void) { return ENSHWICK_ABI_MAJOR; }
+uint16_t enshwick_mod_abi(void) { return ENSHWICK_ABI_MAJOR; }
 
 const EnshwickManifest *enshwick_mod_query(void) { return &MANIFEST; }
 
@@ -23,7 +23,8 @@ EnshwickStatus enshwick_mod_init(const EnshwickHostApi *host, EnshwickModHandle 
     return EnshwickStatus_OK;
 }
 
-void enshwick_mod_ready(const EnshwickHostApi *host, EnshwickModHandle me) {
+EnshwickStatus enshwick_mod_ready(const EnshwickHostApi *host, EnshwickModHandle me) {
     (void)host;
     (void)me;
+    return EnshwickStatus_OK;
 }

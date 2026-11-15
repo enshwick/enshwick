@@ -36,8 +36,8 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use enshwick_core::abi::{
-    Event, Header, PlayerData, StatChange, StatChangeFn, StatDefData, StatModifierData, StatModify,
-    StatRef, StatSource, Str,
+    Event, Header, PlayerData, StatChange, StatChangeFn, StatModifier, StatModify, StatRef,
+    StatSource, StatSpec, Str,
 };
 use enshwick_core::affixes::lines_of;
 use enshwick_core::content::Id;
@@ -87,7 +87,7 @@ struct Sealed {
     by_key: FxHashMap<u32, u32>,
     defaults: Box<[f32]>,
     defs: Box<[StatDef]>,
-    buffs: FxHashMap<u32, Box<[StatModifierData]>>,
+    buffs: FxHashMap<u32, Box<[StatModifier]>>,
     handlers: Box<[Registered<StatChangeFn>]>,
     /// The built-in damage and resistance kinds: every type, then by type.
     damage: u32,
@@ -103,7 +103,7 @@ struct Sealed {
 #[derive(Debug, Default)]
 struct Pending {
     kinds: Vec<Kind>,
-    buffs: Vec<(u32, StatModifierData)>,
+    buffs: Vec<(u32, StatModifier)>,
     handlers: Vec<Registered<StatChangeFn>>,
     affixes: Vec<Affix>,
     used: bool,
@@ -386,7 +386,7 @@ pub(crate) fn open(
 }
 
 /// Gives buff `buff` modifiers. During init only.
-pub(crate) fn buff(buff: u32, modifiers: &[StatModifierData]) -> Result<(), StatsError> {
+pub(crate) fn buff(buff: u32, modifiers: &[StatModifier]) -> Result<(), StatsError> {
     if modifiers.iter().any(|m| Op::from_raw(m.op).is_none()) {
         return Err(StatsError::BadDef);
     }
@@ -442,7 +442,7 @@ pub(crate) fn seal() {
             )
         })
         .collect();
-    let mut buffs: FxHashMap<u32, Vec<StatModifierData>> = FxHashMap::default();
+    let mut buffs: FxHashMap<u32, Vec<StatModifier>> = FxHashMap::default();
     for (id, m) in pending.buffs {
         buffs.entry(id).or_default().push(m);
     }
@@ -484,17 +484,14 @@ pub(crate) fn seal() {
 }
 
 /// The definition and id of kind `stat`.
-pub(crate) fn info(stat: u32) -> Result<(StatDefData, Str), StatsError> {
+pub(crate) fn info(stat: u32) -> Result<(StatSpec, Str), StatsError> {
     let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
     let kind = sealed
         .kinds
         .get(usize::try_from(stat).map_err(|_| StatsError::BadStat)?)
         .ok_or(StatsError::BadStat)?;
-    let (def, text, _) = kind.def.as_ref().ok_or(StatsError::Undefined)?;
-    let mut data = def.to_data();
-    // The kinds live as long as the process, so their text does too.
-    data.text = Str::new(text);
-    Ok((data, Str::new(&kind.id)))
+    let (def, _, _) = kind.def.as_ref().ok_or(StatsError::Undefined)?;
+    Ok((def.to_data(), Str::new(&kind.id)))
 }
 
 /// The value of kind `stat` on `entity`, from the snapshot; any thread.

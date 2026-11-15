@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 
 use crate::Entity;
 use crate::ItemId;
-use crate::abi::EntityPlace;
+use crate::content::Guid;
 
 use super::{World, WorldError};
 
@@ -117,7 +117,7 @@ impl World {
     ///
     /// [`WorldError::Refused`] for a corner that is not finite;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] before a world runs or on a game build
+    /// step; [`WorldError::Unavailable`] before a world runs or on a game build
     /// without the reads, the marks of creatures and altars included.
     ///
     /// # Examples
@@ -135,13 +135,13 @@ impl World {
     #[script]
     pub fn props_in(self, a: [f64; 3], b: [f64; 3]) -> Result<Vec<Prop>, WorldError> {
         let (low, high) = span(a, b).ok_or(WorldError::Refused)?;
-        let orientation = self.0.orientation.ok_or(WorldError::Missing)?;
-        let no_props = self.0.no_props.ok_or(WorldError::Missing)?;
+        let orientation = self.0.orientation.ok_or(WorldError::Unavailable)?;
+        let no_props = self.0.no_props.ok_or(WorldError::Unavailable)?;
         let mut templates = Templates::default();
         let mut props: Vec<Prop> = self
             .placed_with(self.0.used_item.hash())?
             .iter()
-            .map(|place| (place.entity, crate::ecs::metres(place.position)))
+            .map(|place| (place.entity, place.position))
             .filter(|(_, at)| (0..3).all(|axis| (low[axis]..=high[axis]).contains(&at[axis])))
             .filter_map(|(entity, position)| {
                 if no_props
@@ -173,41 +173,17 @@ impl World {
             })
             .collect();
         if templates.found == 0 && templates.unknown > 0 {
-            return Err(WorldError::Missing);
+            return Err(WorldError::Unavailable);
         }
         props.sort_unstable_by_key(|prop| prop.entity.0);
         Ok(props)
-    }
-
-    /// Every entity with a component of type `hash` and a place in the
-    /// world, as the loader answers.
-    pub(crate) fn placed_with(self, hash: u32) -> Result<Vec<EntityPlace>, WorldError> {
-        let entities = self.0.host.api().entities;
-        let mut capacity = 1024u32;
-        loop {
-            let mut places = vec![EntityPlace::default(); capacity as usize];
-            let mut count = 0u32;
-            let status = entities(
-                self.0.host.handle(),
-                hash,
-                places.as_mut_ptr(),
-                capacity,
-                &raw mut count,
-            );
-            WorldError::from_status(status)?;
-            if count <= capacity {
-                places.truncate(count as usize);
-                return Ok(places);
-            }
-            capacity = count;
-        }
     }
 }
 
 /// The templates items place, looked up once per item during one query.
 #[derive(Default)]
 struct Templates {
-    known: FxHashMap<ItemId, Option<[u8; 16]>>,
+    known: FxHashMap<ItemId, Option<Guid>>,
     /// Items the loader knew.
     found: usize,
     /// Items the loader did not know: all of them before the game first
@@ -220,11 +196,11 @@ impl Templates {
     /// item that places nothing or the loader does not know. The world
     /// resolves props only where the loader reads the template, so a zero
     /// GUID means the item places nothing.
-    fn placed_by(&mut self, world: World, item: ItemId) -> Option<[u8; 16]> {
+    fn placed_by(&mut self, world: World, item: ItemId) -> Option<Guid> {
         *self.known.entry(item).or_insert_with(|| {
             if let Some(data) = enshwick_content::__internal::item_data(&world.0.host, item) {
                 self.found += 1;
-                Some(data.placed_entity).filter(|guid| *guid != [0; 16])
+                Some(data.placed_entity).filter(|guid| *guid != Guid::NIL)
             } else {
                 self.unknown += 1;
                 None

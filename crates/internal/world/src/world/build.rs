@@ -46,7 +46,7 @@ impl PlayerPermissions {
     ];
 
     /// Every permission's bit at once, as the server's console holds them.
-    pub const ALL_BITS: u8 = {
+    pub const ALL_BITS: u32 = {
         let mut bits = 0;
         let mut i = 0;
         while i < Self::ALL.len() {
@@ -66,7 +66,7 @@ impl PlayerPermissions {
     /// assert_eq!(PlayerPermissions::CanKickBan.bit(), 1);
     /// ```
     #[must_use]
-    pub const fn bit(self) -> u8 {
+    pub const fn bit(self) -> u32 {
         match self {
             Self::CanKickBan => PlayerInfo::CAN_KICK_BAN,
             Self::CanAccessInventories => PlayerInfo::CAN_ACCESS_INVENTORIES,
@@ -152,7 +152,7 @@ impl World {
         }
         let mut check = BuildRights {
             header: Header::of::<BuildRights>(),
-            player: player.entity,
+            character: player.entity,
             refusal: BuildRights::ALLOWED,
             min: [0, 1, 2].map(|i| a[i].min(b[i])),
             max: [0, 1, 2].map(|i| a[i].max(b[i])),
@@ -172,7 +172,7 @@ impl World {
     ///
     /// [`WorldError::Refused`] for a corner that is not finite;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] while no world is loaded or on a game
+    /// step; [`WorldError::Unavailable`] while no world is loaded or on a game
     /// build without the zone list.
     ///
     /// # Examples

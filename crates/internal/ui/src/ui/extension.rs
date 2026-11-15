@@ -133,7 +133,7 @@ impl LoadMethods for crate::BaseLoad {
             screen: Str::new(screen.name()),
             edge: edge.to_raw(),
             reserved: 0,
-            hosts: hosts.as_ptr().cast(),
+            hosts: hosts.as_ptr(),
             host_count,
             reserved_hosts: 0,
         };
@@ -142,7 +142,14 @@ impl LoadMethods for crate::BaseLoad {
                 host,
                 draw: Mutex::new(draw),
             },
-            |user| (host.api().ui_extension)(host.handle(), &raw const spec, draw_frame::<F>, user),
+            |user| {
+                (host.api().ui_extension)(
+                    host.handle(),
+                    &raw const spec,
+                    Some(draw_frame::<F>),
+                    user,
+                )
+            },
             "screen extension",
         )
     }

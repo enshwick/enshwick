@@ -129,7 +129,9 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
 }
 
 /// A pack's `ready`: nothing to start.
-pub(crate) extern "system" fn ready(_api: *const HostApi, _me: ModHandle) {}
+pub(crate) extern "system" fn ready(_api: *const HostApi, _me: ModHandle) -> Status {
+    Status::OK
+}
 
 /// Forgets the loot and scripts of pack `id`, which is off; its hash stays
 /// for the join check, which lists the pack as off with its files.

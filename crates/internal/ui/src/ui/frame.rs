@@ -180,7 +180,7 @@ impl Frame<'_> {
     #[must_use]
     pub fn screen_host_template(&self) -> Option<crate::content::Guid> {
         let template = self.raw.screen_host_template;
-        (template != [0; 16]).then_some(crate::content::Guid(template))
+        (template != crate::content::Guid::NIL).then_some(template)
     }
 
     /// Unstable: needs the `unstable` feature and may change in any release.
@@ -206,7 +206,7 @@ impl Frame<'_> {
     #[must_use]
     pub fn screen_host_position(&self) -> Option<[f64; 3]> {
         self.screen_host_template()
-            .map(|_| crate::ecs::metres(self.raw.screen_host_position))
+            .map(|_| self.raw.screen_host_position)
     }
 
     fn draw(&mut self, widget: &mut UiWidget) -> bool {
@@ -408,16 +408,15 @@ impl Frame<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a container neither the game's archive nor a mod holds,
-    /// and on a loader older than ABI 11.14.
+    /// [`Off`] for a container neither the game's archive nor a mod holds.
     ///
     /// # Examples
     ///
     /// See the [`sound`](crate::sound) module.
     pub fn play(&mut self, sound: SoundContainerId) -> Result<(), Off> {
         let mut widget = UiWidget {
-            kind: UiWidget::PLAY,
-            sound: sound.guid().0,
+            kind: UiWidget::SOUND,
+            sound: sound.guid(),
             ..UiWidget::EMPTY
         };
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);

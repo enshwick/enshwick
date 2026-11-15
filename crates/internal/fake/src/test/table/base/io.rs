@@ -65,20 +65,6 @@ pub(crate) fn get_headed_list<T: Headed>(raw: *const T, count: u32) -> Option<Ve
     unsafe { copy::headed_list_in(raw, count, T::BORN) }
 }
 
-/// Writes up to `capacity` of `items` to a mod's list of headed entries, as
-/// the loader does.
-pub(crate) fn put_headed_list<T: Headed>(
-    items: &[T],
-    out: *mut T,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    // SAFETY: the safe layer passes `out` null or room for `capacity`
-    // entries, each as large as the first one's header states, and `count`
-    // null or a writable, aligned `u32`, untouched by others during the call.
-    unsafe { copy::put_headed_list(items, out, capacity, count) }
-}
-
 /// Copies up to `capacity` of `items` to `out`, `entry_size` bytes apart, and
 /// writes how many there are, as the loader does.
 pub(crate) fn list<T: Copy>(

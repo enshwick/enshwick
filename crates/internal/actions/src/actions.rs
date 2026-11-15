@@ -59,7 +59,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::Off;
 use crate::PlayerKey;
-use crate::abi::Str;
+use crate::abi::{ActionTarget as RawTarget, Str};
 use crate::controls::{Control, Key};
 use crate::i18n::Texts;
 use crate::world::{Player, PlayerPermissions};
@@ -79,6 +79,9 @@ const PLATFORM_TEXTS: &str = r#"
 "actions.no_item" = "No item {name}."
 "actions.no_item_near" = "No item {name}. Closest: {near}."
 "actions.several_items" = "Several items are named {name}; name one by its GUID."
+"actions.no_template" = "No template {name}."
+"actions.no_template_near" = "No template {name}. Closest: {near}."
+"actions.several_templates" = "Several templates are named {name}; name one by its GUID."
 "actions.bad" = "Write it so: {usage}"
 "actions.too_long" = "{label} takes at most {max} bytes."
 "actions.player" = "player"
@@ -98,6 +101,9 @@ const PLATFORM_TEXTS: &str = r#"
 "actions.no_item" = "Немає предмета {name}."
 "actions.no_item_near" = "Немає предмета {name}. Найближчі: {near}."
 "actions.several_items" = "Кілька предметів мають назву {name}; вкажи один за його GUID."
+"actions.no_template" = "Немає шаблону {name}."
+"actions.no_template_near" = "Немає шаблону {name}. Найближчі: {near}."
+"actions.several_templates" = "Кілька шаблонів мають назву {name}; вкажи один за його GUID."
 "actions.bad" = "Пиши так: {usage}"
 "actions.too_long" = "{label}: щонайбільше {max} байтів."
 "actions.player" = "гравець"
@@ -148,7 +154,7 @@ pub struct Action {
     with_self: bool,
     args: Vec<Arg>,
     /// The permission bits a player needs, all of them.
-    needs: u8,
+    needs: u32,
     allow: Option<Allow>,
     at: Option<At>,
     on: Option<On>,
@@ -345,10 +351,14 @@ impl Action {
     }
 
     /// What the action acts on for a player, found on the server each time
-    /// the player looks or runs it: a [`Subject`], or a [`FindSubjectError`]
-    /// with why there is none, which the player reads beside the dimmed
-    /// action. A mod's own
-    /// permission rules, extension points included, belong here.
+    /// a [window](crate::actions::Window) draws it or the player runs it: a
+    /// [`Subject`], or a [`FindSubjectError`] with why there is none, which
+    /// the player reads beside the dimmed action.
+    ///
+    /// A mod's own permission rules, extension points included, belong
+    /// here. Which of the mod's carried controls a player gets follows [`allow`](Self::allow),
+    /// [`admins`](Self::admins) and [`needs`](Self::needs) alone, so this
+    /// does not run at a join or a change of permissions.
     ///
     /// # Examples
     ///
@@ -488,10 +498,7 @@ impl Actions {
     /// }
     /// ```
     pub fn run(&self, action: &str, args: &[Value]) -> Result<(), Off> {
-        let host = self.registry.host;
-        let args = sheet::encode_args(args);
-        let status = (host.api().run_action)(host.handle(), Str::new(action), Str::new(&args));
-        crate::load::ok(status, (), || format!("action {action}"))
+        self.send(action, args, core::ptr::null())
     }
 
     /// Runs the action as [`run`](Self::run) does, on the object `target`,
@@ -530,15 +537,16 @@ impl Actions {
     /// }
     /// ```
     pub fn run_at(&self, action: &str, args: &[Value], target: ActionTarget) -> Result<(), Off> {
+        let raw = target.to_raw();
+        self.send(action, args, &raw const raw)
+    }
+
+    /// Asks the server to run `action` on `target`, null for none.
+    fn send(&self, action: &str, args: &[Value], target: *const RawTarget) -> Result<(), Off> {
         let host = self.registry.host;
         let args = sheet::encode_args(args);
-        let raw = target.to_raw();
-        let status = (host.api().run_action_at)(
-            host.handle(),
-            Str::new(action),
-            Str::new(&args),
-            &raw const raw,
-        );
+        let status =
+            (host.api().run_action)(host.handle(), Str::new(action), Str::new(&args), target);
         crate::load::ok(status, (), || format!("action {action}"))
     }
 
@@ -634,7 +642,7 @@ impl Actions {
             return Err(Off::new("commands: named once already"));
         }
         let host = self.registry.host;
-        let status = (host.api().commands)(host.handle(), Str::EMPTY, Str::new(alias));
+        let status = (host.api().commands)(host.handle(), Str::new(alias));
         if matches!(status, crate::abi::Status::OK | crate::abi::Status::REFUSED) {
             named.store(true, core::sync::atomic::Ordering::Release);
         }
@@ -923,7 +931,7 @@ impl LoadMethods for crate::BaseLoad {
         });
         crate::load::hand_over(
             Arc::clone(&registry),
-            |user| (host.api().actions)(host.handle(), answer::answer, user),
+            |user| (host.api().actions)(host.handle(), Some(answer::answer), user),
             "actions",
         )?;
         crate::i18n::hand_under(host, &registry.texts);

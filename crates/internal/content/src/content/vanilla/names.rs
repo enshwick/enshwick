@@ -23,6 +23,45 @@ pub struct VanillaItem {
     pub name_tag: Option<Guid>,
 }
 
+/// A vanilla entity template with its name, from [`templates`].
+///
+/// # Examples
+///
+/// See [`templates`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub struct VanillaTemplate {
+    /// The template.
+    pub guid: Guid,
+    /// Its name, as [`template`](super::template) takes it, such as
+    /// `Enemy_Wildbeast_Wolf`.
+    pub name: String,
+}
+
+/// Every vanilla entity template of the running game with its name, sorted
+/// by name: for a picker, a list or suggestions.
+///
+/// Several templates may share a name. The first call reads every template
+/// once, about 139 ms on a dedicated server (build 26083076).
+///
+/// # Errors
+///
+/// [`VanillaError::Unreadable`] outside the game or when the templates do
+/// not read.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::vanilla;
+///
+/// if let Ok(templates) = vanilla::templates() {
+///     enshwick::info!("the game has {} templates", templates.len());
+/// }
+/// ```
+pub fn templates() -> Result<Vec<VanillaTemplate>, VanillaError> {
+    game()?.templates()
+}
+
 /// A vanilla recipe with its name and what it makes, from [`recipes`].
 ///
 /// # Examples

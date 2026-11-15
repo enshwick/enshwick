@@ -154,7 +154,7 @@ mod tests {
         let status = (api.subscribe_tick)(
             loader.handle(),
             0,
-            nothing,
+            Some(nothing),
             core::ptr::null_mut(),
             &raw mut handle,
         );

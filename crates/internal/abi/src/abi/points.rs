@@ -189,13 +189,18 @@ impl PointVerdict {
     pub const SET: Self = Self(1);
     /// The link refused: the chain stops.
     pub const REFUSE: Self = Self(2);
-    /// The link panicked; the loader turns it off.
-    pub const PANICKED: Self = Self(3);
+    /// The link could not answer, as when its handler panicked: the loader
+    /// turns this link off, leaves the answer as it was and asks the next.
+    pub const FAILED: Self = Self(3);
 }
 
 /// A mod's link on an extension point: the input, valid for the call, the
 /// answer so far, which the link may overwrite and then answers
 /// [`PointVerdict::SET`], and the pointer given at attaching.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread that asks the point.
 ///
 /// # Examples
 ///

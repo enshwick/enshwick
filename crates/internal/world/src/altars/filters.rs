@@ -56,7 +56,7 @@ where
         &[][..]
     } else {
         // SAFETY: `zone_count` boxes at `zones`, valid for the call.
-        unsafe { core::slice::from_raw_parts(check.zones, check.zone_count) }
+        unsafe { core::slice::from_raw_parts(check.zones, check.zone_count as usize) }
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };

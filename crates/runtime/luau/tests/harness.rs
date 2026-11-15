@@ -76,3 +76,38 @@ pub(crate) fn run(host: FakeHost, main: &str) -> Installed {
 pub(crate) fn logged(loader: &Installed, text: &str) -> bool {
     loader.logs().iter().any(|(_, line)| line.contains(text))
 }
+
+/// An action appended to a script that declares `actions`: it shows its
+/// runner a window that draws the action its text names.
+pub(crate) const LOOK: &str = r#"
+    actions:add({ id = "look", label = "Look", args = { enshwick.actions.text("Action", 32) } },
+        function(request)
+            local window = { id = "look", title = "Look", items = { { Action = request:args()[1].Text } } }
+            actions:show(window, { request:player().key })
+            return enshwick.actions.done("")
+        end)
+"#;
+
+/// The entry of action `id` that the script's [`LOOK`] window shows
+/// `viewer` in `language`.
+pub(crate) fn looked(
+    loader: &Installed,
+    viewer: &enshwick::abi::PlayerInfo,
+    language: enshwick::i18n::Language,
+    id: &str,
+) -> enshwick::actions::sheet::Entry {
+    let shown = loader.ask_actions(
+        enshwick::abi::ActionCall::RUN,
+        viewer,
+        0,
+        "look",
+        &format!("t{id}"),
+    );
+    assert_eq!(shown.as_deref(), Some("1"), "{:?}", loader.logs());
+    let carried = loader.carried_windows(viewer, language.0);
+    let (_, text) = carried.iter().find(|(window, _)| window == "look").unwrap();
+    enshwick::actions::window::decode(text)
+        .unwrap()
+        .entries
+        .remove(0)
+}

@@ -98,7 +98,7 @@ impl Voxels for Game<'_> {
     ) -> Result<u32, TransactionError> {
         let check = BuildRights {
             header: Header::of::<BuildRights>(),
-            player: enshwick_core::Entity(actor),
+            character: enshwick_core::Entity(actor),
             refusal: BuildRights::ALLOWED,
             min,
             max,

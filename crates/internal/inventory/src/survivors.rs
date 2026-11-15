@@ -228,7 +228,7 @@ impl Summon {
         Self {
             item: raw.item,
             ammo: (raw.ammo.get() != 0).then_some(raw.ammo),
-            template: Guid(raw.template),
+            template: raw.template,
             target: raw.target,
             slot: SlotRef(raw.slot),
             pide: Entity::from_raw(raw.pide.0),
@@ -306,7 +306,7 @@ where
 {
     // SAFETY: the loader passes a valid check for the duration of the call.
     let Some(check) = (unsafe { check.as_ref() }) else {
-        return 1;
+        return crate::abi::FILTER_PASS;
     };
     let call = BedCheck {
         npc_id: check.npc_id,
@@ -318,7 +318,7 @@ where
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
     let keep = crate::host::guard("panic in a survivor bed check", || true, || handler(&call));
-    u8::from(keep)
+    crate::host::verdict(keep)
 }
 
 /// The loader's summon, read as far as its header says it reaches.
@@ -394,7 +394,7 @@ where
 unsafe extern "system" fn run_status<F>(
     survivor: NpcId,
     statuses: *const u8,
-    count: usize,
+    count: u32,
     user: *mut c_void,
 ) -> u32
 where
@@ -404,7 +404,7 @@ where
         &[][..]
     } else {
         // SAFETY: `count` bytes at `statuses`, valid for the call.
-        unsafe { core::slice::from_raw_parts(statuses, count) }
+        unsafe { core::slice::from_raw_parts(statuses, count as usize) }
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
@@ -465,7 +465,7 @@ impl LoadMethods for crate::BaseLoad {
         self.register(
             "the survivor lookup",
             |api| api.survivor_lookup,
-            run_lookup::<F> as crate::abi::SurvivorLookupFn,
+            Some(run_lookup::<F> as crate::abi::SurvivorLookupFn),
             handler,
         )
     }
@@ -477,7 +477,7 @@ impl LoadMethods for crate::BaseLoad {
         self.register(
             "the survivor bed check",
             |api| api.survivor_bed_check,
-            run_bed_check::<F> as crate::abi::BedCheckFn,
+            Some(run_bed_check::<F> as crate::abi::BedCheckFn),
             filter,
         )
     }
@@ -489,7 +489,7 @@ impl LoadMethods for crate::BaseLoad {
         self.register(
             "the summon filter",
             |api| api.summon_filter,
-            run_summon::<F> as crate::abi::SummonFn,
+            Some(run_summon::<F> as crate::abi::SummonFilterFn),
             filter,
         )
     }
@@ -501,7 +501,7 @@ impl LoadMethods for crate::BaseLoad {
         self.register(
             "the summon handler",
             |api| api.summoned,
-            run_summoned::<F> as crate::abi::SummonFn,
+            Some(run_summoned::<F> as crate::abi::SummonFilterFn),
             handler,
         )
     }
@@ -527,7 +527,7 @@ impl LoadMethods for crate::BaseLoad {
         self.register(
             "the survivor menu merge",
             |api| api.survivor_status,
-            run_status::<F> as crate::abi::SurvivorStatusFn,
+            Some(run_status::<F> as crate::abi::SurvivorStatusFn),
             merge,
         )
     }
@@ -568,7 +568,7 @@ mod tests {
             header: Header::of::<RawSummon>(),
             item: ItemId::new(7),
             ammo: ItemId::new(0),
-            template: [1; 16],
+            template: Guid([1; 16]),
             target: [1, 2, 3],
             slot: 0x3_0000_0041,
             pide: Entity(pide),

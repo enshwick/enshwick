@@ -1,5 +1,6 @@
 //! Terrain and voxels: the terrain materials, terrain edits, and the voxels the server reads and the edits it reports.
 
+use crate::abi::Metres;
 use crate::abi::{Header, ItemId, ModHandle};
 
 /// A terrain material of the running game, written by
@@ -83,7 +84,7 @@ pub struct TerrainEdit {
     /// dig.
     pub material: u32,
     /// Where, in metres; every axis 0 or more.
-    pub position: [f32; 3],
+    pub position: Metres,
     /// How far it reaches, in metres, above 0 and up to 16: a mound's or a
     /// flattened disc's radius, a dug sphere's.
     pub radius: f32,
@@ -117,8 +118,9 @@ impl TerrainEdit {
 /// [`HostApi::voxel_read`](super::HostApi::voxel_read). The loader decodes
 /// the game's voxel into it, so a mod never reads the game's own encoding.
 ///
-/// Its layout is frozen: [`HostApi::voxel_read`](super::HostApi::voxel_read)
-/// writes an array of it with no entry size.
+/// Frozen, written as an array by
+/// [`HostApi::voxel_read`](super::HostApi::voxel_read): it is the game's own
+/// packed four-byte voxel.
 ///
 /// # Examples
 ///
@@ -194,11 +196,11 @@ impl Voxel {
     }
 }
 
-/// One voxel a committed edit changed, as [`VoxelEditData`] lists it: where
+/// One voxel a committed edit changed, as [`VoxelEditRequest`] lists it: where
 /// it is and what it was and is.
 ///
-/// Its layout is frozen: [`VoxelEditData`] points at an array of it with no
-/// entry size.
+/// Frozen, read as an array from [`VoxelEditRequest`]: a cell and its voxel
+/// before and after are all a change is.
 ///
 /// # Examples
 ///
@@ -230,16 +232,16 @@ pub struct VoxelChange {
 /// The game writes a whole box, aligned to its bricks of 8 voxels and
 /// larger than the edit, so `changes` lists only the voxels that differ
 /// from the box as it was. Layout grows only by appending; read a later
-/// field after [`Header::covers`].
+/// field once the header's `size` covers it.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, ModHandle, VoxelChange, VoxelEditData};
+/// use enshwick::abi::{Header, ModHandle, VoxelChange, VoxelEditRequest};
 ///
 /// let changes = [VoxelChange::default()];
-/// let edit = VoxelEditData {
-///     header: Header::of::<VoxelEditData>(),
+/// let edit = VoxelEditRequest {
+///     header: Header::of::<VoxelEditRequest>(),
 ///     by: ModHandle::NONE,
 ///     min: [192, 72, 192],
 ///     size: [16, 16, 16],
@@ -250,7 +252,7 @@ pub struct VoxelChange {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
-pub struct VoxelEditData {
+pub struct VoxelEditRequest {
     /// Size and version of this struct.
     pub header: Header,
     /// The mod whose call through the API made the edit, such as a
@@ -266,7 +268,7 @@ pub struct VoxelEditData {
     /// fastest, then y, then z. Valid for the call only.
     pub changes: *const VoxelChange,
     /// How many voxels changed, at least one.
-    pub count: u64,
+    pub count: u32,
 }
 
-impl_headed!(VoxelEditData);
+impl_headed!(VoxelEditRequest);

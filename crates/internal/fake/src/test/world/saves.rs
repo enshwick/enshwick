@@ -21,7 +21,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.set_save_info(Some(SaveInfo {
     ///     header: Header::of::<SaveInfo>(),
-    ///     world: [1; 16],
+    ///     world: enshwick::abi::Guid([1; 16]),
     ///     saved_at: 60,
     ///     size: 10,
     ///     backups: 0,

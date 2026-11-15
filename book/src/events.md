@@ -79,9 +79,9 @@ The data types have these fields:
 - `TickData::step` counts steps since the loader started counting, from 1.
   The other fields of `TickData` are in [Ticks](#ticks):
   - `elapsed_steps`
-  - `elapsed_nanos`
-  - `step_nanos`
-  - `cost_nanos`
+  - `elapsed_ns`
+  - `step_ns`
+  - `cost_ns`
   - `game`
 - `PlayerData` has three fields. [`World::player`](world.md) gives the rest,
   such as the name.
@@ -112,14 +112,13 @@ The data types have these fields:
   - `x`
   - `z`
   - `size`
-- `PlayerDeathData` has eight fields:
+- `PlayerDeathData` has six fields:
   - `entity`
-  - `cause`
+  - `cause`: numbered as the damage filter numbers its causes, with the
+    deadly shroud apart from the shroud
   - `key`
   - `position`
   - `cause_guid`
-  - `was_deadly_fog`
-  - `drowned`
   - `killer_entity`
 - `TerrainPageData` has three fields:
   - `x`

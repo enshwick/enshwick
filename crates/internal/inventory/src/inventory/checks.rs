@@ -2,6 +2,7 @@
 //! once for both.
 
 use super::MAX_OPS;
+use crate::Entity;
 use crate::abi::InventoryOp;
 
 /// Whether the loader refuses `ops` as one request: none, more than
@@ -14,30 +15,34 @@ pub fn refused(ops: &[InventoryOp]) -> bool {
 /// Whether an operation names what its kind needs.
 #[must_use]
 pub fn valid(op: &InventoryOp) -> bool {
-    let entity = |v: u64| u32::try_from(v).is_ok_and(|v| v != 0);
+    let some = |e: Entity| e != Entity::NONE;
+    let slot = some(op.target) && u8::try_from(op.slot).is_ok();
+    let count = op.count != 0 && i32::try_from(op.count).is_ok();
     match op.kind {
         InventoryOp::GIVE | InventoryOp::TAKE => {
-            entity(op.target)
+            some(op.target)
                 && op.item != crate::ItemId::new(0)
-                && op.count != 0
-                && i32::try_from(op.count).is_ok()
+                && count
                 && (op.kind == InventoryOp::TAKE || fill(op).is_some())
         }
-        InventoryOp::DESTROY_SLOT => op.target & 0xffff_ffff != 0,
+        InventoryOp::DESTROY_SLOT => slot,
         InventoryOp::RENEW => {
-            op.target & 0xffff_ffff != 0
-                && op.other & 0xffff_ffff != 0
+            slot && some(op.other)
                 && op.item != crate::ItemId::new(0)
-                && op.count != 0
-                && i32::try_from(op.count).is_ok()
+                && count
                 && fill(&renew_give(op)).is_some()
         }
-        InventoryOp::MOVE_SLOT => {
-            op.target & 0xffff_ffff != 0 && entity(op.other) && u16::try_from(op.count).is_ok()
-        }
-        InventoryOp::MOVE_ALL => entity(op.target) && entity(op.other) && op.target != op.other,
+        InventoryOp::MOVE_SLOT => slot && some(op.other) && u16::try_from(op.count).is_ok(),
+        InventoryOp::MOVE_ALL => some(op.target) && some(op.other) && op.target != op.other,
         _ => false,
     }
+}
+
+/// The slot a slot operation names, as the game packs it:
+/// `sub-inventory | index << 32`.
+#[must_use]
+pub fn slot_ref(op: &InventoryOp) -> u64 {
+    u64::from(op.target.0) | u64::from(op.slot) << 32
 }
 
 /// The give half of a renew: the new item into the slot's inventory.
@@ -46,10 +51,11 @@ pub fn renew_give(op: &InventoryOp) -> InventoryOp {
     InventoryOp {
         kind: InventoryOp::GIVE,
         flags: InventoryOp::FILLED,
-        target: op.other & 0xffff_ffff,
-        other: op.other >> 32,
+        target: op.other,
+        fill: op.fill,
         item: op.item,
         count: op.count,
+        ..InventoryOp::default()
     }
 }
 
@@ -61,11 +67,10 @@ pub fn fill(op: &InventoryOp) -> Option<[u8; 16]> {
     if op.flags & InventoryOp::FILLED == 0 {
         return Some(option);
     }
-    let fill = f32::from_bits(u32::try_from(op.other).ok()?);
-    if !(0.0..=1.0).contains(&fill) {
+    if !(0.0..=1.0).contains(&op.fill) {
         return None;
     }
-    option[..4].copy_from_slice(&fill.to_le_bytes());
+    option[..4].copy_from_slice(&op.fill.to_le_bytes());
     option[4] = 1;
     Some(option)
 }
@@ -77,11 +82,10 @@ mod tests {
     fn give(count: u32) -> InventoryOp {
         InventoryOp {
             kind: InventoryOp::GIVE,
-            flags: 0,
-            target: 7,
-            other: 0,
+            target: Entity(7),
             item: crate::ItemId::new(3),
             count,
+            ..InventoryOp::default()
         }
     }
 
@@ -101,9 +105,23 @@ mod tests {
     fn a_fill_outside_zero_to_one_is_no_fill() {
         let mut filled = give(1);
         filled.flags = InventoryOp::FILLED;
-        filled.other = u64::from(2.0f32.to_bits());
+        filled.fill = 2.0;
         assert_eq!(fill(&filled), None);
-        filled.other = u64::from(0.5f32.to_bits());
+        filled.fill = 0.5;
         assert_eq!(fill(&filled).map(|o| o[4]), Some(1));
+    }
+
+    #[test]
+    fn a_slot_past_a_byte_or_without_its_inventory_is_refused() {
+        let destroy = |target, slot| InventoryOp {
+            kind: InventoryOp::DESTROY_SLOT,
+            target,
+            slot,
+            ..InventoryOp::default()
+        };
+        assert!(valid(&destroy(Entity(0x41), 3)));
+        assert_eq!(slot_ref(&destroy(Entity(0x41), 3)), 0x3_0000_0041);
+        assert!(!valid(&destroy(Entity(0x41), 256)));
+        assert!(!valid(&destroy(Entity::NONE, 3)));
     }
 }

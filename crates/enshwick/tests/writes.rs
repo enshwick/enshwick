@@ -90,8 +90,8 @@ mod tests {
             .component(Entity(7), 2, &stamina)
             .component(Entity(7), 6, &[0; 8])
             .component(Entity(8), 1, &dead)
-            .template(Entity(7), [1; 16])
-            .template(Entity(8), [2; 16])
+            .template(Entity(7), enshwick::content::Guid([1; 16]))
+            .template(Entity(8), enshwick::content::Guid([2; 16]))
             .refuse_write(7)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Writes)`.

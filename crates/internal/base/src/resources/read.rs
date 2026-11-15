@@ -100,7 +100,7 @@ impl Host {
                 buffer.truncate(len);
                 return Ok(buffer);
             }
-            if status != Status::BAD_ARGS || len <= buffer.len() {
+            if status != Status::TOO_SMALL || len <= buffer.len() {
                 return Err(status);
             }
             buffer.resize(len, 0);

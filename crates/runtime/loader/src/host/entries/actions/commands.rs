@@ -24,7 +24,7 @@ fn kept(answer: crate::actions::player_actions::Answer) -> ActionReply {
 }
 
 entries! {
-    fn commands(me as Mod, _name: Str, alias as Text) -> Status {
+    fn commands(me as Mod, alias as Text) -> Status {
         in_init(me.index)?;
         crate::actions::commands::register(me.loader, me.index, alias)?;
         crate::engine::log::write(Level::DEBUG, &me.record.id, &format!("commands, alias /{alias}"));
@@ -58,11 +58,11 @@ entries! {
         me as Mod,
         id as Text,
         [players, count] as List<enshwick_core::PlayerKey>,
-        close: u32,
+        change: u32,
     ) -> Status {
         if players.len() > crate::ui::windows::MAX_PLAYERS {
             return Err(Status::BAD_ARGS.into());
         }
-        Ok(crate::ui::windows::show(me.loader, me.index, id, players, close)?)
+        Ok(crate::ui::windows::show(me.loader, me.index, id, players, change)?)
     }
 }

@@ -44,7 +44,12 @@ impl ManifestFacts {
         } else {
             // SAFETY: a manifest points at `dependency_count` dependencies,
             // `declare_mod!`'s static array, alive for the process.
-            unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
+            unsafe {
+                core::slice::from_raw_parts(
+                    manifest.dependencies,
+                    manifest.dependency_count as usize,
+                )
+            }
         };
         Self {
             id: text(manifest.id),
@@ -109,7 +114,7 @@ pub(crate) fn note_manifest(
     } else {
         // SAFETY: a manifest points at `export_count` names that live as
         // long as it, which outlives the mod's init.
-        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) }
+        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count as usize) }
             .iter()
             .map(|name| text(*name))
             .collect()
@@ -167,7 +172,7 @@ pub(crate) fn refuses_developer(
         })
 }
 
-pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
+pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) -> Status {
     let reason = text(reason);
     // The loader logs every turn-off with its reason.
     let line = format!("off: {}", reason.replace('\t', " "));
@@ -176,14 +181,16 @@ pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
         s.sent.push((me, Level::ERROR, line.clone()));
         s.logs.push((Level::ERROR, line));
     });
+    Status::OK
 }
 
-pub(crate) extern "system" fn log(me: ModHandle, level: Level, message: Str) {
+pub(crate) extern "system" fn log(me: ModHandle, level: Level, message: Str) -> Status {
     let message = text(message);
     with((), |s| {
         s.sent.push((me, level, message.clone()));
         s.logs.push((level, message));
     });
+    Status::OK
 }
 
 pub(crate) extern "system" fn settings(_me: ModHandle, file: Str, out: *mut Str) -> Status {
@@ -212,7 +219,7 @@ pub(crate) extern "system" fn rename_content(
     renames: *const ContentRename,
     count: u32,
 ) -> Status {
-    let renames: Vec<([u8; 16], [u8; 16])> = match count {
+    let renames: Vec<(enshwick_core::abi::Guid, enshwick_core::abi::Guid)> = match count {
         0 => Vec::new(),
         _ if renames.is_null() => return Status::BAD_ARGS,
         // SAFETY: `renames` is non-null, checked just before, and the ABI has
@@ -283,11 +290,17 @@ pub(crate) extern "system" fn config_schema(
 pub(crate) extern "system" fn config_check(
     me: ModHandle,
     file: Str,
-    callback: ConfigCheckFn,
+    callback: Option<ConfigCheckFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     let file = text(file);
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         if s.config_checks.contains_key(&file) {
             return Status::REFUSED;
         }
@@ -471,6 +484,9 @@ pub(crate) fn language_of_character(entity: enshwick_core::Entity) -> Option<u32
     })
 }
 
-pub(crate) extern "system" fn language(_me: ModHandle) -> u32 {
-    READER.get().unwrap_or_else(|| with(0, |s| s.host.language))
+pub(crate) extern "system" fn language(_me: ModHandle, out: *mut u32) -> Status {
+    crate::test::table::put(
+        out,
+        READER.get().unwrap_or_else(|| with(0, |s| s.host.language)),
+    )
 }

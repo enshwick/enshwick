@@ -40,6 +40,7 @@ pub mod reflect;
 pub mod releases;
 mod resolve;
 mod routes;
+pub mod signature;
 mod table;
 pub mod typed;
 mod version;

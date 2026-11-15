@@ -15,9 +15,11 @@ Everything the crate offers without a feature:
 
 - the mod and its loader: `Load`, `Host`, settings, texts and state;
 - hooks, game memory, events and game events;
-- the server's world calls outside `world`: altars, buffs, daytime, effects,
-  game settings, the damage types, terrain, voxels and weather, whose errors share
-  one type, `enshwick::WorldError`;
+- the server's world in `World`: its queries and component writes, players,
+  accounts, chat, notices, saves, vitals, kicks, bans and join rules;
+- altars, buffs, daytime, effects, game settings, the damage types, terrain,
+  voxels and weather, whose errors share one type with `world`,
+  `enshwick::WorldError`;
 - inventories, stats and affixes, apart from writing them onto single items;
 - content and data packs, apart from the parts that use `typed` items;
 - services, mod events, extension points, messages and the interface.
@@ -29,7 +31,7 @@ change in any release, a patch included.
 
 | Part                                                                                                                                                      | Why it is unstable                                                                                       |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `world`: `World`, its players, chat, notices, component writes, transactions, captures, kicks, bans, chat mutes and join rules. `Load::world`, `Load::on_rename`, `Load::on_join`. `WorldError::StaticHalf`, `WorldError::HoldsState`, `WorldError::NotAProp`. | young; world edits and build rights rest on engine facts not yet seen in the running game |
+| The edits of `world`: props, build rights, captures and transactions. `world::Prop`, `world::CapturedProp`, `world::WorldTransform`, `world::PropState`, `world::HeldState`, `world::PlayerPermissions`, `world::BuildRefusal`, `world::Capture`, `world::CAPTURE_TILES`, `world::Transaction`, `world::TransactionId`, `world::TransactionStatus`. `Player::has`, `WorldError::HoldsState`, `WorldError::NotAProp`. | rollback, props in a base, build rights, block placement and the per-step voxel budget are not yet seen with a connected player |
 | `typed`, under its own `typed` feature. That feature turns on `unstable`. | young; its items follow the newest game build until 1.0 |
 | The parts that use `typed` items. `content::enemies`, `content::spawns`, `content::skills`, `content::knowledge`, `content::journal`, `content::removal`, `quests`. `Load::add_enemy`, `Load::add_arsenal`, `Load::change_arsenal`, `Load::add_spawn_entry`, `Load::change_spawner`. `Load::skill_nodes`, `Load::add_skill_node`, `Load::add_perk`, `Load::add_knowledge`, `Load::add_quest`, `Load::change_quest`, `Load::quests`. `Load::remove_item`, `Load::remove_workshop`, `Load::remove_loot_table`, `Load::rekey_item`. `Load::add_weather_phenomenon`, `Load::change_weather_phenomenon`, `weather::NewPhenomenon`, `weather::PhenomenonChange`, `weather::PhenomenonId`. `content::vanilla::enemy`, `content::vanilla::Enemy`, `content::vanilla::experience_values`, `content::vanilla::ExperienceBalanceValue`. `ComponentChange::set`, `ComponentChange::remove`, `ComponentChange::edit`. `Frame::input_hint`, `Knowledge::quest_progression`, `Knowledge::set_quest_progression`. | they use the generated typed items, which follow the newest game build until 1.0 |
 | `map` and `Load::fog_of_war`. Also the map markers of `ui`. `Load::map`, `Load::on_waypoint`, `Load::on_ping`. `ui::Marker`, `ui::MarkerColor`, `ui::MAX_MARKERS`, `Ui::set_markers`, `Ui::clear_markers`, `Ui::map_marker_types`. | young; the map frame, the fog and how markers show are not yet seen in the client |
@@ -43,7 +45,7 @@ change in any release, a patch included.
 | `Load::add_experience` | whether a player gets the gain of an experience value a mod added is not yet seen in the game |
 | `Load::add_journal_page` and `content::journal::lore_category` | which categories the client draws a page under is read from its code only, not yet seen in the game |
 | `Knowledge::revoke` and `Load::on_knowledge_input`. `Knowledge::revoke_world`, `Knowledge::revoke_account`, `knowledge::Revoke`, `knowledge::Refusal`, `knowledge::KnowledgeRequest`. | how a vanilla client takes a revoke, and what it asks for, is not yet seen |
-| `Load::request_base_limits` and `altars::set_base_cap` | young |
+| `Load::request_base_limits` and `altars::set_base_limit` | young |
 | `Load::limit_altar_level` | young |
 | `item_data` and `entity_data`. `Stats::set_item`. Rolling affixes onto items with `Affixes::roll`. Also `Load::add_loot_affixes` and `Load::add_craft_affixes`. `Load::item_data`, `Load::entity_data`, `affixes::AffixLoot`, `affixes::AffixCraft`. | after a restart, a value on an item outside a placed container or a player's inventory stays aside |
 | `rates`: every game rate. Also `Load::rate`. | how a lowered skill-point total and the loot counts play out is not yet seen in the client |
@@ -72,9 +74,10 @@ feature; the call itself does not.
 ## Luau
 
 A Luau mod has no features to turn on. The definitions in `enshwick.d.luau` mark
-the unstable parts "Unstable". They are the `world` namespace and
-`enshwick.caller`. `enshwick.on_client_game_type` is one too. They
-may change in any release, as their Rust counterparts do.
+the unstable parts "Unstable". They are the props, build rights, captures
+and transactions of the `world` namespace, and `enshwick.caller`.
+`enshwick.on_client_game_type` is one too. They may change in any release,
+as their Rust counterparts do.
 
 ## The ABI
 

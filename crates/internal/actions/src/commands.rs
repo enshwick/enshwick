@@ -49,7 +49,7 @@ pub use crate::command_names::{is_alias, is_reserved, name_of};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Caller {
     label: String,
-    permissions: u8,
+    permissions: u32,
 }
 
 impl Caller {
@@ -163,7 +163,7 @@ pub fn run(line: &str, caller: &Caller) -> Result<Outcome, RunCommandError> {
         host.handle(),
         Str::new(line),
         Str::new(&caller.label),
-        u32::from(caller.permissions),
+        caller.permissions,
         &raw mut out,
     );
     enshwick_base::load::outcome::<RunCommandError>(status)?;

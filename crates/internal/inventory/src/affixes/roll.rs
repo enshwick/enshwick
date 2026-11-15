@@ -1,6 +1,6 @@
 use rustc_hash::FxHashSet;
 
-use crate::abi::{ItemLine, StatModifierData};
+use crate::abi::{ItemLine, StatModifier};
 use crate::stats::{ItemStats, Op, StatKey};
 
 use super::defs::{AffixDef, AffixId, AffixKey, ItemRarity};
@@ -216,7 +216,7 @@ pub fn lines_of(
     stat: impl Fn(StatKey) -> Option<u32>,
 ) -> Vec<ItemLine> {
     let line = |stat: u32, op: Op, value: f32, affix: u32| ItemLine {
-        modifier: StatModifierData {
+        modifier: StatModifier {
             stat,
             op: op.to_raw(),
             reserved: [0; 3],

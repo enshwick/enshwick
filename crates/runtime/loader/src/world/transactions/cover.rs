@@ -178,7 +178,7 @@ mod tests {
 
     use super::*;
 
-    fn edit(kind: u32, shape: u32, position: [f32; 3], radius: f32) -> TerrainEdit {
+    fn edit(kind: u32, shape: u32, position: [f64; 3], radius: f32) -> TerrainEdit {
         TerrainEdit {
             header: Header::of::<TerrainEdit>(),
             kind,
@@ -296,7 +296,7 @@ mod tests {
                 ..fine
             },
             TerrainEdit {
-                position: [f32::INFINITY, 0.0, 0.0],
+                position: [f64::INFINITY, 0.0, 0.0],
                 ..fine
             },
             TerrainEdit {

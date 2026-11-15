@@ -382,7 +382,7 @@ error[E0624]: associated function `from_status` is private
 error[E0624]: associated function `check` is private
   --> tests/ui/internals_out_of_reach.rs:22:25
    |
-22 |     let _ = WorldError::check(status, WorldError::Missing);
+22 |     let _ = WorldError::check(status, WorldError::Unavailable);
    |                         ^^^^^ private associated function
    |
   ::: $WORKSPACE/crates/internal/world/src/world_error.rs

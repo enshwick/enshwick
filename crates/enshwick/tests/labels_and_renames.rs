@@ -43,7 +43,7 @@ mod tests {
     }
 
     fn player(name: &str) -> PlayerInfo {
-        let mut bytes = [0; 64];
+        let mut bytes = [0; PlayerInfo::NAME_MAX];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),

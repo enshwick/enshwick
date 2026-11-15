@@ -2,6 +2,11 @@
 
 use crate::Off;
 
+/// The altar zones a Flame level allows once `Load::raise_base_limit` holds.
+const RAISED_ZONES: u32 = 32;
+/// The bases the game groups once `Load::raise_base_limit` holds.
+const RAISED_BASES: u32 = 16;
+
 /// `Load`'s methods of this module on the base handle, which core's
 /// forwarders call.
 #[doc(hidden)]
@@ -19,7 +24,11 @@ pub trait LoadMethods {
 impl LoadMethods for crate::BaseLoad {
     fn raise_base_limit(&mut self) -> Result<bool, Off> {
         let host = self.host();
-        armed((host.api().raise_base_limit)(host.handle()))
+        armed((host.api().request_base_limits)(
+            host.handle(),
+            RAISED_ZONES,
+            RAISED_BASES,
+        ))
     }
 
     #[cfg(feature = "unstable")]
@@ -45,7 +54,7 @@ impl LoadMethods for crate::BaseLoad {
 fn armed(status: crate::abi::Status) -> Result<bool, Off> {
     if status.is_ok() {
         Ok(true)
-    } else if status == crate::abi::Status::MISSING {
+    } else if status == crate::abi::Status::UNAVAILABLE {
         Ok(false)
     } else {
         Err(crate::load::off_status("the base limit", status))

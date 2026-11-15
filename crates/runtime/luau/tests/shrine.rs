@@ -65,7 +65,7 @@ mod tests {
         ItemAction {
             header: Header::of::<ItemAction>(),
             kind,
-            player: Entity(2),
+            character: Entity(2),
             item: ItemId::named("you.shrine:tonic"),
             count: 1,
             inventory: Entity(40),
@@ -90,7 +90,7 @@ mod tests {
     fn the_shrine_tonic_counts_each_drink_keeps_itself_and_rewards_the_world_s_experience_once() {
         let data = std::env::temp_dir().join(format!("enshwick-shrine-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
-        let mut name = [0u8; 64];
+        let mut name = [0u8; PlayerInfo::NAME_MAX];
         name[..3].copy_from_slice(b"Ann");
         let ann = PlayerInfo {
             header: Header::of::<PlayerInfo>(),

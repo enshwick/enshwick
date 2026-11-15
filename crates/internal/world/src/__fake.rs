@@ -7,8 +7,8 @@ use crate::voxels::{EditSource, Voxel};
 use crate::world::HeldState;
 
 /// The `TransactionInfo::HOLDS_` bit of `state`.
-#[cfg(feature = "unstable")]
 #[must_use]
+#[cfg(feature = "unstable")]
 pub fn held_bit(state: HeldState) -> u32 {
     state.bit()
 }

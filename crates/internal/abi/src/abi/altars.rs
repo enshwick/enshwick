@@ -2,10 +2,12 @@
 
 use core::ffi::c_void;
 
+use crate::abi::Cell;
+use crate::abi::Metres;
 use crate::abi::{Entity, Header};
 
-/// A box of whole cells or of 32.32 fixed-point metres, as its user says:
-/// `min` inclusive, `max` exclusive on each axis; axis 1 is up.
+/// A box of whole [`Cell`]s: `min` inclusive, `max` exclusive on each axis;
+/// axis 1 is up.
 ///
 /// # Examples
 ///
@@ -19,10 +21,21 @@ use crate::abi::{Entity, Header};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct Bounds {
     /// The inclusive lower corner.
-    pub min: [i64; 3],
+    pub min: Cell,
     /// The exclusive upper corner.
-    pub max: [i64; 3],
+    pub max: Cell,
 }
+
+/// How many level zones an [`AltarInfo`] has room for: a bound of the ABI,
+/// above the levels the game gives an altar in its reflected
+/// `Upgrade.levels` list, which [`AltarInfo::level_count`] reports.
+///
+/// # Examples
+///
+/// ```
+/// assert!(enshwick::abi::AltarInfo::EMPTY.levels.len() == enshwick::abi::ALTAR_LEVELS);
+/// ```
+pub const ALTAR_LEVELS: usize = 16;
 
 /// One Flame Altar of the server's world, from [`HostApi::altars`](super::HostApi::altars).
 ///
@@ -60,10 +73,11 @@ pub struct AltarInfo {
     pub reserved: u8,
     /// The zone as the engine has built it now, growth by any mod included.
     pub zone: Bounds,
-    /// The vanilla zone at each level from 1 to `level_count`.
-    pub levels: [Bounds; 16],
+    /// The vanilla zone at each level from 1 to `level_count`; 0 levels when
+    /// the altar has more than [`ALTAR_LEVELS`].
+    pub levels: [Bounds; ALTAR_LEVELS],
     /// Where the altar stands, in metres.
-    pub position: [f64; 3],
+    pub position: Metres,
 }
 
 impl_headed!(AltarInfo);
@@ -84,7 +98,7 @@ impl AltarInfo {
         levels: [Bounds {
             min: [0; 3],
             max: [0; 3],
-        }; 16],
+        }; ALTAR_LEVELS],
         position: [0.0; 3],
     };
 }
@@ -127,14 +141,19 @@ impl_headed!(AltarZone);
 /// An altar zone filter: the zone so far, writable, and the pointer given
 /// at registration. It must not unwind.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone).
-pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mut c_void);
+pub type AltarZoneFilterFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mut c_void);
 
 /// A placement the game refused because the object's box does not lie in a
-/// single building zone, as [`HostApi::building_zone_check_filter`](super::HostApi::building_zone_check_filter) hands it on.
-/// Coordinates are 32.32 fixed-point metres.
+/// single building zone, as [`HostApi::building_zone_filter`](super::HostApi::building_zone_filter) hands it on.
+/// Coordinates are [`Metres`].
 ///
 /// The name is enshwick's, after the game's building zone: the game's check
 /// has no name of its own.
@@ -142,14 +161,14 @@ pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mu
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Bounds, Header, BuildingZoneCheck};
+/// use enshwick::abi::{BuildingZoneCheck, Extent, Header};
 ///
 /// let check = BuildingZoneCheck {
 ///     header: Header::of::<BuildingZoneCheck>(),
 ///     zones: core::ptr::null(),
 ///     zone_count: 0,
-///     object: Bounds::default(),
-///     margin: 0,
+///     object: Extent::default(),
+///     margin: 0.0,
 /// };
 /// assert_eq!(check.zone_count, 0);
 /// ```
@@ -158,24 +177,49 @@ pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mu
 pub struct BuildingZoneCheck {
     /// Size and version of this struct.
     pub header: Header,
-    /// The building zones, half-open boxes, valid for the call.
-    pub zones: *const Bounds,
+    /// The building zones, valid for the call.
+    pub zones: *const Extent,
     /// How many boxes `zones` holds.
-    pub zone_count: usize,
-    /// The object's box, both corners included.
-    pub object: Bounds,
-    /// How far the game lets an object reach past a zone, on every side.
-    pub margin: i64,
+    pub zone_count: u32,
+    /// The object's box.
+    pub object: Extent,
+    /// How far the game lets an object reach past a zone on every side, in metres.
+    pub margin: f64,
 }
 
 impl_headed!(BuildingZoneCheck);
 
+/// A box in the world, from its lowest corner `min` to its highest `max`, in
+/// [`Metres`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::Extent;
+///
+/// let room = Extent { min: [0.0; 3], max: [4.0, 3.0, 4.0] };
+/// assert!(room.max[1] > room.min[1]);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, bytemuck::Zeroable)]
+pub struct Extent {
+    /// The lowest corner.
+    pub min: Metres,
+    /// The highest corner, at least `min` on every axis.
+    pub max: Metres,
+}
+
 /// A mod's zone check filter: the check and the pointer given at
 /// registration; returns 1 to accept the placement after all.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in
 /// [`Load::on_building_zone_check`](../struct.Load.html#method.on_building_zone_check).
-pub type BuildingZoneCheckFn =
+pub type BuildingZoneFilterFn =
     unsafe extern "system" fn(check: *const BuildingZoneCheck, user: *mut c_void) -> u8;

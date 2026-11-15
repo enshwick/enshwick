@@ -108,10 +108,15 @@ fn ask(
         header: Header::of::<ActionCall>(),
         kind,
         language,
-        player: *player,
+        player: core::ptr::from_ref(player),
         action: Str::new(action),
         args: Str::new(args),
-        target,
+        // A target without flags names no object.
+        target: if target.flags == 0 {
+            core::ptr::null()
+        } else {
+            &raw const target
+        },
         reply: if answers_text(kind) {
             core::ptr::null_mut()
         } else {
@@ -146,27 +151,17 @@ fn ask(
     }
     // SAFETY: the reply stays valid until the callback runs again.
     let text = unsafe { reply.as_str() }.unwrap_or("");
-    if answers_text(kind) {
-        return Some(Answer {
-            done: true,
-            text: text.to_owned(),
-        });
-    }
-    // A mod built before ABI 11.19 answers a run as `1` or `0` and the text.
-    let (done, text) = match text.split_at_checked(1) {
-        Some((flag, text)) => (flag == "1", text),
-        None => (false, ""),
-    };
+    // A run the mod wrote no reply for is not done.
     Some(Answer {
-        done,
+        done: answers_text(kind),
         text: text.to_owned(),
     })
 }
 
-/// Whether a mod answers question `kind` with a text alone, a sheet or a
-/// window, not a run's outcome.
+/// Whether a mod answers question `kind` with a text alone, the ids it
+/// allows or a window, not a run's outcome.
 const fn answers_text(kind: u32) -> bool {
-    kind == ActionCall::SHEET || kind == ActionCall::WINDOW
+    kind == ActionCall::ALLOWED || kind == ActionCall::WINDOW
 }
 
 /// Mod `owner`'s window `id` as `player` sees it in `language`: its text,
@@ -266,31 +261,32 @@ pub(crate) fn declaring(loader: &Loader) -> Vec<ModIndex> {
     running(loader).map(|r| r.owner).collect()
 }
 
-/// The ids of mod `owner`'s actions `player` may run now, from the sheet
-/// the mod gives for them; `None` when the mod is off or declared no
-/// actions.
+/// The ids of mod `owner`'s actions `player` may run now, as the mod
+/// answers [`ActionCall::ALLOWED`]; `None` when the mod is off or declared
+/// no actions.
 pub(crate) fn allowed(
     loader: &Loader,
     owner: ModIndex,
     player: &PlayerInfo,
 ) -> Option<Vec<String>> {
     let registered = running(loader).find(|r| r.owner == owner)?;
-    let sheet = ask(
+    let answer = ask(
         registered,
-        Question::of(ActionCall::SHEET),
+        Question::of(ActionCall::ALLOWED),
         player,
         0,
         ("", "", ""),
         ActionTarget::NONE,
     )?;
-    Some(sheet_ids(&sheet.text))
+    Some(allowed_ids(&answer.text))
 }
 
-/// The action ids a mod's sheet lists.
-fn sheet_ids(sheet: &str) -> Vec<String> {
-    enshwick_core::actions::sheet::decode(sheet)
-        .into_iter()
-        .map(|entry| entry.id)
+/// The action ids of an answer to [`ActionCall::ALLOWED`], one per line.
+fn allowed_ids(answer: &str) -> Vec<String> {
+    answer
+        .lines()
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
         .collect()
 }
 
@@ -543,24 +539,15 @@ mod tests {
     }
 
     #[test]
-    fn the_actions_a_sheet_lists_are_the_ones_carried() {
-        use enshwick_core::actions::sheet::{Entry, encode};
-
-        let entry = |id: &str| Entry {
-            id: id.into(),
-            label: format!("{id}\tlabel"),
-            ..Entry::default()
-        };
-        assert_eq!(
-            sheet_ids(&encode(&[entry("greet"), entry("wipe")])),
-            ["greet", "wipe"]
-        );
-        assert_eq!(sheet_ids(""), Vec::<String>::new());
+    fn the_allowed_answer_reads_one_id_per_line() {
+        assert_eq!(allowed_ids("greet\nwipe\n"), ["greet", "wipe"]);
+        assert_eq!(allowed_ids("greet\r\n\nwipe"), ["greet", "wipe"]);
+        assert_eq!(allowed_ids(""), Vec::<String>::new());
     }
 
     #[test]
-    fn a_sheet_and_a_window_answer_as_text_and_the_rest_as_runs() {
-        assert!(answers_text(ActionCall::SHEET));
+    fn the_allowed_ids_and_a_window_answer_as_text_and_the_rest_as_runs() {
+        assert!(answers_text(ActionCall::ALLOWED));
         assert!(answers_text(ActionCall::WINDOW));
         for kind in [
             ActionCall::RUN,

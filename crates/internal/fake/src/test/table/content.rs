@@ -26,10 +26,13 @@ pub(crate) struct DataChanges {
 /// component lies in; 0 outside every component.
 pub(crate) extern "system" fn read_only(
     _me: ModHandle,
-    address: usize,
-    max: usize,
-    out: *mut usize,
+    address: u64,
+    max: u32,
+    out: *mut u32,
 ) -> Status {
+    let (Ok(address), max) = (usize::try_from(address), max as usize) else {
+        return put(out, 0);
+    };
     let len = with(0, |s| {
         s.host
             .components
@@ -37,19 +40,22 @@ pub(crate) extern "system" fn read_only(
             .find(|&&(start, len)| (start..start + len).contains(&address))
             .map_or(0, |&(start, len)| (start + len - address).min(max))
     });
-    put(out, len)
+    put(out, u32::try_from(len).unwrap_or(u32::MAX))
 }
 
 pub(crate) extern "system" fn declare_content(
     _me: ModHandle,
     id: Str,
-    out: *mut [u8; 16],
+    out: *mut enshwick_core::content::Guid,
 ) -> Status {
     let id = text(id);
     let Some(guid) = enshwick_core::content::Guid::try_named(&id) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         let clash = s
             .content_ids
             .iter()
@@ -65,13 +71,13 @@ pub(crate) extern "system" fn declare_content(
         if !s.content_ids.contains(&id) {
             s.content_ids.push(id);
         }
-        put(out, guid.0)
+        put(out, guid)
     })
 }
 
 pub(crate) extern "system" fn content_name(
     _me: ModHandle,
-    guid: *const [u8; 16],
+    guid: *const enshwick_core::content::Guid,
     out: *mut Str,
 ) -> Status {
     if out.is_null() {
@@ -81,7 +87,7 @@ pub(crate) extern "system" fn content_name(
     let Some(&guid) = (unsafe { guid.as_ref() }) else {
         return Status::BAD_ARGS;
     };
-    let guid = enshwick_core::content::Guid(guid);
+
     with(Status::MISSING, |s| {
         // The id's heap text stays where it is while the state keeps it.
         let named = s
@@ -96,9 +102,7 @@ pub(crate) extern "system" fn content_name(
 
 pub(crate) extern "system" fn crafting_prop(
     me: ModHandle,
-    prop: *const [u8; 16],
-    first: u8,
-    width: u8,
+    prop: *const enshwick_core::content::Guid,
     out: *mut u8,
 ) -> Status {
     // SAFETY: the safe layer passes the prop's GUID, alive for the call.
@@ -115,10 +119,11 @@ pub(crate) extern "system" fn crafting_prop(
         if !super::base::mods::joins(s, me) {
             return Status::REFUSED;
         }
-        let (bounds, added) = &mut s.crafting_props;
-        if *bounds.get_or_insert((first, width)) != (first, width) {
-            return Status::BAD_ARGS;
-        }
+        // As the loader: without the game's mask and props nothing reads.
+        let Some((first, width)) = s.host.crafting_mask else {
+            return Status::REFUSED;
+        };
+        let added = &mut s.crafting_props;
         let at = added
             .iter()
             .position(|known| *known == prop)
@@ -172,7 +177,7 @@ pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
             return Status::REFUSED;
         }
         if s.host.missing_rates.contains(&rate) {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
@@ -203,9 +208,12 @@ pub(crate) extern "system" fn serve_resource(
     me: ModHandle,
     key: *const ResourceKey,
     base: *const ResourceKey,
-    patch: ResourcePatchFn,
+    patch: Option<ResourcePatchFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(patch) = patch else {
+        return Status::BAD_ARGS;
+    };
     // SAFETY: the safe layer passes valid keys for the call; `as_ref` turns away null.
     let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
@@ -216,6 +224,9 @@ pub(crate) extern "system" fn serve_resource(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         let entry = (
             ServedResource { key, base },
             Registered::new(patch, user, me),
@@ -240,21 +251,37 @@ pub(crate) extern "system" fn rebuild_resource(_me: ModHandle, key: *const Resou
     if building(&key) {
         return Status::BUILDING;
     }
-    with(Status::MISSING, |s| {
-        if !s.served.iter().any(|served| served.0.key == key) {
-            return Status::BAD_ARGS;
-        }
+    let found = with(Err(Status::MISSING), |s| {
+        let Some(served) = s.served.iter().find(|served| served.0.key == key) else {
+            return Err(Status::BAD_ARGS);
+        };
+        let base = served.0.base;
         s.rebuilds.push(key);
-        Status::OK
-    })
+        Ok((base, s.registration == Registration::Open))
+    });
+    match found {
+        Ok((_, true)) => Status::OK,
+        Ok((base, false)) => {
+            // As the loader after init: the patches run again over the base
+            // and their buffers are freed; no game holds the bytes here.
+            if let Ok(archived) = archived(&base) {
+                drop(build_resource(&key, &archived));
+            }
+            Status::OK
+        }
+        Err(status) => status,
+    }
 }
 
 pub(crate) extern "system" fn recipe_rule(
     _me: ModHandle,
     kind: enshwick_core::abi::RecipeRuleKind,
     name: Str,
-    disable: u32,
+    disable: u8,
 ) -> Status {
+    if disable > 1 {
+        return Status::BAD_ARGS;
+    }
     let name = text(name);
     with(Status::MISSING, |s| {
         s.recipe_rules.retain(|(k, n)| !(*k == kind && *n == name));
@@ -268,12 +295,12 @@ pub(crate) extern "system" fn recipe_rule(
 pub(crate) extern "system" fn recipe_disabled(
     _me: ModHandle,
     recipe: enshwick_core::RecipeId,
-    out: *mut u32,
+    out: *mut u8,
 ) -> Status {
     let disabled = with(false, |s| s.host.disabled_recipes.contains(&recipe.get()));
     if !out.is_null() {
         // SAFETY: the safe layer passes its out value for the call.
-        unsafe { out.write(u32::from(disabled)) };
+        unsafe { out.write(u8::from(disabled)) };
     }
     Status::OK
 }
@@ -289,10 +316,15 @@ pub(crate) extern "system" fn recipe_kind(
     )
 }
 
+/// As the loader's: a fixed change, or a live one when `out` is set.
 pub(crate) extern "system" fn change_data(
-    _me: ModHandle,
+    me: ModHandle,
     change: *const enshwick_core::abi::DataChange,
+    out: *mut enshwick_core::abi::ChangeId,
 ) -> Status {
+    if !out.is_null() {
+        return live(me, change, out);
+    }
     // SAFETY: the safe layer passes null or a record with its header, valid
     // for the call; an all-zero record is valid, and `item` reads as zero
     // for a record of a mod built before it.
@@ -304,6 +336,10 @@ pub(crate) extern "system" fn change_data(
     }) else {
         return Status::BAD_ARGS;
     };
+    // shortcut: the loader reads the change before the phase, so a malformed one after init answers BAD_ARGS there; match it when a test needs that order.
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     // SAFETY: the safe layer borrows the source for the call.
     let source = unsafe { raw.source.as_str() }
         .unwrap_or_default()
@@ -332,15 +368,13 @@ pub(crate) extern "system" fn change_data(
     })
 }
 
-pub(crate) extern "system" fn declare_change(
+/// A live change, whose value `set_change` sets later; `out` is non-null.
+fn live(
     me: ModHandle,
     change: *const enshwick_core::abi::DataChange,
     out: *mut enshwick_core::abi::ChangeId,
 ) -> Status {
     use enshwick_core::content::changes::{Change, Field, ItemsChange, Target};
-    if out.is_null() {
-        return Status::BAD_ARGS;
-    }
     // SAFETY: the safe layer passes null or a full record with its header,
     // valid for the call.
     let Some(raw) = (unsafe {
@@ -422,18 +456,24 @@ pub(crate) extern "system" fn add_text(
 ) -> Status {
     let value = text(value);
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.texts.push((id, language, value));
         Status::OK
     })
 }
 
-pub(crate) extern "system" fn item_data_open(_me: ModHandle, id: Str, out: *mut u32) -> Status {
+pub(crate) extern "system" fn define_item_data(_me: ModHandle, id: Str, out: *mut u32) -> Status {
     let id = text(id);
     let full = if id.contains(':') {
         id
     } else {
         format!("{}:{id}", crate::test::MOD_ID)
     };
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let kind = with(None, |s| {
         let index = s
             .item_kinds
@@ -448,13 +488,13 @@ pub(crate) extern "system" fn item_data_open(_me: ModHandle, id: Str, out: *mut 
     found(kind, out)
 }
 
-pub(crate) extern "system" fn entity_data_open(
+pub(crate) extern "system" fn define_entity_data(
     me: ModHandle,
     id: Str,
     _flags: enshwick_core::abi::EntityDataFlags,
     out: *mut u32,
 ) -> Status {
-    item_data_open(me, id, out)
+    define_item_data(me, id, out)
 }
 
 pub(crate) extern "system" fn item_data_get(
@@ -563,7 +603,7 @@ pub(crate) extern "system" fn icons_ready(_me: ModHandle) -> Status {
     if with(false, |s| s.host.icons_ready) {
         Status::OK
     } else {
-        Status::MISSING
+        Status::UNAVAILABLE
     }
 }
 
@@ -689,7 +729,10 @@ pub(crate) extern "system" fn resource_buffer(
         buffers.last_mut().map(|buffer| buffer.as_mut_ptr())
     });
     match lent {
-        Some(at) => put(out, at),
+        Some(at) => {
+            with((), |s| s.lent_buffers += 1);
+            put(out, at)
+        }
         None => Status::REFUSED,
     }
 }
@@ -712,32 +755,33 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
     let _building = Building::enter(*key);
     let mut bytes = base.to_vec();
     let mut built = false;
+    let Ok(base_len) = u32::try_from(bytes.len()) else {
+        return Err(Status::MISSING);
+    };
+    let mut len = base_len;
     for patch in patches {
-        let mut out = core::ptr::null();
+        let mut out = core::ptr::null_mut();
         let mut out_len = 0;
         // SAFETY: `bytes` is readable for the call, the outs are valid, and
         // `user` is the pointer the mod served with.
         let status = patch.run(|patch, user| unsafe {
-            patch(
-                bytes.as_ptr(),
-                bytes.len(),
-                user,
-                &raw mut out,
-                &raw mut out_len,
-            )
+            patch(bytes.as_ptr(), len, user, &raw mut out, &raw mut out_len)
         });
-        if status.is_ok() && !out.is_null() {
-            let lent = BUILDING.with_borrow(|frames| {
-                frames
-                    .last()
-                    .is_some_and(|(_, buffers)| buffers.iter().any(|buffer| buffer.as_ptr() == out))
-            });
-            if !lent {
-                with((), |s| s.kept_outputs += 1);
-            }
-            // SAFETY: on success the patch wrote bytes in a buffer its build
-            // holds until it ends, or its own, which live for the process.
-            bytes = unsafe { core::slice::from_raw_parts(out, out_len) }.to_vec();
+        // As the loader: an output outside the buffers this build lent, null
+        // included, fails the patch.
+        let output = BUILDING.with_borrow(|frames| {
+            frames.last().and_then(|(_, buffers)| {
+                buffers.iter().find_map(|buffer| {
+                    let start = out.addr().checked_sub(buffer.as_ptr().addr())?;
+                    buffer
+                        .get(start..start.checked_add(out_len as usize)?)
+                        .map(<[u8]>::to_vec)
+                })
+            })
+        });
+        if let (true, Some(output)) = (status.is_ok(), output) {
+            bytes = output;
+            len = out_len;
             built = true;
         }
     }
@@ -761,7 +805,12 @@ impl Building {
 
 impl Drop for Building {
     fn drop(&mut self) {
-        BUILDING.with_borrow_mut(Vec::pop);
+        let freed = BUILDING
+            .with_borrow_mut(Vec::pop)
+            .map_or(0, |(_, buffers)| buffers.len());
+        with((), |s| {
+            s.lent_buffers = s.lent_buffers.saturating_sub(freed);
+        });
     }
 }
 
@@ -827,7 +876,7 @@ pub(crate) extern "system" fn types(
     count: *mut u32,
 ) -> Status {
     let Some(table) = with(None, |s| s.host.types.clone()) else {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     };
     crate::test::table::base::io::list(table.entries(), out, entry_size, capacity, count)
 }
@@ -835,6 +884,6 @@ pub(crate) extern "system" fn types(
 pub(crate) extern "system" fn game_version(_me: ModHandle, out: *mut Str) -> Status {
     match with(None, |s| s.host.game_version) {
         Some(version) => put(out, Str::new(version)),
-        None => Status::MISSING,
+        None => Status::UNAVAILABLE,
     }
 }

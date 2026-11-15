@@ -16,7 +16,7 @@ use crate::abi::{BuffTypeId, Entity, Header};
 ///     slot: BuffTypeInfo::RESTED,
 ///     flags: BuffTypeInfo::SAVED,
 ///     name: 1_237_250_642,
-///     duration: 5_000_000_000,
+///     duration_ns: 5_000_000_000,
 /// };
 /// assert_eq!(rested.slot, BuffTypeInfo::RESTED);
 /// ```
@@ -36,7 +36,7 @@ pub struct BuffTypeInfo {
     /// The `LocaTag` of its name, which a client shows.
     pub name: u32,
     /// How long it lasts by default, in game nanoseconds.
-    pub duration: i64,
+    pub duration_ns: i64,
 }
 
 impl_headed!(BuffTypeInfo);
@@ -71,10 +71,10 @@ impl BuffTypeInfo {
 ///     entity: enshwick::Entity(4100),
 ///     slot: 0,
 ///     level: 0,
-///     duration: 600_000_000_000,
-///     remaining: 120_000_000_000,
+///     duration_ns: 600_000_000_000,
+///     remaining_ns: 120_000_000_000,
 /// };
-/// assert!(fed.remaining < fed.duration);
+/// assert!(fed.remaining_ns < fed.duration_ns);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -90,9 +90,9 @@ pub struct ActiveBuff {
     /// Its level; 0 for none.
     pub level: u32,
     /// How long it lasts in all, in game nanoseconds.
-    pub duration: i64,
+    pub duration_ns: i64,
     /// How long it has left, in game nanoseconds.
-    pub remaining: i64,
+    pub remaining_ns: i64,
 }
 
 impl_headed!(ActiveBuff);
@@ -110,9 +110,9 @@ impl_headed!(ActiveBuff);
 ///     id: enshwick::buffs::BuffTypeId::new(7),
 ///     level: 0,
 ///     reserved: 0,
-///     duration: 0,
+///     duration_ns: 0,
 /// };
-/// assert_eq!(request.duration, 0, "the type's own duration");
+/// assert_eq!(request.duration_ns, 0, "the type's own duration");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -128,7 +128,7 @@ pub struct BuffRequest {
     /// Zero.
     pub reserved: u32,
     /// How long it lasts, in game nanoseconds; 0 for the type's own.
-    pub duration: i64,
+    pub duration_ns: i64,
 }
 
 impl_headed!(BuffRequest);

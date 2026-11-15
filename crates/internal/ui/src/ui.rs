@@ -205,7 +205,7 @@ impl Ui {
         let status = (api.ui_dialog)(
             self.host.handle(),
             &raw const raw,
-            answered::<F>,
+            Some(answered::<F>),
             user.cast(),
         );
         if status.is_ok() {
@@ -213,8 +213,7 @@ impl Ui {
         }
         // SAFETY: refused, so the loader keeps no copy of the pointer.
         drop(unsafe { Box::from_raw(user) });
-        // A dialog the loader refuses waits behind one already open.
-        if status == Status::REFUSED {
+        if status == Status::BUSY {
             return Err(UiError::Busy);
         }
         enshwick_base::load::outcome(status)
@@ -224,7 +223,7 @@ impl Ui {
 impl enshwick_base::load::StatusError for UiError {
     fn of(status: Status) -> Self {
         match status {
-            Status::MISSING => Self::Unavailable,
+            Status::UNAVAILABLE | Status::MISSING => Self::Unavailable,
             Status::WRONG_THREAD => Self::WrongThread,
             _ => Self::Refused,
         }
@@ -269,7 +268,7 @@ impl LoadMethods for crate::BaseLoad {
                 host,
                 draw: Mutex::new(draw),
             },
-            |user| (host.api().ui_frame)(host.handle(), draw_frame::<F>, user),
+            |user| (host.api().ui_frame)(host.handle(), Some(draw_frame::<F>), user),
             "frame callback",
         )
     }

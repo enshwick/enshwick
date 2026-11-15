@@ -48,6 +48,11 @@ pub(crate) mod notices;
     expect(dead_code, reason = "only the running server tells a joining player")
 )]
 pub(crate) mod off_line;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game checks its own files")
+)]
+pub(crate) mod official;
 #[cfg(windows)]
 pub(crate) mod points;
 pub mod record;

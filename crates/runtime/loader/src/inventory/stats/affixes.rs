@@ -2,7 +2,7 @@
 //! and the lines an item's rolled affixes give.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{AffixDefData, AffixRoll, ItemLine, StatRef, Str};
+use enshwick_core::abi::{AffixRoll, AffixSpec, ItemLine, StatRef, Str};
 use enshwick_core::affixes::{
     AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll,
 };
@@ -28,7 +28,7 @@ pub(crate) fn open_affix(
     loader: &Loader,
     owner: ModIndex,
     id: &str,
-    data: &AffixDefData,
+    data: &AffixSpec,
 ) -> Result<StatRef, StatsError> {
     let record = loader.mods.get(owner.get()).ok_or(StatsError::NoMod)?;
     let Asked { full, text, own } = full_id(&record.id, id).ok_or(StatsError::BadId)?;

@@ -7,8 +7,8 @@
 //! the settings the server sends once it joined, never written to its disk.
 //!
 //! A client kept out shows one dialog naming each of the server's mods it
-//! lacks, the server's version and where to get it ([`refusal`]), and tells
-//! its mods which they are, with the versions and homepages the server
+//! lacks and the server's version, but no place to get it ([`refusal`]), and
+//! tells its mods which they are, with the versions and homepages the server
 //! advertises
 //! ([`Event::JOIN_REFUSED`](enshwick_core::abi::Event::JOIN_REFUSED)).
 //!

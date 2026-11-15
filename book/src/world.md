@@ -305,7 +305,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 the next step. It removes it the way the game removes things itself: no loot
 drops and no death is raised. It refuses a player's character with
 `WorldError::Refused`. It refuses an entity not in the world with
-`WorldError::Gone`. It fails with `WorldError::Missing` where no server runs
+`WorldError::Gone`. It fails with `WorldError::Unavailable` where no server runs
 or on a build without the command.
 
 `save()` asks the server to save the world now, as its timed saves do;
@@ -384,7 +384,7 @@ the warnings to players and a save before it are the mod's.
 A second `stop()` while the server stops fails with `WorldError::Refused`,
 as does one after a person pressed Ctrl+C or before the game has started.
 In single player and in a hosted game, which have no restart, it fails with
-`WorldError::Missing`. A server
+`WorldError::Unavailable`. A server
 under Wine or Proton has not been tried.
 
 ```rust
@@ -412,7 +412,7 @@ that starts after that leaves the entity out or keeps it.
 Vanilla entities are refused, so no mod drops the game's own data from a
 save. An entity not in the world fails with `WorldError::Gone`; where no
 server runs, or on a build without the commands, the call fails with
-`WorldError::Missing`.
+`WorldError::Unavailable`.
 
 ```rust
 use enshwick::events::WorldSaving;
@@ -477,7 +477,7 @@ actions, as its administrators do; the mod decides who may ask:
 - `AccountAction::Kick` removes a player online;
 - `AccountAction::Ban` puts the account of a player online on the ban list
   and removes the player;
-- `AccountAction::UnBan` takes the account off the list, online or not.
+- `AccountAction::Unban` takes the account off the list, online or not.
 
 A dedicated server keeps the list in `bannedAccounts` of
 `enshrouded_server.json`; a game a client hosts keeps it until the game
@@ -505,7 +505,7 @@ An administrator online and a hosted game's host are never muted.
 `set_muted` returns `WorldError::Refused` for them when it can tell, and
 their lines pass even when their account was muted before. Both calls work
 on any thread while a world runs, on a dedicated server and in a game a
-client hosts. Elsewhere `set_muted` returns `WorldError::Missing`. The mod decides who may ask, such as an
+client hosts. Elsewhere `set_muted` returns `WorldError::Unavailable`. The mod decides who may ask, such as an
 [action](actions.md) only administrators see.
 
 ```rust
@@ -631,7 +631,7 @@ use enshwick::events::BuildingPlaced;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
-        if let Some(player) = world.player(placed.player) {
+        if let Some(player) = world.player(placed.character) {
             let label = format!("Built by {}", player.name);
             let _labelled = world.set_label(placed.entity, &label);
         }

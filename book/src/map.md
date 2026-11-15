@@ -233,7 +233,7 @@ client. There the game's own reveal takes it within a frame, and the
 character's save keeps it, in every world the character enters.
 
 A client without Enshwick is not reached, and the call fails with
-`WorldError::Missing`. It fails so for a player who is not online too, and
+`WorldError::Unavailable`. It fails so for a player who is not online too, and
 on a client in another's game. The mod decides what to tell whoever asked. A
 place that is not finite and a radius out of bounds fail with `Refused`.
 `uncover` returns once the circle is sent and works from any thread;

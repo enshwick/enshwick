@@ -61,7 +61,7 @@ pub(super) fn loot_patches(
             layout,
             items,
             fill,
-            table: Guid(key.guid),
+            table: key.guid,
             fuse: Fuse::new(LOOT_FUSE.feature()),
         });
         patches.push((key, apply, user));
@@ -71,7 +71,7 @@ pub(super) fn loot_patches(
     }
     let mut tables = 0;
     for key in archive.keys_of(fill) {
-        let names = alone.contains(&Guid(key.guid))
+        let names = alone.contains(&key.guid)
             || archive.resource(&key).is_some_and(|table| {
                 fill_items(&layout, &table)
                     .iter()

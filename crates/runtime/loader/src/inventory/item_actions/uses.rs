@@ -126,7 +126,9 @@ impl Uses {
             return;
         };
         let mut watched = self.watched.relock();
-        let of_player = watched.iter().filter(|u| u.call.player == call.player);
+        let of_player = watched
+            .iter()
+            .filter(|u| u.call.character == call.character);
         if of_player.clone().any(|u| u.version == version) {
             return;
         }
@@ -229,7 +231,7 @@ mod tests {
         ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::CONSUMED,
-            player: enshwick_core::Entity(1),
+            character: enshwick_core::Entity(1),
             item: enshwick_core::ItemId::new(7),
             count: 1,
             inventory: enshwick_core::Entity(inventory),
@@ -387,7 +389,7 @@ mod tests {
         }
         assert_eq!(uses.watched.relock().len(), MAX_WATCHED_PER_PLAYER);
         let other = ItemAction {
-            player: enshwick_core::Entity(2),
+            character: enshwick_core::Entity(2),
             ..drink(101, 0)
         };
         uses.watch(other, 1, 7, 5, Some(STILL), at);

@@ -102,14 +102,6 @@ pub struct Terrain {
     dry: bool,
 }
 
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "world positions in metres fit an f32 as the game's edits take them"
-)]
-fn metres(position: [f64; 3]) -> [f32; 3] {
-    position.map(|axis| axis as f32)
-}
-
 impl crate::script::Object for Terrain {
     const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
         "Terrain",
@@ -145,6 +137,7 @@ impl Terrain {
             let status = (self.host.api().terrain_materials)(
                 self.host.handle(),
                 infos.as_mut_ptr(),
+                u32::try_from(size_of::<TerrainMaterialInfo>()).unwrap_or(u32::MAX),
                 capacity,
                 &raw mut count,
             );
@@ -215,7 +208,7 @@ impl Terrain {
     /// loaded yet (it writes nothing, and starts loading it: try again in a
     /// second or so),
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] while no world runs.
+    /// [`WorldError::Unavailable`] while no world runs.
     ///
     /// # Examples
     ///
@@ -300,7 +293,7 @@ fn request(position: [f64; 3], radius: f32, shape: Shape) -> TerrainEdit {
         shape: shape.raw(),
         flags: 0,
         material: 0,
-        position: metres(position),
+        position,
         radius,
         height: 0.0,
         protect: [0; 16],

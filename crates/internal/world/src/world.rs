@@ -1,7 +1,5 @@
 //! The server's world: components, entities and players, their queries and
-//! writes, chat, saves, build rights and [`Transaction`]s.
-//!
-//! Unstable: needs the `unstable` feature and may change in any release.
+//! writes, chat, saves, build rights and transactions.
 //!
 //! Most calls belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
@@ -9,7 +7,9 @@
 //! game.
 
 mod accounts;
+#[cfg(feature = "unstable")]
 mod build;
+#[cfg(feature = "unstable")]
 mod capture;
 mod containers;
 mod entities;
@@ -17,18 +17,22 @@ pub(crate) mod fields;
 mod geometry;
 pub(crate) mod join;
 mod players;
+#[cfg(feature = "unstable")]
 mod prop_state;
+#[cfg(feature = "unstable")]
 mod props;
 pub(crate) mod rename;
 mod saves;
 mod stats;
+#[cfg(feature = "unstable")]
 mod transactions;
 mod vitals;
 
 use core::ffi::c_void;
 
 use crate::BaseLoad;
-use crate::abi::{EntityPlace, Header, PlayerInfo};
+use crate::abi::{EntityPlace, PlayerInfo};
+use crate::content::Guid;
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
@@ -36,17 +40,23 @@ use crate::{Entity, ItemId, PlayerKey};
 use crate::{Host, Off, WorldError};
 
 pub use accounts::AccountAction;
+#[cfg(feature = "unstable")]
 pub use build::{BuildRefusal, PlayerPermissions};
+#[cfg(feature = "unstable")]
 pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use join::Join;
+#[cfg(feature = "unstable")]
 pub use prop_state::{HeldState, PropState};
+#[cfg(feature = "unstable")]
 pub(crate) use props::span;
+#[cfg(feature = "unstable")]
 pub use props::{CapturedProp, Prop, WorldTransform};
 pub use rename::Rename;
 pub use saves::{SaveInfo, WorldGuid};
 pub use stats::{Meter, Progress, Skill, Vitals};
+#[cfg(feature = "unstable")]
 pub use transactions::{Transaction, TransactionId, TransactionStatus};
 
 /// A reflected component type a mod may write, resolved once at init with
@@ -178,20 +188,19 @@ pub struct Player {
     pub key: PlayerKey,
     /// The server's permission bits for the player, as
     /// [player events](crate::abi::PlayerInfo::permissions) list them.
-    pub permissions: u8,
+    pub permissions: u32,
     /// The name the client sent; untrusted, may repeat between players.
     pub name: String,
 }
 
 impl Player {
     pub(crate) fn from_info(info: &PlayerInfo) -> Self {
-        let name = &info.name[..usize::from(info.name_len).min(info.name.len())];
         Self {
             entity: info.entity,
             slot: info.slot,
             key: info.key,
             permissions: info.permissions,
-            name: String::from_utf8_lossy(name).into_owned(),
+            name: info.name_text().into_owned(),
         }
     }
 
@@ -226,6 +235,8 @@ impl Player {
     /// Whether the server gives the player `permission`, as their user
     /// group in the server's settings grants it.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Examples
     ///
     /// ```
@@ -237,6 +248,7 @@ impl Player {
     /// assert!(friend.has(PlayerPermissions::CanEditBase));
     /// assert!(!friend.has(PlayerPermissions::CanKickBan));
     /// ```
+    #[cfg(feature = "unstable")]
     #[must_use]
     pub const fn has(&self, permission: PlayerPermissions) -> bool {
         self.permissions & permission.bit() != 0
@@ -261,7 +273,7 @@ impl Placed {
     fn from_abi(place: &EntityPlace) -> Self {
         Self {
             entity: place.entity,
-            position: crate::ecs::metres(place.position),
+            position: place.position,
         }
     }
 
@@ -306,15 +318,7 @@ pub enum Notice {
 /// A [`PlayerInfo`] for the loader to fill, its header naming this build's
 /// layout.
 fn blank_info() -> PlayerInfo {
-    PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: 0,
-        entity: Entity::NONE,
-        key: PlayerKey::new(0),
-        permissions: 0,
-        name_len: 0,
-        name: [0; 64],
-    }
+    PlayerInfo::with_name(Entity::NONE, PlayerKey::new(0), 0, "")
 }
 
 /// The world reads; get it from [`Load::world`](../struct.Load.html#method.world).
@@ -351,18 +355,22 @@ pub trait LoadMethods {
 
 impl crate::script::Bound for World {
     const NAME: &'static str = "world";
-    const DOC: &'static str = "The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.";
+    const DOC: &'static str = "The server's world: players, accounts, entities, props, vitals and edits in transactions. Its props, build rights, captures and transactions are unstable: they may change in any release.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
         Self::SCRIPT_PLAYERS,
         Self::SCRIPT_THINGS,
         Self::SCRIPT_ACCOUNTS,
+        #[cfg(feature = "unstable")]
         Self::SCRIPT_BUILD,
         Self::SCRIPT_ENTITIES,
+        #[cfg(feature = "unstable")]
         Self::SCRIPT_PROPS,
+        #[cfg(feature = "unstable")]
         Self::SCRIPT_TRANSACTIONS,
         Self::SCRIPT_VITALS,
         Self::SCRIPT_METERS,
         Self::SCRIPT_FIELDS,
+        #[cfg(feature = "unstable")]
         Self::SCRIPT_CAPTURE,
         Self::SCRIPT_SAVES,
     ];
@@ -422,9 +430,11 @@ struct Resolved {
     used_item: ComponentType,
     /// Where a `CurrentTransform` holds its orientation, on builds that
     /// reflect it and the template an item places, which tells props apart.
+    #[cfg(feature = "unstable")]
     orientation: Option<usize>,
     /// The components that mark what is placed from an item but is no
     /// prop: an animal, a survivor, a flame altar.
+    #[cfg(feature = "unstable")]
     no_props: Option<[ComponentType; 3]>,
     label: Option<ComponentType>,
     stats: Option<stats::Stats>,
@@ -436,6 +446,7 @@ static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new(
 /// The offset of the orientation inside a `CurrentTransform`, when the
 /// loader resolves it and the template an item places, which the loader
 /// reads into item data from the same reflection.
+#[cfg(feature = "unstable")]
 fn orientation_offset(load: &BaseLoad) -> Option<usize> {
     load.constant(ids::ITEM_INFO_PLACED_ENTITY).ok()?;
     let transform = load.constant(ids::CURRENT_TRANSFORM_TRANSFORM).ok()?;
@@ -458,7 +469,9 @@ impl World {
             host,
             transform: ComponentType::named(host, ids::CURRENT_TRANSFORM)?,
             used_item: ComponentType::named(host, ids::USED_ITEM)?,
+            #[cfg(feature = "unstable")]
             orientation: orientation_offset(load),
+            #[cfg(feature = "unstable")]
             no_props: [
                 ids::ANIMAL_SAVED,
                 ids::ACTIVE_NPC_STATE_SAVED,
@@ -510,24 +523,19 @@ impl World {
     /// [`WorldError::StaticHalf`] for the static half of an ECS type, the
     /// template's set-up data, [`WorldError::WrongThread`] off the game
     /// thread and
-    /// [`WorldError::Missing`] where no server runs or on a build without
+    /// [`WorldError::Unavailable`] where no server runs or on a build without
     /// writes.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     let flags = enshwick::world::WritableType::resolve(load, "keen::ecs::CombatFlags")?;
-    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    ///     actions.add(Action::new("immune", "Make your character immune").admins(), move |request| {
-    ///         // `immune` is the first byte of `CombatFlags`.
-    ///         match world.update(request.player.entity, flags, |bytes| bytes[0] = 1) {
-    ///             Ok(()) => Outcome::done("Immune"),
-    ///             Err(why) => Outcome::refused(format!("Not immune: {why}")),
-    ///         }
-    ///     })
+    ///     // Run on the game thread: `immune` is the first byte of `CombatFlags`.
+    ///     let _immune =
+    ///         move |entity: enshwick::Entity| world.update(entity, flags, |bytes| bytes[0] = 1);
+    ///     Ok(())
     /// }
     /// ```
     pub fn update<R>(
@@ -536,7 +544,7 @@ impl World {
         ty: WritableType,
         write: impl FnOnce(&mut [u8]) -> R,
     ) -> Result<R, WorldError> {
-        let len = usize::try_from(ty.size).map_err(|_| WorldError::Missing)?;
+        let len = usize::try_from(ty.size).map_err(|_| WorldError::Unavailable)?;
         let data = self.component_mut(entity, ty.ty)?;
         // `write` works on a copy: it may call the world itself, which a
         // borrow of the component would alias, and a panic in it leaves the
@@ -599,26 +607,13 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::actions::{Action, Arg, Outcome, Value};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     let faction = enshwick::world::WritableType::resolve(load, "keen::ecs::Faction")?;
     ///     let value = faction.field::<u8>(load, "faction")?;
-    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    ///     let befriend = Action::new("befriend", "Make an entity a player ally")
-    ///         .admins()
-    ///         .arg(Arg::number("Entity", 0.0..=f64::from(u32::MAX), 1.0));
-    ///     actions.add(befriend, move |request| {
-    ///         let [Value::Number(id)] = request.args else {
-    ///             return Outcome::refused("Name an entity");
-    ///         };
-    ///         let entity = enshwick::Entity(*id as u32);
-    ///         let before = world.get(entity, value);
-    ///         match world.set(entity, value, 11) {
-    ///             Ok(()) => Outcome::done(format!("Faction {before:?} -> 11")),
-    ///             Err(why) => Outcome::refused(format!("{why}")),
-    ///         }
-    ///     })
+    ///     // Run on the game thread: makes `entity` a player ally.
+    ///     let _befriend = move |entity: enshwick::Entity| world.set(entity, value, 11);
+    ///     Ok(())
     /// }
     /// ```
     pub fn set<T: Scalar>(
@@ -628,11 +623,11 @@ impl World {
         value: T,
     ) -> Result<(), WorldError> {
         let data = self.component_mut(entity, ComponentType::from_hash(field.type_hash()))?;
-        let at = usize::try_from(field.offset()).map_err(|_| WorldError::Missing)?;
+        let at = usize::try_from(field.offset()).map_err(|_| WorldError::Unavailable)?;
         let mut bytes = [0u8; 8];
         let len = size_of::<T>().min(bytes.len());
         if !value.to_bytes(&mut bytes[..len]) {
-            return Err(WorldError::Missing);
+            return Err(WorldError::Unavailable);
         }
         // SAFETY: `component_mut` returned the entity's live component, handed
         // out for writing on the game thread; `Field::within` checked at
@@ -660,7 +655,7 @@ impl World {
         );
         match WorldError::check(status, WorldError::Gone) {
             Ok(()) if !out.is_null() => Ok(out),
-            Ok(()) => Err(WorldError::Missing),
+            Ok(()) => Err(WorldError::Unavailable),
             Err(WorldError::Gone) if self.template(entity).is_some() => Err(WorldError::Lacks),
             Err(why) => Err(why),
         }
@@ -726,8 +721,8 @@ impl World {
     /// See [`World`].
     #[must_use]
     #[script]
-    pub fn template(&self, entity: Entity) -> Option<[u8; 16]> {
-        let mut out = [0u8; 16];
+    pub fn template(&self, entity: Entity) -> Option<Guid> {
+        let mut out = Guid::NIL;
         let status =
             (self.0.host.api().entity_template)(self.0.host.handle(), entity, &raw mut out);
         status.is_ok().then_some(out)
@@ -741,7 +736,7 @@ impl World {
     ///
     /// [`WorldError::Refused`] while the world may not be saved, as before
     /// it has loaded; [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] on any other refusal.
+    /// [`WorldError::Unavailable`] on any other refusal.
     ///
     /// # Examples
     ///
@@ -805,6 +800,7 @@ pub(crate) fn online(host: Host) -> Vec<Player> {
     let status = (host.api().players)(
         host.handle(),
         infos.as_mut_ptr(),
+        u32::try_from(size_of::<PlayerInfo>()).unwrap_or(0),
         u32::try_from(MAX).unwrap_or(0),
         &raw mut count,
     );

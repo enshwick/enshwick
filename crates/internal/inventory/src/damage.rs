@@ -200,8 +200,87 @@ impl DamageCause {
 #[cfg(feature = "unstable")]
 #[derive(Debug)]
 pub struct Damage<'a> {
-    check: &'a mut DamageCheck,
+    hit: &'a mut Hit,
 }
+
+/// The most damage types a filter reads; the game has 13 (server 26430253).
+/// A hit's types past it reach the filter's caller unchanged.
+#[cfg(feature = "unstable")]
+const MAX_TYPES: usize = 64;
+
+/// A [`DamageCheck`] with its amounts held by value, so a filter works on a
+/// copy the loader takes back only once the filter returns.
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Hit {
+    cause: u32,
+    target: Entity,
+    source: Entity,
+    attacker: Entity,
+    total: f32,
+    amounts: [f32; MAX_TYPES],
+    /// How many of `amounts` the hit carries; 0 for other causes.
+    count: usize,
+}
+
+#[cfg(feature = "unstable")]
+impl Hit {
+    /// A copy of `check` and the amounts it points at.
+    ///
+    /// # Safety
+    ///
+    /// For a hit, `check.amounts` is null or valid for reads of
+    /// `check.amount_count` floats for the duration of the call.
+    unsafe fn of(check: &DamageCheck) -> Self {
+        let mut hit = Self {
+            cause: check.cause,
+            target: check.target,
+            source: check.source,
+            attacker: check.attacker,
+            total: check.total,
+            amounts: [0.0; MAX_TYPES],
+            count: 0,
+        };
+        if check.cause == DamageCheck::IMPACT && !check.amounts.is_null() {
+            hit.count = usize::try_from(check.amount_count)
+                .unwrap_or(usize::MAX)
+                .min(MAX_TYPES);
+            // SAFETY: the caller guarantees `amounts` is valid for
+            // `amount_count` floats, and `count` is at most that.
+            let given = unsafe { core::slice::from_raw_parts(check.amounts, hit.count) };
+            hit.amounts[..hit.count].copy_from_slice(given);
+        }
+        hit
+    }
+
+    /// Writes what a filter changed back into `check`.
+    ///
+    /// # Safety
+    ///
+    /// As [`Hit::of`] for the same `check`, and the amounts are valid for
+    /// writes too.
+    unsafe fn write_to(&self, check: &mut DamageCheck) {
+        check.total = self.total;
+        if self.count > 0 {
+            // SAFETY: `count` came from this `check` through `Hit::of`, and
+            // the caller guarantees its amounts are valid for writes.
+            let given = unsafe { core::slice::from_raw_parts_mut(check.amounts, self.count) };
+            given.copy_from_slice(self.amounts());
+        }
+    }
+
+    fn amounts(&self) -> &[f32] {
+        &self.amounts[..self.count]
+    }
+
+    fn amounts_mut(&mut self) -> &mut [f32] {
+        &mut self.amounts[..self.count]
+    }
+}
+
+/// The index of healing, which the totals leave out.
+#[cfg(feature = "unstable")]
+const HEALING: usize = DamageTypeNew::Healing.index();
 
 #[cfg(feature = "unstable")]
 impl Damage<'_> {
@@ -212,7 +291,7 @@ impl Damage<'_> {
     /// See the [module](self).
     #[must_use]
     pub const fn cause(&self) -> DamageCause {
-        DamageCause::from_code(self.check.cause)
+        DamageCause::from_code(self.hit.cause)
     }
 
     /// The entity that takes it.
@@ -231,7 +310,7 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub const fn target(&self) -> Entity {
-        self.check.target
+        self.hit.target
     }
 
     /// What dealt a hit: the attacker, or its projectile; `None` for other
@@ -251,10 +330,10 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub const fn source(&self) -> Option<Entity> {
-        if self.check.source.is_none() {
+        if self.hit.source.is_none() {
             None
         } else {
-            Some(self.check.source)
+            Some(self.hit.source)
         }
     }
 
@@ -275,10 +354,10 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub const fn attacker(&self) -> Option<Entity> {
-        if self.check.attacker.is_none() {
+        if self.hit.attacker.is_none() {
             self.source()
         } else {
-            Some(self.check.attacker)
+            Some(self.hit.attacker)
         }
     }
 
@@ -298,8 +377,8 @@ impl Damage<'_> {
     /// }
     /// ```
     #[must_use]
-    pub const fn amount(&self, ty: DamageTypeNew) -> f32 {
-        self.check.amounts[ty.index()]
+    pub fn amount(&self, ty: DamageTypeNew) -> f32 {
+        self.amount_at(ty.index())
     }
 
     /// Sets a hit's damage of type `ty`; does nothing for other causes. A
@@ -308,9 +387,52 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// See [`Damage::amount`].
-    pub const fn set(&mut self, ty: DamageTypeNew, amount: f32) {
-        if self.check.cause == DamageCheck::IMPACT {
-            self.check.amounts[ty.index()] = amount;
+    pub fn set(&mut self, ty: DamageTypeNew, amount: f32) {
+        self.set_at(ty.index(), amount);
+    }
+
+    /// How many damage types a hit carries on the running game build, which
+    /// may have more than [`DamageTypeNew`] names; 0 for other causes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     // A damage type newer than this mod deals nothing.
+    ///     load.on_damage(|damage| {
+    ///         for index in enshwick::damage::DamageTypeNew::ALL.len()..damage.type_count() {
+    ///             damage.set_at(index, 0.0);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn type_count(&self) -> usize {
+        self.hit.count
+    }
+
+    /// A hit's damage of the type at `index`, in the game's order of its
+    /// damage types, from 0; 0 for an index past
+    /// [`type_count`](Self::type_count) and for other causes.
+    ///
+    /// # Examples
+    ///
+    /// See [`Damage::type_count`].
+    #[must_use]
+    pub fn amount_at(&self, index: usize) -> f32 {
+        self.hit.amounts().get(index).copied().unwrap_or(0.0)
+    }
+
+    /// Sets a hit's damage of the type at `index`, as [`Damage::set`] does
+    /// for a named type; does nothing for an index past
+    /// [`type_count`](Self::type_count) and for other causes.
+    ///
+    /// # Examples
+    ///
+    /// See [`Damage::type_count`].
+    pub fn set_at(&mut self, index: usize, amount: f32) {
+        if let Some(slot) = self.hit.amounts_mut().get_mut(index) {
+            *slot = amount;
         }
     }
 
@@ -332,14 +454,16 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub fn total(&self) -> f32 {
-        if self.check.cause == DamageCheck::IMPACT {
-            DamageTypeNew::ALL
+        if self.hit.cause == DamageCheck::IMPACT {
+            self.hit
+                .amounts()
                 .iter()
-                .filter(|&&ty| ty != DamageTypeNew::Healing)
-                .map(|&ty| self.amount(ty))
+                .enumerate()
+                .filter(|&(index, _)| index != HEALING)
+                .map(|(_, amount)| amount)
                 .sum()
         } else {
-            self.check.total
+            self.hit.total
         }
     }
 
@@ -350,14 +474,14 @@ impl Damage<'_> {
     ///
     /// See the [module](self).
     pub fn scale(&mut self, factor: f32) {
-        if self.check.cause == DamageCheck::IMPACT {
-            for ty in DamageTypeNew::ALL {
-                if ty != DamageTypeNew::Healing {
-                    self.check.amounts[ty.index()] *= factor;
+        if self.hit.cause == DamageCheck::IMPACT {
+            for (index, amount) in self.hit.amounts_mut().iter_mut().enumerate() {
+                if index != HEALING {
+                    *amount *= factor;
                 }
             }
         } else {
-            self.check.total *= factor;
+            self.hit.total *= factor;
         }
     }
 
@@ -368,8 +492,8 @@ impl Damage<'_> {
     ///
     /// See the [module](self).
     pub fn scale_type(&mut self, ty: DamageTypeNew, factor: f32) {
-        if self.check.cause == DamageCheck::IMPACT {
-            self.check.amounts[ty.index()] *= factor;
+        if let Some(amount) = self.hit.amounts_mut().get_mut(ty.index()) {
+            *amount *= factor;
         }
     }
 
@@ -393,21 +517,24 @@ where
     let Some(check) = (unsafe { check.as_mut() }) else {
         return;
     };
-    let mut working = *check;
+    // SAFETY: for a hit the loader points `amounts` at `amount_count` floats
+    // it owns for the duration of this call.
+    let mut hit = unsafe { Hit::of(check) };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
     let done = crate::host::guard(
         "panic in a damage filter",
         || false,
         || {
-            filter(&mut Damage {
-                check: &mut working,
-            });
+            filter(&mut Damage { hit: &mut hit });
             true
         },
     );
     if done {
-        *check = working;
+        // SAFETY: the damage filter contract of `HostApi::damage_filter`: for
+        // a hit the loader lends `amount_count` floats at `amounts`, for
+        // reads and writes, for the duration of this call.
+        unsafe { hit.write_to(check) };
     }
 }
 
@@ -432,7 +559,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().damage_filter)(host.handle(), run_damage::<F>, user),
+            |user| (host.api().damage_filter)(host.handle(), Some(run_damage::<F>), user),
             "damage filter",
         )
     }

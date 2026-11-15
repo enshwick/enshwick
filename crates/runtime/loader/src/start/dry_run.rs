@@ -176,6 +176,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
+        unofficial: std::sync::atomic::AtomicBool::new(false),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan, refused),
         parts: crate::parts::parts(),

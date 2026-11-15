@@ -4,11 +4,11 @@ use enshwick_core::abi as api_frame;
 use enshwick_core::abi::Status;
 
 use crate::engine::conflicts::Mode;
-use crate::host::layer::{Caller, HeadedOut, Mod, Out, SizedListOut, entries};
+use crate::host::layer::{Callback, Caller, HeadedOut, Mod, Out, SizedListOut, entries};
 use crate::world::base_groups::limit::Limits;
 
 entries! {
-    fn altars_open(me as Mod) -> Status {
+    fn request_altars(me as Mod) -> Status {
         Ok(crate::world::altars::open(me.loader, me.index)?)
     }
 
@@ -24,7 +24,7 @@ entries! {
 
     fn altar_zone_filter(
         me as Mod,
-        callback: api_frame::AltarZoneFn,
+        callback as Callback<api_frame::AltarZoneFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -38,9 +38,9 @@ entries! {
         Ok(crate::world::altars::resize(me.index)?)
     }
 
-    fn building_zone_check_filter(
+    fn building_zone_filter(
         me as Mod,
-        callback: api_frame::BuildingZoneCheckFn,
+        callback as Callback<api_frame::BuildingZoneFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -52,7 +52,7 @@ entries! {
 
     fn altar_limit_filter(
         me as Mod,
-        callback: api_frame::AltarLimitFilterFn,
+        callback as Callback<api_frame::AltarLimitFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -77,20 +77,16 @@ entries! {
         })
     }
 
-    fn raise_base_limit(me as Mod) -> Status {
-        Ok(crate::world::bases::request(me.loader, Limits::RAISED)?)
-    }
-
     fn request_base_limits(me as Mod, zones: u32, bases: u32) -> Status {
         Ok(crate::world::bases::request(me.loader, Limits { zones, bases })?)
     }
 
-    fn set_base_cap(me as Mod, bases: u32) -> Status {
+    fn set_base_limit(me as Mod, bases: u32) -> Status {
         Ok(crate::world::bases::cap(me.index, bases)?)
     }
 
     fn base_zones(_loader as Caller, zones as Out<u32>, bases as Out<u32>) -> Status {
-        let (zone_count, base_count) = crate::world::bases::zones().ok_or(Status::MISSING)?;
+        let (zone_count, base_count) = crate::world::bases::zones().ok_or(Status::UNAVAILABLE)?;
         zones.put(zone_count)?;
         bases.put(base_count)
     }

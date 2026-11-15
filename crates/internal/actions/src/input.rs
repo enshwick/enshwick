@@ -140,7 +140,7 @@ impl Input {
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] before a world runs.
+    /// step; [`WorldError::Unavailable`] before a world runs.
     ///
     /// # Examples
     ///

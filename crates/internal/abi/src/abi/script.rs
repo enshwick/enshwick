@@ -1,6 +1,6 @@
 //! The ABI's own types as a script sees them.
 
-use super::{Bounds, Level, Side};
+use super::{Bounds, Extent, Level, Side};
 use crate::script::{Choice, Error, Field, FromScript, IntoScript, Record, Ty, Typed, Value};
 
 /// A side by name, as `mods.side` answers it.
@@ -81,6 +81,23 @@ impl Typed for Bounds {
 }
 
 impl IntoScript for Bounds {
+    fn into_value(self) -> Value {
+        Value::Record(vec![self.min.into_value(), self.max.into_value()])
+    }
+}
+
+impl Typed for Extent {
+    const TY: &'static Ty = &Ty::Record(&Record::new(
+        "Extent",
+        "A box in the world in metres, by its lowest and highest corner.",
+        &[
+            Field::new("min", "The lowest corner.", <[f64; 3] as Typed>::TY),
+            Field::new("max", "The highest corner.", <[f64; 3] as Typed>::TY),
+        ],
+    ));
+}
+
+impl IntoScript for Extent {
     fn into_value(self) -> Value {
         Value::Record(vec![self.min.into_value(), self.max.into_value()])
     }

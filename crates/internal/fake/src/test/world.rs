@@ -83,7 +83,7 @@ impl FakeHost {
     /// let health = [80.0f32.to_le_bytes(), 100.0f32.to_le_bytes()].concat();
     /// let loader = enshwick::test::FakeHost::new()
     ///     .component(enshwick::Entity(4096), 0x027a_c564, &health)
-    ///     .template(enshwick::Entity(4096), [0x3a; 16])
+    ///     .template(enshwick::Entity(4096), enshwick::abi::Guid([0x3a; 16]))
     ///     .install();
     /// # let _ = loader;
     /// ```
@@ -182,7 +182,7 @@ impl FakeHost {
             EntityPlace {
                 entity: enshwick_core::Entity(entity.0),
                 reserved: 0,
-                position: enshwick_core::ecs::fixed(position),
+                position,
             },
         ));
         self
@@ -247,13 +247,17 @@ impl FakeHost {
         self
     }
 
-    /// The template GUID of `entity`, in file order.
+    /// The template GUID of `entity`.
     ///
     /// # Examples
     ///
     /// See [`FakeHost::component`].
     #[must_use]
-    pub fn template(mut self, entity: enshwick_core::Entity, guid: [u8; 16]) -> Self {
+    pub fn template(
+        mut self,
+        entity: enshwick_core::Entity,
+        guid: enshwick_core::content::Guid,
+    ) -> Self {
         self.templates.insert(entity.0, guid);
         self
     }
@@ -342,15 +346,15 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.set_daytime(DaytimeInfo {
     ///     header: Header::of::<DaytimeInfo>(),
-    ///     time: 0,
-    ///     day_start: 6 * 3_600_000_000_000,
-    ///     day_end: 18 * 3_600_000_000_000,
-    ///     day_length: 1_800_000_000_000,
-    ///     night_length: 720_000_000_000,
+    ///     time_ns: 0,
+    ///     day_start_ns: 6 * 3_600_000_000_000,
+    ///     day_end_ns: 18 * 3_600_000_000_000,
+    ///     day_length_ns: 1_800_000_000_000,
+    ///     night_length_ns: 720_000_000_000,
     ///     speed: 1.0,
     ///     flags: 0,
     /// });
-    /// assert_eq!(loader.daytime().map(|info| info.time), Some(0));
+    /// assert_eq!(loader.daytime().map(|info| info.time_ns), Some(0));
     /// ```
     pub fn set_daytime(&self, info: enshwick_core::abi::DaytimeInfo) {
         table::with((), |s| s.daytime = Some(info));
@@ -367,7 +371,8 @@ impl Installed {
         table::with(None, |s| s.daytime)
     }
 
-    /// The mod's factor on the clock's speed, once it asked to change it.
+    /// The factor on the clock's speed, every mod's factor multiplied as the
+    /// loader applies them, once a mod asked to change it.
     ///
     /// # Examples
     ///
@@ -377,7 +382,10 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn clock_speed(&self) -> Option<f32> {
-        table::with(None, |s| s.clock_speed)
+        table::with(None, |s| {
+            (!s.clock_speeds.is_empty())
+                .then(|| s.clock_speeds.iter().map(|(_, factor)| factor).product())
+        })
     }
 
     /// Sets the game settings the fake reports, the engine's settings struct
@@ -786,7 +794,7 @@ pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &enshwick_core::abi::Ter
         edit.position
             .iter()
             .zip(end)
-            .any(|(&metres, stop)| f64::from(metres) * 2.0 >= f64::from(stop))
+            .any(|(&metres, stop)| metres * 2.0 >= f64::from(stop))
     })
 }
 
@@ -798,7 +806,7 @@ pub(crate) fn edit_loaded(grids: &[VoxelGrid], edit: &enshwick_core::abi::Terrai
         clippy::cast_sign_loss,
         reason = "a checked edit's position is finite and at 0 or more; `as` saturates"
     )]
-    let at = edit.position.map(|metres| (f64::from(metres) * 2.0) as u32);
+    let at = edit.position.map(|metres| (metres * 2.0) as u32);
     grids.is_empty() || grids.iter().any(|grid| grid.get(at).is_some())
 }
 
@@ -943,7 +951,7 @@ impl FakeZones {
     /// with the permission mask `permissions`, as the loader decides: the
     /// game's terrain tool rule for the permissions, then the building area
     /// and strict no-build tests Enshwick adds from the building cursor.
-    pub(crate) fn refusal(&self, permissions: u8, min: [f64; 3], max: [f64; 3]) -> u32 {
+    pub(crate) fn refusal(&self, permissions: u32, min: [f64; 3], max: [f64; 3]) -> u32 {
         use enshwick_core::abi::{BuildRights, PlayerInfo};
         if permissions & PlayerInfo::CAN_EDIT_WORLD == 0 {
             return BuildRights::NO_CAN_EDIT_WORLD;

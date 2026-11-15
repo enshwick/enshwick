@@ -32,7 +32,7 @@ mod tests {
         Interaction {
             header: Header::of::<Interaction>(),
             kind,
-            player,
+            character: player,
             target: Entity(4096),
             item,
             known,

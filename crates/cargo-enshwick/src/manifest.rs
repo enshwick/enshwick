@@ -65,7 +65,7 @@ unsafe fn describe(manifest: &Manifest) -> String {
     } else {
         // SAFETY: `authors` is non-null, checked just before; the caller
         // guarantees `author_count` aligned names there for the call.
-        unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
+        unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count as usize) }
     };
     let authors: Vec<String> = authors.iter().map(text).collect();
     let exports = if manifest.exports.is_null() {
@@ -73,7 +73,7 @@ unsafe fn describe(manifest: &Manifest) -> String {
     } else {
         // SAFETY: `exports` is non-null, checked just before; the caller
         // guarantees `export_count` aligned names there for the call.
-        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) }
+        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count as usize) }
     };
     let exports: Vec<String> = exports.iter().map(text).collect();
     for (key, value) in [
@@ -94,7 +94,9 @@ unsafe fn describe(manifest: &Manifest) -> String {
     } else {
         // SAFETY: `dependencies` is non-null, checked just before; the caller
         // guarantees `dependency_count` aligned entries there for the call.
-        unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
+        unsafe {
+            core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count as usize)
+        }
     };
     for dependency in dependencies {
         let relation = match dependency.relation {
@@ -174,8 +176,8 @@ fn query(dll: &Path) -> Result<Manifest, String> {
             .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))
     };
     // SAFETY: the ABI gives `exports::ABI` the signature
-    // `extern "system" fn() -> u32`.
-    let abi: unsafe extern "system" fn() -> u32 =
+    // `extern "system" fn() -> u16`.
+    let abi: unsafe extern "system" fn() -> u16 =
         unsafe { core::mem::transmute(export(enshwick_core::abi::exports::ABI)?) };
     // SAFETY: `abi` is the mod's `exports::ABI`, which takes no arguments and
     // returns a constant, the major that decides how the manifest reads.
@@ -269,21 +271,21 @@ mod tests {
         let dependencies = [
             relation("you.trading-post", ">=0.1, <1.0", Relation::REQUIRES),
             relation("you.lanterns", "", Relation::AFTER),
-            relation("old-stalls", "<0.3", Relation::BREAKS),
+            relation("you.old-stalls", "<0.3", Relation::BREAKS),
         ];
         let manifest = Manifest {
             side: Side::BOTH,
             flags: ManifestFlags::NONE,
             dependencies: dependencies.as_ptr(),
-            dependency_count: dependencies.len(),
+            dependency_count: u32::try_from(dependencies.len()).unwrap(),
             name: Str::new("Market Stalls"),
             description: Str::new("Stalls that sell what players craft"),
             authors: AUTHORS.as_ptr(),
-            author_count: AUTHORS.len(),
+            author_count: u32::try_from(AUTHORS.len()).unwrap_or(u32::MAX),
             license: Str::new("MIT"),
             homepage: Str::new("https://github.com/enshwick/enshwick"),
             exports: EXPORTS.as_ptr(),
-            export_count: EXPORTS.len(),
+            export_count: u32::try_from(EXPORTS.len()).unwrap(),
             ..plain("you.market-stalls", "0.2.0")
         };
         assert_eq!(
@@ -295,7 +297,7 @@ mod tests {
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
              exports: content:stall, event:opened\nside: both, in the join check\n\
              requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
-             breaks: old-stalls <0.3"
+             breaks: you.old-stalls <0.3"
         );
     }
 }

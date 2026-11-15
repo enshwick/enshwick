@@ -5,16 +5,23 @@ use core::ffi::c_void;
 
 use crate::test::table::{Registered, State, with};
 use enshwick_core::abi::{
-    ComfortFn, ExperiencePassFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, SkillCheckFn, Status,
+    ComfortFilterFn, ExperienceFilterFn, KnowledgeInfo, KnowledgeInputFilterFn, ModHandle,
+    SkillCheckFn, Status,
 };
 
 pub(crate) extern "system" fn skill_override(
     me: ModHandle,
     node: enshwick_core::abi::SkillNode,
-    callback: SkillCheckFn,
+    callback: Option<SkillCheckFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.skills.push((node, Registered::new(callback, user, me)));
         Status::OK
     })
@@ -22,10 +29,16 @@ pub(crate) extern "system" fn skill_override(
 
 pub(crate) extern "system" fn comfort_filter(
     me: ModHandle,
-    callback: ComfortFn,
+    callback: Option<ComfortFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.comfort_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -33,10 +46,16 @@ pub(crate) extern "system" fn comfort_filter(
 
 pub(crate) extern "system" fn experience_filter(
     me: ModHandle,
-    callback: ExperiencePassFn,
+    callback: Option<ExperienceFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.experience_filters
             .push(Registered::new(callback, user, me));
         Status::OK
@@ -73,8 +92,7 @@ fn flag_outside(kind: u32, value: u32, expected: u32) -> bool {
         && (value >= u32::BITS || (expected != 0 && expected & (1 << value) == 0))
 }
 
-pub(crate) extern "system" fn revoke_knowledge(
-    _me: ModHandle,
+fn revoke(
     entity: enshwick_core::Entity,
     id: enshwick_core::abi::KnowledgeId,
     kind: u32,
@@ -98,30 +116,35 @@ pub(crate) extern "system" fn revoke_knowledge(
     })
 }
 
-pub(crate) extern "system" fn account_knowledge(
-    _me: ModHandle,
+fn for_account(
     key: enshwick_core::PlayerKey,
     id: enshwick_core::abi::KnowledgeId,
     kind: u32,
     value: u32,
-    revoke: u32,
+    revoke: bool,
 ) -> Status {
     with(Status::MISSING, |s| {
         // As the loader, which keeps only a character's knowledge per account.
         if definition(s, id, kind).map(|(scope, _)| scope) != Ok(KnowledgeInfo::PLAYER) {
             return Status::BAD_ARGS;
         }
-        s.account_changes.push((key, id, kind, value, revoke != 0));
+        s.account_changes.push((key, id, kind, value, revoke));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn knowledge_input_filter(
     me: ModHandle,
-    callback: KnowledgeInputFn,
+    callback: Option<KnowledgeInputFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.knowledge_input_filters
             .push(Registered::new(callback, user, me));
         Status::OK
@@ -188,8 +211,30 @@ pub(crate) extern "system" fn game_query(
     Status::OK
 }
 
-pub(crate) extern "system" fn grant_knowledge(
+/// As the loader's `change_knowledge`: a grant or revoke of a character
+/// or the world, or a change of an account.
+pub(crate) extern "system" fn change_knowledge(
     _me: ModHandle,
+    change: *const enshwick_core::abi::KnowledgeChange,
+) -> Status {
+    let Some(change) = super::get_headed(change) else {
+        return Status::BAD_ARGS;
+    };
+    let revoking = match change.op {
+        enshwick_core::abi::KnowledgeChange::GRANT => false,
+        enshwick_core::abi::KnowledgeChange::REVOKE => true,
+        _ => return Status::BAD_ARGS,
+    };
+    let (id, kind, value) = (change.id, u32::from(change.kind), change.value);
+    match (change.account.get(), change.entity) {
+        (0, entity) if revoking => revoke(entity, id, kind, value),
+        (0, entity) => grant(entity, id, kind, value),
+        (_, enshwick_core::Entity(0)) => for_account(change.account, id, kind, value, revoking),
+        _ => Status::BAD_ARGS,
+    }
+}
+
+fn grant(
     entity: enshwick_core::Entity,
     id: enshwick_core::abi::KnowledgeId,
     kind: u32,

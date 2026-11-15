@@ -205,7 +205,7 @@ impl FakeHost {
         )
     }
 
-    /// Plays a game build without inventory transactions: `inventory_open`
+    /// Plays a game build without inventory transactions: `request_inventory`
     /// answers [`Status::MISSING`](enshwick_core::abi::Status::MISSING).
     ///
     /// # Examples
@@ -296,7 +296,9 @@ impl Installed {
     }
 
     /// Runs the mod's damage filters on `check` as the loader does before
-    /// the game applies damage; returns what they left.
+    /// the game applies damage, with a hit's `amounts`, one per damage type
+    /// of the game build the test plays, lent as the loader lends its own;
+    /// returns what they left, with the amounts back in `amounts`.
     ///
     /// # Examples
     ///
@@ -310,23 +312,34 @@ impl Installed {
     ///     target: enshwick::Entity(2),
     ///     source: enshwick::Entity(0),
     ///     attacker: enshwick::Entity(0),
-    ///     amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
     ///     total: 40.0,
+    ///     amount_count: 0,
+    ///     amounts: core::ptr::null_mut(),
     /// };
-    /// assert_eq!(loader.damage(fall), fall, "no filters, no change");
+    /// assert_eq!(loader.damage(fall, &mut []), fall, "no filters, no change");
     /// ```
     #[must_use]
     pub fn damage(
         &self,
         mut check: enshwick_core::abi::DamageCheck,
+        amounts: &mut [f32],
     ) -> enshwick_core::abi::DamageCheck {
+        if !amounts.is_empty() {
+            check.amount_count = u32::try_from(amounts.len()).unwrap_or(u32::MAX);
+            check.amounts = amounts.as_mut_ptr();
+        }
         // One filter at a time, outside the lock, without copying the list:
         // a bench of a filter counts its own allocations alone.
         let mut at = 0;
         while let Some(filter) = table::with(None, |s| s.damage_filters.get(at).copied()) {
-            // SAFETY: the filter the mod registered, with its pointer.
+            // SAFETY: the filter the mod registered, with its pointer; the
+            // amounts `check` points at are `amounts`, borrowed for the call.
             filter.run(|callback, user| unsafe { callback(&raw mut check, user) });
             at += 1;
+        }
+        if !amounts.is_empty() {
+            check.amount_count = 0;
+            check.amounts = core::ptr::null_mut();
         }
         check
     }
@@ -382,7 +395,7 @@ impl Installed {
 /// # Examples
 ///
 /// See [`Installed::inventory_requests`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct SubmittedRequest {
     /// The operations, in order.

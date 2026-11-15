@@ -59,7 +59,7 @@ mod tests {
                 .transaction()
                 .terrain_dig(at, 2.0, Shape::Round, &[])
                 .commit(),
-            Err(WorldError::Missing),
+            Err(WorldError::Unavailable),
             "no world runs yet"
         );
         loader.set_terrain(&[rock()]);
@@ -304,8 +304,13 @@ mod tests {
         // SAFETY: `api` points at the fake's table, which lives for the
         // process.
         let api = unsafe { &*loader.api() };
-        let status =
-            (api.transaction_commit)(enshwick::abi::ModHandle(1), &raw const op, 1, &raw mut id);
+        let status = (api.transaction_commit)(
+            enshwick::abi::ModHandle(1),
+            enshwick::Entity(0),
+            &raw const op,
+            1,
+            &raw mut id,
+        );
         assert_eq!(status, Status::BAD_ARGS);
     }
 

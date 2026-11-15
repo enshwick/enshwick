@@ -30,7 +30,7 @@
 
 use crate::__load::*;
 use crate::engine_ids as ids;
-use crate::resources::{Registry, Value};
+use crate::resources::Value;
 use crate::{ItemId, Off};
 
 use super::items::NewItem;
@@ -54,7 +54,6 @@ const RECIPE_GUID: &str = "recipeGuid";
 const REQUIRED: &str = "requiredProps";
 const REQUIRED_MASK: &str = "requiredPropsMask";
 const MARK: &str = "ecs::RequiredCraftingProp";
-const IN_RANGE: &str = "craftingPropsInRange";
 
 /// A crafting prop: placed in a base, it lets the base's workshops make the
 /// recipes that require it.
@@ -181,21 +180,6 @@ fn crafting_mark(guid: Guid) -> ComponentChange {
     )
 }
 
-/// The first bit of the crafting prop mask no vanilla prop of `props`
-/// takes: one past the highest index, which need not be the count.
-fn first_free(props: &[Value]) -> Result<u8, Off> {
-    let next = props
-        .iter()
-        .map(|prop| match prop.field("craftingPropIndex") {
-            Some(Value::Uint(index)) => index.saturating_add(1),
-            _ => 0,
-        })
-        .max()
-        .unwrap_or(0)
-        .max(u64::try_from(props.len()).unwrap_or(u64::MAX));
-    u8::try_from(next).map_err(|_| Off::new("crafting props: more than 255 in the game"))
-}
-
 /// The workshop registry `registry` with the crafting prop `entry` after
 /// its others.
 fn list_prop(mut registry: Value, entry: &Value) -> Result<Value, Off> {
@@ -300,10 +284,6 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
-    /// The bits of the game's crafting prop mask and the count of the
-    /// game's own crafting props.
-    fn crafting_prop_bounds(&self) -> Result<(u8, u8), Off>;
-
     /// The index the loader gives the crafting prop `prop`.
     fn crafting_prop_index(&self, prop: Guid) -> Result<u8, Off>;
 
@@ -321,39 +301,10 @@ pub(crate) trait LoadHelpers {
 }
 
 impl LoadHelpers for crate::BaseLoad {
-    fn crafting_prop_bounds(&self) -> Result<(u8, u8), Off> {
-        let registry = Registry::game()?;
-        let menu = registry
-            .hashed(self.hash(ids::CLIENT_CRAFTING_INTERACTION)?)
-            .ok_or_else(|| Off::new("crafting props: the crafting menu is not reflected"))?;
-        let width = registry
-            .all_fields(menu)
-            .iter()
-            .find(|field| field.name() == IN_RANGE)
-            .and_then(|field| field.type_name())
-            .and_then(|name| registry.named(name))
-            .and_then(|mask| u8::try_from(mask.size() * 8).ok())
-            .ok_or_else(|| Off::new("crafting props: the mask is not reflected"))?;
-        let vanilla = self
-            .host()
-            .game_value(types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?)?;
-        let Some(Value::List(props)) = vanilla.field(PROPS) else {
-            return Err(Off::new("workshop registry: no list of crafting props"));
-        };
-        Ok((first_free(props)?, width))
-    }
-
     fn crafting_prop_index(&self, prop: Guid) -> Result<u8, Off> {
-        let (first, width) = self.crafting_prop_bounds()?;
         let host = self.host();
         let mut index = 0u8;
-        let status = (host.api().crafting_prop)(
-            host.handle(),
-            &raw const prop.0,
-            first,
-            width,
-            &raw mut index,
-        );
+        let status = (host.api().crafting_prop)(host.handle(), &raw const prop, &raw mut index);
         crate::load::ok(status, index, || format!("crafting prop {prop}"))
     }
 
@@ -418,20 +369,6 @@ mod tests {
         };
         assert_eq!((props.len(), props.last()), (52, Some(&entry)));
         assert!(list_prop(Value::Struct(Vec::new()), &entry).is_err());
-    }
-
-    #[test]
-    fn the_first_free_bit_is_past_the_highest_vanilla_index_not_the_count() {
-        let indexed = |indices: &[u64]| -> Vec<Value> {
-            indices
-                .iter()
-                .map(|&i| Value::Struct(vec![("craftingPropIndex".into(), Value::Uint(i))]))
-                .collect()
-        };
-        assert_eq!(first_free(&indexed(&[0, 1, 2])), Ok(3));
-        assert_eq!(first_free(&indexed(&[0, 1, 5])), Ok(6), "a gap");
-        assert_eq!(first_free(&[]), Ok(0));
-        assert!(first_free(&indexed(&[255])).is_err());
     }
 
     #[test]

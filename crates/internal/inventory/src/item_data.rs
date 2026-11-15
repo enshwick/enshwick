@@ -87,13 +87,13 @@ pub enum SetError {
     )]
     #[error("the value takes {0} bytes, more than {MAX_VALUE}")]
     TooLarge(usize),
-    /// Called on a client that hosts no game, or for entity data off the
+    /// Called where no server runs, as on a client that hosts no game, or
+    /// before the server's world has loaded, or for entity data off the
     /// server's game thread.
-    #[error("only the server sets mod data, entity data on its game thread")]
+    #[error(
+        "only the server sets mod data, once its world has loaded, entity data on its game thread"
+    )]
     NotServer,
-    /// The world has not loaded yet.
-    #[error("the world has not loaded")]
-    NoWorld,
     /// The entity does not exist.
     #[error("no such entity")]
     NoEntity,
@@ -221,8 +221,7 @@ where
 impl enshwick_base::load::StatusError for SetError {
     fn of(status: Status) -> Self {
         match status {
-            Status::REFUSED => Self::NotServer,
-            Status::MISSING => Self::NoWorld,
+            Status::UNAVAILABLE => Self::NotServer,
             Status::NOT_KEPT => Self::NotKept,
             _ => Self::Refused(status.0),
         }
@@ -290,7 +289,7 @@ impl LoadHelpers for crate::BaseLoad {
     {
         let host = self.host();
         let mut kind = 0;
-        let status = (host.api().item_data_open)(host.handle(), Str::new(id), &raw mut kind);
+        let status = (host.api().define_item_data)(host.handle(), Str::new(id), &raw mut kind);
         crate::load::ok(
             status,
             ItemData {

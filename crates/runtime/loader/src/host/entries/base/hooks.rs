@@ -6,11 +6,11 @@ use enshwick_core::abi::{HookSpec, MidHookSpec, Status};
 use crate::engine::chains::Link;
 use crate::engine::mid::MidLink;
 use crate::engine::mod_index::ModIndex;
-use crate::host::layer::{In, Mod, Out, entries};
+use crate::host::layer::{Caller, Headed, Mod, Out, entries};
 use crate::host::memory::slice;
 
 entries! {
-    fn hook(me as Mod, spec as In<HookSpec>) -> Status {
+    fn hook(me as Mod, spec as Headed<HookSpec>) -> Status {
         // SAFETY: `next` is a static inside the mod's DLL, which is never unloaded.
         let next = unsafe { spec.next.as_ref::<'static>() }.ok_or(Status::BAD_ARGS)?;
         // A pack's links are the API's own code in the loader, shared by
@@ -33,10 +33,10 @@ entries! {
         Ok(())
     }
 
-    fn hook_at(me as Mod, spec as In<MidHookSpec>) -> Status {
+    fn hook_at(me as Mod, spec as Headed<MidHookSpec>) -> Status {
         let link = MidLink {
             owner: me.index,
-            handler: spec.handler,
+            handler: spec.handler.ok_or(Status::BAD_ARGS)?,
             user: spec.user.expose_provenance(),
             priority: spec.priority,
             flags: spec.flags,
@@ -45,12 +45,11 @@ entries! {
         Ok(())
     }
 
-    fn code_range(start as Out<u64>, len as Out<u64>) -> Status {
-        let (address, size) = crate::engine::loader::loader()
-            .and_then(|loader| crate::engine::code::text(loader.base))
-            .ok_or(Status::MISSING)?;
+    fn code_range(loader as Caller, start as Out<u64>, len as Out<u32>) -> Status {
+        let (address, size) =
+            crate::engine::code::text(loader.base).ok_or(Status::UNAVAILABLE)?;
         start.put(address as u64)?;
-        len.put(size as u64)
+        len.put(u32::try_from(size).map_err(|_| Status::UNAVAILABLE)?)
     }
 
     fn patch_code(
@@ -58,8 +57,9 @@ entries! {
         address: u64,
         expected: *const u8,
         replacement: *const u8,
-        len: usize,
+        len: u32,
     ) -> Status {
+        let len = len as usize;
         let address = usize::try_from(address).map_err(|_| Status::BAD_ARGS)?;
         let text = crate::engine::code::text(me.loader.base).ok_or(Status::BAD_ARGS)?;
         // SAFETY: the ABI has the mod pass `len` readable bytes at a non-null
@@ -84,7 +84,7 @@ entries! {
         Ok(())
     }
 
-    fn workshop_recipes() -> u32 {
-        Ok(crate::engine::code::workshop_recipes())
+    fn workshop_recipes(_loader as Caller, out as Out<u32>) -> Status {
+        out.put(crate::engine::code::workshop_recipes())
     }
 }

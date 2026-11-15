@@ -310,11 +310,12 @@ fn is_part(part: &str) -> bool {
 
 /// The full id of `id` asked for by a mod whose bare names take the
 /// namespace `mod_id`: `name` names the mod's own kind, `mod:name` any
-/// mod's.
+/// mod's, and the loader's own copy of the API names its kinds after it.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
-    (enshwick_core::abi::is_valid_old_form_id(namespace) && is_part(name))
-        .then(|| format!("{namespace}:{name}"))
+    let owner = enshwick_core::abi::is_valid_id(namespace)
+        || namespace == crate::engine::settings::LOADER_ID;
+    (owner && is_part(name)).then(|| format!("{namespace}:{name}"))
 }
 
 /// Why a data kind did not open, or a value was not read or kept.
@@ -350,9 +351,12 @@ pub(crate) enum UseItemDataError {
     /// Off the server's game thread.
     #[error("off the server's game thread")]
     WrongThread,
-    /// No world is loaded, or the holder has no value of the kind.
+    /// The holder has no value of the kind.
     #[error("no value")]
     NoValue,
+    /// No world is loaded yet.
+    #[error("no world is loaded")]
+    NoWorld,
     /// The loader's own kind is not open, as no feature asked for it.
     #[error("the loader's data kind is not open")]
     Unopened,
@@ -653,7 +657,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, UseItemD
     let scope = self::kind(kind).ok_or(UseItemDataError::UnknownKind)?.scope;
     if serves() {
         let mut server = STATE.server.relock();
-        let server = server.as_mut().ok_or(UseItemDataError::NoValue)?;
+        let server = server.as_mut().ok_or(UseItemDataError::NoWorld)?;
         let record = server
             .values
             .get(&(kind, pide))
@@ -737,7 +741,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), U
     };
     {
         let mut server = STATE.server.relock();
-        let server = server.as_mut().ok_or(UseItemDataError::NoValue)?;
+        let server = server.as_mut().ok_or(UseItemDataError::NoWorld)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
             if spec.scope == Scope::Item {

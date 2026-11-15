@@ -261,7 +261,7 @@ fn read_markers(
     let archive = crate::engine::archive::game().ok_or(ReadSceneError::Archive)?;
     let chunk = archive
         .resource(&ResourceKey {
-            guid: key.scene,
+            guid: enshwick_core::content::Guid(key.scene),
             type_hash: chunk_hash,
             part: key.part,
         })
@@ -269,7 +269,7 @@ fn read_markers(
     let placed = placements(&layout, &chunk).ok_or(ReadSceneError::ChunkUnreadable)?;
     let (found, skipped) = collect(&layout, &placed, marker_hash, |guid| {
         archive.resource(&ResourceKey {
-            guid,
+            guid: enshwick_core::content::Guid(guid),
             type_hash: types::TEMPLATE,
             part: 0,
         })
@@ -287,8 +287,8 @@ fn read_markers(
         .map(|(placed, data)| MapMarkerInfo {
             header: Header::of::<MapMarkerInfo>(),
             position: placed.position,
-            marker_type: data.marker_type,
-            label: data.label,
+            marker_type: enshwick_core::content::Guid(data.marker_type),
+            label: enshwick_core::content::Guid(data.label),
         })
         .collect())
 }
@@ -301,7 +301,7 @@ fn read_frame(layout: FrameLayout, key: SceneKey) -> Result<MapFrameInfo, ReadFr
     let archive = crate::engine::archive::game().ok_or(ReadFrameError::Archive)?;
     let part0 = |type_hash| {
         archive.resource(&ResourceKey {
-            guid: key.scene,
+            guid: enshwick_core::content::Guid(key.scene),
             type_hash,
             part: 0,
         })

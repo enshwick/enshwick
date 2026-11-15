@@ -386,7 +386,7 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
         let label = words("demo.marker.label");
         let marker = enshwick_core::abi::UiMarker {
             header: enshwick_core::abi::Header::of::<enshwick_core::abi::UiMarker>(),
-            position,
+            position: enshwick_core::ecs::metres(position),
             label: enshwick_core::abi::Str::new(&label),
             color: enshwick_core::abi::UiMarker::GREEN,
             marker_type: 0,
@@ -404,9 +404,9 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
             markers.push(marker);
             markers.extend(fast_travel.map(|marker_type| enshwick_core::abi::UiMarker {
                 position: [
-                    position[0].saturating_add(20 << 32),
-                    position[1],
-                    position[2],
+                    marker.position[0] + 20.0,
+                    marker.position[1],
+                    marker.position[2],
                 ],
                 marker_type,
                 ..marker

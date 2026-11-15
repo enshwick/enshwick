@@ -39,7 +39,7 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, name: &str) -> PlayerInfo {
-        let mut bytes = [0u8; 64];
+        let mut bytes = [0u8; PlayerInfo::NAME_MAX];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
@@ -47,7 +47,7 @@ mod tests {
             entity: enshwick::Entity(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: 0,
-            name_len: u8::try_from(name.len()).unwrap(),
+            name_len: u32::try_from(name.len()).unwrap(),
             name: bytes,
         }
     }

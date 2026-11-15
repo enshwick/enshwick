@@ -135,7 +135,9 @@ mod tests {
         let manifest = manifest(query);
         // SAFETY: `exports` points at `export_count` names that live as long
         // as the manifest.
-        let names = unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) };
+        let names = unsafe {
+            core::slice::from_raw_parts(manifest.exports, manifest.export_count as usize)
+        };
         names
             .iter()
             // SAFETY: each name lives as long as the manifest.

@@ -210,7 +210,7 @@ impl LoadMethods for crate::BaseLoad {
         };
         let mut kind = 0;
         let status =
-            (host.api().entity_data_open)(host.handle(), Str::new(id), flags, &raw mut kind);
+            (host.api().define_entity_data)(host.handle(), Str::new(id), flags, &raw mut kind);
         crate::load::ok(
             status,
             EntityData {

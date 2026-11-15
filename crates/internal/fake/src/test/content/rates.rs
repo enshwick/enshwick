@@ -91,7 +91,7 @@ mod tests {
         let api = api(&loader);
         let speed = Rate::FactoryProductionSpeed.id();
         let drops = Rate::ResourceDropStackAmount.id();
-        assert_eq!((api.rate)(ModHandle(1), speed), Status::MISSING);
+        assert_eq!((api.rate)(ModHandle(1), speed), Status::UNAVAILABLE);
         assert_eq!(
             (api.rate)(ModHandle(1), enshwick_core::abi::RateId(0)),
             Status::BAD_ARGS

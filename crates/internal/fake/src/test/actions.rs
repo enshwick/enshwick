@@ -104,7 +104,7 @@ impl Installed {
     /// let call = Interaction {
     ///     header: Header::of::<Interaction>(),
     ///     kind: Interaction::OPEN,
-    ///     player: enshwick::Entity(1),
+    ///     character: enshwick::Entity(1),
     ///     target: enshwick::Entity(2),
     ///     item: enshwick::ItemId::new(0),
     ///     known: 0,
@@ -118,7 +118,9 @@ impl Installed {
         let filters = table::with(Vec::new(), |s| s.interaction_filters.clone());
         filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the mod's pointer.
-            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
+            filter.run(|callback, user| unsafe {
+                callback(call, user) != enshwick_core::abi::FILTER_REFUSE
+            })
         })
     }
 
@@ -139,7 +141,9 @@ impl Installed {
         let filters = table::with(Vec::new(), |s| s.craft_filters.clone());
         filters.iter().all(|filter| {
             // SAFETY: a filter the mod registered with its own pointer.
-            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
+            filter.run(|callback, user| unsafe {
+                callback(call, user) != enshwick_core::abi::FILTER_REFUSE
+            })
         })
     }
 
@@ -160,9 +164,9 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let wall = BuildCheck {
     ///     header: Header::of::<BuildCheck>(),
-    ///     player: enshwick::Entity(2),
+    ///     character: enshwick::Entity(2),
     ///     item: enshwick::ItemId::new(7),
-    ///     position: [0; 3],
+    ///     position: [0.0; 3],
     ///     reason: core::ptr::null_mut(),
     /// };
     /// assert_eq!(loader.build(&wall), Ok(()));
@@ -176,7 +180,7 @@ impl Installed {
             // SAFETY: a filter the mod registered with its own pointer; `asked`
             // and its `reason` slot live on this stack for the call.
             let allowed = filter.run(|callback, user| unsafe { callback(&raw const asked, user) });
-            if allowed == 0 {
+            if allowed == enshwick_core::abi::FILTER_REFUSE {
                 // SAFETY: the refusing filter wrote a text it keeps until its
                 // next call on this thread, or left the empty one.
                 let reason = unsafe { reason.as_str() }.filter(|r| !r.is_empty());

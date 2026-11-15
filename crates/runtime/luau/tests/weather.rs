@@ -15,11 +15,11 @@ mod tests {
             header: Header::of::<WeatherFront>(),
             layer: 0,
             effect: WeatherFront::RAIN,
-            position: [0; 3],
+            position: [0.0; 3],
             radius: 300.0,
             reserved: 0,
-            remaining: 90_000_000_000,
-            phenomenon: [phenomenon; 16],
+            remaining_ns: 90_000_000_000,
+            phenomenon: enshwick::content::Guid([phenomenon; 16]),
         }
     }
 

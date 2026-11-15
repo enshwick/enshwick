@@ -1,18 +1,18 @@
-abi 11.30
+abi 12.0
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
-ActionCall size 216 align 8 born 144
+ActionCall size 96 align 8 born 96
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     language at 12 size 4 type u32
-    player at 16 size 96 type PlayerInfo
-    action at 112 size 16 type Str
-    args at 128 size 16 type Str
-    target at 144 size 40 type ActionTarget
-    reply at 184 size 8 type *mut ActionReply
-    word at 192 size 16 type Str
-    via at 208 size 4 type u32
-    reason at 212 size 4 type u32
+    player at 16 size 8 type *const PlayerInfo
+    action at 24 size 16 type Str
+    args at 40 size 16 type Str
+    target at 56 size 8 type *const ActionTarget
+    reply at 64 size 8 type *mut ActionReply
+    word at 72 size 16 type Str
+    via at 88 size 4 type u32
+    reason at 92 size 4 type u32
 ActionReply size 32 align 8 born 32
     header at 0 size 8 type Header
     done at 8 size 1 type u8
@@ -28,19 +28,9 @@ ActiveBuff size 40 align 8 born 40
     entity at 12 size 4 type Entity
     slot at 16 size 4 type u32
     level at 20 size 4 type u32
-    duration at 24 size 8 type i64
-    remaining at 32 size 8 type i64
-AffixDefData size 64 align 8 born 64
-    header at 0 size 8 type Header
-    text at 8 size 16 type Str
-    group at 24 size 16 type Str
-    modifiers at 40 size 8 type *const AffixModifierData
-    modifier_count at 48 size 4 type u32
-    weight at 52 size 4 type u32
-    categories at 56 size 4 type u32
-    rarity at 60 size 1 type u8
-    reserved at 61 size 3 type [u8; 3]
-AffixModifierData size 20 align 4
+    duration_ns at 24 size 8 type i64
+    remaining_ns at 32 size 8 type i64
+AffixModifierSpec size 20 align 4
     stat at 0 size 4 type u32
     op at 4 size 1 type u8
     reserved at 5 size 3 type [u8; 3]
@@ -56,6 +46,15 @@ AffixRoll size 32 align 8 born 32
     max_rarity at 18 size 1 type u8
     flags at 19 size 1 type u8
     seed at 24 size 8 type u64
+AffixSpec size 48 align 8 born 48
+    header at 0 size 8 type Header
+    group at 8 size 16 type Str
+    modifiers at 24 size 8 type *const AffixModifierSpec
+    modifier_count at 32 size 4 type u32
+    weight at 36 size 4 type u32
+    categories at 40 size 4 type u32
+    rarity at 44 size 1 type u8
+    reserved at 45 size 3 type [u8; 3]
 AltarInfo size 856 align 8 born 856
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
@@ -66,12 +65,12 @@ AltarInfo size 856 align 8 born 856
     zone at 16 size 48 type Bounds
     levels at 64 size 768 type [Bounds; 16]
     position at 832 size 24 type [f64; 3]
-AltarLimit size 16 align 4 born 16
+AltarLimit size 24 align 4 born 24
     header at 0 size 8 type Header
     flame_level at 8 size 4 type u32
-    vanilla at 12 size 1 type u8
-    allowed at 13 size 1 type u8
-    reserved at 14 size 2 type [u8; 2]
+    vanilla at 12 size 4 type u32
+    allowed at 16 size 4 type u32
+    reserved at 20 size 4 type u32
 AltarZone size 32 align 8 born 32
     header at 0 size 8 type Header
     altar at 8 size 4 type Entity
@@ -110,7 +109,7 @@ BuffRequest size 32 align 8 born 32
     id at 12 size 4 type BuffTypeId
     level at 16 size 4 type u32
     reserved at 20 size 4 type u32
-    duration at 24 size 8 type i64
+    duration_ns at 24 size 8 type i64
 BuffTypeId size 4 align 4
     0 at 0 size 4 type u32
 BuffTypeInfo size 32 align 8 born 32
@@ -119,22 +118,22 @@ BuffTypeInfo size 32 align 8 born 32
     slot at 12 size 2 type u16
     flags at 14 size 2 type u16
     name at 16 size 4 type u32
-    duration at 24 size 8 type i64
-BuildCheck size 48 align 8 born 40
+    duration_ns at 24 size 8 type i64
+BuildCheck size 48 align 8 born 48
     header at 0 size 8 type Header
-    player at 8 size 4 type Entity
+    character at 8 size 4 type Entity
     item at 12 size 4 type ItemId
-    position at 16 size 24 type [i64; 3]
+    position at 16 size 24 type [f64; 3]
     reason at 40 size 8 type *mut Str
 BuildInfo size 48 align 8 born 48
     header at 0 size 8 type Header
     side at 8 size 1 type Side
     base at 16 size 8 type u64
     fingerprint at 24 size 20 type Fingerprint
-    table at 44 size 1 type BuildTable
+    complete at 44 size 1 type u8
 BuildRights size 64 align 8 born 64
     header at 0 size 8 type Header
-    player at 8 size 4 type Entity
+    character at 8 size 4 type Entity
     refusal at 12 size 4 type u32
     min at 16 size 24 type [f64; 3]
     max at 40 size 24 type [f64; 3]
@@ -142,26 +141,24 @@ BuildRow size 56 align 8
     side at 0 size 1 type Side
     fingerprint at 4 size 20 type Fingerprint
     symbols at 24 size 8 type *const Symbol
-    symbol_count at 32 size 8 type usize
+    symbol_count at 32 size 4 type u32
     constants at 40 size 8 type *const Symbol
-    constant_count at 48 size 8 type usize
-BuildTable size 1 align 1
-    0 at 0 size 1 type u8
-BuildingData size 52 align 4 born 52
+    constant_count at 48 size 4 type u32
+BuildingData size 64 align 8 born 64
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
-    player at 12 size 4 type Entity
+    character at 12 size 4 type Entity
     item at 16 size 4 type ItemId
     kind at 20 size 1 type u8
     replay at 21 size 1 type u8
-    template at 22 size 16 type [u8; 16]
-    position at 40 size 12 type [f32; 3]
+    template at 22 size 16 type Guid
+    position at 40 size 24 type [f64; 3]
 BuildingZoneCheck size 80 align 8 born 80
     header at 0 size 8 type Header
-    zones at 8 size 8 type *const Bounds
-    zone_count at 16 size 8 type usize
-    object at 24 size 48 type Bounds
-    margin at 72 size 8 type i64
+    zones at 8 size 8 type *const Extent
+    zone_count at 16 size 4 type u32
+    object at 24 size 48 type Extent
+    margin at 72 size 8 type f64
 CallSpec size 64 align 8 born 64
     header at 0 size 8 type Header
     name at 8 size 16 type Str
@@ -184,7 +181,7 @@ ChangeOp size 4 align 4
     0 at 0 size 4 type u32
 ChatLine size 48 align 8 born 48
     header at 0 size 8 type Header
-    player at 8 size 8 type PlayerKey
+    account at 8 size 8 type PlayerKey
     entity at 16 size 4 type Entity
     kind at 20 size 4 type u32
     loca at 24 size 8 type [u32; 2]
@@ -194,33 +191,32 @@ ChatRewrite size 24 align 8 born 24
     buffer at 8 size 8 type *mut u8
     capacity at 16 size 4 type u32
     len at 20 size 4 type u32
-ChunkData size 24 align 4 born 24
+ChunkData size 20 align 4 born 20
     header at 0 size 8 type Header
-    index at 8 size 4 type u32
-    x at 12 size 4 type u32
-    z at 16 size 4 type u32
-    size at 20 size 4 type u32
-Comfort size 28 align 4 born 28
+    x at 8 size 4 type u32
+    z at 12 size 4 type u32
+    size at 16 size 4 type u32
+Comfort size 40 align 8 born 40
     header at 0 size 8 type Header
     category at 8 size 4 type u32
     value at 12 size 4 type i32
-    position at 16 size 12 type [f32; 3]
+    position at 16 size 24 type [f64; 3]
 CommandInfo size 56 align 8 born 56
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     alias at 24 size 16 type Str
     mod_id at 40 size 16 type Str
 ContentRename size 32 align 1
-    from at 0 size 16 type [u8; 16]
-    to at 16 size 16 type [u8; 16]
-ControlEvent size 128 align 8 born 128
+    from at 0 size 16 type Guid
+    to at 16 size 16 type Guid
+ControlEvent size 40 align 8 born 40
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     kind at 24 size 4 type u32
     server at 28 size 1 type u8
     reserved at 29 size 3 type [u8; 3]
-    player at 32 size 96 type PlayerInfo
-ControlSpec size 88 align 8 born 72
+    player at 32 size 8 type *const PlayerInfo
+ControlSpec size 88 align 8 born 88
     header at 0 size 8 type Header
     name at 8 size 16 type Str
     label at 24 size 16 type Str
@@ -237,22 +233,23 @@ CraftCheck size 24 align 4 born 24
     recipe_id at 16 size 4 type RecipeId
     recipe_amount at 20 size 2 type u16
     reserved at 22 size 2 type u16
-DamageCheck size 80 align 4 born 80
+DamageCheck size 40 align 8 born 40
     header at 0 size 8 type Header
     cause at 8 size 4 type u32
     target at 12 size 4 type Entity
     source at 16 size 4 type Entity
     attacker at 20 size 4 type Entity
-    amounts at 24 size 52 type [f32; 13]
-    total at 76 size 4 type f32
+    total at 24 size 4 type f32
+    amount_count at 28 size 4 type u32
+    amounts at 32 size 8 type *mut f32
 DataChange size 80 align 8 born 80
     header at 0 size 8 type Header
-    entry at 8 size 16 type [u8; 16]
+    entry at 8 size 16 type Guid
     field at 24 size 4 type DataField
     op at 28 size 4 type ChangeOp
     value at 32 size 8 type f64
     source at 40 size 16 type Str
-    item at 56 size 16 type [u8; 16]
+    item at 56 size 16 type Guid
     select at 72 size 4 type DataSelect
     categories at 76 size 4 type u32
 DataField size 4 align 4
@@ -261,11 +258,11 @@ DataSelect size 4 align 4
     0 at 0 size 4 type u32
 DaytimeInfo size 56 align 8 born 56
     header at 0 size 8 type Header
-    time at 8 size 8 type i64
-    day_start at 16 size 8 type i64
-    day_end at 24 size 8 type i64
-    day_length at 32 size 8 type i64
-    night_length at 40 size 8 type i64
+    time_ns at 8 size 8 type i64
+    day_start_ns at 16 size 8 type i64
+    day_end_ns at 24 size 8 type i64
+    day_length_ns at 32 size 8 type i64
+    night_length_ns at 40 size 8 type i64
     speed at 48 size 4 type f32
     flags at 52 size 4 type u32
 Dependency size 40 align 8
@@ -276,7 +273,7 @@ DropRequest size 48 align 8 born 48
     header at 0 size 8 type Header
     item at 8 size 4 type ItemId
     count at 12 size 4 type u32
-    position at 16 size 24 type [i64; 3]
+    position at 16 size 24 type [f64; 3]
     level at 40 size 4 type u32
     rarity at 44 size 4 type u32
 Entity size 4 align 4
@@ -286,7 +283,7 @@ EntityDataFlags size 4 align 4
 EntityPlace size 32 align 8
     entity at 0 size 4 type Entity
     reserved at 4 size 4 type u32
-    position at 8 size 24 type [i64; 3]
+    position at 8 size 24 type [f64; 3]
 Event size 4 align 4
     0 at 0 size 4 type u32
 EventSpec size 40 align 8 born 40
@@ -298,23 +295,26 @@ EventTypeInfo size 32 align 8 born 32
     name at 8 size 16 type Str
     hash at 24 size 4 type u32
     size at 28 size 4 type u32
-ExperiencePass size 48 align 8 born 48
+ExperiencePass size 40 align 8 born 40
     header at 0 size 8 type Header
     rows at 8 size 8 type *mut ExperienceRow
-    row_count at 16 size 8 type usize
-    level_cap at 24 size 4 type u32
-    need_for at 32 size 8 type Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>
-    token at 40 size 8 type *mut c_void
+    row_count at 16 size 4 type u32
+    level_cap at 20 size 4 type u32
+    need_for at 24 size 8 type Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>
+    token at 32 size 8 type *mut c_void
 ExperienceRow size 20 align 4
     entity at 0 size 4 type Entity
     level at 4 size 4 type u32
     progress at 8 size 4 type u32
     need at 12 size 4 type u32
     gained at 16 size 4 type u32
+Extent size 48 align 8
+    min at 0 size 24 type [f64; 3]
+    max at 24 size 24 type [f64; 3]
 Fingerprint size 20 align 4
-    guid at 0 size 16 type [u8; 16]
+    guid at 0 size 16 type Guid
     age at 16 size 4 type u32
-FogInfo size 72 align 8 born 40
+FogInfo size 72 align 8 born 72
     header at 0 size 8 type Header
     width at 8 size 4 type u32
     height at 12 size 4 type u32
@@ -332,244 +332,242 @@ GameEventData size 24 align 8 born 24
     type_hash at 8 size 4 type u32
     size at 12 size 4 type u32
     data at 16 size 8 type *const u8
+Guid size 16 align 1
+    0 at 0 size 16 type [u8; 16]
 Header size 8 align 4
     size at 0 size 4 type u32
     abi_major at 4 size 2 type u16
     abi_minor at 6 size 2 type u16
 HookFlags size 4 align 4
     0 at 0 size 4 type u32
-HookSpec size 32 align 8
-    target at 0 size 8 type u64
-    detour at 8 size 8 type usize
-    next at 16 size 8 type *const Atomic<usize>
-    priority at 24 size 4 type i32
-    flags at 28 size 4 type HookFlags
-HostApi size 1696 align 8
+HookSpec size 40 align 8 born 40
+    header at 0 size 8 type Header
+    target at 8 size 8 type u64
+    detour at 16 size 8 type usize
+    next at 24 size 8 type *const Atomic<usize>
+    priority at 32 size 4 type i32
+    flags at 36 size 4 type HookFlags
+HostApi size 1640 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
-    build at 24 size 8 type extern "system" fn(*mut BuildInfo)
+    build at 24 size 8 type extern "system" fn(ModHandle, *mut BuildInfo) -> Status
     symbol at 32 size 8 type extern "system" fn(ModHandle, Str, *mut u64) -> Status
-    system at 40 size 8 type extern "system" fn(Str, *mut u64) -> Status
-    field_offset at 48 size 8 type extern "system" fn(Str, Str, *mut u64) -> Status
-    type_size at 56 size 8 type extern "system" fn(Str, *mut u32) -> Status
+    system at 40 size 8 type extern "system" fn(ModHandle, Str, *mut u64) -> Status
+    field_offset at 48 size 8 type extern "system" fn(ModHandle, Str, Str, *mut u64) -> Status
+    type_size at 56 size 8 type extern "system" fn(ModHandle, Str, *mut u32) -> Status
     hook at 64 size 8 type extern "system" fn(ModHandle, *const HookSpec) -> Status
-    caller_frame at 72 size 8 type extern "system" fn(*mut CallerFrame)
-    fault at 80 size 8 type extern "system" fn(ModHandle, Str)
-    log at 88 size 8 type extern "system" fn(ModHandle, Level, Str)
+    caller_frame at 72 size 8 type extern "system" fn(ModHandle, *mut CallerFrame) -> Status
+    fault at 80 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    log at 88 size 8 type extern "system" fn(ModHandle, Level, Str) -> Status
     settings at 96 size 8 type extern "system" fn(ModHandle, Str, *mut Str) -> Status
     publish at 104 size 8 type extern "system" fn(ModHandle, *const ServiceSpec) -> Status
     service at 112 size 8 type extern "system" fn(ModHandle, *const ServiceSpec, *mut ServiceFound) -> Status
     constant at 120 size 8 type extern "system" fn(ModHandle, Str, *mut u64) -> Status
     data_dir at 128 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
-    log_level at 136 size 8 type extern "system" fn(ModHandle) -> Level
-    subscribe at 144 size 8 type extern "system" fn(ModHandle, Event, unsafe extern "system" fn(Event, *const c_void, *mut c_void), *mut c_void) -> Status
-    type_hash at 152 size 8 type extern "system" fn(Str, *mut u32) -> Status
+    log_level at 136 size 8 type extern "system" fn(ModHandle, *mut Level) -> Status
+    subscribe at 144 size 8 type extern "system" fn(ModHandle, Event, Option<unsafe extern "system" fn(Event, *const c_void, *mut c_void)>, *mut c_void) -> Status
+    type_hash at 152 size 8 type extern "system" fn(ModHandle, Str, *mut u32) -> Status
     component at 160 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut *const c_void) -> Status
-    entity_template at 168 size 8 type extern "system" fn(ModHandle, Entity, *mut [u8; 16]) -> Status
-    player at 176 size 8 type extern "system" fn(ModHandle, Entity, *mut PlayerInfo) -> Status
-    players at 184 size 8 type extern "system" fn(ModHandle, *mut PlayerInfo, u32, *mut u32) -> Status
-    serve_resource at 192 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *const ResourceKey, unsafe extern "system" fn(*const u8, usize, *mut c_void, *mut *const u8, *mut usize) -> Status, *mut c_void) -> Status
-    add_text at 200 size 8 type extern "system" fn(ModHandle, u32, u32, Str) -> Status
-    mods at 208 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
-    code_range at 216 size 8 type extern "system" fn(*mut u64, *mut u64) -> Status
-    patch_code at 224 size 8 type extern "system" fn(ModHandle, u64, *const u8, *const u8, usize) -> Status
-    workshop_recipes at 232 size 8 type extern "system" fn() -> u32
-    hosting at 240 size 8 type extern "system" fn() -> u8
-    server_world at 248 size 8 type extern "system" fn() -> u64
-    chat at 256 size 8 type extern "system" fn(ModHandle, PlayerKey, Str) -> Status
-    set_label at 264 size 8 type extern "system" fn(ModHandle, Entity, Str) -> Status
-    rename_filter at 272 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const RenameCall, *mut c_void) -> u8, *mut c_void) -> Status
-    join_missing at 280 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
-    hook_at at 288 size 8 type extern "system" fn(ModHandle, *const MidHookSpec) -> Status
-    inventory_open at 296 size 8 type extern "system" fn(ModHandle) -> Status
-    item_info at 304 size 8 type extern "system" fn(ModHandle, ItemId, *mut ItemData) -> Status
-    inventory_submit at 312 size 8 type extern "system" fn(ModHandle, *const InventoryRequest, unsafe extern "system" fn(*const InventoryResult, *mut c_void), *mut c_void) -> Status
-    status at 320 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut c_void, *mut Str), *mut c_void) -> Status
-    run_console at 328 size 8 type extern "system" fn(ModHandle, Str, *mut Str) -> Status
-    altars_open at 336 size 8 type extern "system" fn(ModHandle) -> Status
-    altars at 344 size 8 type extern "system" fn(ModHandle, *mut AltarInfo, u32, u32, *mut u32) -> Status
-    building_zone_check_filter at 352 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const BuildingZoneCheck, *mut c_void) -> u8, *mut c_void) -> Status
-    survivor_lookup at 360 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const SurvivorLookup, *mut c_void, *mut Entity) -> u8, *mut c_void) -> Status
-    survivor_bed_check at 368 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const BedCheck, *mut c_void) -> u8, *mut c_void) -> Status
-    summon_filter at 376 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Summon, *mut c_void) -> u8, *mut c_void) -> Status
-    summon_item at 384 size 8 type extern "system" fn(ModHandle, ItemId, NpcId) -> Status
-    survivor_status at 392 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(NpcId, *const u8, usize, *mut c_void) -> u32, *mut c_void) -> Status
-    interaction_filter at 400 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Interaction, *mut c_void) -> u8, *mut c_void) -> Status
-    skill_override at 408 size 8 type extern "system" fn(ModHandle, SkillNode, unsafe extern "system" fn(*const SkillCheck, *mut c_void) -> u8, *mut c_void) -> Status
-    comfort_filter at 416 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Comfort, *mut c_void) -> i32, *mut c_void) -> Status
-    experience_filter at 424 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut ExperiencePass, *mut c_void), *mut c_void) -> Status
-    raise_base_limit at 432 size 8 type extern "system" fn(ModHandle) -> Status
-    base_zones at 440 size 8 type extern "system" fn(ModHandle, *mut u32, *mut u32) -> Status
-    game_event at 448 size 8 type extern "system" fn(ModHandle, u32, unsafe extern "system" fn(*const GameEventData, *mut c_void), *mut c_void) -> Status
-    entities at 456 size 8 type extern "system" fn(ModHandle, u32, *mut EntityPlace, u32, *mut u32) -> Status
-    destroy at 464 size 8 type extern "system" fn(ModHandle, Entity) -> Status
-    save_world at 472 size 8 type extern "system" fn(ModHandle) -> Status
-    world_key at 480 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
-    component_write at 488 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut *mut c_void) -> Status
-    emit at 496 size 8 type extern "system" fn(ModHandle, u32, *const u8, u32) -> Status
-    teleport at 504 size 8 type extern "system" fn(ModHandle, *const TeleportRequest) -> Status
-    spawn at 512 size 8 type extern "system" fn(ModHandle, *const SpawnRequest, *mut Entity) -> Status
-    craft_filter at 520 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const CraftCheck, *mut c_void) -> u8, *mut c_void) -> Status
-    build_filter at 528 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const BuildCheck, *mut c_void) -> u8, *mut c_void) -> Status
-    net_channel at 536 size 8 type extern "system" fn(ModHandle, Str, unsafe extern "system" fn(*const NetMessage, *mut c_void), *mut c_void, *mut u32) -> Status
-    net_send at 544 size 8 type extern "system" fn(ModHandle, u32, PlayerKey, *const u8, u32) -> Status
-    net_ready at 552 size 8 type extern "system" fn(ModHandle, PlayerKey) -> Status
-    notify at 560 size 8 type extern "system" fn(ModHandle, PlayerKey, Str) -> Status
-    time_of_day at 568 size 8 type extern "system" fn(ModHandle, *mut DaytimeInfo) -> Status
-    set_time_of_day at 576 size 8 type extern "system" fn(ModHandle, i64) -> Status
-    time_speed_control at 584 size 8 type extern "system" fn(ModHandle) -> Status
-    set_time_speed at 592 size 8 type extern "system" fn(ModHandle, f32) -> Status
-    game_settings at 600 size 8 type extern "system" fn(ModHandle, *mut u8, u32, *mut u32) -> Status
-    set_game_settings at 608 size 8 type extern "system" fn(ModHandle, *const u8, u32) -> Status
-    damage_filter at 616 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut DamageCheck, *mut c_void), *mut c_void) -> Status
-    buff_types at 624 size 8 type extern "system" fn(ModHandle, *mut BuffTypeInfo, u32, *mut u32) -> Status
-    buffs at 632 size 8 type extern "system" fn(ModHandle, Entity, *mut ActiveBuff, u32, *mut u32) -> Status
-    apply_buff at 640 size 8 type extern "system" fn(ModHandle, *const BuffRequest) -> Status
-    remove_buff at 648 size 8 type extern "system" fn(ModHandle, Entity, BuffTypeId, *mut u8) -> Status
-    knowledge at 656 size 8 type extern "system" fn(ModHandle, Entity, KnowledgeId, *mut KnowledgeInfo) -> Status
-    grant_knowledge at 664 size 8 type extern "system" fn(ModHandle, Entity, KnowledgeId, u32, u32) -> Status
-    quests at 672 size 8 type extern "system" fn(ModHandle, *mut KnowledgeId, u32, *mut u32) -> Status
-    weather_at at 680 size 8 type extern "system" fn(ModHandle, *const [i64; 3], *mut [f32; 4]) -> Status
-    weather_fronts at 688 size 8 type extern "system" fn(ModHandle, *mut WeatherFront, u32, *mut u32) -> Status
-    set_weather at 696 size 8 type extern "system" fn(ModHandle, u32, i64) -> Status
-    terrain_materials at 704 size 8 type extern "system" fn(ModHandle, *mut TerrainMaterialInfo, u32, *mut u32) -> Status
-    terrain_edit at 712 size 8 type extern "system" fn(ModHandle, *const TerrainEdit, *mut f32) -> Status
-    config_schema at 720 size 8 type extern "system" fn(ModHandle, Str, Str, Str) -> Status
-    summoned at 728 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Summon, *mut c_void) -> u8, *mut c_void) -> Status
-    item_data_open at 736 size 8 type extern "system" fn(ModHandle, Str, *mut u32) -> Status
-    item_data_get at 744 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *mut u8, u32, *mut u32) -> Status
-    item_data_set at 752 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *const u8, u32) -> Status
-    ui_frame at 760 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const UiFrame, *mut c_void), *mut c_void) -> Status
-    ui_widget at 768 size 8 type extern "system" fn(ModHandle, u64, *mut UiWidget) -> Status
-    ui_dialog at 776 size 8 type extern "system" fn(ModHandle, *const UiDialog, unsafe extern "system" fn(u32, *mut c_void), *mut c_void) -> Status
-    ui_hud at 784 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const UiFrame, *mut c_void), *mut c_void) -> Status
-    ui_markers at 792 size 8 type extern "system" fn(ModHandle, *const UiMarker, u32) -> Status
-    config_check at 800 size 8 type extern "system" fn(ModHandle, Str, unsafe extern "system" fn(Str, *mut Str, *mut c_void) -> Status, *mut c_void) -> Status
-    texts at 808 size 8 type extern "system" fn(ModHandle, Str) -> Status
-    content_serve at 816 size 8 type extern "system" fn(ModHandle, *const u8, u32, *mut [u32; 4]) -> Status
-    content_read at 824 size 8 type extern "system" fn(ModHandle, *const [u32; 4], *mut u8, u32, *mut u32) -> Status
-    icons_ready at 832 size 8 type extern "system" fn(ModHandle) -> Status
-    stat_open at 840 size 8 type extern "system" fn(ModHandle, Str, *const StatDefData, *mut StatRef) -> Status
-    stat_info at 848 size 8 type extern "system" fn(ModHandle, u32, *mut StatDefData, *mut Str) -> Status
-    stat_value at 856 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut f32) -> Status
-    stat_modify at 864 size 8 type extern "system" fn(ModHandle, *const StatModify) -> Status
-    stat_buff at 872 size 8 type extern "system" fn(ModHandle, u32, *const StatModifierData, u32) -> Status
-    stats_changed at 880 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const StatChange, *mut c_void), *mut c_void) -> Status
-    stat_sources at 888 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut StatSource, u32, *mut u32) -> Status
-    stat_watch at 896 size 8 type extern "system" fn(ModHandle, Entity, u8) -> Status
-    define_event at 904 size 8 type extern "system" fn(ModHandle, *const EventSpec, *mut u32) -> Status
-    subscribe_event at 912 size 8 type extern "system" fn(ModHandle, *const EventSpec, unsafe extern "system" fn(*const c_void, *mut c_void), *mut c_void) -> Status
-    send_event at 920 size 8 type extern "system" fn(ModHandle, u32, *const c_void) -> Status
-    affix_open at 928 size 8 type extern "system" fn(ModHandle, Str, *const AffixDefData, *mut StatRef) -> Status
-    affix_roll at 936 size 8 type extern "system" fn(ModHandle, *const AffixRoll, *mut u32) -> Status
-    item_lines at 944 size 8 type extern "system" fn(ModHandle, Entity, ItemId, *mut ItemLine, u32, *mut u32) -> Status
-    affix_info at 952 size 8 type extern "system" fn(ModHandle, u32, *mut Str, *mut u8) -> Status
-    rename_content at 960 size 8 type extern "system" fn(ModHandle, *const ContentRename, u32) -> Status
-    declare_content at 968 size 8 type extern "system" fn(ModHandle, Str, *mut [u8; 16]) -> Status
-    entity_data_open at 976 size 8 type extern "system" fn(ModHandle, Str, EntityDataFlags, *mut u32) -> Status
-    mod_dir at 984 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
-    knowledge_input_filter at 992 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const KnowledgeInput, *mut c_void) -> u8, *mut c_void) -> Status
-    language at 1000 size 8 type extern "system" fn(ModHandle) -> u32
-    keep_game_settings at 1008 size 8 type extern "system" fn(ModHandle, *const u8, *const u8, u32) -> Status
-    forget_game_settings at 1016 size 8 type extern "system" fn(ModHandle) -> Status
-    revoke_knowledge at 1024 size 8 type extern "system" fn(ModHandle, Entity, KnowledgeId, u32, u32) -> Status
-    account_knowledge at 1032 size 8 type extern "system" fn(ModHandle, PlayerKey, KnowledgeId, u32, u32, u32) -> Status
-    resource_read at 1040 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *mut u8, u32, *mut u32) -> Status
-    game_text at 1048 size 8 type extern "system" fn(ModHandle, u32, u32, *mut Str) -> Status
-    rebuild_resource at 1056 size 8 type extern "system" fn(ModHandle, *const ResourceKey) -> Status
-    recipe_rule at 1064 size 8 type extern "system" fn(ModHandle, RecipeRuleKind, Str, u32) -> Status
-    recipe_disabled at 1072 size 8 type extern "system" fn(ModHandle, RecipeId, *mut u32) -> Status
-    define_point at 1080 size 8 type extern "system" fn(ModHandle, *const PointSpec, *mut PointHandle) -> Status
-    attach_point at 1088 size 8 type extern "system" fn(ModHandle, *const PointLink, unsafe extern "system" fn(*const c_void, *mut c_void, *mut c_void) -> PointVerdict, *mut c_void) -> Status
-    run_point at 1096 size 8 type extern "system" fn(ModHandle, u32, *const c_void, *mut c_void, *mut PointVerdict) -> Status
-    actions at 1104 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const ActionCall, *mut c_void, *mut Str), *mut c_void) -> Status
-    event_types at 1112 size 8 type extern "system" fn(ModHandle, *mut EventTypeInfo, u32, *mut u32) -> Status
-    recipe_kind at 1120 size 8 type extern "system" fn(ModHandle, ItemId, *mut RecipeKind) -> Status
-    feature at 1128 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
-    rate at 1136 size 8 type extern "system" fn(ModHandle, RateId) -> Status
-    set_rate at 1144 size 8 type extern "system" fn(ModHandle, RateId, f32) -> Status
-    change_data at 1152 size 8 type extern "system" fn(ModHandle, *const DataChange) -> Status
-    loop_wait at 1160 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const LoopWaitData, *mut c_void), *mut c_void, *mut LoopWaitSites) -> Status
-    server_wait at 1168 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut u64, *mut c_void), *mut c_void, *mut u32) -> Status
-    task_workers at 1176 size 8 type extern "system" fn(ModHandle, u32, u32, *mut u32) -> Status
-    altar_zone_filter at 1184 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut AltarZone, *mut c_void), *mut c_void) -> Status
-    altar_zones_changed at 1192 size 8 type extern "system" fn(ModHandle) -> Status
-    altar_limit_filter at 1200 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut AltarLimit, *mut c_void), *mut c_void) -> Status
-    base_limit at 1208 size 8 type extern "system" fn(ModHandle, *mut BaseLimitInfo) -> Status
-    voxel_read at 1216 size 8 type extern "system" fn(ModHandle, *const [u32; 3], *const [u32; 3], *mut Voxel, u64) -> Status
-    declare_change at 1224 size 8 type extern "system" fn(ModHandle, *const DataChange, *mut ChangeId) -> Status
-    set_change at 1232 size 8 type extern "system" fn(ModHandle, ChangeId, ChangeOp, f64) -> Status
-    build_rights at 1240 size 8 type extern "system" fn(ModHandle, *mut BuildRights) -> Status
-    transaction_commit at 1248 size 8 type extern "system" fn(ModHandle, *const TransactionOp, u32, *mut u64) -> Status
-    transaction_undo at 1256 size 8 type extern "system" fn(ModHandle, u64) -> Status
-    transaction_status at 1264 size 8 type extern "system" fn(ModHandle, u64, *mut TransactionInfo) -> Status
-    transaction_commit_for at 1272 size 8 type extern "system" fn(ModHandle, Entity, *const TransactionOp, u32, *mut u64) -> Status
-    world_quiet at 1280 size 8 type extern "system" fn(ModHandle) -> Status
-    fog_open at 1288 size 8 type extern "system" fn(ModHandle) -> Status
-    fog_read at 1296 size 8 type extern "system" fn(ModHandle, *mut FogInfo, u32, u32, u32, u32, *mut u8, u32) -> Status
-    serve_call at 1304 size 8 type extern "system" fn(ModHandle, *const CallSpec, unsafe extern "system" fn(*const c_void, *mut c_void, *mut c_void) -> Status, *mut c_void) -> Status
-    find_call at 1312 size 8 type extern "system" fn(ModHandle, *const CallSpec, *mut u32) -> Status
-    call at 1320 size 8 type extern "system" fn(ModHandle, u32, *const c_void, *mut c_void) -> Status
-    transaction_entities at 1328 size 8 type extern "system" fn(ModHandle, u64, *mut Entity, u32, *mut u32) -> Status
-    world_persists at 1336 size 8 type extern "system" fn(ModHandle, *const [f64; 3], *const [f64; 3], *mut u8) -> Status
-    map_markers at 1344 size 8 type extern "system" fn(ModHandle, *mut MapMarkerInfo, u32, u32, *mut u32) -> Status
-    account_action at 1352 size 8 type extern "system" fn(ModHandle, AccountActionType, PlayerKey) -> Status
-    subscribe_tick at 1360 size 8 type extern "system" fn(ModHandle, u64, unsafe extern "system" fn(Event, *const c_void, *mut c_void), *mut c_void, *mut TickHandle) -> Status
-    set_tick_every at 1368 size 8 type extern "system" fn(ModHandle, TickHandle, u64) -> Status
-    map_frame at 1376 size 8 type extern "system" fn(ModHandle, *mut MapFrameInfo) -> Status
-    request_base_limits at 1384 size 8 type extern "system" fn(ModHandle, u32, u32) -> Status
-    map_marker_types at 1392 size 8 type extern "system" fn(ModHandle, *mut MapMarkerTypeInfo, u32, u32, *mut u32) -> Status
-    use_content at 1400 size 8 type extern "system" fn(ModHandle, Str) -> Status
-    chat_mute_set at 1408 size 8 type extern "system" fn(ModHandle, PlayerKey, u8) -> Status
-    chat_mute_has at 1416 size 8 type extern "system" fn(ModHandle, PlayerKey, *mut u8) -> Status
-    set_base_cap at 1424 size 8 type extern "system" fn(ModHandle, u32) -> Status
-    resource_keys at 1432 size 8 type extern "system" fn(ModHandle, u32, *mut ResourceKey, u32, *mut u32) -> Status
-    content_hashes at 1440 size 8 type extern "system" fn(ModHandle, *mut [u32; 4], u32, *mut u32) -> Status
-    types at 1448 size 8 type extern "system" fn(ModHandle, *mut TypeEntry, u32, u32, *mut u32) -> Status
-    game_version at 1456 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
-    control at 1464 size 8 type extern "system" fn(ModHandle, *const ControlSpec, unsafe extern "system" fn(*const ControlEvent, *mut c_void), *mut c_void) -> Status
-    run_action at 1472 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
-    ui_extension at 1480 size 8 type extern "system" fn(ModHandle, *const UiExtension, unsafe extern "system" fn(*const UiFrame, *mut c_void), *mut c_void) -> Status
-    item_filter at 1488 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const ItemAction, *mut c_void) -> u8, *mut c_void) -> Status
-    chat_filter at 1496 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const ChatLine, *mut ChatRewrite, *mut c_void) -> u8, *mut c_void) -> Status
-    save_info at 1504 size 8 type extern "system" fn(ModHandle, *mut SaveInfo) -> Status
-    hold_saves at 1512 size 8 type extern "system" fn(ModHandle, u8) -> Status
-    crafting_prop at 1520 size 8 type extern "system" fn(ModHandle, *const [u8; 16], u8, u8, *mut u8) -> Status
-    set_saved at 1528 size 8 type extern "system" fn(ModHandle, Entity, u8) -> Status
-    run_action_at at 1536 size 8 type extern "system" fn(ModHandle, Str, Str, *const ActionTarget) -> Status
-    local_held at 1544 size 8 type extern "system" fn(ModHandle, *mut u64) -> Status
-    read_only at 1552 size 8 type extern "system" fn(ModHandle, usize, usize, *mut usize) -> Status
-    resource_served at 1560 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *mut u8, u32, *mut u32) -> Status
-    commands at 1568 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
-    run_command at 1576 size 8 type extern "system" fn(ModHandle, Str, Str, u32, *mut ActionReply) -> Status
-    command_list at 1584 size 8 type extern "system" fn(ModHandle, *mut CommandInfo, u32, u32, *mut u32) -> Status
-    actions_changed at 1592 size 8 type extern "system" fn(ModHandle) -> Status
-    resource_buffer at 1600 size 8 type extern "system" fn(ModHandle, u32, *mut *mut u8) -> Status
-    game_query at 1608 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut u32) -> Status
-    action_window at 1616 size 8 type extern "system" fn(ModHandle, Str, *const PlayerKey, u32, u32) -> Status
-    progress_write at 1624 size 8 type extern "system" fn(ModHandle, Entity, u32, u32) -> Status
-    drop_items at 1632 size 8 type extern "system" fn(ModHandle, *const DropRequest, *mut Entity) -> Status
-    config_set at 1640 size 8 type extern "system" fn(ModHandle, Str, Str, Str) -> Status
-    server_stop at 1648 size 8 type extern "system" fn(ModHandle) -> Status
-    fog_uncover at 1656 size 8 type extern "system" fn(ModHandle, PlayerKey, f32, f32, f32) -> Status
-    content_name at 1664 size 8 type extern "system" fn(ModHandle, *const [u8; 16], *mut Str) -> Status
-    language_of at 1672 size 8 type extern "system" fn(ModHandle, PlayerKey) -> u32
-    client_game_event at 1680 size 8 type extern "system" fn(ModHandle, u32, unsafe extern "system" fn(*const GameEventData, *mut c_void), *mut c_void) -> Status
-    join_rule at 1688 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const JoinCall, *mut c_void) -> u8, *mut c_void) -> Status
+    entity_template at 168 size 8 type extern "system" fn(ModHandle, Entity, *mut Guid) -> Status
+    mods at 176 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
+    code_range at 184 size 8 type extern "system" fn(ModHandle, *mut u64, *mut u32) -> Status
+    patch_code at 192 size 8 type extern "system" fn(ModHandle, u64, *const u8, *const u8, u32) -> Status
+    workshop_recipes at 200 size 8 type extern "system" fn(ModHandle, *mut u32) -> Status
+    hosting at 208 size 8 type extern "system" fn(ModHandle, *mut u8) -> Status
+    server_world at 216 size 8 type extern "system" fn(ModHandle, *mut u64) -> Status
+    join_missing at 224 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
+    hook_at at 232 size 8 type extern "system" fn(ModHandle, *const MidHookSpec) -> Status
+    status at 240 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*mut c_void, *mut Str)>, *mut c_void) -> Status
+    subscribe_game_event at 248 size 8 type extern "system" fn(ModHandle, u32, Option<unsafe extern "system" fn(*const GameEventData, *mut c_void)>, *mut c_void) -> Status
+    net_channel at 256 size 8 type extern "system" fn(ModHandle, Str, Option<unsafe extern "system" fn(*const NetMessage, *mut c_void)>, *mut c_void, *mut u32) -> Status
+    net_send at 264 size 8 type extern "system" fn(ModHandle, u32, PlayerKey, *const u8, u32) -> Status
+    net_ready at 272 size 8 type extern "system" fn(ModHandle, PlayerKey) -> Status
+    config_schema at 280 size 8 type extern "system" fn(ModHandle, Str, Str, Str) -> Status
+    config_check at 288 size 8 type extern "system" fn(ModHandle, Str, Option<unsafe extern "system" fn(Str, *mut Str, *mut c_void) -> Status>, *mut c_void) -> Status
+    texts at 296 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    define_event at 304 size 8 type extern "system" fn(ModHandle, *const EventSpec, *mut u32) -> Status
+    subscribe_mod_event at 312 size 8 type extern "system" fn(ModHandle, *const EventSpec, Option<unsafe extern "system" fn(*const c_void, *mut c_void)>, *mut c_void) -> Status
+    send_event at 320 size 8 type extern "system" fn(ModHandle, u32, *const c_void) -> Status
+    rename_content at 328 size 8 type extern "system" fn(ModHandle, *const ContentRename, u32) -> Status
+    mod_dir at 336 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
+    language at 344 size 8 type extern "system" fn(ModHandle, *mut u32) -> Status
+    define_point at 352 size 8 type extern "system" fn(ModHandle, *const PointSpec, *mut PointHandle) -> Status
+    attach_point at 360 size 8 type extern "system" fn(ModHandle, *const PointLink, Option<unsafe extern "system" fn(*const c_void, *mut c_void, *mut c_void) -> PointVerdict>, *mut c_void) -> Status
+    run_point at 368 size 8 type extern "system" fn(ModHandle, u32, *const c_void, *mut c_void, *mut PointVerdict) -> Status
+    event_types at 376 size 8 type extern "system" fn(ModHandle, *mut EventTypeInfo, u32, u32, *mut u32) -> Status
+    feature at 384 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
+    loop_wait at 392 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const LoopWaitData, *mut c_void)>, *mut c_void, *mut LoopWaitSites) -> Status
+    server_wait at 400 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*mut u64, *mut c_void)>, *mut c_void, *mut u8) -> Status
+    task_workers at 408 size 8 type extern "system" fn(ModHandle, u32, u32, *mut u8) -> Status
+    serve_call at 416 size 8 type extern "system" fn(ModHandle, *const CallSpec, Option<unsafe extern "system" fn(*const c_void, *mut c_void, *mut c_void) -> Status>, *mut c_void) -> Status
+    find_call at 424 size 8 type extern "system" fn(ModHandle, *const CallSpec, *mut u32) -> Status
+    call at 432 size 8 type extern "system" fn(ModHandle, u32, *const c_void, *mut c_void) -> Status
+    subscribe_tick at 440 size 8 type extern "system" fn(ModHandle, u64, Option<unsafe extern "system" fn(Event, *const c_void, *mut c_void)>, *mut c_void, *mut TickHandle) -> Status
+    set_tick_every at 448 size 8 type extern "system" fn(ModHandle, TickHandle, u64) -> Status
+    config_set at 456 size 8 type extern "system" fn(ModHandle, Str, Str, Str) -> Status
+    subscribe_client_game_event at 464 size 8 type extern "system" fn(ModHandle, u32, Option<unsafe extern "system" fn(*const GameEventData, *mut c_void)>, *mut c_void) -> Status
+    serve_resource at 472 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *const ResourceKey, Option<unsafe extern "system" fn(*const u8, u32, *mut c_void, *mut *mut u8, *mut u32) -> Status>, *mut c_void) -> Status
+    add_text at 480 size 8 type extern "system" fn(ModHandle, u32, u32, Str) -> Status
+    define_item_data at 488 size 8 type extern "system" fn(ModHandle, Str, *mut u32) -> Status
+    item_data_get at 496 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *mut u8, u32, *mut u32) -> Status
+    item_data_set at 504 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *const u8, u32) -> Status
+    content_serve at 512 size 8 type extern "system" fn(ModHandle, *const u8, u32, *mut [u32; 4]) -> Status
+    content_read at 520 size 8 type extern "system" fn(ModHandle, *const [u32; 4], *mut u8, u32, *mut u32) -> Status
+    icons_ready at 528 size 8 type extern "system" fn(ModHandle) -> Status
+    declare_content at 536 size 8 type extern "system" fn(ModHandle, Str, *mut Guid) -> Status
+    define_entity_data at 544 size 8 type extern "system" fn(ModHandle, Str, EntityDataFlags, *mut u32) -> Status
+    resource_read at 552 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *mut u8, u32, *mut u32) -> Status
+    game_text at 560 size 8 type extern "system" fn(ModHandle, u32, u32, *mut Str) -> Status
+    rebuild_resource at 568 size 8 type extern "system" fn(ModHandle, *const ResourceKey) -> Status
+    recipe_rule at 576 size 8 type extern "system" fn(ModHandle, RecipeRuleKind, Str, u8) -> Status
+    recipe_disabled at 584 size 8 type extern "system" fn(ModHandle, RecipeId, *mut u8) -> Status
+    recipe_kind at 592 size 8 type extern "system" fn(ModHandle, ItemId, *mut RecipeKind) -> Status
+    rate at 600 size 8 type extern "system" fn(ModHandle, RateId) -> Status
+    set_rate at 608 size 8 type extern "system" fn(ModHandle, RateId, f32) -> Status
+    change_data at 616 size 8 type extern "system" fn(ModHandle, *const DataChange, *mut ChangeId) -> Status
+    set_change at 624 size 8 type extern "system" fn(ModHandle, ChangeId, ChangeOp, f64) -> Status
+    use_content at 632 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    resource_keys at 640 size 8 type extern "system" fn(ModHandle, u32, *mut ResourceKey, u32, *mut u32) -> Status
+    content_hashes at 648 size 8 type extern "system" fn(ModHandle, *mut [u32; 4], u32, *mut u32) -> Status
+    types at 656 size 8 type extern "system" fn(ModHandle, *mut TypeEntry, u32, u32, *mut u32) -> Status
+    game_version at 664 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
+    crafting_prop at 672 size 8 type extern "system" fn(ModHandle, *const Guid, *mut u8) -> Status
+    read_only at 680 size 8 type extern "system" fn(ModHandle, u64, u32, *mut u32) -> Status
+    resource_served at 688 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *mut u8, u32, *mut u32) -> Status
+    resource_buffer at 696 size 8 type extern "system" fn(ModHandle, u32, *mut *mut u8) -> Status
+    content_name at 704 size 8 type extern "system" fn(ModHandle, *const Guid, *mut Str) -> Status
+    player at 712 size 8 type extern "system" fn(ModHandle, Entity, *mut PlayerInfo) -> Status
+    players at 720 size 8 type extern "system" fn(ModHandle, *mut PlayerInfo, u32, u32, *mut u32) -> Status
+    chat at 728 size 8 type extern "system" fn(ModHandle, PlayerKey, Str) -> Status
+    chat_all at 736 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    set_label at 744 size 8 type extern "system" fn(ModHandle, Entity, Str) -> Status
+    rename_filter at 752 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const RenameCall, *mut c_void) -> u8>, *mut c_void) -> Status
+    item_info at 760 size 8 type extern "system" fn(ModHandle, ItemId, *mut ItemTypeInfo) -> Status
+    request_altars at 768 size 8 type extern "system" fn(ModHandle) -> Status
+    altars at 776 size 8 type extern "system" fn(ModHandle, *mut AltarInfo, u32, u32, *mut u32) -> Status
+    building_zone_filter at 784 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const BuildingZoneCheck, *mut c_void) -> u8>, *mut c_void) -> Status
+    base_zones at 792 size 8 type extern "system" fn(ModHandle, *mut u32, *mut u32) -> Status
+    entities at 800 size 8 type extern "system" fn(ModHandle, u32, *mut EntityPlace, u32, *mut u32) -> Status
+    destroy at 808 size 8 type extern "system" fn(ModHandle, Entity) -> Status
+    save_world at 816 size 8 type extern "system" fn(ModHandle) -> Status
+    world_key at 824 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
+    component_write at 832 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut *mut c_void) -> Status
+    notify at 840 size 8 type extern "system" fn(ModHandle, PlayerKey, Str) -> Status
+    time_of_day at 848 size 8 type extern "system" fn(ModHandle, *mut DaytimeInfo) -> Status
+    set_time_of_day at 856 size 8 type extern "system" fn(ModHandle, i64) -> Status
+    request_time_speed at 864 size 8 type extern "system" fn(ModHandle) -> Status
+    set_time_speed at 872 size 8 type extern "system" fn(ModHandle, f32) -> Status
+    game_settings at 880 size 8 type extern "system" fn(ModHandle, *mut u8, u32, *mut u32) -> Status
+    set_game_settings at 888 size 8 type extern "system" fn(ModHandle, *const u8, *const u8, u32) -> Status
+    buff_types at 896 size 8 type extern "system" fn(ModHandle, *mut BuffTypeInfo, u32, u32, *mut u32) -> Status
+    buffs at 904 size 8 type extern "system" fn(ModHandle, Entity, *mut ActiveBuff, u32, u32, *mut u32) -> Status
+    apply_buff at 912 size 8 type extern "system" fn(ModHandle, *const BuffRequest) -> Status
+    remove_buff at 920 size 8 type extern "system" fn(ModHandle, Entity, BuffTypeId, *mut u8) -> Status
+    weather_at at 928 size 8 type extern "system" fn(ModHandle, *const [f64; 3], *mut WeatherSample) -> Status
+    weather_fronts at 936 size 8 type extern "system" fn(ModHandle, *mut WeatherFront, u32, u32, *mut u32) -> Status
+    set_weather at 944 size 8 type extern "system" fn(ModHandle, u32, i64) -> Status
+    terrain_materials at 952 size 8 type extern "system" fn(ModHandle, *mut TerrainMaterialInfo, u32, u32, *mut u32) -> Status
+    terrain_edit at 960 size 8 type extern "system" fn(ModHandle, *const TerrainEdit, *mut f32) -> Status
+    altar_zone_filter at 968 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*mut AltarZone, *mut c_void)>, *mut c_void) -> Status
+    altar_zones_changed at 976 size 8 type extern "system" fn(ModHandle) -> Status
+    altar_limit_filter at 984 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*mut AltarLimit, *mut c_void)>, *mut c_void) -> Status
+    base_limit at 992 size 8 type extern "system" fn(ModHandle, *mut BaseLimitInfo) -> Status
+    voxel_read at 1000 size 8 type extern "system" fn(ModHandle, *const [u32; 3], *const [u32; 3], *mut Voxel, u32) -> Status
+    build_rights at 1008 size 8 type extern "system" fn(ModHandle, *mut BuildRights) -> Status
+    transaction_commit at 1016 size 8 type extern "system" fn(ModHandle, Entity, *const TransactionOp, u32, *mut u64) -> Status
+    transaction_undo at 1024 size 8 type extern "system" fn(ModHandle, u64) -> Status
+    transaction_status at 1032 size 8 type extern "system" fn(ModHandle, u64, *mut TransactionInfo) -> Status
+    world_quiet at 1040 size 8 type extern "system" fn(ModHandle) -> Status
+    transaction_entities at 1048 size 8 type extern "system" fn(ModHandle, u64, *mut Entity, u32, *mut u32) -> Status
+    world_persists at 1056 size 8 type extern "system" fn(ModHandle, *const [f64; 3], *const [f64; 3], *mut u8) -> Status
+    map_markers at 1064 size 8 type extern "system" fn(ModHandle, *mut MapMarkerInfo, u32, u32, *mut u32) -> Status
+    account_action at 1072 size 8 type extern "system" fn(ModHandle, AccountActionType, PlayerKey) -> Status
+    map_frame at 1080 size 8 type extern "system" fn(ModHandle, *mut MapFrameInfo) -> Status
+    request_base_limits at 1088 size 8 type extern "system" fn(ModHandle, u32, u32) -> Status
+    set_chat_mute at 1096 size 8 type extern "system" fn(ModHandle, PlayerKey, u8) -> Status
+    chat_muted at 1104 size 8 type extern "system" fn(ModHandle, PlayerKey, *mut u8) -> Status
+    set_base_limit at 1112 size 8 type extern "system" fn(ModHandle, u32) -> Status
+    save_info at 1120 size 8 type extern "system" fn(ModHandle, *mut SaveInfo) -> Status
+    hold_saves at 1128 size 8 type extern "system" fn(ModHandle, u8) -> Status
+    set_saved at 1136 size 8 type extern "system" fn(ModHandle, Entity, u8) -> Status
+    progress_write at 1144 size 8 type extern "system" fn(ModHandle, Entity, u32, u32) -> Status
+    server_stop at 1152 size 8 type extern "system" fn(ModHandle) -> Status
+    fog_uncover at 1160 size 8 type extern "system" fn(ModHandle, PlayerKey, f32, f32, f32) -> Status
+    language_of at 1168 size 8 type extern "system" fn(ModHandle, PlayerKey, *mut u32) -> Status
+    join_rule at 1176 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const JoinCall, *mut c_void) -> u8>, *mut c_void) -> Status
+    request_inventory at 1184 size 8 type extern "system" fn(ModHandle) -> Status
+    inventory_submit at 1192 size 8 type extern "system" fn(ModHandle, *const InventoryRequest, Option<unsafe extern "system" fn(*const InventoryResult, *mut c_void)>, *mut c_void) -> Status
+    survivor_lookup at 1200 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const SurvivorLookup, *mut c_void, *mut Entity) -> u8>, *mut c_void) -> Status
+    survivor_bed_check at 1208 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const BedCheck, *mut c_void) -> u8>, *mut c_void) -> Status
+    summon_filter at 1216 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const Summon, *mut c_void) -> u8>, *mut c_void) -> Status
+    summon_item at 1224 size 8 type extern "system" fn(ModHandle, ItemId, NpcId) -> Status
+    survivor_status at 1232 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(NpcId, *const u8, u32, *mut c_void) -> u32>, *mut c_void) -> Status
+    emit at 1240 size 8 type extern "system" fn(ModHandle, u32, *const u8, u32) -> Status
+    teleport at 1248 size 8 type extern "system" fn(ModHandle, *const TeleportRequest) -> Status
+    spawn at 1256 size 8 type extern "system" fn(ModHandle, *const SpawnRequest, *mut Entity) -> Status
+    damage_filter at 1264 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*mut DamageCheck, *mut c_void)>, *mut c_void) -> Status
+    summoned at 1272 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const Summon, *mut c_void) -> u8>, *mut c_void) -> Status
+    define_stat at 1280 size 8 type extern "system" fn(ModHandle, Str, *const StatSpec, *mut StatRef) -> Status
+    stat_info at 1288 size 8 type extern "system" fn(ModHandle, u32, *mut StatSpec, *mut Str) -> Status
+    stat_value at 1296 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut f32) -> Status
+    stat_modify at 1304 size 8 type extern "system" fn(ModHandle, *const StatModify) -> Status
+    stat_buff at 1312 size 8 type extern "system" fn(ModHandle, u32, *const StatModifier, u32) -> Status
+    stats_changed at 1320 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const StatChange, *mut c_void)>, *mut c_void) -> Status
+    stat_sources at 1328 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut StatSource, u32, *mut u32) -> Status
+    stat_watch at 1336 size 8 type extern "system" fn(ModHandle, Entity, u8) -> Status
+    define_affix at 1344 size 8 type extern "system" fn(ModHandle, Str, *const AffixSpec, *mut StatRef) -> Status
+    affix_roll at 1352 size 8 type extern "system" fn(ModHandle, *const AffixRoll, *mut u32) -> Status
+    item_lines at 1360 size 8 type extern "system" fn(ModHandle, Entity, ItemId, *mut ItemLine, u32, *mut u32) -> Status
+    affix_info at 1368 size 8 type extern "system" fn(ModHandle, u32, *mut Str, *mut u8) -> Status
+    item_filter at 1376 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const ItemAction, *mut c_void) -> u8>, *mut c_void) -> Status
+    drop_items at 1384 size 8 type extern "system" fn(ModHandle, *const DropRequest, *mut Entity) -> Status
+    skill_override at 1392 size 8 type extern "system" fn(ModHandle, SkillNode, Option<unsafe extern "system" fn(*const SkillCheck, *mut c_void) -> u8>, *mut c_void) -> Status
+    comfort_filter at 1400 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const Comfort, *mut c_void) -> i32>, *mut c_void) -> Status
+    experience_filter at 1408 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*mut ExperiencePass, *mut c_void)>, *mut c_void) -> Status
+    knowledge at 1416 size 8 type extern "system" fn(ModHandle, Entity, KnowledgeId, *mut KnowledgeInfo) -> Status
+    change_knowledge at 1424 size 8 type extern "system" fn(ModHandle, *const KnowledgeChange) -> Status
+    quests at 1432 size 8 type extern "system" fn(ModHandle, *mut KnowledgeId, u32, *mut u32) -> Status
+    knowledge_input_filter at 1440 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const KnowledgeInput, *mut c_void) -> u8>, *mut c_void) -> Status
+    game_query at 1448 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut u32) -> Status
+    run_console at 1456 size 8 type extern "system" fn(ModHandle, Str, *mut Str) -> Status
+    interaction_filter at 1464 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const Interaction, *mut c_void) -> u8>, *mut c_void) -> Status
+    craft_filter at 1472 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const CraftCheck, *mut c_void) -> u8>, *mut c_void) -> Status
+    build_filter at 1480 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const BuildCheck, *mut c_void) -> u8>, *mut c_void) -> Status
+    actions at 1488 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const ActionCall, *mut c_void, *mut Str)>, *mut c_void) -> Status
+    control at 1496 size 8 type extern "system" fn(ModHandle, *const ControlSpec, Option<unsafe extern "system" fn(*const ControlEvent, *mut c_void)>, *mut c_void) -> Status
+    run_action at 1504 size 8 type extern "system" fn(ModHandle, Str, Str, *const ActionTarget) -> Status
+    chat_filter at 1512 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const ChatLine, *mut ChatRewrite, *mut c_void) -> u8>, *mut c_void) -> Status
+    commands at 1520 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    run_command at 1528 size 8 type extern "system" fn(ModHandle, Str, Str, u32, *mut ActionReply) -> Status
+    command_list at 1536 size 8 type extern "system" fn(ModHandle, *mut CommandInfo, u32, u32, *mut u32) -> Status
+    actions_changed at 1544 size 8 type extern "system" fn(ModHandle) -> Status
+    action_window at 1552 size 8 type extern "system" fn(ModHandle, Str, *const PlayerKey, u32, u32) -> Status
+    ui_frame at 1560 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const UiFrame, *mut c_void)>, *mut c_void) -> Status
+    ui_widget at 1568 size 8 type extern "system" fn(ModHandle, u64, *mut UiWidget) -> Status
+    ui_dialog at 1576 size 8 type extern "system" fn(ModHandle, *const UiDialog, Option<unsafe extern "system" fn(u32, *mut c_void)>, *mut c_void) -> Status
+    ui_hud at 1584 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const UiFrame, *mut c_void)>, *mut c_void) -> Status
+    ui_markers at 1592 size 8 type extern "system" fn(ModHandle, *const UiMarker, u32) -> Status
+    request_fog at 1600 size 8 type extern "system" fn(ModHandle) -> Status
+    fog_read at 1608 size 8 type extern "system" fn(ModHandle, *mut FogInfo, u32, u32, u32, u32, *mut u8, u32) -> Status
+    map_marker_types at 1616 size 8 type extern "system" fn(ModHandle, *mut MapMarkerTypeInfo, u32, u32, *mut u32) -> Status
+    ui_extension at 1624 size 8 type extern "system" fn(ModHandle, *const UiExtension, Option<unsafe extern "system" fn(*const UiFrame, *mut c_void)>, *mut c_void) -> Status
+    local_held at 1632 size 8 type extern "system" fn(ModHandle, *mut u64) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
-    player at 12 size 4 type Entity
+    character at 12 size 4 type Entity
     target at 16 size 4 type Entity
     item at 20 size 4 type ItemId
     known at 24 size 1 type u8
     reserved at 25 size 3 type [u8; 3]
     position at 32 size 24 type [f64; 3]
-InventoryOp size 32 align 8
+InventoryOp size 32 align 4
     kind at 0 size 4 type u32
     flags at 4 size 4 type u32
-    target at 8 size 8 type u64
-    other at 16 size 8 type u64
+    target at 8 size 4 type Entity
+    slot at 12 size 4 type u32
+    other at 16 size 4 type Entity
+    fill at 20 size 4 type f32
     item at 24 size 4 type ItemId
     count at 28 size 4 type u32
 InventoryOpResult size 8 align 4
@@ -590,27 +588,36 @@ InventoryResult size 24 align 8 born 24
 ItemAction size 32 align 4 born 32
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
-    player at 12 size 4 type Entity
+    character at 12 size 4 type Entity
     item at 16 size 4 type ItemId
     count at 20 size 4 type u32
     inventory at 24 size 4 type Entity
     slot at 28 size 4 type u32
-ItemData size 36 align 4 born 36
+ItemId size 4 align 4
+    0 at 0 size 4 type u32
+ItemLine size 16 align 4
+    modifier at 0 size 12 type StatModifier
+    affix at 12 size 4 type u32
+ItemTypeInfo size 36 align 4 born 36
     header at 0 size 8 type Header
     id at 8 size 4 type ItemId
     max_stack at 12 size 2 type u16
     category at 14 size 1 type u8
     rarity at 15 size 1 type u8
     flags at 16 size 4 type u32
-    placed_entity at 20 size 16 type [u8; 16]
-ItemId size 4 align 4
-    0 at 0 size 4 type u32
-ItemLine size 16 align 4
-    modifier at 0 size 12 type StatModifierData
-    affix at 12 size 4 type u32
+    placed_entity at 20 size 16 type Guid
 JoinCall size 16 align 8 born 16
     header at 0 size 8 type Header
-    player at 8 size 8 type PlayerKey
+    account at 8 size 8 type PlayerKey
+KnowledgeChange size 32 align 8 born 32
+    header at 0 size 8 type Header
+    account at 8 size 8 type PlayerKey
+    entity at 16 size 4 type Entity
+    id at 20 size 4 type KnowledgeId
+    value at 24 size 4 type u32
+    kind at 28 size 1 type u8
+    op at 29 size 1 type u8
+    reserved at 30 size 2 type u16
 KnowledgeData size 20 align 4 born 20
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
@@ -628,14 +635,15 @@ KnowledgeInfo size 24 align 4 born 24
     flags at 20 size 4 type u32
 KnowledgeInput size 32 align 4 born 32
     header at 0 size 8 type Header
-    player at 8 size 4 type Entity
+    character at 8 size 4 type Entity
     id at 12 size 4 type KnowledgeId
     kind at 16 size 1 type u8
     scope at 17 size 1 type u8
     reserved at 18 size 2 type u16
     value at 20 size 4 type u32
     refusal at 24 size 4 type u32
-    allowed at 28 size 4 type u32
+    allowed at 28 size 1 type u8
+    reserved_tail at 29 size 3 type [u8; 3]
 Layout size 16 align 8
     fields at 0 size 8 type *const LayoutField
     count at 8 size 4 type u32
@@ -659,18 +667,18 @@ Manifest size 192 align 8 born 192
     side at 40 size 1 type Side
     flags at 44 size 4 type ManifestFlags
     dependencies at 48 size 8 type *const Dependency
-    dependency_count at 56 size 8 type usize
+    dependency_count at 56 size 4 type u32
     builds at 64 size 8 type *const BuildRow
-    build_count at 72 size 8 type usize
+    build_count at 72 size 4 type u32
     name at 80 size 16 type Str
     description at 96 size 16 type Str
     authors at 112 size 8 type *const Str
-    author_count at 120 size 8 type usize
+    author_count at 120 size 4 type u32
     license at 128 size 16 type Str
     homepage at 144 size 16 type Str
     points at 160 size 16 type Str
     exports at 176 size 8 type *const Str
-    export_count at 184 size 8 type usize
+    export_count at 184 size 4 type u32
 ManifestFlags size 4 align 4
     0 at 0 size 4 type u32
 MapFrameInfo size 48 align 8 born 48
@@ -681,11 +689,11 @@ MapFrameInfo size 48 align 8 born 48
 MapMarkerInfo size 64 align 8 born 64
     header at 0 size 8 type Header
     position at 8 size 24 type [f64; 3]
-    marker_type at 32 size 16 type [u8; 16]
-    label at 48 size 16 type [u8; 16]
+    marker_type at 32 size 16 type Guid
+    label at 48 size 16 type Guid
 MapMarkerTypeInfo size 36 align 4 born 36
     header at 0 size 8 type Header
-    type_name at 8 size 16 type [u8; 16]
+    type_name at 8 size 16 type Guid
     marker_id at 24 size 4 type u32
     sorting_category at 28 size 1 type MarkerTypeSorting
     is_fast_travel_destination at 29 size 1 type u8
@@ -695,12 +703,13 @@ MapMarkerTypeInfo size 36 align 4 born 36
     reserved at 33 size 3 type [u8; 3]
 MarkerTypeSorting size 1 align 1
     0 at 0 size 1 type u8
-MidHookSpec size 32 align 8
-    address at 0 size 8 type u64
-    handler at 8 size 8 type unsafe extern "system" fn(*mut Registers, *mut c_void)
-    user at 16 size 8 type *mut c_void
-    priority at 24 size 4 type i32
-    flags at 28 size 4 type HookFlags
+MidHookSpec size 40 align 8 born 40
+    header at 0 size 8 type Header
+    address at 8 size 8 type u64
+    handler at 16 size 8 type Option<unsafe extern "system" fn(*mut Registers, *mut c_void)>
+    user at 24 size 8 type *mut c_void
+    priority at 32 size 4 type i32
+    flags at 36 size 4 type HookFlags
 ModHandle size 8 align 8
     0 at 0 size 8 type usize
 ModInfo size 152 align 8 born 152
@@ -714,7 +723,7 @@ ModInfo size 152 align 8 born 152
     name at 72 size 16 type Str
     description at 88 size 16 type Str
     authors at 104 size 8 type *const Str
-    author_count at 112 size 8 type usize
+    author_count at 112 size 4 type u32
     license at 120 size 16 type Str
     homepage at 136 size 16 type Str
 NetMessage size 40 align 8 born 40
@@ -732,26 +741,23 @@ PlayerData size 24 align 8 born 24
     slot at 8 size 4 type u32
     entity at 12 size 4 type Entity
     key at 16 size 8 type PlayerKey
-PlayerDeathData size 64 align 8 born 64
+PlayerDeathData size 72 align 8 born 72
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     cause at 12 size 4 type u32
     key at 16 size 8 type PlayerKey
-    position at 24 size 12 type [f32; 3]
-    cause_guid at 36 size 16 type [u8; 16]
-    was_deadly_fog at 52 size 1 type u8
-    drowned at 53 size 1 type u8
-    reserved at 54 size 2 type u16
-    killer_entity at 56 size 4 type Entity
-    reserved_tail at 60 size 4 type u32
-PlayerInfo size 96 align 8 born 96
+    position at 24 size 24 type [f64; 3]
+    cause_guid at 48 size 16 type Guid
+    killer_entity at 64 size 4 type Entity
+    reserved_tail at 68 size 4 type u32
+PlayerInfo size 160 align 8 born 160
     header at 0 size 8 type Header
     slot at 8 size 4 type u32
     entity at 12 size 4 type Entity
     key at 16 size 8 type PlayerKey
-    permissions at 24 size 1 type u8
-    name_len at 25 size 1 type u8
-    name at 26 size 64 type [u8; 64]
+    permissions at 24 size 4 type u32
+    name_len at 28 size 4 type u32
+    name at 32 size 128 type [u8; 128]
 PlayerKey size 8 align 8
     0 at 0 size 8 type u64
 PointFlags size 4 align 4
@@ -830,19 +836,18 @@ Registers size 136 align 8
     rflags at 128 size 8 type u64
 Relation size 1 align 1
     0 at 0 size 1 type u8
-RenameCall size 128 align 8 born 128
+RenameCall size 40 align 8 born 40
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
-    known at 12 size 1 type u8
-    player at 16 size 96 type PlayerInfo
-    text at 112 size 16 type Str
+    player at 16 size 8 type *const PlayerInfo
+    text at 24 size 16 type Str
 ResourceKey size 24 align 4
-    guid at 0 size 16 type [u8; 16]
+    guid at 0 size 16 type Guid
     type_hash at 16 size 4 type u32
     part at 20 size 4 type u32
 SaveInfo size 48 align 8 born 48
     header at 0 size 8 type Header
-    world at 8 size 16 type [u8; 16]
+    world at 8 size 16 type Guid
     saved_at at 24 size 8 type u64
     size at 32 size 8 type u64
     backups at 40 size 4 type u32
@@ -870,15 +875,14 @@ SkillCheck size 20 align 4 born 20
     reserved at 17 size 3 type [u8; 3]
 SkillNode size 4 align 4
     0 at 0 size 4 type u32
-SpawnRequest size 88 align 8 born 80
+SpawnRequest size 80 align 8 born 80
     header at 0 size 8 type Header
-    template at 8 size 16 type [u8; 16]
-    position at 24 size 24 type [i64; 3]
+    template at 8 size 16 type Guid
+    position at 24 size 24 type [f64; 3]
     orientation at 48 size 16 type [f32; 4]
     level at 64 size 4 type u32
-    reserved at 68 size 4 type u32
+    flags at 68 size 4 type u32
     lifetime_ns at 72 size 8 type u64
-    flags at 80 size 8 type u64
 StatChange size 32 align 4 born 32
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
@@ -886,16 +890,7 @@ StatChange size 32 align 4 born 32
     old at 20 size 4 type f32
     new at 24 size 4 type f32
     reserved at 28 size 4 type u32
-StatDefData size 40 align 8 born 40
-    header at 0 size 8 type Header
-    ty at 8 size 1 type u8
-    format at 9 size 1 type u8
-    reserved at 10 size 2 type u16
-    default at 12 size 4 type f32
-    min at 16 size 4 type f32
-    max at 20 size 4 type f32
-    text at 24 size 16 type Str
-StatModifierData size 12 align 4
+StatModifier size 12 align 4
     stat at 0 size 4 type u32
     op at 4 size 1 type u8
     reserved at 5 size 3 type [u8; 3]
@@ -904,7 +899,7 @@ StatModify size 40 align 8 born 40
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     key at 12 size 4 type u32
-    modifier at 16 size 12 type StatModifierData
+    modifier at 16 size 12 type StatModifier
     flags at 28 size 4 type u32
     duration_ms at 32 size 8 type u64
 StatRef size 8 align 4
@@ -918,6 +913,14 @@ StatSource size 20 align 4
     value at 8 size 4 type f32
     id at 12 size 4 type u32
     owner at 16 size 4 type u32
+StatSpec size 24 align 4 born 24
+    header at 0 size 8 type Header
+    ty at 8 size 1 type u8
+    format at 9 size 1 type u8
+    reserved at 10 size 2 type u16
+    default at 12 size 4 type f32
+    min at 16 size 4 type f32
+    max at 20 size 4 type f32
 Status size 4 align 4
     0 at 0 size 4 type u32
 Str size 16 align 8
@@ -927,7 +930,7 @@ Summon size 80 align 8 born 80
     header at 0 size 8 type Header
     item at 8 size 4 type ItemId
     ammo at 12 size 4 type ItemId
-    template at 16 size 16 type [u8; 16]
+    template at 16 size 16 type Guid
     target at 32 size 24 type [i64; 3]
     slot at 56 size 8 type u64
     pide at 64 size 4 type Entity
@@ -950,18 +953,18 @@ TeleportRequest size 56 align 8 born 56
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
     flags at 12 size 4 type u32
-    position at 16 size 24 type [i64; 3]
+    position at 16 size 24 type [f64; 3]
     orientation at 40 size 16 type [f32; 4]
-TerrainEdit size 60 align 4 born 60
+TerrainEdit size 72 align 8 born 72
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     shape at 12 size 4 type u32
     flags at 16 size 4 type u32
     material at 20 size 4 type u32
-    position at 24 size 12 type [f32; 3]
-    radius at 36 size 4 type f32
-    height at 40 size 4 type f32
-    protect at 44 size 16 type [u8; 16]
+    position at 24 size 24 type [f64; 3]
+    radius at 48 size 4 type f32
+    height at 52 size 4 type f32
+    protect at 56 size 16 type [u8; 16]
 TerrainMaterialInfo size 20 align 4 born 20
     header at 0 size 8 type Header
     id at 8 size 1 type u8
@@ -979,9 +982,9 @@ TickData size 56 align 8 born 56
     header at 0 size 8 type Header
     step at 8 size 8 type u64
     elapsed_steps at 16 size 8 type u64
-    elapsed_nanos at 24 size 8 type u64
-    step_nanos at 32 size 8 type u64
-    cost_nanos at 40 size 8 type u64
+    elapsed_ns at 24 size 8 type u64
+    step_ns at 32 size 8 type u64
+    cost_ns at 40 size 8 type u64
     game at 48 size 8 type u64
 TickHandle size 4 align 4
     0 at 0 size 4 type u32
@@ -1040,15 +1043,15 @@ UiDialog size 64 align 8 born 64
     detail at 40 size 16 type Str
     buttons at 56 size 4 type u32
     flags at 60 size 4 type u32
-UiExtension size 48 align 8 born 32
+UiExtension size 48 align 8 born 48
     header at 0 size 8 type Header
     screen at 8 size 16 type Str
     edge at 24 size 4 type u32
     reserved at 28 size 4 type u32
-    hosts at 32 size 8 type *const [u8; 16]
+    hosts at 32 size 8 type *const Guid
     host_count at 40 size 4 type u32
     reserved_hosts at 44 size 4 type u32
-UiFrame size 104 align 8 born 24
+UiFrame size 104 align 8 born 104
     header at 0 size 8 type Header
     token at 8 size 8 type u64
     screen at 16 size 4 type u32
@@ -1057,15 +1060,15 @@ UiFrame size 104 align 8 born 24
     prompt_title at 40 size 16 type Str
     prompt_verb at 56 size 4 type u32
     screen_host at 60 size 4 type Entity
-    screen_host_template at 64 size 16 type [u8; 16]
-    screen_host_position at 80 size 24 type [i64; 3]
+    screen_host_template at 64 size 16 type Guid
+    screen_host_position at 80 size 24 type [f64; 3]
 UiMarker size 56 align 8 born 56
     header at 0 size 8 type Header
-    position at 8 size 24 type [i64; 3]
+    position at 8 size 24 type [f64; 3]
     label at 32 size 16 type Str
     color at 48 size 4 type u32
     marker_type at 52 size 4 type u32
-UiWidget size 112 align 8 born 96
+UiWidget size 112 align 8 born 112
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     flags at 12 size 4 type u32
@@ -1082,7 +1085,7 @@ UiWidget size 112 align 8 born 96
     result at 84 size 4 type u32
     anchor at 88 size 4 type u32
     reserved at 92 size 4 type u32
-    sound at 96 size 16 type [u8; 16]
+    sound at 96 size 16 type Guid
 Voxel size 4 align 1
     kind at 0 size 1 type u8
     material at 1 size 1 type u8
@@ -1092,13 +1095,13 @@ VoxelChange size 20 align 4
     at at 0 size 12 type [u32; 3]
     before at 12 size 4 type Voxel
     after at 16 size 4 type Voxel
-VoxelEditData size 56 align 8 born 56
+VoxelEditRequest size 56 align 8 born 56
     header at 0 size 8 type Header
     by at 8 size 8 type ModHandle
     min at 16 size 12 type [u32; 3]
     size at 28 size 12 type [u32; 3]
     changes at 40 size 8 type *const VoxelChange
-    count at 48 size 8 type u64
+    count at 48 size 4 type u32
 VoxelRegion size 32 align 4 born 32
     header at 0 size 8 type Header
     min at 8 size 12 type [u32; 3]
@@ -1108,13 +1111,404 @@ VoxelWrite size 48 align 8 born 48
     min at 8 size 12 type [u32; 3]
     size at 20 size 12 type [u32; 3]
     voxels at 32 size 8 type *const Voxel
-    count at 40 size 8 type u64
-WeatherFront size 72 align 8 born 56
+    count at 40 size 4 type u32
+WeatherFront size 72 align 8 born 72
     header at 0 size 8 type Header
     layer at 8 size 4 type u32
     effect at 12 size 4 type u32
-    position at 16 size 24 type [i64; 3]
+    position at 16 size 24 type [f64; 3]
     radius at 40 size 4 type f32
     reserved at 44 size 4 type u32
-    remaining at 48 size 8 type i64
-    phenomenon at 56 size 16 type [u8; 16]
+    remaining_ns at 48 size 8 type i64
+    phenomenon at 56 size 16 type Guid
+WeatherSample size 24 align 4 born 24
+    header at 0 size 8 type Header
+    clear at 8 size 4 type f32
+    rain at 12 size 4 type f32
+    snow at 16 size 4 type f32
+    blizzard at 20 size 4 type f32
+const ALTAR_LEVELS = 16
+const AccountActionType::BAN = 1
+const AccountActionType::KICK = 0
+const AccountActionType::UNBAN = 2
+const ActionCall::ALLOWED = 0
+const ActionCall::CHAT = 4
+const ActionCall::CONSOLE = 3
+const ActionCall::REFUSED = 8
+const ActionCall::REFUSED_BOUNDS = 2
+const ActionCall::REFUSED_BUSY = 3
+const ActionCall::REFUSED_RATE = 1
+const ActionCall::REFUSED_REACH = 4
+const ActionCall::REMOTE = 5
+const ActionCall::RUN = 1
+const ActionCall::WINDOW = 6
+const ActionCall::WINDOW_CLOSED = 7
+const ActionTarget::ENTITY = 1
+const ActionTarget::POSITION = 2
+const AffixRoll::ONCE = 1
+const BuffTypeInfo::BUFF = 1
+const BuffTypeInfo::DEBUFF = 2
+const BuffTypeInfo::FOOD = 0
+const BuffTypeInfo::HIDDEN = 2
+const BuffTypeInfo::RESTED = 3
+const BuffTypeInfo::SAVED = 1
+const BuffTypeInfo::TERRAIN = 4
+const BuildRights::ALLOWED = 0
+const BuildRights::INSIDE_STRICT_BUILD_INHIBITOR_ZONE = 4
+const BuildRights::NO_CAN_EDIT_BASE = 2
+const BuildRights::NO_CAN_EDIT_WORLD = 1
+const BuildRights::OUTSIDE_BUILDING_ZONE = 3
+const BuildingData::PICKED_UP = 1
+const BuildingData::PLACED = 0
+const BuildingData::TORN_DOWN = 2
+const ChangeOp::RESET = 2
+const ChangeOp::SET = 0
+const ChangeOp::TIMES = 1
+const ChatLine::EMOTE = 1
+const ChatLine::NOTICE = 2
+const ChatLine::PLAYER = 0
+const ChatRewrite::DROP = 1
+const ChatRewrite::KEEP = 0
+const ChatRewrite::REWRITTEN = 2
+const ControlSpec::HOLD = 4
+const ControlSpec::PRESS = 1
+const ControlSpec::RELEASE = 2
+const DAMAGE_TYPES = 13
+const DamageCheck::ADMIN_KILL = 7
+const DamageCheck::DEADLY_FOG = 3
+const DamageCheck::DROWNING_DEATH = 5
+const DamageCheck::FALL_DAMAGE = 1
+const DamageCheck::FOG = 2
+const DamageCheck::FREEZING = 6
+const DamageCheck::IMPACT = 0
+const DamageCheck::SUFFOCATED = 4
+const DataField::ARMOR = 9
+const DataField::BURN_TIME = 10
+const DataField::COMFORT_AMOUNT = 12
+const DataField::CONTAINER_SLOTS = 6
+const DataField::DAMAGE_MOD = 7
+const DataField::ENERGY_OUTPUT = 11
+const DataField::LOOT_COUNT = 14
+const DataField::LOOT_SPAWN_PROBABILITY = 15
+const DataField::LOOT_STACK_SIZE = 13
+const DataField::LOOT_WEIGHT = 16
+const DataField::MAX_STACK = 1
+const DataField::RECIPE_COST = 3
+const DataField::RECIPE_INGREDIENT = 4
+const DataField::RECIPE_OUTPUT = 2
+const DataField::RECIPE_STATION = 17
+const DataField::RECIPE_TIME = 5
+const DataField::SPEED_MOD = 8
+const DataSelect::BACKPACKS = 6
+const DataSelect::CATEGORY = 1
+const DataSelect::CONTAINERS = 3
+const DataSelect::ENTRY = 0
+const DataSelect::RECIPE_KIND = 4
+const DataSelect::STACKABLE = 2
+const DataSelect::WORKSHOP = 5
+const DaytimeInfo::DAY = 1
+const Entity::NONE = 0
+const EntityDataFlags::NONE = 0
+const EntityDataFlags::SENT = 1
+const Event::ALTARS_CHANGED = 12
+const Event::BUILDING_PLACED = 9
+const Event::BUILDING_REMOVED = 10
+const Event::CHAT_SAID = 21
+const Event::CHUNK_LOADED = 17
+const Event::CHUNK_UNLOADED = 18
+const Event::DAY_STARTED = 13
+const Event::JOIN_REFUSED = 11
+const Event::KNOWLEDGE_CHANGED = 15
+const Event::LOADER_SETTINGS_CHANGED = 2
+const Event::NIGHT_STARTED = 14
+const Event::PLAYER_DIED = 20
+const Event::PLAYER_JOINED = 6
+const Event::PLAYER_LEFT = 7
+const Event::PROGRESS_WRITTEN = 26
+const Event::QUEST_COMPLETED = 16
+const Event::SETTINGS_CHANGED = 1
+const Event::SETTINGS_REPLACED = 19
+const Event::SHUTDOWN_STARTED = 8
+const Event::TERRAIN_PAGE_LOADED = 24
+const Event::TERRAIN_PAGE_UNLOADED = 25
+const Event::TICKED = 3
+const Event::VOXELS_CHANGED = 23
+const Event::WORLD_LOADED = 4
+const Event::WORLD_SAVED = 5
+const Event::WORLD_SAVING = 22
+const FILTER_PASS = 0
+const FILTER_REFUSE = 2
+const FILTER_YES = 1
+const HookFlags::CALLER_FRAME = 2
+const HookFlags::EXCLUSIVE = 1
+const HookFlags::NONE = 0
+const Interaction::DISMANTLE = 5
+const Interaction::MOVE = 2
+const Interaction::OPEN = 1
+const Interaction::QUICK_STASH = 6
+const Interaction::SORT = 3
+const Interaction::STOCK = 4
+const Interaction::UPGRADE = 7
+const InventoryOp::DESTROY_SLOT = 3
+const InventoryOp::FILLED = 2
+const InventoryOp::GIVE = 1
+const InventoryOp::INCLUDE_SPECIAL = 1
+const InventoryOp::MOVE_ALL = 5
+const InventoryOp::MOVE_SLOT = 4
+const InventoryOp::RENEW = 6
+const InventoryOp::TAKE = 2
+const InventoryOpResult::NOT_RUN = 256
+const InventoryRequest::ALLOW_PARTIAL = 1
+const InventoryRequest::NOTIFY = 2
+const InventoryResult::COMMITTED = 0
+const InventoryResult::ROLLED_BACK = 1
+const InventoryResult::TIMED_OUT = 3
+const InventoryResult::UNAVAILABLE = 2
+const ItemAction::CONSUME = 1
+const ItemAction::CONSUMED = 7
+const ItemAction::EQUIP = 3
+const ItemAction::PICKUP = 5
+const ItemAction::PLACE = 6
+const ItemAction::TRASH = 2
+const ItemAction::UNEQUIP = 4
+const ItemTypeInfo::HAS_PIDE = 2
+const ItemTypeInfo::IS_BLUEPRINT = 8
+const ItemTypeInfo::IS_CONTAINER = 4
+const ItemTypeInfo::USES_FUEL = 8192
+const KnowledgeChange::GRANT = 0
+const KnowledgeChange::REVOKE = 1
+const KnowledgeInfo::BOOL = 0
+const KnowledgeInfo::COUNTER = 1
+const KnowledgeInfo::FLAGS = 2
+const KnowledgeInfo::PLAYER = 1
+const KnowledgeInfo::WORLD = 0
+const KnowledgeInput::ALLOWED = 0
+const KnowledgeInput::COUNTER = 4
+const KnowledgeInput::EXPERIENCE = 6
+const KnowledgeInput::FLAG_BIT = 5
+const KnowledgeInput::KIND = 2
+const KnowledgeInput::NO_SCOPE = 255
+const KnowledgeInput::QUEST = 8
+const KnowledgeInput::SKILL_POINTS = 7
+const KnowledgeInput::UNKNOWN = 1
+const KnowledgeInput::WORLD = 3
+const Level::DEBUG = 3
+const Level::ERROR = 0
+const Level::INFO = 2
+const Level::WARN = 1
+const LoopWaitSites::HANDLES = 1
+const LoopWaitSites::MESSAGES = 2
+const LoopWaitSites::NONE = 0
+const MAX_UNCOVER_RADIUS = 100000.0
+const ManifestFlags::DEVELOPER = 4
+const ManifestFlags::NONE = 0
+const MarkerTypeSorting::CUSTOM_MARKER = 4
+const MarkerTypeSorting::DUNGEONS = 2
+const MarkerTypeSorting::FLAME_RELATED = 1
+const MarkerTypeSorting::LOCATIONS = 3
+const MarkerTypeSorting::NONE = 0
+const MarkerTypeSorting::UNKNOWN = 255
+const ModHandle::NONE = 0
+const NetMessage::SERVER = 18446744073709551615
+const PROGRESS_ADD_EXPERIENCE = 3
+const PROGRESS_OPEN = 0
+const PROGRESS_SET_EXPERIENCE = 2
+const PROGRESS_SET_LEVEL = 1
+const PlayerInfo::CAN_ACCESS_INVENTORIES = 2
+const PlayerInfo::CAN_EDIT_BASE = 4
+const PlayerInfo::CAN_EDIT_WORLD = 8
+const PlayerInfo::CAN_EXTEND_BASE = 16
+const PlayerInfo::CAN_KICK_BAN = 1
+const PlayerInfo::CAN_RECEIVE_EXP = 32
+const PlayerInfo::NAME_MAX = 128
+const PointFlags::NONE = 0
+const PointFlags::REFUSE = 1
+const PointMode::ADVISE = 1
+const PointMode::OBSERVE = 0
+const PointMode::OVERRIDE = 2
+const PointVerdict::FAILED = 3
+const PointVerdict::PASS = 0
+const PointVerdict::REFUSE = 2
+const PointVerdict::SET = 1
+const ProgressWriteData::APPLIED = 0
+const ProgressWriteData::BEHIND_DROPPED = 4
+const ProgressWriteData::LEVEL_REFUSED = 3
+const ProgressWriteData::NO_LEVEL_STEP = 1
+const ProgressWriteData::UNCONFIRMED = 5
+const ProgressWriteData::UNREADABLE = 2
+const PropRemove::DISCARD_STATE = 1
+const RateId::COMFORT = 6
+const RateId::EXPERIENCE_COMBAT = 1
+const RateId::EXPERIENCE_EXPLORATION_QUESTS = 3
+const RateId::EXPERIENCE_MINING = 2
+const RateId::FACTORY_PRODUCTION_SPEED = 4
+const RateId::LOOT = 8
+const RateId::RESOURCE_DROP_STACK_AMOUNT = 5
+const RateId::SKILL_POINTS = 7
+const RecipeKind::BUILDING_BLOCK = 1
+const RecipeKind::COMFORT_FURNITURE = 6
+const RecipeKind::DECORATIVE = 5
+const RecipeKind::OTHER = 0
+const RecipeKind::OVERGROWTH = 3
+const RecipeKind::ROOF = 2
+const RecipeKind::TERRAIN = 4
+const RecipeRuleKind::OUTPUT = 1
+const RecipeRuleKind::RECIPE = 0
+const RecipeRuleKind::WORKSHOP = 2
+const Relation::AFTER = 1
+const Relation::BREAKS = 2
+const Relation::REQUIRES = 0
+const SURVIVOR_STATUS_SET = 256
+const Side::BOTH = 3
+const Side::CLIENT = 2
+const Side::SERVER = 1
+const SkillCheck::FLY_MODE = 1
+const SkillCheck::LOCKED = 2
+const SkillCheck::OTHER = 0
+const SkillCheck::UNLOCKED = 1
+const SkillCheck::VANILLA = 0
+const SpawnRequest::DO_NOT_SAVE = 1
+const StatModifier::ADD = 0
+const StatModifier::MAX = 2
+const StatModifier::MULTIPLY = 1
+const StatModifier::OVERRIDE = 3
+const StatModify::REMOVE = 1
+const StatModify::SAVED = 2
+const StatSource::BUFF = 1
+const StatSource::ENTITY = 2
+const StatSource::ITEM = 0
+const StatSpec::ADDITIVE = 0
+const StatSpec::FLAG = 2
+const StatSpec::MULTIPLICATIVE = 1
+const StatSpec::NUMBER = 0
+const StatSpec::PERCENT = 2
+const StatSpec::SIGNED = 1
+const Status::AMBIGUOUS = 2
+const Status::BAD_ARGS = 4
+const Status::BUILDING = 14
+const Status::BUSY = 16
+const Status::FAULTED = 6
+const Status::LOADER_FAULT = 15
+const Status::MISSING = 1
+const Status::NOT_A_PROP = 11
+const Status::NOT_KEPT = 12
+const Status::NOT_LOADED = 8
+const Status::OK = 0
+const Status::OUTSIDE_WORLD = 9
+const Status::REFUSED = 3
+const Status::STATIC_HALF = 10
+const Status::TOO_LATE = 5
+const Status::TOO_SMALL = 17
+const Status::UNAVAILABLE = 13
+const Status::WRONG_THREAD = 7
+const Str::EMPTY = ""
+const Summon::REFUSE = 2
+const Summon::TAKE = 1
+const SurvivorLookup::ASSIGN_BED = 4
+const SurvivorLookup::BED_BINDING = 7
+const SurvivorLookup::BED_OWNER = 3
+const SurvivorLookup::CURSOR = 8
+const SurvivorLookup::PREVIOUS_OCCUPANT = 5
+const SurvivorLookup::ROAMING = 6
+const SurvivorLookup::SPAWN = 2
+const SurvivorLookup::UNIQUENESS = 1
+const TeleportRequest::BEST_SPAWN = 1
+const TeleportRequest::ORIENTED = 2
+const TerrainEdit::ADD = 0
+const TerrainEdit::DIG = 1
+const TerrainEdit::DRY_RUN = 1
+const TerrainEdit::FLATTEN = 2
+const TerrainEdit::ROUND = 0
+const TerrainEdit::SQUARE = 1
+const TerrainMaterialInfo::FLATTENS = 1
+const TransactionInfo::APPLIED = 1
+const TransactionInfo::EXPIRED = 5
+const TransactionInfo::FAILED = 4
+const TransactionInfo::HOLDS_CUSTOM_PLAYER_STRING = 32
+const TransactionInfo::HOLDS_FACTORY_STATION = 4
+const TransactionInfo::HOLDS_FUEL = 64
+const TransactionInfo::HOLDS_GROWTH = 2
+const TransactionInfo::HOLDS_INVENTORY = 1
+const TransactionInfo::HOLDS_LOGIC_GRAPH_NODE_CONNECTED = 128
+const TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER = 256
+const TransactionInfo::HOLDS_NPC_BED = 8
+const TransactionInfo::HOLDS_STORE_ASSOCIATED_NPC_IDS = 16
+const TransactionInfo::PENDING = 0
+const TransactionInfo::UNDOING = 2
+const TransactionInfo::UNDONE = 3
+const TransactionInfo::UNDO_REFUSED = 6
+const TransactionOp::BLOCK = 4
+const TransactionOp::ERASE = 3
+const TransactionOp::PLACE_PROP = 5
+const TransactionOp::REMOVE_PROP = 6
+const TransactionOp::TERRAIN = 1
+const TransactionOp::VOXELS = 2
+const UiDialog::BUTTONS = 495
+const UiDialog::CANCEL = 6
+const UiDialog::CLOSED = 4294967295
+const UiDialog::DISABLE = 1
+const UiDialog::ERASE = 2
+const UiDialog::IGNORE = 8
+const UiDialog::OK = 7
+const UiDialog::OVERWRITE = 5
+const UiDialog::RESET = 3
+const UiDialog::RETRY = 0
+const UiDialog::WAITING = 1
+const UiExtension::BOTTOM = 3
+const UiExtension::LEFT = 0
+const UiExtension::MAX_HOSTS = 64
+const UiExtension::RIGHT = 1
+const UiExtension::TOP = 2
+const UiFrame::IN_GAME = 2
+const UiFrame::LOADING = 1
+const UiFrame::MENU = 0
+const UiMarker::BLACK = 7
+const UiMarker::BLUE = 3
+const UiMarker::GREEN = 2
+const UiMarker::PURPLE = 5
+const UiMarker::RED = 1
+const UiMarker::TURQUOISE = 6
+const UiMarker::WHITE = 0
+const UiMarker::YELLOW = 4
+const UiWidget::BOTTOM_CENTER = 4
+const UiWidget::BOTTOM_LEFT = 3
+const UiWidget::BOTTOM_RIGHT = 5
+const UiWidget::BUTTON = 4
+const UiWidget::CENTER = 4
+const UiWidget::DROPDOWN = 7
+const UiWidget::END = 2
+const UiWidget::INPUT_HINT = 10
+const UiWidget::LABEL = 3
+const UiWidget::PROGRESS = 8
+const UiWidget::READ_ONLY = 1
+const UiWidget::SLIDER = 6
+const UiWidget::SOUND = 9
+const UiWidget::SOUND_BACK = 2
+const UiWidget::SOUND_CLICK = 0
+const UiWidget::SOUND_CONFIRM = 1
+const UiWidget::SOUND_ERROR = 3
+const UiWidget::STYLE_BODY = 0
+const UiWidget::STYLE_H1 = 2
+const UiWidget::STYLE_H2 = 3
+const UiWidget::STYLE_H3 = 4
+const UiWidget::STYLE_NEGATIVE = 7
+const UiWidget::STYLE_POSITIVE = 6
+const UiWidget::STYLE_SECONDARY = 1
+const UiWidget::STYLE_WARNING = 5
+const UiWidget::TOGGLE = 5
+const UiWidget::TOP_CENTER = 1
+const UiWidget::TOP_LEFT = 0
+const UiWidget::TOP_RIGHT = 2
+const UiWidget::WINDOW = 1
+const UiWidget::WRAP = 2
+const Voxel::AIR = 0
+const Voxel::BUILDING = 2
+const Voxel::END = 1073741824
+const Voxel::READ_MAX = 262144
+const Voxel::TERRAIN = 1
+const WINDOW_CLOSE = 1
+const WINDOW_SHOW = 0
+const WINDOW_UPDATE = 2
+const WeatherFront::BLIZZARD = 2
+const WeatherFront::NONE = 0
+const WeatherFront::RAIN = 1

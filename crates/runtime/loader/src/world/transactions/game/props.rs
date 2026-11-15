@@ -141,11 +141,10 @@ pub(super) fn spawn(loader: &Loader, prop: &Prop, actor: u32) -> Result<u32, Tra
     let tag = vec![0u8; type_size(loader, catalogue::ids::DISABLE_RANDOM_LOOT_ON_DESTROY)?];
     let request = SpawnRequest {
         header: Header::of::<SpawnRequest>(),
-        template: prop.template,
-        position: prop.position,
+        template: enshwick_core::content::Guid(prop.template),
+        position: enshwick_core::ecs::metres(prop.position),
         orientation: prop.orientation,
         level: 0,
-        reserved: 0,
         lifetime_ns: 0,
         flags: 0,
     };
@@ -343,7 +342,7 @@ pub(super) fn stands(loader: &Loader, prop: &Prop) -> Result<bool, TransactionEr
     let used_item = type_of(loader, catalogue::ids::USED_ITEM)?;
     let placed = crate::world::entities::with_component(loader, used_item)?;
     Ok(placed.iter().any(|place| {
-        place.position == prop.position
+        enshwick_core::ecs::fixed(place.position) == prop.position
             && crate::engine::world::used_item(loader, place.entity) == Some(prop.item)
             && crate::engine::world::template(loader, place.entity).ok() == Some(prop.template)
     }))

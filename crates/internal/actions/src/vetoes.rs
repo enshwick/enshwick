@@ -67,7 +67,7 @@ where
 {
     // SAFETY: the loader passes a valid call for the duration of this one.
     let Some(call) = (unsafe { call.as_ref() }) else {
-        return 1;
+        return crate::abi::FILTER_PASS;
     };
     let request = enshwick_base::__internal::craft_recipe_event(
         call.crafting_operator_id,
@@ -77,7 +77,7 @@ where
     );
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    u8::from(crate::host::guard(
+    crate::host::verdict(crate::host::guard(
         "panic in a craft filter",
         || true,
         || filter(&request),
@@ -150,12 +150,12 @@ where
 {
     // SAFETY: the loader passes a valid call for the duration of this one.
     let Some(call) = (unsafe { call.as_ref() }) else {
-        return 1;
+        return crate::abi::FILTER_PASS;
     };
     let placement = Placement {
-        player: call.player,
+        player: call.character,
         item: call.item,
-        position: crate::ecs::metres(call.position),
+        position: call.position,
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
@@ -165,15 +165,15 @@ where
         || filter(&placement),
     );
     let reason = match verdict {
-        BuildVerdict::Allow => return 1,
-        BuildVerdict::Refuse => return 0,
+        BuildVerdict::Allow => return crate::abi::FILTER_PASS,
+        BuildVerdict::Refuse => return crate::abi::FILTER_REFUSE,
         BuildVerdict::RefuseBecause(reason) => reason,
     };
     let covered = call
         .header
         .covers(core::mem::offset_of!(BuildCheck, reason) + size_of::<*mut Str>());
     if !covered || call.reason.is_null() {
-        return 0;
+        return crate::abi::FILTER_REFUSE;
     }
     REASON.with_borrow_mut(|kept| {
         *kept = reason;
@@ -183,7 +183,7 @@ where
         // after the loader copied it.
         unsafe { call.reason.write(Str::new(kept)) };
     });
-    0
+    crate::abi::FILTER_REFUSE
 }
 
 /// `Load`'s methods of this module on the base handle, which core's
@@ -212,7 +212,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().craft_filter)(host.handle(), run_craft::<F>, user),
+            |user| (host.api().craft_filter)(host.handle(), Some(run_craft::<F>), user),
             "craft filter",
         )
     }
@@ -235,7 +235,7 @@ where
     let host = load.host();
     crate::load::hand_over(
         filter,
-        |user| (host.api().build_filter)(host.handle(), run_build::<F>, user),
+        |user| (host.api().build_filter)(host.handle(), Some(run_build::<F>), user),
         "build filter",
     )
 }

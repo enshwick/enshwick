@@ -1,6 +1,9 @@
-//! The sheet: the actions a player may use, as the server's loader hands
-//! them to the client's, which draws them. Mods never read it; the loader
-//! and [`Actions`](super::Actions) share it.
+//! The sheet: the actions a [window](super::window) draws whole, as the
+//! server renders them for one player.
+//!
+//! The client's loader reads them from the window's text. Mods never read
+//! it; the loader and [`Actions`](super::Actions) share it, and the fake
+//! host's windows decode it for tests.
 //!
 //! A sheet is text, a line per item and tab-separated fields: `A` an
 //! action, `S` the group of the action before it, `G` an argument of the
@@ -57,7 +60,8 @@ pub struct Entry {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ArgView {
     /// What it is: [`ArgView::PLAYER`], [`ArgView::CHOICE`],
-    /// [`ArgView::NUMBER`], [`ArgView::TOGGLE`] or [`ArgView::TEXT`].
+    /// [`ArgView::NUMBER`], [`ArgView::TOGGLE`], [`ArgView::TEXT`],
+    /// [`ArgView::ITEM`] or [`ArgView::TEMPLATE`].
     pub kind: u8,
     /// Its label, in the player's language.
     pub label: String,
@@ -89,6 +93,9 @@ impl ArgView {
     /// One of the game's items, which the client lists by the names its
     /// game shows.
     pub const ITEM: u8 = 5;
+    /// One of the game's entity templates, which the client lists by the
+    /// names its game data gives them.
+    pub const TEMPLATE: u8 = 6;
 }
 
 /// The separator of a list inside a field.
@@ -267,6 +274,7 @@ pub fn encode_args(args: &[Value]) -> String {
             Value::Toggle(on) => write!(out, "b{}", u8::from(*on)),
             Value::Text(text) => write!(out, "t{}", clean(text)),
             Value::Item(item) => write!(out, "i{item}"),
+            Value::Template(template) => write!(out, "e{template}"),
         };
     }
     out
@@ -295,6 +303,7 @@ pub fn decode_args(text: &str) -> Option<Vec<Value>> {
                 "n" => Value::Number(rest.parse::<f64>().ok().filter(|n| n.is_finite())?),
                 "b" => Value::Toggle(rest == "1"),
                 "i" => Value::Item(crate::content::Guid::try_parse(rest)?),
+                "e" => Value::Template(crate::content::Guid::try_parse(rest)?),
                 "t" if rest.len() <= super::MAX_TEXT && !rest.chars().any(char::is_control) => {
                     Value::Text(rest.to_owned())
                 }
@@ -431,6 +440,9 @@ mod tests {
             Value::Item(crate::content::Guid::parse(
                 "6943053a-32c1-4718-ae22-e61427ddf54d",
             )),
+            Value::Template(crate::content::Guid::parse(
+                "377f61dc-c7b8-4e4f-830f-7d2c3e8b7fd8",
+            )),
         ];
         assert_eq!(decode_args(&encode_args(&args)), Some(args));
         assert_eq!(decode_args(""), Some(Vec::new()));
@@ -438,6 +450,11 @@ mod tests {
         assert_eq!(decode_args("nNaN"), None);
         assert_eq!(decode_args("pzz"), None);
         assert_eq!(decode_args("i6943053a"), None, "a GUID cut short");
+        assert_eq!(
+            decode_args("e377f61dc"),
+            None,
+            "a template's GUID cut short"
+        );
     }
 
     #[test]

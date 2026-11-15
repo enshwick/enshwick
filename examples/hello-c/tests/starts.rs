@@ -36,11 +36,11 @@ mod tests {
     /// it on a fake host, where it logs `line`.
     fn starts(dll: &str, id: &str, line: &str) {
         let export = |name: &str| export(dll, name);
-        // SAFETY: the ABI gives `exports::ABI` the signature `fn() -> u32`.
-        let abi: unsafe extern "system" fn() -> u32 =
+        // SAFETY: the ABI gives `exports::ABI` the signature `fn() -> u16`.
+        let abi: unsafe extern "system" fn() -> u16 =
             unsafe { core::mem::transmute(export(exports::ABI)) };
         // SAFETY: `abi` takes nothing and returns a constant.
-        assert_eq!(unsafe { abi() }, u32::from(ABI_MAJOR));
+        assert_eq!(unsafe { abi() }, ABI_MAJOR);
 
         // SAFETY: the ABI gives `exports::QUERY` the signature
         // `fn() -> *const Manifest`.

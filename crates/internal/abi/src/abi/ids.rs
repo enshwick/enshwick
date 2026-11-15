@@ -176,7 +176,7 @@ pub struct PlayerKey(pub u64);
 pub struct RecipeId(pub u32);
 
 /// A node of the game's skill tree by its id, as
-/// `Skill::node` names the nodes a character
+/// the knowledge reads name the nodes a character
 /// unlocked and a skill check names the node it asks about.
 ///
 /// # Examples
@@ -249,7 +249,7 @@ pub struct SkillNode(pub u32);
 pub struct KnowledgeId(pub u32);
 
 /// A buff type of the game by its id, the
-/// [`Guid::fnv1a`](crate::content::Guid::fnv1a) of its GUID, to apply,
+/// 32-bit FNV-1a hash of its GUID's 16 bytes, to apply,
 /// find or remove one buff.
 ///
 /// # Examples
@@ -283,7 +283,7 @@ pub struct KnowledgeId(pub u32);
 pub struct BuffTypeId(pub u32);
 
 /// An NPC of the game, such as a survivor, by its id, the
-/// [`Guid::fnv1a`](crate::content::Guid::fnv1a) of its template's GUID, to
+/// 32-bit FNV-1a hash of its template's GUID, to
 /// tell survivors apart in lookups, bed checks and summons.
 ///
 /// # Examples

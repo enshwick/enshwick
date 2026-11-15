@@ -3,6 +3,8 @@
 use core::ffi::c_void;
 use core::sync::atomic::AtomicUsize;
 
+use super::Header;
+
 /// Flags of a [`HookSpec`].
 ///
 /// # Examples
@@ -14,7 +16,7 @@ use core::sync::atomic::AtomicUsize;
 /// assert!(flags.contains(HookFlags::CALLER_FRAME));
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct HookFlags(pub u32);
 
 impl HookFlags {
@@ -47,12 +49,13 @@ impl HookFlags {
 ///
 /// ```
 /// use core::sync::atomic::{AtomicU32, AtomicUsize};
-/// use enshwick::abi::{HookFlags, HookSpec};
+/// use enshwick::abi::{Header, HookFlags, HookSpec};
 ///
 /// static NEXT: AtomicUsize = AtomicUsize::new(0);
 /// extern "system" fn detour() {}
 ///
 /// let spec = HookSpec {
+///     header: Header::of::<HookSpec>(),
 ///     target: 0x1_4009_0a60,
 ///     detour: detour as usize,
 ///     next: &NEXT,
@@ -62,8 +65,10 @@ impl HookFlags {
 /// assert_eq!(spec.priority, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct HookSpec {
+    /// Size and version of this struct.
+    pub header: Header,
     /// The absolute address of the game function.
     pub target: u64,
     /// The detour, with the target's signature and the `system` ABI.
@@ -76,8 +81,13 @@ pub struct HookSpec {
     pub flags: HookFlags,
 }
 
+impl_headed!(HookSpec);
+
 /// The game caller's context at entry of a hook chain: its stack pointer and
 /// callee-saved registers, for links that tell callers apart.
+///
+/// Frozen, with no header: it is the x64 caller's whole callee-saved set,
+/// which no call convention will add to.
 ///
 /// # Examples
 ///
@@ -156,6 +166,10 @@ impl CallerFrame {
 /// writes a field changes what the game code sees next. `rsp` is read-only:
 /// the stack stays where it was.
 ///
+/// Frozen, with no header: it is the whole x64 general-purpose set the
+/// loader's stub saves; vector registers, when offered, come through an
+/// entry of their own.
+///
 /// # Examples
 ///
 /// ```
@@ -207,6 +221,11 @@ pub struct Registers {
 /// A handler of a mid-function hook: the saved registers, writable, and the
 /// pointer it was registered with. It must not unwind.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on whichever thread reaches the hooked instruction, so several calls
+/// may run at once.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::hook_at`](../struct.Load.html#method.hook_at).
@@ -221,7 +240,7 @@ pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: 
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{HookFlags, MidHookSpec, Registers};
+/// use enshwick::abi::{Header, HookFlags, MidHookSpec, Registers};
 ///
 /// unsafe extern "system" fn handler(registers: *mut Registers, _user: *mut core::ffi::c_void) {
 ///     // SAFETY: the loader passes its saved registers, valid for the call.
@@ -231,8 +250,9 @@ pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: 
 /// }
 ///
 /// let spec = MidHookSpec {
+///     header: Header::of::<MidHookSpec>(),
 ///     address: 0x1_4009_0a6c,
-///     handler,
+///     handler: Some(handler),
 ///     user: core::ptr::null_mut(),
 ///     priority: 0,
 ///     flags: HookFlags::NONE,
@@ -240,12 +260,14 @@ pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: 
 /// assert_eq!(spec.priority, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct MidHookSpec {
+    /// Size and version of this struct.
+    pub header: Header,
     /// The absolute address of the instruction to run the handler before.
     pub address: u64,
     /// The handler.
-    pub handler: MidHookFn,
+    pub handler: Option<MidHookFn>,
     /// Passed to the handler on every call.
     pub user: *mut c_void,
     /// Lower runs earlier; equal priorities run in load order.
@@ -253,3 +275,5 @@ pub struct MidHookSpec {
     /// [`HookFlags::EXCLUSIVE`] or none.
     pub flags: HookFlags,
 }
+
+impl_headed!(MidHookSpec);

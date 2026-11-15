@@ -87,7 +87,7 @@ impl State {
             .map(|data| answers::Placed {
                 entity: data.entity.0,
                 item: data.item.get(),
-                template: data.template,
+                template: data.template.0,
                 position: data.position,
             });
         let mut placed = self.placed.relock();
@@ -364,11 +364,11 @@ mod tests {
         let piece = |entity, kind| BuildingData {
             header: enshwick_core::abi::Header::of::<BuildingData>(),
             entity,
-            player: enshwick_core::Entity(7),
+            character: enshwick_core::Entity(7),
             item: enshwick_core::ItemId::new(1),
             kind,
             replay: 0,
-            template: [0; 16],
+            template: enshwick_core::content::Guid::NIL,
             position: [0.0; 3],
         };
         let built: Vec<BuildingData> = (0..40)

@@ -36,7 +36,7 @@ impl Load<'_> {
     /// of the game's code; where the loader cannot arm all of it, the game
     /// keeps 16 bases with the zones raised, which [`base_limit`](crate::altars::base_limit) tells. A
     /// world lowers the bases below the request with
-    /// [`set_base_cap`](crate::altars::set_base_cap).
+    /// [`set_base_limit`](crate::altars::set_base_limit).
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///

@@ -345,7 +345,7 @@ fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
         // or the registry's collection on the game thread; the reflected
         // `keen::BuffType` places its `i64` `defaultLifeTime` at
         // `type_duration`.
-        duration: unsafe { read(ty, layout.type_duration) },
+        duration_ns: unsafe { read(ty, layout.type_duration) },
     }
 }
 
@@ -436,8 +436,8 @@ pub(crate) fn of(loader: &Loader, entity: Entity) -> Result<Vec<ActiveBuff>, Buf
             // reflected type places its `level` at `network_level`, read as
             // the `u32` the ABI hands on.
             level: unsafe { read(network, layout.network_level) },
-            duration: total,
-            remaining: end.saturating_sub(now).max(0),
+            duration_ns: total,
+            remaining_ns: end.saturating_sub(now).max(0),
         });
     }
     Ok(out)
@@ -478,18 +478,19 @@ pub(crate) fn type_ids(loader: &Loader, entity: Entity) -> Vec<u32> {
 pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), BuffError> {
     let layout = layout(loader).ok_or(BuffError::Unread)?;
     let (server, _, game, now) = server(layout)?;
-    if request.entity == Entity(0) || request.level > u32::from(u8::MAX) || request.duration < 0 {
+    if request.entity == Entity(0) || request.level > u32::from(u8::MAX) || request.duration_ns < 0
+    {
         return Err(BuffError::BadRequest);
     }
     let ty = find_type(layout, registry(layout, game)?, request.id.get())
         .ok_or(BuffError::BadRequest)?;
-    let duration = if request.duration == 0 {
+    let duration = if request.duration_ns == 0 {
         // SAFETY: `ty` is the non-null live `BuffType` `find_type` returned
         // on the game thread; the reflected `keen::BuffType` places its `i64`
         // `defaultLifeTime` at `type_duration`.
         unsafe { read::<i64>(ty, layout.type_duration) }
     } else {
-        request.duration
+        request.duration_ns
     };
     let container = crate::engine::world::component(loader, request.entity, layout.container)?
         .expose_provenance();

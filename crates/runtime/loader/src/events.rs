@@ -103,8 +103,8 @@ struct Offsets {
 /// The data of the every-step [`Event::TICKED`] for step `step` of `game`.
 fn tick_data(step: u64, time: StepTime, game: u64) -> TickData {
     TickData {
-        elapsed_nanos: time.elapsed,
-        step_nanos: time.average,
+        elapsed_ns: time.elapsed,
+        step_ns: time.average,
         game,
         ..TickData::new(step)
     }
@@ -460,7 +460,7 @@ fn raise_building(loader: &'static Loader, built: &[BuildingData]) {
                     players
                         .get_or_init(|| crate::engine::world::players(loader).unwrap_or_default())
                 })
-                .and_then(|players: &Vec<_>| players.iter().find(|p| p.entity == data.player));
+                .and_then(|players: &Vec<_>| players.iter().find(|p| p.entity == data.character));
             match builder {
                 Some(player) => crate::engine::texts::for_reader(
                     Some(
@@ -541,7 +541,7 @@ fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
         |tick| !crate::engine::loader::is_off(tick.owner()),
         |tick, mut data| {
             data.game = game;
-            data.cost_nanos = crate::engine::profile::events_reading(tick.owner())
+            data.cost_ns = crate::engine::profile::events_reading(tick.owner())
                 .and_then(|(calls, ticks)| {
                     let (calls, ticks) = tick.since_seen(calls, ticks);
                     crate::engine::profile::nanos(ticks.checked_div(calls)?)
@@ -800,7 +800,7 @@ crate::engine::chains::chain_detour! {
                 // SAFETY: `context` is non-null by the check before it and is
                 // the hooked function's build context; its u32 acting player
                 // sits at the build table's `building.ctx_player` offset.
-                player: unsafe { read_at(context, offsets.ctx_player) },
+                character: unsafe { read_at(context, offsets.ctx_player) },
                 item: enshwick_core::ItemId::new(item),
                 kind: BuildingData::PLACED,
                 // SAFETY: `context` is non-null by the check before it and is
@@ -808,7 +808,7 @@ crate::engine::chains::chain_detour! {
                 // at the build table's `building.ctx_replay` offset.
                 replay: unsafe { read_at(context, offsets.ctx_replay) },
                 template: if template.is_null() {
-                    [0; 16]
+                    enshwick_core::content::Guid::NIL
                 } else {
                     // SAFETY: `template` is non-null by the check before it and
                     // is the hooked function's 16-byte template GUID argument.
@@ -864,7 +864,7 @@ crate::engine::chains::chain_detour! {
             STATE.building.push(BuildingData {
                 header: Header::of::<BuildingData>(),
                 entity: enshwick_core::Entity(entity),
-                player: enshwick_core::Entity(player),
+                character: enshwick_core::Entity(player),
                 item: enshwick_core::ItemId::new(0),
                 kind: if mode == 2 {
                     BuildingData::TORN_DOWN
@@ -872,7 +872,7 @@ crate::engine::chains::chain_detour! {
                     BuildingData::PICKED_UP
                 },
                 replay,
-                template: [0; 16],
+                template: enshwick_core::content::Guid::NIL,
                 position: [0.0; 3],
             });
         }

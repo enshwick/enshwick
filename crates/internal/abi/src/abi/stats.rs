@@ -4,36 +4,35 @@ use core::ffi::c_void;
 
 use crate::abi::{Entity, Header, ItemId, Str};
 
-/// A stat kind's definition, for [`HostApi::stat_open`](super::HostApi::stat_open) and
+/// A stat kind's definition, for [`HostApi::define_stat`](super::HostApi::define_stat) and
 /// [`HostApi::stat_info`](super::HostApi::stat_info).
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, StatDefData, Str};
+/// use enshwick::abi::{Header, StatSpec};
 ///
-/// let crit = StatDefData {
-///     header: Header::of::<StatDefData>(),
-///     ty: StatDefData::ADDITIVE,
-///     format: StatDefData::PERCENT,
+/// let crit = StatSpec {
+///     header: Header::of::<StatSpec>(),
+///     ty: StatSpec::ADDITIVE,
+///     format: StatSpec::PERCENT,
 ///     reserved: 0,
 ///     default: 0.0,
 ///     min: 0.0,
 ///     max: 1.0,
-///     text: Str::EMPTY,
 /// };
 /// assert!(crit.min <= crit.default && crit.default <= crit.max);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
-pub struct StatDefData {
+pub struct StatSpec {
     /// Size and version of this struct.
     pub header: Header,
-    /// [`StatDefData::ADDITIVE`], [`StatDefData::MULTIPLICATIVE`] or
-    /// [`StatDefData::FLAG`].
+    /// [`StatSpec::ADDITIVE`], [`StatSpec::MULTIPLICATIVE`] or
+    /// [`StatSpec::FLAG`].
     pub ty: u8,
-    /// How the value reads: [`StatDefData::NUMBER`],
-    /// [`StatDefData::SIGNED`] or [`StatDefData::PERCENT`].
+    /// How the value reads: [`StatSpec::NUMBER`],
+    /// [`StatSpec::SIGNED`] or [`StatSpec::PERCENT`].
     pub format: u8,
     /// Zero.
     pub reserved: u16,
@@ -43,14 +42,11 @@ pub struct StatDefData {
     pub min: f32,
     /// The greatest value.
     pub max: f32,
-    /// The text key that names the stat in its owner's texts, `<name>.name`,
-    /// from `stat_info`; the loader derives it and ignores what a mod passes.
-    pub text: Str,
 }
 
-impl_headed!(StatDefData);
+impl_headed!(StatSpec);
 
-impl StatDefData {
+impl StatSpec {
     /// A sum of points, such as extra health.
     pub const ADDITIVE: u8 = 0;
     /// A factor, 1 without modifiers, such as a damage multiplier.
@@ -90,18 +86,18 @@ pub struct StatRef {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::StatModifierData;
+/// use enshwick::abi::StatModifier;
 ///
-/// let more = StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 50.0 };
-/// assert_eq!(more.op, StatModifierData::ADD);
+/// let more = StatModifier { stat: 0, op: StatModifier::ADD, reserved: [0; 3], value: 50.0 };
+/// assert_eq!(more.op, StatModifier::ADD);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, bytemuck::Zeroable)]
-pub struct StatModifierData {
+pub struct StatModifier {
     /// The stat's index.
     pub stat: u32,
-    /// [`StatModifierData::ADD`], [`StatModifierData::MULTIPLY`],
-    /// [`StatModifierData::MAX`] or [`StatModifierData::OVERRIDE`].
+    /// [`StatModifier::ADD`], [`StatModifier::MULTIPLY`],
+    /// [`StatModifier::MAX`] or [`StatModifier::OVERRIDE`].
     pub op: u8,
     /// Zero.
     pub reserved: [u8; 3],
@@ -109,7 +105,7 @@ pub struct StatModifierData {
     pub value: f32,
 }
 
-impl StatModifierData {
+impl StatModifier {
     /// Adds the value.
     pub const ADD: u8 = 0;
     /// Multiplies by the value.
@@ -126,13 +122,13 @@ impl StatModifierData {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, StatModifierData, StatModify};
+/// use enshwick::abi::{Header, StatModifier, StatModify};
 ///
 /// let blessing = StatModify {
 ///     header: Header::of::<StatModify>(),
 ///     entity: enshwick::Entity(2),
 ///     key: 7,
-///     modifier: StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 50.0 },
+///     modifier: StatModifier { stat: 0, op: StatModifier::ADD, reserved: [0; 3], value: 50.0 },
 ///     flags: 0,
 ///     duration_ms: 60_000,
 /// };
@@ -149,7 +145,7 @@ pub struct StatModify {
     /// replaces the one before.
     pub key: u32,
     /// The modifier.
-    pub modifier: StatModifierData,
+    pub modifier: StatModifier,
     /// [`StatModify::REMOVE`], [`StatModify::SAVED`].
     pub flags: u32,
     /// How long it lasts in milliseconds; 0 until removed.
@@ -199,6 +195,9 @@ impl_headed!(StatChange);
 /// A handler of stat changes: the change and the pointer given at
 /// registration. It runs on the game thread, after a step.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_stats_changed`](../struct.Load.html#method.on_stats_changed).
@@ -210,9 +209,9 @@ pub type StatChangeFn = unsafe extern "system" fn(change: *const StatChange, use
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{StatModifierData, StatSource};
+/// use enshwick::abi::{StatModifier, StatSource};
 ///
-/// let ring = StatSource { kind: StatSource::ITEM, op: StatModifierData::ADD, reserved: 0, stat: 0, value: 20.0, id: 900, owner: 0x5e01 };
+/// let ring = StatSource { kind: StatSource::ITEM, op: StatModifier::ADD, reserved: 0, stat: 0, value: 20.0, id: 900, owner: 0x5e01 };
 /// assert_eq!(ring.kind, StatSource::ITEM);
 /// ```
 #[repr(C)]
@@ -221,7 +220,7 @@ pub struct StatSource {
     /// [`StatSource::ITEM`], [`StatSource::BUFF`] or
     /// [`StatSource::ENTITY`].
     pub kind: u8,
-    /// The operation, as [`StatModifierData::op`].
+    /// The operation, as [`StatModifier::op`].
     pub op: u8,
     /// Zero.
     pub reserved: u16,
@@ -235,17 +234,16 @@ pub struct StatSource {
     pub owner: u32,
 }
 
-/// An affix's definition, for [`HostApi::affix_open`](super::HostApi::affix_open).
+/// An affix's definition, for [`HostApi::define_affix`](super::HostApi::define_affix).
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{AffixDefData, AffixModifierData, Header, StatModifierData, Str};
+/// use enshwick::abi::{AffixSpec, AffixModifierSpec, Header, StatModifier, Str};
 ///
-/// let ranges = [AffixModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], min: 10.0, max: 30.0, step: 1.0 }];
-/// let sturdy = AffixDefData {
-///     header: Header::of::<AffixDefData>(),
-///     text: Str::EMPTY,
+/// let ranges = [AffixModifierSpec { stat: 0, op: StatModifier::ADD, reserved: [0; 3], min: 10.0, max: 30.0, step: 1.0 }];
+/// let sturdy = AffixSpec {
+///     header: Header::of::<AffixSpec>(),
 ///     group: Str::EMPTY,
 ///     modifiers: ranges.as_ptr(),
 ///     modifier_count: 1,
@@ -258,16 +256,13 @@ pub struct StatSource {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
-pub struct AffixDefData {
+pub struct AffixSpec {
     /// Size and version of this struct.
     pub header: Header,
-    /// Not read: the loader names the affix by `<name>.name` in its mod's
-    /// texts. Empty.
-    pub text: Str,
     /// Affixes of one group never roll together on an item; empty for none.
     pub group: Str,
     /// Its modifiers' ranges.
-    pub modifiers: *const AffixModifierData,
+    pub modifiers: *const AffixModifierSpec,
     /// How many.
     pub modifier_count: u32,
     /// How likely it rolls against the others.
@@ -280,20 +275,20 @@ pub struct AffixDefData {
     pub reserved: [u8; 3],
 }
 
-impl_headed!(AffixDefData);
+impl_headed!(AffixSpec);
 
 /// One modifier of an affix with the range its value rolls in; read as
 /// arrays.
 ///
 /// # Examples
 ///
-/// See [`AffixDefData`].
+/// See [`AffixSpec`].
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct AffixModifierData {
+pub struct AffixModifierSpec {
     /// The stat's index.
     pub stat: u32,
-    /// The operation, as [`StatModifierData::op`].
+    /// The operation, as [`StatModifier::op`].
     pub op: u8,
     /// Zero.
     pub reserved: [u8; 3],
@@ -351,16 +346,16 @@ impl AffixRoll {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{ItemLine, StatModifierData};
+/// use enshwick::abi::{ItemLine, StatModifier};
 ///
-/// let line = ItemLine { modifier: StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 20.0 }, affix: 0 };
+/// let line = ItemLine { modifier: StatModifier { stat: 0, op: StatModifier::ADD, reserved: [0; 3], value: 20.0 }, affix: 0 };
 /// assert_eq!(line.affix, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ItemLine {
     /// The modifier.
-    pub modifier: StatModifierData,
+    pub modifier: StatModifier,
     /// The index of the affix it comes from, plus one; 0 for the item's own.
     pub affix: u32,
 }

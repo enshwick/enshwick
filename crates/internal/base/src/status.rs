@@ -49,7 +49,7 @@ impl BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             source,
-            |user| (host.api().status)(host.handle(), run_source::<F>, user),
+            |user| (host.api().status)(host.handle(), Some(run_source::<F>), user),
             "status source",
         )
     }

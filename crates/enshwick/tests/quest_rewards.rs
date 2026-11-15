@@ -190,12 +190,7 @@ mod tests {
         let op = requests[0].ops[0];
         assert_eq!(
             (op.kind, op.target, op.item, op.count),
-            (
-                InventoryOp::GIVE,
-                u64::from(PLAYER.0),
-                ItemId::from_guid(TORCH),
-                2
-            )
+            (InventoryOp::GIVE, PLAYER, ItemId::from_guid(TORCH), 2)
         );
         let fit = |remaining| InventoryOpResult {
             error: 0,

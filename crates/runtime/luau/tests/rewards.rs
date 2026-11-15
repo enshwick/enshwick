@@ -19,7 +19,7 @@ mod tests {
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         let data =
             std::env::temp_dir().join(format!("enshwick-luau-rewards-{}", std::process::id()));
@@ -46,7 +46,7 @@ mod tests {
         let used = ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::CONSUME,
-            player: Entity(2),
+            character: Entity(2),
             item: enshwick::ItemId::named("you.luau:tonic"),
             count: 1,
             inventory: Entity(40),
@@ -80,7 +80,7 @@ mod tests {
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         let data =
             std::env::temp_dir().join(format!("enshwick-luau-reward-error-{}", std::process::id()));

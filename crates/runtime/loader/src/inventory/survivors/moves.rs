@@ -225,7 +225,9 @@ pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
             // SAFETY: the registered `BedCheckFn` lives in the mod's DLL,
             // which stays loaded while its mod runs, and takes the `user`
             // word it registered; `check` outlives the call.
-            if callback.call(|callback, user| unsafe { callback(&raw const check, user) != 0 }) {
+            if callback.call(|callback, user| unsafe {
+                callback(&raw const check, user) != enshwick_core::abi::FILTER_REFUSE
+            }) {
                 core::ops::ControlFlow::Continue(())
             } else {
                 core::ops::ControlFlow::Break(())

@@ -70,6 +70,9 @@ fn name(status: Status) -> String {
         (Status::NOT_KEPT, "NOT_KEPT"),
         (Status::UNAVAILABLE, "UNAVAILABLE"),
         (Status::BUILDING, "BUILDING"),
+        (Status::LOADER_FAULT, "LOADER_FAULT"),
+        (Status::BUSY, "BUSY"),
+        (Status::TOO_SMALL, "TOO_SMALL"),
     ]
     .into_iter()
     .find(|&(known, _)| known == status)
@@ -100,6 +103,7 @@ fn every_domain_error_answers_mods_the_status_it_answered_before() {
         WorldError::Unread,
         WorldError::NoWorld,
         WorldError::NoServer,
+        WorldError::UnreadForCall,
         WorldError::WrongThread,
         WorldError::InStep,
         WorldError::Absent,

@@ -2,10 +2,10 @@
 //! as objects, and the boxes a building zone check hands a filter.
 
 #[cfg(feature = "unstable")]
-use super::set_base_cap;
+use super::set_base_limit;
 use super::{
-    Altar, Altars, Base, BaseLimit, Bounds, BuildingZoneCheck, Grouping, ZoneSizes, base_limit,
-    bases_of, cell_of_fixed, cell_of_metres, grouping,
+    Altar, Altars, Base, BaseLimit, BuildingZoneCheck, Grouping, ZoneSizes, base_limit, bases_of,
+    cell_of_fixed, cell_of_metres, grouping,
 };
 #[cfg(feature = "unstable")]
 use crate::Off;
@@ -34,17 +34,17 @@ impl Typed for BuildingZoneCheck<'_> {
         &[
             Field::new(
                 "zones",
-                "The building zones, half-open.",
-                &Ty::List(<Bounds as Typed>::TY),
+                "The building zones.",
+                &Ty::List(<crate::abi::Extent as Typed>::TY),
             ),
             Field::new(
                 "object",
-                "The object's box, both corners included.",
-                <Bounds as Typed>::TY,
+                "The object's box.",
+                <crate::abi::Extent as Typed>::TY,
             ),
             Field::new(
                 "margin",
-                "How far an object reaches past a zone.",
+                "How far an object reaches past a zone, in metres.",
                 &Ty::Number,
             ),
         ],
@@ -52,15 +52,11 @@ impl Typed for BuildingZoneCheck<'_> {
 }
 
 impl IntoScript for BuildingZoneCheck<'_> {
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "a margin in cells is far below 2^53"
-    )]
     fn into_value(self) -> Value {
         Value::Record(vec![
             Value::List(self.zones.iter().map(|z| z.into_value()).collect()),
             self.object.into_value(),
-            Value::Number(self.margin as f64),
+            Value::Number(self.margin),
         ])
     }
 }
@@ -95,15 +91,15 @@ impl Altars {
         base_limit()
     }
 
-    /// Sets the world's cap of bases, as `set_base_cap` does.
+    /// Sets the world's cap of bases, as `set_base_limit` does.
     ///
     /// # Errors
     ///
-    /// As [`set_base_cap`].
+    /// As [`set_base_limit`].
     #[cfg(feature = "unstable")]
-    #[script(name = "set_base_cap")]
+    #[script(name = "set_base_limit")]
     pub(crate) fn set_base_cap_script(self, bases: u32) -> Result<(), Off> {
-        set_base_cap(bases)
+        set_base_limit(bases)
     }
 
     /// How the game groups altars into bases, as `grouping` reads it.

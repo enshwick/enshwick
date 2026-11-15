@@ -375,10 +375,14 @@ pub(crate) enum WorldError {
     /// No server or world runs in this process.
     #[error("no world runs")]
     NoWorld,
-    /// No server runs in this process, or the build lacks the world's
-    /// reads, for an entity call, whose absent entity is [`Self::Absent`].
+    /// No server runs in this process for an entity call, whose absent
+    /// entity is [`Self::Absent`].
     #[error("no server runs for an entity call")]
     NoServer,
+    /// The build's table lacks the reads an entity call needs, while a
+    /// server may run.
+    #[error("this build lacks the reads an entity call needs")]
+    UnreadForCall,
     /// The caller is off the game thread.
     #[error("called off the game thread")]
     WrongThread,
@@ -415,7 +419,7 @@ pub(crate) fn server() -> Result<usize, WorldError> {
 /// The server, as [`server`] finds it, for an entity call (destroy, keep out
 /// of the save, teleport, a component write).
 pub(crate) fn entity_call(loader: &Loader) -> Result<usize, WorldError> {
-    layout(loader).ok_or(WorldError::NoServer)?;
+    layout(loader).ok_or(WorldError::UnreadForCall)?;
     server().map_err(|error| match error {
         WorldError::NoWorld => WorldError::NoServer,
         other => other,
@@ -705,6 +709,12 @@ mod tests {
         assert!(!state.quiet());
         STEPPING.set(0);
         assert!(state.quiet());
+    }
+
+    #[test]
+    fn an_entity_call_on_a_build_without_the_world_reads_names_the_reads_not_the_server() {
+        let loader = crate::start::tests::bare_loader();
+        assert_eq!(entity_call(&loader), Err(WorldError::UnreadForCall));
     }
 
     #[test]

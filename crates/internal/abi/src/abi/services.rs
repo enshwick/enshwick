@@ -6,7 +6,8 @@ use crate::abi::{Header, Str};
 
 /// One field of a service table or mod event, as its layout hash sees it.
 ///
-/// Frozen: written as an array.
+/// Frozen, written as an array: a field is its name and its type's hash,
+/// all a layout compares.
 ///
 /// # Examples
 ///
@@ -151,6 +152,10 @@ impl_headed!(EventSpec);
 /// A mod's handler for a mod event: the event's data, valid for the call,
 /// and the pointer given at subscription.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread that sends the event.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_mod_event`](../struct.Load.html#method.on_mod_event).
@@ -198,6 +203,9 @@ impl_headed!(CallSpec);
 /// [`Status::OK`](super::Status::OK) only once the whole answer is written.
 /// It runs on the caller's thread, any thread, possibly on several at once
 /// and inside another call, and must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
 ///
 /// # Examples
 ///

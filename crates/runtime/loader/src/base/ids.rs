@@ -63,30 +63,16 @@ pub(crate) struct Ids {
     props: CraftingProps,
 }
 
-/// The crafting props mods add, in the order they were given their index:
-/// the game's own count and the mask's bits, from the first call, and each
-/// prop's GUID.
+/// The crafting props mods add, each prop's GUID in the order they were
+/// given their index.
 #[derive(Debug, Default)]
 struct CraftingProps {
-    bounds: Option<(u8, u8)>,
     added: Vec<Guid>,
 }
 
 /// Why the loader refuses a crafting prop's index.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum CraftingPropError {
-    /// The call's count of the game's props or the mask's bits differ from
-    /// the first call's.
-    #[error(
-        "crafting prop {prop}: the game's props and the mask read {first} and {width}, not {known_first} and {known_width} as before"
-    )]
-    Bounds {
-        prop: Guid,
-        first: u8,
-        width: u8,
-        known_first: u8,
-        known_width: u8,
-    },
     /// Every bit of the mask is taken.
     #[error(
         "crafting prop {prop}: the game's {width}-bit crafting prop mask is full, {first} by the game and {added} by mods"
@@ -136,16 +122,6 @@ impl Ids {
         width: u8,
     ) -> Result<u8, CraftingPropError> {
         let props = &mut self.props;
-        let (known_first, known_width) = *props.bounds.get_or_insert((first, width));
-        if (first, width) != (known_first, known_width) {
-            return Err(CraftingPropError::Bounds {
-                prop,
-                first,
-                width,
-                known_first,
-                known_width,
-            });
-        }
         let at = props
             .added
             .iter()
@@ -263,10 +239,6 @@ mod tests {
         assert_eq!(ids.crafting_prop(prop(1), 62, 64), Ok(62), "given before");
         let full = ids.crafting_prop(prop(3), 62, 64).unwrap_err();
         assert!(full.to_string().contains("64-bit"), "{full}");
-        assert!(matches!(
-            ids.crafting_prop(prop(4), 51, 64),
-            Err(CraftingPropError::Bounds { .. })
-        ));
     }
 
     #[test]

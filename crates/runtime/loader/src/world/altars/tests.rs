@@ -1,4 +1,5 @@
 use super::*;
+use enshwick_core::abi::Bounds;
 
 /// Held by every test that touches the altar state, the targets or the
 /// world counter, which the tests of this file share.
@@ -37,7 +38,7 @@ fn vanilla() -> AltarZone {
 }
 
 /// A sizer of the loader's own, which always runs.
-fn sizer(callback: AltarZoneFn) -> Sizer {
+fn sizer(callback: AltarZoneFilterFn) -> Sizer {
     Sizer::new(ModIndex::LOADER, callback, core::ptr::null_mut())
 }
 

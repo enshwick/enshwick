@@ -412,7 +412,7 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Missing`] on a build without the event,
+    /// [`WorldError::Unavailable`] on a build without the event,
     /// [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Refused`] when the step holds no room for more events.
     ///
@@ -429,7 +429,7 @@ impl Effects {
     /// ```
     #[script]
     pub fn npc_command(&self, npc: u32, order: NpcCommandType) -> Result<(), WorldError> {
-        let event = self.npc.ok_or(WorldError::Missing)?;
+        let event = self.npc.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         let (kind, at) = match order {
             NpcCommandType::Reset => (0, None),
@@ -461,7 +461,7 @@ impl Effects {
     /// ```
     #[script]
     pub fn set_toggle(&self, sender: Entity, signal: u32, on: bool) -> Result<(), WorldError> {
-        let event = self.toggle.ok_or(WorldError::Missing)?;
+        let event = self.toggle.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         put(&mut bytes, event.sender, sender)?;
         put(&mut bytes, event.signal, signal)?;
@@ -492,7 +492,7 @@ impl Effects {
         target: Entity,
         threat: f32,
     ) -> Result<(), WorldError> {
-        let event = self.threat.ok_or(WorldError::Missing)?;
+        let event = self.threat.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         put(&mut bytes, event.attacker, attacker)?;
         put(&mut bytes, event.target, target)?;
@@ -519,7 +519,7 @@ impl Effects {
     #[script]
     #[cfg(feature = "unstable")]
     pub fn ping(&self, sender: Entity, position: [f64; 3]) -> Result<(), WorldError> {
-        let event = self.ping.ok_or(WorldError::Missing)?;
+        let event = self.ping.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         put(&mut bytes, event.sender, sender)?;
         put_position(&mut bytes, event.position, position)?;
@@ -565,7 +565,7 @@ impl Effects {
     /// place, [`WorldError::Refused`] for one the game's teleport does not
     /// move, such as a prop (it moves actors and characters),
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] where no server runs or on a build without
+    /// [`WorldError::Unavailable`] where no server runs or on a build without
     /// teleports.
     ///
     /// # Examples
@@ -595,7 +595,7 @@ impl Effects {
             header: Header::of::<TeleportRequest>(),
             entity,
             flags,
-            position: crate::ecs::fixed(position),
+            position,
             orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
         };
         world_check(
@@ -681,10 +681,11 @@ impl Effects {
         let status = (self.host.api().players)(
             self.host.handle(),
             infos.as_mut_ptr(),
+            u32::try_from(size_of::<PlayerInfo>()).unwrap_or(0),
             u32::try_from(MAX).unwrap_or(0),
             &raw mut count,
         );
-        world_check(status, WorldError::Missing)?;
+        world_check(status, WorldError::Unavailable)?;
         let count = usize::try_from(count).map_or(MAX, |count| count.min(MAX));
         infos[..count]
             .iter()
@@ -717,7 +718,7 @@ impl Effects {
     ///
     /// [`WorldError::Refused`] for a count of 0 or over 65535 or an item
     /// the game does not know; [`WorldError::WrongThread`] off the game
-    /// thread; [`WorldError::Missing`] on a client, a build without the
+    /// thread; [`WorldError::Unavailable`] on a client, a build without the
     /// pickup or the item lookup, or while no item registry or world exists
     /// yet, which a later call may find.
     ///
@@ -742,16 +743,15 @@ impl Effects {
             header: Header::of::<crate::abi::DropRequest>(),
             item,
             count,
-            position: crate::ecs::fixed(at),
+            position: at,
             level: how.level,
             rarity: u32::from(how.rarity.to_raw()),
         };
         let mut entity = Entity::NONE;
-        world_status((self.host.api().drop_items)(
-            self.host.handle(),
-            &raw const request,
-            &raw mut entity,
-        ))?;
+        world_check(
+            (self.host.api().drop_items)(self.host.handle(), &raw const request, &raw mut entity),
+            WorldError::Refused,
+        )?;
         Ok(entity)
     }
 
@@ -772,14 +772,14 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, Spawn};
     ///
-    /// fn beside(effects: &Effects, template: [u8; 16], [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
+    /// fn beside(effects: &Effects, template: enshwick::content::Guid, [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
     ///     effects.spawn(template, [x + 2.0, y, z], Spawn::new())
     /// }
     /// ```
     #[script]
     pub fn spawn(
         &self,
-        template: [u8; 16],
+        template: crate::content::Guid,
         position: [f64; 3],
         how: Spawn,
     ) -> Result<Entity, WorldError> {
@@ -790,10 +790,9 @@ impl Effects {
         let request = SpawnRequest {
             header: Header::of::<SpawnRequest>(),
             template,
-            position: crate::ecs::fixed(position),
+            position,
             orientation: how.orientation.unwrap_or([0.0, 0.0, 0.0, 1.0]),
             level: how.level.unwrap_or(0),
-            reserved: 0,
             lifetime_ns: lifetime,
             flags: if how.do_not_save {
                 SpawnRequest::DO_NOT_SAVE
@@ -823,7 +822,7 @@ fn keep<T>(what: &str, found: Result<T, Off>) -> Option<T> {
 fn blank(ty: EventType) -> Result<Vec<u8>, WorldError> {
     usize::try_from(ty.size())
         .map(|size| vec![0u8; size])
-        .map_err(|_| WorldError::Missing)
+        .map_err(|_| WorldError::Unavailable)
 }
 
 fn put<T: Scalar>(bytes: &mut [u8], field: Field<T>, value: T) -> Result<(), WorldError> {
@@ -835,7 +834,7 @@ fn put_at<T: Scalar>(bytes: &mut [u8], at: u64, value: T) -> Result<(), WorldErr
         .ok()
         .and_then(|at| bytes.get_mut(at..))
         .is_some_and(|out| value.to_bytes(out));
-    written.then_some(()).ok_or(WorldError::Missing)
+    written.then_some(()).ok_or(WorldError::Unavailable)
 }
 
 fn put_position(bytes: &mut [u8], at: u64, position: [f64; 3]) -> Result<(), WorldError> {

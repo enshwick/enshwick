@@ -454,7 +454,8 @@ unsafe extern "system" fn fire(event: *const ControlEvent, user: *mut c_void) {
     let fired = Fired {
         control,
         phase,
-        player: (event.server == 1).then(|| enshwick_world::__internal::player(&event.player)),
+        // SAFETY: the loader passes null or the player, valid for the call.
+        player: unsafe { event.player.as_ref() }.map(enshwick_world::__internal::player),
     };
     crate::host::guard("panic in a control", || (), || handler(&fired));
 }
@@ -510,7 +511,7 @@ where
     let handler: Handler = Box::new(on);
     crate::load::hand_over(
         handler,
-        |user| (host.api().control)(host.handle(), &raw const spec, fire, user),
+        |user| (host.api().control)(host.handle(), &raw const spec, Some(fire), user),
         &format!("control {}", control.name),
     )
 }

@@ -235,8 +235,8 @@ impl FakeChange {
             Self::Terrain(edit) => {
                 let reach = f64::from(edit.radius);
                 (
-                    edit.position.map(|at| (f64::from(at) - reach).max(0.0)),
-                    edit.position.map(|at| f64::from(at) + reach),
+                    edit.position.map(|at| (at - reach).max(0.0)),
+                    edit.position.map(|at| at + reach),
                 )
             }
             Self::Voxels { min, size, .. } | Self::Erase { min, size } => (

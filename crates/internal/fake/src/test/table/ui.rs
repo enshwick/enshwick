@@ -24,12 +24,18 @@ const OPEN: [&str; 7] = [
 /// table it sees for the process, so it is one static.
 pub(crate) extern "system" fn ui_frame(
     me: ModHandle,
-    callback: UiFrameFn,
+    callback: Option<UiFrameFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         if s.host.side == Side::SERVER {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         s.frames.push(Registered::new(callback, user, me));
         Status::OK
@@ -56,7 +62,7 @@ pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Statu
                 unsafe { out.write(bits) };
                 Status::OK
             }
-            None => Status::MISSING,
+            None => Status::UNAVAILABLE,
         }
     })
 }
@@ -157,7 +163,7 @@ pub(crate) extern "system" fn ui_widget(
 
 /// Whether the archive or the mod holds a sound container with GUID `guid`,
 /// as the loader checks before it plays one.
-fn holds_sound(s: &State, guid: [u8; 16]) -> bool {
+fn holds_sound(s: &State, guid: enshwick_core::content::Guid) -> bool {
     s.host
         .type_hashes
         .get(enshwick_core::__fake::ids::SOUND_CONTAINER)
@@ -198,12 +204,14 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
                 title: text(w.detail),
             },
             UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
-            UiWidget::SOUND => Drawn::Sound(w.style),
-            UiWidget::PLAY => {
+            UiWidget::SOUND if w.sound == enshwick_core::content::Guid::NIL => {
+                Drawn::Sound(w.style)
+            }
+            UiWidget::SOUND => {
                 if !holds_sound(s, w.sound) {
                     return Status::MISSING;
                 }
-                Drawn::Play(enshwick_core::content::Guid(w.sound))
+                Drawn::Play(w.sound)
             }
             UiWidget::WINDOW | UiWidget::END => return Status::REFUSED,
             _ if !open => return Status::REFUSED,
@@ -273,12 +281,18 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
 
 pub(crate) extern "system" fn ui_hud(
     me: ModHandle,
-    callback: UiFrameFn,
+    callback: Option<UiFrameFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         if s.host.side == Side::SERVER {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         s.huds.push(Registered::new(callback, user, me));
         Status::OK
@@ -291,21 +305,28 @@ pub(crate) extern "system" fn ui_hud(
 pub(crate) extern "system" fn ui_extension(
     me: ModHandle,
     spec: *const UiExtension,
-    callback: UiFrameFn,
+    callback: Option<UiFrameFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     let Some(spec) = super::get_headed(spec) else {
         return Status::BAD_ARGS;
     };
     let screen = text(spec.screen);
     // SAFETY: the safe layer passes `hosts` null or with `host_count` GUIDs
     // for the call; they are copied here.
-    let Some(hosts) = (unsafe { spec.host_list() }).map(<[[u8; 16]]>::to_vec) else {
+    let Some(hosts) = (unsafe { spec.host_list() }).map(<[enshwick_core::content::Guid]>::to_vec)
+    else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         if s.host.side == Side::SERVER {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         if spec.edge > UiExtension::BOTTOM || OPEN.contains(&screen.as_str()) {
             return Status::BAD_ARGS;
@@ -329,7 +350,7 @@ pub(crate) extern "system" fn ui_markers(
     count: u32,
 ) -> Status {
     if with(true, |s| s.host.side == Side::SERVER) {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     }
     if count as usize > enshwick_core::__fake::MARKER_LIMIT {
         return Status::BAD_ARGS;
@@ -348,11 +369,11 @@ pub(crate) extern "system" fn ui_markers(
         .collect();
     with(Status::MISSING, |s| {
         if s.host.side == Side::SERVER {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         for marker in markers.iter().filter(|m| m.marker_type != 0) {
             let Some(types) = &s.host.map_marker_types else {
-                return Status::MISSING;
+                return Status::UNAVAILABLE;
             };
             if !types.iter().any(|t| t.marker_id == marker.marker_type) {
                 return Status::BAD_ARGS;
@@ -375,7 +396,7 @@ pub(crate) extern "system" fn map_marker_types(
             .then(|| s.host.map_marker_types.clone())
             .flatten()
     }) else {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     };
     crate::test::table::base::io::list(&types, out, entry_size, capacity, count)
 }
@@ -383,9 +404,12 @@ pub(crate) extern "system" fn map_marker_types(
 pub(crate) extern "system" fn ui_dialog(
     me: ModHandle,
     dialog: *const UiDialog,
-    callback: UiAnswerFn,
+    callback: Option<UiAnswerFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     let Some(d) = super::get_headed(dialog) else {
         return Status::BAD_ARGS;
     };
@@ -397,7 +421,7 @@ pub(crate) extern "system" fn ui_dialog(
     };
     with(Status::MISSING, |s| {
         if s.host.side == Side::SERVER {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         if s.dialogs.len() >= 16 {
             return Status::REFUSED;
@@ -407,10 +431,13 @@ pub(crate) extern "system" fn ui_dialog(
     })
 }
 
-pub(crate) extern "system" fn fog_open(_me: ModHandle) -> Status {
+pub(crate) extern "system" fn request_fog(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         if s.host.side == Side::SERVER {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         s.fog_opened = true;
         Status::OK
@@ -436,7 +463,7 @@ pub(crate) extern "system" fn fog_read(
             return Status::REFUSED;
         }
         let Some((found, pixels)) = s.host.fog.as_ref() else {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         };
         let written = super::put_headed(info, *found);
         if written != Status::OK {

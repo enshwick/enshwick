@@ -115,7 +115,7 @@ mod tests {
         let entity = Entity(4096);
         let hash = |name: &str| fnv1a32(name.as_bytes());
         let key = ResourceKey {
-            guid: STONE.0,
+            guid: STONE,
             type_hash: hash(MAPPING),
             part: 0,
         };

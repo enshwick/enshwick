@@ -159,7 +159,7 @@ fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
         host.handle(),
         kind,
         crate::abi::Str::new(&name),
-        u32::from(disable),
+        u8::from(disable),
     );
     crate::load::ok(status, (), || format!("recipe rule {what} {name:?}"))
 }
@@ -229,7 +229,7 @@ pub fn is_disabled(recipe: impl Into<Guid>) -> bool {
         return false;
     };
     let api = host.api();
-    let mut out = 0u32;
+    let mut out = 0u8;
     (api.recipe_disabled)(
         host.handle(),
         crate::RecipeId::new(recipe.into().fnv1a()),
