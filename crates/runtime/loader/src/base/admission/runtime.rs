@@ -304,8 +304,7 @@ pub(crate) fn after_step(loader: &Loader) {
         crate::base::net::keep_greeting(&live);
         let in_game: Vec<u64> = if serving.side == Side::CLIENT {
             crate::engine::world::players(loader)
-                .map(|players| players.iter().map(|p| p.key.get()).collect())
-                .unwrap_or_default()
+                .map_or_default(|players| players.iter().map(|p| p.key.get()).collect())
         } else {
             Vec::new()
         };

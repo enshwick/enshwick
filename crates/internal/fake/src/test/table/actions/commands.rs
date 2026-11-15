@@ -134,10 +134,7 @@ fn granted(
 
 /// The id of the mod under test.
 fn own_id(s: &crate::test::table::State) -> String {
-    s.manifest
-        .as_ref()
-        .map(|m| m.id.clone())
-        .unwrap_or_default()
+    s.manifest.as_ref().map_or_default(|m| m.id.clone())
 }
 
 /// The command sets granted now, and the id of the mod under test.

@@ -18,7 +18,7 @@ members = [
 [workspace.package]
 authors = ["themaiby"]
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.100"
 license = "MIT"
 repository = "https://github.com/enshwick/enshwick"
 homepage = "https://enshwick.com"

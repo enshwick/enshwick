@@ -442,8 +442,8 @@ fn a_hosted_game_s_end_forgets_the_zones_and_caps_but_keeps_the_arming_and_reque
         })
     };
     let _first = state.zones.set([grouped(), grouped()]);
-    for at in 0..2 {
-        state.zone_count[at].store(5, Ordering::Relaxed);
+    for count in &state.zone_count {
+        count.store(5, Ordering::Relaxed);
     }
     state.raised.store(true, Ordering::Release);
     state.forget();

@@ -136,7 +136,7 @@ impl Field {
         Self {
             key: key.to_owned(),
             kind: value.as_ref().map(Kind::of),
-            default: value.map(|v| v.to_string()).unwrap_or_default(),
+            default: value.map_or_default(|v| v.to_string()),
             text: format!("config.{key}"),
             first: first_element(),
             ..Self::default()

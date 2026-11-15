@@ -134,8 +134,7 @@ pub(crate) fn discover(mods_dir: &Path) -> Vec<Found> {
     for dir in dirs {
         let name = dir
             .file_name()
-            .map(|f| f.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|f| f.to_string_lossy().into_owned());
         if name == crate::engine::settings::LOADER_ID || name.starts_with('.') {
             continue;
         }

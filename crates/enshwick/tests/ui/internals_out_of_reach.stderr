@@ -13,18 +13,18 @@ error[E0425]: cannot find function `as_loader` in module `enshwick::__private`
 error[E0425]: cannot find function `refresh_levels` in module `enshwick::__private`
    --> tests/ui/internals_out_of_reach.rs:104:26
     |
-104 |       enshwick::__private::refresh_levels();
-    |                            ^^^^^^^^^^^^^^
+104 |     enshwick::__private::refresh_levels();
+    |                          ^^^^^^^^^^^^^^ not found in `enshwick::__private`
     |
-   ::: $WORKSPACE/crates/internal/base/src/__private.rs
+note: similarly named function `refresh_level` defined here
+   --> $WORKSPACE/crates/internal/base/src/__private.rs
     |
     | / pub unsafe extern "system" fn refresh_level(
     | |     _event: crate::abi::Event,
     | |     _data: *const core::ffi::c_void,
     | |     _user: *mut core::ffi::c_void,
     | | ) {
-    | |_- similarly named function `refresh_level` defined here
-    |
+    | |_^
 help: a function with a similar name exists
     |
 104 -     enshwick::__private::refresh_levels();

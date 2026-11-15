@@ -143,9 +143,7 @@ fn note_old_layout(mods_dir: &Path) {
         crate::log!(
             WARN,
             "mods/{} is not read: a mod lives in a folder of its own, mods/<mod>/",
-            dll.file_name()
-                .map(|f| f.to_string_lossy())
-                .unwrap_or_default()
+            dll.file_name().map_or_default(|f| f.to_string_lossy())
         );
     }
     for path in OLD {
@@ -309,8 +307,7 @@ fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> (Vec<Library>, Vec<reso
     for folder in folders(mods_dir) {
         let name = folder
             .file_name()
-            .map(|f| f.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|f| f.to_string_lossy().into_owned());
         let mut first: Option<String> = None;
         let mut unclear = Vec::new();
         for path in dlls(&folder) {
@@ -320,9 +317,7 @@ fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> (Vec<Library>, Vec<reso
             }
             let file = format!(
                 "{name}/{}",
-                path.file_name()
-                    .map(|f| f.to_string_lossy())
-                    .unwrap_or_default()
+                path.file_name().map_or_default(|f| f.to_string_lossy())
             );
             if let Some(other) = &first {
                 if exports == Some(true) {

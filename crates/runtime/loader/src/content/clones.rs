@@ -81,14 +81,13 @@ pub(crate) fn items(data_dir: &Path) -> Vec<(Guid, Guid)> {
     std::fs::read_to_string(data_dir.join(FILE))
         .ok()
         .and_then(|text| toml::from_str::<Clones>(&text).ok())
-        .map(|clones| {
+        .map_or_default(|clones| {
             clones
                 .items
                 .iter()
                 .filter_map(|(item, vanilla)| Some((guid(item)?, guid(vanilla)?)))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Reads the record in `data_dir`, adds `served` and writes it back when it

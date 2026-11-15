@@ -418,10 +418,7 @@ mod tests {
         assert!(constant("1st").is_err());
         assert!(constant("a key").is_err());
         let file = parse("[en]\n\"a.b\" = \"A\"\n\"a_b\" = \"B\"\n").unwrap();
-        let refused = items(&file)
-            .err()
-            .map(|e| e.to_string())
-            .unwrap_or_default();
+        let refused = items(&file).err().map_or_default(|e| e.to_string());
         assert!(
             refused.contains("both make the constant `A_B`"),
             "{refused}"

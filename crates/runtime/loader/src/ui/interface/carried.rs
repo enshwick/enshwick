@@ -749,7 +749,7 @@ mod tests {
 
     fn held() -> Vec<(String, String)> {
         let held = STATE.load();
-        let held = held.as_deref().map(Vec::as_slice).unwrap_or_default();
+        let held = held.as_deref().map_or_default(Vec::as_slice);
         held.iter()
             .map(|h| (h.mod_id.clone(), h.window.clone()))
             .collect()

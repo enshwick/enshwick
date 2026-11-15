@@ -486,8 +486,7 @@ impl Chains {
     pub fn owners(&self, target: u64) -> Vec<ModIndex> {
         self.by_target
             .get(&target)
-            .map(|c| c.links.iter().map(|l| l.owner).collect())
-            .unwrap_or_default()
+            .map_or_default(|c| c.links.iter().map(|l| l.owner).collect())
     }
 
     /// The loader features with a link on `target`.
@@ -495,8 +494,7 @@ impl Chains {
     pub fn features_at(&self, target: u64) -> Vec<&'static Fuse> {
         self.by_target
             .get(&target)
-            .map(|c| c.links.iter().filter_map(|l| l.feature).collect())
-            .unwrap_or_default()
+            .map_or_default(|c| c.links.iter().filter_map(|l| l.feature).collect())
     }
 
     /// The links targets refused, in order.

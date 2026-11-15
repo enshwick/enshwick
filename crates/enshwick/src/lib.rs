@@ -138,7 +138,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 // tools follow to its files; this crate gives it its path. The macros come
 // from `enshwick-macros` with their docs here: through `enshwick-core`,
 // rustdoc would show only the macro crate's own text, so `config` and
-// `script` take their modules alone (`{self}`).
+// `script` take their modules alone, named again (`{self as config}`) since
+// rustdoc 1.100 files a bare `{self}` under a module called `self`.
 #[doc(inline)]
 pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
@@ -173,7 +174,7 @@ pub use enshwick_base::code;
 #[doc(hidden)]
 pub use enshwick_base::command_names;
 #[doc(inline)]
-pub use enshwick_base::config::{self};
+pub use enshwick_base::config::{self as config};
 #[doc(inline)]
 pub use enshwick_base::ecs;
 #[doc(inline)]
@@ -250,7 +251,7 @@ pub use enshwick_base::status;
 pub use enshwick_base::time;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
-pub use enshwick_core::script::{self};
+pub use enshwick_core::script::{self as script};
 #[cfg(feature = "test")]
 #[doc(inline)]
 pub use enshwick_fake::test;

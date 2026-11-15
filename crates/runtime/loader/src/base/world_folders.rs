@@ -76,9 +76,8 @@ pub fn save_info(key: &str) -> io::Result<Option<SaveInfo>> {
     at.copy_from_slice(&header[SAVED_AT..SAVED_AT + 4]);
     let name = path
         .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let folder = path.parent().map(|p| p.join("backup")).unwrap_or_default();
+        .map_or_default(|n| n.to_string_lossy().into_owned());
+    let folder = path.parent().map_or_default(|p| p.join("backup"));
     let backups = (0..BACKUPS)
         .filter(|n| folder.join(format!("{name}.backup-{n}")).is_file())
         .count();

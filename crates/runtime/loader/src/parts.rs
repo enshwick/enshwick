@@ -156,10 +156,7 @@ mod tests {
         files
             .iter()
             .filter(|p| {
-                let name = p
-                    .file_name()
-                    .map(|n| n.to_string_lossy())
-                    .unwrap_or_default();
+                let name = p.file_name().map_or_default(|n| n.to_string_lossy());
                 name != "tests.rs" && !name.ends_with("_tests.rs")
             })
             .map(|p: &PathBuf| {

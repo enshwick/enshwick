@@ -657,8 +657,7 @@ fn rust_type(name: &str) -> String {
         let unsafety = if function.unsafety { "unsafe " } else { "" };
         let output = function
             .output
-            .map(|output| format!(" -> {}", rust_type(output)))
-            .unwrap_or_default();
+            .map_or_default(|output| format!(" -> {}", rust_type(output)));
         return format!(
             "{unsafety}extern \"system\" fn({}){output}",
             args.join(", ")

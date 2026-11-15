@@ -184,8 +184,7 @@ impl Registry {
         d.action
             .on
             .as_ref()
-            .map(|on| on(&ask, subject.as_ref()))
-            .unwrap_or_default()
+            .map_or_default(|on| on(&ask, subject.as_ref()))
     }
 
     /// The accounts `d` knows for `ask`, bounded: at most [`MAX_KNOWN`],
@@ -194,8 +193,7 @@ impl Registry {
         d.action
             .known
             .as_ref()
-            .map(|known| known(ask))
-            .unwrap_or_default()
+            .map_or_default(|known| known(ask))
             .into_iter()
             .filter(|(_, name)| !name.is_empty())
             .take(MAX_KNOWN)
