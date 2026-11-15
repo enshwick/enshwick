@@ -61,12 +61,12 @@ names every entry of the golden layout once, in that order.
 | `entity_template` | game | probe: spawns | — |
 | `mods` | loader | — | — |
 | `code_range` | game | probe: code section | — |
-| `patch_code` | game | — | — |
+| `patch_code` | game | probe: code patch | — |
 | `workshop_recipes` | game | probe: host reads | — |
 | `hosting` | game | probe: host reads | — |
-| `server_world` | game | — | — |
+| `server_world` | game | probe: server world | — |
 | `join_missing` | loader | — | with a player |
-| `hook_at` | game | — | — |
+| `hook_at` | game | probe: hook inside | — |
 | `status` | loader | — | — |
 | `subscribe_game_event` | game | probe: ping | — |
 | `net_channel` | loader | probe: channel refused | — |
@@ -164,11 +164,11 @@ names every entry of the golden layout once, in that order.
 | `base_limit` | game | probe: base limits | — |
 | `voxel_read` | game | probe: world reads | — |
 | `build_rights` | game | — | with a player |
-| `transaction_commit` | game | — | — |
-| `transaction_undo` | game | — | — |
-| `transaction_status` | game | — | — |
+| `transaction_commit` | game | probe: transaction | — |
+| `transaction_undo` | game | probe: transaction | — |
+| `transaction_status` | game | probe: transaction | — |
 | `world_quiet` | game | — | with a player |
-| `transaction_entities` | game | — | — |
+| `transaction_entities` | game | probe: transaction | — |
 | `world_persists` | game | probe: world reads | — |
 | `map_markers` | game | probe: map | — |
 | `account_action` | game | — | with a player |
@@ -186,7 +186,7 @@ names every entry of the golden layout once, in that order.
 | `language_of` | game | — | with a player |
 | `join_rule` | game | — | with a client joining |
 | `request_inventory` | game | probe: affixes | — |
-| `inventory_submit` | game | — | — |
+| `inventory_submit` | game | — | with a player |
 | `survivor_lookup` | game | — | with a player |
 | `survivor_bed_check` | game | — | with a player |
 | `summon_filter` | game | — | with a player |
