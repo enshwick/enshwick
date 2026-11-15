@@ -201,6 +201,10 @@ pub fn parts_off() -> Vec<PartOff> {
 /// text: a record is never changed or dropped once kept, and a `String`'s
 /// text stays in place when the list grows, so the views stay valid for the
 /// process.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build has a host table")
+)]
 pub(crate) fn parts_off_listed() -> Vec<enshwick_core::abi::LoaderOff> {
     use enshwick_core::abi::{LoaderOff, Str};
     with_parts_off(|parts| {
