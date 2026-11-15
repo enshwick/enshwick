@@ -902,7 +902,9 @@ unsafe fn check(
             // SAFETY: a filter's mod runs, so its DLL that holds the callback
             // stays loaded; the callback gets the user pointer its mod
             // registered and `call`, which lives for the call.
-            if filter.call(|filter, user| unsafe { filter(&raw const call, user) }) != 0 {
+            if filter.call(|filter, user| unsafe { filter(&raw const call, user) })
+                == enshwick_core::abi::FILTER_YES
+            {
                 ControlFlow::Break(())
             } else {
                 ControlFlow::Continue(())

@@ -931,8 +931,8 @@ pub struct HostApi {
         count: *mut u32,
     ) -> Status,
     /// Calls `callback` with `user` when the game refuses a placement whose
-    /// box does not lie in one building zone; any filter returning 1 accepts
-    /// it after all. Runs on both sides, since a client predicts placement.
+    /// box does not lie in one building zone; any filter returning
+    /// [`FILTER_YES`](super::FILTER_YES) accepts it after all. Runs on both sides, since a client predicts placement.
     /// Allowed during `enshwick_mod_init` only.
     pub building_zone_filter: extern "system" fn(
         me: ModHandle,

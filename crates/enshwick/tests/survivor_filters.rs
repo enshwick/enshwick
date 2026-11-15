@@ -42,8 +42,18 @@ mod tests {
                 ));
             })?;
             load.add_summon_item(STAFF, FARMER)?;
+            let host = enshwick::host().ok_or_else(|| Off::new("no host in init"))?;
+            let status =
+                (host.api().summon_filter)(host.handle(), Some(unknown), core::ptr::null_mut());
+            assert_eq!(status, Status::OK);
             Ok(Self)
         }
+    }
+
+    /// A raw filter answering a value no ABI gives a summon filter, which
+    /// the loader reads as "let the game decide", never as taking the item.
+    unsafe extern "system" fn unknown(_: *const abi::Summon, _: *mut c_void) -> u8 {
+        3
     }
 
     enshwick::test::declare_mod!(

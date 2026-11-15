@@ -1,7 +1,9 @@
 //! The fake's altars: their list, zones, limits and the base limit.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{AltarInfo, AltarLimit, AltarZone, BuildingZoneCheck, Extent, Header};
+use enshwick_core::abi::{
+    AltarInfo, AltarLimit, AltarZone, BuildingZoneCheck, Extent, FILTER_YES, Header,
+};
 
 use crate::test::{BaseCode, FakeHost, Installed, table};
 
@@ -148,7 +150,7 @@ impl Installed {
         };
         filters.iter().any(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
-            filter.run(|callback, user| unsafe { callback(&raw const call, user) != 0 })
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) == FILTER_YES })
         })
     }
 

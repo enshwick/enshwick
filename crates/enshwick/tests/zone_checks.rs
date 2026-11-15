@@ -29,8 +29,24 @@ mod tests {
                             && check.object.max[a] + check.margin < high
                     })
             })?;
+            let host = enshwick::host().ok_or_else(|| Off::new("no host in init"))?;
+            let status = (host.api().building_zone_filter)(
+                host.handle(),
+                Some(refusing),
+                core::ptr::null_mut(),
+            );
+            assert_eq!(status, Status::OK);
             Ok(Self)
         }
+    }
+
+    /// A raw filter that keeps the game's refusal with the filter's no,
+    /// which must never accept a placement.
+    unsafe extern "system" fn refusing(
+        _: *const enshwick::abi::BuildingZoneCheck,
+        _: *mut core::ffi::c_void,
+    ) -> u8 {
+        enshwick::abi::FILTER_REFUSE
     }
 
     enshwick::test::declare_mod!(

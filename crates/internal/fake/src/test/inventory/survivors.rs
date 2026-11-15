@@ -135,8 +135,8 @@ impl Installed {
             // SAFETY: a valid summon; `user` is the mod's pointer.
             match filter.run(|callback, user| unsafe { callback(summon, user) }) {
                 Summon::REFUSE => return Summon::REFUSE,
-                0 => {}
-                _ => verdict = Summon::TAKE,
+                Summon::TAKE => verdict = Summon::TAKE,
+                _ => {}
             }
         }
         verdict

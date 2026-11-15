@@ -81,6 +81,9 @@ jobs:
   # The archive, and the PDB and SBOM of every DLL.
   loader:
     if: github.ref == 'refs/heads/main'
+    # The signing key is a release secret, and the release environment
+    # admits main only.
+    environment: release
     runs-on: ubuntu-26.04
     # Room for a Windows SDK cache miss, which downloads for 7 to 9 minutes.
     timeout-minutes: 30

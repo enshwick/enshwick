@@ -210,7 +210,8 @@ pub struct Extent {
 }
 
 /// A mod's zone check filter: the check and the pointer given at
-/// registration; returns 1 to accept the placement after all.
+//// registration; returns [`FILTER_YES`](super::FILTER_YES) to accept the
+/// placement after all, and any other answer keeps the game's refusal.
 ///
 /// Null is never a callback: the loader refuses a null one with
 /// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.

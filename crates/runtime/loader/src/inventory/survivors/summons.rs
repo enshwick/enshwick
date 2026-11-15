@@ -148,11 +148,11 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
         // registered; `call` outlives the call.
         match callback.call(|callback, user| unsafe { callback(&raw const call, user) }) {
             Summon::REFUSE => ControlFlow::Break(()),
-            0 => ControlFlow::Continue(()),
-            _ => {
+            Summon::TAKE => {
                 consume = true;
                 ControlFlow::Continue(())
             }
+            _ => ControlFlow::Continue(()),
         }
     });
     if refused.is_some() {

@@ -814,21 +814,31 @@ crate::engine::chains::chain_detour! {
                     // is the hooked function's 16-byte template GUID argument.
                     unsafe { read_at(template.cast(), 0) }
                 },
-                position: if position.is_null() {
-                    [0.0; 3]
-                } else {
-                    // SAFETY: `position` is non-null by the check before it and
-                    // is the hooked function's three-float position argument.
-                    unsafe { read_at(position.cast(), 0) }
-                },
+                // SAFETY: `position` is null or the hooked function's
+                // three-float position argument, live for the call.
+                position: unsafe { placed_at(position) },
             });
         }
         entity
     }
 }
 
+/// The game's three-float placing position in metres, the origin when null.
+///
+/// # Safety
+///
+/// `position` is null or valid for reads of 12 bytes for the call.
+unsafe fn placed_at(position: *const [f32; 3]) -> [f64; 3] {
+    if position.is_null() {
+        return [0.0; 3];
+    }
+    // SAFETY: `position` is non-null by the check above and valid for 12
+    // bytes by the caller's guarantee; the game passes three f32s, never f64s.
+    unsafe { read_at::<[f32; 3]>(position.cast(), 0) }.map(f64::from)
+}
+
 crate::engine::chains::chain_detour! {
-    /// The table's `building.pickup`: a building piece picked up or torn
+    /// The table's `building.pickup`:a building piece picked up or torn
     /// down, its entity and mode read while it lives, queued for the step
     /// to raise.
     fn pickup_link(context: *mut u8, target: *const u8, tool: u32) -> u8;
