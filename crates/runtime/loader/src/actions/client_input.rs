@@ -345,8 +345,12 @@ pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
         // SAFETY: the detour with a stand-in pass, on a record of the
         // build's size and a mapping past its blocked byte.
         unsafe { client_build(record, 0, 0, 0, map, 0, 0, STEP, 0, 0, 0, 0) };
-        // SAFETY: the stick's x inside the same record.
-        unsafe { enshwick_core::raw::read_at(input.as_ptr(), 0x2b8) }
+        let Some(layout) = GROUPS.input.get() else {
+            return 0;
+        };
+        // SAFETY: the same record, of the build's size.
+        let [x, _] = unsafe { layout.movement_stick(input.as_ptr()) };
+        x.to_bits()
     }
 }
 
