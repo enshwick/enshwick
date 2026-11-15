@@ -270,11 +270,15 @@ pub(super) fn link(loader: &Loader, frames: bool) {
 /// first table entry the screen reads lack.
 fn linked(loader: &Loader, off: OffFn<'_>) -> Result<Linked, &'static str> {
     let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    let context_state = table(pinned::map::CONTEXT_STATE)?;
+    let state_play_data = table(pinned::map::STATE_PLAY_DATA)?;
+    let hud_screen = table(pinned::ui::HUD_SCREEN)?;
+    // After the reads' own entries: a build without them lists one cause.
     link_names(loader, off);
     Ok(Linked {
-        context_state: table(pinned::map::CONTEXT_STATE)?,
-        state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
-        hud_screen: table(pinned::ui::HUD_SCREEN)?,
+        context_state,
+        state_play_data,
+        hud_screen,
         prompt: prompt_at(loader, off),
         screen_host: loader.offset(pinned::ui::SCREEN_HOST),
         return_screen: loader.offset(pinned::ui::RETURN_SCREEN),
