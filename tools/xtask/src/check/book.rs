@@ -87,31 +87,62 @@ fn coverage_problem(root: &Path) -> Option<String> {
         Ok(text) => text,
         Err(error) => return Some(error),
     };
-    entries_mismatch(&chapter, &fields).map(|at| match fields.get(at) {
-        Some(field) => format!(
-            "{chapter_path}: row {} of its entries table should be `{field}`, the next HostApi field of {}; list every field once, in order",
-            at + 1,
-            header::LAYOUT
-        ),
-        None => format!(
-            "{chapter_path}: row {} of its entries table names no HostApi field of {}; remove it",
-            at + 1,
-            header::LAYOUT
-        ),
-    })
+    entries_mismatch(&chapter, &fields)
+        .map(|at| match fields.get(at) {
+            Some(field) => format!(
+                "{chapter_path}: row {} of its entries table should be `{field}`, the next HostApi field of {}; list every field once, in order",
+                at + 1,
+                header::LAYOUT
+            ),
+            None => format!(
+                "{chapter_path}: row {} of its entries table names no HostApi field of {}; remove it",
+                at + 1,
+                header::LAYOUT
+            ),
+        })
+        .or_else(|| {
+            untested_entry(&chapter).map(|entry| {
+                format!(
+                    "{chapter_path}: `{entry}` rests on the game but names no server copy or in-game test; name the probe's check or the in-game check"
+                )
+            })
+        })
+}
+
+/// What a test column of the entries table holds for no test.
+const NO_TEST: &str = "—";
+/// What the second column of the entries table holds for an entry that
+/// rests on the game.
+const RESTS_ON_GAME: &str = "game";
+
+/// The rows of `chapter`'s entries table, each with its entry name.
+fn entry_rows(chapter: &str) -> impl Iterator<Item = (&str, &str)> {
+    chapter
+        .lines()
+        .skip_while(|line| *line != COVERAGE_ENTRIES)
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .filter_map(|line| Some((line.strip_prefix("| `")?.split_once('`')?.0, line)))
 }
 
 /// The first row of `chapter`'s entries table that is not the field of
 /// `fields` at its place, or the row past its end when rows are missing.
 fn entries_mismatch(chapter: &str, fields: &[String]) -> Option<usize> {
-    let mut rows = chapter
-        .lines()
-        .skip_while(|line| *line != COVERAGE_ENTRIES)
-        .skip(1)
-        .take_while(|line| !line.starts_with("## "))
-        .filter_map(|line| line.strip_prefix("| `")?.split_once('`'))
-        .map(|(entry, _)| entry);
+    let mut rows = entry_rows(chapter).map(|(entry, _)| entry);
     (0..=fields.len()).find(|&at| rows.next() != fields.get(at).map(String::as_str))
+}
+
+/// The first entry of `chapter`'s entries table that rests on the game and
+/// names no test in the running game, in either test column.
+fn untested_entry(chapter: &str) -> Option<&str> {
+    entry_rows(chapter).find_map(|(entry, row)| {
+        let cells: Vec<&str> = row.split('|').map(str::trim).collect();
+        matches!(
+            cells.as_slice(),
+            ["", _, RESTS_ON_GAME, NO_TEST, NO_TEST, ""]
+        )
+        .then_some(entry)
+    })
 }
 
 /// The API crate's root, which declares its public modules.
@@ -716,6 +747,19 @@ mod tests {
     #[test]
     fn an_entries_table_listing_every_field_in_order_passes() {
         assert_eq!(entries_mismatch(ENTRIES, &fields(&["header", "log"])), None);
+    }
+
+    #[test]
+    fn a_game_entry_without_a_test_in_the_running_game_is_named() {
+        let chapter = "## The entries\n\n| `log` | loader | — | — |\n\
+                       | `hook_at` | game | probe: hook at | — |\n\
+                       | `server_stop` | game | — | — |\n";
+        assert_eq!(untested_entry(chapter), Some("server_stop"));
+        let tested = chapter.replace(
+            "| `server_stop` | game | — | — |",
+            "| `server_stop` | game | — | with a player |",
+        );
+        assert_eq!(untested_entry(&tested), None);
     }
 
     #[test]

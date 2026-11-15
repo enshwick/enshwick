@@ -66,7 +66,7 @@ names every entry of the golden layout once, in that order.
 | `hosting` | game | probe: host reads | — |
 | `server_world` | game | probe: server world | — |
 | `join_missing` | loader | — | with a player |
-| `hook_at` | game | probe: hook inside | — |
+| `hook_at` | game | probe: hook at | — |
 | `status` | loader | — | — |
 | `subscribe_game_event` | game | probe: ping | — |
 | `net_channel` | loader | probe: channel refused | — |
@@ -181,7 +181,7 @@ names every entry of the golden layout once, in that order.
 | `hold_saves` | game | probe: saves | — |
 | `set_saved` | game | probe: spawns | — |
 | `progress_write` | game | — | with a player |
-| `server_stop` | game | — | — |
+| `server_stop` | game | — | with a player |
 | `fog_uncover` | game | — | with a player |
 | `language_of` | game | — | with a player |
 | `join_rule` | game | — | with a client joining |
