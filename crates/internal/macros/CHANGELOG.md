@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Changed
+
+- `declare_mod!` exports the ABI version as a `u16` and its ready answers a
+  `Status`; a mod id is only `<author>.<name>` (#1106).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ## [1.0.0-alpha.15] - 2026-11-14

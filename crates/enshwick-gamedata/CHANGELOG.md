@@ -6,6 +6,31 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- `signature`: the release signature of Enshwick's own files, which
+  release CI makes with `sign` and the loader checks with `verify` (#1106).
+- `releases::stated` gives the version a build states: the release's own,
+  or for a development build of a commit the release with `+dev.<commit>`,
+  which keeps the release's precedence and channel; `releases::version_line`
+  names the ABI version beside it (#1114).
+- Routes find the client's input builder (`input.client_build`), its stick
+  and look fields, `toggleHudScreen` (`ui.toggle_hud_screen`), the in-game
+  menu's tab index (`ui.menu_tab`), the recipe directory column
+  (`ui.recipe_directory`) and the recipe browser's highlighted recipe and
+  select slot on every kept client build, with checks on the functions'
+  first instructions (#1114).
+- A route finds the input mapping's blocked byte (`input.blocked`), which
+  the client's input builder checks first, on every kept client build
+  (#1118).
+
+### Changed
+
+- The compatibility reports count the 8 new routed entries (#1114).
+- The compatibility reports count the new routed entry (#1118).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Added

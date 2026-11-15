@@ -7,6 +7,14 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Changed
+
+- Content GUIDs are `Guid`; a resource patch writes its output into a buffer
+  from `resource_buffer`; `crafting_prop` takes no engine facts;
+  `vanilla::templates` lists the game's templates with their names (#1106).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Changed

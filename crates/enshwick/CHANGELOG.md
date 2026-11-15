@@ -6,6 +6,125 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- A development build of the loader states a version no release takes,
+  `<release>+dev.<commit>`, such as `1.0.0-alpha.16+dev.5f647f46`, on the
+  main menu line, in the start log, the console's `enshwick` line and the
+  status summary; the log, the console line and the status name the ABI
+  version beside it (#1114).
+- The loader finds the client's input builder, the HUD's own screen toggle,
+  the in-game menu's tab and the crafting menu's recipe browser on every
+  kept client build (#1114).
+- `Input::local_status()` reports the local input sampler's cached flags
+  and sample age without starting reads; Luau
+  `enshwick.input.local_status()` (#1118).
+- `Input::client_snapshot()` copies the client's state for any thread: the
+  session, the world, the open screen and the one it returns to, the
+  screen's host, the in-game menu's tab, the crafting menu's highlighted
+  recipe, the local player and its held controls; Luau
+  `enshwick.input.client_snapshot()` (#1118).
+- `Input::client_command()`, `cancel_command()` and `command_status()` open
+  or close the game's screens, choose the menu's tab, turn the camera once,
+  hold a direction for at most 250 ms and highlight a recipe in the open
+  crafting menu, each with an id and an outcome the client's own state
+  confirms; the player's own input cancels a look or move; Luau
+  `enshwick.input.client_command()` (#1118).
+- `mods::loader_off()` lists each loader part and feature that is off, with
+  its reason and time; Luau `enshwick.mods.loader_off()` (#1118).
+- `ItemInfo::placed_entity_template` names the template a player places
+  from an item (#1118).
+- ABI 12.1: `HostApi::local_input_status`, `client_snapshot`, `loader_off`,
+  `client_command` and `client_command_status`, with `LocalInputInfo`,
+  `ClientSnapshot`, `ClientCommand`, `ClientCommandStatus` and `LoaderOff`;
+  `ClientCommand::in_bounds` checks a command's own bounds (#1118).
+- Fake host: the client snapshot, the sampler status and client commands
+  answer as the loader does, with bounds refused and statuses the test sets
+  (#1118).
+- Loader: one detour on the client's input builder writes a look or a move
+  after the game's own pass, and one on the recipe directory column reads
+  and highlights the crafting menu's recipe; each costs one atomic load
+  until a mod hands it a command (#1118).
+
+### Changed
+
+- ABI 12.0, the shape the ABI freezes in; every mod rebuilds for it (#1106):
+  - A mod id is only `<author>.<name>` everywhere: manifests, points, packs,
+    the join check and item data kinds.
+  - `HostApi` is grouped by domain and renamed by one pattern
+    (`request_*`, `define_*`, `subscribe_*`, `set_*`); every entry takes the
+    mod handle and answers a `Status`, and the C header asserts each offset.
+  - New statuses: `Status::LOADER_FAULT` for a fault inside the loader,
+    `Status::BUSY` for a full queue or a spent rate and
+    `Status::TOO_SMALL` for a short buffer; `MISSING`, `REFUSED` and
+    `BAD_ARGS` keep only their own meaning. An unknown enum value or flag
+    has one rule, stated in the ABI module.
+  - One form each: `Guid` for every GUID, metres as `[f64; 3]` for every
+    position and extent (building zone checks included), `u8` 1 or 0 for
+    yes and no, `u32` for lengths and counts, and time fields named for
+    their unit (`_ns`).
+  - A field holding a player's character entity is `character`, a
+    `PlayerKey` of an account `account`; struct suffixes name their role
+    (`*Data`, `*Info`, `*Spec`, `*Request`).
+  - `PlayerInfo` is headed and can grow, keeps a whole name of up to 128
+    bytes and has room for further permission bits; `ActionCall` points to
+    its `PlayerInfo` and `ActionTarget`, so both can grow.
+  - Damage amounts are a pointer and a count sized to the running game's
+    damage types (13 on the current build) instead of a fixed array.
+  - Lists cross the ABI as a pointer and a `u32` count under one rule, and
+    the structs that must grow carry a header.
+  - A null callback from a C mod is refused with `Status::BAD_ARGS` instead
+    of being called.
+  - Every callback and `HostApi` entry states its calling thread, lifetime,
+    re-entrancy and panic rules.
+  - `ActionCall::SHEET` is gone: `ActionCall::ALLOWED` asks a mod only for
+    the ids of the actions a player may run, one per line, and the loader
+    chooses carried controls from it.
+  - `HostApi::chat` refuses key 0 with `Status::BAD_ARGS`; the new
+    `HostApi::chat_all` sends to everyone and `World::broadcast` uses it.
+  - Knowledge changes go through one `change_knowledge` with a headed
+    `KnowledgeChange`; `run_action` takes its target, `transaction_commit`
+    its actor, `set_game_settings` a mask and `change_data` an optional
+    change id.
+  - `crafting_prop` takes no engine facts from the mod.
+  - A resource patch's output lies in a buffer from `resource_buffer`, its
+    only form; the doc states which threads run a patch and how long its
+    output lives.
+  - Survivor lookups and survivor status menus chain across mods in load
+    order instead of belonging to the first mod; time speed shows as
+    chained.
+  - Dropped: `raise_base_limit` as an entry, `BuildTable`, definition texts,
+    `ChunkData.index`, the 11.x fallbacks and the commands' name field.
+- The world module leaves `unstable`: `World` with its entity and component
+  queries, component writes, players, accounts, chat, notices, saves,
+  vitals, kicks, bans, chat mutes and join rules, and `Load::world`,
+  `Load::on_rename` and `Load::on_join`, in Rust and Luau; props, build
+  rights, captures and transactions stay `unstable` (#1106).
+- `Arg::template` takes a template from a list the client's window builds
+  from its own game and searches as items are; `Value::Template` carries
+  it, and the server refuses a template its game does not know before the
+  handler runs. Luau `enshwick.actions.template` and
+  `enshwick.content.templates` (#1106).
+- Loader: an entity call on a build without the world layout fails with its
+  own error instead of naming no server (#1106).
+- Loader: release builds carry the release signature of the stub and the
+  loader; at start the loader checks both off the game thread, and a build
+  without a valid signature runs as before while the log (code E1011) and
+  the Mods screen name it an unofficial build (#1106).
+- `enshwick.h` ships with each release, its comments name C types, and it
+  asserts sizes and offsets, the packing and an x64 target; the C++
+  manifest has a constant initializer (#1106).
+
+### Fixed
+
+- A held-controls read that went stale stays apart from one never made,
+  and the loader logs once why a step found no mask: no row passed the
+  interface's local player check, or the row had no player input (#1114).
+- `host_version` and the Mods screen's own row state a development build's
+  version, as the log already did (#1118).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Added

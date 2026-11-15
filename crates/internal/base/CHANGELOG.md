@@ -7,6 +7,24 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- `mods::loader_off()` and its Luau mirror list each loader part and
+  feature that is off, with its reason and time (#1118).
+- A test refuses an older or truncated host table before an appended slot
+  is read (#1118).
+
+### Changed
+
+- A mod id is only `<author>.<name>`; the statuses of ABI 12.0 map to `Off`
+  (#1106).
+
+### Fixed
+
+- `host_version` states a development build's version (#1118).
+
 ## [1.0.0-alpha.16] - 2026-11-15
 
 ### Added
