@@ -236,12 +236,11 @@ fn namespace_lists(map: &Map, files: &[(String, String)]) -> Vec<String> {
     let joined: Vec<&str> = files
         .iter()
         .find(|(path, _)| path == "script/namespaces.rs")
-        .map(|(_, text)| {
+        .map_or_default(|(_, text)| {
             text.lines()
                 .filter_map(|line| line.trim().strip_suffix("::NAMESPACES,"))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     if joined != expected {
         problems.push(format!(
             "{SOURCES}/script/namespaces.rs joins {joined:?}, not the lists in the order of {MAP}: {expected:?}"

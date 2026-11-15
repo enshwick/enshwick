@@ -89,8 +89,7 @@ impl World {
     pub fn containers(self, kinds: ContainerKinds) -> Vec<Placed> {
         self.0
             .containers
-            .map(|containers| containers.of(self, kinds))
-            .unwrap_or_default()
+            .map_or_default(|containers| containers.of(self, kinds))
     }
 
     /// Asks the server to destroy `entity` after the systems of the next

@@ -6,11 +6,22 @@
 mod tests {
     use std::path::Path;
 
+    /// The tail that takes `name`'s module alone; rustdoc 1.100 files a bare
+    /// `{self}` under a module called `self`, so the module is named again.
+    fn module_alone(name: &str) -> String {
+        format!("::{{self as {name}}}")
+    }
+
     /// The crate and module of each `pub use <crate>::<module>;` line.
     fn re_exports(lib: &str) -> Vec<(&str, &str)> {
         lib.lines()
             .filter_map(|line| line.strip_prefix("pub use ")?.strip_suffix(';'))
-            .map(|path| path.strip_suffix("::{self}").unwrap_or(path))
+            .map(|path| {
+                path.rsplit_once("::")
+                    .and_then(|(_, last)| last.strip_prefix("{self as ")?.strip_suffix('}'))
+                    .and_then(|name| path.strip_suffix(module_alone(name).as_str()))
+                    .unwrap_or(path)
+            })
             .filter_map(|path| path.split_once("::"))
             .filter(|(krate, module)| {
                 krate.starts_with("enshwick_") && !module.contains(['{', ':'])
@@ -76,7 +87,7 @@ mod tests {
                 let path = format!("pub use {krate}::{name}");
                 lines.iter().any(|line| {
                     line.strip_prefix(path.as_str())
-                        .is_some_and(|rest| rest == ";" || rest == "::{self};")
+                        .is_some_and(|rest| rest == ";" || rest == module_alone(name) + ";")
                 })
             })
             .collect();
@@ -85,7 +96,7 @@ mod tests {
             // rustdoc drops the docs of the internal crate's re-export of the
             // macro here.
             assert!(
-                lines.contains(&format!("pub use {krate}::{name}::{{self}};").as_str()),
+                lines.contains(&format!("pub use {krate}::{name}{};", module_alone(name)).as_str()),
                 "`{name}` takes the macro through {krate} instead of the module alone"
             );
             let at = lines

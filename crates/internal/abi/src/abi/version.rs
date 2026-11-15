@@ -61,10 +61,9 @@ pub enum CheckAbiError {
     },
     /// The mod was built for an older major: it needs a rebuild.
     #[error(
-        "built for ABI major {major}, and Enshwick {} runs ABI {ABI_MAJOR}.{ABI_MINOR}: \
-         rebuild it for Enshwick {}",
-        crate::VERSION,
-        crate::VERSION
+        "built for ABI major {major}, and Enshwick {version} runs ABI {ABI_MAJOR}.{ABI_MINOR}: \
+         rebuild it for Enshwick {version}",
+        version = crate::VERSION
     )]
     OtherMajor {
         /// The major the mod was built for.

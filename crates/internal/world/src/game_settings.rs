@@ -256,10 +256,7 @@ trait Value: Sized {
 impl Value for f32 {
     const SIZE: usize = 4;
     fn decode(bytes: &[u8], _: &Enums) -> Self {
-        bytes
-            .try_into()
-            .map(Self::from_le_bytes)
-            .unwrap_or_default()
+        bytes.try_into().map_or_default(Self::from_le_bytes)
     }
     fn encode(&self, out: &mut [u8], _: &Enums) -> bool {
         out.copy_from_slice(&self.to_le_bytes());
@@ -295,7 +292,7 @@ impl Value for u8 {
 impl Value for Duration {
     const SIZE: usize = 8;
     fn decode(bytes: &[u8], _: &Enums) -> Self {
-        let ns = bytes.try_into().map(i64::from_le_bytes).unwrap_or_default();
+        let ns = bytes.try_into().map_or_default(i64::from_le_bytes);
         Self::from_nanos(u64::try_from(ns).unwrap_or(0))
     }
     fn encode(&self, out: &mut [u8], _: &Enums) -> bool {

@@ -349,7 +349,7 @@ fn read_queue(key: &str) -> Option<Vec<Waiting>> {
                 .map_err(|e| e.to_string())
         });
     match read {
-        Ok(file) => Some(file.map(|file| file.waiting).unwrap_or_default()),
+        Ok(file) => Some(file.map_or_default(|file| file.waiting)),
         Err(error) => {
             crate::log!(
                 WARN,

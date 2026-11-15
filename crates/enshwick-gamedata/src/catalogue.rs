@@ -866,8 +866,7 @@ mod tests {
             .into_iter()
             .filter_map(|var| std::env::var_os(var).map(std::path::PathBuf::from));
         let listed: Vec<std::path::PathBuf> = std::env::var_os("ENSH_EXES")
-            .map(|list| std::env::split_paths(&list).collect())
-            .unwrap_or_default();
+            .map_or_default(|list| std::env::split_paths(&list).collect());
         for path in named.chain(listed) {
             let bytes = std::fs::read(&path).unwrap();
             let image =

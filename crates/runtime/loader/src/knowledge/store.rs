@@ -614,9 +614,8 @@ pub(crate) fn grant(
 pub(crate) fn quests(loader: &Loader) -> Result<Vec<u32>, KnowledgeError> {
     let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let (game, _) = store(layout)?;
-    let mut ids: Vec<u32> = quest_set(layout, game)
-        .map(|set| set.iter().copied().collect())
-        .unwrap_or_default();
+    let mut ids: Vec<u32> =
+        quest_set(layout, game).map_or_default(|set| set.iter().copied().collect());
     ids.sort_unstable();
     Ok(ids)
 }

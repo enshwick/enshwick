@@ -249,9 +249,7 @@ pub fn label(name: &str, id: &str) -> String {
 /// ```
 #[must_use]
 pub fn all() -> Vec<ModEntry> {
-    crate::host()
-        .map(|host| host.listing(host.api().mods, true))
-        .unwrap_or_default()
+    crate::host().map_or_default(|host| host.listing(host.api().mods, true))
 }
 
 /// Whether the mod `id` is loaded and runs: what an optional dependency's
@@ -300,9 +298,7 @@ pub fn is_running(id: &str) -> bool {
 /// ```
 #[must_use]
 pub fn join_missing() -> Vec<ModEntry> {
-    crate::host()
-        .map(|host| host.listing(host.api().join_missing, false))
-        .unwrap_or_default()
+    crate::host().map_or_default(|host| host.listing(host.api().join_missing, false))
 }
 
 impl Host {

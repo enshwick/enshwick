@@ -123,7 +123,7 @@ pub(crate) fn event_schema(
     let data = ident.unraw().to_string();
     let head = format!(
         "[[event]]\nname = {}\ndata = {}\ndoc = {}\nlayout = [",
-        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        toml_string(&name.map_or_default(syn::LitStr::value)),
         toml_string(&data),
         toml_string(&schema_doc(&item.attrs)),
     );
@@ -178,7 +178,7 @@ pub(crate) fn service_schema(
     let table = ident.unraw().to_string();
     let head = format!(
         "[[service]]\nname = {}\ntable = {}\ndoc = {}\nmajor = ",
-        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        toml_string(&name.map_or_default(syn::LitStr::value)),
         toml_string(&table),
         toml_string(&schema_doc(&item.attrs)),
     );
@@ -273,7 +273,7 @@ pub(crate) fn call_schema(
     let input = ident.unraw().to_string();
     let head = format!(
         "[[call]]\nname = {}\ninput = {}\ndoc = {}\nmajor = ",
-        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        toml_string(&name.map_or_default(syn::LitStr::value)),
         toml_string(&input),
         toml_string(&schema_doc(&item.attrs)),
     );
@@ -343,7 +343,7 @@ pub(crate) fn point_schema(
     let input = ident.unraw().to_string();
     let head = format!(
         "[[point]]\nname = {}\nmode = \"{}\"\nrefusable = {refusable}\ninput = {}\ndoc = {}\noutput = \"",
-        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        toml_string(&name.map_or_default(syn::LitStr::value)),
         mode.to_string().to_lowercase(),
         toml_string(&input),
         toml_string(&schema_doc(&item.attrs)),

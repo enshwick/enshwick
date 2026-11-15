@@ -38,8 +38,7 @@ pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place
         .server_values
         .relock()
         .clone()
-        .map(|values| mods_screen::server_rows(schema, &values, words))
-        .unwrap_or_default()
+        .map_or_default(|values| mods_screen::server_rows(schema, &values, words))
 }
 
 /// Draws a page of mod `index`'s settings, those of the world this process

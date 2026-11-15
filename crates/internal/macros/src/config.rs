@@ -487,7 +487,7 @@ pub(super) fn described_field(
     let (min, max) = (bound(&config.min), bound(&config.max));
     let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
     let plain = doc_text(&field.attrs);
-    let label = config.text.map(|t| t.value()).unwrap_or_default();
+    let label = config.text.map_or_default(|t| t.value());
     let secret = config.secret;
     let first = config.first.map(|n| quote!(.with_first(#n)));
     quote! {

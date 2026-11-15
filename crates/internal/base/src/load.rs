@@ -273,8 +273,7 @@ impl BaseLoad {
         self.add_status(move || {
             shown
                 .shut_reason()
-                .map(|why| format!("world store {named} kept shut: {why}"))
-                .unwrap_or_default()
+                .map_or_default(|why| format!("world store {named} kept shut: {why}"))
         })?;
         let closed = store.clone();
         self.on::<crate::events::ShutdownStarted>(move |()| {

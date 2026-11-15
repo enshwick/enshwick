@@ -384,8 +384,7 @@ fn read_kept(key: &str) -> Option<BTreeMap<String, Vec<u8>>> {
         });
     match read {
         Ok(kept) => Some(
-            kept.map(|kept| kept.kept)
-                .unwrap_or_default()
+            kept.map_or_default(|kept| kept.kept)
                 .into_iter()
                 .filter_map(|(name, value)| Some((name, unhex(&value)?)))
                 .collect(),

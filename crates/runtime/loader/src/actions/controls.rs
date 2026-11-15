@@ -754,9 +754,7 @@ pub(crate) fn rows() -> Vec<Row> {
             Row {
                 index,
                 mod_id: d.mod_id().to_owned(),
-                mod_name: record
-                    .map(crate::engine::loader::ModRecord::label)
-                    .unwrap_or_default(),
+                mod_name: record.map_or_default(crate::engine::loader::ModRecord::label),
                 label: record.map_or_else(|| d.label.clone(), |r| label_of(r, &d.label)),
                 keys: *k,
             }

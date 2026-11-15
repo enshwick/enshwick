@@ -232,8 +232,7 @@ fn sources(s: &mut crate::test::table::State, entity: u32, stat: u32) -> Vec<Sta
     let mut buffs: Vec<u32> = s
         .buffs
         .get(&entity)
-        .map(|on| on.iter().map(|b| b.id.get()).collect())
-        .unwrap_or_default();
+        .map_or_default(|on| on.iter().map(|b| b.id.get()).collect());
     buffs.sort_unstable();
     for buff in buffs {
         for (_, m) in s.stats.buffs.iter().filter(|(id, _)| *id == buff) {

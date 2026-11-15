@@ -572,7 +572,7 @@ pub(crate) fn modify(
             && let Some(player) = player
         {
             let record = loader.mods.get(owner.get());
-            let mod_id = record.map(|m| m.id.clone()).unwrap_or_default();
+            let mod_id = record.map_or_default(|m| m.id.clone());
             let stat_id = sealed.kinds[stat as usize].id.to_string();
             state.saved.retain(|s| {
                 !(s.player == player
@@ -751,8 +751,7 @@ pub(crate) fn sources(
         state
             .watched
             .get(&entity.0)
-            .map(|w| w.modifiers.clone())
-            .unwrap_or_default()
+            .map_or_default(|w| w.modifiers.clone())
     });
     let (mut list, _) = gather(loader, sealed, entity, &held);
     list.retain(|s| stat == u32::MAX || s.stat == stat);

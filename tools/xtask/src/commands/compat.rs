@@ -206,8 +206,7 @@ fn side_of(exe: &Path) -> Result<tables::Side, String> {
     let name = exe
         .file_name()
         .and_then(|n| n.to_str())
-        .map(str::to_ascii_lowercase)
-        .unwrap_or_default();
+        .map_or_default(str::to_ascii_lowercase);
     match name.as_str() {
         "enshrouded_server.exe" => Ok(tables::Side::Server),
         "enshrouded.exe" => Ok(tables::Side::Client),

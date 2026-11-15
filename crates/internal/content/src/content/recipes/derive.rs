@@ -189,8 +189,7 @@ impl RecipeView<'_> {
         self.blob
             .array(self.at + self.layout.relative[3])
             .and_then(|(start, len)| self.blob.bytes().get(start..start + len as usize))
-            .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
-            .unwrap_or_default()
+            .map_or_default(|bytes| String::from_utf8_lossy(bytes).into_owned())
     }
 
     /// The item the recipe makes and how many.

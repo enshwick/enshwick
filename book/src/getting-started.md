@@ -17,7 +17,7 @@ puts it in when it installs. For a data pack or a Luau script, take
 [releases page](https://github.com/enshwick/enshwick/releases). Extract it
 next to the game's executable.
 
-Starting a mod and building one in Rust also need Rust 1.99 or newer, from
+Starting a mod and building one in Rust also need Rust 1.100 or newer, from
 [rustup](https://rustup.rs). Install the Windows target and the
 [`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick)
 tool. With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),

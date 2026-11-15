@@ -12,11 +12,7 @@ use crate::engine::loader::Loader;
 /// `mods/` and its file there, as `(id, folder, file)`.
 pub(super) fn take(loader: &'static Loader, folders: Vec<(String, String, String)>) {
     let _started = crate::engine::off_thread::start("mod record", move || {
-        let hash = |path: &Path| {
-            std::fs::read(path)
-                .map(|bytes| record::sha256(&bytes))
-                .unwrap_or_default()
-        };
+        let hash = |path: &Path| std::fs::read(path).map_or_default(|bytes| record::sha256(&bytes));
         let mods = loader
             .mods
             .iter()

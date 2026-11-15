@@ -111,12 +111,11 @@ fn plan_join(manifest: &Path, root: &Path) -> anyhow::Result<Place> {
         doc.get("workspace")
             .and_then(|w| w.get(key))
             .and_then(toml_edit::Item::as_array)
-            .map(|a| {
+            .map_or_default(|a| {
                 a.iter()
                     .filter_map(|v| v.as_str().map(str::to_owned))
                     .collect()
             })
-            .unwrap_or_default()
     };
     if patterns("exclude").iter().any(|p| {
         let p = p.trim_start_matches("./").trim_end_matches('/');

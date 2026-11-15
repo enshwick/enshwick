@@ -507,8 +507,7 @@ fn begin(
     }
     let event_types = load
         .game_event_types()
-        .map(|types| types.iter().map(|t| (t.name(), t.size())).collect())
-        .unwrap_or_default();
+        .map_or_default(|types| types.iter().map(|t| (t.name(), t.size())).collect());
     let inner = Arc::new_cyclic(|me| Inner {
         me: Weak::clone(me),
         id: id.to_owned(),

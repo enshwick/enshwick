@@ -704,7 +704,7 @@ impl Map {
         }
         Ok(MapSnapshot {
             players,
-            altars: altars.map(snapshot_altars).unwrap_or_default(),
+            altars: altars.map_or_default(snapshot_altars),
             markers,
             frame,
         })

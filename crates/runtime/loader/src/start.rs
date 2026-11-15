@@ -439,6 +439,5 @@ fn read_frame() -> enshwick_core::abi::CallerFrame {
         .get()
         .copied()
         .flatten()
-        .map(FrameSlot::read)
-        .unwrap_or_default()
+        .map_or_default(FrameSlot::read)
 }
