@@ -7,6 +7,24 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- `peer`: the bounds of a peer's input, each one constant with its reason,
+  and the one token bucket (`Bucket`, `Rate`, `Rated`) the loader and the
+  fake host rate every input with (#1094).
+- `command_names::first_word` and `command_names::command_word`: the one
+  split of a typed line (#1094).
+
+### Changed
+
+- The helpers that read a mod's values and write the answers across the
+  boundary live once here, for the loader and the fake host (#1083).
+- A status the loader answers maps to each domain's error through one
+  function, which also holds the rule for a status this build does not
+  know (#1083).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

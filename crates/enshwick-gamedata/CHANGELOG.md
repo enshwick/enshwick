@@ -6,6 +6,28 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- Routes find the session's join message handler (`session.join_game`), its
+  reply send (`session.join_reply`), its machine lookup
+  (`session.find_machine`), the join message's account list, the
+  banned reply's flags and the session's peer slots on every kept server and
+  client build, with checks on the three functions' first instructions
+  (#1100).
+
+### Changed
+
+- Each compatibility report records the day `cargo xtask compat` checked its build (`checked`).
+- The compatibility reports count the 17 new routed entries (#1100).
+- The compatibility reports carry new seals: the report tool now reads the lock file through the check tool's shared reader. Their findings are unchanged.
+
+### Fixed
+
+- The route check covers `server.application` and `server.exit_reason` on
+  the older kept server builds too (#1103).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

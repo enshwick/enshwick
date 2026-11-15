@@ -7,6 +7,21 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- `world::Join`, the account a join rule decides on, with its key (#1100).
+
+### Changed
+
+- The check of a terrain edit lives once here, for the loader and the fake
+  host (#1083).
+- World and fog of war errors map the loader's statuses through the shared
+  status rule (#1083).
+- `Player::is_admin` asks `PlayerInfo::admin`, the one test of an
+  administrator (#1094).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

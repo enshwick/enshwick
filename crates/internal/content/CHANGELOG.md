@@ -7,6 +7,13 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Changed
+
+- The docs of `id!` link the book's page on how ids are namespaced.
+- The docs of `content::rebuild` name `Status::BUILDING`, the answer to a patch that rebuilds its own key.
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

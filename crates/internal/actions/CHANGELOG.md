@@ -7,6 +7,29 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- `Actions::on_refused`, `Refused` and `RefusedReason`, and the script's
+  `on_refused` (#1094).
+
+### Changed
+
+- Commands and console lines map the loader's statuses through the shared
+  status rule (#1083).
+- Every reader of a typed line and of the interface's values lives in one
+  module, and a value is checked once at the boundary (#1094).
+- `Registry::allowed` runs once per run (#1094).
+
+### Fixed
+
+- Answer an interface run whose text is longer than its argument takes with the argument's bound instead of a refusal without a reason (#1085).
+- Arguments from the interface that do not decode answer with the usage, not
+  the text of a missing right (#1094).
+- `Action::admins` is the permission to kick and ban, so it holds beside an
+  `allow` (#1094).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

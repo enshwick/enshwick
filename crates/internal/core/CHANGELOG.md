@@ -7,6 +7,19 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- `Load::on_join` and its Luau mirror `enshwick.world.on_join` (#1100).
+
+### Changed
+
+- The rules the loader and the fake host refuse a mod's requests by include
+  the inventory request check and the terrain edit check (#1083).
+- The base's `peer` module is reachable at its path for the API's own
+  crates and the fake host (#1094).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

@@ -6,6 +6,19 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- The Luau definitions name `world.on_join` and `Join` (#1100).
+- The Luau definitions name `Actions:on_refused`, `Refused` and
+  `RefusedReason` (#1094).
+
+### Changed
+
+- A new Rust mod's texts test asks for every text in English and Ukrainian
+  only (#1103).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

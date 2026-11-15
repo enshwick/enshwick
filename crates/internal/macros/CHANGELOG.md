@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-11-15
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

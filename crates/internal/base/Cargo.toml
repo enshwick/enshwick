@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-base"
-version = "1.0.0-alpha.15"
+version = "1.0.0-alpha.16"
 description = "Internal part of enshwick; depend on enshwick: what every domain of the API shares"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
@@ -13,7 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.15" }
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.16" }
 enshwick-abi.workspace = true
 enshwick-values.workspace = true
 aho-corasick.workspace = true
