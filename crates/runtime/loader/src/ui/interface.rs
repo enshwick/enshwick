@@ -284,9 +284,7 @@ pub(crate) fn forget(_loader: &'static Loader) {
 // unbalanced every frame.
 static FRAMES_FUSE: Fuse = Fuse::new("mods' windows");
 static EXTENSIONS_FUSE: Fuse = Fuse::new("screen extensions");
-/// Turns the screen, prompt and host reads off at their first panic; the
-/// frames then read as outside a game.
-static READS_FUSE: Fuse = Fuse::new("screen reads");
+use crate::engine::screens::READS_FUSE;
 static DEMO_FUSE: Fuse = Fuse::new("interface demo");
 static CARRIED_FUSE: Fuse = Fuse::new("carried windows");
 static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
@@ -963,10 +961,9 @@ fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::Frame
 }
 
 mod painter;
-mod snapshot;
-pub(crate) use snapshot::{screen_name, screen_reads_off};
 #[cfg(test)]
 mod recorder;
+mod snapshot;
 pub(crate) use painter::{Painter, widget};
 #[cfg(test)]
 mod tests;

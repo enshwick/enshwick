@@ -171,7 +171,7 @@ pub(crate) fn session() -> u64 {
 /// The client's state now; asking starts the reads.
 pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
     ask();
-    let off = FUSE.is_off() || crate::ui::interface::screen_reads_off();
+    let off = FUSE.is_off() || crate::engine::screens::READS_FUSE.is_off();
     compose(
         Kept {
             words: STATE.copy.read(),
@@ -181,7 +181,7 @@ pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
             scene,
         },
         local_held::now_ms(),
-        crate::ui::interface::screen_name,
+        crate::engine::screens::name,
     )
 }
 

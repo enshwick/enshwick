@@ -1,5 +1,5 @@
 //! What the client's snapshot and commands read of each frame and do in
-//! it, and the names they use.
+//! it.
 
 use std::cell::OnceCell;
 
@@ -7,17 +7,6 @@ use super::{READS_FUSE, extensions};
 use crate::actions::client_commands::{Applied, Kind, Seen};
 use crate::actions::client_snapshot::{FrameRead, TabRead};
 use crate::ui::interface::engine::Engine;
-
-/// Whether the screen reads are off on this build or after a panic.
-pub(crate) fn screen_reads_off() -> bool {
-    READS_FUSE.is_off()
-}
-
-/// The game's name of screen byte `screen`; empty for a byte no constant
-/// names, and before the screen reads link.
-pub(crate) fn screen_name(screen: u8) -> &'static str {
-    extensions::screen_named(screen)
-}
 
 /// This frame's open screens and the menu's tab.
 ///

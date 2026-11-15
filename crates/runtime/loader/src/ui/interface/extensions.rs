@@ -62,9 +62,6 @@ struct Linked {
     context_state: usize,
     state_play_data: usize,
     hud_screen: usize,
-    /// The game's name of each screen by its value; empty for a value no
-    /// constant names.
-    names: Vec<&'static str>,
     /// Where the play data keeps the interaction prompt, on a build whose
     /// table has it.
     prompt: Option<PromptAt>,
@@ -273,11 +270,11 @@ pub(super) fn link(loader: &Loader, frames: bool) {
 /// first table entry the screen reads lack.
 fn linked(loader: &Loader, off: OffFn<'_>) -> Result<Linked, &'static str> {
     let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    link_names(loader, off);
     Ok(Linked {
         context_state: table(pinned::map::CONTEXT_STATE)?,
         state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
         hud_screen: table(pinned::ui::HUD_SCREEN)?,
-        names: screen_names(loader, off),
         prompt: prompt_at(loader, off),
         screen_host: loader.offset(pinned::ui::SCREEN_HOST),
         return_screen: loader.offset(pinned::ui::RETURN_SCREEN),
@@ -292,22 +289,12 @@ fn screen_lacked(id: &str, off: OffFn<'_>) {
     off(&super::EXTENSIONS_FUSE, id, ABSENT);
 }
 
-fn screen_names(loader: &Loader, off: OffFn<'_>) -> Vec<&'static str> {
-    let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
-    let mut names = vec![""; usize::from(u8::MAX) + 1];
-    let Ok(info) = loader.reflection.type_info(screens) else {
+/// Links the screens' names, listing them off on a build that does not
+/// reflect them.
+fn link_names(loader: &Loader, off: OffFn<'_>) {
+    if let Err(screens) = crate::engine::screens::link(loader) {
         off(&SCREEN_NAMES_FUSE, screens, NOT_REFLECTED);
-        return names;
-    };
-    for constant in info.enum_values() {
-        if let Some(slot) = usize::try_from(constant.value())
-            .ok()
-            .and_then(|value| names.get_mut(value))
-        {
-            *slot = constant.name();
-        }
     }
-    names
 }
 
 /// Where the play data keeps the interaction prompt, or `None` with its
@@ -424,7 +411,7 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: b
     };
     FrameReads {
         screen: Some(screen),
-        hud_screen: screen_name(linked, Some(screen)),
+        hud_screen: screen_name(Some(screen)),
         prompt_title,
         prompt_verb,
         screen_host: enshwick_core::Entity(host),
@@ -451,19 +438,14 @@ pub(super) fn hosts_asked(frames: bool) -> bool {
 }
 
 /// The game's name of screen byte `screen`; empty for `None`.
-fn screen_name(linked: &Linked, screen: Option<u8>) -> Str {
-    screen
-        .and_then(|s| linked.names.get(usize::from(s)))
-        .map_or(Str::EMPTY, |name| Str::new(name))
+fn screen_name(screen: Option<u8>) -> Str {
+    screen.map_or(Str::EMPTY, |s| Str::new(screen_named(s)))
 }
 
 /// The game's name of screen byte `screen` on this build: empty for a byte
 /// no constant names, and before the screen reads link.
 pub(crate) fn screen_named(screen: u8) -> &'static str {
-    LINKED
-        .get()
-        .and_then(|linked| linked.names.get(usize::from(screen)).copied())
-        .unwrap_or_default()
+    crate::engine::screens::name(screen)
 }
 
 /// One frame's open screens, read in the game the player is in.
@@ -657,13 +639,8 @@ mod tests {
     #[test]
     fn a_build_without_the_screens_reflected_names_none_and_lists_the_names_off() {
         let asked = Asked::default();
-        let names = screen_names(&crate::start::tests::bare_loader(), &recorder(&asked));
-        assert_eq!(
-            names.len(),
-            usize::from(u8::MAX) + 1,
-            "a slot per screen byte"
-        );
-        assert!(names.iter().all(|name| name.is_empty()));
+        link_names(&crate::start::tests::bare_loader(), &recorder(&asked));
+        assert_eq!(screen_named(1), "");
         let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
         assert_eq!(
             asked.into_inner(),

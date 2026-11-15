@@ -309,7 +309,7 @@ pub(crate) enum CommandError {
 
 /// The screen byte named `name` on this build.
 fn screen_byte(name: &str) -> Option<u8> {
-    (0..=u8::MAX).find(|screen| crate::ui::interface::screen_name(*screen) == name)
+    crate::engine::screens::byte(name)
 }
 
 /// The text of a spec's name, empty for none, for the call: the command

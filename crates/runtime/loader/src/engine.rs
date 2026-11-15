@@ -104,6 +104,8 @@ pub(crate) mod retire;
     expect(dead_code, reason = "only the running game tries code patches again")
 )]
 pub(crate) mod retry;
+#[cfg(windows)]
+pub(crate) mod screens;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the Windows build reads the game's server")

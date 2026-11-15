@@ -146,24 +146,38 @@ end
 ## Reading the client's state in one copy
 
 On a client, `input.client_snapshot()` returns a `ClientSnapshot`. It holds
-what the interface read in its last frame: the open HUD screen, the screen
-it returns to, the open screen's host and the tab the in-game menu shows. It
+what the interface read in its last frame. That is the open HUD screen, the
+screen it returns to, the open screen's host and the in-game menu's tab. It
 also holds the local player, its held controls and the world's name. One
 call copies all of it at once, on any thread.
 
 The menu's tab and the HUD screen are two different things. The `V` key
-opens the crafting screen, and `E` then shows the backpack's tab while the
-HUD screen stays `PlayerCrafting`. So read `menu_tab()` for the page the
-player sees. It names the tab as the screen it stands for: `Social`, `Map`,
-`Journal`, `PlayerCrafting`, `Backpack`, `Character` or `SkillTree`. It is
-`None` while no menu shows.
+opens the crafting screen. The `E` key then shows the backpack's tab, while
+the HUD screen stays `PlayerCrafting`. So read `menu_tab()` for the page the
+player sees. It names the tab as the screen it stands for, and it is `None`
+while no menu shows:
+
+| Tab | Shows |
+| --- | --- |
+| `Social` | the players of the world |
+| `Map` | the map |
+| `Journal` | the journal |
+| `PlayerCrafting` | the crafting menu |
+| `Backpack` | the backpack |
+| `Character` | the character |
+| `SkillTree` | the skill tree |
 
 `session()` counts the client's sessions from 1. It grows when the
-client's game object, the local player or the world changes, so two
+client's game object, the local player or the world changes. So two
 snapshots with the same value belong to one session. `state()` says how old
-the reads are: `Never` before the first frame, `Fresh` within a second,
-`Stale` after that, as while a world loads, and `Off` when the build lacks
-the reads. `age_ms()` gives the age in milliseconds.
+the reads are, and `age_ms()` gives the age in milliseconds:
+
+| State | Means |
+| --- | --- |
+| `Never` | no frame read yet |
+| `Fresh` | read within a second |
+| `Stale` | older, as while a world loads |
+| `Off` | the build lacks the reads |
 
 `highlighted_recipe()` names the recipe the crafting menu's details column
 shows. It follows a click on a tile and the arrow keys; the mouse pointer
@@ -196,8 +210,8 @@ enshwick.ui.on_frame(function(frame)
 end)
 ```
 
-In Luau, `reads` lists the parts the build reads by name, and `session`
-and `age_ms` are decimal strings, as other 64-bit values are.
+In Luau, `reads` lists the parts the build reads by name. The `session` and
+`age_ms` fields are decimal strings, as other 64-bit values are.
 
 ## Driving the client's own screens
 
@@ -216,16 +230,29 @@ then tells what came of it:
 
 A command belongs to one session and, if you name one, to one HUD screen.
 Take both from a [snapshot](#reading-the-clients-state-in-one-copy). The
-loader cancels a command when the session changes, when another screen
-shows, when the player presses a control, when the mod turns off, and after
-two seconds without its effect. One command of each kind waits per mod; a
-second answers `WorldError::Refused` until the first ends.
+loader cancels a command in these cases:
 
-The screens a command opens are the ones the game opens from a key in the
-world: `SystemMenu`, `InGameMenu`, `Map`, `Journal`, `Character`,
-`PlayerCrafting`, `Backpack`, `SkillTree`, `TextChat` and `Social`. The
-loader runs every command in the client's own frame, never inside a mod's
-callback.
+- the session changes;
+- another screen shows;
+- the player presses a control;
+- the mod turns off;
+- two seconds pass without its effect.
+
+One command of each kind waits per mod. A second answers
+`WorldError::Refused` until the first ends.
+
+A command opens the screens the game opens from a key in the world. These
+are the seven tabs of the [snapshot](#reading-the-clients-state-in-one-copy)
+and three more:
+
+| Screen | Shows |
+| --- | --- |
+| `SystemMenu` | the pause menu |
+| `InGameMenu` | the in-game menu |
+| `TextChat` | the chat line |
+
+The loader runs every command in the client's own frame, never inside a
+mod's callback.
 
 ```rust
 use enshwick::input::{ClientCommand, CommandAction};
@@ -265,16 +292,22 @@ game builds it, so they act through the game's own camera and movement.
 | `Move` | x right and y forward, length above 0 and at most 1; 1 to 250 ms | the first step holds the direction | the hold ran out |
 
 A command outside its bounds returns `WorldError::Refused`. A look is in
-radians before the player's camera sensitivity: the camera turns by the
+radians before the player's camera sensitivity. The camera turns by the
 look times the sensitivity, so a turn of an exact angle divides by it. A
 positive yaw turns right.
 
 Both run only on the world's own screen, `InGame`. The player's own input
 wins: a stick or mouse move, or a pressed control, cancels the command with
-`PlayerInput`. So do another screen, a new session, the game blocking input
-(`InputBlocked`) and the mod turning off. When a move ends for any reason,
-the stick is the game's own again in the same step. One look or move runs
-at a time across all mods; a second waits until the first ends.
+`PlayerInput`. The command is also cancelled in these cases:
+
+- another screen shows;
+- a new session starts;
+- the game blocks the player's input, with `InputBlocked`;
+- the mod turns off.
+
+When a move ends for any reason, the stick is the game's own again in the
+same step. One look or move runs at a time across all mods. Another mod's
+command waits until the first ends.
 
 ```rust
 use enshwick::input::{ClientCommand, CommandAction};
@@ -304,8 +337,8 @@ enshwick.input.client_command({
 highlight a recipe, as a click on its tile does. It crafts nothing, pins
 nothing and moves no item. The command waits until a crafting menu draws.
 It is `Observed` once the snapshot's `highlighted_recipe()` names the
-recipe, and `Unavailable` when the open menu does not list it, such as a
-recipe of another workshop.
+recipe. It is `Unavailable` when the open menu does not list the recipe,
+such as a recipe of another workshop.
 
 ```luau
 local function highlight(recipe: number)
