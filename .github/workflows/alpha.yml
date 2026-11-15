@@ -5,7 +5,8 @@
 # provenance, and notes from `cargo xtask notes`. The pull request before it
 # moves the crates to that version and joins their change files into each
 # changelog with `cargo xtask close`; a version already released is refused. Nothing goes to
-# crates.io.
+# crates.io. The loader and each cargo-enshwick build in their own job, at
+# the same time, without secrets; `publish` gathers their files.
 name: alpha
 
 on:
@@ -26,43 +27,28 @@ concurrency:
   group: alpha
   cancel-in-progress: false
 
+# Players download alphas, so every job runs only on main. Each runs on a
+# fresh machine: what ships is built and published without the caches that
+# branch builds write to.
 jobs:
-  alpha:
-    # Players download alphas, so they come only from main.
+  # A version released already, or one whose changelogs are not closed,
+  # fails this job in seconds, and `publish` needs it.
+  version:
     if: github.ref == 'refs/heads/main'
-    # The release environment admits main only.
-    environment: release
-    # A fresh machine: what ships is built and published without the
-    # caches that branch builds write to.
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
-    # The release itself is made with the app's token.
+    timeout-minutes: 5
     permissions:
       contents: read
-      # The build provenance attestations of the archives.
-      id-token: write
-      attestations: write
-    env:
-      HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      # The Windows SDK and CRT that cargo-xwin downloads, saved only by a
-      # release build of main (dev-build.yml).
-      - name: Restore the Windows SDK
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.tool_cache }}/xwin
-          key: xwin-release-${{ runner.os }}-0.23.1-v1
       - uses: ./.github/actions/setup-rust
         with:
           gh: true
-          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.7
 
-      # Before the build: a version released already, or one whose
-      # changelogs are not closed, stops the run in seconds.
       - name: Version and notes
         id: version
         env:
@@ -86,48 +72,147 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
 
-      # The archive, and the PDB and SBOM of every DLL.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes.md
+          if-no-files-found: error
+          retention-days: 1
+
+  # The archive, and the PDB and SBOM of every DLL.
+  loader:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The Windows SDK and CRT that cargo-xwin downloads, saved only by a
+      # release build of main (dev-build.yml).
+      - name: Restore the Windows SDK
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/xwin
+          key: xwin-release-${{ runner.os }}-0.23.1-v1
+      - uses: ./.github/actions/setup-rust
+        with:
+          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.7
+
       - uses: ./.github/actions/release-files
         with:
           out: ${{ runner.temp }}/alpha
 
-      # The tool cargo-binstall installs, named as its metadata in
-      # crates/cargo-enshwick/Cargo.toml expects. Linux gets a static musl
-      # build, which runs on any distribution's glibc; cargo-binstall takes
-      # it on a gnu host too.
-      - name: cargo-enshwick
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: files-loader
+          path: ${{ runner.temp }}/alpha/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The tool cargo-binstall installs, named as its metadata in
+  # crates/cargo-enshwick/Cargo.toml expects, with its SBOM for that
+  # target. Linux gets a static musl build, which runs on any
+  # distribution's glibc; cargo-binstall takes it on a gnu host too.
+  cargo-enshwick:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            build: build
+            binary: cargo-enshwick
+            sbom: cargo-enshwick.linux.cdx.json
+          - target: x86_64-pc-windows-msvc
+            build: xwin build
+            binary: cargo-enshwick.exe
+            sbom: cargo-enshwick.cdx.json
+            pdb: cargo_enshwick.pdb
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Where the files go
+        run: echo "OUT=$RUNNER_TEMP/alpha" >> "$GITHUB_ENV" # zizmor: ignore[github-env] a fixed path
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # As in `loader`.
+      - name: Restore the Windows SDK
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/xwin
+          key: xwin-release-${{ runner.os }}-0.23.1-v1
+      - uses: ./.github/actions/setup-rust
+        with:
+          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.7
+      - uses: ./.github/actions/reproducible
+
+      - name: Build
         env:
-          OUT: ${{ runner.temp }}/alpha
-          LINUX: x86_64-unknown-linux-musl
-          WINDOWS: x86_64-pc-windows-msvc
+          BUILD: ${{ matrix.build }}
+          BINARY: ${{ matrix.binary }}
+          SBOM: ${{ matrix.sbom }}
+          PDB: ${{ matrix.pdb }}
         run: |
-          rustup target add "$LINUX"
-          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=/build --remap-path-prefix=$CARGO_HOME=/cargo --remap-path-prefix=$RUSTUP_HOME=/rustup"
-          cargo auditable build --release --locked -p cargo-enshwick --target "$LINUX"
-          cargo auditable xwin build --release --locked -p cargo-enshwick --target "$WINDOWS"
-          cp "target/$LINUX/release/cargo-enshwick" "$OUT/cargo-enshwick-$LINUX"
-          cp "target/$WINDOWS/release/cargo-enshwick.exe" "$OUT/cargo-enshwick-$WINDOWS.exe"
-          cp "target/$WINDOWS/release/cargo_enshwick.pdb" "$OUT/cargo-enshwick.pdb"
-          cp crates/cargo-enshwick/cargo-enshwick.cdx.json "$OUT/"
-          # The Linux build's own SBOM, without the Windows-only dependencies.
-          cargo cyclonedx --format json --target "$LINUX" --no-build-deps
-          cp crates/cargo-enshwick/cargo-enshwick.cdx.json "$OUT/cargo-enshwick.linux.cdx.json"
-          "$OUT/cargo-enshwick-$LINUX" enshwick --version
+          rustup target add "$TARGET"
+          read -ra build <<< "$BUILD"
+          cargo auditable "${build[@]}" --release --locked -p cargo-enshwick --target "$TARGET"
+          mkdir -p "$OUT"
+          cp "target/$TARGET/release/$BINARY" "$OUT/cargo-enshwick-$TARGET${BINARY#cargo-enshwick}"
+          [ -z "$PDB" ] || cp "target/$TARGET/release/$PDB" "$OUT/cargo-enshwick.pdb"
+          # The build's own SBOM, with only this target's dependencies.
+          cargo cyclonedx --format json --target "$TARGET" --no-build-deps
+          cp crates/cargo-enshwick/cargo-enshwick.cdx.json "$OUT/$SBOM"
+
+      - name: Run it
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: '"$OUT/cargo-enshwick-$TARGET" enshwick --version'
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: files-${{ matrix.target }}
+          path: ${{ runner.temp }}/alpha/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [version, loader, cargo-enshwick]
+    # The release environment admits main only.
+    environment: release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # The release itself is made with the app's token.
+    permissions:
+      contents: read
+      # The build provenance attestations of the archives.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: files-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/alpha
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notes
+          path: ${{ runner.temp }}
 
       # `cargo enshwick install --with-loader` checks enshwick.zip against
       # this list before it unpacks it.
       - name: Checksums
         working-directory: ${{ runner.temp }}/alpha
         run: sha256sum -- * > SHA256SUMS
-
-      - name: VirusTotal
-        if: env.HAS_VIRUSTOTAL_KEY == 'true'
-        continue-on-error: true
-        timeout-minutes: 17
-        uses: ./.github/actions/virustotal
-        with:
-          dir: ${{ runner.temp }}/alpha
-          api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
 
       - name: Build provenance
         if: inputs.publish
@@ -154,7 +239,7 @@ jobs:
         if: inputs.publish
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         working-directory: ${{ runner.temp }}/alpha
         run: |
           assets=(*.zip *.pdb *.cdx.json cargo-enshwick-* SHA256SUMS)
@@ -174,3 +259,33 @@ jobs:
           curl --fail-with-body --silent --show-error --max-time 30 --retry 3 --retry-connrefused \
             -X POST "$DOCS_DEPLOY_HOOK" ||
             echo "::warning title=docs::the docs site build did not start; start it from Cloudflare or with any docs merge"
+
+  # Beside `publish`, never before it: a flag or an outage only warns, and an
+  # analysis still running after two minutes leaves its link.
+  virustotal:
+    needs: loader
+    environment: release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_VIRUSTOTAL_KEY == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: env.HAS_VIRUSTOTAL_KEY == 'true'
+        with:
+          name: files-loader
+          path: ${{ runner.temp }}/alpha
+      - name: VirusTotal
+        if: env.HAS_VIRUSTOTAL_KEY == 'true'
+        continue-on-error: true
+        uses: ./.github/actions/virustotal
+        with:
+          dir: ${{ runner.temp }}/alpha
+          api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          minutes: 2

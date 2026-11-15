@@ -1,0 +1,18 @@
+name: Reproducible build flags
+description: >-
+  Sets the flags that make a release build reproducible for each target
+  that ships: no machine paths in the binaries and PDBs, no linker
+  timestamps, the PDB named without its path, and the source date of the
+  checked-out commit.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: | # zizmor: ignore[github-env] fixed paths only
+        remap="--remap-path-prefix=$GITHUB_WORKSPACE=/build --remap-path-prefix=$CARGO_HOME=/cargo --remap-path-prefix=$RUSTUP_HOME=/rustup"
+        {
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS=$remap -C link-arg=/Brepro -C link-arg=/PDBALTPATH:%_PDB%"
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS=$remap"
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
+        } >> "$GITHUB_ENV"

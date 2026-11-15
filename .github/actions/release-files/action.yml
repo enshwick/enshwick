@@ -12,15 +12,7 @@ inputs:
 runs:
   using: composite
   steps:
-    # Reproducible builds: no machine paths in the DLLs and PDBs, no
-    # timestamps from the linker, and the PDB named without its path.
-    - name: Reproducible build flags
-      shell: bash
-      run: | # zizmor: ignore[github-env] fixed paths only
-        {
-          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS=--remap-path-prefix=$GITHUB_WORKSPACE=/build --remap-path-prefix=$CARGO_HOME=/cargo --remap-path-prefix=$RUSTUP_HOME=/rustup -C link-arg=/Brepro -C link-arg=/PDBALTPATH:%_PDB%"
-          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
-        } >> "$GITHUB_ENV"
+    - uses: ./.github/actions/reproducible
 
     - name: cargo xtask dist
       shell: bash
