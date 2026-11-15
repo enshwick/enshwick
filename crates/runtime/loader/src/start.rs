@@ -148,7 +148,7 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan, found.refused),
-        parts: &crate::parts::PARTS,
+        parts: crate::parts::parts(),
     };
     let Some(loader) = crate::engine::loader::install(loader) else {
         crate::engine::shipped::release();

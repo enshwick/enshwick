@@ -968,7 +968,7 @@ mod tests {
     fn a_player_leaving_reaches_the_parts_that_hear_it_with_no_mod_subscribed() {
         assert!(own_link(pinned::server::PLAYER_REMOVE, true));
         assert!(!own_link(pinned::server::PLAYER_REMOVE, false));
-        let parts = &*crate::parts::PARTS;
+        let parts = crate::parts::parts();
         assert!(parts.iter().any(|part| part.left.is_some()));
     }
 }

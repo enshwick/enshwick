@@ -178,7 +178,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan, refused),
-        parts: &crate::parts::PARTS,
+        parts: crate::parts::parts(),
     };
     let loader = crate::engine::loader::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();

@@ -4,7 +4,7 @@
 //! `enshwick-compat` can tell which features a build lacks. Ids built at run
 //! time, such as `survivors.{name}`, only reach compat through these lists.
 
-use std::sync::LazyLock;
+use std::sync::OnceLock;
 
 use crate::engine::parts::{Part, Parts};
 
@@ -24,15 +24,21 @@ pub(crate) static LAYERS: &[(&str, &[&Part])] = &[
     ("packs", crate::packs::PARTS),
 ];
 
-/// Every part of the loader, gathered once for the process: each loader,
-/// the dry run's included, walks this one.
-pub(crate) static PARTS: LazyLock<Parts> = LazyLock::new(|| Parts::new(LAYERS));
+/// Every part of the loader, gathered once for the process: a table of the
+/// code, which no run changes.
+static PARTS: OnceLock<Parts> = OnceLock::new();
+
+/// Every part of the loader, gathered the first time it is asked for: each
+/// loader, the dry run's included, walks this one.
+pub(crate) fn parts() -> &'static Parts {
+    PARTS.get_or_init(|| Parts::new(LAYERS))
+}
 
 /// Each part of the loader that names build table ids, with them, by name:
 /// the loader's feature table.
 #[must_use]
 pub fn table_ids() -> Vec<(&'static str, &'static [&'static str])> {
-    PARTS.table_ids().to_vec()
+    parts().table_ids().to_vec()
 }
 
 #[cfg(test)]
@@ -42,7 +48,7 @@ mod tests {
 
     use enshwick_gamedata::{self as tables, Table};
 
-    use super::{LAYERS, PARTS, table_ids};
+    use super::{LAYERS, parts, table_ids};
     use crate::engine::parts::Stage;
 
     /// Entries the tables pin that no part of the loader names yet.
@@ -117,7 +123,7 @@ mod tests {
 
     /// The path below `src` of the module of the part named `name`.
     fn module_of(name: &str) -> String {
-        let part = PARTS
+        let part = parts()
             .iter()
             .find(|part| part.name == name)
             .unwrap_or_else(|| panic!("no part {name}"));
@@ -254,7 +260,7 @@ mod tests {
     fn every_id_any_part_names_is_listed_by_some_part() {
         let (catalogue, listed) = (catalogue(), listed());
         // Parts without a list count too: one whose list went missing would pass the test above.
-        for part in PARTS.iter() {
+        for part in parts().iter() {
             let missing: Vec<_> = named(&sources(part.name), &catalogue)
                 .into_iter()
                 .filter(|id| !listed.contains(id))
@@ -301,7 +307,7 @@ mod tests {
             "survivors",
         ];
         let mut sealing = Vec::new();
-        for part in PARTS.iter().filter(|part| part.link.is_some()) {
+        for part in parts().iter().filter(|part| part.link.is_some()) {
             let seals = sources(part.name).split("fn link").skip(1).any(|link| {
                 let body = link.split("\n}\n").next().unwrap_or(link);
                 body.contains(".seal()")
@@ -355,7 +361,7 @@ mod tests {
     /// Each phase of the joins, with what it calls in order: a fused call
     /// by its fuse's name, another by its part's.
     fn phases() -> String {
-        let parts = &*PARTS;
+        let parts = parts();
         let named = |pick: fn(&crate::engine::parts::Part) -> bool| -> String {
             parts
                 .iter()
@@ -415,14 +421,14 @@ mod tests {
     /// Every forget runs after them and drops what the handlers queued.
     #[test]
     fn a_hosted_game_tells_mods_top_layer_first_before_any_part_forgets() {
-        let ending: Vec<_> = PARTS
+        let ending: Vec<_> = parts()
             .iter()
             .rev()
             .filter(|part| part.end.is_some())
             .map(|part| part.name)
             .collect();
         assert_eq!(ending, ["windows", "progress", "inventory"]);
-        let both = PARTS
+        let both = parts()
             .iter()
             .find(|part| part.end.is_some() && part.forget.is_some());
         assert!(both.is_none(), "{both:?} both tells and forgets");
@@ -432,7 +438,7 @@ mod tests {
     /// runs after it.
     #[test]
     fn a_step_reads_what_the_work_before_it_wrote() {
-        let parts = &*PARTS;
+        let parts = parts();
         let at = |stage: Stage, feature: &str| {
             parts
                 .steps(stage)
