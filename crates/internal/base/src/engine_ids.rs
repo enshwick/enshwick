@@ -299,6 +299,8 @@ ids! {
     /// The id of its `u64` of the game controls held, a `Bitmask64` of
     /// `PlayerInputType`.
     CLIENT_PLAYER_INPUT_DIGITAL = "client_player_input.digital";
+    /// The id of the client's look input per device, a float pair each.
+    MULTI_DEVICE_DIRECTIONAL_INPUT = "multi_device_directional_input";
     /// The id of the server-only component of a player's targets, one
     /// `TargetInfo` per `TargetType`.
     SELECTED_TARGETS = "selected_targets";

@@ -100,4 +100,34 @@ mod tests {
         assert_eq!(read[0].2, None, "the first ask starts the reads");
         assert_eq!(read[1].2, Some(vec![GameAction::Block]));
     }
+
+    #[test]
+    fn a_read_with_no_control_held_is_a_mask_of_no_actions_and_no_read_is_none() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .player_input()
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Watcher)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let _first = loader.draw_frame();
+        loader.hold_locally(Some(0));
+        let _idle = loader.draw_frame();
+        loader.hold_locally(Some(1 << 12));
+        let _unnamed = loader.draw_frame();
+        loader.hold_locally(None);
+        let _unread = loader.draw_frame();
+        let held: Vec<_> = READ
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|read| read.2.clone())
+            .collect();
+        assert_eq!(
+            held,
+            [None, Some(vec![]), Some(vec![]), None],
+            "first ask, nothing held, only an unnamed bit, no read"
+        );
+    }
 }

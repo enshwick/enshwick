@@ -40,6 +40,9 @@ jobs:
       contents: read
     env:
       HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
+      # The loader states it is a development build of this commit, a
+      # version no release takes; the alpha releases build without it.
+      ENSHWICK_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

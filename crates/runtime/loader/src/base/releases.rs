@@ -7,7 +7,9 @@ pub use enshwick_gamedata::releases::Release;
 #[cfg(windows)]
 use enshwick_gamedata::releases::{LIMIT, LOADER_TAGS, newer, path};
 
-/// The running loader's version.
+/// The running loader's version: a development build's, built with
+/// `ENSHWICK_COMMIT` set, states its commit (see
+/// [`stated`](enshwick_gamedata::releases::stated)).
 ///
 /// # Panics
 ///
@@ -18,7 +20,16 @@ pub fn running() -> Version {
         clippy::expect_used,
         reason = "Cargo checks the crate's version is SemVer"
     )]
-    Version::parse(env!("CARGO_PKG_VERSION")).expect("the crate version is SemVer")
+    let release = Version::parse(env!("CARGO_PKG_VERSION")).expect("the crate version is SemVer");
+    enshwick_gamedata::releases::stated(&release, option_env!("ENSHWICK_COMMIT"))
+}
+
+/// The running loader's version and the ABI it serves, as the log and the
+/// status name them.
+#[must_use]
+pub fn running_with_abi() -> String {
+    use enshwick_core::abi::{ABI_MAJOR, ABI_MINOR};
+    enshwick_gamedata::releases::version_line(&running(), ABI_MAJOR, ABI_MINOR)
 }
 
 /// Asks GitHub for the releases on a thread of its own and keeps a newer one
@@ -223,6 +234,8 @@ mod tests {
 
     #[test]
     fn the_running_version_is_the_crate_version() {
-        assert_eq!(running().to_string(), env!("CARGO_PKG_VERSION"));
+        if option_env!("ENSHWICK_COMMIT").is_none() {
+            assert_eq!(running().to_string(), env!("CARGO_PKG_VERSION"));
+        }
     }
 }

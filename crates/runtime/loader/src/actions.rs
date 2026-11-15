@@ -8,6 +8,8 @@ pub(crate) mod build_reasons;
 #[cfg(windows)]
 pub(crate) mod chat;
 pub mod chat_mute;
+#[cfg(windows)]
+pub(crate) mod client_control;
 pub mod commands;
 pub mod console;
 #[cfg(windows)]

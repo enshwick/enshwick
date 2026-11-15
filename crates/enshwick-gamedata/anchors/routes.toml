@@ -9139,3 +9139,66 @@ system = "player_ui"
 shape = ["mov rbx,[rbp+*]", "lea rdx,[rbp+?]", "mov rcx,?r", "call {ecs.row_entity}", "mov rdx,rbx", "mov ecx,[rax]", "call {~local_player_check}"]
 take = "value"
 range = [0xc8, 0x320]
+
+[[route]]
+id = "input.client_build"
+sides = ["client"]
+callers = "item.info"
+shape = ["mov dword [rsp+0x38],0x1", "mov [rsp+0x30],?r", "mov ?r,[?+?]", "mov [rsp+0x28],?r", "mov [rsp+0x20],?r", "call *"]
+take = "address"
+check = ["mov [rsp+0x20],r9", "mov [rsp+0x18],r8", "mov [rsp+0x10],rdx", "push rbp"]
+
+[[route]]
+id = "input.movement_stick"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.movementStick"]
+type = "keen::float2"
+range = [0x15c, 0x570]
+
+[[route]]
+id = "input.camera_rotation"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.cameraRotationInput"]
+type = "keen::input_mapping::MultiDeviceDirectionalInput"
+range = [0x162, 0x588]
+
+[[route]]
+id = "ui.toggle_hud_screen"
+sides = ["client"]
+loads = ["[GameUi] toggleHudScreen to %k"]
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi", "push rdi"]
+
+[[route]]
+id = "~in_game_menu"
+sides = ["client"]
+loads = ["codexTab"]
+
+[[route]]
+id = "ui.menu_tab"
+sides = ["client"]
+in = "~in_game_menu"
+shape = ["lea rax,[r15+*]", "mov ecx,?", "cmovne rcx,rax", "mov qword [rcx],0x6"]
+take = "value"
+range = [0x18f38, 0x63d10]
+
+[[route]]
+id = "ui.recipe_directory"
+sides = ["client"]
+loads = ["doRecipeDirectoryColumn"]
+check = ["mov r11,rsp", "mov [r11+0x8],rbx", "mov [r11+0x10],rbp"]
+
+[[route]]
+id = "ui.recipe_select"
+sides = ["client"]
+callers = "ui.column"
+shape = ["xor bl,bl", "cmp [?+*],eax", "jne ?b", "mov bl,0x1"]
+take = "value"
+range = [0x24, 0x90]
+
+[[route]]
+id = "ui.recipe_highlighted"
+sides = ["client"]
+callers = "ui.column"
+shape = ["mov [?+*],?r", "lea r8,[rbx+rbx*8]", "shl r8,0x3"]
+take = "value"
+range = [0x74, 0x1d0]

@@ -22,6 +22,7 @@ pub(crate) mod daytime;
 pub(crate) mod ecs;
 pub(crate) mod experience;
 pub(crate) mod game;
+pub(crate) mod input;
 pub(crate) mod inventory;
 pub(crate) mod item;
 pub(crate) mod join;

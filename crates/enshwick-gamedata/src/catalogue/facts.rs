@@ -1090,6 +1090,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::ClientPlayerInput"),
     ),
     (
+        ids::MULTI_DEVICE_DIRECTIONAL_INPUT,
+        Fact::Type("keen::input_mapping::MultiDeviceDirectionalInput"),
+    ),
+    (
         ids::CLIENT_PLAYER_INPUT_DIGITAL,
         Fact::Path {
             steps: &[

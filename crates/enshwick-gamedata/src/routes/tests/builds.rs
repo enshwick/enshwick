@@ -341,6 +341,37 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ),
     ("1.0 client (26082781)", "ecs.player_ui_iterator", 0x70),
     ("1.0 client (26082781)", "ecs.player_ui_local_player", 0x190),
+    // The client's input builder, `toggleHudScreen`, the recipe directory
+    // column and the in-game menu's tab index; read in the decompiler on
+    // 26430625, the older clients' by the same routes and checks.
+    ("1.0 client (26430625)", "input.client_build", 0x24_77d0),
+    ("1.0 client (26430625)", "ui.toggle_hud_screen", 0xd7_4850),
+    ("1.0 client (26430625)", "ui.recipe_directory", 0xc7_5660),
+    ("1.0 client (26430625)", "ui.menu_tab", 0x3_1e88),
+    ("1.0 client (26320373)", "input.client_build", 0x24_76f0),
+    ("1.0 client (26320373)", "ui.toggle_hud_screen", 0xd7_4790),
+    ("1.0 client (26320373)", "ui.recipe_directory", 0xc7_55a0),
+    ("1.0 client (26320373)", "ui.menu_tab", 0x3_1e88),
+    ("1.0 client (26082781)", "input.client_build", 0x24_37c0),
+    ("1.0 client (26082781)", "ui.toggle_hud_screen", 0xd6_0260),
+    ("1.0 client (26082781)", "ui.recipe_directory", 0xc6_2a40),
+    ("1.0 client (26082781)", "ui.menu_tab", 0x3_1e70),
+    ("1.0 client (1269579)", "input.client_build", 0x24_3620),
+    ("1.0 client (1269579)", "ui.toggle_hud_screen", 0xd5_e7e0),
+    ("1.0 client (1269579)", "ui.recipe_directory", 0xc6_0ec0),
+    ("1.0 client (1269579)", "ui.menu_tab", 0x3_1e70),
+];
+
+/// The client control reads: the input builder's stick and look and the
+/// recipe browser's highlighted recipe and select slot, read in the
+/// decompiler on client 26430625 (research of 2026-11-14). On the other
+/// kept clients the routes found the same values, which pins them there
+/// but does not prove the routes matched the right code.
+const CLIENT_CONTROL_READS: [(&str, u64); 4] = [
+    ("input.movement_stick", 0x2b8),
+    ("input.camera_rotation", 0x2c4),
+    ("ui.recipe_select", 0x48),
+    ("ui.recipe_highlighted", 0xe8),
 ];
 
 /// Entries no table pins, found only by their route, with the value the
@@ -375,13 +406,18 @@ const CLIENT_TABLES: [&str; 4] = [
     "1.0 client (26430625)",
 ];
 
-/// [`ROUTED_ONLY`] and the [`PLAY_DATA_READS`] of each of [`CLIENT_TABLES`].
+/// [`ROUTED_ONLY`], and the [`PLAY_DATA_READS`] and
+/// [`CLIENT_CONTROL_READS`] of each of [`CLIENT_TABLES`].
 fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
-    ROUTED_ONLY.iter().copied().chain(
-        CLIENT_TABLES
-            .into_iter()
-            .flat_map(|table| PLAY_DATA_READS.map(|(id, value)| (table, id, value))),
-    )
+    ROUTED_ONLY
+        .iter()
+        .copied()
+        .chain(CLIENT_TABLES.into_iter().flat_map(|table| {
+            PLAY_DATA_READS
+                .into_iter()
+                .chain(CLIENT_CONTROL_READS)
+                .map(move |(id, value)| (table, id, value))
+        }))
 }
 
 /// Entries a kept build's table pins that the loader needs on no build of

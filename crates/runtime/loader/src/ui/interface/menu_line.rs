@@ -80,7 +80,12 @@ fn line(loader: &Loader) -> super::engine::UiText {
                 .filter_map(|(shown, note)| shown.then_some(note))
                 .collect();
             let total = crate::base::off_line::mods_counted(loader);
-            crate::engine::diag::menu_line(env!("CARGO_PKG_VERSION"), total, off, &notes)
+            crate::engine::diag::menu_line(
+                &crate::base::releases::running().to_string(),
+                total,
+                off,
+                &notes,
+            )
         });
         copy(&[line.as_bytes()])
     })
