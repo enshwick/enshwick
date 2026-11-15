@@ -404,13 +404,13 @@ HostApi size 1640 align 8
     call at 432 size 8 type extern "system" fn(ModHandle, u32, *const c_void, *mut c_void) -> Status
     subscribe_tick at 440 size 8 type extern "system" fn(ModHandle, u64, Option<unsafe extern "system" fn(Event, *const c_void, *mut c_void)>, *mut c_void, *mut TickHandle) -> Status
     set_tick_every at 448 size 8 type extern "system" fn(ModHandle, TickHandle, u64) -> Status
-    config_set at 456 size 8 type extern "system" fn(ModHandle, Str, Str, Str) -> Status
+    set_config at 456 size 8 type extern "system" fn(ModHandle, Str, Str, Str) -> Status
     subscribe_client_game_event at 464 size 8 type extern "system" fn(ModHandle, u32, Option<unsafe extern "system" fn(*const GameEventData, *mut c_void)>, *mut c_void) -> Status
     serve_resource at 472 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *const ResourceKey, Option<unsafe extern "system" fn(*const u8, u32, *mut c_void, *mut *mut u8, *mut u32) -> Status>, *mut c_void) -> Status
     add_text at 480 size 8 type extern "system" fn(ModHandle, u32, u32, Str) -> Status
     define_item_data at 488 size 8 type extern "system" fn(ModHandle, Str, *mut u32) -> Status
     item_data_get at 496 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *mut u8, u32, *mut u32) -> Status
-    item_data_set at 504 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *const u8, u32) -> Status
+    set_item_data at 504 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *const u8, u32) -> Status
     content_serve at 512 size 8 type extern "system" fn(ModHandle, *const u8, u32, *mut [u32; 4]) -> Status
     content_read at 520 size 8 type extern "system" fn(ModHandle, *const [u32; 4], *mut u8, u32, *mut u32) -> Status
     icons_ready at 528 size 8 type extern "system" fn(ModHandle) -> Status

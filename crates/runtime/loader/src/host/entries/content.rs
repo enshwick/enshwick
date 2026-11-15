@@ -124,7 +124,7 @@ entries! {
         out.put(&crate::inventory::item_data::get(kind, pide.0, item.get())?)
     }
 
-    fn item_data_set(
+    fn set_item_data(
         _loader as Caller,
         kind: u32,
         pide: enshwick_core::Entity,

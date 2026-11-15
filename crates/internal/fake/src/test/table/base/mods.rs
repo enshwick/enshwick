@@ -310,7 +310,7 @@ pub(crate) extern "system" fn config_check(
     })
 }
 
-pub(crate) extern "system" fn config_set(
+pub(crate) extern "system" fn set_config(
     _me: ModHandle,
     file: Str,
     key: Str,

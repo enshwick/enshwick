@@ -4554,7 +4554,7 @@ typedef struct EnshwickHostApi {
   // or write, or the write comes from inside the mod's own check or
   // nested more than four deep through its settings handler. On an error the file stays as it was and the loader
   // logs why.
-  EnshwickStatus (*config_set)(EnshwickModHandle me,
+  EnshwickStatus (*set_config)(EnshwickModHandle me,
                                struct EnshwickStr file,
                                struct EnshwickStr key,
                                struct EnshwickStr value);
@@ -4608,7 +4608,7 @@ typedef struct EnshwickHostApi {
   // the clients that run Enshwick get the change. `EnshwickStatus_UNAVAILABLE`
   // on a client alone or before the world has loaded.
   // Any thread.
-  EnshwickStatus (*item_data_set)(EnshwickModHandle me,
+  EnshwickStatus (*set_item_data)(EnshwickModHandle me,
                                   uint32_t kind,
                                   EnshwickEntity pide,
                                   EnshwickItemId item,
@@ -4651,7 +4651,7 @@ typedef struct EnshwickHostApi {
   // Opens the entity data kind `id`, as `EnshwickHostApi.define_item_data` opens
   // an item kind, and writes its index to `out`; with
   // `EnshwickEntityDataFlags_SENT` the clients that run Enshwick get its
-  // values. `EnshwickHostApi.item_data_get` and `EnshwickHostApi.item_data_set`
+  // values. `EnshwickHostApi.item_data_get` and `EnshwickHostApi.set_item_data`
   // read and write it with `item` 0; a set runs on the server's game
   // thread. `EnshwickStatus_REFUSED` for an id opened as an item kind. Allowed
   // during `enshwick_mod_init` only.
@@ -6504,13 +6504,13 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, find_call) == 424, "offset of H
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, call) == 432, "offset of HostApi.call");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, subscribe_tick) == 440, "offset of HostApi.subscribe_tick");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_tick_every) == 448, "offset of HostApi.set_tick_every");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, config_set) == 456, "offset of HostApi.config_set");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_config) == 456, "offset of HostApi.set_config");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, subscribe_client_game_event) == 464, "offset of HostApi.subscribe_client_game_event");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, serve_resource) == 472, "offset of HostApi.serve_resource");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, add_text) == 480, "offset of HostApi.add_text");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_item_data) == 488, "offset of HostApi.define_item_data");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_data_get) == 496, "offset of HostApi.item_data_get");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_data_set) == 504, "offset of HostApi.item_data_set");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_item_data) == 504, "offset of HostApi.set_item_data");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_serve) == 512, "offset of HostApi.content_serve");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_read) == 520, "offset of HostApi.content_read");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, icons_ready) == 528, "offset of HostApi.icons_ready");

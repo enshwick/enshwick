@@ -167,7 +167,7 @@ entries! {
         Ok(())
     }
 
-    fn config_set(me as Mod, file as Text, key as Text, value as Text) -> Status {
+    fn set_config(me as Mod, file as Text, key as Text, value as Text) -> Status {
         crate::base::configure::apply_own(me.loader, me.index.get(), file, key, value)?;
         Ok(())
     }

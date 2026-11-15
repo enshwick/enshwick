@@ -190,7 +190,7 @@ impl Refusal for crate::ui::interface::ExtendScreenError {
     }
 }
 
-/// A mod's write of its own setting, answered as `HostApi::config_set`
+/// A mod's write of its own setting, answered as `HostApi::set_config`
 /// states it and logged as the mod's warning.
 impl Refusal for crate::base::configure::SetOwnSettingError {
     fn status(&self) -> Status {

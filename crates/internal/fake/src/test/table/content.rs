@@ -520,7 +520,7 @@ pub(crate) extern "system" fn item_data_get(
     unsafe { enshwick_core::__fake::copy_out(&value, out, capacity, len) }
 }
 
-pub(crate) extern "system" fn item_data_set(
+pub(crate) extern "system" fn set_item_data(
     _me: ModHandle,
     kind: u32,
     pide: enshwick_core::Entity,

@@ -527,7 +527,7 @@ pub struct HostApi {
     /// or write, or the write comes from inside the mod's own check or
     /// nested more than four deep through its settings handler. On an error the file stays as it was and the loader
     /// logs why.
-    pub config_set: extern "system" fn(me: ModHandle, file: Str, key: Str, value: Str) -> Status,
+    pub set_config: extern "system" fn(me: ModHandle, file: Str, key: Str, value: Str) -> Status,
     /// As [`HostApi::subscribe_game_event`] for the events of the client's own world,
     /// on the thread that steps it, right after the engine moved them; no
     /// filter, veto or item action runs on them. One move hands the
@@ -581,7 +581,7 @@ pub struct HostApi {
     /// the clients that run Enshwick get the change. [`Status::UNAVAILABLE`]
     /// on a client alone or before the world has loaded.
     /// Any thread.
-    pub item_data_set: extern "system" fn(
+    pub set_item_data: extern "system" fn(
         me: ModHandle,
         kind: u32,
         pide: Entity,
@@ -624,7 +624,7 @@ pub struct HostApi {
     /// Opens the entity data kind `id`, as [`HostApi::define_item_data`] opens
     /// an item kind, and writes its index to `out`; with
     /// [`EntityDataFlags::SENT`] the clients that run Enshwick get its
-    /// values. [`HostApi::item_data_get`] and [`HostApi::item_data_set`]
+    /// values. [`HostApi::item_data_get`] and [`HostApi::set_item_data`]
     /// read and write it with `item` 0; a set runs on the server's game
     /// thread. [`Status::REFUSED`] for an id opened as an item kind. Allowed
     /// during `enshwick_mod_init` only.
@@ -2160,13 +2160,13 @@ const _: () = {
     assert!(offset_of!(HostApi, call) == 24 + 51 * 8);
     assert!(offset_of!(HostApi, subscribe_tick) == 24 + 52 * 8);
     assert!(offset_of!(HostApi, set_tick_every) == 24 + 53 * 8);
-    assert!(offset_of!(HostApi, config_set) == 24 + 54 * 8);
+    assert!(offset_of!(HostApi, set_config) == 24 + 54 * 8);
     assert!(offset_of!(HostApi, subscribe_client_game_event) == 24 + 55 * 8);
     assert!(offset_of!(HostApi, serve_resource) == 24 + 56 * 8);
     assert!(offset_of!(HostApi, add_text) == 24 + 57 * 8);
     assert!(offset_of!(HostApi, define_item_data) == 24 + 58 * 8);
     assert!(offset_of!(HostApi, item_data_get) == 24 + 59 * 8);
-    assert!(offset_of!(HostApi, item_data_set) == 24 + 60 * 8);
+    assert!(offset_of!(HostApi, set_item_data) == 24 + 60 * 8);
     assert!(offset_of!(HostApi, content_serve) == 24 + 61 * 8);
     assert!(offset_of!(HostApi, content_read) == 24 + 62 * 8);
     assert!(offset_of!(HostApi, icons_ready) == 24 + 63 * 8);

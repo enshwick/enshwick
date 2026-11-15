@@ -94,13 +94,13 @@ names every entry of the golden layout once, in that order.
 | `call` | loader | — | — |
 | `subscribe_tick` | game | probe: ticks | — |
 | `set_tick_every` | game | probe: ticks | — |
-| `config_set` | loader | — | — |
+| `set_config` | loader | — | — |
 | `subscribe_client_game_event` | game | — | on a client, hosting and joined |
 | `serve_resource` | game | — | client |
 | `add_text` | game | — | client |
 | `define_item_data` | loader | — | — |
 | `item_data_get` | game | probe: entity data | — |
-| `item_data_set` | game | probe: entity data | — |
+| `set_item_data` | game | probe: entity data | — |
 | `content_serve` | game | — | client |
 | `content_read` | game | probe: archive | — |
 | `icons_ready` | game | — | client |
