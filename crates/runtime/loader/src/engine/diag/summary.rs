@@ -111,8 +111,8 @@ impl ModStatus {
 pub struct SkippedMod {
     /// The mod id.
     pub id: String,
-    /// Its version.
-    pub version: String,
+    /// Its version; none for a file refused before its manifest read.
+    pub version: Option<String>,
     /// Its file relative to the game's folder.
     pub file: String,
     /// Why it does not load, as the log says it.
@@ -121,6 +121,16 @@ pub struct SkippedMod {
     pub shown: String,
     /// Whether it counts as off: all but a second copy of a loaded mod.
     pub off: bool,
+}
+
+/// A skipped mod's `id` with its `version` after a space, or its id alone
+/// for a file refused before its manifest read, as the summary, the console
+/// and the logs name it.
+pub(crate) fn mod_named(id: &str, version: Option<&str>) -> String {
+    match version {
+        Some(version) => format!("{id} {version}"),
+        None => id.to_owned(),
+    }
 }
 
 /// What mods serve to the game.
@@ -303,11 +313,8 @@ impl Summary {
             m.render(&mut out);
         }
         for s in &self.skipped {
-            let _w = writeln!(
-                out,
-                "  {} {} skipped, {}: {}",
-                s.id, s.version, s.file, s.reason
-            );
+            let named = mod_named(&s.id, s.version.as_deref());
+            let _w = writeln!(out, "  {named} skipped, {}: {}", s.file, s.reason);
         }
         for line in &self.others {
             let _w = writeln!(out, "  {line}");

@@ -472,13 +472,15 @@ impl Refusal for crate::inventory::spawns::SpawnError {
 }
 
 /// A pickup that does not read is missing, a malformed drop a bad argument,
-/// an item that does not read refused.
+/// an item the game does not have refused, an item lookup the build, the
+/// registry or the world lacks missing.
 impl Refusal for crate::inventory::drops::DropError {
     fn status(&self) -> Status {
         match self {
             Self::Unread => Status::MISSING,
             Self::BadRequest => Status::BAD_ARGS,
-            Self::NoItem => Status::REFUSED,
+            Self::Item(crate::inventory::transactions::ItemInfoError::NoItem) => Status::REFUSED,
+            Self::Item(error) => error.status(),
             Self::World(error) => error.status(),
             Self::Spawn(error) => error.status(),
         }

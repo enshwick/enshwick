@@ -17,7 +17,7 @@ use crate::engine::code::Watching;
 use crate::engine::code_watch::Stage;
 use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
-use crate::engine::parts::{Part, Parts, part};
+use crate::engine::parts::{Part, part};
 use crate::engine::patch::FrameSlot;
 use crate::host;
 
@@ -148,7 +148,7 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan, found.refused),
-        parts: Parts::new(crate::parts::LAYERS),
+        parts: crate::parts::parts(),
     };
     let Some(loader) = crate::engine::loader::install(loader) else {
         crate::engine::shipped::release();
@@ -253,7 +253,7 @@ fn skipped(
         .iter()
         .map(|(i, reason)| resolve::Skipped {
             id: candidates[*i].id.clone(),
-            version: candidates[*i].version.to_string(),
+            version: Some(candidates[*i].version.to_string()),
             // SAFETY: the manifest is the copy `manifest::read` made for the
             // process or a pack's manifest built for the process, its strings
             // and lists readable and never written; a skipped mod's DLL stays

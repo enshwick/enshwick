@@ -239,7 +239,7 @@ fn size_patch(
     replacement[1..].copy_from_slice(&grown.to_le_bytes());
     Ok(CodePatch {
         owner: ModIndex::LOADER,
-        feature: PAST_16,
+        feature: Some(&PAST16),
         address: start + create.start + at,
         expected: expected.into(),
         replacement: replacement.into(),
@@ -445,7 +445,7 @@ pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
 /// Tells once, after the hooks are armed, that bases past 16 are off, unless
 /// a skipped patch already reported it among `already`; a patch that waits
 /// leaves the window to its retry.
-pub(super) fn report(loader: &Loader, already: &[&str]) {
+pub(super) fn report(loader: &Loader, already: &[&Fuse]) {
     let off = off_after_arming(
         SITES.get().is_some(),
         armed(),
@@ -464,10 +464,10 @@ pub(super) fn report(loader: &Loader, already: &[&str]) {
 fn off_after_arming(
     found: bool,
     armed: bool,
-    already: &[&str],
+    already: &[&Fuse],
     skipped: bool,
 ) -> Option<(&'static str, &'static str)> {
-    let reported = already.contains(&PAST_16);
+    let reported = PAST16.among(already);
     if !found || armed || (reported && !skipped) {
         None
     } else if reported {
@@ -660,7 +660,13 @@ mod tests {
 
     #[test]
     fn a_size_patch_skipped_for_good_turns_the_window_s_own_fuse_off_and_one_that_waits_does_not() {
-        let named = [PAST_16];
+        let named = [&PAST16];
+        let twin = Fuse::new(PAST_16);
+        assert_eq!(
+            off_after_arming(true, false, &[&twin], true).map(|o| o.0),
+            Some("bases"),
+            "another fuse of the same name is not the window's"
+        );
         assert_eq!(
             off_after_arming(true, false, &named, true).map(|o| o.0),
             Some("the size patches")

@@ -65,6 +65,11 @@ pub(crate) mod others;
 pub(crate) mod pacing;
 #[cfg(windows)]
 pub(crate) mod pages;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "the parts it orders run on Windows")
+)]
+pub(crate) mod part_order;
 #[cfg(windows)]
 pub(crate) mod parts;
 #[cfg(windows)]

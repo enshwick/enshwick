@@ -246,9 +246,10 @@ pub(crate) enum DropError {
     /// A count of none or past a pickup, or an unknown rarity.
     #[error("the drop request is malformed")]
     BadRequest,
-    /// An item whose data does not read.
-    #[error("the item does not read")]
-    NoItem,
+    /// The item's data did not read: the game has no such item, or the
+    /// build, the registry or the world to read it is missing.
+    #[error(transparent)]
+    Item(#[from] crate::inventory::transactions::ItemInfoError),
     /// The server's world, unreadable now.
     #[error(transparent)]
     World(#[from] crate::engine::world::WorldError),
@@ -264,8 +265,7 @@ pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Resu
     start(loader);
     let layout = READING.layout().ok_or(DropError::Unread)?;
     let bytes = pickup(layout, request).ok_or(DropError::BadRequest)?;
-    crate::inventory::transactions::item_info(loader, request.item.get())
-        .map_err(|_| DropError::NoItem)?;
+    crate::inventory::transactions::item_info(loader, request.item.get())?;
     let spawn = SpawnRequest {
         header: Header::of::<SpawnRequest>(),
         template: layout.template,
@@ -318,6 +318,23 @@ mod tests {
         assert_eq!(bytes[20..24], 9_u32.to_le_bytes());
         assert_eq!(bytes[24], 2);
         assert_eq!(bytes[26..28], 300_u16.to_le_bytes());
+    }
+
+    #[test]
+    fn a_drop_keeps_why_its_item_did_not_read() {
+        use crate::inventory::transactions::ItemInfoError;
+        let all = [
+            ItemInfoError::Unread,
+            ItemInfoError::NoRegistry,
+            ItemInfoError::NoWorld,
+            ItemInfoError::NoItem,
+        ];
+        for why in all {
+            assert!(
+                matches!(DropError::from(why), DropError::Item(kept) if kept == why),
+                "{why:?}"
+            );
+        }
     }
 
     #[test]

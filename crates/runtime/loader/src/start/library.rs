@@ -127,7 +127,7 @@ fn refuse(skip: Skip, folder: &str, file: &str) -> resolve::Skipped {
     log_skip(&skip, file);
     resolve::Skipped {
         id: folder.to_owned(),
-        version: String::new(),
+        version: None,
         label: folder.to_owned(),
         file: file.to_owned(),
         reason: resolve::Skip::Refused { skip },
@@ -259,7 +259,7 @@ pub(super) fn drop_duplicates(
         log_skip(&skip, &library.file);
         copies.push(resolve::Skipped {
             id: candidate.id.clone(),
-            version: candidate.version.to_string(),
+            version: Some(candidate.version.to_string()),
             // SAFETY: the manifest is the copy `manifest::read` made for the
             // process or a pack's manifest built for the process, its strings
             // and lists readable and never written; its DLL stays loaded

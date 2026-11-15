@@ -453,13 +453,20 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     dialog::text(id)
 }
 
-/// Seals the frame callbacks and links the popup on the client. Without its
-/// functions on this build, the interface stays off: mods draw nothing and
-/// dialogs show as system message boxes.
-pub(crate) fn link(loader: &'static Loader) {
-    let count = FRAMES.seal().len();
-    let hud_count = HUDS.seal().len();
+/// Seals the frame and HUD callbacks and the screen extensions, before any
+/// link.
+pub(crate) fn seal() {
+    let _frames = FRAMES.seal();
+    let _huds = HUDS.seal();
     extensions::seal();
+}
+
+/// Links the popup on the client. Without its functions on this build, the
+/// interface stays off: mods draw nothing and dialogs show as system
+/// message boxes.
+pub(crate) fn link(loader: &'static Loader) {
+    let count = FRAMES.sealed().map_or(0, <[_]>::len);
+    let hud_count = HUDS.sealed().map_or(0, <[_]>::len);
     if loader.side != Side::CLIENT {
         return;
     }

@@ -193,8 +193,8 @@ pub(crate) fn open(
     })?
 }
 
-/// Seals the channels.
-pub(crate) fn link() {
+/// Seals the channels, before any link.
+pub(crate) fn seal() {
     let channels = CHANNELS.seal();
     if !channels.is_empty() {
         let names: Vec<&str> = channels.iter().map(|c| c.name.as_str()).collect();

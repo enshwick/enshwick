@@ -200,9 +200,10 @@ thread_local! {
 /// Links the world step, which runs every ECS system of a world, the
 /// server's on its game thread and on a client its own as well.
 pub(crate) fn link(loader: &'static Loader) {
+    static STEP_GATE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("world-step gate");
     let target = Target::Pinned(pinned::world::STEP);
-    let linked = loader.link_feature(
-        "world-step gate",
+    let linked = loader.link_fused(
+        &STEP_GATE,
         target,
         &WORLD_STEP_NEXT,
         world_step,

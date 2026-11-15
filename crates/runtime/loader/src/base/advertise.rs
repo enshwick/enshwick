@@ -188,7 +188,7 @@ mod runtime {
     use std::path::Path;
     use std::time::{Duration, Instant};
 
-    use crate::engine::fuse::{Fuse, Off};
+    use crate::engine::fuse::Fuse;
     use crate::engine::module::Export;
 
     /// The mod set a dedicated server advertises to Steam, for the join
@@ -243,10 +243,7 @@ mod runtime {
     /// Turns the advertisement off because `why`.
     #[cold]
     fn off(why: &str) {
-        ADVERTISE_FUSE.turn_off(&Off::reported(
-            format!("{} off: {why}", ADVERTISE_FUSE.feature()),
-            why.to_owned(),
-        ));
+        ADVERTISE_FUSE.report_off(why.to_owned());
     }
 
     fn run(configured: &str, mods: JoinMods) {

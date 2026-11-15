@@ -205,7 +205,7 @@ pub(crate) struct Loader {
     /// The mods that did not load, shown as off with their reason.
     pub(crate) skipped: Vec<crate::base::resolve::Skipped>,
     /// Every part of the loader's layers, which the start hands down.
-    pub(crate) parts: crate::engine::parts::Parts,
+    pub(crate) parts: &'static crate::engine::parts::Parts,
 }
 
 /// Wires every armed chain of the running loader past the mods that are off
@@ -263,7 +263,7 @@ pub(crate) fn linked<T>(found: &'static OnceLock<T>) -> Option<(&'static Loader,
 }
 
 /// Where one of the loader's detours goes, and how the code there is
-/// checked before [`Loader::link_feature`] links it.
+/// checked before [`Loader::link_fused`] links it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Target<'a> {
     /// A build table symbol, whose code [`Loader::code_holds`] checks.
@@ -372,19 +372,6 @@ impl Loader {
         ])
     }
 
-    /// [`Loader::link_fused`] for the feature named `feature`, the one
-    /// [`Fuse::named`] keeps for the name.
-    pub(crate) fn link_feature<F: Copy>(
-        &self,
-        feature: &str,
-        target: Target<'_>,
-        next: &'static Next<F>,
-        detour: F,
-        flags: HookFlags,
-    ) -> bool {
-        self.link_fused(Fuse::named(feature), target, next, detour, flags)
-    }
-
     /// Links one of the loader's own detours of `feature` on `target`, ahead
     /// of every mod's link there, after checking the target: a table
     /// symbol's code must hold by [`Loader::code_holds`]. A feature arms all
@@ -487,13 +474,6 @@ impl Loader {
         }
         crate::engine::diag::name(address, id);
         true
-    }
-
-    /// Turns `feature` off on this build because its entry `id` failed for
-    /// `reason`, by [`Loader::fuse_off`]. Always false, for the caller to
-    /// return.
-    pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
-        self.fuse_off(Fuse::named(feature), id, reason)
     }
 
     /// Turns `feature` off on this build because its entry `id` failed for

@@ -717,8 +717,9 @@ impl Effects {
     ///
     /// [`WorldError::Refused`] for a count of 0 or over 65535 or an item
     /// the game does not know; [`WorldError::WrongThread`] off the game
-    /// thread; [`WorldError::Missing`] on a client or a build without the
-    /// pickup.
+    /// thread; [`WorldError::Missing`] on a client, a build without the
+    /// pickup or the item lookup, or while no item registry or world exists
+    /// yet, which a later call may find.
     ///
     /// # Examples
     ///

@@ -70,7 +70,7 @@ fn about(paint: &Painter<'_>, record: &crate::engine::loader::ModRecord) {
     heading(
         paint,
         &name,
-        &metadata(&record.version, &record.meta.authors),
+        &metadata(Some(&record.version), &record.meta.authors),
         state_text(off, waiting).map(|state| (state, record.version.as_str(), why)),
     );
     let description = record.description();
@@ -104,10 +104,13 @@ fn skipped_row(paint: &Painter<'_>, skipped: &crate::base::resolve::Skipped) {
     heading(
         paint,
         &skipped.label,
-        &metadata(&skipped.version, core::slice::from_ref(&skipped.file)),
+        &metadata(
+            skipped.version.as_deref(),
+            core::slice::from_ref(&skipped.file),
+        ),
         Some((
             skipped_state(skipped.refused_unread()),
-            skipped.version.as_str(),
+            skipped.version.as_deref().unwrap_or_default(),
             Some(skipped.reason.shown()),
         )),
     );
@@ -192,7 +195,7 @@ pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
     let Some(record) = loader.mods.get(index) else {
         return;
     };
-    let credits = metadata(&record.version, &record.meta.authors);
+    let credits = metadata(Some(&record.version), &record.meta.authors);
     for line in core::iter::once(credits).chain(detail_lines(loader, index, record)) {
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
@@ -200,9 +203,9 @@ pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
 
 /// A mod's dimmed line under its name: its version, when it has one, then
 /// its authors.
-fn metadata(version: &str, authors: &[String]) -> String {
-    core::iter::once(version)
-        .filter(|version| !version.is_empty())
+fn metadata(version: Option<&str>, authors: &[String]) -> String {
+    version
+        .into_iter()
         .chain(authors.iter().map(String::as_str))
         .collect::<Vec<_>>()
         .join(texts::text("mods.metadata.gap"))
@@ -471,7 +474,7 @@ mod tests {
             "a file refused before its version read"
         );
         assert_eq!(
-            metadata("", &["lanterns/lanterns.dll".to_owned()]),
+            metadata(None, &["lanterns/lanterns.dll".to_owned()]),
             "lanterns/lanterns.dll"
         );
     }
@@ -503,8 +506,11 @@ mod tests {
 
     #[test]
     fn a_mod_s_dimmed_line_holds_its_version_then_its_authors_and_nothing_else() {
-        assert_eq!(metadata("0.1.1", &[]), "0.1.1");
+        assert_eq!(metadata(Some("0.1.1"), &[]), "0.1.1");
         let authors = ["themaiby".to_owned(), "enshwick".to_owned()];
-        assert_eq!(metadata("0.2.0", &authors), "0.2.0 · themaiby · enshwick");
+        assert_eq!(
+            metadata(Some("0.2.0"), &authors),
+            "0.2.0 · themaiby · enshwick"
+        );
     }
 }

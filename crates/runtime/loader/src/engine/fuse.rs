@@ -200,6 +200,13 @@ impl Fuse {
         self.feature
     }
 
+    /// Whether this very fuse is one of `fuses`: two fuses may share a name,
+    /// so a list of features is told apart by fuse, never by name.
+    #[cfg(windows)]
+    pub(crate) fn among(&self, fuses: &[&Self]) -> bool {
+        fuses.iter().any(|fuse| core::ptr::eq(*fuse, self))
+    }
+
     /// Whether a panic or a failed live check turned the feature off.
     #[inline]
     pub fn is_off(&self) -> bool {
@@ -299,6 +306,15 @@ impl Fuse {
     pub fn blow(&self, site: &str) {
         let reason = format!("the loader panicked in {site}");
         self.turn_off(&Off::fault(self.feature, &reason));
+    }
+
+    /// Turns the feature off because `why`, a cause that is neither the
+    /// build's fault nor a panic, such as a library the game ships without
+    /// an interface: logged once without an error code and listed with `why`.
+    #[cfg(windows)]
+    #[cold]
+    pub(crate) fn report_off(&self, why: String) {
+        self.turn_off(&Off::reported(format!("{} off: {why}", self.feature), why));
     }
 
     /// The feature named `feature`, one for the name, made the first time

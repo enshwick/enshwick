@@ -141,11 +141,12 @@ pub(crate) fn crafting() -> bool {
     CRAFT.get().is_some()
 }
 
-/// Seals the craft filters and finds the craft request's layout, before any
-/// link: game events link the event move when craft requests are screened.
-/// Craft requests are screened whenever the build reads them, as any recipe
-/// may be disabled later.
+/// Seals the build and craft filters and finds the craft request's layout,
+/// before any link: game events link the event move when craft requests are
+/// screened. Craft requests are screened whenever the build reads them, as
+/// any recipe may be disabled later.
 pub(crate) fn seal(loader: &Loader) {
+    let _builds = BUILD_FILTERS.seal();
     let crafts = CRAFT_FILTERS.seal();
     if let Some(layout) = craft_layout(loader) {
         let _first = CRAFT.set(layout);
@@ -161,10 +162,10 @@ pub(crate) fn seal(loader: &Loader) {
     }
 }
 
-/// Seals the build filters and links the cursor check when a mod registered
-/// one.
+/// Links the cursor check when a mod registered a build filter before the
+/// seal phase.
 pub(crate) fn link(loader: &'static Loader) {
-    let builds = BUILD_FILTERS.seal();
+    let builds = BUILD_FILTERS.sealed().unwrap_or_default();
     if builds.is_empty() {
         return;
     }

@@ -16,12 +16,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use menu::{KeptLine, MenuNote, menu_line};
-pub(crate) use summary::clock;
 #[cfg(windows)]
 pub(crate) use summary::{GAME_CRASHED, crash_heading};
 pub use summary::{
     HookStat, ModStatus, Served, SkippedMod, Summary, duration, messages_line, part_line,
 };
+pub(crate) use summary::{clock, mod_named};
 
 use crate::engine::settings::Settings;
 use enshwick_base::Relock;
@@ -155,8 +155,10 @@ pub struct PartOff {
 
 /// Remembers that the loader's `part` is off for `reason`, for the status
 /// summary and the Mods screen. A part keeps its first reason; past
-/// [`HISTORY`] parts, later ones reach only the log.
-pub fn part_off(part: &str, reason: &str) {
+/// [`HISTORY`] parts, later ones reach only the log. Only
+/// [`Fuse::turn_off`](crate::engine::fuse::Fuse) lists a part, so every part
+/// off is also logged, with its code when its cause has one, and wired past.
+pub(in crate::engine) fn part_off(part: &str, reason: &str) {
     let at = now();
     with_parts_off(|parts| keep_part(parts, HISTORY, (part, reason), at));
     STATE.any_part_off.store(true, Ordering::Release);
@@ -593,7 +595,7 @@ conflicts:
     fn a_mod_skipped_at_start_shows_with_its_file_and_reason_and_a_second_copy_is_not_counted() {
         let skipped = |id: &str, file: &str, reason: &str, off| SkippedMod {
             id: id.into(),
-            version: "0.2.0".into(),
+            version: Some("0.2.0".into()),
             file: file.into(),
             reason: reason.into(),
             shown: format!("[{reason}]"),
@@ -633,6 +635,24 @@ conflicts:
         assert!(
             !short.contains("old/you.lockers.dll"),
             "a second copy of a loaded mod is not off: {short}"
+        );
+    }
+
+    #[test]
+    fn a_file_refused_before_its_manifest_read_shows_in_the_summary_without_a_version() {
+        let mut s = summary();
+        s.skipped = vec![SkippedMod {
+            id: "lanterns".into(),
+            version: None,
+            file: "mods/lanterns/lanterns.dll".into(),
+            reason: "not a mod".into(),
+            shown: "[not a mod]".into(),
+            off: true,
+        }];
+        let text = s.render();
+        assert!(
+            text.contains("  lanterns skipped, mods/lanterns/lanterns.dll: not a mod\n"),
+            "{text}"
         );
     }
 

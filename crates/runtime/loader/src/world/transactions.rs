@@ -176,10 +176,23 @@ fn try_ledger() -> Option<std::sync::MutexGuard<'static, Ledger>> {
     STATE.ledger.try_relock()
 }
 
+/// The step's work under the feature's own fuse, the one that settles what
+/// a panic leaves held, so the step adds no second fuse around it.
+#[cfg(windows)]
+pub(crate) const fn step() -> crate::engine::parts::Step {
+    crate::engine::parts::Step {
+        stage: crate::engine::parts::Stage::Output,
+        work: crate::engine::parts::Fused {
+            fuse: &STATE.fuse,
+            run: |stepping| after_step(stepping.loader),
+        },
+    }
+}
+
 /// Writes the queued work of a step, on the game thread after the step,
 /// behind the feature's fuse.
 #[cfg(windows)]
-pub(crate) fn after_step(loader: &crate::engine::loader::Loader) {
+fn after_step(loader: &crate::engine::loader::Loader) {
     if !STATE.busy.load(Ordering::Acquire) {
         return;
     }

@@ -46,7 +46,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Input, "console lines", |s| console::after_step(
             s.loader
         ))],
-        forget: Some(|_| console::forget()),
+        forget: Some(fused!("console forgetting a hosted game", |_| {
+            console::forget();
+        })),
         ..part!("console", console)
     },
     &Part {
@@ -54,7 +56,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Input, "chat commands", |s| commands::after_step(
             s.loader
         ))],
-        forget: Some(|_| commands::forget()),
+        forget: Some(fused!("commands forgetting a hosted game", |_| {
+            commands::forget();
+        })),
         ..part!("commands", commands)
     },
     // After the commands: the lines it raises and posts take their replies
@@ -64,7 +68,7 @@ pub(crate) static PARTS: &[&Part] = &[
         seal: Some(|_| chat::seal()),
         link: Some(chat::link),
         steps: &[step!(Input, "chat sending", |_| chat::drain())],
-        forget: Some(|_| chat::forget()),
+        forget: Some(fused!("chat forgetting a hosted game", |_| chat::forget())),
         ..part!("chat", chat)
     },
     &Part {
@@ -77,7 +81,9 @@ pub(crate) static PARTS: &[&Part] = &[
         joined: Some(fused!("the players' screens at join", |loader, _| {
             interactions::player_joined(loader);
         })),
-        forget: Some(|_| interactions::forget()),
+        forget: Some(fused!("interactions forgetting a hosted game", |_| {
+            interactions::forget();
+        })),
         ..part!("interactions", interactions)
     },
     &Part {
@@ -98,20 +104,28 @@ pub(crate) static PARTS: &[&Part] = &[
         left: Some(fused!("controls at leave", |_, player| controls::left(
             player.key.get()
         ))),
-        hosting: Some(|_| controls::forget_carried()),
-        forget: Some(|_| controls::forget()),
+        hosting: Some(fused!("controls at a hosted game's start", |_| {
+            controls::forget_carried();
+        })),
+        forget: Some(fused!("controls forgetting a hosted game", |_| {
+            controls::forget();
+        })),
         ..part!("controls", controls)
     },
     &Part {
         seal: Some(|_| player_actions::seal()),
-        forget: Some(|_| admission::forget()),
+        forget: Some(fused!("player_actions forgetting a hosted game", |_| {
+            admission::forget();
+        })),
         ..part!("player_actions", player_actions)
     },
     &Part {
         steps: &[step!(Follow, "build refusals", |s| {
             build_reasons::after_step(s.loader);
         })],
-        forget: Some(|_| build_reasons::forget()),
+        forget: Some(fused!("build_reasons forgetting a hosted game", |_| {
+            build_reasons::forget();
+        })),
         ..part!("build_reasons", build_reasons)
     },
     &Part {

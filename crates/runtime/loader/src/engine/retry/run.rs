@@ -207,7 +207,12 @@ fn give_up(loader: &Loader, held: Option<Held>, reason: &str) {
             continue;
         }
         *verdict = Verdict::Skip(reason.to_owned());
-        crate::engine::code::skipped(loader, patch, reason, &mut off);
+        crate::engine::code::skipped(
+            loader,
+            patch,
+            (crate::engine::code::SkipCause::Fault, reason),
+            &mut off,
+        );
         // Off before it stops waiting, so its hooks are never let through.
         if let Some(record) = loader.mods.get(patch.owner.get()) {
             record.waiting.store(false, Ordering::Release);

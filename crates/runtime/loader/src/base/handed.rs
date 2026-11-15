@@ -25,6 +25,7 @@ pub(crate) const fn hash(bytes: &[u8]) -> u64 {
 /// slot is written over in place while the game may still hold an older
 /// view of it, which then reads the slot's newer text (or a mix of the two
 /// cut short at the older length) but never freed memory.
+#[cfg(windows)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Handed {
     at: *const u8,
@@ -33,6 +34,7 @@ pub(crate) struct Handed {
     hash: u64,
 }
 
+#[cfg(windows)]
 impl Handed {
     /// The view of `len` bytes at `at`, whose [`hash`] is `hash`.
     pub(crate) const fn new(at: *const u8, len: usize, hash: u64) -> Self {
