@@ -36,6 +36,7 @@ impl Openers {
     }
 
     /// The openers once sealed; none before the seal.
+    #[cfg(windows)]
     pub(crate) fn sealed(&self) -> &[ModIndex] {
         self.0.sealed().unwrap_or_default()
     }
