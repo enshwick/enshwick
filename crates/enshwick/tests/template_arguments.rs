@@ -4,6 +4,7 @@
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
@@ -18,6 +19,8 @@ mod tests {
     /// The values each run handed its handler.
     static RUNS: Mutex<Vec<Vec<Value>>> = Mutex::new(Vec::new());
     static ACTIONS: OnceLock<Actions> = OnceLock::new();
+    /// How often the mod's patch of the vanilla creature built it.
+    static PATCHED: AtomicUsize = AtomicUsize::new(0);
 
     const TAME: Id = Id::new("you.summoner:tame");
     const UNKNOWN: Guid = Guid::parse("00000000-0000-4000-8000-000000000001");
@@ -27,6 +30,11 @@ mod tests {
     impl Mod for Summoner {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.add_template(NewTemplate::new(TAME, CREATURE))?;
+            let creature = enshwick::content::types::TEMPLATE_RESOURCE.key(CREATURE)?;
+            load.serve(creature, creature, |bytes| {
+                PATCHED.fetch_add(1, Ordering::Relaxed);
+                Some(bytes.to_vec())
+            })?;
             let actions = load.actions(Texts::default())?;
             actions.add(
                 Action::new("summon", "Summon")
@@ -135,6 +143,22 @@ mod tests {
             "an item in a template's place"
         );
         assert!(runs().is_empty());
+    }
+
+    #[test]
+    fn a_vanilla_template_argument_is_known_without_building_it_through_other_patches() {
+        let loader = start();
+        let before = PATCHED.load(Ordering::Relaxed);
+        let run = |args: &str| loader.ask_actions(ActionCall::RUN, &root(), 0, "summon", args);
+        assert_eq!(run(&format!("e{CREATURE}")).as_deref(), Some("1ok"));
+        assert_eq!(
+            loader
+                .type_in_chat(&root(), 0, &format!("/m summon {CREATURE}"))
+                .as_deref(),
+            Some("1ok")
+        );
+        assert_eq!(PATCHED.load(Ordering::Relaxed), before, "no patch ran");
+        assert_eq!(runs().len(), 2);
     }
 
     #[test]

@@ -3,6 +3,7 @@
 //! at the boundary, and the reply when they name none.
 
 use crate::PlayerKey;
+use crate::abi::Status;
 use crate::content::Guid;
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
@@ -413,11 +414,22 @@ impl Registry {
     }
 
     /// Whether the server's game knows the template `template`, vanilla or
-    /// served by a mod: whether its resource reads.
+    /// served by a mod. A template in the game's archive answers by its
+    /// length alone, so no mod's patch runs to validate an argument; only a
+    /// mod's new template is built to tell.
     fn knows_template(&self, template: Guid) -> bool {
-        crate::content::types::TEMPLATE_RESOURCE
-            .key(template)
-            .is_ok_and(|key| self.host.served_resource(key).is_ok())
+        let Ok(key) = crate::content::types::TEMPLATE_RESOURCE.key(template) else {
+            return false;
+        };
+        let mut len = 0u32;
+        let archived = (self.host.api().resource_read)(
+            self.host.handle(),
+            &raw const key,
+            core::ptr::null_mut(),
+            0,
+            &raw mut len,
+        );
+        matches!(archived, Status::OK | Status::TOO_SMALL) || self.host.served_resource(key).is_ok()
     }
 
     /// Whether the server's game knows `item` by this very GUID. The game
