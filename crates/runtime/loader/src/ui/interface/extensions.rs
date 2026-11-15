@@ -234,11 +234,13 @@ pub(super) fn seal() {
 type OffFn<'a> = &'a dyn Fn(&'static Fuse, &str, &str);
 
 /// Reads where the screen, the prompt and the hosts sit. What this build
-/// lacks is listed off when mods' frames, HUD items (`frames`) or the
-/// extensions sealed before read it, else only logged.
+/// lacks is listed off when mods' frames, HUD items (`frames`), the
+/// extensions sealed before or, on a client, the client snapshot and
+/// commands read it, else only logged.
 pub(super) fn link(loader: &Loader, frames: bool) {
     let extensions = EXTENSIONS.sealed().unwrap_or_default();
-    let used = frames || !extensions.is_empty();
+    // Any mod may ask a client's snapshot or command after init.
+    let used = frames || !extensions.is_empty() || loader.side == Side::CLIENT;
     let off = |fuse: &'static Fuse, id: &str, reason: &str| {
         if used {
             loader.fuse_off(fuse, id, reason);

@@ -229,14 +229,20 @@ then tells what came of it:
 | `Unavailable` | the build lacks what it needs, or the open menu lacks the recipe |
 
 A command belongs to one session and, if you name one, to one HUD screen.
-Take both from a [snapshot](#reading-the-clients-state-in-one-copy). The
-loader cancels a command in these cases:
+Take both from a [snapshot](#reading-the-clients-state-in-one-copy). Session
+0, from a snapshot taken before the first frame, means the session of the
+first frame that runs the command. A command whose effect already shows,
+such as opening the screen that is open, is `Observed` at once. The loader
+cancels a command in these cases:
 
 - the session changes;
 - another screen shows;
 - the player presses a control;
 - the mod turns off;
-- two seconds pass without its effect.
+- two seconds pass without its effect, in a world or outside one.
+
+A reason a newer loader gives reads as `CancelReason::Other`, `"other"` in
+Luau.
 
 One command of each kind waits per mod. A second answers
 `WorldError::Refused` until the first ends.

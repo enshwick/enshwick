@@ -292,13 +292,15 @@ crate::engine::chains::chain_detour! {
 }
 
 /// Readies the builder's detour for its benchmark with a stand-in for the
-/// game's pass: the closure runs one step pass and answers the stick's x
-/// bits, with nothing handed or with a move held.
+/// game's pass: the closure runs one step pass and answers the stick's
+/// forward bits, with nothing handed or with a move held.
 #[doc(hidden)]
 pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
-    /// Stands in for the game's pass: writes nothing.
+    /// Stands in for the game's step pass: rewrites the stick as the
+    /// player's, zero, as the game does each step, so the detour sees no
+    /// input of the player's and its move holds.
     unsafe extern "system" fn game(
-        _: *mut u8,
+        input: *mut u8,
         _: usize,
         _: usize,
         _: usize,
@@ -311,6 +313,9 @@ pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
         _: u32,
         _: usize,
     ) {
+        let stick = crate::actions::client_control::BENCH_INPUT.stick_offset();
+        // SAFETY: the benchmark's own record, of the stand-in layout's size.
+        unsafe { enshwick_core::raw::write_at(input, stick, [0.0_f32; 2]) };
     }
     type Build = unsafe extern "system" fn(
         *mut u8,
@@ -349,8 +354,8 @@ pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
             return 0;
         };
         // SAFETY: the same record, of the build's size.
-        let [x, _] = unsafe { layout.movement_stick(input.as_ptr()) };
-        x.to_bits()
+        let [_, forward] = unsafe { layout.movement_stick(input.as_ptr()) };
+        forward.to_bits()
     }
 }
 
@@ -364,6 +369,14 @@ mod tests {
             blocked: false,
             player: false,
             owner_off: false,
+        }
+    }
+
+    #[test]
+    fn the_benchmark_s_move_holds_its_stick_through_every_pass_it_times() {
+        let mut moving = bench_client_build(true);
+        for pass in 0..4 {
+            assert_eq!(moving(), 1.0_f32.to_bits(), "pass {pass}");
         }
     }
 

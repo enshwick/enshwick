@@ -181,9 +181,7 @@ impl Tab {
                 .and_then(|value| u8::try_from(value).ok())
                 .ok_or(catalogue::ids::HUD_SCREEN_TYPE)
         };
-        for tab in MenuTab::ALL {
-            value(tab.name())?;
-        }
+        // Every tab names a menu screen, so this finds each tab's too.
         let mut menu_screens = [0; 4];
         for name in MENU_SCREENS {
             let screen = value(name)?;
@@ -195,7 +193,6 @@ impl Tab {
         })
     }
 
-    /// Whether screen byte `screen` is one of the in-game menu's.
     /// Sets the tab the in-game menu draws by; the menu shows it from its
     /// next frame (index read every frame after its first, client
     /// 26430625).
@@ -210,6 +207,7 @@ impl Tab {
         unsafe { enshwick_core::raw::write_at(state, self.menu_tab, tab.index()) };
     }
 
+    /// Whether screen byte `screen` is one of the in-game menu's.
     fn is_menu(&self, screen: u8) -> bool {
         self.menu_screens[usize::from(screen / 64)] & 1 << (screen % 64) != 0
     }
@@ -407,14 +405,24 @@ fn fits(at: usize, size: usize, record: usize) -> bool {
     at.checked_add(size).is_some_and(|end| end <= record)
 }
 
-/// Links the input group with client 26430625's layout, for the builder's
-/// benchmark.
+/// The input layout the builder's benchmark runs on, client 26430625's,
+/// over buffers of its own; never linked in a game.
+pub(crate) const BENCH_INPUT: InputLayout = InputLayout {
+    movement_stick: 0x2b8,
+    camera_rotation: 0x2c4,
+    blocked: 0xad5a,
+};
+
+/// Links the input group with [`BENCH_INPUT`], for the builder's benchmark.
 pub(crate) fn bench_input() {
-    let _first = GROUPS.input.layout.set(InputLayout {
-        movement_stick: 0x2b8,
-        camera_rotation: 0x2c4,
-        blocked: 0xad5a,
-    });
+    let _first = GROUPS.input.layout.set(BENCH_INPUT);
+}
+
+impl InputLayout {
+    /// The offset of the movement stick, for a stand-in of the game's pass.
+    pub(crate) const fn stick_offset(&self) -> usize {
+        self.movement_stick
+    }
 }
 
 pub(crate) fn link(loader: &Loader) {
@@ -471,15 +479,8 @@ impl MenuTab {
     /// The `HudScreenType` member the tab shows, which `link` checks the
     /// build reflects.
     pub(crate) const fn name(self) -> &'static str {
-        match self {
-            Self::Social => "Social",
-            Self::Map => "Map",
-            Self::Journal => "Journal",
-            Self::PlayerCrafting => "PlayerCrafting",
-            Self::Backpack => "Backpack",
-            Self::Character => "Character",
-            Self::SkillTree => "SkillTree",
-        }
+        // Declared in the menu's index order, as the rules list the names.
+        enshwick_core::__private::rules::MENU_TABS[self as usize]
     }
 }
 

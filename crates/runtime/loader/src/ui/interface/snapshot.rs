@@ -65,7 +65,7 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
                 screen: view.screen,
                 tab,
                 recipe,
-                held: crate::actions::local_held::held().unwrap_or(0),
+                held: crate::actions::local_held::held().ok(),
             })
         },
         |kind| {

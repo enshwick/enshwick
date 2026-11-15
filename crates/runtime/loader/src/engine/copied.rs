@@ -4,6 +4,11 @@
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering, fence};
 
+/// Tries a reader spins before it yields to the writer.
+const SPINS: u32 = 4;
+/// Tries a reader makes before it gives up on a writer stopped mid-write.
+const TRIES: u32 = 64;
+
 /// `N` words behind a sequence count, written by one thread at a time.
 #[derive(Debug)]
 pub(crate) struct Copied<const N: usize> {
@@ -32,12 +37,17 @@ impl<const N: usize> Copied<N> {
     }
 
     /// The last whole write, or `None` while the writer stays mid-write
-    /// through a few tries.
+    /// through every try: a few spins, then yields, so a writer preempted
+    /// mid-write gets the time to finish.
     pub(crate) fn load(&self) -> Option<[u64; N]> {
-        for _ in 0..4 {
+        for attempt in 0..TRIES {
             let before = self.seq.load(Ordering::Acquire);
             if before % 2 == 1 {
-                core::hint::spin_loop();
+                if attempt < SPINS {
+                    core::hint::spin_loop();
+                } else {
+                    std::thread::yield_now();
+                }
                 continue;
             }
             let words = self.words.each_ref().map(|w| w.load(Ordering::Relaxed));

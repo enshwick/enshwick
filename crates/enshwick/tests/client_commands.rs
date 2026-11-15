@@ -167,6 +167,22 @@ side = "both""#
     }
 
     #[test]
+    fn a_screen_tab_or_expected_screen_the_loader_refuses_the_fake_refuses_too() {
+        let (_loader, input) = input(Side::CLIENT);
+        for refused in [
+            ClientCommand::new(CommandAction::OpenScreen("StorageChest".to_owned()), 1),
+            ClientCommand::new(CommandAction::ChooseTab("Inventory".to_owned()), 1),
+            look(0.5).on_screen("Backpack"),
+        ] {
+            assert!(
+                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                "{refused:?}"
+            );
+        }
+        assert!(input.client_command(&look(0.5).on_screen("InGame")).is_ok());
+    }
+
+    #[test]
     fn the_player_s_input_and_a_block_cancel_a_look_or_move() {
         let (loader, input) = input(Side::CLIENT);
         for (command, reason, expected) in [

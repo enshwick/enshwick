@@ -543,7 +543,10 @@ pub(crate) extern "system" fn client_command(
             unsafe { id.write(spec.cancels) };
             return Status::OK;
         }
-        if !(Spec::OPEN_SCREEN..=Spec::HIGHLIGHT_RECIPE).contains(&spec.kind) || !spec.in_bounds() {
+        if !(Spec::OPEN_SCREEN..=Spec::HIGHLIGHT_RECIPE).contains(&spec.kind)
+            || !spec.in_bounds()
+            || !named_as_the_loader_takes(&spec)
+        {
             return Status::BAD_ARGS;
         }
         if s.client_commands
@@ -569,6 +572,19 @@ pub(crate) extern "system" fn client_command(
         // SAFETY: the safe layer passes a writable `u64`, non-null above.
         unsafe { id.write(next) };
         Status::OK
+    })
+}
+
+/// Whether `spec`'s target and expected screen are ones the loader takes:
+/// an open of a screen the game opens from the world, a tab the menu has,
+/// and a look or move that expects only the world's screen.
+fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
+    // SAFETY: the mod's spec, its target borrowed for the call.
+    let target = unsafe { spec.target.as_str() };
+    // SAFETY: the mod's spec, its expected screen borrowed for the call.
+    let expected = unsafe { spec.expected_screen.as_str() };
+    target.zip(expected).is_some_and(|(target, expected)| {
+        enshwick_core::__fake::rules::client_command_names(spec.kind, target, expected)
     })
 }
 

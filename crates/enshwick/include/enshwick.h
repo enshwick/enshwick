@@ -972,7 +972,9 @@ typedef struct EnshwickClientCommand {
   uint32_t hold_ms;
   // The session the command belongs to, as
   // `EnshwickClientSnapshot.session` names it; a command whose session ended
-  // is cancelled.
+  // is cancelled. 0, the session of a snapshot taken before the
+  // interface read a game, takes the session of the first frame that
+  // runs the command.
   uint64_t session;
   // The HUD screen the client must show, a `HudScreenType` member; empty
   // for any screen.

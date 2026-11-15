@@ -77,7 +77,7 @@ pub struct ClientCommand {
 impl ClientCommand {
     /// `action` for the client's session `session`, as
     /// [`ClientSnapshot::session`](super::ClientSnapshot::session) names it,
-    /// on any screen.
+    /// on any screen; 0 takes the session of the first frame that runs it.
     ///
     /// # Examples
     ///
@@ -187,6 +187,9 @@ pub enum CancelReason {
     InputBlocked,
     /// The mod or the feature turned off.
     ModOff,
+    /// A reason a newer loader gives that this build of the API does not
+    /// name, as its raw value.
+    Other(u32),
 }
 
 impl CancelReason {
@@ -208,14 +211,14 @@ impl CancelReason {
         Self::ALL
             .iter()
             .find(|(raw, ..)| *raw == reason)
-            .map_or(Self::TimedOut, |(_, reason, _)| *reason)
+            .map_or(Self::Other(reason), |(_, reason, _)| *reason)
     }
 
     fn name(self) -> &'static str {
         Self::ALL
             .iter()
             .find(|(_, reason, _)| *reason == self)
-            .map_or("", |(.., name)| name)
+            .map_or("other", |(.., name)| name)
     }
 }
 
@@ -334,7 +337,8 @@ struct LuauStatus {
     /// `"pending"`, `"applied"`, `"observed"`, `"cancelled"` or
     /// `"unavailable"`.
     pub state: String,
-    /// Why a cancelled command ended, such as `"timed_out"`.
+    /// Why a cancelled command ended, such as `"timed_out"`; `"other"` for
+    /// a reason a newer loader gives.
     pub reason: Option<String>,
     /// Milliseconds since the command was queued.
     pub age_ms: u64,
@@ -529,5 +533,19 @@ mod tests {
             CommandState::Cancelled(CancelReason::PlayerInput)
         );
         assert_eq!(CancelReason::PlayerInput.name(), "player_input");
+    }
+
+    #[test]
+    fn a_reason_a_newer_loader_adds_reads_as_other_not_as_a_known_one() {
+        let raw = Raw {
+            state: Raw::CANCELLED,
+            reason: 99,
+            ..Raw::EMPTY
+        };
+        assert_eq!(
+            CommandState::from_raw(&raw),
+            CommandState::Cancelled(CancelReason::Other(99))
+        );
+        assert_eq!(CancelReason::Other(99).name(), "other");
     }
 }

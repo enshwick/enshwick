@@ -25,30 +25,21 @@ use crate::actions::client_input::{self, Ask};
 use crate::actions::client_recipes;
 use crate::actions::client_snapshot::{RecipeRead, TabRead};
 use crate::actions::local_held;
+use enshwick_core::__private::rules;
+
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
+
+/// The feature the commands' fuse names.
+const FEATURE: &str = "client commands";
+/// Off at the commands' first panic: queueing then answers unavailable.
+static FUSE: Fuse = Fuse::new(FEATURE);
 
 /// How long a command may wait for its effect.
 const TIMEOUT_MS: u64 = 2000;
 /// How many commands' outcomes the loader keeps for their status.
 const KEPT: usize = 64;
-
-/// The screens a command opens: the ones the game opens from a key in the
-/// world (client 26430625), by their `HudScreenType` names.
-const OPENS: [&str; 10] = [
-    "SystemMenu",
-    "InGameMenu",
-    "Map",
-    "Journal",
-    "Character",
-    "PlayerCrafting",
-    "Backpack",
-    "SkillTree",
-    "TextChat",
-    "Social",
-];
-/// The screen a close returns to.
-const WORLD: &str = "InGame";
 
 /// What a queued command does, its arguments checked.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -117,8 +108,9 @@ pub(crate) struct Command {
     session: u64,
     /// The screen byte the client must show, `None` for any.
     expected: Option<u8>,
-    /// The held controls when it was queued: a new one is the player's.
-    held: u64,
+    /// The held controls when it was queued, or at the first fresh read
+    /// after it: a new one is the player's. `None` until one.
+    held: Option<u64>,
     queued_ms: u64,
     state: u32,
     reason: u32,
@@ -178,8 +170,8 @@ pub(crate) struct Seen {
     pub(crate) tab: TabRead,
     /// The crafting menu's highlighted recipe.
     pub(crate) recipe: RecipeRead,
-    /// The held controls of a fresh read, 0 without one.
-    pub(crate) held: u64,
+    /// The held controls of a fresh read, `None` without one.
+    pub(crate) held: Option<u64>,
 }
 
 /// What the game answered a command it was handed.
@@ -217,22 +209,27 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
     if seen.session != command.session {
         return cancel(Status::SESSION_CHANGED);
     }
+    // Its effect showing already, applied or not: an open of the screen
+    // shown is not toggled shut.
+    let shows = match command.kind {
+        Kind::Open(screen) | Kind::Close(screen) => seen.screen == screen,
+        Kind::Tab(tab) => seen.tab == TabRead::Shown(tab),
+        Kind::Highlight(recipe) => seen.recipe == RecipeRead::Shown(Some(recipe)),
+        Kind::Look(_) | Kind::Move(..) => false,
+    };
+    if shows {
+        return Next::End(Status::OBSERVED, 0);
+    }
     let drives = command.kind.drives();
     if drives && command.expected.is_some_and(|screen| screen != seen.screen) {
         return cancel(Status::OTHER_SCREEN);
     }
-    let pressed = seen.held & !command.held != 0;
+    let pressed = match (command.held, seen.held) {
+        (Some(queued), Some(now)) => now & !queued != 0,
+        _ => false,
+    };
     let applied = command.state == Status::APPLIED || progress == Some(Progress::Taken);
     if applied {
-        let shows = match command.kind {
-            Kind::Open(screen) | Kind::Close(screen) => seen.screen == screen,
-            Kind::Tab(tab) => seen.tab == TabRead::Shown(tab),
-            Kind::Highlight(recipe) => seen.recipe == RecipeRead::Shown(Some(recipe)),
-            Kind::Look(_) | Kind::Move(..) => false,
-        };
-        if shows {
-            return Next::End(Status::OBSERVED, 0);
-        }
         if drives && pressed {
             return cancel(Status::PLAYER_INPUT);
         }
@@ -256,17 +253,22 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
             return Next::Apply;
         }
     }
+    if timed_out(command, now) {
+        return cancel(Status::TIMED_OUT);
+    }
+    Next::Wait
+}
+
+/// Whether `command` waited past its timeout at `now`.
+fn timed_out(command: &Command, now: u64) -> bool {
     // A move taken just before the timeout still holds its whole hold.
     let limit = TIMEOUT_MS
-        + if drives {
+        + if command.kind.drives() {
             u64::from(Spec::MAX_HOLD_MS)
         } else {
             0
         };
-    if now.saturating_sub(command.queued_ms) > limit {
-        return cancel(Status::TIMED_OUT);
-    }
-    Next::Wait
+    now.saturating_sub(command.queued_ms) > limit
 }
 
 /// The commands: the ones still open and the last [`KEPT`] that ended.
@@ -330,14 +332,14 @@ fn kind(spec: &Spec) -> Result<Kind, CommandError> {
     let target = unsafe { text(spec.target) }?;
     match spec.kind {
         Spec::OPEN_SCREEN => {
-            if !OPENS.contains(&target) {
+            if !rules::CLIENT_OPENS.contains(&target) {
                 return Err(CommandError::BadArgs);
             }
             screen_byte(target)
                 .map(Kind::Open)
                 .ok_or(CommandError::Unavailable)
         }
-        Spec::CLOSE_SCREEN => screen_byte(WORLD)
+        Spec::CLOSE_SCREEN => screen_byte(rules::WORLD_SCREEN)
             .map(Kind::Close)
             .ok_or(CommandError::Unavailable),
         Spec::CHOOSE_TAB => MenuTab::ALL
@@ -357,6 +359,10 @@ fn kind(spec: &Spec) -> Result<Kind, CommandError> {
 /// read for tabs, the builder's detour for looks and moves, the recipe
 /// browser's for recipes.
 fn runs(kind: Kind) -> bool {
+    // Every kind checks itself against the frame's screen reads.
+    if FUSE.is_off() || crate::engine::screens::READS_FUSE.is_off() {
+        return false;
+    }
     let groups = &crate::actions::client_control::GROUPS;
     match kind {
         Kind::Open(_) | Kind::Close(_) => groups.toggle.get().is_some(),
@@ -370,10 +376,10 @@ fn runs(kind: Kind) -> bool {
 /// only on the world's own screen.
 fn expected_screen(kind: Kind, name: &str) -> Result<Option<u8>, CommandError> {
     if kind.drives() {
-        if !name.is_empty() && name != WORLD {
+        if !name.is_empty() && name != rules::WORLD_SCREEN {
             return Err(CommandError::BadArgs);
         }
-        return screen_byte(WORLD)
+        return screen_byte(rules::WORLD_SCREEN)
             .map(Some)
             .ok_or(CommandError::Unavailable);
     }
@@ -405,8 +411,8 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
     // SAFETY: the mod's spec, its text borrowed for the call.
     let expected = expected_screen(kind, unsafe { text(spec.expected_screen) }?)?;
     let held = match local_held::sample() {
-        local_held::Sample::Fresh { bits, .. } => bits,
-        _ => 0,
+        local_held::Sample::Fresh { bits, .. } => Some(bits),
+        _ => None,
     };
     let mut commands = STATE.commands.relock();
     if commands
@@ -470,22 +476,38 @@ pub(crate) fn status(owner: ModIndex, id: u64) -> Option<Status> {
 
 /// Runs the open commands in the interface frame with what it `seen`:
 /// `apply` hands one to the game. One atomic load while none is open.
-pub(crate) fn frame(seen: impl FnOnce() -> Option<Seen>, mut apply: impl FnMut(Kind) -> Applied) {
+/// A frame that reads no game, outside a world or without the screen
+/// reads, only ends the commands that waited too long.
+/// A panic in it turns off only the commands, never the interface frame.
+pub(crate) fn frame(seen: impl FnOnce() -> Option<Seen>, apply: impl FnMut(Kind) -> Applied) {
     if !STATE.open.load(Ordering::Acquire) {
         return;
     }
-    let Some(seen) = seen() else {
-        return;
-    };
-    let now = local_held::now_ms();
+    let _ran = FUSE.run(FEATURE, || run(seen(), local_held::now_ms(), apply));
+}
+
+/// Runs the open commands at `now` with what the frame `seen`.
+fn run(seen: Option<Seen>, now: u64, mut apply: impl FnMut(Kind) -> Applied) {
     let mut commands = STATE.commands.relock();
     for command in commands.kept.iter_mut().filter(|c| c.open()) {
         let off = crate::engine::loader::is_off(command.owner)
             || (command.kind.handed() && !runs(command.kind));
         let next = if off {
             Next::End(Status::CANCELLED, Status::MOD_OFF)
+        } else if let Some(seen) = &seen {
+            // Session 0, before the client read a game, is the one this
+            // frame counts; the first fresh read is the held baseline.
+            if command.session == 0 {
+                command.session = seen.session;
+            }
+            if command.held.is_none() {
+                command.held = seen.held;
+            }
+            next(command, seen, command.progress(), now)
+        } else if timed_out(command, now) {
+            Next::End(Status::CANCELLED, Status::TIMED_OUT)
         } else {
-            next(command, &seen, command.progress(), now)
+            Next::Wait
         };
         match next {
             Next::Wait => {}
@@ -518,7 +540,7 @@ mod tests {
             kind,
             session: 3,
             expected: Some(1),
-            held: 0,
+            held: Some(0),
             queued_ms: 100,
             state: Status::PENDING,
             reason: 0,
@@ -532,7 +554,7 @@ mod tests {
             screen,
             tab,
             recipe: RecipeRead::Unread,
-            held: 0,
+            held: Some(0),
         }
     }
 
@@ -576,7 +598,7 @@ mod tests {
         };
         let cancelled = |reason| Next::End(Status::CANCELLED, reason);
         let pressed = Seen {
-            held: 1 << 3,
+            held: Some(1 << 3),
             ..world()
         };
         assert_eq!(
@@ -741,7 +763,7 @@ mod tests {
         assert_eq!(
             ended(
                 Seen {
-                    held: 1 << 3,
+                    held: Some(1 << 3),
                     ..seen(1, TabRead::NoMenu)
                 },
                 150
@@ -766,11 +788,11 @@ mod tests {
     #[test]
     fn a_control_held_since_the_queue_is_not_the_player_s_new_input() {
         let held = Command {
-            held: 1 << 3,
-            ..command(Kind::Close(1))
+            held: Some(1 << 3),
+            ..command(Kind::Open(9))
         };
         let seen = Seen {
-            held: 1 << 3,
+            held: Some(1 << 3),
             ..seen(1, TabRead::NoMenu)
         };
         assert_eq!(next(&held, &seen, None, 150), Next::Apply);
@@ -797,6 +819,98 @@ mod tests {
             ),
             Next::End(Status::OBSERVED, 0)
         );
+    }
+
+    #[test]
+    fn a_command_whose_effect_already_shows_is_observed_without_applying() {
+        let open = command(Kind::Open(9));
+        assert_eq!(
+            next(&open, &seen(9, TabRead::NoMenu), None, 150),
+            Next::End(Status::OBSERVED, 0),
+            "an open of the screen shown is not toggled shut"
+        );
+        let tab = Command {
+            expected: None,
+            ..command(Kind::Tab(MenuTab::Map))
+        };
+        assert_eq!(
+            next(&tab, &seen(4, TabRead::Shown(MenuTab::Map)), None, 150),
+            Next::End(Status::OBSERVED, 0)
+        );
+    }
+
+    #[test]
+    fn a_control_held_before_the_first_fresh_read_is_not_a_press() {
+        let unread = Command {
+            held: None,
+            ..command(Kind::Look([0.5, 0.0]))
+        };
+        let holding = Seen {
+            held: Some(1 << 3),
+            ..world()
+        };
+        assert_eq!(next(&unread, &holding, None, 150), Next::Apply);
+    }
+
+    /// Keeps `command` as the loader's own, which reads as on without a
+    /// loader running.
+    fn kept(command: Command) {
+        let mut commands = STATE.commands.relock();
+        commands.kept.push_back(Command {
+            owner: ModIndex::LOADER,
+            ..command
+        });
+        STATE.open.store(true, Ordering::Release);
+    }
+
+    fn first() -> Command {
+        STATE.commands.relock().kept[0]
+    }
+
+    #[test]
+    fn a_frame_that_reads_no_game_still_ends_a_command_past_its_timeout() {
+        kept(command(Kind::Tab(MenuTab::Map)));
+        run(None, 150, |_| Applied::Taken);
+        assert!(first().open(), "within its timeout");
+        run(None, 100 + TIMEOUT_MS + 1, |_| Applied::Taken);
+        let ended = first();
+        assert_eq!(
+            (ended.state, ended.reason),
+            (Status::CANCELLED, Status::TIMED_OUT)
+        );
+    }
+
+    #[test]
+    fn a_command_of_session_0_takes_the_session_and_held_baseline_of_its_first_frame() {
+        kept(Command {
+            session: 0,
+            held: None,
+            ..command(Kind::Open(9))
+        });
+        let shown = Seen {
+            session: 5,
+            held: Some(1 << 3),
+            ..seen(1, TabRead::NoMenu)
+        };
+        run(Some(shown), 150, |_| Applied::Taken);
+        let running = first();
+        assert_eq!((running.session, running.held), (5, Some(1 << 3)));
+        assert_eq!(running.state, Status::APPLIED, "not cancelled");
+    }
+
+    #[test]
+    fn no_kind_runs_while_the_screen_reads_or_the_commands_are_off() {
+        crate::engine::screens::READS_FUSE.blow("a test");
+        assert!(!runs(Kind::Open(9)));
+        assert!(!runs(Kind::Tab(MenuTab::Map)));
+    }
+
+    #[test]
+    fn a_panic_in_the_commands_turns_off_only_the_commands() {
+        kept(command(Kind::Open(9)));
+        frame(|| panic!("a test"), |_| Applied::Taken);
+        assert!(FUSE.is_off(), "the panic stopped at the commands' fuse");
+        assert!(!runs(Kind::Open(9)), "queueing answers unavailable");
     }
 
     #[test]

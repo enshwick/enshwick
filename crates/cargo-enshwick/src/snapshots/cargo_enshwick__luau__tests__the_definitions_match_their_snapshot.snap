@@ -580,7 +580,7 @@ export type CommandSet = {
 export type CommandStatus = {
 	--- `"pending"`, `"applied"`, `"observed"`, `"cancelled"` or `"unavailable"`.
 	state: string,
-	--- Why a cancelled command ended, such as `"timed_out"`.
+	--- Why a cancelled command ended, such as `"timed_out"`; `"other"` for a reason a newer loader gives.
 	reason: string?,
 	--- Milliseconds since the command was queued.
 	age_ms: string,

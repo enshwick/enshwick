@@ -104,14 +104,19 @@ fn pack(read: &FrameRead) -> u64 {
         | u64::from(read.host) << 32
 }
 
-/// The session for a frame on `play` with `player` in world count
-/// `worlds`, given the last counted; a new one when any of the three moved.
-fn next_session(last: (u64, u32, u64, u64), now: (u64, u32, u64)) -> u64 {
+/// The session and the player it keeps for a frame on `play` with `player`
+/// in world count `worlds`, given the last counted; a new session when any
+/// of the three moved. A player 0 is one not read yet: the held reads find
+/// it a step after an ask or a world's start, so neither its absence nor
+/// its first read starts a session.
+fn next_session(last: (u64, u32, u64, u64), now: (u64, u32, u64)) -> (u64, u32) {
     let (play, player, worlds, session) = last;
-    if session != 0 && (play, player, worlds) == now {
-        session
+    let (now_play, now_player, now_worlds) = now;
+    let same_player = player == now_player || player == 0 || now_player == 0;
+    if session != 0 && play == now_play && worlds == now_worlds && same_player {
+        (session, if now_player == 0 { player } else { now_player })
     } else {
-        session + 1
+        (session + 1, now_player)
     }
 }
 
@@ -130,7 +135,7 @@ pub(crate) fn frame(read: impl FnOnce() -> Option<FrameRead>) {
             local_held::player().map_or(0, |player| player.0),
             crate::base::saves::worlds(),
         );
-        let session = next_session(
+        let (session, player) = next_session(
             (
                 STATE.play.load(Ordering::Relaxed),
                 STATE.player.load(Ordering::Relaxed),
@@ -140,7 +145,7 @@ pub(crate) fn frame(read: impl FnOnce() -> Option<FrameRead>) {
             now,
         );
         STATE.play.store(now.0, Ordering::Relaxed);
-        STATE.player.store(now.1, Ordering::Relaxed);
+        STATE.player.store(player, Ordering::Relaxed);
         STATE.worlds.store(now.2, Ordering::Relaxed);
         STATE.session.store(session, Ordering::Relaxed);
         STATE.copy.write([
@@ -437,11 +442,31 @@ mod tests {
 
     #[test]
     fn a_session_lasts_while_the_game_object_the_player_and_the_world_stay() {
-        assert_eq!(next_session((0, 0, 0, 0), (0x1000, 7, 1)), 1, "the first");
-        assert_eq!(next_session((0x1000, 7, 1, 1), (0x1000, 7, 1)), 1);
-        assert_eq!(next_session((0x1000, 7, 1, 1), (0x2000, 7, 1)), 2, "object");
-        assert_eq!(next_session((0x1000, 7, 1, 1), (0x1000, 8, 1)), 2, "player");
-        assert_eq!(next_session((0x1000, 7, 1, 1), (0x1000, 7, 2)), 2, "world");
+        let next = |last, now| next_session(last, now).0;
+        assert_eq!(next((0, 0, 0, 0), (0x1000, 7, 1)), 1, "the first");
+        assert_eq!(next((0x1000, 7, 1, 1), (0x1000, 7, 1)), 1);
+        assert_eq!(next((0x1000, 7, 1, 1), (0x2000, 7, 1)), 2, "object");
+        assert_eq!(next((0x1000, 7, 1, 1), (0x1000, 8, 1)), 2, "player");
+        assert_eq!(next((0x1000, 7, 1, 1), (0x1000, 7, 2)), 2, "world");
+    }
+
+    #[test]
+    fn a_player_read_a_step_after_the_ask_or_lost_meanwhile_keeps_the_session() {
+        assert_eq!(
+            next_session((0x1000, 0, 1, 1), (0x1000, 7, 1)),
+            (1, 7),
+            "first read"
+        );
+        assert_eq!(
+            next_session((0x1000, 7, 1, 1), (0x1000, 0, 1)),
+            (1, 7),
+            "not read this frame"
+        );
+        assert_eq!(
+            next_session((0x1000, 7, 1, 1), (0x1000, 0, 2)),
+            (2, 0),
+            "a new world forgets the player"
+        );
     }
 
     #[test]
