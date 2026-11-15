@@ -66,7 +66,6 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
     for (owner, target, reason) in owners {
         let id = named(target);
         if owner.is_loader() {
-            crate::engine::diag::part_off(&id, &format!("its hook could not be armed: {reason}"));
             loader.unarmed(target, &id, &format!("could not be armed: {reason}"));
         } else {
             loader.turn_off(
@@ -120,12 +119,19 @@ fn report_patches(
                      its hooks off until then",
                     patch.address
                 );
-                if patch.owner.is_loader() && !reported.contains(&patch.feature) {
-                    reported.push(patch.feature);
+                if let Some(feature) = patch.feature.filter(|_| patch.owner.is_loader())
+                    && !reported.contains(&feature.feature())
+                {
+                    reported.push(feature.feature());
                 }
             }
             Verdict::Skip(reason) => {
-                crate::engine::code::skipped(loader, patch, reason, &mut reported);
+                crate::engine::code::skipped(
+                    loader,
+                    patch,
+                    (crate::engine::code::SkipCause::Build, reason),
+                    &mut reported,
+                );
             }
         }
     }

@@ -301,6 +301,15 @@ impl Fuse {
         self.turn_off(&Off::fault(self.feature, &reason));
     }
 
+    /// Turns the feature off because `why`, a cause that is neither the
+    /// build's fault nor a panic, such as a library the game ships without
+    /// an interface: logged once without an error code and listed with `why`.
+    #[cfg(windows)]
+    #[cold]
+    pub(crate) fn report_off(&self, why: String) {
+        self.turn_off(&Off::reported(format!("{} off: {why}", self.feature), why));
+    }
+
     /// The feature named `feature`, one for the name, made the first time
     /// a link or a report names it. A cold lookup under a lock: hot paths
     /// hold their feature.

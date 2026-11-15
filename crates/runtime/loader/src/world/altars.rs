@@ -566,10 +566,18 @@ pub(crate) fn register(
     FILTERS.register(owner, callback, user)
 }
 
+/// Seals the sizers, openers and building filters mods registered, before
+/// any link.
+pub(crate) fn seal() {
+    let _sizers = SIZERS.seal();
+    let _openers = STATE.openers.seal();
+    let _filters = FILTERS.seal();
+}
+
 pub(crate) fn link(loader: &'static Loader) {
-    let controlled = !SIZERS.seal().is_empty();
+    let controlled = SIZERS.sealed().is_some_and(|sizers| !sizers.is_empty());
     link_seam(loader);
-    if STATE.openers.seal().is_empty() {
+    if STATE.openers.sealed().is_empty() {
         return;
     }
     if crate::engine::ecs::engine(loader).is_none() {
@@ -641,7 +649,7 @@ fn link_systems(loader: &Loader, entries: [Option<u64>; 2], upgrade_flags: HookF
 }
 
 fn link_seam(loader: &'static Loader) {
-    let filters = FILTERS.seal();
+    let filters = FILTERS.sealed().unwrap_or_default();
     let wanted = !filters.is_empty();
     if !wanted {
         return;

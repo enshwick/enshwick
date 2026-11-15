@@ -183,13 +183,18 @@ fn tile(edge_shift: u32, tile_shift: u32) -> Option<(usize, u32)> {
         .then(|| (1 << tile_shift, 1 << edge_shift))
 }
 
+/// Seals the mods that opened the fog, before any link.
+pub(crate) fn seal() {
+    let _openers = STATE.openers.seal();
+}
+
 /// Links the reveal on every client, for the uncovers its server asks for,
 /// and copies the fog there when a mod opened it.
 pub(crate) fn link(loader: &'static Loader) {
     if loader.side != Side::CLIENT {
         return;
     }
-    if !STATE.openers.seal().is_empty() {
+    if !STATE.openers.sealed().is_empty() {
         find_layout(loader);
     }
     link_at(

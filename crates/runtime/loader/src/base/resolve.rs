@@ -92,8 +92,8 @@ pub struct Skipped {
     /// The mod id; for a file refused before its manifest read, its folder
     /// in `mods/`.
     pub id: String,
-    /// Its version; empty for a file refused before its manifest read.
-    pub version: String,
+    /// Its version; none for a file refused before its manifest read.
+    pub version: Option<String>,
     /// The name players read, or the id when the manifest names none.
     pub label: String,
     /// Its file relative to the game's folder, so a player finds the copy
@@ -113,6 +113,16 @@ impl Skipped {
             Skip::Copy { id } => !loads(id),
             Skip::Refused { skip } => !skip.beside_a_running_mod(),
             _ => true,
+        }
+    }
+
+    /// Its id with its version after a space, or its id alone for a file
+    /// refused before its manifest read, as the console and the logs name it.
+    #[must_use]
+    pub fn named(&self) -> String {
+        match &self.version {
+            Some(version) => format!("{} {version}", self.id),
+            None => self.id.clone(),
         }
     }
 
@@ -383,7 +393,7 @@ mod tests {
     fn only_a_second_copy_of_a_mod_that_runs_does_not_count_as_off() {
         let skipped = |reason| Skipped {
             id: "you.safes".into(),
-            version: "1.0.0".into(),
+            version: Some("1.0.0".into()),
             label: "Safes".into(),
             file: "you.safes/you.safes.dll".into(),
             reason,

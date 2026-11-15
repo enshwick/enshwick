@@ -4,6 +4,8 @@
 //! `enshwick-compat` can tell which features a build lacks. Ids built at run
 //! time, such as `survivors.{name}`, only reach compat through these lists.
 
+use std::sync::LazyLock;
+
 use crate::engine::parts::{Part, Parts};
 
 /// The layers, lowest first: the engine, then the joins' own links, which
@@ -22,11 +24,15 @@ pub(crate) static LAYERS: &[(&str, &[&Part])] = &[
     ("packs", crate::packs::PARTS),
 ];
 
+/// Every part of the loader, gathered once for the process: each loader,
+/// the dry run's included, walks this one.
+pub(crate) static PARTS: LazyLock<Parts> = LazyLock::new(|| Parts::new(LAYERS));
+
 /// Each part of the loader that names build table ids, with them, by name:
 /// the loader's feature table.
 #[must_use]
 pub fn table_ids() -> Vec<(&'static str, &'static [&'static str])> {
-    Parts::new(LAYERS).table_ids().to_vec()
+    PARTS.table_ids().to_vec()
 }
 
 #[cfg(test)]
@@ -36,8 +42,8 @@ mod tests {
 
     use enshwick_gamedata::{self as tables, Table};
 
-    use super::{LAYERS, table_ids};
-    use crate::engine::parts::{Parts, Stage};
+    use super::{LAYERS, PARTS, table_ids};
+    use crate::engine::parts::Stage;
 
     /// Entries the tables pin that no part of the loader names yet.
     const UNNAMED: &[&str] = &[
@@ -111,7 +117,7 @@ mod tests {
 
     /// The path below `src` of the module of the part named `name`.
     fn module_of(name: &str) -> String {
-        let part = Parts::new(LAYERS)
+        let part = PARTS
             .iter()
             .find(|part| part.name == name)
             .unwrap_or_else(|| panic!("no part {name}"));
@@ -152,7 +158,7 @@ mod tests {
             })
             .map(|p: &PathBuf| {
                 let text = std::fs::read_to_string(p).unwrap();
-                match text.find("#[cfg(test)]\nmod tests") {
+                match text.find("#[cfg(test)]\nmod tests {") {
                     Some(at) => text[..at].to_owned(),
                     None => text,
                 }
@@ -248,7 +254,7 @@ mod tests {
     fn every_id_any_part_names_is_listed_by_some_part() {
         let (catalogue, listed) = (catalogue(), listed());
         // Parts without a list count too: one whose list went missing would pass the test above.
-        for part in Parts::new(LAYERS).iter() {
+        for part in PARTS.iter() {
             let missing: Vec<_> = named(&sources(part.name), &catalogue)
                 .into_iter()
                 .filter(|id| !listed.contains(id))
@@ -279,23 +285,49 @@ mod tests {
         }
     }
 
+    /// Every registry seals in the seal phase, before any link, so no link
+    /// sees an open registry whatever the order the parts link in.
+    #[test]
+    fn no_part_seals_a_registry_in_its_link() {
+        // shortcut: these parts still seal their own registries in their
+        // link; drop each from the list as its seals move to the seal phase.
+        const SEALING_IN_LINK: &[&str] = &[
+            "bases",
+            "controls",
+            "damage",
+            "item_actions",
+            "join_gate",
+            "label",
+            "survivors",
+        ];
+        let mut sealing = Vec::new();
+        for part in PARTS.iter().filter(|part| part.link.is_some()) {
+            let seals = sources(part.name).split("fn link").skip(1).any(|link| {
+                let body = link.split("\n}\n").next().unwrap_or(link);
+                body.contains(".seal()")
+            });
+            if seals {
+                sealing.push(part.name);
+            }
+        }
+        sealing.sort_unstable();
+        assert_eq!(sealing, SEALING_IN_LINK, "parts that seal in their link");
+    }
+
     #[test]
     fn the_layers_follow_the_order_of_domains_toml() {
-        let toml = include_str!("../../../internal/core/domains.toml");
-        let list = |key: &str, after: &str| -> Vec<String> {
-            let from = toml.find(after).unwrap_or_else(|| panic!("no {after}"));
-            let line = toml[from..]
-                .lines()
-                .find(|l| l.starts_with(key))
-                .unwrap_or_else(|| panic!("no {key} after {after}"));
-            line.split('"')
-                .skip(1)
-                .step_by(2)
-                .map(str::to_owned)
+        let domains: toml::Table = include_str!("../../../internal/core/domains.toml")
+            .parse()
+            .unwrap();
+        let names = |list: &toml::Value| -> Vec<String> {
+            list.as_array()
+                .unwrap()
+                .iter()
+                .map(|name| name.as_str().unwrap().to_owned())
                 .collect()
         };
-        let mut wanted = list("below = ", "[loader]");
-        wanted.extend(list("order = ", "order = "));
+        let mut wanted = names(&domains["loader"]["below"]);
+        wanted.extend(names(&domains["order"]));
         let layers: Vec<_> = LAYERS
             .iter()
             .map(|(name, _)| (*name).to_owned())
@@ -323,7 +355,7 @@ mod tests {
     /// Each phase of the joins, with what it calls in order: a fused call
     /// by its fuse's name, another by its part's.
     fn phases() -> String {
-        let parts = Parts::new(LAYERS);
+        let parts = &*PARTS;
         let named = |pick: fn(&crate::engine::parts::Part) -> bool| -> String {
             parts
                 .iter()
@@ -383,14 +415,14 @@ mod tests {
     /// Every forget runs after them and drops what the handlers queued.
     #[test]
     fn a_hosted_game_tells_mods_top_layer_first_before_any_part_forgets() {
-        let ending: Vec<_> = Parts::new(LAYERS)
+        let ending: Vec<_> = PARTS
             .iter()
             .rev()
             .filter(|part| part.end.is_some())
             .map(|part| part.name)
             .collect();
         assert_eq!(ending, ["windows", "progress", "inventory"]);
-        let both = Parts::new(LAYERS)
+        let both = PARTS
             .iter()
             .find(|part| part.end.is_some() && part.forget.is_some());
         assert!(both.is_none(), "{both:?} both tells and forgets");
@@ -400,7 +432,7 @@ mod tests {
     /// runs after it.
     #[test]
     fn a_step_reads_what_the_work_before_it_wrote() {
-        let parts = Parts::new(LAYERS);
+        let parts = &*PARTS;
         let at = |stage: Stage, feature: &str| {
             parts
                 .steps(stage)

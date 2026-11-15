@@ -233,11 +233,11 @@ pub(super) fn seal() {
 /// the build lacks and why, as [`Loader::fuse_off`] takes them.
 type OffFn<'a> = &'a dyn Fn(&'static Fuse, &str, &str);
 
-/// Seals the extensions and reads where the screen, the prompt and the
-/// hosts sit. What this build lacks is listed off when mods' frames, HUD
-/// items (`frames`) or extensions read it, else only logged.
+/// Reads where the screen, the prompt and the hosts sit. What this build
+/// lacks is listed off when mods' frames, HUD items (`frames`) or the
+/// extensions sealed before read it, else only logged.
 pub(super) fn link(loader: &Loader, frames: bool) {
-    let extensions = EXTENSIONS.seal();
+    let extensions = EXTENSIONS.sealed().unwrap_or_default();
     let used = frames || !extensions.is_empty();
     let off = |fuse: &'static Fuse, id: &str, reason: &str| {
         if used {

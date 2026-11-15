@@ -9,6 +9,7 @@ use enshwick_core::abi::{Event, PlayerData};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
+use crate::engine::part_order;
 
 /// One part of a layer: a module, with what the joins call in it.
 #[derive(Debug)]
@@ -40,14 +41,14 @@ pub(crate) struct Part {
     /// server's messages from now on.
     pub(crate) hello: Option<KeyCall>,
     /// A client starts hosting a game.
-    pub(crate) hosting: Option<fn(&'static Loader)>,
+    pub(crate) hosting: Option<Fused<fn(&'static Loader)>>,
     /// A client's hosted game ended: the part tells mods what goes with it
     /// (closed windows, unanswered requests), top layer first, before any
     /// part forgets, so what their handlers queue is forgotten too.
     pub(crate) end: Option<Fused<fn(&'static Loader)>>,
     /// A client's hosted game ended: the part forgets its server, after
     /// every part's `end`.
-    pub(crate) forget: Option<fn(&'static Loader)>,
+    pub(crate) forget: Option<Fused<fn(&'static Loader)>>,
     /// Follows the server's world through its loaded, saved and shutdown
     /// events, which [`Loader::emit`] hands it before the mods.
     pub(crate) world_event: Option<WorldCall>,
@@ -88,7 +89,7 @@ impl Part {
         else {
             panic!("no part {name} forgets anything");
         };
-        forget(loader);
+        (forget.run)(loader);
     }
 }
 
@@ -98,6 +99,15 @@ impl Part {
 pub(crate) struct Fused<F> {
     pub(crate) fuse: &'static Fuse,
     pub(crate) run: F,
+}
+
+impl<F: Copy> Fused<F> {
+    /// Hands the call to `call` under its fuse, as `site`: `None` while the
+    /// fuse is off or when the call panicked, which turns it off.
+    #[inline]
+    pub(crate) fn call<R>(&self, site: &str, call: impl FnOnce(F) -> R) -> Option<R> {
+        self.fuse.run(site, || call(self.run))
+    }
 }
 
 /// A call at a player's join or leave.
@@ -209,22 +219,14 @@ impl Parts {
     /// The parts of `layers`, given lowest first.
     pub(crate) fn new(layers: &'static [(&'static str, &'static [&'static Part])]) -> Self {
         let parts = || layers.iter().flat_map(|(_, parts)| parts.iter().copied());
-        let mut rows: Vec<_> = parts()
-            .filter(|part| !part.table_ids.is_empty())
-            .map(|part| (part.name, part.table_ids))
-            .collect();
-        rows.sort_unstable_by_key(|&(name, _)| name);
-        let stages = Stage::ALL.map(|stage| {
-            parts()
-                .flat_map(|part| part.steps)
-                .filter(|step| step.stage == stage)
-                .copied()
-                .collect()
-        });
         Self {
             layers,
-            rows: rows.into_boxed_slice(),
-            stages,
+            rows: part_order::feature_rows(parts().map(|part| (part.name, part.table_ids))),
+            stages: part_order::by_stage(Stage::ALL, || {
+                parts()
+                    .flat_map(|part| part.steps)
+                    .map(|step| (step.stage, *step))
+            }),
         }
     }
 
@@ -250,9 +252,7 @@ impl Parts {
     /// under its own fuse.
     pub(crate) fn world_event(&self, loader: &Loader, event: Event) {
         for fused in self.iter().filter_map(|part| part.world_event.as_ref()) {
-            let _ran = fused
-                .fuse
-                .run("a world event", || (fused.run)(loader, event));
+            let _ran = fused.call("a world event", |run| run(loader, event));
         }
     }
 
@@ -260,24 +260,28 @@ impl Parts {
     /// under its own fuse.
     pub(crate) fn hello(&self, loader: &'static Loader, key: u64) {
         for fused in self.iter().filter_map(|part| part.hello.as_ref()) {
-            let _ran = fused
-                .fuse
-                .run("a client's hello", || (fused.run)(loader, key));
+            let _ran = fused.call("a client's hello", |run| run(loader, key));
+        }
+    }
+
+    /// Tells every part that this client starts hosting a game, each under
+    /// its own fuse.
+    pub(crate) fn hosting(&self, loader: &'static Loader) {
+        for fused in self.iter().filter_map(|part| part.hosting.as_ref()) {
+            let _ran = fused.call("a hosted game's start", |run| run(loader));
         }
     }
 
     /// Ends a client's hosted game in the parts: every `end`, top layer
     /// first, so a window's close handler may still queue a request the
     /// inventory then answers; then every `forget`, which drops what the
-    /// handlers queued with the rest.
+    /// handlers queued with the rest. Each runs under its own fuse.
     pub(crate) fn end(&self, loader: &'static Loader) {
         for fused in self.iter().rev().filter_map(|part| part.end.as_ref()) {
-            let _ran = fused
-                .fuse
-                .run("a hosted game's end", || (fused.run)(loader));
+            let _ran = fused.call("a hosted game's end", |run| run(loader));
         }
-        for forget in self.iter().filter_map(|part| part.forget) {
-            forget(loader);
+        for fused in self.iter().filter_map(|part| part.forget.as_ref()) {
+            let _ran = fused.call("a hosted game's end", |run| run(loader));
         }
     }
 
@@ -320,14 +324,6 @@ mod tests {
     static LAYERS: &[(&str, &[&Part])] = &[("low", LOW), ("high", HIGH)];
 
     #[test]
-    fn the_feature_table_lists_the_parts_that_name_ids_by_name() {
-        let parts = Parts::new(LAYERS);
-        let names: Vec<_> = parts.table_ids().iter().map(|(n, _)| *n).collect();
-        assert_eq!(names, ["alpha", "zeta"]);
-        assert_eq!(parts.table_ids()[0].1, ["a.one", "a.two"]);
-    }
-
-    #[test]
     fn a_stage_runs_its_steps_lowest_layer_first() {
         let parts = Parts::new(LAYERS);
         let follow: Vec<_> = parts
@@ -347,6 +343,42 @@ mod tests {
     fn a_part_knows_its_module() {
         assert_eq!(LOW[0].module, concat!(module_path!(), "::low"));
         assert_eq!(part!("own").module, module_path!());
+    }
+
+    #[test]
+    fn a_part_whose_hosting_or_forget_panics_leaves_the_other_parts_running() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static RAN: AtomicU32 = AtomicU32::new(0);
+        static HOSTS: &[&Part] = &[
+            &Part {
+                hosting: Some(fused!("test hosting that breaks", |_| panic!("broken"))),
+                forget: Some(fused!("test forget that breaks", |_| panic!("broken"))),
+                ..part!("breaks", breaks)
+            },
+            &Part {
+                hosting: Some(fused!("test hosting after it", |_| RAN
+                    .fetch_add(1, Ordering::Relaxed))),
+                forget: Some(fused!("test forget after it", |_| RAN
+                    .fetch_add(10, Ordering::Relaxed))),
+                ..part!("after", after)
+            },
+        ];
+        static WITH_HOSTS: &[(&str, &[&Part])] = &[("hosts", HOSTS)];
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        let parts = Parts::new(WITH_HOSTS);
+        for _ in 0..2 {
+            parts.hosting(loader);
+            parts.end(loader);
+        }
+        assert_eq!(
+            RAN.load(Ordering::Relaxed),
+            22,
+            "the other part runs every time"
+        );
+        let broken = HOSTS[0];
+        assert!(broken.hosting.is_some_and(|h| h.fuse.is_off()));
+        assert!(broken.forget.is_some_and(|f| f.fuse.is_off()));
     }
 
     #[test]

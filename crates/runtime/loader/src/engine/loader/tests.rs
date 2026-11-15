@@ -37,9 +37,10 @@ fn a_registration_joins_until_the_loader_delivers_and_is_too_late_after() {
 #[test]
 fn a_panic_under_another_fuse_of_a_link_s_name_leaves_the_link_wired() {
     static EMBERS: Fuse = Fuse::new("test embers");
+    static TWIN: Fuse = Fuse::new("test embers");
     let loader = crate::start::tests::bare_loader();
     let target = Target::Found("ember.light", Some(0x7000));
-    assert!(loader.link_feature(EMBERS.feature(), target, &EMBER_NEXT, lit, HookFlags::NONE));
+    assert!(loader.link_fused(&EMBERS, target, &EMBER_NEXT, lit, HookFlags::NONE));
     let head: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
     {
         let mut chains = loader.chains.relock();
@@ -50,9 +51,9 @@ fn a_panic_under_another_fuse_of_a_link_s_name_leaves_the_link_wired() {
             chain.wire(|_| false);
         }
     }
-    EMBERS.blow("a test");
+    TWIN.blow("a test");
     loader.rewire();
-    assert!(!Fuse::named(EMBERS.feature()).is_off());
+    assert!(!EMBERS.is_off());
     assert_eq!(
         head.load(Ordering::Acquire),
         Next::<Lit>::address_of(lit),
@@ -62,11 +63,12 @@ fn a_panic_under_another_fuse_of_a_link_s_name_leaves_the_link_wired() {
 
 #[test]
 fn a_feature_whose_target_fails_to_arm_is_wired_past_on_its_other_targets() {
+    static LAMPS: Fuse = Fuse::new("test lamps");
     let loader = crate::start::tests::bare_loader();
-    let feature = "test lamps";
+    let feature = LAMPS.feature();
     let link = |id, at, next: &'static Next<Lit>| {
-        loader.link_feature(
-            feature,
+        loader.link_fused(
+            &LAMPS,
             Target::Found(id, Some(at)),
             next,
             lit,
@@ -88,7 +90,7 @@ fn a_feature_whose_target_fails_to_arm_is_wired_past_on_its_other_targets() {
     assert_eq!(head.load(Ordering::Acquire), Next::<Lit>::address_of(lit));
     loader.unarmed(0x6000, "lamp.glow", "could not be armed: a test");
     loader.rewire();
-    assert!(Fuse::named(feature).is_off());
+    assert!(LAMPS.is_off());
     assert_eq!(
         head.load(Ordering::Acquire),
         0xff,
@@ -100,10 +102,10 @@ fn a_feature_whose_target_fails_to_arm_is_wired_past_on_its_other_targets() {
 
 #[test]
 fn a_feature_that_turns_off_after_arming_is_wired_past_by_the_loader() {
+    static WICKS: Fuse = Fuse::new("test wicks");
     let loader = crate::start::tests::bare_loader();
-    let feature = "test wicks";
     let target = Target::Found("wick.light", Some(0x4000));
-    assert!(loader.link_feature(feature, target, &WICK_NEXT, lit, HookFlags::NONE));
+    assert!(loader.link_fused(&WICKS, target, &WICK_NEXT, lit, HookFlags::NONE));
     let head: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
     {
         let mut chains = loader.chains.relock();
@@ -115,7 +117,7 @@ fn a_feature_that_turns_off_after_arming_is_wired_past_by_the_loader() {
         }
     }
     assert_eq!(head.load(Ordering::Acquire), Next::<Lit>::address_of(lit));
-    Fuse::named(feature).blow("a test");
+    WICKS.blow("a test");
     loader.rewire();
     assert_eq!(
         head.load(Ordering::Acquire),
@@ -169,10 +171,11 @@ fn a_feature_whose_mid_hook_fails_to_arm_is_wholly_off_with_its_other_sites() {
 
 #[test]
 fn a_feature_whose_second_link_fails_is_wholly_off_and_its_first_target_never_armed() {
+    static LANTERNS: Fuse = Fuse::new("test lanterns");
     let loader = crate::start::tests::bare_loader();
-    let feature = "test lanterns";
+    let feature = LANTERNS.feature();
     let link = |id, at, next: &'static Next<Lit>| {
-        loader.link_feature(feature, Target::Found(id, at), next, lit, HookFlags::NONE)
+        loader.link_fused(&LANTERNS, Target::Found(id, at), next, lit, HookFlags::NONE)
     };
     assert!(link("lantern.light", Some(0x1000), &FIRST_NEXT));
     assert!(!link("lantern.glow", None, &SECOND_NEXT));
@@ -180,7 +183,7 @@ fn a_feature_whose_second_link_fails_is_wholly_off_and_its_first_target_never_ar
         !link("lantern.wick", Some(0x3000), &THIRD_NEXT),
         "a feature that is off links nothing more"
     );
-    assert!(Fuse::named(feature).is_off());
+    assert!(LANTERNS.is_off());
     let mut chains = loader.chains.relock();
     chains.seal();
     assert!(
@@ -278,7 +281,7 @@ static LAYERS: &[(&str, &[&crate::engine::parts::Part])] = &[("test", FOLLOWING)
 
 fn following_loader() -> Loader {
     let mut loader = crate::start::tests::bare_loader();
-    loader.parts = crate::engine::parts::Parts::new(LAYERS);
+    loader.parts = Box::leak(Box::new(crate::engine::parts::Parts::new(LAYERS)));
     loader
 }
 

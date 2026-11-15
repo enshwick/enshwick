@@ -34,6 +34,11 @@ impl Openers {
     pub(crate) fn seal(&self) -> &[ModIndex] {
         self.0.seal()
     }
+
+    /// The openers once sealed; none before the seal.
+    pub(crate) fn sealed(&self) -> &[ModIndex] {
+        self.0.sealed().unwrap_or_default()
+    }
 }
 
 #[cfg(test)]

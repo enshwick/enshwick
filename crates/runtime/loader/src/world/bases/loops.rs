@@ -385,7 +385,7 @@ impl Sites {
         self.getter
             .map(|(at, expected)| CodePatch {
                 owner: ModIndex::LOADER,
-                feature: super::past16::PAST_16,
+                feature: Some(&PAST16),
                 address: at,
                 expected: expected.into(),
                 replacement: jump_to((ours as *const ()).addr()).into(),

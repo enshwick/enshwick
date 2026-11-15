@@ -115,7 +115,7 @@ mod tests {
         assert_eq!(super::mods(&loader), "no mods loaded");
         loader.skipped.push(Skipped {
             id: "you.safes".into(),
-            version: "0.2.0".into(),
+            version: Some("0.2.0".into()),
             label: "Safes".into(),
             file: "you.safes/you.safes.dll".into(),
             reason: Skip::Missing {

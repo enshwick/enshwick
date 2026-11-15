@@ -75,7 +75,7 @@ pub struct DryMod {
     pub file: String,
     /// The mod id; empty when its manifest did not read.
     pub id: String,
-    /// The mod's version.
+    /// The mod's version; empty when its manifest did not read.
     pub version: String,
     /// Whether it started and stayed on.
     pub running: bool,
@@ -178,7 +178,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan, refused),
-        parts: crate::engine::parts::Parts::new(crate::parts::LAYERS),
+        parts: &crate::parts::PARTS,
     };
     let loader = crate::engine::loader::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
@@ -231,7 +231,7 @@ fn outcomes(
     mods.extend(loader.skipped.iter().map(|skipped| DryMod {
         file: skipped.file.clone(),
         id: skipped.id.clone(),
-        version: skipped.version.clone(),
+        version: skipped.version.clone().unwrap_or_default(),
         running: false,
         reason: format!("skipped: {}", skipped.reason),
     }));
@@ -263,7 +263,7 @@ mod tests {
         let mut loader = crate::start::tests::bare_loader();
         loader.skipped.push(Skipped {
             id: "you.safes".into(),
-            version: "0.2.0".into(),
+            version: Some("0.2.0".into()),
             label: "Safes".into(),
             file: "old/you.safes.dll".into(),
             reason: Skip::Copy {

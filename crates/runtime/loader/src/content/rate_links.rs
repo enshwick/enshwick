@@ -70,11 +70,15 @@ pub(crate) fn wanted(symbol: Symbol) -> bool {
         .any(|&(rate, symbols)| symbols.contains(&symbol) && RATES.declared(rate))
 }
 
-/// Seals the rates mods declared and links the functions they need; the
-/// comfort rate rides on the comfort link of [`crate::knowledge::progress`], which
-/// links after this.
-pub(crate) fn link(loader: &'static Loader) {
+/// Seals the rates mods declared, before any link asks which are.
+pub(crate) fn seal() {
     RATES.seal();
+}
+
+/// Links the functions the declared rates need; the comfort rate rides on
+/// the comfort link of [`crate::knowledge::progress`], which links after
+/// this.
+pub(crate) fn link(loader: &'static Loader) {
     let slot = SlotFields::reflect(&loader.reflection);
     let _first = LINKED.set(Linked {
         experience: experience_rates(|id| {

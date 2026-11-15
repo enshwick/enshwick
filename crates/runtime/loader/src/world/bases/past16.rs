@@ -239,7 +239,7 @@ fn size_patch(
     replacement[1..].copy_from_slice(&grown.to_le_bytes());
     Ok(CodePatch {
         owner: ModIndex::LOADER,
-        feature: PAST_16,
+        feature: Some(&PAST16),
         address: start + create.start + at,
         expected: expected.into(),
         replacement: replacement.into(),

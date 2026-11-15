@@ -40,6 +40,10 @@ name = "no_manifest"
 crate-type = ["cdylib"]
 
 [[example]]
+name = "bad_id"
+crate-type = ["cdylib"]
+
+[[example]]
 name = "imports"
 crate-type = ["cdylib"]
 
@@ -103,6 +107,23 @@ pub unsafe extern "system" fn enshwick_mod_init(_: *const HostApi, _: ModHandle)
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle) {}
 "#;
+
+/// A manifest that reads but does not parse: its id is not of the form mods
+/// take, which `declare_mod!` would refuse to compile. The fields it leaves
+/// zero are empty strings and lists.
+const BAD_ID_MANIFEST: &str = r#"{
+    use enshwick::abi::{Header, Manifest, Side, Str};
+    let manifest = Manifest {
+        header: Header::of::<Manifest>(),
+        id: Str::new("Lanterns"),
+        version: Str::new("0.1.0"),
+        side: Side::BOTH,
+        // SAFETY: a manifest of zeros is empty strings and lists, which the
+        // loader reads as absent.
+        ..unsafe { core::mem::zeroed() }
+    };
+    Box::leak(Box::new(manifest))
+}"#;
 
 /// The DLL the `imports` fixture links against, by name only; the tests
 /// place it where the search must not look.
@@ -194,6 +215,11 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
             RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
                 .replace("{query}", "core::ptr::null()"),
         ),
+        (
+            "bad_id",
+            RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
+                .replace("{query}", BAD_ID_MANIFEST),
+        ),
         ("imports", IMPORTS.replace("{dependency}", DEPENDENCY)),
     ];
     for (name, source) in sources {
@@ -275,6 +301,7 @@ fn fill_mods(built: &Path, mods: &Path) {
         ("half", "half/half.dll"),
         ("old_abi", "old-abi/old-abi.dll"),
         ("no_manifest", "no-manifest/no-manifest.dll"),
+        ("bad_id", "bad-id/bad-id.dll"),
         ("lockers", "top.dll"),
         ("lanterns", "enshwick/lanterns.dll"),
     ] {
@@ -316,6 +343,18 @@ fn assert_only_unloadable_files_unmapped(
     );
 }
 
+/// A DLL the discovery refused after loading it, such as one whose manifest
+/// does not parse, is unloaded before the discovery returns.
+fn assert_not_loaded(dll: &Path) {
+    let wide: Vec<u16> = std::os::windows::ffi::OsStrExt::encode_wide(dll.as_os_str())
+        .chain([0])
+        .collect();
+    // SAFETY: `wide` is a null-terminated wide path, read for the call.
+    let module =
+        unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(wide.as_ptr()) };
+    assert!(module.is_null(), "{} is still loaded", dll.display());
+}
+
 /// Every refused fixture reaches the screens and the status by its folder,
 /// with the line the log wrote for it, and the second lanterns file as the
 /// one skipped copy, the file the log `line` names.
@@ -324,7 +363,7 @@ fn assert_refused_reach_the_screens(
     lines: &[(Level, String)],
     line: &str,
 ) {
-    let [half, second, no_manifest, not_pe, old_abi, copy] = refused else {
+    let [half, second, no_manifest, not_pe, old_abi, bad_id, copy] = refused else {
         panic!("each refused file for the screens and the status: {refused:?}");
     };
     for (skipped, folder) in [
@@ -333,14 +372,15 @@ fn assert_refused_reach_the_screens(
         (no_manifest, "no-manifest"),
         (not_pe, "not-pe"),
         (old_abi, "old-abi"),
+        (bad_id, "bad-id"),
     ] {
         assert_eq!(
             (
                 skipped.id.as_str(),
                 skipped.label.as_str(),
-                skipped.version.as_str()
+                skipped.version.as_deref()
             ),
-            (folder, folder, ""),
+            (folder, folder, None),
             "{skipped:?}"
         );
         let crate::base::resolve::Skip::Refused { skip } = &skipped.reason else {
@@ -370,15 +410,30 @@ fn assert_refused_reach_the_screens(
         ),
         "{not_pe:?}"
     );
+    let crate::base::resolve::Skip::Refused {
+        skip: super::Skip::Manifest(reason),
+    } = &bad_id.reason
+    else {
+        panic!("refused for its manifest: {bad_id:?}");
+    };
+    assert_eq!(
+        reason,
+        &crate::base::manifest::ManifestError::BadId("Lanterns".into())
+    );
+    assert_eq!(
+        bad_id.reason.shown(),
+        crate::engine::texts::fill("mods.skipped.manifest", &[("reason", &reason.to_string())]),
+        "the Mods screen shows why"
+    );
     assert!(
         line.starts_with(&copy.file),
         "the copy the log names: {copy:?}"
     );
     assert_eq!(
-        (copy.id.as_str(), copy.version.as_str(), &copy.reason),
+        (copy.id.as_str(), copy.version.as_deref(), &copy.reason),
         (
             "fixture.lanterns",
-            "0.1.0",
+            Some("0.1.0"),
             &crate::base::resolve::Skip::Copy {
                 id: "fixture.lanterns".into()
             }
@@ -418,6 +473,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     drop(turn);
 
     assert_only_unloadable_files_unmapped(&mapped, &lines);
+    assert_not_loaded(&mods.join("bad-id").join("bad-id.dll"));
 
     let (found, candidates, others) = (all.libraries, all.candidates, all.others);
     let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();

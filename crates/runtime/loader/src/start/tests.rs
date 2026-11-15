@@ -122,7 +122,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
         skipped,
-        parts: Parts::new(crate::parts::LAYERS),
+        parts: &crate::parts::PARTS,
     };
     (loader, order)
 }
@@ -175,9 +175,9 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
         (
             skipped.id.as_str(),
             skipped.label.as_str(),
-            skipped.version.as_str()
+            skipped.version.as_deref()
         ),
-        ("you.safes", "you.safes", "1.0.0")
+        ("you.safes", "you.safes", Some("1.0.0"))
     );
     assert_eq!(
         skipped.reason,
@@ -208,7 +208,7 @@ fn the_status_summary_lists_a_mod_skipped_at_start_and_does_not_count_a_second_c
         crate::base::status::summary(&loader).skipped,
         [crate::engine::diag::SkippedMod {
             id: "you.safes".into(),
-            version: "1.0.0".into(),
+            version: Some("1.0.0".into()),
             file: "you.safes/you.safes.dll".into(),
             reason: "another copy of you.safes loads instead; delete this one".into(),
             shown: resolve::Skip::Copy {
@@ -237,7 +237,7 @@ fn the_off_names_and_count_follow_a_mod_that_turns_off() {
     let mut loader = loader;
     loader.skipped.push(resolve::Skipped {
         id: "you.map".into(),
-        version: "1.0.0".into(),
+        version: Some("1.0.0".into()),
         label: "Map".into(),
         file: "you.map/you.map.dll".into(),
         reason: resolve::Skip::Missing { id: "you.x".into() },

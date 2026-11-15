@@ -4,7 +4,9 @@ The loader runs inside the game and the dedicated server, so a flaw in it runs
 with their rights.
 
 Report a vulnerability privately through GitHub: the repository's **Security**
-tab, **Report a vulnerability**. Do not open a public issue for it.
+tab, **Report a vulnerability**. Mail to
+[security@enshwick.com](mailto:security@enshwick.com) works too. Do not open a
+public issue for it.
 
 In scope: the released loader and mods and the code in this repository, for
 example a way for a player or a crafted save to crash a server running Enshwick

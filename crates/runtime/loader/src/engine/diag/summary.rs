@@ -111,8 +111,8 @@ impl ModStatus {
 pub struct SkippedMod {
     /// The mod id.
     pub id: String,
-    /// Its version.
-    pub version: String,
+    /// Its version; none for a file refused before its manifest read.
+    pub version: Option<String>,
     /// Its file relative to the game's folder.
     pub file: String,
     /// Why it does not load, as the log says it.
@@ -303,10 +303,14 @@ impl Summary {
             m.render(&mut out);
         }
         for s in &self.skipped {
+            let version = s.version.as_deref().map(|v| format!(" {v}"));
             let _w = writeln!(
                 out,
-                "  {} {} skipped, {}: {}",
-                s.id, s.version, s.file, s.reason
+                "  {}{} skipped, {}: {}",
+                s.id,
+                version.unwrap_or_default(),
+                s.file,
+                s.reason
             );
         }
         for line in &self.others {

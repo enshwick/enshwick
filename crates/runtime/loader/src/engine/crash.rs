@@ -589,14 +589,13 @@ pub(crate) fn link(loader: &Loader) {
         "dbghelp.MiniDumpWriteDump",
         found.map(|f| f as *const () as u64),
     );
-    loader.link_feature(
-        "crash blame on crash dumps (MiniDumpWriteDump)",
-        target,
-        &DUMP_NEXT,
-        dump,
-        HookFlags::NONE,
-    );
+    // A link that fails has turned the feature off and said so.
+    let _linked = loader.link_fused(&DUMP_FUSE, target, &DUMP_NEXT, dump, HookFlags::NONE);
 }
+
+/// The report on the game's crash dumps, a loader feature.
+static DUMP_FUSE: crate::engine::fuse::Fuse =
+    crate::engine::fuse::Fuse::new("crash blame on crash dumps (MiniDumpWriteDump)");
 
 /// The address range of a loaded module, `None` when Windows does not say.
 pub(crate) fn range_of(module: HMODULE) -> Option<(usize, usize)> {

@@ -34,7 +34,9 @@ use crate::engine::parts::{Part, fused, part};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         link: Some(recipes::init),
-        forget: Some(|_| recipes::forget()),
+        forget: Some(fused!("recipes forgetting a hosted game", |_| {
+            recipes::forget();
+        })),
         ..part!("recipes", recipes)
     },
     &Part {
@@ -56,6 +58,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: rate_links::TABLE_IDS,
+        seal: Some(|_| rate_links::seal()),
         link: Some(rate_links::link),
         world_event: Some(fused!("recipe rates at world events", |_, event| {
             rate_links::world_event(event);
