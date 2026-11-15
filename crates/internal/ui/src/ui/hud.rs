@@ -167,7 +167,7 @@ impl LoadMethods for crate::BaseLoad {
                 host,
                 draw: Mutex::new(draw),
             },
-            |user| (host.api().ui_hud)(host.handle(), draw_hud::<F>, user),
+            |user| (host.api().ui_hud)(host.handle(), Some(draw_hud::<F>), user),
             "HUD callback",
         )
     }

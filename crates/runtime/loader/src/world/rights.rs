@@ -51,16 +51,16 @@ pub(crate) fn kept(zones: &[[[i64; 3]; 2]], corners: [[i64; 3]; 2]) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Permissions {
     /// `CanEditWorld`.
-    pub(crate) edit_world: u8,
+    pub(crate) edit_world: u32,
     /// `CanEditBase`.
-    pub(crate) edit_base: u8,
+    pub(crate) edit_base: u32,
 }
 
 impl Permissions {
     /// The masks for the bit indices `edit_world` and `edit_base`; `None`
-    /// for an index past the byte.
+    /// for an index past the bits.
     pub(crate) fn from_indices(edit_world: u64, edit_base: u64) -> Option<Self> {
-        let bit = |index: u64| u32::try_from(index).ok().and_then(|i| 1u8.checked_shl(i));
+        let bit = |index: u64| u32::try_from(index).ok().and_then(|i| 1u32.checked_shl(i));
         Some(Self {
             edit_world: bit(edit_world)?,
             edit_base: bit(edit_base)?,
@@ -149,7 +149,7 @@ pub(crate) trait Zones {
 /// then the building area and the strict no-build zones, in the loader's
 /// order.
 pub(crate) fn refusal(
-    mask: u8,
+    mask: u32,
     bits: Permissions,
     corners: [[i64; 3]; 2],
     zones: &mut impl Zones,
@@ -339,7 +339,7 @@ mod game {
         }
         let mask = crate::engine::world::players(loader)?
             .iter()
-            .find(|player| player.entity == check.player)
+            .find(|player| player.entity == check.character)
             .map_or(0, |player| player.permissions);
         let mut game = Game {
             zones: core::ptr::with_exposed_provenance(zones),
@@ -385,7 +385,7 @@ mod tests {
         edit_world: 1 << 3,
         edit_base: 1 << 2,
     };
-    const BOTH: u8 = BITS.edit_world | BITS.edit_base;
+    const BOTH: u32 = BITS.edit_world | BITS.edit_base;
 
     /// Fixed answers, with the questions asked counted.
     #[derive(Default)]
@@ -496,7 +496,7 @@ mod tests {
             ..Answers::default()
         };
         assert_eq!(
-            refusal(u8::MAX, BITS, CORNERS, &mut zones),
+            refusal(u32::MAX, BITS, CORNERS, &mut zones),
             BuildRights::INSIDE_STRICT_BUILD_INHIBITOR_ZONE
         );
     }
@@ -504,14 +504,14 @@ mod tests {
     #[test]
     fn permission_bits_come_from_their_indices() {
         assert_eq!(Permissions::from_indices(3, 2), Some(BITS));
-        assert_eq!(Permissions::from_indices(8, 2), None);
+        assert_eq!(Permissions::from_indices(32, 2), None);
         assert_eq!(Permissions::from_indices(u64::MAX, 2), None);
     }
 
     fn check(min: [f64; 3], max: [f64; 3]) -> BuildRights {
         BuildRights {
             header: Header::of::<BuildRights>(),
-            player: enshwick_core::Entity(2),
+            character: enshwick_core::Entity(2),
             refusal: 0,
             min,
             max,

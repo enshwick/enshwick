@@ -134,7 +134,9 @@ pub fn refresh_levels() {
     };
     MAX_LEVEL.store(own.log_level().0, Ordering::Relaxed);
     for (pack, kept) in PACK_LEVELS.made() {
-        kept.store(tagged_level((own.api().log_level)(pack)), Ordering::Relaxed);
+        let mut level = crate::abi::Level::INFO;
+        let _ = (own.api().log_level)(pack, &raw mut level);
+        kept.store(tagged_level(level), Ordering::Relaxed);
     }
 }
 

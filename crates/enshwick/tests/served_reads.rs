@@ -1,9 +1,11 @@
 //! A served read whose every patch fails reads a changed vanilla item as
-//! the archive has it and a new item as missing, and served reads keep no
-//! output of a patch built through the API.
+//! the archive has it and a new item as missing, and served reads and
+//! rebuilds free every buffer their patches took.
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use enshwick::abi::Status;
     use enshwick::content::{Guid, types};
     use enshwick::test::{FakeHost, Installed, OTHER_ITEM, SPARE_ITEM};
@@ -11,6 +13,9 @@ mod tests {
 
     /// An item the mod adds from `SPARE_ITEM`, whose build always fails.
     const NEW_ITEM: Guid = Guid::parse("5e7ead00-0000-4000-8000-000000000001");
+
+    /// How many times the patch of `OTHER_ITEM` ran.
+    static BUILDS: AtomicUsize = AtomicUsize::new(0);
 
     struct Failing;
 
@@ -20,7 +25,11 @@ mod tests {
             load.serve(spare, spare, |_| None)?;
             load.serve(types::ITEM_INFO.key(NEW_ITEM)?, spare, |_| None)?;
             let other = types::ITEM_INFO.key(OTHER_ITEM)?;
-            load.serve(other, other, |item| Some(item.to_vec()))?;
+            load.serve(other, other, |item| {
+                BUILDS.fetch_add(1, Ordering::Relaxed);
+                Some(item.to_vec())
+            })?;
+            load.allow_rebuild(other)?;
             Ok(Self)
         }
     }
@@ -51,14 +60,29 @@ mod tests {
     }
 
     #[test]
-    fn served_reads_keep_no_output_of_a_patch_the_api_built() {
+    fn served_reads_free_every_buffer_their_patches_took() {
         let loader = start();
         let host = enshwick::host().unwrap();
         let other = types::ITEM_INFO.key(OTHER_ITEM).unwrap();
         for _ in 0..10 {
             assert_eq!(host.served_resource(other).ok(), host.game_resource(other));
         }
-        assert_eq!(loader.kept_outputs(), 0, "each output was a lent buffer");
+        assert_eq!(loader.lent_buffers(), 0, "each read freed its output");
+    }
+
+    #[test]
+    fn a_rebuild_runs_the_patch_again_and_frees_the_output_it_built() {
+        let loader = start();
+        let other = types::ITEM_INFO.key(OTHER_ITEM).unwrap();
+        let before = BUILDS.load(Ordering::Relaxed);
+        for _ in 0..10 {
+            enshwick::content::rebuild(other).unwrap();
+        }
+        assert!(
+            BUILDS.load(Ordering::Relaxed) >= before + 10,
+            "each rebuild ran the patch"
+        );
+        assert_eq!(loader.lent_buffers(), 0, "each rebuild freed its output");
     }
 
     #[test]

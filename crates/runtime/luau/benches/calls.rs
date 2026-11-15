@@ -134,17 +134,18 @@ fn hit(total: f32) -> DamageCheck {
         target: enshwick::Entity(2),
         source: enshwick::Entity(0),
         attacker: enshwick::Entity(0),
-        amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
         total,
+        amount_count: 0,
+        amounts: core::ptr::null_mut(),
     }
 }
 
 /// The allocations `hits` hits of `total` make, after one warm hit.
 fn allocations(loader: &Installed, total: f32, hits: u32) -> u64 {
-    black_box(loader.damage(hit(total)));
+    black_box(loader.damage(hit(total), &mut []));
     let before = ALLOCATIONS.load(Ordering::Relaxed);
     for _ in 0..hits {
-        black_box(loader.damage(black_box(hit(total))));
+        black_box(loader.damage(black_box(hit(total)), &mut []));
     }
     ALLOCATIONS.load(Ordering::Relaxed) - before
 }
@@ -158,20 +159,20 @@ fn calls(c: &mut Criterion) {
     // SAFETY: both functions are the exports of this file's `declare_mod!(Bench)`.
     let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
     assert_eq!(status, Status::OK, "{:?}", loader.logs());
-    let warm = loader.damage(hit(40.0));
+    let warm = loader.damage(hit(40.0), &mut []);
     assert!((warm.total - 20.0).abs() < 1e-6, "{:?}", loader.logs());
 
     let made = allocations(&loader, 40.0, HITS);
     println!("luau_damage_filter: {made} allocations in {HITS} hits");
     c.bench_function("luau_damage_filter", |b| {
-        b.iter(|| loader.damage(black_box(hit(40.0))));
+        b.iter(|| loader.damage(black_box(hit(40.0)), &mut []));
     });
 
     let mut group = c.benchmark_group(format!("luau_call_x{CALLS}"));
     for (at, (kind, _)) in (1u8..).zip(KINDS) {
         let total = f32::from(at);
         let made = allocations(&loader, total, HITS / CALLS);
-        let after = loader.damage(hit(40.0));
+        let after = loader.damage(hit(40.0), &mut []);
         assert!(
             (after.total - 20.0).abs() < 1e-6,
             "{kind}: {:?}",
@@ -179,7 +180,7 @@ fn calls(c: &mut Criterion) {
         );
         println!("luau_call {kind}: {made} allocations in {HITS} calls");
         group.bench_function(kind, |b| {
-            b.iter(|| loader.damage(black_box(hit(total))));
+            b.iter(|| loader.damage(black_box(hit(total)), &mut []));
         });
     }
     group.finish();

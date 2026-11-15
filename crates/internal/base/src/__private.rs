@@ -218,7 +218,7 @@ impl Manifested {
         let manifest = Box::new(crate::abi::Manifest {
             points: crate::abi::Str::new(&text),
             exports: exports.as_ptr(),
-            export_count: exports.len(),
+            export_count: u32::try_from(exports.len()).unwrap_or(u32::MAX),
             ..*self.base
         });
         Built {
@@ -414,6 +414,23 @@ const fn author_names<const N: usize>(cargo: &'static str) -> ([crate::abi::Str;
 #[must_use]
 pub const fn author_count(cargo: &'static str) -> usize {
     author_names::<0>(cargo).1
+}
+
+/// `len` as the ABI's `u32` count; past `u32::MAX` it fails the build,
+/// since the manifest is a constant.
+///
+/// # Panics
+///
+/// When `len` passes `u32::MAX`.
+#[must_use]
+pub const fn count(len: usize) -> u32 {
+    assert!(
+        len <= u32::MAX as usize,
+        "a manifest list holds at most u32::MAX entries"
+    );
+    #[expect(clippy::cast_possible_truncation, reason = "checked just above")]
+    let count = len as u32;
+    count
 }
 
 /// The authors' names for the manifest.

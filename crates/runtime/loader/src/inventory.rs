@@ -11,10 +11,7 @@ pub(crate) mod drops;
 pub(crate) mod item_actions;
 #[cfg(windows)]
 pub(crate) mod item_data;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the client's interface lists items")
-)]
+#[cfg(windows)]
 pub(crate) mod item_names;
 pub mod item_records;
 #[cfg_attr(

@@ -28,7 +28,7 @@ mod tests {
         "#
     );
 
-    fn player(entity: u32, key: u64, permissions: u8) -> PlayerInfo {
+    fn player(entity: u32, key: u64, permissions: u32) -> PlayerInfo {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
@@ -36,7 +36,7 @@ mod tests {
             key: enshwick::PlayerKey::new(key),
             permissions,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 
@@ -77,7 +77,7 @@ mod tests {
         assert_eq!(loader.removed(), [7]);
 
         assert_eq!(
-            world.account_action(AccountAction::UnBan, enshwick::PlayerKey::new(7)),
+            world.account_action(AccountAction::Unban, enshwick::PlayerKey::new(7)),
             Ok(())
         );
         assert!(loader.banned().is_empty());
@@ -94,7 +94,7 @@ mod tests {
 
         assert_eq!(
             world.set_muted(enshwick::PlayerKey::new(7), true),
-            Err(WorldError::Missing)
+            Err(WorldError::Unavailable)
         );
         assert!(loader.muted().is_empty());
     }
@@ -150,8 +150,8 @@ mod tests {
         let world = *WORLD.get().unwrap();
         let key = enshwick::PlayerKey::new;
 
-        assert_eq!(world.set_muted(key(7), true), Err(WorldError::Missing));
-        assert_eq!(world.muted(key(7)), Err(WorldError::Missing));
+        assert_eq!(world.set_muted(key(7), true), Err(WorldError::Unavailable));
+        assert_eq!(world.muted(key(7)), Err(WorldError::Unavailable));
         assert!(loader.muted().is_empty());
     }
 
@@ -199,7 +199,7 @@ mod tests {
             Err(WorldError::Refused)
         );
         assert_eq!(
-            world.account_action(AccountAction::UnBan, enshwick::PlayerKey::new(7)),
+            world.account_action(AccountAction::Unban, enshwick::PlayerKey::new(7)),
             Ok(())
         );
         assert!(loader.banned().is_empty());

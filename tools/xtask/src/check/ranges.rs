@@ -131,8 +131,8 @@ mod tests {
             post = { id = "you.trading-post", version = ">=0.1, <1.0" }
 
             [package.metadata.enshwick.breaks]
-            market = { id = "old-market", version = "<0.2" }
-            other = "other"
+            market = { id = "you.old-market", version = "<0.2" }
+            other = "you.other"
         "#;
         assert_eq!(
             declared(text, "0.3.0"),
@@ -148,10 +148,10 @@ mod tests {
                     ),
                     (
                         "breaks".to_owned(),
-                        "old-market".to_owned(),
+                        "you.old-market".to_owned(),
                         "<0.2".to_owned()
                     ),
-                    ("breaks".to_owned(), "other".to_owned(), String::new()),
+                    ("breaks".to_owned(), "you.other".to_owned(), String::new()),
                 ],
             }]
         );

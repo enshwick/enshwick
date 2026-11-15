@@ -5,8 +5,8 @@ use enshwick_core::abi::Status;
 
 use crate::host::layer::guards::on_client;
 use crate::host::layer::{
-    Caller, Headed, HeadedInOut, HeadedList, HeadedOut, MaybeBuffer, Mod, Out, SizedListOut,
-    entries,
+    Callback, Caller, Headed, HeadedInOut, HeadedList, HeadedOut, MaybeBuffer, Mod, Out,
+    SizedListOut, entries,
 };
 
 entries! {
@@ -15,7 +15,7 @@ entries! {
         out.put(crate::actions::local_held::held()?)
     }
 
-    fn ui_frame(me as Mod, callback: api_frame::UiFrameFn, user: *mut core::ffi::c_void) -> Status {
+    fn ui_frame(me as Mod, callback as Callback<api_frame::UiFrameFn>, user: *mut core::ffi::c_void) -> Status {
         Ok(crate::ui::interface::register_frame(me.loader, me.index, callback, user)?)
     }
 
@@ -26,14 +26,14 @@ entries! {
         Ok(drawn?)
     }
 
-    fn ui_hud(me as Mod, callback: api_frame::UiFrameFn, user: *mut core::ffi::c_void) -> Status {
+    fn ui_hud(me as Mod, callback as Callback<api_frame::UiFrameFn>, user: *mut core::ffi::c_void) -> Status {
         Ok(crate::ui::interface::register_hud(me.loader, me.index, callback, user)?)
     }
 
     fn ui_extension(
         me as Mod,
         spec as Headed<api_frame::UiExtension>,
-        callback: api_frame::UiFrameFn,
+        callback as Callback<api_frame::UiFrameFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         // SAFETY: the mod's screen name stays alive and unchanged for this
@@ -45,7 +45,7 @@ entries! {
         // `register_extension` copies before it returns.
         let hosts = unsafe { spec.host_list() }.ok_or(Status::BAD_ARGS)?;
         Ok(crate::ui::interface::register_extension(
-            me.loader, me.index, screen, spec.edge, hosts, callback, user,
+            me.loader, me.index, screen, spec.edge, bytemuck::cast_slice(hosts), callback, user,
         )?)
     }
 
@@ -74,13 +74,13 @@ entries! {
     fn ui_dialog(
         me as Mod,
         dialog as Headed<api_frame::UiDialog>,
-        callback: api_frame::UiAnswerFn,
+        callback as Callback<api_frame::UiAnswerFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         Ok(crate::ui::interface::mod_dialog(me.loader, me.index, &dialog, callback, user)?)
     }
 
-    fn fog_open(me as Mod) -> Status {
+    fn request_fog(me as Mod) -> Status {
         Ok(crate::world::fog::open(me.loader, me.index)?)
     }
 

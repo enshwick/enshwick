@@ -33,7 +33,9 @@ pub use experience::{ExperienceBalanceValue, experience_values};
 
 mod names;
 
-pub use names::{VanillaItem, VanillaRecipe, item_by_display_name, items, recipes};
+pub use names::{
+    VanillaItem, VanillaRecipe, VanillaTemplate, item_by_display_name, items, recipes, templates,
+};
 
 /// Reads one resource of the game's archive.
 type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;

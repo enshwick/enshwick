@@ -21,12 +21,18 @@ the tested languages.
 The header is
 [`enshwick.h`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/include/enshwick.h),
 written from the same Rust types the loader uses and checked against the ABI's
-layout on every change. It also compiles as C++20. Each example writes one
-line to the log when it starts.
+layout on every change. It also compiles as C++20. It ends with a static
+assert for the size, alignment and offsets of every type. It sets its own
+packing with `#pragma pack`, so the packing your code sets, with `/Zp` or a
+pragma, cannot change its layout. It stops with an error on any target but 64-bit x86
+Windows. Each example writes one line to the log when it starts.
 
 ## Write the mod
 
-1. Copy `enshwick.h` next to your source file.
+1. Download `enshwick.h` from the
+   [release](https://github.com/enshwick/enshwick/releases) of the loader
+   your mod targets, and put it next to your source file. Each release
+   carries the header of its own ABI.
 2. Fill a static `EnshwickManifest`. Its `header` is the struct's size and the
    ABI version. The version is `ENSHWICK_ABI_MAJOR` and `ENSHWICK_ABI_MINOR`.
    A mod needs at least `id` and `version`. It needs `side` too.
@@ -48,8 +54,9 @@ Names follow one pattern:
 | `Status::OK`             | `EnshwickStatus_OK`  |
 | the type `HookSpec`      | `EnshwickHookSpec`   |
 | a constant: `MAX_ZONES`  | `ENSHWICK_MAX_ZONES` |
+| a field: `HostApi::log`  | `EnshwickHostApi.log` |
 
-Every comment in the header is the Rust item's documentation.
+Every comment in the header is the item's documentation, with the C names of this table.
 
 ## Build it
 
@@ -67,7 +74,9 @@ calls the C runtime links it as usual: with Visual Studio's `cl /LD`, `clang-cl`
 or [cargo-xwin](https://github.com/rust-cross/cargo-xwin)'s SDK off Windows.
 
 A C++ mod builds the same way with C++20, which allows the designated
-initializers the manifest uses:
+initializers the manifest uses. In C++, `EnshwickStr` points at `const char`.
+So `ENSHWICK_STR_INIT` needs no cast. A manifest declared `constinit` is in
+the DLL's data from the start, with no C++ runtime to set it up:
 
 ```sh
 clang++ --target=x86_64-pc-windows-msvc -std=c++20 -O2 -shared -fuse-ld=lld \

@@ -3,6 +3,7 @@
 //! at the boundary, and the reply when they name none.
 
 use crate::PlayerKey;
+use crate::abi::Status;
 use crate::content::Guid;
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
@@ -24,6 +25,8 @@ impl ReadArgsError {
             Self::TooLong { .. } => RefusedReason::TooLong,
             Self::NoItem { .. } => RefusedReason::UnknownItem,
             Self::SeveralItems { .. } => RefusedReason::SeveralItems,
+            Self::NoTemplate { .. } => RefusedReason::UnknownTemplate,
+            Self::SeveralTemplates { .. } => RefusedReason::SeveralTemplates,
         }
     }
 }
@@ -55,6 +58,13 @@ pub(super) enum ReadArgsError {
     /// Several items have the name.
     #[error("several items are named {name}")]
     SeveralItems { name: String },
+    /// No entity template the game knows has the name; `near` lists names
+    /// that look like it.
+    #[error("no template {name}")]
+    NoTemplate { name: String, near: Vec<String> },
+    /// Several templates have the name.
+    #[error("several templates are named {name}")]
+    SeveralTemplates { name: String },
 }
 
 /// A word of a console line: a run without white space, or a run between
@@ -148,6 +158,17 @@ impl Registry {
             ReadArgsError::SeveralItems { name } => {
                 self.say("actions.several_items", language, &[("name", name)])
             }
+            ReadArgsError::NoTemplate { name, near } if near.is_empty() => {
+                self.say("actions.no_template", language, &[("name", name)])
+            }
+            ReadArgsError::NoTemplate { name, near } => self.say(
+                "actions.no_template_near",
+                language,
+                &[("name", name), ("near", &near.join(", "))],
+            ),
+            ReadArgsError::SeveralTemplates { name } => {
+                self.say("actions.several_templates", language, &[("name", name)])
+            }
         }
     }
 
@@ -180,7 +201,7 @@ impl Registry {
     /// The values the `words` of `line` give the optional arguments
     /// `optional`, which fill in order: each word reads as its argument,
     /// and the arguments left without a word take their defaults. An
-    /// optional text or item, always the last, takes what is left of the
+    /// optional text, item or template, always the last, takes what is left of the
     /// line, starting at the first word that does not read as the argument
     /// before it. Without one a word that does not read, or one too many,
     /// is an error.
@@ -196,11 +217,7 @@ impl Registry {
             _ => (None, optional),
         };
         let default = |arg: &Arg| match arg.default.clone() {
-            Some(Value::Item(item)) if !self.knows_item(item) => Err(ReadArgsError::NoItem {
-                name: item.to_string(),
-                near: Vec::new(),
-            }),
-            Some(value) => Ok(value),
+            Some(value) => self.unknown_content(&value).map_or(Ok(value), Err),
             None => Err(ReadArgsError::Usage),
         };
         let mut values = Vec::with_capacity(optional.len());
@@ -226,10 +243,7 @@ impl Registry {
             }
         }
         match (text, run_of_line(line, rest)) {
-            (Some(arg), Some(typed)) if arg.kind == ArgView::ITEM => {
-                values.push(self.item_named(typed)?);
-            }
-            (Some(arg), Some(typed)) => values.push(Self::text_value(arg, typed)?),
+            (Some(arg), Some(typed)) => values.push(self.line_value(arg, typed)?),
             (Some(arg), None) => values.push(default(arg)?),
             (None, Some(_)) => return Err(ReadArgsError::Usage),
             (None, None) => {}
@@ -268,7 +282,7 @@ impl Registry {
         let args = &d.action.args;
         let required = args.iter().take_while(|arg| arg.default.is_none()).count();
         let (required, optional) = args.split_at(required);
-        // A last optional text or item takes the rest of the line itself,
+        // A last optional text, item or template takes the rest of the line itself,
         // so the arguments before it take one word each.
         let text_ends = optional.last().is_some_and(takes_line);
         let mut values = Vec::with_capacity(args.len());
@@ -277,7 +291,7 @@ impl Registry {
         for (i, arg) in required.iter().enumerate() {
             let takes_rest = i + 1 == required.len() && !text_ends;
             let value = match arg.kind {
-                ArgView::PLAYER | ArgView::TEXT | ArgView::ITEM => {
+                ArgView::PLAYER | ArgView::TEXT | ArgView::ITEM | ArgView::TEMPLATE => {
                     let taken = if takes_rest {
                         let (taken, given) = (1..=rest.len())
                             .find_map(|kept| {
@@ -295,10 +309,8 @@ impl Registry {
                     rest = if takes_rest { &[] } else { after };
                     if arg.kind == ArgView::PLAYER {
                         self.player_named(&joined(mine), &known)?
-                    } else if arg.kind == ArgView::ITEM {
-                        self.item_named(run_of_line(line, mine).ok_or_else(bad)?)?
                     } else {
-                        Self::text_value(arg, run_of_line(line, mine).ok_or_else(bad)?)?
+                        self.line_value(arg, run_of_line(line, mine).ok_or_else(bad)?)?
                     }
                 }
                 _ => {
@@ -356,6 +368,70 @@ impl Registry {
         }
     }
 
+    /// The template `text` names on the console: its GUID, a content id in
+    /// full, or a vanilla template's name. A GUID or content id of a
+    /// template the server's game does not know is refused under the text
+    /// typed.
+    pub(super) fn template_named(&self, text: &str) -> Result<Value, ReadArgsError> {
+        use crate::content::vanilla::VanillaError;
+
+        let unknown = |near| ReadArgsError::NoTemplate {
+            name: text.to_owned(),
+            near,
+        };
+        if let Some(template) = Guid::try_parse(text).or_else(|| Guid::try_named(text)) {
+            return if self.knows_template(template) {
+                Ok(Value::Template(template))
+            } else {
+                Err(unknown(Vec::new()))
+            };
+        }
+        let Some(vanilla) = crate::content::vanilla::Vanilla::game() else {
+            return Err(unknown(Vec::new()));
+        };
+        // shortcut: the first name read lists every template on this thread,
+        // about 139 ms on a dedicated server (26083076), once per process;
+        // read them off-thread at the first declared template argument if a
+        // console run ever has to stay within a frame.
+        match enshwick_content::__internal::template(vanilla, text) {
+            Ok(template) => Ok(Value::Template(template)),
+            Err(VanillaError::AmbiguousTemplate { .. }) => Err(ReadArgsError::SeveralTemplates {
+                name: text.to_owned(),
+            }),
+            Err(VanillaError::UnknownTemplate { near, .. }) => Err(unknown(near)),
+            Err(_) => Err(unknown(Vec::new())),
+        }
+    }
+
+    /// The value `typed`, the run of a line an argument that reads words as
+    /// a text does takes, gives `arg`: an item, a template or a text.
+    fn line_value(&self, arg: &Arg, typed: &str) -> Result<Value, ReadArgsError> {
+        match arg.kind {
+            ArgView::ITEM => self.item_named(typed),
+            ArgView::TEMPLATE => self.template_named(typed),
+            _ => Self::text_value(arg, typed),
+        }
+    }
+
+    /// Whether the server's game knows the template `template`, vanilla or
+    /// served by a mod. A template in the game's archive answers by its
+    /// length alone, so no mod's patch runs to validate an argument; only a
+    /// mod's new template is built to tell.
+    fn knows_template(&self, template: Guid) -> bool {
+        let Ok(key) = crate::content::types::TEMPLATE_RESOURCE.key(template) else {
+            return false;
+        };
+        let mut len = 0u32;
+        let archived = (self.host.api().resource_read)(
+            self.host.handle(),
+            &raw const key,
+            core::ptr::null_mut(),
+            0,
+            &raw mut len,
+        );
+        matches!(archived, Status::OK | Status::TOO_SMALL) || self.host.served_resource(key).is_ok()
+    }
+
     /// Whether the server's game knows `item` by this very GUID. The game
     /// keys items by [`Guid::fnv1a`], so a GUID that shares an item's key
     /// but is not that item is refused: a vanilla item's GUID is the one its
@@ -375,12 +451,22 @@ impl Registry {
         }
     }
 
-    /// The first item of `values` the server's game does not know.
-    fn unknown_item(&self, values: &[Value]) -> Option<Guid> {
-        values.iter().find_map(|value| match value {
-            Value::Item(item) if !self.knows_item(*item) => Some(*item),
+    /// The error of `value` when it names an item or a template the
+    /// server's game does not know.
+    fn unknown_content(&self, value: &Value) -> Option<ReadArgsError> {
+        match value {
+            Value::Item(item) if !self.knows_item(*item) => Some(ReadArgsError::NoItem {
+                name: item.to_string(),
+                near: Vec::new(),
+            }),
+            Value::Template(template) if !self.knows_template(*template) => {
+                Some(ReadArgsError::NoTemplate {
+                    name: template.to_string(),
+                    near: Vec::new(),
+                })
+            }
             _ => None,
-        })
+        }
     }
 
     /// `text` as the value of the text argument `arg`, or why it takes
@@ -447,8 +533,9 @@ impl Registry {
 
     /// Whether the interface's `values` fit `d`'s arguments, the one check
     /// of a value a client sent: their count and shape, each within its
-    /// argument, and every item one the server's game knows. A typed line's
-    /// values are read word by word against their arguments instead.
+    /// argument, and every item and template one the server's game knows. A
+    /// typed line's values are read word by word against their arguments
+    /// instead.
     pub(super) fn values_fit(&self, d: &Declared, values: &[Value]) -> Result<(), ReadArgsError> {
         let shape_fits = if d.action.on.is_some() {
             matches!(values, [Value::Player { .. }, Value::Toggle(_)])
@@ -459,13 +546,10 @@ impl Registry {
         if !shape_fits {
             return Err(ReadArgsError::Usage);
         }
-        match self.unknown_item(values) {
-            Some(item) => Err(ReadArgsError::NoItem {
-                name: item.to_string(),
-                near: Vec::new(),
-            }),
-            None => Ok(()),
-        }
+        values
+            .iter()
+            .find_map(|value| self.unknown_content(value))
+            .map_or(Ok(()), Err)
     }
 
     /// Fills in the players in `values`, which the interface sends by key,

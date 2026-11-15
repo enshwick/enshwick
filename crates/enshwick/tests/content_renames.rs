@@ -76,8 +76,8 @@ mod tests {
     fn a_second_declaration_or_a_rename_to_itself_is_refused() {
         let _loader = start();
         let onto_itself = ContentRename {
-            from: CHEST.0,
-            to: CHEST.0,
+            from: CHEST,
+            to: CHEST,
         };
         assert_eq!(rename_raw(&[onto_itself]), Status::REFUSED);
         assert_eq!(rename_raw(&[]), Status::REFUSED, "declared once at init");

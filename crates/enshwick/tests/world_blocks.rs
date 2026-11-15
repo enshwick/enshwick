@@ -38,7 +38,7 @@ mod tests {
     const WORLDER: u32 = 2;
     const GUEST: u32 = 4;
 
-    fn info(entity: u32, permissions: u8) -> PlayerInfo {
+    fn info(entity: u32, permissions: u32) -> PlayerInfo {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
@@ -46,7 +46,7 @@ mod tests {
             key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 
@@ -226,33 +226,6 @@ mod tests {
     }
 
     #[test]
-    fn a_commit_for_no_character_is_refused() {
-        let (loader, _world) = started();
-        let region = enshwick::abi::VoxelRegion {
-            header: Header::of::<enshwick::abi::VoxelRegion>(),
-            min: [200, 80, 200],
-            size: [4, 4, 4],
-        };
-        let op = enshwick::abi::TransactionOp {
-            kind: enshwick::abi::TransactionOp::ERASE,
-            reserved: 0,
-            data: (&raw const region).cast(),
-        };
-        let mut id = 0u64;
-        // SAFETY: `api` points at the fake's table, which lives for the
-        // process.
-        let api = unsafe { &*loader.api() };
-        let status = (api.transaction_commit_for)(
-            enshwick::abi::ModHandle(1),
-            Entity(0),
-            &raw const op,
-            1,
-            &raw mut id,
-        );
-        assert_eq!(status, Status::BAD_ARGS);
-    }
-
-    #[test]
     fn the_fake_refuses_voxels_whose_kind_is_not_their_material_s() {
         use enshwick::abi::{TransactionOp, Voxel as Raw, VoxelWrite};
 
@@ -281,7 +254,13 @@ mod tests {
                 data: (&raw const write).cast(),
             };
             let mut id = 0u64;
-            (api.transaction_commit)(enshwick::abi::ModHandle(1), &raw const op, 1, &raw mut id)
+            (api.transaction_commit)(
+                enshwick::abi::ModHandle(1),
+                Entity(0),
+                &raw const op,
+                1,
+                &raw mut id,
+            )
         };
         for good in [
             raw(Raw::AIR, 0, 0),

@@ -56,7 +56,7 @@ mod tests {
             key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 
@@ -199,6 +199,6 @@ mod tests {
         assert_eq!(handed, entity);
         assert_eq!(request.item, ItemId(0x2a));
         assert_eq!((request.count, request.level, request.rarity), (5, 3, 2));
-        assert_eq!(request.position, [1 << 32, 2 << 32, -(3 << 32)]);
+        assert_eq!(request.position, [1.0, 2.0, -3.0]);
     }
 }

@@ -13,7 +13,7 @@ export type AcceptOfferedInteractionEvent = {
 }
 
 --- What the game does to an account, as its account actions name it.
-export type AccountAction = "Kick" | "Ban" | "UnBan"
+export type AccountAction = "Kick" | "Ban" | "Unban"
 
 --- What a player does that a reward follows.
 export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | "Quest" | { Consume: number } | { Pickup: number }
@@ -35,7 +35,7 @@ export type ActionTarget = {
 }
 
 --- A value the player picked for an argument, in the order of `Action.arg`; a list hands the player and the switch.
-export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean } | { Text: string } | { Item: string }
+export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean } | { Text: string } | { Item: string } | { Template: string }
 
 --- One of the server's players: the account key, and the name as the server knows it.
 export type ActionValuePlayer = {
@@ -302,14 +302,6 @@ export type Block = {
 	material: number,
 }
 
---- A box of cells, by its lowest and highest corner.
-export type Bounds = {
-	--- The lowest corner.
-	min: {number},
-	--- The highest corner.
-	max: {number},
-}
-
 --- A buff an entity has, from `Buffs.of`.
 export type Buff = {
 	--- Its type.
@@ -353,14 +345,14 @@ export type BuildingData = {
 	--- The placed entity; for a removal, the entity as it was.
 	entity: number,
 	--- The acting player's character entity.
-	player: number,
+	character: number,
 	--- The item placed, which the entity keeps as its `UsedItem`; 0 for a removal.
 	item: number,
 	--- What happened: 0 placed, 1 picked up, 2 torn down.
 	kind: number,
 	--- 1 when undo or redo replayed the action.
 	replay: number,
-	--- The template GUID of the placed entity, in file order; zero for a removal.
+	--- The template GUID of the placed entity; zero for a removal.
 	template: string,
 	--- Where it was placed, in metres; zero for a removal.
 	position: vector,
@@ -390,11 +382,11 @@ export type BuildingTearDownEvent = {
 
 --- An object a player places, checked against the building zones it may reach into.
 export type BuildingZoneCheck = {
-	--- The building zones, half-open.
-	zones: {Bounds},
-	--- The object's box, both corners included.
-	object: Bounds,
-	--- How far an object reaches past a zone.
+	--- The building zones.
+	zones: {Extent},
+	--- The object's box.
+	object: Extent,
+	--- How far an object reaches past a zone, in metres.
 	margin: number,
 }
 
@@ -498,8 +490,6 @@ export type ChatLine = {
 
 --- The data of the `ChunkLoaded` and `ChunkUnloaded` events: a chunk of the world's entities, never of its terrain's voxels.
 export type ChunkData = {
-	--- The chunk's index in the world's grid: `z * width + x`.
-	index: number,
 	--- Its column, west to east from 0.
 	x: number,
 	--- Its row, from 0 along the other axis.
@@ -639,6 +629,12 @@ export type Damage = {
 	amount: (self: Damage, ty: DamageTypeNew) -> number,
 	--- Sets a hit's damage of type `ty`, as `Damage.set` does.
 	set: (self: Damage, ty: DamageTypeNew, amount: number) -> (),
+	--- How many damage types a hit carries, as `Damage.type_count` says.
+	type_count: (self: Damage) -> number,
+	--- A hit's damage of the type at `index`, from 0 in the game's order, as `Damage.amount_at` reads it.
+	amount_at: (self: Damage, index: number) -> number,
+	--- Sets a hit's damage of the type at `index`, as `Damage.set_at` does.
+	set_at: (self: Damage, index: number, amount: number) -> (),
 	--- The damage the health takes, as `Damage.total` sums it.
 	total: (self: Damage) -> number,
 	--- Scales the damage by `factor`, as `Damage.scale` does.
@@ -772,6 +768,14 @@ export type ExperienceBalanceValue = {
 
 --- The groups of experience sources the game's settings give one factor each, and so one rate each.
 export type ExperienceGroup = "Combat" | "Mining" | "ExplorationQuests"
+
+--- A box in the world in metres, by its lowest and highest corner.
+export type Extent = {
+	--- The lowest corner.
+	min: vector,
+	--- The highest corner.
+	max: vector,
+}
 
 --- A field of a writable component type, read and written as its kind.
 export type Field = {
@@ -1158,7 +1162,7 @@ export type ItemInfo = {
 	id: number,
 	--- How many fit one stack.
 	max_stack_size: number,
-	--- `ItemInfo` flags, see `ItemData`.
+	--- `ItemInfo` flags, see `ItemTypeInfo`.
 	flags: number,
 	--- The game's `ItemCategory`: 1 equipment (armour and rings), 2 weapons, 3 tools, and so on.
 	category: number,
@@ -1966,7 +1970,7 @@ export type PlayerData = {
 export type PlayerDeathData = {
 	--- The player's character; 0 when the account left in the same step. The name is enshwick's: the game's record holds the user instead.
 	entity: number,
-	--- What killed the player, the game's death cause: 0 a hit, 1 a fall, 2 the shroud, 3 suffocation.
+	--- What killed the player, numbered as the damage filter numbers its causes: `DamageCheck.IMPACT`, `DamageCheck.FALL_DAMAGE`, `DamageCheck.FOG`, `DamageCheck.DEADLY_FOG` or `DamageCheck.SUFFOCATED`, which is drowning; another number is a cause of a later game build.
 	cause: number,
 	--- The account, the same number in every session; the name is enshwick's for the game's account id hash.
 	key: string,
@@ -1974,10 +1978,6 @@ export type PlayerDeathData = {
 	position: vector,
 	--- For a hit, the template GUID of what dealt it, a creature's or an impact's; zero for other causes.
 	cause_guid: string,
-	--- 1 when the shroud was the deadly kind, which kills at once.
-	was_deadly_fog: number,
-	--- 1 when the player drowned.
-	drowned: number,
 	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `EntityDiedEvent` reads it; 0 for other causes, or when the history names none. The name is enshwick's.
 	killer_entity: number,
 }
@@ -1995,7 +1995,7 @@ export type Progress = {
 	experience_needed: number,
 }
 
---- What became of a level or experience write a mod asked for with `HostApi.progress_write`: the data of the `ProgressWritten` event. The name is enshwick's. ABI 11.25.
+--- What became of a level or experience write a mod asked for with `HostApi.progress_write`: the data of the `ProgressWritten` event. The name is enshwick's.
 export type ProgressWriteData = {
 	--- The player's character the write was for.
 	entity: number,
@@ -2243,7 +2243,7 @@ export type Refused = {
 }
 
 --- Why the platform refused a run of an action before its handler.
-export type RefusedReason = "UnknownAction" | "NoRight" | "Usage" | "UnknownPlayer" | "SeveralPlayers" | "PlayerGone" | "TooLong" | "UnknownItem" | "SeveralItems" | "CommandsOff" | "Rate" | "Bounds" | "Busy" | "OutOfReach"
+export type RefusedReason = "UnknownAction" | "NoRight" | "Usage" | "UnknownPlayer" | "SeveralPlayers" | "PlayerGone" | "TooLong" | "UnknownItem" | "SeveralItems" | "CommandsOff" | "Rate" | "Bounds" | "Busy" | "OutOfReach" | "UnknownTemplate" | "SeveralTemplates"
 
 --- A player's rename of an entity, for `Load.on_rename`.
 export type Rename = {
@@ -2814,7 +2814,7 @@ export type TerrainPageData = {
 	x: number,
 	--- Its row, from 0 along the voxels' z axis.
 	z: number,
-	--- Its side in metres, 128 on server 26430253: it spans `x * size` to `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size` along z, as `VoxelPos.to_metres` counts them, at every height.
+	--- Its side in metres, 128 on server 26430253: it spans `x * size` to `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size` along z, at every height.
 	size: number,
 }
 
@@ -2859,11 +2859,11 @@ export type TickData = {
 	--- Server steps since this handler's last call: 1 for an every-step handler and for a handler's first call.
 	elapsed_steps: string,
 	--- Wall time since this handler's last call in nanoseconds; for its first call, and for an every-step handler, the time since the step before. 0 on the loader's first step.
-	elapsed_nanos: string,
+	elapsed_ns: string,
 	--- The average time between server steps in nanoseconds, over about the last 16 steps; 0 until a step has been measured.
-	step_nanos: string,
+	step_ns: string,
 	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler, unless the loader's diagnostics time callbacks, and for about a second after they start, while the loader measures its clock.
-	cost_nanos: string,
+	cost_ns: string,
 	--- Which game the server steps, from 1: a dedicated server runs one, and a client counts one more for each game it hosts after the first.
 	game: string,
 }
@@ -2971,6 +2971,14 @@ export type VanillaRecipe = {
 	name: string,
 	--- The item it makes, whose name the game shows for the recipe; nil for a recipe that names none.
 	output: string?,
+}
+
+--- A vanilla entity template with its name, from `templates`.
+export type VanillaTemplate = {
+	--- The template.
+	guid: string,
+	--- Its name, as `template` takes it, such as `Enemy_Wildbeast_Wolf`.
+	name: string,
 }
 
 --- Where a request came from.
@@ -3111,7 +3119,7 @@ export type WorkshopSurvivor = {
 }
 
 --- Why the server's world refused a request.
-export type WorldError = "WrongThread" | "Gone" | "Missing" | "Refused" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp"
+export type WorldError = "WrongThread" | "Gone" | "Unavailable" | "Busy" | "Failed" | "Refused" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp"
 
 --- The mod's data for the world running now, saved beside it.
 export type WorldStore = {
@@ -3477,6 +3485,8 @@ declare enshwick: {
 		station: (name: string) -> Station,
 		--- The vanilla template named `name`.
 		template: (name: string) -> string,
+		--- Every vanilla template with its name, sorted by name.
+		templates: () -> {VanillaTemplate},
 		--- The vanilla enemy whose template is named `name`: its template, faction and arsenal.
 		enemy: (name: string) -> Enemy,
 		--- The vanilla experience values, each `{ value, source, gain }`, in the balancing table's order.
@@ -3635,7 +3645,7 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		resource_type: (id: string) -> ResourceType,
 	},
-	--- The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.
+	--- The server's world: players, accounts, entities, props, vitals and edits in transactions. Its props, build rights, captures and transactions are unstable: they may change in any release.
 	world: {
 		--- The connected player whose character is `entity`.
 		player: (entity: number) -> Player?,
@@ -3862,8 +3872,8 @@ declare enshwick: {
 		bases_of: (altars: {Altar}) -> {Base},
 		--- The limit of bases in force, as `base_limit` reads it.
 		base_limit: () -> BaseLimit?,
-		--- Sets the world's cap of bases, as `set_base_cap` does.
-		set_base_cap: (bases: number) -> (),
+		--- Sets the world's cap of bases, as `set_base_limit` does.
+		set_base_limit: (bases: number) -> (),
 		--- How the game groups altars into bases, as `grouping` reads it.
 		grouping: () -> Grouping?,
 		--- Flame Altars: their list, their bases, zones and limits.
@@ -3881,7 +3891,7 @@ declare enshwick: {
 		--- Lets the game group every listed altar zone into its bases, up to 32 altars a Flame level in 16 bases, refusing an altar that would start a 17th base; `false` when the platform does not recognise this build's code, and the game keeps its own. The loader's hooks go in together: when one cannot be armed, none does and the game keeps 16, which `base_limit` tells from `Mod.ready` on.
 		--- Only while the mod starts, at the top level of main.luau.
 		raise_base_limit: () -> boolean,
-		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_cap`. Unstable: needs the `unstable` feature and may change in any release.
+		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_limit`. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		request_base_limits: (zones: number, bases: number) -> boolean,
 		--- Adds a kind of Flame Altar, on the server and the client alike: a prop copied from the vanilla altar whose item is `item.like`, as `Load.add_prop` adds one, whose altars take the kind's zones through an altar zone filter of this mod, chained with other mods' filters in load order (see `Load.on_altar_zone`). `Altar.template` tells the kind's altars apart.
@@ -4174,6 +4184,8 @@ declare enshwick: {
 		text: (label: string, max_bytes: number) -> Arg,
 		--- One of the game's items, which the client lists by the names its game shows, as `Arg.item` makes it.
 		item: (label: string) -> Arg,
+		--- One of the game's entity templates, which the client lists by the names its game data gives them, as `Arg.template` makes it.
+		template: (label: string) -> Arg,
 		--- Whether `id` can name an action or a window, as `is_valid_id` says.
 		is_valid_id: (id: string) -> boolean,
 		--- What an action acts on, as `Subject.new` makes it.

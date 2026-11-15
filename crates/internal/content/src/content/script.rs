@@ -355,6 +355,16 @@ impl Content {
         vanilla::template(name)
     }
 
+    /// Every vanilla template with its name, sorted by name.
+    ///
+    /// # Errors
+    ///
+    /// As [`vanilla::templates`].
+    #[script]
+    pub fn templates(self) -> Result<Vec<vanilla::VanillaTemplate>, vanilla::VanillaError> {
+        vanilla::templates()
+    }
+
     /// The vanilla enemy whose template is named `name`: its template,
     /// faction and arsenal.
     ///

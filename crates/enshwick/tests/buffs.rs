@@ -46,7 +46,7 @@ mod tests {
             slot: BuffTypeInfo::BUFF,
             flags: BuffTypeInfo::SAVED,
             name: 99,
-            duration: 60_000_000_000,
+            duration_ns: 60_000_000_000,
         };
         loader.set_buffs(&[swift], &[Entity(2)]);
         let types = buffs.types();

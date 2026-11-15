@@ -38,7 +38,7 @@ mod tests {
             .type_hash("keen::ecs::CombatFlags", 6)
             .type_size("keen::ecs::CombatFlags", 8)
             .component(Entity(5), 6, &[0; 8])
-            .template(Entity(5), [5; 16])
+            .template(Entity(5), enshwick::content::Guid([5; 16]))
     }
 
     /// What destroy, `set_saved`, teleport and a component write answer for
@@ -61,9 +61,9 @@ mod tests {
     #[test]
     fn on_a_client_that_hosts_no_game_every_entity_call_is_missing_not_gone() {
         let answered = answers(world().side(Side::CLIENT), Entity(5));
-        assert_eq!(answered, [Err(WorldError::Missing); 4]);
+        assert_eq!(answered, [Err(WorldError::Unavailable); 4]);
         let unknown = answers(world().side(Side::CLIENT), Entity(9));
-        assert_eq!(unknown, [Err(WorldError::Missing); 4]);
+        assert_eq!(unknown, [Err(WorldError::Unavailable); 4]);
     }
 
     #[test]
@@ -78,7 +78,7 @@ mod tests {
         let answered = std::thread::spawn(move || world.set_saved(Entity(5), false))
             .join()
             .unwrap();
-        assert_eq!(answered, Err(WorldError::Missing));
+        assert_eq!(answered, Err(WorldError::Unavailable));
     }
 
     #[test]
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn a_build_without_the_entity_commands_is_missing_them_for_every_entity() {
         let answered = answers(world().without_entity_commands(), Entity(5));
-        assert_eq!(answered, [Err(WorldError::Missing); 4]);
+        assert_eq!(answered, [Err(WorldError::Unavailable); 4]);
         let gone = answers(world(), Entity(9));
         assert_eq!(gone, [Err(WorldError::Gone); 4]);
     }

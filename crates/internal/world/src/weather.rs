@@ -39,7 +39,8 @@ pub use phenomena::{NewPhenomenon, PhenomenonChange, PhenomenonId};
 
 use crate::Host;
 use crate::WorldError;
-use crate::abi::{Header, Status, WeatherFront};
+use crate::abi::{Header, Status, WeatherFront, WeatherSample};
+use crate::content::Guid;
 
 /// What the weather is at a place, as the game names it.
 ///
@@ -154,7 +155,7 @@ pub struct Front {
     /// one a mod added is the GUID its `PhenomenonId` holds; `None` when the
     /// loader does not tell.
     #[script(default)]
-    pub phenomenon: Option<crate::content::Guid>,
+    pub phenomenon: Option<Guid>,
 }
 
 /// The weather to start, for [`Weather::set`].
@@ -214,15 +215,20 @@ impl Weather {
     #[must_use]
     #[script]
     pub fn at(&self, position: [f64; 3]) -> Option<WeatherAt> {
-        let fixed = crate::ecs::fixed(position);
-        let mut out = [0.0f32; 4];
+        let mut out = WeatherSample {
+            header: Header::of::<WeatherSample>(),
+            clear: 0.0,
+            rain: 0.0,
+            snow: 0.0,
+            blizzard: 0.0,
+        };
         let status =
-            (self.host.api().weather_at)(self.host.handle(), &raw const fixed, &raw mut out);
+            (self.host.api().weather_at)(self.host.handle(), &raw const position, &raw mut out);
         (status == Status::OK).then_some(WeatherAt {
-            clear: out[0],
-            rain: out[1],
-            snow: out[2],
-            blizzard: out[3],
+            clear: out.clear,
+            rain: out.rain,
+            snow: out.snow,
+            blizzard: out.blizzard,
         })
     }
 
@@ -239,11 +245,11 @@ impl Weather {
             header: Header::of::<WeatherFront>(),
             layer: 0,
             effect: 0,
-            position: [0; 3],
+            position: [0.0; 3],
             radius: 0.0,
             reserved: 0,
-            remaining: 0,
-            phenomenon: [0; 16],
+            remaining_ns: 0,
+            phenomenon: Guid::NIL,
         };
         let mut fronts = vec![blank; 16];
         loop {
@@ -252,6 +258,7 @@ impl Weather {
             let status = (self.host.api().weather_fronts)(
                 self.host.handle(),
                 fronts.as_mut_ptr(),
+                u32::try_from(size_of::<WeatherFront>()).unwrap_or(u32::MAX),
                 capacity,
                 &raw mut count,
             );
@@ -275,14 +282,14 @@ impl Weather {
                     WeatherFront::BLIZZARD => WeatherPhenomenonEffect::Blizzard,
                     other => WeatherPhenomenonEffect::Other(other),
                 },
-                position: crate::ecs::metres(front.position),
+                position: front.position,
                 radius: front.radius,
-                remaining: Duration::from_nanos(u64::try_from(front.remaining).unwrap_or(0)),
+                remaining: Duration::from_nanos(u64::try_from(front.remaining_ns).unwrap_or(0)),
                 phenomenon: (front
                     .header
                     .covers(core::mem::offset_of!(WeatherFront, phenomenon) + 16)
-                    && front.phenomenon != [0; 16])
-                    .then_some(crate::content::Guid(front.phenomenon)),
+                    && front.phenomenon != Guid::NIL)
+                    .then_some(front.phenomenon),
             })
             .collect()
     }
@@ -301,7 +308,7 @@ impl Weather {
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] while no world runs or on a build without
+    /// [`WorldError::Unavailable`] while no world runs or on a build without
     /// weather.
     ///
     /// # Examples
@@ -440,7 +447,7 @@ mod tests {
             position: [0.0; 3],
             radius: 1.0,
             remaining: Duration::from_secs(remaining_secs),
-            phenomenon: Some(crate::content::Guid([phenomenon; 16])),
+            phenomenon: Some(Guid([phenomenon; 16])),
         }
     }
 

@@ -3,40 +3,47 @@
 use core::ffi::c_void;
 
 use crate::abi::{Entity, Header, ItemId};
+use crate::content::Guid;
 
 /// One operation of an inventory transaction, in [`InventoryRequest::ops`].
+///
+/// Frozen, with no header: [`InventoryRequest`] reads the operations as an
+/// array; a kind that needs more than these fields is a new entry.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick::Entity;
 /// use enshwick::abi::InventoryOp;
 ///
 /// // Everything from a chest (entity 40) to a player (entity 2).
 /// let op = InventoryOp {
 ///     kind: InventoryOp::MOVE_ALL,
-///     flags: 0,
-///     target: 40,
-///     other: 2,
-///     item: enshwick::ItemId::new(0),
-///     count: 0,
+///     target: Entity(40),
+///     other: Entity(2),
+///     ..InventoryOp::default()
 /// };
 /// assert_eq!(op.kind, 5);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct InventoryOp {
     /// What to do: one of the constants on this type.
     pub kind: u32,
-    /// [`InventoryOp::INCLUDE_SPECIAL`] or none.
+    /// [`InventoryOp::INCLUDE_SPECIAL`], [`InventoryOp::FILLED`] or none.
     pub flags: u32,
-    /// The inventory entity, or for slot operations the slot reference
-    /// (`sub-inventory | index << 32`).
-    pub target: u64,
-    /// The destination inventory entity of a move; for a give with
-    /// [`InventoryOp::FILLED`], the bits of the `f32` fill each new item's
-    /// meter starts with; 0 otherwise.
-    pub other: u64,
-    /// The item id of a give or take.
+    /// The inventory entity; for slot operations, the sub-inventory that
+    /// holds the slot.
+    pub target: Entity,
+    /// For slot operations, the slot's index in `target`; 0 otherwise.
+    pub slot: u32,
+    /// The destination inventory of a move, or the inventory a renew gives
+    /// to; entity 0 otherwise.
+    pub other: Entity,
+    /// The fill, 0 to 1, each new item's meter starts with, for a give with
+    /// [`InventoryOp::FILLED`] and for a renew; 0 otherwise.
+    pub fill: f32,
+    /// The item id of a give, take or renew.
     pub item: ItemId,
     /// How many to give or take; for a slot move, how many to move, 0 for the
     /// whole stack.
@@ -48,23 +55,22 @@ impl InventoryOp {
     pub const GIVE: u32 = 1;
     /// Removes `count` items `item` from the inventory `target`.
     pub const TAKE: u32 = 2;
-    /// Destroys the stack in slot `target`.
+    /// Destroys the stack in slot `slot` of `target`.
     pub const DESTROY_SLOT: u32 = 3;
-    /// Moves the stack in slot `target`, or `count` of it, into the inventory
-    /// `other`.
+    /// Moves the stack in slot `slot` of `target`, or `count` of it, into the
+    /// inventory `other`.
     pub const MOVE_SLOT: u32 = 4;
     /// Moves every stack of the inventory `target` into the inventory `other`.
     pub const MOVE_ALL: u32 = 5;
     /// For [`InventoryOp::MOVE_ALL`]: also move the source's action bar,
     /// equipment and locked slots.
     pub const INCLUDE_SPECIAL: u32 = 1;
-    /// Replaces the stack in slot `target` with `count` new items `item`,
-    /// each with its own entity, given to the inventory in `other`'s low
-    /// half and asked for the same slot; `other`'s high half holds the
-    /// `f32` fill of their meter.
+    /// Replaces the stack in slot `slot` of `target` with `count` new items
+    /// `item`, each with its own entity and its meter at `fill`, given to
+    /// the inventory `other` and asked for the same slot.
     pub const RENEW: u32 = 6;
-    /// For [`InventoryOp::GIVE`]: `other` holds the fill of each new item's
-    /// meter, the game's own per-item fuel fill.
+    /// For [`InventoryOp::GIVE`]: each new item's meter starts at `fill`,
+    /// the game's own per-item fuel fill.
     pub const FILLED: u32 = 2;
 }
 
@@ -76,7 +82,7 @@ impl InventoryOp {
 /// ```
 /// use enshwick::abi::{Header, InventoryOp, InventoryRequest};
 ///
-/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: 2, item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
+/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: enshwick::Entity(2), item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
 /// let request = InventoryRequest {
 ///     header: Header::of::<InventoryRequest>(),
 ///     flags: InventoryRequest::NOTIFY,
@@ -181,6 +187,9 @@ impl InventoryResult {
 /// Receives the [`InventoryResult`] of a request, on the server's game thread
 /// after a simulation step; it must not unwind.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in
@@ -193,22 +202,22 @@ pub type InventoryResultFn =
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, ItemData};
+/// use enshwick::abi::{Header, ItemTypeInfo};
 ///
-/// let sword = ItemData {
-///     header: Header::of::<ItemData>(),
+/// let sword = ItemTypeInfo {
+///     header: Header::of::<ItemTypeInfo>(),
 ///     id: enshwick::ItemId::new(7),
 ///     max_stack: 1,
 ///     category: 2,
 ///     rarity: 0,
-///     flags: ItemData::HAS_PIDE,
-///     placed_entity: [0; 16],
+///     flags: ItemTypeInfo::HAS_PIDE,
+///     placed_entity: enshwick::abi::Guid::NIL,
 /// };
-/// assert_ne!(sword.flags & ItemData::HAS_PIDE, 0);
+/// assert_ne!(sword.flags & ItemTypeInfo::HAS_PIDE, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
-pub struct ItemData {
+pub struct ItemTypeInfo {
     /// Size and version of this struct.
     pub header: Header,
     /// The item id: FNV-1a of the item's GUID.
@@ -220,17 +229,17 @@ pub struct ItemData {
     pub category: u8,
     /// The game's `ItemRarity` of the type.
     pub rarity: u8,
-    /// `ItemInfo` flags: [`ItemData::HAS_PIDE`] and the others on this type.
+    /// `ItemInfo` flags: [`ItemTypeInfo::HAS_PIDE`] and the others on this type.
     pub flags: u32,
     /// The GUID of the template a player places from the item, its
-    /// `equipment.placedEntity`, in file order; all zero for an item that
+    /// `equipment.placedEntity`; all zero for an item that
     /// places nothing.
-    pub placed_entity: [u8; 16],
+    pub placed_entity: Guid,
 }
 
-impl_headed!(ItemData);
+impl_headed!(ItemTypeInfo);
 
-impl ItemData {
+impl ItemTypeInfo {
     /// Each item has an entity of its own, with durability or a level.
     pub const HAS_PIDE: u32 = 1 << 1;
     /// The item is a container.

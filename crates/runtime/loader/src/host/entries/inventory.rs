@@ -1,13 +1,14 @@
 //! Host functions for the inventory domain: inventory requests, items,
 //! survivors, stats, affixes, damage, drops, spawns and teleports.
 
-use enshwick_core::abi::{DropRequest, ItemActionFn, Status, Str};
+use enshwick_core::abi::{DropRequest, ItemFilterFn, Status, Str};
 use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::conflicts::Mode;
 use crate::host::entries::base::services::exported;
 use crate::host::layer::{
-    Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded, Mod, Out, Text, entries,
+    Callback, Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded, Mod, Out, Text,
+    entries,
 };
 
 /// Where every inventory request's required fields end: its op count.
@@ -22,19 +23,19 @@ entries! {
 
     fn survivor_lookup(
         me as Mod,
-        callback: api_frame::SurvivorLookupFn,
+        callback as Callback<api_frame::SurvivorLookupFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
             "survivor lookup",
-            Mode::Exclusive,
+            Mode::FirstAnswers,
             crate::inventory::survivors::register_lookup(me.loader, me.index, callback, user),
         )
     }
 
     fn survivor_bed_check(
         me as Mod,
-        callback: api_frame::BedCheckFn,
+        callback as Callback<api_frame::BedCheckFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -46,7 +47,7 @@ entries! {
 
     fn summon_filter(
         me as Mod,
-        callback: api_frame::SummonFn,
+        callback as Callback<api_frame::SummonFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -56,14 +57,14 @@ entries! {
         )
     }
 
-    fn summoned(me as Mod, callback: api_frame::SummonFn, user: *mut core::ffi::c_void) -> Status {
+    fn summoned(me as Mod, callback as Callback<api_frame::SummonFilterFn>, user: *mut core::ffi::c_void) -> Status {
         Ok(crate::inventory::survivors::register_summoned(me.loader, me.index, callback, user)?)
     }
 
-    fn stat_open(
+    fn define_stat(
         me as Mod,
         id as Text,
-        def as MaybeHeaded<api_frame::StatDefData>,
+        def as MaybeHeaded<api_frame::StatSpec>,
         out as Out<api_frame::StatRef>,
     ) -> Status {
         let def = def
@@ -78,7 +79,7 @@ entries! {
     fn stat_info(
         _loader as Caller,
         stat: u32,
-        def as HeadedOut<api_frame::StatDefData>,
+        def as HeadedOut<api_frame::StatSpec>,
         id as Out<Str>,
     ) -> Status {
         let (data, name) = crate::inventory::stats::info(stat)?;
@@ -98,7 +99,7 @@ entries! {
     fn stat_buff(
         _loader as Caller,
         buff: u32,
-        [modifiers, count] as List<api_frame::StatModifierData>,
+        [modifiers, count] as List<api_frame::StatModifier>,
     ) -> Status {
         crate::inventory::stats::buff(buff, modifiers)?;
         Ok(())
@@ -106,7 +107,7 @@ entries! {
 
     fn stats_changed(
         me as Mod,
-        callback: api_frame::StatChangeFn,
+        callback as Callback<api_frame::StatChangeFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         crate::inventory::stats::on_changed(me.index, callback, user)?;
@@ -127,10 +128,10 @@ entries! {
         Ok(())
     }
 
-    fn affix_open(
+    fn define_affix(
         me as Mod,
         id as Text,
-        def as Headed<api_frame::AffixDefData>,
+        def as Headed<api_frame::AffixSpec>,
         out as Out<api_frame::StatRef>,
     ) -> Status {
         out.put(crate::inventory::stats::open_affix(me.loader, me.index, id, &def)?)
@@ -165,19 +166,19 @@ entries! {
 
     fn survivor_status(
         me as Mod,
-        callback: api_frame::SurvivorStatusFn,
+        callback as Callback<api_frame::SurvivorStatusFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
             "survivor status",
-            Mode::Exclusive,
+            Mode::FirstAnswers,
             crate::inventory::survivors::register_status(me.loader, me.index, callback, user),
         )
     }
 
     fn damage_filter(
         me as Mod,
-        callback: enshwick_core::abi::DamageFilterFn,
+        callback as Callback<enshwick_core::abi::DamageFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -187,20 +188,20 @@ entries! {
         )
     }
 
-    fn inventory_open(loader as Caller) -> Status {
+    fn request_inventory(loader as Caller) -> Status {
         Ok(crate::inventory::transactions::open(loader)?)
     }
 
     fn inventory_submit(
         me as Mod,
         request as HeadedSince<api_frame::InventoryRequest, SUBMIT_REQUIRED>,
-        done: api_frame::InventoryResultFn,
+        done as Callback<api_frame::InventoryResultFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         Ok(crate::inventory::transactions::submit(me.loader, me.index, &request, done, user)?)
     }
 
-    fn item_filter(me as Mod, callback: ItemActionFn, user: *mut core::ffi::c_void) -> Status {
+    fn item_filter(me as Mod, callback as Callback<ItemFilterFn>, user: *mut core::ffi::c_void) -> Status {
         me.claim(
             "item filter",
             Mode::Chained,

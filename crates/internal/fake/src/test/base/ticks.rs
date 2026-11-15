@@ -31,11 +31,14 @@ pub(crate) struct FakeTicks {
 
 pub(crate) extern "system" fn subscribe_tick(
     me: ModHandle,
-    every_nanos: u64,
-    callback: EventFn,
+    every_ns: u64,
+    callback: Option<EventFn>,
     user: *mut c_void,
     out: *mut TickHandle,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     if out.is_null() {
         return Status::BAD_ARGS;
     }
@@ -47,7 +50,7 @@ pub(crate) extern "system" fn subscribe_tick(
             return Status::REFUSED;
         };
         s.ticks.ticks.push(FakeTick {
-            every: every_nanos,
+            every: every_ns,
             handler: Registered::new(callback, user, me),
             last: None,
         });
@@ -58,7 +61,7 @@ pub(crate) extern "system" fn subscribe_tick(
 pub(crate) extern "system" fn set_tick_every(
     me: ModHandle,
     handle: TickHandle,
-    every_nanos: u64,
+    every_ns: u64,
 ) -> Status {
     with(Status::MISSING, |s| {
         let Some(tick) = s.ticks.ticks.get_mut(handle.0 as usize) else {
@@ -67,7 +70,7 @@ pub(crate) extern "system" fn set_tick_every(
         if tick.handler.owner() != Some(me) {
             return Status::REFUSED;
         }
-        tick.every = every_nanos;
+        tick.every = every_ns;
         Status::OK
     })
 }
@@ -106,8 +109,8 @@ impl Installed {
             ticks.nanos = ticks.nanos.saturating_add(elapsed);
             let (step, now) = (ticks.step, ticks.nanos);
             let tick = TickData {
-                elapsed_nanos: elapsed,
-                step_nanos: elapsed,
+                elapsed_ns: elapsed,
+                step_ns: elapsed,
                 game: ticks.games_ended + 1,
                 ..TickData::new(step)
             };
@@ -127,7 +130,7 @@ impl Installed {
                     t.last = Some((step, now));
                     let data = TickData {
                         elapsed_steps: steps,
-                        elapsed_nanos: nanos,
+                        elapsed_ns: nanos,
                         ..tick
                     };
                     (t.handler, data)

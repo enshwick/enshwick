@@ -1,4 +1,4 @@
-use crate::abi::{AffixDefData, AffixModifierData, Header, Str};
+use crate::abi::{AffixModifierSpec, AffixSpec, Header, Str};
 use crate::content::categories::ItemCategoryMask;
 use crate::stats::{Op, Stat};
 
@@ -248,10 +248,9 @@ impl AffixDef {
     /// assert_eq!(def.to_data(&ranges).modifier_count, 0);
     /// ```
     #[must_use]
-    pub fn to_data(&self, ranges: &[AffixModifierData]) -> AffixDefData {
-        AffixDefData {
-            header: Header::of::<AffixDefData>(),
-            text: Str::EMPTY,
+    pub fn to_data(&self, ranges: &[AffixModifierSpec]) -> AffixSpec {
+        AffixSpec {
+            header: Header::of::<AffixSpec>(),
             group: self.group.as_deref().map_or(Str::EMPTY, Str::new),
             modifiers: ranges.as_ptr(),
             modifier_count: u32::try_from(ranges.len()).unwrap_or(u32::MAX),
@@ -290,10 +289,7 @@ impl AffixDef {
     /// assert_eq!(back, Some(def));
     /// ```
     #[must_use]
-    pub unsafe fn from_data(
-        data: &AffixDefData,
-        stat: impl Fn(u32) -> Option<Stat>,
-    ) -> Option<Self> {
+    pub unsafe fn from_data(data: &AffixSpec, stat: impl Fn(u32) -> Option<Stat>) -> Option<Self> {
         // SAFETY: the caller keeps the group's bytes alive and unchanged for
         // the call, and `group` is copied before it returns.
         let group = unsafe { data.group.as_str() }?;
@@ -334,10 +330,10 @@ impl AffixDef {
     ///
     /// See [`AffixDef::to_data`].
     #[must_use]
-    pub fn to_ranges(&self) -> Vec<AffixModifierData> {
+    pub fn to_ranges(&self) -> Vec<AffixModifierSpec> {
         self.ranges
             .iter()
-            .map(|r| AffixModifierData {
+            .map(|r| AffixModifierSpec {
                 stat: r.stat.index(),
                 op: r.op.to_raw(),
                 reserved: [0; 3],

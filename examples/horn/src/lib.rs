@@ -91,7 +91,7 @@ mod tests {
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 3,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         ann.name[..3].copy_from_slice(b"Ann");
         let interact = [GameAction::ContextualAction];

@@ -1,4 +1,4 @@
-use crate::abi::{Header, StatDefData, StatRef, Str};
+use crate::abi::{Header, StatRef, StatSpec};
 use crate::content::items::StatFormat;
 
 /// What a stat's number is.
@@ -154,27 +154,26 @@ impl StatDef {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::StatDefData;
+    /// use enshwick::abi::StatSpec;
     /// use enshwick::stats::StatDef;
     ///
     /// let data = StatDef::multiplicative().to_data();
-    /// assert_eq!(data.ty, StatDefData::MULTIPLICATIVE);
+    /// assert_eq!(data.ty, StatSpec::MULTIPLICATIVE);
     /// ```
     #[must_use]
-    pub fn to_data(&self) -> StatDefData {
-        StatDefData {
-            header: Header::of::<StatDefData>(),
+    pub fn to_data(&self) -> StatSpec {
+        StatSpec {
+            header: Header::of::<StatSpec>(),
             ty: match self.ty {
-                StatType::Additive => StatDefData::ADDITIVE,
-                StatType::Multiplicative => StatDefData::MULTIPLICATIVE,
-                StatType::Flag => StatDefData::FLAG,
+                StatType::Additive => StatSpec::ADDITIVE,
+                StatType::Multiplicative => StatSpec::MULTIPLICATIVE,
+                StatType::Flag => StatSpec::FLAG,
             },
             format: enshwick_content::__internal::stat_format(self.format),
             reserved: 0,
             default: self.default,
             min: self.min,
             max: self.max,
-            text: Str::EMPTY,
         }
     }
 
@@ -190,16 +189,16 @@ impl StatDef {
     /// assert_eq!(StatDef::from_data(&haste.to_data()), Some(haste));
     /// ```
     #[must_use]
-    pub fn from_data(data: &StatDefData) -> Option<Self> {
+    pub fn from_data(data: &StatSpec) -> Option<Self> {
         let ty = match data.ty {
-            StatDefData::ADDITIVE => StatType::Additive,
-            StatDefData::MULTIPLICATIVE => StatType::Multiplicative,
-            StatDefData::FLAG => StatType::Flag,
+            StatSpec::ADDITIVE => StatType::Additive,
+            StatSpec::MULTIPLICATIVE => StatType::Multiplicative,
+            StatSpec::FLAG => StatType::Flag,
             _ => return None,
         };
         let format = match data.format {
-            StatDefData::SIGNED => StatFormat::Signed,
-            StatDefData::PERCENT => StatFormat::Percent,
+            StatSpec::SIGNED => StatFormat::Signed,
+            StatSpec::PERCENT => StatFormat::Percent,
             _ => StatFormat::Number,
         };
         let def = Self {

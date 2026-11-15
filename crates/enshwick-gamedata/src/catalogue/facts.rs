@@ -1447,6 +1447,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL,
         offset(GAME_SETTINGS, "flameLevelFogRemoval", UINT8),
     ),
+    (ids::DAMAGE_TYPE, Fact::Type(DAMAGE_TYPE)),
     (
         ids::DAMAGE_TYPE_PHYSICAL_CUT,
         enum_constant(DAMAGE_TYPE, "Physical_Cut"),

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 
+use enshwick_core::Entity;
+
 use super::checks::{fill, valid};
 use super::*;
 
@@ -234,7 +236,7 @@ fn a_build_without_the_checked_code_names_it_absent_not_moved() {
 fn operations_must_name_what_they_need() {
     let give = InventoryOp {
         kind: InventoryOp::GIVE,
-        target: 2,
+        target: Entity(2),
         item: enshwick_core::ItemId::new(7),
         count: 1,
         ..InventoryOp::default()
@@ -248,7 +250,7 @@ fn operations_must_name_what_they_need() {
     assert!(!valid(&InventoryOp { kind: 99, ..give }));
     let filled = InventoryOp {
         flags: InventoryOp::FILLED,
-        other: u64::from(0.5f32.to_bits()),
+        fill: 0.5f32,
         ..give
     };
     assert!(valid(&filled));
@@ -257,25 +259,29 @@ fn operations_must_name_what_they_need() {
         Some((0.5f32.to_le_bytes().to_vec(), 1))
     );
     assert!(!valid(&InventoryOp {
-        other: u64::from(1.5f32.to_bits()),
+        fill: 1.5f32,
         ..filled
     }));
     assert!(!valid(&InventoryOp {
-        other: u64::from(f32::NAN.to_bits()),
+        fill: f32::NAN,
         ..filled
     }));
     let all = InventoryOp {
         kind: InventoryOp::MOVE_ALL,
-        target: 40,
-        other: 2,
+        target: Entity(40),
+        other: Entity(2),
         ..InventoryOp::default()
     };
     assert!(valid(&all));
-    assert!(!valid(&InventoryOp { other: 40, ..all }));
+    assert!(!valid(&InventoryOp {
+        other: Entity(40),
+        ..all
+    }));
     let slot = InventoryOp {
         kind: InventoryOp::MOVE_SLOT,
-        target: 0x29 | 3 << 32,
-        other: 2,
+        target: Entity(0x29),
+        slot: 3,
+        other: Entity(2),
         count: 70_000,
         ..InventoryOp::default()
     };

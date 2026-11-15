@@ -5,7 +5,7 @@ use crate::__load::*;
 use std::sync::Mutex;
 
 use crate::Off;
-use crate::abi::ItemData;
+use crate::abi::ItemTypeInfo;
 use crate::engine_ids as ids;
 use crate::locks::Relock;
 
@@ -347,7 +347,7 @@ pub struct ItemLayout {
     pub name: usize,
     /// The tag of its description.
     pub description: usize,
-    /// Its flags, such as [`ItemData::HAS_PIDE`].
+    /// Its flags, such as [`ItemTypeInfo::HAS_PIDE`].
     pub flags: usize,
     /// The template of each item's own entity.
     pub pid_entity: usize,
@@ -451,10 +451,10 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
     }
     if let Some(meter) = item.meter {
         let flags = info.read_u32(layout.flags)?;
-        if flags & ItemData::HAS_PIDE != 0 || meter.max_fuel_charges == 0 {
+        if flags & ItemTypeInfo::HAS_PIDE != 0 || meter.max_fuel_charges == 0 {
             return None;
         }
-        let flags = flags | ItemData::HAS_PIDE | ItemData::USES_FUEL;
+        let flags = flags | ItemTypeInfo::HAS_PIDE | ItemTypeInfo::USES_FUEL;
         written &= info.write(layout.flags, &flags.to_le_bytes())
             && info.write(layout.pid_entity, &meter.template.guid().0);
     }
@@ -702,12 +702,12 @@ mod tests {
         let clone = Blob::new(&clone_item(&LAYOUT, &staff, &item, NEW).unwrap());
         assert_eq!(
             clone.read_u32(0x78),
-            Some(1 << 8 | ItemData::HAS_PIDE | ItemData::USES_FUEL)
+            Some(1 << 8 | ItemTypeInfo::HAS_PIDE | ItemTypeInfo::USES_FUEL)
         );
         assert_eq!(&clone.bytes()[0x80..0x90], &TEMPLATE.0);
 
         let mut sword = staff.clone();
-        sword[0x78..0x7c].copy_from_slice(&ItemData::HAS_PIDE.to_le_bytes());
+        sword[0x78..0x7c].copy_from_slice(&ItemTypeInfo::HAS_PIDE.to_le_bytes());
         assert!(
             clone_item(&LAYOUT, &sword, &item, NEW).is_none(),
             "a durability entity stays"

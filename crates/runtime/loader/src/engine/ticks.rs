@@ -315,8 +315,8 @@ impl Ticks {
             tick.last_nanos.store(now, Ordering::Relaxed);
             let data = TickData {
                 elapsed_steps: if last_step == 0 { 1 } else { step - last_step },
-                elapsed_nanos: last.map_or(time.elapsed, |last| now.saturating_sub(last)),
-                step_nanos: time.average,
+                elapsed_ns: last.map_or(time.elapsed, |last| now.saturating_sub(last)),
+                step_ns: time.average,
                 ..TickData::new(step)
             };
             call(tick, data);
@@ -363,7 +363,7 @@ mod tests {
                         tick.owner().get(),
                         data.step,
                         data.elapsed_steps,
-                        data.elapsed_nanos,
+                        data.elapsed_ns,
                     ));
                 },
             );

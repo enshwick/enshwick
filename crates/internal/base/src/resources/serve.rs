@@ -31,7 +31,7 @@ pub fn serve(
         host.handle(),
         &raw const key,
         &raw const base,
-        patch,
+        Some(patch),
         user.cast(),
     );
     if !status.is_ok() {
@@ -53,10 +53,10 @@ pub fn serve(
 /// - `out` and `out_len` are null or writable for one value each.
 unsafe extern "system" fn build(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     if user.is_null() || out.is_null() || out_len.is_null() {
         return Status::BAD_ARGS;
@@ -70,25 +70,22 @@ unsafe extern "system" fn build(
     } else {
         // SAFETY: `base` is not null in this branch, and the caller guarantees
         // `base_len` readable bytes there, unchanged for the call.
-        unsafe { core::slice::from_raw_parts(base, base_len) }
+        unsafe { core::slice::from_raw_parts(base, base_len as usize) }
     };
     let built = crate::host::caught(|| builder(base));
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
     };
-    let len = bytes.len();
-    // Bytes the loader cannot lend a buffer for stay for the process, as
-    // `ResourcePatchFn` allows: they are handed over, never read here again.
-    let at = lent(&bytes)
-        .unwrap_or_else(|| Box::into_raw(bytes.into_boxed_slice()).cast::<u8>())
-        .cast_const();
+    let Some((at, len)) = lent(&bytes) else {
+        return Status::REFUSED;
+    };
     // SAFETY: `out` is not null, as the early return ensures, and the caller
     // guarantees it is writable for one pointer.
     unsafe {
         out.write(at);
     }
     // SAFETY: `out_len` is not null, as the early return ensures, and the
-    // caller guarantees it is writable for one `usize`.
+    // caller guarantees it is writable for one `u32`.
     unsafe {
         out_len.write(len);
     }
@@ -97,8 +94,9 @@ unsafe extern "system" fn build(
 
 /// `bytes` copied into a buffer the loader lends the running patch
 /// ([`HostApi::resource_buffer`](crate::abi::HostApi::resource_buffer)),
-/// which it frees once no build reads them; `None` when it lends none.
-fn lent(bytes: &[u8]) -> Option<*mut u8> {
+/// which it frees once no build reads them, with their length; `None` when
+/// it lends none.
+fn lent(bytes: &[u8]) -> Option<(*mut u8, u32)> {
     let host = crate::host()?;
     let len = u32::try_from(bytes.len()).ok()?;
     let mut at = core::ptr::null_mut();
@@ -109,7 +107,7 @@ fn lent(bytes: &[u8]) -> Option<*mut u8> {
     // SAFETY: the loader lent `len` writable bytes at `at`, apart from
     // `bytes`, for the build that runs this patch.
     unsafe { at.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
-    Some(at)
+    Some((at, len))
 }
 
 #[cfg(test)]
@@ -117,17 +115,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_builder_reads_a_null_base_as_empty() {
-        let builder: Builder = Box::new(|base: &[u8]| Some(vec![u8::from(base.is_empty())]));
+    fn a_builder_reads_a_null_base_as_empty_and_refuses_without_a_lent_buffer() {
+        static SAW_EMPTY: core::sync::atomic::AtomicBool =
+            core::sync::atomic::AtomicBool::new(false);
+        let builder: Builder = Box::new(|base: &[u8]| {
+            SAW_EMPTY.store(base.is_empty(), core::sync::atomic::Ordering::Relaxed);
+            Some(vec![1])
+        });
         let user = core::ptr::from_ref(&builder).cast_mut().cast();
-        let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+        let (mut out, mut out_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: a null base, `user` points at the `Builder` alive in this
         // frame, and both out pointers are writable locals.
         let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };
-        assert_eq!(status, Status::OK);
-        // SAFETY: `build` returned OK and set `out` to the `out_len` bytes it
-        // leaked, which are never freed.
-        assert_eq!(unsafe { core::slice::from_raw_parts(out, out_len) }, [1]);
+        assert!(SAW_EMPTY.load(core::sync::atomic::Ordering::Relaxed));
+        assert_eq!(status, Status::REFUSED, "no host lends a buffer here");
+        assert!(out.is_null());
         // SAFETY: `user` points at the `Builder` alive in this frame, and
         // `build` refuses a null `out` before it writes anything.
         let refused = unsafe {
@@ -153,7 +155,7 @@ mod tests {
         }
         let builder: Builder = Box::new(|_: &[u8]| std::panic::panic_any(Bomb));
         let user = core::ptr::from_ref(&builder).cast_mut().cast();
-        let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+        let (mut out, mut out_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: a null base, `user` points at the `Builder` alive in this
         // frame, and both out pointers are writable locals.
         let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };

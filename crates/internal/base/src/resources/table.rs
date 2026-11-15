@@ -298,7 +298,7 @@ impl Host {
         );
         crate::load::ok(status, (), || "resource keys".to_owned())?;
         let empty = crate::abi::ResourceKey {
-            guid: [0; 16],
+            guid: crate::content::Guid::NIL,
             type_hash: 0,
             part: 0,
         };
@@ -362,8 +362,10 @@ impl Host {
             0,
             &raw mut len,
         );
-        if status != Status::BAD_ARGS {
-            return None;
+        match status {
+            Status::OK => return Some(Vec::new()),
+            Status::TOO_SMALL => {}
+            _ => return None,
         }
         let mut buffer = vec![0u8; usize::try_from(len).ok()?];
         let status = (api.content_read)(
@@ -452,12 +454,9 @@ impl Host {
     /// }
     /// ```
     pub fn game_value(&self, key: crate::abi::ResourceKey) -> Result<super::Value, Off> {
-        let bytes = self.game_resource(key).ok_or_else(|| {
-            Off::new(format!(
-                "resource {}: not in the archive",
-                crate::content::Guid(key.guid)
-            ))
-        })?;
+        let bytes = self
+            .game_resource(key)
+            .ok_or_else(|| Off::new(format!("resource {}: not in the archive", key.guid)))?;
         decode(key, &bytes)
     }
 
@@ -611,11 +610,9 @@ impl crate::BaseLoad {
 /// and returns its GUID.
 #[doc(hidden)]
 pub fn declare(host: Host, id: &str) -> Result<crate::content::Guid, Off> {
-    let mut out = [0u8; 16];
+    let mut out = crate::content::Guid::NIL;
     let status = (host.api().declare_content)(host.handle(), Str::new(id), &raw mut out);
-    crate::load::ok(status, crate::content::Guid(out), || {
-        format!("content id {id}")
-    })
+    crate::load::ok(status, out, || format!("content id {id}"))
 }
 
 #[cfg(test)]
@@ -625,7 +622,7 @@ mod tests {
     #[test]
     fn a_failed_patch_keeps_a_game_resource_and_serves_no_new_one() {
         let key = |guid: u8| ResourceKey {
-            guid: [guid; 16],
+            guid: crate::content::Guid([guid; 16]),
             type_hash: 7,
             part: 0,
         };

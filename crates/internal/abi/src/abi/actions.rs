@@ -2,6 +2,7 @@
 
 use core::ffi::c_void;
 
+use crate::abi::Metres;
 use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 
 /// A question the loader asks a mod about its player actions, registered
@@ -12,22 +13,15 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 /// ```
 /// use enshwick::abi::{ActionCall, Header, PlayerInfo, Str};
 ///
+/// let player = PlayerInfo::with_name(enshwick::Entity(2), enshwick::PlayerKey::new(7), 0, "Ann");
 /// let call = ActionCall {
 ///     header: Header::of::<ActionCall>(),
 ///     kind: ActionCall::RUN,
 ///     language: 0,
-///     player: PlayerInfo {
-///         header: Header::of::<PlayerInfo>(),
-///         slot: 0,
-///         entity: enshwick::Entity(2),
-///         key: enshwick::PlayerKey::new(7),
-///         permissions: 0,
-///         name_len: 0,
-///         name: [0; 64],
-///     },
+///     player: &raw const player,
 ///     action: Str::new("access"),
 ///     args: Str::new("p0000000000000009\tb1"),
-///     target: enshwick::abi::ActionTarget::NONE,
+///     target: core::ptr::null(),
 ///     reply: core::ptr::null_mut(),
 ///     word: Str::EMPTY,
 ///     via: 0,
@@ -40,7 +34,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
-    /// What the loader asks or tells: [`ActionCall::SHEET`],
+    /// What the loader asks or tells: [`ActionCall::ALLOWED`],
     /// [`ActionCall::RUN`], [`ActionCall::CONSOLE`], [`ActionCall::CHAT`],
     /// [`ActionCall::REMOTE`], [`ActionCall::WINDOW`] or
     /// [`ActionCall::WINDOW_CLOSED`]; a mod built for an older minor answers a kind
@@ -49,8 +43,8 @@ pub struct ActionCall {
     /// The language the player reads the game in, a
     /// [`Language`](../i18n/struct.Language.html) value.
     pub language: u32,
-    /// The player the question is about.
-    pub player: PlayerInfo,
+    /// The player the question is about, never null, valid for the call.
+    pub player: *const PlayerInfo,
     /// The action's id, for [`ActionCall::RUN`]; the console line after the
     /// mod's id, for [`ActionCall::CONSOLE`]; the line after the command's
     /// name or alias, for [`ActionCall::CHAT`] and [`ActionCall::REMOTE`];
@@ -59,43 +53,38 @@ pub struct ActionCall {
     /// The action's arguments in the sheet's encoding, for
     /// [`ActionCall::RUN`]; valid for the call.
     pub args: Str,
-    /// The object the player's client named for [`ActionCall::RUN`]; no
-    /// flags for none, and for the other questions.
-    pub target: ActionTarget,
-    /// Where the mod writes its answer to every question but
-    /// [`ActionCall::SHEET`], a zeroed [`ActionReply`] the loader owns for
-    /// the call; null for [`ActionCall::SHEET`]. A mod writes the whole
+    /// The object the player's client named for [`ActionCall::RUN`], valid
+    /// for the call; null for none and for the other questions.
+    pub target: *const ActionTarget,
+    /// Where the mod writes its answer to a run, a zeroed [`ActionReply`]
+    /// the loader owns for the call; null for [`ActionCall::ALLOWED`] and
+    /// [`ActionCall::WINDOW`], whose answer is the callback's `reply` text. A mod writes the whole
     /// struct, its header first, and leaves the callback's `reply` text
-    /// untouched. A mod built before ABI 11.19 does not see this field and
-    /// answers in the `reply` text as `1` or `0` and then the text, which
-    /// the loader reads only while this struct's header stays zero. ABI
-    /// 11.19.
+    /// untouched; a run whose reply it leaves zero is not done.
     pub reply: *mut ActionReply,
     /// The word that named the mod in the line, in lower case and without
     /// its `/`: the mod's command name, alias or id, for
     /// [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] and
     /// [`ActionCall::REMOTE`], so the mod's help names the command as the
     /// caller typed it; empty for the other questions. Valid for the call.
-    /// ABI 11.23.
     pub word: Str,
     /// For [`ActionCall::REFUSED`], the question the run would have been:
     /// [`ActionCall::RUN`], [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] or
-    /// [`ActionCall::REMOTE`]; 0 for the other questions. ABI 11.29.
+    /// [`ActionCall::REMOTE`]; 0 for the other questions.
     pub via: u32,
     /// For [`ActionCall::REFUSED`], why the loader refused the run, one of
-    /// the `ActionCall::REFUSED_` reasons; 0 for the other questions. ABI
-    /// 11.29.
+    /// the `ActionCall::REFUSED_` reasons; 0 for the other questions.
     pub reason: u32,
 }
 
-impl_headed!(ActionCall, born = 144);
+impl_headed!(ActionCall);
 
 /// A mod's answer to a run of one of its actions: whether it was done and
 /// the text the caller reads.
 ///
 /// A mod writes it through [`ActionCall::reply`], and
 /// [`HostApi::run_command`](super::HostApi::run_command) writes one for its
-/// caller. ABI 11.19.
+/// caller.
 ///
 /// # Examples
 ///
@@ -129,11 +118,11 @@ pub const WINDOW_SHOW: u32 = 0;
 pub const WINDOW_CLOSE: u32 = 1;
 /// The `close` value of
 /// [`HostApi::action_window`](super::HostApi::action_window) that updates a
-/// window only on the clients that still show it. ABI 11.23.
+/// window only on the clients that still show it.
 pub const WINDOW_UPDATE: u32 = 2;
 
 /// A running mod's command names, from
-/// [`HostApi::command_list`](super::HostApi::command_list). ABI 11.19.
+/// [`HostApi::command_list`](super::HostApi::command_list).
 ///
 /// # Examples
 ///
@@ -165,7 +154,7 @@ pub struct CommandInfo {
 impl_headed!(CommandInfo);
 
 /// The object a run of an action names, sent with
-/// [`HostApi::run_action_at`](super::HostApi::run_action_at) and handed back
+/// [`HostApi::run_action`](super::HostApi::run_action) and handed back
 /// to the mod in [`ActionCall::target`].
 ///
 /// # Examples
@@ -193,7 +182,7 @@ pub struct ActionTarget {
     /// [`ActionTarget::ENTITY`].
     pub entity: Entity,
     /// Where it stands, in metres, with [`ActionTarget::POSITION`].
-    pub position: [f64; 3],
+    pub position: Metres,
 }
 
 impl_headed!(ActionTarget);
@@ -270,9 +259,12 @@ impl ActionTarget {
 }
 
 impl ActionCall {
-    /// The actions the player may use now, as a sheet: the reply is the
-    /// sheet's text.
-    pub const SHEET: u32 = 0;
+    /// The ids of the actions the player may run now, as the mod's rights
+    /// for them say, one per line in the reply text; the mod looks for no
+    /// subject and builds no label or list. The loader asks it to choose
+    /// the carried controls a player gets, at their join and when their
+    /// permissions or the mod's rules change.
+    pub const ALLOWED: u32 = 0;
     /// The player runs an action from the interface: the answer, whether it
     /// was done and the text the player reads, goes in
     /// [`ActionCall::reply`].
@@ -286,19 +278,17 @@ impl ActionCall {
     /// A player runs a command from chat, `/<name> ` and then what
     /// [`ActionCall::CONSOLE`] takes in `action`; `player` is the sender and
     /// `language` the language they read. The reply is as for
-    /// [`ActionCall::RUN`]. ABI 11.19.
+    /// [`ActionCall::RUN`].
     pub const CHAT: u32 = 4;
     /// A mod runs a command line for a remote caller, such as a remote
     /// console, as [`ActionCall::CHAT`] does; `player` holds the caller's
-    /// label as its name, its permission bits, key 0 and no character. ABI
-    /// 11.19.
+    /// label as its name, its permission bits, key 0 and no character.
     pub const REMOTE: u32 = 5;
     /// The window of the calling mod's that `action` names, as `player`
     /// sees it in `language`, after
     /// [`HostApi::action_window`](super::HostApi::action_window) showed it:
     /// the reply is the window's text, empty when the mod keeps no such
-    /// window for them or the player may not run an action it names. ABI
-    /// 11.22.
+    /// window for them or the player may not run an action it names.
     pub const WINDOW: u32 = 6;
     /// The client of the player whose account key `player` holds closed
     /// the calling mod's window `action`, let it go for a newer one, or
@@ -306,14 +296,14 @@ impl ActionCall {
     /// [`ActionCall::WINDOW`]; or, with an empty `action`, that
     /// player left, and holds none of the mod's windows any more. The mod
     /// forgets what it kept for them. `player` holds the account key alone:
-    /// no character, name or permission. No reply is read. ABI 11.23.
+    /// no character, name or permission. No reply is read.
     pub const WINDOW_CLOSED: u32 = 7;
     /// The loader refused a run of one of the mod's actions before asking
     /// the mod, and answered the caller itself: `via` names the question the
     /// run would have been, `reason` why, and `action`, `args` and `word`
     /// hold what that question would have held. `player` is the caller, or
     /// the account key alone for one no longer in the world. No reply is
-    /// read. ABI 11.29.
+    /// read.
     pub const REFUSED: u32 = 8;
     /// [`ActionCall::reason`]: the caller is over the loader's rate of runs.
     pub const REFUSED_RATE: u32 = 1;
@@ -332,6 +322,11 @@ impl ActionCall {
 /// call, the pointer given at registration and where to write the reply,
 /// which stays valid until the callback runs again.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the server's game thread for a player, and on the thread that runs
+/// the line for the console or a remote caller.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in `Load::actions`, behind the `unstable` feature.
@@ -341,6 +336,11 @@ pub type ActionFn =
 /// A mod's status source: the pointer given at registration and where to
 /// write the mod's lines for the loader's status summary. The text stays
 /// valid until the source runs again; empty for none.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread that asks for the loader's status summary, such as the
+/// one running a console line.
 ///
 /// # Examples
 ///
@@ -353,24 +353,15 @@ pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, PlayerInfo, RenameCall, Str};
+/// use enshwick::abi::{Header, RenameCall, Str};
 ///
 /// let call = RenameCall {
 ///     header: Header::of::<RenameCall>(),
 ///     entity: enshwick::Entity(4096),
-///     known: 0,
-///     player: PlayerInfo {
-///         header: Header::of::<PlayerInfo>(),
-///         slot: 0,
-///         entity: enshwick::Entity(0),
-///         key: enshwick::PlayerKey::new(0),
-///         permissions: 0,
-///         name_len: 0,
-///         name: [0; 64],
-///     },
+///     player: core::ptr::null(),
 ///     text: Str::new("Tools"),
 /// };
-/// assert_eq!(call.known, 0);
+/// assert!(call.player.is_null());
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -379,11 +370,9 @@ pub struct RenameCall {
     pub header: Header,
     /// The entity being renamed.
     pub entity: Entity,
-    /// 1 when `player` holds the renaming player, 0 when the loader could
+    /// The renaming player, valid for the call; null when the loader could
     /// not tell who sent the rename.
-    pub known: u8,
-    /// The renaming player, when `known` is 1.
-    pub player: PlayerInfo,
+    pub player: *const PlayerInfo,
     /// The new name as the client sent it; valid for the call.
     pub text: Str,
 }
@@ -391,9 +380,14 @@ pub struct RenameCall {
 impl_headed!(RenameCall);
 
 /// A mod's rename filter: the call and the pointer given at registration;
-/// returns 1 to let the rename through, 0 to refuse it.
+/// returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse the rename, else [`FILTER_PASS`](super::FILTER_PASS).
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread the game changes the name on.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in `Load::on_rename`, behind the `unstable` feature.
-pub type RenameCallFn = unsafe extern "system" fn(call: *const RenameCall, user: *mut c_void) -> u8;
+pub type RenameFilterFn =
+    unsafe extern "system" fn(call: *const RenameCall, user: *mut c_void) -> u8;

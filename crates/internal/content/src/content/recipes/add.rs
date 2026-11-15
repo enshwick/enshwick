@@ -37,8 +37,11 @@ pub fn workshop_limit() -> usize {
     let Some(host) = crate::host() else {
         return WORKSHOP_RECIPES;
     };
-    let api = host.api();
-    match (api.workshop_recipes)() {
+    let mut limit = 0;
+    if !(host.api().workshop_recipes)(host.handle(), &raw mut limit).is_ok() {
+        return WORKSHOP_RECIPES;
+    }
+    match limit {
         u32::MAX => usize::MAX,
         limit => usize::try_from(limit).unwrap_or(WORKSHOP_RECIPES),
     }

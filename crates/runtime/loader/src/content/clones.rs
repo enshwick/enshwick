@@ -47,18 +47,18 @@ impl Clones {
                 types::ITEM_INFO => &mut self.items,
                 _ => continue,
             };
-            let vanilla = Guid(base.guid).to_string();
-            let previous = list.insert(Guid(key.guid).to_string(), vanilla.clone());
+            let vanilla = base.guid.to_string();
+            let previous = list.insert(key.guid.to_string(), vanilla.clone());
             changed |= previous.as_ref() != Some(&vanilla);
         }
         changed
     }
 
-    /// The template clones: clone GUID to vanilla GUID, in memory order.
-    pub(crate) fn template_aliases(&self) -> FxHashMap<[u8; 16], [u8; 16]> {
+    /// The template clones: clone GUID to vanilla GUID.
+    pub(crate) fn template_aliases(&self) -> FxHashMap<Guid, Guid> {
         self.templates
             .iter()
-            .filter_map(|(clone, vanilla)| Some((guid(clone)?.0, guid(vanilla)?.0)))
+            .filter_map(|(clone, vanilla)| Some((guid(clone)?, guid(vanilla)?)))
             .collect()
     }
 }
@@ -76,8 +76,8 @@ fn guid(text: &str) -> Option<Guid> {
 }
 
 /// The cloned items of the record in `data_dir`: item GUID and vanilla
-/// GUID, in memory order; none without a record.
-pub(crate) fn items(data_dir: &Path) -> Vec<([u8; 16], [u8; 16])> {
+/// GUID; none without a record.
+pub(crate) fn items(data_dir: &Path) -> Vec<(Guid, Guid)> {
     std::fs::read_to_string(data_dir.join(FILE))
         .ok()
         .and_then(|text| toml::from_str::<Clones>(&text).ok())
@@ -85,7 +85,7 @@ pub(crate) fn items(data_dir: &Path) -> Vec<([u8; 16], [u8; 16])> {
             clones
                 .items
                 .iter()
-                .filter_map(|(item, vanilla)| Some((guid(item)?.0, guid(vanilla)?.0)))
+                .filter_map(|(item, vanilla)| Some((guid(item)?, guid(vanilla)?)))
                 .collect()
         })
         .unwrap_or_default()
@@ -96,7 +96,7 @@ pub(crate) fn items(data_dir: &Path) -> Vec<([u8; 16], [u8; 16])> {
 pub(crate) fn update(
     data_dir: &Path,
     served: impl IntoIterator<Item = (ResourceKey, ResourceKey)>,
-) -> FxHashMap<[u8; 16], [u8; 16]> {
+) -> FxHashMap<Guid, Guid> {
     let path = data_dir.join(FILE);
     let read = enshwick_core::files::read_to_string_if_present(&path)
         .map_err(|error| error.to_string())
@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(clones.templates.len(), 1);
         assert_eq!(clones.items[&ITEM.to_string()], BENCH_ITEM.to_string());
         let aliases = clones.template_aliases();
-        assert_eq!(aliases.get(&CLONE.0), Some(&BENCH.0));
+        assert_eq!(aliases.get(&CLONE), Some(&BENCH));
     }
 
     #[test]
@@ -199,7 +199,7 @@ mod tests {
         )];
         assert_eq!(update(&dir, served).len(), 1);
         let aliases = update(&dir, []);
-        assert_eq!(aliases.get(&CLONE.0), Some(&BENCH.0));
+        assert_eq!(aliases.get(&CLONE), Some(&BENCH));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

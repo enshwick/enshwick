@@ -6,7 +6,7 @@ fn a_short_buffer_gets_the_length_and_a_long_enough_one_the_bytes() {
     let (mut out, mut len) = ([0u8; 3], 0u32);
     // SAFETY: `out` holds 3 writable bytes and `len` is a local `u32`.
     let short = unsafe { copy_out(&data, out.as_mut_ptr(), 2, &raw mut len) };
-    assert_eq!((short, len, out), (Status::BAD_ARGS, 3, [0; 3]));
+    assert_eq!((short, len, out), (Status::TOO_SMALL, 3, [0; 3]));
     // SAFETY: `out` holds 3 writable bytes and `len` is a local `u32`.
     let copied = unsafe { copy_out(&data, out.as_mut_ptr(), 3, &raw mut len) };
     assert_eq!((copied, len, out), (Status::OK, 3, data));
@@ -17,7 +17,15 @@ fn a_null_out_only_asks_the_length() {
     let mut len = 0u32;
     // SAFETY: a null `out` is allowed and `len` is a local `u32`.
     let status = unsafe { copy_out(&[9; 5], core::ptr::null_mut(), 5, &raw mut len) };
-    assert_eq!((status, len), (Status::BAD_ARGS, 5));
+    assert_eq!((status, len), (Status::TOO_SMALL, 5));
+}
+
+#[test]
+fn empty_data_copies_into_any_out_even_a_null_one() {
+    let mut len = 7u32;
+    // SAFETY: a null `out` is allowed and `len` is a local `u32`.
+    let status = unsafe { copy_out(&[], core::ptr::null_mut(), 0, &raw mut len) };
+    assert_eq!((status, len), (Status::OK, 0));
 }
 
 #[test]

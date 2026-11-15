@@ -42,8 +42,18 @@ mod tests {
                 ));
             })?;
             load.add_summon_item(STAFF, FARMER)?;
+            let host = enshwick::host().ok_or_else(|| Off::new("no host in init"))?;
+            let status =
+                (host.api().summon_filter)(host.handle(), Some(unknown), core::ptr::null_mut());
+            assert_eq!(status, Status::OK);
             Ok(Self)
         }
+    }
+
+    /// A raw filter answering a value no ABI gives a summon filter, which
+    /// the loader reads as "let the game decide", never as taking the item.
+    unsafe extern "system" fn unknown(_: *const abi::Summon, _: *mut c_void) -> u8 {
+        3
     }
 
     enshwick::test::declare_mod!(
@@ -80,7 +90,7 @@ mod tests {
             header: Header::of::<abi::Summon>(),
             item,
             ammo,
-            template: [0; 16],
+            template: enshwick::content::Guid([0; 16]),
             target: [1, 2, 3],
             slot: 0,
             pide: Entity(900),
@@ -177,30 +187,30 @@ mod tests {
         assert_eq!(loader.survivor_status(FARMER, &[0b0111]), None);
     }
 
-    unsafe extern "system" fn no_merge(_: NpcId, _: *const u8, _: usize, _: *mut c_void) -> u32 {
+    unsafe extern "system" fn no_merge(_: NpcId, _: *const u8, _: u32, _: *mut c_void) -> u32 {
         0
     }
 
     fn ask_merge(loader: &enshwick::test::Installed, as_mod: abi::ModHandle) -> Status {
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
-        (api.survivor_status)(as_mod, no_merge, core::ptr::null_mut())
+        (api.survivor_status)(as_mod, Some(no_merge), core::ptr::null_mut())
     }
 
     #[test]
-    fn a_status_merge_is_missing_on_the_server() {
+    fn a_status_merge_is_unavailable_on_the_server() {
         let loader = enshwick::test::FakeHost::new().side(Side::SERVER).install();
-        assert_eq!(ask_merge(&loader, loader.handle()), Status::MISSING);
+        assert_eq!(ask_merge(&loader, loader.handle()), Status::UNAVAILABLE);
         assert_eq!(loader.survivor_status(FARMER, &[1, 3]), None);
     }
 
     #[test]
-    fn a_status_merge_is_held_by_one_mod_which_may_register_it_again() {
+    fn every_mod_may_register_a_status_merge_and_register_its_own_again() {
         let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
         let other = abi::ModHandle(loader.handle().0 + 1);
         assert_eq!(ask_merge(&loader, loader.handle()), Status::OK);
         assert_eq!(ask_merge(&loader, loader.handle()), Status::OK);
-        assert_eq!(ask_merge(&loader, other), Status::REFUSED);
+        assert_eq!(ask_merge(&loader, other), Status::OK);
     }
 
     #[test]

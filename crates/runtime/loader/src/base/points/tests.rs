@@ -311,7 +311,7 @@ fn an_observed_point_keeps_its_answer() {
 fn a_panicking_link_turns_off_and_the_point_runs_without_it() {
     let mut registry = Registry::default();
     let live = defined(&mut registry);
-    let mut panics = link(ModIndex::new(1), PointVerdict::PANICKED.0 as usize);
+    let mut panics = link(ModIndex::new(1), PointVerdict::FAILED.0 as usize);
     panics.priority = -1;
     assert!(registry.attach(panics).is_ok());
     assert!(registry.attach(link(ModIndex::new(2), set(5))).is_ok());

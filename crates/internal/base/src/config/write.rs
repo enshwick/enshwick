@@ -66,7 +66,7 @@ pub(super) fn write(
     value: &toml::Value,
 ) -> Result<(), SetSettingError> {
     let value = value.to_string();
-    let status = (host.api().config_set)(
+    let status = (host.api().set_config)(
         host.handle(),
         Str::new(file),
         Str::new(key),

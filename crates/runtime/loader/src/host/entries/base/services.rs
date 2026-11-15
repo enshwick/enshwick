@@ -9,7 +9,7 @@ use enshwick_core::abi::{Event, EventFn, Header, Status, Str, TickHandle};
 use crate::engine::kept_text::keep;
 use crate::engine::loader::{Loader, ModRecord, Subscription};
 use crate::host::layer::guards::{before_delivery, open};
-use crate::host::layer::{Asker, Headed, HeadedOut, Mod, Out, Rule, entries};
+use crate::host::layer::{Asker, Callback, Headed, HeadedOut, Mod, Out, Rule, entries};
 use crate::host::memory::{headed_in, text};
 
 impl crate::base::points::Mods for Loader {
@@ -225,10 +225,10 @@ entries! {
         out.put(id)
     }
 
-    fn subscribe_event(
+    fn subscribe_mod_event(
         me as Mod,
         spec as Headed<api_frame::EventSpec>,
-        callback: api_frame::ModEventFn,
+        callback as Callback<api_frame::ModEventFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         open(crate::base::services::sealed())?;
@@ -270,7 +270,7 @@ entries! {
     fn attach_point(
         me as Mod,
         link as Headed<api_frame::PointLink>,
-        callback: api_frame::PointFn,
+        callback as Callback<api_frame::PointFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         open(crate::base::points::sealed())?;
@@ -326,7 +326,7 @@ entries! {
     fn subscribe(
         me as Mod,
         event: Event,
-        callback: EventFn,
+        callback as Callback<EventFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         if !(Event::SETTINGS_CHANGED.0..=Event::PROGRESS_WRITTEN.0).contains(&event.0) {
@@ -344,20 +344,20 @@ entries! {
 
     fn subscribe_tick(
         me as Mod,
-        every_nanos: u64,
-        callback: EventFn,
+        every_ns: u64,
+        callback as Callback<EventFn>,
         user: *mut core::ffi::c_void,
         out as Out<TickHandle>,
     ) -> Status {
         before_delivery(me.loader)?;
         let handle = crate::engine::ticks::TICKS
-            .add(me.index, every_nanos, callback, user)
+            .add(me.index, every_ns, callback, user)
             .ok_or(Status::REFUSED)?;
         out.put(handle)
     }
 
-    fn set_tick_every(me as Mod, handle: TickHandle, every_nanos: u64) -> Status {
-        crate::engine::ticks::TICKS.set_every(handle, me.index, every_nanos)?;
+    fn set_tick_every(me as Mod, handle: TickHandle, every_ns: u64) -> Status {
+        crate::engine::ticks::TICKS.set_every(handle, me.index, every_ns)?;
         Ok(())
     }
 }

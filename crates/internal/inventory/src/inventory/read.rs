@@ -95,7 +95,7 @@ impl Inventories {
     pub(crate) fn resolve(load: &mut BaseLoad) -> Result<Self, Off> {
         let host = load.host();
         let scheduler = load.scheduler()?;
-        let status = (host.api().inventory_open)(host.handle());
+        let status = (host.api().request_inventory)(host.handle());
         if !status.is_ok() {
             return Err(Off::new(format!(
                 "inventories: unavailable on this game build (status {})",
@@ -235,7 +235,7 @@ impl Inventories {
         let status = (self.host.api().inventory_submit)(
             self.host.handle(),
             &raw const request,
-            deliver,
+            Some(deliver),
             user.cast(),
         );
         if !status.is_ok() {

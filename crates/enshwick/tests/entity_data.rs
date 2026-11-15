@@ -80,7 +80,7 @@ mod tests {
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         let loader = enshwick::test::FakeHost::new().player(player).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Chests)`.

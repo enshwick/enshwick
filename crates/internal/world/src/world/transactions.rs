@@ -67,7 +67,9 @@ pub enum TransactionStatus {
     /// read back: [`WorldError::NotLoaded`] when part of the world was not
     /// loaded yet (the check starts loading it, so the same transaction
     /// committed again a second or so later can pass), [`WorldError::OutsideWorld`] when a change leaves the world,
-    /// [`WorldError::Missing`] when the world ended. The changes written
+    /// [`WorldError::Gone`] when an entity it acts on left the world,
+    /// [`WorldError::Refused`] when a block's blueprint changed since the
+    /// commit, [`WorldError::Unavailable`] when the world ended. The changes written
     /// stay, and [`World::undo`] can take them back while the loader keeps
     /// their undo data; a brick it could not read back after its change is
     /// never written over, so such an undo is refused.
@@ -97,7 +99,7 @@ impl TransactionStatus {
             if info.holds != 0 {
                 return Some(WorldError::HoldsState(PropState::from_bits(info.holds)));
             }
-            WorldError::check(info.reason, WorldError::Missing).err()
+            WorldError::check(info.reason, WorldError::Gone).err()
         };
         match info.state {
             TransactionInfo::APPLIED => Self::Applied,
@@ -105,7 +107,7 @@ impl TransactionStatus {
             TransactionInfo::UNDONE => Self::Undone,
             TransactionInfo::FAILED => match BuildRefusal::from_code(info.refusal) {
                 Some(refusal) => Self::NotAllowed(refusal),
-                None => Self::Failed(reason().unwrap_or(WorldError::Missing)),
+                None => Self::Failed(reason().unwrap_or(WorldError::Unavailable)),
             },
             TransactionInfo::EXPIRED => Self::Expired,
             TransactionInfo::UNDO_REFUSED => {
@@ -186,7 +188,7 @@ impl Change {
             min: *min,
             size: *size,
             voxels: voxels.as_ptr(),
-            count: voxels.len() as u64,
+            count: u32::try_from(voxels.len()).unwrap_or(u32::MAX),
         })
     }
 
@@ -515,11 +517,11 @@ impl Transaction {
     /// (as [`Terrain`](crate::terrain::Terrain) does; a block whose shape
     /// item has no `VoxelBlueprintItem` or whose material item places no
     /// building material; voxels whose kind is not the one their material
-    /// names), more than the
-    /// loader's cap of changes or bricks, or a full queue;
-    /// [`WorldError::OutsideWorld`] for a change past the world's edge or
+    /// names), or more than the
+    /// loader's cap of changes or bricks; [`WorldError::Busy`] for a full
+    /// queue, which a later step may take; [`WorldError::OutsideWorld`] for a change past the world's edge or
     /// above 1,024 metres, once the loader has met the world (before, the
-    /// transaction fails with it instead); [`WorldError::Missing`] while no
+    /// transaction fails with it instead); [`WorldError::Unavailable`] while no
     /// world runs or on a build without the edits or the undo. A player's
     /// rights ([`World::transaction_for`]) are checked at the first step,
     /// not here: a refusal shows as [`TransactionStatus::NotAllowed`].
@@ -539,17 +541,13 @@ impl Transaction {
         let count = u32::try_from(ops.len()).map_err(|_| WorldError::Refused)?;
         let mut id = 0u64;
         let api = self.host.api();
-        let status = if self.actor.is_none() {
-            (api.transaction_commit)(self.host.handle(), ops.as_ptr(), count, &raw mut id)
-        } else {
-            (api.transaction_commit_for)(
-                self.host.handle(),
-                self.actor,
-                ops.as_ptr(),
-                count,
-                &raw mut id,
-            )
-        };
+        let status = (api.transaction_commit)(
+            self.host.handle(),
+            self.actor,
+            ops.as_ptr(),
+            count,
+            &raw mut id,
+        );
         WorldError::from_status(status).map(|()| TransactionId(id))
     }
 }

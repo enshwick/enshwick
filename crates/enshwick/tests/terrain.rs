@@ -40,7 +40,7 @@ mod tests {
         assert!(terrain.materials().is_empty());
         assert_eq!(
             terrain.dig([1.0; 3], 2.0, Shape::Round, &[]),
-            Err(WorldError::Missing),
+            Err(WorldError::Unavailable),
             "no world runs yet"
         );
         let rock = TerrainMaterialInfo {

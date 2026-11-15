@@ -217,7 +217,7 @@ impl LoadMethods for crate::BaseLoad {
         let ranges = def.to_ranges();
         let data = def.to_data(&ranges);
         let mut out = StatRef::default();
-        let status = (host.api().affix_open)(
+        let status = (host.api().define_affix)(
             host.handle(),
             Str::new(&full),
             &raw const data,

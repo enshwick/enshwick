@@ -13,14 +13,15 @@ mod tests {
     fn input(value: u32, allowed: bool) -> KnowledgeInput {
         KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player: Entity(2),
+            character: Entity(2),
             id: KnowledgeId::new(0x1d),
             kind: KnowledgeInfo::BOOL,
             scope: KnowledgeInfo::PLAYER,
             reserved: 0,
             value,
             refusal: KnowledgeInput::ALLOWED,
-            allowed: u32::from(allowed),
+            allowed: u8::from(allowed),
+            reserved_tail: [0; 3],
         }
     }
 

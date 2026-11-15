@@ -75,14 +75,13 @@ enshwick::test::declare_mod!(
 /// The interface's version alone, without the three functions beside it.
 const HALF: &str = r#"
 #[unsafe(no_mangle)]
-pub extern "system" fn enshwick_mod_abi() -> u32 {
-    u32::from(enshwick::abi::ABI_MAJOR)
+pub extern "system" fn enshwick_mod_abi() -> u16 {
+    enshwick::abi::ABI_MAJOR
 }
 "#;
 
-/// What `enshwick_mod_abi` returned before ABI majors: a hash of the
-/// layout, here the last one.
-const HASHED_ABI: u32 = 0x0dc8_5f01;
+/// The major a mod built for an older Enshwick returns.
+const OLDER_ABI: u16 = enshwick_core::abi::ABI_MAJOR - 1;
 
 /// All four exports; `{abi}` is the version it says and `{query}` its
 /// manifest.
@@ -90,7 +89,7 @@ const RAW: &str = r#"
 use enshwick::abi::{HostApi, Manifest, ModHandle, Status};
 
 #[unsafe(no_mangle)]
-pub extern "system" fn enshwick_mod_abi() -> u32 {
+pub extern "system" fn enshwick_mod_abi() -> u16 {
     {abi}
 }
 
@@ -105,7 +104,9 @@ pub unsafe extern "system" fn enshwick_mod_init(_: *const HostApi, _: ModHandle)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle) {}
+pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle) -> Status {
+    Status::OK
+}
 "#;
 
 /// A manifest that reads but does not parse: its id is not of the form mods
@@ -207,17 +208,17 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
         ("half", HALF.to_owned()),
         (
             "old_abi",
-            RAW.replace("{abi}", &HASHED_ABI.to_string())
+            RAW.replace("{abi}", &OLDER_ABI.to_string())
                 .replace("{query}", "core::ptr::null()"),
         ),
         (
             "no_manifest",
-            RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
+            RAW.replace("{abi}", "enshwick::abi::ABI_MAJOR")
                 .replace("{query}", "core::ptr::null()"),
         ),
         (
             "bad_id",
-            RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
+            RAW.replace("{abi}", "enshwick::abi::ABI_MAJOR")
                 .replace("{query}", BAD_ID_MANIFEST),
         ),
         ("imports", IMPORTS.replace("{dependency}", DEPENDENCY)),
@@ -504,7 +505,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         Level::WARN,
         &format!(
             "old-abi/old-abi.dll skipped: {} ({})",
-            enshwick_core::abi::check_major(HASHED_ABI).unwrap_err(),
+            enshwick_core::abi::check_major(OLDER_ABI).unwrap_err(),
             errors::OTHER_ABI
         ),
     );

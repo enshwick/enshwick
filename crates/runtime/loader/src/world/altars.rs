@@ -34,8 +34,8 @@ use std::time::{Duration, Instant};
 use arc_swap::ArcSwapOption;
 use arrayvec::ArrayVec;
 use enshwick_core::abi::{
-    AltarInfo, AltarZone, AltarZoneFn, Bounds, BuildingZoneCheck, BuildingZoneCheckFn, Event,
-    Header, HookFlags, Side,
+    AltarInfo, AltarZone, AltarZoneFilterFn, BuildingZoneCheck, BuildingZoneFilterFn, Event,
+    Extent, Header, HookFlags, Side,
 };
 use enshwick_core::altars::MAX_ZONES;
 use enshwick_core::raw::{read_at, read_ptr_at};
@@ -92,7 +92,7 @@ const UPGRADE_ATTRIBUTES: usize = 9;
 /// Found on the 1.0 build 1269579, server and client.
 const HALF: f32 = 0.5;
 /// The most levels an altar reports; the engine has far fewer.
-const MAX_LEVELS: usize = 16;
+const MAX_LEVELS: usize = enshwick_core::abi::ALTAR_LEVELS;
 
 type Sizes = ArrayVec<[f32; 3], MAX_LEVELS>;
 
@@ -298,7 +298,7 @@ const ZONES_SYSTEM: &str = "add_buildzones_server";
 /// The reflected system the range and level passes follow.
 const UPGRADE_SYSTEM: &str = "upgrade_building_range";
 
-type Sizer = Registered<AltarZoneFn>;
+type Sizer = Registered<AltarZoneFilterFn>;
 
 #[derive(Debug, Clone, Copy)]
 struct SeamLayout {
@@ -310,7 +310,7 @@ struct SeamLayout {
     corner_size: usize,
 }
 
-static FILTERS: Filters<BuildingZoneCheckFn> = Filters::new(Feature::Altars);
+static FILTERS: Filters<BuildingZoneFilterFn> = Filters::new(Feature::Altars);
 static SEAM: OnceLock<SeamLayout> = OnceLock::new();
 
 thread_local! {
@@ -354,7 +354,7 @@ pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Result<(), JoinFeatureEr
 pub(crate) fn add_sizer(
     loader: &Loader,
     owner: ModIndex,
-    callback: AltarZoneFn,
+    callback: AltarZoneFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     open(loader, owner)?;
@@ -560,7 +560,7 @@ pub(crate) fn forget() {
 /// [`Sealed`] after init.
 pub(crate) fn register(
     owner: ModIndex,
-    callback: BuildingZoneCheckFn,
+    callback: BuildingZoneFilterFn,
     user: *mut c_void,
 ) -> Result<(), Sealed> {
     FILTERS.register(owner, callback, user)
@@ -842,10 +842,9 @@ crate::engine::chains::chain_detour! {
 /// - `corners` is readable for two corner points of `layout.corner_size`
 ///   bytes, each starting with three `i64`.
 /// - Nothing writes either during the call.
-#[expect(clippy::cast_possible_truncation, reason = "margins are a few metres")]
 unsafe fn check(
     layout: &SeamLayout,
-    filters: &Filters<BuildingZoneCheckFn>,
+    filters: &Filters<BuildingZoneFilterFn>,
     list: *const u8,
     corners: *const i64,
     margin: f32,
@@ -859,7 +858,7 @@ unsafe fn check(
     if entries.is_null() || count > MAX_ZONES {
         return false;
     }
-    let mut zones: ArrayVec<Bounds, MAX_ZONES> = ArrayVec::new();
+    let mut zones: ArrayVec<Extent, MAX_ZONES> = ArrayVec::new();
     for i in 0..count {
         let entry = entries.wrapping_add(i * layout.entry_size);
         // SAFETY: `entries` is non-null by the check before it and `i` below the
@@ -877,9 +876,9 @@ unsafe fn check(
         // SAFETY: `entry` is an entry of the live list, `i` below its count,
         // and an entry starts with min and max as six i64.
         let bounds: [i64; 6] = unsafe { read_at(entry, 0) };
-        zones.push(Bounds {
-            min: [bounds[0], bounds[1], bounds[2]],
-            max: [bounds[3], bounds[4], bounds[5]],
+        zones.push(Extent {
+            min: enshwick_core::ecs::metres([bounds[0], bounds[1], bounds[2]]),
+            max: enshwick_core::ecs::metres([bounds[3], bounds[4], bounds[5]]),
         });
     }
     // SAFETY: the caller guarantees two readable corners, the first starting
@@ -891,19 +890,21 @@ unsafe fn check(
     let call = BuildingZoneCheck {
         header: Header::of::<BuildingZoneCheck>(),
         zones: zones.as_ptr(),
-        zone_count: zones.len(),
-        object: Bounds {
-            min: [0, 1, 2].map(|a| low[a].min(high[a])),
-            max: [0, 1, 2].map(|a| low[a].max(high[a])),
+        zone_count: u32::try_from(zones.len()).unwrap_or(u32::MAX),
+        object: Extent {
+            min: enshwick_core::ecs::metres([0, 1, 2].map(|a| low[a].min(high[a]))),
+            max: enshwick_core::ecs::metres([0, 1, 2].map(|a| low[a].max(high[a]))),
         },
-        margin: (f64::from(margin) * enshwick_core::ecs::FIXED_PER_METRE) as i64,
+        margin: f64::from(margin),
     };
     filters
         .ask(|filter| {
             // SAFETY: a filter's mod runs, so its DLL that holds the callback
             // stays loaded; the callback gets the user pointer its mod
             // registered and `call`, which lives for the call.
-            if filter.call(|filter, user| unsafe { filter(&raw const call, user) }) != 0 {
+            if filter.call(|filter, user| unsafe { filter(&raw const call, user) })
+                == enshwick_core::abi::FILTER_YES
+            {
                 ControlFlow::Break(())
             } else {
                 ControlFlow::Continue(())

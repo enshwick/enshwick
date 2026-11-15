@@ -136,27 +136,29 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
     };
     manifest.id = text(manifest.id);
     manifest.version = text(manifest.version);
-    manifest.dependencies = list(manifest.dependencies, manifest.dependency_count, |d| {
-        Dependency {
+    manifest.dependencies = list(
+        manifest.dependencies,
+        manifest.dependency_count as usize,
+        |d| Dependency {
             id: text(d.id),
             range: text(d.range),
             ..d
-        }
-    });
-    manifest.builds = list(manifest.builds, manifest.build_count, |row| {
+        },
+    );
+    manifest.builds = list(manifest.builds, manifest.build_count as usize, |row| {
         enshwick_core::abi::BuildRow {
-            symbols: list(row.symbols, row.symbol_count, symbol),
-            constants: list(row.constants, row.constant_count, symbol),
+            symbols: list(row.symbols, row.symbol_count as usize, symbol),
+            constants: list(row.constants, row.constant_count as usize, symbol),
             ..row
         }
     });
     manifest.name = text(manifest.name);
     manifest.description = text(manifest.description);
-    manifest.authors = list(manifest.authors, manifest.author_count, text);
+    manifest.authors = list(manifest.authors, manifest.author_count as usize, text);
     manifest.license = text(manifest.license);
     manifest.points = text(manifest.points);
     manifest.homepage = text(manifest.homepage);
-    manifest.exports = list(manifest.exports, manifest.export_count, text);
+    manifest.exports = list(manifest.exports, manifest.export_count as usize, text);
     manifest
 }
 
@@ -174,7 +176,8 @@ pub unsafe fn exports(manifest: &Manifest) -> Vec<&str> {
     // SAFETY: `exports` is non-null and the count nonzero, checked just
     // before; the caller guarantees `export_count` aligned strings there,
     // readable and unchanged for the call.
-    let names = unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) };
+    let names =
+        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count as usize) };
     names
         .iter()
         // SAFETY: the caller guarantees every name readable for its length
@@ -245,7 +248,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     let count = if manifest.exports.is_null() {
         0
     } else {
-        manifest.export_count
+        manifest.export_count as usize
     };
     if listed.len() != count {
         return Err(ManifestError::NotUtf8("export"));
@@ -272,7 +275,9 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
         // SAFETY: `dependencies` is non-null and the count nonzero, checked
         // just before; the caller guarantees `dependency_count` aligned entries
         // there, readable and unchanged for the call.
-        unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
+        unsafe {
+            core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count as usize)
+        }
     };
     let dependencies = raw
         .iter()
@@ -392,7 +397,7 @@ pub unsafe fn meta(manifest: &Manifest) -> Meta {
     } else {
         // SAFETY: `authors` is non-null, checked just before; the caller
         // guarantees `author_count` aligned strings there for the call.
-        unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
+        unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count as usize) }
     };
     let homepage = text(&manifest.homepage);
     Meta {
@@ -471,7 +476,7 @@ mod tests {
             side: Side::BOTH,
             flags: ManifestFlags::NONE,
             dependencies: DEPENDENCIES.as_ptr(),
-            dependency_count: DEPENDENCIES.len(),
+            dependency_count: u32::try_from(DEPENDENCIES.len()).unwrap(),
             builds: core::ptr::null(),
             build_count: 0,
             name: Str::EMPTY,
@@ -494,7 +499,7 @@ mod tests {
         m.name = Str::new("Trading Post");
         m.description = Str::new(" A chest only its owner opens ");
         m.authors = AUTHORS.as_ptr();
-        m.author_count = AUTHORS.len();
+        m.author_count = u32::try_from(AUTHORS.len()).unwrap();
         m.license = Str::new("MIT");
         m.homepage = Str::new("github.com/enshwick/enshwick");
         // SAFETY: every string and list in `m` points at `'static` literals
@@ -631,7 +636,7 @@ mod tests {
         static EXPORTS: [Str; 2] = [Str::new("call:price-of"), Str::new("sold")];
         let mut bare = manifest("you.trading-post", "0.1.0");
         bare.exports = EXPORTS.as_ptr();
-        bare.export_count = EXPORTS.len();
+        bare.export_count = u32::try_from(EXPORTS.len()).unwrap();
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
         let why = unsafe { parse(&bare) }.unwrap_err().to_string();
@@ -652,7 +657,7 @@ mod tests {
         static EXPORTS: [Str; 2] = [Str::new("call:price-of"), Str::new("event:sold")];
         let mut exporting = manifest("you.trading-post", "0.1.0");
         exporting.exports = EXPORTS.as_ptr();
-        exporting.export_count = EXPORTS.len();
+        exporting.export_count = u32::try_from(EXPORTS.len()).unwrap();
         // SAFETY: `exporting` is a whole local manifest, its strings and lists
         // pointing at `'static` data.
         let copied = unsafe { read(&raw const exporting) }.unwrap();

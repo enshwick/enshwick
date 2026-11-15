@@ -35,6 +35,10 @@ impl_headed!(LoopWaitData);
 /// A handler of the event loop's waits: the wait, borrowed for the call,
 /// and the pointer given at registration. It must not unwind.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread that waits, inside its wait.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_loop_wait`](../struct.Load.html#method.on_loop_wait).
@@ -43,6 +47,10 @@ pub type LoopWaitFn = unsafe extern "system" fn(wait: *const LoopWaitData, user:
 /// A handler of the server loop's wait between two passes: the wait in
 /// nanoseconds, which it may change, and the pointer given at registration.
 /// It must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the server loop's thread, between two passes.
 ///
 /// # Examples
 ///

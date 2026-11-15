@@ -7,7 +7,7 @@ use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::world::Whose;
 use crate::host::layer::guards::in_init;
-use crate::host::layer::{Caller, HeadedListOut, Mod, Out, Text, entries};
+use crate::host::layer::{Callback, Caller, Mod, Out, SizedListOut, Text, entries};
 
 /// Registers the calling mod's game event handler for the world `whose`.
 fn game_event_of(
@@ -29,7 +29,7 @@ fn game_event_of(
 }
 
 entries! {
-    fn event_types(loader as Caller, [out, capacity, count] as HeadedListOut<EventTypeInfo>) -> Status {
+    fn event_types(loader as Caller, [out, entry_size, capacity, count] as SizedListOut<EventTypeInfo>) -> Status {
         let types: Vec<EventTypeInfo> = crate::engine::catalogue::event_types(&loader.reflection)
             .filter_map(|ty| {
                 Some(EventTypeInfo {
@@ -52,18 +52,18 @@ entries! {
         out.put(crate::engine::world::component(loader, entity, type_hash)?)
     }
 
-    fn entity_template(loader as Caller, entity: Entity, out as Out<[u8; 16]>) -> Status {
-        out.put(crate::engine::world::template(loader, entity)?)
+    fn entity_template(loader as Caller, entity: Entity, out as Out<enshwick_core::content::Guid>) -> Status {
+        out.put(enshwick_core::content::Guid(crate::engine::world::template(loader, entity)?))
     }
 
-    fn hosting() -> u8 {
-        Ok(crate::engine::loader::loader().map_or(0, |loader| {
-            u8::from(loader.side == Side::SERVER || crate::engine::world::hosting())
-        }))
+    fn hosting(loader as Caller, out as Out<u8>) -> Status {
+        out.put(u8::from(
+            loader.side == Side::SERVER || crate::engine::world::hosting(),
+        ))
     }
 
-    fn server_world() -> u64 {
-        Ok(crate::engine::world::server_world())
+    fn server_world(_loader as Caller, out as Out<u64>) -> Status {
+        out.put(crate::engine::world::server_world())
     }
 
     fn feature(me as Mod, name as Text, off as Text) -> Status {
@@ -91,26 +91,26 @@ entries! {
 
     fn status(
         me as Mod,
-        callback: api_frame::StatusFn,
+        callback as Callback<api_frame::StatusFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         in_init(me.index)?;
         Ok(crate::base::status::register(me.index, callback, user)?)
     }
 
-    fn client_game_event(
+    fn subscribe_client_game_event(
         me as Mod,
         type_hash: u32,
-        callback: api_frame::GameEventFn,
+        callback as Callback<api_frame::GameEventFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         Ok(game_event_of(Whose::Client, me, type_hash, callback, user)?)
     }
 
-    fn game_event(
+    fn subscribe_game_event(
         me as Mod,
         type_hash: u32,
-        callback: api_frame::GameEventFn,
+        callback as Callback<api_frame::GameEventFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         Ok(game_event_of(Whose::Server, me, type_hash, callback, user)?)

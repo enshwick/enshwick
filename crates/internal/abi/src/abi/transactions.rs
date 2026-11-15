@@ -2,6 +2,7 @@
 
 use core::ffi::c_void;
 
+use crate::abi::Metres;
 use crate::abi::{Entity, Header, ItemId, Status, Voxel};
 
 /// One change of a transaction, handed to
@@ -86,7 +87,7 @@ pub struct PropPlace {
     /// Zero.
     pub reserved: u32,
     /// Where it stands, in metres.
-    pub position: [f64; 3],
+    pub position: Metres,
     /// Which way it faces, a quaternion x, y, z, w.
     pub orientation: [f32; 4],
 }
@@ -154,7 +155,7 @@ pub struct VoxelWrite {
     /// each kind must be the one its material names.
     pub voxels: *const Voxel,
     /// The voxels at `voxels`: `size[0] * size[1] * size[2]`.
-    pub count: u64,
+    pub count: u32,
 }
 
 impl_headed!(VoxelWrite);
@@ -210,7 +211,7 @@ pub struct BlockPlace {
     /// material.
     pub material: ItemId,
     /// Where the block's middle lies, in metres.
-    pub position: [f64; 3],
+    pub position: Metres,
     /// The block's rotation, a quaternion x, y, z, w; the game keeps the
     /// nearest quarter turns.
     pub rotation: [f32; 4],
@@ -251,8 +252,9 @@ pub struct TransactionInfo {
     /// Why it failed, or why its last undo was refused:
     /// [`Status::NOT_LOADED`] for a part of the world not loaded,
     /// [`Status::OUTSIDE_WORLD`] for a change that leaves the world,
-    /// [`Status::REFUSED`] for a region changed since, [`Status::MISSING`]
-    /// when the world ended or the build lacks a piece; [`Status::OK`]
+    /// [`Status::REFUSED`] for a region changed since,
+    /// [`Status::UNAVAILABLE`] when the world ended or the build lacks a
+    /// piece; [`Status::OK`]
     /// otherwise.
     pub reason: Status,
     /// The changes it holds.

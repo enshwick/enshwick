@@ -195,7 +195,7 @@ mod tests {
             key: player,
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         let answer = loader.ask_actions(ActionCall::RUN, &info, 0, "mark", "");
         assert!(

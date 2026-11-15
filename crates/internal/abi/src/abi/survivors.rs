@@ -2,7 +2,9 @@
 
 use core::ffi::c_void;
 
+use crate::abi::Cell;
 use crate::abi::{Entity, Header, ItemId, NpcId};
+use crate::content::Guid;
 
 /// A game system asking which entity is a survivor, as
 /// [`HostApi::survivor_lookup`](super::HostApi::survivor_lookup) hands it to the mod that answers.
@@ -42,7 +44,7 @@ pub struct SurvivorLookup {
     /// The entity the asker works on, as its purpose says; 0 for none.
     pub entity: Entity,
     /// The cell its purpose names.
-    pub cell: [i64; 3],
+    pub cell: Cell,
     /// The bed an entity sleeps in, 0 for none; valid during the call with
     /// `token`.
     pub bed_of: Option<unsafe extern "system" fn(token: *mut c_void, entity: Entity) -> Entity>,
@@ -83,6 +85,11 @@ impl SurvivorLookup {
 /// The mod's survivor lookup: the call and the pointer given at
 /// registration; returns 1 with the answer in `out`, or 0 for the game's own.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_survivor_lookup`](../struct.Load.html#method.on_survivor_lookup).
@@ -118,14 +125,19 @@ pub struct BedCheck {
     /// The bed.
     pub bed_id: Entity,
     /// Where the survivor belongs: its saved spawn cell, or where it stands.
-    pub home: [i64; 3],
+    pub home: Cell,
     /// Where the bed stands.
-    pub bed_at: [i64; 3],
+    pub bed_at: Cell,
 }
 
 impl_headed!(BedCheck);
 
-/// A filter of survivors' beds: returns 0 to make the game clear the bed.
+/// A filter of survivors' beds: returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to make the game clear the bed.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
 ///
 /// # Examples
 ///
@@ -146,7 +158,7 @@ pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *m
 ///     header: Header::of::<Summon>(),
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     ammo: enshwick::ItemId::new(0),
-///     template: [0; 16],
+///     template: enshwick::abi::Guid::NIL,
 ///     target: [0; 3],
 ///     slot: 0x3_0000_0041,
 ///     pide: enshwick::Entity(900),
@@ -165,10 +177,10 @@ pub struct Summon {
     pub item: ItemId,
     /// The ammunition it used, 0 for none.
     pub ammo: ItemId,
-    /// The template GUID it places, in file order.
-    pub template: [u8; 16],
+    /// The template GUID it places.
+    pub template: Guid,
     /// The target cell.
-    pub target: [i64; 3],
+    pub target: Cell,
     /// The slot the used item lies in, `sub-inventory | index << 32`.
     pub slot: u64,
     /// The used item's own entity, 0 for an item without one.
@@ -196,11 +208,16 @@ impl Summon {
 /// item in the same transaction, and only when the spawn or move works,
 /// [`Summon::REFUSE`] to refuse the use, or 0 to leave it.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_summon`](../struct.Load.html#method.on_summon) and
 /// [`Load::on_summoned`](../struct.Load.html#method.on_summoned).
-pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
+pub type SummonFilterFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
 
 /// The client's survivor menu merging the statuses of every entity of one
 /// survivor.
@@ -209,13 +226,18 @@ pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut 
 /// the pointer given at registration; returns [`SURVIVOR_STATUS_SET`] or-ed
 /// with the byte to show, or 0 to leave the game's.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the client, on the thread of the game system that builds the
+/// survivor menu.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_survivor_status`](../struct.Load.html#method.on_survivor_status).
 pub type SurvivorStatusFn = unsafe extern "system" fn(
     survivor: NpcId,
     statuses: *const u8,
-    count: usize,
+    count: u32,
     user: *mut c_void,
 ) -> u32;
 

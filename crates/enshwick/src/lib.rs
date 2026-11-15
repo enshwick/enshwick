@@ -48,7 +48,7 @@
 //! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`](mod@config), [`i18n`], [`status`], [`state`], [`files`], [`Relock`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
-//! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
+//! | The server's world | [`world`], [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
 //! | Players and their things | [`inventory`], [`interactions`], [`knowledge`], [`progress`] |
 //! | Game rules | [`damage`], [`loot`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
 //! | Content | [`content`], [`packs`] |
@@ -56,11 +56,11 @@
 //! | Interface | [`ui`], [`sound`] |
 #![cfg_attr(
     feature = "unstable",
-    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`input`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`items`], [`rewards`], [`console`], [`rates`], [`script`](mod@script) |"
+    doc = "| Unstable, with the `unstable` feature | [`map`],[`input`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`items`], [`rewards`], [`console`], [`rates`], [`script`](mod@script) |"
 )]
 #![cfg_attr(
     not(feature = "unstable"),
-    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `input`, `item_data`, `entity_data`, `actions`, `controls`, `items`, `rewards`, `console`, `rates`, `script` |"
+    doc = "| Unstable, with the `unstable` feature | `map`,`input`, `item_data`, `entity_data`, `actions`, `controls`, `items`, `rewards`, `console`, `rates`, `script` |"
 )]
 //! | Tests | `test`, with the `test` feature |
 //!
@@ -90,7 +90,7 @@
 //! #[enshwick::config]
 //! struct Settings {
 //!     /// Altars added at every Flame level.
-//!     extra_altars: u8,
+//!     extra_altars: u32,
 //! }
 //!
 //! impl Default for Settings {
@@ -112,8 +112,8 @@
 //!     }
 //! }
 //!
-//! static EXTRA: AtomicU8 = AtomicU8::new(0);
-//! use std::sync::atomic::{AtomicU8, Ordering::Relaxed};
+//! static EXTRA: AtomicU32 = AtomicU32::new(0);
+//! use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 //!
 //! enshwick::declare_mod!(Hello);
 //! ```
@@ -276,7 +276,6 @@ pub use enshwick_world::typed;
 pub use enshwick_world::voxels;
 #[doc(inline)]
 pub use enshwick_world::weather;
-#[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::world;
 

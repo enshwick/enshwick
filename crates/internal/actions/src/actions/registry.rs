@@ -236,16 +236,15 @@ impl Registry {
         })
     }
 
-    /// The sheet of `player`: every action they may use, in `language`.
-    pub(super) fn sheet(&self, player: &Player, language: Language) -> String {
-        let others = self.others(player);
-        let entries: Vec<Entry> = self
-            .declared()
-            .iter()
-            .filter(|d| Self::allowed(d, player))
-            .map(|d| self.entry(d, player, language, &others))
-            .collect();
-        sheet::encode(&entries)
+    /// The ids of the actions `player` may run now, one per line, from their
+    /// rights alone: no subject, label or list is built.
+    pub(super) fn allowed_ids(&self, player: &Player) -> String {
+        let mut ids = String::new();
+        for d in self.declared().iter().filter(|d| Self::allowed(d, player)) {
+            ids.push_str(&d.action.id);
+            ids.push('\n');
+        }
+        ids
     }
 
     /// The players online but `player`, at most [`MAX_PLAYERS`].
@@ -474,7 +473,7 @@ mod tests {
         }
     }
 
-    fn with_permissions(permissions: u8) -> Player {
+    fn with_permissions(permissions: u32) -> Player {
         Player {
             entity: crate::Entity(2),
             slot: 0,

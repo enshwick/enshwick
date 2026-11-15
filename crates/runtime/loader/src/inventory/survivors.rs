@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::{BedCheckFn, Side, SummonFn, SurvivorLookupFn, SurvivorStatusFn};
+use enshwick_core::abi::{BedCheckFn, Side, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn};
 use enshwick_core::raw::read_at;
 
 use crate::engine::fuse::Fuse;
@@ -170,14 +170,14 @@ static MENU: OnceLock<Option<Menu>> = OnceLock::new();
 /// seal phase, before any link.
 #[derive(Debug)]
 struct Registrations {
-    /// The one mod's survivor lookup.
+    /// The mods' survivor lookups, one each, in load order.
     lookup: Registry<Registered<SurvivorLookupFn>>,
     bed_checks: Registry<Registered<BedCheckFn>>,
-    summons: Registry<Registered<SummonFn>>,
-    summoned: Registry<Registered<SummonFn>>,
+    summons: Registry<Registered<SummonFilterFn>>,
+    summoned: Registry<Registered<SummonFilterFn>>,
     /// Staff items filed in the survivor registry, as (item, survivor).
     items: Registry<(u32, u32)>,
-    /// The one mod's menu status merge, client only.
+    /// The mods' menu status merges, one each, in load order; client only.
     status: Registry<Registered<SurvivorStatusFn>>,
 }
 
@@ -193,14 +193,14 @@ impl Registrations {
         }
     }
 
-    /// The registered lookup, once sealed.
-    fn lookup(&self) -> Option<Registered<SurvivorLookupFn>> {
-        self.lookup.sealed()?.first().copied()
+    /// The registered lookups in load order, once sealed.
+    fn lookup(&self) -> &[Registered<SurvivorLookupFn>] {
+        self.lookup.sealed().unwrap_or_default()
     }
 
-    /// The registered menu status merge, once sealed.
-    fn status(&self) -> Option<Registered<SurvivorStatusFn>> {
-        self.status.sealed()?.first().copied()
+    /// The registered menu status merges in load order, once sealed.
+    fn status(&self) -> &[Registered<SurvivorStatusFn>] {
+        self.status.sealed().unwrap_or_default()
     }
 
     /// Seals every registration once every mod's init ran and says what
@@ -255,17 +255,27 @@ struct Asked {
 
 /// Holds `registered` in `one`, which takes one mod at a time: refused while
 /// another mod holds it, replaced for the same mod.
-fn hold_one<F>(
-    one: &Registry<Registered<F>>,
+fn hold_each<F>(
+    each: &Registry<Registered<F>>,
     registered: Registered<F>,
 ) -> Result<(), JoinFeatureError> {
-    one.edit(|held| {
-        if held.iter().any(|r| r.owner != registered.owner) {
-            return Err(JoinFeatureError::Taken);
-        }
-        *held = vec![registered];
-        Ok(())
-    })?
+    each.edit(
+        |held| match held.iter_mut().find(|r| r.owner == registered.owner) {
+            Some(own) => *own = registered,
+            None => held.push(registered),
+        },
+    )?;
+    Ok(())
+}
+
+/// The first answer of `registered`, in load order, from the mods `on`
+/// counts as on; `None` when every one passes on.
+fn first_answer<F, T>(
+    registered: &[Registered<F>],
+    on: impl Fn(ModIndex) -> bool,
+    ask: impl FnMut(&Registered<F>) -> Option<T>,
+) -> Option<T> {
+    registered.iter().filter(|r| on(r.owner)).find_map(ask)
 }
 
 /// The survivor and entity a staff moves, and since when.
@@ -482,12 +492,12 @@ fn spawns(loader: &Loader) -> bool {
     layout(loader).is_some() && symbol(loader, pinned::survivors::SPAWN).is_some()
 }
 
-/// Registers mod `owner`'s survivor lookup; one mod at a time.
+/// Registers mod `owner`'s survivor lookup, after the lookups of the mods
+/// before it; a second one replaces its first.
 ///
 /// # Errors
 ///
-/// [`JoinFeatureError`] after init, on a build without survivors, or while
-/// another mod holds the lookup.
+/// [`JoinFeatureError`] after init or on a build without survivors.
 pub(crate) fn register_lookup(
     loader: &Loader,
     owner: ModIndex,
@@ -495,7 +505,7 @@ pub(crate) fn register_lookup(
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     open(loader, || engine_and_layout(loader))?;
-    hold_one(
+    hold_each(
         &STATE.registrations.lookup,
         Registered::new(owner, callback, user),
     )
@@ -525,7 +535,7 @@ pub(crate) fn register_bed_check(
 pub(crate) fn register_summon(
     loader: &Loader,
     owner: ModIndex,
-    callback: SummonFn,
+    callback: SummonFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     open(loader, || spawns(loader))?;
@@ -541,7 +551,7 @@ pub(crate) fn register_summon(
 pub(crate) fn register_summoned(
     loader: &Loader,
     owner: ModIndex,
-    callback: SummonFn,
+    callback: SummonFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     open(loader, || spawns(loader))?;
@@ -565,12 +575,13 @@ pub(crate) fn register_item(
     Ok(STATE.registrations.items.add((item, survivor))?)
 }
 
-/// Registers mod `owner`'s menu status merge; client only, one mod.
+/// Registers mod `owner`'s menu status merge, after the merges of the mods
+/// before it; a second one replaces its first. Client only.
 ///
 /// # Errors
 ///
-/// [`JoinFeatureError`] after init, off a client or a build without the menu,
-/// or while another mod holds the merge.
+/// [`JoinFeatureError`] after init, off a client or on a build without the
+/// menu.
 pub(crate) fn register_status(
     loader: &Loader,
     owner: ModIndex,
@@ -582,7 +593,7 @@ pub(crate) fn register_status(
             && menu(loader).is_some()
             && crate::engine::ecs::engine(loader).is_some()
     })?;
-    hold_one(
+    hold_each(
         &STATE.registrations.status,
         Registered::new(owner, callback, user),
     )

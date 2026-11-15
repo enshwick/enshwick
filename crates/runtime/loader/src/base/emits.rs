@@ -324,7 +324,10 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
             out.copy_from_slice(bytes);
         }
     };
-    for (i, axis) in request.position.iter().enumerate() {
+    for (i, axis) in enshwick_core::ecs::fixed(request.position)
+        .iter()
+        .enumerate()
+    {
         put(teleport.position + i * 8, &axis.to_le_bytes());
     }
     for (i, part) in orientation.iter().enumerate() {

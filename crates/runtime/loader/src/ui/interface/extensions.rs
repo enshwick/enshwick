@@ -127,8 +127,8 @@ impl FrameReads {
             prompt_title: self.prompt_title,
             prompt_verb: self.prompt_verb,
             screen_host: self.screen_host,
-            screen_host_template: self.screen_host_template,
-            screen_host_position: self.screen_host_position,
+            screen_host_template: enshwick_core::content::Guid(self.screen_host_template),
+            screen_host_position: enshwick_core::ecs::metres(self.screen_host_position),
         }
     }
 }

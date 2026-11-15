@@ -284,7 +284,7 @@ fn place(layout: &Layout, entry: &[u8]) -> EntityPlace {
             .and_then(|b| b.try_into().ok())
             .map_or(Entity(0), |b| Entity(u32::from_le_bytes(b))),
         reserved: 0,
-        position: [word(at), word(at + 8), word(at + 16)],
+        position: enshwick_core::ecs::metres([word(at), word(at + 8), word(at + 16)]),
     }
 }
 

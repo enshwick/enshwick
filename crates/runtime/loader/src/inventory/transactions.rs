@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 use enshwick_core::__private::rules::inventory_checks as checks;
 use enshwick_core::abi::{
     Header, HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
-    InventoryResultFn, ItemData, Registers, Side,
+    InventoryResultFn, ItemTypeInfo, Registers, Side,
 };
 use run::run;
 
@@ -798,12 +798,12 @@ pub(crate) fn item_info_at(
 }
 
 /// The static data of `item`, once a world runs.
-pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, ItemInfoError> {
+pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemTypeInfo, ItemInfoError> {
     let executor = executor(loader).ok_or(ItemInfoError::Unread)?;
     let access = crate::engine::world::access(&"item lookup").ok_or(ItemInfoError::NoWorld)?;
     let info = item_info_at(loader, &access, item)?.ok_or(ItemInfoError::NoItem)?;
-    Ok(ItemData {
-        header: Header::of::<ItemData>(),
+    Ok(ItemTypeInfo {
+        header: Header::of::<ItemTypeInfo>(),
         id: enshwick_core::ItemId::new(item),
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `maxStackSize` at the reflected offset.
@@ -817,14 +817,17 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, ItemInfo
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `flags` at the reflected offset.
         flags: unsafe { enshwick_core::raw::read_at(info, executor.item_flags) },
-        placed_entity: executor.item_placed_entity.map_or([0; 16], |at| {
-            // SAFETY: the lookup returned the item's non-null `ItemInfo`
-            // (checked earlier), live while `access` is held, whose
-            // `equipment.placedEntity`
-            // at the reflected offset is a 16-byte GUID held inline (server
-            // 399, client 426).
-            unsafe { enshwick_core::raw::read_at(info, at) }
-        }),
+        placed_entity: executor.item_placed_entity.map_or(
+            enshwick_core::content::Guid::NIL,
+            |at| {
+                // SAFETY: the lookup returned the item's non-null `ItemInfo`
+                // (checked earlier), live while `access` is held, whose
+                // `equipment.placedEntity`
+                // at the reflected offset is a 16-byte GUID held inline (server
+                // 399, client 426).
+                unsafe { enshwick_core::raw::read_at(info, at) }
+            },
+        ),
     })
 }
 

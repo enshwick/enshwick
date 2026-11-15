@@ -48,7 +48,7 @@ fn accessors(c: &mut Criterion) {
         .constant("world_transform.orientation", 24)
         .constant("item_info.placed_entity", 0x3c0)
         .item(enshwick::ItemId::new(7), 1, 0)
-        .item_places(enshwick::ItemId::new(7), [7; 16])
+        .item_places(enshwick::ItemId::new(7), enshwick::content::Guid([7; 16]))
         .component(Entity(4096), 2, &7u32.to_le_bytes())
         .component(Entity(4096), 1, &[0; 64]);
     for i in 0..PROPS {
@@ -56,7 +56,7 @@ fn accessors(c: &mut Criterion) {
         let at = [f64::from(i % 64), 0.0, f64::from(i / 64)].map(|axis| axis * 4.0);
         fake = fake
             .placed(2, Entity(entity), at)
-            .template(Entity(entity), [7; 16])
+            .template(Entity(entity), enshwick::content::Guid([7; 16]))
             .component(Entity(entity), 2, &7u32.to_le_bytes())
             .component(Entity(entity), 1, &[0; 40]);
     }

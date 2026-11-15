@@ -396,7 +396,11 @@ pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Terrai
     for column in bricks.columns() {
         crate::world::voxels::column_loaded(loader, column.min())?;
     }
-    let [x, y, z] = request.position;
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the game's terrain edits take f32 metres"
+    )]
+    let [x, y, z] = request.position.map(|axis| axis as f32);
     let site = Site {
         editor: core::ptr::with_exposed_provenance_mut(editor),
         alloc: core::ptr::with_exposed_provenance_mut(alloc),

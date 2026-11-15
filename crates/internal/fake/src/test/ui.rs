@@ -12,7 +12,7 @@ struct Reads {
     title: String,
     verb: u32,
     host: u32,
-    host_read: Option<([u8; 16], [i64; 3])>,
+    host_read: Option<(enshwick_core::content::Guid, [i64; 3])>,
 }
 
 fn reads() -> Reads {
@@ -39,8 +39,12 @@ fn in_game(token: u64, open: &str, reads: &Reads) -> enshwick_core::abi::UiFrame
         prompt_title: enshwick_core::abi::Str::new(&reads.title),
         prompt_verb: reads.verb,
         screen_host: enshwick_core::Entity(reads.host),
-        screen_host_template: reads.host_read.map_or([0; 16], |(t, _)| t),
-        screen_host_position: reads.host_read.map_or([0; 3], |(_, p)| p),
+        screen_host_template: reads
+            .host_read
+            .map_or(enshwick_core::content::Guid::NIL, |(t, _)| t),
+        screen_host_position: reads
+            .host_read
+            .map_or([0.0; 3], |(_, p)| enshwick_core::ecs::metres(p)),
     }
 }
 
@@ -252,7 +256,7 @@ impl Installed {
     /// ```
     pub fn read_screen_host(&self, template: enshwick_core::content::Guid, position: [f64; 3]) {
         let fixed = enshwick_core::ecs::fixed(position);
-        table::with((), |s| s.screen_host_read = Some((template.0, fixed)));
+        table::with((), |s| s.screen_host_read = Some((template, fixed)));
     }
 
     /// Names the game action `action` on the fake build, its reflected
@@ -461,10 +465,10 @@ pub enum Drawn {
 /// # Examples
 ///
 /// See [`Installed::markers`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FakeMarker {
-    /// Where, in 32.32 fixed-point metres.
-    pub position: [i64; 3],
+    /// Where, in metres.
+    pub position: [f64; 3],
     /// The label.
     pub label: String,
     /// The colour, `UiMarker::WHITE` and on.

@@ -58,7 +58,9 @@ mod tests {
         let pinged_at = at(facts::UI_PING_EVENT_POSITION);
         let npc_event = host.hash(facts::NPC_COMMAND_EVENT.id()).unwrap();
         let npc_size = host.size(facts::NPC_COMMAND_EVENT.id()).unwrap();
-        let loader = host.template(Entity(5), [5; 16]).install();
+        let loader = host
+            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -72,7 +74,7 @@ mod tests {
         effects.ping(Entity(6), [0.5, 0.0, 0.0]).unwrap();
         assert_eq!(
             effects.set_toggle(Entity(5), 9, true),
-            Err(WorldError::Missing),
+            Err(WorldError::Unavailable),
             "the toggle event is not on this fake build"
         );
         let emits = loader.emits();
@@ -114,21 +116,28 @@ mod tests {
             Err(WorldError::Gone)
         );
         let spawned = effects
-            .spawn([7; 16], [1.0, 2.0, 3.0], Spawn::new().level(4))
+            .spawn(
+                enshwick::content::Guid([7; 16]),
+                [1.0, 2.0, 3.0],
+                Spawn::new().level(4),
+            )
             .unwrap();
         assert_eq!(
-            effects.spawn([0; 16], [0.0; 3], Spawn::new()),
+            effects.spawn(enshwick::content::Guid([0; 16]), [0.0; 3], Spawn::new()),
             Err(WorldError::Refused)
         );
         let spawns = loader.spawns();
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].0, spawned.0);
-        assert_eq!((spawns[0].1.template, spawns[0].1.level), ([7; 16], 4));
-        assert_eq!(spawns[0].1.position, [1 << 32, 2 << 32, 3 << 32]);
+        assert_eq!(
+            (spawns[0].1.template, spawns[0].1.level),
+            (enshwick::content::Guid([7; 16]), 4)
+        );
+        assert_eq!(spawns[0].1.position, [1.0, 2.0, 3.0]);
         let teleports = loader.teleports();
         assert_eq!(teleports.len(), 1);
         assert_eq!(teleports[0].entity, Entity(5));
         assert_eq!(teleports[0].flags, TeleportRequest::BEST_SPAWN);
-        assert_eq!(teleports[0].position, [10 << 32, 20 << 32, 30 << 32]);
+        assert_eq!(teleports[0].position, [10.0, 20.0, 30.0]);
     }
 }

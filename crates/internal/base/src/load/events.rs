@@ -153,7 +153,7 @@ where
 {
     game_events_through(
         host,
-        host.api().game_event,
+        host.api().subscribe_game_event,
         type_hash,
         &format!("game events of {what}"),
         handler,
@@ -181,7 +181,7 @@ where
 {
     game_events_through(
         host,
-        host.api().client_game_event,
+        host.api().subscribe_client_game_event,
         type_hash,
         &format!("client game events of {what}"),
         handler,
@@ -203,7 +203,7 @@ where
     let handle = host.handle();
     hand_over(
         handler,
-        |user| register(handle, type_hash, deliver_game::<F>, user),
+        |user| register(handle, type_hash, Some(deliver_game::<F>), user),
         what,
     )
 }
@@ -212,7 +212,7 @@ where
 type GameEventRegister = extern "system" fn(
     crate::abi::ModHandle,
     u32,
-    crate::abi::GameEventFn,
+    Option<crate::abi::GameEventFn>,
     *mut c_void,
 ) -> crate::abi::Status;
 
@@ -240,7 +240,7 @@ where
             (host.api().subscribe_tick)(
                 host.handle(),
                 crate::events::nanos(every),
-                deliver::<F>,
+                Some(deliver::<F>),
                 user,
                 out,
             )
@@ -259,10 +259,10 @@ pub(super) fn subscribe_mod_event<E: ModEvent, F: Fn(&E) + Send + Sync + 'static
     hand_over(
         handler,
         |user| {
-            (host.api().subscribe_event)(
+            (host.api().subscribe_mod_event)(
                 host.handle(),
                 &raw const spec,
-                deliver_mod_event::<E, F>,
+                Some(deliver_mod_event::<E, F>),
                 user,
             )
         },

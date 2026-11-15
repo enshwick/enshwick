@@ -41,6 +41,7 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
+use enshwick_core::content::Guid;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -125,7 +126,7 @@ static SERVING_FUSE: Fuse = Fuse::new("served resource builds");
 static RESOURCES: Registry<Served> = Registry::new();
 /// Cloned templates ever served, clone GUID to vanilla GUID: read in place of
 /// a clone no mod serves now.
-static ALIASES: OnceLock<rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
+static ALIASES: OnceLock<rustc_hash::FxHashMap<Guid, Guid>> = OnceLock::new();
 // SAFETY: `OpenFn` is the signature of the build table's `resource.open`,
 // and `seal_and_link` uses this slot only as that function's next.
 static OPEN_NEXT: Next<OpenFn> = unsafe { Next::new() };
@@ -459,8 +460,8 @@ pub(crate) fn new_keys_of_type(type_hash: u32) -> Vec<ResourceKey> {
 /// Cloned templates no mod that is on serves now, each with the vanilla
 /// template read in its place: the game registers them from its listing, so
 /// a world's placed clones of a removed mod load as the vanilla one.
-pub(crate) fn orphan_templates() -> Vec<([u8; 16], [u8; 16])> {
-    let served: Vec<[u8; 16]> = new_keys_of_type(crate::engine::catalogue::types::TEMPLATE)
+pub(crate) fn orphan_templates() -> Vec<(Guid, Guid)> {
+    let served: Vec<Guid> = new_keys_of_type(crate::engine::catalogue::types::TEMPLATE)
         .iter()
         .map(|key| key.guid)
         .collect();
@@ -506,7 +507,7 @@ fn key_name(key: &ResourceKey) -> String {
         types::UI_IMAGE => "image",
         _ => "resource",
     };
-    format!("{kind} {}", enshwick_core::content::Guid(key.guid))
+    format!("{kind} {}", key.guid)
 }
 
 /// What mods serve, for the status summary.
@@ -539,7 +540,7 @@ fn alias(key: &ResourceKey) -> Option<ResourceKey> {
 }
 
 /// Content mods renamed, old GUID to new.
-static RENAMES: OnceLock<&'static rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
+static RENAMES: OnceLock<&'static rustc_hash::FxHashMap<Guid, Guid>> = OnceLock::new();
 
 /// The key a mod renamed `key` to.
 fn renamed(key: &ResourceKey) -> Option<ResourceKey> {
@@ -837,7 +838,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
             DEBUG,
             "served resource {:08x}:{} built by {}, {current_len} bytes",
             entry.key.type_hash,
-            hex(&entry.key.guid),
+            hex(&entry.key.guid.0),
             by.join(", ")
         );
     }
@@ -890,7 +891,7 @@ crate::engine::chains::chain_detour! {
             // Status byte, a word, then the key padded to 32 bytes, as the
             // game writes it.
             let mut bytes = [0u8; 0x28];
-            bytes[8..24].copy_from_slice(&entry.key.guid);
+            bytes[8..24].copy_from_slice(&entry.key.guid.0);
             bytes[24..28].copy_from_slice(&entry.key.type_hash.to_le_bytes());
             bytes[28..32].copy_from_slice(&entry.key.part.to_le_bytes());
             // SAFETY: `out` is non-null by the check before it and is the

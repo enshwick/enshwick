@@ -1,10 +1,11 @@
 # An alpha release of the loader, run by hand on main until 1.0.0: the
 # version the workspace carries, `1.0.0-alpha.N`, becomes the GitHub
-# prerelease `v1.0.0-alpha.N` with `enshwick.zip`, `cargo-enshwick` for
-# Windows and Linux, their PDBs, SBOMs, SHA-256 checksums and build
-# provenance, and notes from `cargo xtask notes`. The pull request before it
-# moves the crates to that version and joins their change files into each
-# changelog with `cargo xtask close`; a version already released is refused.
+# prerelease `v1.0.0-alpha.N` with `enshwick.zip`, the C header
+# `enshwick.h`, `cargo-enshwick` for Windows and Linux, their PDBs, SBOMs,
+# SHA-256 checksums and build provenance, and notes from `cargo xtask
+# notes`. The pull request before it moves the crates to that version and
+# joins their change files into each changelog with `cargo xtask close`; a
+# version already released is refused.
 # Nothing goes to crates.io.
 name: alpha
 
@@ -80,6 +81,9 @@ jobs:
   # The archive, and the PDB and SBOM of every DLL.
   loader:
     if: github.ref == 'refs/heads/main'
+    # The signing key is a release secret, and the release environment
+    # admits main only.
+    environment: release
     runs-on: ubuntu-26.04
     # Room for a Windows SDK cache miss, which downloads for 7 to 9 minutes.
     timeout-minutes: 30
@@ -104,6 +108,12 @@ jobs:
       - uses: ./.github/actions/release-files
         with:
           out: ${{ runner.temp }}/alpha
+          signing-key: ${{ secrets.ENSHWICK_SIGNING_KEY }}
+          signed: "true"
+
+      # The C header of this release's ABI, for mods in C and C++.
+      - name: C header
+        run: cp crates/enshwick/include/enshwick.h "$RUNNER_TEMP/alpha/"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -249,7 +259,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         working-directory: ${{ runner.temp }}/alpha
         run: |
-          assets=(*.zip *.pdb *.cdx.json cargo-enshwick-* SHA256SUMS)
+          assets=(*.zip *.h *.pdb *.cdx.json cargo-enshwick-* SHA256SUMS)
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "Enshwick $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
             --prerelease --latest=false

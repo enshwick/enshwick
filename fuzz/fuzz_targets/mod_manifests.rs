@@ -48,7 +48,7 @@ fn candidate(record: &[u8]) -> Option<Candidate> {
         side: Side(side.parse().unwrap_or(3)),
         flags: ManifestFlags::NONE,
         dependencies: dependencies.as_ptr(),
-        dependency_count: dependencies.len(),
+        dependency_count: u32::try_from(dependencies.len()).unwrap_or(u32::MAX),
         builds: core::ptr::null(),
         build_count: 0,
         name: Str::new(id),
@@ -59,7 +59,7 @@ fn candidate(record: &[u8]) -> Option<Candidate> {
         homepage: Str::EMPTY,
         points: Str::new(deps),
         exports: exports.as_ptr(),
-        export_count: exports.len(),
+        export_count: u32::try_from(exports.len()).unwrap_or(u32::MAX),
     };
     // SAFETY: every string borrows the input, `dependencies` holds
     // `dependency_count` entries and `exports` `export_count`; all outlive

@@ -3,7 +3,7 @@
 
 use arrayvec::ArrayVec;
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, PlayerInfo};
+use enshwick_core::abi::PlayerInfo;
 
 use super::{Layout, MAX_NAME, SLOT_IN_GAME, WorldError, layout, reader};
 use crate::engine::loader::Loader;
@@ -221,7 +221,8 @@ fn player_at(
     entity: Entity,
     infos: usize,
 ) -> PlayerInfo {
-    let mut name = [0u8; 64];
+    // Past the kept length, so the cut finds where the last whole character ends.
+    let mut name = [0u8; PlayerInfo::NAME_MAX + 4];
     // SAFETY: `slot` is a player slot `players` found in the server on the
     // game thread; the table's `server.player_slot_name` offset holds the
     // name's data pointer.
@@ -257,7 +258,7 @@ fn player_at(
                 // (below `permission_entries`, the enclosing condition); the
                 // table's `server.permission_mask` offset holds its mask byte;
                 // read on the game thread.
-                unsafe { read::<u8>(entry, layout.permission_mask) }
+                u32::from(unsafe { read::<u8>(entry, layout.permission_mask) })
             } else {
                 0
             }
@@ -265,16 +266,12 @@ fn player_at(
             0
         }
     };
-    PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: u32::try_from(index).unwrap_or(u32::MAX),
-        entity,
-        // SAFETY: `slot` is a player slot `players` found in the server on
-        // the game thread; the table's `server.player_slot_key` offset holds
-        // its `u64` account key.
-        key: unsafe { read(slot, layout.slot_key) },
-        permissions,
-        name_len: u8::try_from(name_len).unwrap_or(0),
-        name,
-    }
+    // SAFETY: `slot` is a player slot `players` found in the server on the
+    // game thread; the table's `server.player_slot_key` offset holds its
+    // `u64` account key.
+    let key = unsafe { read(slot, layout.slot_key) };
+    let text = String::from_utf8_lossy(&name[..name_len]);
+    let mut info = PlayerInfo::with_name(entity, key, permissions, &text);
+    info.slot = u32::try_from(index).unwrap_or(u32::MAX);
+    info
 }

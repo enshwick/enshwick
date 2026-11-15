@@ -4,12 +4,13 @@
 //! such as a world call's status as its outcome and a player as the loader
 //! hands them over.
 
+use crate::Host;
 #[cfg(feature = "unstable")]
 use crate::abi::RecipeId;
 #[cfg(feature = "unstable")]
 use crate::content::Guid;
 #[cfg(feature = "unstable")]
-use crate::{Entity, Host, Off};
+use crate::{Entity, Off};
 
 /// The handles of the typed API a script holds, which the scripts' start
 /// functions on `Load` return.
@@ -86,17 +87,25 @@ pub fn world_check(
 }
 
 /// The player `info` describes, as the loader hands them over.
-#[cfg(feature = "unstable")]
 #[must_use]
 pub fn player(info: &crate::abi::PlayerInfo) -> crate::world::Player {
     crate::world::Player::from_info(info)
 }
 
 /// The players connected now, from the loader.
-#[cfg(feature = "unstable")]
 #[must_use]
 pub fn online(host: Host) -> Vec<crate::world::Player> {
     crate::world::online(host)
+}
+
+/// The players connected now, or the loader's status when it cannot list
+/// them.
+///
+/// # Errors
+///
+/// The loader's status of its players list.
+pub fn listed(host: Host) -> Result<Vec<crate::world::Player>, crate::abi::Status> {
+    crate::world::listed(host)
 }
 
 /// The map marker type `info` describes, as the loader lists them.

@@ -128,9 +128,9 @@ fn ids_are_content_ids_and_say_whose_they_are() {
 fn values_follow_the_sources_in_their_order() {
     let sealed = combat_kinds();
     let list = [
-        source(StatSource::ITEM, StatModifierData::MULTIPLY, 2, 1.5, 900, 7),
-        source(StatSource::BUFF, StatModifierData::ADD, 3, 0.25, 0x99, 0),
-        source(StatSource::ENTITY, StatModifierData::ADD, 3, 0.25, 1, 0),
+        source(StatSource::ITEM, StatModifier::MULTIPLY, 2, 1.5, 900, 7),
+        source(StatSource::BUFF, StatModifier::ADD, 3, 0.25, 0x99, 0),
+        source(StatSource::ENTITY, StatModifier::ADD, 3, 0.25, 1, 0),
     ];
     let values = work_out(&sealed, &list);
     let want = [1.0f32, 0.0, 1.5, 0.5];
@@ -189,7 +189,7 @@ fn saved_modifiers_round_trip() {
         owner: "rpg".into(),
         key: 5,
         stat: "rpg:crit".into(),
-        op: StatModifierData::ADD,
+        op: StatModifier::ADD,
         value: 0.1,
     }];
     let bytes = postcard::to_allocvec(&saved).unwrap();

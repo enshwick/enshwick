@@ -521,6 +521,10 @@ impl FakeHost {
             ),
         ];
         let mut host = self.items().recipes().workshops().types(types);
+        // The fake's mask is the uint64 of `craftingPropsInRange` it reflects.
+        host.crafting_mask = u8::try_from(VANILLA_CRAFTING_PROPS)
+            .ok()
+            .map(|first| (first, 64));
         for (guid, value) in templates {
             if let Ok(bytes) = registry.encode(TEMPLATE, &value, None) {
                 host = host.resource(guid.key_by_hash(hash(TEMPLATE)), bytes);

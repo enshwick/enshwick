@@ -190,7 +190,7 @@ mod tests {
             (markers[0].label.as_str(), markers[0].color),
             ("Locker", UiMarker::GREEN)
         );
-        assert_eq!(markers[0].position, [1 << 32, 2 << 32, 3 << 32]);
+        assert_eq!(markers[0].position, [1.0, 2.0, 3.0]);
         assert_eq!(markers[1].color, UiMarker::WHITE);
     }
 

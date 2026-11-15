@@ -182,7 +182,7 @@ impl Resources {
                 text(ty.qualified_name())
             });
         Data::Struct(vec![
-            ("guid".into(), Data::Guid(Guid(key.guid))),
+            ("guid".into(), Data::Guid(key.guid)),
             ("type".into(), ty),
             ("part".into(), Data::Uint(key.part.into())),
         ])
@@ -222,7 +222,7 @@ impl Resources {
             Some(_) => return Err(Off::new("a key's part is a number")),
         };
         Ok(ResourceKey {
-            guid: guid.0,
+            guid,
             type_hash,
             part,
         })

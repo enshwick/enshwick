@@ -59,7 +59,7 @@ mod tests {
                 .transaction()
                 .terrain_dig(at, 2.0, Shape::Round, &[])
                 .commit(),
-            Err(WorldError::Missing),
+            Err(WorldError::Unavailable),
             "no world runs yet"
         );
         loader.set_terrain(&[rock()]);
@@ -162,6 +162,18 @@ mod tests {
             world.undo(far),
             Err(WorldError::Refused),
             "it wrote nothing to take back"
+        );
+
+        let lost = world
+            .transaction()
+            .terrain_dig(at, 2.0, Shape::Round, &[])
+            .commit()
+            .unwrap();
+        loader.fail_transaction(lost.get(), Status::MISSING);
+        assert_eq!(
+            world.transaction_status(lost),
+            Some(TransactionStatus::Failed(WorldError::Gone)),
+            "an entity it acts on left the world, which the build has nothing to do with"
         );
 
         let changed = world
@@ -304,8 +316,13 @@ mod tests {
         // SAFETY: `api` points at the fake's table, which lives for the
         // process.
         let api = unsafe { &*loader.api() };
-        let status =
-            (api.transaction_commit)(enshwick::abi::ModHandle(1), &raw const op, 1, &raw mut id);
+        let status = (api.transaction_commit)(
+            enshwick::abi::ModHandle(1),
+            enshwick::Entity(0),
+            &raw const op,
+            1,
+            &raw mut id,
+        );
         assert_eq!(status, Status::BAD_ARGS);
     }
 

@@ -17,6 +17,17 @@ fn a_hosted_game_s_end_forgets_the_joined_players_and_the_queued_building_events
 }
 
 #[test]
+fn a_placed_piece_s_position_widens_the_game_s_three_floats_without_reading_past_them() {
+    let floats: [f32; 3] = [1.5, -2.25, 1024.0];
+    // SAFETY: `floats` is a live three-float array, as the game passes.
+    let placed = unsafe { placed_at(&raw const floats) };
+    assert_eq!(placed, [1.5, -2.25, 1024.0]);
+    // SAFETY: a null position is allowed by `placed_at`.
+    let origin = unsafe { placed_at(core::ptr::null()) };
+    assert_eq!(origin, [0.0; 3]);
+}
+
+#[test]
 fn each_link_is_a_feature_of_its_own_named_once() {
     let names = [
         &STEP_FUSE,

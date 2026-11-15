@@ -775,7 +775,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_queued_change_keeps_waiting_exactly_when_the_call_was_refused() {
+    fn a_queued_change_keeps_waiting_exactly_when_the_call_was_refused_or_busy() {
         use crate::host::layer::Refusal;
         use enshwick_core::abi::Status;
         for error in [
@@ -793,7 +793,7 @@ mod tests {
         ] {
             assert_eq!(
                 error.may_pass(),
-                error.status() == Status::REFUSED,
+                matches!(error.status(), Status::REFUSED | Status::BUSY),
                 "{error:?}"
             );
         }

@@ -27,8 +27,13 @@ unsafe extern "system" fn failing_init(_: *const HostApi, handle: ModHandle) -> 
     Status::FAULTED
 }
 
-unsafe extern "system" fn on_ready(_: *const HostApi, handle: ModHandle) {
+unsafe extern "system" fn on_ready(_: *const HostApi, handle: ModHandle) -> Status {
     CALLS.with_borrow_mut(|calls| calls.push(("ready", handle.0)));
+    Status::OK
+}
+
+unsafe extern "system" fn failing_ready(_: *const HostApi, _: ModHandle) -> Status {
+    Status::FAULTED
 }
 
 /// A mod whose `init` answers as `init` does.
@@ -120,6 +125,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
+        unofficial: AtomicBool::new(false),
         retry: crate::engine::retry::Retry::default(),
         skipped,
         parts: crate::parts::parts(),
@@ -406,4 +412,30 @@ fn ready_skips_the_mods_that_are_off() {
     CALLS.with_borrow_mut(Vec::clear);
     ready(&loader, &order, None);
     assert_eq!(called(), [("ready", handle_of(&loader, "you.lanterns"))]);
+}
+
+#[test]
+fn a_mod_whose_ready_fails_is_turned_off_and_the_others_stay_on() {
+    let (loader, mut libraries) = loader(
+        &[TestMod::plain("you.lanterns"), TestMod::plain("you.stalls")],
+        false,
+    );
+    let stalls = loader
+        .mods
+        .iter()
+        .position(|m| m.id == "you.stalls")
+        .unwrap();
+    libraries[stalls].ready = failing_ready;
+    let order: Vec<&Library> = libraries.iter().collect();
+    initialise(&loader, &order, None);
+    ready(&loader, &order, None);
+    let off = |id: &str| {
+        loader
+            .mods
+            .iter()
+            .find(|m| m.id == id)
+            .is_some_and(|m| m.off.load(Ordering::Acquire))
+    };
+    assert!(off("you.stalls"));
+    assert!(!off("you.lanterns"));
 }

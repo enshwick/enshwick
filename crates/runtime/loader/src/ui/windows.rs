@@ -51,7 +51,7 @@ pub enum Change {
 }
 
 impl Change {
-    /// The change a `close` value of `HostApi::action_window` asks for;
+    /// The change the `change` value of `HostApi::action_window` asks for;
     /// `None` for a value this loader does not know.
     #[must_use]
     pub const fn of(close: u32) -> Option<Self> {

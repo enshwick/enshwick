@@ -393,6 +393,7 @@ ids! {
     GAME_SETTINGS_NIGHT_TIME_DURATION = "game_settings.night_time_duration";
     GAME_SETTINGS_CURSE_MODIFIER = "game_settings.curse_modifier";
     GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL = "game_settings.flame_level_fog_removal";
+    DAMAGE_TYPE = "damage_type";
     DAMAGE_TYPE_PHYSICAL_CUT = "damage_type.physical_cut";
     DAMAGE_TYPE_PHYSICAL_PIERCE = "damage_type.physical_pierce";
     DAMAGE_TYPE_PHYSICAL_BLUNT = "damage_type.physical_blunt";

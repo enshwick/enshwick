@@ -19,7 +19,7 @@ use crate::world::PropState;
 pub enum WorldError {
     /// Called off the server's game thread or inside a step (from a filter
     /// or a hook on a system); some reads answer it while no server runs,
-    /// where the entity calls answer [`WorldError::Missing`].
+    /// where the entity calls answer [`WorldError::Unavailable`].
     #[error("not on the server's game thread")]
     WrongThread,
     /// The entity is not in the world.
@@ -29,7 +29,15 @@ pub enum WorldError {
     /// client in another's game, or this loader or game build lacks the
     /// piece.
     #[error("not available here, or on this loader or game build")]
-    Missing,
+    Unavailable,
+    /// A queue of the world is full: the same request may pass after a
+    /// later step.
+    #[error("the world is busy; try again later")]
+    Busy,
+    /// The loader failed inside its own code, or answered with an outcome
+    /// this build of the mod does not know.
+    #[error("failed in the loader")]
+    Failed,
     /// The world refused: a player's character, a save before the world
     /// has loaded, a write that would kill, or a copy the game keeps for
     /// clients.
@@ -50,10 +58,7 @@ pub enum WorldError {
     /// The component type is the static half of its ECS type, such as
     /// `FuelSetup`: the set-up values every entity of the template shares,
     /// which the world reads but never writes.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
     #[error("the template's set-up data, which is never written")]
-    #[cfg(feature = "unstable")]
     StaticHalf,
     /// The prop holds state a player would lose: items, growth, a
     /// production queue, assigned survivors, written text, fuel, logic
@@ -81,12 +86,13 @@ impl enshwick_base::load::StatusError for WorldError {
             Status::WRONG_THREAD => Self::WrongThread,
             Status::NOT_LOADED => Self::NotLoaded,
             Status::OUTSIDE_WORLD => Self::OutsideWorld,
-            #[cfg(feature = "unstable")]
             Status::STATIC_HALF => Self::StaticHalf,
             #[cfg(feature = "unstable")]
             Status::NOT_A_PROP => Self::NotAProp,
             Status::REFUSED | Status::BAD_ARGS => Self::Refused,
-            _ => Self::Missing,
+            Status::UNAVAILABLE | Status::MISSING => Self::Unavailable,
+            Status::BUSY => Self::Busy,
+            _ => Self::Failed,
         }
     }
 }
@@ -113,11 +119,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_unavailable_call_and_any_status_a_mod_does_not_know_read_as_missing() {
-        for status in [Status::UNAVAILABLE, Status(15), Status(u32::MAX)] {
+    fn an_unavailable_call_reads_as_unavailable_and_an_unknown_status_as_a_failure() {
+        assert_eq!(
+            WorldError::check(Status::UNAVAILABLE, WorldError::Gone),
+            Err(WorldError::Unavailable)
+        );
+        assert_eq!(
+            WorldError::check(Status::BUSY, WorldError::Gone),
+            Err(WorldError::Busy)
+        );
+        for status in [Status::LOADER_FAULT, Status(u32::MAX)] {
             assert_eq!(
                 WorldError::check(status, WorldError::Gone),
-                Err(WorldError::Missing)
+                Err(WorldError::Failed)
             );
         }
     }

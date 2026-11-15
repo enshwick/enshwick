@@ -4,17 +4,18 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
-    use enshwick::actions::sheet::{ArgView, decode};
-    use enshwick::actions::{Action, Arg, Outcome, Value};
+    use enshwick::actions::sheet::ArgView;
+    use enshwick::actions::{Action, Actions, Arg, Outcome, Value, Window, window};
     use enshwick::content::Guid;
     use enshwick::i18n::Texts;
     use enshwick::{ItemId, Load, Mod, Off, PlayerKey};
 
     /// The values each run handed its handler.
     static RUNS: Mutex<Vec<Vec<Value>>> = Mutex::new(Vec::new());
+    static ACTIONS: OnceLock<Actions> = OnceLock::new();
 
     const TORCH: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const LAMP: Guid = Guid::named("you.spawner:lamp");
@@ -46,6 +47,7 @@ mod tests {
                 },
             )?;
             actions.commands("s")?;
+            let _first = ACTIONS.set(actions);
             Ok(Self)
         }
     }
@@ -66,7 +68,7 @@ mod tests {
             key: PlayerKey::new(9),
             permissions: PlayerInfo::CAN_KICK_BAN,
             name_len: 4,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..4].copy_from_slice(b"Root");
         info
@@ -90,13 +92,12 @@ mod tests {
     }
 
     #[test]
-    fn the_sheet_offers_an_item_argument_and_the_interface_sends_the_picked_guid() {
+    fn a_window_offers_an_item_argument_and_the_interface_sends_the_picked_guid() {
         let loader = start();
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &root(), 0, "", "")
-                .unwrap(),
-        );
+        let spawn = Window::new("spawn", "Spawn").action("spawn");
+        ACTIONS.get().unwrap().show(spawn, &[root().key]).unwrap();
+        let carried = loader.carried_windows(&root(), 0);
+        let sheet = window::decode(&carried[0].1).unwrap().entries;
         assert_eq!(sheet[0].args[0].kind, ArgView::ITEM);
         assert_eq!(sheet[0].group, "Items");
         assert_eq!(sheet[0].args[0].default, None);

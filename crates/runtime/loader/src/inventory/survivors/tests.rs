@@ -81,25 +81,57 @@ unsafe extern "system" fn no_lookup(
 }
 
 #[test]
-fn one_mod_holds_the_lookup_until_the_seal_and_a_reopened_one_takes_any() {
+fn every_mod_holds_one_lookup_in_load_order_until_the_seal() {
     let registrations = Registrations::new();
     let (first, second) = (ModIndex::new(1), ModIndex::new(2));
     let hold = |owner| {
-        hold_one(
+        hold_each(
             &registrations.lookup,
             Registered::new(owner, no_lookup, core::ptr::null_mut()),
         )
     };
     assert_eq!(hold(first), Ok(()));
+    assert_eq!(hold(second), Ok(()), "a second mod chains after the first");
     assert_eq!(hold(first), Ok(()), "the same mod replaces its own");
-    assert_eq!(hold(second), Err(JoinFeatureError::Taken));
     assert!(registrations.seal().lookup);
     assert!(registrations.is_sealed());
-    assert_eq!(registrations.lookup().map(|r| r.owner), Some(first));
+    let owners: Vec<ModIndex> = registrations.lookup().iter().map(|r| r.owner).collect();
+    assert_eq!(owners, [first, second]);
     assert_eq!(hold(first), Err(JoinFeatureError::TooLate));
     registrations.reopen();
     assert!(!registrations.is_sealed());
     assert_eq!(hold(second), Ok(()));
+}
+
+#[test]
+fn the_first_mod_on_that_answers_decides_and_the_others_pass_on() {
+    let registered: Vec<Registered<SurvivorLookupFn>> = (1..=3)
+        .map(|owner| {
+            let lookup: SurvivorLookupFn = no_lookup;
+            Registered::new(ModIndex::new(owner), lookup, core::ptr::null_mut())
+        })
+        .collect();
+    let answers = |owner: ModIndex| match owner.get() {
+        1 => None,
+        2 => Some(20),
+        _ => Some(30),
+    };
+    let asked = RefCell::new(Vec::new());
+    let ask = |r: &Registered<SurvivorLookupFn>| {
+        asked.borrow_mut().push(r.owner.get());
+        answers(r.owner)
+    };
+    assert_eq!(first_answer(&registered, |_| true, ask), Some(20));
+    assert_eq!(*asked.borrow(), [1, 2], "the third is never asked");
+    let second_off = |owner: ModIndex| owner.get() != 2;
+    assert_eq!(
+        first_answer(&registered, second_off, |r| answers(r.owner)),
+        Some(30)
+    );
+    assert_eq!(
+        first_answer(&registered, |_| false, |r| answers(r.owner)),
+        None
+    );
 }
 
 #[test]

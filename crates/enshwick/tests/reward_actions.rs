@@ -68,7 +68,7 @@ mod tests {
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 
@@ -261,7 +261,7 @@ mod tests {
         let drink = |player: u32| ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::CONSUME,
-            player: Entity(player),
+            character: Entity(player),
             item: tonic(),
             count: 1,
             inventory: Entity(100),

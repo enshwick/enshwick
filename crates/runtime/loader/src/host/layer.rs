@@ -23,9 +23,9 @@ pub(crate) mod guards;
 mod refusals;
 
 pub(crate) use args::{
-    AnyMod, Arg, Arg2, Arg3, Arg4, Asker, Buffer, BytesOut, BytesSlot, Caller, Headed, HeadedInOut,
-    HeadedList, HeadedListOut, HeadedOut, HeadedSince, In, List, ListOut, MaybeBuffer, MaybeHeaded,
-    Mod, Out, SizedListOut, Text, UnalignedList, Values,
+    AnyMod, Arg, Arg2, Arg3, Arg4, Asker, Buffer, BytesOut, BytesSlot, Callback, Caller, Headed,
+    HeadedInOut, HeadedList, HeadedOut, HeadedSince, In, List, ListOut, MaybeBuffer, MaybeHeaded,
+    MaybeOut, Mod, Out, SizedListOut, Slot, Text, UnalignedList, Values, YesNo,
 };
 pub(crate) use refusals::{Rule, RuleOff};
 
@@ -169,28 +169,12 @@ pub(crate) trait Reply: Sized {
 }
 
 impl Reply for Status {
-    const FAULT: Self = Self::REFUSED;
+    const FAULT: Self = Self::LOADER_FAULT;
 
     fn refused(status: Status) -> Self {
         status
     }
 }
-
-/// [`Reply`] for an entry whose return value carries no status: a refusal
-/// answers what a panic answers.
-macro_rules! reply_without_status {
-    ($($ty:ty = $fault:expr),* $(,)?) => {$(
-        impl Reply for $ty {
-            const FAULT: Self = $fault;
-
-            fn refused(_: Status) -> Self {
-                Self::FAULT
-            }
-        }
-    )*};
-}
-
-reply_without_status!(() = (), u8 = 0, u32 = 0, u64 = 0, Level = Level::INFO);
 
 /// What an entry's body gives on success, turned into the entry's return
 /// value: the value itself, or [`Status::OK`] for `()`.
@@ -214,9 +198,10 @@ impl Answer<Status> for () {
 /// entry: settles a refusal and catches a panic, so nothing unwinds into
 /// the mod.
 ///
-/// A panic inside a mod's callback that the body ran turns that mod off;
-/// any other turns `feature`, the entry's own, off, and [`live`] refuses the
-/// later calls.
+/// A panic inside a mod's callback that the body ran turns that mod off and
+/// answers [`Status::FAULTED`]; any other turns `feature`, the entry's own,
+/// off and answers [`Status::LOADER_FAULT`], and [`live`] refuses the later
+/// calls.
 #[inline]
 pub(crate) fn run<R: Reply, A: Answer<R>>(
     feature: &'static Fuse,
@@ -231,12 +216,15 @@ pub(crate) fn run<R: Reply, A: Answer<R>>(
     answered.unwrap_or_else(|payload| {
         // Turning off what panicked, or dropping the payload, may panic too.
         let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            panicked(&call, feature, outer, payload);
+            panicked(&call, feature, outer, payload)
         }));
-        if let Err(payload) = again {
-            leak(payload);
+        match again {
+            Ok(status) => R::refused(status),
+            Err(payload) => {
+                leak(payload);
+                R::FAULT
+            }
         }
-        R::FAULT
     })
 }
 
@@ -246,11 +234,11 @@ pub(crate) fn run<R: Reply, A: Answer<R>>(
 ///
 /// # Errors
 ///
-/// [`Status::REFUSED`] while `entry` is off.
+/// [`Status::LOADER_FAULT`] while `entry` is off.
 #[inline]
 pub(crate) fn live(entry: &Fuse) -> Result<(), Refused> {
     if entry.is_off() {
-        Err(Refused::with(Status::REFUSED))
+        Err(Refused::with(Status::LOADER_FAULT))
     } else {
         Ok(())
     }
@@ -267,8 +255,13 @@ fn leak(payload: Box<dyn core::any::Any + Send>) {
 }
 
 /// Turns off what panicked and drops the payload, inside the second guard
-/// of [`run`].
-fn panicked(call: &Call, feature: &Fuse, outer: u32, payload: Box<dyn core::any::Any + Send>) {
+/// of [`run`]; the status the entry answers.
+fn panicked(
+    call: &Call,
+    feature: &Fuse,
+    outer: u32,
+    payload: Box<dyn core::any::Any + Send>,
+) -> Status {
     let text = crate::engine::early::panic_text(payload.as_ref()).to_string();
     drop(payload);
     let Some(owner) = crate::engine::profile::unwound(outer) else {
@@ -276,7 +269,7 @@ fn panicked(call: &Call, feature: &Fuse, outer: u32, payload: Box<dyn core::any:
             feature.feature(),
             &format!("the loader panicked in {}: {text}", call.name),
         ));
-        return;
+        return Status::LOADER_FAULT;
     };
     let reason = format!("panic in its callback inside {}: {text}", call.name);
     if let Some(loader) = crate::engine::loader::loader() {
@@ -284,6 +277,7 @@ fn panicked(call: &Call, feature: &Fuse, outer: u32, payload: Box<dyn core::any:
     } else {
         crate::log!(ERROR, "mod {owner}: {reason}");
     }
+    Status::FAULTED
 }
 
 /// The running loader, for an entry that takes no mod handle.
@@ -300,7 +294,7 @@ pub(crate) fn loaded() -> Result<&'static Loader, Refused> {
 ///
 /// ```ignore
 /// entries! {
-///     fn item_info(loader as Caller, item: ItemId, out as HeadedOut<ItemData>) -> Status {
+///     fn item_info(loader as Caller, item: ItemId, out as HeadedOut<ItemTypeInfo>) -> Status {
 ///         out.put(crate::inventory::transactions::item_info(loader, item.get())?)
 ///     }
 /// }

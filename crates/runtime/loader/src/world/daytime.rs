@@ -248,11 +248,11 @@ pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, DaytimeError> {
     let is_day: u8 = unsafe { crate::engine::memory::read(daytime, layout.is_day) };
     Ok(DaytimeInfo {
         header: Header::of::<DaytimeInfo>(),
-        time,
-        day_start,
-        day_end,
-        day_length,
-        night_length,
+        time_ns: time,
+        day_start_ns: day_start,
+        day_end_ns: day_end,
+        day_length_ns: day_length,
+        night_length_ns: night_length,
         speed,
         flags: if is_day == 0 { 0 } else { DaytimeInfo::DAY },
     })

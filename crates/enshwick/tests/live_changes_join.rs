@@ -74,23 +74,19 @@ mod tests {
         let raw = |me, field: Field| {
             let change = enshwick::abi::DataChange {
                 header: enshwick::abi::Header::of::<enshwick::abi::DataChange>(),
-                entry: [7; 16],
+                entry: Guid([7; 16]),
                 field: field.to_abi(),
                 op: enshwick::abi::ChangeOp::TIMES,
                 value: 1.0,
                 source: enshwick::abi::Str::new("raw"),
-                item: [0; 16],
+                item: Guid([0; 16]),
                 select: enshwick::abi::DataSelect::ENTRY,
                 categories: 0,
             };
             let mut id = enshwick::abi::ChangeId(0);
             // SAFETY: the fake host's table lives for the process; `change`
             // and `id` are locals alive for the call.
-            (unsafe { &*loader.api() }.declare_change)(
-                ModHandle(me),
-                &raw const change,
-                &raw mut id,
-            )
+            (unsafe { &*loader.api() }.change_data)(ModHandle(me), &raw const change, &raw mut id)
         };
         assert_eq!(raw(3, Field::MaxStackSize), Status::REFUSED);
         assert_eq!(raw(4, Field::MaxStackSize), Status::REFUSED);

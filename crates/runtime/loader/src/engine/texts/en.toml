@@ -8,6 +8,7 @@
 "windows.name" = "Or type a name"
 "windows.text" = "Type here"
 "windows.item" = "Search for an item"
+"windows.template" = "Search for a template"
 "controls.title" = "Key bindings"
 "controls.belongs" = "These keys are yours on this computer. They do not belong to the world."
 "mods.carried" = "Runs on the server you joined. You can change its keys here."
@@ -36,6 +37,7 @@
 "mods.discovery.off" = "Mod discovery is off: in games a player hosts, the host and the players who join do not see each other's mods."
 "mods.settings.broken" = "enshwick.toml has errors. Protections stay on until it is fixed. See the log."
 "mods.newer" = "Enshwick {version} is available: {address}"
+"mods.unofficial" = "Unofficial build: these Enshwick files do not carry the signature of an official release. See the log."
 "mods.extends" = "Extends: {points}"
 "mods.settings" = "Settings" # text tag 0x4fd146ae
 "mods.settings.server-marked" = "Settings marked \"set by the server\" come from the server you joined."

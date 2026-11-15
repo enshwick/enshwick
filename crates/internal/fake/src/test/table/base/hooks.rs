@@ -3,13 +3,12 @@
 use core::sync::atomic::Ordering;
 
 use crate::test::LinkedHook;
-use crate::test::table::{Registered, Registration, put, with};
+use crate::test::table::{Registered, Registration, get_headed, put, with};
 use enshwick_core::__fake::rules;
 use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
 pub(crate) extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Status {
-    // SAFETY: the safe layer passes a valid spec for the call; `as_ref` turns away null.
-    let Some(spec) = (unsafe { spec.as_ref() }).filter(|spec| !spec.next.is_null()) else {
+    let Some(spec) = get_headed(spec).filter(|spec| !spec.next.is_null()) else {
         return Status::BAD_ARGS;
     };
     let linked = with(Status::MISSING, |s| {
@@ -50,14 +49,16 @@ pub(crate) extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Sta
 }
 
 pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -> Status {
-    // SAFETY: the safe layer passes a valid spec for the call; `as_ref` turns away null.
-    let Some(spec) = (unsafe { spec.as_ref() }) else {
+    let Some(spec) = get_headed(spec) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
+        let Some(handler) = spec.handler else {
+            return Status::BAD_ARGS;
+        };
         if spec.address == 0 {
             return Status::BAD_ARGS;
         }
@@ -70,21 +71,21 @@ pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -
             return Status::REFUSED;
         }
         s.mid_hooks
-            .push((spec.address, Registered::new(spec.handler, spec.user, me)));
+            .push((spec.address, Registered::new(handler, spec.user, me)));
         Status::OK
     })
 }
 
-pub(crate) extern "system" fn code_range(start: *mut u64, len: *mut u64) -> Status {
+pub(crate) extern "system" fn code_range(_me: ModHandle, start: *mut u64, len: *mut u32) -> Status {
     let (address, size) = with((0, 0), |s| s.host.code);
     if address == 0 {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     }
     let status = put(start, address);
     if !status.is_ok() {
         return status;
     }
-    put(len, size)
+    put(len, u32::try_from(size).unwrap_or(u32::MAX))
 }
 
 pub(crate) extern "system" fn patch_code(
@@ -92,8 +93,9 @@ pub(crate) extern "system" fn patch_code(
     address: u64,
     expected: *const u8,
     replacement: *const u8,
-    len: usize,
+    len: u32,
 ) -> Status {
+    let len = len as usize;
     if expected.is_null() || replacement.is_null() {
         return Status::BAD_ARGS;
     }
@@ -124,6 +126,6 @@ pub(crate) extern "system" fn patch_code(
     })
 }
 
-pub(crate) extern "system" fn workshop_recipes() -> u32 {
-    with(512, |s| s.host.workshop_recipes)
+pub(crate) extern "system" fn workshop_recipes(_me: ModHandle, out: *mut u32) -> Status {
+    put(out, with(512, |s| s.host.workshop_recipes))
 }

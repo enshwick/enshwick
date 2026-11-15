@@ -4,16 +4,17 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
-    use enshwick::actions::sheet::{ArgView, decode};
-    use enshwick::actions::{Action, Arg, Outcome, Value};
+    use enshwick::actions::sheet::{ArgView, Entry};
+    use enshwick::actions::{Action, Actions, Arg, Outcome, Value, Window, window};
     use enshwick::i18n::{Language, Texts};
     use enshwick::{Load, Mod, Off, PlayerKey};
 
     /// The values each run handed its handler.
     static RUNS: Mutex<Vec<Vec<Value>>> = Mutex::new(Vec::new());
+    static ACTIONS: OnceLock<Actions> = OnceLock::new();
 
     /// The accounts the mod knows: Ann, who is also online in the tests,
     /// Bob, who is offline, and two offline accounts that share the name
@@ -71,6 +72,7 @@ mod tests {
             )?;
             self_and_optional(&actions, ran)?;
             actions.commands("b")?;
+            let _first = ACTIONS.set(actions);
             Ok(Self)
         }
     }
@@ -78,7 +80,7 @@ mod tests {
     /// The actions that offer the player who looks, and those with optional
     /// arguments, each run by `ran`.
     fn self_and_optional(
-        actions: &enshwick::actions::Actions,
+        actions: &Actions,
         ran: impl Fn(&enshwick::actions::Request<'_>) -> Outcome + Send + Sync + Copy + 'static,
     ) -> Result<(), Off> {
         actions.add(
@@ -156,15 +158,15 @@ mod tests {
         "#
     );
 
-    fn player(entity: u32, key: u64, name: &str, permissions: u8) -> PlayerInfo {
+    fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
         let mut info = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,
             entity: enshwick::Entity(entity),
             key: PlayerKey::new(key),
             permissions,
-            name_len: u8::try_from(name.len()).unwrap(),
-            name: [0; 64],
+            name_len: u32::try_from(name.len()).unwrap(),
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
@@ -184,6 +186,17 @@ mod tests {
 
     fn runs() -> Vec<Vec<Value>> {
         std::mem::take(&mut *RUNS.lock().unwrap())
+    }
+
+    /// The entries a window naming the actions `ids` shows `viewer`.
+    fn shown(loader: &enshwick::test::Installed, viewer: &PlayerInfo, ids: &[&str]) -> Vec<Entry> {
+        let look = ids
+            .iter()
+            .fold(Window::new("look", "Look"), |w, id| w.action(id));
+        ACTIONS.get().unwrap().show(look, &[viewer.key]).unwrap();
+        let carried = loader.carried_windows(viewer, 0);
+        let (_, text) = carried.iter().find(|(id, _)| id == "look").unwrap();
+        window::decode(text).unwrap().entries
     }
 
     fn text(text: &str) -> Value {
@@ -338,11 +351,7 @@ mod tests {
         let ann = player(3, 7, "Ann", 0);
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
         let loader = start(&[ann, root]);
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
-                .unwrap(),
-        );
+        let sheet = shown(&loader, &root, &["shield", "heal", "allowed", "ban"]);
         let entry = |id: &str| sheet.iter().find(|e| e.id == id).unwrap();
         let viewer = PlayerKey::new(9);
 
@@ -449,12 +458,7 @@ mod tests {
         assert!(run("t").unwrap().starts_with('0'), "an empty text");
         assert!(runs().is_empty());
 
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
-                .unwrap(),
-        );
-        let say = &sheet.iter().find(|e| e.id == "say").unwrap().args[0];
+        let say = &shown(&loader, &root, &["say"])[0].args[0];
         assert_eq!(say.kind, ArgView::TEXT);
         assert_eq!((say.min, say.max), (1.0, 24.0));
     }
@@ -495,11 +499,7 @@ mod tests {
             Some("0No player named Zed.")
         );
 
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
-                .unwrap(),
-        );
+        let sheet = shown(&loader, &root, &["ban", "allowed"]);
         let ban = &sheet.iter().find(|e| e.id == "ban").unwrap().args[0];
         let options: Vec<&str> = ban.players.iter().map(|p| p.1.as_str()).collect();
         assert_eq!(

@@ -25,7 +25,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side};
+use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemFilterFn, Side};
 use enshwick_core::raw::{read_at, write_at};
 
 use crate::engine::ecs::{Components, Engine};
@@ -41,7 +41,7 @@ use uses::{USES, moves};
 /// The system that runs the players' equips and unequips.
 const EQUIPMENT_SYSTEM: &str = "equipment_actions";
 
-static FILTERS: Filters<ItemActionFn> = Filters::new(Feature::Items);
+static FILTERS: Filters<ItemFilterFn> = Filters::new(Feature::Items);
 /// The layout and components the links read, once linked.
 static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
 
@@ -253,7 +253,7 @@ fn events(loader: &Loader) -> Events {
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
-    callback: ItemActionFn,
+    callback: ItemFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     let available = || {
@@ -323,7 +323,9 @@ fn ask(call: &ItemAction, refusable: bool) -> bool {
     // SAFETY: a filter's mod runs, so its DLL that holds the callback stays
     // loaded; it gets the user pointer its mod registered and `call`, which
     // lives for the call.
-    let allows = |filter: &ItemActionFn, user| unsafe { filter(call, user) != 0 };
+    let allows = |filter: &ItemFilterFn, user| unsafe {
+        filter(call, user) != enshwick_core::abi::FILTER_REFUSE
+    };
     if refusable {
         FILTERS.refuser(allows).is_none()
     } else {
@@ -407,7 +409,7 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
             let consumed =
-                unsafe { components.component(ctx, call.player.0, layout.consumed_input) }?;
+                unsafe { components.component(ctx, call.character.0, layout.consumed_input) }?;
             let slot = u8::try_from(call.slot).ok()?;
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
@@ -462,7 +464,7 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
         let call = ItemAction {
             header: Header::of::<ItemAction>(),
             kind,
-            player: enshwick_core::Entity(player),
+            character: enshwick_core::Entity(player),
             item: enshwick_core::ItemId::new(item),
             count: if kind == ItemAction::CONSUME {
                 1
@@ -602,7 +604,7 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
         let call = ItemAction {
             header: Header::of::<ItemAction>(),
             kind: heard.kind,
-            player: enshwick_core::Entity(player),
+            character: enshwick_core::Entity(player),
             item: enshwick_core::ItemId::new(item),
             count,
             inventory: enshwick_core::Entity(0),

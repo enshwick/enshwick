@@ -3,7 +3,9 @@
 use core::ffi::c_void;
 use core::time::Duration;
 
+use crate::abi::Metres;
 use crate::abi::{Entity, Header, ItemId, KnowledgeId, PlayerKey};
+use crate::content::Guid;
 
 /// Something the loader tells subscribed mods about, with
 /// [`HostApi::subscribe`](super::HostApi::subscribe).
@@ -56,8 +58,8 @@ impl Event {
     /// [`BuildingData`] whose entity no longer exists. Raised on the game
     /// thread after the step. Server only.
     pub const BUILDING_REMOVED: Self = Self(10);
-    /// The join check kept this client out of a server that runs join mods
-    /// the client lacks or runs in another version; no data.
+    /// The join check kept this client out of a server that runs mods of
+    /// side both the client lacks or runs in another version; no data.
     /// [`HostApi::join_missing`](super::HostApi::join_missing) lists those mods with the versions the
     /// server runs and their pages. Raised on the game thread once the player
     /// closed the loader's dialog. Client only.
@@ -66,7 +68,7 @@ impl Event {
     /// removed, moved, raised a level or had its zone built anew; no data.
     /// [`HostApi::altars`](super::HostApi::altars) lists them as they are now. Raised on the game
     /// thread after the step that noticed it, while a mod has opened altars
-    /// ([`HostApi::altars_open`](super::HostApi::altars_open)). Server only.
+    /// ([`HostApi::request_altars`](super::HostApi::request_altars)). Server only.
     pub const ALTARS_CHANGED: Self = Self(12);
     /// The day began in the server's world: the clock passed the hour day
     /// starts at, or a mod set it into the day; no data. Raised on the game
@@ -110,33 +112,31 @@ impl Event {
     /// kept, as they left it, an emote or another line the server posted;
     /// data is a [`ChatLine`](super::ChatLine). Lines the loader posts for
     /// mods raise none, and a player's lines raise at most eight a second.
-    /// Raised on the game thread after the step. Server only. ABI 11.6.
+    /// Raised on the game thread after the step. Server only.
     pub const CHAT_SAID: Self = Self(21);
     /// A save of the world got under way: what a mod writes now beside the
     /// save belongs to it, and [`Event::WORLD_SAVED`] follows once it is on
     /// disk; no data. Raised on the game thread after the step that started
-    /// it. Server only. ABI 11.6.
+    /// it. Server only.
     pub const WORLD_SAVING: Self = Self(22);
     /// The server's voxel editor wrote voxels of the world: a player's tool
     /// or building, the game itself, or a mod's terrain edit, transaction
-    /// or undo; data is a [`VoxelEditData`](super::VoxelEditData). One
+    /// or undo; data is a [`VoxelEditRequest`](super::VoxelEditRequest). One
     /// event per write, which an undo or a transaction makes per brick of
     /// 8 voxels; a write that changed nothing raises none. The name is
     /// enshwick's. Raised on the game thread after the step. Server only.
-    /// ABI 11.12.
     pub const VOXELS_CHANGED: Self = Self(23);
     /// A page of the terrain came into the server's memory, so its voxels
     /// usually read and edit; data is a [`TerrainPageData`]. The ground loads and
     /// drops by page on its own, with players near or not, so a mod that
     /// keeps its terrain edits outside the save writes them again here.
     /// Raised on the game thread after the step. Dedicated server only.
-    /// ABI 11.15.
     pub const TERRAIN_PAGE_LOADED: Self = Self(24);
     /// A page of the terrain left the server's memory, the one used least
     /// lately, and its voxels read as not loaded until a read loads it
     /// again; data is a [`TerrainPageData`]. Raised on the game thread
     /// after the step.
-    /// Dedicated server only. ABI 11.15.
+    /// Dedicated server only.
     pub const TERRAIN_PAGE_UNLOADED: Self = Self(25);
     /// A level or experience write the mod asked for with
     /// [`HostApi::progress_write`](super::HostApi::progress_write) was
@@ -145,7 +145,7 @@ impl Event {
     /// only, on the game thread after the step that applied the write, or
     /// after the second step end with no level step that could take it;
     /// a write still waiting when a hosted game ends is heard as dropped
-    /// then. The name is enshwick's. Server only. ABI 11.25.
+    /// then. The name is enshwick's. Server only.
     pub const PROGRESS_WRITTEN: Self = Self(26);
 }
 
@@ -154,22 +154,19 @@ impl Event {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, PlayerDeathData};
+/// use enshwick::abi::{DamageCheck, Header, PlayerDeathData};
 ///
 /// let fell = PlayerDeathData {
 ///     header: Header::of::<PlayerDeathData>(),
 ///     entity: enshwick::Entity(2),
-///     cause: PlayerDeathData::FALL_DAMAGE,
+///     cause: DamageCheck::FALL_DAMAGE,
 ///     key: enshwick::PlayerKey::new(7),
 ///     position: [10.0, 50.0, -3.0],
-///     cause_guid: [0; 16],
-///     was_deadly_fog: 0,
-///     drowned: 0,
-///     reserved: 0,
+///     cause_guid: enshwick::abi::Guid::NIL,
 ///     killer_entity: enshwick::Entity(0),
 ///     reserved_tail: 0,
 /// };
-/// assert_eq!(fell.cause, PlayerDeathData::FALL_DAMAGE);
+/// assert_eq!(fell.cause, DamageCheck::FALL_DAMAGE);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable, crate::Script)]
@@ -179,26 +176,22 @@ pub struct PlayerDeathData {
     /// The player's character; 0 when the account left in the same step.
     /// The name is enshwick's: the game's record holds the user instead.
     pub entity: Entity,
-    /// What killed the player, the game's death cause: 0
-    /// [a hit](PlayerDeathData::IMPACT), 1
-    /// [a fall](PlayerDeathData::FALL_DAMAGE), 2
-    /// [the shroud](PlayerDeathData::FOG), 3
-    /// [suffocation](PlayerDeathData::SUFFOCATED).
+    /// What killed the player, numbered as the damage filter numbers its
+    /// causes: [`DamageCheck::IMPACT`](super::DamageCheck::IMPACT),
+    /// [`DamageCheck::FALL_DAMAGE`](super::DamageCheck::FALL_DAMAGE),
+    /// [`DamageCheck::FOG`](super::DamageCheck::FOG),
+    /// [`DamageCheck::DEADLY_FOG`](super::DamageCheck::DEADLY_FOG) or
+    /// [`DamageCheck::SUFFOCATED`](super::DamageCheck::SUFFOCATED), which is
+    /// drowning; another number is a cause of a later game build.
     pub cause: u32,
     /// The account, [the same number](PlayerInfo::key) in every session;
     /// the name is enshwick's for the game's account id hash.
     pub key: PlayerKey,
     /// Where, in metres.
-    pub position: [f32; 3],
+    pub position: Metres,
     /// For a hit, the template GUID of what dealt it, a creature's or an
     /// impact's; zero for other causes.
-    pub cause_guid: [u8; 16],
-    /// 1 when the shroud was the deadly kind, which kills at once.
-    pub was_deadly_fog: u8,
-    /// 1 when the player drowned.
-    pub drowned: u8,
-    /// Zero.
-    pub reserved: u16,
+    pub cause_guid: Guid,
     /// For a hit, the attacker of the last hit the player took, from its
     /// `HitHistory`, as [`EntityDiedEvent`](../game_events/struct.EntityDiedEvent.html) reads it; 0 for other
     /// causes, or when the history names none. The name is enshwick's.
@@ -208,17 +201,6 @@ pub struct PlayerDeathData {
 }
 
 impl_headed!(PlayerDeathData);
-
-impl PlayerDeathData {
-    /// A hit.
-    pub const IMPACT: u32 = 0;
-    /// A fall.
-    pub const FALL_DAMAGE: u32 = 1;
-    /// The shroud.
-    pub const FOG: u32 = 2;
-    /// Out of breath, under water.
-    pub const SUFFOCATED: u32 = 3;
-}
 
 /// The data of the [`KnowledgeChanged`](../events/struct.KnowledgeChanged.html) event.
 ///
@@ -279,7 +261,7 @@ impl_headed!(QuestData);
 ///
 /// let seen = KnowledgeInput {
 ///     header: Header::of::<KnowledgeInput>(),
-///     player: enshwick::Entity(2),
+///     character: enshwick::Entity(2),
 ///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
@@ -287,6 +269,7 @@ impl_headed!(QuestData);
 ///     value: 0,
 ///     refusal: KnowledgeInput::ALLOWED,
 ///     allowed: 1,
+///     reserved_tail: [0; 3],
 /// };
 /// assert_eq!(seen.allowed, 1);
 /// ```
@@ -296,7 +279,7 @@ pub struct KnowledgeInput {
     /// Size and version of this struct.
     pub header: Header,
     /// The asking player's character.
-    pub player: Entity,
+    pub character: Entity,
     /// The knowledge id.
     pub id: KnowledgeId,
     /// The kind the client names: [`KnowledgeInfo::BOOL`](super::KnowledgeInfo::BOOL),
@@ -315,7 +298,9 @@ pub struct KnowledgeInput {
     pub refusal: u32,
     /// 1 when the request goes through so far: after the guard, which
     /// refuses only when enforcing, and the filters that ran before.
-    pub allowed: u32,
+    pub allowed: u8,
+    /// Zero.
+    pub reserved_tail: [u8; 3],
 }
 
 impl_headed!(KnowledgeInput);
@@ -344,12 +329,17 @@ impl KnowledgeInput {
 }
 
 /// A mod's knowledge input filter: the request and the pointer given at
-/// registration; returns 1 to let it through, 0 to refuse it.
+/// registration; returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse it, else [`FILTER_PASS`](super::FILTER_PASS).
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in `Load::on_knowledge_input`, behind the `unstable` feature.
-pub type KnowledgeInputFn =
+pub type KnowledgeInputFilterFn =
     unsafe extern "system" fn(call: *const KnowledgeInput, user: *mut c_void) -> u8;
 
 /// The data of the [`ChunkLoaded`](../events/struct.ChunkLoaded.html) and
@@ -361,7 +351,7 @@ pub type KnowledgeInputFn =
 /// ```
 /// use enshwick::abi::{ChunkData, Header};
 ///
-/// let chunk = ChunkData { header: Header::of::<ChunkData>(), index: 41, x: 1, z: 1, size: 256 };
+/// let chunk = ChunkData { header: Header::of::<ChunkData>(), x: 1, z: 1, size: 256 };
 /// assert_eq!(chunk.x * chunk.size, 256, "it starts 256 m east of the origin");
 /// ```
 #[repr(C)]
@@ -369,8 +359,6 @@ pub type KnowledgeInputFn =
 pub struct ChunkData {
     /// Size and version of this struct.
     pub header: Header,
-    /// The chunk's index in the world's grid: `z * width + x`.
-    pub index: u32,
     /// Its column, west to east from 0.
     pub x: u32,
     /// Its row, from 0 along the other axis.
@@ -407,8 +395,7 @@ pub struct TerrainPageData {
     pub z: u32,
     /// Its side in metres, 128 on server 26430253: it spans `x * size` to
     /// `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size`
-    /// along z, as [`VoxelPos::to_metres`](../voxels/struct.VoxelPos.html#method.to_metres)
-    /// counts them, at every height.
+    /// along z, at every height.
     pub size: u32,
 }
 
@@ -425,11 +412,11 @@ impl_headed!(TerrainPageData);
 /// let placed = BuildingData {
 ///     header: Header::of::<BuildingData>(),
 ///     entity: enshwick::Entity(4096),
-///     player: enshwick::Entity(2),
+///     character: enshwick::Entity(2),
 ///     item: enshwick::ItemId::new(1_302_084_846),
 ///     kind: BuildingData::PLACED,
 ///     replay: 0,
-///     template: [0; 16],
+///     template: enshwick::abi::Guid::NIL,
 ///     position: [1.0, 2.0, 3.0],
 /// };
 /// assert_eq!(placed.kind, BuildingData::PLACED);
@@ -442,7 +429,7 @@ pub struct BuildingData {
     /// The placed entity; for a removal, the entity as it was.
     pub entity: Entity,
     /// The acting player's character entity.
-    pub player: Entity,
+    pub character: Entity,
     /// The item placed, which the entity keeps as its `UsedItem`; 0 for a
     /// removal.
     pub item: ItemId,
@@ -451,11 +438,11 @@ pub struct BuildingData {
     pub kind: u8,
     /// 1 when undo or redo replayed the action.
     pub replay: u8,
-    /// The template GUID of the placed entity, in file order; zero for a
+    /// The template GUID of the placed entity; zero for a
     /// removal.
-    pub template: [u8; 16],
+    pub template: Guid,
     /// Where it was placed, in metres; zero for a removal.
-    pub position: [f32; 3],
+    pub position: Metres,
 }
 
 impl_headed!(BuildingData);
@@ -469,76 +456,102 @@ impl BuildingData {
     pub const TORN_DOWN: u8 = 2;
 }
 
-/// A connected player, from [`HostApi::player`](super::HostApi::player) or [`HostApi::players`](super::HostApi::players).
+/// A connected player, or a caller with no character, from
+/// [`HostApi::player`](super::HostApi::player),
+/// [`HostApi::players`](super::HostApi::players) or a call about one.
 ///
-/// Unlike other structs with a [`Header`], its layout is frozen and it never
-/// grows: [`ActionCall`](super::ActionCall) and [`RenameCall`](super::RenameCall) carry it before fields of their
-/// own, and [`HostApi::players`](super::HostApi::players) writes an array of it with no entry size.
-/// Player data a later minor adds goes into a new struct. The caller still
-/// starts each one it passes with [`Header::of`].
+/// It grows by appending, as any struct with a [`Header`] does: a call
+/// hands it by pointer and a list states its entry size, so a later minor
+/// adds a field without new calls. The caller starts each one it passes with
+/// a header of its own size and ABI version.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, PlayerInfo};
+/// use enshwick::abi::PlayerInfo;
 ///
-/// let mut name = [0u8; 64];
-/// name[..3].copy_from_slice(b"Ann");
-/// let player = PlayerInfo {
-///     header: Header::of::<PlayerInfo>(),
-///     slot: 0,
-///     entity: enshwick::Entity(2),
-///     key: enshwick::PlayerKey::new(7),
-///     permissions: PlayerInfo::CAN_ACCESS_INVENTORIES,
-///     name_len: 3,
-///     name,
-/// };
-/// assert_eq!(&player.name[..usize::from(player.name_len)], b"Ann");
+/// let player = PlayerInfo::with_name(
+///     enshwick::Entity(2),
+///     enshwick::PlayerKey::new(7),
+///     PlayerInfo::CAN_ACCESS_INVENTORIES,
+///     "Ann",
+/// );
+/// assert_eq!(player.name_text(), "Ann");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct PlayerInfo {
     /// Size and version of this struct.
     pub header: Header,
-    /// The server's player slot.
+    /// The server's player slot; `u32::MAX` for a caller with no character.
     pub slot: u32,
-    /// The player character's entity.
+    /// The player character's entity; 0 for a caller with no character.
     pub entity: Entity,
     /// The same number for the same account in every session.
     pub key: PlayerKey,
-    /// The server's permission bits for the player: 1
+    /// The game's user group bits for the player: 1
     /// [kick and ban](PlayerInfo::CAN_KICK_BAN), 2
     /// [open inventories](PlayerInfo::CAN_ACCESS_INVENTORIES), 4
     /// [edit the base](PlayerInfo::CAN_EDIT_BASE), 8
     /// [edit the world](PlayerInfo::CAN_EDIT_WORLD), 16
     /// [extend the base](PlayerInfo::CAN_EXTEND_BASE), 32
-    /// [receive experience](PlayerInfo::CAN_RECEIVE_EXP).
-    pub permissions: u8,
-    /// Bytes of `name` in use.
-    pub name_len: u8,
-    /// The name the client sent, UTF-8 as sent, cut at 64 bytes.
-    pub name: [u8; 64],
+    /// [receive experience](PlayerInfo::CAN_RECEIVE_EXP). Bits the game adds
+    /// later are passed on as it sets them; a mod ignores bits it does not
+    /// know.
+    pub permissions: u32,
+    /// Bytes of `name` in use, at most [`PlayerInfo::NAME_MAX`].
+    pub name_len: u32,
+    /// The name the client sent, UTF-8; one longer than
+    /// [`PlayerInfo::NAME_MAX`] bytes is cut at the last whole character
+    /// that fits, never inside one.
+    pub name: [u8; 128],
 }
 
 impl_headed!(PlayerInfo);
 
 impl PlayerInfo {
     /// May kick and ban; the server's administrators.
-    pub const CAN_KICK_BAN: u8 = 1;
+    pub const CAN_KICK_BAN: u32 = 1;
     /// May open chests and other inventories.
-    pub const CAN_ACCESS_INVENTORIES: u8 = 1 << 1;
+    pub const CAN_ACCESS_INVENTORIES: u32 = 1 << 1;
     /// May build in bases.
-    pub const CAN_EDIT_BASE: u8 = 1 << 2;
+    pub const CAN_EDIT_BASE: u32 = 1 << 2;
     /// May change the world outside bases.
-    pub const CAN_EDIT_WORLD: u8 = 1 << 3;
+    pub const CAN_EDIT_WORLD: u32 = 1 << 3;
     /// May extend bases.
-    pub const CAN_EXTEND_BASE: u8 = 1 << 4;
+    pub const CAN_EXTEND_BASE: u32 = 1 << 4;
     /// Receives experience.
-    pub const CAN_RECEIVE_EXP: u8 = 1 << 5;
+    pub const CAN_RECEIVE_EXP: u32 = 1 << 5;
+    /// The most bytes of a name: 32 characters of up to four bytes each,
+    /// the longest name Steam allows.
+    pub const NAME_MAX: usize = 128;
+
+    /// A player with the name `name`, cut at the last whole character within
+    /// [`PlayerInfo::NAME_MAX`] bytes; slot `u32::MAX` until the writer sets
+    /// it.
+    ///
+    /// # Examples
+    ///
+    /// See [`PlayerInfo`].
+    #[must_use]
+    pub fn with_name(entity: Entity, key: PlayerKey, permissions: u32, name: &str) -> Self {
+        let name = &name[..name.floor_char_boundary(Self::NAME_MAX)];
+        let mut bytes = [0u8; Self::NAME_MAX];
+        bytes[..name.len()].copy_from_slice(name.as_bytes());
+        Self {
+            header: Header::of::<Self>(),
+            slot: u32::MAX,
+            entity,
+            key,
+            permissions,
+            // At most `NAME_MAX`, which fits.
+            name_len: u32::try_from(name.len()).unwrap_or(0),
+            name: bytes,
+        }
+    }
 
     /// A caller with no character, as the server's console, a remote caller
-    /// or a player who left: account `key`, `permissions`, and `name` cut on
-    /// a character boundary to the 64 bytes `name` holds.
+    /// or a player who left: account `key`, `permissions` and `name`.
     ///
     /// # Examples
     ///
@@ -551,19 +564,8 @@ impl PlayerInfo {
     /// assert!(console.is_admin());
     /// ```
     #[must_use]
-    pub fn without_character(key: PlayerKey, permissions: u8, name: &str) -> Self {
-        let name = &name[..name.floor_char_boundary(64)];
-        let mut bytes = [0u8; 64];
-        bytes[..name.len()].copy_from_slice(name.as_bytes());
-        Self {
-            header: Header::of::<Self>(),
-            slot: u32::MAX,
-            entity: Entity(0),
-            key,
-            permissions,
-            name_len: u8::try_from(name.len()).unwrap_or(64),
-            name: bytes,
-        }
+    pub fn without_character(key: PlayerKey, permissions: u32, name: &str) -> Self {
+        Self::with_name(Entity(0), key, permissions, name)
     }
 
     /// Whether the server lets the player kick and ban: its administrators.
@@ -588,18 +590,19 @@ impl PlayerInfo {
     /// assert!(!PlayerInfo::admin(PlayerInfo::CAN_EDIT_BASE));
     /// ```
     #[must_use]
-    pub const fn admin(permissions: u8) -> bool {
+    pub const fn admin(permissions: u32) -> bool {
         permissions & Self::CAN_KICK_BAN != 0
     }
 
-    /// The player's name, a byte the client sent that is not UTF-8 replaced.
+    /// The player's name, a byte that is not UTF-8 replaced.
     ///
     /// # Examples
     ///
     /// See [`PlayerInfo::without_character`].
     #[must_use]
     pub fn name_text(&self) -> std::borrow::Cow<'_, str> {
-        String::from_utf8_lossy(&self.name[..usize::from(self.name_len).min(self.name.len())])
+        let len = usize::try_from(self.name_len).map_or(0, |len| len.min(self.name.len()));
+        String::from_utf8_lossy(&self.name[..len])
     }
 }
 
@@ -633,16 +636,16 @@ pub struct TickData {
     /// Wall time since this handler's last call in nanoseconds; for its
     /// first call, and for an every-step handler, the time since the step
     /// before. 0 on the loader's first step.
-    pub elapsed_nanos: u64,
+    pub elapsed_ns: u64,
     /// The average time between server steps in nanoseconds, over about the
     /// last 16 steps; 0 until a step has been measured.
-    pub step_nanos: u64,
+    pub step_ns: u64,
     /// What one call of this mod's event handlers cost on average since
     /// this handler's last call, in nanoseconds; 0 for an every-step
     /// handler, unless the loader's diagnostics time callbacks, and for
     /// about a second after they start, while the loader measures its
     /// clock.
-    pub cost_nanos: u64,
+    pub cost_ns: u64,
     /// Which game the server steps, from 1: a dedicated server runs one,
     /// and a client counts one more for each game it hosts after the first.
     pub game: u64,
@@ -667,9 +670,9 @@ impl TickData {
             header: Header::of::<Self>(),
             step,
             elapsed_steps: 1,
-            elapsed_nanos: 0,
-            step_nanos: 0,
-            cost_nanos: 0,
+            elapsed_ns: 0,
+            step_ns: 0,
+            cost_ns: 0,
             game: 1,
         }
     }
@@ -685,8 +688,8 @@ impl TickData {
         let nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
         Self {
             elapsed_steps: steps,
-            elapsed_nanos: nanos,
-            step_nanos: nanos / steps.max(1),
+            elapsed_ns: nanos,
+            step_ns: nanos / steps.max(1),
             ..self
         }
     }
@@ -698,7 +701,7 @@ impl TickData {
     /// See [`TickData`].
     #[must_use]
     pub const fn elapsed(&self) -> Duration {
-        Duration::from_nanos(self.elapsed_nanos)
+        Duration::from_nanos(self.elapsed_ns)
     }
 
     /// The average time between server steps lately, about 50 ms on an
@@ -714,7 +717,7 @@ impl TickData {
     /// ```
     #[must_use]
     pub const fn step_interval(&self) -> Option<Duration> {
-        match self.step_nanos {
+        match self.step_ns {
             0 => None,
             nanos => Some(Duration::from_nanos(nanos)),
         }
@@ -731,7 +734,7 @@ impl TickData {
     /// ```
     #[must_use]
     pub const fn cost(&self) -> Option<Duration> {
-        match self.cost_nanos {
+        match self.cost_ns {
             0 => None,
             nanos => Some(Duration::from_nanos(nanos)),
         }
@@ -785,6 +788,9 @@ impl_headed!(PlayerData);
 /// A mod's handler for an [`Event`]: the event, its data (null for events
 /// without data, valid for the call, and no other thread writes it during
 /// the call) and the pointer given at subscription.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
 ///
 /// # Examples
 ///

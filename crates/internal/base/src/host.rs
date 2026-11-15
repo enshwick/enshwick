@@ -86,6 +86,18 @@ pub(crate) fn spawn(
         .spawn(move || running_as(running, body))
 }
 
+/// The answer of a filter that lets through or refuses: a mod that lets it
+/// through leaves the decision to the game and the filters after it.
+#[inline]
+#[must_use]
+pub const fn verdict(passes: bool) -> u8 {
+    if passes {
+        crate::abi::FILTER_PASS
+    } else {
+        crate::abi::FILTER_REFUSE
+    }
+}
+
 /// Runs a mod's callback for the loader; a panic faults the mod with
 /// `reason` and the panic's message, and `fallback` answers in its place.
 #[inline]
@@ -294,12 +306,13 @@ impl Host {
             side: Side(0),
             base: 0,
             fingerprint: Fingerprint {
-                guid: [0; 16],
+                guid: crate::content::Guid::NIL,
                 age: 0,
             },
-            table: crate::abi::BuildTable::EXACT,
+            complete: 1,
         };
-        (self.api.build)(&raw mut out);
+        // A refused call leaves the defaults: no side, no base.
+        let _ = (self.api.build)(self.me, &raw mut out);
         out
     }
 
@@ -316,13 +329,17 @@ impl Host {
     /// ```
     #[must_use]
     pub fn hosting(&self) -> bool {
-        (self.api.hosting)() != 0
+        let mut hosting = 0;
+        let _ = (self.api.hosting)(self.me, &raw mut hosting);
+        hosting != 0
     }
 
     /// The entity world of the game server this process runs, 0 while none
     /// runs or before its first step.
     pub(crate) fn server_world(&self) -> u64 {
-        (self.api.server_world)()
+        let mut world = 0;
+        let _ = (self.api.server_world)(self.me, &raw mut world);
+        world
     }
 
     /// Writes `message` to the log under this mod's id.
@@ -333,7 +350,7 @@ impl Host {
     ///
     /// See [`Host`].
     pub fn log(&self, level: Level, message: &str) {
-        (self.api.log)(self.me, level, Str::new(message));
+        let _ = (self.api.log)(self.me, level, Str::new(message));
     }
 
     /// The most detailed level the loader keeps for this mod's lines, from
@@ -350,7 +367,9 @@ impl Host {
     /// ```
     #[must_use]
     pub fn log_level(&self) -> Level {
-        (self.api.log_level)(self.me)
+        let mut level = Level::INFO;
+        let _ = (self.api.log_level)(self.me, &raw mut level);
+        level
     }
 
     /// The text of this mod's settings file `file` in force, empty while no
@@ -368,7 +387,7 @@ impl Host {
     /// `HostApi::content_name` answers it; `None` for none.
     #[doc(hidden)]
     #[must_use]
-    pub fn content_name(&self, guid: [u8; 16]) -> Option<String> {
+    pub fn content_name(&self, guid: crate::content::Guid) -> Option<String> {
         let mut out = Str::EMPTY;
         let status = (self.api.content_name)(self.me, &raw const guid, &raw mut out);
         if !status.is_ok() {
@@ -403,7 +422,7 @@ impl Host {
     /// Subscribes `callback` to `event`.
     #[doc(hidden)]
     pub fn subscribe(&self, event: Event, callback: EventFn, user: *mut c_void) -> Status {
-        (self.api.subscribe)(self.me, event, callback, user)
+        (self.api.subscribe)(self.me, event, Some(callback), user)
     }
 
     /// Reports that this mod failed at run time. The loader unlinks every hook
@@ -417,7 +436,7 @@ impl Host {
     /// }
     /// ```
     pub fn fault(&self, reason: &str) {
-        (self.api.fault)(self.me, Str::new(reason));
+        let _ = (self.api.fault)(self.me, Str::new(reason));
     }
 
     /// The game caller's context at entry of the running hook chain, for hooks
@@ -436,7 +455,7 @@ impl Host {
     #[must_use]
     pub fn caller_frame(&self) -> CallerFrame {
         let mut frame = CallerFrame::default();
-        (self.api.caller_frame)(&raw mut frame);
+        let _ = (self.api.caller_frame)(self.me, &raw mut frame);
         frame
     }
 }

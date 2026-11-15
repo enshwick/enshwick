@@ -13,13 +13,13 @@ use crate::base::resolve::{self, Candidate};
 use crate::engine::module::Export;
 use crate::engine::others::OtherDll;
 
-type AbiFn = extern "system" fn() -> u32;
+type AbiFn = extern "system" fn() -> u16;
 
 type QueryFn = extern "system" fn() -> *const Manifest;
 
 pub(super) type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 
-pub(super) type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
+pub(super) type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 
 /// A mod DLL with its exports, or a data pack with the loader's.
 pub(super) struct Library {

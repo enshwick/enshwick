@@ -88,13 +88,19 @@ fn declared(spec: *const CallSpec) -> Option<Declared> {
 pub(crate) extern "system" fn serve_call(
     me: ModHandle,
     spec: *const CallSpec,
-    callback: CallFn,
+    callback: Option<CallFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     let Some(declared) = declared(spec) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         let calls = &mut s.calls;
         if calls
             .served
@@ -119,6 +125,9 @@ pub(crate) extern "system" fn find_call(
     let Some(declared) = declared(spec) else {
         return Status::BAD_ARGS;
     };
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let id = with(None, |s| {
         let required = s
             .manifest

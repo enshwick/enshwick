@@ -122,15 +122,15 @@ mod tests {
         "#
     );
 
-    fn player(entity: u32, key: u64, name: &str, permissions: u8) -> PlayerInfo {
+    fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
         let mut info = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,
             entity: enshwick::Entity(entity),
             key: PlayerKey::new(key),
             permissions,
-            name_len: u8::try_from(name.len()).unwrap(),
-            name: [0; 64],
+            name_len: u32::try_from(name.len()).unwrap(),
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info

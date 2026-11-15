@@ -67,11 +67,10 @@ mod tests {
     fn spawn_request() -> SpawnRequest {
         SpawnRequest {
             header: Header::of::<SpawnRequest>(),
-            template: [0x3a; 16],
-            position: [1, 2, 3],
+            template: enshwick::content::Guid([0x3a; 16]),
+            position: [1.0, 2.0, 3.0],
             orientation: [0.0, 0.0, 0.0, 1.0],
             level: 12,
-            reserved: 0,
             lifetime_ns: 0,
             flags: 0,
         }
@@ -102,13 +101,13 @@ mod tests {
     #[test]
     fn a_mod_s_shorter_list_entries_are_filled_only_as_far_as_they_reach() {
         let player = |slot: u32| PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
             slot,
-            entity: enshwick::Entity(100 + slot),
-            key: enshwick::PlayerKey::new(u64::from(slot) + 1),
-            permissions: 0,
-            name_len: 0,
-            name: [0; 64],
+            ..PlayerInfo::with_name(
+                enshwick::Entity(100 + slot),
+                enshwick::PlayerKey::new(u64::from(slot) + 1),
+                0,
+                "",
+            )
         };
         let loader = FakeHost::new()
             .player(player(0))
@@ -126,7 +125,8 @@ mod tests {
         }
         let mut count = 0;
         let out = room.as_mut_ptr().cast::<PlayerInfo>();
-        let status = (api.players)(loader.handle(), out, 2, &raw mut count);
+        let entry_size = u32::try_from(stride).unwrap();
+        let status = (api.players)(loader.handle(), out, entry_size, 2, &raw mut count);
         assert_eq!((status, count), (Status::OK, 2));
         let written: Vec<u8> = room.iter().flat_map(|word| word.to_le_bytes()).collect();
         let entity_at = core::mem::offset_of!(PlayerInfo, entity);
@@ -139,12 +139,17 @@ mod tests {
             written[2 * stride..].iter().all(|&b| b == 0xAB),
             "written past the list"
         );
-        let mut none: Vec<PlayerInfo> = Vec::new();
-        let status = (api.players)(loader.handle(), none.as_mut_ptr(), 0, &raw mut count);
+        let status = (api.players)(
+            loader.handle(),
+            core::ptr::null_mut(),
+            entry_size,
+            0,
+            &raw mut count,
+        );
         assert_eq!(
             (status, count),
             (Status::OK, 2),
-            "an empty list's dangling pointer"
+            "a null list asks the count"
         );
     }
 
@@ -154,7 +159,7 @@ mod tests {
             enshwick::abi::check_abi(ABI_MAJOR - 1, 0),
             enshwick::abi::check_abi(ABI_MAJOR + 1, 0),
             enshwick::abi::check_abi(ABI_MAJOR, ABI_MINOR + 1),
-            enshwick::abi::check_major(u32::MAX),
+            enshwick::abi::check_major(ABI_MAJOR - 1),
         ];
         for why in refusals.map(Result::unwrap_err) {
             let text = why.to_string();

@@ -174,7 +174,7 @@ impl Ui {
             .iter()
             .map(|m| UiMarker {
                 header: Header::of::<UiMarker>(),
-                position: crate::ecs::fixed(m.position),
+                position: m.position,
                 label: Str::new(m.label),
                 color: m.color.to_raw(),
                 marker_type: m.type_id.map_or(0, MapMarkerTypeId::get),

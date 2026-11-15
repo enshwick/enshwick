@@ -22,7 +22,7 @@ mod tests {
                 enshwick::info!("chunk {},{} loaded", chunk.x, chunk.z);
             })?;
             load.on::<ChunkUnloaded>(|chunk| {
-                enshwick::info!("chunk {} unloaded", chunk.index);
+                enshwick::info!("chunk {},{} unloaded", chunk.x, chunk.z);
             })?;
             Ok(Self)
         }
@@ -46,16 +46,19 @@ mod tests {
         let weather = WEATHER.get().unwrap();
 
         assert_eq!(weather.at([0.0; 3]), None, "no world runs yet");
-        assert_eq!(weather.set(Forecast::Rain, None), Err(WorldError::Missing));
+        assert_eq!(
+            weather.set(Forecast::Rain, None),
+            Err(WorldError::Unavailable)
+        );
         let front = WeatherFront {
             header: Header::of::<WeatherFront>(),
             layer: 1,
             effect: WeatherFront::BLIZZARD,
-            position: [5 << 32, 0, -(7 << 32)],
+            position: [5.0, 0.0, -7.0],
             radius: 300.0,
             reserved: 0,
-            remaining: 90_000_000_000,
-            phenomenon: [9; 16],
+            remaining_ns: 90_000_000_000,
+            phenomenon: enshwick::content::Guid([9; 16]),
         };
         loader.set_weather([0.1, 0.2, 0.6, 0.1], &[front]);
         assert_eq!(
@@ -103,7 +106,6 @@ mod tests {
 
         let chunk = ChunkData {
             header: Header::of::<ChunkData>(),
-            index: 41,
             x: 1,
             z: 1,
             size: 256,
@@ -112,6 +114,6 @@ mod tests {
         assert_eq!(loader.raise::<ChunkUnloaded>(&chunk), 1);
         let logged = |line: &str| loader.logs().iter().any(|(_, l)| l.contains(line));
         assert!(logged("chunk 1,1 loaded"), "{:?}", loader.logs());
-        assert!(logged("chunk 41 unloaded"), "{:?}", loader.logs());
+        assert!(logged("chunk 1,1 unloaded"), "{:?}", loader.logs());
     }
 }

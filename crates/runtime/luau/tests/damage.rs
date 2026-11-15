@@ -16,8 +16,9 @@ mod tests {
             target: enshwick::Entity(2),
             source: enshwick::Entity(0),
             attacker: enshwick::Entity(0),
-            amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
             total,
+            amount_count: 0,
+            amounts: core::ptr::null_mut(),
         }
     }
 
@@ -43,18 +44,14 @@ mod tests {
             end)
             "#,
         );
-        assert!((loader.damage(check(DamageCheck::FALL_DAMAGE, 40.0)).total - 20.0).abs() < 1e-6);
-        assert!(
-            loader
-                .damage(check(DamageCheck::DEADLY_FOG, 300.0))
-                .total
-                .abs()
-                < 1e-6
-        );
-        let mut cut = check(DamageCheck::IMPACT, 0.0);
-        cut.amounts[DamageTypeNew::PhysicalCut.index()] = 4.0;
-        let after = loader.damage(cut);
-        assert!((after.amounts[DamageTypeNew::PhysicalCut.index()] - 5.0).abs() < 1e-6);
+        let fall = loader.damage(check(DamageCheck::FALL_DAMAGE, 40.0), &mut []);
+        assert!((fall.total - 20.0).abs() < 1e-6);
+        let death = loader.damage(check(DamageCheck::DEADLY_FOG, 300.0), &mut []);
+        assert!(death.total.abs() < 1e-6);
+        let mut cut = [0.0; enshwick::abi::DAMAGE_TYPES];
+        cut[DamageTypeNew::PhysicalCut.index()] = 4.0;
+        let _after = loader.damage(check(DamageCheck::IMPACT, 0.0), &mut cut);
+        assert!((cut[DamageTypeNew::PhysicalCut.index()] - 5.0).abs() < 1e-6);
         for line in [
             "hit 1 FallDamage same true",
             "hit 2 DeadlyFog same true",
@@ -77,7 +74,14 @@ mod tests {
             end)
             ",
         );
-        assert!((loader.damage(check(DamageCheck::IMPACT, 40.0)).total - 40.0).abs() < 1e-6);
+        assert!(
+            (loader
+                .damage(check(DamageCheck::IMPACT, 40.0), &mut [])
+                .total
+                - 40.0)
+                .abs()
+                < 1e-6
+        );
         assert!(logged(&loader, "stale false"), "{:?}", loader.logs());
     }
 }

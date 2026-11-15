@@ -216,7 +216,7 @@ impl BaseLoad {
                     (host.api().attach_point)(
                         host.handle(),
                         &raw const raw,
-                        run_described::<F>,
+                        Some(run_described::<F>),
                         user,
                     )
                 },
@@ -475,6 +475,6 @@ where
         }
         Ok(DescribedVerdict::Refuse) if link.refusable && link.changes => PointVerdict::REFUSE,
         Ok(_) => PointVerdict::PASS,
-        Err(_) => PointVerdict::PANICKED,
+        Err(_) => PointVerdict::FAILED,
     }
 }

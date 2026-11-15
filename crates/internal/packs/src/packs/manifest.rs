@@ -345,13 +345,8 @@ impl PackManifest {
                 format!("{at}: `{VANILLA}` names the game's own content; choose another alias")
             } else if !seen.insert(alias) {
                 format!("{at}: the alias names another dependency already")
-            } else if !crate::abi::is_valid_id(&dependency.id)
-                && !crate::abi::is_valid_old_form_id(&dependency.id)
-            {
-                format!(
-                    "{at}: {:?} is not <author>.<name> or [a-z0-9-]+",
-                    dependency.id
-                )
+            } else if !crate::abi::is_valid_id(&dependency.id) {
+                format!("{at}: {:?} is not <author>.<name>", dependency.id)
             } else if relation == Relation::AFTER && !dependency.version.is_empty() {
                 format!("{at}: `after` orders by id alone and takes no `version`")
             } else {

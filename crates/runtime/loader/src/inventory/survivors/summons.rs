@@ -143,16 +143,16 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
     };
     let mut consume = false;
     let refused = crate::engine::filters::ask(summons, Feature::Survivors, |callback| {
-        // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
+        // SAFETY: the registered `SummonFilterFn` lives in the mod's DLL, which
         // stays loaded while its mod runs, and takes the `user` word it
         // registered; `call` outlives the call.
         match callback.call(|callback, user| unsafe { callback(&raw const call, user) }) {
             Summon::REFUSE => ControlFlow::Break(()),
-            0 => ControlFlow::Continue(()),
-            _ => {
+            Summon::TAKE => {
                 consume = true;
                 ControlFlow::Continue(())
             }
+            _ => ControlFlow::Continue(()),
         }
     });
     if refused.is_some() {
@@ -178,7 +178,7 @@ pub(super) fn summoned(call: Summon) {
     };
     let _none: Option<(_, ())> =
         crate::engine::filters::ask(summoned, Feature::Survivors, |callback| {
-            // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
+            // SAFETY: the registered `SummonFilterFn` lives in the mod's DLL, which
             // stays loaded while its mod runs, and takes the `user` word it
             // registered; `call` outlives the call.
             callback.call(|callback, user| unsafe { callback(&raw const call, user) });

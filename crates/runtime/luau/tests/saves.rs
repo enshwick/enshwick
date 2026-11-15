@@ -26,7 +26,7 @@ mod tests {
         );
         loader.set_save_info(Some(SaveInfo {
             header: Header::of::<SaveInfo>(),
-            world: [9; 16],
+            world: enshwick::content::Guid([9; 16]),
             saved_at: 1_762_300_000,
             size: 4_096,
             backups: 3,
@@ -46,7 +46,7 @@ mod tests {
             loader.logs()
         );
         assert!(!loader.saves_held());
-        let flags: Vec<u64> = loader.spawns().into_iter().map(|(_, r)| r.flags).collect();
+        let flags: Vec<u32> = loader.spawns().into_iter().map(|(_, r)| r.flags).collect();
         assert_eq!(flags, [SpawnRequest::DO_NOT_SAVE], "{:?}", loader.logs());
     }
 

@@ -8,8 +8,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::{
-    Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
-    SkillCheck, SkillCheckFn,
+    Comfort, ComfortFilterFn, ExperienceFilterFn, ExperiencePass, ExperienceRow, Header, HookFlags,
+    Side, SkillCheck, SkillCheckFn,
 };
 
 use crate::engine::chains::{Next, Onward};
@@ -80,8 +80,8 @@ struct Levels {
 
 /// The skill checks mods register, each with the node it answers for.
 static SKILLS: Registry<(u32, Registered<SkillCheckFn>)> = Registry::new();
-static COMFORT: Filters<ComfortFn> = Filters::new(Feature::Progress);
-static EXPERIENCE_FILTERS: Filters<ExperiencePassFn> = Filters::new(Feature::Progress);
+static COMFORT: Filters<ComfortFilterFn> = Filters::new(Feature::Progress);
+static EXPERIENCE_FILTERS: Filters<ExperienceFilterFn> = Filters::new(Feature::Progress);
 /// Where the fly mode gate's call returns to, once the link found it on
 /// this build.
 static FLY_MODE: OnceLock<usize> = OnceLock::new();
@@ -176,7 +176,7 @@ pub(crate) fn register_skill(
 pub(crate) fn register_comfort(
     loader: &Loader,
     owner: ModIndex,
-    callback: ComfortFn,
+    callback: ComfortFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     loader.before_delivery()?;
@@ -192,7 +192,7 @@ pub(crate) fn register_comfort(
 pub(crate) fn register_experience(
     loader: &Loader,
     owner: ModIndex,
-    callback: ExperiencePassFn,
+    callback: ExperienceFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     loader.before_delivery()?;
@@ -388,7 +388,7 @@ unsafe extern "system" fn register(
                 header: Header::of::<Comfort>(),
                 category,
                 value,
-                position: at,
+                position: at.map(f64::from),
             };
             // SAFETY: the filter's mod runs, so its DLL that holds the
             // callback stays loaded; it gets the user pointer its mod
@@ -552,7 +552,7 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                 let mut pass = ExperiencePass {
                     header: Header::of::<ExperiencePass>(),
                     rows: rows.as_mut_ptr(),
-                    row_count: rows.len(),
+                    row_count: u32::try_from(rows.len()).unwrap_or(u32::MAX),
                     level_cap,
                     need_for: Some(need_for),
                     token: (&raw mut token).cast(),

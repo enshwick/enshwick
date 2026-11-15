@@ -273,7 +273,7 @@ fn terrain(at: f32) -> TerrainEdit {
         shape: TerrainEdit::ROUND,
         flags: 0,
         material: 0,
-        position: [at; 3],
+        position: [f64::from(at); 3],
         radius: 4.0,
         height: 0.0,
         protect: [0; 16],

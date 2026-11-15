@@ -266,6 +266,41 @@ impl Arg for Text {
     }
 }
 
+/// A yes or no, the ABI's 1 or 0: [`Status::BAD_ARGS`] for any other byte.
+pub(crate) struct YesNo;
+
+impl Arg for YesNo {
+    type Raw = u8;
+    type Value<'call> = bool;
+
+    unsafe fn from_abi(raw: u8, _: &Call) -> Result<bool, Refused> {
+        match raw {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(BAD_ARGS),
+        }
+    }
+}
+
+/// A mod's callback: [`Status::BAD_ARGS`] when the mod passed null, which a
+/// mod in another language can, before anything keeps or calls it.
+///
+/// The ABI promises a non-null callback callable for as long as the mod is
+/// loaded.
+pub(crate) struct Callback<F>(PhantomData<F>);
+
+impl<F: Copy> Arg for Callback<F> {
+    type Raw = Option<F>;
+    type Value<'call>
+        = F
+    where
+        Self: 'call;
+
+    unsafe fn from_abi(raw: Option<F>, _: &Call) -> Result<F, Refused> {
+        raw.ok_or(BAD_ARGS)
+    }
+}
+
 /// A struct that starts with a header, copied as far as the mod's version
 /// reaches: [`Status::BAD_ARGS`] for null or one shorter than its first
 /// version.
@@ -393,6 +428,27 @@ impl<T> Slot<'_, T> {
         // it writable for a `T` nothing else touches during the call, which
         // this slot borrows; `put` needs no alignment.
         checked(unsafe { memory::put(self.out, value) })
+    }
+}
+
+/// [`Out`] that a mod may leave null for an answer it does not want: `None`
+/// then.
+pub(crate) struct MaybeOut<T>(PhantomData<T>);
+
+impl<T> Arg for MaybeOut<T> {
+    type Raw = *mut T;
+    type Value<'call>
+        = Option<Slot<'call, T>>
+    where
+        Self: 'call;
+
+    unsafe fn from_abi(raw: *mut T, call: &Call) -> Result<Option<Slot<'_, T>>, Refused> {
+        if raw.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: the ABI's promise for this kind is `Out`'s for a non-null
+        // pointer.
+        unsafe { Out::<T>::from_abi(raw, call) }.map(Some)
     }
 }
 
@@ -686,63 +742,6 @@ impl<T: Copy> ListSlot<'_, T> {
     }
 }
 
-/// Where the mod wants a list of structs that start with headers, each as
-/// large as the first one's header says: the list, its capacity and where
-/// the total goes. A null list only asks the total.
-///
-/// The ABI promises the list null or `capacity` consecutive entries, each
-/// starting with its header and writable for the size the first one states,
-/// and the total null or a writable, aligned `u32`, untouched by others
-/// during the call.
-pub(crate) struct HeadedListOut<T>(PhantomData<T>);
-
-/// The places a [`HeadedListOut`] names.
-pub(crate) struct HeadedListSlot<'call, T> {
-    out: *mut T,
-    capacity: u32,
-    count: *mut u32,
-    call: PhantomData<&'call mut T>,
-}
-
-impl<T: enshwick_core::abi::Headed> Arg3 for HeadedListOut<T> {
-    type First = *mut T;
-    type Second = u32;
-    type Third = *mut u32;
-    type Value<'call>
-        = HeadedListSlot<'call, T>
-    where
-        Self: 'call;
-
-    unsafe fn from_abi(
-        out: *mut T,
-        capacity: u32,
-        count: *mut u32,
-        _: &Call,
-    ) -> Result<HeadedListSlot<'_, T>, Refused> {
-        Ok(HeadedListSlot {
-            out,
-            capacity,
-            count,
-            call: PhantomData,
-        })
-    }
-}
-
-impl<T: enshwick_core::abi::Headed> HeadedListSlot<'_, T> {
-    /// Writes as many of `items` as fit, as far as both sides know an entry,
-    /// and their total.
-    ///
-    /// # Errors
-    ///
-    /// [`Status::BAD_ARGS`] for a first entry shorter than a header or a
-    /// null total.
-    pub(crate) fn put(self, items: &[T]) -> Result<(), Refused> {
-        // SAFETY: the ABI's promise for `HeadedListOut` is
-        // `put_headed_list`'s, for the call this slot borrows.
-        checked(unsafe { memory::put_headed_list(items, self.out, self.capacity, self.count) })
-    }
-}
-
 /// Where the mod wants a list of headed entries of the size it states: the
 /// list, the size of an entry, its capacity and where the total goes. A null
 /// list only asks the total.
@@ -871,7 +870,7 @@ impl BytesSlot<'_> {
     ///
     /// # Errors
     ///
-    /// [`Status::BAD_ARGS`] for a short or null buffer, the length written
+    /// [`Status::TOO_SMALL`] for a short or null buffer, the length written
     /// so the mod can grow its buffer; [`Status::REFUSED`] past `u32::MAX`
     /// bytes.
     pub(crate) fn put(&self, data: &[u8]) -> Result<(), Refused> {

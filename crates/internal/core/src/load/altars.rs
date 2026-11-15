@@ -66,8 +66,8 @@ impl Load<'_> {
     ///     load.on_building_zone_check(|check| {
     ///         check.zones.len() >= 2
     ///             && (0..3).all(|a| {
-    ///                 let low = check.zones.iter().map(|z| z.min[a]).min().unwrap_or(0);
-    ///                 let high = check.zones.iter().map(|z| z.max[a]).max().unwrap_or(0);
+    ///                 let low = check.zones.iter().map(|z| z.min[a]).fold(f64::INFINITY, f64::min);
+    ///                 let high = check.zones.iter().map(|z| z.max[a]).fold(f64::NEG_INFINITY, f64::max);
     ///                 low <= check.object.min[a] && check.object.max[a] < high
     ///             })
     ///     })

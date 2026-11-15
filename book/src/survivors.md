@@ -59,7 +59,8 @@ enshwick.survivors.on_survivor_lookup(function(lookup)
 end)
 ```
 
-One mod answers at a time; a second is refused. The lookup runs on the
+Every mod's lookup runs in load order. The first that answers decides;
+`Vanilla` passes on to the next mod, and then to the game. The lookup runs on the
 server's worker threads, in the dedicated server or a hosting client. For
 `Cursor` it runs on a client alone too. Keep it quick, never block, and read
 [altars](altars.md) through a handle taken at init.
@@ -140,7 +141,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 The client's survivor menu keeps one record per survivor. With several
 entities of one survivor, `load.on_survivor_status` decides what it shows. It
 gets the survivor and the status byte of each entity. It returns the byte to
-show, or `None` for the game's. Client only; one mod at a time.
+show, or `None` to pass on. Every mod's merge runs in load order, and the first
+byte returned decides. Client only.
 
 ## Worked example
 

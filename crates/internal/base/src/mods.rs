@@ -412,7 +412,7 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
     } else {
         // SAFETY: the caller guarantees a non-null `authors` points at
         // `author_count` initialised `Str`s alive for the call.
-        unsafe { core::slice::from_raw_parts(info.authors, info.author_count) }
+        unsafe { core::slice::from_raw_parts(info.authors, info.author_count as usize) }
     };
     let (name, description, authors, license, homepage) = (
         text(&info.name),
@@ -454,7 +454,7 @@ mod tests {
             name: Str::new("Trading Post"),
             description: Str::new("A chest only its owner opens"),
             authors: AUTHORS.as_ptr(),
-            author_count: AUTHORS.len(),
+            author_count: u32::try_from(AUTHORS.len()).unwrap(),
             license: Str::new("MIT"),
             homepage: Str::EMPTY,
         };

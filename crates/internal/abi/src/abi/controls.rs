@@ -8,7 +8,7 @@ use crate::abi::{Header, PlayerInfo, Str};
 /// A control a mod declares with [`HostApi::control`](super::HostApi::control)
 /// during `enshwick_mod_init`.
 ///
-/// A key is a `controls::Key` value, with the `unstable` feature: the key's scan code in
+/// A key is the key's scan code in
 /// bits 0 to 9 (bit 8 for an extended key, bit 9 for a mouse button) and the
 /// modifiers that must be down with it in bits 16 to 18.
 ///
@@ -60,11 +60,11 @@ pub struct ControlSpec {
     /// time the control fires on a client; empty for none. A mod of side
     /// server needs it, since its controls reach the clients without its
     /// code; then [`label`](Self::label) is a key of its texts. Valid for the
-    /// call. ABI 11.11.
+    /// call.
     pub action: Str,
 }
 
-impl_headed!(ControlSpec, born = 72);
+impl_headed!(ControlSpec);
 
 impl ControlSpec {
     /// The control fires once when its key goes down.
@@ -81,7 +81,7 @@ impl ControlSpec {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{ControlEvent, ControlSpec, Header, PlayerInfo, Str};
+/// use enshwick::abi::{ControlEvent, ControlSpec, Header, Str};
 ///
 /// let event = ControlEvent {
 ///     header: Header::of::<ControlEvent>(),
@@ -89,15 +89,7 @@ impl ControlSpec {
 ///     kind: ControlSpec::PRESS,
 ///     server: 0,
 ///     reserved: [0; 3],
-///     player: PlayerInfo {
-///         header: Header::of::<PlayerInfo>(),
-///         slot: 0,
-///         entity: enshwick::Entity(0),
-///         key: enshwick::PlayerKey::new(0),
-///         permissions: 0,
-///         name_len: 0,
-///         name: [0; 64],
-///     },
+///     player: core::ptr::null(),
 /// };
 /// assert_eq!(event.server, 0);
 /// ```
@@ -116,8 +108,9 @@ pub struct ControlEvent {
     pub server: u8,
     /// Zero.
     pub reserved: [u8; 3],
-    /// The player whose game action fired the control, when `server` is 1.
-    pub player: PlayerInfo,
+    /// The player whose game action fired the control, valid for the call,
+    /// when `server` is 1; null on the client.
+    pub player: *const PlayerInfo,
 }
 
 impl_headed!(ControlEvent);
@@ -128,6 +121,9 @@ impl_headed!(ControlEvent);
 /// The client calls it on its interface thread for a key, the server on its
 /// game thread for a game action; a client hosting a game does both, so a
 /// control with a key and a game action may run on the two threads at once.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
 ///
 /// # Examples
 ///

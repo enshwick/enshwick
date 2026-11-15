@@ -99,7 +99,7 @@ fn admit(rate: &mut Vec<(PlayerKey, u64, u32)>, player: PlayerKey, now: u64) -> 
 fn line(player: PlayerKey, kind: u32, text: &str) -> ChatLine {
     ChatLine {
         header: Header::of::<ChatLine>(),
-        player,
+        account: player,
         entity: Entity(0),
         kind,
         loca: [0; 2],

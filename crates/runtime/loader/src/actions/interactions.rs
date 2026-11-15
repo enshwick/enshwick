@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFn, Side};
+use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFilterFn, Side};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::UNREFLECTED;
@@ -87,7 +87,7 @@ struct Layout {
     consumed_input: u32,
 }
 
-static FILTERS: Filters<InteractionFn> = Filters::new(Feature::Interactions);
+static FILTERS: Filters<InteractionFilterFn> = Filters::new(Feature::Interactions);
 /// The layout and components the links read, once linked.
 static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
 
@@ -200,7 +200,7 @@ fn layout(loader: &Loader) -> Result<Layout, Lacks> {
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
-    callback: InteractionFn,
+    callback: InteractionFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     loader.before_delivery()?;
@@ -392,7 +392,7 @@ fn allowed(call: &Interaction) -> bool {
     // loaded; it gets the user pointer its mod registered and `call`, which
     // lives for the call.
     FILTERS
-        .refuser(|filter, user| unsafe { filter(call, user) != 0 })
+        .refuser(|filter, user| unsafe { filter(call, user) != enshwick_core::abi::FILTER_REFUSE })
         .is_none()
 }
 
@@ -407,7 +407,7 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
     let mut call = Interaction {
         header: Header::of::<Interaction>(),
         kind,
-        player: enshwick_core::Entity(player),
+        character: enshwick_core::Entity(player),
         target: enshwick_core::Entity(target),
         item: enshwick_core::ItemId::new(0),
         known: 0,

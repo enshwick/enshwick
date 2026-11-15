@@ -37,16 +37,16 @@ pub(crate) fn before_delivery(loader: &Loader) -> Result<(), Status> {
     open(loader.before_delivery().is_err())
 }
 
-/// [`Status::MISSING`] off the client, which alone has what the entry
+/// [`Status::UNAVAILABLE`] off the client, which alone has what the entry
 /// serves.
 ///
 /// # Errors
 ///
-/// [`Status::MISSING`] on a server.
+/// [`Status::UNAVAILABLE`] on a server.
 pub(crate) fn on_client(loader: &Loader) -> Result<(), Status> {
     if loader.side == Side::CLIENT {
         Ok(())
     } else {
-        Err(Status::MISSING)
+        Err(Status::UNAVAILABLE)
     }
 }

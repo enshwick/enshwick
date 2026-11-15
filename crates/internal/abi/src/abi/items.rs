@@ -21,7 +21,7 @@ use crate::abi::{Entity, Header, ItemId};
 /// let call = ItemAction {
 ///     header: Header::of::<ItemAction>(),
 ///     kind: ItemAction::CONSUME,
-///     player: enshwick::Entity(4096),
+///     character: enshwick::Entity(4096),
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     count: 1,
 ///     inventory: enshwick::Entity(4100),
@@ -37,7 +37,7 @@ pub struct ItemAction {
     /// What the player does; one of the constants on this type.
     pub kind: u32,
     /// The player's character entity.
-    pub player: Entity,
+    pub character: Entity,
     /// The item.
     pub item: ItemId,
     /// How many: 1 for a use, the stack for the others.
@@ -70,18 +70,22 @@ impl ItemAction {
     /// The game took the item of a [`CONSUME`](Self::CONSUME) every filter
     /// allowed from its slot, at a later step; a use the game refuses, or
     /// whose player does anything else first, raises none. The answer is ignored.
-    /// ABI 11.7.
     pub const CONSUMED: u32 = 7;
 }
 
 /// A mod's item filter: the action and the pointer given at registration;
-/// returns 0 to refuse an action that can be refused.
+/// returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse an action that can be refused.
 ///
 /// The game handles a refused action as one it already ran, so nothing
 /// moves and nothing is lost.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in `Load::on_item_action`, with the `unstable`
 /// feature.
-pub type ItemActionFn = unsafe extern "system" fn(call: *const ItemAction, user: *mut c_void) -> u8;
+pub type ItemFilterFn = unsafe extern "system" fn(call: *const ItemAction, user: *mut c_void) -> u8;

@@ -43,22 +43,21 @@ impl FakeHost {
         self
     }
 
-    /// Whether the loader found every entry it knows on the build;
-    /// [`BuildTable::EXACT`](enshwick_core::abi::BuildTable::EXACT) by default.
+    /// Whether the loader found every entry it knows on the build, which
+    /// [`BuildInfo::complete`](enshwick_core::abi::BuildInfo::complete) says;
+    /// `true` by default.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::BuildTable;
-    ///
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .build_table(BuildTable::PATTERNS)
+    ///     .build_complete(false)
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn build_table(mut self, table: enshwick_core::abi::BuildTable) -> Self {
-        self.table = table;
+    pub fn build_complete(mut self, complete: bool) -> Self {
+        self.build_complete = complete;
         self
     }
 

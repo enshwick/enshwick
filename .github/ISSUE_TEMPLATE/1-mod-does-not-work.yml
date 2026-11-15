@@ -41,6 +41,17 @@ body:
       description: The `Enshwick <version> starting` line of the loader's log names it. Without that line, give the release you installed.
     validations:
       required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Official build
+      description: The loader's log has an `official build` or an `unofficial build` line, and the Mods screen shows `Unofficial build` at the top for the second. An unofficial build did not come from an official release, or something changed its files.
+      options:
+        - "Official: the log says official build"
+        - "Unofficial: the log says unofficial build"
+        - No loader's log
+    validations:
+      required: true
   - type: textarea
     id: mods
     attributes:

@@ -145,7 +145,8 @@ client's world at its next step.
 
 The console and a remote caller have no account, so a line or notice for them
 goes to no player. The mod logs a warning once. Answer such a request in its
-outcome.
+outcome. In C, the host's `chat` entry refuses account key 0 with a
+status of bad arguments. Its `chat_all` entry sends to every player.
 
 ### A text in each player's language
 

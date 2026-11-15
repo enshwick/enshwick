@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use enshwick_base::abi::ResourceKey;
+use enshwick_base::content::Guid;
 use rustc_hash::FxHashMap;
 
 use enshwick_base::Relock;
@@ -263,14 +264,14 @@ impl Archive {
     #[must_use]
     pub fn contains(&self, key: &ResourceKey) -> bool {
         self.resources
-            .contains_key(&(key.guid, key.type_hash, key.part))
+            .contains_key(&(key.guid.0, key.type_hash, key.part))
     }
 
     /// The bytes of resource `key`, as the game reads them before it
     /// resolves their references; `None` for a key the archive lacks.
     #[must_use]
     pub fn resource(&self, key: &ResourceKey) -> Option<Vec<u8>> {
-        let place = *self.resources.get(&(key.guid, key.type_hash, key.part))?;
+        let place = *self.resources.get(&(key.guid.0, key.type_hash, key.part))?;
         let (start, len) = (place.at, place.len);
         let end = start.checked_add(len)?;
         // The chunks must cover the whole resource.
@@ -314,7 +315,7 @@ impl Archive {
         keys.sort_unstable_by_key(|(key, place)| (place.at, **key));
         keys.into_iter()
             .map(|(&(guid, type_hash, part), _)| ResourceKey {
-                guid,
+                guid: Guid(guid),
                 type_hash,
                 part,
             })
@@ -359,7 +360,7 @@ impl Archive {
         keys.sort_unstable_by_key(|(key, place)| (place.at, **key));
         keys.into_iter()
             .map(|(&(guid, type_hash, part), _)| ResourceKey {
-                guid,
+                guid: Guid(guid),
                 type_hash,
                 part,
             })
@@ -563,7 +564,7 @@ mod tests {
 
     fn key(guid: u8, part: u32) -> ResourceKey {
         ResourceKey {
-            guid: [guid; 16],
+            guid: Guid([guid; 16]),
             type_hash: 0xabcd,
             part,
         }

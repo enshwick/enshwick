@@ -235,8 +235,8 @@ fn store_off(label: &str, feature: &str, reason: &str) -> Option<String> {
 
 /// What the loader itself has on, off or wrong, above the mods: developer
 /// tools on, with the interface demo's button where this game has them,
-/// features this build lacks, parts a panic turned off, a newer release, a
-/// broken settings file and discovery off.
+/// features this build lacks, parts a panic turned off, an unofficial build,
+/// a newer release, a broken settings file and discovery off.
 fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
     if loader.developer_tools {
         paint.label(
@@ -255,6 +255,14 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
         paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
     }
     parts_off(paint);
+    if loader.unofficial.load(Ordering::Acquire) {
+        paint.label(
+            texts::text("mods.unofficial").as_bytes(),
+            UiWidget::STYLE_NEGATIVE,
+            true,
+            false,
+        );
+    }
     if let Some(release) = loader.newer_release.get() {
         let line = texts::fill(
             "mods.newer",

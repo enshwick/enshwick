@@ -98,7 +98,6 @@ pub use enshwick_values::shape;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_world::typed;
-#[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::world;
 

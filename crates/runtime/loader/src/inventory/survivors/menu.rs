@@ -170,10 +170,12 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
     ) else {
         return;
     };
-    let (Some(menu), Some(merge)) = (menu(loader), STATE.registrations.status()) else {
+    let merges = STATE.registrations.status();
+    let on = |owner| !crate::engine::loader::is_off(owner);
+    let Some(menu) = menu(loader) else {
         return;
     };
-    if crate::engine::loader::is_off(merge.owner) {
+    if !merges.iter().any(|merge| on(merge.owner)) {
         return;
     }
     STATUS_ROWS.with_borrow_mut(|(rows, bits)| {
@@ -222,29 +224,32 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
             return;
         }
         rows.sort_unstable();
-        let user = core::ptr::with_exposed_provenance_mut(merge.user);
         for group in rows.chunk_by(|a, b| a.0 == b.0) {
             let id = group[0].0;
             bits.clear();
             bits.extend(group.iter().map(|&(_, _, status)| status));
-            // SAFETY: the registered `SurvivorStatusFn` lives in the mod's
-            // DLL, which stays loaded for the process, and takes the `user`
-            // word it registered; `bits` outlives the call.
-            let answer = crate::engine::profile::call(
-                merge.owner,
-                crate::engine::profile::Feature::Survivors,
-                || unsafe {
-                    (merge.callback)(
-                        enshwick_core::abi::NpcId::new(id),
-                        bits.as_ptr(),
-                        bits.len(),
-                        user,
-                    )
-                },
-            );
-            if answer & enshwick_core::abi::SURVIVOR_STATUS_SET == 0 {
+            let first = super::first_answer(merges, on, |merge| {
+                let user = core::ptr::with_exposed_provenance_mut(merge.user);
+                // SAFETY: the registered `SurvivorStatusFn` lives in the mod's
+                // DLL, which stays loaded for the process, and takes the
+                // `user` word it registered; `bits` outlives the call.
+                let answer = crate::engine::profile::call(
+                    merge.owner,
+                    crate::engine::profile::Feature::Survivors,
+                    || unsafe {
+                        (merge.callback)(
+                            enshwick_core::abi::NpcId::new(id),
+                            bits.as_ptr(),
+                            u32::try_from(bits.len()).unwrap_or(u32::MAX),
+                            user,
+                        )
+                    },
+                );
+                (answer & enshwick_core::abi::SURVIVOR_STATUS_SET != 0).then_some(answer)
+            });
+            let Some(answer) = first else {
                 continue;
-            }
+            };
             // SAFETY: `play_data` is the client's non-zero (checked earlier)
             // live `UiPlayData` from the system's own query words, used on
             // its thread while it runs.

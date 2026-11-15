@@ -129,7 +129,7 @@ impl ItemAction {
     /// not know or a call without a player or an item.
     fn from_raw(call: &RawItemAction) -> Option<Self> {
         let kind = Kind::from_raw(call.kind)?;
-        if call.player.is_none() || call.item.get() == 0 {
+        if call.character.is_none() || call.item.get() == 0 {
             return None;
         }
         let slot = u8::try_from(call.slot)
@@ -138,7 +138,7 @@ impl ItemAction {
             .map(|index| SlotRef::new(call.inventory, index));
         Some(Self {
             kind,
-            player: call.player,
+            player: call.character,
             item: call.item,
             count: call.count,
             slot,
@@ -152,11 +152,11 @@ where
 {
     // SAFETY: the loader passes a valid call for the duration of this one.
     let Some(action) = (unsafe { call.as_ref() }).and_then(ItemAction::from_raw) else {
-        return 1;
+        return crate::abi::FILTER_PASS;
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    u8::from(crate::host::guard(
+    crate::host::verdict(crate::host::guard(
         "panic in an item filter",
         || true,
         || filter(&action),
@@ -188,7 +188,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().item_filter)(host.handle(), run_filter::<F>, user),
+            |user| (host.api().item_filter)(host.handle(), Some(run_filter::<F>), user),
             "item filter",
         )
     }
@@ -212,7 +212,7 @@ mod tests {
         RawItemAction {
             header: Header::of::<RawItemAction>(),
             kind,
-            player: Entity(4096),
+            character: Entity(4096),
             item: ItemId::new(0x5e01),
             count: 1,
             inventory: Entity(inventory),
@@ -247,7 +247,7 @@ mod tests {
             assert_eq!(kind.can_refuse(), refuses, "{kind:?}");
         }
         let mut nobody = raw(RawItemAction::CONSUME, 4100, 3);
-        nobody.player = Entity(0);
+        nobody.character = Entity(0);
         assert_eq!(ItemAction::from_raw(&nobody), None, "no player, no action");
     }
 

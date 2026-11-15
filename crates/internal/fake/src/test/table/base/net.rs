@@ -8,11 +8,17 @@ use enshwick_core::abi::{ModHandle, NetMessageFn, Status, Str};
 pub(crate) extern "system" fn net_channel(
     me: ModHandle,
     name: Str,
-    callback: NetMessageFn,
+    callback: Option<NetMessageFn>,
     user: *mut c_void,
     out: *mut u32,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     let name = text(name);
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let id = with(None, |s| {
         // The loader opens channels to clients for mods of side both alone.
         if !super::mods::joins(s, me) || s.channels.iter().any(|c| c.0 == name) {

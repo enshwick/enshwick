@@ -1,5 +1,5 @@
 //! The content domain: served resources, content changes, rates, recipes, item
-//! kinds and textures.
+//! kinds, named content for pickers and textures.
 
 #[cfg(windows)]
 pub(crate) mod clones;
@@ -8,8 +8,21 @@ pub(crate) mod clones;
     expect(dead_code, reason = "only the running game takes mods' renames")
 )]
 pub(crate) mod content_renames;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(
+        dead_code,
+        reason = "only the running game reads the crafting prop mask"
+    )
+)]
+pub(crate) mod crafting_props;
 pub mod data_changes;
 pub mod item_kinds;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the client's interface lists named content")
+)]
+pub(crate) mod names;
 #[cfg(windows)]
 pub(crate) mod rate_links;
 #[cfg_attr(
@@ -22,6 +35,11 @@ pub mod recipes;
 pub(crate) mod served;
 #[cfg(windows)]
 pub(crate) mod standins;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the client's interface lists templates")
+)]
+pub(crate) mod template_names;
 #[cfg(windows)]
 pub(crate) mod textures;
 

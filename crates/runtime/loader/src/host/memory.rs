@@ -2,8 +2,8 @@
 //! fake host shares, and the symbol lookup of a mod's build rows.
 
 pub(crate) use enshwick_base::__private::copy::{
-    copy_out, headed_in, headed_list_in, list_in, put, put_headed, put_headed_list, put_list,
-    put_sized_list, room, slice, text,
+    copy_out, headed_in, headed_list_in, list_in, put, put_headed, put_list, put_sized_list, room,
+    slice, text,
 };
 
 /// The value of the symbol named `name`.

@@ -11,20 +11,14 @@ use crate::host::layer::{
 use crate::world::transactions::{Change, Erase, Paste};
 
 entries! {
-    fn transaction_commit(me as Mod, [ops, count] as UnalignedList<TransactionOp>, id as Out<u64>) -> Status {
-        id.put(commit(me, None, ops)?)
-    }
-
-    fn transaction_commit_for(
+    fn transaction_commit(
         me as Mod,
         actor: enshwick_core::Entity,
         [ops, count] as UnalignedList<TransactionOp>,
         id as Out<u64>,
     ) -> Status {
-        if actor == enshwick_core::Entity(0) {
-            return Err(Status::BAD_ARGS.into());
-        }
-        id.put(commit(me, Some(actor.0), ops)?)
+        let actor = (actor != enshwick_core::Entity(0)).then_some(actor.0);
+        id.put(commit(me, actor, ops)?)
     }
 
     fn transaction_entities(
@@ -118,7 +112,7 @@ unsafe fn change(
             }
             .ok_or(Status::BAD_ARGS)?;
             let most = crate::world::transactions::LIMITS.bricks as u64 * 512;
-            if write.voxels.is_null() || write.count > most {
+            if write.voxels.is_null() || u64::from(write.count) > most {
                 return Err(Status::BAD_ARGS.into());
             }
             let count = usize::try_from(write.count).map_err(|_| Status::BAD_ARGS)?;

@@ -1,27 +1,29 @@
 //! The fake's buff entries: the buff types and what each holder holds.
 
-use crate::test::table::{get_headed, put_headed_list, with};
+use crate::test::table::{get_headed, list, with};
 use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, ModHandle, Status};
 
 pub(crate) extern "system" fn buff_types(
     _me: ModHandle,
     out: *mut BuffTypeInfo,
+    entry_size: u32,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
     let types = with(Vec::new(), |s| s.buff_types.clone());
-    put_headed_list(&types, out, capacity, count)
+    list(&types, out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn buffs(
     _me: ModHandle,
     entity: enshwick_core::Entity,
     out: *mut ActiveBuff,
+    entry_size: u32,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
     match with(None::<Vec<ActiveBuff>>, |s| s.buffs.get(&entity.0).cloned()) {
-        Some(on) => put_headed_list(&on, out, capacity, count),
+        Some(on) => list(&on, out, entry_size, capacity, count),
         None => Status::MISSING,
     }
 }
@@ -37,14 +39,14 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
         let Some(on) = s.buffs.get_mut(&request.entity.0) else {
             return Status::MISSING;
         };
-        let duration = if request.duration == 0 {
-            ty.duration
+        let duration = if request.duration_ns == 0 {
+            ty.duration_ns
         } else {
-            request.duration
+            request.duration_ns
         };
         if let Some(buff) = on.iter_mut().find(|buff| buff.id == request.id) {
-            buff.duration = duration;
-            buff.remaining = duration;
+            buff.duration_ns = duration;
+            buff.remaining_ns = duration;
         } else {
             on.push(ActiveBuff {
                 header: Header::of::<ActiveBuff>(),
@@ -52,8 +54,8 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
                 entity: enshwick_core::Entity(0x8000 + u32::try_from(on.len()).unwrap_or(0)),
                 slot: u32::from(ty.slot),
                 level: request.level,
-                duration,
-                remaining: duration,
+                duration_ns: duration,
+                remaining_ns: duration,
             });
         }
         Status::OK

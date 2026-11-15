@@ -96,7 +96,7 @@ pub struct Placed {
     /// Its template GUID, in file order.
     pub template: [u8; 16],
     /// Where, in metres.
-    pub position: [f32; 3],
+    pub position: [f64; 3],
 }
 
 /// What `enshwick placed` answers for `placed`, newest first, with each
@@ -114,7 +114,7 @@ pub fn placed(placed: &[Placed], item_words: impl Fn(u32) -> String) -> String {
                 p.entity,
                 item_words(p.item),
                 Guid(p.template),
-                place(Some(p.position.map(f64::from)))
+                place(Some(p.position))
             )
         })
         .collect::<Vec<_>>()
