@@ -155,6 +155,7 @@ fn a_toolchain_lint_cargo_or_nextest_config_change_checks_everything() {
         ".cargo/config.toml",
         ".cargo/config",
         ".config/nextest.toml",
+        "tools/xtask/nextest.toml",
     ] {
         assert_eq!(scope(&files(&[file]), &workspace()), Scope::All, "{file}");
     }
@@ -753,6 +754,23 @@ fn locally_a_change_to_many_packages_with_few_dependents_is_wide() {
         super::scope(&changed, &packages, &Tree::default(), Lane::Ci),
         Scope::Some { wide: false, .. }
     ));
+}
+
+#[test]
+fn locally_the_luau_runtime_a_book_chapter_adds_counts_towards_the_limit() {
+    let (mut packages, leaves) = base_and_leaves();
+    packages.pop();
+    packages.push(package(BOOK_LUAU, "crates/runtime/luau", &[]));
+    let files = files(&["crates/base/src/lib.rs", "book/src/luau.md"]);
+    let Scope::Some {
+        code, tested, wide, ..
+    } = super::scope(&files, &packages, &Tree::default(), Lane::Local)
+    else {
+        panic!("the whole workspace");
+    };
+    assert!(wide);
+    assert_eq!(code, names(&["base", BOOK_LUAU]));
+    assert_eq!(tested.len(), leaves.len() - 1);
 }
 
 #[test]

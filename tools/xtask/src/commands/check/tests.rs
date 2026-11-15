@@ -97,10 +97,67 @@ fn the_host_tests_take_the_xtask_nextest_settings_after_the_workspace_arguments(
         .find(|step| step.starts_with("cargo nextest run"))
         .unwrap();
     assert!(
-        nextest.contains(&format!("--workspace --config-file {NEXTEST_CONFIG} -E")),
+        nextest.contains(&format!(
+            "--workspace --tool-config-file xtask:{NEXTEST_CONFIG} -E"
+        )),
         "{nextest}"
     );
     assert!(Path::new(NEXTEST_CONFIG).is_file());
+    assert!(
+        NEXTEST_CONFIG
+            .replace('\\', "/")
+            .ends_with(affected::XTASK_NEXTEST)
+    );
+}
+
+#[test]
+fn the_test_the_host_tests_start_first_still_exists_in_the_loader() {
+    let settings = std::fs::read_to_string(NEXTEST_CONFIG).unwrap();
+    let name = settings
+        .split("test(=")
+        .nth(1)
+        .and_then(|rest| rest.split(')').next())
+        .unwrap();
+    let (module, function) = name.rsplit_once("::").unwrap();
+    let file = module.strip_suffix("::tests").unwrap().replace("::", "/");
+    let source = std::fs::read_to_string(
+        workspace_root().join(format!("crates/runtime/loader/src/{file}.rs")),
+    )
+    .unwrap();
+    assert!(source.contains(&format!("fn {function}()")), "{name}");
+}
+
+#[test]
+fn only_a_wide_check_that_would_check_the_stable_surface_says_it_left_it_to_ci() {
+    let set = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
+    let scope = |code: &[&str], docs: &[&str], built: &[&str], wide: bool| Scope::Some {
+        code: set(code),
+        docs: set(docs),
+        tested: BTreeSet::new(),
+        built: set(built),
+        wide,
+    };
+    let parts = [Part::Host, Part::StableApi];
+    assert!(stable_api_left_to_ci(
+        &scope(&[FACADE], &[], &[], true),
+        &parts
+    ));
+    assert!(stable_api_left_to_ci(
+        &scope(&["enshwick-abi"], &[FACADE], &[], true),
+        &parts
+    ));
+    assert!(!stable_api_left_to_ci(
+        &scope(&["enshwick-abi"], &[], &[FACADE], true),
+        &parts
+    ));
+    assert!(!stable_api_left_to_ci(
+        &scope(&[FACADE], &[], &[], true),
+        &[Part::Host]
+    ));
+    assert!(!stable_api_left_to_ci(
+        &scope(&[FACADE], &[], &[], false),
+        &parts
+    ));
 }
 
 #[test]

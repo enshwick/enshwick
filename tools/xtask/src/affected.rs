@@ -39,9 +39,9 @@ pub(crate) enum Scope {
     /// Only these packages.
     Some {
         /// Packages checked in full (lints, tests, examples, and for the
-        /// facade its trybuild test and stable surface): the changed ones
-        /// and their dependents, or locally past [`MAX_LOCAL_PACKAGES`]
-        /// the changed ones alone.
+        /// facade its trybuild test and stable surface unless `wide`): the
+        /// changed ones and their dependents, or when `wide` the changed
+        /// ones alone.
         code: BTreeSet<String>,
         /// Packages whose doctests changed without their code: the book's
         /// chapters are doctests of the API crate.
@@ -63,8 +63,9 @@ pub(crate) enum Scope {
 
 /// Where a check runs. CI and the merge queue check every package a change
 /// reaches in full; a local check, which must stay under ten minutes, runs
-/// only the tests of the dependents of a change many packages depend on,
-/// and only builds a package whose versions alone moved.
+/// only the tests of the dependents of a change that reaches more than
+/// [`MAX_LOCAL_PACKAGES`], and only builds a package whose versions alone
+/// moved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Lane {
     Local,
@@ -94,10 +95,12 @@ impl Lane {
 /// stable surface go to CI. Through the dev-dependencies on the facade, a
 /// change to any API crate reaches about 24 packages, whose examples,
 /// trybuild test and stable surface checked in full go past the ten-minute
-/// local limit on the Windows PC (669 s, 2026-11-14); counting only the
-/// dependents beyond the changed packages, a change to 22 of them ran
-/// 641 s with those two left in (2026-11-15).
+/// local limit on the Windows PC (669 s, 2026-11-14).
 pub(crate) const MAX_LOCAL_PACKAGES: usize = 9;
+
+/// The nextest settings every host test run of `cargo xtask check` reads,
+/// beside the repository's own `.config/nextest.toml`.
+pub(crate) const XTASK_NEXTEST: &str = "tools/xtask/nextest.toml";
 
 /// A package's own changelog and change files, which no build reads.
 const CHANGELOG: &str = "CHANGELOG.md";
@@ -126,6 +129,7 @@ const GLOBAL_FILES: &[&str] = &[
     "clippy.toml",
     ".cargo/config.toml",
     ".cargo/config",
+    XTASK_NEXTEST,
 ];
 /// Directories of tool settings every test run reads, such as nextest's
 /// `.config/nextest.toml`.
@@ -199,17 +203,17 @@ pub(crate) fn scope(
         }
     }
     let mut code = dependents(&changed, packages);
+    // Its own tests read the chapters and run luau-lsp; what depends on it does not.
+    if luau && packages.iter().any(|package| package.name == BOOK_LUAU) {
+        code.insert(BOOK_LUAU.to_owned());
+        changed.insert(BOOK_LUAU.to_owned());
+    }
     let wide = local && code.len() > MAX_LOCAL_PACKAGES;
     let mut tested = BTreeSet::new();
     if wide {
         tested = code.difference(&changed).cloned().collect();
         code = changed;
     }
-    // Its own tests read the chapters and run luau-lsp; what depends on it does not.
-    if luau && packages.iter().any(|package| package.name == BOOK_LUAU) {
-        code.insert(BOOK_LUAU.to_owned());
-    }
-    tested.retain(|name| !code.contains(name));
     let mut built = bumped;
     built.retain(|name| !code.contains(name) && !tested.contains(name));
     docs.retain(|name| !code.contains(name));

@@ -38,9 +38,9 @@ const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask
 /// under `target/tests/trybuild`: only [`Part::Trybuild`] runs it.
 const TRYBUILD: &str = "binary_id(enshwick::main) & test(/^(config_files|internals)::/)";
 
-/// The nextest settings of the host tests, which start the slowest first;
-/// the workspace has no `.config/nextest.toml`, which a change to would
-/// make every check a check of the whole workspace.
+/// The host tests' nextest settings ([`affected::XTASK_NEXTEST`]), which
+/// start the slowest first; a tool config, so `.config/nextest.toml` still
+/// applies over it.
 const NEXTEST_CONFIG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/nextest.toml");
 
 /// The API crate's features the trybuild test builds with: trybuild builds
@@ -205,6 +205,18 @@ fn touches(scope: &Scope, package: &str) -> bool {
 /// ten minutes (669 s, 2026-11-14).
 fn wide(scope: &Scope) -> bool {
     matches!(scope, Scope::Some { wide: true, .. })
+}
+
+/// Whether `scope` needs the facade's stable surface checked: its examples,
+/// the book's among them, change with its documents as well as its code.
+fn stable_api_due(scope: &Scope) -> bool {
+    touches(scope, FACADE) || matches!(scope, Scope::Some { docs, .. } if docs.contains(FACADE))
+}
+
+/// Whether a check of `parts` would check the stable surface of `scope` but
+/// leaves it to CI because the change is [`wide`].
+fn stable_api_left_to_ci(scope: &Scope, parts: &[Part]) -> bool {
+    wide(scope) && parts.contains(&Part::StableApi) && stable_api_due(scope)
 }
 
 /// Whether `scope` checks, tests or only builds the code of `package`.
@@ -636,8 +648,8 @@ fn host_steps(
         };
         if let Some(filter) = filter {
             steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&[
-                "--config-file",
-                NEXTEST_CONFIG,
+                "--tool-config-file",
+                &format!("xtask:{NEXTEST_CONFIG}"),
                 "-E",
                 &filter,
             ]));
@@ -667,13 +679,7 @@ fn host_steps(
         }
         steps.push(step);
     }
-    // The API crate's examples, the book's among them, change with its
-    // documents as well as with its code.
-    let api_docs = match scope {
-        Scope::All => true,
-        Scope::Some { docs, .. } => docs.iter().any(|name| name == FACADE),
-    };
-    if parts.contains(&Part::StableApi) && (touches(scope, FACADE) || api_docs) && !wide(scope) {
+    if parts.contains(&Part::StableApi) && stable_api_due(scope) && !wide(scope) {
         steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, full) {
@@ -710,7 +716,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         docs,
         tested,
         built,
-        wide,
+        ..
     } = scope
     {
         if code.is_empty() && docs.is_empty() && tested.is_empty() && built.is_empty() {
@@ -728,7 +734,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
                 names.join(", "),
             ));
         }
-        if *wide && reaches(scope, FACADE) {
+        if stable_api_left_to_ci(scope, parts) {
             say(&format!(
                 "{FACADE}'s stable surface is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
             ));
