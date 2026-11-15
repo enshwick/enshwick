@@ -164,6 +164,18 @@ mod tests {
             "it wrote nothing to take back"
         );
 
+        let lost = world
+            .transaction()
+            .terrain_dig(at, 2.0, Shape::Round, &[])
+            .commit()
+            .unwrap();
+        loader.fail_transaction(lost.get(), Status::MISSING);
+        assert_eq!(
+            world.transaction_status(lost),
+            Some(TransactionStatus::Failed(WorldError::Gone)),
+            "an entity it acts on left the world, which the build has nothing to do with"
+        );
+
         let changed = world
             .transaction()
             .terrain_add(at, 2.0, 1.0, 9, Shape::Round)

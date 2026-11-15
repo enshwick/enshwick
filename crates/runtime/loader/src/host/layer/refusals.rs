@@ -524,12 +524,14 @@ impl Refusal for crate::world::transactions::TransactionError {
             | Self::BadShape => Status::BAD_ARGS,
             Self::NotAProp => Status::NOT_A_PROP,
             Self::Unavailable => Status::UNAVAILABLE,
-            Self::Gone | Self::BlueprintChanged => Status::MISSING,
+            Self::Gone => Status::MISSING,
             Self::OutsideWorld => Status::OUTSIDE_WORLD,
             Self::NotLoaded => Status::NOT_LOADED,
-            Self::NotUndoable | Self::NoRights | Self::HoldsState | Self::Changed => {
-                Status::REFUSED
-            }
+            Self::NotUndoable
+            | Self::NoRights
+            | Self::HoldsState
+            | Self::Changed
+            | Self::BlueprintChanged => Status::REFUSED,
             Self::Full => Status::BUSY,
             Self::World(error) => error.status(),
             Self::Voxels(error) => error.status(),

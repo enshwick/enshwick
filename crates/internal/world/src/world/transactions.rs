@@ -67,7 +67,9 @@ pub enum TransactionStatus {
     /// read back: [`WorldError::NotLoaded`] when part of the world was not
     /// loaded yet (the check starts loading it, so the same transaction
     /// committed again a second or so later can pass), [`WorldError::OutsideWorld`] when a change leaves the world,
-    /// [`WorldError::Unavailable`] when the world ended. The changes written
+    /// [`WorldError::Gone`] when an entity it acts on left the world,
+    /// [`WorldError::Refused`] when a block's blueprint changed since the
+    /// commit, [`WorldError::Unavailable`] when the world ended. The changes written
     /// stay, and [`World::undo`] can take them back while the loader keeps
     /// their undo data; a brick it could not read back after its change is
     /// never written over, so such an undo is refused.
@@ -97,7 +99,7 @@ impl TransactionStatus {
             if info.holds != 0 {
                 return Some(WorldError::HoldsState(PropState::from_bits(info.holds)));
             }
-            WorldError::check(info.reason, WorldError::Unavailable).err()
+            WorldError::check(info.reason, WorldError::Gone).err()
         };
         match info.state {
             TransactionInfo::APPLIED => Self::Applied,
@@ -515,9 +517,9 @@ impl Transaction {
     /// (as [`Terrain`](crate::terrain::Terrain) does; a block whose shape
     /// item has no `VoxelBlueprintItem` or whose material item places no
     /// building material; voxels whose kind is not the one their material
-    /// names), more than the
-    /// loader's cap of changes or bricks, or a full queue;
-    /// [`WorldError::OutsideWorld`] for a change past the world's edge or
+    /// names), or more than the
+    /// loader's cap of changes or bricks; [`WorldError::Busy`] for a full
+    /// queue, which a later step may take; [`WorldError::OutsideWorld`] for a change past the world's edge or
     /// above 1,024 metres, once the loader has met the world (before, the
     /// transaction fails with it instead); [`WorldError::Unavailable`] while no
     /// world runs or on a build without the edits or the undo. A player's

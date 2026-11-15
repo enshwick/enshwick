@@ -273,8 +273,9 @@ impl Knowledge {
     ///
     /// [`WorldError::Refused`] for an id the game does not know, a grant
     /// that does not fit the id's kind,
-    /// a bit the game does not expect, a player not in the game, or a step
-    /// with too many grants; [`WorldError::WrongThread`] off the game
+    /// a bit the game does not expect or a player not in the game;
+    /// [`WorldError::Busy`] for a step with too many grants, which a later
+    /// step may take; [`WorldError::WrongThread`] off the game
     /// thread; [`WorldError::Unavailable`] on a build without knowledge.
     ///
     /// # Examples
