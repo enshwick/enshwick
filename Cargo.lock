@@ -684,7 +684,6 @@ dependencies = [
 name = "enshwick-inventory"
 version = "1.0.0-alpha.16"
 dependencies = [
- "bytemuck",
  "enshwick",
  "enshwick-abi",
  "enshwick-base",
