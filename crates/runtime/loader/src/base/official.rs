@@ -19,13 +19,27 @@ pub(crate) fn unsigned(game_dir: &Path, files: &[&str]) -> Vec<String> {
         .collect()
 }
 
-fn check(path: &Path) -> Result<(), String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+/// Why a loader file does not carry a valid release signature.
+#[derive(Debug, thiserror::Error)]
+enum CheckFileError {
+    /// The file itself does not read.
+    #[error("{0}")]
+    Unread(std::io::Error),
+    /// No signature file reads beside it.
+    #[error("no signature ({0})")]
+    Unsigned(std::io::Error),
+    /// The signature does not hold.
+    #[error(transparent)]
+    Signature(#[from] signature::CheckSignatureError),
+}
+
+fn check(path: &Path) -> Result<(), CheckFileError> {
+    let bytes = std::fs::read(path).map_err(CheckFileError::Unread)?;
     let mut signed = path.as_os_str().to_owned();
     signed.push(".");
     signed.push(signature::EXTENSION);
-    let sig = std::fs::read(&signed).map_err(|e| format!("no signature ({e})"))?;
-    signature::verify(&bytes, &sig).map_err(|e| e.to_string())
+    let sig = std::fs::read(&signed).map_err(CheckFileError::Unsigned)?;
+    Ok(signature::verify(&bytes, &sig)?)
 }
 
 /// Checks the loader's files on a thread of its own: an unofficial build is
