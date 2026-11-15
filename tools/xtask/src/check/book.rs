@@ -133,8 +133,9 @@ fn unnamed_modules(lib: &str, texts: &[String]) -> Vec<String> {
 }
 
 /// The modules `lib` declares as `pub mod <name>;` or re-exports whole from
-/// an internal crate as `pub use enshwick_<crate>::<name>;`, without those
-/// whose attribute lines right above hide them from the docs.
+/// an internal crate as `pub use enshwick_<crate>::<name>;` or alone as
+/// `pub use enshwick_<crate>::<name>::{self as <name>};`, without those whose
+/// attribute lines right above hide them from the docs.
 fn public_modules(lib: &str) -> Vec<&str> {
     let mut modules = Vec::new();
     let mut hidden = false;
@@ -144,20 +145,20 @@ fn public_modules(lib: &str) -> Vec<&str> {
             hidden |= line == "#[doc(hidden)]";
             continue;
         }
-        let declared = line.strip_prefix("pub mod ");
+        let declared = line
+            .strip_prefix("pub mod ")
+            .and_then(|rest| rest.strip_suffix(';'));
         // The macro crate's lowercase items are macros, not modules.
         let reexported = line
             .strip_prefix("pub use ")
-            .and_then(|rest| rest.split_once("::"))
+            .and_then(|rest| rest.strip_suffix(';')?.split_once("::"))
             .filter(|(from, _)| from.starts_with("enshwick_") && *from != "enshwick_macros")
-            .map(|(_, name)| name)
-            .filter(|name| {
-                name.bytes()
-                    .all(|b| b.is_ascii_lowercase() || b == b'_' || b == b';')
-            });
-        if let Some(name) = declared
-            .or(reexported)
-            .and_then(|rest| rest.strip_suffix(';'))
+            .map(|(_, name)| match name.split_once("::{self as ") {
+                Some((module, alias)) if alias.strip_suffix('}') == Some(module) => module,
+                _ => name,
+            })
+            .filter(|name| name.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'));
+        if let Some(name) = declared.or(reexported)
             && !hidden
         {
             modules.push(name);
@@ -688,6 +689,13 @@ mod tests {
         let lib = "#[doc(inline)]\npub use enshwick_values::shape;\npub use enshwick_values::Off;\n\
                    pub use enshwick_macros::texts;\n#[doc(hidden)]\npub use enshwick_values::abi;\n";
         assert_eq!(public_modules(lib), ["shape"]);
+    }
+
+    #[test]
+    fn a_module_re_exported_alone_under_its_own_name_needs_a_chapter() {
+        let lib = "pub use enshwick_base::config::{self as config};\n\
+                   pub use enshwick_abi::raw_abi::{self as abi};\npub use enshwick_macros::config;\n";
+        assert_eq!(public_modules(lib), ["config"]);
     }
 
     #[test]

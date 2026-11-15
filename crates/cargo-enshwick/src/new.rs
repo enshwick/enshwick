@@ -470,6 +470,17 @@ mod tests {
     }
 
     #[test]
+    fn a_new_mod_pins_the_toolchain_and_rust_version_this_workspace_builds_with() {
+        assert_eq!(RUST_TOOLCHAIN, include_str!("../../../rust-toolchain.toml"));
+        let files = files("you.lockers", Side::Server, None, &Place::Alone).unwrap();
+        let cargo: toml::Table = text(&files, "Cargo.toml").parse().unwrap();
+        assert_eq!(
+            cargo["package"]["rust-version"].as_str(),
+            Some(env!("CARGO_PKG_RUST_VERSION"))
+        );
+    }
+
+    #[test]
     fn a_crate_of_its_own_carries_the_toolchain_the_flags_and_the_profile() {
         for place in [Place::Alone, Place::Excluded] {
             let files = files("you.lockers", Side::Server, None, &place).unwrap();
