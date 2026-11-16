@@ -213,6 +213,25 @@ impl ClientSnapshot {
         named(self.raw.scene)
     }
 
+    /// The server a [`CommandAction::Join`](super::CommandAction::Join) of
+    /// this loader joins or joined, as `host:query_port`, while the client is
+    /// on its way there or in its world; `None` in the menu, in a hosted
+    /// world, after a join another way, and from a loader older than ABI 12.11.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::ClientSnapshot;
+    ///
+    /// fn on_server(snapshot: &ClientSnapshot, server: &str) -> bool {
+    ///     snapshot.server() == Some(server)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn server(&self) -> Option<&'static str> {
+        named(self.raw.server)
+    }
+
     /// Whether the running build reads `part`, so its `None` means "none
     /// now" rather than "unread".
     ///
@@ -402,6 +421,8 @@ struct LuauSnapshot {
     pub player: Option<Entity>,
     /// The highlighted recipe.
     pub highlighted_recipe: Option<RecipeId>,
+    /// The server a join of this loader joined, as `host:query_port`.
+    pub server: Option<String>,
 }
 
 impl From<ClientSnapshot> for LuauSnapshot {
@@ -426,6 +447,7 @@ impl From<ClientSnapshot> for LuauSnapshot {
                 .map(|held| held.iter().map(|action| action.name().to_owned()).collect()),
             player: snapshot.player(),
             highlighted_recipe: snapshot.highlighted_recipe(),
+            server: owned(snapshot.server()),
         }
     }
 }
@@ -494,9 +516,11 @@ mod tests {
             hud_screen: Str::new("SystemMenu"),
             held: 1,
             player: Entity(12),
+            server: Str::new("127.0.0.1:15637"),
             ..Raw::EMPTY
         };
         let luau = LuauSnapshot::from(snapshot(raw));
+        assert_eq!(luau.server.as_deref(), Some("127.0.0.1:15637"));
         assert_eq!(luau.state, "stale");
         assert_eq!(luau.reads, ["screens", "held", "player"]);
         assert_eq!(luau.held, Some(Vec::new()), "a bit the build names none of");

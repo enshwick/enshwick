@@ -75,6 +75,20 @@ pub(crate) const PROMPT_VERB: Constant = Constant::new("ui.prompt_verb");
 pub(crate) const SCREEN_HOST: Constant = Constant::new("ui.screen_host");
 pub(crate) const HUD_VISIBLE: Symbol = Symbol::new("ui.hud_visible");
 pub(crate) const INPUT_HINT: Symbol = Symbol::new("ui.input_hint");
+/// The interface's posters of menu commands: each reserves its command in
+/// the UI queue, writes its kind byte and returns it, or null when the
+/// queue is full (client 26430625).
+pub(crate) const POST_BACK: Symbol = Symbol::new("ui.post_back");
+pub(crate) const POST_JOIN: Symbol = Symbol::new("ui.post_join");
+pub(crate) const POST_PASSWORD: Symbol = Symbol::new("ui.post_password");
+pub(crate) const POST_START_PLAY: Symbol = Symbol::new("ui.post_start_play");
+/// Where the main menu reads a posted command's payload (`0x140873710`,
+/// client 26430625): the password's text and its `u16` length, the join's
+/// area byte (its target follows it) and the address's last `u16`.
+pub(crate) const POST_PASSWORD_TEXT: Constant = Constant::new("ui.post_password_text");
+pub(crate) const POST_PASSWORD_LEN: Constant = Constant::new("ui.post_password_len");
+pub(crate) const POST_JOIN_AREA: Constant = Constant::new("ui.post_join_area");
+pub(crate) const POST_JOIN_TAIL: Constant = Constant::new("ui.post_join_tail");
 pub(crate) const ITEM_SLOT: Symbol = Symbol::new("ui.item_slot");
 pub(crate) const ITEM_SLOT_CLICKABLE: Constant = Constant::new("ui.item_slot_clickable");
 pub(crate) const ITEM_SLOT_INIT: Symbol = Symbol::new("ui.item_slot_init");

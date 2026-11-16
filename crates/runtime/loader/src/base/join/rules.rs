@@ -176,6 +176,26 @@ pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
 
 /// [`query_rules`] with the whole query bound to `timeout`.
 fn query_rules_within(server: SocketAddr, timeout: Duration) -> std::io::Result<Vec<u8>> {
+    query_within(
+        server,
+        &[0xff, 0xff, 0xff, 0xff, b'V'],
+        &WHOLE,
+        b'E',
+        timeout,
+    )
+}
+
+/// Asks `server` over the Steam query protocol: `request` with `first`
+/// after it, then `request` with each challenge the server sends back; the
+/// whole reply of `kind`, its split packets put back together, giving up at
+/// `timeout`.
+pub(super) fn query_within(
+    server: SocketAddr,
+    request: &[u8],
+    first: &[u8],
+    kind: u8,
+    timeout: Duration,
+) -> std::io::Result<Vec<u8>> {
     let deadline = Instant::now() + timeout;
     let socket = UdpSocket::bind(local_for(server))?;
     socket.connect(server)?;
@@ -187,17 +207,16 @@ fn query_rules_within(server: SocketAddr, timeout: Duration) -> std::io::Result<
         socket.set_read_timeout(Some(left))?;
         socket.recv(reply)
     };
-    let mut request = vec![0xff, 0xff, 0xff, 0xff, b'V', 0xff, 0xff, 0xff, 0xff];
+    let mut sent = [request, first].concat();
     // A reply larger than the buffer fails to read on Windows, which would
     // let the join through unchecked.
     let mut reply = vec![0u8; 65_536];
     for _ in 0..3 {
-        socket.send(&request)?;
+        socket.send(&sent)?;
         let len = recv(&mut reply)?;
         // A challenge comes back first; send it with the next request.
         if len >= 9 && reply[4] == b'A' {
-            request.truncate(5);
-            request.extend_from_slice(&reply[5..9]);
+            sent = [request, &reply[5..9]].concat();
             continue;
         }
         let mut whole = reply[..len].to_vec();
@@ -219,12 +238,12 @@ fn query_rules_within(server: SocketAddr, timeout: Duration) -> std::io::Result<
                 Err(why) => return Err(std::io::Error::other(why)),
             };
         }
-        if !whole.starts_with(&WHOLE) || whole.get(4) != Some(&b'E') {
-            return Err(std::io::Error::other("a reply that holds no rules"));
+        if !whole.starts_with(&WHOLE) || whole.get(4) != Some(&kind) {
+            return Err(std::io::Error::other("a reply of another kind"));
         }
         return Ok(whole);
     }
-    Err(std::io::Error::other("no rules after three challenges"))
+    Err(std::io::Error::other("no reply after three challenges"))
 }
 
 /// The address the query's socket takes for `server`: the loopback address

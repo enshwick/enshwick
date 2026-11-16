@@ -504,15 +504,15 @@ export type ChunkData = {
 	size: number,
 }
 
---- `ClientCommand` as Luau gives it.
+--- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"` or `"highlight_recipe"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"` or `"leave"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
 	--- The HUD screen the client must show.
 	expected_screen: string?,
-	--- The screen to open or the tab to choose.
+	--- The screen to open, the tab to choose or the server to join.
 	target: string?,
 	--- A look's yaw and pitch in radians.
 	look: {number}?,
@@ -522,6 +522,8 @@ export type ClientCommand = {
 	hold_ms: number?,
 	--- The recipe to highlight.
 	recipe: number?,
+	--- A join's server password.
+	password: string?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
@@ -550,6 +552,8 @@ export type ClientSnapshot = {
 	player: number?,
 	--- The highlighted recipe.
 	highlighted_recipe: number?,
+	--- The server a join of this loader joined, as `host:query_port`.
+	server: string?,
 }
 
 --- The mod's factor on how fast the server's clock runs.
@@ -580,12 +584,14 @@ export type CommandSet = {
 
 --- `CommandStatus` as Luau sees it.
 export type CommandStatus = {
-	--- `"pending"`, `"applied"`, `"observed"`, `"cancelled"` or `"unavailable"`.
+	--- `"pending"`, `"applied"`, `"observed"`, `"cancelled"`, `"unavailable"` or `"failed"`.
 	state: string,
-	--- Why a cancelled command ended, such as `"timed_out"`; `"other"` for a reason a newer loader gives.
+	--- Why a cancelled command ended, such as `"timed_out"`, or why a `"failed"` join failed, such as `"full"`; `"other"` for one a newer loader gives.
 	reason: string?,
 	--- Milliseconds since the command was queued.
 	age_ms: string,
+	--- A join or leave's phase: `"queued"`, `"menu"`, `"connecting"`, `"loading"`, `"in_world"` or `"left"`.
+	phase: string?,
 }
 
 --- A change of one component of a template: `set` it whole, `edit` the fields a table names, or neither to remove it.

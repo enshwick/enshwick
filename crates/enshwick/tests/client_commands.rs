@@ -2,7 +2,10 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{ClientCommand as Raw, ClientCommandStatus as Status, Side};
-    use enshwick::input::{CancelReason, ClientCommand, CommandAction, CommandState, Input};
+    use enshwick::input::{
+        CancelReason, ClientCommand, CommandAction, CommandState, Input, JoinFailure, JoinPhase,
+        Password,
+    };
     use enshwick::{Load, Mod, Off, WorldError};
     use std::sync::Mutex;
 
@@ -242,5 +245,114 @@ side = "both""#
             input.client_command(&open_backpack()),
             Err(WorldError::Unavailable)
         ));
+    }
+
+    fn join(server: &str) -> ClientCommand {
+        ClientCommand::new(
+            CommandAction::Join {
+                server: server.to_owned(),
+                password: Some(Password::new("hunter2")),
+            },
+            0,
+        )
+    }
+
+    #[test]
+    fn a_join_walks_its_phases_and_its_status_holds_no_password() {
+        let (loader, input) = input(Side::CLIENT);
+        let id = input.client_command(&join("127.0.0.1:15637")).unwrap();
+        assert_eq!(
+            loader.client_commands(),
+            [(1, Raw::JOIN, "127.0.0.1:15637".to_owned())],
+            "the server is kept, the password is not"
+        );
+        let status = input.command_status(id).unwrap();
+        assert_eq!(
+            (status.state, status.phase),
+            (CommandState::Pending, Some(JoinPhase::Queued))
+        );
+        assert!(!format!("{status:?}").contains("hunter2"));
+        loader.set_command_status(1, Status::APPLIED, 0);
+        loader.set_command_phase(1, Status::PHASE_LOADING, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().phase,
+            Some(JoinPhase::Loading)
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        loader.set_command_phase(1, Status::PHASE_IN_WORLD, 0);
+        let done = input.command_status(id).unwrap();
+        assert_eq!(
+            (done.state, done.phase),
+            (CommandState::Observed, Some(JoinPhase::InWorld))
+        );
+    }
+
+    #[test]
+    fn a_failed_join_names_why_and_a_cancelled_one_frees_the_next() {
+        let (loader, input) = input(Side::CLIENT);
+        let id = input.client_command(&join("127.0.0.1:15637")).unwrap();
+        loader.set_command_status(1, Status::FAILED, 0);
+        loader.set_command_phase(1, Status::PHASE_MENU, Status::WRONG_PASSWORD);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Failed(JoinFailure::WrongPassword)
+        );
+        let again = input.client_command(&join("127.0.0.1:15637")).unwrap();
+        assert!(
+            matches!(
+                input.client_command(&join("10.0.0.2:15637")),
+                Err(WorldError::Refused)
+            ),
+            "one join at a time"
+        );
+        input.cancel_command(again).unwrap();
+        assert_eq!(
+            input.command_status(again).unwrap().state,
+            CommandState::Cancelled(CancelReason::ByMod)
+        );
+        assert!(input.client_command(&join("10.0.0.2:15637")).is_ok());
+    }
+
+    #[test]
+    fn a_join_is_refused_in_a_world_or_without_a_host_and_port_and_a_leave_outside_one() {
+        let (loader, input) = input(Side::CLIENT);
+        for bad in ["127.0.0.1", "a b:15637", "host:0"] {
+            assert!(
+                matches!(input.client_command(&join(bad)), Err(WorldError::Refused)),
+                "{bad}"
+            );
+        }
+        let in_a_session = ClientCommand::new(
+            CommandAction::Join {
+                server: "127.0.0.1:15637".to_owned(),
+                password: None,
+            },
+            3,
+        );
+        assert!(matches!(
+            input.client_command(&in_a_session),
+            Err(WorldError::Refused)
+        ));
+        let leave = ClientCommand::new(CommandAction::Leave, 0);
+        assert!(
+            matches!(input.client_command(&leave), Err(WorldError::Refused)),
+            "no world to leave"
+        );
+        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+            session: 2,
+            ..enshwick::abi::ClientSnapshot::EMPTY
+        });
+        assert!(matches!(
+            input.client_command(&join("127.0.0.1:15637")),
+            Err(WorldError::Refused)
+        ));
+        let leave = input
+            .client_command(&ClientCommand::new(CommandAction::Leave, 2))
+            .unwrap();
+        assert_eq!(
+            input.command_status(leave).unwrap().phase,
+            Some(JoinPhase::InWorld),
+            "a leave has a phase from the queue on"
+        );
     }
 }

@@ -635,7 +635,7 @@ pub(crate) extern "system" fn client_command(
             unsafe { id.write(spec.cancels) };
             return Status::OK;
         }
-        if !(Spec::OPEN_SCREEN..=Spec::HIGHLIGHT_RECIPE).contains(&spec.kind)
+        if !(Spec::OPEN_SCREEN..=Spec::LEAVE).contains(&spec.kind)
             || !spec.in_bounds()
             || !named_as_the_loader_takes(&spec)
         {
@@ -647,8 +647,22 @@ pub(crate) extern "system" fn client_command(
         {
             return Status::REFUSED;
         }
+        // One join or leave at a time; a join from the main menu, outside a
+        // world, which the snapshot's session names, and a leave inside one.
+        let plays = |kind: u32| kind == Spec::JOIN || kind == Spec::LEAVE;
+        if plays(spec.kind) {
+            let in_world = s.client_snapshot.session != 0;
+            let running = s
+                .client_commands
+                .iter()
+                .any(|(_, kind, _, status)| plays(*kind) && open(status));
+            if running || in_world == (spec.kind == Spec::JOIN) {
+                return Status::REFUSED;
+            }
+        }
         let next = s.client_commands.len() as u64 + 1;
-        // SAFETY: the mod's spec, its target borrowed for the call.
+        // SAFETY: the mod's spec, its target borrowed for the call; the
+        // password is never read, kept or returned.
         let target = unsafe { spec.target.as_str() }
             .unwrap_or_default()
             .to_owned();
@@ -658,6 +672,13 @@ pub(crate) extern "system" fn client_command(
             target,
             Raw {
                 kind: spec.kind,
+                // As the loader queues them: a join waits for its server's
+                // answer, a leave starts in the world.
+                phase: match spec.kind {
+                    Spec::JOIN => Raw::PHASE_QUEUED,
+                    Spec::LEAVE => Raw::PHASE_IN_WORLD,
+                    _ => 0,
+                },
                 ..Raw::EMPTY
             },
         ));

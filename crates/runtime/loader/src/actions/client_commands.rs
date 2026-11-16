@@ -9,6 +9,7 @@
 //! queues, each runs nothing but one atomic load.
 
 mod handoff;
+mod play;
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
@@ -20,6 +21,7 @@ use enshwick_core::abi::{ClientCommand as Spec, ClientCommandStatus as Status};
 use enshwick_core::abi::{Side, Str};
 
 pub(crate) use self::handoff::Handoff;
+pub(crate) use self::play::{Post, server_str};
 use crate::actions::client_control::MenuTab;
 use crate::actions::client_input::{self, Ask};
 use crate::actions::client_recipes;
@@ -56,6 +58,11 @@ pub(crate) enum Kind {
     Move([f32; 2], u32),
     /// Highlights the recipe in the open crafting menu.
     Highlight(RecipeId),
+    /// Joins a server from the main menu; its target and password live in
+    /// [`play`] from the queue on.
+    Join,
+    /// Leaves play back to the main menu.
+    Leave,
 }
 
 impl Kind {
@@ -67,6 +74,8 @@ impl Kind {
             Self::Look(_) => Spec::LOOK,
             Self::Move(..) => Spec::MOVE,
             Self::Highlight(_) => Spec::HIGHLIGHT_RECIPE,
+            Self::Join => Spec::JOIN,
+            Self::Leave => Spec::LEAVE,
         }
     }
 
@@ -79,7 +88,26 @@ impl Kind {
     /// Whether a detour of the game's own code runs it, through a
     /// [`Handoff`], rather than the interface frame.
     const fn handed(self) -> bool {
-        matches!(self, Self::Look(_) | Self::Move(..) | Self::Highlight(_))
+        matches!(
+            self,
+            Self::Look(_) | Self::Move(..) | Self::Highlight(_) | Self::Join | Self::Leave
+        )
+    }
+
+    /// Whether it joins or leaves play, at the game's own pace once handed:
+    /// no session, screen or two-second check ends it then.
+    const fn plays(self) -> bool {
+        matches!(self, Self::Join | Self::Leave)
+    }
+
+    /// Its phase when queued: a join waits for the server's answer, a leave
+    /// starts in play; 0 for kinds without phases.
+    const fn queued_phase(self) -> u32 {
+        match self {
+            Self::Join => Status::PHASE_QUEUED,
+            Self::Leave => Status::PHASE_IN_WORLD,
+            _ => 0,
+        }
     }
 }
 
@@ -97,6 +125,8 @@ pub(crate) enum Progress {
     /// The game's own state lacks its target: the open menu does not list
     /// the recipe.
     Unavailable,
+    /// The game ended a join without reaching the world, for this failure.
+    Failed(u32),
 }
 
 /// One command and where it stands.
@@ -116,6 +146,10 @@ pub(crate) struct Command {
     reason: u32,
     /// Whether its detour holds it, to be released when it ends.
     handed: bool,
+    /// A join or leave's last phase, 0 for other kinds.
+    phase: u32,
+    /// Why a join failed, 0 otherwise.
+    failure: u32,
 }
 
 impl Command {
@@ -131,7 +165,8 @@ impl Command {
         let progress = match self.kind {
             Kind::Look(_) | Kind::Move(..) => client_input::progress(self.id),
             Kind::Highlight(_) => client_recipes::progress(self.id),
-            Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => None,
+            // A handed join or leave runs through `plays_next` instead.
+            Kind::Join | Kind::Leave | Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => None,
         };
         Some(progress.unwrap_or(Progress::Waiting))
     }
@@ -145,18 +180,22 @@ impl Command {
                 client_input::hand(self.id, self.owner, Ask::Move(direction, hold))
             }
             Kind::Highlight(recipe) => client_recipes::hand(self.id, recipe),
-            Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => false,
+            Kind::Leave => play::leave(self.id, local_held::now_ms()).is_ok(),
+            // Handed when queued, with its target and password.
+            Kind::Join | Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => false,
         }
     }
 
-    /// Takes it back from its detour once it ended.
-    fn release(&self) {
+    /// Takes it back from its detour once it ended; `by_mod` when its mod
+    /// cancelled it, so a join the game took goes back to the menu.
+    fn release(&self, by_mod: bool) {
         if !self.handed {
             return;
         }
         match self.kind {
             Kind::Look(_) | Kind::Move(..) => client_input::release(self.id),
             Kind::Highlight(_) => client_recipes::release(self.id),
+            Kind::Join | Kind::Leave => play::release(self.id, local_held::now_ms(), by_mod),
             Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => {}
         }
     }
@@ -200,11 +239,8 @@ enum Next {
 /// and where its detour stands, `progress`, once it is handed.
 fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) -> Next {
     let cancel = |reason| Next::End(Status::CANCELLED, reason);
-    match progress {
-        Some(Progress::Done) => return Next::End(Status::OBSERVED, 0),
-        Some(Progress::Cancelled(reason)) => return cancel(reason),
-        Some(Progress::Unavailable) => return Next::End(Status::UNAVAILABLE, 0),
-        Some(Progress::Waiting | Progress::Taken) | None => {}
+    if let Some(end) = progress.and_then(ended) {
+        return end;
     }
     if seen.session != command.session {
         return cancel(Status::SESSION_CHANGED);
@@ -215,7 +251,7 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
         Kind::Open(screen) | Kind::Close(screen) => seen.screen == screen,
         Kind::Tab(tab) => seen.tab == TabRead::Shown(tab),
         Kind::Highlight(recipe) => seen.recipe == RecipeRead::Shown(Some(recipe)),
-        Kind::Look(_) | Kind::Move(..) => false,
+        Kind::Look(_) | Kind::Move(..) | Kind::Join | Kind::Leave => false,
     };
     if shows {
         return Next::End(Status::OBSERVED, 0);
@@ -247,7 +283,12 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
             _ if progress.is_some() => false,
             Kind::Tab(_) => !matches!(seen.tab, TabRead::NoMenu),
             Kind::Highlight(_) => matches!(seen.recipe, RecipeRead::Shown(_)),
-            Kind::Open(_) | Kind::Close(_) | Kind::Look(_) | Kind::Move(..) => true,
+            Kind::Open(_)
+            | Kind::Close(_)
+            | Kind::Look(_)
+            | Kind::Move(..)
+            | Kind::Join
+            | Kind::Leave => true,
         };
         if ready {
             return Next::Apply;
@@ -257,6 +298,37 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
         return cancel(Status::TIMED_OUT);
     }
     Next::Wait
+}
+
+/// What the frame does with a join or leave the play module holds, its
+/// phase and failure taken into `command`: the game's own pace decides,
+/// never the two-second limit.
+fn plays_next(command: &mut Command) -> Next {
+    let Some(report) = play::report_of(command.id) else {
+        return Next::End(Status::UNAVAILABLE, 0);
+    };
+    command.phase = report.phase;
+    command.failure = report.failure;
+    if let Some(end) = ended(report.progress) {
+        return end;
+    }
+    if report.progress == Progress::Taken && command.state == Status::PENDING {
+        Next::Applied
+    } else {
+        Next::Wait
+    }
+}
+
+/// How a command ends once its detour reports `progress`; `None` while it
+/// runs.
+const fn ended(progress: Progress) -> Option<Next> {
+    match progress {
+        Progress::Done => Some(Next::End(Status::OBSERVED, 0)),
+        Progress::Cancelled(reason) => Some(Next::End(Status::CANCELLED, reason)),
+        Progress::Unavailable => Some(Next::End(Status::UNAVAILABLE, 0)),
+        Progress::Failed(_) => Some(Next::End(Status::FAILED, 0)),
+        Progress::Waiting | Progress::Taken => None,
+    }
 }
 
 /// Whether `command` waited past its timeout at `now`.
@@ -307,6 +379,18 @@ pub(crate) enum CommandError {
     /// The mod has a command of this kind open.
     #[error("a command of this kind waits")]
     Waiting,
+    /// The client is not where the command starts, or a join or leave runs.
+    #[error("the client is not where the command starts, or a join or leave runs")]
+    NotNow,
+}
+
+impl From<play::StartError> for CommandError {
+    fn from(error: play::StartError) -> Self {
+        match error {
+            play::StartError::BadArgs => Self::BadArgs,
+            play::StartError::NotNow => Self::NotNow,
+        }
+    }
 }
 
 /// The screen byte named `name` on this build.
@@ -351,6 +435,8 @@ fn kind(spec: &Spec) -> Result<Kind, CommandError> {
         Spec::LOOK => Ok(Kind::Look(spec.look)),
         Spec::MOVE => Ok(Kind::Move(spec.direction, spec.hold_ms)),
         Spec::HIGHLIGHT_RECIPE => Ok(Kind::Highlight(spec.recipe)),
+        Spec::JOIN => Ok(Kind::Join),
+        Spec::LEAVE => Ok(Kind::Leave),
         _ => Err(CommandError::BadArgs),
     }
 }
@@ -369,6 +455,7 @@ fn runs(kind: Kind) -> bool {
         Kind::Tab(_) => groups.tab.get().is_some(),
         Kind::Look(_) | Kind::Move(..) => client_input::runs(),
         Kind::Highlight(_) => client_recipes::runs(),
+        Kind::Join | Kind::Leave => play::runs(),
     }
 }
 
@@ -382,6 +469,14 @@ fn expected_screen(kind: Kind, name: &str) -> Result<Option<u8>, CommandError> {
         return screen_byte(rules::WORLD_SCREEN)
             .map(Some)
             .ok_or(CommandError::Unavailable);
+    }
+    if kind == Kind::Join {
+        // A join starts at the main menu, which no HUD screen names.
+        return if name.is_empty() {
+            Ok(None)
+        } else {
+            Err(CommandError::BadArgs)
+        };
     }
     if name.is_empty() {
         return Ok(None);
@@ -423,6 +518,21 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         return Err(CommandError::Waiting);
     }
     let id = commands.next_id;
+    let now = local_held::now_ms();
+    if kind == Kind::Leave {
+        // Handed in the frame, after its screen check; refused here where it
+        // could not start, as the fake host refuses it.
+        play::can_leave(now)?;
+    }
+    if kind == Kind::Join {
+        // SAFETY: the mod's spec, its target borrowed for the call; the play
+        // module copies it.
+        let target = unsafe { text(spec.target) }?;
+        // SAFETY: the same spec's password, borrowed for the call; the play
+        // module keeps a copy only until it is posted.
+        let password = unsafe { text(spec.password) }?;
+        play::join(id, target, password.as_bytes(), now)?;
+    }
     commands.next_id += 1;
     commands.kept.push_back(Command {
         id,
@@ -431,10 +541,12 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         session: spec.session,
         expected,
         held,
-        queued_ms: local_held::now_ms(),
+        queued_ms: now,
         state: Status::PENDING,
         reason: 0,
-        handed: false,
+        handed: kind == Kind::Join,
+        phase: kind.queued_phase(),
+        failure: 0,
     });
     while commands.kept.len() > KEPT && commands.kept.front().is_some_and(|c| !c.open()) {
         commands.kept.pop_front();
@@ -451,7 +563,7 @@ fn cancel(owner: ModIndex, id: u64) {
         .iter_mut()
         .find(|c| c.id == id && c.owner == owner && c.open())
     {
-        command.release();
+        command.release(true);
         command.state = Status::CANCELLED;
         command.reason = Status::BY_MOD;
     }
@@ -470,6 +582,8 @@ pub(crate) fn status(owner: ModIndex, id: u64) -> Option<Status> {
         reason: command.reason,
         kind: command.kind.raw(),
         age_ms: local_held::now_ms().saturating_sub(command.queued_ms),
+        phase: command.phase,
+        failure: command.failure,
         ..Status::EMPTY
     })
 }
@@ -490,6 +604,23 @@ pub(crate) fn frame(seen: impl FnOnce() -> Option<Seen>, apply: impl FnMut(Kind)
     });
 }
 
+/// Notes the client's app stage `byte` and runs a join or leave in the
+/// interface frame: `game` answers whether the frame reads the client's
+/// play data, `post` hands a menu command to the game. A panic in it turns
+/// off only the commands, never the interface frame.
+pub(crate) fn play_frame(
+    byte: impl FnOnce() -> u8,
+    game: impl FnOnce() -> bool,
+    post: impl FnMut(Post<'_>) -> bool,
+) {
+    let _ran = FUSE.run(FEATURE, || {
+        let now = local_held::now_ms();
+        let byte = byte();
+        play::note_stage(byte, now);
+        play::frame(play::Stage::of(byte), now, game, post);
+    });
+}
+
 /// Runs the open `commands` at `now` with what the frame `seen`; whether
 /// one is still open.
 fn run(
@@ -503,6 +634,8 @@ fn run(
             || (command.kind.handed() && !runs(command.kind));
         let next = if off {
             Next::End(Status::CANCELLED, Status::MOD_OFF)
+        } else if command.kind.plays() && command.handed {
+            plays_next(command)
         } else if let Some(seen) = &seen {
             // Session 0, before the client read a game, is the one this
             // frame counts; the first fresh read is the held baseline.
@@ -528,7 +661,7 @@ fn run(
             },
             Next::Applied => command.state = Status::APPLIED,
             Next::End(state, reason) => {
-                command.release();
+                command.release(false);
                 command.state = state;
                 command.reason = reason;
             }
@@ -538,415 +671,4 @@ fn run(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn command(kind: Kind) -> Command {
-        Command {
-            id: 1,
-            owner: ModIndex::new(0),
-            kind,
-            session: 3,
-            expected: Some(1),
-            held: Some(0),
-            queued_ms: 100,
-            state: Status::PENDING,
-            reason: 0,
-            handed: false,
-        }
-    }
-
-    fn seen(screen: u8, tab: TabRead) -> Seen {
-        Seen {
-            session: 3,
-            screen,
-            tab,
-            recipe: RecipeRead::Unread,
-            held: Some(0),
-        }
-    }
-
-    /// The world's own screen, 1 on client 26430625.
-    fn world() -> Seen {
-        seen(1, TabRead::NoMenu)
-    }
-
-    #[test]
-    fn a_look_is_handed_on_the_world_screen_and_observed_when_written() {
-        let look = command(Kind::Look([0.5, 0.0]));
-        assert_eq!(next(&look, &world(), None, 150), Next::Apply);
-        let handed = Command {
-            handed: true,
-            ..look
-        };
-        assert_eq!(
-            next(&handed, &world(), Some(Progress::Waiting), 150),
-            Next::Wait,
-            "handed once"
-        );
-        assert_eq!(
-            next(&handed, &world(), Some(Progress::Done), 160),
-            Next::End(Status::OBSERVED, 0)
-        );
-    }
-
-    #[test]
-    fn a_move_is_applied_while_it_holds_and_cancelled_by_a_press_or_another_screen() {
-        let walk = Command {
-            handed: true,
-            ..command(Kind::Move([0.0, 1.0], 250))
-        };
-        assert_eq!(
-            next(&walk, &world(), Some(Progress::Taken), 150),
-            Next::Applied
-        );
-        let moving = Command {
-            state: Status::APPLIED,
-            ..walk
-        };
-        let cancelled = |reason| Next::End(Status::CANCELLED, reason);
-        let pressed = Seen {
-            held: Some(1 << 3),
-            ..world()
-        };
-        assert_eq!(
-            next(&moving, &pressed, Some(Progress::Taken), 160),
-            cancelled(Status::PLAYER_INPUT),
-            "W pressed during the move"
-        );
-        assert_eq!(
-            next(
-                &moving,
-                &seen(4, TabRead::NoMenu),
-                Some(Progress::Taken),
-                160
-            ),
-            cancelled(Status::OTHER_SCREEN),
-            "a menu opened during the move"
-        );
-        assert_eq!(
-            next(
-                &moving,
-                &world(),
-                Some(Progress::Cancelled(Status::INPUT_BLOCKED)),
-                160
-            ),
-            cancelled(Status::INPUT_BLOCKED)
-        );
-        assert_eq!(
-            next(&moving, &world(), Some(Progress::Done), 400),
-            Next::End(Status::OBSERVED, 0)
-        );
-    }
-
-    #[test]
-    fn a_move_taken_late_keeps_its_hold_before_the_timeout() {
-        let moving = Command {
-            handed: true,
-            state: Status::APPLIED,
-            ..command(Kind::Move([0.0, 1.0], 250))
-        };
-        let late = 100 + TIMEOUT_MS + 100;
-        assert_eq!(
-            next(&moving, &world(), Some(Progress::Taken), late),
-            Next::Wait
-        );
-        assert_eq!(
-            next(&moving, &world(), Some(Progress::Taken), late + 200),
-            Next::End(Status::CANCELLED, Status::TIMED_OUT)
-        );
-    }
-
-    #[test]
-    fn a_recipe_waits_for_the_browser_and_is_observed_once_it_is_highlighted() {
-        let torch = RecipeId(0x7cd8_0a04);
-        let highlight = Command {
-            expected: None,
-            ..command(Kind::Highlight(torch))
-        };
-        let browser = |recipe| Seen {
-            recipe: RecipeRead::Shown(recipe),
-            ..seen(8, TabRead::NoMenu)
-        };
-        assert_eq!(next(&highlight, &world(), None, 150), Next::Wait, "no menu");
-        assert_eq!(next(&highlight, &browser(None), None, 150), Next::Apply);
-        let handed = Command {
-            handed: true,
-            ..highlight
-        };
-        assert_eq!(
-            next(&handed, &browser(None), Some(Progress::Taken), 160),
-            Next::Applied
-        );
-        let applied = Command {
-            state: Status::APPLIED,
-            ..handed
-        };
-        assert_eq!(
-            next(&applied, &browser(Some(torch)), Some(Progress::Taken), 170),
-            Next::End(Status::OBSERVED, 0)
-        );
-        assert_eq!(
-            next(&handed, &browser(None), Some(Progress::Unavailable), 160),
-            Next::End(Status::UNAVAILABLE, 0),
-            "a recipe the open menu does not list"
-        );
-    }
-
-    #[test]
-    fn a_look_or_move_past_its_bounds_and_on_another_screen_is_refused() {
-        let spec = |kind, look, direction, hold_ms| Spec {
-            kind,
-            look,
-            direction,
-            hold_ms,
-            ..Spec::EMPTY
-        };
-        assert_eq!(
-            kind(&spec(Spec::LOOK, [Spec::MAX_LOOK, -0.5], [0.0; 2], 0)),
-            Ok(Kind::Look([Spec::MAX_LOOK, -0.5]))
-        );
-        for refused in [
-            spec(Spec::LOOK, [Spec::MAX_LOOK + 0.01, 0.0], [0.0; 2], 0),
-            spec(Spec::LOOK, [f32::NAN, 0.0], [0.0; 2], 0),
-            spec(Spec::MOVE, [0.0; 2], [0.0, 1.0], 251),
-            spec(Spec::MOVE, [0.0; 2], [0.0, 1.0], 0),
-            spec(Spec::MOVE, [0.0; 2], [1.0, 1.0], 100),
-            spec(Spec::MOVE, [0.0; 2], [0.0, 0.0], 100),
-            Spec {
-                kind: Spec::HIGHLIGHT_RECIPE,
-                ..Spec::EMPTY
-            },
-        ] {
-            assert_eq!(kind(&refused), Err(CommandError::BadArgs), "{refused:?}");
-        }
-        assert_eq!(
-            expected_screen(Kind::Move([0.0, 1.0], 100), "Backpack"),
-            Err(CommandError::BadArgs)
-        );
-    }
-
-    #[test]
-    fn a_command_applies_on_its_screen_and_is_observed_once_the_screen_shows() {
-        let mut open = command(Kind::Open(9));
-        assert_eq!(
-            next(&open, &seen(1, TabRead::NoMenu), None, 150),
-            Next::Apply
-        );
-        open.state = Status::APPLIED;
-        assert_eq!(
-            next(&open, &seen(1, TabRead::NoMenu), None, 160),
-            Next::Wait
-        );
-        assert_eq!(
-            next(
-                &open,
-                &seen(9, TabRead::Shown(MenuTab::Backpack)),
-                None,
-                170
-            ),
-            Next::End(Status::OBSERVED, 0)
-        );
-    }
-
-    #[test]
-    fn each_cancel_reason_ends_a_pending_command() {
-        let open = command(Kind::Open(9));
-        let ended = |seen: Seen, now| next(&open, &seen, None, now);
-        let cancelled = |reason| Next::End(Status::CANCELLED, reason);
-        assert_eq!(
-            ended(
-                Seen {
-                    session: 4,
-                    ..seen(1, TabRead::NoMenu)
-                },
-                150
-            ),
-            cancelled(Status::SESSION_CHANGED)
-        );
-        assert_eq!(
-            ended(seen(4, TabRead::NoMenu), 150),
-            cancelled(Status::OTHER_SCREEN)
-        );
-        assert_eq!(
-            ended(
-                Seen {
-                    held: Some(1 << 3),
-                    ..seen(1, TabRead::NoMenu)
-                },
-                150
-            ),
-            cancelled(Status::PLAYER_INPUT)
-        );
-        let applied = Command {
-            state: Status::APPLIED,
-            ..open
-        };
-        assert_eq!(
-            next(
-                &applied,
-                &seen(1, TabRead::NoMenu),
-                None,
-                100 + TIMEOUT_MS + 1
-            ),
-            cancelled(Status::TIMED_OUT)
-        );
-    }
-
-    #[test]
-    fn a_control_held_since_the_queue_is_not_the_player_s_new_input() {
-        let held = Command {
-            held: Some(1 << 3),
-            ..command(Kind::Open(9))
-        };
-        let seen = Seen {
-            held: Some(1 << 3),
-            ..seen(1, TabRead::NoMenu)
-        };
-        assert_eq!(next(&held, &seen, None, 150), Next::Apply);
-    }
-
-    #[test]
-    fn a_tab_applies_while_the_menu_shows_a_tab_the_build_adds() {
-        let tab = Command {
-            expected: None,
-            ..command(Kind::Tab(MenuTab::Map))
-        };
-        assert_eq!(next(&tab, &seen(4, TabRead::Other), None, 150), Next::Apply);
-    }
-
-    #[test]
-    fn a_tab_waits_for_the_menu_and_is_observed_when_it_shows() {
-        let mut tab = Command {
-            expected: None,
-            ..command(Kind::Tab(MenuTab::Character))
-        };
-        assert_eq!(next(&tab, &seen(1, TabRead::NoMenu), None, 150), Next::Wait);
-        assert_eq!(
-            next(&tab, &seen(4, TabRead::Shown(MenuTab::Backpack)), None, 150),
-            Next::Apply
-        );
-        tab.state = Status::APPLIED;
-        assert_eq!(
-            next(
-                &tab,
-                &seen(4, TabRead::Shown(MenuTab::Character)),
-                None,
-                160
-            ),
-            Next::End(Status::OBSERVED, 0)
-        );
-    }
-
-    #[test]
-    fn a_command_whose_effect_already_shows_is_observed_without_applying() {
-        let open = command(Kind::Open(9));
-        assert_eq!(
-            next(&open, &seen(9, TabRead::NoMenu), None, 150),
-            Next::End(Status::OBSERVED, 0),
-            "an open of the screen shown is not toggled shut"
-        );
-        let tab = Command {
-            expected: None,
-            ..command(Kind::Tab(MenuTab::Map))
-        };
-        assert_eq!(
-            next(&tab, &seen(4, TabRead::Shown(MenuTab::Map)), None, 150),
-            Next::End(Status::OBSERVED, 0)
-        );
-    }
-
-    #[test]
-    fn a_control_held_before_the_first_fresh_read_is_not_a_press() {
-        let unread = Command {
-            held: None,
-            ..command(Kind::Look([0.5, 0.0]))
-        };
-        let holding = Seen {
-            held: Some(1 << 3),
-            ..world()
-        };
-        assert_eq!(next(&unread, &holding, None, 150), Next::Apply);
-    }
-
-    /// Commands of their own for a test, apart from the process's, holding
-    /// `command` as the loader's own, which reads as on without a loader.
-    fn kept(command: Command) -> Commands {
-        Commands {
-            next_id: 2,
-            kept: VecDeque::from([Command {
-                owner: ModIndex::LOADER,
-                ..command
-            }]),
-        }
-    }
-
-    #[test]
-    fn a_frame_that_reads_no_game_still_ends_a_command_past_its_timeout() {
-        let mut commands = kept(command(Kind::Tab(MenuTab::Map)));
-        assert!(
-            run(&mut commands, None, 150, |_| Applied::Taken),
-            "within its timeout"
-        );
-        let late = 100 + TIMEOUT_MS + 1;
-        assert!(!run(&mut commands, None, late, |_| Applied::Taken));
-        let ended = commands.kept[0];
-        assert_eq!(
-            (ended.state, ended.reason),
-            (Status::CANCELLED, Status::TIMED_OUT)
-        );
-    }
-
-    #[test]
-    fn a_command_of_session_0_takes_the_session_and_held_baseline_of_its_first_frame() {
-        let mut commands = kept(Command {
-            session: 0,
-            held: None,
-            ..command(Kind::Open(9))
-        });
-        let shown = Seen {
-            session: 5,
-            held: Some(1 << 3),
-            ..seen(1, TabRead::NoMenu)
-        };
-        run(&mut commands, Some(shown), 150, |_| Applied::Taken);
-        let running = commands.kept[0];
-        assert_eq!((running.session, running.held), (5, Some(1 << 3)));
-        assert_eq!(running.state, Status::APPLIED, "not cancelled");
-    }
-
-    #[test]
-    fn no_kind_runs_while_the_screen_reads_are_off() {
-        crate::engine::screens::READS_FUSE.blow("a test");
-        assert!(!runs(Kind::Open(9)));
-        assert!(!runs(Kind::Tab(MenuTab::Map)));
-    }
-
-    #[test]
-    fn no_kind_runs_once_the_commands_panicked() {
-        FUSE.blow("a test");
-        assert!(!runs(Kind::Open(9)), "queueing answers unavailable");
-    }
-
-    #[test]
-    fn the_frame_runs_nothing_while_no_command_is_open() {
-        let mut asked = false;
-        frame(
-            || {
-                asked = true;
-                None
-            },
-            |_| Applied::Taken,
-        );
-        assert!(!asked);
-    }
-
-    #[test]
-    fn a_server_queues_nothing() {
-        let loader = crate::start::tests::bare_loader();
-        assert_eq!(
-            queue(&loader, ModIndex::new(0), &Spec::EMPTY),
-            Err(CommandError::NotClient)
-        );
-    }
-}
+mod tests;

@@ -343,7 +343,7 @@ impl Refusal for crate::actions::client_commands::CommandError {
         match self {
             CommandError::NotClient | CommandError::Unavailable => Status::UNAVAILABLE,
             CommandError::BadArgs => Status::BAD_ARGS,
-            CommandError::Waiting => Status::REFUSED,
+            CommandError::Waiting | CommandError::NotNow => Status::REFUSED,
         }
     }
 }

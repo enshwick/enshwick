@@ -149,8 +149,19 @@ pub fn client_command_names(kind: u32, target: &str, expected: &str) -> bool {
         Spec::OPEN_SCREEN => CLIENT_OPENS.contains(&target),
         Spec::CHOOSE_TAB => MENU_TABS.contains(&target),
         Spec::LOOK | Spec::MOVE => expected.is_empty() || expected == WORLD_SCREEN,
+        Spec::JOIN => join_target(target).is_some() && expected.is_empty(),
         _ => true,
     }
+}
+
+/// A join's server `target` as its host and query port: `host:port`, the
+/// host a name or an address without spaces, the port above 0; `None` for
+/// anything else.
+#[must_use]
+pub fn join_target(target: &str) -> Option<(&str, u16)> {
+    let (host, port) = target.rsplit_once(':')?;
+    let port = port.parse::<u16>().ok().filter(|&p| p != 0)?;
+    (!host.is_empty() && !host.contains(char::is_whitespace)).then_some((host, port))
 }
 
 #[cfg(test)]
@@ -166,6 +177,24 @@ mod tests {
         assert!(!client_command_names(Spec::CHOOSE_TAB, "Inventory", ""));
         assert!(client_command_names(Spec::LOOK, "", WORLD_SCREEN));
         assert!(!client_command_names(Spec::MOVE, "", "Backpack"));
+        assert!(client_command_names(Spec::JOIN, "127.0.0.1:15637", ""));
+        assert!(!client_command_names(
+            Spec::JOIN,
+            "127.0.0.1:15637",
+            "InGame"
+        ));
+    }
+
+    #[test]
+    fn a_join_target_is_a_host_and_a_port() {
+        assert_eq!(join_target("127.0.0.1:15637"), Some(("127.0.0.1", 15637)));
+        assert_eq!(
+            join_target("play.example.net:15637"),
+            Some(("play.example.net", 15637))
+        );
+        for bad in ["127.0.0.1", ":15637", "a:0", "a:b", "a b:1", "a:70000"] {
+            assert_eq!(join_target(bad), None, "{bad}");
+        }
     }
     use crate::schema_section::Kind;
 

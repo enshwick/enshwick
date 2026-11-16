@@ -1,0 +1,6 @@
+### Added
+
+- `unstable`: client commands join a dedicated server from the main menu, by its `host:query_port` and a password the mod gives, and leave a world back to the main menu: `CommandAction::Join`, `CommandAction::Leave` and `input::Password`, whose `Debug` shows none of the password. The loader asks the server's query port for its Steam id and game port, hands the password to the game's own join, which keeps only a hash of it, and keeps, logs and returns none of it.
+- `unstable`: `CommandStatus::phase` follows a join or leave (`JoinPhase`), and a join that ends back at the main menu is `CommandState::Failed` with the `JoinFailure` the client can tell; no two-second limit cancels a join. `ClientSnapshot::server` names the server the client joined through the loader.
+- Append `ClientCommand::JOIN`, `LEAVE`, `MAX_PASSWORD` and the `password` field, `ClientCommandStatus::FAILED` with its `phase` and `failure` fields and constants, and `ClientSnapshot::server` in ABI 12.11.
+- `test`: `FakeHost` takes joins and leaves as the loader does, one at a time, a join outside a world and a leave inside one, keeping the server but never the password; `FakeHost::set_command_phase` sets a join's phase and failure.
