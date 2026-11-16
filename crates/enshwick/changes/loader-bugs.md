@@ -17,9 +17,9 @@
   post-step link, or a panic in the step's work, left client game events,
   notices and the freeing of handed lists stopped for the whole hosted game,
   with no reason shown (#1134).
-- A client without the server's state link lists its own game events and
-  notices off with the reason, since it cannot tell a hosted world from its
-  own (#1134).
+- A client without the server's state link lists its notices off with the
+  reason, and its own game events too when a mod subscribed to them, since
+  it cannot tell a hosted world from its own (#1134).
 - A second Enter after a text field in the Mods screen or a mod's window
   saved its text no longer presses the window's Back button. The arrows
   still move the selection, and Back takes Enter once reached (#1134).
