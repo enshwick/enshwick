@@ -211,6 +211,47 @@ mod tests {
     }
 
     #[test]
+    fn the_console_names_a_vanilla_item_in_any_case_and_lists_the_guids_of_a_shared_name() {
+        const CHEST: Guid = Guid::parse("00000000-0000-4000-8000-00000000c001");
+        const CRATE: Guid = Guid::parse("00000000-0000-4000-8000-00000000c002");
+        let loader = enshwick::test::FakeHost::new()
+            .player(root())
+            .items()
+            .workshops()
+            .vanilla_items(&[
+                (TORCH, "Tool_Torch01"),
+                (CHEST, "Prop_Chest"),
+                (CRATE, "PROP_CHEST"),
+            ])
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let chat = |line: &str| loader.type_in_chat(&root(), 0, line);
+        assert_eq!(chat("/s spawn tool_torch01 4").as_deref(), Some("1ok"));
+        assert_eq!(chat("/s spawn PROP_CHEST").as_deref(), Some("1ok"));
+        assert_eq!(
+            runs(),
+            [
+                vec![Value::Item(TORCH), Value::Number(4.0)],
+                vec![Value::Item(CRATE), Value::Number(1.0)],
+            ],
+            "an exact name wins over one in another case"
+        );
+        assert_eq!(
+            chat("/s spawn prop_chest").as_deref(),
+            Some(
+                format!(
+                    "0Several items are named prop_chest: {CHEST}, {CRATE}. Name one by its GUID."
+                )
+                .as_str()
+            )
+        );
+        assert!(runs().is_empty());
+    }
+
+    #[test]
     fn an_unknown_typed_item_is_refused_under_the_text_typed() {
         let loader = start();
         assert_eq!(

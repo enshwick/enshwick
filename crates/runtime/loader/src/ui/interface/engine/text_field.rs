@@ -221,19 +221,53 @@ thread_local! {
     /// Whether a text field had the caret in this interface frame and in
     /// the last one.
     static CARET: Cell<[bool; 2]> = const { Cell::new([false; 2]) };
+    /// Whether the loader's windows hold their focus back: from a field's
+    /// caret until the player's next move between a window's members.
+    static FOCUS_HELD: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Starts the next interface frame, on its thread: this frame's caret
-/// becomes the last frame's.
-pub(in crate::ui::interface) fn caret_next_frame() {
+/// becomes the last frame's, and a frame that drew no window (`windowed`
+/// false) ends a held focus, so the next window opens with its own.
+pub(in crate::ui::interface) fn caret_next_frame(windowed: bool) {
     let [now, _] = CARET.get();
     CARET.set([false, now]);
+    if !windowed {
+        FOCUS_HELD.set(false);
+    }
 }
 
 /// Notes a field with the caret in this frame.
 fn caret_seen() {
     let [_, last] = CARET.get();
     CARET.set([true, last]);
+    FOCUS_HELD.set(true);
+}
+
+/// Whether the loader's windows hold their focus back, on the interface
+/// thread. Enter and Escape in a field clear the focus, and a window's
+/// `ui.nav_end` gives a focus nobody holds to its remembered member, the
+/// window's Back, while its group's byte `+0x70` (the navigation config's
+/// focus byte) is set; a second Enter would then press Back. Moves step
+/// apart from that byte, and only a moved selection takes the focus once
+/// the byte is set again (client 26430625, read in the decompiler).
+pub(super) fn focus_held() -> bool {
+    FOCUS_HELD.get()
+}
+
+/// A window's `ui.nav_end` answered `moved`, a bool the game returns in its
+/// low byte: anything but 0 is the player moving between its members, which
+/// ends the held focus.
+pub(super) fn nav_ended(moved: u8) {
+    if moved != 0 {
+        FOCUS_HELD.set(false);
+    }
+}
+
+/// The navigation config's focus byte: 0 gives the focus to no member
+/// unasked (client 26430625).
+pub(super) const fn focus_byte(held: bool) -> u16 {
+    if held { 0 } else { 1 }
 }
 
 /// Whether a field had the caret in the last frame, on the interface
@@ -444,21 +478,52 @@ mod tests {
 
     #[test]
     fn navigation_stays_quiet_only_in_the_frame_after_a_field_had_the_caret() {
-        caret_next_frame();
-        caret_next_frame();
+        caret_next_frame(true);
+        caret_next_frame(true);
         assert!(!typed_last_frame(), "no field typed");
         caret_seen();
         assert!(!typed_last_frame(), "the frame the typing starts in");
-        caret_next_frame();
+        caret_next_frame(true);
         assert!(typed_last_frame(), "the frame after a field typed");
         caret_seen();
-        caret_next_frame();
+        caret_next_frame(true);
         assert!(typed_last_frame(), "a field keeps typing");
-        caret_next_frame();
+        caret_next_frame(true);
         assert!(
             !typed_last_frame(),
             "the frame after Enter ended the typing"
         );
+    }
+
+    #[test]
+    fn a_window_holds_its_focus_from_a_field_s_caret_until_the_player_moves() {
+        nav_ended(1);
+        assert!(!focus_held(), "no field had the caret");
+        assert_eq!(focus_byte(focus_held()), 1, "Back takes the focus");
+        caret_seen();
+        caret_next_frame(true);
+        caret_next_frame(true);
+        assert!(!typed_last_frame(), "Enter ended the typing");
+        assert!(focus_held(), "a second Enter finds no Back focused");
+        assert_eq!(focus_byte(focus_held()), 0);
+        nav_ended(0);
+        assert!(focus_held(), "a frame without a move keeps it held");
+        nav_ended(1);
+        assert!(
+            !focus_held(),
+            "a move lets the moved-to member take the focus"
+        );
+        assert_eq!(focus_byte(focus_held()), 1);
+    }
+
+    #[test]
+    fn a_frame_without_a_window_ends_a_held_focus_so_the_next_window_has_its_own() {
+        caret_seen();
+        caret_next_frame(true);
+        caret_next_frame(true);
+        assert!(focus_held(), "the window with the field is still drawn");
+        caret_next_frame(false);
+        assert!(!focus_held(), "the window closed without a move");
     }
 
     #[test]

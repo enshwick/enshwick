@@ -27,7 +27,7 @@ pub(crate) use crate::engine::server_pin::ServerAccess;
 use crate::engine::server_pin::{Place, ServerCell};
 
 mod whose;
-pub(crate) use whose::{Whose, server_starts, whose};
+pub(crate) use whose::{Whose, server_left, server_starts, whose};
 
 mod players;
 #[cfg(test)]
@@ -74,8 +74,8 @@ const STALL_FIRST_WARNING: Duration = Duration::from_secs(1);
 const STALL_WARNING_EVERY: Duration = Duration::from_secs(5);
 
 /// What the loader knows of the running server: the server's own lifecycle
-/// (its capture, release and teardown) sets and clears it, so a hosted
-/// game's end needs no `forget` here.
+/// (its start, capture, release, teardown and leaving the server list) sets
+/// and clears it, so a hosted game's end needs no `forget` here.
 #[derive(Debug)]
 struct State {
     /// The server object, seen by the post-step hook, and the pins of
@@ -132,7 +132,7 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
     let entity_world = if world == 0 { 0 } else { world + entities };
     STATE.server_world.store(entity_world, Ordering::Release);
     if entity_world != 0 {
-        STATE.hosted.server_seen(thread);
+        whose::server_stepped(thread);
     }
 }
 
@@ -179,7 +179,6 @@ pub(crate) fn tear_down() {
     });
     STATE.server_world.store(0, Ordering::Release);
     STATE.game_thread.store(0, Ordering::Release);
-    STATE.hosted.server_gone();
 }
 
 /// Forgets the server of a hosted game that stopped, after [`retire`]; its

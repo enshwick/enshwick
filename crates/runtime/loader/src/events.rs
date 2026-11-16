@@ -70,6 +70,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 
 /// Server states, from the game's state machine. A hosted game enters
 /// Initialize before its Load state reads the save (client 410 and 426).
+/// A server enters None as it leaves the game's server list, once the
+/// teardown freed it (client 26430625). The name is Enshwick's.
+const STATE_NONE: u8 = 0;
 const STATE_INITIALIZE: u8 = 2;
 const STATE_RUN: u8 = 5;
 const STATE_SHUTDOWN: u8 = 6;
@@ -243,6 +246,7 @@ pub(crate) fn link(loader: &'static Loader) {
             for (_, fuse) in features.iter().filter(|(wanted, _)| *wanted) {
                 let _off = loader.fuse_off(fuse, lacking.id(), crate::engine::builds::ABSENT);
             }
+            untold(loader, lacking.id(), crate::engine::builds::ABSENT);
             return;
         }
     };
@@ -269,7 +273,7 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
             step_link,
             none,
         );
-    let _state = state
+    let state_linked = state
         && loader.link_fused(
             &STATE_LINK,
             at(pinned::server::SET_STATE),
@@ -277,6 +281,9 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
             set_state,
             none,
         );
+    if !state_linked {
+        untold(loader, pinned::server::SET_STATE.id(), UNTOLD);
+    }
     let _save = save
         && loader.link_fused(
             &SAVE_FUSE,
@@ -294,6 +301,20 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
             none,
         );
     stepped
+}
+
+/// Why a client's own game events and notices are off without the state
+/// link.
+const UNTOLD: &str =
+    "is not linked, and a hosted game's world cannot be told from the client's own";
+
+/// On a client, turns its own game events and notices off by the entry `id`
+/// for `reason`: without the state link no hosted server's start is seen,
+/// so its world would pass for the client's own.
+fn untold(loader: &Loader, id: &str, reason: &str) {
+    if loader.side == Side::CLIENT {
+        crate::base::game_events::untold(loader, id, reason);
+    }
 }
 
 /// Links the building events a mod subscribed to, `place` and `pickup`,
@@ -382,8 +403,7 @@ crate::engine::chains::chain_detour! {
 /// - Called on the game thread after its step, where nothing else writes
 ///   the slots.
 unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8, now: Instant) {
-    // SAFETY: `GetCurrentThreadId` has no preconditions.
-    let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    let thread = crate::engine::off_thread::current_thread();
     let (seen, game) = SESSION.step(server.expose_provenance(), thread);
     match seen {
         Step::Ended => return,
@@ -605,6 +625,18 @@ fn forget_pages_entering(state: u8) {
     }
 }
 
+/// The engine's own work at `site` once the game changed the server to
+/// `state`: a shutting server retires, and one that left the game's server
+/// list frees its hosted thread.
+fn after_change(site: &str, state: u8) {
+    if state == STATE_SHUTDOWN {
+        each_change(site, crate::engine::world::retire);
+    }
+    if state == STATE_NONE {
+        each_change(site, crate::engine::world::server_left);
+    }
+}
+
 /// Runs the engine's own `work` for the server's lifetime at `site`, on
 /// every state change, even after it panicked once: turned off, it would
 /// leave readers off the game thread a server the game frees, which crashes
@@ -647,9 +679,7 @@ crate::engine::chains::chain_detour! {
             each_change(site, crate::engine::world::server_starts);
         }
         onward.call();
-        if state == STATE_SHUTDOWN {
-            each_change(site, crate::engine::world::retire);
-        }
+        after_change(site, state);
         let (Some((loader, _)), Some(old)) = (linked, old) else {
             return;
         };

@@ -177,18 +177,23 @@ impl Engine {
     }
 
     /// A navigation config of `kind`, as the game's popups, scrolled columns
-    /// and chat field fill theirs: wrapping, both axes, every input, and no
-    /// moves while a text field types.
+    /// and chat field fill theirs: wrapping, both axes, every input, no
+    /// moves while a text field types, and a window's focus held back after
+    /// one typed.
     pub(super) fn nav_config(&self, kind: u32) -> Buf<NAV_CONFIG> {
         let mut nav = Buf::<NAV_CONFIG>::zeroed();
-        let [kind_at, wrap, axis, flags, input, layer, sound] = self.layout.nav;
+        // The table's `ui.nav_sound` is the focus byte (client 26430625).
+        let [kind_at, wrap, axis, flags, input, layer, focus] = self.layout.nav;
         nav.u32(kind_at, kind);
         nav.u8(wrap, 1);
         nav.u32(axis, 3);
         nav.u16(flags, text_field::nav_flags(text_field::typed_last_frame()));
         nav.u32(input, 2);
         nav.u16(layer, 0x1b);
-        nav.u16(sound, 1);
+        nav.u16(
+            focus,
+            text_field::focus_byte(kind == NAV_WINDOW && text_field::focus_held()),
+        );
         nav
     }
 
@@ -205,7 +210,8 @@ impl Engine {
             // SAFETY: `self.nav_end` is the game's `ui.nav_end`, its entry
             // bytes checked in `Engine::resolve`, on the group `window_begin`
             // pushed in this frame, unmoved by this function's `# Safety`.
-            unsafe { (self.nav_end)(window.nav.ptr(), 0) };
+            let moved = unsafe { (self.nav_end)(window.nav.ptr(), 0) };
+            text_field::nav_ended(moved);
         }
         // SAFETY: `self.nav_drop` is the game's `ui.nav_drop`, its entry bytes
         // checked in `Engine::resolve`, on the group `window_begin` pushed in

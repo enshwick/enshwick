@@ -430,6 +430,16 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
+/// Turns the client's notices, and its own game events when a mod
+/// subscribed to them, off by the entry `id` it lacks for `reason`, when
+/// the loader cannot tell a hosted server's world from the client's.
+pub(crate) fn untold(loader: &Loader, id: &str, reason: &str) {
+    if SUBSCRIBERS.any(|subscriber| subscriber.whose == Whose::Client) {
+        let _off = loader.fuse_off(&CLIENT_FUSE, id, reason);
+    }
+    let _off = loader.fuse_off(&NOTICES_FUSE, id, reason);
+}
+
 /// Why the screens are off when the event move does not link.
 const MOVE_OFF: &str = "the event move is off";
 

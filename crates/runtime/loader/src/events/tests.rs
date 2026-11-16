@@ -135,6 +135,66 @@ fn building_events_without_the_step_s_link_are_listed_off_for_the_step() {
     assert!(loader.chains.relock().is_empty(), "nothing linked");
 }
 
+/// The reason the Mods screen lists for the loader feature named `feature`.
+fn listed_off(feature: &str) -> Option<String> {
+    crate::engine::diag::parts_off()
+        .into_iter()
+        .find(|part| part.part == feature)
+        .map(|part| part.reason)
+}
+
+#[test]
+fn a_client_without_the_state_link_lists_its_notices_off_for_the_state_link() {
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::pinning_loader(
+        Side::CLIENT,
+        &[],
+        &[],
+    )));
+    let _stepped = link_server(loader, [false, true, false, false]);
+    let notices = listed_off("server notices").unwrap_or_default();
+    assert!(
+        notices.starts_with(pinned::server::SET_STATE.id()),
+        "{notices}"
+    );
+    assert_eq!(
+        listed_off("client game events"),
+        None,
+        "no mod asked for client events, so none is listed off"
+    );
+}
+
+#[test]
+fn a_dedicated_server_without_the_state_link_keeps_its_notices() {
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::pinning_loader(
+        Side::SERVER,
+        &[],
+        &[],
+    )));
+    let _stepped = link_server(loader, [false, true, false, false]);
+    assert_eq!(listed_off("server notices"), None);
+}
+
+#[test]
+fn a_server_leaving_the_game_s_list_frees_its_hosted_thread() {
+    const CLIENT_WORLD: usize = 0x2000; // bound, not a game offset: a test's own world address
+    crate::engine::world::server_starts();
+    assert_eq!(
+        crate::engine::world::whose(Side::CLIENT, CLIENT_WORLD),
+        None
+    );
+    after_change("a test", STATE_TEAR_DOWN);
+    assert_eq!(
+        crate::engine::world::whose(Side::CLIENT, CLIENT_WORLD),
+        None,
+        "another state keeps it"
+    );
+    after_change("a test", STATE_NONE);
+    assert_eq!(
+        crate::engine::world::whose(Side::CLIENT, CLIENT_WORLD),
+        Some(crate::engine::world::Whose::Client)
+    );
+}
+
 #[test]
 fn read_only_runs_found_after_the_shutdown_are_forgotten_at_the_teardown_and_the_next_start() {
     use crate::engine::pages::LASTING;
