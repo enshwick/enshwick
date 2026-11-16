@@ -338,9 +338,11 @@ impl Installed {
         }
     }
 
-    /// `player` leaves, as far as the mod's windows go: their client holds
-    /// none any more, what waited for it is dropped, and the mod hears that
-    /// the player left, as the loader tells every mod with actions.
+    /// `player` leaves, as far as the mod's windows and permission changes
+    /// go: their client holds no window any more, what waited for it is
+    /// dropped, every mod's change to their permissions ends, and the mod
+    /// hears that the player left, as the loader tells every mod with
+    /// actions.
     ///
     /// # Examples
     ///
@@ -354,6 +356,7 @@ impl Installed {
         table::with((), |s| {
             s.commands.carried.retain(|(k, _, _)| *k != key);
             s.commands.windows.retain(|(k, _, _)| *k != key);
+            s.permission_changes.left(player);
         });
         self.tell_window_closed(player, "");
     }

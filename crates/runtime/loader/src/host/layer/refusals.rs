@@ -378,6 +378,19 @@ impl Refusal for crate::engine::world::WorldError {
     }
 }
 
+/// A bad account or bit is a bad argument, an account not in game refused;
+/// the rest is the world's own answer.
+#[cfg(windows)]
+impl Refusal for crate::world::permissions::PermissionError {
+    fn status(&self) -> Status {
+        match self {
+            Self::BadBits => Status::BAD_ARGS,
+            Self::NotInGame => Status::REFUSED,
+            Self::World(error) => error.status(),
+        }
+    }
+}
+
 /// A link or patch after arming is too late, a malformed one a bad
 /// argument, one another holds refused.
 impl Refusal for crate::engine::chains::LinkError {

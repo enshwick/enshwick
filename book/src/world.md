@@ -614,6 +614,66 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## Change a player's permissions
+
+`world.change_permissions(key, deny, grant)` changes the permissions of a
+player in game. It takes the permissions in `deny` and gives those in
+`grant`, on top of the player's user group. The game's own checks on the
+server then follow it (server 26430253):
+
+| Taken permission       | What the server refuses                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| `CanEditWorld`         | digging, bombs, building and breaking anywhere             |
+| `CanEditBase`          | the same inside a Flame Altar's building zone              |
+| `CanAccessInventories` | opening chests and other containers in bases               |
+| `CanKickBan`           | the game's account actions; other admin sends stay allowed |
+
+The other permissions change the same way. Which server checks follow them
+is not checked yet.
+
+Each call replaces the mod's own change, and two empty lists end it. When
+several mods change one player, a permission any mod takes is gone, even
+when another mod gives it. A change holds from the server's next step. It
+ends when the mod ends it or turns off, the player leaves or the world ends.
+Nothing is written to the server's settings.
+
+While a change holds, `player.permissions` reads the bits in force. Enshwick's
+own admin checks read them too, so a taken `CanKickBan` takes those rights.
+
+The server rebuilds each player's permissions from their user group in every
+frame. Enshwick therefore applies the mods' changes again before every step.
+The player's client still acts by its group's permissions. It may show an
+edit for a moment that the server then refuses. A granted permission works
+only for actions the client already sends, since the client never starts an
+edit its group forbids.
+
+The call runs on the server's game thread. A new change is refused for an
+account not in game, while ending one needs no player. The call is
+unavailable outside a server, and on a game build without the permission
+table or the links it needs.
+
+```rust
+use enshwick::world::PlayerPermissions::{CanEditBase, CanEditWorld};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    load.on::<enshwick::events::PlayerJoined>(move |joined| {
+        let Some(player) = world.player(joined.entity) else {
+            return;
+        };
+        if !player.is_admin() {
+            let taken = [CanEditWorld, CanEditBase];
+            if let Err(why) = world.change_permissions(player.key, &taken, &[]) {
+                enshwick::warn!("{} can still build: {why}", player.name);
+            }
+        }
+    })
+}
+```
+
+In Luau, `enshwick.world.change_permissions(key, { "CanEditWorld" }, {})`
+takes the same lists.
+
 ## Labels
 
 `world.set_label(entity, text)` names an entity as a player's rename does.

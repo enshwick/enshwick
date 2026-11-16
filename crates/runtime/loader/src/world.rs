@@ -37,6 +37,8 @@ pub mod map_marker_types;
     expect(dead_code, reason = "only the Windows build's parts open to mods")
 )]
 pub(crate) mod openers;
+#[cfg(windows)]
+pub(crate) mod permissions;
 pub mod prop_holds;
 #[cfg_attr(
     not(windows),
@@ -188,6 +190,15 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: rights::TABLE_IDS,
         ..part!("rights", rights)
+    },
+    &Part {
+        left: Some(fused!("permission changes at leave", |_, player| {
+            permissions::left(player.key.get());
+        })),
+        forget: Some(fused!("permissions forgetting a hosted game", |_| {
+            permissions::forget();
+        })),
+        ..part!("permissions", permissions)
     },
     &Part {
         table_ids: scene::TABLE_IDS,

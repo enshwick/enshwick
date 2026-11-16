@@ -2204,6 +2204,24 @@ pub struct HostApi {
         callback: Option<UiTooltipFn>,
         user: *mut c_void,
     ) -> Status,
+    /// Replaces the mod's change to the permissions of the player in game
+    /// with `account`: `deny` takes bits from the player, `grant` gives
+    /// bits, both masks of [`PlayerInfo`](super::PlayerInfo)'s permission
+    /// bits; both 0 ends the change. The server holds the player to
+    /// `(group | every grant) & !every deny`, with `group` the bits of the
+    /// player's user group, from its next step on, so the game's own checks
+    /// refuse what a taken bit guards, and the loader's own reads of the
+    /// player's bits give the bits in force; the player's client still acts
+    /// by its group's bits. A change ends when the mod ends it or turns
+    /// off, when the player leaves and when the world ends; ending one
+    /// needs no player in game. [`Status::BAD_ARGS`] for account 0 or a bit
+    /// past the permissions; [`Status::REFUSED`] for a new change to an
+    /// account not in game; [`Status::WRONG_THREAD`] off the server's game
+    /// thread; [`Status::UNAVAILABLE`] outside a server and on a build
+    /// without the permission table, the step link or the player removal
+    /// link. ABI 12.5.
+    pub change_permissions:
+        extern "system" fn(me: ModHandle, account: PlayerKey, deny: u32, grant: u32) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2424,5 +2442,6 @@ const _: () = {
     assert!(offset_of!(HostApi, terrain_material_add) == 24 + 207 * 8);
     assert!(offset_of!(HostApi, interaction_prompt) == 24 + 208 * 8);
     assert!(offset_of!(HostApi, ui_item_tooltip) == 24 + 209 * 8);
-    assert!(size_of::<HostApi>() == 24 + 210 * 8);
+    assert!(offset_of!(HostApi, change_permissions) == 24 + 210 * 8);
+    assert!(size_of::<HostApi>() == 24 + 211 * 8);
 };

@@ -43,6 +43,8 @@ use crate::world::fog::{FogReadError, UncoverError};
 use crate::world::fog_image::ReadError;
 use crate::world::game_settings::GameSettingsError;
 use crate::world::label::LabelError;
+#[cfg(windows)]
+use crate::world::permissions::PermissionError;
 use crate::world::prop_holds::HoldError;
 use crate::world::rights::RightsError;
 use crate::world::scene::SceneError;
@@ -382,5 +384,8 @@ fn every_windows_only_domain_error_answers_mods_the_status_it_answered_before() 
         TransactionError::Item(ItemInfoError::NoItem),
         TransactionError::Spawn(SpawnError::BadRequest),
         TransactionError::Entity(EntityError::Player),
+        PermissionError::BadBits,
+        PermissionError::NotInGame,
+        PermissionError::World(world),
     ]);
 }
