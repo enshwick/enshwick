@@ -28,6 +28,8 @@ impl Interaction {
 
     /// This interaction with the move it carries, for a test of a filter.
     ///
+    /// Luau has no setter: a script writes the `moved` field of the table.
+    ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Examples
@@ -79,9 +81,12 @@ pub struct Move {
 }
 
 impl Move {
-    /// A `transfer` from container `from` into `to` that names no slot,
-    /// item, amount or action, as a whole-inventory move does, for a test of
-    /// a filter; the other fields are public to set.
+    /// A `transfer` from container `from` into `to` as a whole-inventory move
+    /// is handed to a filter: action [`InventoryActionType::All`] and no slot,
+    /// item or amount, for a test of a filter; the other fields are public to
+    /// set.
+    ///
+    /// Luau has no constructor: a script writes the record as a table.
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
@@ -89,7 +94,7 @@ impl Move {
     ///
     /// ```
     /// use enshwick::Entity;
-    /// use enshwick::interactions::{Interaction, Kind, Move, Transfer};
+    /// use enshwick::interactions::{InventoryActionType, Interaction, Kind, Move, Transfer};
     ///
     /// const OWNER: Entity = Entity(4096);
     ///
@@ -99,6 +104,7 @@ impl Move {
     ///
     /// let (stranger, chest) = (Entity(4097), Entity(5000));
     /// let take_all = Move::new(Transfer::TakeAll, Some(chest), Some(stranger));
+    /// assert_eq!(take_all.action, Some(InventoryActionType::All));
     /// let call = Interaction::new(Kind::Move, stranger, chest).with_moved(take_all);
     /// assert!(!allowed(&call));
     /// ```
@@ -106,7 +112,7 @@ impl Move {
     pub const fn new(transfer: Transfer, from: Option<Entity>, to: Option<Entity>) -> Self {
         Self {
             transfer,
-            action: None,
+            action: Some(InventoryActionType::All),
             amount: 0,
             item: None,
             stack: 0,

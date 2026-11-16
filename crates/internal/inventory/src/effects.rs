@@ -26,7 +26,7 @@
 //! use enshwick::Entity;
 //! use enshwick::effects::Effects;
 //!
-//! fn alarm(effects: &Effects, sender: Entity, signal: u32) -> Result<(), enshwick::WorldError> {
+//! fn alarm(effects: Effects, sender: Entity, signal: u32) -> Result<(), enshwick::WorldError> {
 //!     effects.set_toggle(sender, signal, true)
 //! }
 //!
@@ -359,6 +359,8 @@ const _: () = assert!(size_of::<Effects>() == size_of::<usize>());
 #[derive(Debug)]
 struct Resolved {
     host: Host,
+    /// The `CurrentTransform` component, read for where a player stands.
+    transform: Option<ComponentType>,
     npc: Option<NpcCommand>,
     toggle: Option<SetToggle>,
     threat: Option<AddThreat>,
@@ -431,6 +433,7 @@ impl Effects {
         })();
         Self(RESOLVED.get_or_init(|| Resolved {
             host,
+            transform: ComponentType::named(host, ids::CURRENT_TRANSFORM).ok(),
             npc: keep("survivor orders", npc),
             toggle: keep("toggles", toggle),
             threat: keep("threat", threat),
@@ -456,7 +459,7 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, NpcCommandType};
     ///
-    /// fn gather(effects: &Effects, survivor: u32, at: [f64; 3]) {
+    /// fn gather(effects: Effects, survivor: u32, at: [f64; 3]) {
     ///     if let Err(why) = effects.npc_command(survivor, NpcCommandType::GoToPosition(at)) {
     ///         enshwick::debug!("survivor {survivor} stays: {why}");
     ///     }
@@ -610,7 +613,7 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, Teleport};
     ///
-    /// fn home(effects: &Effects, me: enshwick::Entity) -> Result<(), enshwick::WorldError> {
+    /// fn home(effects: Effects, me: enshwick::Entity) -> Result<(), enshwick::WorldError> {
     ///     effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position())
     /// }
     /// ```
@@ -658,7 +661,7 @@ impl Effects {
     /// use enshwick::PlayerKey;
     /// use enshwick::effects::{Effects, Teleport};
     ///
-    /// fn to_spawn(effects: &Effects, player: PlayerKey) -> Result<(), enshwick::WorldError> {
+    /// fn to_spawn(effects: Effects, player: PlayerKey) -> Result<(), enshwick::WorldError> {
     ///     effects.teleport_player(player, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position())
     /// }
     /// ```
@@ -669,7 +672,8 @@ impl Effects {
         position: [f64; 3],
         how: Teleport,
     ) -> Result<(), WorldError> {
-        self.teleport(self.character(player)?, position, how)
+        let [character] = self.characters([player])?;
+        self.teleport(character, position, how)
     }
 
     /// Asks the server to move the character of the connected player
@@ -689,7 +693,7 @@ impl Effects {
     /// use enshwick::PlayerKey;
     /// use enshwick::effects::{Effects, Teleport};
     ///
-    /// fn join(effects: &Effects, guest: PlayerKey, host: PlayerKey) -> Result<(), enshwick::WorldError> {
+    /// fn join(effects: Effects, guest: PlayerKey, host: PlayerKey) -> Result<(), enshwick::WorldError> {
     ///     effects.teleport_player_to(guest, host, Teleport::new())
     /// }
     /// ```
@@ -700,27 +704,30 @@ impl Effects {
         to: PlayerKey,
         how: Teleport,
     ) -> Result<(), WorldError> {
-        let character = self.character(player)?;
-        let target = self.character(to)?;
+        let [character, target] = self.characters([player, to])?;
         let position = self.position(target).ok_or(WorldError::Gone)?;
         self.teleport(character, position, how.search_best_spawn_position())
     }
 
-    /// The character of the connected player `key`.
-    fn character(self, key: PlayerKey) -> Result<Entity, WorldError> {
+    /// The characters of the connected players `keys`, from one list of the
+    /// players.
+    fn characters<const N: usize>(self, keys: [PlayerKey; N]) -> Result<[Entity; N], WorldError> {
         let players = enshwick_world::__internal::listed(self.0.host)
             .or_else(|status| world_check(status, WorldError::Unavailable).map(|()| Vec::new()))?;
-        players
-            .into_iter()
-            .find(|player| player.key == key && player.entity != Entity(0))
-            .map(|player| player.entity)
-            .ok_or(WorldError::Gone)
+        let mut characters = [Entity::NONE; N];
+        for (character, key) in characters.iter_mut().zip(keys) {
+            *character = players
+                .iter()
+                .find(|player| player.key == key && player.entity != Entity::NONE)
+                .map(|player| player.entity)
+                .ok_or(WorldError::Gone)?;
+        }
+        Ok(characters)
     }
 
     /// Where `entity` stands, in metres, from its transform.
     fn position(self, entity: Entity) -> Option<[f64; 3]> {
-        let transform = ComponentType::named(self.0.host, ids::CURRENT_TRANSFORM).ok()?;
-        let data = enshwick_base::__internal::component(transform, self.0.host, entity)?;
+        let data = enshwick_base::__internal::component(self.0.transform?, self.0.host, entity)?;
         // SAFETY: `component` returned the entity's live CurrentTransform, valid
         // until the game thread moves on, and it is read at once.
         Some(unsafe { crate::ecs::transform_position(data.cast()) })
@@ -750,7 +757,7 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, ItemDrop};
     ///
-    /// fn logs(effects: &Effects, wood: enshwick::ItemId, at: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
+    /// fn logs(effects: Effects, wood: enshwick::ItemId, at: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
     ///     effects.drop_items(wood, 5, at, ItemDrop::new())
     /// }
     /// ```
@@ -799,7 +806,7 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, Spawn};
     ///
-    /// fn beside(effects: &Effects, template: enshwick::content::Guid, [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
+    /// fn beside(effects: Effects, template: enshwick::content::Guid, [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
     ///     effects.spawn(template, [x + 2.0, y, z], Spawn::new())
     /// }
     /// ```

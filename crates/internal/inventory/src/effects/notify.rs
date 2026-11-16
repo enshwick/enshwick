@@ -123,7 +123,7 @@ impl Effects {
     /// use enshwick::content::Guid;
     /// use enshwick::effects::{Effects, Notify, NotifyAt};
     ///
-    /// fn chime(effects: &Effects, notifier: Guid, at: [f64; 3]) {
+    /// fn chime(effects: Effects, notifier: Guid, at: [f64; 3]) {
     ///     if let Err(why) = effects.notify(&Notify::new(notifier, NotifyAt::Position(at))) {
     ///         enshwick::debug!("no chime: {why}");
     ///     }
