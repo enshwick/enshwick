@@ -247,3 +247,4 @@ names every entry of the golden layout once, in that order.
 | `loader_off` | loader | fake listing and kept-text tests | — |
 | `client_command` | game | fake client/server, bounds, command and handoff tests, Luau | client |
 | `client_command_status` | game | fake states and every cancel reason, Luau | client |
+| `terrain_material_add` | game | — | client |
