@@ -20,6 +20,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
+use enshwick_core::Entity;
 use enshwick_core::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, MidHookFn, Registers};
 use enshwick_gamedata::catalogue;
 
@@ -135,7 +136,7 @@ fn types_match(loader: &Loader) -> bool {
 }
 
 /// Seals the filters before any part links, so [`filtering`] answers every
-/// link, the death sink's among them, whatever the parts' order.
+/// link the same, whatever the parts' order.
 pub(crate) fn seal() {
     let _filters = FILTERS.seal();
 }
@@ -210,9 +211,9 @@ fn blank(cause: u32, target: u32) -> DamageCheck {
     DamageCheck {
         header: Header::of::<DamageCheck>(),
         cause,
-        target: enshwick_core::Entity(target),
-        source: enshwick_core::Entity(0),
-        attacker: enshwick_core::Entity(0),
+        target: Entity(target),
+        source: Entity(0),
+        attacker: Entity(0),
         total: 0.0,
         amount_count: 0,
         amounts: core::ptr::null_mut(),
@@ -301,8 +302,8 @@ mid_handler! {
         // attacker, worked out before it; 1.0 build 1269579.
         let root = low(registers.r12).cast_unsigned();
         let attacker = if root == 0 { source } else { root };
-        check.source = enshwick_core::Entity(source);
-        check.attacker = enshwick_core::Entity(attacker);
+        check.source = Entity(source);
+        check.attacker = Entity(attacker);
         let mut amounts = read;
         crate::inventory::stats::on_hit(&mut amounts, target, attacker);
         check.total = amounts
@@ -342,10 +343,9 @@ mid_handler! {
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
-        let kept = kept_health(current, new, |damage| {
+        let kept = fall_kept(Entity(target), current, new, |damage| {
             filtered(DamageCheck::FALL_DAMAGE, target, damage)
         });
-        WRITTEN.set((kept != new).then_some((target, kept)));
         if kept != new {
             registers.r9 = u64::from(kept.cast_unsigned());
         }
@@ -354,8 +354,23 @@ mid_handler! {
 
 thread_local! {
     /// The row and the health the fall this thread last wrote, when the
-    /// filters changed what the game worked out; every fall write sets it.
-    static WRITTEN: core::cell::Cell<Option<(u32, i32)>> = const { core::cell::Cell::new(None) };
+    /// filters changed its damage; every fall write sets it.
+    static WRITTEN: core::cell::Cell<Option<(Entity, i32)>> = const { core::cell::Cell::new(None) };
+}
+
+/// [`kept_health`] for a fall of `target`, noting for [`fall_death`] the
+/// health left whenever the filters changed the damage, even where the
+/// game's truncated write is already 0; every fall write sets the note, so
+/// none outlives the row it was made for.
+fn fall_kept(target: Entity, current: i32, new: i32, filter: impl FnOnce(i32) -> i32) -> i32 {
+    let mut changed = false;
+    let kept = kept_health(current, new, |damage| {
+        let filtered = filter(damage);
+        changed = filtered != damage;
+        filtered
+    });
+    WRITTEN.set(changed.then_some((target, kept)));
+    kept
 }
 
 mid_handler! {
@@ -374,7 +389,7 @@ mid_handler! {
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; server 26430253.
         let row = unsafe { row_entity(registers.r15) };
-        registers.rflags = decided(Some(written), row, registers.rflags);
+        registers.rflags = decided(Some(written), Entity(row), registers.rflags);
     }
 }
 
@@ -382,7 +397,7 @@ mid_handler! {
 /// decide from the health the filters left: below for 0, which records the
 /// death, above for any other health, which records none. A note `written`
 /// for another row than `row` leaves `rflags` as the game set them.
-fn decided(written: Option<(u32, i32)>, row: u32, rflags: u64) -> u64 {
+fn decided(written: Option<(Entity, i32)>, row: Entity, rflags: u64) -> u64 {
     match written {
         Some((entity, kept)) if entity == row && kept <= 0 => rflags | CARRY,
         Some((entity, _)) if entity == row => rflags & !(CARRY | ZERO),
@@ -698,25 +713,49 @@ mod tests {
         rflags & (CARRY | ZERO) == 0
     }
 
+    const ROW: Entity = Entity(7);
+
     #[test]
     fn a_fall_a_filter_makes_lethal_records_the_death() {
-        let written = Some((7, kept_health(30, 10, |damage| damage * 3)));
-        assert_eq!(written, Some((7, 0)));
-        assert!(!skips_the_death(decided(written, 7, ABOVE)));
+        assert_eq!(fall_kept(ROW, 30, 10, |damage| damage * 3), 0);
+        let written = WRITTEN.take();
+        assert_eq!(written, Some((ROW, 0)));
+        assert!(!skips_the_death(decided(written, ROW, ABOVE)));
+    }
+
+    #[test]
+    fn a_fall_a_filter_makes_lethal_where_the_game_already_wrote_0_records_the_death() {
+        // Health 100 and a fall worked out to 0.4: the game writes 0 but
+        // its float says alive.
+        assert_eq!(fall_kept(ROW, 100, 0, |damage| damage + 50), 0);
+        let written = WRITTEN.take();
+        assert_eq!(written, Some((ROW, 0)));
+        assert!(!skips_the_death(decided(written, ROW, ABOVE)));
     }
 
     #[test]
     fn a_lethal_fall_a_filter_spares_records_no_death() {
-        let written = Some((7, kept_health(30, 0, |_| 0)));
-        assert_eq!(written, Some((7, 30)));
-        assert!(skips_the_death(decided(written, 7, LETHAL)));
+        assert_eq!(fall_kept(ROW, 30, 0, |_| 0), 30);
+        let written = WRITTEN.take();
+        assert_eq!(written, Some((ROW, 30)));
+        assert!(skips_the_death(decided(written, ROW, LETHAL)));
+    }
+
+    #[test]
+    fn a_fall_the_filters_leave_alone_or_that_takes_nothing_clears_the_note() {
+        let _lethal = fall_kept(ROW, 30, 10, |damage| damage * 3);
+        assert_eq!(fall_kept(Entity(8), 30, 40, |_| unreachable!()), 40);
+        assert_eq!(WRITTEN.take(), None, "took nothing");
+        let _lethal = fall_kept(ROW, 30, 10, |damage| damage * 3);
+        assert_eq!(fall_kept(Entity(8), 30, 10, |damage| damage), 10);
+        assert_eq!(WRITTEN.take(), None, "left alone");
     }
 
     #[test]
     fn a_note_of_another_row_or_none_leaves_the_game_s_decision() {
-        assert_eq!(decided(Some((8, 30)), 7, LETHAL), LETHAL);
-        assert_eq!(decided(Some((8, 0)), 7, ABOVE), ABOVE);
-        assert_eq!(decided(None, 7, LETHAL), LETHAL);
+        assert_eq!(decided(Some((Entity(8), 30)), ROW, LETHAL), LETHAL);
+        assert_eq!(decided(Some((Entity(8), 0)), ROW, ABOVE), ABOVE);
+        assert_eq!(decided(None, ROW, LETHAL), LETHAL);
     }
 
     #[test]

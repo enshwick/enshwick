@@ -7,71 +7,64 @@
 //! wants them, and a read during the step finds the characters the step's
 //! systems see. A character made inside a step is found from the next one.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering, fence};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::{Entity, PlayerKey};
 
 use super::players::occupied;
-use super::{STATE, layout, reader};
+use super::{SLOT_IN_GAME, STATE, layout, reader};
+use crate::engine::copied::Copied;
 use crate::engine::fuse::Fuse;
 use crate::engine::memory::read;
 use crate::engine::players::MAX_PLAYERS;
 
-/// The copy, without a lock: a sequence number that is odd while the copy
-/// is written, so a read that overlaps a write finds nothing rather than a
-/// character paired with another's account.
+/// The copy's words: how many players it holds, then each one's character
+/// and account.
+const WORDS: usize = 1 + 2 * MAX_PLAYERS;
+
+/// The copy, without a lock, and whether a feature wants it.
 #[derive(Debug)]
 pub(super) struct Accounts {
     wanted: AtomicBool,
-    sequence: AtomicU32,
-    len: AtomicUsize,
-    entities: [AtomicU32; MAX_PLAYERS],
-    keys: [AtomicU64; MAX_PLAYERS],
+    copy: Copied<WORDS>,
 }
 
 impl Accounts {
     pub(super) const fn new() -> Self {
         Self {
             wanted: AtomicBool::new(false),
-            sequence: AtomicU32::new(0),
-            len: AtomicUsize::new(0),
-            entities: [const { AtomicU32::new(0) }; MAX_PLAYERS],
-            keys: [const { AtomicU64::new(0) }; MAX_PLAYERS],
+            copy: Copied::new(),
         }
     }
 
     /// Replaces the copy with `pairs`, at most [`MAX_PLAYERS`] of them.
-    fn write(&self, pairs: impl IntoIterator<Item = (u32, u64)>) {
-        self.sequence.fetch_add(1, Ordering::Relaxed);
-        fence(Ordering::Release);
+    fn write(&self, pairs: impl IntoIterator<Item = (Entity, PlayerKey)>) {
+        let mut words = [0; WORDS];
         let mut len = 0;
-        for ((entity, key), (to_entity, to_key)) in
-            pairs.into_iter().zip(self.entities.iter().zip(&self.keys))
-        {
-            to_entity.store(entity, Ordering::Relaxed);
-            to_key.store(key, Ordering::Relaxed);
+        for ((entity, key), pair) in pairs.into_iter().zip(words[1..].as_chunks_mut::<2>().0) {
+            *pair = [u64::from(entity.0), key.0];
             len += 1;
         }
-        self.len.store(len, Ordering::Relaxed);
-        self.sequence.fetch_add(1, Ordering::Release);
+        words[0] = len;
+        self.copy.write(words);
     }
 
     /// The account of the character `entity` in the copy; `None` for a
-    /// character it does not hold, or while it is written.
+    /// character it does not hold, or while a write stays open.
     fn of(&self, entity: Entity) -> Option<PlayerKey> {
-        let before = self.sequence.load(Ordering::Acquire);
-        if before % 2 == 1 || entity.0 == 0 {
+        if entity.0 == 0 {
             return None;
         }
-        let len = self.len.load(Ordering::Relaxed).min(MAX_PLAYERS);
-        let key = self.entities[..len]
+        let words = self.copy.load()?;
+        let len = usize::try_from(words[0]).unwrap_or(0).min(MAX_PLAYERS);
+        words[1..]
+            .as_chunks::<2>()
+            .0
             .iter()
-            .position(|e| e.load(Ordering::Relaxed) == entity.0)
-            .map(|index| self.keys[index].load(Ordering::Relaxed));
-        fence(Ordering::Acquire);
-        let after = self.sequence.load(Ordering::Relaxed);
-        key.filter(|&key| before == after && key != 0)
-            .map(PlayerKey::new)
+            .take(len)
+            .find(|&&[character, _]| character == u64::from(entity.0))
+            .map(|&[_, key]| PlayerKey(key))
+            .filter(|&key| key != PlayerKey::default())
     }
 }
 
@@ -93,7 +86,7 @@ pub(super) fn wanted() -> bool {
 
 /// The account of the character `entity` in the server's world as of the
 /// start of the current step, on any thread; `None` for a character that
-/// is no player's, before the first step, or when the copy is off.
+/// is no player's in game, before the first step, or when the copy is off.
 pub(crate) fn account_of(entity: Entity) -> Option<PlayerKey> {
     if FUSE.is_off() {
         return None;
@@ -101,10 +94,9 @@ pub(crate) fn account_of(entity: Entity) -> Option<PlayerKey> {
     STATE.accounts.of(entity)
 }
 
-/// Copies each player slot's character and account just before `world`
-/// steps, when it is the server's world on its game thread. The caller
-/// checks [`wanted`] first and runs this under [`FUSE`].
-#[cold]
+/// Copies the character and account of each player in game just before
+/// `world` steps, when it is the server's world on its game thread. The
+/// caller checks [`wanted`] first and runs this under [`FUSE`].
 pub(super) fn refresh(world: usize) {
     let (Some(loader), Ok(server)) = (crate::engine::loader::loader(), reader()) else {
         return;
@@ -122,27 +114,60 @@ pub(super) fn refresh(world: usize) {
     // SAFETY: `reader` returned the live server on its game thread, which
     // alone writes it; the table places its slots.
     let slots = unsafe { occupied(layout.player_slots(), server) };
-    STATE.accounts.write(slots.map(|(_, slot, _, entity)| {
-        // SAFETY: `slot` is a player slot `occupied` found in the server; the
-        // table's `server.player_slot_key` offset holds its `u64` account key.
-        (entity, unsafe { read::<u64>(slot, layout.slot_key) })
+    STATE.accounts.write(in_game(slots).map(|(slot, entity)| {
+        // SAFETY: `slot` is a player slot `occupied` found in the server;
+        // the table's `server.player_slot_key` offset holds its `u64`
+        // account key.
+        (
+            entity,
+            PlayerKey(unsafe { read::<u64>(slot, layout.slot_key) }),
+        )
     }));
 }
 
-/// Forgets every account, as the server's world ends.
+/// The address and character of each slot `occupied` names whose player is
+/// in game, as the world's player reads list them: a joining or leaving
+/// slot may still name another occupant's character.
+fn in_game(
+    slots: impl Iterator<Item = (usize, usize, u8, u32)>,
+) -> impl Iterator<Item = (usize, Entity)> {
+    slots
+        .filter(|&(_, _, state, _)| state == SLOT_IN_GAME)
+        .map(|(_, slot, _, entity)| (slot, Entity(entity)))
+}
+
+/// Forgets every account, as the server's world ends; a hosted game's end
+/// runs it on another thread than the step's.
 pub(super) fn clear() {
     STATE.accounts.write([]);
+}
+
+/// What a build check pays to find the last of [`MAX_PLAYERS`] characters
+/// in a full copy, and a server step to write one, for their benchmark.
+#[doc(hidden)]
+pub fn bench_accounts() -> (impl FnMut() -> Option<PlayerKey>, impl FnMut()) {
+    let most = u32::try_from(MAX_PLAYERS).unwrap_or(u32::MAX);
+    let full = move || (1..=most).map(|n| (Entity(n), PlayerKey(u64::from(n))));
+    let read = Accounts::new();
+    read.write(full());
+    let last = Entity(most);
+    let written = Accounts::new();
+    (move || read.of(last), move || written.write(full()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn pair(entity: u32, key: u64) -> (Entity, PlayerKey) {
+        (Entity(entity), PlayerKey(key))
+    }
+
     #[test]
     fn a_character_in_the_copy_names_its_account_and_any_other_none() {
         let accounts = Accounts::new();
-        accounts.write([(7, 0x5eed), (9, 0xbeef)]);
-        assert_eq!(accounts.of(Entity(9)), Some(PlayerKey::new(0xbeef)));
+        accounts.write([pair(7, 0x5eed), pair(9, 0xbeef)]);
+        assert_eq!(accounts.of(Entity(9)), Some(PlayerKey(0xbeef)));
         assert_eq!(accounts.of(Entity(8)), None);
         assert_eq!(accounts.of(Entity(0)), None);
     }
@@ -150,24 +175,33 @@ mod tests {
     #[test]
     fn a_new_copy_drops_the_characters_the_last_one_held() {
         let accounts = Accounts::new();
-        accounts.write([(7, 0x5eed), (9, 0xbeef)]);
-        accounts.write([(11, 0x5eed)]);
+        accounts.write([pair(7, 0x5eed), pair(9, 0xbeef)]);
+        accounts.write([pair(11, 0x5eed)]);
         assert_eq!(accounts.of(Entity(7)), None);
-        assert_eq!(accounts.of(Entity(11)), Some(PlayerKey::new(0x5eed)));
+        assert_eq!(accounts.of(Entity(11)), Some(PlayerKey(0x5eed)));
     }
 
     #[test]
     fn a_read_while_the_copy_is_written_finds_nothing() {
         let accounts = Accounts::new();
-        accounts.write([(7, 0x5eed)]);
-        accounts.sequence.fetch_add(1, Ordering::Relaxed);
+        accounts.write([pair(7, 0x5eed)]);
+        accounts.copy.begin_write();
         assert_eq!(accounts.of(Entity(7)), None);
+    }
+
+    #[test]
+    fn only_slots_whose_player_is_in_game_reach_the_copy() {
+        let slots = [(0, 0x100, SLOT_IN_GAME, 7), (1, 0x200, SLOT_IN_GAME ^ 1, 9)];
+        assert_eq!(
+            in_game(slots.into_iter()).collect::<Vec<_>>(),
+            [(0x100, Entity(7))]
+        );
     }
 
     #[test]
     fn a_slot_without_an_account_names_none() {
         let accounts = Accounts::new();
-        accounts.write([(7, 0)]);
+        accounts.write([pair(7, 0)]);
         assert_eq!(accounts.of(Entity(7)), None);
     }
 
@@ -175,13 +209,10 @@ mod tests {
     fn more_slots_than_the_copy_holds_keep_the_first() {
         let accounts = Accounts::new();
         let many = (1..=u32::try_from(MAX_PLAYERS + 3).unwrap_or(u32::MAX))
-            .map(|entity| (entity, u64::from(entity)));
+            .map(|entity| pair(entity, u64::from(entity)));
         accounts.write(many);
         let last = u32::try_from(MAX_PLAYERS).unwrap_or(u32::MAX);
-        assert_eq!(
-            accounts.of(Entity(last)),
-            Some(PlayerKey::new(u64::from(last)))
-        );
+        assert_eq!(accounts.of(Entity(last)), Some(PlayerKey(u64::from(last))));
         assert_eq!(accounts.of(Entity(last + 1)), None);
     }
 }

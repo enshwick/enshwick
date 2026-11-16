@@ -165,7 +165,8 @@ impl Installed {
     /// else the reason the first refusing filter gave, if any. `call`'s own
     /// `reason` is not used; the fake host gives each filter a slot. A zero
     /// `account` becomes that of the player whose character `call` names,
-    /// as the loader fills it. The filters run as on the game's worker
+    /// as the loader fills it for the server's world; a client that does not
+    /// host keeps it zero, as in its own prediction. The filters run as on the game's worker
     /// threads, where world reads answer [`Status::WRONG_THREAD`](enshwick_core::abi::Status::WRONG_THREAD).
     ///
     /// # Errors
@@ -189,9 +190,14 @@ impl Installed {
     /// assert_eq!(loader.build(&wall), Ok(()));
     /// ```
     pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {
+        // shortcut: the loader finds a character made in the current server step only from the next step, and the fake has no steps, so a respawned character's account comes at once; model it if a mod test ever needs that gap.
         let (filters, account) = table::with((Vec::new(), None), |s| {
+            let server = s.host.side == enshwick_core::abi::Side::SERVER || s.host.hosting;
             let account = s.host.players.iter().find(|p| p.entity == call.character);
-            (s.build_filters.clone(), account.map(|p| p.key))
+            (
+                s.build_filters.clone(),
+                account.filter(|_| server).map(|p| p.key),
+            )
         });
         for filter in filters {
             let mut reason = enshwick_core::abi::Str::new("");

@@ -117,6 +117,20 @@ mod tests {
     }
 
     #[test]
+    fn a_client_s_own_prediction_gives_build_filters_no_account() {
+        let ann = PlayerInfo::with_name(Entity(2), BANNED, 0, "Ann");
+        let loader = enshwick::test::FakeHost::new()
+            .side(enshwick::abi::Side::CLIENT)
+            .player(ann)
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Picky)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert_eq!(loader.build(&wall(2)), Ok(()));
+    }
+
+    #[test]
     fn a_build_filter_runs_off_the_game_thread_where_world_reads_find_nothing() {
         let ann = PlayerInfo::with_name(Entity(2), BANNED, 0, "Ann");
         let loader = enshwick::test::FakeHost::new()

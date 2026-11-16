@@ -285,6 +285,13 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     // same place in the same code.
     ("1.0 server (26430253)", "damage.fall_death", 0x8_a7bc),
     ("1.0 client (26430625)", "damage.fall_death", 0x27_8acc),
+    // The same branch, found by its route, on the older kept builds.
+    ("1.0 server (1269579)", "damage.fall_death", 0x8_5e9c),
+    ("1.0 server (26083076)", "damage.fall_death", 0x8_6d4c),
+    ("1.0 server (26319703)", "damage.fall_death", 0x8_a7bc),
+    ("1.0 client (1269579)", "damage.fall_death", 0x27_446c),
+    ("1.0 client (26082781)", "damage.fall_death", 0x27_460c),
+    ("1.0 client (26320373)", "damage.fall_death", 0x27_89ec),
     // The same join path on the older kept builds.
     ("1.0 client (1269579)", "session.find_machine", 0xa5_e0c0),
     ("1.0 client (1269579)", "session.join_account_id", 0x4),

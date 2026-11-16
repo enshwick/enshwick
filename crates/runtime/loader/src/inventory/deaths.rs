@@ -312,17 +312,19 @@ pub(crate) fn forget() {
 mod tests {
     use super::*;
 
+    const LAYOUT: Record = Record {
+        size: 48,
+        account: 0,
+        cause: 12,
+        position: 16,
+        cause_guid: 28,
+        was_deadly_fog: 44,
+        causes: [0, 1, 2, 3],
+    };
+
     #[test]
     fn a_record_reads_into_the_event() {
-        let layout = Record {
-            size: 48,
-            account: 0,
-            cause: 12,
-            position: 16,
-            cause_guid: 28,
-            was_deadly_fog: 44,
-            causes: [0, 1, 2, 3],
-        };
+        let layout = LAYOUT;
         let mut bytes = [0u8; 64];
         bytes[..8].copy_from_slice(&7u64.to_le_bytes());
         bytes[12] = 3;
@@ -338,15 +340,7 @@ mod tests {
 
     #[test]
     fn the_deadly_shroud_and_a_cause_the_loader_has_no_name_for_get_their_own_numbers() {
-        let layout = Record {
-            size: 48,
-            account: 0,
-            cause: 12,
-            position: 16,
-            cause_guid: 28,
-            was_deadly_fog: 44,
-            causes: [0, 1, 2, 3],
-        };
+        let layout = LAYOUT;
         assert_eq!(cause(&layout, 2, false), DamageCheck::FOG);
         assert_eq!(cause(&layout, 2, true), DamageCheck::DEADLY_FOG);
         assert_eq!(cause(&layout, 1, true), DamageCheck::FALL_DAMAGE);

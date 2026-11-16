@@ -108,7 +108,9 @@ The server's answer decides. A client that runs the mod too shows the cursor
 as not allowed, so give the same answer on both sides. Base it on what both
 know, the item and the place, or on
 [settings](settings.md#on-a-joined-server) the server sends. A client without
-the mod shows the placement as allowed, and the server places nothing.
+the mod shows the placement as allowed, and the server places nothing. Only
+the server knows the account: a client's prediction gets `None`. So a filter
+that judges by account lets `None` pass, and the server's answer stands.
 
 ## Interactions
 
