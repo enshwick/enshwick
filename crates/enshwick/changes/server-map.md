@@ -10,8 +10,10 @@
   on_marker, on_point } }` (#1143).
 - Loader: the server keeps the map of each window a client holds from the
   text it carried and looks at those players' waypoints every 100 ms; the
-  client puts the held maps' markers on the game's map as the loader's own,
-  steps its windows aside while the Map screen is open and draws a line
-  saying to open the map (#1143).
+  client puts the markers of the newest held window's map on the game's map
+  as the loader's own, steps its windows aside while the Map screen is open
+  and draws a line saying to open the map. A build that does not reflect the
+  waypoint lists "map waypoints" as off with its reason (#1143).
 - Fake host: `Installed::set_waypoint` runs what the newest map a player
-  holds asks for at a waypoint, as the loader does (#1143).
+  holds asks for at a waypoint, as the loader does, and only when the
+  waypoint moved (#1143).

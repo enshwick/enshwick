@@ -33,7 +33,8 @@ struct Marker {
 /// [`on_marker`](Self::on_marker) action with that marker's values; one
 /// set elsewhere runs the [`on_point`](Self::on_point) action with its x,
 /// y and z in metres. Only a waypoint moved while the player holds the
-/// window runs anything, and the server checks each run as any other.
+/// window runs anything, and the server checks each run as any other. The
+/// markers past the room of a window's text are left out, the first kept.
 ///
 /// # Examples
 ///
@@ -140,20 +141,28 @@ impl WindowMap {
         })
     }
 
-    /// The map's lines, `say` filling a label in the reader's language.
-    pub(super) fn lines(&self, say: super::Say<'_>) -> String {
+    /// The map's lines within `room` bytes, `say` filling a label in the
+    /// reader's language, and whether every marker fit: the markers past
+    /// the room are left out, the first kept, and a map whose own line does
+    /// not fit is left out whole.
+    pub(super) fn lines(&self, say: super::Say<'_>, room: usize) -> (String, bool) {
         let id = |action: &Option<String>| action.as_deref().map_or_default(clean);
         let mut lines = format!("M\t{}\t{}\n", id(&self.on_marker), id(&self.on_point));
+        if lines.len() > room {
+            return (String::new(), false);
+        }
+        let mut line = String::new();
         for marker in &self.markers {
             let [x, y, z] = marker.position;
             let args = sheet::encode_args(&marker.args).replace('\t', ARG);
-            let _ = writeln!(
-                lines,
-                "K\t{x}\t{y}\t{z}\t{}\t{args}",
-                marker.label.line(say)
-            );
+            line.clear();
+            let _ = writeln!(line, "K\t{x}\t{y}\t{z}\t{}\t{args}", marker.label.line(say));
+            if lines.len() + line.len() > room {
+                return (lines, false);
+            }
+            lines.push_str(&line);
         }
-        lines
+        (lines, true)
     }
 }
 
@@ -315,6 +324,38 @@ mod tests {
             ["goto", "place"],
             "a player gets the map only when they may run both"
         );
+    }
+
+    #[test]
+    fn a_map_past_the_window_s_room_keeps_its_first_markers_and_its_actions() {
+        let long = "L".repeat(200);
+        let mut map = WindowMap::new().on_marker("goto").on_point("place");
+        for n in 0..MAX_MARKERS {
+            map = map.marker(
+                [f64::from(u8::try_from(n).unwrap()), 0.0, 0.0],
+                &long,
+                &[player(7)],
+            );
+        }
+        let window = Window::new("w", "W")
+            .text("first", &[])
+            .action("kick")
+            .map(map);
+        assert!(window.draws("kick"));
+        assert!(!window.draws("goto"), "a map's action needs no sheet entry");
+        let text = window.render(&say, &[]);
+        assert!(text.len() <= super::super::MAX_BYTES);
+        let view = decode(&text).unwrap();
+        let Some(ItemView::Map(kept)) = view.items.last() else {
+            panic!("the map stays: {:?}", view.items);
+        };
+        assert_eq!(kept.on_point.as_deref(), Some("place"));
+        assert!(
+            (1..MAX_MARKERS).contains(&kept.markers.len()),
+            "{} markers",
+            kept.markers.len()
+        );
+        assert_eq!(kept.markers[0].position, [0.0, 0.0, 0.0], "the first kept");
     }
 
     #[test]

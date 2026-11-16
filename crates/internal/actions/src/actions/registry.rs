@@ -376,6 +376,7 @@ impl Registry {
         let others = self.others(player);
         let entries: Vec<Entry> = named
             .iter()
+            .filter(|d| window.draws(&d.action.id))
             .map(|d| self.entry(d, player, language, &others))
             .collect();
         window.render(&|key, values| self.say(key, language, values), &entries)

@@ -261,6 +261,11 @@ mod tests {
         assert_eq!(near.as_deref(), Some("1goto 8"));
         let far = loader.set_waypoint(&root, 0, [400.0, 2.0, -3.5]);
         assert_eq!(far.as_deref(), Some("1place 400 2 -3.5"));
+        assert_eq!(
+            loader.set_waypoint(&root, 0, [400.0, 2.0, -3.5]),
+            None,
+            "a waypoint where it already was runs nothing"
+        );
         assert_eq!(loader.set_waypoint(&bob, 0, [400.0, 2.0, -3.5]), None);
 
         loader.close_window(&root, "map");

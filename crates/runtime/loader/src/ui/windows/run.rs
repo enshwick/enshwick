@@ -14,6 +14,7 @@ use super::{
     merged, message, note, pend, queue, route,
 };
 use crate::engine::catalogue::{self, ids};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::world::WorldError;
@@ -115,12 +116,35 @@ static WINDOWS: Windows = Windows {
     waypoint: OnceLock::new(),
 };
 
-/// Keeps only the maps of windows clients still hold.
+/// The waypoints of maps in carried windows: off on a build whose
+/// reflection lacks the `PlayerWaypoint` the server reads.
+static WAYPOINTS_FUSE: Fuse = Fuse::new("map waypoints");
+
+/// Keeps only the maps of windows clients still hold, and the waypoints
+/// seen of their players.
 fn keep_maps() {
     let held = WINDOWS.held.relock();
     let mut maps = WINDOWS.maps.relock();
-    kept(&mut maps, &held);
+    kept(&mut maps, &mut WINDOWS.seen.relock(), &held);
     WINDOWS.any_map.store(!maps.is_empty(), Ordering::Release);
+}
+
+/// The waypoint's layout, read once; `None` while `feature`, which turns
+/// off with the reason in the Mods screen and status report on a build
+/// without it, is off.
+fn waypoint_at(loader: &Loader, feature: &'static Fuse) -> Option<&'static WaypointAt> {
+    if feature.is_off() {
+        return None;
+    }
+    let at = WINDOWS.waypoint.get_or_init(|| WaypointAt::resolve(loader));
+    if at.is_none() {
+        loader.fuse_off(
+            feature,
+            ids::PLAYER_WAYPOINT,
+            "is not reflected with the fields the server reads, so a map's waypoint runs nothing",
+        );
+    }
+    at.as_ref()
 }
 
 /// Runs what the waypoints of players holding a map ask for, at most every
@@ -136,30 +160,21 @@ fn watch_waypoints(loader: &Loader) {
         return;
     }
     WINDOWS.looked.store(now, Ordering::Relaxed);
-    let at = WINDOWS.waypoint.get_or_init(|| {
-        let at = WaypointAt::resolve(loader);
-        if at.is_none() {
-            crate::log!(
-                WARN,
-                "windows: this build reflects no PlayerWaypoint the server reads, so a map's waypoint runs nothing"
-            );
-        }
-        at
-    });
-    let Some(at) = at else {
+    let Some(at) = waypoint_at(loader, &WAYPOINTS_FUSE) else {
         return;
     };
     if crate::engine::world::quiet_world(loader).is_err() {
         return;
     }
     let online = crate::engine::world::players(loader).unwrap_or_default();
+    let frame = crate::world::scene::frame_info(loader).ok();
     let asked = {
         let maps = WINDOWS.maps.relock();
         let waypoint = |key: u64| {
             let player = online.iter().find(|p| p.key == PlayerKey::new(key))?;
             at.read(loader, player.entity).ok()
         };
-        runs(&maps, &mut WINDOWS.seen.relock(), waypoint)
+        runs(&maps, &mut WINDOWS.seen.relock(), frame.as_ref(), waypoint)
     };
     for run in asked {
         let Some(record) = loader.mods.get(run.owner.get()) else {
@@ -464,6 +479,22 @@ mod tests {
         let turn = TURN.relock();
         forget(None);
         turn
+    }
+
+    #[test]
+    fn map_waypoints_a_build_cannot_read_are_listed_off_not_only_logged() {
+        static WAYPOINTS_OFF: Fuse = Fuse::new("test map waypoints");
+        let loader = crate::start::tests::bare_loader();
+        assert!(waypoint_at(&loader, &WAYPOINTS_OFF).is_none());
+        assert!(WAYPOINTS_OFF.is_off());
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed
+                .iter()
+                .any(|p| p.part == WAYPOINTS_OFF.feature()
+                    && p.reason.starts_with(ids::PLAYER_WAYPOINT)),
+            "the reason names what the build lacks: {listed:?}"
+        );
     }
 
     #[test]

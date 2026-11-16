@@ -343,7 +343,10 @@ impl Installed {
     /// they hold with a map runs what `MapView::run_at` picks, the action of
     /// a marker within `actions::window::NEAR` or the action of a point,
     /// as a run through [`ask_actions`](Self::ask_actions); the mod's reply,
-    /// `None` when they hold no map or it runs nothing there. Call
+    /// `None` when they hold no map or it runs nothing there. As in the
+    /// game, only a move runs anything: a waypoint set where it already was
+    /// runs nothing, and one set while the player held no map is forgotten.
+    /// Call
     /// [`carried_windows`](Self::carried_windows) first, so the client holds
     /// what the mod showed.
     ///
@@ -379,7 +382,30 @@ impl Installed {
                 ItemView::Map(map) => Some(map),
                 _ => None,
             })
-        })?;
+        });
+        let moved = table::with(false, |s| {
+            let waypoints = &mut s.commands.waypoints;
+            let last = waypoints.iter().position(|(k, _)| *k == key);
+            match (&map, last) {
+                (None, Some(last)) => {
+                    waypoints.remove(last);
+                    false
+                }
+                (None, None) => false,
+                (Some(_), Some(last)) => {
+                    let before = core::mem::replace(&mut waypoints[last].1, at);
+                    before.map(f64::to_bits) != at.map(f64::to_bits)
+                }
+                (Some(_), None) => {
+                    waypoints.push((key, at));
+                    true
+                }
+            }
+        });
+        if !moved {
+            return None;
+        }
+        let map = map?;
         let (action, args) = map.run_at(at)?;
         let args = enshwick_core::actions::sheet::encode_args(&args);
         self.ask_actions(
@@ -409,6 +435,7 @@ impl Installed {
         table::with((), |s| {
             s.commands.carried.retain(|(k, _, _)| *k != key);
             s.commands.windows.retain(|(k, _, _)| *k != key);
+            s.commands.waypoints.retain(|(k, _)| *k != key);
             s.permission_changes.left(player);
         });
         self.tell_window_closed(player, "");

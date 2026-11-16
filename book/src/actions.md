@@ -745,8 +745,9 @@ windows inside the game. Joined friends get theirs over the network.
 
 A window may hold one map. Its markers show on the player's own Map screen
 while the player holds the window, and the window steps aside while that
-screen is open. The waypoint the player sets on the map runs the mod's
-actions:
+screen is open. When the player holds several windows with a map, the
+newest one counts: its markers show and its actions run. The waypoint the
+player sets on the map runs the mod's actions:
 
 | Builder | What it does |
 | --- | --- |
@@ -755,10 +756,11 @@ actions:
 | `.on_marker(action)` | a waypoint within 16 m of a marker, across the ground, runs `action` with the nearest marker's values |
 | `.on_point(action)` | a waypoint anywhere else runs `action` with its x, y and z; the action takes three numbers |
 
-Only a waypoint the player moves while they hold the window runs anything;
-the server looks at it every 100 ms. Each run is an ordinary run from that
+Only a waypoint the player moves inside the map while they hold the window
+runs anything; the server looks at it every 100 ms. Each run is an ordinary run from that
 player, checked again on the server. The player gets the window only when
-they may run both actions. A map holds at most 64 markers. To move the
+they may run both actions. A map holds at most 64 markers; when the
+window's text has no room for all of them, the first ones stay. To move the
 markers, show or update the window again, such as once a second for the
 players' positions.
 
@@ -845,7 +847,8 @@ the loader does:
   mod hears of both as the loader tells it.
 - `set_waypoint(&player, language, at)` moves that player's waypoint to
   `at`. The newest window they hold with a map runs its marker or point
-  action, and the call returns the mod's reply.
+  action, and the call returns the mod's reply. A waypoint set where it
+  already was runs nothing, as in the game.
 - `console::run("<mod id> <action> ...")` runs the console form. The fake
   hands a line to the mod's own actions unless `console_answer` gave its first
   word an answer.

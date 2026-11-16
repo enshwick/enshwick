@@ -235,6 +235,17 @@ impl Window {
         })
     }
 
+    /// Whether an item the client draws names action `id`: a row's button
+    /// or an action drawn whole, which need its sheet entry; a map's
+    /// actions run on the server and need none.
+    pub(super) fn draws(&self, id: &str) -> bool {
+        self.items.iter().any(|item| match item {
+            Item::Row(row) => row.buttons.iter().any(|b| b.action == id),
+            Item::Action(action) => action == id,
+            Item::Text(_) | Item::Map(_) => false,
+        })
+    }
+
     /// Why the window cannot be shown: too many items, buttons or maps, or
     /// what `check` finds wrong with how an item uses an action; `None`
     /// when it can.
@@ -307,7 +318,12 @@ impl Window {
                 Item::Action(action) => {
                     let _ = writeln!(lines, "E\t{}", clean(action));
                 }
-                Item::Map(map) => lines = map.lines(say),
+                Item::Map(map) => {
+                    let room = MAX_BYTES.saturating_sub(out.len() + tail.len());
+                    let (kept, every) = map.lines(say, room);
+                    whole &= every;
+                    lines = kept;
+                }
             }
             if out.len() + lines.len() + tail.len() > MAX_BYTES {
                 whole = false;
