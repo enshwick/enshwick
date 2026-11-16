@@ -163,8 +163,12 @@ fn a_build_without_the_server_layout_turns_off_each_link_it_would_make_with_its_
             .map_or_else(String::new, |p| p.reason.clone())
     };
     assert!(
-        reason(&STEP_FUSE).starts_with(pinned::server::PLAYER_SLOTS.id()),
-        "the step names the first of its own offsets: {listed:?}"
+        reason(&STEP_FUSE).starts_with(pinned::server::WORLD.id()),
+        "the step names the world it captures: {listed:?}"
+    );
+    assert!(
+        reason(&REMOVE_FUSE).starts_with(pinned::server::PLAYER_SLOTS.id()),
+        "the slots, which only the joins and leaves read, under theirs: {listed:?}"
     );
     assert!(
         reason(&STATE_FUSE).starts_with(pinned::server::ENTRY_STATE.id()),
