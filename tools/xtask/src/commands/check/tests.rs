@@ -133,6 +133,26 @@ fn only_a_wide_check_that_would_check_the_stable_surface_says_it_left_it_to_ci()
 }
 
 #[test]
+fn a_stable_api_check_says_when_the_change_does_not_reach_the_stable_surface() {
+    let scope = |code: &[&str], docs: &[&str]| Scope::Some {
+        code: code.iter().map(|name| (*name).to_owned()).collect(),
+        docs: docs.iter().map(|name| (*name).to_owned()).collect(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: false,
+    };
+    let parts = [Part::StableApi];
+    assert!(stable_api_out_of_scope(&scope(&["xtask"], &[]), &parts));
+    assert!(!stable_api_out_of_scope(&scope(&[FACADE], &[]), &parts));
+    assert!(!stable_api_out_of_scope(&scope(&[], &[FACADE]), &parts));
+    assert!(!stable_api_out_of_scope(&Scope::All, &parts));
+    assert!(!stable_api_out_of_scope(
+        &scope(&["xtask"], &[]),
+        &[Part::Host]
+    ));
+}
+
+#[test]
 fn the_semver_part_checks_each_package_it_is_given_and_none_without() {
     assert!(semver_step(&[]).is_none());
     let step = semver_step(&["enshwick".to_owned(), "enshwick-core".to_owned()]).unwrap();
