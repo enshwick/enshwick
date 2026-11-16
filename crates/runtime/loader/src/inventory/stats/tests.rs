@@ -214,3 +214,63 @@ fn one_mod_stopping_its_watch_leaves_another_mods_watch() {
     watched.ask(a, false);
     assert!(watched.asked.is_empty(), "nobody watches it");
 }
+
+#[test]
+fn shown_values_a_full_link_had_no_room_for_go_again_at_the_next_step() {
+    use own::Sent;
+    let def = StatDef::additive().in_group(enshwick_core::stats::StatGroup::Primary);
+    let mut sealed = sealed(&[("enshwick:luck", def.clone())]);
+    sealed.kinds[0].def = Some((def, "luck.name".into(), ModIndex::LOADER.get()));
+    let mut world = World::default();
+    let watched = Watched {
+        player: Some(9),
+        values: Box::new([0.5]),
+        ..Watched::default()
+    };
+    world.watched.insert(7, watched);
+    let change = StatChange {
+        header: Header::of::<StatChange>(),
+        entity: Entity(7),
+        stat: StatRef {
+            index: 0,
+            key: key_of("enshwick:luck").0,
+        },
+        old: 0.0,
+        new: 0.5,
+        reserved: 0,
+    };
+    let mut tries = 0;
+    own::send_due(&sealed, &mut world, &[change], |_| {
+        tries += 1;
+        Sent::NoRoom
+    });
+    assert_eq!(world.values_owed, [7], "owed to the next step");
+    own::send_due(&sealed, &mut world, &[change], |_| {
+        tries += 1;
+        Sent::Done
+    });
+    assert_eq!(tries, 2, "the owed player and its change go as one message");
+    assert!(world.values_owed.is_empty());
+    own::send_due(&sealed, &mut world, &[change], |_| Sent::NotReady);
+    assert!(world.values_owed.is_empty(), "its hello asks for them");
+}
+
+#[test]
+fn a_kind_shows_only_while_the_mod_that_defines_it_runs() {
+    let loader = crate::start::tests::loader_running(&["you.rpg"]);
+    let mut sealed = sealed(&[
+        ("enshwick:luck", StatDef::additive()),
+        ("you.rpg:curse", StatDef::additive()),
+    ]);
+    sealed.kinds[0].def = Some((
+        StatDef::additive(),
+        "luck.name".into(),
+        ModIndex::LOADER.get(),
+    ));
+    sealed.kinds[1].def = Some((StatDef::additive(), "curse.name".into(), 0));
+    assert!(own::runs(&loader, &sealed, 0), "the loader's own");
+    assert!(own::runs(&loader, &sealed, 1), "a running mod's");
+    loader.mods[0].off.store(true, Ordering::Release);
+    assert!(!own::runs(&loader, &sealed, 1), "a mod turned off");
+    assert!(own::runs(&loader, &sealed, 0), "the loader's own stays");
+}

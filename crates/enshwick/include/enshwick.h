@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 5
+#define ENSHWICK_ABI_MINOR 6
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -2642,7 +2642,39 @@ typedef struct EnshwickStatSpec {
   float min;
   // The greatest value.
   float max;
+  // The group of the Character screen's attributes it shows in as a row,
+  // `EnshwickStatSpec_GROUP_NONE` for none: `EnshwickStatSpec_GROUP_MAIN` to
+  // `EnshwickStatSpec_GROUP_PROTECTION`.
+  uint8_t group;
+  // `EnshwickStatSpec_HIDDEN`.
+  uint8_t flags;
+  // Zero.
+  uint16_t reserved_display;
 } EnshwickStatSpec;
+// In no group of the Character screen.
+#define EnshwickStatSpec_GROUP_NONE 0
+// The attribute points column beside the tabs, under the game's
+// `groupMain`.
+#define EnshwickStatSpec_GROUP_MAIN 1
+// The same column, under `groupFogSurvival`.
+#define EnshwickStatSpec_GROUP_FOG_SURVIVAL 2
+// The Basics tab, under `groupPrimary`.
+#define EnshwickStatSpec_GROUP_PRIMARY 3
+// The Basics tab, under `groupRegeneration`.
+#define EnshwickStatSpec_GROUP_REGENERATION 4
+// The Basics tab, under `groupMisc`.
+#define EnshwickStatSpec_GROUP_MISC 5
+// The Damage tab, under `groupDamage`.
+#define EnshwickStatSpec_GROUP_DAMAGE 6
+// The Damage tab, under `groupWeaponDamage`.
+#define EnshwickStatSpec_GROUP_WEAPON_DAMAGE 7
+// The Damage tab, under `groupEnemyDamage`.
+#define EnshwickStatSpec_GROUP_ENEMY_DAMAGE 8
+// The Protection tab, the game's `groupProtection`.
+#define EnshwickStatSpec_GROUP_PROTECTION 9
+// Shown nowhere: no row on the Character screen and no line in item
+// tooltips.
+#define EnshwickStatSpec_HIDDEN 1
 // A sum of points, such as extra health.
 #define EnshwickStatSpec_ADDITIVE 0
 // A factor, 1 without modifiers, such as a damage multiplier.
@@ -7620,7 +7652,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, stat) == 4, "offset of StatS
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, value) == 8, "offset of StatSource.value");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, id) == 12, "offset of StatSource.id");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, owner) == 16, "offset of StatSource.owner");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStatSpec) == 24, "size of StatSpec");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStatSpec) == 28, "size of StatSpec");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickStatSpec) == 4, "alignment of StatSpec");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, header) == 0, "offset of StatSpec.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, ty) == 8, "offset of StatSpec.ty");
@@ -7629,6 +7661,9 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, reserved) == 10, "offset of St
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, default_) == 12, "offset of StatSpec.default");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, min) == 16, "offset of StatSpec.min");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, max) == 20, "offset of StatSpec.max");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, group) == 24, "offset of StatSpec.group");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, flags) == 25, "offset of StatSpec.flags");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, reserved_display) == 26, "offset of StatSpec.reserved_display");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStatus) == 4, "size of Status");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickStatus) == 4, "alignment of Status");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStr) == 16, "size of Str");

@@ -2785,10 +2785,17 @@ export type StatDef = {
 	max: number,
 	--- How the value reads.
 	format: StatFormat,
+	--- The group of the Character screen's attributes where the local player's value shows as a row; nil for no row. Unstable: needs the `unstable` feature and may change in any release.
+	group: StatGroup?,
+	--- Shown nowhere: no row on the Character screen and no line in item tooltips, for a number only mods read.
+	hidden: boolean?,
 }
 
 --- How a `ImpactUiValue`'s number reads. The name is enshwick's: the game's number format together with its signed flag.
 export type StatFormat = "Number" | "Signed" | "Percent"
+
+--- A group of the Character screen's attributes, where a stat's row shows. The names are the game's groups; the column beside the tabs shows the first two, the Basics, Damage and Protection tabs the others. Unstable: needs the `unstable` feature and may change in any release.
+export type StatGroup = "Main" | "FogSurvival" | "Primary" | "Regeneration" | "Misc" | "Damage" | "WeaponDamage" | "EnemyDamage" | "Protection"
 
 --- What a stat kind is called and how it reads, from `Stats.info`.
 export type StatInfo = {
@@ -2835,6 +2842,8 @@ export type Stats = {
 	key_of: (self: Stats, id: string) -> number,
 	--- The text key that names the stat `id`, as `name_key` gives it.
 	name_key: (self: Stats, id: string) -> string?,
+	--- The text key that describes the stat `id`, as `description_key` gives it.
+	description_key: (self: Stats, id: string) -> string?,
 	--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 	aggregate: (self: Stats, def: StatDef, modifiers: {ScriptModifier}) -> number,
 }
@@ -4241,6 +4250,8 @@ declare enshwick: {
 		key_of: (id: string) -> number,
 		--- The text key that names the stat `id`, as `name_key` gives it.
 		name_key: (id: string) -> string?,
+		--- The text key that describes the stat `id`, as `description_key` gives it.
+		description_key: (id: string) -> string?,
 		--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 		aggregate: (def: StatDef, modifiers: {ScriptModifier}) -> number,
 		--- Stats of entities and items: values, modifiers, sources and definitions.

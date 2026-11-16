@@ -20,7 +20,10 @@
 //!
 //! The platform applies the built-in kinds to the game itself on the
 //! server; a mod's own kinds mean what the mods that read them make of
-//! them.
+//! them. On clients with Enshwick, an item's modifiers and affixes show as
+//! lines of its tooltip, and a kind with a group (`unstable`) shows the local
+//! player's value as a row of the Character screen; [`StatDef::hidden`]
+//! shows a kind nowhere.
 //!
 //! # Examples
 //!
@@ -100,6 +103,26 @@ pub const fn key_of(id: &str) -> StatKey {
 #[must_use]
 pub fn name_key(id: &str) -> Option<String> {
     enshwick_values::content::part_name(id, enshwick_values::content::NAME_PART)
+}
+
+/// The part of a stat kind's id whose text describes it.
+const DESCRIPTION_PART: &str = "description";
+
+/// The text key that describes the stat kind of full id `id` in its owner's
+/// texts, `<name>.description`, shown when the cursor rests on its row of
+/// the Character screen; optional.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::stats::description_key;
+///
+/// assert_eq!(description_key("you.hello:luck").as_deref(), Some("luck.description"));
+/// assert_eq!(description_key("luck"), None);
+/// ```
+#[must_use]
+pub fn description_key(id: &str) -> Option<String> {
+    enshwick_values::content::part_name(id, DESCRIPTION_PART)
 }
 
 /// The platform's built-in stat kinds, which it applies to the game on the
@@ -197,6 +220,13 @@ impl Stats {
     #[script(name = "name_key")]
     pub(crate) fn name_key_script(self, id: &str) -> Option<String> {
         name_key(id)
+    }
+
+    /// The text key that describes the stat `id`, as [`description_key`]
+    /// gives it.
+    #[script(name = "description_key")]
+    pub(crate) fn description_key_script(self, id: &str) -> Option<String> {
+        description_key(id)
     }
 
     /// The value `def` gives with `modifiers`, each an op and its value, as

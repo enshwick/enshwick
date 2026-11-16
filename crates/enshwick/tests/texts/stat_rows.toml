@@ -1,0 +1,11 @@
+[en]
+"luck.name" = "Luck"
+"luck.description" = "Luck in battle and with loot"
+"curse.name" = "Curse"
+"plain.name" = "Plain"
+
+[uk]
+"luck.name" = "Удача"
+"luck.description" = "Щастить у бою й під час здобичі"
+"curse.name" = "Прокляття"
+"plain.name" = "Звичайна"

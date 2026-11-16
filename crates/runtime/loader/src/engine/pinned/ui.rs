@@ -7,6 +7,21 @@ pub(crate) const ACTION_EXTENT: Constant = Constant::new("ui.action_extent");
 pub(crate) const ACTION_NEW: Symbol = Symbol::new("ui.action_new");
 pub(crate) const ACTION_NODE: Constant = Constant::new("ui.action_node");
 pub(crate) const ACTION_QUERY: Symbol = Symbol::new("ui.action_query");
+pub(crate) const ATTRIBUTE_ROW_PUSH: Symbol = Symbol::new("ui.attribute_row_push");
+pub(crate) const ATTRIBUTE_ROW_SIZE: Constant = Constant::new("ui.attribute_row_size");
+/// The Character screen's row builders, one per group, in the order of
+/// `StatGroup::ALL`.
+pub(crate) const ATTRIBUTE_ROWS: [Symbol; enshwick_core::stats::StatGroup::ALL.len()] = [
+    Symbol::new("ui.attribute_rows_main"),
+    Symbol::new("ui.attribute_rows_fog_survival"),
+    Symbol::new("ui.attribute_rows_primary"),
+    Symbol::new("ui.attribute_rows_regeneration"),
+    Symbol::new("ui.attribute_rows_misc"),
+    Symbol::new("ui.attribute_rows_damage"),
+    Symbol::new("ui.attribute_rows_weapon_damage"),
+    Symbol::new("ui.attribute_rows_enemy_damage"),
+    Symbol::new("ui.attribute_rows_protection"),
+];
 pub(crate) const BUTTON: Symbol = Symbol::new("ui.button");
 pub(crate) const BUTTON_ALIGN: Constant = Constant::new("ui.button_align");
 pub(crate) const BUTTON_CENTERED: Constant = Constant::new("ui.button_centered");

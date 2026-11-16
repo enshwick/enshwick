@@ -36,6 +36,7 @@ mod saves;
 mod scripts;
 mod shrine;
 mod sound;
+mod stat_rows;
 mod terrain_materials;
 mod terrain_pages;
 mod trail;

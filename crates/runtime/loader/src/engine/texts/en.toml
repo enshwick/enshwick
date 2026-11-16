@@ -255,6 +255,8 @@
 "menu.line.settings" = "{line} · enshwick.toml has errors, see the log"
 "menu.line.developer" = "{line} · DEVELOPER TOOLS ON"
 "developer.on" = "DEVELOPER TOOLS ARE ON. THEY ARE FOR TESTING MODS ONLY."
+# A stat modifier's line in an item's tooltip: "+10%" and the stat's name.
+"stat.line" = "{value} {name}"
 # The built-in stat kinds' names are the game's own texts, in every language
 # file, from the text tags beside them (client build 426, Steam build 26082781).
 "health_max.name" = "Max Health" # text tag 0xf9a7d233

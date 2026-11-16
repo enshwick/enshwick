@@ -90,6 +90,7 @@ pub(crate) static PARTS: &[&Part] = &[
         joined: Some(fused!("stats at join", |loader, player| {
             stats::player_joined(loader, player);
         })),
+        hello: Some(fused!("stats at hello", |_, key| stats::hello(key))),
         world_event: Some(fused!("stats at world events", |loader, event| {
             stats::world_event(loader, event);
         })),
