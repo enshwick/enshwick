@@ -64,6 +64,7 @@ impl Engine {
             crate::ui::interface::window_drawn();
         }
         window.saved_nav = self.nav(context);
+        self.caret.begin();
         super::widgets::twins_window(name.hash);
         let name = [name.ptr.expose_provenance() as u64, name.len];
         // SAFETY: `self.window_begin` is the game's `ui.window_begin`, its
@@ -155,6 +156,13 @@ impl Engine {
             unsafe { self.title(context, title) };
         }
         let mut nav = self.nav_config(NAV_WINDOW);
+        if window.typing {
+            // The low byte of the config's flags 0 reads no move from the
+            // arrows and the stick while a field types, as the game's text
+            // popup writes it (client 26430625).
+            let [_, _, _, flags, ..] = self.layout.nav;
+            nav.u8(flags, 0);
+        }
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's
         // `ui.nav_extent` bytes and `nav` its `ui.nav_config_size`
@@ -200,13 +208,18 @@ impl Engine {
     /// - `window` did not move since it started.
     /// - Every frame opened inside `window` is closed.
     pub(in crate::ui::interface) unsafe fn window_end(&self, context: usize, window: &mut Window) {
-        // SAFETY: `self.nav_end` is the game's `ui.nav_end`, its entry bytes
-        // checked in `Engine::resolve`, on the group `window_begin` pushed in
-        // this frame, unmoved by this function's `# Safety`.
-        unsafe { (self.nav_end)(window.nav.ptr(), 0) };
+        // `ui.nav_end` gives the focus back to the group's own member, so it
+        // waits while a field types, or Enter would press that button.
+        if !core::mem::replace(&mut window.typing, self.caret.end()) {
+            // SAFETY: `self.nav_end` is the game's `ui.nav_end`, its entry
+            // bytes checked in `Engine::resolve`, on the group `window_begin`
+            // pushed in this frame, unmoved by this function's `# Safety`.
+            unsafe { (self.nav_end)(window.nav.ptr(), 0) };
+        }
         // SAFETY: `self.nav_drop` is the game's `ui.nav_drop`, its entry bytes
         // checked in `Engine::resolve`, on the group `window_begin` pushed in
-        // this frame and `nav_end` just ended.
+        // this frame; the game's text popup drops its group with or without
+        // `nav_end` (client 26430625).
         unsafe { (self.nav_drop)(window.nav.ptr()) };
         self.restore_nav(context, window.saved_nav);
         // SAFETY: `self.frame_close` is the game's `ui.frame_close`, its entry

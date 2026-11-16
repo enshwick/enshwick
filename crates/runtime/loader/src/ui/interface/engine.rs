@@ -510,6 +510,8 @@ pub(super) struct Window {
     /// The screen's edge a screen extension's panel sits at, undimmed;
     /// `None` for a window centred over a dimmed screen.
     edge: Option<u32>,
+    /// One of the window's text fields had the caret in the last frame.
+    typing: bool,
 }
 
 impl Window {
@@ -523,6 +525,7 @@ impl Window {
             layer: 0x1f,
             gap: 30.0,
             edge: None,
+            typing: false,
         }
     }
 
@@ -576,6 +579,8 @@ pub(crate) struct Engine {
     scroll: Option<scroll::Scrolling>,
     /// The text field's functions; `None` shows texts read-only.
     text_fields: Option<text_field::TextFields>,
+    /// Whether a text field of the open window has the caret.
+    caret: text_field::Caret,
     /// The game's key hint; `None` refuses mods' input hints.
     pub(super) hint: Option<hint::InputHints>,
     /// The row frame and the separator; `None` stacks a row's cells.
@@ -813,6 +818,7 @@ impl Engine {
             dialog,
             scroll,
             text_fields,
+            caret: text_field::Caret::default(),
             hint,
             rows,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),

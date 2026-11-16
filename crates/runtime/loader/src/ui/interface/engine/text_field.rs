@@ -9,6 +9,8 @@
 use super::{
     Buf, Engine, Loader, Lookup, Missing, NodeFloatFn, OneFn, Ptr, UiText, field, game_fn, stretch,
 };
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use crate::base::configure::rows::{ENTRY_BYTES, typed};
 use crate::engine::pinned;
 
@@ -214,6 +216,31 @@ impl TextBuffer {
     }
 }
 
+/// Whether a text field drawn in the open window has the caret. The
+/// window's navigation would hand the focus back to its own member, so
+/// Enter would press that button instead of the field's confirm; the game's
+/// text popup skips its navigation's end while its field typed in the last
+/// frame (client 26430625, seen live).
+#[derive(Debug, Default)]
+pub(super) struct Caret(AtomicBool);
+
+impl Caret {
+    /// A window begins: a field drawn outside it does not count.
+    pub(super) fn begin(&self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
+
+    /// A field of the open window has the caret after its input.
+    fn seen(&self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+
+    /// The window ends: whether one of its fields had the caret.
+    pub(super) fn end(&self) -> bool {
+        self.0.swap(false, Ordering::Relaxed)
+    }
+}
+
 /// What the player did in a text field this frame.
 #[derive(Clone, Copy, Debug)]
 pub(in crate::ui::interface) struct Typed {
@@ -373,6 +400,9 @@ impl Engine {
         // `GameText` at `ui.text_field_text`, which points at `buffer`, still
         // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
+        if editing {
+            self.caret.seen();
+        }
         Some(Typed {
             entered: answer & u64::from(u32::MAX) == ENTERED,
             editing,
@@ -399,6 +429,19 @@ mod tests {
             .into_iter()
             .find_map(|(known, value)| (known == id).then_some(value))?
         }
+    }
+
+    #[test]
+    fn a_window_knows_its_field_had_the_caret_only_for_the_frame_it_did() {
+        let caret = Caret::default();
+        caret.seen();
+        caret.begin();
+        assert!(!caret.end(), "a field drawn before the window");
+        caret.begin();
+        caret.seen();
+        assert!(caret.end(), "a field of the window types");
+        caret.begin();
+        assert!(!caret.end(), "the typing ended with Enter");
     }
 
     #[test]
