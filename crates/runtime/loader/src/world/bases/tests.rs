@@ -302,25 +302,43 @@ fn limit_filters_chain_on_the_count_so_far_within_the_zones() {
 
 #[test]
 fn the_lowest_cap_of_every_mod_lowers_the_bases_asked_for() {
-    let asked = Asked {
-        zones: AtomicU32::new(16),
-        bases: AtomicU32::new(16),
-        capped: AtomicU32::new(u32::MAX),
-        caps: Mutex::new(Vec::new()),
-    };
-    asked.take(Limits {
+    let state = State::new();
+    state.asked.take(Limits {
         zones: 64,
         bases: 40,
     });
-    assert_eq!(asked.limits().bases, 40);
-    asked.cap(ModIndex::new(0), 30);
-    asked.cap(ModIndex::new(1), 20);
-    assert_eq!(asked.limits().bases, 20);
-    asked.cap(ModIndex::new(1), 50);
-    assert_eq!(asked.limits().bases, 30);
-    asked.cap(ModIndex::new(0), 179);
-    assert_eq!(asked.limits().bases, 40);
-    assert_eq!(asked.limits().zones, 64);
+    let caps = &state.current.caps;
+    assert_eq!(state.limits().bases, 40);
+    caps.cap(ModIndex::new(0), 30);
+    caps.cap(ModIndex::new(1), 20);
+    assert_eq!(state.limits().bases, 20);
+    caps.cap(ModIndex::new(1), 50);
+    assert_eq!(state.limits().bases, 30);
+    caps.cap(ModIndex::new(0), 179);
+    assert_eq!(state.limits().bases, 40);
+    assert_eq!(state.limits().zones, 64);
+}
+
+#[test]
+fn a_cap_set_while_a_world_is_forgotten_never_leaves_its_lowest_reset() {
+    let state = State::new();
+    let caps = &state.current.caps;
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            for _ in 0..20_000 {
+                caps.clear();
+            }
+        });
+        for _ in 0..20_000 {
+            caps.cap(ModIndex::new(0), 20);
+        }
+    });
+    let lowest = caps.caps.relock().iter().map(|&(_, cap)| cap).min();
+    assert_eq!(
+        caps.capped.load(Ordering::Relaxed),
+        lowest.unwrap_or(u32::MAX),
+        "the lowest follows the caps it was taken from"
+    );
 }
 
 /// One test, in order: the steps share the raised limit's fuses, which are
@@ -434,21 +452,21 @@ fn a_hosted_game_s_end_forgets_the_zones_and_caps_but_keeps_the_arming_and_reque
         zones: 64,
         bases: 40,
     });
-    state.asked.cap(ModIndex::new(0), 20);
+    state.current.caps.cap(ModIndex::new(0), 20);
     let grouped = || {
         ArcSwap::from_pointee(Zones {
             zones: Vec::new(),
             bases: 3,
         })
     };
-    let _first = state.zones.set([grouped(), grouped()]);
-    for count in &state.zone_count {
+    let _first = state.current.zones.set([grouped(), grouped()]);
+    for count in &state.current.zone_count {
         count.store(5, Ordering::Relaxed);
     }
     state.raised.store(true, Ordering::Release);
     state.forget();
     assert_eq!(
-        state.asked.limits(),
+        state.limits(),
         Limits {
             zones: 64,
             bases: 40
@@ -456,9 +474,13 @@ fn a_hosted_game_s_end_forgets_the_zones_and_caps_but_keeps_the_arming_and_reque
         "a mod off in the next world caps nothing there; the init requests stay"
     );
     for at in 0..2 {
-        assert_eq!(state.zone_count[at].load(Ordering::Relaxed), u32::MAX);
+        assert_eq!(
+            state.current.zone_count[at].load(Ordering::Relaxed),
+            u32::MAX
+        );
         assert!(
             state
+                .current
                 .zones
                 .get()
                 .is_some_and(|zones| zones[at].load().bases == 0)

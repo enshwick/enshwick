@@ -23,7 +23,7 @@ use crate::world::base_groups::window::{self, Kind};
 /// Links the altar limit under [`ALTAR_LIMIT`]; true when linked.
 pub(super) fn link_limit(loader: &Loader) -> bool {
     let target = Target::Pinned(pinned::building::MAX_ALTARS);
-    loader.link_fused(
+    loader.link_feature(
         &ALTAR_LIMIT,
         target,
         &MAX_ALTARS_NEXT,
@@ -42,37 +42,37 @@ pub(super) fn link_raised(loader: &Loader) -> bool {
     let only = HookFlags::EXCLUSIVE;
     let fuse = &RAISED_FUSE;
     let new_base = at(pinned::bases::NEW_BASE);
-    loader.link_fused(&BASE_CAP, new_base, &ADD_BASE_NEXT, add_base, none)
-        && loader.link_fused(fuse, at(pinned::bases::GROUPING), &GROUP_NEXT, group, none)
-        && loader.link_fused(
+    loader.link_feature(&BASE_CAP, new_base, &ADD_BASE_NEXT, add_base, none)
+        && loader.link_feature(fuse, at(pinned::bases::GROUPING), &GROUP_NEXT, group, none)
+        && loader.link_feature(
             fuse,
             at(pinned::bases::BASE_AT),
             &BASE_AT_NEXT,
             base_at,
             only,
         )
-        && loader.link_fused(
+        && loader.link_feature(
             fuse,
             at(pinned::bases::IN_BASE),
             &IN_BASE_NEXT,
             in_base,
             only,
         )
-        && loader.link_fused(
+        && loader.link_feature(
             fuse,
             at(pinned::bases::HOLDER_AT),
             &HOLDER_AT_NEXT,
             holder_at,
             only,
         )
-        && loader.link_fused(
+        && loader.link_feature(
             fuse,
             at(pinned::bases::ZONES_AT),
             &ZONES_AT_NEXT,
             zones_at,
             only,
         )
-        && loader.link_fused(fuse, at(pinned::bases::CURSOR), &CHECK_NEXT, check, none)
+        && loader.link_feature(fuse, at(pinned::bases::CURSOR), &CHECK_NEXT, check, none)
 }
 
 crate::engine::chains::chain_detour! {
@@ -202,7 +202,7 @@ unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> 
         members::settle(
             bases,
             sites.fields,
-            STATE.asked.bases(kind),
+            STATE.bases(kind),
             new_base,
             ready.as_ref().map(|f| f as &dyn Fn(usize)),
         )
@@ -216,7 +216,12 @@ unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> 
 /// - `bases` is the non-null bases object the grouping has just filled,
 ///   live for the call, on the grouping's thread.
 unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) {
-    let Some(known) = STATE.zones.get().map(|zones| &zones[kind_index(kind)]) else {
+    let Some(known) = STATE
+        .current
+        .zones
+        .get()
+        .map(|zones| &zones[kind_index(kind)])
+    else {
         return;
     };
     // SAFETY: `keep`'s caller guarantees a live object just grouped, on the
@@ -228,7 +233,7 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
         based: grouped.iter().any(|base| base.zones.contains(i)),
     };
     let count = u32::try_from(grouped.len()).unwrap_or(u32::MAX);
-    STATE.zone_count[kind_index(kind)].store(
+    STATE.current.zone_count[kind_index(kind)].store(
         u32::try_from(listed).unwrap_or(u32::MAX - 1),
         Ordering::Relaxed,
     );
@@ -257,7 +262,7 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
             crate::log!(
                 WARN,
                 "{listed} altar zones in {count} bases: {apart} stand apart from every base, since the game holds {} bases; they allow building but no base features until they touch a base's zone",
-                STATE.asked.bases(kind)
+                STATE.bases(kind)
             );
         } else {
             crate::log!(INFO, "{listed} altar zones in {count} bases");
@@ -284,7 +289,7 @@ crate::engine::chains::chain_detour! {
             let kind = unsafe { side_of(bases, &fields) };
             // SAFETY: the game's grouping calls the new base code only after
             // it refilled the object's zone list, on its own thread.
-            let plan = || plan_bases(|| unsafe { members::planned(bases, fields, STATE.asked.bases(kind)) });
+            let plan = || plan_bases(|| unsafe { members::planned(bases, fields, STATE.bases(kind)) });
             if !may_start(started, &STATE.planned[kind_index(kind)], plan) {
                 return;
             }

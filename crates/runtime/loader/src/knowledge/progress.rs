@@ -230,7 +230,7 @@ pub(crate) fn link(loader: &'static Loader) {
             }
         };
     if wants[0]
-        && loader.link_fused(
+        && loader.link_feature(
             &SKILLS_FUSE,
             Target::Pinned(pinned::skill::NODE_UNLOCKED),
             &SKILL_NEXT,
@@ -241,7 +241,7 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(INFO, "skill checks filtered by mods");
     }
     if wants[1]
-        && loader.link_fused(
+        && loader.link_feature(
             &COMFORT_FUSE,
             Target::Pinned(pinned::comfort::BASE_REGISTER),
             &COMFORT_NEXT,
@@ -253,7 +253,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if wants[2]
         && let Some(player_level) = player_level
-        && loader.link_fused(
+        && loader.link_feature(
             &LEVEL_FUSE,
             player_level,
             &LEVEL_NEXT,

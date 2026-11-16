@@ -480,7 +480,7 @@ pub(crate) fn link(loader: &Loader) {
     if !wanted() {
         return;
     }
-    let _linked = loader.link_fused(
+    let _linked = loader.link_feature(
         &DESTROY_FUSE,
         Target::Pinned(pinned::ecs::DESTROY_REQUEST),
         &DESTROY_NEXT,

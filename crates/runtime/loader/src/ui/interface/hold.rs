@@ -29,7 +29,7 @@ pub(super) fn link(loader: &Loader) {
         return;
     }
     let at = Target::Pinned(pinned::ui::SCREEN_SHOWS_CURSOR);
-    let _linked = loader.link_fused(&HOLD_FUSE, at, &NEXT, shows_cursor, HookFlags::NONE);
+    let _linked = loader.link_feature(&HOLD_FUSE, at, &NEXT, shows_cursor, HookFlags::NONE);
 }
 
 crate::engine::chains::chain_detour! {

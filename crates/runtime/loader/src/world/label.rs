@@ -147,9 +147,14 @@ pub(crate) fn register(
     FILTERS.register(owner, callback, user)
 }
 
+/// Seals the rename filters before any link.
+pub(crate) fn seal() {
+    let _filters = FILTERS.seal();
+}
+
 /// Links the rename check when a mod filters renames.
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = FILTERS.seal();
+    let filters = FILTERS.sealed().unwrap_or_default();
     let wanted = !filters.is_empty();
     if !wanted {
         return;
@@ -160,7 +165,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     let target = Target::Pinned(pinned::label::REPLACE);
     let flags = HookFlags::CALLER_FRAME;
-    if loader.link_fused(&FUSE, target, &REPLACE_NEXT, replace, flags) {
+    if loader.link_feature(&FUSE, target, &REPLACE_NEXT, replace, flags) {
         crate::log!(INFO, "rename filters on");
     }
 }
@@ -397,6 +402,7 @@ mod tests {
             Ok(())
         );
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        seal();
         link(loader);
         assert!(FUSE.is_off());
         let listed = crate::engine::diag::parts_off();

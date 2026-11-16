@@ -288,20 +288,27 @@ mod tests {
         }
     }
 
+    /// The status lists a fuse once by its name, so a part's own fuse has a
+    /// name no fuse of its module's links has.
+    #[test]
+    fn no_part_fuse_shares_its_name_with_a_fuse_of_its_module() {
+        let mut shared = Vec::new();
+        for part in parts().iter() {
+            let named = format!("Fuse::new(\"{}\")", part.fuse.feature());
+            if sources(part.name).contains(&named) {
+                shared.push(part.name);
+            }
+        }
+        assert!(
+            shared.is_empty(),
+            "part fuses named as a link's: {shared:?}"
+        );
+    }
+
     /// Every registry seals in the seal phase, before any link, so no link
     /// sees an open registry whatever the order the parts link in.
     #[test]
     fn no_part_seals_a_registry_in_its_link() {
-        // shortcut: these parts still seal their own registries in their
-        // link; drop each from the list as its seals move to the seal phase.
-        const SEALING_IN_LINK: &[&str] = &[
-            "bases",
-            "controls",
-            "item_actions",
-            "join_gate",
-            "label",
-            "survivors",
-        ];
         // shortcut: a scan of each `fn link*` body, which misses a seal in a
         // helper the link calls; a check in the registry's seal would see
         // it, once registries know the phase they are sealed in.
@@ -311,8 +318,10 @@ mod tests {
                 sealing.push(part.name);
             }
         }
-        sealing.sort_unstable();
-        assert_eq!(sealing, SEALING_IN_LINK, "parts that seal in their link");
+        assert!(
+            sealing.is_empty(),
+            "parts that seal in their link: {sealing:?}"
+        );
     }
 
     /// The bodies of the `fn link*` functions in `text`, each up to the
@@ -429,7 +438,8 @@ mod tests {
                 parts
                     .iter()
                     .rev()
-                    .filter_map(|p| p.end.as_ref().map(|e| e.fuse.feature()))
+                    .filter(|p| p.end.is_some())
+                    .map(|p| p.name)
                     .collect::<Vec<_>>()
                     .join(", "),
             ),

@@ -17,6 +17,49 @@ fn a_hosted_game_s_end_forgets_the_joined_players_and_the_queued_building_events
 }
 
 #[test]
+fn a_build_without_a_player_slot_constant_still_steps_and_one_without_the_world_does_not() {
+    use super::offsets::{Found, WorldAt};
+    let found = Found {
+        entry_state: Ok(1),
+        slots: Err(pinned::server::PLAYER_SLOT_STATE),
+        world: Ok(WorldAt {
+            server_world: 1,
+            entities: 2,
+        }),
+        building: Err(pinned::building::PICKUP_MODE),
+    };
+    assert_eq!(found.step(), None, "only the joins need the slots");
+    let found = Found {
+        world: Err(pinned::world::ENTITIES),
+        ..found
+    };
+    assert_eq!(found.step(), Some(pinned::world::ENTITIES));
+}
+
+#[test]
+fn a_player_whose_slot_clears_or_is_reused_unseen_leaves_once_before_the_next_joins() {
+    use SlotScan::{Joined, Left, Replaced, Same};
+    let in_game = true;
+    assert_eq!(scan_slot(0, 0, false), Same, "an empty slot");
+    assert_eq!(scan_slot(0, 7, !in_game), Same, "a player on the way in");
+    assert_eq!(scan_slot(0, 7, in_game), Joined);
+    assert_eq!(scan_slot(7, 7, in_game), Same, "joined once");
+    assert_eq!(scan_slot(7, 7, !in_game), Same, "the removal link ends it");
+    assert_eq!(scan_slot(7, 0, false), Left, "the slot cleared unseen");
+    assert_eq!(
+        scan_slot(7, 9, !in_game),
+        Left,
+        "reused, the new one not in yet"
+    );
+    assert_eq!(scan_slot(7, 9, in_game), Replaced, "reused within one step");
+    assert_eq!(
+        scan_slot(0, 0, false),
+        Same,
+        "after the removal link zeroed the record, no second leave"
+    );
+}
+
+#[test]
 fn a_placed_piece_s_position_widens_the_game_s_three_floats_without_reading_past_them() {
     let floats: [f32; 3] = [1.5, -2.25, 1024.0];
     // SAFETY: `floats` is a live three-float array, as the game passes.
@@ -113,11 +156,70 @@ fn a_build_without_the_server_layout_turns_off_each_link_it_would_make_with_its_
         "a link no mod asked for stays out of the list"
     );
     let listed = crate::engine::diag::parts_off();
-    let step = listed.iter().find(|p| p.part == STEP_FUSE.feature());
+    let reason = |fuse: &Fuse| {
+        listed
+            .iter()
+            .find(|p| p.part == fuse.feature())
+            .map_or_else(String::new, |p| p.reason.clone())
+    };
     assert!(
-        step.is_some_and(|p| p.reason.starts_with(pinned::server::ENTRY_STATE.id())),
+        reason(&STEP_FUSE).starts_with(pinned::server::WORLD.id()),
+        "the step names the world it captures: {listed:?}"
+    );
+    assert!(
+        reason(&REMOVE_FUSE).starts_with(pinned::server::PLAYER_SLOTS.id()),
+        "the slots, which only the joins and leaves read, under theirs: {listed:?}"
+    );
+    assert!(
+        reason(&STATE_FUSE).starts_with(pinned::server::ENTRY_STATE.id()),
         "{listed:?}"
     );
+}
+
+/// Every server and world constant the links read, but the building ones.
+const ALL_BUT_BUILDING: &[(Constant, u64)] = &[
+    (pinned::server::ENTRY_STATE, 8),
+    (pinned::server::PLAYER_SLOTS, 16),
+    (pinned::server::PLAYER_SLOT_SIZE, 32),
+    (pinned::server::PLAYER_SLOT_COUNT, 16),
+    (pinned::server::PLAYER_SLOT_STATE, 4),
+    (pinned::server::PLAYER_SLOT_ENTITY, 8),
+    (pinned::server::PLAYER_SLOT_KEY, 16),
+    (pinned::server::WORLD, 24),
+    (pinned::world::ENTITIES, 32),
+];
+
+#[test]
+fn a_client_without_a_building_constant_keeps_its_state_link_s_notices() {
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::pinning_loader(
+        Side::CLIENT,
+        &[],
+        ALL_BUT_BUILDING,
+    )));
+    link(loader);
+    let notices = listed_off("server notices").unwrap_or_default();
+    assert!(
+        !notices.starts_with(pinned::building::CTX_PLAYER.id()),
+        "an unrelated building constant names nothing off: {notices}"
+    );
+    assert!(!STATE_FUSE.is_off(), "the state link's offsets are there");
+}
+
+#[test]
+fn a_client_without_the_entry_state_lists_its_notices_off_naming_it() {
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::pinning_loader(
+        Side::CLIENT,
+        &[],
+        &ALL_BUT_BUILDING[1..],
+    )));
+    link(loader);
+    let notices = listed_off("server notices").unwrap_or_default();
+    assert!(
+        notices.starts_with(pinned::server::ENTRY_STATE.id()),
+        "{notices}"
+    );
+    assert!(STATE_FUSE.is_off());
+    assert!(!REMOVE_FUSE.is_off(), "the removal has its offsets");
 }
 
 #[test]

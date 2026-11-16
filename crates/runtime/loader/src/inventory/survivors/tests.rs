@@ -63,7 +63,8 @@ fn a_summoned_filter_alone_asks_for_the_staffs_and_seals_both_staff_registries()
         core::ptr::null_mut(),
     ));
     assert!(added.is_ok());
-    let asked = registrations.seal();
+    registrations.seal();
+    let asked = registrations.asked();
     assert!(asked.summons && !asked.lookup && !asked.beds && !asked.items && !asked.status);
     assert!(
         registrations.is_sealed(),
@@ -93,7 +94,8 @@ fn every_mod_holds_one_lookup_in_load_order_until_the_seal() {
     assert_eq!(hold(first), Ok(()));
     assert_eq!(hold(second), Ok(()), "a second mod chains after the first");
     assert_eq!(hold(first), Ok(()), "the same mod replaces its own");
-    assert!(registrations.seal().lookup);
+    registrations.seal();
+    assert!(registrations.asked().lookup);
     assert!(registrations.is_sealed());
     let owners: Vec<ModIndex> = registrations.lookup().iter().map(|r| r.owner).collect();
     assert_eq!(owners, [first, second]);

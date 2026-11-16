@@ -18,20 +18,20 @@ pub(super) const GROW_FAILED: u8 = 0x27;
 /// under [`PAST16`]; true when every link is made.
 pub(super) fn link(loader: &Loader, base_ids: bool) -> bool {
     let at = Target::Pinned;
-    loader.link_fused(
+    loader.link_feature(
         &PAST16,
         at(bases::SORT),
         &SORT_NEXT,
         sort,
         HookFlags::EXCLUSIVE,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &PAST16,
         at(bases::SORT_ALL),
         &SORT_ALL_NEXT,
         sort_all,
         HookFlags::NONE,
     ) && (!base_ids
-        || loader.link_fused(
+        || loader.link_feature(
             &PAST16,
             at(bases::BASE_IDS),
             &BASE_IDS_NEXT,

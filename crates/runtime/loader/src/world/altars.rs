@@ -181,10 +181,8 @@ impl Records {
 struct State {
     /// The mods that opened the altars.
     openers: Openers,
-    records: Mutex<Records>,
-    sizing: Sizing,
-    /// The zones the filters asked for, by altar, for the range pass.
-    targets: ArcSwapOption<Targets>,
+    /// What the altars know of the world that runs.
+    current: World,
     /// Set when the records changed since the last step.
     changed: AtomicBool,
     /// The server steps the post-step counted; never reset, since only the
@@ -200,26 +198,54 @@ impl State {
     /// Forgets the world that went: its records, targets and sizing.
     fn forget(&self) {
         self.world.fetch_add(1, Ordering::AcqRel);
-        *self.records.relock() = Records::new();
-        self.targets.store(None);
-        self.sizing.asked.store(false, Ordering::Release);
-        self.sizing.running.store(0, Ordering::Release);
+        self.current.forget();
         self.changed.store(true, Ordering::Release);
     }
 
     const fn new() -> Self {
         Self {
             openers: Openers::new(),
+            current: World::new(),
+            changed: AtomicBool::new(false),
+            step: AtomicU64::new(0),
+            world: AtomicU64::new(0),
+        }
+    }
+}
+
+/// What the altars know of one world, made new whole when it goes.
+#[derive(Debug)]
+struct World {
+    records: Mutex<Records>,
+    sizing: Sizing,
+    /// The zones the filters asked for, by altar, for the range pass.
+    targets: ArcSwapOption<Targets>,
+}
+
+impl World {
+    const fn new() -> Self {
+        Self {
             records: Mutex::new(Records::new()),
             sizing: Sizing {
                 asked: AtomicBool::new(false),
                 running: AtomicUsize::new(0),
             },
             targets: ArcSwapOption::const_empty(),
-            changed: AtomicBool::new(false),
-            step: AtomicU64::new(0),
-            world: AtomicU64::new(0),
         }
+    }
+
+    /// Makes every field as [`World::new`] does; the pattern names each, so
+    /// a field added later fails to build until it is reset here too.
+    fn forget(&self) {
+        let Self {
+            records,
+            sizing: Sizing { asked, running },
+            targets,
+        } = self;
+        *records.relock() = Records::new();
+        asked.store(false, Ordering::Release);
+        running.store(0, Ordering::Release);
+        targets.store(None);
     }
 }
 
@@ -376,7 +402,7 @@ pub(crate) fn resize(owner: ModIndex) -> Result<(), NoSizerError> {
     if !SIZERS.any(|sizer| sizer.owner == owner) {
         return Err(NoSizerError);
     }
-    STATE.sizing.asked.store(true, Ordering::Release);
+    STATE.current.sizing.asked.store(true, Ordering::Release);
     Ok(())
 }
 
@@ -430,7 +456,11 @@ fn chain(vanilla: AltarZone, sizers: &[&Sizer]) -> Option<(i64, i64)> {
 /// [`size_zones_with`].
 fn size_zones() {
     let running: Vec<&Sizer> = running_sizers().collect();
-    STATE.sizing.running.store(running.len(), Ordering::Release);
+    STATE
+        .current
+        .sizing
+        .running
+        .store(running.len(), Ordering::Release);
     size_zones_with(&running);
 }
 
@@ -439,11 +469,11 @@ fn size_zones() {
 /// they may read the altars.
 fn size_zones_with(sizers: &[&Sizer]) {
     if sizers.is_empty() {
-        STATE.targets.store(None);
+        STATE.current.targets.store(None);
         return;
     }
     let vanilla: Vec<Vanilla> = {
-        let state = STATE.records.relock();
+        let state = STATE.current.records.relock();
         state
             .placed
             .iter()
@@ -481,11 +511,11 @@ fn size_zones_with(sizers: &[&Sizer]) {
             );
         }
     }
-    STATE.targets.store(Some(Arc::new(targets)));
+    STATE.current.targets.store(Some(Arc::new(targets)));
 }
 
 pub(crate) fn list() -> Vec<AltarInfo> {
-    let state = STATE.records.relock();
+    let state = STATE.current.records.relock();
     state
         .placed
         .iter()
@@ -530,7 +560,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     // Only the post-step forgets: passes run many times a step, and none
     // runs once the last altar is gone.
     if step.is_multiple_of(EXPIRE_EVERY)
-        && let Some(mut state) = STATE.records.try_relock()
+        && let Some(mut state) = STATE.current.records.try_relock()
     {
         let now = When { at: now, step };
         let state = &mut *state;
@@ -540,8 +570,8 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         }
     }
     let changed = STATE.changed.swap(false, Ordering::AcqRel);
-    let gone = STATE.sizing.running.load(Ordering::Acquire) != running_sizers().count();
-    if changed | STATE.sizing.asked.swap(false, Ordering::AcqRel) | gone {
+    let gone = STATE.current.sizing.running.load(Ordering::Acquire) != running_sizers().count();
+    if changed | STATE.current.sizing.asked.swap(false, Ordering::AcqRel) | gone {
         size_zones();
     }
     if changed {
@@ -633,13 +663,13 @@ pub(crate) fn link(loader: &'static Loader) {
 /// [`ALTARS`]; true when both are linked.
 fn link_systems(loader: &Loader, entries: [Option<u64>; 2], upgrade_flags: HookFlags) -> bool {
     let [zones, upgrade_at] = entries;
-    loader.link_fused(
+    loader.link_feature(
         &ALTARS,
         Target::Found(ZONES_SYSTEM, zones),
         &ADD_ZONES_NEXT,
         add_zones,
         HookFlags::NONE,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &ALTARS,
         Target::Found(UPGRADE_SYSTEM, upgrade_at),
         &UPGRADE_NEXT,
@@ -674,7 +704,7 @@ fn link_seam(loader: &'static Loader) {
     };
     let _first = SEAM.set(layout);
     let target = Target::Pinned(pinned::building::SEAM_CHECK);
-    if loader.link_fused(&ZONE_CHECKS, target, &SEAM_NEXT, seam, HookFlags::NONE) {
+    if loader.link_feature(&ZONE_CHECKS, target, &SEAM_NEXT, seam, HookFlags::NONE) {
         crate::log!(INFO, "zone checks on");
     }
 }
@@ -792,10 +822,10 @@ fn merge(
     built: &mut Vec<(u32, [f32; 3])>,
     levels: &mut Vec<(u32, Sizes)>,
 ) {
-    let mut state = match STATE.records.try_relock() {
+    let mut state = match STATE.current.records.try_relock() {
         Some(state) => state,
         None if placed.len() + built.len() + levels.len() < HELD_BACK => return,
-        None => STATE.records.relock(),
+        None => STATE.current.records.relock(),
     };
     let now = now();
     let mut changed = false;

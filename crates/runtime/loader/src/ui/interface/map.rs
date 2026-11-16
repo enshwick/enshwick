@@ -15,7 +15,7 @@
 
 use std::collections::VecDeque;
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
@@ -195,8 +195,6 @@ struct Markers {
     /// The running registry's marker types, once read; `None` for good
     /// when it has no type for the loader's choice.
     registry: OnceLock<Option<RunningTypes>>,
-    /// Whether the log told of mod markers the game's list had no room for.
-    told_full: AtomicBool,
 }
 
 static MARKERS: Markers = Markers {
@@ -208,7 +206,6 @@ static MARKERS: Markers = Markers {
     play_data: AtomicUsize::new(0),
     noted_at: AtomicU64::new(0),
     registry: OnceLock::new(),
-    told_full: AtomicBool::new(false),
 };
 
 /// One marker, owned by the loader.
@@ -415,7 +412,7 @@ fn link_under(loader: &Loader, feature: &'static Fuse) {
             .ok()
             .map(enshwick_gamedata::reflect::System::entry),
     );
-    loader.link_fused(feature, target, &NEXT, detour as SystemFn, HookFlags::NONE);
+    loader.link_feature(feature, target, &NEXT, detour as SystemFn, HookFlags::NONE);
 }
 
 crate::engine::chains::chain_detour! {
@@ -501,11 +498,9 @@ fn append() {
         unsafe { core::ptr::copy_nonoverlapping(entry.ptr(), slot, layout.entry_size) };
         count += 1;
     }
-    if left_out > 0
-        && crate::engine::loader::loader().is_some_and(|loader| loader.developer_tools)
-        && !MARKERS.told_full.swap(true, Ordering::Relaxed)
+    if left_out > 0 && crate::engine::loader::loader().is_some_and(|loader| loader.developer_tools)
     {
-        crate::log!(
+        crate::log_once!(
             WARN,
             "map markers: the map's list holds {count} of {capacity} entries{}; {left_out} mod markers do not show",
             if entries.is_null() {

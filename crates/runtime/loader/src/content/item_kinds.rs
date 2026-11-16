@@ -5,7 +5,7 @@
 //! A dedicated server resolves its items after it first builds the recipe
 //! registry, so a recipe patch sees kinds only in a rebuild there.
 
-use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
 use enshwick_core::abi::RecipeKind;
@@ -321,7 +321,6 @@ pub struct ItemKinds<const N: usize> {
     /// The layout and classes; unset until sealed, and for good when
     /// reflection lacks the item id or slot.
     sealed: OnceLock<ItemKindLayout>,
-    warned: AtomicBool,
 }
 
 impl<const N: usize> ItemKinds<N> {
@@ -333,7 +332,6 @@ impl<const N: usize> ItemKinds<N> {
             pending: AtomicUsize::new(0),
             kinds: Table::new(),
             sealed: OnceLock::new(),
-            warned: AtomicBool::new(false),
         }
     }
 
@@ -359,7 +357,7 @@ impl<const N: usize> ItemKinds<N> {
             Ok(_) => {
                 self.pending.fetch_add(1, Ordering::AcqRel);
             }
-            Err(Full) => self.full(),
+            Err(Full) => Self::full(),
         }
     }
 
@@ -383,7 +381,7 @@ impl<const N: usize> ItemKinds<N> {
     /// Records that the recipes making the item `item` are of `kind`.
     pub fn record(&self, item: u32, kind: RecipeKind) {
         if self.kinds.insert(item, kind.0).is_err() {
-            self.full();
+            Self::full();
         }
     }
 
@@ -395,13 +393,11 @@ impl<const N: usize> ItemKinds<N> {
     }
 
     #[cold]
-    fn full(&self) {
-        if !self.warned.swap(true, Ordering::Relaxed) {
-            crate::log!(
-                WARN,
-                "more items than recipe kinds can hold: the rest have no kind"
-            );
-        }
+    fn full() {
+        crate::log_once!(
+            WARN,
+            "more items than recipe kinds can hold: the rest have no kind"
+        );
     }
 }
 
@@ -540,7 +536,6 @@ mod tests {
         let items = sealed();
         items.opened(0);
         assert!(!items.pending());
-        assert!(!items.warned.load(Ordering::Relaxed));
 
         let unsealed = ItemKinds::<SMALL>::new();
         unsealed.opened(5);

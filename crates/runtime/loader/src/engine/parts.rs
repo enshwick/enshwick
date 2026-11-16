@@ -34,32 +34,39 @@ pub(crate) struct Part {
     pub(crate) steps: &'static [Step],
     /// A player reached the game.
     pub(crate) joined: Option<PlayerCall>,
-    /// A player leaves, before the game removes the character.
+    /// A player leaves, before the game removes the character; after it, as
+    /// recorded at join, when the game cleared or reused the slot unseen.
     pub(crate) left: Option<PlayerCall>,
     /// The client of the player with this account key said hello and the
     /// server welcomed it, on a link that holds nothing yet: it takes the
     /// server's messages from now on.
     pub(crate) hello: Option<KeyCall>,
     /// A client starts hosting a game.
-    pub(crate) hosting: Option<Fused<fn(&'static Loader)>>,
+    pub(crate) hosting: Option<fn(&'static Loader)>,
     /// A client's hosted game ended: the part tells mods what goes with it
     /// (closed windows, unanswered requests), top layer first, before any
     /// part forgets, so what their handlers queue is forgotten too.
-    pub(crate) end: Option<Fused<fn(&'static Loader)>>,
+    pub(crate) end: Option<fn(&'static Loader)>,
     /// A client's hosted game ended: the part forgets its server, after
     /// every part's `end`.
-    pub(crate) forget: Option<Fused<fn(&'static Loader)>>,
+    pub(crate) forget: Option<fn(&'static Loader)>,
     /// Follows the server's world through its loaded, saved and shutdown
     /// events, which [`Loader::emit`] hands it before the mods.
     pub(crate) world_event: Option<WorldCall>,
     /// Whether the part follows the world with no mod subscribed to those
     /// events, so their links are made.
     pub(crate) follows: Option<fn(&Loader) -> bool>,
+    /// The part as a whole, named after it: its hosting, end and forget run
+    /// under it, and once a panic in one of them turns it off, the part's
+    /// steps, joins, leaves, hellos and world events stop too, since they
+    /// would run on a game's state it no longer keeps.
+    pub(crate) fuse: &'static Fuse,
 }
 
 impl Part {
-    /// A part named `name` that the module `module` is, with nothing to call.
-    pub(crate) const fn new(name: &'static str, module: &'static str) -> Self {
+    /// A part named `name` that the module `module` is, under its own `fuse`,
+    /// with nothing to call.
+    pub(crate) const fn new(name: &'static str, module: &'static str, fuse: &'static Fuse) -> Self {
         Self {
             name,
             module,
@@ -75,6 +82,35 @@ impl Part {
             forget: None,
             world_event: None,
             follows: None,
+            fuse,
+        }
+    }
+
+    /// Whether the part's own fuse is on, so its calls run.
+    pub(crate) fn runs(&self) -> bool {
+        !self.fuse.is_off()
+    }
+
+    /// Runs `call`, one of the part's hosting, end or forget, under the
+    /// part's fuse at `site`.
+    fn whole(&self, call: Option<fn(&'static Loader)>, site: &str, loader: &'static Loader) {
+        if let Some(run) = call {
+            let _ran = self.fuse.run(site, || run(loader));
+        }
+    }
+
+    /// Runs the part's `forget` at a hosted game's end: under the part's
+    /// fuse, and still once the fuse is off, a panic then swallowed, since
+    /// the part's links stay armed and read what `forget` clears.
+    fn clear(&self, loader: &'static Loader) {
+        let Some(forget) = self.forget else {
+            return;
+        };
+        if self.runs() {
+            self.whole(Some(forget), "forgetting its hosted game", loader);
+        } else {
+            let _cleared =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| forget(loader)));
         }
     }
 
@@ -89,7 +125,7 @@ impl Part {
         else {
             panic!("no part {name} forgets anything");
         };
-        (forget.run)(loader);
+        forget(loader);
     }
 }
 
@@ -142,6 +178,9 @@ impl Stage {
 pub(crate) struct Step {
     pub(crate) stage: Stage,
     pub(crate) work: Fused<fn(&Stepping)>,
+    /// The fuse of the part the step belongs to, once [`Parts`] gathered it:
+    /// off, the step no longer runs.
+    pub(crate) part: Option<&'static Fuse>,
 }
 
 /// What a step's work is given.
@@ -183,6 +222,7 @@ macro_rules! step {
         $crate::engine::parts::Step {
             stage: $crate::engine::parts::Stage::$stage,
             work: $crate::engine::parts::fused!($feature, $($run)+),
+            part: None,
         }
     };
 }
@@ -191,15 +231,18 @@ pub(crate) use step;
 /// The part a layer's module `$module` is, named `$name`; without a module,
 /// the module that writes it.
 macro_rules! part {
-    ($name:literal, $($module:ident)::+) => {
+    ($name:literal, $($module:ident)::+) => {{
+        static FUSE: $crate::engine::fuse::Fuse = $crate::engine::fuse::Fuse::new(concat!($name, " part"));
         $crate::engine::parts::Part::new(
             $name,
             concat!(module_path!() $(, "::", stringify!($module))+),
+            &FUSE,
         )
-    };
-    ($name:literal) => {
-        $crate::engine::parts::Part::new($name, module_path!())
-    };
+    }};
+    ($name:literal) => {{
+        static FUSE: $crate::engine::fuse::Fuse = $crate::engine::fuse::Fuse::new(concat!($name, " part"));
+        $crate::engine::parts::Part::new($name, module_path!(), &FUSE)
+    }};
 }
 pub(crate) use part;
 
@@ -223,9 +266,15 @@ impl Parts {
             layers,
             rows: part_order::feature_rows(parts().map(|part| (part.name, part.table_ids))),
             stages: part_order::by_stage(Stage::ALL, || {
-                parts()
-                    .flat_map(|part| part.steps)
-                    .map(|step| (step.stage, *step))
+                parts().flat_map(|part| {
+                    part.steps.iter().map(|step| {
+                        let step = Step {
+                            part: Some(part.fuse),
+                            ..*step
+                        };
+                        (step.stage, step)
+                    })
+                })
             }),
         }
     }
@@ -244,14 +293,23 @@ impl Parts {
             self.steps(stage),
             "the post-step link",
             |step| step.work.fuse,
-            |step| (step.work.run)(stepping),
+            |step| {
+                if step.part.is_none_or(|part| !part.is_off()) {
+                    (step.work.run)(stepping);
+                }
+            },
         );
+    }
+
+    /// Every part whose own fuse is on.
+    fn running(&self) -> impl DoubleEndedIterator<Item = &'static Part> + use<> {
+        self.iter().filter(|part| part.runs())
     }
 
     /// Hands the world's `event` to every part that follows the world, each
     /// under its own fuse.
     pub(crate) fn world_event(&self, loader: &Loader, event: Event) {
-        for fused in self.iter().filter_map(|part| part.world_event.as_ref()) {
+        for fused in self.running().filter_map(|part| part.world_event.as_ref()) {
             let _ran = fused.call("a world event", |run| run(loader, event));
         }
     }
@@ -259,29 +317,30 @@ impl Parts {
     /// Tells every part that the client of player `key` said hello, each
     /// under its own fuse.
     pub(crate) fn hello(&self, loader: &'static Loader, key: u64) {
-        for fused in self.iter().filter_map(|part| part.hello.as_ref()) {
+        for fused in self.running().filter_map(|part| part.hello.as_ref()) {
             let _ran = fused.call("a client's hello", |run| run(loader, key));
         }
     }
 
     /// Tells every part that this client starts hosting a game, each under
-    /// its own fuse.
+    /// the part's fuse.
     pub(crate) fn hosting(&self, loader: &'static Loader) {
-        for fused in self.iter().filter_map(|part| part.hosting.as_ref()) {
-            let _ran = fused.call("a hosted game's start", |run| run(loader));
+        for part in self.iter() {
+            part.whole(part.hosting, "its hosted game's start", loader);
         }
     }
 
     /// Ends a client's hosted game in the parts: every `end`, top layer
     /// first, so a window's close handler may still queue a request the
     /// inventory then answers; then every `forget`, which drops what the
-    /// handlers queued with the rest. Each runs under its own fuse.
+    /// handlers queued with the rest. Each runs under the part's fuse, and
+    /// `forget` also once that fuse is off.
     pub(crate) fn end(&self, loader: &'static Loader) {
-        for fused in self.iter().rev().filter_map(|part| part.end.as_ref()) {
-            let _ran = fused.call("a hosted game's end", |run| run(loader));
+        for part in self.iter().rev() {
+            part.whole(part.end, "its hosted game's end", loader);
         }
-        for fused in self.iter().filter_map(|part| part.forget.as_ref()) {
-            let _ran = fused.call("a hosted game's end", |run| run(loader));
+        for part in self.iter() {
+            part.clear(loader);
         }
     }
 
@@ -346,39 +405,78 @@ mod tests {
     }
 
     #[test]
-    fn a_part_whose_hosting_or_forget_panics_leaves_the_other_parts_running() {
+    fn a_part_whose_end_panics_stops_whole_still_forgets_and_leaves_the_other_parts_running() {
         use std::sync::atomic::{AtomicU32, Ordering};
 
         static RAN: AtomicU32 = AtomicU32::new(0);
+        static BROKEN_STEPS: AtomicU32 = AtomicU32::new(0);
+        static BROKEN_HELLOS: AtomicU32 = AtomicU32::new(0);
+        static BROKEN_FORGETS: AtomicU32 = AtomicU32::new(0);
         static HOSTS: &[&Part] = &[
             &Part {
-                hosting: Some(fused!("test hosting that breaks", |_| panic!("broken"))),
-                forget: Some(fused!("test forget that breaks", |_| panic!("broken"))),
+                steps: &[step!(Follow, "test steps of the broken part", |_| {
+                    BROKEN_STEPS.fetch_add(1, Ordering::Relaxed);
+                })],
+                hello: Some(fused!("test hello of the broken part", |_, _| {
+                    BROKEN_HELLOS.fetch_add(1, Ordering::Relaxed);
+                })),
+                end: Some(|_| panic!("broken")),
+                forget: Some(|_| {
+                    BROKEN_FORGETS.fetch_add(1, Ordering::Relaxed);
+                    panic!("broken");
+                }),
                 ..part!("breaks", breaks)
             },
             &Part {
-                hosting: Some(fused!("test hosting after it", |_| RAN
-                    .fetch_add(1, Ordering::Relaxed))),
-                forget: Some(fused!("test forget after it", |_| RAN
-                    .fetch_add(10, Ordering::Relaxed))),
+                hosting: Some(|_| {
+                    RAN.fetch_add(1, Ordering::Relaxed);
+                }),
+                forget: Some(|_| {
+                    RAN.fetch_add(10, Ordering::Relaxed);
+                }),
                 ..part!("after", after)
             },
         ];
         static WITH_HOSTS: &[(&str, &[&Part])] = &[("hosts", HOSTS)];
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         let parts = Parts::new(WITH_HOSTS);
+        let stepping = Stepping {
+            loader,
+            now: Instant::now(),
+            step: 1,
+        };
+        parts.run(Stage::Follow, &stepping);
+        parts.hello(loader, 7);
         for _ in 0..2 {
             parts.hosting(loader);
             parts.end(loader);
         }
+        parts.run(Stage::Follow, &stepping);
+        parts.hello(loader, 7);
         assert_eq!(
             RAN.load(Ordering::Relaxed),
             22,
             "the other part runs every time"
         );
         let broken = HOSTS[0];
-        assert!(broken.hosting.is_some_and(|h| h.fuse.is_off()));
-        assert!(broken.forget.is_some_and(|f| f.fuse.is_off()));
+        assert!(!broken.runs(), "the part's own fuse is off");
+        assert_eq!(
+            (
+                BROKEN_STEPS.load(Ordering::Relaxed),
+                BROKEN_HELLOS.load(Ordering::Relaxed)
+            ),
+            (1, 1),
+            "its step and hello ran before, and not after"
+        );
+        assert!(
+            !broken.steps[0].work.fuse.is_off(),
+            "the step itself never panicked"
+        );
+        assert_eq!(
+            BROKEN_FORGETS.load(Ordering::Relaxed),
+            2,
+            "its links stay armed, so it still forgets each game"
+        );
     }
 
     #[test]

@@ -148,9 +148,14 @@ pub(crate) fn register(
     RULES.register_when(|| layout(loader).is_some(), owner, callback, user)
 }
 
+/// Seals the join rules before any link.
+pub(crate) fn seal() {
+    let _rules = RULES.seal();
+}
+
 /// Links the join check when a mod has a join rule.
 pub(crate) fn link(loader: &'static Loader) {
-    if RULES.seal().is_empty() {
+    if RULES.sealed().is_none_or(<[_]>::is_empty) {
         return;
     }
     if let Err((id, reason)) = found(loader) {
@@ -158,7 +163,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     let target = Target::Pinned(session::JOIN_GAME);
-    if loader.link_fused(&FUSE, target, &JOIN_NEXT, join_game, HookFlags::NONE) {
+    if loader.link_feature(&FUSE, target, &JOIN_NEXT, join_game, HookFlags::NONE) {
         crate::log!(INFO, "join rules on");
     }
 }

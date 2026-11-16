@@ -16,13 +16,13 @@ use crate::engine::pinned;
 /// Links the survivor lookup's moves and record updates, after its lookups;
 /// false once it is off.
 pub(super) fn link_moves(loader: &Loader) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         &LOOKUP_FUSE,
         Target::Pinned(pinned::npc::MOVE),
         &MOVE_NEXT,
         move_link,
         HookFlags::NONE,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &LOOKUP_FUSE,
         Target::Pinned(pinned::npc::UPDATE),
         &UPDATE_NEXT,
@@ -33,7 +33,7 @@ pub(super) fn link_moves(loader: &Loader) -> bool {
 
 /// Links the bed checks; false once they are off.
 pub(super) fn link_bed_checks(loader: &Loader) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         &BEDS_FUSE,
         Target::Pinned(pinned::npc::BED_CHECK),
         &BED_CHECK_NEXT,

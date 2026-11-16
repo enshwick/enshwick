@@ -236,7 +236,7 @@ pub(crate) fn init(loader: &'static Loader) {
     let _linked = crate::engine::code::link_recipe_lookup(loader);
     if loader.side == Side::CLIENT {
         let at = Target::Pinned(pinned::recipe::MENU_KNOWN);
-        let _linked = loader.link_fused(&MENU_FUSE, at, &KNOWN_NEXT, menu_known, HookFlags::NONE);
+        let _linked = loader.link_feature(&MENU_FUSE, at, &KNOWN_NEXT, menu_known, HookFlags::NONE);
     }
     STATE.changed();
 }

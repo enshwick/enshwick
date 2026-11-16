@@ -320,7 +320,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if ENGINE.get().is_some_and(Engine::has_hud) {
         link_hud(loader, &HUD_FUSE);
     }
-    if loader.link_fused(
+    if loader.link_feature(
         &INTERFACE_FUSE,
         Target::Pinned(pinned::ui::POPUP),
         &NEXT,
@@ -340,7 +340,7 @@ pub(crate) fn link(loader: &'static Loader) {
 /// Links the HUD part under `feature`, [`HUD_FUSE`] outside tests: the
 /// feature its draw runs under, so a panic there wires the chain past it.
 fn link_hud(loader: &Loader, feature: &'static Fuse) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         feature,
         Target::Pinned(pinned::ui::HUD),
         &HUD_NEXT,

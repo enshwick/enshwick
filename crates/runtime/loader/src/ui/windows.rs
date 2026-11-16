@@ -31,6 +31,8 @@ use crate::engine::mod_index::ModIndex;
 pub mod maps;
 #[cfg(windows)]
 mod run;
+#[cfg(all(test, windows))]
+pub(crate) use run::tests as harness;
 #[cfg(windows)]
 pub(crate) use run::{ShowWindowError, after_step, closed, forget, hello, left, ran, show};
 

@@ -159,7 +159,7 @@ pub(super) fn link(loader: &Loader, asked: bool) {
     }
     match hover_holds(loader) {
         Ok(_) if asked => {
-            let _linked = loader.link_fused(
+            let _linked = loader.link_feature(
                 &HOVER_FUSE,
                 Target::Pinned(pinned::ui::ITEM_SLOT),
                 &NEXT,

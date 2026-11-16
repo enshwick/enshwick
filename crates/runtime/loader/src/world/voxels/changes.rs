@@ -276,7 +276,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let target = crate::engine::loader::Target::Pinned(pinned::voxel::COMMIT);
     // The link passes every write through until the layout is set, so
     // `after_step` reads no editor while the link is refused.
-    if loader.link_fused(
+    if loader.link_feature(
         &EDITS_FUSE,
         target,
         &COMMIT_NEXT,

@@ -56,6 +56,28 @@ fn a_build_without_the_component_reads_names_the_first_entry_it_lacks() {
 }
 
 #[test]
+fn the_link_tells_the_holds_the_filters_the_seal_phase_sealed_and_none_before_it() {
+    unsafe extern "system" fn allow(_: *const Interaction, _: *mut c_void) -> u8 {
+        1
+    }
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    let unsealed = crate::world::prop_holds::PropHolds::new();
+    link_with(loader, &unsealed);
+    assert!(
+        unsealed.quiet(),
+        "no seal phase, no filter wakes the detours"
+    );
+    assert_eq!(
+        FILTERS.register(ModIndex::new(0), allow, core::ptr::null_mut()),
+        Ok(())
+    );
+    seal();
+    let sealed = crate::world::prop_holds::PropHolds::new();
+    link_with(loader, &sealed);
+    assert!(!sealed.quiet(), "the sealed filter keeps the detours awake");
+}
+
+#[test]
 fn a_build_without_the_layout_lists_the_filters_actions_and_holds_off() {
     let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
     let state = State::new();
@@ -72,7 +94,7 @@ fn a_build_without_the_layout_lists_the_filters_actions_and_holds_off() {
 #[test]
 fn props_open_to_players_name_the_link_that_is_off_without_a_build_code() {
     let turn = crate::engine::log::capture_turn();
-    HOLDS_FUSE.turn_off(&holds_off(&ACTIONS_FUSE));
+    holds_off(&ACTIONS_FUSE);
     let lines = crate::engine::log::captured();
     drop(turn);
     assert!(

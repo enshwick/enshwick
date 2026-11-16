@@ -1,6 +1,6 @@
 //! The loader's start: identify the game, load the mods, arm their hooks.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -147,6 +147,7 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         settings_problems,
         newer_release: OnceLock::new(),
         unofficial: AtomicBool::new(false),
+        offs: AtomicU64::new(0),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan, found.refused),
         parts: crate::parts::parts(),

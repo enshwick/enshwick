@@ -201,7 +201,7 @@ pub(super) unsafe fn write_ranges_into(
     if RANGES_FUSE.is_off() {
         return false;
     }
-    let targets = STATE.targets.load();
+    let targets = STATE.current.targets.load();
     // SAFETY: the caller guarantees the system's live context on its thread;
     // its iterator is `UPGRADE_WORDS` words, checked against the system's
     // reflected components at link; the query ends inside this call.

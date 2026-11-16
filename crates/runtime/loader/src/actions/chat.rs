@@ -369,7 +369,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     // Linked first: without the post, mods' lines must stay refused.
     let target = Target::Pinned(pinned::chat::POST);
-    if !loader.link_fused(
+    if !loader.link_feature(
         &CHAT_FUSE,
         target,
         &POST_NEXT,

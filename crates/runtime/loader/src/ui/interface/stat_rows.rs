@@ -255,7 +255,7 @@ pub(super) fn link(loader: &Loader) {
                 loader.build.reason(id, reason)
             ),
             Ok(()) => {
-                if loader.link_fused(fuse, Target::Pinned(builder), next, detour, HookFlags::NONE)
+                if loader.link_feature(fuse, Target::Pinned(builder), next, detour, HookFlags::NONE)
                     && asked
                 {
                     linked += 1;

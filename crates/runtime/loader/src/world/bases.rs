@@ -386,46 +386,100 @@ static LIMITS: Registry<LimitFilter> = Registry::new();
 /// What the bases keep while the game runs; the arrays are per bases object
 /// kind as [`kind_index`] numbers them.
 struct State {
-    /// The zones and bases of the last grouping; made at link.
-    zones: OnceLock<[ArcSwap<Zones>; 2]>,
-    /// How many zones the world has, `u32::MAX` before the first grouping.
-    zone_count: [AtomicU32; 2],
     /// Set at arming when every site is hooked; a world's end leaves it.
     raised: AtomicBool,
     /// How many bases the game's own grouping may start: set to 16 as each
     /// grouping begins and at its first new base, so no world's end resets it.
     planned: [AtomicUsize; 2],
-    /// The largest limits the mods asked for, and their caps for this world.
+    /// The largest limits the mods asked for at init.
     asked: Asked,
+    /// What the bases know of the world that runs.
+    current: World,
 }
 
 impl State {
     const fn new() -> Self {
         Self {
-            zones: OnceLock::new(),
-            zone_count: [const { AtomicU32::new(u32::MAX) }; 2],
             raised: AtomicBool::new(false),
             planned: [const { AtomicUsize::new(window::VANILLA) }; 2],
             asked: Asked {
                 zones: AtomicU32::new(VANILLA_ZONES),
                 bases: AtomicU32::new(MAX_BASES),
+            },
+            current: World::new(),
+        }
+    }
+
+    /// Forgets the world that went: its zones and the mods' caps on it.
+    fn forget(&self) {
+        self.current.forget();
+    }
+
+    /// The limits asked for, the bases lowered to this world's caps.
+    fn limits(&self) -> Limits {
+        Limits {
+            zones: self.asked.zones.load(Ordering::Relaxed),
+            bases: self.world_bases(),
+        }
+    }
+
+    /// The bases asked for, lowered to every mod's cap on this world.
+    fn world_bases(&self) -> u32 {
+        self.asked
+            .bases
+            .load(Ordering::Relaxed)
+            .min(self.current.caps.capped.load(Ordering::Relaxed))
+    }
+
+    /// The most bases a grouping on a `kind` object holds: what was asked
+    /// and capped on the server, every base the game can hold on the client.
+    fn bases(&self, kind: Kind) -> usize {
+        let asked = usize::try_from(self.world_bases()).unwrap_or(usize::MAX);
+        window::cap(kind, asked, most_bases())
+    }
+}
+
+/// What the bases know of one world, made new whole when it goes; the
+/// arrays are per bases object kind as [`kind_index`] numbers them.
+#[derive(Debug)]
+struct World {
+    /// The zones and bases of the last grouping; made at link, emptied when
+    /// the world goes.
+    zones: OnceLock<[ArcSwap<Zones>; 2]>,
+    /// How many zones the world has, `u32::MAX` before the first grouping.
+    zone_count: [AtomicU32; 2],
+    /// The bases the mods let this world hold.
+    caps: Caps,
+}
+
+impl World {
+    const fn new() -> Self {
+        Self {
+            zones: OnceLock::new(),
+            zone_count: [const { AtomicU32::new(u32::MAX) }; 2],
+            caps: Caps {
                 capped: AtomicU32::new(u32::MAX),
                 caps: Mutex::new(Vec::new()),
             },
         }
     }
 
-    /// Forgets the world that went: its zones and the mods' caps on it.
+    /// Makes every field as [`World::new`] does, but the zones made at link,
+    /// which go empty; the pattern names each field, so a field added later
+    /// fails to build until it is reset here too.
     fn forget(&self) {
-        if let Some(zones) = self.zones.get() {
-            for kind in zones {
-                kind.store(Arc::new(Zones::default()));
-            }
+        let Self {
+            zones,
+            zone_count,
+            caps,
+        } = self;
+        for kind in zones.get().into_iter().flatten() {
+            kind.store(Arc::new(Zones::default()));
         }
-        for count in &self.zone_count {
+        for count in zone_count {
             count.store(u32::MAX, Ordering::Relaxed);
         }
-        self.asked.forget_caps();
+        caps.clear();
     }
 }
 
@@ -450,24 +504,23 @@ fn most_bases() -> usize {
     }
 }
 
-/// The largest limits the mods asked for, each at least the game's own,
-/// and the bases the mods let this world hold below them.
+/// The largest limits the mods asked for, each at least the game's own.
 #[derive(Debug)]
 struct Asked {
     zones: AtomicU32,
     bases: AtomicU32,
+}
+
+/// The bases the mods let one world hold, below the largest request.
+#[derive(Debug)]
+struct Caps {
     /// The lowest of `caps`, `u32::MAX` while no mod set one.
     capped: AtomicU32,
     /// Each mod's latest base cap.
     caps: Mutex<Vec<(ModIndex, u32)>>,
 }
 
-impl Asked {
-    fn take(&self, asked: Limits) {
-        self.zones.fetch_max(asked.zones, Ordering::Relaxed);
-        self.bases.fetch_max(asked.bases, Ordering::Relaxed);
-    }
-
+impl Caps {
     /// Puts mod `owner`'s cap at `bases`, replacing its last.
     fn cap(&self, owner: ModIndex, bases: u32) {
         let mut caps = self.caps.relock();
@@ -479,33 +532,19 @@ impl Asked {
         self.capped.store(lowest, Ordering::Relaxed);
     }
 
-    /// Drops every mod's cap, so the next world holds only the caps its own
-    /// mods set at its load.
-    fn forget_caps(&self) {
+    /// Drops every mod's cap; `capped` moves under the same lock as in
+    /// [`Caps::cap`], so a cap set meanwhile never sees it reset after.
+    fn clear(&self) {
         let mut caps = self.caps.relock();
         caps.clear();
         self.capped.store(u32::MAX, Ordering::Relaxed);
     }
+}
 
-    /// The bases asked for, lowered to every mod's cap.
-    fn world_bases(&self) -> u32 {
-        self.bases
-            .load(Ordering::Relaxed)
-            .min(self.capped.load(Ordering::Relaxed))
-    }
-
-    fn limits(&self) -> Limits {
-        Limits {
-            zones: self.zones.load(Ordering::Relaxed),
-            bases: self.world_bases(),
-        }
-    }
-
-    /// The most bases a grouping on a `kind` object holds: what was asked
-    /// and capped on the server, every base the game can hold on the client.
-    fn bases(&self, kind: Kind) -> usize {
-        let asked = usize::try_from(self.world_bases()).unwrap_or(usize::MAX);
-        window::cap(kind, asked, most_bases())
+impl Asked {
+    fn take(&self, asked: Limits) {
+        self.zones.fetch_max(asked.zones, Ordering::Relaxed);
+        self.bases.fetch_max(asked.bases, Ordering::Relaxed);
     }
 
     fn asked_past_16(&self) -> bool {
@@ -543,7 +582,7 @@ pub(crate) fn add_limit(
 /// largest request once every hook is armed.
 pub(crate) fn base_limit() -> Limits {
     if raised() {
-        let asked = STATE.asked.limits();
+        let asked = STATE.limits();
         Limits {
             bases: asked
                 .bases
@@ -608,7 +647,7 @@ pub(crate) fn cap(owner: ModIndex, bases: u32) -> Result<(), BasesError> {
     if bases < MAX_BASES {
         return Err(BasesError::BelowGame);
     }
-    STATE.asked.cap(owner, bases);
+    STATE.current.caps.cap(owner, bases);
     Ok(())
 }
 
@@ -627,7 +666,7 @@ fn find(loader: &Loader) -> Result<(), BasesError> {
     match sites_of(fields, |symbol| loader.address(symbol)) {
         Ok(sites) => {
             let _first = SITES.set(sites);
-            let _first = STATE.zones.set([
+            let _first = STATE.current.zones.set([
                 ArcSwap::from_pointee(Zones::default()),
                 ArcSwap::from_pointee(Zones::default()),
             ]);
@@ -689,8 +728,8 @@ pub(crate) fn disarm() {
 
 /// Tells once, after the hooks are armed, which base features are off,
 /// apart from those a skipped patch already reported among `already`.
-pub(crate) fn report(loader: &Loader, already: &[&Fuse]) {
-    past16::report(loader, already);
+pub(crate) fn report(already: &[&Fuse]) {
+    past16::report(already);
 }
 
 fn raised() -> bool {
@@ -709,10 +748,10 @@ pub(crate) fn zones() -> Option<(u32, u32)> {
 /// The last grouping's zone count and zones: the server's, which decides,
 /// or the client's on a client that hosts none.
 fn known() -> Option<(u32, Arc<Zones>)> {
-    let zones = STATE.zones.get()?;
+    let zones = STATE.current.zones.get()?;
     [Kind::Server, Kind::Client].into_iter().find_map(|kind| {
         let at = kind_index(kind);
-        let count = STATE.zone_count[at].load(Ordering::Relaxed);
+        let count = STATE.current.zone_count[at].load(Ordering::Relaxed);
         (count != u32::MAX).then(|| (count, zones[at].load_full()))
     })
 }
@@ -722,15 +761,20 @@ pub(crate) fn forget() {
     members::forget();
 }
 
+/// Seals the altar limit filters before any link.
+pub(crate) fn seal() {
+    let _limits = LIMITS.seal();
+}
+
 pub(crate) fn link(loader: &'static Loader) {
-    if !LIMITS.seal().is_empty() {
+    if LIMITS.sealed().is_some_and(|limits| !limits.is_empty()) {
         let _linked = detours::link_limit(loader);
     }
     let Some(sites) = SITES.get() else {
         return;
     };
     if detours::link_raised(loader) {
-        let asked = STATE.asked.limits();
+        let asked = STATE.limits();
         crate::log!(
             INFO,
             "bases take {} altar zones in {} bases",

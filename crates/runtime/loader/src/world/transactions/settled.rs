@@ -93,6 +93,11 @@ impl Waits {
             .collect()
     }
 
+    /// When the first wait's time comes, `None` while none has a time.
+    pub(crate) fn earliest(&self) -> Option<Instant> {
+        self.0.iter().filter_map(|wait| wait.until).min()
+    }
+
     /// Takes out every wait, as when the transactions turn off.
     pub(crate) fn take_all(&mut self) -> Vec<Wait> {
         core::mem::take(&mut self.0)

@@ -882,7 +882,7 @@ fn link_chunks(loader: &Loader) {
         }
     };
     // Set only once linked: `after_step` takes no events without it.
-    if loader.link_fused(
+    if loader.link_feature(
         &CHUNKS_FUSE,
         Target::Pinned(pinned::chunks::STEP),
         &CHUNK_NEXT,

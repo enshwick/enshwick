@@ -120,6 +120,28 @@ impl State {
 
 static STATE: State = State::new();
 
+#[cfg(test)]
+thread_local! {
+    /// The players a test on this thread put in game, listed by [`players`]
+    /// in place of the server's slots; per thread, as the test loader is,
+    /// so tests sharing a process never see each other's.
+    static ONLINE: core::cell::RefCell<Option<Vec<enshwick_core::abi::PlayerInfo>>> =
+        const { core::cell::RefCell::new(None) };
+}
+
+/// Puts `online` in game for a test on this thread, as [`players`] lists
+/// them, until a `None` hands the list back to the server's slots.
+#[cfg(test)]
+pub(crate) fn put_online(online: Option<Vec<enshwick_core::abi::PlayerInfo>>) {
+    ONLINE.with_borrow_mut(|put| *put = online);
+}
+
+/// The players a test on this thread put in game.
+#[cfg(test)]
+fn online() -> Option<Vec<enshwick_core::abi::PlayerInfo>> {
+    ONLINE.with_borrow(Clone::clone)
+}
+
 /// Records the server seen after a step on `thread`, and its entity world
 /// from `world_offset` and `entities`.
 pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities: usize) {
@@ -210,7 +232,7 @@ thread_local! {
 pub(crate) fn link(loader: &'static Loader) {
     static STEP_GATE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("world-step gate");
     let target = Target::Pinned(pinned::world::STEP);
-    let linked = loader.link_fused(
+    let linked = loader.link_feature(
         &STEP_GATE,
         target,
         &WORLD_STEP_NEXT,
@@ -712,6 +734,17 @@ pub(crate) fn type_hash(descriptor: u64) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn players_a_test_puts_online_are_its_own_thread_s_alone() {
+        let listed = || online().map(|players| players.len());
+        put_online(Some(Vec::new()));
+        assert_eq!(listed(), Some(0));
+        let elsewhere = std::thread::spawn(listed).join().ok();
+        assert_eq!(elsewhere, Some(None), "another test's thread sees none");
+        put_online(None);
+        assert_eq!(listed(), None);
+    }
 
     #[test]
     fn changes_wait_for_a_quiet_moment_inside_a_step() {

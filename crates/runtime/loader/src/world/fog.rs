@@ -72,34 +72,63 @@ static LAYOUT: std::sync::OnceLock<Layout> = std::sync::OnceLock::new();
 struct State {
     /// The mods that opened the fog.
     openers: Openers,
+    /// Fogs seen so far, never reset: a mod tells a new fog by its session.
+    sessions: AtomicU64,
+    /// Whether the reveal is linked, so an uncover has a reveal to run in.
+    reveal_linked: AtomicBool,
+    /// What the fog knows of the world that runs.
+    current: World,
+}
+
+static STATE: State = State {
+    openers: Openers::new(),
+    sessions: AtomicU64::new(0),
+    reveal_linked: AtomicBool::new(false),
+    current: World::new(),
+};
+
+/// What the fog knows of one world, made new whole when its fog goes.
+struct World {
     /// The copy, with the fog object it copies.
     mirror: Mutex<Option<Mirror>>,
     /// The tiles reveals skipped while a mod held the copy, as
     /// [`TileRect::pack`] writes them; 0 for none.
     skipped: AtomicU64,
-    /// Fogs seen so far, never reset: a mod tells a new fog by its session.
-    sessions: AtomicU64,
     uncovers: Uncovers,
 }
 
-static STATE: State = State {
-    openers: Openers::new(),
-    mirror: Mutex::new(None),
-    skipped: AtomicU64::new(0),
-    sessions: AtomicU64::new(0),
-    uncovers: Uncovers {
-        linked: AtomicBool::new(false),
-        waiting: AtomicBool::new(false),
-        warned: AtomicBool::new(false),
-        circles: Mutex::new(Vec::new()),
-    },
-};
+impl World {
+    const fn new() -> Self {
+        Self {
+            mirror: Mutex::new(None),
+            skipped: AtomicU64::new(0),
+            uncovers: Uncovers {
+                waiting: AtomicBool::new(false),
+                warned: AtomicBool::new(false),
+                circles: Mutex::new(Vec::new()),
+            },
+        }
+    }
+
+    /// Makes every field as [`World::new`] does, the copy through `mirror`,
+    /// its lock held; the pattern names each field, so a field added later
+    /// fails to build until it is reset here too.
+    fn forget(&self, mut mirror: std::sync::MutexGuard<'_, Option<Mirror>>) {
+        let Self {
+            mirror: _,
+            skipped,
+            uncovers,
+        } = self;
+        *mirror = None;
+        skipped.store(0, Ordering::Release);
+        drop(mirror);
+        uncovers.forget();
+    }
+}
 
 /// The circles the server asked this client to uncover, each a centre and a
 /// radius in metres, which the next reveal hands the game.
 struct Uncovers {
-    /// Whether the reveal is linked, so an uncover has a reveal to run in.
-    linked: AtomicBool,
     /// Whether `circles` holds any, read first on every reveal.
     waiting: AtomicBool,
     /// Whether an uncover the client dropped was logged since the last fog
@@ -220,9 +249,9 @@ fn find_layout(loader: &Loader) {
 /// Links the fog's `destroy` and its `reveal`, both or neither.
 fn link_at(loader: &Loader, destroy_at: Target<'_>, reveal_at: Target<'_>) {
     // The destroy goes first: a copy must never outlive its fog.
-    let linked = loader.link_fused(&FUSE, destroy_at, &DESTROY_NEXT, destroy, HookFlags::NONE)
-        && loader.link_fused(&FUSE, reveal_at, &REVEAL_NEXT, reveal, HookFlags::NONE);
-    STATE.uncovers.linked.store(linked, Ordering::Release);
+    let linked = loader.link_feature(&FUSE, destroy_at, &DESTROY_NEXT, destroy, HookFlags::NONE)
+        && loader.link_feature(&FUSE, reveal_at, &REVEAL_NEXT, reveal, HookFlags::NONE);
+    STATE.reveal_linked.store(linked, Ordering::Release);
 }
 
 crate::engine::chains::chain_detour! {
@@ -244,27 +273,34 @@ crate::engine::chains::chain_detour! {
 /// circles waiting to uncover, which belonged to its world.
 #[cold]
 fn forget(fog: usize) {
-    let mut mirror = STATE.mirror.relock();
+    let mirror = STATE.current.mirror.relock();
     if mirror.as_ref().is_some_and(|m| m.fog == fog) {
-        *mirror = None;
-        STATE.skipped.store(0, Ordering::Release);
+        STATE.current.forget(mirror);
+    } else {
+        drop(mirror);
+        STATE.current.uncovers.forget();
     }
-    drop(mirror);
-    forget_uncovers();
 }
 
 /// Drops the copy and the circles waiting to uncover when a hosted game
 /// ends, whether or not the free of its fog was seen.
 pub(crate) fn forget_world() {
-    *STATE.mirror.relock() = None;
-    STATE.skipped.store(0, Ordering::Release);
-    forget_uncovers();
+    STATE.current.forget(STATE.current.mirror.relock());
 }
 
-fn forget_uncovers() {
-    STATE.uncovers.circles.relock().clear();
-    STATE.uncovers.waiting.store(false, Ordering::Release);
-    STATE.uncovers.warned.store(false, Ordering::Release);
+impl Uncovers {
+    /// Makes every field new; the pattern names each, so a field added later
+    /// fails to build until it is reset here too.
+    fn forget(&self) {
+        let Self {
+            waiting,
+            warned,
+            circles,
+        } = self;
+        circles.relock().clear();
+        waiting.store(false, Ordering::Release);
+        warned.store(false, Ordering::Release);
+    }
 }
 
 crate::engine::chains::chain_detour! {
@@ -284,7 +320,7 @@ crate::engine::chains::chain_detour! {
         let result = onward.call();
         if !fog.is_null() {
             copy_after(fog, at, range);
-            if STATE.uncovers.waiting.load(Ordering::Acquire) {
+            if STATE.current.uncovers.waiting.load(Ordering::Acquire) {
                 uncover(fog);
             }
         }
@@ -301,11 +337,15 @@ fn uncover(fog: *mut u8) {
     let Some(next) = REVEAL_NEXT.wired() else {
         return;
     };
-    let Some(mut circles) = STATE.uncovers.circles.try_relock() else {
+    let Some(mut circles) = STATE.current.uncovers.circles.try_relock() else {
         return;
     };
     let taken = core::mem::take(&mut *circles);
-    STATE.uncovers.waiting.store(false, Ordering::Release);
+    STATE
+        .current
+        .uncovers
+        .waiting
+        .store(false, Ordering::Release);
     drop(circles);
     for (at, radius) in taken {
         let range = radius * UNCOVER_RANGE_PER_RADIUS;
@@ -333,25 +373,29 @@ fn copy_after(fog: *mut u8, at: Option<[f32; 2]>, range: f32) {
 /// reveal runs it. False when it was dropped, with a warning once.
 pub(crate) fn uncover_here(at: [f32; 2], radius: f32) -> bool {
     let dropped = |why: &str| {
-        if !STATE.uncovers.warned.swap(true, Ordering::AcqRel) {
+        if !STATE.current.uncovers.warned.swap(true, Ordering::AcqRel) {
             crate::log!(
                 WARN,
                 "fog of war uncovers dropped until the fog goes: {why}"
             );
         }
     };
-    if !STATE.uncovers.linked.load(Ordering::Acquire) || FUSE.is_off() {
+    if !STATE.reveal_linked.load(Ordering::Acquire) || FUSE.is_off() {
         dropped("the fog of war is off on this client");
         return false;
     }
-    let mut circles = STATE.uncovers.circles.relock();
+    let mut circles = STATE.current.uncovers.circles.relock();
     if circles.len() >= MAX_UNCOVERS {
         drop(circles);
         dropped(&format!("{MAX_UNCOVERS} wait already"));
         return false;
     }
     circles.push((at, radius));
-    STATE.uncovers.waiting.store(true, Ordering::Release);
+    STATE
+        .current
+        .uncovers
+        .waiting
+        .store(true, Ordering::Release);
     true
 }
 
@@ -444,14 +488,14 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
         return;
     };
     let revealed = at.and_then(|xz| shape.revealed(xz, range));
-    let Some(mut mirror) = STATE.mirror.try_relock() else {
+    let Some(mut mirror) = STATE.current.mirror.try_relock() else {
         if let Some(rect) = revealed {
             skip(&rect);
         }
         return;
     };
     let held = mirror.as_ref().map(|m| (m.fog, m.image.shape()));
-    let skipped = TileRect::unpack(STATE.skipped.swap(0, Ordering::AcqRel));
+    let skipped = TileRect::unpack(STATE.current.skipped.swap(0, Ordering::AcqRel));
     let planned = plan(held, fog, shape, revealed, skipped);
     let full = matches!(planned, Plan::Full);
     let rect = match planned {
@@ -508,10 +552,10 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
 /// one from copying.
 #[cold]
 fn skip(rect: &TileRect) {
-    let mut held = STATE.skipped.load(Ordering::Acquire);
+    let mut held = STATE.current.skipped.load(Ordering::Acquire);
     loop {
         let merged = TileRect::unpack(held).map_or_else(|| rect.clone(), |old| old.union(rect));
-        match STATE.skipped.compare_exchange_weak(
+        match STATE.current.skipped.compare_exchange_weak(
             held,
             merged.pack(),
             Ordering::AcqRel,
@@ -565,7 +609,7 @@ fn read_opened(
     if FUSE.is_off() || COPY_FUSE.is_off() {
         return Err(FogReadError::NoCopy);
     }
-    let mut mirror = STATE.mirror.relock();
+    let mut mirror = STATE.current.mirror.relock();
     let Some(mirror) = mirror.as_mut() else {
         return Err(FogReadError::NoCopy);
     };
@@ -611,30 +655,34 @@ mod tests {
     #[test]
     fn a_host_s_own_circle_queues_here_and_a_hosted_game_s_end_drops_what_waits() {
         let loader = crate::start::tests::pinning_loader(Side::SERVER, &[], &[]);
-        STATE.uncovers.linked.store(true, Ordering::Release);
+        STATE.reveal_linked.store(true, Ordering::Release);
         assert_eq!(uncover_as(&loader, 7, true, [1.0, 2.0], 3.0), Ok(()));
         assert_eq!(
             uncover_as(&loader, 8, false, [1.0, 2.0], 3.0),
             Err(UncoverError::NotReady),
             "a remote player without Enshwick is not reached"
         );
-        STATE.uncovers.linked.store(false, Ordering::Release);
+        STATE.reveal_linked.store(false, Ordering::Release);
         assert_eq!(
             uncover_as(&loader, 7, true, [1.0, 2.0], 3.0),
             Err(UncoverError::NotSent),
             "the host's own fog is off"
         );
-        assert!(STATE.uncovers.warned.load(Ordering::Acquire));
-        assert_eq!(STATE.uncovers.circles.relock().len(), 1);
-        STATE.uncovers.waiting.store(true, Ordering::Release);
-        STATE.skipped.store(7, Ordering::Release);
+        assert!(STATE.current.uncovers.warned.load(Ordering::Acquire));
+        assert_eq!(STATE.current.uncovers.circles.relock().len(), 1);
+        STATE
+            .current
+            .uncovers
+            .waiting
+            .store(true, Ordering::Release);
+        STATE.current.skipped.store(7, Ordering::Release);
         forget_world();
-        assert!(STATE.mirror.relock().is_none());
-        assert_eq!(STATE.skipped.load(Ordering::Acquire), 0);
-        assert!(STATE.uncovers.circles.relock().is_empty());
-        assert!(!STATE.uncovers.waiting.load(Ordering::Acquire));
+        assert!(STATE.current.mirror.relock().is_none());
+        assert_eq!(STATE.current.skipped.load(Ordering::Acquire), 0);
+        assert!(STATE.current.uncovers.circles.relock().is_empty());
+        assert!(!STATE.current.uncovers.waiting.load(Ordering::Acquire));
         assert!(
-            !STATE.uncovers.warned.load(Ordering::Acquire),
+            !STATE.current.uncovers.warned.load(Ordering::Acquire),
             "the next world warns again"
         );
     }
@@ -658,7 +706,7 @@ mod tests {
             Target::Found("fog.reveal", None),
         );
         assert!(FUSE.is_off());
-        assert!(!STATE.uncovers.linked.load(Ordering::Acquire));
+        assert!(!STATE.reveal_linked.load(Ordering::Acquire));
         let mut chains = loader.chains.relock();
         chains.seal();
         assert!(chains.is_empty(), "the destroy went with its feature");

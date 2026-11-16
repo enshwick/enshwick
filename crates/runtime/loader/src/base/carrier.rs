@@ -245,7 +245,7 @@ pub(crate) fn link(loader: &'static Loader) {
     // Linked even without the sockets: the lobby a client hosts is published
     // from here too, and a hosting client talks with its server half.
     let linked = loader.side != Side::CLIENT
-        || loader.link_fused(
+        || loader.link_feature(
             &FRAME_FUSE,
             Target::Pinned(pinned::chat::CLIENT_SEND),
             &CLIENT_SEND_NEXT,
@@ -394,6 +394,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     };
     let mut gone = Vec::new();
     let mut restarted = Vec::new();
+    let mut live = None;
     let inbox = {
         let Some(mut guard) = CARRIER.server.try_relock() else {
             return;
@@ -404,6 +405,7 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
             && let Ok(machines) = crate::engine::world::machines(loader)
         {
             members(game, session, state, &machines, now);
+            live = Some(machines.iter().map(|&(key, _)| key).collect::<Vec<u64>>());
         }
         let developer = loader.developer_tools;
         let State { peers, inbox, .. } = state;
@@ -429,9 +431,10 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
         });
         core::mem::take(inbox)
     };
-    // A client whose link started over says hello again on the new one.
+    // A client whose link started over says hello again on the new one;
+    // until its welcome there, what goes to it waits.
     for &key in &restarted {
-        crate::base::net::forget_peer(key);
+        crate::base::net::link_restarted(key);
     }
     for item in &inbox.items {
         let (start, end) = item.span;
@@ -440,6 +443,12 @@ pub(crate) fn after_step(loader: &Loader, now: Instant) {
     give_back(&CARRIER.server, session, inbox);
     for key in gone {
         crate::base::net::forget_peer(key);
+    }
+    // Here, not in the join admission's step, which runs only while a world
+    // requires Enshwick: a welcomed client's held messages and join data
+    // wait for room on its link whatever the world's rules.
+    if let Some(live) = live {
+        crate::base::net::keep_greeting(&live);
     }
 }
 

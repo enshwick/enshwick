@@ -97,10 +97,13 @@ impl State {
         }
     }
 
-    /// Forgets the world that went: its kept fields and its first step.
+    /// Forgets the world that went: its kept fields and its first step. Every
+    /// field is the world's; the pattern names each, so a field added later
+    /// fails to build until it is reset here too.
     fn forget(&self) {
-        self.pending.store(false, Ordering::Release);
-        *self.kept.relock() = Kept::new();
+        let Self { kept, pending } = self;
+        pending.store(false, Ordering::Release);
+        *kept.relock() = Kept::new();
     }
 }
 

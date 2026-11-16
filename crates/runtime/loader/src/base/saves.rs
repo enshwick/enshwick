@@ -221,7 +221,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     let target = Target::Pinned(pinned::save::PATH);
-    let _linked = loader.link_fused(&KEYS_FUSE, target, &PATH_NEXT, built, HookFlags::NONE);
+    let _linked = loader.link_feature(&KEYS_FUSE, target, &PATH_NEXT, built, HookFlags::NONE);
 }
 
 crate::engine::chains::chain_detour! {

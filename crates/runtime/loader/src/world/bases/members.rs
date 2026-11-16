@@ -411,13 +411,19 @@ pub(super) unsafe fn settle(
 }
 
 /// Forgets every side table and the lent count's tally, when a world
-/// closes.
+/// closes. Every field is the world's; the pattern names each, so a field
+/// added later fails to build until it is reset here too.
 pub(super) fn forget() {
-    for side in &STATE.sides {
+    let State {
+        sides,
+        count_lent,
+        entered_while_lent,
+    } = &STATE;
+    for side in sides {
         side.forget();
     }
-    STATE.count_lent.store(false, Ordering::Relaxed);
-    STATE.entered_while_lent.store(0, Ordering::Relaxed);
+    count_lent.store(false, Ordering::Relaxed);
+    entered_while_lent.store(0, Ordering::Relaxed);
 }
 
 /// Writes the lookups' answer at `out`, laid out as `a`: the error byte and

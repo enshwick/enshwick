@@ -315,7 +315,7 @@ pub(crate) fn seal() {
 /// Seals the filters and links the two systems' entries when a mod
 /// registered one.
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = FILTERS.seal();
+    let filters = FILTERS.sealed().unwrap_or_default();
     if filters.is_empty() {
         return;
     }
@@ -339,7 +339,7 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     // The uses go through interactions' link on the same system: the
     // loader links a target once.
-    let equips = loader.link_fused(
+    let equips = loader.link_feature(
         &EQUIPS_FUSE,
         Target::Found(EQUIPMENT_SYSTEM, entry(EQUIPMENT_SYSTEM)),
         &EQUIPMENT_NEXT,

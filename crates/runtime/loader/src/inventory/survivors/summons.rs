@@ -16,7 +16,7 @@ use super::{STAFFS_FUSE, STATE, layout};
 
 /// Links the staffs' spawn; false once they are off.
 pub(super) fn link(loader: &Loader) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         &STAFFS_FUSE,
         Target::Pinned(pinned::survivors::SPAWN),
         &SPAWN_NEXT,

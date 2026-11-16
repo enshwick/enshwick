@@ -203,16 +203,27 @@ impl Registrations {
         self.status.sealed().unwrap_or_default()
     }
 
-    /// Seals every registration once every mod's init ran and says what
-    /// mods asked for; later calls say the same.
-    fn seal(&self) -> Asked {
-        let (summons, summoned) = (self.summons.seal(), self.summoned.seal());
+    /// Seals every registration once every mod's init ran.
+    fn seal(&self) {
+        let _summons = self.summons.seal();
+        let _summoned = self.summoned.seal();
+        let _lookup = self.lookup.seal();
+        let _beds = self.bed_checks.seal();
+        let _items = self.items.seal();
+        let _status = self.status.seal();
+    }
+
+    /// What mods asked for, as sealed; nothing before the seal phase.
+    fn asked(&self) -> Asked {
+        fn any<T>(sealed: Option<&[T]>) -> bool {
+            sealed.is_some_and(|items| !items.is_empty())
+        }
         Asked {
-            lookup: !self.lookup.seal().is_empty(),
-            beds: !self.bed_checks.seal().is_empty(),
-            summons: !summons.is_empty() || !summoned.is_empty(),
-            items: !self.items.seal().is_empty(),
-            status: !self.status.seal().is_empty(),
+            lookup: any(self.lookup.sealed()),
+            beds: any(self.bed_checks.sealed()),
+            summons: any(self.summons.sealed()) || any(self.summoned.sealed()),
+            items: any(self.items.sealed()),
+            status: any(self.status.sealed()),
         }
     }
 
@@ -591,7 +602,7 @@ pub(crate) fn register_status(
     open(loader, || {
         loader.side == Side::CLIENT
             && menu(loader).is_some()
-            && crate::engine::ecs::engine(loader).is_some()
+            && crate::engine::ecs::walk(loader).is_ok()
     })?;
     hold_each(
         &STATE.registrations.status,
@@ -624,10 +635,10 @@ const MENU_SYSTEM: &str = "ui_npc_status";
 /// Seals what mods registered before any link, so no other part's link
 /// runs while mods may still register.
 pub(crate) fn seal() {
-    let _asked = STATE.registrations.seal();
+    STATE.registrations.seal();
 }
 
-/// Links what mods asked for.
+/// Links what mods asked for, as the seal phase sealed it.
 pub(crate) fn link(loader: &'static Loader) {
     let Asked {
         lookup,
@@ -635,7 +646,7 @@ pub(crate) fn link(loader: &'static Loader) {
         summons,
         items,
         status,
-    } = STATE.registrations.seal();
+    } = STATE.registrations.asked();
     let wanted = lookup || beds || summons || items || status;
     let lookup = lookup && lookup::link(loader) && moves::link_moves(loader);
     let beds = beds && moves::link_bed_checks(loader);

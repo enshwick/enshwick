@@ -22,6 +22,11 @@ use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 /// interaction filters', so a build without the prompt's pieces lacks only
 /// the prompts.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    // The query walk's, all of it, so this row names what turns it off.
+    pinned::ecs::CONTEXT_ROW.id(),
+    pinned::ecs::DESCRIPTOR_ENTITY_RECORDS.id(),
+    pinned::ecs::ENTITY_RECORD_SIZE.id(),
+    pinned::ecs::ITERATOR_INIT.id(),
     pinned::ecs::ITERATOR_NEXT.id(),
     pinned::ui::PROMPT_CONTEXT.id(),
     pinned::ui::PROMPT_SITE.id(),
@@ -163,7 +168,7 @@ pub(crate) fn register(
 
 /// The server's layout, or the id of what this build lacks.
 fn server_layout(loader: &Loader) -> Result<ServerLayout, &'static str> {
-    crate::engine::ecs::engine(loader).ok_or(pinned::ecs::ITERATOR_NEXT.id())?;
+    crate::engine::ecs::walk(loader)?;
     crate::engine::ecs::components_match(loader, RESET_SYSTEM, &RESET_READS, &RESET_WRITES)
         .map_err(|_| RESET_SYSTEM)?;
     Ok(ServerLayout {
@@ -205,7 +210,7 @@ pub(crate) fn link(loader: &'static Loader) {
 
 /// Links the reset on every side, as any can host a world.
 fn link_server(loader: &'static Loader, prompts: &'static [Prompt]) {
-    if crate::engine::ecs::engine(loader).is_some()
+    if crate::engine::ecs::walk(loader).is_ok()
         && let Err(why) =
             crate::engine::ecs::components_match(loader, RESET_SYSTEM, &RESET_READS, &RESET_WRITES)
     {
@@ -238,7 +243,7 @@ fn link_server(loader: &'static Loader, prompts: &'static [Prompt]) {
         .system(RESET_SYSTEM)
         .ok()
         .map(enshwick_gamedata::reflect::System::entry);
-    if loader.link_fused(
+    if loader.link_feature(
         &PROMPTS_FUSE,
         Target::Found(RESET_SYSTEM, entry),
         &RESET_NEXT,
@@ -352,7 +357,7 @@ crate::engine::chains::chain_detour! {
 ///   own run and before it returns.
 unsafe fn write_prompts(ctx: *mut u64) {
     let (Some((layout, prompts, empty)), Some(engine)) =
-        (LINKS.server.get(), crate::engine::ecs::resolved())
+        (LINKS.server.get(), crate::engine::ecs::walked())
     else {
         return;
     };
@@ -644,7 +649,7 @@ mod tests {
         let loader = crate::start::tests::bare_loader();
         assert_eq!(
             server_layout(&loader).map(|_| ()),
-            Err(pinned::ecs::ITERATOR_NEXT.id())
+            Err(pinned::ecs::ITERATOR_INIT.id())
         );
     }
 

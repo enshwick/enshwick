@@ -15,7 +15,7 @@ use super::UNREFLECTED;
 use crate::engine::builds::ABSENT;
 use crate::engine::ecs::{Components, Engine};
 use crate::engine::filters::Filters;
-use crate::engine::fuse::{Fuse, Off};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Constant, Symbol};
@@ -243,18 +243,24 @@ fn still_linked(made: bool, fuse: &Fuse) -> bool {
     made && !fuse.is_off()
 }
 
-/// Why the props stay open while transactions hold them: the link `off`,
-/// which the hold relies on, is off. Neither the build's fault nor a
+/// Turns off the props' hold while transactions hold them because the link
+/// `off`, which the hold relies on, is off. Neither the build's fault nor a
 /// panic of the holds, so no error code.
-fn holds_off(off: &Fuse) -> Off {
-    let why = format!("{} is off", off.feature());
-    Off::reported(format!("{} off: {why}", HOLDS_FUSE.feature()), why)
+fn holds_off(off: &Fuse) {
+    HOLDS_FUSE.report_off(format!("{} is off", off.feature()));
 }
 
 pub(crate) fn link(loader: &'static Loader) {
+    link_with(loader, crate::world::transactions::holds());
+}
+
+/// Links the filters and the inventory actions, and tells `holds` how many
+/// filters the seal phase sealed, none when it did not run, and whether the
+/// hold is ready.
+fn link_with(loader: &'static Loader, holds: &crate::world::prop_holds::PropHolds) {
     let hold_ready = link_in(loader, &STATE);
     let filters = FILTERS.sealed().map_or(0, <[_]>::len);
-    crate::world::transactions::holds().linked(filters, hold_ready);
+    holds.linked(filters, hold_ready);
 }
 
 /// Links the filters and the inventory actions, keeping in `state` whether
@@ -282,7 +288,7 @@ fn link_in(loader: &'static Loader, state: &State) -> bool {
                 .map(enshwick_gamedata::reflect::System::entry);
             (
                 link_filters(loader, Target::Pinned, stock_flags),
-                loader.link_fused(
+                loader.link_feature(
                     &ACTIONS_FUSE,
                     Target::Found(ACTIONS_SYSTEM, entry),
                     &ACTIONS_NEXT,
@@ -306,7 +312,7 @@ fn link_in(loader: &'static Loader, state: &State) -> bool {
         } else {
             &INTERACTIONS_FUSE
         };
-        HOLDS_FUSE.turn_off(&holds_off(off));
+        holds_off(off);
     }
     if filtered {
         crate::log!(INFO, "interaction filters on");
@@ -324,21 +330,21 @@ fn link_filters(
 ) -> bool {
     let fuse = &INTERACTIONS_FUSE;
     let none = HookFlags::NONE;
-    loader.link_fused(
+    loader.link_feature(
         fuse,
         at(pinned::access::OFFER_TEST),
         &OFFER_NEXT,
         offer,
         none,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         fuse,
         at(pinned::access::TRANSFER),
         &TRANSFER_NEXT,
         transfer,
         none,
-    ) && loader.link_fused(fuse, at(pinned::access::SORT), &SORT_NEXT, sort, none)
+    ) && loader.link_feature(fuse, at(pinned::access::SORT), &SORT_NEXT, sort, none)
         && stock::link(loader, at(pinned::access::BASE_STOCK), stock_flags)
-        && loader.link_fused(
+        && loader.link_feature(
             fuse,
             at(pinned::access::DISMANTLE_METHOD),
             &DISMANTLE_NEXT,

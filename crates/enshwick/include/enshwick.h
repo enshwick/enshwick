@@ -1608,7 +1608,10 @@ typedef uint32_t EnshwickEvent;
 // Raised on the game thread. Server only.
 #define EnshwickEvent_PLAYER_JOINED 6
 // A player who joined is leaving, with their character still in the
-// world; data is a `EnshwickPlayerData`. Raised on the game thread. Server only.
+// world; data is a `EnshwickPlayerData`. A player whose slot the game cleared
+// or gave another player unseen is told after the step, as recorded at
+// join, with the character maybe gone. Raised on the game thread.
+// Server only.
 #define EnshwickEvent_PLAYER_LEFT 7
 // The server begins an orderly stop with the world and players still
 // alive; no data. Raised on the game thread; a killed process raises

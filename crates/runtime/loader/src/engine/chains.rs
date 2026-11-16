@@ -211,7 +211,7 @@ macro_rules! chain_detour {
             // SAFETY: the slot's type is the detour's own signature, which
             // the detour's documentation says is the hooked function's; the
             // loader links the detour only with this slot, since
-            // `link_fused` takes both of one type, so the slot is the
+            // `link_feature` takes both of one type, so the slot is the
             // `next` of that one link and only the detour calls `get`.
             unsafe { $crate::engine::chains::Next::new() };
 

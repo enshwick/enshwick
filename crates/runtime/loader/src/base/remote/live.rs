@@ -388,4 +388,34 @@ mod tests {
         state.forget();
         assert_eq!(state.rates.relock().edits.admit(7, now), Admitted::Yes);
     }
+
+    #[test]
+    fn a_client_s_window_close_is_answered_by_letting_the_window_go_for_its_mod_to_hear() {
+        use crate::ui::windows::harness::{KEY, MOD, Serving, WINDOW};
+        let serving = Serving::new();
+        serving.greet();
+        serving.show();
+        crate::ui::windows::after_step(serving.loader);
+        assert_eq!(serving.sent(), [Serving::opened()]);
+        let close = |id: &str| Message::WindowClose {
+            id: id.to_owned(),
+            window: WINDOW.to_owned(),
+        };
+
+        answer(serving.loader, KEY + 1, close(MOD));
+        answer(serving.loader, KEY, close("you.unknown"));
+        assert_eq!(
+            serving.windows().0.len(),
+            1,
+            "not this client's, not this mod"
+        );
+        answer(serving.loader, KEY, close(MOD));
+        assert_eq!(serving.windows(), (Vec::new(), Vec::new()));
+        crate::ui::windows::after_step(serving.loader);
+        assert_eq!(serving.heard(), [WINDOW]);
+        assert!(
+            serving.sent().is_empty(),
+            "nothing is answered to the client"
+        );
+    }
 }

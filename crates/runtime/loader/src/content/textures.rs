@@ -349,8 +349,8 @@ fn link_textures(loader: &Loader) -> bool {
         Target::Pinned(pinned::textures::REQUEST),
         Target::Pinned(pinned::textures::REGISTRY_FILL),
     );
-    loader.link_fused(&TEXTURES_FUSE, request_at, &REQUEST_NEXT, request, none)
-        && loader.link_fused(&TEXTURES_FUSE, fill_at, &FILL_NEXT, fill, none)
+    loader.link_feature(&TEXTURES_FUSE, request_at, &REQUEST_NEXT, request, none)
+        && loader.link_feature(&TEXTURES_FUSE, fill_at, &FILL_NEXT, fill, none)
 }
 
 /// Links the key listing, for the served templates and UI images, once its
@@ -366,7 +366,7 @@ fn link_keys(loader: &Loader) -> bool {
         return false;
     }
     let keys_at = Target::Pinned(pinned::textures::KEYS);
-    let linked = loader.link_fused(&TEMPLATES_FUSE, keys_at, &KEYS_NEXT, keys, HookFlags::NONE);
+    let linked = loader.link_feature(&TEMPLATES_FUSE, keys_at, &KEYS_NEXT, keys, HookFlags::NONE);
     if linked {
         crate::log!(INFO, "mod templates: the key listing is linked");
     }
