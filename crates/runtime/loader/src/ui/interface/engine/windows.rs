@@ -10,8 +10,7 @@ use super::{
 /// 1 for the start, 2 the centre, 3 the end, as the HUD's columns take it.
 /// The navigation kind of a popup window.
 const NAV_WINDOW: u32 = 2;
-/// The navigation kind of a scrolled column, and of the chat's text field
-/// (client 26430625).
+/// The navigation kind of a scrolled column.
 pub(super) const NAV_COLUMN: u32 = 3;
 
 const fn edge_align(edge: u32) -> u16 {
@@ -155,6 +154,9 @@ impl Engine {
             // the panel frame opened above is the window `title` asks for.
             unsafe { self.title(context, title) };
         }
+        // SAFETY: in a frame on its thread by this function's `# Safety`,
+        // before the window's navigation reads its input below.
+        unsafe { self.take_enter() };
         let mut nav = self.nav_config(NAV_WINDOW);
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's

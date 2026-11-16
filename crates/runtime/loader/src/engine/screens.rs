@@ -53,10 +53,22 @@ pub(crate) fn note_window(shown: bool) {
 }
 
 /// Whether a loader or mod window or dialog shows over the world, which takes
-/// the cursor and holds the player's look and move; from any thread.
+/// the cursor and holds the player's input; from any thread.
 pub(crate) fn window_shows() -> bool {
     let until = WINDOW.until.load(Ordering::Relaxed);
     until != 0 && now_ms() < until
+}
+
+/// The world held under loader windows: the cursor shows and the player's
+/// input is held. One fuse for both, so the cursor never shows while the
+/// camera still turns; the cursor's detour carries it, and the input
+/// builder's detour, which the client commands own, reads it.
+pub(crate) static HOLD_FUSE: Fuse = Fuse::new("the world held under loader windows");
+
+/// Whether the player's input is held now: a window shows and the hold is
+/// on; from any thread.
+pub(crate) fn holds_world() -> bool {
+    window_shows() && !HOLD_FUSE.is_off()
 }
 
 /// Each screen byte's name on `loader`'s build, or the type's name when the
@@ -125,6 +137,7 @@ mod tests {
         assert!(!window_shows(), "nothing noted");
         note_window(true);
         assert!(window_shows());
+        assert!(holds_world(), "the hold is on while its fuse is");
         note_window(false);
         assert!(!window_shows(), "a frame without a window hands it back");
         WINDOW.until.store(now_ms(), Ordering::Relaxed);

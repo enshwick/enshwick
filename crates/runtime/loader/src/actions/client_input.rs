@@ -4,7 +4,10 @@
 //!
 //! The builder runs per game step (mode 0, the stick) and per frame (mode
 //! 1, the look), on the interface's thread (client 26430625, seen live).
-//! Until a mod hands one over, its detour adds one atomic load.
+//! While a loader window shows over the world, the player's input is held
+//! here first ([`crate::engine::screens::holds_world`]), as the game holds
+//! it while it blocks the input. Until a mod hands one over and with no
+//! window, its detour adds two atomic loads.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
@@ -256,9 +259,9 @@ unsafe fn drive(
 crate::engine::chains::chain_detour! {
     /// The client's input builder `(input, consumer, consumer2, _, mapping,
     /// settings, camera, mode, ..)`, twelve arguments and no answer (client
-    /// 26430625). The game's pass runs first, then the hold under a loader
-    /// window, whose link sits inside this one; a handed look or move is
-    /// written after both.
+    /// 26430625). The game's pass runs first, then the hold while a loader
+    /// window shows ([`crate::engine::screens::holds_world`]); a handed look
+    /// or move is written after both, so it still works under a window.
     fn client_build(
         input: *mut u8,
         consumer: usize,
@@ -277,6 +280,14 @@ crate::engine::chains::chain_detour! {
     fuse &FUSE, "the client's look and move";
     |onward| {
         onward.call();
+        if crate::engine::screens::holds_world()
+            && !input.is_null()
+            && let Some(layout) = GROUPS.input.get()
+        {
+            // SAFETY: the builder's own non-null input record, right after
+            // its pass on its thread, which nothing else touches meanwhile.
+            unsafe { layout.hold(input, mode) };
+        }
         if let Some(handed) = DRIVE.handoff.current()
             && let Some(layout) = GROUPS.input.get()
             && !input.is_null()

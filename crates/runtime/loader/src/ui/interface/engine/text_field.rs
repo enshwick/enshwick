@@ -7,8 +7,7 @@
 //! answer to 1; its kept state says whether it has the caret.
 
 use super::{
-    Buf, Engine, Loader, Lookup, Missing, NAV_SIZE, NodeFloatFn, OneFn, Ptr, UiText, field,
-    game_fn, stretch,
+    Buf, Engine, Loader, Lookup, Missing, NodeFloatFn, OneFn, Ptr, UiText, field, game_fn, stretch,
 };
 use crate::base::configure::rows::{ENTRY_BYTES, typed};
 use crate::engine::pinned;
@@ -120,6 +119,42 @@ const LOOK_BOXED: u32 = 2;
 /// The rename dialog's text alignment in its field: left and top, where a
 /// label's default is the centre.
 const ALIGN_LEFT: u16 = 0x101;
+
+/// The text field that had the caret in the last frame, and whether the
+/// player pressed Enter for it in this one.
+#[derive(Clone, Copy, Default)]
+struct Caret {
+    /// The field's node id; 0 for none.
+    node: u64,
+    entered: bool,
+}
+
+thread_local! {
+    /// The interface thread's field with the caret, kept across frames.
+    static CARET: core::cell::Cell<Caret> = const {
+        core::cell::Cell::new(Caret { node: 0, entered: false })
+    };
+}
+
+impl Engine {
+    /// Takes Enter for the text field that had the caret in the last frame,
+    /// before a window's navigation reads its input: the window would take
+    /// it as Confirm on its focused button, as Enter pressed the Mods
+    /// screen's Back while a field typed (client 26430625, seen live).
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread, before the window's navigation reads its input.
+    pub(super) unsafe fn take_enter(&self) {
+        let caret = CARET.get();
+        if caret.node != 0 && !caret.entered {
+            // SAFETY: this function's `# Safety`.
+            let entered = unsafe { self.confirm_pressed(caret.node) };
+            CARET.set(Caret { entered, ..caret });
+        }
+    }
+}
 
 /// The text field's functions.
 #[derive(Debug)]
@@ -255,17 +290,6 @@ impl Engine {
         buffer.text.data = buffer.bytes.as_mut_ptr();
         buffer.text.capacity = ENTRY_BYTES as u64;
         buffer.text.grow = 0;
-        // The field takes a navigation group of its own, as the chat's does,
-        // so the window's group does not take Enter from it to press its
-        // focused button (client 26430625).
-        let mut nav = self.nav_config(super::windows::NAV_COLUMN);
-        let mut group = Buf::<NAV_SIZE>::zeroed();
-        // SAFETY: `self.nav_init` is the game's `ui.nav_init`, checked in
-        // `Engine::resolve`, inside the window this function's `# Safety`
-        // gives; `group` holds the table's `ui.nav_extent` bytes and `nav`
-        // its `ui.nav_config_size` (`Layout::read`), and `group` stays in
-        // place until `nav_drop` below.
-        unsafe { (self.nav_init)(group.ptr(), nav.ptr()) };
         let mut field = Buf::<FIELD_SIZE>::zeroed();
         // SAFETY: `fns.field` is the game's `ui.text_field`, checked in
         // `TextFields::resolve`, inside the window this function's `# Safety`
@@ -363,13 +387,31 @@ impl Engine {
         // bytes to the live `pointer`.
         unsafe { (fns.hit)(field.ptr(), &raw mut pointer, 1, 0, 0) };
         let clicked = pointer[0] == CLICKED && !ending;
+        let node = self.frame_node(&field);
+        let id = if node == 0 {
+            0
+        } else {
+            // SAFETY: `node` is non-zero, the field's node the game wrote into
+            // it above, whose id sits at the table's `ui.node_id`.
+            unsafe { crate::engine::memory::read::<u64>(node, self.layout.node_id) }
+        };
+        let caret = CARET.get();
+        let confirmed = editing && !ending && id != 0 && caret.node == id && caret.entered;
+        if editing && !confirmed {
+            CARET.set(Caret {
+                node: id,
+                entered: false,
+            });
+        } else if caret.node == id {
+            CARET.set(Caret::default());
+        }
         if clicked {
             // SAFETY: `fns.focus` is the game's `ui.focus_request`, checked in
             // `TextFields::resolve`, on the field built above.
             unsafe { (fns.focus)(field.ptr()) };
         }
         buffer.typing = keeps_typing(clicked, buffer.typing, editing);
-        if editing && ending {
+        if editing && (ending || confirmed) {
             // SAFETY: `state` is non-zero, checked by `editing`, and points at
             // the field's kept state, whose editing byte at `at` lies inside
             // it as `TextLayout::read` checked; the game touches the state
@@ -379,27 +421,14 @@ impl Engine {
             editing = false;
         }
         buffer.text.len = buffer.text.len.min(ENTRY_BYTES as u64);
-        let mut input = [0u64; 2];
-        // SAFETY: `self.nav_input` is the game's `ui.nav_input`, checked in
-        // `Engine::resolve`; it writes sixteen bytes to the live `input` and
-        // reads the navigation config `nav`.
-        unsafe { (self.nav_input)(&raw mut input, nav.ptr(), 1) };
-        // SAFETY: `self.nav_set` is the game's `ui.nav_set`, checked in
-        // `Engine::resolve`, on the group `nav_init` filled above, with the
-        // live `input`.
-        unsafe { (self.nav_set)(group.ptr(), &raw const input) };
         // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
         // `Engine::resolve`, on the field built above, which draws and closes
         // it as the game's callers do; it reads the text through the
         // `GameText` at `ui.text_field_text`, which points at `buffer`, still
         // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
-        // SAFETY: `self.nav_drop` is the game's `ui.nav_drop`, checked in
-        // `Engine::resolve`, on the group `nav_init` made above, unmoved; it
-        // hands the window's group back as the current one.
-        unsafe { (self.nav_drop)(group.ptr()) };
         Some(Typed {
-            entered: answer & u64::from(u32::MAX) == ENTERED,
+            entered: confirmed || answer & u64::from(u32::MAX) == ENTERED,
             editing,
         })
     }

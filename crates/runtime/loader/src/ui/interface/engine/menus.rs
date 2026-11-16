@@ -1,5 +1,11 @@
 use super::{ACTION_SPEC, Buf, Engine, MENU_ENTRY, UiText};
 
+/// The interface action Confirm, which a text field with the caret asks for
+/// Enter (client 26430625).
+const ACTION_CONFIRM: u8 = 0;
+/// The interface action Back: Escape, or B on a gamepad.
+const ACTION_BACK: u8 = 1;
+
 impl Engine {
     /// Draws one more entry of the title screen's main menu, after its
     /// Settings, with `text`; true when clicked.
@@ -56,6 +62,32 @@ impl Engine {
     /// - Called inside a frame of the game's interface update, on its
     ///   thread.
     pub(in crate::ui::interface) unsafe fn back_pressed(&self, node: u64) -> bool {
+        // SAFETY: this function's `# Safety`. Action 1 is Back, as the pause
+        // menu builds it.
+        unsafe { self.action_pressed(node, ACTION_BACK) }
+    }
+
+    /// Whether the player pressed Confirm this frame over the node `node`,
+    /// taking the press: Enter in a text field that has the caret, as the
+    /// game's field asks it (client 26430625).
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread.
+    pub(in crate::ui::interface) unsafe fn confirm_pressed(&self, node: u64) -> bool {
+        // SAFETY: this function's `# Safety`.
+        unsafe { self.action_pressed(node, ACTION_CONFIRM) }
+    }
+
+    /// Whether the player pressed the interface action `action` this frame,
+    /// bound to `node`, taking the press so nothing else acts on it.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread.
+    unsafe fn action_pressed(&self, node: u64, action: u8) -> bool {
         let (Some(layout), Some(new), Some(query)) =
             (self.menu, self.action_new, self.action_query)
         else {
@@ -65,8 +97,8 @@ impl Engine {
         // SAFETY: `new` is the game's `ui.action_new`, checked in
         // `Engine::resolve`, in a frame on its thread by this function's
         // `# Safety`; `spec` holds the table's `ui.action_extent` bytes
-        // (`MenuLayout::read`). Action 1 is Back, as the pause menu builds it.
-        unsafe { new(spec.ptr(), 1, 1) };
+        // (`MenuLayout::read`).
+        unsafe { new(spec.ptr(), action, 1) };
         spec.u64(layout.action_node, node);
         spec.u8(layout.action_bound, 1);
         // SAFETY: `query` is the game's `ui.action_query`, checked in
