@@ -29,6 +29,12 @@ where
     (crate::services::run_typed::<C, F>, user.cast())
 }
 
+/// Moves the scheduler's clock to `nanos` past the start of the mod life,
+/// as the fake's steps do; it never moves back.
+pub fn move_clock(nanos: u64) {
+    crate::schedule::set_fake_clock(nanos);
+}
+
 /// The function that runs a link of the point `P` whose user pointer is a
 /// leaked `Box<F>`, as `Load::extend_point` attaches it.
 #[must_use]
