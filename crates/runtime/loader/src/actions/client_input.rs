@@ -5,7 +5,7 @@
 //! The builder runs per game step (mode 0, the stick) and per frame (mode
 //! 1, the look), on the interface's thread (client 26430625, seen live).
 //! While a loader window shows over the world, the player's own look and
-//! stick are held (the interface's [`crate::ui::interface::window_shows`]).
+//! stick are held ([`crate::engine::screens::window_shows`]).
 //! Until a mod hands one over and with no window, its detour adds two
 //! atomic loads.
 
@@ -303,7 +303,7 @@ crate::engine::chains::chain_detour! {
     fuse &FUSE, "the client's look and move";
     |onward| {
         onward.call();
-        if crate::ui::interface::window_shows()
+        if crate::engine::screens::window_shows()
             && !input.is_null()
             && let Some(layout) = GROUPS.input.get()
         {

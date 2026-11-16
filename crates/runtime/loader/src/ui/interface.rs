@@ -19,7 +19,6 @@ use crate::engine::registry::{JoinFeatureError, Registry};
 mod arena;
 pub(crate) mod carried;
 mod cursor;
-pub(crate) use cursor::window_shows;
 pub(crate) mod demo;
 mod dialog;
 mod engine;
@@ -609,7 +608,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
         });
     }
     if context == 0 || state.is_null() {
-        cursor::note(false);
+        crate::engine::screens::note_window(false);
         return;
     }
     let shown = READS_FUSE
@@ -618,7 +617,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     dialog::note_world(shown != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
-    cursor::note(window_shown());
+    crate::engine::screens::note_window(window_shown());
     crate::actions::controls::frame(context);
     // SAFETY: inside the frame on the interface thread, `context` non-zero
     // by the guard before it.
