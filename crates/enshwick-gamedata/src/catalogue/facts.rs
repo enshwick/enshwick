@@ -706,6 +706,169 @@ pub const FACTS: &[(&str, Fact)] = &[
             "keen::BlobArray<keen::BlobString>",
         ),
     ),
+    (ids::BUFF_COLLECTION, Fact::Type(BUFF_COLLECTION)),
+    (
+        ids::BUFF_COLLECTION_BUFFS,
+        offset(BUFF_COLLECTION, "buffs", "keen::BlobArray<keen::BuffType>"),
+    ),
+    (
+        ids::BUFF_COLLECTION_ENTRIES,
+        Fact::Path {
+            steps: &[(BUFF_COLLECTION, "buffMap"), (BUFF_MAP, "entries")],
+            holds: "keen::BlobArray<keen::StaticHashMapEntry>",
+        },
+    ),
+    (
+        ids::BUFF_COLLECTION_KEYS,
+        Fact::Path {
+            steps: &[(BUFF_COLLECTION, "buffMap"), (BUFF_MAP, "keys")],
+            holds: "keen::BlobArray<keen::BuffTypeId>",
+        },
+    ),
+    (
+        ids::BUFF_COLLECTION_VALUES,
+        Fact::Path {
+            steps: &[(BUFF_COLLECTION, "buffMap"), (BUFF_MAP, "values")],
+            holds: "keen::BlobArray<keen::uint32>",
+        },
+    ),
+    (ids::BUFF_TYPE, Fact::Type(BUFF_TYPE)),
+    (
+        ids::BUFF_TYPE_ID,
+        offset(BUFF_TYPE, "buffTypeId", "keen::BuffTypeId"),
+    ),
+    (
+        ids::BUFF_TYPE_SLOT,
+        offset(BUFF_TYPE, "slot", "keen::BuffSlotType"),
+    ),
+    (
+        ids::BUFF_TYPE_LIFE_TIME,
+        offset(BUFF_TYPE, "defaultLifeTime", TIME),
+    ),
+    (
+        ids::BUFF_TYPE_NAME,
+        offset(BUFF_TYPE, "name", "keen::NameLocaTag"),
+    ),
+    (
+        ids::BUFF_TYPE_DESCRIPTION,
+        offset(BUFF_TYPE, "description", "keen::DescriptionLocaTag"),
+    ),
+    (
+        ids::BUFF_TYPE_HIDE_IN_UI,
+        offset(BUFF_TYPE, "hideInUi", BOOL),
+    ),
+    (
+        ids::BUFF_TYPE_ICON,
+        Fact::Path {
+            steps: &[(BUFF_TYPE, "icon"), ("keen::UiTexture", "image")],
+            holds: "keen::UiImageReference",
+        },
+    ),
+    (
+        ids::BUFF_TYPE_HIDE_DURATION_IN_UI,
+        offset(BUFF_TYPE, "hideDurationInUi", BOOL),
+    ),
+    (ids::BUFF_TYPE_IS_SAVED, offset(BUFF_TYPE, "isSaved", BOOL)),
+    (
+        ids::BUFF_TYPE_IMPACT,
+        offset(BUFF_TYPE, "impact", "keen::ImpactProgramReference"),
+    ),
+    (
+        ids::BUFF_TYPE_IMPACT_SIMPLE,
+        Fact::Path {
+            steps: &[
+                (BUFF_TYPE, "impactValues"),
+                (IMPACT_CONFIGURATIONS, "simple"),
+            ],
+            holds: IMPACT_CONFIGURATION_ARRAY,
+        },
+    ),
+    (
+        ids::BUFF_TYPE_IMPACT_SCALED,
+        Fact::Path {
+            steps: &[
+                (BUFF_TYPE, "impactValues"),
+                (IMPACT_CONFIGURATIONS, "scaled"),
+            ],
+            holds: IMPACT_CONFIGURATION_ARRAY,
+        },
+    ),
+    (
+        ids::BUFF_TYPE_UI_VALUES,
+        offset(
+            BUFF_TYPE,
+            "uiValues",
+            "keen::BlobArray<keen::ImpactUiValue>",
+        ),
+    ),
+    (
+        ids::BUFF_TYPE_ON_CREATE,
+        offset(
+            BUFF_TYPE,
+            "onCreate",
+            "keen::BlobArray<keen::OnCreateHelper>",
+        ),
+    ),
+    (
+        ids::BUFF_TYPE_WHILE_APPLIED,
+        offset(
+            BUFF_TYPE,
+            "whileApplied",
+            "keen::BlobArray<keen::WhileAppliedHelper>",
+        ),
+    ),
+    (
+        ids::BUFF_TYPE_ON_TIMEOUT,
+        offset(BUFF_TYPE, "onTimeout", "keen::OnTimeoutHelper"),
+    ),
+    (
+        ids::BUFF_TYPE_ON_TIMEOUT_IS_SET,
+        offset(BUFF_TYPE, "onTimeoutIsSet", BOOL),
+    ),
+    (
+        ids::BUFF_TYPE_VFX_MESHES,
+        Fact::Path {
+            steps: &[
+                (BUFF_TYPE, "vfxResourceReferences"),
+                (VFX_REFERENCES, "meshes"),
+            ],
+            holds: "keen::BlobArray<keen::ObjectReference<keen::VfxMeshResource>>",
+        },
+    ),
+    (
+        ids::BUFF_TYPE_VFX_MODELS,
+        Fact::Path {
+            steps: &[
+                (BUFF_TYPE, "vfxResourceReferences"),
+                (VFX_REFERENCES, "models"),
+            ],
+            holds: "keen::BlobArray<keen::ObjectReference<keen::RenderModel>>",
+        },
+    ),
+    (
+        ids::BUFF_TYPE_VFX_JOINTS,
+        Fact::Path {
+            steps: &[
+                (BUFF_TYPE, "vfxResourceReferences"),
+                (VFX_REFERENCES, "jointCollections"),
+            ],
+            holds: "keen::BlobArray<keen::ObjectReference<keen::VfxJointCollectionResource>>",
+        },
+    ),
+    (ids::BUFF_MAP_ENTRY, Fact::Type(MAP_ENTRY)),
+    (
+        ids::BUFF_MAP_ENTRY_START,
+        offset(MAP_ENTRY, "start", "keen::uint32"),
+    ),
+    (
+        ids::BUFF_MAP_ENTRY_COUNT,
+        offset(MAP_ENTRY, "count", "keen::uint32"),
+    ),
+    (
+        ids::IMPACT_PROGRAM_REFERENCE,
+        Fact::Type("keen::ImpactProgramReference"),
+    ),
+    (ids::BUFF_ON_TIMEOUT, Fact::Type("keen::OnTimeoutHelper")),
     (ids::TEMPLATE, Fact::Type("keen::ecs::TemplateResource")),
     (
         ids::TEMPLATE_COMPONENTS,
@@ -2508,3 +2671,24 @@ const TEMPLATE_REFERENCE: &str = "keen::ecs::TemplateReference";
 
 /// How an item's armor splits across damage kinds.
 const ARMOR_DISTRIBUTION: &str = "keen::impact::ArmorDistribution";
+
+/// The one resource that holds every buff type.
+const BUFF_COLLECTION: &str = "keen::BuffTypeCollectionResource";
+
+/// One buff type in the collection.
+const BUFF_TYPE: &str = "keen::BuffType";
+
+/// The baked hash map of the buff collection, buff type id to index.
+const BUFF_MAP: &str = "keen::BuffTypeMap";
+
+/// One bucket of a baked hash map.
+const MAP_ENTRY: &str = "keen::StaticHashMapEntry";
+
+/// A buff type's impact configurations, simple and scaled.
+const IMPACT_CONFIGURATIONS: &str = "keen::impact::Configurations";
+
+/// One list of impact configurations.
+const IMPACT_CONFIGURATION_ARRAY: &str = "keen::impact::ConfigurationArray";
+
+/// The effect resources a buff type loads.
+const VFX_REFERENCES: &str = "keen::VfxResourceReferences";

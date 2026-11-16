@@ -6,6 +6,7 @@ mod affixes;
 mod allocations;
 mod altars;
 mod book;
+mod buff_types;
 mod calls;
 mod chat;
 mod commands;

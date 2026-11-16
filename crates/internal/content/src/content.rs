@@ -192,7 +192,8 @@ impl<B: Grow> Blob<B> {
     /// of `room` with room for all `room` counted, so the edits grow `out`
     /// in place: over an [`Output`](crate::resources::Output), its build
     /// takes one loan and moves nothing.
-    pub(crate) fn over_with_room(mut out: B, room: Room<'_>) -> Self {
+    #[doc(hidden)]
+    pub fn over_with_room(mut out: B, room: Room<'_>) -> Self {
         out.grow(0);
         out.reserve(room.len);
         out.put(room.base);
@@ -203,7 +204,9 @@ impl<B: Grow> Blob<B> {
 impl<'a> Blob<&'a [u8]> {
     /// A blob that only reads `base`, for what a helper decides before it
     /// copies the base.
-    pub(crate) const fn reading(base: &'a [u8]) -> Self {
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn reading(base: &'a [u8]) -> Self {
         Self(base)
     }
 }
@@ -211,15 +214,18 @@ impl<'a> Blob<&'a [u8]> {
 /// The length a blob over a base reaches through the appends and array
 /// growths a helper makes, worked out on the base before the blob copies
 /// it, with the arithmetic [`Blob::append`] and [`Blob::grow_array`] use.
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Room<'a> {
+pub struct Room<'a> {
     base: &'a [u8],
     len: usize,
 }
 
 impl<'a> Room<'a> {
     /// The room `base` takes as it is.
-    pub(crate) const fn new(base: &'a [u8]) -> Self {
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn new(base: &'a [u8]) -> Self {
         Self {
             base,
             len: base.len(),
@@ -227,7 +233,9 @@ impl<'a> Room<'a> {
     }
 
     /// The room after [`Blob::append`] of `len` bytes at `align`.
-    pub(crate) fn append(self, len: usize, align: usize) -> Option<Self> {
+    #[doc(hidden)]
+    #[must_use]
+    pub fn append(self, len: usize, align: usize) -> Option<Self> {
         Some(Self {
             len: aligned(self.len, align).checked_add(len)?,
             ..self
@@ -237,13 +245,9 @@ impl<'a> Room<'a> {
     /// The room after [`Blob::grow_array`] of the base's array at `field`,
     /// of `size`-byte elements, by `extra` elements; `None` when the base
     /// has no array there.
-    pub(crate) fn grow_array(
-        self,
-        field: usize,
-        size: usize,
-        align: usize,
-        extra: usize,
-    ) -> Option<Self> {
+    #[doc(hidden)]
+    #[must_use]
+    pub fn grow_array(self, field: usize, size: usize, align: usize, extra: usize) -> Option<Self> {
         let (_, count) = Blob::reading(self.base).array(field)?;
         let elements = usize::try_from(count).ok()?.checked_add(extra)?;
         self.append(elements.checked_mul(size)?, align)

@@ -431,8 +431,12 @@ fn build(layout: &ImageLayout, base: &[u8], pixels: Pixels, out: &mut Output<'_>
     Some(())
 }
 
-/// Whether this client shows served icons now.
-pub(crate) fn ready() -> bool {
+/// Whether this client shows served icons now; content that names an icon
+/// keeps its vanilla one until then, since an icon its UI does not know ends
+/// the game.
+#[doc(hidden)]
+#[must_use]
+pub fn ready() -> bool {
     crate::host().is_some_and(|host| (host.api().icons_ready)(host.handle()).is_ok())
 }
 

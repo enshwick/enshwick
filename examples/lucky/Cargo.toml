@@ -1,0 +1,30 @@
+[package]
+name = "enshwick-example-lucky"
+version = "0.0.0-dev"
+description = "Example: a buff type of the mod's own with its icon, name and a luck modifier, given by a control on L"
+keywords = ["enshrouded", "mod", "example"]
+categories = ["game-development"]
+readme = "../README.md"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.enshwick]
+id = "you.lucky"
+side = "both"
+name = "Lucky"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick = { workspace = true, features = ["unstable"] }
+
+[dev-dependencies]
+enshwick = { workspace = true, features = ["test", "unstable"] }
+
+[lints]
+workspace = true

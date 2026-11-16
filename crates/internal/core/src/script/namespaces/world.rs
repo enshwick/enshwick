@@ -34,6 +34,8 @@ pub(super) const NAMESPACES: &[Namespace] = &[
         ],
     ),
     Namespace::of::<Buffs>(),
+    #[cfg(feature = "unstable")]
+    Namespace::starting("buffs", "", &[Load::SCRIPT_BUFFS_ADD]),
     Namespace::of::<GameSettings>(),
     Namespace::of::<Weather>(),
     Namespace::starting(

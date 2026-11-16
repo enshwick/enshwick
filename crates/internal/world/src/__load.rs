@@ -5,6 +5,8 @@ pub use crate::altars::LoadMethods as _;
 pub use crate::altars::kinds::LoadMethods as _;
 pub use crate::altars::limits::LoadMethods as _;
 pub use crate::buffs::LoadMethods as _;
+#[cfg(feature = "unstable")]
+pub use crate::buffs::new::LoadMethods as _;
 pub use crate::daytime::LoadMethods as _;
 pub use crate::game_settings::LoadMethods as _;
 #[cfg(feature = "unstable")]

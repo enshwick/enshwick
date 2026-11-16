@@ -12,6 +12,7 @@ and none is released. The book's own examples cover the smaller cases.
 | [haggling](haggling/)                                 | extending another mod's rule at its extension point         |
 | [hello-c](hello-c/)                                   | a mod in C and one in C++, against `enshwick.h`             |
 | [horn](horn/)                                         | a control on G that runs an action, one that follows interact |
+| [lucky](lucky/)                                       | a buff type of its own with an icon, a name and a luck modifier |
 | [waypoints](waypoints/)                               | a mod of side both whose server sends a mark its client draws |
 | [you.material-stacks](you.material-stacks/)           | a data pack that raises the stack size of materials         |
 | [you.recipe-cost-and-time](you.recipe-cost-and-time/) | a data pack that halves three recipes' cost and time        |

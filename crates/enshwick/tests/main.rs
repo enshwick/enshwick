@@ -22,6 +22,10 @@ mod altar_kinds;
 mod altar_limit;
 mod altar_zones;
 mod base_limits;
+#[cfg(feature = "unstable")]
+mod buff_types;
+#[cfg(feature = "unstable")]
+mod buff_types_server;
 mod buffs;
 #[cfg(feature = "unstable")]
 mod build_rights;

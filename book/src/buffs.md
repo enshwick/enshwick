@@ -122,5 +122,73 @@ Clients see buffs given and removed as the game's own, with their icons and
 times. The game saves the types it saves with a character, buffs from mods
 among them; other types end when the player leaves.
 
+## A buff type of your own
+
+Unstable: needs the `unstable` feature and may change in any release.
+
+`load.add_buff(new)` adds a buff type to the game during `init`. It returns
+the type's `BuffTypeId`. A `NewBuff` copies a vanilla type, `like`, under the
+mod's content id, and changes only what its setters set:
+
+| Setter | Sets |
+| --- | --- |
+| `name`, `description` | the tags of its texts, given text with `add_texts` |
+| `icon` | an [icon](content/items.md) of its own for the HUD's buff row |
+| `default_life_time` | how long it lasts, in game time |
+| `slot` | its kind, such as `BuffSlotType::Buff` |
+| `hide_in_ui`, `hide_duration_in_ui` | whether it shows, and whether its time shows |
+| `saved` | whether the game saves it with a character |
+| `plain` | drops what the vanilla type runs, so only the mod's modifiers change stats |
+
+`add_buff_modifiers` gives the type its stat modifiers, as for a vanilla
+type, and `apply` gives it to an entity. A copy that is not `plain` keeps the
+vanilla type's effects and tooltip values. A `plain` copy still keeps the
+vanilla type's colour, food poison mark, apply type, faction mask and whether
+it ends at death.
+
+```rust
+use core::time::Duration;
+use enshwick::buffs::{BuffSlotType, BuffTypeId, NewBuff};
+use enshwick::content::{Id, id};
+use enshwick::stats::{Modifier, Op, StatDef};
+
+const LUCKY: Id = id!("lucky");
+const LUCKY_NAME: Id = LUCKY.part("name");
+
+const TEXTS: &str = r#"
+[en]
+"lucky.name" = "Lucky"
+"#;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let texts = load.texts_from(TEXTS)?;
+    load.add_texts(&texts, &[("lucky.name", LUCKY_NAME)])?;
+    let luck = load.define_stat(id!("luck"), &StatDef::additive().range(0.0, 1.0))?;
+    // A food buff of the game, ten minutes long.
+    let food = BuffTypeId(0xf9b3_64f6);
+    let lucky = load.add_buff(
+        NewBuff::new(LUCKY, food)
+            .name(LUCKY_NAME.guid())
+            .default_life_time(Duration::from_mins(5))
+            .slot(BuffSlotType::Buff)
+            .plain(),
+    )?;
+    load.add_buff_modifiers(lucky, &[Modifier::new(luck, Op::Add, 0.1)])
+}
+```
+
+Luau has it as `enshwick.buffs.add_buff`, with the setters' names as fields.
+Only `saved` differs: its field is `is_saved`.
+The [lucky example](https://github.com/enshwick/enshwick/tree/main/examples/lucky)
+gives the buff with a control.
+
+The type is served on both sides, so a mod with buff types runs on both
+sides; a server-only mod is refused. `add_buff` also refuses a `like` the game
+lacks. It refuses an id the game already has, or one the mod added before. The
+mod learns this at `init` and decides whether to go on without the type. A
+player without
+the mod sees the buff as an empty bubble until the join check removes the player. A world loaded without the mod drops
+the saved buffs of its types.
+
 Where each call works is in
 [What may be called where](concepts/threads.md#what-may-be-called-where).
