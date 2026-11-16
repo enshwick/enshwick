@@ -49,6 +49,10 @@ pub(crate) enum TerrainMaterialError {
     TooLate,
     /// The archive lacks the palette or the terraforming rules.
     #[error("this build's archive lacks the terrain palette or rules")]
+    #[cfg_attr(
+        all(not(windows), test),
+        expect(dead_code, reason = "only the running game reads the archive")
+    )]
     Unread,
     /// A material it copies or falls back to that the game lacks.
     #[error("terrain id {0} is none of the game's terrain materials")]

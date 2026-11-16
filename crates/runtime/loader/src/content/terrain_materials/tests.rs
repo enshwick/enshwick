@@ -83,6 +83,9 @@ fn the_game_leaves_terrain_ids_117_to_127_free() {
     let palette = palette();
     assert_eq!(palette.free(), (117..=127).collect::<Vec<u8>>());
     assert!(palette.holds(SAND) && !palette.holds(0) && !palette.holds(117));
+    assert_eq!(palette.guid_of(SAND), Some(guid(SAND)));
+    assert_eq!(palette.id_of(guid(ROCK)), Some(ROCK));
+    assert_eq!(palette.guid_of(117), None, "a free id names nothing");
 }
 
 #[test]
