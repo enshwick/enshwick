@@ -265,7 +265,7 @@ pub(crate) extern "system" fn rebuild_resource(_me: ModHandle, key: *const Resou
             // As the loader after init: the patches run again over the base
             // and their buffers are freed; no game holds the bytes here.
             if let Ok(archived) = archived(&base) {
-                drop(build_resource(&key, &archived));
+                drop(build_resource(&key, &archived, Build::Game));
             }
             Status::OK
         }
@@ -641,7 +641,7 @@ pub(crate) extern "system" fn resource_served(
                 return archived(&key);
             };
             let archived = archived(&base)?;
-            match build_resource(&key, &archived) {
+            match build_resource(&key, &archived, Build::Scratch) {
                 // As the loader: a key whose every patch failed reads as
                 // the archive has it.
                 Err(Status::MISSING) if key == base => Ok(archived),
@@ -737,13 +737,29 @@ pub(crate) extern "system" fn resource_buffer(
     }
 }
 
-/// Builds the served resource `key` from `base` with every mod's patches,
-/// in order, as the game's first read of it would: a failed patch is
-/// skipped, and [`Status::MISSING`] when none built. As the loader,
-/// [`Status::BUILDING`] for a key whose patches already run on this thread,
-/// and a patch whose builder panicked ([`Status::FAULTED`]) never runs
-/// again: its mod reports the resource as a feature off.
-pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
+/// Who a build of a served resource is for, as the loader tells them apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Build {
+    /// The game's first build or a rebuild, whose bytes the game holds: a
+    /// patch that fails turns its mod off.
+    Game,
+    /// A mod's served read, kept nowhere: a patch that fails is skipped and
+    /// its mod stays on.
+    Scratch,
+}
+
+/// Builds the served resource `key` from `base` with every running mod's
+/// patches, in order, for `build`: [`Status::MISSING`] when none built. As
+/// the loader, [`Status::BUILDING`] for a key whose patches already run on
+/// this thread; a patch that refuses or hands back bytes it was not lent
+/// turns its mod off in a game build and is skipped in a scratch one; and a
+/// patch whose builder panicked ([`Status::FAULTED`]) never runs again: its
+/// mod reports the resource as a feature off.
+pub(crate) fn build_resource(
+    key: &ResourceKey,
+    base: &[u8],
+    build: Build,
+) -> Result<Vec<u8>, Status> {
     if building(key) {
         return Err(Status::BUILDING);
     }
@@ -751,7 +767,9 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
         s.served
             .iter()
             .enumerate()
-            .filter(|(at, served)| served.0.key == *key && !s.served_off.contains(at))
+            .filter(|(at, served)| {
+                served.0.key == *key && !s.served_off.contains(at) && !served.1.owner_off(&s.off)
+            })
             .map(|(at, served)| (at, served.1))
             .collect()
     });
@@ -786,10 +804,15 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
                 })
             })
         });
-        if let (true, Some(output)) = (status.is_ok(), output) {
-            bytes = output;
-            len = out_len;
-            built = true;
+        match (status.is_ok(), output) {
+            (true, Some(output)) => {
+                bytes = output;
+                len = out_len;
+                built = true;
+            }
+            // As the loader: an output it did not lend is a bad one.
+            (true, None) => refused(key, build, patch.owner(), Status::BAD_ARGS),
+            (false, _) => refused(key, build, patch.owner(), status),
         }
     }
     if built {
@@ -799,10 +822,39 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
     }
 }
 
+/// The name the loader gives served resource `key`, from the fake's type
+/// hashes.
+fn served_name(key: &ResourceKey) -> String {
+    with(format!("resource {}", key.guid), |s| {
+        enshwick_core::resources::served_name(key, |id| s.host.type_hashes.get(id).copied())
+    })
+}
+
+/// A patch of mod `owner` failed to build `key` with `status`: in a game
+/// build the mod turns off with the loader's reason, once; a scratch
+/// build skips it.
+fn refused(key: &ResourceKey, build: Build, owner: Option<ModHandle>, status: Status) {
+    let Some(owner) = owner.filter(|_| build == Build::Game) else {
+        return;
+    };
+    if crate::test::table::base::registered::is_off(owner) {
+        return;
+    }
+    let reason = format!("served {} failed to build ({})", served_name(key), status.0);
+    let line = format!("off: {reason} ({})", enshwick_core::__fake::MOD_OFF);
+    with((), |s| {
+        s.faults.push(reason);
+        s.sent
+            .push((owner, enshwick_core::abi::Level::ERROR, line.clone()));
+        s.logs.push((enshwick_core::abi::Level::ERROR, line));
+    });
+    crate::test::table::base::registered::turn_off(owner);
+}
+
 /// Turns off the patch at `at` in `served` of `key`, whose builder panicked,
 /// and has its mod report the resource off, as the loader does.
 fn panicked(key: &ResourceKey, at: usize, owner: Option<ModHandle>) {
-    let name = format!("served resource {}", key.guid);
+    let name = format!("served {}", served_name(key));
     let line = format!(
         "feature {name} off: {}",
         enshwick_core::resources::BUILDER_PANICKED

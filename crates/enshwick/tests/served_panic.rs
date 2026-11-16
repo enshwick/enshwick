@@ -1,5 +1,6 @@
 //! A served resource's builder that panics turns off only that resource;
-//! one that returns `None` is refused and runs again.
+//! one that returns `None` turns its mod off in the game's build, and in a
+//! served read is refused and runs again.
 
 #[cfg(test)]
 mod tests {
@@ -50,21 +51,28 @@ mod tests {
         "#
     );
 
-    #[test]
-    fn a_builder_that_panics_is_never_called_again_and_its_resource_is_named_off() {
-        let loader = enshwick::test::FakeHost::new().install();
+    fn start(host: enshwick::test::FakeHost) -> enshwick::test::Installed {
+        let loader = host.install();
         // SAFETY: the exports of this file's `declare_mod!`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
+        loader
+    }
+
+    #[test]
+    fn a_builder_that_panics_is_never_called_again_and_its_resource_is_named_off() {
+        // The keys' type is an item's here, so the feature names it as the
+        // loader does.
+        let item = enshwick::content::types::ITEM_INFO.id();
+        let loader = start(enshwick::test::FakeHost::new().type_hash(item, BROKEN.type_hash));
         for _ in 0..2 {
             assert_eq!(loader.build_resource(&BROKEN, &[1]), Err(Status::MISSING));
         }
         assert_eq!(BROKEN_RUNS.load(Ordering::Relaxed), 1, "called once only");
         let features = loader.features();
-        let off = features
-            .iter()
-            .find(|(name, _)| name.contains(&BROKEN.guid.to_string()));
+        let name = format!("served item {}", BROKEN.guid);
+        let off = features.iter().find(|(have, _)| *have == name);
         assert!(
             off.is_some_and(|(_, why)| why.as_deref().is_some_and(|why| why.contains("panicked"))),
             "{features:?}"
@@ -74,16 +82,37 @@ mod tests {
     }
 
     #[test]
-    fn a_builder_that_returns_none_is_refused_and_runs_at_the_next_build() {
-        let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of this file's `declare_mod!`.
-        let status =
-            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, Status::OK);
+    fn a_builder_that_returns_none_in_the_game_s_build_turns_its_mod_off() {
+        let loader = start(enshwick::test::FakeHost::new());
+        assert_eq!(loader.build_resource(&PICKY, &[1]), Err(Status::MISSING));
+        assert!(loader.is_off());
+        let reason = format!("served resource {} failed to build", PICKY.guid);
+        assert!(
+            loader.logs().iter().any(|(_, line)| line.contains(&reason)),
+            "{:?}",
+            loader.logs()
+        );
+        assert_eq!(loader.build_resource(&PICKY, &[1]), Err(Status::MISSING));
+        assert_eq!(
+            PICKY_RUNS.load(Ordering::Relaxed),
+            1,
+            "a mod that is off builds nothing"
+        );
+    }
+
+    #[test]
+    fn a_builder_that_returns_none_in_a_served_read_is_refused_and_runs_at_the_next_read() {
+        let loader = start(enshwick::test::FakeHost::new().resource(PICKY, vec![1]));
+        let host = enshwick::host().unwrap();
         for _ in 0..2 {
-            assert_eq!(loader.build_resource(&PICKY, &[1]), Err(Status::MISSING));
+            assert_eq!(
+                host.served_resource(PICKY).ok(),
+                Some(vec![1]),
+                "a changed key whose every patch failed reads as archived"
+            );
         }
         assert_eq!(PICKY_RUNS.load(Ordering::Relaxed), 2);
+        assert!(!loader.is_off(), "the game never read that build");
         assert!(loader.features().is_empty());
     }
 }

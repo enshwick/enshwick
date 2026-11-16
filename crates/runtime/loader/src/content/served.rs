@@ -536,21 +536,9 @@ pub(crate) fn shared() -> Vec<(String, Vec<ModIndex>)> {
 }
 
 /// A resource key in words: the registries by name, others as type and
-/// GUID.
+/// GUID, named as the fake names it.
 fn key_name(key: &ResourceKey) -> String {
-    use crate::engine::catalogue::types;
-    let kind = match key.type_hash {
-        types::ITEM_REGISTRY => return "the item registry".to_owned(),
-        types::RECIPE_REGISTRY => return "the recipe registry".to_owned(),
-        types::WORKSHOP_REGISTRY => return "the workshop registry".to_owned(),
-        types::UI_BUNDLE => return "the UI bundle".to_owned(),
-        types::TEMPLATE_COLLECTION => "template collection",
-        types::ITEM_INFO => "item",
-        types::TEMPLATE => "template",
-        types::UI_IMAGE => "image",
-        _ => "resource",
-    };
-    format!("{kind} {}", key.guid)
+    enshwick_core::resources::served_name(key, enshwick_gamedata::catalogue::type_hash)
 }
 
 /// What mods serve, for the status summary.

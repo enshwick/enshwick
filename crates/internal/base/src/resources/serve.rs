@@ -367,6 +367,37 @@ impl Grow for Output<'_> {
 #[doc(hidden)]
 pub const BUILDER_PANICKED: &str = "mods.off.served.panicked";
 
+/// The name of served resource `key` in a mod's features and off reasons,
+/// as the loader and the fake give it: a registry by its name, else the
+/// kind of resource and its GUID. `hash_of` answers the running build's
+/// hash of a resource type's engine id.
+#[doc(hidden)]
+pub fn served_name(key: &ResourceKey, hash_of: impl Fn(&str) -> Option<u32>) -> String {
+    use crate::engine_ids as ids;
+
+    const WHOLE: [(&str, &str); 4] = [
+        (ids::ITEM_REGISTRY, "the item registry"),
+        (ids::RECIPE_REGISTRY, "the recipe registry"),
+        (ids::WORKSHOP_REGISTRY, "the workshop registry"),
+        (ids::UI_BUNDLE, "the UI bundle"),
+    ];
+    const OF: [(&str, &str); 4] = [
+        (ids::TEMPLATE_COLLECTION, "template collection"),
+        (ids::ITEM_INFO, "item"),
+        (ids::TEMPLATE, "template"),
+        (ids::UI_IMAGE, "image"),
+    ];
+    let is = |id: &str| hash_of(id) == Some(key.type_hash);
+    if let Some((_, name)) = WHOLE.iter().find(|(id, _)| is(id)) {
+        return (*name).to_owned();
+    }
+    let kind = OF
+        .iter()
+        .find(|(id, _)| is(id))
+        .map_or("resource", |(_, kind)| *kind);
+    format!("{kind} {}", key.guid)
+}
+
 /// Serves `key` from `base` through `builder` for the mod `host` serves,
 /// as `Load::serve` does; also for a runtime that holds the mod's host
 /// during its init, such as a script's.
