@@ -277,12 +277,11 @@ impl InputLayout {
     ///   which nothing else touches during the call.
     pub(crate) unsafe fn hold(&self, input: *mut u8, mode: u32) {
         // SAFETY: the caller's record, which `resolve` checked holds a
-        // 64-bit mask at `digital_input` and a float pair at
-        // `target_selection`.
-        unsafe {
-            enshwick_core::raw::write_at(input, self.digital_input, 0u64);
-            enshwick_core::raw::write_at(input, self.target_selection, [0f32; 2]);
-        }
+        // 64-bit mask at `digital_input`.
+        unsafe { enshwick_core::raw::write_at(input, self.digital_input, 0u64) };
+        // SAFETY: the caller's record, which `resolve` checked holds a float
+        // pair at `target_selection`.
+        unsafe { enshwick_core::raw::write_at(input, self.target_selection, [0f32; 2]) };
         match mode {
             // SAFETY: the caller's record, by this function's `# Safety`.
             pass::STEP => unsafe { self.set_movement_stick(input, [0.0; 2]) },
@@ -579,6 +578,9 @@ mod tests {
 
     #[test]
     fn the_hold_clears_the_buttons_every_pass_and_the_stick_or_look_only_in_its_own() {
+        fn at<T: bytemuck::AnyBitPattern>(input: &[u8], at: usize) -> T {
+            bytemuck::pod_read_unaligned(&input[at..at + size_of::<T>()])
+        }
         let look: Look = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]];
         let written = || {
             let mut input = vec![0u8; 0x600];
@@ -590,22 +592,19 @@ mod tests {
         };
         let layout = BENCH_INPUT;
         let read = |input: &[u8]| {
-            // SAFETY: each read lies inside the record, of the build's size.
-            unsafe {
-                (
-                    layout.movement_stick(input.as_ptr()),
-                    layout.camera_rotation(input.as_ptr()),
-                    enshwick_core::raw::read_at::<[f32; 2]>(input.as_ptr(), 0x2ec),
-                    enshwick_core::raw::read_at::<u64>(input.as_ptr(), 0x3a8),
-                )
-            }
+            (
+                at::<[f32; 2]>(input, 0x2b8),
+                at::<Look>(input, 0x2c4),
+                at::<[f32; 2]>(input, 0x2ec),
+                at::<u64>(input, 0x3a8),
+            )
         };
         let mut step = written();
         // SAFETY: the record above, of the build's size, not shared.
         unsafe { layout.hold(step.as_mut_ptr(), pass::STEP) };
         assert_eq!(read(&step), ([0.0; 2], look, [0.0; 2], 0), "the step pass");
         let mut frame = written();
-        // SAFETY: as above.
+        // SAFETY: a fresh record of the build's size, not shared.
         unsafe { layout.hold(frame.as_mut_ptr(), pass::FRAME) };
         assert_eq!(
             read(&frame),

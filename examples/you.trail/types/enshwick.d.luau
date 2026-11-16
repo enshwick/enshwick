@@ -924,6 +924,8 @@ export type Frame = {
 	screen: (self: Frame) -> Screen,
 	--- Draws a window titled `title` and its contents with `body`, which gets this frame, as `Frame.window` does; false when it could not be drawn, and `body` did not run.
 	window: (self: Frame, id: string, title: string, body: (arg1: Frame) -> ()) -> boolean,
+	--- Whether the player pressed Back over the window whose body is drawing, as `Frame.back` says.
+	back: (self: Frame) -> boolean,
 	--- Draws a line of text, as `Frame.label` does.
 	label: (self: Frame, label: Label) -> (),
 	--- Draws a button, as `Frame.button` does; true in the frame it is clicked.

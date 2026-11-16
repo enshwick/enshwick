@@ -176,6 +176,18 @@ fn holds_sound(s: &State, guid: enshwick_core::content::Guid) -> bool {
         })
 }
 
+/// Draws window `w` with id `id`, answering 1 when the test pressed Back
+/// over it, as the loader does.
+fn window(s: &mut State, w: &mut UiWidget, id: String) -> crate::test::Drawn {
+    if matches!(input(s, &id), Some(crate::test::Input::Back)) {
+        w.result = 1;
+    }
+    crate::test::Drawn::Window {
+        id,
+        title: text(w.detail),
+    }
+}
+
 /// Draws the widget `w` in `frame` and writes its answer into it.
 fn draw(frame: u64, w: &mut UiWidget) -> Status {
     use crate::test::{Drawn, Input};
@@ -200,15 +212,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
         let read_only = w.flags & UiWidget::READ_ONLY != 0;
         w.result = 0;
         let drawn = match w.kind {
-            UiWidget::WINDOW if !open => {
-                if matches!(input(s, &label), Some(Input::Back)) {
-                    w.result = 1;
-                }
-                Drawn::Window {
-                    id: label,
-                    title: text(w.detail),
-                }
-            }
+            UiWidget::WINDOW if !open => window(s, w, label),
             UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND if w.sound == enshwick_core::content::Guid::NIL => {
                 Drawn::Sound(w.style)
