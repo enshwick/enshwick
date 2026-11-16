@@ -15,16 +15,6 @@ pub(crate) fn alone() -> std::sync::MutexGuard<'static, ()> {
     guard
 }
 
-/// What went to the client of the player [`host_for_test`] made the host,
-/// as `(channel, data)`, taken whole: the record of a part's sends to one
-/// client.
-pub(crate) fn sent_to_host() -> Vec<(u32, Vec<u8>)> {
-    take_looped(false)
-        .into_iter()
-        .map(|looped| (looped.channel, looped.data))
-        .collect()
-}
-
 #[test]
 fn a_build_without_the_socket_calls_lists_them_off_by_what_it_lacks() {
     let _alone = alone();
