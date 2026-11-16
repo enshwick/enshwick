@@ -29,7 +29,10 @@
 //! scale or an immediate equal to it; a `nop` spells nothing) or `scale`
 //! (the factor the shape's instructions multiply the register its first
 //! one reads by, such as a record size held only in `lea r9,[rax+rax*4];
-//! shl r9,5`); the last four are constants, the rest symbols. A taken
+//! shl r9,5`) or `extent` (how far the function an `in` shape lies in
+//! writes the object it is handed: the end of its highest store through a
+//! register other than the stack's); the last five are constants, the rest
+//! symbols. A taken
 //! constant needs a shape of two steps or one with an exact operand or an
 //! `{entry}`. `shift` turns
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
@@ -120,6 +123,19 @@ enum Take {
     Cell,
     Spelled,
     Scale,
+    /// How far the function an `in` shape lies in writes the object it is
+    /// handed: the end of its highest store off the stack.
+    Extent,
+}
+
+impl Take {
+    /// Whether the take is a constant rather than a symbol.
+    const fn is_constant(self) -> bool {
+        matches!(
+            self,
+            Self::Value | Self::Cell | Self::Spelled | Self::Scale | Self::Extent
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,8 +204,10 @@ impl Route {
     /// reflected offset or size.
     #[cfg(test)]
     fn finds_constant(&self) -> bool {
-        matches!(self.take, Take::Value | Take::Cell | Take::Scale)
-            || matches!(self.how, How::Field(_) | How::Size(_))
+        matches!(
+            self.take,
+            Take::Value | Take::Cell | Take::Scale | Take::Extent
+        ) || matches!(self.how, How::Field(_) | How::Size(_))
     }
 
     /// `found`, or [`Routed::Outside`] for a constant outside the route's
@@ -281,14 +299,15 @@ impl RouteRow {
             _ if reflected => {}
             Take::Start if takes == 0 => {}
             Take::End | Take::Spelled | Take::Scale if shaped && takes == 0 => {}
+            Take::Extent if matches!(how, How::Shape { .. }) && takes == 0 => {}
             Take::Address | Take::Value | Take::Cell if shaped && takes == 1 => {}
             _ => {
                 return Err(bad(
-                    "`end`, `spelled` and `scale` take a shape without `*`, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
+                    "`end`, `spelled` and `scale` take a shape without `*`, `extent` an `in` shape without `*`, `address`, `value` and `cell` a shape with one `*`, and `start` no `*`",
                 ));
             }
         }
-        let constant = matches!(take, Take::Value | Take::Cell | Take::Spelled | Take::Scale);
+        let constant = take.is_constant();
         if constant && steps.len() < 2 && !steps.iter().any(Step::is_exact) {
             return Err(bad(
                 "a taken constant needs a shape of two steps, an exact operand or an `{entry}`",
@@ -453,7 +472,7 @@ fn bounds(
 ) -> Result<Option<(u64, u64)>, &'static str> {
     if (range.is_some() || align.is_some()) && !constant {
         return Err(
-            "`range` and `align` bound a `value`, `cell` or `scale` take or a `field` or `size` route",
+            "`range` and `align` bound a `value`, `cell`, `scale` or `extent` take or a `field` or `size` route",
         );
     }
     match range {

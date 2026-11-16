@@ -224,6 +224,9 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             Some(nth) => self.nth_match(function, &route.after, steps, nth)?,
             None => self.only_match([function], steps)?.1,
         };
+        if route.take == Take::Extent {
+            return shape::extent(self.parts(function).iter().flatten()).map(Routed::Constant);
+        }
         self.take(route, steps, one)
     }
 
@@ -370,6 +373,8 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
                 );
                 shape::scale(&code.decode(run)).map(Routed::Constant)
             }
+            // `shaped` measures the whole function before a match is taken.
+            Take::Extent => None,
         }
     }
 }
