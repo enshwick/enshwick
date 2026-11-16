@@ -291,7 +291,7 @@ pub fn fill_items(layout: &LootLayout, table: &[u8]) -> Vec<ItemId> {
 /// and of its groups, depth first; `None` when the table does not read.
 fn walk(
     layout: &LootLayout,
-    blob: &Blob,
+    blob: &Blob<impl AsRef<[u8]>>,
     group: usize,
     depth: usize,
     visit: &mut dyn FnMut(usize) -> Option<()>,

@@ -211,7 +211,8 @@ impl LoadMethods for crate::BaseLoad {
                     .ok_or_else(|| {
                         Off::new(format!("its base item {}: not in the game", item.like))
                     })?;
-                let bytes = items::served_clone(&layout, &like, &item, new)
+                let mut bytes = Vec::new();
+                items::served_clone(&layout, &like, &item, new, &mut bytes)
                     .ok_or_else(|| Off::new("the mod's item does not clone from its base"))?;
                 crate::resources::decode(new_key, &bytes)?
             }

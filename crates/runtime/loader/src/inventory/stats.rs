@@ -125,8 +125,8 @@ struct Held {
 #[derive(Debug, Default)]
 struct Watched {
     modifiers: Vec<Held>,
-    /// A mod asked to watch it.
-    asked: bool,
+    /// The mods that ask to watch it, in index order.
+    asked: Vec<ModIndex>,
     /// The account of the player it is.
     player: Option<u64>,
     /// What it wore and had at the last look, hashed.
@@ -137,6 +137,20 @@ struct Watched {
     /// The points the loader added to the entity's maximum health, stamina
     /// and mana.
     applied: [i32; 3],
+}
+
+impl Watched {
+    /// Adds mod `owner`'s ask to watch it, or takes that ask back; another
+    /// mod's ask stays.
+    fn ask(&mut self, owner: ModIndex, on: bool) {
+        match (self.asked.binary_search(&owner), on) {
+            (Err(at), true) => self.asked.insert(at, owner),
+            (Ok(at), false) => {
+                self.asked.remove(at);
+            }
+            _ => {}
+        }
+    }
 }
 
 /// A saved modifier, kept by the player's account, the mod's id and the
@@ -596,8 +610,9 @@ pub(crate) fn modify(
     })
 }
 
-/// Watches or stops watching `entity` for a mod.
-pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), StatsError> {
+/// Watches or stops watching `entity` for mod `owner`; it stays watched
+/// while any mod asks.
+pub(crate) fn watch(owner: ModIndex, entity: Entity, on: bool) -> Result<(), StatsError> {
     if SEALED.get().is_none() || entity == Entity(0) {
         return Err(StatsError::NothingToWatch);
     }
@@ -607,10 +622,10 @@ pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), StatsError> {
     STATE.with_world(|state| {
         if on {
             let watched = state.watched.entry(entity.0).or_default();
-            watched.asked = true;
+            watched.ask(owner, true);
             watched.dirty = true;
         } else if let Some(watched) = state.watched.get_mut(&entity.0) {
-            watched.asked = false;
+            watched.ask(owner, false);
         }
     });
     Ok(())

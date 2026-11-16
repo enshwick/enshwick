@@ -71,8 +71,11 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
             let mut stand_in = NewItem::new(NAME, vanilla);
             stand_in.name = Some(NAME.guid());
             stand_in.description = Some(DESCRIPTION.guid());
-            let build: Builder =
-                Box::new(move |base: &[u8]| clone_item(&layout, base, &stand_in, item));
+            let build: Builder = Box::new(move |base: &[u8]| {
+                let mut built = Vec::new();
+                clone_item(&layout, base, &stand_in, item, &mut built)?;
+                Some(built)
+            });
             (
                 item.key_by_hash(types::ITEM_INFO),
                 vanilla.key_by_hash(types::ITEM_INFO),
@@ -83,7 +86,15 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
     let listed: Vec<Guid> = orphans.iter().map(|&(item, _)| item).collect();
     let registry: Builder = Box::new(move |base: &[u8]| {
         listed.iter().try_fold(base.to_vec(), |registry, &item| {
-            list_item(&layout, &registry, item, &format!("stand-in {item}"))
+            let mut listed = Vec::new();
+            list_item(
+                &layout,
+                &registry,
+                item,
+                &format!("stand-in {item}"),
+                &mut listed,
+            )?;
+            Some(listed)
         })
     });
     for (tag, key) in [

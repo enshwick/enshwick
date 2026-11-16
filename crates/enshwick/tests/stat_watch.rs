@@ -75,5 +75,13 @@ mod tests {
             1,
             "watched again, the lifted curse counts"
         );
+        stats.watch(ENEMY, true);
+        stats.watch(ENEMY, false);
+        buffs.apply(ENEMY, CURSED, Apply::new()).unwrap();
+        assert_eq!(
+            loader.settle_stats(),
+            0,
+            "a mod's second watch is the same watch, which it stopped"
+        );
     }
 }

@@ -1,12 +1,15 @@
 //! What one served read costs: the loader builds the resource through the
-//! mod's builder, which here copies a large base and changes one byte, or
-//! decodes a typed table, doubles a field and encodes it again.
+//! mod's builder, which here copies a large base and changes one byte,
+//! decodes a typed table, doubles a field and encodes it again, or lists an
+//! item in a large item registry with a content helper, in the lent output
+//! and, for comparison, in a `Vec` copied into it.
 
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick::abi::{ResourceKey, Status};
 use enshwick::content::Guid;
+use enshwick::content::items::{ItemLayout, list_item};
 use enshwick::resources::{Field, Kind, Registry, Type, Value, fnv1a32};
 use enshwick::{Load, Mod, Off};
 
@@ -22,6 +25,34 @@ fn table_key() -> ResourceKey {
 
 fn large_key() -> ResourceKey {
     LARGE.key_by_hash(7)
+}
+
+/// An item registry listed in place, and the same listed in a `Vec` first.
+const LISTED: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000002");
+const COPIED: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000003");
+/// The item a build lists.
+const ITEM: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+/// A registry's reference array at 0 and its names, none, at 8.
+const LAYOUT: ItemLayout = ItemLayout {
+    id: 0,
+    object: 4,
+    name: 0x48,
+    description: 0x68,
+    flags: 0x70,
+    pid_entity: 0x78,
+    ui_values: 0x88,
+    icon_image: 0x58,
+    ui_value: [0x28, 0, 4, 8, 0x24],
+    refs: 0,
+    names: 8,
+};
+
+/// An item registry of `LARGE_LEN` bytes of references after its headers.
+fn registry() -> Vec<u8> {
+    let refs = u32::try_from(LARGE_LEN / 16).unwrap_or(u32::MAX);
+    let mut bytes = [16u32, refs, 8, 0].map(u32::to_le_bytes).concat();
+    bytes.resize(16 + LARGE_LEN, 0);
+    bytes
 }
 
 fn types() -> Vec<Type<'static>> {
@@ -54,6 +85,16 @@ impl Mod for Bench {
                 .encode_into(TABLE_TYPE, &value, Some(base), out)
                 .ok()
         })?;
+        let listed = LISTED.key_by_hash(7);
+        load.serve(listed, listed, |base, out| {
+            list_item(&LAYOUT, base, ITEM, "Item", out)
+        })?;
+        let copied = COPIED.key_by_hash(7);
+        load.serve(copied, copied, |base, out| {
+            let mut bytes = Vec::new();
+            list_item(&LAYOUT, base, ITEM, "Item", &mut bytes)?;
+            out.copy_from(&bytes)
+        })?;
         Ok(Self)
     }
 }
@@ -73,6 +114,8 @@ fn reads(c: &mut Criterion) {
         .types(types())
         .resource(table_key(), table)
         .resource(large_key(), vec![0x5a; LARGE_LEN])
+        .resource(LISTED.key_by_hash(7), registry())
+        .resource(COPIED.key_by_hash(7), registry())
         .install();
     // SAFETY: the three functions are the exports of this file's `declare_mod!(Bench)`.
     let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -82,6 +125,12 @@ fn reads(c: &mut Criterion) {
     };
     c.bench_function("served_read_large", |b| {
         b.iter(|| black_box(host.served_resource(black_box(large_key()))));
+    });
+    c.bench_function("served_read_content", |b| {
+        b.iter(|| black_box(host.served_resource(black_box(LISTED.key_by_hash(7)))));
+    });
+    c.bench_function("served_read_content_copied", |b| {
+        b.iter(|| black_box(host.served_resource(black_box(COPIED.key_by_hash(7)))));
     });
     c.bench_function("served_read_value", |b| {
         b.iter(|| black_box(host.served_resource(black_box(table_key()))));

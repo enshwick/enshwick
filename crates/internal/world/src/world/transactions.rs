@@ -1,5 +1,9 @@
 //! Transactions: changes of the server's world written as one, with undo.
 
+use core::ops::ControlFlow;
+use core::time::Duration;
+use std::time::Instant;
+
 use crate::Entity;
 use crate::abi::{
     BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
@@ -116,6 +120,25 @@ impl TransactionStatus {
             _ => Self::Pending,
         }
     }
+}
+
+/// What a committed [`Transaction`] came to once it stopped running, which
+/// [`World::when_settled`] hands its handler.
+///
+/// # Examples
+///
+/// See [`World::when_settled`].
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct Settled {
+    /// [`TransactionStatus::Applied`] once it is written whole, else how it
+    /// ended; still [`TransactionStatus::Pending`] when the wait's bound
+    /// passed first; `None` once the loader no longer remembers it.
+    pub status: Option<TransactionStatus>,
+    /// The props it placed and still holds, oldest first, as
+    /// [`World::transaction_entities`] lists them; once it is applied they
+    /// stand in the world.
+    pub props: Vec<Entity>,
 }
 
 /// Changes of the server's world that the loader writes as one, and can
@@ -664,6 +687,76 @@ impl World {
         }
         raw.truncate(count as usize);
         raw
+    }
+
+    /// Runs `handler` once transaction `id` of this mod stopped running: one
+    /// scheduler pass after it is [`TransactionStatus::Applied`], when the
+    /// props it placed stand in the world, or once it ended otherwise. A large
+    /// transaction spread over steps is waited for whole; an undo of it that
+    /// is still running counts as its end. Once `within` passed, the handler
+    /// gets the transaction as it stands, still pending perhaps. `handler` runs on the server's game
+    /// thread, as a [`Scheduler`](crate::schedule::Scheduler) task of this
+    /// mod; the wait ends without it when the game it started in ends. The
+    /// handler decides what an end other than applied means, such as a
+    /// [`TransactionStatus::Failed`] with [`WorldError::NotLoaded`], which the
+    /// same changes committed again may pass.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Unavailable`] when the loader gave this mod no tick to
+    /// wait on when it opened the world.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use enshwick::world::{TransactionStatus, World, WorldTransform};
+    /// use enshwick::{ItemId, WorldError};
+    ///
+    /// fn place_chest(world: World, chest: ItemId, at: WorldTransform) -> Result<(), WorldError> {
+    ///     let id = world.transaction().place_prop(chest, at).commit()?;
+    ///     world.when_settled(id, Duration::from_secs(10), |settled| match (&settled.status, settled.props.first()) {
+    ///         (Some(TransactionStatus::Applied), Some(chest)) => {
+    ///             enshwick::info!("chest {chest:?} stands");
+    ///         }
+    ///         (status, _) => enshwick::warn!("no chest: {status:?}"),
+    ///     })
+    /// }
+    /// ```
+    #[script]
+    pub fn when_settled(
+        self,
+        id: TransactionId,
+        within: Duration,
+        handler: impl FnOnce(&Settled) + Send + 'static,
+    ) -> Result<(), WorldError> {
+        let scheduler = self.0.scheduler.ok_or(WorldError::Unavailable)?;
+        let mut handler = Some(handler);
+        let mut applied = false;
+        let until = Instant::now().checked_add(within);
+        scheduler.every(Duration::ZERO, move || {
+            let status = self.transaction_status(id);
+            let waits = until.is_none_or(|until| Instant::now() < until);
+            match status {
+                Some(TransactionStatus::Pending) if waits => return ControlFlow::Continue(()),
+                // Its props stand from the step after the one that placed them.
+                Some(TransactionStatus::Applied) if !applied && waits => {
+                    applied = true;
+                    return ControlFlow::Continue(());
+                }
+                _ => {}
+            }
+            let settled = Settled {
+                status,
+                props: self.transaction_entities(id),
+            };
+            if let Some(handler) = handler.take() {
+                handler(&settled);
+            }
+            ControlFlow::Break(())
+        });
+        Ok(())
     }
 
     /// Where transaction `id` of this mod stands; `None` for an id the

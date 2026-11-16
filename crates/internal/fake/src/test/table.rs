@@ -259,6 +259,9 @@ pub(crate) struct State {
     pub(crate) local_input_info: enshwick_core::abi::LocalInputInfo,
     /// The client snapshot the loader would write, as the test set it.
     pub(crate) client_snapshot: enshwick_core::abi::ClientSnapshot,
+    /// Whether a snapshot ask started the frame's reads, and whether an
+    /// interface step read them since.
+    pub(crate) snapshot_reads: (bool, bool),
     /// The loader's parts and features off, as the test turned them off.
     pub(crate) loader_off: Vec<enshwick_core::abi::LoaderOff>,
     /// The client commands mods queued, each with its kind, target and
@@ -498,6 +501,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
             age_ms: u64::MAX,
         },
         client_snapshot: enshwick_core::abi::ClientSnapshot::EMPTY,
+        snapshot_reads: (false, false),
         loader_off: Vec::new(),
         client_commands: Vec::new(),
         hud: None,

@@ -625,7 +625,8 @@ pub(crate) extern "system" fn client_command_status(
 }
 
 /// The client snapshot the test set; the loader's answers: unavailable on
-/// a server.
+/// a server, and from the first ask, which starts the reads, until an
+/// interface step reads them, the empty snapshot, never read.
 pub(crate) extern "system" fn client_snapshot(
     _me: ModHandle,
     out: *mut enshwick_core::abi::ClientSnapshot,
@@ -637,7 +638,13 @@ pub(crate) extern "system" fn client_snapshot(
         if s.host.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        super::put_headed(out, s.client_snapshot)
+        s.snapshot_reads.0 = true;
+        let snapshot = if s.snapshot_reads.1 {
+            s.client_snapshot
+        } else {
+            enshwick_core::abi::ClientSnapshot::EMPTY
+        };
+        super::put_headed(out, snapshot)
     })
 }
 

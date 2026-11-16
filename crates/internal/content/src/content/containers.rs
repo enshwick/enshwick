@@ -5,6 +5,7 @@ use crate::Off;
 use crate::engine_ids as ids;
 
 use super::{Blob, EngineFacts};
+use crate::resources::Grow;
 
 /// A `BlobVariant` in a template's component list: type hash, offset from
 /// its second word, size.
@@ -69,13 +70,21 @@ impl ContainerLayout {
 }
 
 /// The data offset of each component of `template` with type hash `hash`.
-fn components(layout: &ContainerLayout, blob: &Blob, hash: u32) -> Option<Vec<usize>> {
+fn components(
+    layout: &ContainerLayout,
+    blob: &Blob<impl AsRef<[u8]>>,
+    hash: u32,
+) -> Option<Vec<usize>> {
     template_components(blob, layout.components, hash)
 }
 
 /// The data offset of each component with type hash `hash` in the template
 /// `blob`, whose component list sits at `list`.
-pub(crate) fn template_components(blob: &Blob, list: usize, hash: u32) -> Option<Vec<usize>> {
+pub(crate) fn template_components(
+    blob: &Blob<impl AsRef<[u8]>>,
+    list: usize,
+    hash: u32,
+) -> Option<Vec<usize>> {
     let (start, count) = blob.array(list)?;
     let mut found = Vec::new();
     for variant in (0..usize::try_from(count).ok()?).map(|i| start + i * VARIANT) {
@@ -100,8 +109,8 @@ pub fn container_slots(layout: &ContainerLayout, template: &[u8]) -> Option<u8> 
     blob.bytes().get(setup + layout.generic).copied()
 }
 
-/// The container `template` with `slots` generic slots; `None` for a
-/// template without an inventory setup of its own.
+/// Builds in `out` the container `template` with `slots` generic slots;
+/// `None` for a template without an inventory setup of its own.
 ///
 /// It writes the inventory setup's generic and loot counts and its
 /// override's count, which vanilla containers keep equal.
@@ -113,12 +122,18 @@ pub fn container_slots(layout: &ContainerLayout, template: &[u8]) -> Option<u8> 
 ///
 /// fn doubled(layout: &ContainerLayout, template: &[u8]) -> Option<Vec<u8>> {
 ///     let slots = container_slots(layout, template)?;
-///     resize_container(layout, template, slots.saturating_mul(2).min(128))
+///     let mut doubled = Vec::new();
+///     resize_container(layout, template, slots.saturating_mul(2).min(128), &mut doubled)?;
+///     Some(doubled)
 /// }
 /// ```
-#[must_use]
-pub fn resize_container(layout: &ContainerLayout, template: &[u8], slots: u8) -> Option<Vec<u8>> {
-    let mut blob = Blob::new(template);
+pub fn resize_container(
+    layout: &ContainerLayout,
+    template: &[u8],
+    slots: u8,
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut blob = Blob::over(out, template);
     let setups = components(layout, &blob, layout.setup)?;
     if setups.is_empty() {
         return None;
@@ -137,7 +152,7 @@ pub fn resize_container(layout: &ContainerLayout, template: &[u8], slots: u8) ->
             }
         }
     }
-    Some(blob.into_bytes())
+    Some(())
 }
 
 /// The container layout and template of the tests here, the vanilla
@@ -197,7 +212,8 @@ pub(crate) mod tests {
     fn a_chest_s_slots_read_and_change_in_every_count() {
         let template = chest(24);
         assert_eq!(container_slots(&LAYOUT, &template), Some(24));
-        let resized = resize_container(&LAYOUT, &template, 48).unwrap();
+        let resized =
+            crate::content::built(|out| resize_container(&LAYOUT, &template, 48, out)).unwrap();
         assert_eq!(container_slots(&LAYOUT, &resized), Some(48));
         let blob = Blob::new(&resized);
         let setup = components(&LAYOUT, &blob, LAYOUT.setup).unwrap()[0];
@@ -214,6 +230,9 @@ pub(crate) mod tests {
         assert!(blob.set_array(0, 8, 0));
         let empty = blob.into_bytes();
         assert_eq!(container_slots(&LAYOUT, &empty), None);
-        assert_eq!(resize_container(&LAYOUT, &empty, 48), None);
+        assert_eq!(
+            crate::content::built(|out| resize_container(&LAYOUT, &empty, 48, out)),
+            None
+        );
     }
 }

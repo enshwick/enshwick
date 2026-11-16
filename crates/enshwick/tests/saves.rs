@@ -189,7 +189,8 @@ mod tests {
             Err(enshwick::WorldError::Gone),
             "a spawn is in the world only from the next step"
         );
-        assert_eq!(loader.tick(Duration::from_millis(50)), 0);
+        // A step; the world's scheduler is the one handler it runs.
+        let _ran = loader.tick(Duration::from_millis(50));
         world.set_saved(decoy, false).unwrap();
         world.set_saved(other, false).unwrap();
         world.set_saved(decoy, false).unwrap();

@@ -14,6 +14,7 @@ use crate::engine_ids as ids;
 
 use super::workshops::WorkshopId;
 use super::{Blob, EngineFacts, Guid, types};
+use crate::resources::{Grow, Output};
 
 /// The client's UI bundle resource, which holds the crafting menu.
 pub const UI_BUNDLE: Guid = Guid::parse("46e14df6-fb8f-4f66-9463-e23b9e19e48e");
@@ -111,8 +112,8 @@ pub struct MenuEntry {
     pub workshop: Option<WorkshopId>,
 }
 
-/// The UI bundle with each of `entries` listed in the crafting menu, right
-/// after the recipe it follows.
+/// Builds in `out` the UI bundle with each of `entries` listed in the crafting
+/// menu, right after the recipe it follows.
 ///
 /// A recipe with no place to go, or whose group already shows [`GROUP_ENTRIES`]
 /// recipes, is left out with a warning; `None` only when the bundle does not
@@ -132,19 +133,27 @@ pub struct MenuEntry {
 ///         workshop: None,
 ///     };
 ///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
-///     load.serve(bundle, bundle, move |base, out| out.copy_from(&list_recipes(&layout, base, &[entry])?))
+///     load.serve(bundle, bundle, move |base, out| list_recipes(&layout, base, &[entry], out))
 /// }
 /// ```
-#[must_use]
-pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -> Option<Vec<u8>> {
-    let mut blob = Blob::new(bundle);
+pub fn list_recipes(
+    layout: &MenuLayout,
+    bundle: &[u8],
+    entries: &[MenuEntry],
+    out: &mut impl Grow,
+) -> Option<()> {
+    list_in(layout, &mut Blob::over(out, bundle), entries)
+}
+
+/// Lists each of `entries` in the bundle `blob` holds, as [`list_recipes`].
+fn list_in(layout: &MenuLayout, blob: &mut Blob<impl Grow>, entries: &[MenuEntry]) -> Option<()> {
     let (mut listed, mut unplaced, mut full) = (0usize, 0usize, 0usize);
     for entry in entries {
-        let Place::In { group, set, after } = find_place(layout, &blob, entry)? else {
+        let Place::In { group, set, after } = find_place(layout, blob, entry)? else {
             unplaced += 1;
             continue;
         };
-        if group_entries(layout, &blob, group)? >= GROUP_ENTRIES {
+        if group_entries(layout, blob, group)? >= GROUP_ENTRIES {
             full += 1;
             continue;
         }
@@ -175,12 +184,12 @@ pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -
             "{full} recipes left out of the crafting menu: their group shows {GROUP_ENTRIES} recipes, the game's most"
         );
     }
-    Some(blob.into_bytes())
+    Some(())
 }
 
-/// The UI bundle with each recipe of `moves` taken out of every workshop's
-/// crafting menu but its new workshop's, where it goes last in the first
-/// set unless it is listed there already.
+/// Builds in `out` the UI bundle with each recipe of `moves` taken out of
+/// every workshop's crafting menu but its new workshop's, where it goes last
+/// in the first set unless it is listed there already.
 ///
 /// A recipe whose new workshop has no menu is only taken out; `None` when
 /// the bundle does not read with `layout`.
@@ -197,16 +206,16 @@ pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -
 ///     let planks = Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac");
 ///     let kiln = WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
 ///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
-///     load.serve(bundle, bundle, move |base, out| out.copy_from(&move_recipes(&layout, base, &[(planks, kiln)])?))
+///     load.serve(bundle, bundle, move |base, out| move_recipes(&layout, base, &[(planks, kiln)], out))
 /// }
 /// ```
-#[must_use]
 pub fn move_recipes(
     layout: &MenuLayout,
     bundle: &[u8],
     moves: &[(Guid, WorkshopId)],
-) -> Option<Vec<u8>> {
-    let mut blob = Blob::new(bundle);
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut blob = Blob::over(out, bundle);
     let (workshops, _) = blob.array(layout.collection + layout.workshops)?;
     let mut entries = Vec::new();
     for &(recipe, workshop) in moves {
@@ -248,7 +257,7 @@ pub fn move_recipes(
             });
         }
     }
-    list_recipes(layout, &blob.into_bytes(), &entries)
+    list_in(layout, &mut blob, &entries)
 }
 
 /// Where a recipe goes in the crafting menu.
@@ -265,7 +274,11 @@ enum Place {
 }
 
 /// The place for `entry`; `None` when the bundle does not read.
-fn find_place(layout: &MenuLayout, blob: &Blob, entry: &MenuEntry) -> Option<Place> {
+fn find_place(
+    layout: &MenuLayout,
+    blob: &Blob<impl AsRef<[u8]>>,
+    entry: &MenuEntry,
+) -> Option<Place> {
     let tree_count = tree_count(layout, blob)?;
     let trees: Vec<usize> = match entry.workshop {
         Some(workshop) => match tree_of(layout, blob, workshop) {
@@ -311,7 +324,7 @@ fn find_place(layout: &MenuLayout, blob: &Blob, entry: &MenuEntry) -> Option<Pla
 /// How many trees the menu has, one per workshop; `None` unless the
 /// workshops and the trees are as many and more than none, as in every
 /// menu the game bakes.
-fn tree_count(layout: &MenuLayout, blob: &Blob) -> Option<usize> {
+fn tree_count(layout: &MenuLayout, blob: &Blob<impl AsRef<[u8]>>) -> Option<usize> {
     let (_, workshops) = blob.array(layout.collection + layout.workshops)?;
     let (_, trees) = blob.array(layout.collection + layout.trees)?;
     (workshops == trees && trees > 0)
@@ -321,14 +334,18 @@ fn tree_count(layout: &MenuLayout, blob: &Blob) -> Option<usize> {
 
 /// The index of `workshop`'s tree; `None` for a workshop the menu lacks or
 /// a bundle that does not read.
-fn tree_of(layout: &MenuLayout, blob: &Blob, workshop: WorkshopId) -> Option<usize> {
+fn tree_of(
+    layout: &MenuLayout,
+    blob: &Blob<impl AsRef<[u8]>>,
+    workshop: WorkshopId,
+) -> Option<usize> {
     let (start, _) = blob.array(layout.collection + layout.workshops)?;
     (0..tree_count(layout, blob)?)
         .find(|&index| blob.read_u32(start + index * 4) == Some(workshop.id()))
 }
 
 /// The offsets of the groups of tree `tree`.
-fn groups(layout: &MenuLayout, blob: &Blob, tree: usize) -> Option<Vec<usize>> {
+fn groups(layout: &MenuLayout, blob: &Blob<impl AsRef<[u8]>>, tree: usize) -> Option<Vec<usize>> {
     let (trees, _) = blob.array(layout.collection + layout.trees)?;
     elements(
         blob,
@@ -339,7 +356,7 @@ fn groups(layout: &MenuLayout, blob: &Blob, tree: usize) -> Option<Vec<usize>> {
 
 /// The offsets of the `size`-byte elements of the array whose header is at
 /// `field`.
-fn elements(blob: &Blob, field: usize, size: usize) -> Option<Vec<usize>> {
+fn elements(blob: &Blob<impl AsRef<[u8]>>, field: usize, size: usize) -> Option<Vec<usize>> {
     let (start, count) = blob.array(field)?;
     Some(
         (0..usize::try_from(count).ok()?)
@@ -349,7 +366,11 @@ fn elements(blob: &Blob, field: usize, size: usize) -> Option<Vec<usize>> {
 }
 
 /// How many recipes the group at `group` lists, all its sets together.
-fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize> {
+fn group_entries(
+    layout: &MenuLayout,
+    blob: &Blob<impl AsRef<[u8]>>,
+    group: usize,
+) -> Option<usize> {
     let mut total = 0usize;
     for set in elements(blob, group + layout.sets, layout.set)? {
         let (_, count) = blob.array(set + layout.entries)?;
@@ -358,8 +379,8 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
     Some(total)
 }
 
-/// The UI bundle with a crafting menu for `workshop`: one group with one empty
-/// set, where recipes that name the workshop go.
+/// Builds in `out` the UI bundle with a crafting menu for `workshop`: one
+/// group with one empty set, where recipes that name the workshop go.
 ///
 /// A workshop the menu already has keeps its tree; `None` when the bundle does
 /// not read with `layout`.
@@ -375,17 +396,21 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let bench = WorkshopId::new(id!("bench.workshop").guid());
 ///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
-///     load.serve(bundle, bundle, move |base, out| out.copy_from(&list_workshop(&layout, base, bench)?))
+///     load.serve(bundle, bundle, move |base, out| list_workshop(&layout, base, bench, out))
 /// }
 /// ```
-#[must_use]
-pub fn list_workshop(layout: &MenuLayout, bundle: &[u8], workshop: WorkshopId) -> Option<Vec<u8>> {
-    let mut blob = Blob::new(bundle);
+pub fn list_workshop(
+    layout: &MenuLayout,
+    bundle: &[u8],
+    workshop: WorkshopId,
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut blob = Blob::over(out, bundle);
     let workshops = layout.collection + layout.workshops;
     let trees = layout.collection + layout.trees;
     tree_count(layout, &blob)?;
     if tree_of(layout, &blob, workshop).is_some() {
-        return Some(blob.into_bytes());
+        return Some(());
     }
     let set = blob.append(&vec![0; layout.set], 8);
     let mut group = vec![0u8; layout.group];
@@ -421,7 +446,7 @@ pub fn list_workshop(layout: &MenuLayout, bundle: &[u8], workshop: WorkshopId) -
             return None;
         }
     }
-    Some(blob.into_bytes())
+    Some(())
 }
 
 /// Serves the UI bundle with `edit` on it, on the client only. A layout
@@ -429,7 +454,7 @@ pub fn list_workshop(layout: &MenuLayout, bundle: &[u8], workshop: WorkshopId) -
 /// as it is with a warning: the recipes themselves still work.
 pub(crate) fn serve(
     load: &mut crate::BaseLoad,
-    edit: impl Fn(&MenuLayout, &[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
+    edit: impl Fn(&MenuLayout, &[u8], &mut Output<'_>) -> Option<()> + Send + Sync + 'static,
 ) -> Result<(), Off> {
     if load.host().build().side != Side::CLIENT {
         return Ok(());
@@ -444,11 +469,11 @@ pub(crate) fn serve(
         }
     };
     load.serve(bundle, bundle, move |base, out| {
-        let Some(edited) = edit(&layout, base) else {
+        if edit(&layout, base, out).is_none() {
             crate::warn!("new recipes stay out of the crafting menu: the UI bundle does not read");
             return out.copy_from(base);
-        };
-        out.copy_from(&edited)
+        }
+        Some(())
     })
 }
 
@@ -554,7 +579,9 @@ mod tests {
             (kiln, &[&[&[3]]]),
             (9, &[&[&[4]]]),
         ]);
-        let built = move_recipes(&LAYOUT, &base, &[(CHEST, bench())]).unwrap();
+        let built =
+            crate::content::built(|out| move_recipes(&LAYOUT, &base, &[(CHEST, bench())], out))
+                .unwrap();
         assert_eq!(
             read(&built),
             [
@@ -563,7 +590,9 @@ mod tests {
                 (9, vec![vec![vec![4]]]),
             ]
         );
-        let again = move_recipes(&LAYOUT, &built, &[(CHEST, bench())]).unwrap();
+        let again =
+            crate::content::built(|out| move_recipes(&LAYOUT, &built, &[(CHEST, bench())], out))
+                .unwrap();
         assert_eq!(read(&again), read(&built));
     }
 
@@ -575,7 +604,8 @@ mod tests {
             after: Some(CHEST),
             workshop: None,
         };
-        let built = list_recipes(&LAYOUT, &base, &[entry]).unwrap();
+        let built =
+            crate::content::built(|out| list_recipes(&LAYOUT, &base, &[entry], out)).unwrap();
         assert_eq!(
             read(&built),
             [
@@ -596,13 +626,15 @@ mod tests {
             after: Some(CHEST),
             workshop: None,
         };
-        let first = list_recipes(&LAYOUT, &base, &[locker]).unwrap();
+        let first =
+            crate::content::built(|out| list_recipes(&LAYOUT, &base, &[locker], out)).unwrap();
         let vault = MenuEntry {
             recipe: VAULT,
             after: Some(LOCKER),
             workshop: None,
         };
-        let second = list_recipes(&LAYOUT, &first, &[vault]).unwrap();
+        let second =
+            crate::content::built(|out| list_recipes(&LAYOUT, &first, &[vault], out)).unwrap();
         assert_eq!(
             read(&second),
             [(
@@ -620,8 +652,12 @@ mod tests {
             after: Some(CHEST),
             workshop: None,
         };
-        let first = list_recipes(&LAYOUT, &base, &[after_chest(LOCKER)]).unwrap();
-        let second = list_recipes(&LAYOUT, &first, &[after_chest(VAULT)]).unwrap();
+        let first =
+            crate::content::built(|out| list_recipes(&LAYOUT, &base, &[after_chest(LOCKER)], out))
+                .unwrap();
+        let second =
+            crate::content::built(|out| list_recipes(&LAYOUT, &first, &[after_chest(VAULT)], out))
+                .unwrap();
         assert_eq!(
             read(&second),
             [(
@@ -642,7 +678,8 @@ mod tests {
             after: Some(CHEST),
             workshop: Some(bench()),
         };
-        let built = list_recipes(&LAYOUT, &base, &[entry]).unwrap();
+        let built =
+            crate::content::built(|out| list_recipes(&LAYOUT, &base, &[entry], out)).unwrap();
         assert_eq!(
             read(&built)[1],
             (
@@ -668,7 +705,8 @@ mod tests {
                 workshop: Some(bench()),
             },
         ];
-        let built = list_recipes(&LAYOUT, &base, &entries).unwrap();
+        let built =
+            crate::content::built(|out| list_recipes(&LAYOUT, &base, &entries, out)).unwrap();
         assert_eq!(built, base);
     }
 
@@ -682,10 +720,14 @@ mod tests {
             after: Some(CHEST),
             workshop: Some(bench()),
         };
-        assert_eq!(list_recipes(&LAYOUT, &base, &[entry]).unwrap(), base);
+        assert_eq!(
+            crate::content::built(|out| list_recipes(&LAYOUT, &base, &[entry], out)).unwrap(),
+            base
+        );
 
         let room = bundle(&[(bench().id(), &[&[left, &right[1..]]])]);
-        let built = list_recipes(&LAYOUT, &room, &[entry]).unwrap();
+        let built =
+            crate::content::built(|out| list_recipes(&LAYOUT, &room, &[entry], out)).unwrap();
         assert_eq!(read(&built)[0].1[0][0].len(), 301);
         assert_eq!(read(&built)[0].1[0][0][300], LOCKER.fnv1a());
     }
@@ -693,7 +735,8 @@ mod tests {
     #[test]
     fn a_new_workshop_gets_a_menu_its_recipes_go_to() {
         let base = bundle(&[(9, &[&[&[CHEST.fnv1a()]]])]);
-        let built = list_workshop(&LAYOUT, &base, bench()).unwrap();
+        let built =
+            crate::content::built(|out| list_workshop(&LAYOUT, &base, bench(), out)).unwrap();
         assert_eq!(
             read(&built),
             [
@@ -704,14 +747,18 @@ mod tests {
         let blob = Blob::new(&built);
         let (groups, _) = blob.array(blob.array(0x48).unwrap().0 + 8).unwrap();
         assert_eq!(&blob.bytes()[groups..groups + 16], &bench().guid().0);
-        assert_eq!(list_workshop(&LAYOUT, &built, bench()).unwrap(), built);
+        assert_eq!(
+            crate::content::built(|out| list_workshop(&LAYOUT, &built, bench(), out)).unwrap(),
+            built
+        );
 
         let entry = MenuEntry {
             recipe: LOCKER,
             after: Some(CHEST),
             workshop: Some(bench()),
         };
-        let built = list_recipes(&LAYOUT, &built, &[entry]).unwrap();
+        let built =
+            crate::content::built(|out| list_recipes(&LAYOUT, &built, &[entry], out)).unwrap();
         assert_eq!(
             read(&built)[1],
             (bench().id(), vec![vec![vec![LOCKER.fnv1a()]]])
@@ -724,11 +771,18 @@ mod tests {
         let mut blob = Blob::new(&bundle(&[(9, &[&[&[1]]])]));
         assert!(blob.write(0x50, &0u32.to_le_bytes()));
         assert!(blob.write(0x54, &0u32.to_le_bytes()));
-        let built = Blob::new(&list_workshop(&LAYOUT, blob.bytes(), bench()).unwrap());
+        let built = Blob::new(
+            &crate::content::built(|out| list_workshop(&LAYOUT, blob.bytes(), bench(), out))
+                .unwrap(),
+        );
         assert_eq!(built.read_u32(0x50), Some(1));
         assert_eq!(built.read_u32(0x54), Some(1));
-        let kept =
-            Blob::new(&list_workshop(&LAYOUT, &bundle(&[(9, &[&[&[1]]])]), bench()).unwrap());
+        let kept = Blob::new(
+            &crate::content::built(|out| {
+                list_workshop(&LAYOUT, &bundle(&[(9, &[&[&[1]]])]), bench(), out)
+            })
+            .unwrap(),
+        );
         assert_eq!(kept.read_u32(0x54), Some(2));
     }
 
@@ -739,15 +793,27 @@ mod tests {
             after: Some(CHEST),
             workshop: None,
         };
-        assert!(list_recipes(&LAYOUT, &[0; 8], &[entry]).is_none());
-        assert!(list_workshop(&LAYOUT, &[0; 8], bench()).is_none());
+        assert!(
+            crate::content::built(|out| list_recipes(&LAYOUT, &[0; 8], &[entry], out)).is_none()
+        );
+        assert!(
+            crate::content::built(|out| list_workshop(&LAYOUT, &[0; 8], bench(), out)).is_none()
+        );
 
         let mut uneven = Blob::new(&bundle(&[(9, &[&[&[CHEST.fnv1a()]]])]));
         let (workshops, _) = uneven.array(0x40).unwrap();
         assert!(uneven.set_array(0x40, workshops, 2));
-        assert!(list_recipes(&LAYOUT, uneven.bytes(), &[entry]).is_none());
-        assert!(list_workshop(&LAYOUT, uneven.bytes(), bench()).is_none());
+        assert!(
+            crate::content::built(|out| list_recipes(&LAYOUT, uneven.bytes(), &[entry], out))
+                .is_none()
+        );
+        assert!(
+            crate::content::built(|out| list_workshop(&LAYOUT, uneven.bytes(), bench(), out))
+                .is_none()
+        );
         let empty = bundle(&[]);
-        assert!(list_recipes(&LAYOUT, &empty, &[entry]).is_none());
+        assert!(
+            crate::content::built(|out| list_recipes(&LAYOUT, &empty, &[entry], out)).is_none()
+        );
     }
 }

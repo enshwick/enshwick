@@ -57,7 +57,7 @@ pub use rename::Rename;
 pub use saves::{SaveInfo, WorldGuid};
 pub use stats::{Meter, Progress, Skill, Vitals};
 #[cfg(feature = "unstable")]
-pub use transactions::{Transaction, TransactionId, TransactionStatus};
+pub use transactions::{Settled, Transaction, TransactionId, TransactionStatus};
 
 /// A reflected component type a mod may write, resolved once at init with
 /// [`WritableType::resolve`]: one the server owns, not a copy the game keeps
@@ -382,7 +382,17 @@ impl crate::script::Bound for World {
 
 impl LoadMethods for BaseLoad {
     fn world(&mut self) -> Result<World, Off> {
-        World::resolve(self)
+        // Taken at init, as a tick cannot be subscribed after it.
+        #[cfg(feature = "unstable")]
+        let scheduler = self
+            .scheduler()
+            .inspect_err(|off| crate::debug!("transaction waits off: {off}"))
+            .ok();
+        World::resolve(
+            self,
+            #[cfg(feature = "unstable")]
+            scheduler,
+        )
     }
 }
 
@@ -439,6 +449,10 @@ struct Resolved {
     label: Option<ComponentType>,
     stats: Option<stats::Stats>,
     containers: Option<containers::Containers>,
+    /// The mod's scheduler, which waits for transactions from; `None` when
+    /// its tick could not be subscribed.
+    #[cfg(feature = "unstable")]
+    scheduler: Option<crate::schedule::Scheduler>,
 }
 
 static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
@@ -456,7 +470,10 @@ fn orientation_offset(load: &BaseLoad) -> Option<usize> {
 
 #[crate::script(things)]
 impl World {
-    pub(crate) fn resolve(load: &BaseLoad) -> Result<Self, Off> {
+    pub(crate) fn resolve(
+        load: &BaseLoad,
+        #[cfg(feature = "unstable")] scheduler: Option<crate::schedule::Scheduler>,
+    ) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
             return Ok(Self(resolved));
         }
@@ -486,6 +503,8 @@ impl World {
             stats: stats::Stats::resolve(load, host)
                 .inspect_err(|off| crate::debug!("stat reads off: {off}"))
                 .ok(),
+            #[cfg(feature = "unstable")]
+            scheduler,
         };
         Ok(Self(RESOLVED.get_or_init(|| resolved)))
     }

@@ -7,6 +7,7 @@ use crate::engine_ids as ids;
 use super::super::workshops::WorkshopId;
 use super::super::{Blob, EngineFacts, Guid, Id};
 use super::derive::{makes, scaled_inputs};
+use crate::resources::Grow;
 
 /// The most recipes the game itself takes at one workshop; more ends the game
 /// with "`SmallDynamicArray` is out of elements" unless the loader lifts the
@@ -162,8 +163,8 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
     })
 }
 
-/// The recipe registry with `recipe` after the others, unless its workshop
-/// already holds `limit` recipes.
+/// Builds in `out` the recipe registry with `recipe` after the others, unless
+/// its workshop already holds `limit` recipes.
 ///
 /// `Load::add_recipe` serves it with [`workshop_limit`]; call it from a
 /// [`Load::serve`](../../struct.Load.html#method.serve) builder of your own to combine it with other edits.
@@ -183,18 +184,18 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 ///     let layout = RecipeLayout::resolve(load)?;
 ///     let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
 ///     load.serve(registry, registry, move |base, out| {
-///         out.copy_from(&add_recipe_to(&layout, base, &recipe, workshop_limit())?)
+///         add_recipe_to(&layout, base, &recipe, workshop_limit(), out)
 ///     })
 /// }
 /// ```
-#[must_use]
 pub fn add_recipe_to(
     layout: &RecipeLayout,
     registry: &[u8],
     recipe: &NewRecipe,
     limit: usize,
-) -> Option<Vec<u8>> {
-    let mut registry = Blob::new(registry);
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut registry = Blob::over(out, registry);
     let (start, count) = registry.array(layout.recipes)?;
     let Some(like) = (0..usize::try_from(count).ok()?)
         .map(|i| start + i * layout.recipe)
@@ -218,7 +219,7 @@ pub fn add_recipe_to(
         >= limit
     {
         crate::warn!("recipe skipped: workshop {workshop} holds {limit} recipes, the game's most");
-        return Some(registry.into_bytes());
+        return Some(());
     }
     let template = registry.bytes().get(like..like + layout.recipe)?.to_vec();
     let inputs = scaled_inputs(layout, &registry, like, recipe.cost)?;
@@ -254,13 +255,13 @@ pub fn add_recipe_to(
         && recipe
             .workshop
             .is_none_or(|target| retarget(layout, &mut registry, at, target));
-    written.then(|| registry.into_bytes())
+    written.then_some(())
 }
 
 /// Moves the recipe at `at` to `workshop`.
 pub(super) fn retarget(
     layout: &RecipeLayout,
-    blob: &mut Blob,
+    blob: &mut Blob<impl Grow>,
     at: usize,
     workshop: WorkshopId,
 ) -> bool {
@@ -271,7 +272,7 @@ pub(super) fn retarget(
 /// How many recipes each workshop has.
 pub(super) fn workshop_counts(
     layout: &RecipeLayout,
-    blob: &Blob,
+    blob: &Blob<impl AsRef<[u8]>>,
 ) -> Option<rustc_hash::FxHashMap<u32, usize>> {
     let (start, count) = blob.array(layout.recipes)?;
     let mut counts = rustc_hash::FxHashMap::default();

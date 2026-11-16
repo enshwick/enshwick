@@ -2563,6 +2563,14 @@ export type SettingsRead = {
 	preset: GameSettingsPreset,
 }
 
+--- What a committed `Transaction` came to once it stopped running, which `World.when_settled` hands its handler.
+export type Settled = {
+	--- `TransactionStatus.Applied` once it is written whole, else how it ended; still `TransactionStatus.Pending` when the wait's bound passed first; nil once the loader no longer remembers it.
+	status: TransactionStatus?,
+	--- The props it placed and still holds, oldest first, as `World.transaction_entities` lists them; once it is applied they stand in the world.
+	props: {number},
+}
+
 --- The shape of an edit. The name is enshwick's, not the game's.
 export type Shape = "Round" | "Square"
 
@@ -2782,7 +2790,7 @@ export type Stats = {
 	sources: (self: Stats, entity: number, stat: Stat?) -> {Source},
 	--- The id and definition of `stat`; nil for a kind opened but never defined. Any thread.
 	info: (self: Stats, stat: Stat) -> StatInfo?,
-	--- Watches `entity` for the items it wears and the buffs it has, or stops watching it. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. Any thread, on the process that runs the world; elsewhere it does nothing.
+	--- Watches `entity` for the items it wears and the buffs it has, or stops this mod's watch. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. The watch is per mod: the entity stays watched while any mod watches it, so one mod's stop leaves another's watch, and a mod turned off loses its watches. Any thread, on the process that runs the world; elsewhere it does nothing.
 	watch: (self: Stats, entity: number, watch: boolean) -> (),
 	--- The key a stat id hashes to, as `key_of` gives it.
 	key_of: (self: Stats, id: string) -> number,
@@ -3807,6 +3815,8 @@ declare enshwick: {
 		undo: (id: string) -> (),
 		--- The props transaction `id` of this mod placed and still holds, oldest first; empty for an id the loader no longer remembers, or not this mod's. A prop is in the world from the step after the one that placed it.
 		transaction_entities: (id: string) -> {number},
+		--- Runs `handler` once transaction `id` of this mod stopped running: one scheduler pass after it is `TransactionStatus.Applied`, when the props it placed stand in the world, or once it ended otherwise. A large transaction spread over steps is waited for whole; an undo of it that is still running counts as its end. Once `within` passed, the handler gets the transaction as it stands, still pending perhaps. `handler` runs on the server's game thread, as a `Scheduler` task of this mod; the wait ends without it when the game it started in ends. The handler decides what an end other than applied means, such as a `TransactionStatus.Failed` with `WorldError.NotLoaded`, which the same changes committed again may pass.
+		when_settled: (id: string, within: number, handler: (arg1: Settled) -> ()) -> (),
 		--- Where transaction `id` of this mod stands; nil for an id the loader no longer remembers (it keeps the newest few thousand) or not this mod's.
 		transaction_status: (id: string) -> TransactionStatus?,
 		--- `entity`'s health, stamina and mana; nil when it has no health, off the game thread, or on a build without stat reads.
@@ -4175,7 +4185,7 @@ declare enshwick: {
 		sources: (entity: number, stat: Stat?) -> {Source},
 		--- The id and definition of `stat`; nil for a kind opened but never defined. Any thread.
 		info: (stat: Stat) -> StatInfo?,
-		--- Watches `entity` for the items it wears and the buffs it has, or stops watching it. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. Any thread, on the process that runs the world; elsewhere it does nothing.
+		--- Watches `entity` for the items it wears and the buffs it has, or stops this mod's watch. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. The watch is per mod: the entity stays watched while any mod watches it, so one mod's stop leaves another's watch, and a mod turned off loses its watches. Any thread, on the process that runs the world; elsewhere it does nothing.
 		watch: (entity: number, watch: boolean) -> (),
 		--- The key a stat id hashes to, as `key_of` gives it.
 		key_of: (id: string) -> number,
@@ -4356,7 +4366,7 @@ declare enshwick: {
 		local_held: () -> {string}?,
 		--- Observes only cached loader metadata on any thread, without starting sampling. Fields are weakly consistent; no world, session, player or current UI state is inferred. Requires a matching ABI 12.1 or newer loader; older loaders cannot load this SDK.
 		local_status: () -> LocalInputStatus,
-		--- The client's state in one copy, for any thread: its session and world, the open screens and menu tab, the local player and its held controls. The first ask starts the reads, so it answers `SnapshotState.Never`.
+		--- The client's state in one copy, for any thread: its session and world, the open screens and menu tab, the local player and its held controls. The reads start when the mod opens its input, so the client's first interface step after that answers, in the mod's first frame in a game. It is `SnapshotState.Never` before that step, and while no frame drew a game since, as in the main menu before the first world. The reads cost one look at the interface's screen state and menu tab per frame, which client commands share, and a copy of four words; the held controls cost their own row, as `Input.local_held` says.
 		client_snapshot: () -> ClientSnapshot,
 		--- Queues `command` for the client's interface or input; its id. The call answers only that it is queued: `Input.command_status` tells what came of it. It runs later on the client's game thread, only while the client is still in the command's session on its screen. One command of each kind waits per mod.
 		client_command: (command: ClientCommand) -> string,

@@ -14,6 +14,7 @@ use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
 use super::templates::{ComponentChange, NewTemplate};
 use super::{Blob, EngineFacts, Guid, Id, types};
+use crate::resources::Grow;
 
 /// The game's workshop registry resource.
 pub const WORKSHOP_REGISTRY: Guid = Guid::parse("3baba1c2-bc82-4ab7-b20e-16dec28208af");
@@ -386,9 +387,9 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
         .is_some()
 }
 
-/// The new station item, cloned from the vanilla station in `like`, placing
-/// the new template; `None` when the vanilla item does not place
-/// `new.like.template`.
+/// Builds in `out` the new station item, cloned from the vanilla station in
+/// `like`, placing the new template; `None` when the vanilla item does not
+/// place `new.like.template`.
 ///
 /// # Examples
 ///
@@ -404,32 +405,30 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let items = ItemLayout::resolve(load)?;
 ///     let (item, like) = (types::ITEM_INFO.key(new.id.guid())?, types::ITEM_INFO.key(new.like.item)?);
-///     load.serve(item, like, move |base, out| out.copy_from(&clone_station(&items, &layout, base, &new)?))
+///     load.serve(item, like, move |base, out| clone_station(&items, &layout, base, &new, out))
 /// }
 /// ```
-#[must_use]
 pub fn clone_station(
     items: &ItemLayout,
     layout: &WorkshopLayout,
     like: &[u8],
     new: &NewWorkshop,
-) -> Option<Vec<u8>> {
+    out: &mut impl Grow,
+) -> Option<()> {
     let placed = like.get(layout.placed_entity..layout.placed_entity + REFERENCE)?;
     if placed != new.like.template.0 {
         return None;
     }
-    let mut item = Blob::new(&items::clone_item(
-        items,
-        like,
-        &item_of(new)?,
-        new.id.guid(),
-    )?);
-    item.write(layout.placed_entity, &new.id.try_part(TEMPLATE)?.guid().0)
-        .then(|| item.into_bytes())
+    items::clone_item(items, like, &item_of(new)?, new.id.guid(), out)?;
+    let template = new.id.try_part(TEMPLATE)?.guid();
+    Blob(out)
+        .write(layout.placed_entity, &template.0)
+        .then_some(())
 }
 
-/// The workshop registry with the new workshop after the others: a copy of
-/// the vanilla station's entry with the new workshop, item and name.
+/// Builds in `out` the workshop registry with the new workshop after the
+/// others: a copy of the vanilla station's entry with the new workshop, item
+/// and name.
 ///
 /// # Examples
 ///
@@ -445,16 +444,16 @@ pub fn clone_station(
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let registry = types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?;
-///     load.serve(registry, registry, move |base, out| out.copy_from(&list_workshop(&layout, base, &new)?))
+///     load.serve(registry, registry, move |base, out| list_workshop(&layout, base, &new, out))
 /// }
 /// ```
-#[must_use]
 pub fn list_workshop(
     layout: &WorkshopLayout,
     registry: &[u8],
     new: &NewWorkshop,
-) -> Option<Vec<u8>> {
-    let mut blob = Blob::new(registry);
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut blob = Blob::over(out, registry);
     let (start, count) = blob.array(layout.workshops)?;
     let like = new.like.item.fnv1a();
     let vanilla = (0..usize::try_from(count).ok()?)
@@ -479,7 +478,7 @@ pub fn list_workshop(
         put(layout.entry_name, &name.fnv1a().to_le_bytes())?;
     }
     blob.grow_array(layout.workshops, layout.entry, 4, &[], &[(entry, None)])?;
-    Some(blob.into_bytes())
+    Some(())
 }
 
 /// The station item as a plain new item; `None` when its tags do not fit.
@@ -528,20 +527,20 @@ impl LoadMethods for crate::BaseLoad {
         self.serve(
             types::ITEM_INFO.key(new.id.guid())?,
             types::ITEM_INFO.key(like.item)?,
-            move |base, out| out.copy_from(&clone_station(&item_layout, &layout, base, &station)?),
+            move |base, out| clone_station(&item_layout, &layout, base, &station, out),
         )?;
         let (item, debug_name) = (new.id.guid(), new.debug_name.clone());
         let registry = types::ITEM_REGISTRY_RESOURCE.key(items::ITEM_REGISTRY)?;
         self.serve(registry, registry, move |base, out| {
-            out.copy_from(&items::list_item(&item_layout, base, item, &debug_name)?)
+            items::list_item(&item_layout, base, item, &debug_name, out)
         })?;
         let cost = new.recipe_cost;
         let registry = types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?;
         self.serve(registry, registry, move |base, out| {
-            out.copy_from(&list_workshop(&layout, base, &new)?)
+            list_workshop(&layout, base, &new, out)
         })?;
-        super::menu::serve(self, move |menu, bundle| {
-            super::menu::list_workshop(menu, bundle, workshop)
+        super::menu::serve(self, move |menu, bundle, out| {
+            super::menu::list_workshop(menu, bundle, workshop, out)
         })?;
         if let Some(cost) = cost {
             self.push_recipe(NewRecipe {
@@ -665,7 +664,9 @@ pub(crate) mod tests {
         let long: &'static str = Box::leak(format!("test:{}", "b".repeat(120)).into_boxed_str());
         let too_long = NewWorkshop::new(Id::new(long), stations::WORKBENCH);
         assert!(too_long.check().is_err());
-        assert!(list_workshop(&LAYOUT, &[0; 64], &too_long).is_none());
+        assert!(
+            crate::content::built(|out| list_workshop(&LAYOUT, &[0; 64], &too_long, out)).is_none()
+        );
     }
 
     fn u32_at(bytes: &[u8], at: usize) -> u32 {
@@ -683,13 +684,18 @@ pub(crate) mod tests {
     fn the_station_item_places_the_new_template() {
         let mut bench = vec![0u8; 0x400];
         bench[0x3c0..0x3d0].copy_from_slice(&stations::WORKBENCH.template.0);
-        let clone = clone_station(&ITEMS, &LAYOUT, &bench, &new()).unwrap();
+        let clone =
+            crate::content::built(|out| clone_station(&ITEMS, &LAYOUT, &bench, &new(), out))
+                .unwrap();
         assert_eq!(&clone[..4], &ITEM.fnv1a().to_le_bytes());
         assert_eq!(&clone[0x3c0..0x3d0], &TEMPLATE.0);
         assert_eq!(&clone[0x48..0x58], &NAME.0);
         // An item placing something else is not the station named.
         bench[0x3c0] ^= 1;
-        assert!(clone_station(&ITEMS, &LAYOUT, &bench, &new()).is_none());
+        assert!(
+            crate::content::built(|out| clone_station(&ITEMS, &LAYOUT, &bench, &new(), out))
+                .is_none()
+        );
     }
 
     #[test]
@@ -703,7 +709,10 @@ pub(crate) mod tests {
         entry[48..52].copy_from_slice(&3u32.to_le_bytes());
         let at = blob.append(&entry, 4);
         assert!(blob.set_array(8, at, 1));
-        let built = Blob::new(&list_workshop(&LAYOUT, blob.bytes(), &new()).unwrap());
+        let built = Blob::new(
+            &crate::content::built(|out| list_workshop(&LAYOUT, blob.bytes(), &new(), out))
+                .unwrap(),
+        );
         let (start, count) = built.array(8).unwrap();
         assert_eq!(count, 2);
         let added = &built.bytes()[start + 56..start + 112];
@@ -720,6 +729,9 @@ pub(crate) mod tests {
     fn a_registry_without_the_vanilla_station_builds_nothing() {
         let mut blob = Blob::new(&[0u8; 24]);
         assert!(blob.set_array(8, 24, 0));
-        assert!(list_workshop(&LAYOUT, blob.bytes(), &new()).is_none());
+        assert!(
+            crate::content::built(|out| list_workshop(&LAYOUT, blob.bytes(), &new(), out))
+                .is_none()
+        );
     }
 }

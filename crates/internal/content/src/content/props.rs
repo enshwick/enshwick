@@ -38,6 +38,7 @@ use super::recipes::{NewRecipe, RECIPE_REGISTRY};
 use super::templates::{ComponentChange, NewTemplate, TemplateId};
 use super::workshops::WORKSHOP_REGISTRY;
 use super::{Blob, EngineFacts, Guid, Id, types};
+use crate::resources::Grow;
 
 /// The parts a prop's other ids take after its item's id.
 const TEMPLATE: &str = "template";
@@ -158,10 +159,9 @@ fn placed_by(load: &crate::BaseLoad, item: Guid) -> Result<Guid, Off> {
         .ok_or_else(|| Off::new(format!("prop: the vanilla item {item} places nothing")))
 }
 
-/// `info` placing `template`; `None` when it is too short.
-fn place(info: &[u8], at: usize, template: Guid) -> Option<Vec<u8>> {
-    let mut item = Blob::new(info);
-    item.write(at, &template.0).then(|| item.into_bytes())
+/// Builds in `out` `info` placing `template`; `None` when it is too short.
+fn place(info: &[u8], at: usize, template: Guid, out: &mut impl Grow) -> Option<()> {
+    Blob::over(out, info).write(at, &template.0).then_some(())
 }
 
 /// A game id as the codec reads one: a struct of its `value`.
@@ -261,7 +261,7 @@ impl LoadMethods for crate::BaseLoad {
         {
             // A second link on the item, after `add_item`'s on the same base.
             self.serve(types::ITEM_INFO.key(guid)?, base, move |info, out| {
-                out.copy_from(&place(info, at, placed)?)
+                place(info, at, placed, out)
             })?;
         }
         if let Some(cost) = new.recipe_cost {
@@ -402,8 +402,8 @@ mod tests {
 
     #[test]
     fn placing_writes_the_template_where_the_item_names_it() {
-        let placed = place(&[0; 24], 8, Guid([5; 16])).unwrap();
+        let placed = crate::content::built(|out| place(&[0; 24], 8, Guid([5; 16]), out)).unwrap();
         assert_eq!(&placed[8..24], &[5; 16]);
-        assert!(place(&[0; 8], 8, Guid([5; 16])).is_none());
+        assert!(crate::content::built(|out| place(&[0; 8], 8, Guid([5; 16]), out)).is_none());
     }
 }

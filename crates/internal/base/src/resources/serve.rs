@@ -241,14 +241,76 @@ impl core::ops::DerefMut for Output<'_> {
     }
 }
 
-/// Bytes that grow at their end: a `Vec<u8>` or a builder's [`Output`], so
-/// one encoder writes either.
-pub(crate) trait Grow: core::ops::DerefMut<Target = [u8]> {
+impl AsRef<[u8]> for Output<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
+
+impl AsMut<[u8]> for Output<'_> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self
+    }
+}
+
+/// Bytes that grow at their end, which a content helper builds a resource
+/// in: a builder's [`Output`], to serve it with no copy, or a `Vec<u8>`.
+///
+/// It is sealed: `Output`, `Vec<u8>` and a `&mut` of either implement it.
+/// Growth an output's loader refuses writes nothing, and the build fails.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::resources::Grow;
+///
+/// fn twice(base: &[u8], out: &mut impl Grow) {
+///     out.put(base);
+///     out.put(base);
+/// }
+///
+/// let mut bytes = Vec::new();
+/// twice(&[1, 2], &mut bytes);
+/// assert_eq!(bytes, [1, 2, 1, 2]);
+/// ```
+pub trait Grow: AsRef<[u8]> + AsMut<[u8]> + sealed::Sealed {
     /// Grows or cuts the bytes to `len`, new ones zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::resources::Grow;
+    ///
+    /// let mut bytes = vec![7];
+    /// bytes.grow(3);
+    /// assert_eq!(bytes, [7, 0, 0]);
+    /// ```
     fn grow(&mut self, len: usize);
 
     /// Appends `bytes`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Grow`].
     fn put(&mut self, bytes: &[u8]);
+}
+
+/// Keeps [`Grow`] to the byte stores this crate knows.
+pub(super) mod sealed {
+    pub trait Sealed {}
+    impl Sealed for Vec<u8> {}
+    impl Sealed for super::Output<'_> {}
+    impl<S: Sealed + ?Sized> Sealed for &mut S {}
+}
+
+impl<G: Grow + ?Sized> Grow for &mut G {
+    fn grow(&mut self, len: usize) {
+        (**self).grow(len);
+    }
+
+    fn put(&mut self, bytes: &[u8]) {
+        (**self).put(bytes);
+    }
 }
 
 impl Grow for Vec<u8> {

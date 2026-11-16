@@ -347,6 +347,34 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_a_fresh_snapshot_in_its_first_drawn_frame() {
+        use enshwick::abi::{ClientSnapshot, Str};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local s = enshwick.input.client_snapshot()
+                enshwick.log.info(`first frame {s.state} {s.hud_screen}`)
+            end)
+            ",
+        );
+        loader.set_client_snapshot(ClientSnapshot {
+            state: ClientSnapshot::FRESH,
+            available: ClientSnapshot::SCREENS,
+            session: 1,
+            age_ms: 16,
+            hud_screen: Str::new("Backpack"),
+            ..ClientSnapshot::EMPTY
+        });
+        let _drawn = loader.draw_frame();
+        assert!(
+            logged(&loader, "first frame fresh Backpack"),
+            "the start opened the input: {:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_script_moves_looks_and_highlights_a_recipe_within_their_bounds() {
         use enshwick::abi::ClientCommandStatus as Status;
         let loader = run(

@@ -724,19 +724,19 @@ fn a_changed_string_never_writes_over_bytes_another_header_shares() {
 /// Bytes that stop growing past a cap, as an [`Output`] the loader refuses.
 struct Capped(Vec<u8>, usize);
 
-impl core::ops::Deref for Capped {
-    type Target = [u8];
-
-    fn deref(&self) -> &[u8] {
+impl AsRef<[u8]> for Capped {
+    fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
 
-impl core::ops::DerefMut for Capped {
-    fn deref_mut(&mut self) -> &mut [u8] {
+impl AsMut<[u8]> for Capped {
+    fn as_mut(&mut self) -> &mut [u8] {
         &mut self.0
     }
 }
+
+impl serve::sealed::Sealed for Capped {}
 
 impl Grow for Capped {
     fn grow(&mut self, len: usize) {

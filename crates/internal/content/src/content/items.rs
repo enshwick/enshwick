@@ -11,6 +11,7 @@ use crate::locks::Relock;
 
 use super::templates::{ComponentChange, NewTemplate};
 use super::{Blob, EngineFacts, Guid, Id, types};
+use crate::resources::Grow;
 
 /// What the mod added: the meter templates it serves, and its items.
 #[derive(Debug, Default)]
@@ -51,15 +52,16 @@ pub(crate) fn served_clone(
     like: &[u8],
     item: &NewItem,
     guid: Guid,
-) -> Option<Vec<u8>> {
+    out: &mut impl Grow,
+) -> Option<()> {
     if item.icon.is_some() && !super::icons::ready() {
         let vanilla = NewItem {
             icon: None,
             ..item.clone()
         };
-        return clone_item(layout, like, &vanilla, guid);
+        return clone_item(layout, like, &vanilla, guid, out);
     }
-    clone_item(layout, like, item, guid)
+    clone_item(layout, like, item, guid, out)
 }
 
 /// The game's item registry resource.
@@ -410,8 +412,9 @@ const REFERENCE: usize = 16;
 /// A blob string header.
 const BLOB_STRING: usize = 8;
 
-/// `item`'s item data under `guid`, its own or a former one, made from the
-/// vanilla one in `like` with its id, object GUID, tags, meter and lines.
+/// Builds in `out` `item`'s item data under `guid`, its own or a former one,
+/// made from the vanilla one in `like` with its id, object GUID, tags, meter
+/// and lines.
 ///
 /// `None` when `like` is too short for the layout, or when the item has a meter
 /// and `like` already has an entity of its own (a weapon's durability), which
@@ -433,14 +436,20 @@ const BLOB_STRING: usize = 8;
 ///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
 /// );
 /// let vanilla = [0u8; 0x90];
-/// let clone = clone_item(&layout, &vanilla, &item, item.id.guid()).ok_or("too short")?;
+/// let mut clone = Vec::new();
+/// clone_item(&layout, &vanilla, &item, item.id.guid(), &mut clone).ok_or("too short")?;
 /// assert_eq!(clone[..4], enshwick::ItemId::from_guid(item.id.guid()).get().to_le_bytes());
 /// assert_eq!(clone[4..20], item.id.guid().0);
 /// # Ok::<(), &str>(())
 /// ```
-#[must_use]
-pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) -> Option<Vec<u8>> {
-    let mut info = Blob::new(like);
+pub fn clone_item(
+    layout: &ItemLayout,
+    like: &[u8],
+    item: &NewItem,
+    guid: Guid,
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut info = Blob::over(out, like);
     let mut written =
         info.write(layout.id, &guid.fnv1a().to_le_bytes()) && info.write(layout.object, &guid.0);
     if let Some(name) = item.name {
@@ -479,11 +488,11 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
         }
         info.grow_array(layout.ui_values, size, 4, &[], &rows)?;
     }
-    written.then(|| info.into_bytes())
+    written.then_some(())
 }
 
-/// The item registry with `guid` listed after the others, and its debug name
-/// beside it.
+/// Builds in `out` the item registry with `guid` listed after the others, and
+/// its debug name beside it.
 ///
 /// `None` when the registry does not have the layout's arrays or lists another
 /// item with `guid`'s game id, which would stand for both.
@@ -499,17 +508,18 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 ///     let layout = ItemLayout::resolve(load)?;
 ///     let staff = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 ///     let registry = types::ITEM_REGISTRY_RESOURCE.key(ITEM_REGISTRY)?;
-///     load.serve(registry, registry, move |base, out| out.copy_from(&list_item(&layout, base, staff, "Staff")?))
+///     load.serve(registry, registry, move |base, out| list_item(&layout, base, staff, "Staff", out))
 /// }
 /// ```
-#[must_use]
 pub fn list_item(
     layout: &ItemLayout,
     registry: &[u8],
     guid: Guid,
     debug_name: &str,
-) -> Option<Vec<u8>> {
-    let mut registry = Blob::new(registry);
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut registry = Blob::over(out, registry);
+    let game_id = guid.fnv1a();
     let (first, refs) = registry.array(layout.refs)?;
     let (_, names) = registry.array(layout.names)?;
     let listed = registry
@@ -520,11 +530,10 @@ pub fn list_item(
         .0
         .iter()
         .map(|r| Guid(*r))
-        .find(|other| other.fnv1a() == guid.fnv1a() && *other != guid)
+        .find(|other| other.fnv1a() == game_id && *other != guid)
     {
         crate::warn!(
-            "item {debug_name} ({guid}) has the game id {:#010x} of item {other}; it needs another id",
-            guid.fnv1a()
+            "item {debug_name} ({guid}) has the game id {game_id:#010x} of item {other}; it needs another id"
         );
         return None;
     }
@@ -547,7 +556,7 @@ pub fn list_item(
             return None;
         }
     }
-    Some(registry.into_bytes())
+    Some(())
 }
 
 /// `Load`'s methods of this module on the base handle, which core's
@@ -610,11 +619,11 @@ impl LoadHelpers for crate::BaseLoad {
         self.serve(
             types::ITEM_INFO.key(guid)?,
             types::ITEM_INFO.key(like)?,
-            move |base, out| out.copy_from(&served_clone(&layout, base, &item, guid)?),
+            move |base, out| served_clone(&layout, base, &item, guid, out),
         )?;
         let registry = types::ITEM_REGISTRY_RESOURCE.key(ITEM_REGISTRY)?;
         self.serve(registry, registry, move |base, out| {
-            out.copy_from(&list_item(&layout, base, guid, &debug_name)?)
+            list_item(&layout, base, guid, &debug_name, out)
         })?;
         if let Some(meter) = meter {
             // Items of one kind may share their template: serve it once.
@@ -678,7 +687,8 @@ mod tests {
             name: Some(NAME),
             ..NewItem::new(NEW_ID, CHEST)
         };
-        let clone = clone_item(&LAYOUT, &chest, &item, NEW).unwrap();
+        let clone =
+            crate::content::built(|out| clone_item(&LAYOUT, &chest, &item, NEW, out)).unwrap();
         assert_eq!(&clone[..4], &NEW.fnv1a().to_le_bytes());
         assert_eq!(&clone[4..20], &NEW.0);
         assert_eq!(&clone[0x48..0x58], &NAME.0);
@@ -699,7 +709,9 @@ mod tests {
             meter: Some(meter),
             ..NewItem::new(NEW_ID, CHEST)
         };
-        let clone = Blob::new(&clone_item(&LAYOUT, &staff, &item, NEW).unwrap());
+        let clone = Blob::new(
+            &crate::content::built(|out| clone_item(&LAYOUT, &staff, &item, NEW, out)).unwrap(),
+        );
         assert_eq!(
             clone.read_u32(0x78),
             Some(1 << 8 | ItemTypeInfo::HAS_PIDE | ItemTypeInfo::USES_FUEL)
@@ -709,7 +721,7 @@ mod tests {
         let mut sword = staff.clone();
         sword[0x78..0x7c].copy_from_slice(&ItemTypeInfo::HAS_PIDE.to_le_bytes());
         assert!(
-            clone_item(&LAYOUT, &sword, &item, NEW).is_none(),
+            crate::content::built(|out| clone_item(&LAYOUT, &sword, &item, NEW, out)).is_none(),
             "a durability entity stays"
         );
     }
@@ -736,7 +748,10 @@ mod tests {
             ],
             ..NewItem::new(NEW_ID, CHEST)
         };
-        let clone = Blob::new(&clone_item(&LAYOUT, armour.bytes(), &item, NEW).unwrap());
+        let clone = Blob::new(
+            &crate::content::built(|out| clone_item(&LAYOUT, armour.bytes(), &item, NEW, out))
+                .unwrap(),
+        );
         let (rows, count) = clone.array(0x90).unwrap();
         assert_eq!(count, 3);
         assert_eq!(clone.read_u32(rows), Some(7));
@@ -773,8 +788,11 @@ mod tests {
         assert!(blob.set_array(name, text, 5));
         assert!(blob.set_array(0, reference, 1));
         assert!(blob.set_array(0x38, name, 1));
-        let once = list_item(&LAYOUT, blob.bytes(), NEW, "New").unwrap();
-        let twice = Blob::new(&list_item(&LAYOUT, &once, NAME, "Other").unwrap());
+        let once =
+            crate::content::built(|out| list_item(&LAYOUT, blob.bytes(), NEW, "New", out)).unwrap();
+        let twice = Blob::new(
+            &crate::content::built(|out| list_item(&LAYOUT, &once, NAME, "Other", out)).unwrap(),
+        );
         let (refs, count) = twice.array(0).unwrap();
         assert_eq!(count, 3);
         assert_eq!(&twice.bytes()[refs + 32..refs + 48], &NAME.0);

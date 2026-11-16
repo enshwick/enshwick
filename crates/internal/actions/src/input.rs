@@ -143,9 +143,11 @@ impl Input {
             let resolved = Resolved::resolve(load)?;
             Self(RESOLVED.get_or_init(|| resolved))
         };
-        // The loader starts reading the held controls at the first ask, which
-        // answers none: asking now has the first step after it answer.
+        // The loader starts reading the held controls and the client snapshot
+        // at the first ask, which answers none: asking now has the first
+        // step after it answer.
         let _started = input.local_held();
+        let _snapshot = input.client_snapshot();
         Ok(input)
     }
 

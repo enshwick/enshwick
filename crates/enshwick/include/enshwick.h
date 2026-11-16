@@ -5870,8 +5870,9 @@ typedef struct EnshwickHostApi {
                                  uint32_t capacity,
                                  uint32_t *count);
   // Watches `entity` for the items it wears and the buffs it has, or
-  // stops for `watch` 0: players are always watched, and so is every
-  // entity a mod keeps a modifier on. Any thread.
+  // stops `me`'s watch for `watch` 0: the entity stays watched while any
+  // mod watches it, players are always watched, and so is every entity a
+  // mod keeps a modifier on. Any thread.
   EnshwickStatus (*stat_watch)(EnshwickModHandle me, EnshwickEntity entity, uint8_t watch);
   // Defines the affix `id` with `def` and writes its index and key to
   // `out`. `id` is a full content id in the mod's namespace,
@@ -6299,9 +6300,11 @@ typedef struct EnshwickHostApi {
   // Writes to `out`, a headed `EnshwickClientSnapshot`, the client's state in
   // one copy: its session, the open screens and the in-game menu's tab
   // from the interface's last frame, and the local player's held
-  // controls. The first call starts the interface's reads and the held
-  // controls' reads, so it answers `EnshwickClientSnapshot_NEVER`; every call
-  // after a frame drew a game answers its copy. Client only:
+  // controls. The first call, of any mod, starts the interface's reads
+  // and the held controls' reads, so it answers `EnshwickClientSnapshot_NEVER`;
+  // the safe layer calls it when a mod opens its input. Every call after
+  // a frame drew a game answers its copy; until one did, as in the main
+  // menu before the first world, it answers `NEVER`. Client only:
   // `EnshwickStatus_UNAVAILABLE` on a server; `EnshwickStatus_BAD_ARGS` for a null
   // or unheaded `out`. Any thread; it runs no mod callback, and `out` is
   // borrowed for the call. ABI 12.1.
