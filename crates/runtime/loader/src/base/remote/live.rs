@@ -165,7 +165,9 @@ pub(crate) fn client(message: Message) {
             text,
         } => crate::ui::interface::carried::heard(&id, &window, open, &text),
         Message::WindowClose { id, window } => crate::ui::interface::carried::closed(&id, &window),
-        Message::FogUncover { at, radius } => crate::world::fog::uncover_here(at, radius),
+        Message::FogUncover { at, radius } => {
+            let _queued = crate::world::fog::uncover_here(at, radius);
+        }
         Message::Query { .. }
         | Message::Edit { .. }
         | Message::ActionsLanguage { .. }

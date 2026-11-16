@@ -258,6 +258,8 @@ mod base;
 mod content;
 mod inventory;
 mod knowledge;
+#[cfg(test)]
+mod neutral;
 mod ui;
 mod world;
 

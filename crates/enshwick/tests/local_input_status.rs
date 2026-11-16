@@ -58,8 +58,9 @@ side = "both""#
         assert_eq!(live.age_ms, Some(15));
         assert!(
             input.local_held().is_none(),
-            "the first ask starts the reads"
+            "no interface step ran since opening Input started the reads"
         );
+        let _step = loader.draw_frame();
         assert_eq!(input.local_held().unwrap().bits(), 0);
         loader.set_local_input_status(Info {
             header: Header::of::<Info>(),

@@ -37,6 +37,8 @@ pub use enshwick_values::resources::{Value, Variant};
 pub use kind::Kind;
 pub use registry::Registry;
 pub use script::{Bytes, Resources};
+pub(crate) use serve::Grow;
+pub use serve::Output;
 #[doc(hidden)]
 pub use serve::serve;
 #[doc(hidden)]

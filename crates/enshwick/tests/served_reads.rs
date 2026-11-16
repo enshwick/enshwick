@@ -22,12 +22,12 @@ mod tests {
     impl Mod for Failing {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let spare = types::ITEM_INFO.key(SPARE_ITEM)?;
-            load.serve(spare, spare, |_| None)?;
-            load.serve(types::ITEM_INFO.key(NEW_ITEM)?, spare, |_| None)?;
+            load.serve(spare, spare, |_, _| None)?;
+            load.serve(types::ITEM_INFO.key(NEW_ITEM)?, spare, |_, _| None)?;
             let other = types::ITEM_INFO.key(OTHER_ITEM)?;
-            load.serve(other, other, |item| {
+            load.serve(other, other, |item, out| {
                 BUILDS.fetch_add(1, Ordering::Relaxed);
-                Some(item.to_vec())
+                out.copy_from(item)
             })?;
             load.allow_rebuild(other)?;
             Ok(Self)

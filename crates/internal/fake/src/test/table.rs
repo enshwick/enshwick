@@ -62,11 +62,13 @@ pub(crate) type Extension = (
 );
 
 /// The local player's held controls as the test set them, `None` as outside
-/// a game, and whether a mod asked yet: the loader starts reading them at
-/// the first ask, so that ask answers missing.
+/// a game; whether a mod asked yet, as the loader starts reading them at the
+/// first ask; and whether an interface step ran since, the first that reads
+/// them.
 pub(crate) struct Held {
     pub(crate) bits: Option<u64>,
     pub(crate) asked: bool,
+    pub(crate) stepped: bool,
 }
 
 /// What the installed fake answers and what it has recorded.
@@ -487,6 +489,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         local_held: Held {
             bits: None,
             asked: false,
+            stepped: false,
         },
         local_input_info: enshwick_core::abi::LocalInputInfo {
             header: Header::of::<enshwick_core::abi::LocalInputInfo>(),

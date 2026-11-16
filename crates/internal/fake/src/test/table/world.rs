@@ -381,8 +381,10 @@ pub(crate) extern "system" fn fog_uncover(
         {
             return Status::BAD_ARGS;
         }
-        // As the loader: only a client that takes its messages is reached.
-        if !s.host.net_peers.contains(&player.get()) {
+        // As the loader: a client that hosts uncovers its own player's fog
+        // itself; another player only when its client takes the messages.
+        let own = s.host.hosting && s.host.host_key == Some(player);
+        if !own && !s.host.net_peers.contains(&player.get()) {
             return Status::UNAVAILABLE;
         }
         s.uncovers.push((player, [x, z], radius));

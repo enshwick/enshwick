@@ -55,13 +55,13 @@ mod tests {
                     .ok_or_else(|| Off::new("no table type"))?;
                 let host = enshwick::host().ok_or_else(|| Off::new("no host"))?;
                 for key in host.resource_keys(Some(table))? {
-                    load.serve(key, key, move |base| {
+                    load.serve(key, key, move |base, out| {
                         let mut value = registry.decode("keen::balance::Table", base).ok()?;
                         if let Some(Value::Float(damage)) = value.field_mut("damage") {
                             *damage *= 2.0;
                         }
                         registry
-                            .encode("keen::balance::Table", &value, Some(base))
+                            .encode_into("keen::balance::Table", &value, Some(base), out)
                             .ok()
                     })?;
                 }

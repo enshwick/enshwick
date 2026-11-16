@@ -328,29 +328,31 @@ fn copy_after(fog: *mut u8, at: Option<[f32; 2]>, range: f32) {
     }
 }
 
-/// Queues a circle the server asked this client to uncover, on the thread
-/// that reads the server's messages; the next reveal runs it.
-pub(crate) fn uncover_here(at: [f32; 2], radius: f32) {
+/// Queues a circle to uncover on this client, which its server asked for,
+/// or the server half of a client that hosts for its own player; the next
+/// reveal runs it. False when it was dropped, with a warning once.
+pub(crate) fn uncover_here(at: [f32; 2], radius: f32) -> bool {
     let dropped = |why: &str| {
         if !STATE.uncovers.warned.swap(true, Ordering::AcqRel) {
             crate::log!(
                 WARN,
-                "fog of war uncovers from the server dropped until the fog goes: {why}"
+                "fog of war uncovers dropped until the fog goes: {why}"
             );
         }
     };
     if !STATE.uncovers.linked.load(Ordering::Acquire) || FUSE.is_off() {
         dropped("the fog of war is off on this client");
-        return;
+        return false;
     }
     let mut circles = STATE.uncovers.circles.relock();
     if circles.len() >= MAX_UNCOVERS {
         drop(circles);
         dropped(&format!("{MAX_UNCOVERS} wait already"));
-        return;
+        return false;
     }
     circles.push((at, radius));
     STATE.uncovers.waiting.store(true, Ordering::Release);
+    true
 }
 
 /// Why a circle of a player's fog was not sent to uncover.
@@ -371,12 +373,14 @@ pub(crate) enum UncoverError {
 }
 
 /// Sends the client of the player with account key `key` a circle of its
-/// fog of war to uncover, for `HostApi::fog_uncover`.
+/// fog of war to uncover, for `HostApi::fog_uncover`; on a client that
+/// hosts, its own player's circle is queued here, as no message reaches
+/// the game the loader runs in.
 ///
 /// # Errors
 ///
 /// [`UncoverError`] off a server, for a circle out of range, a link not
-/// ready or a message not sent.
+/// ready, or a message not sent or circle not queued.
 pub(crate) fn uncover_for(
     loader: &Loader,
     key: u64,
@@ -388,6 +392,11 @@ pub(crate) fn uncover_for(
     }
     if !crate::base::remote::Message::uncover_fits(at, radius) {
         return Err(UncoverError::BadCircle);
+    }
+    if crate::base::carrier::is_host(key) {
+        return uncover_here(at, radius)
+            .then_some(())
+            .ok_or(UncoverError::NotSent);
     }
     if !crate::base::net::ready(key) {
         return Err(UncoverError::NotReady);
@@ -586,7 +595,29 @@ mod tests {
             .map(|p| p.reason)
     }
 
-    /// The only test that queues uncovers, which are the process's own.
+    #[test]
+    fn a_host_s_own_circle_is_queued_here_and_another_player_needs_a_link() {
+        let loader = crate::start::tests::pinning_loader(Side::SERVER, &[], &[]);
+        crate::base::carrier::host_for_test(7);
+        STATE.uncovers.linked.store(true, Ordering::Release);
+        assert_eq!(uncover_for(&loader, 7, [1.0, 2.0], 3.0), Ok(()));
+        assert_eq!(*STATE.uncovers.circles.relock(), [([1.0, 2.0], 3.0)]);
+        assert!(STATE.uncovers.waiting.load(Ordering::Acquire));
+        assert_eq!(
+            uncover_for(&loader, 8, [1.0, 2.0], 3.0),
+            Err(UncoverError::NotReady),
+            "a remote player without Enshwick is not reached"
+        );
+        STATE.uncovers.linked.store(false, Ordering::Release);
+        assert_eq!(
+            uncover_for(&loader, 7, [1.0, 2.0], 3.0),
+            Err(UncoverError::NotSent),
+            "the host's own fog is off"
+        );
+        crate::base::carrier::unhost_for_test();
+    }
+
+    /// Queues uncovers, which are the process's own.
     #[test]
     fn a_hosted_game_s_end_drops_its_skipped_tiles_and_waiting_uncovers() {
         STATE.uncovers.circles.relock().push(([1.0, 2.0], 3.0));

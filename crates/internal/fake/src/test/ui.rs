@@ -15,6 +15,12 @@ struct Reads {
     host_read: Option<(enshwick_core::content::Guid, [i64; 3])>,
 }
 
+/// An interface step before a draw, as the game's `player_ui` runs before
+/// the interface draws: the held reads a mod started read from now on.
+fn step() {
+    table::with((), |s| s.local_held.stepped |= s.local_held.asked);
+}
+
 fn reads() -> Reads {
     table::with(Reads::default(), |s| Reads {
         title: s
@@ -67,6 +73,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn draw_frame(&self) -> Vec<Drawn> {
+        step();
         let (frames, open) = table::with((Vec::new(), ""), |s| (s.frames.clone(), s.open_screen));
         let mut drawn = Vec::new();
         for (token, handler) in (1u64..).zip(frames) {
@@ -102,6 +109,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn draw_hud(&self) -> Vec<(u32, Drawn)> {
+        step();
         let (huds, open) = table::with((Vec::new(), ""), |s| (s.huds.clone(), s.open_screen));
         let mut drawn = Vec::new();
         for (token, handler) in (1u64..).zip(huds) {
@@ -143,6 +151,7 @@ impl Installed {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn draw_screen(&self, screen: enshwick_core::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
+        step();
         let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
         extensions.sort_by_key(|&(_, edge, ..)| edge);
         let open = screen.name();
@@ -283,7 +292,8 @@ impl Installed {
     /// Makes `held`, a `Bitmask64` of the game's `PlayerInputType`, the
     /// controls the local player holds from now on, as the client's last
     /// step read them; `None` as outside a game. As in the game, a mod's
-    /// first ask starts the reads and answers `None`.
+    /// first ask, which opening `Input` makes, starts the reads, and they
+    /// answer from the next draw on: a frame, the HUD or a screen.
     ///
     /// # Examples
     ///

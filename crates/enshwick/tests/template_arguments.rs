@@ -31,9 +31,9 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.add_template(NewTemplate::new(TAME, CREATURE))?;
             let creature = enshwick::content::types::TEMPLATE_RESOURCE.key(CREATURE)?;
-            load.serve(creature, creature, |bytes| {
+            load.serve(creature, creature, |bytes, out| {
                 PATCHED.fetch_add(1, Ordering::Relaxed);
-                Some(bytes.to_vec())
+                out.copy_from(bytes)
             })?;
             let actions = load.actions(Texts::default())?;
             actions.add(

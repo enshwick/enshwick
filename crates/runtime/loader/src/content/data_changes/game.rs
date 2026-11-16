@@ -296,19 +296,40 @@ fn items_in(
         placed: at(catalogue::ids::ITEM_INFO_PLACED_ENTITY)?,
         backpack,
     };
-    let layout = ContainerLayout::resolve(&catalogue::Reflected(reflection)).ok();
-    let slots = |template: Guid| {
-        let layout = layout.as_ref()?;
-        let data =
-            archive.resource(&template.key_by_hash(crate::engine::catalogue::types::TEMPLATE))?;
-        container_slots(layout, &data)
-    };
-    let mut items: Vec<(Guid, ItemTraits)> = archive
+    // Items and the templates they place lie in different chunks of the
+    // archive, which keeps few unpacked: read every item, then every template
+    // they ask for, each in archive order, so each chunk unpacks once.
+    let infos: Vec<(Guid, Vec<u8>)> = archive
         .keys_of(crate::engine::catalogue::types::ITEM_INFO)
         .into_iter()
-        .filter_map(|key| {
-            let bytes = archive.resource(&key)?;
-            Some((key.guid, traits_of(&bytes, offsets, slots)?))
+        .filter_map(|key| Some((key.guid, archive.resource(&key)?)))
+        .collect();
+    let asked = core::cell::RefCell::new(rustc_hash::FxHashSet::default());
+    for (_, bytes) in &infos {
+        let _unread = traits_of(bytes, offsets, |template| {
+            asked.borrow_mut().insert(template);
+            None
+        });
+    }
+    let asked = asked.into_inner();
+    let slots: FxHashMap<Guid, u8> = ContainerLayout::resolve(&catalogue::Reflected(reflection))
+        .ok()
+        .map_or_default(|layout| {
+            archive
+                .keys_of(crate::engine::catalogue::types::TEMPLATE)
+                .into_iter()
+                .filter(|key| asked.contains(&key.guid))
+                .filter_map(|key| {
+                    let slots = container_slots(&layout, &archive.resource(&key)?)?;
+                    Some((key.guid, slots))
+                })
+                .collect()
+        });
+    let mut items: Vec<(Guid, ItemTraits)> = infos
+        .iter()
+        .filter_map(|(item, bytes)| {
+            let traits = traits_of(bytes, offsets, |template| slots.get(&template).copied())?;
+            Some((*item, traits))
         })
         .collect();
     items.sort_unstable_by_key(|(item, _)| item.0);

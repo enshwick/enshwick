@@ -299,14 +299,15 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
 ///     let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
-///     load.serve(registry, registry, move |base| {
-///         derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &|recipe| {
+///     load.serve(registry, registry, move |base, out| {
+///         let derived = derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &|recipe| {
 ///             recipe.debug_name().starts_with("Block_").then_some(Derived {
 ///                 output: 2,
 ///                 cost: 1,
 ///                 workshop: None,
 ///             })
-///         })
+///         })?;
+///         out.copy_from(&derived)
 ///     })
 /// }
 /// ```

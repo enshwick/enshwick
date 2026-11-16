@@ -52,12 +52,12 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let registry = Registry::game()?;
     let ty = registry.named(TABLE).ok_or_else(|| enshwick::Off::new("no balancing table"))?;
     for key in load.host().resource_keys(Some(ty))? {
-        load.serve(key, key, move |base| {
+        load.serve(key, key, move |base, out| {
             let mut table = registry.decode(TABLE, base).ok()?;
             if let Some(Value::Float(factor)) = table.field_mut("damageMod2Handed") {
                 *factor *= 2.0;
             }
-            registry.encode(TABLE, &table, Some(base)).ok()
+            registry.encode_into(TABLE, &table, Some(base), out).ok()
         })?;
     }
     Ok(())

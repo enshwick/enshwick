@@ -91,8 +91,14 @@ impl Load<'_> {
 
     /// Serves the resource `key`, built by `builder` from the resource
     /// `base` the first time the game reads it: a new resource when the keys
-    /// differ, a changed vanilla one when they are equal. `None` from the
-    /// builder turns the mod off and the resource reads as missing.
+    /// differ, a changed vanilla one when they are equal.
+    ///
+    /// The builder writes the resource into its
+    /// [`Output`](crate::resources::Output), bytes the loader lends for the
+    /// build, so nothing is copied out; a resource built elsewhere goes in
+    /// with [`Output::copy_from`](crate::resources::Output::copy_from).
+    /// `None` from the builder turns the mod off and the resource reads as
+    /// missing.
     ///
     /// # Errors
     ///
@@ -103,17 +109,18 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::{Blob, Guid, types};
+    /// use enshwick::content::{Guid, types};
     ///
     /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     /// const LOCKER: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(CHEST)?, |chest| {
-    ///         let mut item = Blob::new(chest);
-    ///         item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes());
-    ///         item.write(4, &LOCKER.0);
-    ///         Some(item.into_bytes())
+    ///     load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(CHEST)?, |chest, out| {
+    ///         out.reserve(chest.len());
+    ///         out.extend_from_slice(chest);
+    ///         out.get_mut(0..4)?.copy_from_slice(&enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes());
+    ///         out.get_mut(4..20)?.copy_from_slice(&LOCKER.0);
+    ///         Some(())
     ///     })
     /// }
     /// ```
@@ -121,7 +128,7 @@ impl Load<'_> {
         &mut self,
         key: ResourceKey,
         base: ResourceKey,
-        builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
+        builder: impl Fn(&[u8], &mut crate::resources::Output<'_>) -> Option<()> + Send + Sync + 'static,
     ) -> Result<(), Off>;
 }
 
@@ -144,7 +151,7 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let key = types::ITEM_INFO.key(CHEST)?;
-    ///     load.serve(key, key, |chest| Some(chest.to_vec()))?;
+    ///     load.serve(key, key, |chest, out| out.copy_from(chest))?;
     ///     load.allow_rebuild(key)
     /// }
     /// ```

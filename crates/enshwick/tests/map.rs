@@ -379,6 +379,25 @@ mod tests {
     }
 
     #[test]
+    fn a_client_that_hosts_uncovers_its_own_player_s_fog_with_no_link() {
+        let (host, guest) = (enshwick::PlayerKey::new(7), enshwick::PlayerKey::new(8));
+        let (loader, map) = start(
+            fake()
+                .side(enshwick::abi::Side::CLIENT)
+                .hosting(true)
+                .host_key(host)
+                .map_frame(FRAME),
+        );
+        assert_eq!(map.uncover_all(host), Ok(()));
+        assert_eq!(
+            map.uncover(guest, [0.0, 0.0], 50.0),
+            Err(WorldError::Unavailable),
+            "a guest without Enshwick is not reached"
+        );
+        assert_eq!(loader.fog_uncovers().len(), 1);
+    }
+
+    #[test]
     fn a_client_in_another_s_game_uncovers_nothing() {
         let key = enshwick::PlayerKey::new(7);
         let (loader, map) = start(

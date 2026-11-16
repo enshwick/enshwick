@@ -31,7 +31,7 @@ builds it from the bytes of the resource `base`:
   registry with one more entry.
 
 ```rust
-use enshwick::content::{Blob, Guid, Id, id, types, vanilla};
+use enshwick::content::{Guid, Id, id, types, vanilla};
 
 const LOCKER_ID: Id = id!("locker");
 
@@ -39,14 +39,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const LOCKER: Guid = LOCKER_ID.guid();
     let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
     load.declare(LOCKER_ID)?;
-    load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(storage_box)?, |base| {
-        let mut item = Blob::new(base);
+    load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(storage_box)?, |base, out| {
+        out.reserve(base.len());
+        out.extend_from_slice(base);
         // Offsets for illustration: a real mod reads them from reflection.
-        let written = item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes()) && item.write(4, &LOCKER.0);
-        written.then(|| item.into_bytes())
+        out.get_mut(0..4)?.copy_from_slice(&enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes());
+        out.get_mut(4..20)?.copy_from_slice(&LOCKER.0);
+        Some(())
     })
 }
 ```
+
+The builder writes into `out`, bytes the loader lends for the build, so the
+resource is never copied out of the mod. `out` grows as a `Vec<u8>` does.
+A builder that calls `out.reserve(len)` first builds in one buffer. A resource built elsewhere,
+such as with `Blob`, goes in with `out.copy_from(&bytes)`.
 
 Field offsets change between game builds. During `init`, resolve a layout
 such as
@@ -61,8 +68,8 @@ and `load.type_size(type)` read the game's reflection. See
 the resource the first time it reads it, on whatever thread it reads it. It
 keeps the result for the life of the process. So the builder:
 
-- is `Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static`: move what it
-  needs into it;
+- is `Fn(&[u8], &mut Output<'_>) -> Option<()> + Send + Sync + 'static`:
+  move what it needs into it;
 - runs once per resource, not per read, unless the mod rebuilds it;
 - returns `None` when the base does not read as expected. That turns the mod
   off. A panic in the builder counts the same.

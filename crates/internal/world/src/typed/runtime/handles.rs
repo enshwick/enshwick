@@ -334,20 +334,23 @@ impl RawResource {
         self.own(key)?;
         self.own(base)?;
         let Self { id, name, .. } = *self;
-        crate::resources::serve(host, key, base, move |bytes| {
+        crate::resources::serve(host, key, base, move |bytes, out| {
             let changed = Registry::game().and_then(|registry| {
-                Ok(match change(registry.decode(name, bytes)?)? {
-                    Some(value) => registry.encode(name, &value, Some(bytes))?,
-                    None => bytes.to_vec(),
-                })
+                match change(registry.decode(name, bytes)?)? {
+                    Some(value) => registry.encode_into(name, &value, Some(bytes), out)?,
+                    None => out.extend_from_slice(bytes),
+                }
+                Ok(())
             });
-            Some(changed.unwrap_or_else(|why| {
+            if let Err(why) = changed {
                 host.log(
                     crate::abi::Level::WARN,
                     &format!("typed {id}: served unchanged: {why}"),
                 );
-                bytes.to_vec()
-            }))
+                out.resize(0);
+                out.extend_from_slice(bytes);
+            }
+            Some(())
         })
     }
 }

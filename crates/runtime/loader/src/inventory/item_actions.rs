@@ -59,6 +59,11 @@ static ITEMS_FUSE: Fuse = Fuse::new("item filters");
 /// so a build without the equipment system leaves those on.
 static EQUIPS_FUSE: Fuse = Fuse::new("item equips");
 
+/// The switch of the pickups and placements the filters hear from the
+/// server's event streams, apart from the uses so a build without the
+/// streams leaves those on.
+static EVENTS_FUSE: Fuse = Fuse::new("item event filters");
+
 /// Where one versioned action sits in the player's input, and where its
 /// handled version sits in the consumed input, in bytes.
 #[derive(Debug, Clone, Copy)]
@@ -268,6 +273,15 @@ pub(crate) fn register(
 /// event streams screened for it.
 pub(crate) fn wanted() -> bool {
     FILTERS.has_sealed()
+}
+
+/// Lists the item event filters off, by the event stream entry `id` the
+/// build lacks for `reason`, when a mod filters items: only the copy of the
+/// server's event streams hears pickups and placements.
+pub(crate) fn unscreened(loader: &Loader, id: &str, reason: &str) {
+    if wanted() {
+        let _off = loader.fuse_off(&EVENTS_FUSE, id, reason);
+    }
 }
 
 /// Seals the filters before any link: game events link the event move when
@@ -583,7 +597,7 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
     else {
         return;
     };
-    let _done = ITEMS_FUSE.run("the item events", || {
+    let _done = EVENTS_FUSE.run("the item events", || {
         // SAFETY: the event is of `heard`'s type and at least its reflected
         // size (`find` checks both), readable for `size` bytes (the caller's
         // contract); its u32 item id sits at the reflected `heard.item`.
@@ -659,6 +673,26 @@ mod tests {
         assert!(!wanted(), "open filters answer nothing yet");
         seal();
         assert!(wanted(), "game events read it before this part links");
+    }
+
+    #[test]
+    fn a_build_without_the_event_streams_lists_only_the_item_events_off() {
+        let loader = crate::start::tests::bare_loader();
+        unscreened(&loader, "ecs.event_streams", "absent");
+        assert!(!EVENTS_FUSE.is_off(), "no mod filters items yet");
+        FILTERS
+            .register(ModIndex::new(0), filter, core::ptr::null_mut())
+            .unwrap();
+        seal();
+        unscreened(&loader, "ecs.event_streams", "absent");
+        assert!(EVENTS_FUSE.is_off());
+        assert!(!ITEMS_FUSE.is_off(), "the item uses still run");
+        let off = crate::base::off_reason(&EVENTS_FUSE);
+        assert!(
+            off.as_deref()
+                .is_some_and(|r| r.starts_with("ecs.event_streams")),
+            "{off:?}"
+        );
     }
 
     #[test]

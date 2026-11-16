@@ -141,6 +141,15 @@ pub(crate) fn crafting() -> bool {
     CRAFT.get().is_some()
 }
 
+/// Lists the craft filters off, by the event stream entry `id` the build
+/// lacks for `reason`, when they screen craft requests: only the copy of the
+/// server's event streams screens them.
+pub(crate) fn unscreened(loader: &Loader, id: &str, reason: &str) {
+    if crafting() {
+        let _off = loader.fuse_off(&CRAFT_FUSE, id, reason);
+    }
+}
+
 /// Seals the build and craft filters and finds the craft request's layout,
 /// before any link: game events link the event move when craft requests are
 /// screened. Craft requests are screened whenever the build reads them, as
@@ -431,6 +440,22 @@ mod tests {
         }
         assert_eq!(refused, request(0, 7, 0));
         assert_eq!(allowed, request(5, 8, 3));
+    }
+
+    #[test]
+    fn a_build_without_the_event_streams_lists_the_craft_filters_off_by_the_entry() {
+        let loader = crate::start::tests::bare_loader();
+        unscreened(&loader, "ecs.event_streams", "absent");
+        assert!(!CRAFT_FUSE.is_off(), "nothing screens crafts yet");
+        let _first = CRAFT.set(LAYOUT);
+        unscreened(&loader, "ecs.event_streams", "absent");
+        assert!(CRAFT_FUSE.is_off());
+        let off = crate::base::off_reason(&CRAFT_FUSE);
+        assert!(
+            off.as_deref()
+                .is_some_and(|r| r.starts_with("ecs.event_streams")),
+            "{off:?}"
+        );
     }
 
     #[test]

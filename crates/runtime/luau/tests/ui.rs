@@ -376,7 +376,7 @@ mod tests {
             end)
             ",
         );
-        let _first_ask = loader.draw_frame();
+        let _nothing_held = loader.draw_frame();
         loader.show_prompt(Some(("Chest", 7)));
         loader.hold_locally(Some(1 << 30));
         let _drawn = loader.draw_frame();
@@ -392,6 +392,26 @@ mod tests {
         ] {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
+    }
+
+    #[test]
+    fn a_script_s_first_frame_reads_the_held_controls_as_its_input_opened_at_start() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function()
+                local held = enshwick.input.local_held()
+                enshwick.log.info(`first frame held {held and table.concat(held, ',')}`)
+            end)
+            ",
+        );
+        loader.hold_locally(Some(1 << 30));
+        let _first = loader.draw_frame();
+        assert!(
+            logged(&loader, "first frame held Block"),
+            "{:?}",
+            loader.logs()
+        );
     }
 
     #[test]

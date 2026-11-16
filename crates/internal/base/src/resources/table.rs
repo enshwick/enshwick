@@ -531,21 +531,25 @@ pub fn serve_value(
         .hashed(base.type_hash)
         .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
         .qualified_name();
-    crate::resources::serve(host, key, base, move |bytes| {
-        let keep = |error: &dyn std::fmt::Display| {
+    crate::resources::serve(host, key, base, move |bytes, out| {
+        let keep = |error: &dyn std::fmt::Display, out: &mut super::Output<'_>| {
             host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
-            fallback(key, base, bytes)
+            fallback(key, base, bytes, out)
         };
         let value = match registry.decode(name, bytes) {
             Ok(value) => value,
-            Err(error) => return keep(&error),
+            Err(error) => return keep(&error, out),
         };
         match patch(value) {
-            Ok(super::Value::Nil) => Some(bytes.to_vec()),
-            Ok(edited) => registry
-                .encode(name, &edited, Some(bytes))
-                .map_or_else(|error| keep(&error), Some),
-            Err(error) => keep(&error),
+            Ok(super::Value::Nil) => {
+                out.extend_from_slice(bytes);
+                Some(())
+            }
+            Ok(edited) => match registry.encode_into(name, &edited, Some(bytes), out) {
+                Ok(()) => Some(()),
+                Err(error) => keep(&error, out),
+            },
+            Err(error) => keep(&error, out),
         }
     })
 }
@@ -557,8 +561,12 @@ fn fallback(
     key: crate::abi::ResourceKey,
     base: crate::abi::ResourceKey,
     bytes: &[u8],
-) -> Option<Vec<u8>> {
-    (key == base).then(|| bytes.to_vec())
+    out: &mut super::Output<'_>,
+) -> Option<()> {
+    (key == base).then(|| {
+        out.resize(0);
+        out.extend_from_slice(bytes);
+    })
 }
 
 /// Serves `value` as the new resource `key`, of the type its key names; the
@@ -591,7 +599,10 @@ pub fn serve_new(
         .next()
         .ok_or_else(|| Off::new(format!("the game has no {name} to build a new one from")))?;
     let bytes = registry.encode(name, value, None)?;
-    crate::resources::serve(host, key, base, move |_| Some(bytes.clone()))
+    crate::resources::serve(host, key, base, move |_, out| {
+        out.extend_from_slice(&bytes);
+        Some(())
+    })
 }
 
 impl crate::BaseLoad {
@@ -626,12 +637,10 @@ mod tests {
             type_hash: 7,
             part: 0,
         };
+        let mut out = super::super::Output::new();
+        assert_eq!(super::fallback(key(1), key(1), b"base", &mut out), Some(()));
         assert_eq!(
-            super::fallback(key(1), key(1), b"base"),
-            Some(b"base".to_vec())
-        );
-        assert_eq!(
-            super::fallback(key(2), key(1), b"base"),
+            super::fallback(key(2), key(1), b"base", &mut out),
             None,
             "a copy turns the mod off"
         );

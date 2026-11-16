@@ -451,6 +451,9 @@ fn stream_layout(loader: &Loader, client_wanted: bool) -> Option<Layout> {
         .inspect_err(|missing: &Constant| {
             let absent = crate::engine::builds::ABSENT;
             let _off = loader.fuse_off(&DELIVERY_FUSE, missing.id(), absent);
+            // Craft requests and item events are screened only in the copy.
+            crate::actions::vetoes::unscreened(loader, missing.id(), absent);
+            crate::inventory::item_actions::unscreened(loader, missing.id(), absent);
             if loader.side == Side::CLIENT && client_wanted {
                 let _off = loader.fuse_off(&CLIENT_FUSE, missing.id(), absent);
             }

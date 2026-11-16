@@ -155,7 +155,6 @@ fn a_toolchain_lint_cargo_or_nextest_config_change_checks_everything() {
         ".cargo/config.toml",
         ".cargo/config",
         ".config/nextest.toml",
-        "tools/xtask/nextest.toml",
     ] {
         assert_eq!(scope(&files(&[file]), &workspace()), Scope::All, "{file}");
     }

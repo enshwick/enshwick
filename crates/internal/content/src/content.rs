@@ -404,7 +404,7 @@ pub trait LoadMethods {
         &mut self,
         key: ResourceKey,
         base: ResourceKey,
-        builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
+        builder: impl Fn(&[u8], &mut crate::resources::Output<'_>) -> Option<()> + Send + Sync + 'static,
     ) -> Result<(), Off>;
 
     /// As `Load::allow_rebuild`.
@@ -430,7 +430,7 @@ impl LoadMethods for crate::BaseLoad {
         &mut self,
         key: ResourceKey,
         base: ResourceKey,
-        builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
+        builder: impl Fn(&[u8], &mut crate::resources::Output<'_>) -> Option<()> + Send + Sync + 'static,
     ) -> Result<(), Off> {
         crate::resources::serve(self.host(), key, base, builder)
     }

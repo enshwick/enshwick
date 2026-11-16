@@ -7,11 +7,12 @@
 //! moves data that no longer fits to the end of the bytes, as
 //! `content::Blob` does.
 
+mod encode;
 mod rebase;
 
 use std::borrow::Cow;
 
-use super::{Field, Kind, Registry, Type, Value, Variant};
+use super::{Field, Grow, Kind, Registry, Type, Value, Variant};
 use enshwick_values::content::Guid;
 
 /// Nesting deeper than this is taken for a loop in bad data.
@@ -222,63 +223,6 @@ impl<'a> Registry<'a> {
         }
         .value(ty, 0, 0)
     }
-
-    /// Writes `value`, of the type qualified as `type_name`, as resource
-    /// bytes: over `base`, the bytes it was read from, keeping every byte
-    /// whose value did not change, or into new bytes for `None`. A struct may
-    /// name only the fields it changes; the rest keep `base`'s bytes, or
-    /// zero.
-    ///
-    /// # Errors
-    ///
-    /// [`CodecError`] for a value of another kind than its type, a number
-    /// out of its type's range, a name no constant or field carries, a static
-    /// array of another length, and a `base` too short for the type.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::resources::{Field, Kind, Registry, Type, Value};
-    ///
-    /// let registry = Registry::new([
-    ///     Type::new("demo::float32", Kind::Float32, 4, 4),
-    ///     Type::new("demo::Table", Kind::Struct, 8, 4).with_fields(vec![
-    ///         Field::new("damage", 0, "demo::float32"),
-    ///         Field::new("speed", 4, "demo::float32"),
-    ///     ]),
-    /// ]);
-    /// let base = [2.5f32.to_le_bytes(), 1.0f32.to_le_bytes()].concat();
-    /// let doubled = Value::Struct(vec![("damage".into(), Value::Float(5.0))]);
-    /// let bytes = registry.encode("demo::Table", &doubled, Some(&base))?;
-    /// assert_eq!(bytes, [5.0f32.to_le_bytes(), 1.0f32.to_le_bytes()].concat());
-    /// # Ok::<(), enshwick::resources::CodecError>(())
-    /// ```
-    pub fn encode(
-        &self,
-        type_name: &str,
-        value: &Value,
-        base: Option<&[u8]>,
-    ) -> Result<Vec<u8>, CodecError> {
-        let ty = self.require(type_name)?;
-        let size = size_of(ty);
-        let (bytes, fresh) = match base {
-            Some(base) if base.len() >= size => (base.to_vec(), false),
-            Some(base) => {
-                return Err(CodecError::new(format!(
-                    "the base holds {} bytes, {} needs {size}",
-                    base.len(),
-                    ty.qualified_name()
-                )));
-            }
-            None => (vec![0; size], true),
-        };
-        let mut encoder = Encoder {
-            registry: self,
-            bytes,
-        };
-        encoder.value(ty, value, 0, fresh, 0)?;
-        Ok(encoder.bytes)
-    }
 }
 
 struct Decoder<'r, 'a, 'b> {
@@ -455,9 +399,9 @@ impl<'a> Decoder<'_, 'a, '_> {
     }
 }
 
-struct Encoder<'r, 'a> {
+struct Encoder<'r, 'a, 'o, B: Grow> {
     registry: &'r Registry<'a>,
-    bytes: Vec<u8>,
+    bytes: &'o mut B,
 }
 
 /// A value of `ty` that another kind was given for.
@@ -535,7 +479,7 @@ fn coerce<'v>(ty: &Type<'_>, value: &'v Value) -> Result<Cow<'v, Value>, CodecEr
     }))
 }
 
-impl<'a> Encoder<'_, 'a> {
+impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
     fn write(&mut self, at: usize, data: &[u8]) -> Result<(), CodecError> {
         self.bytes
             .get_mut(at..at + data.len())
@@ -552,7 +496,7 @@ impl<'a> Encoder<'_, 'a> {
     /// where.
     fn append(&mut self, len: usize, align: usize) -> usize {
         let start = self.bytes.len().next_multiple_of(align.max(1));
-        self.bytes.resize(start + len, 0);
+        self.bytes.grow(start + len);
         start
     }
 
@@ -566,7 +510,7 @@ impl<'a> Encoder<'_, 'a> {
     /// Where the data of the header at `at` lies when `len` bytes of it are
     /// inside the bytes.
     fn existing(&self, at: usize, from: usize, len: usize) -> Option<usize> {
-        let start = target(&self.bytes, at, from).ok()?;
+        let start = target(self.bytes, at, from).ok()?;
         self.read(start, len).map(|_| start)
     }
 
@@ -659,7 +603,7 @@ impl<'a> Encoder<'_, 'a> {
             (Kind::BlobString, Value::Bytes(data)) => self.string(data, at, fresh),
             (Kind::BlobOptional, value) => self.optional(ty, value, at, fresh, depth),
             (Kind::BlobVariant, Value::Nil) => {
-                if word(&self.bytes, at)? != 0 {
+                if word(self.bytes, at)? != 0 {
                     self.write(at, &[0; 12])?;
                 }
                 Ok(())
@@ -771,7 +715,7 @@ impl<'a> Encoder<'_, 'a> {
         fresh: bool,
         depth: usize,
     ) -> Result<(), CodecError> {
-        let set = word(&self.bytes, at)? != 0;
+        let set = word(self.bytes, at)? != 0;
         if *value == Value::Nil {
             if set {
                 self.write(at, &[0; 4])?;
@@ -799,7 +743,7 @@ impl<'a> Encoder<'_, 'a> {
         let held = self.registry.require(variant.type_name())?;
         let len = size_of(held);
         let from = at + VARIANT_OFFSET;
-        let existing = if !fresh && word(&self.bytes, at)? == held.qualified_hash() {
+        let existing = if !fresh && word(self.bytes, at)? == held.qualified_hash() {
             self.existing(from, from, len)
         } else {
             None
@@ -898,7 +842,7 @@ impl<'a> Encoder<'_, 'a> {
             .len()
             .checked_mul(stride)
             .ok_or_else(|| not_fit(items.len(), ty))?;
-        let current = word(&self.bytes, at + 4)?;
+        let current = word(self.bytes, at + 4)?;
         let place = if !fresh && current == count {
             if count == 0 {
                 return Ok(());
@@ -950,7 +894,7 @@ impl<'a> Encoder<'_, 'a> {
 
     fn string(&mut self, data: &[u8], at: usize, fresh: bool) -> Result<(), CodecError> {
         let count = u32::try_from(data.len()).map_err(|_| CodecError::new("text past 4 GiB"))?;
-        let current = word(&self.bytes, at + 4)?;
+        let current = word(self.bytes, at + 4)?;
         if !fresh && current == count {
             if count == 0 {
                 return Ok(());

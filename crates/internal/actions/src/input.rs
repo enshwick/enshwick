@@ -137,11 +137,16 @@ impl Resolved {
 #[crate::script(held)]
 impl Input {
     pub(crate) fn open(load: &impl crate::Loading) -> Result<Self, Off> {
-        if let Some(resolved) = RESOLVED.get() {
-            return Ok(Self(resolved));
-        }
-        let resolved = Resolved::resolve(load)?;
-        Ok(Self(RESOLVED.get_or_init(|| resolved)))
+        let input = if let Some(resolved) = RESOLVED.get() {
+            Self(resolved)
+        } else {
+            let resolved = Resolved::resolve(load)?;
+            Self(RESOLVED.get_or_init(|| resolved))
+        };
+        // The loader starts reading the held controls at the first ask, which
+        // answers none: asking now has the first step after it answer.
+        let _started = input.local_held();
+        Ok(input)
     }
 
     /// The game's controls `player` holds this step, as their client last
@@ -183,10 +188,14 @@ impl Input {
     }
 
     /// The game's controls the local player holds, as this client's
-    /// interface read them in its last step; `None` on a server, outside a
-    /// game and while no step ran for a second, as in the pause menu. Only
-    /// the gameplay controls: the client-only ones, such as the menu and
-    /// map keys, are not in it. Read on any thread.
+    /// interface read them in its last step. Only the gameplay controls:
+    /// the client-only ones, such as the menu and map keys, are not in it.
+    /// Read on any thread.
+    ///
+    /// The reads start when the mod opens its input, so the interface's
+    /// first step after that answers. `None` on a server, outside a game,
+    /// before that first step, while no step ran for a second, as in the
+    /// pause menu, and on a game build without the read.
     ///
     /// # Examples
     ///
