@@ -199,6 +199,23 @@ pub const UI_PING_EVENT: Fact = Fact(ids::UI_PING_EVENT);
 pub const UI_PING_EVENT_SENDER_ENTITY_ID: Fact = Fact(ids::UI_PING_EVENT_SENDER_ENTITY_ID);
 /// Where a ping keeps its place, three 32.32 fixed-point `i64`.
 pub const UI_PING_EVENT_POSITION: Fact = Fact(ids::UI_PING_POSITION);
+/// The notify game event: a notifier, a sound or an effect at a place.
+pub const NOTIFY_EVENT: Fact = Fact(ids::NOTIFY_EVENT);
+/// Where a notify keeps its `ecs::Offset`, whose turn follows
+/// [`OFFSET_ORIENTATION_OFFSET`].
+pub const NOTIFY_EVENT_OFFSET: Fact = Fact(ids::NOTIFY_EVENT_OFFSET);
+/// Where an `ecs::Offset` keeps its turn, a quaternion `x, y, z, w`.
+pub const OFFSET_ORIENTATION_OFFSET: Fact = Fact(ids::OFFSET_ORIENTATION_OFFSET);
+/// Where a notify keeps its world transform.
+pub const NOTIFY_EVENT_TRANSFORM: Fact = Fact(ids::NOTIFY_EVENT_TRANSFORM);
+/// Where a notify keeps its `u32` source entity.
+pub const NOTIFY_EVENT_SOURCE_ENTITY_ID: Fact = Fact(ids::NOTIFY_EVENT_SOURCE_ENTITY_ID);
+/// Where a notify keeps the GUID of what it plays.
+pub const NOTIFY_EVENT_TYPE_GUID: Fact = Fact(ids::NOTIFY_EVENT_TYPE_GUID);
+/// Where a notify keeps its `u8` type.
+pub const NOTIFY_EVENT_TYPE: Fact = Fact(ids::NOTIFY_EVENT_TYPE);
+/// Where a notify keeps its `u8` sound volume hint.
+pub const NOTIFY_EVENT_SOUND_VOLUME_HINT: Fact = Fact(ids::NOTIFY_EVENT_SOUND_VOLUME_HINT);
 
 /// The marker of a player character, set by
 /// [`FakeHost::container_kinds`](crate::test::FakeHost::container_kinds).

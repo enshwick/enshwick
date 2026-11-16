@@ -7,8 +7,8 @@ use enshwick_core::{Entity, abi as api_frame};
 use crate::engine::conflicts::Mode;
 use crate::host::entries::base::services::exported;
 use crate::host::layer::{
-    Callback, Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded, Mod, Out, Text,
-    entries,
+    Asker, Callback, Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded, Mod, Out,
+    Text, entries,
 };
 
 /// Where every inventory request's required fields end: its op count.
@@ -209,8 +209,8 @@ entries! {
         )
     }
 
-    fn emit(loader as Caller, type_hash: u32, [data, size] as List<u8>) -> Status {
-        crate::base::emits::emit(loader, type_hash, data)?;
+    fn emit(me as Asker, type_hash: u32, [data, size] as List<u8>) -> Status {
+        crate::base::emits::emit(me.loader, me.handle, type_hash, data)?;
         Ok(())
     }
 

@@ -15,6 +15,7 @@
 //! level.
 
 mod kinds;
+pub(crate) mod notify;
 mod values;
 
 use core::marker::PhantomData;
@@ -29,8 +30,10 @@ pub use kinds::{
     FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent, LevelUpEvent, LootInteractionEvent,
     RevivedPlayerEvent, XpGainedEvent,
 };
+pub use notify::NotifyEvent;
 pub use values::{
     AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
+    NotifyEventType, SoundVolumeHint,
 };
 
 mod sealed {
@@ -65,6 +68,7 @@ typed_kinds!(
     LootInteractionEvent,
     HandleEquipmentSlotChangedEvent,
     RevivedPlayerEvent,
+    NotifyEvent,
 );
 
 impl CraftRecipeEvent {
@@ -286,8 +290,9 @@ impl EventType {
 }
 
 /// A plain value a [`Field`] reads from an event: an integer, a float, a
-/// `bool`, an [`Entity`] or another id of the game ([`ItemId`], [`RecipeId`],
-/// [`PlayerKey`]); implemented by those types only.
+/// `bool`, an [`Entity`], another id of the game ([`ItemId`], [`RecipeId`],
+/// [`PlayerKey`]) or a [`Guid`](crate::content::Guid); implemented by those
+/// types only.
 ///
 /// # Examples
 ///
@@ -372,6 +377,21 @@ macro_rules! id_scalars {
 }
 
 id_scalars!(ItemId: u32, RecipeId: u32, PlayerKey: u64);
+
+impl sealed::Sealed for crate::content::Guid {}
+
+impl Scalar for crate::content::Guid {
+    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        Some(Self(bytes.get(..16)?.try_into().ok()?))
+    }
+
+    fn to_bytes(self, bytes: &mut [u8]) -> bool {
+        bytes
+            .get_mut(..16)
+            .map(|out| out.copy_from_slice(&self.0))
+            .is_some()
+    }
+}
 
 /// A field of one reflected type, an event or a component, resolved by name
 /// for the running build.

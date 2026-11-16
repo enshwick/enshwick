@@ -302,6 +302,7 @@ fn every_domain_error_answers_mods_the_status_it_answered_before() {
         EmitError::NotAllowed,
         EmitError::BadSize,
         EmitError::Refused,
+        EmitError::TooMany,
         EmitError::Unavailable,
         EmitError::NoEntity,
         EmitError::NotMovable,

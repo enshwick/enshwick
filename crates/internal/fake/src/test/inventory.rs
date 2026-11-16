@@ -80,7 +80,9 @@ impl FakeHost {
     }
 
     /// The events [`Effects`](enshwick_core::effects::Effects) raises for an NPC
-    /// command, a threat and a ping; the toggle event stays off.
+    /// command, a threat, a ping and a notifier, at the offsets of the
+    /// running game; the toggle event stays off. The NPC command's and the
+    /// notifier's transforms take their layout from [`FakeHost::world`].
     ///
     /// # Examples
     ///
@@ -91,6 +93,7 @@ impl FakeHost {
     /// let host = enshwick::test::FakeHost::new().effect_events();
     /// let position = host.offset(facts::UI_PING_EVENT_POSITION.id())?;
     /// assert!(position + 24 <= host.size(facts::UI_PING_EVENT.id())?);
+    /// assert_eq!(host.size(facts::NOTIFY_EVENT.id())?, 224);
     /// # Ok::<(), enshwick::Off>(())
     /// ```
     #[must_use]
@@ -100,13 +103,32 @@ impl FakeHost {
                 ids::NPC_COMMAND_EVENT,
                 ids::ADD_THREAT_TARGET_EVENT,
                 ids::UI_PING_EVENT,
+                ids::NOTIFY_EVENT,
             ],
             &[
                 (ids::NPC_COMMAND_EVENT, 72),
                 (ids::ADD_THREAT_TARGET_EVENT, 24),
                 (ids::UI_PING_EVENT, 40),
+                (ids::NOTIFY_EVENT, 224),
             ],
             &[
+                (ids::NOTIFY_EVENT_OFFSET, 8),
+                (ids::OFFSET_ORIENTATION_OFFSET, 24),
+                (ids::NOTIFY_EVENT_TRANSFORM, 48),
+                (ids::NOTIFY_EVENT_SOURCE_ENTITY_ID, 192),
+                (ids::NOTIFY_EVENT_TYPE_GUID, 200),
+                (ids::NOTIFY_EVENT_TYPE, 216),
+                (ids::NOTIFY_EVENT_SOUND_VOLUME_HINT, 217),
+                (ids::NOTIFY_EVENT_TYPE_NORMAL, 0),
+                (ids::NOTIFY_EVENT_TYPE_SFX, 1),
+                (ids::NOTIFY_EVENT_TYPE_VFX, 2),
+                (ids::SOUND_VOLUME_HINT_GENERIC_SFX, 0),
+                (ids::SOUND_VOLUME_HINT_PLAYER, 1),
+                (ids::SOUND_VOLUME_HINT_PET, 2),
+                (ids::SOUND_VOLUME_HINT_LIVESTOCK, 3),
+                (ids::SOUND_VOLUME_HINT_FRIENDLY_NPC, 4),
+                (ids::SOUND_VOLUME_HINT_ENEMY, 5),
+                (ids::SOUND_VOLUME_HINT_VOICEOVER, 6),
                 (ids::NPC_COMMAND_EVENT_TYPE, 8),
                 (ids::NPC_COMMAND_EVENT_NPC_ID, 12),
                 (ids::NPC_COMMAND_EVENT_TARGET_TRANSFORM, 16),

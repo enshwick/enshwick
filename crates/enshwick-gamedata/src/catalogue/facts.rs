@@ -437,6 +437,35 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::UI_PING_POSITION,
         offset("keen::ecs::UiPingEvent", "position", WORLD_POSITION),
     ),
+    (ids::NOTIFY_EVENT, Fact::Type(NOTIFY_EVENT)),
+    (
+        ids::NOTIFY_EVENT_OFFSET,
+        offset(NOTIFY_EVENT, "offset", "keen::ecs::Offset"),
+    ),
+    (
+        ids::NOTIFY_EVENT_TRANSFORM,
+        offset(NOTIFY_EVENT, "transform", WORLD_TRANSFORM),
+    ),
+    (
+        ids::NOTIFY_EVENT_SOURCE_ENTITY_ID,
+        offset(NOTIFY_EVENT, "sourceEntityId", ENTITY_ID),
+    ),
+    (
+        ids::NOTIFY_EVENT_TYPE_GUID,
+        offset(NOTIFY_EVENT, "typeGuid", GUID),
+    ),
+    (
+        ids::NOTIFY_EVENT_TYPE,
+        offset(NOTIFY_EVENT, "type", NOTIFY_EVENT_TYPE),
+    ),
+    (
+        ids::NOTIFY_EVENT_SOUND_VOLUME_HINT,
+        offset(NOTIFY_EVENT, "soundVolumeHint", SOUND_VOLUME_HINT),
+    ),
+    (
+        ids::OFFSET_ORIENTATION_OFFSET,
+        offset("keen::ecs::Offset", "orientationOffset", "keen::Quaternion"),
+    ),
     (ids::ITEM_INFO, Fact::Type("keen::ItemInfo")),
     (
         ids::ITEM_INFO_ID,
@@ -1598,6 +1627,46 @@ pub const FACTS: &[(&str, Fact)] = &[
         enum_constant(ALTAR_ACTION, "SetAsPreferredSpawnAltar"),
     ),
     (
+        ids::NOTIFY_EVENT_TYPE_NORMAL,
+        enum_constant(NOTIFY_EVENT_TYPE, "Normal"),
+    ),
+    (
+        ids::NOTIFY_EVENT_TYPE_SFX,
+        enum_constant(NOTIFY_EVENT_TYPE, "Sfx"),
+    ),
+    (
+        ids::NOTIFY_EVENT_TYPE_VFX,
+        enum_constant(NOTIFY_EVENT_TYPE, "Vfx"),
+    ),
+    (
+        ids::SOUND_VOLUME_HINT_GENERIC_SFX,
+        enum_constant(SOUND_VOLUME_HINT, "GenericSfx"),
+    ),
+    (
+        ids::SOUND_VOLUME_HINT_PLAYER,
+        enum_constant(SOUND_VOLUME_HINT, "Player"),
+    ),
+    (
+        ids::SOUND_VOLUME_HINT_PET,
+        enum_constant(SOUND_VOLUME_HINT, "Pet"),
+    ),
+    (
+        ids::SOUND_VOLUME_HINT_LIVESTOCK,
+        enum_constant(SOUND_VOLUME_HINT, "Livestock"),
+    ),
+    (
+        ids::SOUND_VOLUME_HINT_FRIENDLY_NPC,
+        enum_constant(SOUND_VOLUME_HINT, "FriendlyNpc"),
+    ),
+    (
+        ids::SOUND_VOLUME_HINT_ENEMY,
+        enum_constant(SOUND_VOLUME_HINT, "Enemy"),
+    ),
+    (
+        ids::SOUND_VOLUME_HINT_VOICEOVER,
+        enum_constant(SOUND_VOLUME_HINT, "Voiceover"),
+    ),
+    (
         ids::EQUIPMENT_SLOT_VANITY_HEAD,
         enum_constant(EQUIPMENT_SLOT, "Vanity_Head"),
     ),
@@ -2313,6 +2382,15 @@ const EXPERIENCE_SOURCE: &str = "keen::ExperienceSourceType";
 
 /// What a player did at a Flame Altar.
 const ALTAR_ACTION: &str = "keen::ecs::FlameAltarActionType";
+
+/// A notifier, a sound or an effect the server raises at a place.
+const NOTIFY_EVENT: &str = "keen::ecs::NotifyEvent";
+
+/// Whether a notify names a notifier, a sound or an effect.
+const NOTIFY_EVENT_TYPE: &str = "keen::ecs::NotifyEventType";
+
+/// Whose sound a notify is, for the client's volume groups.
+const SOUND_VOLUME_HINT: &str = "keen::SoundVolumeHint";
 
 /// A character's equipment slot.
 const EQUIPMENT_SLOT: &str = "keen::EquipmentSlot";

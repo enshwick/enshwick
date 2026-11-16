@@ -11,6 +11,8 @@ use crate::ecs::ComponentType;
 use crate::game_events::CraftRecipeEvent;
 use crate::{Entity, Host, RecipeId};
 
+pub use crate::game_events::notify::NotifyLayout;
+
 /// Makes `host` the answer of [`crate::host`]; the first call wins.
 #[must_use]
 pub fn install(host: Host) -> Host {

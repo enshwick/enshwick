@@ -390,7 +390,87 @@ impl EquipmentSlot {
     ];
 }
 
-named_values!(ExperienceSourceType, FlameAltarActionType, EquipmentSlot);
+/// What a notify names: a notifier, a sound or an effect; the loader reads
+/// the engine's value of each variant by its constant's name.
+///
+/// # Examples
+///
+/// See [`NotifyEvent`](crate::game_events::NotifyEvent).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum NotifyEventType {
+    /// A notifier, whose resource names its sound, effect and camera shake.
+    Normal,
+    /// A sound container, played at the place.
+    Sfx,
+    /// A visual effect, shown at the place.
+    Vfx,
+    /// A value this crate does not name, as the game gave it.
+    Other(u8),
+}
+
+impl NotifyEventType {
+    /// Each type with the id of its engine constant.
+    pub(crate) const IDS: [(Self, &'static str); 3] = [
+        (Self::Normal, ids::NOTIFY_EVENT_TYPE_NORMAL),
+        (Self::Sfx, ids::NOTIFY_EVENT_TYPE_SFX),
+        (Self::Vfx, ids::NOTIFY_EVENT_TYPE_VFX),
+    ];
+}
+
+/// Whose sound a notify is, which the client's volume settings group it
+/// by; the loader reads the engine's value of each variant by its
+/// constant's name.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::game_events::SoundVolumeHint;
+///
+/// assert_eq!(SoundVolumeHint::default(), SoundVolumeHint::GenericSfx);
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum SoundVolumeHint {
+    /// Any sound effect.
+    #[default]
+    GenericSfx,
+    /// A player's sound.
+    Player,
+    /// A pet's sound.
+    Pet,
+    /// A farm animal's sound.
+    Livestock,
+    /// A friendly character's sound.
+    FriendlyNpc,
+    /// An enemy's sound.
+    Enemy,
+    /// Spoken lines.
+    Voiceover,
+    /// A value this crate does not name, as the game gave it.
+    Other(u8),
+}
+
+impl SoundVolumeHint {
+    /// Each hint with the id of its engine constant.
+    pub(crate) const IDS: [(Self, &'static str); 7] = [
+        (Self::GenericSfx, ids::SOUND_VOLUME_HINT_GENERIC_SFX),
+        (Self::Player, ids::SOUND_VOLUME_HINT_PLAYER),
+        (Self::Pet, ids::SOUND_VOLUME_HINT_PET),
+        (Self::Livestock, ids::SOUND_VOLUME_HINT_LIVESTOCK),
+        (Self::FriendlyNpc, ids::SOUND_VOLUME_HINT_FRIENDLY_NPC),
+        (Self::Enemy, ids::SOUND_VOLUME_HINT_ENEMY),
+        (Self::Voiceover, ids::SOUND_VOLUME_HINT_VOICEOVER),
+    ];
+}
+
+named_values!(
+    ExperienceSourceType,
+    FlameAltarActionType,
+    EquipmentSlot,
+    NotifyEventType,
+    SoundVolumeHint
+);
 
 #[cfg(test)]
 mod tests {
@@ -402,6 +482,8 @@ mod tests {
         assert_named_after_engine(&EquipmentSlot::IDS);
         assert_named_after_engine(&ExperienceSourceType::IDS);
         assert_named_after_engine(&FlameAltarActionType::IDS);
+        assert_named_after_engine(&NotifyEventType::IDS);
+        assert_named_after_engine(&SoundVolumeHint::IDS);
         for names in [
             DamageTypeMask::NAMES.as_slice(),
             AttackCategoryMask::NAMES.as_slice(),

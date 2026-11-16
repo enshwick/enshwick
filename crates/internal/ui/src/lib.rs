@@ -27,7 +27,7 @@ pub(crate) use enshwick_base::engine_ids;
 pub(crate) use enshwick_base::load::BaseLoad;
 pub(crate) use enshwick_base::locks;
 #[doc(hidden)]
-pub use enshwick_base::{ecs, mods, resources, script};
+pub use enshwick_base::{ecs, game_events, mods, resources, script};
 #[doc(hidden)]
 pub use enshwick_content::content;
 #[cfg(feature = "unstable")]

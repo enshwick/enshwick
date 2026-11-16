@@ -1,5 +1,5 @@
-//! Effects in the server's world: game events a mod raises, teleports and
-//! spawns.
+//! Effects in the server's world: game events a mod raises, notifiers the
+//! clients play, teleports and spawns.
 //!
 //! An event goes where the game's own events go: the loader puts it into
 //! the stream the engine moves at the start of the next step, and the
@@ -43,7 +43,12 @@ use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{BaseLoad, Host, Off};
+use enshwick_base::__internal::NotifyLayout;
 use enshwick_world::__internal::{world_check, world_status};
+
+mod notify;
+
+pub use notify::{MAX_NOTIFIES_PER_STEP, Notify, NotifyAt};
 
 /// How an entity arrives, for [`Effects::teleport`].
 ///
@@ -347,6 +352,7 @@ pub struct Effects {
     threat: Option<AddThreat>,
     #[cfg(feature = "unstable")]
     ping: Option<Ping>,
+    notify: Option<NotifyLayout>,
 }
 
 #[crate::script(events)]
@@ -403,6 +409,7 @@ impl Effects {
             threat: keep("threat", threat),
             #[cfg(feature = "unstable")]
             ping: keep("pings", ping),
+            notify: keep("notifiers", NotifyLayout::resolve(load)),
         }
     }
 
@@ -857,9 +864,12 @@ pub trait LoadMethods {
 
 impl crate::script::Bound for Effects {
     const NAME: &'static str = "effects";
-    const DOC: &'static str = "Effects a mod has on the server's world: survivor orders, toggles, threat, pings, teleports and spawns.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_EVENTS, Self::SCRIPT_SPAWNS];
+    const DOC: &'static str = "Effects a mod has on the server's world: survivor orders, toggles, threat, pings, notifiers, teleports and spawns.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
+        Self::SCRIPT_EVENTS,
+        Self::SCRIPT_NOTIFIERS,
+        Self::SCRIPT_SPAWNS,
+    ];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(load.base_mut().effects())

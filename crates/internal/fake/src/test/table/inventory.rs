@@ -3,6 +3,8 @@
 
 use core::ffi::c_void;
 
+use enshwick_core::__fake::ids;
+
 use crate::test::SubmittedRequest;
 use crate::test::table::{Registered, Registration, with};
 
@@ -74,7 +76,7 @@ pub(crate) extern "system" fn drop_items(
 }
 
 pub(crate) extern "system" fn emit(
-    _me: ModHandle,
+    me: ModHandle,
     type_hash: u32,
     data: *const u8,
     size: u32,
@@ -85,6 +87,18 @@ pub(crate) extern "system" fn emit(
     // SAFETY: the safe layer passes `size` bytes at `data` for the call.
     let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
     with(Status::MISSING, |s| {
+        let notify = s.host.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
+        if notify {
+            let step = s.ticks.step;
+            let (counted, count) = s.notified.entry(me).or_insert((step, 0));
+            if *counted != step {
+                (*counted, *count) = (step, 0);
+            }
+            if *count >= enshwick_core::effects::MAX_NOTIFIES_PER_STEP {
+                return Status::REFUSED;
+            }
+            *count += 1;
+        }
         s.emits.push((type_hash, bytes));
         Status::OK
     })
