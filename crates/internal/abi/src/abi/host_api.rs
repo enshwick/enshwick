@@ -19,9 +19,9 @@ use crate::abi::{
     PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn, ResourceKey, ResourcePatchFn,
     SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn,
     StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension,
-    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, WeatherSample,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd,
+    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn,
+    UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2155,6 +2155,22 @@ pub struct HostApi {
     /// Any thread. ABI 12.1.
     pub client_command_status:
         extern "system" fn(me: ModHandle, id: u64, out: *mut ClientCommandStatus) -> Status,
+    /// Adds `material`, a headed [`TerrainMaterialAdd`], as a terrain
+    /// material of the game, and writes the voxel id it has for this run to
+    /// `id`. The loader gives mods' materials the terrain ids no palette of
+    /// the game names, in load order, and serves the material's palette
+    /// entry, rules and look on both sides; saves name its voxels by its
+    /// GUID. [`Status::BAD_ARGS`] for a `like` or `fallback` that is no
+    /// terrain material of the game or a change it does not know;
+    /// [`Status::REFUSED`] for a GUID added before and once every free id is
+    /// taken; [`Status::UNAVAILABLE`] on a build whose archive lacks the
+    /// palette or the rules. Allowed during `enshwick_mod_init` only.
+    /// ABI 12.2.
+    pub terrain_material_add: extern "system" fn(
+        me: ModHandle,
+        material: *const TerrainMaterialAdd,
+        id: *mut u8,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2372,5 +2388,6 @@ const _: () = {
     assert!(offset_of!(HostApi, loader_off) == 24 + 204 * 8);
     assert!(offset_of!(HostApi, client_command) == 24 + 205 * 8);
     assert!(offset_of!(HostApi, client_command_status) == 24 + 206 * 8);
-    assert!(size_of::<HostApi>() == 24 + 207 * 8);
+    assert!(offset_of!(HostApi, terrain_material_add) == 24 + 207 * 8);
+    assert!(size_of::<HostApi>() == 24 + 208 * 8);
 };

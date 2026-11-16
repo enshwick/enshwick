@@ -64,6 +64,16 @@ pub fn terrain_edit_valid(edit: &crate::abi::TerrainEdit) -> bool {
         }
 }
 
+/// Whether the loader takes the changes of the terrain material `material`,
+/// a check the loader and the fake host share: changes it knows, and a
+/// health of 1 or more when it sets one.
+#[must_use]
+pub fn terrain_material_changes_valid(material: &crate::abi::TerrainMaterialAdd) -> bool {
+    use crate::abi::TerrainMaterialAdd;
+    material.changes & !TerrainMaterialAdd::ALL_CHANGES == 0
+        && (material.changes & TerrainMaterialAdd::HEALTH == 0 || material.health >= 1)
+}
+
 /// `status` of a world call as its outcome.
 ///
 /// # Errors

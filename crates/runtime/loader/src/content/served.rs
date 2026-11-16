@@ -260,13 +260,20 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let mut made = None;
     RESOURCES.seal_with(|mut served| {
         let count = served.len();
-        let aliases = crate::content::clones::update(
+        let materials = crate::content::terrain_materials::sealed();
+        let recorded = crate::content::clones::update(
             &loader.mods_dir,
             served.iter().map(|s| (s.key, s.base)),
+            crate::content::terrain_materials::record(loader, materials),
         );
+        let aliases = recorded.aliases;
         let standing = stand_ins.map_or(0, |(items, registry)| {
             serve_stand_ins(&mut served, items, registry)
         });
+        let grounded = serve_terrain(
+            &mut served,
+            crate::content::terrain_materials::serve(loader, materials, &recorded.terrain),
+        );
         let changed = serve_changes(
             &mut served,
             crate::content::data_changes::serve(loader),
@@ -276,10 +283,10 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
             &mut served,
             crate::content::rate_links::recipe_patch(loader),
         );
-        made = Some((count, aliases, standing, changed, rated));
+        made = Some((count, aliases, standing, grounded, changed, rated));
         served
     });
-    let Some((count, aliases, standing, changed, rated)) = made else {
+    let Some((count, aliases, standing, grounded, changed, rated)) = made else {
         return;
     };
     let served = RESOURCES.sealed().unwrap_or_default();
@@ -289,7 +296,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         .count();
     let recorded = aliases.len();
     if ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing + changed + rated == 0
+        || count + recorded + renames.len() + standing + grounded + changed + rated == 0
     {
         return;
     }
@@ -363,6 +370,30 @@ fn serve_stand_ins(
     match served.iter_mut().find(|s| s.key == key) {
         Some(listed) => listed.patches.push(patch(registry)),
         None => served.push(Served::new(key, key, vec![patch(registry)], false)),
+    }
+    count
+}
+
+/// Adds the loader's patches for terrain materials to `served`, first on
+/// each key, so a mod's patch of the rules sees the new ones; how many keys.
+fn serve_terrain(
+    served: &mut Vec<Served>,
+    patches: Vec<(ResourceKey, crate::content::terrain_materials::Builder)>,
+) -> usize {
+    let count = patches.len();
+    for (key, builder) in patches {
+        let (apply, user) = own_patch(crate::content::terrain_materials::TerrainPatch::new(
+            builder,
+        ));
+        let patch = Patch {
+            owner: ModIndex::LOADER,
+            apply,
+            user: user.expose_provenance(),
+        };
+        match served.iter_mut().find(|s| s.key == key) {
+            Some(entry) => entry.patches.insert(0, patch),
+            None => served.push(Served::new(key, key, vec![patch], false)),
+        }
     }
     count
 }

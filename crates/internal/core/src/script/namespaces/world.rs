@@ -67,4 +67,5 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::of::<Voxels>(),
     Namespace::starting("voxels", "", &[Load::SCRIPT_VOXEL_EDITS]),
     Namespace::of::<Terrain>(),
+    Namespace::starting("terrain", "", &[Load::SCRIPT_TERRAIN_MATERIALS]),
 ];

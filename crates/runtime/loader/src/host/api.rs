@@ -231,4 +231,5 @@ pub(crate) static API: HostApi = HostApi {
     loader_off,
     client_command,
     client_command_status,
+    terrain_material_add,
 };

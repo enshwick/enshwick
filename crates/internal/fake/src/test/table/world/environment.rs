@@ -4,8 +4,8 @@
 use crate::test::table::{found_headed, get_headed, list, on_game_thread, with};
 use crate::test::world::{VoxelGrid, edit_loaded, edit_outside, outside};
 use enshwick_core::abi::{
-    DaytimeInfo, Header, ModHandle, Status, TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
-    WeatherSample,
+    DaytimeInfo, Header, ModHandle, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo,
+    Voxel, WeatherFront, WeatherSample,
 };
 
 pub(crate) extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo) -> Status {
@@ -195,10 +195,85 @@ pub(crate) extern "system" fn terrain_materials(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some(materials) = with(None, |s| s.terrain.clone()) else {
+    let Some(mut materials) = with(None, |s| s.terrain.clone()) else {
         return Status::UNAVAILABLE;
     };
+    let added = with(Vec::new(), |s| s.terrain_added.clone());
+    for (material, id) in added.iter().zip(GAME_FREE_TERRAIN) {
+        if let Some(like) = materials.iter().find(|m| m.id == material.like).copied() {
+            materials.push(added_info(like, material, id));
+        }
+    }
     list(&materials, out, entry_size, capacity, count)
+}
+
+/// The terrain ids the game's palette leaves free (data 1287369), which the
+/// loader gives mods' materials in load order.
+const GAME_FREE_TERRAIN: core::ops::RangeInclusive<u8> = 117..=127;
+
+/// The game's own terrain ids, below the free ones.
+const GAME_TERRAIN: core::ops::RangeInclusive<u8> = 1..=116;
+
+/// What the game lists for `material` at terrain id `id`: `like` with the
+/// rules it changes.
+fn added_info(
+    like: TerrainMaterialInfo,
+    material: &TerrainMaterialAdd,
+    id: u8,
+) -> TerrainMaterialInfo {
+    let set = |bit| material.changes & bit != 0;
+    let mut info = TerrainMaterialInfo { id, ..like };
+    if set(TerrainMaterialAdd::ITEM) {
+        info.item = enshwick_core::ItemId::new(material.item.fnv1a());
+    }
+    if set(TerrainMaterialAdd::HARDNESS) {
+        info.hardness = material.hardness;
+    }
+    if set(TerrainMaterialAdd::HEALTH) {
+        info.health = material.health;
+    }
+    if set(TerrainMaterialAdd::FLATTENS) {
+        info.flags = material.flags & TerrainMaterialInfo::FLATTENS;
+    }
+    info
+}
+
+pub(crate) extern "system" fn terrain_material_add(
+    _me: ModHandle,
+    material: *const TerrainMaterialAdd,
+    id: *mut u8,
+) -> Status {
+    let Some(material) = get_headed(material) else {
+        return Status::BAD_ARGS;
+    };
+    if id.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let vanilla = |id| GAME_TERRAIN.contains(&id);
+    if !vanilla(material.like)
+        || !vanilla(material.fallback)
+        || !enshwick_core::__fake::rules::terrain_material_changes_valid(&material)
+    {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if material.guid == enshwick_core::content::Guid::NIL
+            || s.terrain_added.iter().any(|m| m.guid == material.guid)
+        {
+            return Status::REFUSED;
+        }
+        let Some(placed) = GAME_FREE_TERRAIN.clone().nth(s.terrain_added.len()) else {
+            return Status::REFUSED;
+        };
+        s.terrain_added.push(material);
+        // SAFETY: `id` is non-null (checked above) and the safe layer passes
+        // a byte for the call.
+        unsafe { id.write(placed) };
+        Status::OK
+    })
 }
 
 pub(crate) extern "system" fn terrain_edit(

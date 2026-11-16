@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 1
+#define ENSHWICK_ABI_MINOR 2
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -3141,6 +3141,51 @@ typedef struct EnshwickLoaderOff {
   // When it turned off, in seconds since the Unix epoch.
   uint64_t at;
 } EnshwickLoaderOff;
+
+// A terrain material of a mod's own, for
+// `EnshwickHostApi.terrain_material_add`:
+// a copy of a vanilla material, its look included, with the rules
+// `changes` names set from this struct.
+typedef struct EnshwickTerrainMaterialAdd {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The GUID saves name its voxels by: its content id's.
+  struct EnshwickGuid guid;
+  // The item digging it yields, by its GUID, with
+  // `EnshwickTerrainMaterialAdd_ITEM`.
+  struct EnshwickGuid item;
+  // The health a voxel of it has against tools, with
+  // `EnshwickTerrainMaterialAdd_HEALTH`.
+  int32_t health;
+  // The game's terrain material it copies, its look and every rule it
+  // does not change, by voxel id.
+  uint8_t like;
+  // The game's terrain material its voxels load as while no mod adds it,
+  // by voxel id.
+  uint8_t fallback;
+  // The rules it sets: `EnshwickTerrainMaterialAdd_ITEM`,
+  // `EnshwickTerrainMaterialAdd_HARDNESS`, `EnshwickTerrainMaterialAdd_HEALTH` and
+  // `EnshwickTerrainMaterialAdd_FLATTENS`, or none.
+  uint8_t changes;
+  // How hard it is to dig, the game's hardness category from 0, with
+  // `EnshwickTerrainMaterialAdd_HARDNESS`.
+  uint8_t hardness;
+  // `EnshwickTerrainMaterialInfo_FLATTENS` or none, with
+  // `EnshwickTerrainMaterialAdd_FLATTENS`.
+  uint8_t flags;
+  // Zero.
+  uint8_t reserved[3];
+} EnshwickTerrainMaterialAdd;
+// Sets the item digging it yields.
+#define EnshwickTerrainMaterialAdd_ITEM 1
+// Sets its hardness.
+#define EnshwickTerrainMaterialAdd_HARDNESS (1 << 1)
+// Sets its health.
+#define EnshwickTerrainMaterialAdd_HEALTH (1 << 2)
+// Sets whether a player's tool can flatten it.
+#define EnshwickTerrainMaterialAdd_FLATTENS (1 << 3)
+// Every change it may set.
+#define EnshwickTerrainMaterialAdd_ALL_CHANGES (((EnshwickTerrainMaterialAdd_ITEM | EnshwickTerrainMaterialAdd_HARDNESS) | EnshwickTerrainMaterialAdd_HEALTH) | EnshwickTerrainMaterialAdd_FLATTENS)
 
 
 // A player about to interact with an entity, as
@@ -6342,6 +6387,20 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*client_command_status)(EnshwickModHandle me,
                                           uint64_t id,
                                           struct EnshwickClientCommandStatus *out);
+  // Adds `material`, a headed `EnshwickTerrainMaterialAdd`, as a terrain
+  // material of the game, and writes the voxel id it has for this run to
+  // `id`. The loader gives mods' materials the terrain ids no palette of
+  // the game names, in load order, and serves the material's palette
+  // entry, rules and look on both sides; saves name its voxels by its
+  // GUID. `EnshwickStatus_BAD_ARGS` for a `like` or `fallback` that is no
+  // terrain material of the game or a change it does not know;
+  // `EnshwickStatus_REFUSED` for a GUID added before and once every free id is
+  // taken; `EnshwickStatus_UNAVAILABLE` on a build whose archive lacks the
+  // palette or the rules. Allowed during `enshwick_mod_init` only.
+  // ABI 12.2.
+  EnshwickStatus (*terrain_material_add)(EnshwickModHandle me,
+                                         const struct EnshwickTerrainMaterialAdd *material,
+                                         uint8_t *id);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -6779,7 +6838,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1680, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1688, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -6990,6 +7049,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_snapshot) == 1648, "offs
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, loader_off) == 1656, "offset of HostApi.loader_off");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command) == 1664, "offset of HostApi.client_command");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command_status) == 1672, "offset of HostApi.client_command_status");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 1680, "offset of HostApi.terrain_material_add");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -7468,6 +7528,18 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainEdit, position) == 24, "offset of
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainEdit, radius) == 48, "offset of TerrainEdit.radius");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainEdit, height) == 52, "offset of TerrainEdit.height");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainEdit, protect) == 56, "offset of TerrainEdit.protect");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickTerrainMaterialAdd) == 52, "size of TerrainMaterialAdd");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickTerrainMaterialAdd) == 4, "alignment of TerrainMaterialAdd");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, header) == 0, "offset of TerrainMaterialAdd.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, guid) == 8, "offset of TerrainMaterialAdd.guid");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, item) == 24, "offset of TerrainMaterialAdd.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, health) == 40, "offset of TerrainMaterialAdd.health");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, like) == 44, "offset of TerrainMaterialAdd.like");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, fallback) == 45, "offset of TerrainMaterialAdd.fallback");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, changes) == 46, "offset of TerrainMaterialAdd.changes");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, hardness) == 47, "offset of TerrainMaterialAdd.hardness");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, flags) == 48, "offset of TerrainMaterialAdd.flags");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialAdd, reserved) == 49, "offset of TerrainMaterialAdd.reserved");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickTerrainMaterialInfo) == 20, "size of TerrainMaterialInfo");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickTerrainMaterialInfo) == 4, "alignment of TerrainMaterialInfo");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickTerrainMaterialInfo, header) == 0, "offset of TerrainMaterialInfo.header");
