@@ -573,6 +573,19 @@ pub(crate) fn ready(peer: u64) -> bool {
     state(|s| s.peers.contains_key(&peer))
 }
 
+/// Makes `peer` take messages, as after its hello, or no longer, for a
+/// test of a part that sends to clients.
+#[cfg(test)]
+pub(crate) fn set_ready(peer: u64, ready: bool) {
+    state(|s| {
+        if ready {
+            s.peers.entry(peer).or_insert_with(Peer::new);
+        } else {
+            s.peers.remove(&peer);
+        }
+    });
+}
+
 /// The account keys of the clients that said hello, on the server.
 pub(crate) fn clients() -> Vec<u64> {
     state(|s| {

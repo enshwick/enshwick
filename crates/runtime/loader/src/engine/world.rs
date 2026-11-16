@@ -93,6 +93,10 @@ struct State {
     step_linked: AtomicBool,
     /// Whose world a client's engine pass hands the loader.
     hosted: whose::Hosted,
+    /// The players a test put in game, listed by [`players`] in place of
+    /// the server's slots.
+    #[cfg(test)]
+    online: std::sync::Mutex<Option<Vec<enshwick_core::abi::PlayerInfo>>>,
 }
 
 impl State {
@@ -104,6 +108,8 @@ impl State {
             server_world: AtomicUsize::new(0),
             step_linked: AtomicBool::new(false),
             hosted: whose::Hosted::new(),
+            #[cfg(test)]
+            online: std::sync::Mutex::new(None),
         }
     }
 
@@ -115,6 +121,14 @@ impl State {
 }
 
 static STATE: State = State::new();
+
+/// Puts `online` in game for a test, as [`players`] lists them, until a
+/// `None` hands the list back to the server's slots.
+#[cfg(test)]
+pub(crate) fn put_online(online: Option<Vec<enshwick_core::abi::PlayerInfo>>) {
+    use enshwick_base::Relock;
+    *STATE.online.relock() = online;
+}
 
 /// Records the server seen after a step on `thread`, and its entity world
 /// from `world_offset` and `entities`.
