@@ -740,6 +740,37 @@ fn a_spelled_value_needs_a_step_that_spells_it_and_a_reflected_number_stands_alo
     }
 }
 
+/// A function's extent is its highest store off the stack, wherever in the
+/// code it lies, so a wider store before the last one still counts.
+#[test]
+fn an_extent_is_the_end_of_the_highest_store_off_the_stack() {
+    let extent = |bytes: &[u8]| {
+        let run: Vec<Instruction> = Decoder::with_ip(64, bytes, 0x1000, DecoderOptions::NONE)
+            .into_iter()
+            .collect();
+        shape::extent(&run)
+    };
+    // mov qword [rcx+0x18],5; mov [rsp+8],rax; mov [rdx+0x90],r9b; ret
+    let init = [
+        0x48, 0xc7, 0x41, 0x18, 0x05, 0x00, 0x00, 0x00, 0x48, 0x89, 0x44, 0x24, 0x08, 0x44, 0x88,
+        0x8a, 0x90, 0x00, 0x00, 0x00, 0xc3,
+    ];
+    assert_eq!(extent(&init), Some(0x91));
+    // movups [rcx+0x98],xmm0; mov [rdx+0x90],r9b; ret
+    let wider_first = [
+        0x0f, 0x11, 0x81, 0x98, 0x00, 0x00, 0x00, 0x44, 0x88, 0x8a, 0x90, 0x00, 0x00, 0x00, 0xc3,
+    ];
+    assert_eq!(extent(&wider_first), Some(0xa8), "not the last store's end");
+    // mov [rcx+rax*8],rdx
+    assert_eq!(
+        extent(&[0x48, 0x89, 0x14, 0xc1]),
+        None,
+        "an index has no reach"
+    );
+    // mov [rsp+8],rax; ret
+    assert_eq!(extent(&[0x48, 0x89, 0x44, 0x24, 0x08, 0xc3]), None);
+}
+
 /// The record sizes of the game's code, each held only in index arithmetic,
 /// fold to their factor; what the fold cannot follow gives none.
 #[test]

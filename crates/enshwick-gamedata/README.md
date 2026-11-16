@@ -45,7 +45,9 @@ game update that moves a field changes this crate, not the mods.
   in its own encoding (`spelled`: memory without a displacement for 0, else
   an index scale or an immediate, never a `nop`'s), or the factor the
   shape's instructions multiply one index by (`scale`, such as a record
-  size held only in `lea r9,[rax+rax*4]; shl r9,5`), which counts only
+  size held only in `lea r9,[rax+rax*4]; shl r9,5`), or how far the
+  function an `in` shape lies in writes the object it is handed (`extent`:
+  the end of its highest store off the stack), which counts only
   where the shape matches once; a taken constant's shape has two steps,
   an exact operand or an `{entry}`. A memory operand through `[?+*]` takes
   any base register, and `nth` takes the n-th run of a shape that repeats,

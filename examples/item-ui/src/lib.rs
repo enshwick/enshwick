@@ -3,7 +3,9 @@
 //! in the game's item tooltips, one from the mod's item data and one on a
 //! vanilla sword. Its stat kind Luck shows as a row of the Character
 //! screen's Basics tab, 10% for every player who joins, and on every weapon
-//! a player crafts, which rolls the affix Lucky.
+//! a player crafts, which rolls the affix Lucky. Its kind Calm, 20% for
+//! every player, shows in the Fog Survival group, even while that group has
+//! no row of the game's own.
 
 use enshwick::ItemId;
 use enshwick::abi::Side;
@@ -36,11 +38,20 @@ impl Mod for ItemUi {
         // The server keeps and sends the uses; a client reads what it got.
         let uses: ItemData<u16> = load.item_data("uses")?;
         let luck = luck(load)?;
+        let calm = load.define_stat(
+            id!("calm"),
+            &StatDef::additive()
+                .range(0.0, 1.0)
+                .format(StatFormat::Percent)
+                .in_group(StatGroup::FogSurvival),
+        )?;
         if load.host().build().side != Side::CLIENT {
             let stats = load.stats()?;
             load.on::<PlayerJoined>(move |joined| {
                 let welcome = Modifier::new(luck, Op::Add, 0.1);
                 let _blessed = stats.set(joined.entity, "welcome", welcome, Lasting::UntilRemoved);
+                let calmed = Modifier::new(calm, Op::Add, 0.2);
+                let _calmed = stats.set(joined.entity, "calm", calmed, Lasting::UntilRemoved);
             })?;
             load.add_craft_affixes(AffixCraft::new(1.0, RollRules::new(1, 1)))?;
             return Ok(Self);

@@ -29,10 +29,16 @@ pub(super) static SLOTS_FUSE: Fuse = Fuse::new("item slots");
 pub(super) static HOVER_FUSE: Fuse = Fuse::new("hovered inventory slot");
 
 /// The `u64`s of room a slot's data takes on the loader's stack.
-const SLOT_DATA: usize = 0x14; // bound, not a game offset: room the loader keeps, more than the 0x91 bytes the game's init writes (client 26430625)
+const SLOT_DATA: usize = 0x14; // bound, not a game offset: room the loader keeps; the link checks the init's routed extent (0x91 bytes on client 26430625) against it
+
+/// The bytes of the widget's state block, which it builds in a local and
+/// copies into its answer with one `movups`, the copy `ui.item_slot_state`
+/// matches.
+const STATE_BYTES: usize = 16;
 
 /// The answer of the game's slot widget, its return value: the slot's
-/// rectangle, then its state bytes (client 26430625, decompiler).
+/// rectangle, then its state bytes (client 26430625, decompiler). The link
+/// checks each state byte and the answer's extent against the routes.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, bytemuck::Zeroable, bytemuck::Pod)]
 pub(crate) struct Answer {
@@ -52,9 +58,10 @@ pub(crate) struct Answer {
 /// A stack's record, which the slot data's first field points at and the
 /// item viewer's descriptor starts with. Its slot, item and entity sit where
 /// the reflected `ItemInstanceInfo` keeps them, and the link checks the
-/// routed offsets against these fields. At 0x10, where the reflection puts
-/// `stateMask`, the slot widget reads the stack's count: it compares it with
-/// the item's largest stack before a split (client 26430625, decompiler).
+/// routed offsets and size against these fields. At 0x10, where the
+/// reflection puts `stateMask`, the slot widget reads the stack's count: it
+/// compares it with the item's largest stack before a split (client
+/// 26430625, decompiler).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable, bytemuck::Pod)]
 struct Record {
@@ -132,65 +139,126 @@ pub(super) fn hovered() -> Hovered {
 /// a slot or read the hovered one. Without a mod asking, what the build
 /// lacks is only logged, never listed off.
 pub(super) fn link(loader: &Loader, asked: bool) {
-    let linked = match linked(loader) {
-        Ok(linked) => linked,
-        Err((id, reason)) if asked => {
-            loader.fuse_off(&SLOTS_FUSE, id, reason);
-            loader.fuse_off(&HOVER_FUSE, id, reason);
-            return;
-        }
-        Err((id, reason)) => {
+    let off = |fuse: &'static Fuse, (id, reason): Failed| {
+        if asked {
+            loader.fuse_off(fuse, id, reason);
+        } else {
             let reason = loader.build.reason(id, reason);
             crate::log!(
                 INFO,
-                "interface: no mod draws item slots, which this build lacks: {id} {reason}"
+                "interface: no mod asks for {}, which this build lacks: {id} {reason}",
+                fuse.feature()
             );
-            return;
         }
     };
-    let _first = LINKED.set(linked);
-    if asked {
-        let _linked = loader.link_fused(
-            &HOVER_FUSE,
-            Target::Pinned(pinned::ui::ITEM_SLOT),
-            &NEXT,
-            slot_detour as SlotFn,
-            HookFlags::NONE,
-        );
+    match linked(loader) {
+        Ok(linked) => {
+            let _first = LINKED.set(linked);
+        }
+        Err(failed) => off(&SLOTS_FUSE, failed),
+    }
+    match hover_holds(loader) {
+        Ok(_) if asked => {
+            let _linked = loader.link_fused(
+                &HOVER_FUSE,
+                Target::Pinned(pinned::ui::ITEM_SLOT),
+                &NEXT,
+                slot_detour as SlotFn,
+                HookFlags::NONE,
+            );
+        }
+        Ok(_) => {}
+        Err(failed) => off(&HOVER_FUSE, failed),
     }
 }
 
-/// What the slots need of this build, or the first table entry it lacks or
-/// that does not fit the record, with why.
-fn linked(loader: &Loader) -> Result<Linked, (&'static str, &'static str)> {
-    use crate::engine::builds::ABSENT;
-    let offset = |id: pinned::Constant| loader.offset(id).ok_or((id.id(), ABSENT));
-    let function = |id: pinned::Symbol| {
-        loader
-            .address(id)
-            .filter(|_| loader.code_holds(id))
-            .and_then(|a| usize::try_from(a).ok())
-            .ok_or((id.id(), ABSENT))
-    };
-    let fits = |id: pinned::Constant, field: usize| {
-        offset(id)?
-            .eq(&field)
-            .then_some(())
-            .ok_or((id.id(), "is not where the slot's record keeps it"))
-    };
-    fits(pinned::ui::VIEWER_ITEM, core::mem::offset_of!(Record, item))?;
-    fits(pinned::ui::VIEWER_PIDE, core::mem::offset_of!(Record, pide))?;
-    let (draw, init, info) = (
-        function(pinned::ui::ITEM_SLOT)?,
-        function(pinned::ui::ITEM_SLOT_INIT)?,
-        function(pinned::item::INFO)?,
-    );
-    let clickable = offset(pinned::ui::ITEM_SLOT_CLICKABLE)?;
-    if !in_slot_data(clickable) {
+/// What a link failed on: the entry, and why.
+type Failed = (&'static str, &'static str);
+
+/// The build's function `id`, once its code holds its route's check.
+fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, Failed> {
+    loader
+        .address(id)
+        .filter(|_| loader.code_holds(id))
+        .and_then(|a| usize::try_from(a).ok())
+        .ok_or((id.id(), crate::engine::builds::ABSENT))
+}
+
+/// The slot widget, once the record's fields and the answer's hover byte,
+/// all the hovered slot reads, lie where the loader keeps them, or the first
+/// table entry it lacks or that does not fit, with why.
+fn hover_holds(loader: &Loader) -> Result<usize, Failed> {
+    use core::mem::offset_of;
+    let draw = function(loader, pinned::ui::ITEM_SLOT)?;
+    let offset = |id| offset(loader, id);
+    for (id, field) in [
+        (pinned::ui::VIEWER_ITEM, offset_of!(Record, item)),
+        (pinned::ui::VIEWER_PIDE, offset_of!(Record, pide)),
+        (pinned::ui::ITEM_SLOT_COUNT, offset_of!(Record, count)),
+    ] {
+        if offset(id)? != field {
+            return Err((id.id(), "is not where the slot's record keeps it"));
+        }
+    }
+    let size = pinned::ui::ITEM_SLOT_RECORD_SIZE;
+    if offset(size)? != size_of::<Record>() {
+        return Err((size.id(), "is not the size of the slot's record"));
+    }
+    answer_holds_byte(
+        loader,
+        pinned::ui::ITEM_SLOT_HOVERED,
+        offset_of!(Answer, hovered),
+    )?;
+    Ok(draw)
+}
+
+/// The build's constant `id`.
+fn offset(loader: &Loader, id: pinned::Constant) -> Result<usize, Failed> {
+    loader
+        .offset(id)
+        .ok_or((id.id(), crate::engine::builds::ABSENT))
+}
+
+/// `Ok` when the widget's state byte `id` lands at `field` of its
+/// [`Answer`], inside the answer.
+fn answer_holds_byte(loader: &Loader, id: pinned::Constant, field: usize) -> Result<(), Failed> {
+    let state = offset(loader, pinned::ui::ITEM_SLOT_STATE)?;
+    if !answer_holds(state + STATE_BYTES) {
         return Err((
-            pinned::ui::ITEM_SLOT_CLICKABLE.id(),
-            "is past the room the loader keeps for a slot's data",
+            pinned::ui::ITEM_SLOT_STATE.id(),
+            "ends the slot's answer past the room the loader keeps for it",
         ));
+    }
+    let local = offset(loader, pinned::ui::ITEM_SLOT_STATE_LOCAL)?;
+    if answer_offset(state, local, offset(loader, id)?) != Some(field) {
+        return Err((id.id(), "is not where the slot's answer keeps it"));
+    }
+    Ok(())
+}
+
+/// What mods' slots need of this build, or the first table entry it lacks or
+/// that does not fit, with why.
+fn linked(loader: &Loader) -> Result<Linked, Failed> {
+    use core::mem::offset_of;
+    let draw = hover_holds(loader)?;
+    let (init, info) = (
+        function(loader, pinned::ui::ITEM_SLOT_INIT)?,
+        function(loader, pinned::item::INFO)?,
+    );
+    answer_holds_byte(
+        loader,
+        pinned::ui::ITEM_SLOT_PRESSED,
+        offset_of!(Answer, pressed),
+    )?;
+    answer_holds_byte(loader, pinned::ui::ITEM_SLOT_HIT, offset_of!(Answer, hit))?;
+    let offset = |id| offset(loader, id);
+    let room = "is past the room the loader keeps for a slot's data";
+    if !slot_data_holds(offset(pinned::ui::ITEM_SLOT_INIT_END)?) {
+        return Err((pinned::ui::ITEM_SLOT_INIT_END.id(), room));
+    }
+    let clickable = offset(pinned::ui::ITEM_SLOT_CLICKABLE)?;
+    if !slot_data_holds(clickable + 1) {
+        return Err((pinned::ui::ITEM_SLOT_CLICKABLE.id(), room));
     }
     Ok(Linked {
         // SAFETY: `code_holds` checked the code at `ui.item_slot` against its
@@ -212,10 +280,25 @@ fn linked(loader: &Loader) -> Result<Linked, (&'static str, &'static str)> {
     })
 }
 
-/// Whether a byte at `offset` of a slot's data lies in the `SLOT_DATA`
+/// Whether the bytes of a slot's data before `end` lie in the `SLOT_DATA`
 /// `u64`s the loader keeps for it.
-const fn in_slot_data(offset: usize) -> bool {
-    offset < SLOT_DATA * size_of::<u64>()
+const fn slot_data_holds(end: usize) -> bool {
+    end <= SLOT_DATA * size_of::<u64>()
+}
+
+/// Whether the bytes of the widget's answer before `end` lie in the
+/// [`Answer`] the loader hands it.
+const fn answer_holds(end: usize) -> bool {
+    end <= size_of::<Answer>()
+}
+
+/// Where the answer keeps the state byte the widget writes at `byte` of its
+/// stack: the block at `local` goes to `state` of the answer whole. `None`
+/// for a byte outside the block.
+fn answer_offset(state: usize, local: usize, byte: usize) -> Option<usize> {
+    byte.checked_sub(local)
+        .filter(|&within| within < STATE_BYTES)
+        .map(|within| state + within)
 }
 
 crate::engine::chains::chain_detour! {
@@ -326,11 +409,12 @@ pub(super) unsafe fn draw(context: usize, raw: &mut UiWidget) -> Result<(), Widg
     };
     let mut slot = [0u64; SLOT_DATA];
     // SAFETY: `init` is the game's `ui.item_slot_init`, checked at link, on
-    // `SLOT_DATA` `u64`s of this stack, more than it writes.
+    // `SLOT_DATA` `u64`s of this stack, no fewer than its routed extent by
+    // `slot_data_holds` at link.
     unsafe { (linked.init)(slot.as_mut_ptr().cast()) };
     slot[0] = (&raw mut record).expose_provenance() as u64;
     // SAFETY: `slot` holds `SLOT_DATA` `u64`s, its click flag at the table's
-    // `ui.item_slot_clickable`, inside them by `in_slot_data` at link.
+    // `ui.item_slot_clickable`, inside them by `slot_data_holds` at link.
     unsafe {
         crate::engine::memory::write::<u8>(
             slot.as_mut_ptr().expose_provenance(),
@@ -441,11 +525,40 @@ mod tests {
     }
 
     #[test]
-    fn a_click_flag_past_the_kept_slot_data_is_refused() {
-        assert!(in_slot_data(0x62), "client 26430625");
-        assert!(in_slot_data(SLOT_DATA * 8 - 1));
-        assert!(!in_slot_data(SLOT_DATA * 8));
-        assert!(!in_slot_data(196), "the route's old upper bound");
+    fn a_click_flag_or_an_init_extent_past_the_kept_slot_data_is_refused() {
+        assert!(
+            slot_data_holds(0x62 + 1),
+            "the click flag on client 26430625"
+        );
+        assert!(
+            slot_data_holds(0x91),
+            "the init's extent on client 26430625"
+        );
+        assert!(slot_data_holds(SLOT_DATA * 8));
+        assert!(!slot_data_holds(SLOT_DATA * 8 + 1));
+        assert!(!slot_data_holds(0x122), "the init route's upper bound");
+    }
+
+    #[test]
+    fn a_state_byte_maps_into_the_answer_only_from_inside_its_block() {
+        let (state, local) = (0x10, 0x60);
+        assert_eq!(
+            [0x60, 0x65, 0x69].map(|byte| answer_offset(state, local, byte)),
+            [Some(0x10), Some(0x15), Some(0x19)],
+            "client 26430625"
+        );
+        assert_eq!(answer_offset(state, local, local - 1), None);
+        assert_eq!(answer_offset(state, local, local + STATE_BYTES), None);
+        assert_eq!(
+            answer_offset(state, local, local + STATE_BYTES - 1),
+            Some(0x1f)
+        );
+    }
+
+    #[test]
+    fn an_answer_past_the_loader_s_buffer_is_refused() {
+        assert!(answer_holds(0x10 + STATE_BYTES), "client 26430625");
+        assert!(!answer_holds(0x20 + STATE_BYTES));
     }
 
     #[test]

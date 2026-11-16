@@ -32,6 +32,9 @@ use crate::engine::registry::JoinFeatureError;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::inventory::PUT_OUT_ERROR.id(),
+    pinned::inventory::PUT_OUT_LEFT.id(),
+    pinned::inventory::PUT_OUT_PLACED.id(),
     pinned::inventory::PUT_SLOT.id(),
     pinned::inventory::TXN_OWNERS.id(),
     pinned::ecs::SLOT_ROOT.id(),
@@ -62,20 +65,56 @@ struct Layout {
     owners: usize,
     /// `UsedItem`'s type hash.
     used_item: u32,
+    /// Where the put's result record keeps its fields.
+    out: PutOut,
+}
+
+/// Where the put's result record keeps its `u8` error code, its `u32` the
+/// put writes zero beside it, and its `u32` count left over, as the put
+/// writes them when a slot does not take the stack (server 26430253 and
+/// client 26430625, decompiler).
+#[derive(Debug, Clone, Copy)]
+struct PutOut {
+    error: usize,
+    placed: usize,
+    left: usize,
+}
+
+impl PutOut {
+    /// The fields at the routed offsets; `None` when two of them overlap,
+    /// which no record the put writes has.
+    fn new(error: usize, placed: usize, left: usize) -> Option<Self> {
+        let fields = [(error, 1), (placed, 4), (left, 4)];
+        let apart = |(a, a_len): (usize, usize), (b, b_len): (usize, usize)| {
+            a + a_len <= b || b + b_len <= a
+        };
+        (apart(fields[0], fields[1]) && apart(fields[0], fields[2]) && apart(fields[1], fields[2]))
+            .then_some(Self {
+                error,
+                placed,
+                left,
+            })
+    }
 }
 
 static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
 
 /// The layout and components on this build, or the id of the part it lacks.
 fn layout(loader: &Loader) -> Result<(Layout, Components), &'static str> {
-    let owners = pinned::inventory::TXN_OWNERS;
+    let offset = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
     // The put reads the container's item as `UsedItem`'s one u32.
     if names::size(loader, ids::USED_ITEM) != Some(size_of::<u32>()) {
         return Err(ids::USED_ITEM);
     }
     let layout = Layout {
-        owners: loader.offset(owners).ok_or(owners.id())?,
+        owners: offset(pinned::inventory::TXN_OWNERS)?,
         used_item: names::component_hash(loader, ids::USED_ITEM).ok_or(ids::USED_ITEM)?,
+        out: PutOut::new(
+            offset(pinned::inventory::PUT_OUT_ERROR)?,
+            offset(pinned::inventory::PUT_OUT_PLACED)?,
+            offset(pinned::inventory::PUT_OUT_LEFT)?,
+        )
+        .ok_or(pinned::inventory::PUT_OUT_PLACED.id())?,
     };
     Ok((layout, Components::found(loader)?))
 }
@@ -166,36 +205,36 @@ crate::engine::chains::chain_detour! {
         if out.is_null() || txn.is_null() || info.is_null() || count == 0 {
             return onward.call();
         }
+        let Some((layout, components)) = LINKED.get() else {
+            return onward.call();
+        };
         // SAFETY: `txn` and `info` are the running put's own non-null
         // arguments (checked before it), on its system's thread.
-        if !unsafe { refused(txn, slot, info, count) } {
+        if !unsafe { refused(layout, components, txn, slot, info, count) } {
             return onward.call();
         }
-        let nothing = PutResult {
-            error: 0,
-            reserved: [0; 3],
-            placed: 0,
-            left: count,
-        };
         // SAFETY: `out` is the put's non-null result record (checked before
-        // it), laid out as `PutResult`.
-        unsafe { write_at(out, 0, nothing) };
+        // it), its fields where the routes found the put writes them.
+        unsafe { put_nothing(out, layout.out, count) };
         out
     }
 }
 
-/// The put's result record, as the game writes "put nothing" when a slot
-/// does not take the stack (server 26430253, client 26430625).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct PutResult {
-    /// The game's error code, 0 for none.
-    error: u8,
-    reserved: [u8; 3],
-    /// Zero for a put that placed nothing.
-    placed: u32,
-    /// The count left over: the whole count when nothing went in.
-    left: u32,
+/// Writes the put's "put nothing" answer into its result record at `out`:
+/// no error, zero beside it and the whole `count` left over, as the game's
+/// put answers for a slot that does not take the stack.
+///
+/// # Safety
+///
+/// - `out` is writable at each of `fields`: a byte at `error`, four bytes at
+///   `placed` and `left`.
+unsafe fn put_nothing(out: *mut u8, fields: PutOut, count: u32) {
+    // SAFETY: the caller's contract: a byte is writable at `error`.
+    unsafe { write_at(out, fields.error, 0u8) };
+    // SAFETY: the caller's contract: four bytes are writable at `placed`.
+    unsafe { write_at(out, fields.placed, 0u32) };
+    // SAFETY: the caller's contract: four bytes are writable at `left`.
+    unsafe { write_at(out, fields.left, count) };
 }
 
 /// Whether a rule refuses `count` of the item `info` describes entering
@@ -205,12 +244,36 @@ struct PutResult {
 ///
 /// - `txn` is the live transaction of a running `inventory.put_slot`, used on
 ///   its system's thread; `info` is the item info that put received.
-unsafe fn refused(txn: *mut u8, slot: u64, info: *const u32, count: u32) -> bool {
-    let Some((layout, components)) = LINKED.get() else {
-        return false;
-    };
+unsafe fn refused(
+    layout: &Layout,
+    components: &Components,
+    txn: *mut u8,
+    slot: u64,
+    info: *const u32,
+    count: u32,
+) -> bool {
+    // SAFETY: the caller's contract, which `asked` shares.
+    unsafe { asked(layout, components, txn, slot, info, count) }
+        .is_some_and(|put| RULES.sealed().is_some_and(|rules| refused_by(rules, &put)))
+}
+
+/// The put a rule hears: `count` of the item `info` describes entering
+/// `slot` in the transaction `txn`; `None` for a slot or container the put
+/// does not name.
+///
+/// # Safety
+///
+/// As [`refused`].
+unsafe fn asked(
+    layout: &Layout,
+    components: &Components,
+    txn: *mut u8,
+    slot: u64,
+    info: *const u32,
+    count: u32,
+) -> Option<ContainerPut> {
     if slot == 0 {
-        return false;
+        return None;
     }
     // SAFETY: `txn` is the put's live transaction; `inventory.txn_init`
     // writes its system context to the first word (server 26430253).
@@ -219,25 +282,18 @@ unsafe fn refused(txn: *mut u8, slot: u64, info: *const u32, count: u32) -> bool
     // index at the build table's `inventory.txn_owners`.
     let owners: u64 = unsafe { read_at(txn, layout.owners) };
     if ctx.is_null() {
-        return false;
+        return None;
     }
     // SAFETY: `ctx` is the non-null context of the system running the put,
     // on its thread, and `owners` comes from that system's transaction.
-    let Some(container) = (unsafe { components.slot_root(ctx, slot, owners) }) else {
-        return false;
-    };
+    let container = unsafe { components.slot_root(ctx, slot, owners) }?;
     // SAFETY: `ctx` is the running system's live context on its thread.
-    let Some(used) = (unsafe { components.component(ctx, container, layout.used_item) }) else {
-        return false;
-    };
+    let used = unsafe { components.component(ctx, container, layout.used_item) }?;
     // SAFETY: `used` is the container's live `UsedItem` component, which
     // reflection sizes at 4 bytes, its u32 item id alone (checked by
     // `layout`).
     let container_item = ItemId::new(unsafe { read_at(used, 0) });
-    let Some(rules) = RULES.sealed() else {
-        return false;
-    };
-    let put = ContainerPut {
+    Some(ContainerPut {
         header: Header::of::<ContainerPut>(),
         container: Entity(container),
         container_item,
@@ -246,8 +302,7 @@ unsafe fn refused(txn: *mut u8, slot: u64, info: *const u32, count: u32) -> bool
         item: ItemId::new(unsafe { read_at(info.cast::<u8>(), 0) }),
         count,
         slot: crate::inventory::stacks::slot_id(slot),
-    };
-    refused_by(rules, &put)
+    })
 }
 
 /// Raises a pickup of `count` of `item` by `character`'s player on the
@@ -304,6 +359,49 @@ mod tests {
     unsafe extern "system" fn count_asks(_: *const ContainerPut, _: *mut c_void) -> u8 {
         let _before = ASKED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         0
+    }
+
+    #[test]
+    fn put_nothing_writes_each_field_where_the_routes_found_it() {
+        let mut record = [0xaau8; 16];
+        let fields = PutOut {
+            error: 0,
+            placed: 4,
+            left: 8,
+        };
+        // SAFETY: `record` is writable for 16 bytes, past each field.
+        unsafe { put_nothing(record.as_mut_ptr(), fields, 7) };
+        assert_eq!(
+            record,
+            [
+                0, 0xaa, 0xaa, 0xaa, 0, 0, 0, 0, 7, 0, 0, 0, 0xaa, 0xaa, 0xaa, 0xaa
+            ],
+            "server 26430253: the padding and the bytes past the record stay"
+        );
+        let moved = PutOut {
+            error: 1,
+            placed: 8,
+            left: 4,
+        };
+        let mut record = [0xaau8; 16];
+        // SAFETY: `record` is writable for 16 bytes, past each field.
+        unsafe { put_nothing(record.as_mut_ptr(), moved, 7) };
+        assert_eq!(
+            &record[..12],
+            &[0xaa, 0, 0xaa, 0xaa, 7, 0, 0, 0, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn put_result_fields_that_overlap_are_refused() {
+        assert!(PutOut::new(0, 4, 8).is_some(), "server 26430253");
+        assert!(PutOut::new(1, 8, 4).is_some());
+        assert!(PutOut::new(2, 0, 8).is_none(), "placed over the error byte");
+        assert!(PutOut::new(0, 4, 6).is_none(), "left over placed");
+        assert!(
+            PutOut::new(4, 4, 8).is_none(),
+            "the error byte inside placed"
+        );
     }
 
     #[test]

@@ -2,8 +2,12 @@
 "luck.name" = "Luck"
 "luck.description" = "Luck in battle and with loot"
 "lucky.name" = "Lucky"
+"calm.name" = "Calm"
+"calm.description" = "Calm in the fog"
 
 [uk]
 "luck.name" = "Удача"
 "luck.description" = "Щастить у бою й під час здобичі"
 "lucky.name" = "Щасливий"
+"calm.name" = "Спокій"
+"calm.description" = "Спокій у тумані"

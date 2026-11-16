@@ -469,6 +469,43 @@ const READS: [OpAccess; 4] = [
     OpAccess::ReadCondWrite,
 ];
 
+const WRITES: [OpAccess; 4] = [
+    OpAccess::Write,
+    OpAccess::ReadWrite,
+    OpAccess::CondWrite,
+    OpAccess::ReadCondWrite,
+];
+
+/// The end of the highest store `code` makes through a base register that
+/// is not the stack's, its frame's or RIP: how far a function writes the
+/// object it is handed. None for no such store, or for one with an index or
+/// a negative displacement, whose reach the code alone does not give. A
+/// store through a call or a string instruction is not followed.
+pub(crate) fn extent<'i>(code: impl IntoIterator<Item = &'i Instruction>) -> Option<u64> {
+    let mut info = InstructionInfoFactory::new();
+    let mut end = None;
+    for ins in code {
+        for used in info.info(ins).used_memory() {
+            let off_stack = !matches!(
+                used.base(),
+                Register::None | Register::RSP | Register::RBP | Register::RIP
+            );
+            if !off_stack || !WRITES.contains(&used.access()) {
+                continue;
+            }
+            if used.index() != Register::None {
+                return None;
+            }
+            let disp = i64::try_from(used.displacement()).ok()?;
+            let reach = u64::try_from(disp)
+                .ok()?
+                .checked_add(u64::try_from(used.memory_size().size()).ok()?)?;
+            end = end.max(Some(reach));
+        }
+    }
+    end
+}
+
 /// The factor `run` multiplies one index by: the register the first
 /// instruction reads stands for the index `i`, each register holds `k · i`
 /// plus something that does not depend on `i`, and the answer is `k` of the
