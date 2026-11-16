@@ -9,6 +9,8 @@
 use super::{
     Buf, Engine, Loader, Lookup, Missing, NodeFloatFn, OneFn, Ptr, UiText, field, game_fn, stretch,
 };
+use core::cell::Cell;
+
 use crate::base::configure::rows::{ENTRY_BYTES, typed};
 use crate::engine::pinned;
 
@@ -214,6 +216,41 @@ impl TextBuffer {
     }
 }
 
+thread_local! {
+    /// Whether a text field had the caret in this interface frame and in
+    /// the last one.
+    static CARET: Cell<[bool; 2]> = const { Cell::new([false; 2]) };
+}
+
+/// Starts the next interface frame, on its thread: this frame's caret
+/// becomes the last frame's.
+pub(in crate::ui::interface) fn caret_next_frame() {
+    let [now, _] = CARET.get();
+    CARET.set([false, now]);
+}
+
+/// Notes a field with the caret in this frame.
+fn caret_seen() {
+    let [_, last] = CARET.get();
+    CARET.set([true, last]);
+}
+
+/// Whether a field had the caret in the last frame, on the interface
+/// thread. The loader's windows and scroll areas then read no move, and no
+/// window calls `ui.nav_end`, as the game's text popup does (client
+/// 26430625, seen live): a field joins the scroll area's group, so a
+/// window's `ui.nav_end` would give the focus to the window's own button
+/// and Enter would press it instead of the field's confirm.
+pub(super) fn typed_last_frame() -> bool {
+    CARET.get()[1]
+}
+
+/// The navigation config's flags: the low byte 0 reads no move from the
+/// arrows and the stick (client 26430625).
+pub(super) const fn nav_flags(typed_last_frame: bool) -> u16 {
+    if typed_last_frame { 0x100 } else { 0x101 }
+}
+
 /// What the player did in a text field this frame.
 #[derive(Clone, Copy, Debug)]
 pub(in crate::ui::interface) struct Typed {
@@ -373,6 +410,9 @@ impl Engine {
         // `GameText` at `ui.text_field_text`, which points at `buffer`, still
         // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
+        if editing {
+            caret_seen();
+        }
         Some(Typed {
             entered: answer & u64::from(u32::MAX) == ENTERED,
             editing,
@@ -399,6 +439,32 @@ mod tests {
             .into_iter()
             .find_map(|(known, value)| (known == id).then_some(value))?
         }
+    }
+
+    #[test]
+    fn navigation_stays_quiet_only_in_the_frame_after_a_field_had_the_caret() {
+        caret_next_frame();
+        caret_next_frame();
+        assert!(!typed_last_frame(), "no field typed");
+        caret_seen();
+        assert!(!typed_last_frame(), "the frame the typing starts in");
+        caret_next_frame();
+        assert!(typed_last_frame(), "the frame after a field typed");
+        caret_seen();
+        caret_next_frame();
+        assert!(typed_last_frame(), "a field keeps typing");
+        caret_next_frame();
+        assert!(
+            !typed_last_frame(),
+            "the frame after Enter ended the typing"
+        );
+    }
+
+    #[test]
+    fn navigation_reads_no_move_only_while_a_field_typed() {
+        assert_eq!(nav_flags(false), 0x101);
+        assert_eq!(nav_flags(true) & 0xff, 0, "no move from arrows or stick");
+        assert_eq!(nav_flags(true) >> 8, 1, "the high byte stays");
     }
 
     #[test]

@@ -617,6 +617,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     dialog::note_world(shown != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
+    engine::caret_next_frame();
     crate::engine::screens::note_window(window_shown());
     crate::actions::controls::frame(context);
     // SAFETY: inside the frame on the interface thread, `context` non-zero

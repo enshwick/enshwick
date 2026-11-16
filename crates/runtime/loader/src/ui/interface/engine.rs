@@ -975,5 +975,5 @@ pub(in crate::ui::interface) use looks::Icon;
 use looks::{BUNDLE, Legal, Looks, looks, path, sound};
 pub(super) use rows::Row;
 pub(super) use scroll::Scroll;
-pub(super) use text_field::{TextBuffer, Typed};
+pub(super) use text_field::{TextBuffer, Typed, caret_next_frame};
 pub(super) use widgets::Takes;
