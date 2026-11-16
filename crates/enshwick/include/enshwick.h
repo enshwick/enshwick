@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 6
+#define ENSHWICK_ABI_MINOR 8
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -2406,15 +2406,17 @@ typedef struct EnshwickTransactionInfo {
   // When a prop's state stopped it, or stopped its last undo, the kinds
   // of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
   uint32_t holds;
-  // The props it placed and still holds, which
+  // The props it placed and did not undo, which
   // `EnshwickHostApi.transaction_entities`
-  // lists.
+  // lists; kept when its undo data expires, dropped when the world ends.
   uint32_t created;
 } EnshwickTransactionInfo;
 // Queued, or written in part: the loader spreads a large one over the
 // server's steps.
 #define EnshwickTransactionInfo_PENDING 0
-// Written whole; it can be undone.
+// Written whole, each prop it placed standing in the world, or still
+// absent after the loader's wait limit, or with its start state
+// unreadable; it can be undone.
 #define EnshwickTransactionInfo_APPLIED 1
 // An undo is queued or written in part.
 #define EnshwickTransactionInfo_UNDOING 2
@@ -2642,7 +2644,39 @@ typedef struct EnshwickStatSpec {
   float min;
   // The greatest value.
   float max;
+  // The group of the Character screen's attributes it shows in as a row,
+  // `EnshwickStatSpec_GROUP_NONE` for none: `EnshwickStatSpec_GROUP_MAIN` to
+  // `EnshwickStatSpec_GROUP_PROTECTION`.
+  uint8_t group;
+  // `EnshwickStatSpec_HIDDEN`.
+  uint8_t flags;
+  // Zero.
+  uint16_t reserved_display;
 } EnshwickStatSpec;
+// In no group of the Character screen.
+#define EnshwickStatSpec_GROUP_NONE 0
+// The attribute points column beside the tabs, under the game's
+// `groupMain`.
+#define EnshwickStatSpec_GROUP_MAIN 1
+// The same column, under `groupFogSurvival`.
+#define EnshwickStatSpec_GROUP_FOG_SURVIVAL 2
+// The Basics tab, under `groupPrimary`.
+#define EnshwickStatSpec_GROUP_PRIMARY 3
+// The Basics tab, under `groupRegeneration`.
+#define EnshwickStatSpec_GROUP_REGENERATION 4
+// The Basics tab, under `groupMisc`.
+#define EnshwickStatSpec_GROUP_MISC 5
+// The Damage tab, under `groupDamage`.
+#define EnshwickStatSpec_GROUP_DAMAGE 6
+// The Damage tab, under `groupWeaponDamage`.
+#define EnshwickStatSpec_GROUP_WEAPON_DAMAGE 7
+// The Damage tab, under `groupEnemyDamage`.
+#define EnshwickStatSpec_GROUP_ENEMY_DAMAGE 8
+// The Protection tab, the game's `groupProtection`.
+#define EnshwickStatSpec_GROUP_PROTECTION 9
+// Shown nowhere: no row on the Character screen and no line in item
+// tooltips.
+#define EnshwickStatSpec_HIDDEN 1
 // A sum of points, such as extra health.
 #define EnshwickStatSpec_ADDITIVE 0
 // A factor, 1 without modifiers, such as a damage multiplier.
@@ -4437,6 +4471,16 @@ typedef uint32_t (*EnshwickSurvivorStatusFn)(EnshwickNpcId survivor,
                                              uint32_t count,
                                              void *user);
 
+// A handler of a transaction's end: the transaction's id, where it stands
+// (borrowed for the call, null once the loader no longer remembers it) and
+// the pointer given at registration. It must not unwind.
+//
+// `EnshwickHostApi.transaction_settled`
+// calls it once, on the server's game thread after a step.
+typedef void (*EnshwickTransactionSettledFn)(uint64_t id,
+                                             const struct EnshwickTransactionInfo *info,
+                                             void *user);
+
 // A mod's callback for the answer to its dialog: the answer, such as
 // `EnshwickUiDialog_OK` or `EnshwickUiDialog_CLOSED`, and the pointer given with the
 // dialog.
@@ -5657,7 +5701,7 @@ typedef struct EnshwickHostApi {
   // inside a step, `EnshwickStatus_UNAVAILABLE` while no world runs.
   EnshwickStatus (*world_quiet)(EnshwickModHandle me);
   // Writes the entities of the props transaction `id` of this mod placed
-  // and still holds, oldest first, up to `capacity` of them at `out`,
+  // and did not undo, kept when its undo data expires, oldest first, up to `capacity` of them at `out`,
   // and their number to `count`; a prop is in the world from the step
   // after the one that placed it. `out` may be null with `capacity` 0 to
   // learn the number. `EnshwickStatus_BAD_ARGS` for a null `count`;
@@ -6562,10 +6606,31 @@ typedef struct EnshwickHostApi {
                                        EnshwickPlayerKey account,
                                        uint32_t deny,
                                        uint32_t grant);
+  // Calls `callback` once for transaction `id` of this mod, with where it
+  // stands and `user`, on the server's game thread after the first step
+  // that ends with it no longer `EnshwickTransactionInfo_PENDING`: written
+  // whole (`EnshwickTransactionInfo_APPLIED`, which says when a prop may still
+  // be absent), or failed, refused, undoing or undone. A step at least
+  // `within_ns` nanoseconds after the call runs it as it stands, still
+  // pending perhaps. The `info` is null when the loader forgot the
+  // transaction meanwhile. A step runs its due callbacks in the order
+  // they were asked, and a callback may ask again. When a client's hosted
+  // game ends, every callback kept runs with its transaction failed or
+  // expired, never in the next game; a dedicated server that stops runs
+  // none. A mod the loader turned off loses its callbacks unrun. `EnshwickStatus_BAD_ARGS` for a null `callback`;
+  // `EnshwickStatus_MISSING` for an id this mod did not get or one the loader
+  // forgot; `EnshwickStatus_UNAVAILABLE` once the transactions are off, which
+  // runs every callback kept at once. Nothing is kept on an error. Any
+  // thread. ABI 12.7.
+  EnshwickStatus (*transaction_settled)(EnshwickModHandle me,
+                                        uint64_t id,
+                                        uint64_t within_ns,
+                                        EnshwickTransactionSettledFn callback,
+                                        void *user);
   // Copies the prop template and optional local placement box for `item`
   // into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
   // `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
-  // server, registry or required reads. Any thread, read-only. ABI 12.6.
+  // server, registry or required reads. Any thread, read-only. ABI 12.8.
   EnshwickStatus (*prop_placement_info)(EnshwickModHandle me,
                                         EnshwickItemId item,
                                         struct EnshwickPropPlacementInfo *out);
@@ -7006,7 +7071,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1720, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1728, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7221,7 +7286,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 1680, 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_prompt) == 1688, "offset of HostApi.interaction_prompt");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_item_tooltip) == 1696, "offset of HostApi.ui_item_tooltip");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_permissions) == 1704, "offset of HostApi.change_permissions");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1712, "offset of HostApi.prop_placement_info");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_settled) == 1712, "offset of HostApi.transaction_settled");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1720, "offset of HostApi.prop_placement_info");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -7655,7 +7721,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, stat) == 4, "offset of StatS
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, value) == 8, "offset of StatSource.value");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, id) == 12, "offset of StatSource.id");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSource, owner) == 16, "offset of StatSource.owner");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStatSpec) == 24, "size of StatSpec");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStatSpec) == 28, "size of StatSpec");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickStatSpec) == 4, "alignment of StatSpec");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, header) == 0, "offset of StatSpec.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, ty) == 8, "offset of StatSpec.ty");
@@ -7664,6 +7730,9 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, reserved) == 10, "offset of St
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, default_) == 12, "offset of StatSpec.default");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, min) == 16, "offset of StatSpec.min");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, max) == 20, "offset of StatSpec.max");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, group) == 24, "offset of StatSpec.group");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, flags) == 25, "offset of StatSpec.flags");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickStatSpec, reserved_display) == 26, "offset of StatSpec.reserved_display");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStatus) == 4, "size of Status");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickStatus) == 4, "alignment of Status");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickStr) == 16, "size of Str");

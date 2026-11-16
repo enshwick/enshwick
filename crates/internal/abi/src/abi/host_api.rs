@@ -21,8 +21,8 @@ use crate::abi::{
     SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status,
     StatusFn, Str, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
     TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo,
-    TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn,
-    UiWidget, Voxel, WeatherFront, WeatherSample,
+    TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn,
+    UiMarker, UiTooltipFn, UiWidget, Voxel, WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -1261,7 +1261,7 @@ pub struct HostApi {
     /// inside a step, [`Status::UNAVAILABLE`] while no world runs.
     pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the entities of the props transaction `id` of this mod placed
-    /// and still holds, oldest first, up to `capacity` of them at `out`,
+    /// and did not undo, kept when its undo data expires, oldest first, up to `capacity` of them at `out`,
     /// and their number to `count`; a prop is in the world from the step
     /// after the one that placed it. `out` may be null with `capacity` 0 to
     /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
@@ -2222,10 +2222,33 @@ pub struct HostApi {
     /// link. ABI 12.5.
     pub change_permissions:
         extern "system" fn(me: ModHandle, account: PlayerKey, deny: u32, grant: u32) -> Status,
+    /// Calls `callback` once for transaction `id` of this mod, with where it
+    /// stands and `user`, on the server's game thread after the first step
+    /// that ends with it no longer [`TransactionInfo::PENDING`]: written
+    /// whole ([`TransactionInfo::APPLIED`], which says when a prop may still
+    /// be absent), or failed, refused, undoing or undone. A step at least
+    /// `within_ns` nanoseconds after the call runs it as it stands, still
+    /// pending perhaps. The `info` is null when the loader forgot the
+    /// transaction meanwhile. A step runs its due callbacks in the order
+    /// they were asked, and a callback may ask again. When a client's hosted
+    /// game ends, every callback kept runs with its transaction failed or
+    /// expired, never in the next game; a dedicated server that stops runs
+    /// none. A mod the loader turned off loses its callbacks unrun. [`Status::BAD_ARGS`] for a null `callback`;
+    /// [`Status::MISSING`] for an id this mod did not get or one the loader
+    /// forgot; [`Status::UNAVAILABLE`] once the transactions are off, which
+    /// runs every callback kept at once. Nothing is kept on an error. Any
+    /// thread. ABI 12.7.
+    pub transaction_settled: extern "system" fn(
+        me: ModHandle,
+        id: u64,
+        within_ns: u64,
+        callback: Option<TransactionSettledFn>,
+        user: *mut c_void,
+    ) -> Status,
     /// Copies the prop template and optional local placement box for `item`
     /// into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
     /// `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
-    /// server, registry or required reads. Any thread, read-only. ABI 12.6.
+    /// server, registry or required reads. Any thread, read-only. ABI 12.8.
     pub prop_placement_info:
         extern "system" fn(me: ModHandle, item: ItemId, out: *mut PropPlacementInfo) -> Status,
 }
@@ -2449,6 +2472,7 @@ const _: () = {
     assert!(offset_of!(HostApi, interaction_prompt) == 24 + 208 * 8);
     assert!(offset_of!(HostApi, ui_item_tooltip) == 24 + 209 * 8);
     assert!(offset_of!(HostApi, change_permissions) == 24 + 210 * 8);
-    assert!(offset_of!(HostApi, prop_placement_info) == 24 + 211 * 8);
-    assert!(size_of::<HostApi>() == 24 + 212 * 8);
+    assert!(offset_of!(HostApi, transaction_settled) == 24 + 211 * 8);
+    assert!(offset_of!(HostApi, prop_placement_info) == 24 + 212 * 8);
+    assert!(size_of::<HostApi>() == 24 + 213 * 8);
 };

@@ -20,6 +20,9 @@ use crate::abi::{Entity, Header, ItemId, Str};
 ///     default: 0.0,
 ///     min: 0.0,
 ///     max: 1.0,
+///     group: StatSpec::GROUP_PRIMARY,
+///     flags: 0,
+///     reserved_display: 0,
 /// };
 /// assert!(crit.min <= crit.default && crit.default <= crit.max);
 /// ```
@@ -42,11 +45,43 @@ pub struct StatSpec {
     pub min: f32,
     /// The greatest value.
     pub max: f32,
+    /// The group of the Character screen's attributes it shows in as a row,
+    /// [`StatSpec::GROUP_NONE`] for none: [`StatSpec::GROUP_MAIN`] to
+    /// [`StatSpec::GROUP_PROTECTION`].
+    pub group: u8,
+    /// [`StatSpec::HIDDEN`].
+    pub flags: u8,
+    /// Zero.
+    pub reserved_display: u16,
 }
 
-impl_headed!(StatSpec);
+impl_headed!(StatSpec, born = 24);
 
 impl StatSpec {
+    /// In no group of the Character screen.
+    pub const GROUP_NONE: u8 = 0;
+    /// The attribute points column beside the tabs, under the game's
+    /// `groupMain`.
+    pub const GROUP_MAIN: u8 = 1;
+    /// The same column, under `groupFogSurvival`.
+    pub const GROUP_FOG_SURVIVAL: u8 = 2;
+    /// The Basics tab, under `groupPrimary`.
+    pub const GROUP_PRIMARY: u8 = 3;
+    /// The Basics tab, under `groupRegeneration`.
+    pub const GROUP_REGENERATION: u8 = 4;
+    /// The Basics tab, under `groupMisc`.
+    pub const GROUP_MISC: u8 = 5;
+    /// The Damage tab, under `groupDamage`.
+    pub const GROUP_DAMAGE: u8 = 6;
+    /// The Damage tab, under `groupWeaponDamage`.
+    pub const GROUP_WEAPON_DAMAGE: u8 = 7;
+    /// The Damage tab, under `groupEnemyDamage`.
+    pub const GROUP_ENEMY_DAMAGE: u8 = 8;
+    /// The Protection tab, the game's `groupProtection`.
+    pub const GROUP_PROTECTION: u8 = 9;
+    /// Shown nowhere: no row on the Character screen and no line in item
+    /// tooltips.
+    pub const HIDDEN: u8 = 1;
     /// A sum of points, such as extra health.
     pub const ADDITIVE: u8 = 0;
     /// A factor, 1 without modifiers, such as a damage multiplier.

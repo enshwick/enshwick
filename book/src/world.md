@@ -676,7 +676,7 @@ takes the same lists.
 
 ## Prop placement metadata
 
-Enable `unstable` and use a matching ABI 12.6 loader.
+Enable `unstable` and use a matching ABI 12.8 loader.
 Read metadata with `world.prop_placement_info(item)`.
 The returned optional `PropPlacementBox` holds local corners in metres.
 Its `min` and `max` fields preserve declared values.

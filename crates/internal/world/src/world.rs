@@ -382,10 +382,7 @@ impl crate::script::Bound for World {
 
 impl LoadMethods for BaseLoad {
     fn world(&mut self) -> Result<World, Off> {
-        let world = World::resolve(self)?;
-        #[cfg(feature = "unstable")]
-        transactions::take_scheduler(self);
-        Ok(world)
+        World::resolve(self)
     }
 }
 

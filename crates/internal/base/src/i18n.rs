@@ -650,6 +650,17 @@ pub fn hand_under(host: Host, texts: &Texts) {
     keep(host, texts, false);
 }
 
+/// Hands `toml`, the mod's own texts file, beneath what the mod hands
+/// itself, once as it starts, so the loader names what the mod defines
+/// before the mod asks for its texts; a file that does not parse is left
+/// for the mod's own call to report.
+#[doc(hidden)]
+pub fn hand_own(host: Host, toml: &str) {
+    if let Ok(texts) = Texts::parse(toml) {
+        keep(host, &texts, false);
+    }
+}
+
 /// Merges `texts` with the mod's kept texts, over or beneath them, and
 /// hands the loader the result.
 fn keep(host: Host, texts: &Texts, over: bool) {

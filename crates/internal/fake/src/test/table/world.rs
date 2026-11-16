@@ -26,6 +26,8 @@ pub(crate) struct WorldEdits {
     pub(crate) terrain: Vec<TerrainEdit>,
     /// Committed transactions, oldest first.
     pub(crate) transactions: Vec<crate::test::FakeTransaction>,
+    /// The newest id the fake forgot, so a new transaction never takes it.
+    pub(crate) forgotten: u64,
     /// Whether the world has stopped, as between two worlds.
     pub(crate) stopped: bool,
     /// Whether the scene's map markers are held as still being read.

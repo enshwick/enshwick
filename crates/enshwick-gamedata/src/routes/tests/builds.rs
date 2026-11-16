@@ -482,7 +482,7 @@ const ITEM_UI_SYMBOLS: &[(&str, &str, u64)] = &[
 /// the item viewer's layout, unknown-item flag, item and item entity, the
 /// same on every kept client (client 26430625 in the decompiler,
 /// 2026-11-16).
-const ITEM_UI_READS: [(&str, u64); 8] = [
+const ITEM_UI_READS: [(&str, u64); 9] = [
     ("ui.item_slot_clickable", 0x62),
     ("ui.context_player", 0xd0),
     ("ui.player_data", 0x38),
@@ -491,6 +491,165 @@ const ITEM_UI_READS: [(&str, u64); 8] = [
     ("ui.viewer_unknown", 0xe3),
     ("ui.viewer_item", 0x8),
     ("ui.viewer_pide", 0xc),
+    ("ui.attribute_row_size", 0x2a0),
+];
+
+/// The Character screen's row builders, one per group, and the push they
+/// share, by table, read in the decompiler on client 26430625 (2026-11-16,
+/// research note ui-native-rows); the older clients' by the same routes.
+const ATTRIBUTE_SYMBOLS: &[(&str, &str, u64)] = &[
+    ("1.0 client (26430625)", "ui.attribute_row_push", 0xd6_bd60),
+    ("1.0 client (26430625)", "ui.attribute_rows_main", 0xd1_c990),
+    (
+        "1.0 client (26430625)",
+        "ui.attribute_rows_fog_survival",
+        0xd2_3b90,
+    ),
+    (
+        "1.0 client (26430625)",
+        "ui.attribute_rows_primary",
+        0xd2_06e0,
+    ),
+    (
+        "1.0 client (26430625)",
+        "ui.attribute_rows_regeneration",
+        0xd2_1770,
+    ),
+    ("1.0 client (26430625)", "ui.attribute_rows_misc", 0xd1_e250),
+    (
+        "1.0 client (26430625)",
+        "ui.attribute_rows_damage",
+        0xd1_5890,
+    ),
+    (
+        "1.0 client (26430625)",
+        "ui.attribute_rows_weapon_damage",
+        0xd2_5eb0,
+    ),
+    (
+        "1.0 client (26430625)",
+        "ui.attribute_rows_enemy_damage",
+        0xd1_8420,
+    ),
+    (
+        "1.0 client (26430625)",
+        "ui.attribute_rows_protection",
+        0xd2_2f90,
+    ),
+    ("1.0 client (26320373)", "ui.attribute_row_push", 0xd6_bca0),
+    ("1.0 client (26320373)", "ui.attribute_rows_main", 0xd1_c8d0),
+    (
+        "1.0 client (26320373)",
+        "ui.attribute_rows_fog_survival",
+        0xd2_3ad0,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.attribute_rows_primary",
+        0xd2_0620,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.attribute_rows_regeneration",
+        0xd2_16b0,
+    ),
+    ("1.0 client (26320373)", "ui.attribute_rows_misc", 0xd1_e190),
+    (
+        "1.0 client (26320373)",
+        "ui.attribute_rows_damage",
+        0xd1_57d0,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.attribute_rows_weapon_damage",
+        0xd2_5df0,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.attribute_rows_enemy_damage",
+        0xd1_8360,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.attribute_rows_protection",
+        0xd2_2ed0,
+    ),
+    ("1.0 client (1269579)", "ui.attribute_row_push", 0xd5_6530),
+    ("1.0 client (1269579)", "ui.attribute_rows_main", 0xd0_7f00),
+    (
+        "1.0 client (1269579)",
+        "ui.attribute_rows_fog_survival",
+        0xd0_efe0,
+    ),
+    (
+        "1.0 client (1269579)",
+        "ui.attribute_rows_primary",
+        0xd0_bc20,
+    ),
+    (
+        "1.0 client (1269579)",
+        "ui.attribute_rows_regeneration",
+        0xd0_cca0,
+    ),
+    ("1.0 client (1269579)", "ui.attribute_rows_misc", 0xd0_97c0),
+    (
+        "1.0 client (1269579)",
+        "ui.attribute_rows_damage",
+        0xd0_0940,
+    ),
+    (
+        "1.0 client (1269579)",
+        "ui.attribute_rows_weapon_damage",
+        0xd1_1340,
+    ),
+    (
+        "1.0 client (1269579)",
+        "ui.attribute_rows_enemy_damage",
+        0xd0_3960,
+    ),
+    (
+        "1.0 client (1269579)",
+        "ui.attribute_rows_protection",
+        0xd0_e3e0,
+    ),
+    ("1.0 client (26082781)", "ui.attribute_row_push", 0xd5_7fb0),
+    ("1.0 client (26082781)", "ui.attribute_rows_main", 0xd0_9990),
+    (
+        "1.0 client (26082781)",
+        "ui.attribute_rows_fog_survival",
+        0xd1_0a70,
+    ),
+    (
+        "1.0 client (26082781)",
+        "ui.attribute_rows_primary",
+        0xd0_d6b0,
+    ),
+    (
+        "1.0 client (26082781)",
+        "ui.attribute_rows_regeneration",
+        0xd0_e730,
+    ),
+    ("1.0 client (26082781)", "ui.attribute_rows_misc", 0xd0_b250),
+    (
+        "1.0 client (26082781)",
+        "ui.attribute_rows_damage",
+        0xd0_23d0,
+    ),
+    (
+        "1.0 client (26082781)",
+        "ui.attribute_rows_weapon_damage",
+        0xd1_2dd0,
+    ),
+    (
+        "1.0 client (26082781)",
+        "ui.attribute_rows_enemy_damage",
+        0xd0_53f0,
+    ),
+    (
+        "1.0 client (26082781)",
+        "ui.attribute_rows_protection",
+        0xd0_fe70,
+    ),
 ];
 
 /// The kept client tables, by name.
@@ -508,6 +667,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
     ROUTED_ONLY
         .iter()
         .chain(ITEM_UI_SYMBOLS)
+        .chain(ATTRIBUTE_SYMBOLS)
         .copied()
         .chain(CLIENT_TABLES.into_iter().flat_map(|table| {
             PLAY_DATA_READS

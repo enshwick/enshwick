@@ -67,7 +67,9 @@ The game's English reads as `en-us`, which falls back to `en`.
 Keep the file at `src/texts.toml`, beside `lib.rs`.
 [`declare_mod!`](../concepts/loader-and-abi.md#the-manifest) embeds it.
 [`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/i18n.rs)
-reads it during `init`.
+reads it during `init`. The loader gets the file as the mod starts. So a
+name it shows from the mod's texts, such as a stat kind's row, needs no
+call. A text the mod hands itself stays over the file's.
 [`enshwick::texts!()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
 writes a module `texts` with a constant per key, so code names a key the
 file has:
@@ -99,7 +101,8 @@ enshwick.i18n.add_texts(texts, {
 ```
 
 A Luau mod keeps the file as `texts.toml` in its folder, beside
-`main.luau`. `enshwick.i18n.texts()` reads it. A script names a key by
+`main.luau`. `enshwick.i18n.texts()` reads it, and the loader gets it as
+the mod starts, as for a Rust mod. A script names a key by
 its text, since it has no `texts!` constants.
 
 A key's constant is the key in upper case, with `.` and `-` replaced. Each

@@ -76,6 +76,9 @@ pub unsafe fn init<M: Mod>(
         host.fault(&refused);
         return Status::REFUSED;
     }
+    if let Some(toml) = texts {
+        enshwick_base::i18n::hand_own(host, toml);
+    }
     let outcome = caught(|| M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts)));
     let _set = INITIALISED.set(());
     match settled(host, outcome) {

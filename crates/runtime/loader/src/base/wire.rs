@@ -56,6 +56,12 @@ const PROBE_HEAD: usize = 2 + 1 + 8;
 /// A control message from the server: the mods of side both its world
 /// runs, to a client whose hello named others, before the kick.
 pub const MODS: u8 = 7;
+/// A control message from the server: the values of the stat kinds the
+/// Character screen shows, for the player's own character.
+pub const STAT_VALUES: u8 = 8;
+/// The most stat values one message carries: what fits a control message
+/// after its kind and version.
+pub const MAX_STAT_VALUES: usize = (MAX_CONTROL - 2) / 8;
 pub use enshwick_base::peer::MESSAGE_RATE;
 
 /// Bit of a hello's flags: the mod list is whole.
@@ -263,6 +269,53 @@ pub fn read_notice(bytes: &[u8]) -> Option<(u32, &str)> {
         u32::from_le_bytes(*entity),
         core::str::from_utf8(text).ok()?,
     ))
+}
+
+/// A stat values message: each stat's key and value, little-endian, at
+/// most [`MAX_STAT_VALUES`] of them.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::base::wire::{STAT_VALUES, control, read_stat_values, stat_values};
+///
+/// let data = stat_values(&[(7, 0.5), (9, -2.0)]);
+/// let rest = data.strip_prefix(control(STAT_VALUES).as_slice()).ok_or("no kind")?;
+/// assert_eq!(read_stat_values(rest).collect::<Vec<_>>(), [(7, 0.5), (9, -2.0)]);
+/// # Ok::<(), &str>(())
+/// ```
+#[must_use]
+pub fn stat_values(values: &[(u32, f32)]) -> Vec<u8> {
+    let mut data = control(STAT_VALUES);
+    for (key, value) in values.iter().take(MAX_STAT_VALUES) {
+        data.extend_from_slice(&key.to_le_bytes());
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+    data
+}
+
+/// The stat keys and values of a stat values message, after its control
+/// kind, at most [`MAX_STAT_VALUES`]; a cut entry at the end is left out.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::base::wire::read_stat_values;
+///
+/// let bytes = [7u32.to_le_bytes(), 1.5f32.to_le_bytes(), [1, 2, 3, 0]].concat();
+/// assert_eq!(read_stat_values(&bytes[..11]).collect::<Vec<_>>(), [(7, 1.5)]);
+/// ```
+pub fn read_stat_values(bytes: &[u8]) -> impl Iterator<Item = (u32, f32)> + '_ {
+    let (entries, _cut) = bytes.as_chunks::<8>();
+    entries
+        .iter()
+        .take(MAX_STAT_VALUES)
+        .map(|&[a, b, c, d, e, f, g, h]| {
+            (
+                u32::from_le_bytes([a, b, c, d]),
+                f32::from_le_bytes([e, f, g, h]),
+            )
+        })
 }
 
 /// The position a demo message carries: three little-endian `i64`.

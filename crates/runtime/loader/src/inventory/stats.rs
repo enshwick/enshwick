@@ -23,11 +23,15 @@ use enshwick_base::Relock;
 mod affixes;
 mod equipment;
 mod error;
+mod own;
+mod shown;
 mod vitals;
 
 use affixes::{Affix, pool};
 pub(crate) use affixes::{RollAffixesError, affix_info, item_lines, open_affix, roll};
 pub(crate) use error::StatsError;
+pub(crate) use own::{hello, own_value};
+pub(crate) use shown::{group_kinds, item_line_texts, shown_kind};
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -174,6 +178,9 @@ struct World {
     /// The world's key, where its saved modifiers go.
     key: Option<String>,
     next_expiry: Option<Instant>,
+    /// The watched players whose shown values found no room on their link,
+    /// sent again at the next step.
+    values_owed: Vec<u32>,
 }
 
 /// The values every reader sees: by entity, each kind's value, and the
@@ -852,9 +859,11 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         None
     };
     let mut forgot = false;
+    let mut owing = false;
     let mut due = Vec::new();
     STATE.with_world(|state| {
         expire(state, now);
+        owing = !state.values_owed.is_empty();
         if let Some(players) = &players {
             forgot = follow(loader, state, players);
         }
@@ -878,13 +887,14 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
             results.push((entity, seen, work_out(sealed, &list)));
         }
     }
-    if results.is_empty() && !forgot {
+    if results.is_empty() && !forgot && !owing {
         return;
     }
     let mut changes = Vec::new();
     let published = STATE.with_world(|state| {
         let entities: Vec<u32> = results.iter().map(|r| r.0).collect();
         let moved = take_values(sealed, state, results, &mut changes);
+        own::send_changed(sealed, state, &changes);
         for entity in entities {
             if let Some(watched) = state.watched.get_mut(&entity) {
                 raise_maxima(loader, sealed, Entity(entity), watched);
