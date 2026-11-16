@@ -2,6 +2,7 @@
 //! every workspace package that depends on them. A local check leaves the
 //! widest part to CI and the merge queue ([`Lane`]).
 
+pub(crate) mod idents;
 mod shared;
 mod versions;
 
@@ -15,8 +16,17 @@ pub(crate) struct Package {
     pub(crate) version: String,
     /// Directory relative to the repository root, with `/` separators.
     pub(crate) dir: String,
-    /// Workspace packages it depends on, in any dependency kind.
+    /// Workspace packages it depends on, in any dependency kind, those of
+    /// [`Self::doc_deps`] left out.
     pub(crate) deps: Vec<String>,
+    /// Workspace dev-dependencies only its doc examples can use: its
+    /// library, its only crate with tests, gives itself their name
+    /// ([`idents::self_alias`]), so its own code reaches itself by that
+    /// name, and a change to one reaches its examples, not its tests. The
+    /// API's domain crates dev-depend on the facade for their examples,
+    /// which made a change to any of them reach all 26 packages
+    /// (2026-11-16).
+    pub(crate) doc_deps: Vec<String>,
     /// The name of its library target, as Rust paths name it, if it has one.
     pub(crate) lib: Option<String>,
     /// Builds only for Windows (`package.metadata.xtask.windows-only`):
@@ -44,7 +54,9 @@ pub(crate) enum Scope {
         /// ones alone.
         code: BTreeSet<String>,
         /// Packages whose doctests changed without their code: the book's
-        /// chapters are doctests of the API crate.
+        /// chapters are doctests of the API crate, and a change that is not
+        /// wide reaches the examples of the packages whose examples alone
+        /// use a changed one ([`Package::doc_deps`]).
         docs: BTreeSet<String>,
         /// Packages a local check runs the tests of but not the examples,
         /// leaving those, the facade's trybuild test and its stable surface
@@ -56,7 +68,9 @@ pub(crate) enum Scope {
         built: BTreeSet<String>,
         /// A local check of a change that reaches more than
         /// [`MAX_LOCAL_PACKAGES`], changed ones included: it leaves the
-        /// facade's trybuild test and stable surface to CI.
+        /// facade's trybuild test and stable surface and the dependents'
+        /// rustdoc to CI, and runs the dependents' tests one process per
+        /// binary.
         wide: bool,
     },
 }
@@ -91,11 +105,11 @@ impl Lane {
 
 /// The most packages, changed ones and their dependents together, a local
 /// check checks in full: one changed package and eight that depend on it.
-/// Past it the dependents' examples, the facade's trybuild test and its
-/// stable surface go to CI. Through the dev-dependencies on the facade, a
-/// change to any API crate reaches about 24 packages, whose examples,
-/// trybuild test and stable surface checked in full go past the ten-minute
-/// local limit on the Windows PC (669 s, 2026-11-14).
+/// Past it the dependents' examples and rustdoc, the facade's trybuild test
+/// and its stable surface go to CI. A change to any API crate reaches 23 to
+/// 27 packages (2026-11-17), whose examples, trybuild test and stable
+/// surface checked in full went past the ten-minute local limit on the
+/// Windows PC (669 s, 2026-11-14).
 pub(crate) const MAX_LOCAL_PACKAGES: usize = 9;
 
 /// A package's own changelog and change files, which no build reads.
@@ -204,6 +218,10 @@ pub(crate) fn scope(
         changed.insert(BOOK_LUAU.to_owned());
     }
     let wide = local && code.len() > MAX_LOCAL_PACKAGES;
+    // A wide change leaves the examples of what it reaches to CI.
+    if !wide {
+        docs.extend(examples_of(&code, packages));
+    }
     let mut tested = BTreeSet::new();
     if wide {
         tested = code.difference(&changed).cloned().collect();
@@ -252,6 +270,17 @@ pub(crate) fn dependents(changed: &BTreeSet<String>, packages: &[Package]) -> BT
             return found;
         }
     }
+}
+
+/// The packages outside `code` whose doc examples use one of `code`
+/// ([`Package::doc_deps`]).
+fn examples_of(code: &BTreeSet<String>, packages: &[Package]) -> BTreeSet<String> {
+    packages
+        .iter()
+        .filter(|package| !code.contains(&package.name))
+        .filter(|package| package.doc_deps.iter().any(|dep| code.contains(dep)))
+        .map(|package| package.name.clone())
+        .collect()
 }
 
 #[cfg(test)]

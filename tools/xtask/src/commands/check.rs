@@ -6,7 +6,8 @@
 //! rustdoc over the workspace, where unchanged packages are already fresh,
 //! and nextest and the doctests run for the changed packages and every
 //! package that depends on them; a local check leaves the widest part of
-//! that to CI ([`affected::Lane`]). Off Windows the workspace is also
+//! that to CI ([`affected::Lane`]) and runs the tests a wide change only
+//! reaches one process per binary ([`in_process`]). Off Windows the workspace is also
 //! linted for Windows through `cargo xwin`, beside the host checks.
 //! `--windows` also runs the Windows tests of the crates marked
 //! `windows-tests` or `windows-only`, under Wine on an amd64 Linux host.
@@ -197,7 +198,9 @@ fn touches(scope: &Scope, package: &str) -> bool {
 /// Whether a local check of `scope` reaches more packages than
 /// [`MAX_LOCAL_PACKAGES`]: it leaves the trybuild test and the stable
 /// surface's build to CI, which alone kept a check of a facade change over
-/// ten minutes (669 s, 2026-11-14).
+/// ten minutes (669 s, 2026-11-14), and the dependents' rustdoc
+/// ([`changed_rustdoc`]), and runs the dependents' tests one process per
+/// binary ([`in_process`]).
 fn wide(scope: &Scope) -> bool {
     matches!(scope, Scope::Some { wide: true, .. })
 }
@@ -586,9 +589,41 @@ fn doc_links_step() -> Step {
 
 /// Whether the workspace's rustdoc runs: whenever code changed, since a
 /// change to one crate breaks links in the docs of the crates that use it,
-/// and in the full suite. It takes seconds once clippy built the workspace.
-const fn workspace_rustdoc(code: bool, full: bool) -> bool {
-    code || full
+/// and in the full suite. A [`wide`] change leaves the dependents' rustdoc
+/// to CI with their examples ([`changed_rustdoc`]): the workspace's took
+/// 78 s of a check that took 11 min 45 s after an ABI change while four
+/// batches built (2026-11-16).
+const fn workspace_rustdoc(code: bool, wide: bool, full: bool) -> bool {
+    (code && !wide) || full
+}
+
+/// The rustdoc of the packages a [`wide`] `scope` changed, those the host
+/// build `workspace` leaves out skipped, with the link check of the
+/// facade's pages when it is one: 11 s the first time, then under a second
+/// (2026-11-17). It selects them alone, so its features unify on their own.
+fn changed_rustdoc(scope: &Scope, workspace: &[String]) -> Vec<Step> {
+    let Scope::Some { code, .. } = scope else {
+        return Vec::new();
+    };
+    let excluded = |name: &String| {
+        workspace
+            .windows(2)
+            .any(|pair| pair[0] == EXCLUDE && &pair[1] == name)
+    };
+    let mut step = Step::new(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings");
+    let mut any = false;
+    for name in code.iter().filter(|name| !excluded(name)) {
+        step = step.then(&["-p", name.as_str()]);
+        any = true;
+    }
+    let mut steps = Vec::new();
+    if any {
+        steps.push(step);
+    }
+    if touches(scope, FACADE) {
+        steps.push(doc_links_step());
+    }
+    steps
 }
 
 /// The ast-grep rules' own tests, the rules over the repository
@@ -598,6 +633,9 @@ fn source_checks() -> bool {
         && crate::check::rules::scan(&workspace_root())
         && Step::tool("cargo-machete", &[]).run(false)
 }
+
+/// Cargo's flag that leaves a package out of a `--workspace` build.
+const EXCLUDE: &str = "--exclude";
 
 /// The cargo arguments every host build and test of the workspace takes.
 pub(crate) fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
@@ -609,7 +647,7 @@ pub(crate) fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
     // Off Windows the crates that build only for Windows stay out of host builds.
     if !on_windows {
         for package in packages.iter().filter(|p| p.windows_only) {
-            args.extend(["--exclude".to_owned(), package.name.clone()]);
+            args.extend([EXCLUDE.to_owned(), package.name.clone()]);
         }
     }
     args
@@ -678,10 +716,12 @@ fn host_steps(
     if parts.contains(&Part::StableApi) && stable_api_due(scope) && !wide(scope) {
         steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
-    if run_docs && workspace_rustdoc(code, full) {
+    if run_docs && workspace_rustdoc(code, wide(scope), full) {
         // `code` alone: a package whose version alone moved needs no docs.
         steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
         steps.push(doc_links_step());
+    } else if run_docs && code && wide(scope) {
+        steps.extend(changed_rustdoc(scope, workspace));
     }
     if full && run_host {
         steps.push(Step::new(&["deny", "check"]));
@@ -730,6 +770,11 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
                 names.join(", "),
             ));
         }
+        if wide(scope) && parts.contains(&Part::Docs) {
+            say(&format!(
+                "the dependents' rustdoc is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
+            ));
+        }
         if stable_api_left_to_ci(scope, parts) {
             say(&format!(
                 "{FACADE}'s stable surface is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
@@ -749,7 +794,10 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     } else {
         say("checking the whole workspace");
     }
-    let (flags, tests, doctests) = plan(scope, packages, host_ok);
+    let separate = in_process::packages(scope, parts.contains(&Part::Host), packages, host_ok);
+    let (flags, tests, doctests) = plan(scope, packages, |name| {
+        host_ok(name) && !separate.contains(name)
+    });
     let workspace = host_args(packages, on_windows);
     let stable = stable_api(packages);
     let host_steps = host_steps(
@@ -785,11 +833,13 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     thread::scope(|scope| {
         let windows = windows.as_ref().map(|step| scope.spawn(|| step.run(true)));
         // The first failing host step ends the host checks.
-        let host_passed = host_steps.iter().all(|step| step.run(false));
+        let host_passed = host_steps.iter().all(|step| step.run(false))
+            && (separate.is_empty() || in_process::run(&separate, &workspace));
         let windows_passed = windows.is_none_or(|handle| handle.join().unwrap_or(false));
         host_passed && windows_passed
     })
 }
 
+mod in_process;
 #[cfg(test)]
 mod tests;

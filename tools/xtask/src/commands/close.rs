@@ -88,6 +88,7 @@ mod tests {
             version: "1.0.0-alpha.15".to_owned(),
             dir: dir.to_owned(),
             deps: Vec::new(),
+            doc_deps: Vec::new(),
             lib: None,
             windows_only: false,
             windows_tests: false,

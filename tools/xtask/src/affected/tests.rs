@@ -8,6 +8,7 @@ fn package(name: &str, dir: &str, deps: &[&str]) -> Package {
         version: "0.0.0-dev".to_owned(),
         dir: dir.to_owned(),
         deps: deps.iter().map(|d| (*d).to_owned()).collect(),
+        doc_deps: Vec::new(),
         lib: None,
         windows_only: false,
         windows_tests: false,
@@ -650,6 +651,53 @@ fn locally_a_change_with_many_dependents_runs_only_their_tests() {
             wide: false,
         }
     );
+}
+
+#[test]
+fn a_dependency_only_the_doc_examples_use_reaches_the_examples_not_the_tests() {
+    let doc_user = |name: &str, dir: &str, deps: &[&str]| Package {
+        doc_deps: vec!["enshwick".to_owned()],
+        ..package(name, dir, deps)
+    };
+    let packages = [
+        doc_user("abi", "crates/internal/abi", &[]),
+        doc_user("ui", "crates/internal/ui", &["abi"]),
+        doc_user("world", "crates/internal/world", &["abi"]),
+        package("enshwick", "crates/enshwick", &["abi", "ui", "world"]),
+    ];
+    let ui = files(&["crates/internal/ui/src/lib.rs"]);
+    assert_eq!(
+        scope(&ui, &packages),
+        Scope::Some {
+            code: names(&["enshwick", "ui"]),
+            docs: names(&["abi", "world"]),
+            tested: names(&[]),
+            built: names(&[]),
+            wide: false,
+        }
+    );
+    // Normal edges still reach each dependent's tests.
+    let abi = files(&["crates/internal/abi/src/lib.rs"]);
+    assert_eq!(
+        code(scope(&abi, &packages)),
+        names(&["abi", "enshwick", "ui", "world"])
+    );
+}
+
+#[test]
+fn a_wide_change_leaves_the_examples_of_doc_dependents_to_ci() {
+    let mut packages = api_workspace();
+    packages.push(Package {
+        doc_deps: vec!["enshwick".to_owned()],
+        ..package("docs-only", "crates/internal/docs-only", &[])
+    });
+    let files = files(&["crates/internal/world/src/daytime.rs"]);
+    let Scope::Some { docs, tested, .. } =
+        super::scope(&files, &packages, &Tree::default(), Lane::Local)
+    else {
+        panic!("the whole workspace");
+    };
+    assert!(docs.is_empty() && !tested.contains("docs-only"), "{docs:?}");
 }
 
 #[test]
