@@ -368,6 +368,8 @@ pub(crate) struct State {
     pub(crate) served_off: Vec<usize>,
     /// The mods' changes to players' permissions.
     pub(crate) permission_changes: permissions::Changes,
+    /// The waits on transactions' ends, in the order asked.
+    pub(crate) settle_waits: Vec<SettleWait>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -582,6 +584,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         off: Vec::new(),
         served_off: Vec::new(),
         permission_changes: permissions::Changes::default(),
+        settle_waits: Vec::new(),
     });
     turn
 }
@@ -817,4 +820,16 @@ pub(crate) static TABLE: HostApi = HostApi {
     interaction_prompt,
     ui_item_tooltip,
     change_permissions: permissions::change_permissions,
+    transaction_settled,
 };
+
+/// What the loader runs after each step's own work: the waits it ended.
+pub(crate) fn after_step() {
+    run_settled();
+}
+
+/// What the loader forgets as a client's hosted game ends: the world's
+/// transactions, after each wait on them ran.
+pub(crate) fn end_game() {
+    end_world();
+}

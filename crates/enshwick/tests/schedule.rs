@@ -1,5 +1,6 @@
 //! The scheduler through the fake host: a task queued while a game runs ends
-//! with that game, and a task queued at init runs in every game.
+//! with that game, a task queued at init runs in every game, and a tick the
+//! loader refuses leaves the mod without a scheduler.
 
 #[cfg(test)]
 mod tests {
@@ -40,6 +41,16 @@ mod tests {
     );
 
     const STEP: Duration = Duration::from_millis(100);
+
+    #[test]
+    fn a_scheduler_whose_tick_the_loader_refuses_turns_the_mod_off() {
+        let loader = FakeHost::new().refuse_tick(0).install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Timers)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_ne!(status, Status::OK);
+        assert!(SCHEDULER.lock().unwrap().is_none(), "init never got one");
+    }
 
     #[test]
     fn a_task_queued_in_one_game_never_runs_in_the_next() {

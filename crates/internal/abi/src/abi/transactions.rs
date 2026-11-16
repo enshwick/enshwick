@@ -273,9 +273,9 @@ pub struct TransactionInfo {
     /// When a prop's state stopped it, or stopped its last undo, the kinds
     /// of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
     pub holds: u32,
-    /// The props it placed and still holds, which
+    /// The props it placed and did not undo, which
     /// [`HostApi::transaction_entities`](super::HostApi::transaction_entities)
-    /// lists.
+    /// lists; kept when its undo data expires, dropped when the world ends.
     pub created: u32,
 }
 
@@ -285,7 +285,9 @@ impl TransactionInfo {
     /// Queued, or written in part: the loader spreads a large one over the
     /// server's steps.
     pub const PENDING: u32 = 0;
-    /// Written whole; it can be undone.
+    /// Written whole, each prop it placed standing in the world, or still
+    /// absent after the loader's wait limit, or with its start state
+    /// unreadable; it can be undone.
     pub const APPLIED: u32 = 1;
     /// An undo is queued or written in part.
     pub const UNDOING: u32 = 2;
@@ -329,3 +331,16 @@ impl TransactionInfo {
     /// again.
     pub const UNDO_REFUSED: u32 = 6;
 }
+
+/// A handler of a transaction's end: the transaction's id, where it stands
+/// (borrowed for the call, null once the loader no longer remembers it) and
+/// the pointer given at registration. It must not unwind.
+///
+/// [`HostApi::transaction_settled`](super::HostApi::transaction_settled)
+/// calls it once, on the server's game thread after a step.
+///
+/// # Examples
+///
+/// The safe layer wraps it in `World::when_settled`.
+pub type TransactionSettledFn =
+    unsafe extern "system" fn(id: u64, info: *const TransactionInfo, user: *mut c_void);

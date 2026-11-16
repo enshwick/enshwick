@@ -1,10 +1,12 @@
 //! The fake loader's transactions: commits, undos and statuses.
 
-use crate::test::table::{put, with};
+use core::ffi::c_void;
+
+use crate::test::table::{Registered, put, with};
 use crate::test::{FakeChange, FakeTransaction};
 use enshwick_core::abi::{
     BlockPlace, Header, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
-    TransactionOp, Voxel, VoxelRegion, VoxelWrite,
+    TransactionOp, TransactionSettledFn, Voxel, VoxelRegion, VoxelWrite,
 };
 
 /// The most changes the fake takes in one transaction, as the loader.
@@ -95,7 +97,12 @@ pub(crate) extern "system" fn transaction_commit(
         if claimed(&s.edits.transactions, host) + bound > BRICKS_MAX {
             return Status::REFUSED;
         }
-        let next = s.edits.transactions.last().map_or(1, |last| last.id + 1);
+        let next = s
+            .edits
+            .transactions
+            .last()
+            .map_or(s.edits.forgotten, |last| last.id)
+            + 1;
         let ops = u32::try_from(changes.len()).unwrap_or(u32::MAX);
         s.edits.transactions.push(FakeTransaction {
             id: next,
@@ -337,5 +344,110 @@ pub(crate) extern "system" fn transaction_status(
         Status::OK
     } else {
         Status::BAD_ARGS
+    }
+}
+
+/// A wait for the end of a transaction, as the loader keeps it until a step
+/// runs it.
+pub(crate) struct SettleWait {
+    id: u64,
+    /// The fake server time from which a step runs it whatever the
+    /// transaction's state, in nanoseconds.
+    until: u64,
+    callback: Registered<TransactionSettledFn>,
+}
+
+pub(crate) extern "system" fn transaction_settled(
+    me: ModHandle,
+    id: u64,
+    within_ns: u64,
+    callback: Option<TransactionSettledFn>,
+    user: *mut c_void,
+) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::UNAVAILABLE, |s| {
+        if !s
+            .edits
+            .transactions
+            .iter()
+            .any(|t| t.id == id && t.owner == me)
+        {
+            return Status::MISSING;
+        }
+        let until = s.ticks.nanos().saturating_add(within_ns);
+        s.settle_waits.push(SettleWait {
+            id,
+            until,
+            callback: Registered::new(callback, user, me),
+        });
+        Status::OK
+    })
+}
+
+/// Runs, in the order asked, each wait whose transaction is no longer
+/// pending, is forgotten or whose time passed, as the loader does after a
+/// step's transactions, and drops those of a mod that is off unrun.
+pub(crate) fn run_settled() {
+    run_waits(false);
+}
+
+/// Ends the world's transactions as the loader does when a client's hosted
+/// game ends: those in work fail, the rest expire, the props placed and the
+/// undo data go with the world; then every wait runs.
+pub(crate) fn end_world() {
+    with((), |s| {
+        for transaction in &mut s.edits.transactions {
+            let info = &mut transaction.info;
+            match info.state {
+                TransactionInfo::PENDING | TransactionInfo::UNDOING => {
+                    info.state = TransactionInfo::FAILED;
+                    info.reason = Status::UNAVAILABLE;
+                }
+                TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED => {
+                    info.state = TransactionInfo::EXPIRED;
+                }
+                _ => {}
+            }
+            info.bricks = 0;
+            info.created = 0;
+            transaction.created.clear();
+            transaction.removed.clear();
+        }
+    });
+    run_waits(true);
+}
+
+/// Takes out the waits a step ends, or with `all` every wait, and runs
+/// them outside the table, so a callback may ask again.
+fn run_waits(all: bool) {
+    let due: Vec<(SettleWait, Option<TransactionInfo>)> = with(Vec::new(), |s| {
+        let now = s.ticks.nanos();
+        let (transactions, off) = (&s.edits.transactions, &s.off);
+        let info = |wait: &SettleWait| {
+            transactions
+                .iter()
+                .find(|t| t.id == wait.id && Some(t.owner) == wait.callback.owner())
+                .map(|t| t.info)
+        };
+        s.settle_waits
+            .extract_if(.., |wait| {
+                all || wait.callback.owner_off(off)
+                    || now >= wait.until
+                    || info(wait).is_none_or(|info| info.state != TransactionInfo::PENDING)
+            })
+            .map(|wait| {
+                let info = info(&wait);
+                (wait, info)
+            })
+            .collect()
+    });
+    for (wait, info) in due {
+        let info = info.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
+        // SAFETY: `user` is the pointer the mod asked with, handed back once;
+        // `info` is null or lives for the call.
+        wait.callback
+            .run(|callback, user| unsafe { callback(wait.id, info, user) });
     }
 }

@@ -297,6 +297,8 @@ mod world_props;
 mod world_queries;
 mod world_settings;
 #[cfg(feature = "unstable")]
+mod world_settled;
+#[cfg(feature = "unstable")]
 mod world_writes;
 mod worlds;
 #[cfg(feature = "unstable")]
