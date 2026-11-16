@@ -387,12 +387,28 @@ pub(crate) fn state() -> MutexGuard<'static, Option<State>> {
 thread_local! {
     /// Whether this thread holds the installed fake.
     static HOLDS_TURN: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    /// Calls this thread runs as the game's worker threads would.
+    static ON_WORKER: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
 }
 
 /// Whether this thread installed the fake, the one that stands for the
-/// server's game thread.
+/// server's game thread, outside a call [`on_worker`] runs.
 pub(crate) fn on_game_thread() -> bool {
-    HOLDS_TURN.get()
+    HOLDS_TURN.get() && ON_WORKER.get() == 0
+}
+
+/// Runs `work` as the loader runs a filter on a game worker thread, where
+/// [`on_game_thread`] answers false.
+pub(crate) fn on_worker<R>(work: impl FnOnce() -> R) -> R {
+    struct Leave;
+    impl Drop for Leave {
+        fn drop(&mut self) {
+            ON_WORKER.set(ON_WORKER.get().wrapping_sub(1));
+        }
+    }
+    ON_WORKER.set(ON_WORKER.get().wrapping_add(1));
+    let _leave = Leave;
+    work()
 }
 
 /// Waits for the table to be free and takes it for this thread.

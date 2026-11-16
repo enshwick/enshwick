@@ -163,7 +163,10 @@ impl Installed {
     /// Asks the mod's build filters about `call`, as the cursor check does
     /// after it allowed a placement: `Ok` when the placement goes ahead,
     /// else the reason the first refusing filter gave, if any. `call`'s own
-    /// `reason` is not used; the fake host gives each filter a slot.
+    /// `reason` is not used; the fake host gives each filter a slot. A zero
+    /// `account` becomes that of the player whose character `call` names,
+    /// as the loader fills it. The filters run as on the game's worker
+    /// threads, where world reads answer [`Status::WRONG_THREAD`](enshwick_core::abi::Status::WRONG_THREAD).
     ///
     /// # Errors
     ///
@@ -181,18 +184,27 @@ impl Installed {
     ///     item: enshwick::ItemId::new(7),
     ///     position: [0.0; 3],
     ///     reason: core::ptr::null_mut(),
+    ///     account: enshwick::PlayerKey::default(),
     /// };
     /// assert_eq!(loader.build(&wall), Ok(()));
     /// ```
     pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {
-        let filters = table::with(Vec::new(), |s| s.build_filters.clone());
+        let (filters, account) = table::with((Vec::new(), None), |s| {
+            let account = s.host.players.iter().find(|p| p.entity == call.character);
+            (s.build_filters.clone(), account.map(|p| p.key))
+        });
         for filter in filters {
             let mut reason = enshwick_core::abi::Str::new("");
             let mut asked = *call;
             asked.reason = &raw mut reason;
-            // SAFETY: a filter the mod registered with its own pointer; `asked`
-            // and its `reason` slot live on this stack for the call.
-            let allowed = filter.run(|callback, user| unsafe { callback(&raw const asked, user) });
+            if asked.account == enshwick_core::PlayerKey::default() {
+                asked.account = account.unwrap_or_default();
+            }
+            let allowed = table::on_worker(|| {
+                // SAFETY: a filter the mod registered with its own pointer;
+                // `asked` and its `reason` slot live on this stack for the call.
+                filter.run(|callback, user| unsafe { callback(&raw const asked, user) })
+            });
             if allowed == enshwick_core::abi::FILTER_REFUSE {
                 // SAFETY: the refusing filter wrote a text it keeps until its
                 // next call on this thread, or left the empty one.

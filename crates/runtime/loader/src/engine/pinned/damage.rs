@@ -7,6 +7,7 @@ pub(crate) const DROWNING: Symbol = Symbol::new("damage.drowning");
 pub(crate) const DROWNING_DEATH: Symbol = Symbol::new("damage.drowning_death");
 pub(crate) const FACTION_KILL: Symbol = Symbol::new("damage.faction_kill");
 pub(crate) const FALL: Symbol = Symbol::new("damage.fall");
+pub(crate) const FALL_DEATH: Symbol = Symbol::new("damage.fall_death");
 pub(crate) const FREEZING: Symbol = Symbol::new("damage.freezing");
 pub(crate) const HIT: Symbol = Symbol::new("damage.hit");
 pub(crate) const HIT_SOURCE: Constant = Constant::new("damage.hit_source");

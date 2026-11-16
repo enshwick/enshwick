@@ -280,6 +280,11 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 server (26430253)", "session.platform", 0x80),
     ("1.0 client (26320373)", "session.platform", 0x80),
     ("1.0 client (26430625)", "session.platform", 0x80),
+    // The fall system's branch past its death record, read in the
+    // decompiler on server 26430253 (2026-11-16); the client's is at the
+    // same place in the same code.
+    ("1.0 server (26430253)", "damage.fall_death", 0x8_a7bc),
+    ("1.0 client (26430625)", "damage.fall_death", 0x27_8acc),
     // The same join path on the older kept builds.
     ("1.0 client (1269579)", "session.find_machine", 0xa5_e0c0),
     ("1.0 client (1269579)", "session.join_account_id", 0x4),

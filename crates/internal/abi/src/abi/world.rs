@@ -257,6 +257,7 @@ pub type CraftFilterFn =
 ///     item: enshwick::ItemId::new(0x1d),
 ///     position: [0.0; 3],
 ///     reason: core::ptr::null_mut(),
+///     account: enshwick::PlayerKey::new(7),
 /// };
 /// assert_eq!(wall.item, enshwick::ItemId::new(0x1d));
 /// ```
@@ -276,9 +277,13 @@ pub struct BuildCheck {
     /// stays valid until the filter's next call on the same thread; the
     /// loader copies it before then, on that thread.
     pub reason: *mut Str,
+    /// The building player's account, which a new character of the same
+    /// player keeps; 0 where the loader cannot tell, such as in a client's
+    /// own prediction. A mod reads it only where `header` covers it.
+    pub account: PlayerKey,
 }
 
-impl_headed!(BuildCheck);
+impl_headed!(BuildCheck, born = 48);
 
 /// A mod's build filter: the placement and the pointer given at
 /// registration; returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse it, else [`FILTER_PASS`](super::FILTER_PASS).

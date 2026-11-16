@@ -2092,6 +2092,15 @@ system = "fall_damage_infliction"
 shape = ["mov [r8+rcx*4],r9d"]
 check = ["mov [r8+rcx*4],r9d", "mov rcx,rbx", "call ?b"]
 
+# The branch past the death record: the system decides on a death from the
+# health it worked out in xmm7, not from what it wrote (server 26430253).
+[[route]]
+id = "damage.fall_death"
+system = "fall_damage_infliction"
+shape = ["comiss xmm7,xmm8"]
+take = "end"
+check = ["ja ?b", "mov rcx,r15", "call ?b"]
+
 [[route]]
 id = "damage.freezing"
 system = "bodyheat_depletion"

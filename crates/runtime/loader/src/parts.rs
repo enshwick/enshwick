@@ -297,7 +297,6 @@ mod tests {
         const SEALING_IN_LINK: &[&str] = &[
             "bases",
             "controls",
-            "damage",
             "item_actions",
             "join_gate",
             "label",

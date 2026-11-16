@@ -155,6 +155,7 @@ mod tests {
             item: ItemId::new(7),
             position: [0.0; 3],
             reason: core::ptr::null_mut(),
+            account: PlayerKey::default(),
         });
         assert_eq!(placed, Ok(()));
         ran_as_the_pack();

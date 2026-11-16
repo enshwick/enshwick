@@ -44,9 +44,12 @@ runs after the game's cursor check allows a placement. It gets a `Placement`,
 a name of Enshwick's own, since the game's check has none. Its fields are
 these:
 
-- `player`, who builds;
+- `player`, the character who builds;
 - `item`, what is placed;
-- `position`, where, in metres.
+- `position`, where, in metres;
+- `account`, the builder's account key, which stays the same when the player
+  gets a new character. It is `None` (nil in Luau) where the loader cannot
+  tell, such as in a client's own prediction.
 
 It answers a `BuildVerdict`:
 
@@ -97,7 +100,9 @@ The server runs the cursor check on the cursor each player's client sends.
 The client runs it for its own prediction. So the filter runs on both sides,
 on the cursor systems' worker threads, on every frame a player aims to build.
 Keep it quick: no allocation, no lock, no log, and no world reads, which
-belong on the game thread.
+belong on the game thread and fail here with `WrongThread`. To judge a
+player, match `account` against a list the mod keeps from the game thread.
+A new character of the same player keeps its account.
 
 The server's answer decides. A client that runs the mod too shows the cursor
 as not allowed, so give the same answer on both sides. Base it on what both
