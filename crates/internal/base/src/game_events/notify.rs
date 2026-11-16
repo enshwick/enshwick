@@ -5,7 +5,7 @@ use crate::content::Guid;
 use crate::engine_enum::Values;
 use crate::engine_ids as ids;
 use crate::game_events::values::{NotifyEventType, SoundVolumeHint};
-use crate::game_events::{EventType, Field, RawGameEvent, Scalar};
+use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::{BaseLoad, Entity, Off};
 
 /// A notifier, a sound or an effect the server raised at a place or on an
@@ -50,66 +50,51 @@ impl crate::events::Kind for NotifyEvent {
         F: Fn(&Self) + Send + Sync + 'static,
     {
         let layout = NotifyLayout::resolve(load)?;
-        load.on_raw_game_event(layout.ty, move |event| {
-            if let Some(notify) = layout.decode(event) {
-                handler(&notify);
-            }
-        })
+        super::kinds::on(load, layout.ty, move |event| layout.decode(event), handler)
     }
 }
 
-/// [`NotifyEvent`]'s layout on the running build: it reads the events the
-/// game raises and writes the ones a mod raises. The crates above reach it
-/// through `__internal`; a mod raises a notifier with `Effects::notify`.
+/// [`NotifyEvent`]'s fields on the running build, for reading the events
+/// the game raises and writing the ones a mod raises. The crates above
+/// reach it through `__internal`; a mod raises a notifier with
+/// `Effects::notify`, which resolves the transform it writes itself.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
 pub struct NotifyLayout {
-    ty: EventType,
-    /// The `w` of the turn inside the event's `ecs::Offset`.
-    turn_w: Field<f32>,
-    /// The first of the transform's three fixed-point coordinates.
-    position: u64,
-    /// The `w` of the transform's orientation.
-    orientation_w: Field<f32>,
-    /// The first of the transform's three scale factors.
-    scale: u64,
-    source: Field<Entity>,
-    guid: Field<Guid>,
-    kind: Field<u8>,
-    hint: Field<u8>,
+    /// The event type.
+    pub ty: EventType,
+    /// The transform's three fixed-point coordinates.
+    position: [Field<i64>; 3],
+    /// The entity it plays on.
+    pub source: Field<Entity>,
+    /// What it names: a notifier, a sound container or an effect.
+    pub guid: Field<Guid>,
+    /// Its [`NotifyEventType`], as the engine's value.
+    pub kind: Field<u8>,
+    /// Its [`SoundVolumeHint`], as the engine's value.
+    pub hint: Field<u8>,
     types: Values<NotifyEventType, 3>,
     hints: Values<SoundVolumeHint, 7>,
 }
 
 #[doc(hidden)]
 impl NotifyLayout {
-    /// The layout on the running build.
+    /// The fields on the running build that reading an event needs.
     ///
     /// # Errors
     ///
-    /// [`Off`] on a build without the event or one of its fields.
+    /// [`Off`] on a build without the event or one of those fields.
     pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         let ty = load.game_event_type(ids::NOTIFY_EVENT)?;
-        let at = |base: &str, field: &str| -> Result<u64, Off> {
-            Ok(load.constant(base)? + load.constant(field)?)
+        let position = load.constant(ids::NOTIFY_EVENT_TRANSFORM)?
+            + load.constant(ids::WORLD_TRANSFORM_POSITION)?;
+        let axis = |at: u64| {
+            ty.field_at(position + at)
+                .ok_or_else(|| Off::new("notify events: the position past the event's end"))
         };
-        let field = |offset: u64| {
-            ty.field_at(offset)
-                .ok_or_else(|| Off::new("notify events: a field past the event's end"))
-        };
-        // The `w` of a quaternion follows its `x`, `y` and `z`.
-        let w = 12;
         Ok(Self {
             ty,
-            turn_w: field(at(ids::NOTIFY_EVENT_OFFSET, ids::OFFSET_ORIENTATION_OFFSET)? + w)?,
-            position: at(ids::NOTIFY_EVENT_TRANSFORM, ids::WORLD_TRANSFORM_POSITION)?,
-            orientation_w: field(
-                at(
-                    ids::NOTIFY_EVENT_TRANSFORM,
-                    ids::WORLD_TRANSFORM_ORIENTATION,
-                )? + w,
-            )?,
-            scale: at(ids::NOTIFY_EVENT_TRANSFORM, ids::WORLD_TRANSFORM_SCALE)?,
+            position: [axis(0)?, axis(8)?, axis(16)?],
             source: ty.field_by_id(load, ids::NOTIFY_EVENT_SOURCE_ENTITY_ID)?,
             guid: ty.field_by_id(load, ids::NOTIFY_EVENT_TYPE_GUID)?,
             kind: ty.field_by_id(load, ids::NOTIFY_EVENT_TYPE)?,
@@ -119,29 +104,15 @@ impl NotifyLayout {
         })
     }
 
-    /// The event type.
-    #[must_use]
-    pub const fn ty(&self) -> EventType {
-        self.ty
-    }
-
     /// The typed event of `event`; `None` for another type or bytes too few.
     #[must_use]
     pub fn decode(&self, event: &RawGameEvent<'_>) -> Option<NotifyEvent> {
-        let source = event.get(self.source)?;
-        let fixed = [0, 8, 16].map(|axis| {
-            usize::try_from(self.position + axis)
-                .ok()
-                .and_then(|at| event.read::<i64>(at))
-        });
-        let [Some(x), Some(y), Some(z)] = fixed else {
-            return None;
-        };
+        let [x, y, z] = self.position.map(|axis| event.get(axis));
         let kind = event.get(self.kind)?;
         let hint = event.get(self.hint)?;
         Some(NotifyEvent {
-            source_entity_id: (!source.is_none()).then_some(source),
-            position: crate::ecs::metres([x, y, z]),
+            source_entity_id: super::kinds::some(event.get(self.source)?),
+            position: crate::ecs::metres([x?, y?, z?]),
             r#type: self
                 .types
                 .variant(u64::from(kind))
@@ -154,54 +125,21 @@ impl NotifyLayout {
         })
     }
 
-    /// The bytes of a notify of `kind` naming `guid`, on `source` or at
-    /// `position` in metres, as the game's own systems lay one out: the turn
-    /// and orientation unturned, the scale 1; `None` when the build lacks
-    /// the value of its type or hint.
+    /// The engine's value of `kind`; `None` when the build lacks it.
     #[must_use]
-    pub fn encode(
-        &self,
-        kind: NotifyEventType,
-        guid: Guid,
-        source: Option<Entity>,
-        position: [f64; 3],
-        hint: SoundVolumeHint,
-    ) -> Option<Vec<u8>> {
-        let kind = match kind {
-            NotifyEventType::Other(raw) => raw,
-            known => u8::try_from(self.types.value(known)?).ok()?,
-        };
-        let hint = match hint {
-            SoundVolumeHint::Other(raw) => raw,
-            known => u8::try_from(self.hints.value(known)?).ok()?,
-        };
-        let mut bytes = vec![0u8; usize::try_from(self.ty.size()).ok()?];
-        let mut written = put(&mut bytes, self.turn_w, 1.0)
-            && put(&mut bytes, self.orientation_w, 1.0)
-            && put(&mut bytes, self.guid, guid)
-            && put(&mut bytes, self.kind, kind)
-            && put(&mut bytes, self.hint, hint)
-            && put(&mut bytes, self.source, source.unwrap_or(Entity::NONE));
-        let fixed = crate::ecs::fixed(position);
-        for (step, axis) in (0u64..).zip(fixed) {
-            written &= put_at(&mut bytes, self.position + 8 * step, axis);
+    pub fn kind_value(&self, kind: NotifyEventType) -> Option<u8> {
+        match kind {
+            NotifyEventType::Other(raw) => Some(raw),
+            known => u8::try_from(self.types.value(known)?).ok(),
         }
-        for step in 0..3 {
-            written &= put_at(&mut bytes, self.scale + 4 * step, 1.0f32);
-        }
-        written.then_some(bytes)
     }
-}
 
-/// Writes `value` at `field`; false past the bytes.
-fn put<T: Scalar>(bytes: &mut [u8], field: Field<T>, value: T) -> bool {
-    put_at(bytes, u64::from(field.offset()), value)
-}
-
-/// Writes `value` at `at`; false past the bytes.
-fn put_at<T: Scalar>(bytes: &mut [u8], at: u64, value: T) -> bool {
-    usize::try_from(at)
-        .ok()
-        .and_then(|at| bytes.get_mut(at..))
-        .is_some_and(|out| value.to_bytes(out))
+    /// The engine's value of `hint`; `None` when the build lacks it.
+    #[must_use]
+    pub fn hint_value(&self, hint: SoundVolumeHint) -> Option<u8> {
+        match hint {
+            SoundVolumeHint::Other(raw) => Some(raw),
+            known => u8::try_from(self.hints.value(known)?).ok(),
+        }
+    }
 }

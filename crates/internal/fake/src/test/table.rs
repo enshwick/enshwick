@@ -148,7 +148,7 @@ pub(crate) struct State {
     /// The game events the mod raised: type hash and bytes.
     pub(crate) emits: Vec<(u32, Vec<u8>)>,
     /// The notifiers each mod raised in the step it last raised one.
-    pub(crate) notified: rustc_hash::FxHashMap<ModHandle, (u64, u32)>,
+    pub(crate) notified: enshwick_core::peer::PerStep,
     /// The teleports the mod asked for.
     pub(crate) teleports: Vec<TeleportRequest>,
     /// The spawns the mod asked for, with the ids handed out.
@@ -470,7 +470,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         muted: Vec::new(),
         writes: Vec::new(),
         emits: Vec::new(),
-        notified: rustc_hash::FxHashMap::default(),
+        notified: enshwick_core::peer::PerStep::new(enshwick_core::peer::MAX_NOTIFIES_PER_STEP),
         teleports: Vec::new(),
         spawns: Vec::new(),
         spawn_steps: Vec::new(),

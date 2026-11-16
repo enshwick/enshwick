@@ -4171,7 +4171,7 @@ declare enshwick: {
 		teleport_player: (player: string, position: vector, how: Teleport) -> (),
 		--- Asks the server to move the character of the connected player `player` to where the connected player `to` stands, as `teleport_player` does; the game always picks a free spot beside them, so the two never stand in one place.
 		teleport_player_to: (player: string, to: string, how: Teleport) -> (),
-		--- Raises the notifier `notify.notifier` at a place or on an entity, as the game's own systems do for a hit or a pickup: every client in range, a client without mods too, plays its sound and effect. The clients play it after the next step; a mod hears it in `Load.on_notify` then. At most `MAX_NOTIFIES_PER_STEP` per mod in one server step.
+		--- Raises the notifier `notify.notifier` at a place or on an entity, as the game's own systems do for a hit or a pickup: every client in range plays its sound and effect. The clients play it after the next step; a mod hears it in `Load.on_notify` then. At most `MAX_NOTIFIES_PER_STEP` per mod in one server step. Unstable: needs the `unstable` feature and may change in any release, since a client playing a notifier the server raised is not yet seen in the running game.
 		notify: (notify: Notify) -> (),
 		--- Drops `count` new items of `item` on the ground at `at` in metres, as one loose stack any player can pick up, as the game spills loot; the pickup's entity comes back at once and is in the world after the next step. The game drops it to the ground and does not save it. The loader reads the pickup as the server starts, in about a tenth of a second, and a drop before that read ends waits for it. On the server's game thread only.
 		drop_items: (item: number, count: number, at: vector, how: ItemDrop) -> number,
@@ -4502,7 +4502,7 @@ declare enshwick: {
 		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		change: (sound: string, change: SoundChange) -> (),
-		--- Calls `handler` on the server's game thread for each notifier and sound the server places in the world, the game's own and those a mod raises with `Effects.notify`: the events of type `Normal` and `Sfx`, not the visual effects. On a client it hears only a game that client hosts.
+		--- Calls `handler` on the server's game thread for each notifier and sound the server places in the world, the game's own and those a mod raises with `Effects.notify`: every event but the visual effects, type `Vfx`, so a type this build names but the crate does not reaches it too. On a client it hears only a game that client hosts.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_notify: (handler: (arg1: NotifyEvent) -> ()) -> (),
 		--- Unstable: needs the `unstable` feature and may change in any release. Adds the sound in `new.file` and a container that plays it, under `new.id`, and returns the container, which `Frame.play`, `Load.change_sound` and other mods use. The client holds it as the game holds its own uncompressed sounds, built from one of them, streamed from memory; nothing is written to the archive or a save. A server checks the file and serves nothing. Wrap the call in `Load.feature` so a bad file turns off that sound alone, with the reason on the Mods screen.

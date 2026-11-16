@@ -38,12 +38,10 @@ impl Load<'_> {
 impl Load<'_> {
     /// Calls `handler` on the server's game thread for each notifier and
     /// sound the server places in the world, the game's own and those a mod
-    /// raises with [`Effects::notify`](crate::effects::Effects::notify):
-    /// the events of type
-    /// [`Normal`](crate::game_events::NotifyEventType::Normal) and
-    /// [`Sfx`](crate::game_events::NotifyEventType::Sfx), not the visual
-    /// effects. On a client it
-    /// hears only a game that client hosts.
+    /// raises with `Effects::notify`: every event but the visual effects,
+    /// type [`Vfx`](crate::game_events::NotifyEventType::Vfx), so a type
+    /// this build names but the crate does not reaches it too. On a client
+    /// it hears only a game that client hosts.
     ///
     /// # Errors
     ///

@@ -84,20 +84,22 @@ pub(crate) extern "system" fn emit(
     if data.is_null() {
         return Status::BAD_ARGS;
     }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
     // SAFETY: the safe layer passes `size` bytes at `data` for the call.
     let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
     with(Status::MISSING, |s| {
+        if s.edits.stopped {
+            return Status::UNAVAILABLE;
+        }
+        let step = s.ticks.step;
         let notify = s.host.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
+        if notify && !s.notified.has_room(me, step) {
+            return Status::REFUSED;
+        }
         if notify {
-            let step = s.ticks.step;
-            let (counted, count) = s.notified.entry(me).or_insert((step, 0));
-            if *counted != step {
-                (*counted, *count) = (step, 0);
-            }
-            if *count >= enshwick_core::effects::MAX_NOTIFIES_PER_STEP {
-                return Status::REFUSED;
-            }
-            *count += 1;
+            s.notified.count(me, step);
         }
         s.emits.push((type_hash, bytes));
         Status::OK

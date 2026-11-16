@@ -18,9 +18,9 @@
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_base::Relock;
+use enshwick_base::peer::{MAX_NOTIFIES_PER_STEP, PerStep};
 use enshwick_core::Entity;
 use enshwick_core::abi::{ModHandle, TeleportRequest};
-use enshwick_core::effects::MAX_NOTIFIES_PER_STEP;
 use rustc_hash::FxHashMap;
 
 use crate::engine::catalogue::{ids, type_name};
@@ -112,24 +112,7 @@ struct Layout {
     /// `NotifyEvent`'s hash: every client in range plays one, so each mod
     /// raises a bounded number a step.
     notify: Option<u32>,
-    notified: Mutex<Notified>,
-}
-
-/// The notifiers each mod raised in the step it last raised one.
-#[derive(Debug, Default)]
-struct Notified(FxHashMap<ModHandle, (u64, u32)>);
-
-impl Notified {
-    /// Counts one more notifier of `me` in `step`; false past the bound.
-    fn take(&mut self, me: ModHandle, step: u64) -> bool {
-        let (counted, count) = self.0.entry(me).or_insert((step, 0));
-        if *counted != step {
-            (*counted, *count) = (step, 0);
-        }
-        let under = *count < MAX_NOTIFIES_PER_STEP;
-        *count += u32::from(under);
-        under
-    }
+    notified: Mutex<PerStep>,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -209,7 +192,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 )?,
                 teleport_count: hash_of("keen::ecs::TeleportCount")?,
                 notify: crate::engine::catalogue::component_hash(loader, ids::NOTIFY_EVENT),
-                notified: Mutex::default(),
+                notified: Mutex::new(PerStep::new(MAX_NOTIFIES_PER_STEP)),
             })
         })
         .as_ref()
@@ -272,15 +255,17 @@ pub(crate) fn emit(
     if usize::try_from(allowed.size).ok() != Some(bytes.len()) {
         return Err(EmitError::BadSize);
     }
-    if layout.notify == Some(hash)
-        && !layout
-            .notified
-            .relock()
-            .take(me, crate::engine::ticks::steps())
-    {
+    if layout.notify != Some(hash) {
+        return push(loader, hash, bytes);
+    }
+    entity_world()?;
+    let step = crate::engine::ticks::steps();
+    if !layout.notified.relock().has_room(me, step) {
         return Err(EmitError::TooMany);
     }
-    push(loader, hash, bytes)
+    push(loader, hash, bytes)?;
+    layout.notified.relock().count(me, step);
+    Ok(())
 }
 
 /// Raises the event `bytes` of type `hash` for the loader's own features,
@@ -423,21 +408,4 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     // after its header.
     unsafe { enshwick_core::raw::write_bytes_at(record, layout.record_data, &data) };
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn each_mod_raises_a_bounded_number_of_notifiers_a_step() {
-        let mut notified = Notified::default();
-        let (me, other) = (ModHandle(1), ModHandle(2));
-        for _ in 0..MAX_NOTIFIES_PER_STEP {
-            assert!(notified.take(me, 7));
-        }
-        assert!(!notified.take(me, 7), "one past the bound");
-        assert!(notified.take(other, 7), "another mod counts apart");
-        assert!(notified.take(me, 8), "a new step starts over");
-    }
 }

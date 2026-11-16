@@ -393,11 +393,100 @@ impl Rated {
     }
 }
 
+/// The most notifiers one mod raises in one server step; the loader
+/// refuses more, since every client in range plays each one.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(enshwick_base::peer::MAX_NOTIFIES_PER_STEP, 32);
+/// ```
+pub const MAX_NOTIFIES_PER_STEP: u32 = 32;
+
+/// How often each mod did one bounded thing in the server step it last did
+/// it: the one per-step bound of a mod's calls, so the loader and the fake
+/// host refuse the same call.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::abi::ModHandle;
+/// use enshwick_base::peer::PerStep;
+///
+/// let mut each = PerStep::new(1);
+/// let me = ModHandle(1);
+/// assert!(each.has_room(me, 7));
+/// each.count(me, 7);
+/// assert!(!each.has_room(me, 7));
+/// assert!(each.has_room(me, 8), "a new step starts over");
+/// ```
+#[derive(Debug)]
+pub struct PerStep {
+    max: u32,
+    /// Each mod's step and its count in that step.
+    counts: FxHashMap<crate::abi::ModHandle, (u64, u32)>,
+}
+
+impl PerStep {
+    /// No mod counted yet, each allowed `max` a step.
+    ///
+    /// # Examples
+    ///
+    /// See [`PerStep`].
+    #[must_use]
+    pub const fn new(max: u32) -> Self {
+        Self {
+            max,
+            counts: FxHashMap::with_hasher(FxBuildHasher),
+        }
+    }
+
+    /// Whether `me` may do it once more in `step`.
+    ///
+    /// # Examples
+    ///
+    /// See [`PerStep`].
+    #[must_use]
+    pub fn has_room(&self, me: crate::abi::ModHandle, step: u64) -> bool {
+        self.counts
+            .get(&me)
+            .is_none_or(|&(counted, count)| counted != step || count < self.max)
+    }
+
+    /// Counts one more of `me` in `step`; call it only for what went.
+    ///
+    /// # Examples
+    ///
+    /// See [`PerStep`].
+    pub fn count(&mut self, me: crate::abi::ModHandle, step: u64) {
+        let (counted, count) = self.counts.entry(me).or_insert((step, 0));
+        if *counted != step {
+            (*counted, *count) = (step, 0);
+        }
+        *count = count.saturating_add(1);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
     use super::*;
+
+    #[test]
+    fn each_mod_does_a_bounded_number_a_step_and_only_what_went_counts() {
+        let mut each = PerStep::new(MAX_NOTIFIES_PER_STEP);
+        let (me, other) = (crate::abi::ModHandle(1), crate::abi::ModHandle(2));
+        for _ in 0..MAX_NOTIFIES_PER_STEP {
+            assert!(each.has_room(me, 7));
+            each.count(me, 7);
+        }
+        assert!(!each.has_room(me, 7), "one past the bound");
+        assert!(each.has_room(other, 7), "another mod counts apart");
+        assert!(each.has_room(me, 8), "a new step starts over");
+        each.count(me, 8);
+        assert!(each.has_room(me, 8), "a refused try took nothing");
+    }
 
     #[test]
     fn a_bucket_lets_a_burst_through_then_refills_at_its_rate() {

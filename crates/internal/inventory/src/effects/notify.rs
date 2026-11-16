@@ -1,19 +1,12 @@
 //! Notifiers a mod raises: a sound, an effect and a camera shake every
 //! client in range plays.
 
-use super::Effects;
+use super::{Effects, TransformAt, blank, put, put_floats, put_position, put_quaternion};
 use crate::game_events::{NotifyEventType, SoundVolumeHint};
 use crate::{Entity, WorldError};
+use enshwick_base::__internal::NotifyLayout;
 
-/// The most notifiers one mod raises in one server step; the loader
-/// refuses more, since every client in range plays each one.
-///
-/// # Examples
-///
-/// ```
-/// assert_eq!(enshwick::effects::MAX_NOTIFIES_PER_STEP, 32);
-/// ```
-pub const MAX_NOTIFIES_PER_STEP: u32 = 32;
+pub use enshwick_base::peer::MAX_NOTIFIES_PER_STEP;
 
 /// Where a notifier plays, for [`Notify`].
 ///
@@ -92,21 +85,37 @@ impl Notify {
     }
 }
 
+/// `NotifyEvent` as a mod writes it: its fields, and the turn and transform
+/// the game's own systems fill in.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct NotifyWrite {
+    pub(super) layout: NotifyLayout,
+    /// The orientation inside the event's `ecs::Offset`.
+    pub(super) turn: u64,
+    pub(super) target: TransformAt,
+}
+
 #[crate::script(notifiers)]
 impl Effects {
     /// Raises the notifier `notify.notifier` at a place or on an entity, as
     /// the game's own systems do for a hit or a pickup: every client in
-    /// range, a client without mods too, plays its sound and effect. The
-    /// clients play it after the next step; a mod hears it in
+    /// range plays its sound and effect. The clients play it after the next
+    /// step; a mod hears it in
     /// [`Load::on_notify`](../struct.Load.html#method.on_notify) then.
     ///
     /// At most [`MAX_NOTIFIES_PER_STEP`] per mod in one server step.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since a client playing a notifier the server raised is not yet seen
+    /// in the running game.
+    ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] past the step's bound or when the step holds
-    /// no room for more events, [`WorldError::WrongThread`] off the game
-    /// thread and [`WorldError::Unavailable`] on a build without notifiers.
+    /// [`WorldError::Refused`] for entity 0 or a position that is not
+    /// finite, past the step's bound or when the step holds no room for
+    /// more events, [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Unavailable`] where no server world runs or on a build
+    /// without notifiers.
     ///
     /// # Examples
     ///
@@ -122,20 +131,33 @@ impl Effects {
     /// ```
     #[script]
     pub fn notify(&self, notify: &Notify) -> Result<(), WorldError> {
-        let layout = self.notify.ok_or(WorldError::Unavailable)?;
+        let event = self.notify.ok_or(WorldError::Unavailable)?;
+        let layout = event.layout;
         let (source, position) = match notify.at {
-            NotifyAt::Entity(entity) => (Some(entity), [0.0; 3]),
-            NotifyAt::Position(at) => (None, at),
+            NotifyAt::Entity(entity) if entity.is_none() => return Err(WorldError::Refused),
+            NotifyAt::Entity(entity) => (entity, None),
+            NotifyAt::Position(at) if !at.iter().all(|axis| axis.is_finite()) => {
+                return Err(WorldError::Refused);
+            }
+            NotifyAt::Position(at) => (Entity::NONE, Some(at)),
         };
-        let bytes = layout
-            .encode(
-                NotifyEventType::Normal,
-                notify.notifier,
-                source,
-                position,
-                notify.sound_volume_hint,
-            )
+        let kind = layout
+            .kind_value(NotifyEventType::Normal)
             .ok_or(WorldError::Unavailable)?;
-        self.emit_raw(layout.ty(), &bytes)
+        let hint = layout
+            .hint_value(notify.sound_volume_hint)
+            .ok_or(WorldError::Unavailable)?;
+        let mut bytes = blank(layout.ty)?;
+        put(&mut bytes, layout.guid, notify.notifier)?;
+        put(&mut bytes, layout.kind, kind)?;
+        put(&mut bytes, layout.hint, hint)?;
+        put(&mut bytes, layout.source, source)?;
+        put_quaternion(&mut bytes, event.turn, [0.0, 0.0, 0.0, 1.0])?;
+        put_quaternion(&mut bytes, event.target.orientation, [0.0, 0.0, 0.0, 1.0])?;
+        put_floats(&mut bytes, event.target.scale, [1.0; 3])?;
+        if let Some(at) = position {
+            put_position(&mut bytes, event.target.position, at)?;
+        }
+        self.emit_raw(layout.ty, &bytes)
     }
 }

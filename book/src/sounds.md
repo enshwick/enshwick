@@ -85,8 +85,13 @@ mods too. A notifier is a `keen::NotifierResource`, named by its GUID.
 settings group it; the default is any sound effect.
 
 A mod raises at most 32 notifiers in one server step
-(`MAX_NOTIFIES_PER_STEP`). The call past that bound is refused. A notifier
-that misleads players in a fight does not belong in a mod.
+(`MAX_NOTIFIES_PER_STEP`). The call past that bound is refused, and so is
+entity 0 or a position that is not finite. The call belongs on the server's
+game thread, in a handler, never at the top of `init`. A notifier that
+misleads players in a fight does not belong in a mod.
+
+`effects.notify` needs the `unstable` feature and may change in any
+release. No client has yet been seen playing a notifier the server raised.
 
 ```rust
 use enshwick::content::Guid;
@@ -107,11 +112,16 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 ```luau
-enshwick.effects.notify({
-    notifier = "<notifier GUID>",
-    at = { Position = vector.create(0, 100, 0) },
-    sound_volume_hint = "FriendlyNpc",
-})
+enshwick.on("PlayerJoined", function(joined)
+    local ok, why = pcall(enshwick.effects.notify, {
+        notifier = "<notifier GUID>",
+        at = { Entity = joined.entity },
+        sound_volume_hint = "FriendlyNpc",
+    })
+    if not ok then
+        enshwick.log.info(`no chime: {why}`)
+    end
+end)
 ```
 
 ## Choose which sound a notifier plays

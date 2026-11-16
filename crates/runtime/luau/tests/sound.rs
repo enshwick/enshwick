@@ -6,6 +6,7 @@
 mod tests {
     use enshwick::abi::Side;
     use enshwick::content::EngineFacts;
+    use enshwick::events::WorldLoaded;
     use enshwick::test::{FakeHost, facts};
 
     use crate::harness::{logged, run};
@@ -20,13 +21,23 @@ mod tests {
             enshwick.sound.on_notify(function(notify)
                 enshwick.log.info(`heard {notify.type} {notify.type_guid} {notify.sound_volume_hint} {notify.position.x} {notify.source_entity_id}`)
             end)
-            enshwick.effects.notify({
-                notifier = "07070707-0707-0707-0707-070707070707",
-                at = { Position = vector.create(2, 0, 0) },
-                sound_volume_hint = "Enemy",
-            })
-            enshwick.effects.notify({ notifier = "07070707-0707-0707-0707-070707070707", at = { Entity = 9 } })
+            enshwick.on("WorldLoaded", function()
+                enshwick.effects.notify({
+                    notifier = "07070707-0707-0707-0707-070707070707",
+                    at = { Position = vector.create(2, 0, 0) },
+                    sound_volume_hint = "Enemy",
+                })
+                enshwick.effects.notify({ notifier = "07070707-0707-0707-0707-070707070707", at = { Entity = 9 } })
+                local refused = pcall(enshwick.effects.notify, { notifier = "07070707-0707-0707-0707-070707070707", at = { Entity = 0 } })
+                enshwick.log.info(`entity 0 raised: {refused}`)
+            end)
             "#,
+        );
+        assert!(loader.raise::<WorldLoaded>(&()) > 0, "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "entity 0 raised: false"),
+            "{:?}",
+            loader.logs()
         );
         let emits = loader.emits();
         assert_eq!(emits.len(), 2, "{:?}", loader.logs());

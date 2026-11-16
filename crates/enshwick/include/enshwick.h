@@ -5956,9 +5956,9 @@ typedef struct EnshwickHostApi {
   // `type_hash`, its whole layout; the loader stamps it with the game
   // time and the systems of the next step see it. Only types the loader
   // allows, which the server's own systems raise: `EnshwickStatus_REFUSED`
-  // for any other or when the step's stream is full,
-  // `EnshwickStatus_BAD_ARGS` for a size that is not the type's. On the
-  // server's game thread only.
+  // for any other, when the step's stream is full or past a mod's 32
+  // notify events in one step, `EnshwickStatus_BAD_ARGS` for a size that is
+  // not the type's. On the server's game thread only.
   EnshwickStatus (*emit)(EnshwickModHandle me,
                          uint32_t type_hash,
                          const uint8_t *data,

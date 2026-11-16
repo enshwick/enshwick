@@ -209,10 +209,7 @@ impl LoadMethods for crate::BaseLoad {
         F: Fn(&NotifyEvent) + Send + Sync + 'static,
     {
         self.on::<NotifyEvent>(move |notify| {
-            if matches!(
-                notify.r#type,
-                NotifyEventType::Normal | NotifyEventType::Sfx
-            ) {
+            if notify.r#type != NotifyEventType::Vfx {
                 handler(notify);
             }
         })

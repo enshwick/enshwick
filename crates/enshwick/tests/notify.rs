@@ -87,6 +87,34 @@ mod tests {
         assert_eq!(u32::from_le_bytes(word(on_entity, source)), 9);
         assert_eq!(i64::from_le_bytes(word(on_entity, position)), 0);
 
+        assert_eq!(
+            effects.notify(&Notify::new(BELL, NotifyAt::Entity(Entity::NONE))),
+            Err(WorldError::Refused),
+            "entity 0 names none"
+        );
+        assert_eq!(
+            effects.notify(&Notify::new(BELL, NotifyAt::Position([f64::NAN, 0.0, 0.0]))),
+            Err(WorldError::Refused),
+            "a position that is not finite"
+        );
+        let off_thread = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    (0..=MAX_NOTIFIES_PER_STEP)
+                        .map(|_| effects.notify(&here))
+                        .collect::<Vec<_>>()
+                })
+                .join()
+                .unwrap()
+        });
+        assert!(
+            off_thread
+                .iter()
+                .all(|r| *r == Err(WorldError::WrongThread)),
+            "{off_thread:?}"
+        );
+        assert_eq!(loader.emits().len(), 2, "nothing refused was raised");
+
         for _ in 2..MAX_NOTIFIES_PER_STEP {
             effects.notify(&here).unwrap();
         }
@@ -102,11 +130,16 @@ mod tests {
         vfx[kind] = 2;
         let mut sfx = on_entity.clone();
         sfx[kind] = 1;
-        for bytes in [placed, &vfx, &sfx] {
+        let mut unnamed = placed.clone();
+        unnamed[kind] = 9;
+        for bytes in [placed, &vfx, &sfx, &unnamed] {
             let _heard = loader.raise_game_event(notify_event, bytes);
         }
+        loader.stop_world();
+        assert_eq!(effects.notify(&here), Err(WorldError::Unavailable));
         let heard = HEARD.lock().unwrap();
-        assert_eq!(heard.len(), 2, "the visual effect is not handed on");
+        assert_eq!(heard.len(), 3, "the visual effect is not handed on");
+        assert_eq!(heard[2].r#type, NotifyEventType::Other(9));
         assert_eq!(heard[0].r#type, NotifyEventType::Normal);
         assert_eq!(heard[0].type_guid, BELL);
         assert_eq!(heard[0].position, [1.0, 2.0, -3.0]);
@@ -115,5 +148,33 @@ mod tests {
         assert_eq!(heard[1].r#type, NotifyEventType::Sfx);
         assert_eq!(heard[1].source_entity_id, Some(Entity(9)));
         assert_eq!(heard[1].sound_volume_hint, SoundVolumeHint::GenericSfx);
+    }
+
+    #[test]
+    fn a_build_without_what_raising_writes_still_hears_notifiers() {
+        let host = FakeHost::new()
+            .world()
+            .effect_events()
+            .without_fact(facts::OFFSET_ORIENTATION_OFFSET);
+        let notify_event = host.hash(facts::NOTIFY_EVENT.id()).unwrap();
+        let guid = host.offset(facts::NOTIFY_EVENT_TYPE_GUID.id()).unwrap();
+        let loader = host.install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Chimes)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let effects = EFFECTS.get().unwrap();
+        assert_eq!(
+            effects.notify(&Notify::new(BELL, NotifyAt::Entity(Entity(9)))),
+            Err(WorldError::Unavailable),
+            "raising needs the turn"
+        );
+
+        let mut bytes = vec![0u8; 224];
+        bytes[guid..guid + 16].copy_from_slice(&BELL.0);
+        let _heard = loader.raise_game_event(notify_event, &bytes);
+        let heard = HEARD.lock().unwrap();
+        assert_eq!(heard.len(), 1, "hearing needs no turn");
+        assert_eq!(heard[0].type_guid, BELL);
     }
 }
