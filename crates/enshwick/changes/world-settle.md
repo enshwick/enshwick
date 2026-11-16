@@ -1,6 +1,6 @@
 ### Added
 
-- ABI 12.6: `HostApi::transaction_settled` and `abi::TransactionSettledFn`.
+- ABI 12.7: `HostApi::transaction_settled` and `abi::TransactionSettledFn`.
   The loader calls a mod back once, after the step that ends a
   transaction's run or once a bound passed.
 

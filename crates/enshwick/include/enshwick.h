@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 6
+#define ENSHWICK_ABI_MINOR 7
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -6601,7 +6601,7 @@ typedef struct EnshwickHostApi {
   // `EnshwickStatus_MISSING` for an id this mod did not get or one the loader
   // forgot; `EnshwickStatus_UNAVAILABLE` once the transactions are off, which
   // runs every callback kept at once. Nothing is kept on an error. Any
-  // thread. ABI 12.6.
+  // thread. ABI 12.7.
   EnshwickStatus (*transaction_settled)(EnshwickModHandle me,
                                         uint64_t id,
                                         uint64_t within_ns,

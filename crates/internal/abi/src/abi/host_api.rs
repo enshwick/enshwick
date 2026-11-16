@@ -2237,7 +2237,7 @@ pub struct HostApi {
     /// [`Status::MISSING`] for an id this mod did not get or one the loader
     /// forgot; [`Status::UNAVAILABLE`] once the transactions are off, which
     /// runs every callback kept at once. Nothing is kept on an error. Any
-    /// thread. ABI 12.6.
+    /// thread. ABI 12.7.
     pub transaction_settled: extern "system" fn(
         me: ModHandle,
         id: u64,
