@@ -13,6 +13,7 @@ use enshwick_core::RecipeId;
 use enshwick_core::abi::Side;
 use enshwick_gamedata::catalogue;
 
+use crate::actions::client_snapshot::TabRead;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
@@ -226,15 +227,14 @@ impl Tab {
         })
     }
 
-    /// Sets the tab the in-game menu draws by; the menu shows it from its
-    /// next frame (index read every frame after its first, client
-    /// 26430625).
+    /// Sets the tab the in-game menu draws, which [`Tab::shown`] reads back.
     ///
-    /// The menu keeps no tab of its own: its tab keys and the links that
-    /// jump to the map or the journal switch the tab by this write alone,
-    /// plus a sound, and the menu picks the tab it draws from it each frame,
-    /// so the index read back is what the menu draws (client 26430625, read
-    /// in the decompiler).
+    /// The menu keeps no tab of its own: its tab keys and its map and
+    /// journal links write this index alone. Every frame after its first it
+    /// draws by the index's low byte; on its first frame it takes the tab
+    /// from the HUD screen, over an earlier write. Unlike the game's own
+    /// switch, this plays no sound and posts no "Open/Close Character Screen
+    /// Tab" for Character (client 26430625, read in the decompiler).
     ///
     /// # Safety
     ///
@@ -251,20 +251,22 @@ impl Tab {
         self.menu_screens[usize::from(screen / 64)] & 1 << (screen % 64) != 0
     }
 
-    /// The tab the in-game menu shows on screen byte `screen`; `None` while
-    /// no menu screen is open, whatever index the state still holds.
+    /// The tab the in-game menu shows on screen byte `screen`, by the low
+    /// byte of its index as the menu draws it; [`TabRead::NoMenu`] while no
+    /// menu screen is open, whatever index the state still holds.
     ///
     /// # Safety
     ///
     /// - `state` is the interface state the in-game menu draws from, valid
-    ///   for reads of a `u64` at the routed `ui.menu_tab`, read in the
+    ///   for a read of a byte at the routed `ui.menu_tab`, read in the
     ///   interface frame on its thread.
-    pub(crate) unsafe fn shown(&self, state: *const u8, screen: u8) -> Option<MenuTab> {
+    pub(crate) unsafe fn shown(&self, state: *const u8, screen: u8) -> TabRead {
         if !self.is_menu(screen) {
-            return None;
+            return TabRead::NoMenu;
         }
         // SAFETY: the caller's contract.
-        MenuTab::from_index(unsafe { enshwick_core::raw::read_at(state, self.menu_tab) })
+        let index: u8 = unsafe { enshwick_core::raw::read_at(state, self.menu_tab) };
+        MenuTab::from_index(u64::from(index)).map_or(TabRead::Other, TabRead::Shown)
     }
 }
 
@@ -560,7 +562,8 @@ impl MenuTab {
 
     /// The menu's index of the tab.
     pub(crate) fn index(self) -> u64 {
-        Self::ALL.iter().position(|tab| *tab == self).unwrap_or(0) as u64
+        // Declared in the menu's index order, as `ALL` lists them.
+        self as u64
     }
 
     /// The `HudScreenType` member the tab shows, which `link` checks the
@@ -663,18 +666,43 @@ mod tests {
     }
 
     #[test]
-    fn the_menu_tab_reads_by_index_and_an_unknown_index_is_none() {
+    fn the_menu_tab_reads_by_index_and_an_unknown_index_is_another_tab() {
         let mut state = vec![0u8; 0x3_1e90];
         let tab = tab_26430625();
         for (index, shown) in [
-            (0u64, Some(MenuTab::Social)),
-            (4, Some(MenuTab::Backpack)),
-            (6, Some(MenuTab::SkillTree)),
-            (7, None),
+            (0u64, TabRead::Shown(MenuTab::Social)),
+            (4, TabRead::Shown(MenuTab::Backpack)),
+            (6, TabRead::Shown(MenuTab::SkillTree)),
+            (7, TabRead::Other),
         ] {
             put(&mut state, 0x3_1e88, index);
             // SAFETY: the state holds a u64 at the tab index.
             assert_eq!(unsafe { tab.shown(state.as_ptr(), 4) }, shown, "{index}");
+        }
+    }
+
+    #[test]
+    fn the_menu_tab_reads_only_the_low_byte_the_menu_draws_by() {
+        let mut state = vec![0u8; 0x3_1e90];
+        put(&mut state, 0x3_1e88, 0xdead_beef_0000_0005_u64);
+        let tab = tab_26430625();
+        // SAFETY: the state holds a u64 at the tab index.
+        let shown = unsafe { tab.shown(state.as_ptr(), 4) };
+        assert_eq!(shown, TabRead::Shown(MenuTab::Character));
+    }
+
+    #[test]
+    fn a_chosen_tab_reads_back_as_shown_and_clears_the_whole_index() {
+        let mut state = vec![0xffu8; 0x3_1e90];
+        let tab = tab_26430625();
+        for chosen in MenuTab::ALL {
+            // SAFETY: the state holds a u64 at the tab index, not shared.
+            unsafe { tab.choose(state.as_mut_ptr(), chosen) };
+            // SAFETY: the same state, read after the write.
+            let shown = unsafe { tab.shown(state.as_ptr(), 4) };
+            assert_eq!(shown, TabRead::Shown(chosen));
+            let index: u64 = bytemuck::pod_read_unaligned(&state[0x3_1e88..0x3_1e90]);
+            assert_eq!(index, chosen.index(), "{chosen:?}");
         }
     }
 
@@ -685,10 +713,18 @@ mod tests {
         let tab = tab_26430625();
         // SAFETY: the state holds a u64 at the tab index.
         let shown = |screen| unsafe { tab.shown(state.as_ptr(), screen) };
-        assert_eq!(shown(1), None, "the world, after Esc closed the menu");
-        assert_eq!(shown(0x15), None, "a storage chest");
-        assert_eq!(shown(8), Some(MenuTab::Backpack), "V, then E");
-        assert_eq!(shown(0x2c), Some(MenuTab::Backpack), "the social screen");
+        assert_eq!(
+            shown(1),
+            TabRead::NoMenu,
+            "the world, after Esc closed the menu"
+        );
+        assert_eq!(shown(0x15), TabRead::NoMenu, "a storage chest");
+        assert_eq!(shown(8), TabRead::Shown(MenuTab::Backpack), "V, then E");
+        assert_eq!(
+            shown(0x2c),
+            TabRead::Shown(MenuTab::Backpack),
+            "the social screen"
+        );
     }
 
     #[test]

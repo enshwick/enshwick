@@ -63,6 +63,8 @@ pub(crate) enum TabRead {
     NoMenu,
     /// The menu shows this tab.
     Shown(MenuTab),
+    /// A menu screen is open on a tab the build adds; mods read no tab.
+    Other,
 }
 
 /// What the frame keeps, written only on the interface thread.
@@ -93,7 +95,7 @@ static FUSE: Fuse = Fuse::new(FEATURE);
 /// the tab code ([`NO_TAB`] for none) and the tab-read bit, then the host.
 fn pack(read: &FrameRead) -> u64 {
     let (tab, tab_read) = match read.tab {
-        TabRead::NoMenu => (NO_TAB, 1),
+        TabRead::NoMenu | TabRead::Other => (NO_TAB, 1),
         TabRead::Shown(tab) => (tab.index(), 1),
         TabRead::Unread => (NO_TAB, 0),
     };
