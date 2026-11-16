@@ -9,6 +9,49 @@ use crate::content::Guid;
 
 use super::{World, WorldError};
 
+/// Declared local placement corners in metres, before a prop turns.
+/// This is item metadata, not a complete physical or permission footprint.
+///
+/// # Examples
+///
+/// ```
+/// let bounds = enshwick::world::PropPlacementBox { min: [-1.0, 0.0, -1.0], max: [1.0, 2.0, 1.0] };
+/// assert_eq!(bounds.max[1], 2.0);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+pub struct PropPlacementBox {
+    /// The declared minimum corner.
+    pub min: [f32; 3],
+    /// The declared maximum corner.
+    pub max: [f32; 3],
+}
+
+/// An item's prop template and optional declared local placement box.
+///
+/// These are copied metadata, not a complete physical footprint or proof of
+/// permission, collision, persistence, label ownership or safe recovery.
+///
+/// # Examples
+///
+/// ```
+/// fn inspect(world: enshwick::world::World, item: enshwick::ItemId) -> Result<(), enshwick::WorldError> {
+///     let info = world.prop_placement_info(item)?;
+///     assert_eq!(info.item, item);
+///     Ok(())
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+pub struct PropPlacementInfo {
+    /// The queried item.
+    pub item: ItemId,
+    /// The template it places.
+    pub template: Guid,
+    /// The resolver's local corners in metres, before rotation. None means
+    /// absent, invalid or unavailable reads, never a known empty footprint.
+    /// The loader's fallback permission box is not returned here.
+    pub local_box: Option<PropPlacementBox>,
+}
+
 /// Where a thing stands and which way it faces: the game's `WorldTransform`
 /// without its scale, which is 1 for every prop the game places.
 ///
@@ -105,6 +148,44 @@ pub(crate) fn span(a: [f64; 3], b: [f64; 3]) -> Option<([f64; 3], [f64; 3])> {
 
 #[crate::script(props)]
 impl World {
+    /// Copies the prop template and optional local placement box of `item`,
+    /// without spawning an entity or committing a transaction. Any thread;
+    /// the loader pins the server's item registry for the read.
+    ///
+    /// # Errors
+    ///
+    /// `Refused` for an unknown item or one that places nothing; `NotAProp` for
+    /// creatures and flame altars; `Unavailable` without the running server,
+    /// registry or required reads. Missing box reads return `local_box=None`,
+    /// not a fallback footprint or a placement permission.
+    ///
+    /// # Examples
+    ///
+    /// See [`PropPlacementInfo`].
+    #[script]
+    pub fn prop_placement_info(self, item: ItemId) -> Result<PropPlacementInfo, WorldError> {
+        let mut info = crate::abi::PropPlacementInfo {
+            header: crate::abi::Header::of::<crate::abi::PropPlacementInfo>(),
+            template: Guid::NIL,
+            min: [0.0; 3],
+            max: [0.0; 3],
+            flags: 0,
+        };
+        let status =
+            (self.0.host.api().prop_placement_info)(self.0.host.handle(), item, &raw mut info);
+        WorldError::from_status(status)?;
+        Ok(PropPlacementInfo {
+            item,
+            template: info.template,
+            local_box: (info.flags & crate::abi::PropPlacementInfo::HAS_LOCAL_BOX != 0).then_some(
+                PropPlacementBox {
+                    min: info.min,
+                    max: info.max,
+                },
+            ),
+        })
+    }
+
     /// The props whose position lies in the box between corners `a` and
     /// `b`, in metres, edges included, by entity: what a player placed
     /// there from an item, told apart by the template the item places,

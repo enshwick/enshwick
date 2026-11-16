@@ -13,6 +13,37 @@ mod tests {
     use crate::harness::{logged, run};
 
     #[test]
+    fn a_script_reads_placement_metadata_without_placing_a_prop() {
+        let loader = run(
+            FakeHost::new()
+                .world()
+                .item(ItemId::new(30), 1, 0)
+                .item_places(ItemId::new(30), Guid([0x3a; 16]))
+                .placement_box(ItemId::new(30), [-2.0, 0.0, -0.5], [3.0, 4.0, 0.5])
+                .item(ItemId::new(31), 1, 0)
+                .item_places(ItemId::new(31), Guid([0x3b; 16])),
+            r"
+            local world = enshwick.world
+            local info = world.prop_placement_info(30)
+            assert(info.item == 30)
+            assert(info.template == '3a3a3a3a-3a3a-3a3a-3a3a-3a3a3a3a3a3a')
+            assert(info.local_box.min == vector.create(-2, 0, -0.5))
+            assert(info.local_box.max == vector.create(3, 4, 0.5))
+            assert(world.prop_placement_info(31).local_box == nil)
+            assert(not pcall(world.prop_placement_info, 99))
+            enshwick.log.info('placement metadata copied')
+            ",
+        );
+        assert!(
+            logged(&loader, "placement metadata copied"),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(loader.props().is_empty());
+        assert!(loader.transactions().is_empty());
+    }
+
+    #[test]
     fn a_script_gets_its_placed_prop_once_it_stands() {
         let loader = run(
             FakeHost::new()

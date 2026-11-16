@@ -36,6 +36,14 @@ fn account(key: enshwick_core::PlayerKey) -> Result<u64, Status> {
 }
 
 entries! {
+    fn prop_placement_info(
+        loader as Caller,
+        item: enshwick_core::ItemId,
+        out as HeadedOut<api_frame::PropPlacementInfo>,
+    ) -> Status {
+        out.put(crate::world::transactions::prop_placement_info(loader, item.get())?)
+    }
+
     fn language_of(_me as Mod, key: enshwick_core::PlayerKey, out as Out<u32>) -> Status {
         out.put(crate::base::net::language_number(key.get()))
     }

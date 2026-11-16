@@ -52,7 +52,7 @@ pub use prop_state::{HeldState, PropState};
 #[cfg(feature = "unstable")]
 pub(crate) use props::span;
 #[cfg(feature = "unstable")]
-pub use props::{CapturedProp, Prop, WorldTransform};
+pub use props::{CapturedProp, Prop, PropPlacementBox, PropPlacementInfo, WorldTransform};
 pub use rename::Rename;
 pub use saves::{SaveInfo, WorldGuid};
 pub use stats::{Meter, Progress, Skill, Vitals};

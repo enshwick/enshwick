@@ -33,7 +33,7 @@ use crate::engine::pinned;
 use enshwick_base::Relock;
 pub(crate) use error::TransactionError;
 #[cfg(windows)]
-pub(crate) use game::{resolve, resolve_prop, saving};
+pub(crate) use game::{prop_placement_info, resolve, resolve_prop, saving};
 #[cfg(any(windows, test))]
 pub(crate) use ledger::Change;
 pub(crate) use ledger::Standing;

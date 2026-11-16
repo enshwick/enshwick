@@ -329,3 +329,42 @@ impl TransactionInfo {
     /// again.
     pub const UNDO_REFUSED: u32 = 6;
 }
+
+/// An item's prop template and optional local placement box, copied by
+/// [`HostApi::prop_placement_info`](crate::abi::HostApi::prop_placement_info).
+/// No entity is placed and no permission, collision or persistence is checked.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, PropPlacementInfo};
+/// let info = PropPlacementInfo {
+///     header: Header::of::<PropPlacementInfo>(),
+///     template: enshwick::content::Guid::NIL,
+///     min: [0.0; 3], max: [0.0; 3], flags: 0,
+/// };
+/// assert_eq!(info.flags & PropPlacementInfo::HAS_LOCAL_BOX, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct PropPlacementInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The template the item places, never `NIL` on success.
+    pub template: crate::content::Guid,
+    /// The declared local minimum corner in metres; read only with `HAS_LOCAL_BOX`.
+    pub min: [f32; 3],
+    /// The declared local maximum corner in metres; read only with `HAS_LOCAL_BOX`.
+    pub max: [f32; 3],
+    /// `HAS_LOCAL_BOX` when the existing resolver supplied finite local corners.
+    pub flags: u32,
+}
+
+impl_headed!(PropPlacementInfo);
+
+impl PropPlacementInfo {
+    /// The resolver supplied local corners, without normalization or a complete
+    /// geometry check. Without it, bounds are unknown,
+    /// not an empty box or the loader's fallback permission box.
+    pub const HAS_LOCAL_BOX: u32 = 1;
+}

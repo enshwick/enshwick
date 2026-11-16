@@ -2170,6 +2170,24 @@ export type PropId = {
 	crafting_prop: string?,
 }
 
+--- Declared local placement corners in metres, before a prop turns. This is item metadata, not a complete physical or permission footprint.
+export type PropPlacementBox = {
+	--- The declared minimum corner.
+	min: vector,
+	--- The declared maximum corner.
+	max: vector,
+}
+
+--- An item's prop template and optional declared local placement box. These are copied metadata, not a complete physical footprint or proof of permission, collision, persistence, label ownership or safe recovery.
+export type PropPlacementInfo = {
+	--- The queried item.
+	item: number,
+	--- The template it places.
+	template: string,
+	--- The resolver's local corners in metres, before rotation. None means absent, invalid or unavailable reads, never a known empty footprint. The loader's fallback permission box is not returned here.
+	local_box: PropPlacementBox?,
+}
+
 --- Who asks for a survivor's entity, with what it works on. The name is enshwick's, not the game's.
 export type Purpose = { Uniqueness: PurposeUniqueness } | { Spawn: PurposeSpawn } | { BedOwner: PurposeBedOwner } | { AssignBed: PurposeAssignBed } | { PreviousOccupant: PurposePreviousOccupant } | { Roaming: PurposeRoaming } | "BedBinding" | "Cursor"
 
@@ -3856,6 +3874,8 @@ declare enshwick: {
 		containers: (kinds: {string}) -> {Placed},
 		--- Asks the server to destroy `entity` after the systems of the next step, as the game removes things itself: no loot and no death.
 		destroy: (entity: number) -> (),
+		--- Copies the prop template and optional local placement box of `item`, without spawning an entity or committing a transaction. Any thread; the loader pins the server's item registry for the read.
+		prop_placement_info: (item: number) -> PropPlacementInfo,
 		--- The props whose position lies in the box between corners `a` and `b`, in metres, edges included, by entity: what a player placed there from an item, told apart by the template the item places, not the things a world comes with. Creatures placed from items (animals, pets, survivors) and flame altars are no props and are left out; the entity calls reach them. The engine walks every entity with a `UsedItem`, so call it now and then, not every step.
 		props_in: (a: vector, b: vector) -> {Prop},
 		--- Starts a `Transaction` of the server's world.

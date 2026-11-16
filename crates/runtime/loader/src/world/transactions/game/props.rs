@@ -98,6 +98,28 @@ fn item_prop(
     Ok((template, local_box, logic))
 }
 
+/// Copies the existing item resolver's prop metadata without constructing or
+/// committing a placement. The server pin keeps the item registry alive.
+pub(crate) fn placement_info(
+    loader: &Loader,
+    item: u32,
+) -> Result<enshwick_core::abi::PropPlacementInfo, TransactionError> {
+    use enshwick_core::abi::PropPlacementInfo;
+    let access = crate::engine::world::access(&"prop placement metadata")
+        .ok_or(TransactionError::Unavailable)?;
+    let (template, local_box, _) = item_prop(loader, &access, item)?;
+    let (min, max, flags) = local_box.map_or(([0.0; 3], [0.0; 3], 0), |(min, max)| {
+        (min, max, PropPlacementInfo::HAS_LOCAL_BOX)
+    });
+    Ok(PropPlacementInfo {
+        header: Header::of::<PropPlacementInfo>(),
+        template: enshwick_core::content::Guid(template),
+        min,
+        max,
+        flags,
+    })
+}
+
 /// The prop `request` asks to place, checked: its item's template, box
 /// and logic flag. [`TransactionError::BadPlace`] for a position or orientation out
 /// of range, [`TransactionError::BadItem`] for an item that places nothing, [`TransactionError::NotAProp`] for one

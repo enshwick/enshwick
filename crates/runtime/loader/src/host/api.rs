@@ -235,4 +235,5 @@ pub(crate) static API: HostApi = HostApi {
     interaction_prompt,
     ui_item_tooltip,
     change_permissions,
+    prop_placement_info,
 };

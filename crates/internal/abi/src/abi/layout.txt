@@ -1,4 +1,4 @@
-abi 12.5
+abi 12.6
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -381,7 +381,7 @@ HookSpec size 40 align 8 born 40
     next at 24 size 8 type *const Atomic<usize>
     priority at 32 size 4 type i32
     flags at 36 size 4 type HookFlags
-HostApi size 1712 align 8
+HostApi size 1720 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(ModHandle, *mut BuildInfo) -> Status
@@ -595,6 +595,7 @@ HostApi size 1712 align 8
     interaction_prompt at 1688 size 8 type extern "system" fn(ModHandle, *const InteractionPrompt) -> Status
     ui_item_tooltip at 1696 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const UiTooltipItem, *mut c_void)>, *mut c_void) -> Status
     change_permissions at 1704 size 8 type extern "system" fn(ModHandle, PlayerKey, u32, u32) -> Status
+    prop_placement_info at 1712 size 8 type extern "system" fn(ModHandle, ItemId, *mut PropPlacementInfo) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -859,6 +860,12 @@ PropPlace size 56 align 8 born 56
     reserved at 12 size 4 type u32
     position at 16 size 24 type [f64; 3]
     orientation at 40 size 16 type [f32; 4]
+PropPlacementInfo size 52 align 4 born 52
+    header at 0 size 8 type Header
+    template at 8 size 16 type Guid
+    min at 24 size 12 type [f32; 3]
+    max at 36 size 12 type [f32; 3]
+    flags at 48 size 4 type u32
 PropRemove size 16 align 4 born 16
     header at 0 size 8 type Header
     entity at 8 size 4 type Entity
@@ -1456,6 +1463,7 @@ const ProgressWriteData::LEVEL_REFUSED = 3
 const ProgressWriteData::NO_LEVEL_STEP = 1
 const ProgressWriteData::UNCONFIRMED = 5
 const ProgressWriteData::UNREADABLE = 2
+const PropPlacementInfo::HAS_LOCAL_BOX = 1
 const PropRemove::DISCARD_STATE = 1
 const RateId::COMFORT = 6
 const RateId::EXPERIENCE_COMBAT = 1

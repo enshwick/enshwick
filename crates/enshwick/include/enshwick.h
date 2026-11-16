@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 5
+#define ENSHWICK_ABI_MINOR 6
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -3229,6 +3229,26 @@ typedef struct EnshwickInteractionPrompt {
 // The press runs the game's empty interaction instead of the object's
 // own action, such as opening a chest, so only the mod's action runs.
 #define EnshwickInteractionPrompt_REPLACE_ACTION 1
+
+// An item's prop template and optional local placement box, copied by
+// `EnshwickHostApi.prop_placement_info`.
+// No entity is placed and no permission, collision or persistence is checked.
+typedef struct EnshwickPropPlacementInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The template the item places, never `NIL` on success.
+  struct EnshwickGuid template_;
+  // The declared local minimum corner in metres; read only with `HAS_LOCAL_BOX`.
+  float min[3];
+  // The declared local maximum corner in metres; read only with `HAS_LOCAL_BOX`.
+  float max[3];
+  // `HAS_LOCAL_BOX` when the existing resolver supplied finite local corners.
+  uint32_t flags;
+} EnshwickPropPlacementInfo;
+// The resolver supplied local corners, without normalization or a complete
+// geometry check. Without it, bounds are unknown,
+// not an empty box or the loader's fallback permission box.
+#define EnshwickPropPlacementInfo_HAS_LOCAL_BOX 1
 
 
 // A player about to interact with an entity, as
@@ -6542,6 +6562,13 @@ typedef struct EnshwickHostApi {
                                        EnshwickPlayerKey account,
                                        uint32_t deny,
                                        uint32_t grant);
+  // Copies the prop template and optional local placement box for `item`
+  // into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
+  // `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
+  // server, registry or required reads. Any thread, read-only. ABI 12.6.
+  EnshwickStatus (*prop_placement_info)(EnshwickModHandle me,
+                                        EnshwickItemId item,
+                                        struct EnshwickPropPlacementInfo *out);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -6979,7 +7006,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1712, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1720, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7194,6 +7221,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 1680, 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_prompt) == 1688, "offset of HostApi.interaction_prompt");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_item_tooltip) == 1696, "offset of HostApi.ui_item_tooltip");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_permissions) == 1704, "offset of HostApi.change_permissions");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1712, "offset of HostApi.prop_placement_info");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -7492,6 +7520,13 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlace, item) == 8, "offset of PropPl
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlace, reserved) == 12, "offset of PropPlace.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlace, position) == 16, "offset of PropPlace.position");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlace, orientation) == 40, "offset of PropPlace.orientation");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickPropPlacementInfo) == 52, "size of PropPlacementInfo");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickPropPlacementInfo) == 4, "alignment of PropPlacementInfo");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlacementInfo, header) == 0, "offset of PropPlacementInfo.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlacementInfo, template_) == 8, "offset of PropPlacementInfo.template");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlacementInfo, min) == 24, "offset of PropPlacementInfo.min");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlacementInfo, max) == 36, "offset of PropPlacementInfo.max");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropPlacementInfo, flags) == 48, "offset of PropPlacementInfo.flags");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickPropRemove) == 16, "size of PropRemove");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickPropRemove) == 4, "alignment of PropRemove");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickPropRemove, header) == 0, "offset of PropRemove.header");

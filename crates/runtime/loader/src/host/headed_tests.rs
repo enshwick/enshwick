@@ -88,6 +88,7 @@ macro_rules! headed {
             PlayerDeathData,
             PlayerInfo,
             PropPlace,
+            PropPlacementInfo,
             PropRemove,
             PointHandle,
             PointLink,

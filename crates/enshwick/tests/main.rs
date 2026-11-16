@@ -290,6 +290,8 @@ mod windows;
 #[cfg(feature = "unstable")]
 mod world_blocks;
 #[cfg(feature = "unstable")]
+mod world_prop_placement;
+#[cfg(feature = "unstable")]
 mod world_props;
 #[cfg(feature = "unstable")]
 mod world_queries;

@@ -16,13 +16,13 @@ use crate::abi::{
     KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff, LocalInputInfo,
     LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
     ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn, ResourceKey,
-    ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
-    StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str,
-    SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry,
-    UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel,
-    WeatherFront, WeatherSample,
+    PointSpec, PointVerdict, PropPlacementInfo, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn,
+    ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
+    SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status,
+    StatusFn, Str, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo,
+    TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn,
+    UiWidget, Voxel, WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2222,6 +2222,12 @@ pub struct HostApi {
     /// link. ABI 12.5.
     pub change_permissions:
         extern "system" fn(me: ModHandle, account: PlayerKey, deny: u32, grant: u32) -> Status,
+    /// Copies the prop template and optional local placement box for `item`
+    /// into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
+    /// `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
+    /// server, registry or required reads. Any thread, read-only. ABI 12.6.
+    pub prop_placement_info:
+        extern "system" fn(me: ModHandle, item: ItemId, out: *mut PropPlacementInfo) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2443,5 +2449,6 @@ const _: () = {
     assert!(offset_of!(HostApi, interaction_prompt) == 24 + 208 * 8);
     assert!(offset_of!(HostApi, ui_item_tooltip) == 24 + 209 * 8);
     assert!(offset_of!(HostApi, change_permissions) == 24 + 210 * 8);
-    assert!(size_of::<HostApi>() == 24 + 211 * 8);
+    assert!(offset_of!(HostApi, prop_placement_info) == 24 + 211 * 8);
+    assert!(size_of::<HostApi>() == 24 + 212 * 8);
 };
