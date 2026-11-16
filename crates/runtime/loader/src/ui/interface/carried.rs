@@ -233,6 +233,12 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
 ///
 /// As [`draw`]; `drawn` stays in place until it returns.
 unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn) -> Click {
+    // Back (Escape, B) closes the window, bound to its panel from the last
+    // frame, so the press does not also open the pause menu.
+    let node = engine.node_id(&drawn.window);
+    // SAFETY: in a frame of the interface update on its thread, by this
+    // function's `# Safety`.
+    let back = node != 0 && unsafe { engine.back_pressed(node) };
     let (mod_id, id) = &drawn.key;
     let name = copy(&[b"enshwick/carried/", mod_id.as_bytes(), b"/", id.as_bytes()]);
     let title = copy(&[view.title.as_bytes()]);
@@ -260,7 +266,7 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
     // they open.
     unsafe { engine.scroll_end(&mut drawn.scroll) };
     paint.set_scrolled(false);
-    if paint.button(texts::text("actions.close").as_bytes(), true) {
+    if paint.button(texts::text("actions.close").as_bytes(), true) || back {
         click = Click::Close;
     }
     // SAFETY: `window_begin` started `drawn.window` in this frame, on this

@@ -18,6 +18,7 @@ use crate::engine::registry::{JoinFeatureError, Registry};
 
 mod arena;
 pub(crate) mod carried;
+mod cursor;
 pub(crate) mod demo;
 mod dialog;
 mod engine;
@@ -191,6 +192,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::SCROLL_NAV.id(),
     pinned::ui::SCROLL_SET_FOCUS.id(),
     pinned::ui::SCROLL_STATE_SIZE.id(),
+    pinned::ui::SCREEN_SHOWS_CURSOR.id(),
     pinned::ui::SLIDER.id(),
     pinned::ui::SLIDER_BOUNDED.id(),
     pinned::ui::SLIDER_DISCRETE.id(),
@@ -202,6 +204,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::SLIDER_READ_ONLY.id(),
     pinned::ui::SLIDER_EXTENT.id(),
     pinned::ui::SLIDER_STEPS.id(),
+    pinned::ui::SLIDER_TEXT.id(),
     pinned::ui::SLIDER_STOP_CAPACITY.id(),
     pinned::ui::SLIDER_STOP_COUNT.id(),
     pinned::ui::SLIDER_STOPS.id(),
@@ -220,6 +223,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::TEXT_FIELD_STATE.id(),
     pinned::ui::TEXT_FIELD_STATE_KEY.id(),
     pinned::ui::TEXT_FIELD_STATE_SIZE.id(),
+    pinned::ui::TEXT_FIELD_START.id(),
     pinned::ui::TEXT_FIELD_TEXT.id(),
     pinned::ui::TOGGLE.id(),
     pinned::ui::TOGGLE_COUNT.id(),
@@ -332,6 +336,12 @@ thread_local! {
 fn window_drawn() {
     let [_, last] = WINDOWS.get();
     WINDOWS.set([true, last]);
+}
+
+/// Whether a loader or mod window or dialog over the world has the cursor,
+/// as of the last frame; from any thread.
+pub(crate) fn cursor_wanted() -> bool {
+    cursor::wanted()
 }
 
 /// Whether the loader or a mod showed a window or a dialog in the last
@@ -482,6 +492,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
         menu_line::link(loader, engine);
+        cursor::link(loader);
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
         link_hud(loader, &HUD_FUSE);
@@ -594,6 +605,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
         });
     }
     if context == 0 || state.is_null() {
+        cursor::note(false);
         return;
     }
     let shown = READS_FUSE
@@ -602,6 +614,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     dialog::note_world(shown != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
+    cursor::note(now || dialog::showing());
     crate::actions::controls::frame(context);
     // SAFETY: inside the frame on the interface thread, `context` non-zero
     // by the guard before it.

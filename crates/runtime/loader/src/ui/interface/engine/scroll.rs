@@ -11,6 +11,7 @@ use super::{
     game_fn, path, sound, stretch,
 };
 use crate::engine::pinned;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 type PersistFn = unsafe extern "system" fn(
     node: usize,
@@ -303,6 +304,21 @@ pub(in crate::ui::interface) struct Scroll {
     column: Buf<FRAME_SIZE>,
     /// What the start opened, for the end to close.
     opened: Opened,
+    /// The id of the area's frame, 0 until its first start takes a new one.
+    id: usize,
+}
+
+/// The ids the loader's scroll areas take, one per content they show.
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+/// A frame id no node of the game's has yet: the game keeps its nodes by
+/// id, and one it numbers itself follows its parent and its place there
+/// (client 26430625), so the rows of a page took the scroll offset and the
+/// focus of the rows of the page shown before them.
+fn new_id() -> usize {
+    let count = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let id = STATE_KEY ^ count.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    usize::try_from(id).unwrap_or(1).max(1)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -313,13 +329,23 @@ enum Opened {
 }
 
 impl Scroll {
+    /// A scroll area of its own, at its top with nothing focused, whatever
+    /// another window drew in its place before.
     pub(in crate::ui::interface) const fn new() -> Self {
         Self {
             parent: Buf::zeroed(),
             area: Buf::zeroed(),
             column: Buf::zeroed(),
             opened: Opened::Nothing,
+            id: 0,
         }
+    }
+
+    /// Starts the area afresh on its next frame, at its top with nothing
+    /// focused, for new content in the same place, such as another page of a
+    /// screen.
+    pub(in crate::ui::interface) const fn to_top(&mut self) {
+        self.id = 0;
     }
 }
 
@@ -350,11 +376,15 @@ impl Engine {
         let Some(fns) = &self.scroll else {
             return false;
         };
+        if scroll.id == 0 {
+            scroll.id = new_id();
+        }
         // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
         // gives; `scroll.parent` holds the table's `ui.frame_extent` bytes
-        // (`Layout::read`) and stays in place until `scroll_end`.
-        unsafe { (self.frame_open)(scroll.parent.ptr(), 0) };
+        // (`Layout::read`) and stays in place until `scroll_end`; the game
+        // keys the frame's node by the non-zero `scroll.id`.
+        unsafe { (self.frame_open)(scroll.parent.ptr(), scroll.id) };
         scroll.opened = Opened::Parent;
         let parent = self.frame_node(&scroll.parent);
         // SAFETY: `self.node_height` is the game's `ui.node_height`, checked

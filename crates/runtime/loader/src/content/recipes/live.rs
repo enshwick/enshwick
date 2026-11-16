@@ -14,10 +14,13 @@ use enshwick_core::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
 use enshwick_core::content::{Blob, Guid};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use enshwick_core::abi::HookFlags;
+
 use crate::engine::catalogue::{Reflected, types};
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::Loader;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::pinned;
 use crate::engine::settings::LOADER_ID;
 use crate::engine::texts;
 use enshwick_base::Relock;
@@ -199,7 +202,14 @@ static STATE: LazyLock<Recipes> = LazyLock::new(Recipes::new);
 /// nothing.
 static DISABLED_FUSE: Fuse = Fuse::new("disabled recipes");
 
-/// Sets disabled recipes up: the layout and the lookup hook. Before arming.
+/// The build table ids disabled recipes hook on the client: the question
+/// every crafting menu asks before it shows a recipe.
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::recipe::MENU_KNOWN.id()];
+
+/// The crafting menus' question, a loader feature of the client.
+static MENU_FUSE: Fuse = Fuse::new("disabled recipes in crafting menus");
+
+/// Sets disabled recipes up: the layout and the hooks. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
     if !STATE.keep_layout(
         loader,
@@ -207,11 +217,41 @@ pub(crate) fn init(loader: &'static Loader) {
     ) {
         return;
     }
-    // Without the lookup, which turns itself off where players and admins
-    // see it, disabled recipes stay in the crafting menus and the rest of
-    // them holds.
+    // Without the lookup or the menus' question, each of which turns itself
+    // off where players and admins see it, disabled recipes stay in the
+    // crafting menus and the rest of them holds.
     let _linked = crate::engine::code::link_recipe_lookup(loader);
+    if loader.side == Side::CLIENT {
+        let at = Target::Pinned(pinned::recipe::MENU_KNOWN);
+        let _linked = loader.link_fused(&MENU_FUSE, at, &KNOWN_NEXT, menu_known, HookFlags::NONE);
+    }
     STATE.changed();
+}
+
+crate::engine::chains::chain_detour! {
+    /// The table's `recipe.menu_known(recipe) -> bool`, which the crafting
+    /// menus (by hand, at stations and survivors) ask for each recipe of
+    /// their book before they list it, and the recipe tiles before they
+    /// draw (client 26430625): no for a disabled recipe. The book takes
+    /// the recipe ids of the UI bundle's crafting directories, so the
+    /// per-workshop lookup never reaches these menus.
+    fn menu_known(recipe: *const u8) -> u8;
+    next KNOWN_NEXT;
+    fuse &MENU_FUSE, "the crafting menus' recipe question";
+    |onward| {
+        let known = onward.call();
+        if known == 0 || recipe.is_null() {
+            return known;
+        }
+        let Some(layout) = STATE.layout() else {
+            return known;
+        };
+        // SAFETY: the game passes the question a recipe of its live
+        // registry, non-null by the check above, the one its by-id lookup
+        // just found; `layout.id` is the reflected offset of its `u32` id.
+        let id: u32 = unsafe { enshwick_core::raw::read_at(recipe, layout.id) };
+        if STATE.is_disabled(id) { 0 } else { known }
+    }
 }
 
 /// The world's own recipe file, while a world runs.

@@ -460,6 +460,16 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         // table's `ui.popup_extent` (`DialogLayout::read`).
         unsafe { next(shown.state.ptr()) };
         engine.restore_nav(context, nav);
+        // Back (Escape, B) closes the dialog without an answer, as its
+        // buttons need the mouse or Enter.
+        // SAFETY: in a frame of the interface update on its thread, by this
+        // function's `# Safety`.
+        if unsafe { engine.back_pressed(0) } {
+            if let Some(gone) = current.take() {
+                gone.answerer.answer(UiDialog::CLOSED);
+            }
+            return;
+        }
         // SAFETY: `host` is non-zero, checked by the guard before it, and is
         // the interface host read from the frame's live context; its answer
         // flag sits at the table's `ui.host_answered`, and only this thread,

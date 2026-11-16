@@ -1,4 +1,4 @@
-use super::widgets::slider_format;
+use super::widgets::{SLIDER_TEXT_BYTES, slider_text};
 use super::*;
 
 #[test]
@@ -163,11 +163,18 @@ fn client_tables() -> Vec<enshwick_gamedata::Table> {
 }
 
 /// A table's constant by id; the entries only their engine routes find
-/// stand in: the text field's kept-state key as 1, the dropdown's external
-/// mode byte as 0xc76, its offset on every kept client build.
+/// stand in: the text field's kept-state key as 1, its start byte as
+/// 0x198a, the slider's own value text as 0x58 and the dropdown's external
+/// mode byte as 0xc76, their offsets on every kept client build.
 fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
     if id == pinned::ui::TEXT_FIELD_STATE_KEY.id() {
         return Some(1);
+    }
+    if id == pinned::ui::TEXT_FIELD_START.id() {
+        return Some(0x198a);
+    }
+    if id == pinned::ui::SLIDER_TEXT.id() {
+        return Some(0x58);
     }
     if id == pinned::ui::DROPDOWN_EXTERNAL.id() {
         return Some(0xc76);
@@ -249,10 +256,12 @@ fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
         let state = pinned::ui::TEXT_FIELD_STATE_SIZE.id();
         let editing = pinned::ui::TEXT_FIELD_EDITING.id();
         let key = pinned::ui::TEXT_FIELD_STATE_KEY.id();
+        let start = pinned::ui::TEXT_FIELD_START.id();
         for (id, value, room, blamed) in [
             (extent, Some(0x1000), true, extent),
             (text, Some(0x1000), true, text),
             (state, Some(0x10), true, editing),
+            (start, Some(0x4000), true, start),
             (extent, None, false, extent),
             (key, None, false, key),
         ] {
@@ -377,17 +386,35 @@ fn client_tables_pin_the_scroll_area_and_the_text_field_whole() {
     assert_eq!(highlight, Some(0x60), "the config's 0x28 plus 0x38");
 }
 
+/// The value text `slider_text` gives.
+fn shown(value: f32, range: (f32, f32), steps: u32, whole: bool) -> String {
+    let (bytes, len) = slider_text(value, range, steps, whole);
+    String::from_utf8(bytes[..len].to_vec()).unwrap()
+}
+
 #[test]
 fn whole_stops_show_whole_numbers() {
-    assert_eq!(slider_format(1.0, 20.0, 20, false), 2);
-    assert_eq!(slider_format(0.0, 1.0, 11, false), 4);
-    assert_eq!(slider_format(0.0, 10.0, 0, false), 4);
+    assert_eq!(shown(7.0, (1.0, 20.0), 20, false), "7");
+    assert_eq!(shown(0.3, (0.0, 1.0), 11, false), "0.30");
+    assert_eq!(shown(2.5, (0.0, 10.0), 0, false), "2.50");
 }
 
 #[test]
 fn a_whole_setting_s_slider_shows_no_decimals_whatever_its_stops() {
-    assert_eq!(slider_format(0.0, 1000.0, 0, true), 2);
-    assert_eq!(slider_format(0.0, 1.0, 11, true), 2);
+    assert_eq!(shown(250.4, (0.0, 1000.0), 0, true), "250");
+    assert_eq!(shown(0.6, (0.0, 1.0), 11, true), "1");
+}
+
+#[test]
+fn a_slider_text_never_reads_minus_zero() {
+    assert_eq!(shown(-0.2, (-1.0, 1.0), 3, false), "0");
+    assert_eq!(shown(-0.001, (-1.0, 1.0), 0, false), "0.00");
+}
+
+#[test]
+fn a_slider_text_too_long_for_its_room_is_cut() {
+    let (_, len) = slider_text(f32::MAX, (0.0, f32::MAX), 0, true);
+    assert_eq!(len, SLIDER_TEXT_BYTES);
 }
 
 #[test]

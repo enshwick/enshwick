@@ -188,6 +188,24 @@ fn turned(mut game: Look, [yaw, pitch]: [f32; 2]) -> Look {
     game
 }
 
+/// Drops the mouse's part of the look the builder just wrote, while a loader
+/// window or dialog over the world has the cursor: the camera stays still
+/// as under a game screen, which the game holds by its screen byte, which a
+/// loader window does not set (client 26430625, seen live).
+///
+/// # Safety
+///
+/// - `input` is the local player's live `ClientPlayerInput` the builder
+///   just wrote, on the builder's thread right after the game's pass.
+#[cold]
+unsafe fn hold_mouse_look(layout: &InputLayout, input: *mut u8) {
+    // SAFETY: the caller's record, just written by the game's pass.
+    let mut look = unsafe { layout.camera_rotation(input) };
+    look[MOUSE] = [0.0; 2];
+    // SAFETY: the same record, on the builder's thread.
+    unsafe { layout.set_camera_rotation(input, look) };
+}
+
 /// Runs the builder's pass in `mode` on handed command `id` at `stage`.
 ///
 /// # Safety
@@ -279,6 +297,15 @@ crate::engine::chains::chain_detour! {
     fuse &FUSE, "the client's look and move";
     |onward| {
         onward.call();
+        if mode == FRAME
+            && crate::ui::interface::cursor_wanted()
+            && !input.is_null()
+            && let Some(layout) = GROUPS.input.get()
+        {
+            // SAFETY: the builder's own non-null input record, right after
+            // its pass on its thread.
+            unsafe { hold_mouse_look(layout, input) };
+        }
         if let Some(handed) = DRIVE.handoff.current()
             && let Some(layout) = GROUPS.input.get()
             && !input.is_null()
