@@ -91,7 +91,12 @@ mod tests {
             assert!(host.props().is_empty());
             assert!(host.transactions().is_empty());
         }
-        for bounds in [None, Some([[0.0; 3]; 2]), Some([[f32::NAN; 3], [1.0; 3]])] {
+        for bounds in [
+            None,
+            Some([[0.0; 3]; 2]),
+            Some([[f32::NAN; 3], [1.0; 3]]),
+            Some([[1.0; 3], [-1.0; 3]]),
+        ] {
             let host = enshwick::test::FakeHost::new();
             let host = match bounds {
                 Some(bounds) => host.placement_box(ITEM, bounds[0], bounds[1]),

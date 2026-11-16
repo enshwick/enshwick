@@ -2168,9 +2168,9 @@ export type PropId = {
 
 --- Declared local placement corners in metres, before a prop turns. This is item metadata, not a complete physical or permission footprint.
 export type PropPlacementBox = {
-	--- The declared minimum corner.
+	--- The declared minimum corner, which may lie above `max` on some axes.
 	min: vector,
-	--- The declared maximum corner.
+	--- The declared maximum corner, above `min` on at least one axis.
 	max: vector,
 }
 

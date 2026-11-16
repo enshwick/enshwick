@@ -20,9 +20,9 @@ use super::{World, WorldError};
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct PropPlacementBox {
-    /// The declared minimum corner.
+    /// The declared minimum corner, which may lie above `max` on some axes.
     pub min: [f32; 3],
-    /// The declared maximum corner.
+    /// The declared maximum corner, above `min` on at least one axis.
     pub max: [f32; 3],
 }
 

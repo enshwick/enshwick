@@ -21,7 +21,10 @@ mod tests {
                 .item_places(ItemId::new(30), Guid([0x3a; 16]))
                 .placement_box(ItemId::new(30), [-2.0, 0.0, -0.5], [3.0, 4.0, 0.5])
                 .item(ItemId::new(31), 1, 0)
-                .item_places(ItemId::new(31), Guid([0x3b; 16])),
+                .item_places(ItemId::new(31), Guid([0x3b; 16]))
+                .item(ItemId::new(32), 1, 0)
+                .item_places(ItemId::new(32), Guid([0x3c; 16]))
+                .placement_box(ItemId::new(32), [0.0; 3], [0.0; 3]),
             r"
             local world = enshwick.world
             local info = world.prop_placement_info(30)
@@ -30,6 +33,7 @@ mod tests {
             assert(info.local_box.min == vector.create(-2, 0, -0.5))
             assert(info.local_box.max == vector.create(3, 4, 0.5))
             assert(world.prop_placement_info(31).local_box == nil)
+            assert(world.prop_placement_info(32).local_box == nil)
             assert(not pcall(world.prop_placement_info, 99))
             enshwick.log.info('placement metadata copied')
             ",

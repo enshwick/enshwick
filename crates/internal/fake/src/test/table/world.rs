@@ -634,9 +634,7 @@ pub(crate) extern "system" fn prop_placement_info(
             .placement_boxes
             .iter()
             .find(|(id, ..)| *id == item.get())
-            .filter(|(_, min, max)| {
-                min.iter().chain(max).all(|v| v.is_finite()) && (0..3).any(|i| max[i] > min[i])
-            });
+            .filter(|&&(_, min, max)| PropPlacementInfo::declares_box(min, max));
         let (min, max, flags) = bounds.map_or(([0.0; 3], [0.0; 3], 0), |&(_, min, max)| {
             (min, max, PropPlacementInfo::HAS_LOCAL_BOX)
         });

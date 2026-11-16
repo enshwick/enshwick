@@ -381,4 +381,22 @@ impl PropPlacementInfo {
     /// geometry check. Without it, bounds are unknown,
     /// not an empty box or the loader's fallback permission box.
     pub const HAS_LOCAL_BOX: u32 = 1;
+
+    /// Whether declared corners count as a local box: every value finite and
+    /// `max` above `min` on at least one axis. The loader and the fake host
+    /// share this rule, so a box inverted on some axes still counts and its
+    /// corners stay as declared.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::PropPlacementInfo;
+    /// assert!(PropPlacementInfo::declares_box([0.0; 3], [0.0, 1.0, 0.0]));
+    /// assert!(!PropPlacementInfo::declares_box([1.0; 3], [0.0; 3]));
+    /// assert!(!PropPlacementInfo::declares_box([f32::NAN; 3], [1.0; 3]));
+    /// ```
+    #[must_use]
+    pub fn declares_box(min: [f32; 3], max: [f32; 3]) -> bool {
+        min.iter().chain(&max).all(|v| v.is_finite()) && (0..3).any(|axis| max[axis] > min[axis])
+    }
 }

@@ -88,8 +88,7 @@ fn item_prop(
             // placement box's highest corner, three `f32`, at the reflected
             // path.
             let max: [f32; 3] = unsafe { enshwick_core::raw::read_at(info, max_at) };
-            let finite = min.iter().chain(&max).all(|v| v.is_finite());
-            (finite && (0..3).any(|axis| max[axis] > min[axis])).then_some((min, max))
+            enshwick_core::abi::PropPlacementInfo::declares_box(min, max).then_some((min, max))
         }
         _ => None,
     };
