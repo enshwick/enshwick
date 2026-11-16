@@ -94,7 +94,7 @@ side = "both""#
     }
 
     #[test]
-    fn cached_status_preserves_age_boundaries_and_ignores_unknown_flags() {
+    fn cached_status_keeps_extreme_ages_and_ignores_unknown_flags() {
         let loader = enshwick::test::FakeHost::new()
             .side(Side::CLIENT)
             .player_input()
@@ -104,7 +104,9 @@ side = "both""#
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let input = INPUT.lock().unwrap().unwrap();
-        for age_ms in [0, 1000, 1001, u64::MAX - 1, u64::MAX] {
+        // The loader decides freshness and its own tests hold the 1000 ms
+        // boundary; the SDK only copies the flag, so no age here implies it.
+        for age_ms in [0, u64::MAX - 1, u64::MAX] {
             loader.set_local_input_status(Info {
                 header: Header::of::<Info>(),
                 flags: Info::SAMPLE_PRESENT | (1 << 31),
