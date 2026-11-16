@@ -511,10 +511,9 @@ impl FakeHost {
     /// Refuses the periodic tick subscription number `index`, from 0, in
     /// the order the mod asks
     /// ([`Status::REFUSED`](enshwick_core::abi::Status::REFUSED)), as the
-    /// loader refuses a tick it cannot list. The first world a mod opens
-    /// asks for one to wait on transactions: refusing it leaves
-    /// `World::when_settled` unavailable while a later
-    /// [`Scheduler`](enshwick_core::schedule::Scheduler) still gets its own.
+    /// loader refuses a tick it cannot list, so a
+    /// [`Load::scheduler`](enshwick_core::Load::scheduler) that asks for
+    /// that one returns an [`Off`](enshwick_core::Off).
     ///
     /// # Examples
     ///

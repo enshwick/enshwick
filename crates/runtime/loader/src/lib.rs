@@ -60,6 +60,8 @@ pub use ui::interface::item_slots::bench_item_slot;
 #[cfg(windows)]
 #[doc(hidden)]
 pub use ui::interface::tooltips::bench_tooltip_lines;
+#[doc(hidden)]
+pub use world::transactions::bench_settle_step;
 
 /// The loader's `HostApi` table, for the benchmark of one entry call.
 #[cfg(windows)]

@@ -251,3 +251,4 @@ names every entry of the golden layout once, in that order.
 | `interaction_prompt` | game | — | with a player, client |
 | `ui_item_tooltip` | game | — | client |
 | `change_permissions` | game | — | with a player |
+| `transaction_settled` | game | probe: transaction | — |

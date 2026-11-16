@@ -154,7 +154,7 @@ impl Installed {
 
     /// Drops the undo data of every written transaction, as the loader does
     /// to stay within its memory cap: each applied one turns expired and
-    /// forgets the props it placed.
+    /// still lists the props it placed, which stand in the world.
     ///
     /// # Examples
     ///
@@ -169,10 +169,28 @@ impl Installed {
                 if transaction.info.state == TransactionInfo::APPLIED {
                     transaction.info.state = TransactionInfo::EXPIRED;
                     transaction.info.bricks = 0;
-                    transaction.info.created = 0;
-                    transaction.created.clear();
                 }
             }
+        });
+    }
+
+    /// Forgets every transaction, as the loader forgets those past its
+    /// newest 4,096: their status and entities answer that none is known,
+    /// and a wait on one is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.forget_transactions();
+    /// assert!(loader.transactions().is_empty());
+    /// ```
+    pub fn forget_transactions(&self) {
+        table::with((), |s| {
+            if let Some(last) = s.edits.transactions.last() {
+                s.edits.forgotten = last.id;
+            }
+            s.edits.transactions.clear();
         });
     }
 

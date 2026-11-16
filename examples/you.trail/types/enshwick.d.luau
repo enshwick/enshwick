@@ -2596,9 +2596,9 @@ export type SettingsRead = {
 
 --- What a committed `Transaction` came to once it stopped running, which `World.when_settled` hands its handler.
 export type Settled = {
-	--- `TransactionStatus.Applied` once it is written whole, or `TransactionStatus.Expired` when its undo data was dropped since; else how it ended; still `TransactionStatus.Pending` when the wait's bound passed first; nil once the loader no longer remembers it.
+	--- `TransactionStatus.Applied` once it is written whole, or `TransactionStatus.Expired` when its undo data was dropped since or the world ended; else how it ended; still `TransactionStatus.Pending` when the wait's bound passed first; nil once the loader no longer remembers it.
 	status: TransactionStatus?,
-	--- The props it placed and held, oldest first, as `World.transaction_entities` lists them; once it is written whole they stand in the world.
+	--- The props it placed and did not undo, oldest first, as `World.transaction_entities` lists them; once it is written whole they stand in the world, and none is left once the world ended.
 	props: {number},
 }
 
@@ -3871,7 +3871,7 @@ declare enshwick: {
 		undo: (id: string) -> (),
 		--- The props transaction `id` of this mod placed and still holds, oldest first; empty for an id the loader no longer remembers, or not this mod's. A prop is in the world from the step after the one that placed it.
 		transaction_entities: (id: string) -> {number},
-		--- Runs `handler` once transaction `id` of this mod stopped running, so a mod acts on its placed props without polling. Once the transaction is written whole (`TransactionStatus.Applied`, or `TransactionStatus.Expired` when the loader dropped its undo data meanwhile), the handler runs one scheduler pass later, when the props it placed stand in the world; it gets the props the transaction held when it was written, even when it expired since. Any other end runs it at once; a large transaction spread over steps is waited for whole, and an undo of it that is still running counts as its end. Once `within` passed, the handler gets the transaction as it stands, still pending perhaps. `handler` runs on the server's game thread as a `Scheduler` task of this mod, so it belongs to the game it was asked in (`schedule`). The handler decides what an end other than written whole means, such as a `TransactionStatus.Failed` with `WorldError.NotLoaded`, which the same changes committed again may pass.
+		--- Runs `handler` once transaction `id` of this mod stopped running, so a mod acts on its placed props without polling. The loader runs it on the server's game thread after the step that ends the transaction's run. Written whole (`TransactionStatus.Applied`) means each prop it placed stands in the world, and the handler gets them; the loader waits up to 3,600 steps for a prop to appear, and one still absent then, or whose state does not read, is applied all the same. Any other end, a failure, a refusal, or an undo still running, runs it after that step too. A large transaction spread over steps is waited for whole. A step once `within` passed runs it with the transaction as it stands, still pending perhaps. When the world ends, it runs with the transaction failed or expired, never in the next game. The handler decides what an end other than written whole means, such as a `TransactionStatus.Failed` with `WorldError.NotLoaded`, which the same changes committed again may pass. It never runs when the loader turned the mod off first.
 		when_settled: (id: string, within: number, handler: (arg1: Settled) -> ()) -> (),
 		--- Where transaction `id` of this mod stands; nil for an id the loader no longer remembers (it keeps the newest few thousand) or not this mod's.
 		transaction_status: (id: string) -> TransactionStatus?,

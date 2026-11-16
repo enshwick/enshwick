@@ -1,38 +1,18 @@
 //! Transactions: changes of the server's world written as one, with undo.
 
-use core::ops::ControlFlow;
+use core::ffi::c_void;
 use core::time::Duration;
-use std::time::Instant;
 
 use crate::Entity;
 use crate::abi::{
     BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
     VoxelRegion, VoxelWrite,
 };
-use crate::schedule::Scheduler;
 use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
 use crate::voxels::{VoxelBox, VoxelPos};
-use crate::{BaseLoad, Host, ItemId};
+use crate::{Host, ItemId};
 
 use super::{BuildRefusal, Player, PropState, World, WorldError, WorldTransform};
-
-/// The scheduler [`World::when_settled`] waits on, taken when the mod opens
-/// the world in `init`, as a tick cannot be subscribed after it.
-static WAITS: crate::state::ModLocal<Scheduler> = crate::state::ModLocal::new();
-
-/// Takes the mod's scheduler for transaction waits, once its world resolved;
-/// a later open in `init` asks again after a failed one.
-pub(super) fn take_scheduler(load: &mut BaseLoad) {
-    if WAITS.get().is_some() {
-        return;
-    }
-    match load.scheduler() {
-        Ok(scheduler) => {
-            let _first = WAITS.set(scheduler);
-        }
-        Err(off) => crate::debug!("transaction waits off: {off}"),
-    }
-}
 
 /// The id of a committed [`Transaction`], for [`World::undo`] and
 /// [`World::transaction_status`]; valid while the server runs.
@@ -80,7 +60,9 @@ pub enum TransactionStatus {
     /// Queued, or written in part: a large transaction spreads over the
     /// server's steps.
     Pending,
-    /// Written whole; it can be undone.
+    /// Written whole, each prop it placed standing in the world unless the
+    /// loader's wait for it ran out or its state did not read; it can be
+    /// undone.
     Applied,
     /// Its undo is queued or written in part.
     Undoing,
@@ -151,14 +133,14 @@ impl TransactionStatus {
 #[non_exhaustive]
 pub struct Settled {
     /// [`TransactionStatus::Applied`] once it is written whole, or
-    /// [`TransactionStatus::Expired`] when its undo data was dropped since;
-    /// else how it ended; still [`TransactionStatus::Pending`] when the
-    /// wait's bound passed first; `None` once the loader no longer remembers
-    /// it.
+    /// [`TransactionStatus::Expired`] when its undo data was dropped since
+    /// or the world ended; else how it ended; still
+    /// [`TransactionStatus::Pending`] when the wait's bound passed first;
+    /// `None` once the loader no longer remembers it.
     pub status: Option<TransactionStatus>,
-    /// The props it placed and held, oldest first, as
+    /// The props it placed and did not undo, oldest first, as
     /// [`World::transaction_entities`] lists them; once it is written whole
-    /// they stand in the world.
+    /// they stand in the world, and none is left once the world ended.
     pub props: Vec<Entity>,
 }
 
@@ -731,25 +713,27 @@ impl World {
     /// Runs `handler` once transaction `id` of this mod stopped running, so a
     /// mod acts on its placed props without polling.
     ///
-    /// Once the transaction is written whole ([`TransactionStatus::Applied`],
-    /// or [`TransactionStatus::Expired`] when the loader dropped its undo
-    /// data meanwhile), the handler runs one scheduler pass later, when the
-    /// props it placed stand in the world; it gets the props the transaction
-    /// held when it was written, even when it expired since. Any other end
-    /// runs it at once; a large transaction spread over steps is waited for
-    /// whole, and an undo of it that is still running counts as its end. Once
-    /// `within` passed, the handler gets the transaction as it stands, still
-    /// pending perhaps. `handler` runs on the server's game thread as a
-    /// [`Scheduler`] task of this mod, so it belongs to the game it was asked
-    /// in ([`schedule`](crate::schedule)). The handler
+    /// The loader runs it on the server's game thread after the step that
+    /// ends the transaction's run. Written whole
+    /// ([`TransactionStatus::Applied`]) means each prop it placed stands in
+    /// the world, and the handler gets them; the loader waits up to 3,600
+    /// steps for a prop to appear, and one still absent then, or whose
+    /// state does not read, is applied all the same. Any other end, a
+    /// failure, a refusal, or an undo still running, runs it after that
+    /// step too. A large transaction spread over steps is waited for whole.
+    /// A step once `within` passed runs it with the transaction as it
+    /// stands, still pending perhaps. When the world ends, it runs with the
+    /// transaction failed or expired, never in the next game. The handler
     /// decides what an end other than written whole means, such as a
-    /// [`TransactionStatus::Failed`] with [`WorldError::NotLoaded`], which the
-    /// same changes committed again may pass.
+    /// [`TransactionStatus::Failed`] with [`WorldError::NotLoaded`], which
+    /// the same changes committed again may pass. It never runs when the
+    /// loader turned the mod off first.
     ///
     /// # Errors
     ///
-    /// [`WorldError::Unavailable`] when the loader gave this mod no tick to
-    /// wait on when it opened the world.
+    /// [`WorldError::Refused`] for an id this mod did not get or one the
+    /// loader forgot; [`WorldError::Unavailable`] once the loader's
+    /// transactions are off. `handler` then never runs.
     ///
     /// # Examples
     ///
@@ -768,47 +752,33 @@ impl World {
     /// }
     /// ```
     #[script]
-    pub fn when_settled(
+    pub fn when_settled<F>(
         self,
         id: TransactionId,
         within: Duration,
-        handler: impl FnOnce(&Settled) + Send + 'static,
-    ) -> Result<(), WorldError> {
-        let scheduler = *WAITS.get().ok_or(WorldError::Unavailable)?;
-        let mut handler = Some(handler);
-        // The props it held when first seen written whole.
-        let mut written: Option<Vec<Entity>> = None;
-        let until = Instant::now().checked_add(within);
-        scheduler.every(Duration::ZERO, move || {
-            let status = self.transaction_status(id);
-            let waits = until.is_none_or(|until| Instant::now() < until);
-            let whole = matches!(
-                status,
-                Some(TransactionStatus::Applied | TransactionStatus::Expired)
-            );
-            match status {
-                Some(TransactionStatus::Pending) if waits => return ControlFlow::Continue(()),
-                // Its props stand from the step after the one that placed
-                // them, so this pass waits even past the bound.
-                _ if whole && written.is_none() => {
-                    written = Some(self.transaction_entities(id));
-                    return ControlFlow::Continue(());
-                }
-                _ => {}
-            }
-            let settled = Settled {
-                status,
-                props: match written.take() {
-                    Some(props) if whole => props,
-                    _ => self.transaction_entities(id),
-                },
-            };
-            if let Some(handler) = handler.take() {
-                handler(&settled);
-            }
-            ControlFlow::Break(())
-        });
-        Ok(())
+        handler: F,
+    ) -> Result<(), WorldError>
+    where
+        F: FnOnce(&Settled) + Send + 'static,
+    {
+        let host = self.0.host;
+        let within_ns = u64::try_from(within.as_nanos()).unwrap_or(u64::MAX);
+        let user = Box::into_raw(Box::new(Waiting {
+            world: self,
+            handler,
+        }));
+        let status = (host.api().transaction_settled)(
+            host.handle(),
+            id.0,
+            within_ns,
+            Some(settled::<F>),
+            user.cast(),
+        );
+        if !status.is_ok() {
+            // SAFETY: refused, so the loader keeps no copy of the pointer.
+            drop(unsafe { Box::from_raw(user) });
+        }
+        WorldError::check(status, WorldError::Refused)
     }
 
     /// Where transaction `id` of this mod stands; `None` for an id the
@@ -837,4 +807,29 @@ impl World {
         let status = (host.api().transaction_status)(host.handle(), id.0, &raw mut info);
         status.is_ok().then(|| TransactionStatus::from_info(&info))
     }
+}
+
+/// A [`World::when_settled`] handler as the loader keeps it until the end.
+struct Waiting<F> {
+    world: World,
+    handler: F,
+}
+
+unsafe extern "system" fn settled<F>(id: u64, info: *const TransactionInfo, user: *mut c_void)
+where
+    F: FnOnce(&Settled),
+{
+    // SAFETY: `user` is the `Waiting<F>` boxed for this wait, handed back
+    // exactly once.
+    let waiting = unsafe { Box::from_raw(user.cast::<Waiting<F>>()) };
+    // SAFETY: the loader hands over null or an info alive for the call.
+    let status = unsafe { info.as_ref() }.map(TransactionStatus::from_info);
+    crate::host::guard(
+        "panic in a transaction's settled handler",
+        || (),
+        move || {
+            let props = waiting.world.transaction_entities(TransactionId(id));
+            (waiting.handler)(&Settled { status, props });
+        },
+    );
 }

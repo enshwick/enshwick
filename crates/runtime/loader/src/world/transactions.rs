@@ -20,9 +20,12 @@ mod ledger;
 mod paste;
 pub(crate) mod props;
 mod record;
+mod settled;
 
+use core::time::Duration;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 #[cfg(test)]
 use enshwick_core::abi::TransactionInfo;
@@ -34,12 +37,13 @@ use enshwick_base::Relock;
 pub(crate) use error::TransactionError;
 #[cfg(windows)]
 pub(crate) use game::{resolve, resolve_prop, saving};
-#[cfg(any(windows, test))]
 pub(crate) use ledger::Change;
 pub(crate) use ledger::Standing;
 use ledger::{Ledger, Limits};
 #[cfg(windows)]
 pub(crate) use paste::{Erase, Paste};
+pub(crate) use settled::End;
+use settled::{Wait, Waits};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -86,6 +90,12 @@ struct Transactions {
     fuse: Fuse,
     /// The props its removals and undos keep players from.
     holds: crate::world::prop_holds::PropHolds,
+    /// Whether mods wait for ends, so a step without waits takes no lock;
+    /// written only under the waits' lock.
+    waiting: AtomicBool,
+    /// The mods' waits for their transactions' ends. Its lock is taken
+    /// before the ledger's, never after.
+    waits: Mutex<Waits>,
 }
 
 impl Transactions {
@@ -95,8 +105,80 @@ impl Transactions {
             ledger: Mutex::new(Ledger::new(LIMITS)),
             fuse: Fuse::new("world transactions"),
             holds: crate::world::prop_holds::PropHolds::new(),
+            waiting: AtomicBool::new(false),
+            waits: Mutex::new(Waits::new()),
         }
     }
+
+    /// Keeps `wait` for the steps to come; [`TransactionError::Unavailable`]
+    /// once the feature is off.
+    fn add_wait(&self, wait: Wait) -> Result<(), TransactionError> {
+        let mut waits = self.waits.relock();
+        // Under the waits' lock, so a fuse turning off now runs this one too.
+        if self.fuse.is_off() {
+            return Err(TransactionError::Unavailable);
+        }
+        waits.add(wait);
+        self.waiting.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    /// Runs the waits that end at `now`, in the order asked, outside the
+    /// locks so a callback may ask again or read the ledger. A step that
+    /// finds either lock taken leaves them to the next, as the pass does,
+    /// so the game thread never waits on a mod's thread.
+    fn run_due(&self, now: Instant) {
+        if !self.waiting.load(Ordering::Acquire) {
+            return;
+        }
+        let Some(mut waits) = self.waits.try_relock() else {
+            return;
+        };
+        let Some(ledger) = self.ledger.try_relock() else {
+            return;
+        };
+        let due = waits.due(now, |owner, id| ledger.info(owner, id), is_off);
+        self.waiting.store(!waits.is_empty(), Ordering::Release);
+        drop(ledger);
+        drop(waits);
+        for (wait, standing) in due {
+            run(wait, standing.as_ref());
+        }
+    }
+
+    /// Runs every wait as its transaction stands, as the feature turns off.
+    fn run_all(&self) {
+        let all = {
+            let mut waits = self.waits.relock();
+            self.waiting.store(false, Ordering::Release);
+            waits.take_all()
+        };
+        for wait in all {
+            let standing = self.ledger.relock().info(wait.owner, wait.id);
+            run(wait, standing.as_ref());
+        }
+    }
+}
+
+#[cfg(windows)]
+use crate::engine::loader::is_off;
+
+/// Off Windows no loader turns a mod off.
+#[cfg(not(windows))]
+const fn is_off(_: ModIndex) -> bool {
+    false
+}
+
+/// Runs `wait`'s callback as its mod's, unless the loader turned the mod
+/// off: its callback then never runs, and what it holds in the mod stays.
+fn run(wait: Wait, standing: Option<&Standing>) {
+    if is_off(wait.owner) {
+        return;
+    }
+    let owner = wait.owner;
+    crate::engine::profile::call(owner, crate::engine::profile::Feature::Events, || {
+        wait.run(standing);
+    });
 }
 
 static STATE: Transactions = Transactions::new();
@@ -108,20 +190,67 @@ pub(crate) fn holds() -> &'static crate::world::prop_holds::PropHolds {
 
 /// Runs a step's `work` behind the feature's fuse. A panic turns the
 /// feature off and settles every transaction held, since its work in hand
-/// is lost: those in work fail, the rest expire.
+/// is lost: those in work fail, the rest expire; then every wait runs.
 fn guarded(state: &Transactions, work: impl FnOnce()) {
     if state.fuse.run("the post-step link", work).is_none() && state.fuse.is_off() {
-        let mut ledger = state.ledger.relock();
-        if ledger.busy() || ledger.kept() > 0 {
-            ledger.forget();
+        {
+            let mut ledger = state.ledger.relock();
+            if ledger.busy() || ledger.kept() > 0 {
+                ledger.forget();
+            }
+            state.busy.store(false, Ordering::Release);
         }
-        state.busy.store(false, Ordering::Release);
         let deposits = state.holds.release_all();
         #[cfg(windows)]
         game::restore_deposits(&deposits);
         #[cfg(not(windows))]
         drop(deposits);
+        state.run_all();
     }
+}
+
+/// Runs `end` once for transaction `id` of `owner`, after the first step
+/// that ends with it no longer pending, or after `within`;
+/// [`TransactionError::Unavailable`] once the feature is off.
+pub(crate) fn when_settled(
+    owner: ModIndex,
+    id: u64,
+    within: Duration,
+    end: End,
+) -> Result<(), TransactionError> {
+    let until = Instant::now().checked_add(within);
+    STATE.add_wait(Wait::new(owner, id, until, end))
+}
+
+/// For the benchmark of what a step pays for its waits: a step's look at
+/// `pending` waits, each on a transaction still pending, none due.
+#[doc(hidden)]
+pub fn bench_settle_step(pending: usize) -> impl Fn() {
+    let state: &'static Transactions = Box::leak(Box::new(Transactions::new()));
+    let dig = enshwick_core::abi::TerrainEdit {
+        header: enshwick_core::abi::Header::of::<enshwick_core::abi::TerrainEdit>(),
+        kind: enshwick_core::abi::TerrainEdit::DIG,
+        shape: enshwick_core::abi::TerrainEdit::ROUND,
+        flags: 0,
+        material: 0,
+        position: [20.0; 3],
+        radius: 1.0,
+        height: 0.0,
+        protect: [0; 16],
+    };
+    for _ in 0..pending {
+        let committed =
+            state
+                .ledger
+                .relock()
+                .commit(ModIndex::LOADER, None, vec![Change::Terrain(dig)]);
+        if let Ok(id) = committed {
+            let _kept = state.add_wait(Wait::new(ModIndex::LOADER, id, None, Box::new(|_| {})));
+        }
+    }
+    // The step hands over its own time, so the look reads no clock.
+    let now = Instant::now();
+    move || state.run_due(now)
 }
 
 /// Queues `changes` as one transaction of `owner`. [`TransactionError::Unavailable`] while
@@ -184,19 +313,22 @@ pub(crate) const fn step() -> crate::engine::parts::Step {
         stage: crate::engine::parts::Stage::Output,
         work: crate::engine::parts::Fused {
             fuse: &STATE.fuse,
-            run: |stepping| after_step(stepping.loader),
+            run: after_step,
         },
     }
 }
 
-/// Writes the queued work of a step, on the game thread after the step,
-/// behind the feature's fuse.
+/// Writes the queued work of a step, then runs the waits it ended, on the
+/// game thread after the step, behind the feature's fuse.
 #[cfg(windows)]
-fn after_step(loader: &crate::engine::loader::Loader) {
-    if !STATE.busy.load(Ordering::Acquire) {
-        return;
+fn after_step(stepping: &crate::engine::parts::Stepping) {
+    if STATE.busy.load(Ordering::Acquire) {
+        guarded(&STATE, || pass(stepping.loader));
     }
-    guarded(&STATE, || pass(loader));
+    // A pass that panicked already ran every wait as the feature turned off.
+    if !STATE.fuse.is_off() {
+        guarded(&STATE, || STATE.run_due(stepping.now));
+    }
 }
 
 /// The step's pass over the queue. The game's edits and undo writes run
@@ -210,7 +342,7 @@ fn pass(loader: &crate::engine::loader::Loader) {
     let Ok(mut world) = game::Game::new(loader) else {
         return;
     };
-    let started = std::time::Instant::now();
+    let started = Instant::now();
     let extent = world.extent().ok();
     let Some(mut pass) = try_ledger().map(|mut ledger| ledger.begin(extent, BRICKS_PER_STEP))
     else {
@@ -242,12 +374,21 @@ fn pass(loader: &crate::engine::loader::Loader) {
     }
 }
 
-/// Drops what the loader holds for a world that ended.
+/// Drops what the loader holds for a world that ended, then runs every
+/// wait with its transaction as the world left it, so no wait reaches the
+/// next game.
 pub(crate) fn forget() {
-    let mut ledger = STATE.ledger.relock();
-    ledger.forget();
-    STATE.busy.store(false, Ordering::Release);
-    STATE.holds.forget();
+    forget_in(&STATE);
+}
+
+fn forget_in(state: &Transactions) {
+    {
+        let mut ledger = state.ledger.relock();
+        ledger.forget();
+        state.busy.store(false, Ordering::Release);
+    }
+    state.holds.forget();
+    state.run_all();
 }
 
 #[cfg(test)]
@@ -308,5 +449,88 @@ mod tests {
         guarded(&state, || panic!("in a pass"));
         assert!(!state.holds.is_held(40));
         assert!(state.holds.quiet(), "players reach it again");
+    }
+
+    /// The states the ends of one test saw, in order.
+    type Seen = std::sync::Arc<Mutex<Vec<Option<u32>>>>;
+
+    /// An end that notes its transaction's state in `seen`.
+    fn noting(seen: &Seen) -> End {
+        let seen = std::sync::Arc::clone(seen);
+        Box::new(move |standing| seen.relock().push(standing.map(|s| s.state)))
+    }
+
+    /// A transaction of the loader's own, which the loader never turns off,
+    /// with a wait that notes its end in `seen`.
+    fn waited(state: &Transactions, within: Duration, seen: &Seen) -> u64 {
+        let id = state
+            .ledger
+            .relock()
+            .commit(ModIndex::LOADER, None, vec![Change::Terrain(dig())])
+            .unwrap();
+        let until = Instant::now().checked_add(within);
+        state
+            .add_wait(Wait::new(ModIndex::LOADER, id, until, noting(seen)))
+            .unwrap();
+        id
+    }
+
+    #[test]
+    fn a_wait_runs_once_after_the_step_its_transaction_stops_pending() {
+        let state = Transactions::new();
+        let seen = Seen::default();
+        let id = waited(&state, Duration::from_secs(60), &seen);
+        state.run_due(Instant::now());
+        assert!(seen.relock().is_empty(), "still pending");
+        state.ledger.relock().undo(ModIndex::LOADER, id).unwrap();
+        state.run_due(Instant::now());
+        state.run_due(Instant::now());
+        assert_eq!(*seen.relock(), [Some(TransactionInfo::UNDONE)]);
+        assert!(!state.waiting.load(Ordering::Acquire), "no wait is left");
+    }
+
+    #[test]
+    fn a_world_that_ends_runs_every_wait_and_keeps_none_for_the_next() {
+        let state = Transactions::new();
+        let seen = Seen::default();
+        waited(&state, Duration::from_secs(60), &seen);
+        forget_in(&state);
+        assert_eq!(*seen.relock(), [Some(TransactionInfo::FAILED)]);
+        assert!(!state.waiting.load(Ordering::Acquire));
+        state.run_due(Instant::now());
+        assert_eq!(seen.relock().len(), 1, "the next game runs it no more");
+    }
+
+    #[test]
+    fn a_step_that_finds_the_ledger_taken_leaves_its_waits_to_the_next() {
+        let state = Transactions::new();
+        let seen = Seen::default();
+        waited(&state, Duration::ZERO, &seen);
+        let held = state.ledger.relock();
+        state.run_due(Instant::now());
+        assert!(seen.relock().is_empty(), "the game thread never waits");
+        drop(held);
+        state.run_due(Instant::now());
+        assert_eq!(*seen.relock(), [Some(TransactionInfo::PENDING)]);
+    }
+
+    #[test]
+    fn a_wait_past_its_time_runs_with_its_transaction_pending() {
+        let state = Transactions::new();
+        let seen = Seen::default();
+        waited(&state, Duration::ZERO, &seen);
+        state.run_due(Instant::now());
+        assert_eq!(*seen.relock(), [Some(TransactionInfo::PENDING)]);
+    }
+
+    #[test]
+    fn a_pass_that_panics_runs_every_wait_and_takes_no_more() {
+        let state = Transactions::new();
+        let seen = Seen::default();
+        let id = waited(&state, Duration::from_secs(60), &seen);
+        guarded(&state, || panic!("in a pass"));
+        assert_eq!(*seen.relock(), [Some(TransactionInfo::FAILED)]);
+        let late = Wait::new(ModIndex::LOADER, id, None, noting(&seen));
+        assert_eq!(state.add_wait(late), Err(TransactionError::Unavailable));
     }
 }
