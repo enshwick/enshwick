@@ -48,9 +48,9 @@ entries! {
 
     fn interaction_prompt(me as Mod, spec as Headed<api_frame::InteractionPrompt>) -> Status {
         me.claim(
-            "interaction prompt",
+            crate::actions::interaction_prompts::feature(spec.item),
             Mode::Exclusive,
-            crate::actions::interactions::prompts::register(me.loader, me.index, &spec),
+            crate::actions::interaction_prompts::register(me.loader, me.index, &spec),
         )
     }
 

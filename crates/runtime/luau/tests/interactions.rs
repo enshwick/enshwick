@@ -45,7 +45,7 @@ mod tests {
             r#"
             local pray = enshwick.resources.declare("you.luau:pray")
             enshwick.interactions.prompt(0x5e01, { verb = "Use", text = pray, replace_action = true })
-            enshwick.interactions.prompt(0x5e02, { verb = "Activate", replace_action = false })
+            enshwick.interactions.prompt(0x5e02, { verb = "Activate" })
             "#,
         );
         let altar = loader.prompt(ItemId::new(0x5e01)).unwrap();

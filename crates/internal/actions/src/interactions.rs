@@ -215,6 +215,7 @@ macro_rules! verbs {
         impl Verb {
             /// Every verb with the game's English text of it, for the
             /// loader's check against the game's own texts.
+            #[cfg(feature = "test")]
             #[doc(hidden)]
             pub const ALL: &[(Self, &str)] = &[$((Self::$name, $text)),*];
 
@@ -320,6 +321,7 @@ pub struct ObjectPrompt {
     /// The press runs the game's empty interaction, a short reach, instead
     /// of the object's own action, such as opening a chest; the mod's action
     /// on the game event `AcceptOfferedInteractionEvent` runs alone.
+    #[script(default)]
     pub replace_action: bool,
 }
 

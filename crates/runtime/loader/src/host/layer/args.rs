@@ -151,7 +151,7 @@ impl Mod {
     /// The claim's own refusal.
     pub(crate) fn claim<E: Into<Refused>>(
         &self,
-        feature: &'static str,
+        feature: impl Into<std::borrow::Cow<'static, str>>,
         mode: crate::engine::conflicts::Mode,
         outcome: Result<(), E>,
     ) -> Result<(), Refused> {

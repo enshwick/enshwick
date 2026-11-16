@@ -31,6 +31,8 @@ enshwick = { path = "../../enshwick", features = ["test"] }
 # The features of `enshwick-core`, which turns each of them on here.
 [features]
 fake = []
+# Test-only tables, for the loader's tests against the game's data.
+test = []
 unstable = [
     "enshwick-base/unstable",
     "enshwick-content/unstable",

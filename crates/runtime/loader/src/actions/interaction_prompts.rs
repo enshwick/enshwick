@@ -18,6 +18,16 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 
+/// The build table ids this part of the loader names, apart from the
+/// interaction filters', so a build without the prompt's pieces lacks only
+/// the prompts.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::ecs::ITERATOR_NEXT.id(),
+    pinned::ui::PROMPT_CONTEXT.id(),
+    pinned::ui::PROMPT_SITE.id(),
+    pinned::ui::PROMPT_VERB.id(),
+];
+
 /// The system that clears every object's prompt overrides each step.
 const RESET_SYSTEM: &str = "interaction_override_reset";
 const RESET_READS: [&str; 0] = [];
@@ -120,14 +130,23 @@ pub(crate) enum PromptError {
 
 sealed_is_too_late!(PromptError);
 
+/// The feature a prompt on `item` claims in the conflict report: one per
+/// item, as one mod's prompt shuts out no other item's.
+pub(crate) fn feature(item: enshwick_core::ItemId) -> String {
+    format!("interaction prompt on item {}", item.get())
+}
+
 /// The prompts mods registered, sealed in item order.
 static PROMPTS: Registry<Prompt> = Registry::new();
 
-/// Registers mod `owner`'s prompt `spec`: one per item across all mods.
+/// Registers mod `owner`'s prompt `spec`: one per item across all mods. A
+/// build without the client's text site keeps the verb and the action and
+/// turns the text off alone at the link.
 ///
 /// # Errors
 ///
-/// [`PromptError`] for a malformed spec, after init, or for an item another
+/// [`PromptError`] for a malformed spec, after init, for a verb or an
+/// action on a build without the server's writes, or for an item another
 /// prompt has.
 pub(crate) fn register(
     loader: &Loader,
@@ -136,9 +155,7 @@ pub(crate) fn register(
 ) -> Result<(), PromptError> {
     loader.before_delivery()?;
     let prompt = Prompt::of(owner, spec)?;
-    let server = prompt.verb != 0 || prompt.replace;
-    let client = prompt.text != 0 && loader.side == Side::CLIENT;
-    if (server && server_layout(loader).is_err()) || (client && client_layout(loader).is_err()) {
+    if (prompt.verb != 0 || prompt.replace) && server_layout(loader).is_err() {
         return Err(JoinFeatureError::Unavailable.into());
     }
     PROMPTS.edit(|prompts| add(prompts, prompt))?
@@ -146,6 +163,7 @@ pub(crate) fn register(
 
 /// The server's layout, or the id of what this build lacks.
 fn server_layout(loader: &Loader) -> Result<ServerLayout, &'static str> {
+    crate::engine::ecs::engine(loader).ok_or(pinned::ecs::ITERATOR_NEXT.id())?;
     crate::engine::ecs::components_match(loader, RESET_SYSTEM, &RESET_READS, &RESET_WRITES)
         .map_err(|_| RESET_SYSTEM)?;
     Ok(ServerLayout {
@@ -187,6 +205,13 @@ pub(crate) fn link(loader: &'static Loader) {
 
 /// Links the reset on every side, as any can host a world.
 fn link_server(loader: &'static Loader, prompts: &'static [Prompt]) {
+    if crate::engine::ecs::engine(loader).is_some()
+        && let Err(why) =
+            crate::engine::ecs::components_match(loader, RESET_SYSTEM, &RESET_READS, &RESET_WRITES)
+    {
+        loader.fuse_off(&PROMPTS_FUSE, RESET_SYSTEM, &why.to_string());
+        return;
+    }
     let layout = match server_layout(loader) {
         Ok(layout) => layout,
         Err(id) => {
@@ -332,7 +357,12 @@ unsafe fn write_prompts(ctx: *mut u64) {
         return;
     };
     // The reset's context does not name its world (client 26430625, hosted
-    // game, seen live 2026-11-16), so its rows are read in the server's.
+    // game, seen live 2026-11-16), so its rows are read in the server's, and
+    // only on the server's game thread, where its world cannot change under
+    // the read or be freed.
+    if crate::engine::world::reader().is_err() {
+        return;
+    }
     let world = usize::try_from(crate::engine::world::server_world()).unwrap_or(0);
     if ctx.is_null() || world == 0 {
         return;
@@ -373,7 +403,7 @@ unsafe fn write_prompts(ctx: *mut u64) {
             // SAFETY: `used` is the entity's live `UsedItem` component, which
             // is the u32 item id alone.
             let item: u32 = unsafe { read_at(used, 0) };
-            let Some(prompt) = find(prompts, item) else {
+            let Some(prompt) = live(prompts, item) else {
                 continue;
             };
             // Only the server's own row of the entity: a row of another world
@@ -459,7 +489,7 @@ unsafe fn show_text(registers: &Registers) {
     // SAFETY: `used` is the target's live `UsedItem` component, which is the
     // u32 item id alone.
     let item: u32 = unsafe { read_at(used, 0) };
-    if let Some(prompt) = find(prompts, item).filter(|p| p.text != 0) {
+    if let Some(prompt) = live(prompts, item).filter(|p| p.text != 0) {
         // SAFETY: `play` is the interface's non-null play data at the site
         // (the caller's contract), which `player_ui` writes on this thread;
         // its u32 verb sits at the table's `ui.prompt_verb`.
@@ -490,6 +520,12 @@ fn find(prompts: &[Prompt], item: u32) -> Option<&Prompt> {
         .binary_search_by_key(&item, |p| p.item)
         .ok()
         .and_then(|at| prompts.get(at))
+}
+
+/// [`find`]'s prompt while its mod is on: a mod turned off, or off for
+/// this world, changes no prompt.
+fn live(prompts: &[Prompt], item: u32) -> Option<&Prompt> {
+    find(prompts, item).filter(|p| !crate::engine::loader::is_off(p.owner))
 }
 
 #[cfg(test)]
@@ -570,6 +606,45 @@ mod tests {
         assert_eq!(
             empty_sequence_in(&archive, &reflection.registry()),
             Some(0x8d57_a851)
+        );
+    }
+
+    #[test]
+    fn prompts_on_two_items_claim_two_features() {
+        assert_ne!(feature(ItemId::new(1)), feature(ItemId::new(2)));
+        assert_eq!(feature(ItemId::new(1)), feature(ItemId::new(1)));
+    }
+
+    #[test]
+    fn a_prompt_of_a_mod_that_is_off_changes_nothing() {
+        // No mod of this index runs, so it reads as off.
+        let gone = Prompt::of(ModIndex::new(400), &spec(5, 7, 9, 1)).unwrap();
+        let prompts = [gone];
+        assert_eq!(find(&prompts, 5), Some(&gone));
+        assert_eq!(live(&prompts, 5), None);
+    }
+
+    #[test]
+    fn a_build_without_the_text_site_keeps_a_text_and_refuses_a_verb() {
+        let loader = crate::start::tests::pinning_loader(Side::CLIENT, &[], &[]);
+        let mine = ModIndex::new(0);
+        assert_eq!(
+            register(&loader, mine, &spec(0xC0DE_0563, 0, 9, 0)),
+            Ok(()),
+            "the text turns off alone at the link"
+        );
+        assert_eq!(
+            register(&loader, mine, &spec(0xC0DE_0564, 7, 9, 0)),
+            Err(PromptError::Register(JoinFeatureError::Unavailable))
+        );
+    }
+
+    #[test]
+    fn a_build_without_the_entity_engine_lacks_the_server_s_writes() {
+        let loader = crate::start::tests::bare_loader();
+        assert_eq!(
+            server_layout(&loader).map(|_| ()),
+            Err(pinned::ecs::ITERATOR_NEXT.id())
         );
     }
 

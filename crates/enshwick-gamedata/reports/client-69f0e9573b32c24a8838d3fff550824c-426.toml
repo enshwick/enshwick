@@ -2,7 +2,7 @@
 # `sealed` ties it to the code that finds it, so a report edited by hand or
 # left behind by that code fails `cargo xtask check`.
 
-sealed = "47525a3c5a238fcfcab72b0cad5b926f7782e4097da2577e9f990e302a374240"
+sealed = "04ad8019ed9db1ba58e02af979f996eaa13f40819ccf9c07df5d4899df6acafc"
 build = "client, Steam build 26082781, game 1273043, executable 69f0e9573b32c24a8838d3fff550824c/426"
 side = "client"
 steam_build = 26082781
@@ -14,6 +14,6 @@ missing = ["ui.prompt_site"]
 unread = ["attribute.experience_needed_slot", "attribute.fuel_max_slot", "attribute.health_adder_slot", "attribute.health_max_slot", "attribute.mana_adder_slot", "attribute.mana_max_slot", "attribute.shroud_max_slot", "attribute.stamina_adder_slot", "attribute.stamina_max_slot"]
 
 [[feature]]
-name = "interactions"
+name = "interaction_prompts"
 state = "partly"
 missing = ["ui.prompt_site"]

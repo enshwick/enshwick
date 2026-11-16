@@ -70,15 +70,41 @@ mod tests {
     #[test]
     fn a_second_prompt_on_an_item_and_an_empty_prompt_are_refused() {
         let loader = FakeHost::new().install();
+        // Under `cargo test` the other test's init may have run first, in
+        // this process.
+        let before = REFUSED.lock().unwrap().len();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Shrine)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        assert_eq!(*REFUSED.lock().unwrap(), [true, true]);
+        assert_eq!(REFUSED.lock().unwrap()[before..], [true, true]);
         assert_eq!(
             loader.prompt(ALTAR).map(|p| p.verb),
             Some(Verb::Use.id()),
             "the first prompt stays"
+        );
+    }
+
+    #[test]
+    fn any_prompt_after_init_is_too_late_even_a_malformed_one() {
+        let loader = FakeHost::new().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Shrine)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        // SAFETY: the fake's table lives for the process.
+        let api = unsafe { &*loader.api() };
+        let empty = InteractionPrompt {
+            header: enshwick::abi::Header::of::<InteractionPrompt>(),
+            item: ItemId::new(0),
+            verb: 0,
+            text: 0,
+            flags: 0,
+        };
+        assert_eq!(
+            (api.interaction_prompt)(loader.handle(), &raw const empty),
+            Status::TOO_LATE,
+            "as the loader, which checks the time before the spec"
         );
     }
 }

@@ -6432,8 +6432,9 @@ typedef struct EnshwickHostApi {
   // prompt per item across all mods. Allowed during `enshwick_mod_init`
   // only; `EnshwickStatus_BAD_ARGS` for a null or short `spec`, item 0, an
   // unknown flag or a prompt that changes nothing; `EnshwickStatus_REFUSED`
-  // for an item another prompt has; `EnshwickStatus_UNAVAILABLE` on a build
-  // that lacks a piece. ABI 12.3.
+  // for an item another prompt has; `EnshwickStatus_UNAVAILABLE` for a verb
+  // or an action on a build without the server's writes, while a build
+  // without the client's text site turns the text off alone. ABI 12.3.
   EnshwickStatus (*interaction_prompt)(EnshwickModHandle me,
                                        const struct EnshwickInteractionPrompt *spec);
 } EnshwickHostApi;

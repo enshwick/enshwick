@@ -42,7 +42,9 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] after init, for item 0 or a prompt that changes nothing, for
-    /// an item another prompt has, or on a build that lacks a piece.
+    /// an item another prompt has, or for a verb or an action on a build
+    /// without the server's writes; a build without the client's text site
+    /// turns the text off alone.
     ///
     /// # Examples
     ///

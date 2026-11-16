@@ -67,6 +67,7 @@ loom = { version = "0.7.2", default-features = false }
 criterion.workspace = true
 # The discovery tests build mods against `crates/enshwick` by path.
 enshwick.workspace = true
+enshwick-core = { workspace = true, features = ["unstable", "test"] }
 enshwick-gamedata = { workspace = true, features = ["test"] }
 insta.workspace = true
 proptest.workspace = true

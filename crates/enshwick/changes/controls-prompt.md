@@ -6,4 +6,4 @@
   verb's place on clients with Enshwick (`interactions::ObjectPrompt`;
   unstable). Luau has it as `interactions.prompt`.
 - `FakeHost::prompt` reads the prompt a mod gave an item.
-- ABI 12.2: `HostApi::interaction_prompt` and `abi::InteractionPrompt`.
+- ABI 12.3: `HostApi::interaction_prompt` and `abi::InteractionPrompt`.

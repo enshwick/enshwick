@@ -2178,8 +2178,9 @@ pub struct HostApi {
     /// prompt per item across all mods. Allowed during `enshwick_mod_init`
     /// only; [`Status::BAD_ARGS`] for a null or short `spec`, item 0, an
     /// unknown flag or a prompt that changes nothing; [`Status::REFUSED`]
-    /// for an item another prompt has; [`Status::UNAVAILABLE`] on a build
-    /// that lacks a piece. ABI 12.3.
+    /// for an item another prompt has; [`Status::UNAVAILABLE`] for a verb
+    /// or an action on a build without the server's writes, while a build
+    /// without the client's text site turns the text off alone. ABI 12.3.
     pub interaction_prompt:
         extern "system" fn(me: ModHandle, spec: *const InteractionPrompt) -> Status,
 }
