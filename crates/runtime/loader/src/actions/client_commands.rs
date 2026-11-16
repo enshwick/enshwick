@@ -807,6 +807,15 @@ mod tests {
     }
 
     #[test]
+    fn a_tab_applies_while_the_menu_shows_a_tab_the_build_adds() {
+        let tab = Command {
+            expected: None,
+            ..command(Kind::Tab(MenuTab::Map))
+        };
+        assert_eq!(next(&tab, &seen(4, TabRead::Other), None, 150), Next::Apply);
+    }
+
+    #[test]
     fn a_tab_waits_for_the_menu_and_is_observed_when_it_shows() {
         let mut tab = Command {
             expected: None,

@@ -28,9 +28,7 @@ unsafe fn view(engine: &Engine, context: usize) -> Option<(extensions::ScreenVie
             // SAFETY: `view.state` is this frame's interface state, the one the
             // in-game menu draws from, read on the interface thread; its tab
             // index sits at the routed `ui.menu_tab`.
-            let shown =
-                unsafe { tab.shown(core::ptr::with_exposed_provenance(view.state), view.screen) };
-            shown.map_or(TabRead::NoMenu, TabRead::Shown)
+            unsafe { tab.shown(core::ptr::with_exposed_provenance(view.state), view.screen) }
         });
     Some((view, tab))
 }
