@@ -8,7 +8,8 @@
 //! shroud, drowning and freezing take health without a hit, in
 //! `fall_damage_infliction`, `fog_resistance_update`, `oxygen_update` and
 //! `bodyheat_depletion`; the loader hooks their writes to the health
-//! attribute. An administrator's kill zeroes every health attribute at
+//! attribute, and a lethal fall the filters spare records no death
+//! ([`spared_fall`]). An administrator's kill zeroes every health attribute at
 //! once, so the loader hooks the test before it: of the target's health in
 //! `admin_player` for chosen enemies, of the entity's faction in
 //! `debug_kill_faction` for whole factions and players, and a refused kill
@@ -129,8 +130,14 @@ fn types_match(loader: &Loader) -> bool {
         .is_ok_and(|info| info.enum_values().len() == TYPES)
 }
 
-/// Seals the filters and links every site when a mod filters damage or
-/// uses stats: the filters arm at all the sites or none.
+/// Seals the filters before any part links, so [`filtering`] answers every
+/// link, the death sink's among them, whatever the parts' order.
+pub(crate) fn seal() {
+    let _filters = FILTERS.seal();
+}
+
+/// Links every site when a mod filters damage or uses stats: the filters
+/// arm at all the sites or none.
 pub(crate) fn link(loader: &Loader) {
     link_in(loader, FILTERS.seal(), crate::inventory::stats::wanted());
 }
@@ -173,7 +180,7 @@ fn sites(filtering: bool) -> &'static [(Symbol, MidHookFn)] {
 
 /// Whether a mod filters damage; one load, before a site reads anything.
 #[inline]
-fn filtering() -> bool {
+pub(crate) fn filtering() -> bool {
     FILTERS.has_sealed()
 }
 
@@ -327,16 +334,54 @@ mid_handler! {
         // system writes it; 1.0 build 1269579.
         let current: i32 = unsafe { crate::engine::memory::read(health_slot(registers), 0) };
         let new = low(registers.r9);
-        let damage = current.saturating_sub(new);
-        if damage <= 0 {
-            return;
+        let r15 = registers.r15;
+        let kept = fall_kept(current, new, |damage| {
+            // SAFETY: at the site `r15` holds the live query context of the
+            // system running on this thread; 1.0 build 1269579.
+            let target = unsafe { row_entity(r15) };
+            filtered(DamageCheck::FALL_DAMAGE, target, damage)
+        });
+        if kept != new {
+            registers.r9 = u64::from(kept.cast_unsigned());
         }
-        // SAFETY: at the site `r15` holds the live query context of the
-        // system running on this thread; 1.0 build 1269579.
-        let target = unsafe { row_entity(registers.r15) };
-        let damage = filtered(DamageCheck::FALL_DAMAGE, target, damage);
-        registers.r9 = u64::from(current.saturating_sub(damage).max(0).cast_unsigned());
     }
+}
+
+thread_local! {
+    /// Whether the fall this thread last filtered was lethal until the
+    /// filters spared it.
+    static SPARED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// The health a write from `current` to the game's `new` leaves once
+/// `filter` turned its damage into what is taken; `new` when the write
+/// takes nothing.
+fn kept_health(current: i32, new: i32, filter: impl FnOnce(i32) -> i32) -> i32 {
+    let damage = current.saturating_sub(new);
+    if damage <= 0 {
+        return new;
+    }
+    current.saturating_sub(filter(damage)).max(0)
+}
+
+/// [`kept_health`] for a fall, noting for [`spared_fall`] whether the
+/// filter spared a lethal one; every fall write sets the note, so none
+/// outlives the row it was made for.
+fn fall_kept(current: i32, new: i32, filter: impl FnOnce(i32) -> i32) -> i32 {
+    let kept = kept_health(current, new, filter);
+    SPARED.set(new <= 0 && kept > 0);
+    kept
+}
+
+/// Whether the fall this thread last filtered was spared, cleared by the
+/// asking.
+///
+/// `fall_damage_infliction` decides on a player's death from the health it
+/// worked out, not the health it wrote, so after a spared fall it still
+/// hands the death sink a record, on this thread right after the write;
+/// server 26430253, client 26430625.
+pub(crate) fn spared_fall() -> bool {
+    SPARED.replace(false)
 }
 
 mid_handler! {
@@ -369,15 +414,16 @@ mid_handler! {
         // system writes it; 1.0 build 1269579.
         let current: i32 = unsafe { crate::engine::memory::read(health_slot(registers), 0) };
         let new = low(registers.rdx);
-        let damage = current.saturating_sub(new);
-        if damage <= 0 {
-            return;
+        let r15 = registers.r15;
+        let kept = kept_health(current, new, |damage| {
+            // SAFETY: at the site `r15` holds the live query context of the
+            // system running on this thread; 1.0 build 1269579.
+            let target = unsafe { row_entity(r15) };
+            filtered(DamageCheck::DEADLY_FOG, target, damage)
+        });
+        if kept != new {
+            registers.rdx = u64::from(kept.cast_unsigned());
         }
-        // SAFETY: at the site `r15` holds the live query context of the
-        // system running on this thread; 1.0 build 1269579.
-        let target = unsafe { row_entity(registers.r15) };
-        let damage = filtered(DamageCheck::DEADLY_FOG, target, damage);
-        registers.rdx = u64::from(current.saturating_sub(damage).max(0).cast_unsigned());
     }
 }
 
@@ -411,16 +457,16 @@ mid_handler! {
         // build 1269579.
         let current: i32 = unsafe { crate::engine::memory::read(health_slot(registers), 0) };
         let new = low(registers.r14);
-        let damage = current.saturating_sub(new);
-        if damage <= 0 {
-            return;
+        let r15 = registers.r15;
+        let kept = kept_health(current, new, |damage| {
+            // SAFETY: at the site `r15` holds the live query context of the
+            // system running on this thread; 1.0 build 1269579.
+            let target = unsafe { row_entity(r15) };
+            filtered(DamageCheck::DROWNING_DEATH, target, damage)
+        });
+        if kept != new {
+            registers.r14 = (registers.r14 & !0xffff_ffff) | u64::from(kept.cast_unsigned());
         }
-        // SAFETY: at the site `r15` holds the live query context of the
-        // system running on this thread; 1.0 build 1269579.
-        let target = unsafe { row_entity(registers.r15) };
-        let damage = filtered(DamageCheck::DROWNING_DEATH, target, damage);
-        let kept = current.saturating_sub(damage).max(0).cast_unsigned();
-        registers.r14 = (registers.r14 & !0xffff_ffff) | u64::from(kept);
     }
 }
 
@@ -623,6 +669,36 @@ mod tests {
         };
         assert_eq!(ids(false), [pinned::damage::HIT.id()]);
         assert_eq!(ids(true).len(), 9);
+    }
+
+    #[test]
+    fn a_lethal_fall_the_filters_cancel_keeps_the_health_and_spares_the_player_once() {
+        assert_eq!(fall_kept(30, 0, |_| 0), 30);
+        assert!(spared_fall());
+        assert!(!spared_fall(), "a spared fall answers one death record");
+    }
+
+    #[test]
+    fn a_fall_is_spared_only_when_the_filters_turn_a_lethal_write_into_a_survivable_one() {
+        assert_eq!(fall_kept(30, 0, |damage| damage), 0);
+        assert!(!spared_fall(), "still lethal");
+        assert_eq!(fall_kept(30, 10, |_| 0), 30);
+        assert!(!spared_fall(), "never lethal");
+        assert_eq!(fall_kept(30, 40, |_| unreachable!()), 40, "no damage");
+    }
+
+    #[test]
+    fn a_fall_that_takes_nothing_clears_a_spared_fall_another_row_left_on_the_thread() {
+        let _spared = fall_kept(30, 0, |_| 0);
+        assert_eq!(fall_kept(30, 40, |_| unreachable!()), 40);
+        assert!(!spared_fall());
+    }
+
+    #[test]
+    fn a_filtered_write_keeps_what_the_filter_leaves_and_never_goes_below_zero() {
+        assert_eq!(kept_health(30, 10, |damage| damage / 2), 20);
+        assert_eq!(kept_health(30, 10, |damage| damage * 3), 0);
+        assert_eq!(kept_health(30, 30, |_| unreachable!()), 30, "no damage");
     }
 
     #[test]
