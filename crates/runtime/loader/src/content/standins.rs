@@ -85,17 +85,19 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
         .collect();
     let listed: Vec<Guid> = orphans.iter().map(|&(item, _)| item).collect();
     let registry: Builder = Box::new(move |base: &[u8]| {
-        listed.iter().try_fold(base.to_vec(), |registry, &item| {
-            let mut listed = Vec::new();
+        // Two buffers in turn: each listing builds from the last one's bytes.
+        let (mut registry, mut next) = (base.to_vec(), Vec::new());
+        for &item in &listed {
             list_item(
                 &layout,
                 &registry,
                 item,
                 &format!("stand-in {item}"),
-                &mut listed,
+                &mut next,
             )?;
-            Some(listed)
-        })
+            core::mem::swap(&mut registry, &mut next);
+        }
+        Some(registry)
     });
     for (tag, key) in [
         (NAME, "stand-in.name"),

@@ -317,6 +317,7 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 ///     })
 /// }
 /// ```
+#[must_use]
 pub fn derive_recipes_in(
     layout: &RecipeLayout,
     registry: &[u8],

@@ -324,6 +324,9 @@ impl<B: Grow> Blob<B> {
         relative: &[usize],
         extra: &[(Vec<u8>, Option<usize>)],
     ) -> Option<u32> {
+        if size == 0 {
+            return None;
+        }
         let (start, count) = self.array(field)?;
         let old = usize::try_from(count).ok()?;
         let old_end = start.checked_add(old.checked_mul(size)?)?;

@@ -302,6 +302,53 @@ mod tests {
     }
 
     #[test]
+    fn a_wait_for_a_placement_that_expires_hands_over_the_prop_it_placed() {
+        let (loader, world) = started();
+        let id = world
+            .transaction()
+            .place_prop(CHEST, here())
+            .commit()
+            .unwrap();
+        let seen = settled_into(world, id);
+        loader.run_transactions();
+        pass(&loader);
+        let placed = world.transaction_entities(id);
+        assert_eq!(placed.len(), 1);
+        loader.expire_transactions();
+        pass(&loader);
+        let settled = seen.lock().unwrap().take().unwrap();
+        assert_eq!(settled.status, Some(TransactionStatus::Expired));
+        assert_eq!(settled.props, placed);
+    }
+
+    #[test]
+    fn a_wait_whose_bound_passed_still_waits_a_pass_for_an_applied_prop() {
+        let (loader, world) = started();
+        let id = world
+            .transaction()
+            .place_prop(CHEST, here())
+            .commit()
+            .unwrap();
+        let seen = Arc::new(Mutex::new(None));
+        let kept = Arc::clone(&seen);
+        world
+            .when_settled(id, Duration::ZERO, move |settled| {
+                *kept.lock().unwrap() = Some(settled.clone());
+            })
+            .unwrap();
+        loader.run_transactions();
+        pass(&loader);
+        assert!(
+            seen.lock().unwrap().is_none(),
+            "its prop stands a step later"
+        );
+        pass(&loader);
+        let settled = seen.lock().unwrap().take().unwrap();
+        assert_eq!(settled.status, Some(TransactionStatus::Applied));
+        assert_eq!(settled.props.len(), 1);
+    }
+
+    #[test]
     fn a_wait_for_a_failed_transaction_hands_over_its_failure() {
         let (loader, world) = started();
         let id = world

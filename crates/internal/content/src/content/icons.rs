@@ -343,6 +343,7 @@ impl ImageLayout {
 /// assert_eq!((image[0x31], image[0x32]), (0x25, 1));
 /// # Ok::<(), &str>(())
 /// ```
+#[must_use]
 pub fn clone_image(
     layout: &ImageLayout,
     base: &[u8],

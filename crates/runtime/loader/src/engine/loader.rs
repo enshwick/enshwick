@@ -514,7 +514,7 @@ impl Loader {
     /// loader's own links never are. The one rule [`is_off`] and
     /// [`bypassed`] follow too; only atomic loads, for hook calls.
     #[inline]
-    fn passed(&self, owner: ModIndex, waiting: bool) -> bool {
+    pub(crate) fn passed(&self, owner: ModIndex, waiting: bool) -> bool {
         owner != ModIndex::LOADER
             && self.mods.get(owner.get()).is_none_or(|m| {
                 m.off.load(Ordering::Acquire) || (waiting && m.waiting.load(Ordering::Acquire))

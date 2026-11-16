@@ -408,6 +408,7 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 ///     load.serve(item, like, move |base, out| clone_station(&items, &layout, base, &new, out))
 /// }
 /// ```
+#[must_use]
 pub fn clone_station(
     items: &ItemLayout,
     layout: &WorkshopLayout,
@@ -447,6 +448,7 @@ pub fn clone_station(
 ///     load.serve(registry, registry, move |base, out| list_workshop(&layout, base, &new, out))
 /// }
 /// ```
+#[must_use]
 pub fn list_workshop(
     layout: &WorkshopLayout,
     registry: &[u8],

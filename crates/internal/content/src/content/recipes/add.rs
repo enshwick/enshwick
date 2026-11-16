@@ -188,6 +188,7 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 ///     })
 /// }
 /// ```
+#[must_use]
 pub fn add_recipe_to(
     layout: &RecipeLayout,
     registry: &[u8],

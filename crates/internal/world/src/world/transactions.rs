@@ -9,11 +9,30 @@ use crate::abi::{
     BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
     VoxelRegion, VoxelWrite,
 };
+use crate::schedule::Scheduler;
 use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
 use crate::voxels::{VoxelBox, VoxelPos};
-use crate::{Host, ItemId};
+use crate::{BaseLoad, Host, ItemId};
 
 use super::{BuildRefusal, Player, PropState, World, WorldError, WorldTransform};
+
+/// The scheduler [`World::when_settled`] waits on, taken when the mod opens
+/// the world in `init`, as a tick cannot be subscribed after it.
+static WAITS: crate::state::ModLocal<Scheduler> = crate::state::ModLocal::new();
+
+/// Takes the mod's scheduler for transaction waits, once its world resolved;
+/// a later open in `init` asks again after a failed one.
+pub(super) fn take_scheduler(load: &mut BaseLoad) {
+    if WAITS.get().is_some() {
+        return;
+    }
+    match load.scheduler() {
+        Ok(scheduler) => {
+            let _first = WAITS.set(scheduler);
+        }
+        Err(off) => crate::debug!("transaction waits off: {off}"),
+    }
+}
 
 /// The id of a committed [`Transaction`], for [`World::undo`] and
 /// [`World::transaction_status`]; valid while the server runs.
@@ -131,13 +150,15 @@ impl TransactionStatus {
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct Settled {
-    /// [`TransactionStatus::Applied`] once it is written whole, else how it
-    /// ended; still [`TransactionStatus::Pending`] when the wait's bound
-    /// passed first; `None` once the loader no longer remembers it.
+    /// [`TransactionStatus::Applied`] once it is written whole, or
+    /// [`TransactionStatus::Expired`] when its undo data was dropped since;
+    /// else how it ended; still [`TransactionStatus::Pending`] when the
+    /// wait's bound passed first; `None` once the loader no longer remembers
+    /// it.
     pub status: Option<TransactionStatus>,
-    /// The props it placed and still holds, oldest first, as
-    /// [`World::transaction_entities`] lists them; once it is applied they
-    /// stand in the world.
+    /// The props it placed and held, oldest first, as
+    /// [`World::transaction_entities`] lists them; once it is written whole
+    /// they stand in the world.
     pub props: Vec<Entity>,
 }
 
@@ -689,15 +710,21 @@ impl World {
         raw
     }
 
-    /// Runs `handler` once transaction `id` of this mod stopped running: one
-    /// scheduler pass after it is [`TransactionStatus::Applied`], when the
-    /// props it placed stand in the world, or once it ended otherwise. A large
-    /// transaction spread over steps is waited for whole; an undo of it that
-    /// is still running counts as its end. Once `within` passed, the handler
-    /// gets the transaction as it stands, still pending perhaps. `handler` runs on the server's game
-    /// thread, as a [`Scheduler`](crate::schedule::Scheduler) task of this
-    /// mod; the wait ends without it when the game it started in ends. The
-    /// handler decides what an end other than applied means, such as a
+    /// Runs `handler` once transaction `id` of this mod stopped running, so a
+    /// mod acts on its placed props without polling.
+    ///
+    /// Once the transaction is written whole ([`TransactionStatus::Applied`],
+    /// or [`TransactionStatus::Expired`] when the loader dropped its undo
+    /// data meanwhile), the handler runs one scheduler pass later, when the
+    /// props it placed stand in the world; it gets the props the transaction
+    /// held when it was written, even when it expired since. Any other end
+    /// runs it at once; a large transaction spread over steps is waited for
+    /// whole, and an undo of it that is still running counts as its end. Once
+    /// `within` passed, the handler gets the transaction as it stands, still
+    /// pending perhaps. `handler` runs on the server's game thread as a
+    /// [`Scheduler`] task of this mod, so it belongs to the game of the
+    /// scheduler's last pass ([`schedule`](crate::schedule)). The handler
+    /// decides what an end other than written whole means, such as a
     /// [`TransactionStatus::Failed`] with [`WorldError::NotLoaded`], which the
     /// same changes committed again may pass.
     ///
@@ -717,7 +744,7 @@ impl World {
     /// fn place_chest(world: World, chest: ItemId, at: WorldTransform) -> Result<(), WorldError> {
     ///     let id = world.transaction().place_prop(chest, at).commit()?;
     ///     world.when_settled(id, Duration::from_secs(10), |settled| match (&settled.status, settled.props.first()) {
-    ///         (Some(TransactionStatus::Applied), Some(chest)) => {
+    ///         (Some(TransactionStatus::Applied | TransactionStatus::Expired), Some(chest)) => {
     ///             enshwick::info!("chest {chest:?} stands");
     ///         }
     ///         (status, _) => enshwick::warn!("no chest: {status:?}"),
@@ -731,25 +758,34 @@ impl World {
         within: Duration,
         handler: impl FnOnce(&Settled) + Send + 'static,
     ) -> Result<(), WorldError> {
-        let scheduler = self.0.scheduler.ok_or(WorldError::Unavailable)?;
+        let scheduler = *WAITS.get().ok_or(WorldError::Unavailable)?;
         let mut handler = Some(handler);
-        let mut applied = false;
+        // The props it held when first seen written whole.
+        let mut written: Option<Vec<Entity>> = None;
         let until = Instant::now().checked_add(within);
         scheduler.every(Duration::ZERO, move || {
             let status = self.transaction_status(id);
             let waits = until.is_none_or(|until| Instant::now() < until);
+            let whole = matches!(
+                status,
+                Some(TransactionStatus::Applied | TransactionStatus::Expired)
+            );
             match status {
                 Some(TransactionStatus::Pending) if waits => return ControlFlow::Continue(()),
-                // Its props stand from the step after the one that placed them.
-                Some(TransactionStatus::Applied) if !applied && waits => {
-                    applied = true;
+                // Its props stand from the step after the one that placed
+                // them, so this pass waits even past the bound.
+                _ if whole && written.is_none() => {
+                    written = Some(self.transaction_entities(id));
                     return ControlFlow::Continue(());
                 }
                 _ => {}
             }
             let settled = Settled {
                 status,
-                props: self.transaction_entities(id),
+                props: match written.take() {
+                    Some(props) if whole => props,
+                    _ => self.transaction_entities(id),
+                },
             };
             if let Some(handler) = handler.take() {
                 handler(&settled);

@@ -127,6 +127,7 @@ pub fn container_slots(layout: &ContainerLayout, template: &[u8]) -> Option<u8> 
 ///     Some(doubled)
 /// }
 /// ```
+#[must_use]
 pub fn resize_container(
     layout: &ContainerLayout,
     template: &[u8],

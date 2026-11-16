@@ -96,8 +96,7 @@ pub(super) fn follow(loader: &Loader, state: &mut World, players: &[PlayerInfo])
     }
     let before = state.watched.len();
     state.watched.retain(|entity, w| {
-        w.asked
-            .retain(|&owner| !crate::engine::loader::is_off(owner));
+        w.asked.retain(|&owner| !loader.passed(owner, false));
         // An entry with values still to work out, or maxima points still
         // added, stays until a step takes them back.
         let keep = online.contains(entity)

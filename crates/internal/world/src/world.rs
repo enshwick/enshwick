@@ -382,17 +382,10 @@ impl crate::script::Bound for World {
 
 impl LoadMethods for BaseLoad {
     fn world(&mut self) -> Result<World, Off> {
-        // Taken at init, as a tick cannot be subscribed after it.
+        let world = World::resolve(self)?;
         #[cfg(feature = "unstable")]
-        let scheduler = self
-            .scheduler()
-            .inspect_err(|off| crate::debug!("transaction waits off: {off}"))
-            .ok();
-        World::resolve(
-            self,
-            #[cfg(feature = "unstable")]
-            scheduler,
-        )
+        transactions::take_scheduler(self);
+        Ok(world)
     }
 }
 
@@ -449,10 +442,6 @@ struct Resolved {
     label: Option<ComponentType>,
     stats: Option<stats::Stats>,
     containers: Option<containers::Containers>,
-    /// The mod's scheduler, which waits for transactions from; `None` when
-    /// its tick could not be subscribed.
-    #[cfg(feature = "unstable")]
-    scheduler: Option<crate::schedule::Scheduler>,
 }
 
 static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
@@ -470,10 +459,7 @@ fn orientation_offset(load: &BaseLoad) -> Option<usize> {
 
 #[crate::script(things)]
 impl World {
-    pub(crate) fn resolve(
-        load: &BaseLoad,
-        #[cfg(feature = "unstable")] scheduler: Option<crate::schedule::Scheduler>,
-    ) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
             return Ok(Self(resolved));
         }
@@ -503,8 +489,6 @@ impl World {
             stats: stats::Stats::resolve(load, host)
                 .inspect_err(|off| crate::debug!("stat reads off: {off}"))
                 .ok(),
-            #[cfg(feature = "unstable")]
-            scheduler,
         };
         Ok(Self(RESOLVED.get_or_init(|| resolved)))
     }

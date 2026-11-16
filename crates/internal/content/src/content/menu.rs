@@ -136,6 +136,7 @@ pub struct MenuEntry {
 ///     load.serve(bundle, bundle, move |base, out| list_recipes(&layout, base, &[entry], out))
 /// }
 /// ```
+#[must_use]
 pub fn list_recipes(
     layout: &MenuLayout,
     bundle: &[u8],
@@ -209,6 +210,7 @@ fn list_in(layout: &MenuLayout, blob: &mut Blob<impl Grow>, entries: &[MenuEntry
 ///     load.serve(bundle, bundle, move |base, out| move_recipes(&layout, base, &[(planks, kiln)], out))
 /// }
 /// ```
+#[must_use]
 pub fn move_recipes(
     layout: &MenuLayout,
     bundle: &[u8],
@@ -399,6 +401,7 @@ fn group_entries(
 ///     load.serve(bundle, bundle, move |base, out| list_workshop(&layout, base, bench, out))
 /// }
 /// ```
+#[must_use]
 pub fn list_workshop(
     layout: &MenuLayout,
     bundle: &[u8],

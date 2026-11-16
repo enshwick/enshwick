@@ -8,6 +8,13 @@ fn a_guid_parses_to_memory_order_and_its_game_id() {
 }
 
 #[test]
+fn growing_an_array_of_zero_sized_elements_fails_without_a_panic() {
+    let mut blob = Blob::new(&[8, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(blob.grow_array(0, 0, 4, &[], &[(Vec::new(), None)]), None);
+    assert_eq!(blob.bytes(), [8, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
 fn moved_elements_keep_pointing_at_their_data() {
     // Root: array at 0 of one 8-byte element at 8; the element is a string
     // header pointing at "ab" at 16.

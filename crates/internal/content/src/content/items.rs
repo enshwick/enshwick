@@ -442,6 +442,7 @@ const BLOB_STRING: usize = 8;
 /// assert_eq!(clone[4..20], item.id.guid().0);
 /// # Ok::<(), &str>(())
 /// ```
+#[must_use]
 pub fn clone_item(
     layout: &ItemLayout,
     like: &[u8],
@@ -511,6 +512,7 @@ pub fn clone_item(
 ///     load.serve(registry, registry, move |base, out| list_item(&layout, base, staff, "Staff", out))
 /// }
 /// ```
+#[must_use]
 pub fn list_item(
     layout: &ItemLayout,
     registry: &[u8],
