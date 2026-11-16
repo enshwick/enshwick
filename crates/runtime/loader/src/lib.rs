@@ -53,6 +53,9 @@ pub use content::{served::bench_text_lookup, textures::bench_texture_request};
 #[doc(hidden)]
 pub use engine::pages::{forget as forget_read_only, read_only};
 #[cfg(windows)]
+#[doc(hidden)]
+pub use engine::world::accounts::bench_accounts;
+#[cfg(windows)]
 pub use parts::table_ids;
 #[cfg(windows)]
 #[doc(hidden)]

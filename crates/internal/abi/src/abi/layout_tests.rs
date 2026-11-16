@@ -215,7 +215,7 @@ shapes! {
         DropRequest { header, item, count, position, level, rarity },
         ProgressWriteData { header, entity, what, value, outcome, level, experience, gained },
         CraftCheck { header, crafting_operator_id, crafting_station_id, recipe_id, recipe_amount, reserved },
-        BuildCheck { header, character, item, position, reason },
+        BuildCheck { header, character, item, position, reason, account },
         NetMessage { header, channel, reserved, peer, data, size, reserved_tail },
         DaytimeInfo { header, time_ns, day_start_ns, day_end_ns, day_length_ns, night_length_ns, speed, flags },
         DamageCheck { header, cause, target, source, attacker, total, amount_count, amounts },

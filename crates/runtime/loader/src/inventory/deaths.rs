@@ -10,10 +10,7 @@
 //! copies the record and raises [`Event::PLAYER_DIED`] after the step, with
 //! the attacker of the last hit in the player's `HitHistory` for a hit.
 //! Deaths no system records, such as freezing or an administrator's kill,
-//! raise nothing here. A lethal fall the damage filters spared still
-//! reaches the sink, since the fall system decides on the death before the
-//! filtered write; the sink refuses that record, so the game counts no
-//! death and no event is raised.
+//! raise nothing here.
 
 use std::sync::OnceLock;
 
@@ -110,28 +107,7 @@ impl History {
     }
 }
 
-/// What the death sink works with, set once at link.
-#[derive(Debug, Clone, Copy)]
-struct Sink {
-    layout: Record,
-    /// Whether a mod listens for deaths, so the sink keeps records for the
-    /// event; with only damage filters it only refuses spared falls.
-    raise: bool,
-}
-
-/// What the sink does with a record.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Verdict {
-    /// Refuses it, so the game counts no death: a fall's, right after the
-    /// damage filters spared that fall on this thread.
-    Refuse,
-    /// Keeps a copy for the event and hands it on.
-    Raise,
-    /// Hands it on.
-    Pass,
-}
-
-static SINK: OnceLock<Sink> = OnceLock::new();
+static RECORD: OnceLock<Record> = OnceLock::new();
 static HISTORY: OnceLock<Option<History>> = OnceLock::new();
 /// Deaths seen since the last step, as the records' bytes.
 static SEEN: Pending<[u8; 64]> = Pending::new();
@@ -206,42 +182,22 @@ fn record(loader: &Loader) -> Option<Record> {
     })
 }
 
-/// What `sink` does with the record `bytes`, `spared` telling whether the
-/// filters spared a lethal fall on this thread just before.
-fn verdict(sink: &Sink, spared: bool, bytes: &[u8; 64]) -> Verdict {
-    let code = field::<1>(bytes, sink.layout.cause)[0];
-    if spared && cause(&sink.layout, code, false) == DamageCheck::FALL_DAMAGE {
-        Verdict::Refuse
-    } else if sink.raise {
-        Verdict::Raise
-    } else {
-        Verdict::Pass
-    }
-}
-
-/// The reason the record cannot be read, for the off notice and the log.
-const UNREAD: &str = "is not reflected within 64 bytes with every field the event carries";
-
-/// Links the sink when a mod listens for deaths or filters damage, which
-/// can spare a lethal fall.
+/// Links the sink when a mod listens for deaths.
 pub(crate) fn link(loader: &'static Loader) {
-    let raise = loader.subscribed(Event::PLAYER_DIED);
-    if !raise && !crate::inventory::damage::filtering() {
+    if !loader.subscribed(Event::PLAYER_DIED) {
         return;
     }
     let Some(layout) = record(loader) else {
-        if raise {
-            let _off = loader.fuse_off(&DEATHS_FUSE, DEATH_RECORD, UNREAD);
-        } else {
-            crate::log!(
-                WARN,
-                "damage filters: {DEATH_RECORD} {UNREAD}, so a lethal fall a filter spares still counts as a death"
-            );
-        }
+        let _off = loader.fuse_off(
+            &DEATHS_FUSE,
+            DEATH_RECORD,
+            "is not reflected within 64 bytes with every field the event carries",
+        );
         return;
     };
-    let _first = SINK.set(Sink { layout, raise });
-    if raise && HISTORY.get_or_init(|| History::resolve(loader)).is_none() {
+    let _first = RECORD.set(layout);
+    let history = HISTORY.get_or_init(|| History::resolve(loader));
+    if history.is_none() {
         crate::log!(
             WARN,
             "player deaths: no hit history in this build, killers stay 0"
@@ -259,53 +215,24 @@ pub(crate) fn link(loader: &'static Loader) {
 /// The switch of the player deaths.
 static DEATHS_FUSE: Fuse = Fuse::new("player deaths");
 
-/// Where the sink's 8-byte status keeps its code; server 26430253, client
-/// 26430625.
-const STATUS_CODE: usize = 0;
-/// The code of a record the sink took.
-const TAKEN: u8 = 0;
-/// Where the sink's status keeps a `u32` the sink zeroes on every path; the
-/// same builds.
-const STATUS_DETAIL: usize = 4;
-
 crate::engine::chains::chain_detour! {
     /// The game's death sink at the table's `player.death_sink`: keeps a
-    /// copy of the record for the event after the step, and refuses the
-    /// record of a fall the damage filters spared.
+    /// copy of the record for the event after the step.
     fn sink(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8;
     next SINK_NEXT;
     fuse &DEATHS_FUSE, "the sink";
     |onward| {
-        // Taken first, so no other record on this thread finds it set.
-        let spared = crate::inventory::damage::spared_fall();
-        if let Some(sink) = SINK.get()
+        if let Some(layout) = RECORD.get()
             && !death.is_null()
         {
             let mut bytes = [0u8; 64];
-            for (at, byte) in bytes.iter_mut().enumerate().take(sink.layout.size) {
+            for (at, byte) in bytes.iter_mut().enumerate().take(layout.size) {
                 // SAFETY: the game hands the sink a non-null record (checked
                 // earlier) of the reflected `PlayerDeath` size, valid for the
                 // call, and `at` is below that size.
                 *byte = unsafe { enshwick_core::raw::read_at(death, at) };
             }
-            match verdict(sink, spared, &bytes) {
-                Verdict::Refuse if !out.is_null() => {
-                    let at = out.expose_provenance();
-                    // SAFETY: the sink's result is the caller's 8-byte
-                    // status, non-null (checked above) and valid for the
-                    // call, as the sink itself fills it on server 26430253
-                    // and client 26430625 (the same code).
-                    unsafe { crate::engine::memory::write(at, STATUS_CODE, TAKEN) };
-                    // SAFETY: the same status, whose `u32` at `STATUS_DETAIL`
-                    // the sink zeroes on every path, on the same builds.
-                    unsafe { crate::engine::memory::write(at, STATUS_DETAIL, 0_u32) };
-                    return out;
-                }
-                Verdict::Raise => {
-                    let _kept = SEEN.push_within(MOST, core::iter::once(bytes));
-                }
-                Verdict::Refuse | Verdict::Pass => {}
-            }
+            let _kept = SEEN.push_within(MOST, core::iter::once(bytes));
         }
         onward.call()
     }
@@ -349,7 +276,7 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
 
 /// Raises the deaths of the last step, on the game thread after it.
 pub(crate) fn after_step(loader: &Loader) {
-    let Some(Sink { layout, .. }) = SINK.get() else {
+    let Some(layout) = RECORD.get() else {
         return;
     };
     let seen = SEEN.take();
@@ -395,13 +322,6 @@ mod tests {
         causes: [0, 1, 2, 3],
     };
 
-    /// A record of game cause `code` in [`LAYOUT`].
-    fn of_cause(code: u8) -> [u8; 64] {
-        let mut bytes = [0u8; 64];
-        bytes[LAYOUT.cause] = code;
-        bytes
-    }
-
     #[test]
     fn a_record_reads_into_the_event() {
         let layout = LAYOUT;
@@ -425,35 +345,6 @@ mod tests {
         assert_eq!(cause(&layout, 2, true), DamageCheck::DEADLY_FOG);
         assert_eq!(cause(&layout, 1, true), DamageCheck::FALL_DAMAGE);
         assert_eq!(cause(&layout, 9, false), UNNAMED_CAUSE);
-    }
-
-    #[test]
-    fn only_a_fall_record_after_a_spared_fall_is_refused_and_kept_from_the_event() {
-        let listened = Sink {
-            layout: LAYOUT,
-            raise: true,
-        };
-        assert_eq!(verdict(&listened, true, &of_cause(1)), Verdict::Refuse);
-        assert_eq!(
-            verdict(&listened, false, &of_cause(1)),
-            Verdict::Raise,
-            "a fall the filters left lethal"
-        );
-        assert_eq!(
-            verdict(&listened, true, &of_cause(3)),
-            Verdict::Raise,
-            "another cause on the same thread"
-        );
-    }
-
-    #[test]
-    fn with_only_damage_filters_the_sink_refuses_spared_falls_and_keeps_no_record() {
-        let filtering = Sink {
-            layout: LAYOUT,
-            raise: false,
-        };
-        assert_eq!(verdict(&filtering, true, &of_cause(1)), Verdict::Refuse);
-        assert_eq!(verdict(&filtering, false, &of_cause(1)), Verdict::Pass);
     }
 
     #[test]

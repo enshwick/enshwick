@@ -29,6 +29,7 @@ use crate::engine::server_pin::{Place, ServerCell};
 mod whose;
 pub(crate) use whose::{Whose, server_left, server_starts, whose};
 
+pub(crate) mod accounts;
 pub(crate) mod permissions;
 mod players;
 #[cfg(test)]
@@ -93,6 +94,8 @@ struct State {
     step_linked: AtomicBool,
     /// Whose world a client's engine pass hands the loader.
     hosted: whose::Hosted,
+    /// Each character's account, for reads off the game thread.
+    accounts: accounts::Accounts,
 }
 
 impl State {
@@ -104,6 +107,7 @@ impl State {
             server_world: AtomicUsize::new(0),
             step_linked: AtomicBool::new(false),
             hosted: whose::Hosted::new(),
+            accounts: accounts::Accounts::new(),
         }
     }
 
@@ -156,6 +160,7 @@ pub(crate) fn retire() {
 /// read of freed memory.
 pub(crate) fn tear_down() {
     permissions::clear();
+    accounts::clear();
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     let retired_on = STATE.retired_on.swap(0, Ordering::AcqRel);
@@ -190,6 +195,7 @@ pub(crate) fn release() {
     STATE.server_world.store(0, Ordering::Release);
     STATE.game_thread.store(0, Ordering::Release);
     permissions::clear();
+    accounts::clear();
 }
 
 thread_local! {
@@ -225,6 +231,11 @@ crate::engine::chains::chain_detour! {
         if permissions::pending() {
             onward.before(&permissions::FUSE, "the permission write before a step", || {
                 permissions::apply(world as usize);
+            });
+        }
+        if accounts::wanted() {
+            onward.before(&accounts::FUSE, "the account copy before a step", || {
+                accounts::refresh(world as usize);
             });
         }
         STEPPING.set(STEPPING.get().wrapping_add(1));

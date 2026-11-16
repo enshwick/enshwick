@@ -25,10 +25,20 @@ impl<const N: usize> Copied<N> {
         }
     }
 
-    /// Stores `words`; only one thread writes at a time.
+    /// Stores `words`; a writer takes the odd count only from an even one,
+    /// so a second writer waits for the first instead of passing a reader
+    /// half of each.
     pub(crate) fn write(&self, words: [u64; N]) {
-        let seq = self.seq.load(Ordering::Relaxed);
-        self.seq.store(seq.wrapping_add(1), Ordering::Relaxed);
+        let mut seq = self.seq.load(Ordering::Relaxed) & !1;
+        while let Err(now) = self.seq.compare_exchange_weak(
+            seq,
+            seq.wrapping_add(1),
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            seq = now & !1;
+            core::hint::spin_loop();
+        }
         fence(Ordering::Release);
         for (word, value) in self.words.iter().zip(words) {
             word.store(value, Ordering::Relaxed);
@@ -97,5 +107,20 @@ mod tests {
             }
         }
         writer.join().unwrap();
+    }
+
+    #[test]
+    fn a_second_writer_waits_until_the_first_has_written() {
+        let copied = Copied::<1>::new();
+        copied.begin_write();
+        std::thread::scope(|scope| {
+            let second = scope.spawn(|| copied.write([7]));
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            assert_eq!(copied.seq.load(Ordering::Relaxed), 1, "the second waits");
+            copied.seq.store(2, Ordering::Release);
+            assert!(second.join().is_ok());
+        });
+        assert_eq!(copied.seq.load(Ordering::Relaxed), 4);
+        assert_eq!(copied.load(), Some([7]));
     }
 }

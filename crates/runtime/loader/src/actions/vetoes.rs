@@ -13,7 +13,10 @@
 //! own prediction, on worker threads. The loader runs the filters after the
 //! check and adds the game's own "no permission" flag to a refused
 //! placement, which the building systems refuse to place and the client's
-//! cursor shows as not allowed.
+//! cursor shows as not allowed. The builder's account comes from the copy of
+//! the player slots the loader takes before each server step
+//! ([`crate::engine::world::accounts`]), since world reads are refused on
+//! those threads.
 
 use core::ffi::c_void;
 use core::ops::ControlFlow;
@@ -187,6 +190,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = BUILD.set(layout);
     let target = Target::Pinned(pinned::building::CURSOR_CHECK);
     if loader.link_fused(&BUILD_FUSE, target, &CURSOR_NEXT, cursor, HookFlags::NONE) {
+        crate::engine::world::accounts::want();
         crate::log!(INFO, "build filters on: {}", builds.len());
     }
 }
@@ -346,16 +350,28 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // item's static data, which starts with its `u32` id and stays loaded.
         unsafe { read_at::<u32>(info, 0) }
     };
+    let server = crate::engine::loader::loader()
+        .is_some_and(|loader| loader.side == enshwick_core::abi::Side::SERVER)
+        // SAFETY: `system` is the cursor's system context, null or live, on
+        // the thread running that system (the caller's contract), all
+        // `is_world` asks for.
+        || unsafe { engine.is_world(system, crate::engine::world::server_world()) };
+    let character = enshwick_core::Entity(player);
+    let account = server
+        .then(|| crate::engine::world::accounts::account_of(character))
+        .flatten()
+        .unwrap_or_default();
     let mut reason = Str::new("");
     let call = BuildCheck {
         header: Header::of::<BuildCheck>(),
-        character: enshwick_core::Entity(player),
+        character,
         item: enshwick_core::ItemId::new(item),
         // SAFETY: `transform` is non-null (the null checks return first) and
         // the check's live cursor transform (the caller's contract), which
         // starts with its 32.32 position, three `i64`.
         position: enshwick_core::ecs::metres(unsafe { read_at::<[i64; 3]>(transform.cast(), 0) }),
         reason: &raw mut reason,
+        account,
     };
     // SAFETY: `call.reason` points at `reason`, live on this stack for the
     // whole chain.
@@ -363,12 +379,6 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // SAFETY: only the refusing filter wrote `reason`, a text it keeps
         // until its next call on this thread, which comes after this read.
         if let Some(text) = unsafe { reason.as_str() } {
-            let server = crate::engine::loader::loader()
-                .is_some_and(|loader| loader.side == enshwick_core::abi::Side::SERVER)
-                // SAFETY: `system` is the cursor's system context, null or
-                // live, on the thread running that system (the caller's
-                // contract), all `is_world` asks for.
-                || unsafe { engine.is_world(system, crate::engine::world::server_world()) };
             crate::actions::build_reasons::refused(filter.owner, call.character, text, server);
         }
         // SAFETY: `flags` is non-null (the null checks return first) and the
@@ -525,6 +535,7 @@ mod tests {
             item: enshwick_core::ItemId::new(2),
             position: [0.0; 3],
             reason: &raw mut reason,
+            account: enshwick_core::PlayerKey::default(),
         };
         // SAFETY: `call.reason` points at `reason` on this stack for the call.
         let refused_by = unsafe { refuser(&filters, &call) };

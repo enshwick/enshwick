@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 9
+#define ENSHWICK_ABI_MINOR 10
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -640,6 +640,10 @@ typedef struct EnshwickBuildCheck {
   // stays valid until the filter's next call on the same thread; the
   // loader copies it before then, on that thread.
   struct EnshwickStr *reason;
+  // The building player's account, which a new character of the same
+  // player keeps; 0 where the loader cannot tell, such as in a client's
+  // own prediction. A mod reads it only where `header` covers it.
+  EnshwickPlayerKey account;
 } EnshwickBuildCheck;
 
 // Which binary of the game runs, or where a mod runs.
@@ -6893,13 +6897,14 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeInfo, slot) == 12, "offset of Bu
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeInfo, flags) == 14, "offset of BuffTypeInfo.flags");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeInfo, name) == 16, "offset of BuffTypeInfo.name");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeInfo, duration_ns) == 24, "offset of BuffTypeInfo.duration_ns");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickBuildCheck) == 48, "size of BuildCheck");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickBuildCheck) == 56, "size of BuildCheck");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickBuildCheck) == 8, "alignment of BuildCheck");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuildCheck, header) == 0, "offset of BuildCheck.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuildCheck, character) == 8, "offset of BuildCheck.character");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuildCheck, item) == 12, "offset of BuildCheck.item");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuildCheck, position) == 16, "offset of BuildCheck.position");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuildCheck, reason) == 40, "offset of BuildCheck.reason");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuildCheck, account) == 48, "offset of BuildCheck.account");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickBuildInfo) == 48, "size of BuildInfo");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickBuildInfo) == 8, "alignment of BuildInfo");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuildInfo, header) == 0, "offset of BuildInfo.header");

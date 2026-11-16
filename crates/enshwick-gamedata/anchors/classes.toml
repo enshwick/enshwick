@@ -190,6 +190,7 @@ entries = [
   "damage.drowning_death",
   "damage.faction_kill",
   "damage.fall",
+  "damage.fall_death",
   "damage.freezing",
   "damage.hit",
   "damage.hit_source",

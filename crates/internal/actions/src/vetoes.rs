@@ -39,7 +39,7 @@ use crate::Off;
 use crate::abi::{BuildCheck, CraftCheck, Str};
 use crate::game_events::CraftRecipeEvent;
 use crate::script::{Answer, Error, Ty, Value};
-use crate::{Entity, ItemId};
+use crate::{Entity, ItemId, PlayerKey};
 
 pub(crate) mod script;
 
@@ -59,6 +59,11 @@ pub struct Placement {
     pub item: ItemId,
     /// Where, in metres.
     pub position: [f64; 3],
+    /// The building player's account, which stays the same when the player
+    /// gets a new character, so a filter judges the player without a world
+    /// read; `None` where the loader cannot tell, such as in a client's own
+    /// prediction.
+    pub account: Option<PlayerKey>,
 }
 
 unsafe extern "system" fn run_craft<F>(call: *const CraftCheck, user: *mut c_void) -> u8
@@ -152,10 +157,16 @@ where
     let Some(call) = (unsafe { call.as_ref() }) else {
         return crate::abi::FILTER_PASS;
     };
+    let account = call
+        .header
+        .covers(core::mem::offset_of!(BuildCheck, account) + size_of::<PlayerKey>())
+        .then_some(call.account)
+        .filter(|&key| key != PlayerKey::default());
     let placement = Placement {
         player: call.character,
         item: call.item,
         position: call.position,
+        account,
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };

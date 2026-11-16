@@ -8,8 +8,8 @@
 //! shroud, drowning and freezing take health without a hit, in
 //! `fall_damage_infliction`, `fog_resistance_update`, `oxygen_update` and
 //! `bodyheat_depletion`; the loader hooks their writes to the health
-//! attribute, and a lethal fall the filters spare records no death
-//! ([`spared_fall`]). An administrator's kill zeroes every health attribute at
+//! attribute, and the fall system's own death decision follows the health
+//! the filters left ([`decided`]). An administrator's kill zeroes every health attribute at
 //! once, so the loader hooks the test before it: of the target's health in
 //! `admin_player` for chosen enemies, of the entity's faction in
 //! `debug_kill_faction` for whole factions and players, and a refused kill
@@ -20,6 +20,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
+use enshwick_core::Entity;
 use enshwick_core::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, MidHookFn, Registers};
 use enshwick_gamedata::catalogue;
 
@@ -39,6 +40,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::damage::DROWNING_DEATH.id(),
     pinned::damage::FACTION_KILL.id(),
     pinned::damage::FALL.id(),
+    pinned::damage::FALL_DEATH.id(),
     pinned::damage::FREEZING.id(),
     pinned::damage::HIT.id(),
     pinned::damage::HIT_SOURCE.id(),
@@ -60,6 +62,8 @@ const OTHER_TYPES: &str = "has another number of values than the loader's hit ve
 const HEALING: usize = enshwick_core::damage::DamageTypeNew::Healing.index();
 /// The carry flag in `rflags`.
 const CARRY: u64 = 1;
+/// The zero flag in `rflags`.
+const ZERO: u64 = 1 << 6;
 
 /// Null, for an admin kill's test of the target's health to read when the
 /// filters refuse it.
@@ -79,9 +83,10 @@ struct Layout {
 }
 
 /// Each site's mid-hook target and handler, the hit site first.
-const SITES: [(Symbol, MidHookFn); 9] = [
+const SITES: [(Symbol, MidHookFn); 10] = [
     (pinned::damage::HIT, hit),
     (pinned::damage::FALL, fall),
+    (pinned::damage::FALL_DEATH, fall_death),
     (pinned::damage::SHROUD, shroud),
     (pinned::damage::SHROUD_DEATH, shroud_death),
     (pinned::damage::DROWNING, drowning),
@@ -131,7 +136,7 @@ fn types_match(loader: &Loader) -> bool {
 }
 
 /// Seals the filters before any part links, so [`filtering`] answers every
-/// link, the death sink's among them, whatever the parts' order.
+/// link the same, whatever the parts' order.
 pub(crate) fn seal() {
     let _filters = FILTERS.seal();
 }
@@ -139,7 +144,8 @@ pub(crate) fn seal() {
 /// Links every site when a mod filters damage or uses stats: the filters
 /// arm at all the sites or none.
 pub(crate) fn link(loader: &Loader) {
-    link_in(loader, FILTERS.seal(), crate::inventory::stats::wanted());
+    let filters = FILTERS.sealed().unwrap_or_default();
+    link_in(loader, filters, crate::inventory::stats::wanted());
 }
 
 /// Links the sites `filters` and the stats, when `stats` are wanted, need.
@@ -205,9 +211,9 @@ fn blank(cause: u32, target: u32) -> DamageCheck {
     DamageCheck {
         header: Header::of::<DamageCheck>(),
         cause,
-        target: enshwick_core::Entity(target),
-        source: enshwick_core::Entity(0),
-        attacker: enshwick_core::Entity(0),
+        target: Entity(target),
+        source: Entity(0),
+        attacker: Entity(0),
         total: 0.0,
         amount_count: 0,
         amounts: core::ptr::null_mut(),
@@ -296,8 +302,8 @@ mid_handler! {
         // attacker, worked out before it; 1.0 build 1269579.
         let root = low(registers.r12).cast_unsigned();
         let attacker = if root == 0 { source } else { root };
-        check.source = enshwick_core::Entity(source);
-        check.attacker = enshwick_core::Entity(attacker);
+        check.source = Entity(source);
+        check.attacker = Entity(attacker);
         let mut amounts = read;
         crate::inventory::stats::on_hit(&mut amounts, target, attacker);
         check.total = amounts
@@ -334,11 +340,10 @@ mid_handler! {
         // system writes it; 1.0 build 1269579.
         let current: i32 = unsafe { crate::engine::memory::read(health_slot(registers), 0) };
         let new = low(registers.r9);
-        let r15 = registers.r15;
-        let kept = fall_kept(current, new, |damage| {
-            // SAFETY: at the site `r15` holds the live query context of the
-            // system running on this thread; 1.0 build 1269579.
-            let target = unsafe { row_entity(r15) };
+        // SAFETY: at the site `r15` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
+        let target = unsafe { row_entity(registers.r15) };
+        let kept = fall_kept(Entity(target), current, new, |damage| {
             filtered(DamageCheck::FALL_DAMAGE, target, damage)
         });
         if kept != new {
@@ -348,9 +353,56 @@ mid_handler! {
 }
 
 thread_local! {
-    /// Whether the fall this thread last filtered was lethal until the
-    /// filters spared it.
-    static SPARED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    /// The row and the health the fall this thread last wrote, when the
+    /// filters changed its damage; every fall write sets it.
+    static WRITTEN: core::cell::Cell<Option<(Entity, i32)>> = const { core::cell::Cell::new(None) };
+}
+
+/// [`kept_health`] for a fall of `target`, noting for [`fall_death`] the
+/// health left whenever the filters changed the damage, even where the
+/// game's truncated write is already 0; every fall write sets the note, so
+/// none outlives the row it was made for.
+fn fall_kept(target: Entity, current: i32, new: i32, filter: impl FnOnce(i32) -> i32) -> i32 {
+    let mut changed = false;
+    let kept = kept_health(current, new, |damage| {
+        let filtered = filter(damage);
+        changed = filtered != damage;
+        filtered
+    });
+    WRITTEN.set(changed.then_some((target, kept)));
+    kept
+}
+
+mid_handler! {
+    fn fall_death;
+    gate filtering();
+    fuse DAMAGE_FUSE, "the fall death site";
+    |registers| {
+        // `fall_damage_infliction` decides on a death from the health it
+        // worked out in `xmm7`, not from the health it wrote: `comiss
+        // xmm7,xmm8` against 0, then this `ja` past the death record, with
+        // `r15` its context (server 26430253 and client 26430625, the same
+        // code).
+        let Some(written) = WRITTEN.take() else {
+            return;
+        };
+        // SAFETY: at the site `r15` holds the live query context of the
+        // system running on this thread; server 26430253.
+        let row = unsafe { row_entity(registers.r15) };
+        registers.rflags = decided(Some(written), Entity(row), registers.rflags);
+    }
+}
+
+/// The flags for the fall's `ja` past its death record that make the game
+/// decide from the health the filters left: below for 0, which records the
+/// death, above for any other health, which records none. A note `written`
+/// for another row than `row` leaves `rflags` as the game set them.
+fn decided(written: Option<(Entity, i32)>, row: Entity, rflags: u64) -> u64 {
+    match written {
+        Some((entity, kept)) if entity == row && kept <= 0 => rflags | CARRY,
+        Some((entity, _)) if entity == row => rflags & !(CARRY | ZERO),
+        _ => rflags,
+    }
 }
 
 /// The health a write from `current` to the game's `new` leaves once
@@ -362,26 +414,6 @@ fn kept_health(current: i32, new: i32, filter: impl FnOnce(i32) -> i32) -> i32 {
         return new;
     }
     current.saturating_sub(filter(damage)).max(0)
-}
-
-/// [`kept_health`] for a fall, noting for [`spared_fall`] whether the
-/// filter spared a lethal one; every fall write sets the note, so none
-/// outlives the row it was made for.
-fn fall_kept(current: i32, new: i32, filter: impl FnOnce(i32) -> i32) -> i32 {
-    let kept = kept_health(current, new, filter);
-    SPARED.set(new <= 0 && kept > 0);
-    kept
-}
-
-/// Whether the fall this thread last filtered was spared, cleared by the
-/// asking.
-///
-/// `fall_damage_infliction` decides on a player's death from the health it
-/// worked out, not the health it wrote, so after a spared fall it still
-/// hands the death sink a record, on this thread right after the write;
-/// server 26430253, client 26430625.
-pub(crate) fn spared_fall() -> bool {
-    SPARED.replace(false)
 }
 
 mid_handler! {
@@ -660,7 +692,7 @@ mod tests {
     }
 
     #[test]
-    fn stats_alone_link_only_the_hit_site_and_filters_link_all_nine() {
+    fn stats_alone_link_only_the_hit_site_and_filters_link_all_ten() {
         let ids = |filtering| {
             sites(filtering)
                 .iter()
@@ -668,30 +700,62 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(ids(false), [pinned::damage::HIT.id()]);
-        assert_eq!(ids(true).len(), 9);
+        assert_eq!(ids(true).len(), 10);
+    }
+
+    /// `rflags` after `comiss` of a survivable fall (above) and a lethal
+    /// one (zero).
+    const ABOVE: u64 = 0x202;
+    const LETHAL: u64 = 0x202 | ZERO;
+
+    /// Whether `ja` jumps past the death record under `rflags`.
+    fn skips_the_death(rflags: u64) -> bool {
+        rflags & (CARRY | ZERO) == 0
+    }
+
+    const ROW: Entity = Entity(7);
+
+    #[test]
+    fn a_fall_a_filter_makes_lethal_records_the_death() {
+        assert_eq!(fall_kept(ROW, 30, 10, |damage| damage * 3), 0);
+        let written = WRITTEN.take();
+        assert_eq!(written, Some((ROW, 0)));
+        assert!(!skips_the_death(decided(written, ROW, ABOVE)));
     }
 
     #[test]
-    fn a_lethal_fall_the_filters_cancel_keeps_the_health_and_spares_the_player_once() {
-        assert_eq!(fall_kept(30, 0, |_| 0), 30);
-        assert!(spared_fall());
-        assert!(!spared_fall(), "a spared fall answers one death record");
+    fn a_fall_a_filter_makes_lethal_where_the_game_already_wrote_0_records_the_death() {
+        // Health 100 and a fall worked out to 0.4: the game writes 0 but
+        // its float says alive.
+        assert_eq!(fall_kept(ROW, 100, 0, |damage| damage + 50), 0);
+        let written = WRITTEN.take();
+        assert_eq!(written, Some((ROW, 0)));
+        assert!(!skips_the_death(decided(written, ROW, ABOVE)));
     }
 
     #[test]
-    fn a_fall_is_spared_only_when_the_filters_turn_a_lethal_write_into_a_survivable_one() {
-        assert_eq!(fall_kept(30, 0, |damage| damage), 0);
-        assert!(!spared_fall(), "still lethal");
-        assert_eq!(fall_kept(30, 10, |_| 0), 30);
-        assert!(!spared_fall(), "never lethal");
-        assert_eq!(fall_kept(30, 40, |_| unreachable!()), 40, "no damage");
+    fn a_lethal_fall_a_filter_spares_records_no_death() {
+        assert_eq!(fall_kept(ROW, 30, 0, |_| 0), 30);
+        let written = WRITTEN.take();
+        assert_eq!(written, Some((ROW, 30)));
+        assert!(skips_the_death(decided(written, ROW, LETHAL)));
     }
 
     #[test]
-    fn a_fall_that_takes_nothing_clears_a_spared_fall_another_row_left_on_the_thread() {
-        let _spared = fall_kept(30, 0, |_| 0);
-        assert_eq!(fall_kept(30, 40, |_| unreachable!()), 40);
-        assert!(!spared_fall());
+    fn a_fall_the_filters_leave_alone_or_that_takes_nothing_clears_the_note() {
+        let _lethal = fall_kept(ROW, 30, 10, |damage| damage * 3);
+        assert_eq!(fall_kept(Entity(8), 30, 40, |_| unreachable!()), 40);
+        assert_eq!(WRITTEN.take(), None, "took nothing");
+        let _lethal = fall_kept(ROW, 30, 10, |damage| damage * 3);
+        assert_eq!(fall_kept(Entity(8), 30, 10, |damage| damage), 10);
+        assert_eq!(WRITTEN.take(), None, "left alone");
+    }
+
+    #[test]
+    fn a_note_of_another_row_or_none_leaves_the_game_s_decision() {
+        assert_eq!(decided(Some((Entity(8), 30)), ROW, LETHAL), LETHAL);
+        assert_eq!(decided(Some((Entity(8), 0)), ROW, ABOVE), ABOVE);
+        assert_eq!(decided(None, ROW, LETHAL), LETHAL);
     }
 
     #[test]

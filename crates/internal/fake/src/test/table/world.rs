@@ -68,6 +68,9 @@ pub(crate) extern "system" fn player(
     entity: enshwick_core::Entity,
     out: *mut PlayerInfo,
 ) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
     let player = with(None, |s| {
         s.host.players.iter().find(|p| p.entity == entity).copied()
     });
@@ -81,6 +84,9 @@ pub(crate) extern "system" fn players(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
     let players = with(Vec::new(), |s| s.host.players.clone());
     super::base::io::list(&players, out, entry_size, capacity, count)
 }

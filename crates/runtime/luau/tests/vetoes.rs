@@ -3,9 +3,9 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{BuildCheck, Header};
+    use enshwick::abi::{BuildCheck, Header, PlayerInfo};
     use enshwick::test::FakeHost;
-    use enshwick::{Entity, ItemId};
+    use enshwick::{Entity, ItemId, PlayerKey};
 
     use crate::harness::run;
 
@@ -31,6 +31,7 @@ mod tests {
             item: ItemId::new(item),
             position: [0.0, f64::from(y), 0.0],
             reason: core::ptr::null_mut(),
+            account: PlayerKey::default(),
         };
         assert_eq!(loader.build(&build(7, 5)), Ok(()));
         assert_eq!(
@@ -38,5 +39,34 @@ mod tests {
             Err(Some("picky.below_sea".to_owned()))
         );
         assert_eq!(loader.build(&build(13, 5)), Err(None));
+    }
+
+    #[test]
+    fn a_script_s_build_filter_judges_the_builder_by_account() {
+        let ann = PlayerInfo::with_name(Entity(2), PlayerKey::new(7), 0, "Ann");
+        let loader = run(
+            FakeHost::new().player(ann),
+            r#"
+            enshwick.vetoes.on_build(function(placement)
+                if placement.account == "7" then
+                    return "zone.not_yours"
+                end
+                return placement.account == nil
+            end)
+            "#,
+        );
+        let build = |character| BuildCheck {
+            header: Header::of::<BuildCheck>(),
+            character: Entity(character),
+            item: ItemId::new(7),
+            position: [0.0; 3],
+            reason: core::ptr::null_mut(),
+            account: PlayerKey::default(),
+        };
+        assert_eq!(
+            loader.build(&build(2)),
+            Err(Some("zone.not_yours".to_owned()))
+        );
+        assert_eq!(loader.build(&build(9)), Ok(()));
     }
 }
