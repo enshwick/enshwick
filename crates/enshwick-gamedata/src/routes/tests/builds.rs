@@ -110,9 +110,6 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
         "ui.screen_shows_cursor",
         0x120_5610,
     ),
-    // The predicate the client tick shows the cursor by in the world, from
-    // the HUD screen byte; read in the decompiler on 26430625, found by the
-    // route on the other kept clients.
     // The text field's look, which its constructor zeroes and the rename
     // dialog sets; read in both on 26082781 and 26430625.
     ("1.0 client (1269579)", "ui.text_field_look", 0x148),

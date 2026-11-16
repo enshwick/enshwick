@@ -289,10 +289,14 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     let frame = STATE.frame.load(Ordering::Relaxed);
     STATE.seen(from).store(frame, Ordering::Relaxed);
     let showing = SCREEN.with_borrow(|s| s.as_ref().map(|s| s.from)) == Some(from);
-    // SAFETY: `entry` runs only from the main and pause menu hooks, which
-    // the game reaches while drawing its menu inside a frame on the
-    // interface thread.
-    if showing && unsafe { engine.back_pressed(STATE.node.load(Ordering::Relaxed)) } {
+    // A dialog over the screen draws after it, so its Back is left to it.
+    if showing
+        && !super::dialog::showing()
+        // SAFETY: `entry` runs only from the main and pause menu hooks,
+        // which the game reaches while drawing its menu inside a frame on
+        // the interface thread.
+        && unsafe { engine.back_pressed(STATE.node.load(Ordering::Relaxed)) }
+    {
         STATE.back.store(BACK_PRESSED, Ordering::Relaxed);
     }
     let text = copy(&[texts::text("mods.title").as_bytes()]);

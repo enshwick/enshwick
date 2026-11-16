@@ -27,6 +27,10 @@ const ICON_SLOT: f32 = 50.0;
 /// `ui.slider_text`, as the game's own sliders with a text of their own set
 /// it; 3 is a whole number and 5 two decimals there (client 26430625).
 const SLIDER_OWN_TEXT: u32 = 2;
+/// The slider's value format with one decimal (%.1f), which the game fills
+/// itself; the loader's sliders used it before they had a text of their own,
+/// and still do where `ui.slider_text` misses (client 26430625).
+const SLIDER_ONE_DECIMAL: u32 = 4;
 /// Room for a slider's value text, far past any setting's range; a longer
 /// one is cut.
 pub(super) const SLIDER_TEXT_BYTES: usize = 32;
@@ -483,10 +487,14 @@ impl Engine {
         config.u8(layout.slider_bounded, 1);
         config.u8(layout.slider_read_only, u8::from(read_only));
         config.u8(layout.slider_on_release, u8::from(on_release));
-        let (text, len) = slider_text(value, (min, max), steps, whole);
-        let text = super::super::copy(&[text.get(..len).unwrap_or_default()]);
-        config.u32(layout.slider_format, SLIDER_OWN_TEXT);
-        config.text(layout.slider_text, &text);
+        if let Some(at) = layout.slider_text {
+            let (text, len) = slider_text(value, (min, max), steps, whole);
+            let text = super::super::copy(&[text.get(..len).unwrap_or_default()]);
+            config.u32(layout.slider_format, SLIDER_OWN_TEXT);
+            config.text(at, &text);
+        } else {
+            config.u32(layout.slider_format, SLIDER_ONE_DECIMAL);
+        }
         let most = u32::try_from(layout.slider_stop_capacity).unwrap_or(0);
         if (2..=most).contains(&steps) {
             for (i, slot) in (0..steps).zip((layout.slider_stops..).step_by(4)) {

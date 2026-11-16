@@ -137,6 +137,13 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
             Some(None),
             "a build whose dropdown mode byte no route finds keeps the interface"
         );
+        assert_eq!(layout.slider_text, Some(0x58));
+        let unrouted = |id: &str| (id != pinned::ui::SLIDER_TEXT.id()).then(|| lookup(id))?;
+        assert_eq!(
+            Layout::read(&unrouted).map(|l| l.slider_text).ok(),
+            Some(None),
+            "a build whose slider text no route finds keeps the interface"
+        );
         DialogLayout::read(&lookup).unwrap();
         let grown = |id: &str| {
             if id == pinned::ui::LABEL_EXTENT.id() {
@@ -256,12 +263,10 @@ fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
         let state = pinned::ui::TEXT_FIELD_STATE_SIZE.id();
         let editing = pinned::ui::TEXT_FIELD_EDITING.id();
         let key = pinned::ui::TEXT_FIELD_STATE_KEY.id();
-        let start = pinned::ui::TEXT_FIELD_START.id();
         for (id, value, room, blamed) in [
             (extent, Some(0x1000), true, extent),
             (text, Some(0x1000), true, text),
             (state, Some(0x10), true, editing),
-            (start, Some(0x4000), true, start),
             (extent, None, false, extent),
             (key, None, false, key),
         ] {
@@ -384,6 +389,24 @@ fn client_tables_pin_the_scroll_area_and_the_text_field_whole() {
         .find(|c| c.id() == pinned::ui::NAV_HIGHLIGHT.id())
         .map(enshwick_gamedata::Constant::value);
     assert_eq!(highlight, Some(0x60), "the config's 0x28 plus 0x38");
+}
+
+#[test]
+fn a_scroll_area_keeps_its_frame_until_it_starts_over_and_shares_it_with_none() {
+    let mut page = Scroll::new();
+    let mut other = Scroll::new();
+    let first = page.frame_id();
+    assert_ne!(first, 0);
+    assert_eq!(page.frame_id(), first, "the same frame each draw");
+    assert_ne!(
+        other.frame_id(),
+        first,
+        "another area takes a node of its own"
+    );
+    page.start_over();
+    let next = page.frame_id();
+    assert_ne!(next, first, "a new page starts at its top");
+    assert_ne!(next, 0);
 }
 
 /// The value text `slider_text` gives.

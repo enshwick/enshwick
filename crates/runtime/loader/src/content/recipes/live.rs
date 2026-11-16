@@ -84,6 +84,9 @@ struct Recipes {
     layout: OnceLock<Option<RecipeLayout>>,
     /// Set when the rules or what they resolve against changed.
     dirty: AtomicBool,
+    /// Whether `disabled` holds any recipe: the crafting menus ask for each
+    /// recipe each frame, and most worlds disable none.
+    any: AtomicBool,
 }
 
 impl Recipes {
@@ -94,7 +97,21 @@ impl Recipes {
             live: Mutex::default(),
             layout: OnceLock::new(),
             dirty: AtomicBool::new(true),
+            any: AtomicBool::new(false),
         }
+    }
+
+    /// Puts `ids` in force as the next generation of disabled recipes.
+    fn set_disabled(&self, ids: FxHashSet<u32>) {
+        let generation = self.disabled.load().generation + 1;
+        self.any.store(!ids.is_empty(), Ordering::Release);
+        self.disabled.store(Arc::new(Disabled { ids, generation }));
+    }
+
+    /// Whether some recipe is disabled now: one atomic load, for the hot
+    /// callers to check first.
+    fn any_disabled(&self) -> bool {
+        self.any.load(Ordering::Acquire)
     }
 
     fn live<R>(&self, work: impl FnOnce(&mut Live) -> R) -> R {
@@ -188,11 +205,7 @@ impl Recipes {
             registry,
             "does not read with the recipe layout",
         );
-        let generation = self.disabled.load().generation + 1;
-        self.disabled.store(Arc::new(Disabled {
-            ids: FxHashSet::default(),
-            generation,
-        }));
+        self.set_disabled(FxHashSet::default());
     }
 }
 
@@ -240,7 +253,7 @@ crate::engine::chains::chain_detour! {
     fuse &MENU_FUSE, "the crafting menus' recipe question";
     |onward| {
         let known = onward.call();
-        if known == 0 || recipe.is_null() {
+        if known == 0 || recipe.is_null() || !STATE.any_disabled() {
             return known;
         }
         let Some(layout) = STATE.layout() else {
@@ -477,11 +490,10 @@ fn apply(loader: &Loader, index: &Index) {
     if old.ids == ids {
         return;
     }
-    let generation = old.generation + 1;
     let count = ids.len();
     let mut sorted: Vec<u32> = ids.iter().copied().collect();
     sorted.sort_unstable();
-    STATE.disabled.store(Arc::new(Disabled { ids, generation }));
+    STATE.set_disabled(ids);
     crate::log!(
         INFO,
         "disabled recipes: {count}{}",
@@ -601,10 +613,7 @@ pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
         stack_item: 0,
         stack_count: 0,
     }));
-    STATE.disabled.store(Arc::new(Disabled {
-        ids: disabled.iter().copied().collect(),
-        generation: STATE.disabled.load().generation + 1,
-    }));
+    STATE.set_disabled(disabled.iter().copied().collect());
     let recipes: Box<[u32]> = (1..=8).collect();
     let list: Box<[u64]> = recipes
         .iter()
@@ -625,10 +634,7 @@ pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
 /// Disables exactly `ids`, for tests.
 #[cfg(test)]
 pub(crate) fn disable_for_test(ids: &[u32]) {
-    STATE.disabled.store(Arc::new(Disabled {
-        ids: ids.iter().copied().collect(),
-        generation: STATE.disabled.load().generation + 1,
-    }));
+    STATE.set_disabled(ids.iter().copied().collect());
 }
 
 /// A world loaded or stopped: its file, written from the template when it

@@ -47,8 +47,9 @@ pub(super) struct TextLayout {
     /// the rename dialog clears it on Back to end the typing.
     editing: usize,
     /// The kept state's byte that starts the typing at the field's next
-    /// input, as its navigation's confirm does.
-    start: usize,
+    /// input, as its navigation's confirm does; `None` where its route misses
+    /// or points outside the state, and a click only asks for the focus.
+    start: Option<usize>,
     /// The game's key for the field's kept state among its node's states,
     /// which changes with each build.
     key: u64,
@@ -79,10 +80,9 @@ impl TextLayout {
         if editing >= state {
             return Err(Missing::Room(pinned::ui::TEXT_FIELD_EDITING.id()));
         }
-        let start = field(lookup, pinned::ui::TEXT_FIELD_START.id())?;
-        if start >= state {
-            return Err(Missing::Room(pinned::ui::TEXT_FIELD_START.id()));
-        }
+        let start = field(lookup, pinned::ui::TEXT_FIELD_START.id())
+            .ok()
+            .filter(|&at| at < state);
         let key = pinned::ui::TEXT_FIELD_STATE_KEY.id();
         let key = lookup(key).ok_or(Missing::Entry(key))?;
         let look = field(lookup, pinned::ui::TEXT_FIELD_LOOK.id())
@@ -99,6 +99,13 @@ impl TextLayout {
         })
     }
 }
+/// Whether a field keeps its typing into the next frame: a click starts it;
+/// Enter, a click elsewhere or Back ends the typing the game ran (`editing`
+/// clears).
+const fn keeps_typing(clicked: bool, typing: bool, editing: bool) -> bool {
+    clicked || (typing && editing)
+}
+
 /// The input's answer for Enter.
 const ENTERED: u64 = 1;
 /// The hit test's first byte for a click.
@@ -156,6 +163,8 @@ pub(in crate::ui::interface) struct TextBuffer {
     bytes: [u8; ENTRY_BYTES],
     /// The player clicked the field and has not ended the typing yet.
     typing: bool,
+    /// The typing ends at the field's next draw, as Back asked.
+    end: bool,
 }
 
 impl TextBuffer {
@@ -170,7 +179,26 @@ impl TextBuffer {
             },
             bytes: [0; ENTRY_BYTES],
             typing: false,
+            end: false,
         })
+    }
+
+    /// Whether the player clicked the field and has not ended the typing,
+    /// nor has Back asked to end it.
+    pub(in crate::ui::interface) const fn typing(&self) -> bool {
+        self.typing && !self.end
+    }
+
+    /// Stands in for the player's click into the field.
+    #[cfg(test)]
+    pub(in crate::ui::interface) const fn start_typing(&mut self) {
+        self.typing = true;
+    }
+
+    /// Ends the typing at the field's next draw, for a window whose Back
+    /// reaches it while the field has the caret.
+    pub(in crate::ui::interface) const fn end_typing(&mut self) {
+        self.end = true;
     }
 
     /// The text the buffer holds.
@@ -221,6 +249,7 @@ impl Engine {
         ending: bool,
     ) -> Option<Typed> {
         let fns = self.text_fields.as_ref()?;
+        let ending = ending || core::mem::take(&mut buffer.end);
         let bundle = self.bundle(context);
         buffer.text.data = buffer.bytes.as_mut_ptr();
         buffer.text.capacity = ENTRY_BYTES as u64;
@@ -262,14 +291,17 @@ impl Engine {
         // SAFETY: `fns.min_height` is the game's `ui.node_min_height`,
         // checked in `TextFields::resolve`, on the field's node.
         unsafe { (fns.min_height)(node, FIELD_HEIGHT) };
-        // SAFETY: `fns.state` is the game's `ui.text_field_state`, checked in
-        // `TextFields::resolve`, on the field built above, with the build's
-        // own key for the field's state, `ui.text_field_state_key`; the game
-        // keeps the state for the field's node, so it stays put this frame.
-        let state = unsafe { (fns.state)(field.ptr(), fns.layout.key, 1) };
-        let state = state.expose_provenance();
+        // The game may make or move the field's kept state in its input, so
+        // each use looks it up again rather than keep its address across it.
+        let kept = |object: *mut u8| {
+            // SAFETY: `fns.state` is the game's `ui.text_field_state`, checked
+            // in `TextFields::resolve`, on `object`, the field built above,
+            // with the build's own key for the field's state,
+            // `ui.text_field_state_key`.
+            unsafe { (fns.state)(object, fns.layout.key, 1) }.expose_provenance()
+        };
         let at = fns.layout.editing;
-        let editing_now = || {
+        let editing_in = |state: usize| {
             state != 0
                 // SAFETY: `state` is non-zero, checked first, and points at
                 // the field's kept state of the build's
@@ -289,13 +321,17 @@ impl Engine {
             // SAFETY: `fns.focus` is the game's `ui.focus_request`, checked in
             // `TextFields::resolve`, on the field built above.
             unsafe { (fns.focus)(field.ptr()) };
-            if state != 0 && !editing_now() {
+            let state = kept(field.ptr());
+            if let Some(start) = fns.layout.start
+                && state != 0
+                && !editing_in(state)
+            {
                 // SAFETY: `state` is non-zero, checked first, and points at
-                // the field's kept state, whose start byte at
+                // the field's kept state, just looked up, whose start byte at
                 // `ui.text_field_start` lies inside it as `TextLayout::read`
                 // checked; the game touches the state only on this thread
                 // while it draws, and its next input reads the byte.
-                unsafe { crate::engine::memory::write::<u8>(state, fns.layout.start, 1) };
+                unsafe { crate::engine::memory::write::<u8>(state, start, 1) };
             }
         }
         let mut answer = 0u64;
@@ -307,7 +343,8 @@ impl Engine {
         // live `answer`; `hint` outlives the frame by this function's
         // `# Safety`.
         unsafe { (fns.input)(field.ptr(), &raw mut answer, hint, 0) };
-        let mut editing = editing_now();
+        let state = kept(field.ptr());
+        let mut editing = editing_in(state);
         let mut pointer = [0u8; 8];
         // SAFETY: `fns.hit` is the game's `ui.frame_hit`, checked in
         // `TextFields::resolve`, on the field built above; it writes eight
@@ -319,8 +356,7 @@ impl Engine {
             // `TextFields::resolve`, on the field built above.
             unsafe { (fns.focus)(field.ptr()) };
         }
-        // Enter, a click elsewhere or Back ended the typing the game ran.
-        buffer.typing = clicked || (buffer.typing && editing);
+        buffer.typing = keeps_typing(clicked, buffer.typing, editing);
         if editing && ending {
             // SAFETY: `state` is non-zero, checked by `editing`, and points at
             // the field's kept state, whose editing byte at `at` lies inside
@@ -372,5 +408,37 @@ mod tests {
         assert_eq!(look(Some(0x26e)), Some(Some(0x26e)), "the last four bytes");
         assert_eq!(look(Some(0x26f)), Some(None), "one byte past the object");
         assert_eq!(look(None), Some(None), "a build whose route misses");
+    }
+
+    #[test]
+    fn a_field_without_its_start_byte_still_types() {
+        let start = |at: Option<u64>| {
+            let lookup = build(None);
+            let changed = move |id: &str| {
+                if id == pinned::ui::TEXT_FIELD_START.id() {
+                    at
+                } else {
+                    lookup(id)
+                }
+            };
+            TextLayout::read(&changed).map(|layout| layout.start).ok()
+        };
+        assert_eq!(start(Some(0x198a)), Some(Some(0x198a)));
+        assert_eq!(start(None), Some(None), "a build whose route misses");
+        assert_eq!(start(Some(0x1990)), Some(None), "past the kept state");
+    }
+
+    #[test]
+    fn a_click_starts_the_typing_and_the_game_s_end_of_editing_stops_it() {
+        assert!(keeps_typing(true, false, false), "a click starts it");
+        assert!(
+            keeps_typing(false, true, true),
+            "it holds while the game edits"
+        );
+        assert!(!keeps_typing(false, true, false), "Enter or Back ended it");
+        assert!(
+            !keeps_typing(false, false, true),
+            "the game's own editing is not ours"
+        );
     }
 }

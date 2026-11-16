@@ -4,7 +4,10 @@
 //!
 //! The builder runs per game step (mode 0, the stick) and per frame (mode
 //! 1, the look), on the interface's thread (client 26430625, seen live).
-//! Until a mod hands one over, its detour adds one atomic load.
+//! While a loader window shows over the world, the player's own look and
+//! stick are held (the interface's [`crate::ui::interface::window_shows`]).
+//! Until a mod hands one over and with no window, its detour adds two
+//! atomic loads.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
@@ -58,10 +61,6 @@ struct Drive {
     /// The command's mod, as its load-order index.
     owner: AtomicUsize,
     linked: AtomicBool,
-    /// A loader or mod window or dialog showed over the world in the last
-    /// frame, as the interface notes it. The game reads it on its main
-    /// thread and from ECS systems on workers, so it is an atomic.
-    window: AtomicBool,
 }
 
 static DRIVE: Drive = Drive {
@@ -72,21 +71,8 @@ static DRIVE: Drive = Drive {
     until: AtomicU64::new(0),
     owner: AtomicUsize::new(0),
     linked: AtomicBool::new(false),
-    window: AtomicBool::new(false),
 };
 static FUSE: Fuse = Fuse::new(FEATURE);
-
-/// Notes, once a frame on the interface thread, whether a loader or mod
-/// window or dialog showed in the last frame.
-pub(crate) fn note_window(shown: bool) {
-    DRIVE.window.store(shown, Ordering::Relaxed);
-}
-
-/// Whether a loader or mod window or dialog showed in the last frame, which
-/// takes the cursor and holds the mouse look; from any thread.
-pub(crate) fn window_shows() -> bool {
-    DRIVE.window.load(Ordering::Relaxed)
-}
 
 /// Links the builder's detour on a client whose build has the input group.
 pub(crate) fn link(loader: &Loader) {
@@ -205,22 +191,25 @@ fn turned(mut game: Look, [yaw, pitch]: [f32; 2]) -> Look {
     game
 }
 
-/// Drops the mouse's part of the look the builder just wrote, while a loader
-/// window or dialog over the world has the cursor: the camera stays still
-/// as under a game screen, which the game holds by its screen byte, which a
-/// loader window does not set (client 26430625, seen live).
+/// Drops the player's look (frame pass) or stick (step pass) the builder just
+/// wrote, while a loader window or dialog over the world has the cursor: the
+/// camera and the character stay still as under a game screen, which the
+/// game holds by its screen byte, which a loader window does not set (client
+/// 26430625, seen live).
 ///
 /// # Safety
 ///
 /// - `input` is the local player's live `ClientPlayerInput` the builder
 ///   just wrote, on the builder's thread right after the game's pass.
 #[cold]
-unsafe fn hold_mouse_look(layout: &InputLayout, input: *mut u8) {
-    // SAFETY: the caller's record, just written by the game's pass.
-    let mut look = unsafe { layout.camera_rotation(input) };
-    look[MOUSE] = [0.0; 2];
-    // SAFETY: the same record, on the builder's thread.
-    unsafe { layout.set_camera_rotation(input, look) };
+unsafe fn hold_player(layout: &InputLayout, input: *mut u8, mode: u32) {
+    match mode {
+        // SAFETY: the caller's record, on the builder's thread.
+        FRAME => unsafe { layout.set_camera_rotation(input, Look::default()) },
+        // SAFETY: as above.
+        STEP => unsafe { layout.set_movement_stick(input, [0.0; 2]) },
+        _ => {}
+    }
 }
 
 /// Runs the builder's pass in `mode` on handed command `id` at `stage`.
@@ -314,14 +303,13 @@ crate::engine::chains::chain_detour! {
     fuse &FUSE, "the client's look and move";
     |onward| {
         onward.call();
-        if mode == FRAME
-            && window_shows()
+        if crate::ui::interface::window_shows()
             && !input.is_null()
             && let Some(layout) = GROUPS.input.get()
         {
             // SAFETY: the builder's own non-null input record, right after
             // its pass on its thread.
-            unsafe { hold_mouse_look(layout, input) };
+            unsafe { hold_player(layout, input, mode) };
         }
         if let Some(handed) = DRIVE.handoff.current()
             && let Some(layout) = GROUPS.input.get()

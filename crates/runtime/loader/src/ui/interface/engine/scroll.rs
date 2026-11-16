@@ -343,6 +343,15 @@ impl Scroll {
     pub(in crate::ui::interface) const fn start_over(&mut self) {
         self.id = 0;
     }
+
+    /// The id the area's frame takes, the same each frame until
+    /// [`Scroll::start_over`]; never 0.
+    pub(in crate::ui::interface) fn frame_id(&mut self) -> usize {
+        if self.id == 0 {
+            self.id = new_id();
+        }
+        self.id
+    }
 }
 
 impl Engine {
@@ -372,15 +381,13 @@ impl Engine {
         let Some(fns) = &self.scroll else {
             return false;
         };
-        if scroll.id == 0 {
-            scroll.id = new_id();
-        }
+        let id = scroll.frame_id();
         // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
         // gives; `scroll.parent` holds the table's `ui.frame_extent` bytes
         // (`Layout::read`) and stays in place until `scroll_end`; the game
-        // keys the frame's node by the non-zero `scroll.id`.
-        unsafe { (self.frame_open)(scroll.parent.ptr(), scroll.id) };
+        // keys the frame's node by the non-zero `id`.
+        unsafe { (self.frame_open)(scroll.parent.ptr(), id) };
         scroll.opened = Opened::Parent;
         let parent = self.frame_node(&scroll.parent);
         // SAFETY: `self.node_height` is the game's `ui.node_height`, checked
