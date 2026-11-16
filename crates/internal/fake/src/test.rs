@@ -322,6 +322,9 @@ pub struct FakeHost {
     refused_writes: FxHashSet<u32>,
     static_halves: FxHashSet<u32>,
     net_peers: FxHashSet<u64>,
+    /// Players whose client has not said hello, so their windows wait.
+    #[cfg(feature = "unstable")]
+    without_hello: FxHashSet<u64>,
     /// Content ids other loaded mods declared.
     declared_content: Vec<String>,
     player_languages: FxHashMap<u64, u32>,
@@ -427,6 +430,8 @@ impl FakeHost {
             refused_writes: FxHashSet::default(),
             static_halves: FxHashSet::default(),
             net_peers: FxHashSet::default(),
+            #[cfg(feature = "unstable")]
+            without_hello: FxHashSet::default(),
             declared_content: Vec::new(),
             player_languages: FxHashMap::default(),
             icons_ready: false,
@@ -608,6 +613,7 @@ impl Installed {
     ///
     /// See the [module](crate::test).
     pub unsafe fn init(&self, init: InitFn) -> Status {
+        table::with((), |s| s.registration = table::Registration::Init);
         // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
         // `declare_mod!`, which takes the static fake table and a handle.
         let status = unsafe { init(self.api(), self.handle) };
@@ -631,10 +637,15 @@ impl Installed {
     ///
     /// See the [module](crate::test).
     pub unsafe fn ready(&self, ready: ReadyFn) -> Status {
-        table::with((), |s| s.base_limit.armed = true);
+        table::with((), |s| {
+            s.base_limit.armed = true;
+            s.edits.readying = true;
+        });
         // SAFETY: the caller guarantees `ready` is the `enshwick_mod_ready` of
         // a `declare_mod!` whose init succeeded on this fake.
-        self.off_unless_ok(unsafe { ready(self.api(), self.handle) })
+        let status = unsafe { ready(self.api(), self.handle) };
+        table::with((), |s| s.edits.readying = false);
+        self.off_unless_ok(status)
     }
 
     /// Turns the mod off when `status` is not [`Status::OK`]; `status`.

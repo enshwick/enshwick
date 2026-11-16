@@ -33,9 +33,9 @@ mod tests {
             end)
             ",
         );
-        // The scheduler runs on wall time: `on_front` looks once a second.
+        // `on_front` looks once a second of the fake's clock, which a step
+        // moves by its length.
         let poll = || {
-            std::thread::sleep(Duration::from_millis(1_050));
             let _ran = loader.tick(Duration::from_secs(1));
         };
         loader.set_weather([0.0, 1.0, 0.0, 0.0], &[front(1)]);

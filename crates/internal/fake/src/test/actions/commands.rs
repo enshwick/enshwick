@@ -230,14 +230,23 @@ impl Installed {
     #[must_use]
     pub fn carried_windows(&self, player: &PlayerInfo, language: u32) -> Vec<(String, String)> {
         let key = player.key.get();
-        let (actions, waiting) = table::with((None, Vec::new()), |s| {
+        let (actions, waiting, ready) = table::with((None, Vec::new(), true), |s| {
             let (mine, others): (Vec<_>, Vec<_>) = core::mem::take(&mut s.commands.windows)
                 .into_iter()
                 .partition(|(k, _, _)| *k == key);
             s.commands.windows = others;
             let online = s.host.players.iter().any(|p| p.key == player.key);
-            (s.actions, if online { mine } else { Vec::new() })
+            let ready = !s.host.without_hello.contains(&key);
+            (s.actions, if online { mine } else { Vec::new() }, ready)
         });
+        if !ready {
+            for (_, id, change) in waiting {
+                if let Some(closed) = table::with(None, |s| s.commands.pend(key, id, change)) {
+                    self.tell_window_closed(player.key, &closed);
+                }
+            }
+            return Vec::new();
+        }
         for (_, id, change) in waiting {
             let holds = table::with(false, |s| {
                 let mut carried = s.commands.carried.iter();
@@ -417,6 +426,34 @@ impl Installed {
         )
     }
 
+    /// `player`'s client says hello and the server welcomes it, as on its
+    /// join or when its link starts over: it takes mod messages from now
+    /// on, and the windows it held and those shown to it while it took
+    /// none show again at the next
+    /// [`carried_windows`](Self::carried_windows), before the mod's newer
+    /// changes. Past the bound of waiting changes none of them shows, and
+    /// the mod hears each as closed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let ann = enshwick::PlayerKey::new(7);
+    /// let loader = enshwick::test::FakeHost::new().without_hello(ann).install();
+    /// loader.say_hello(ann);
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn say_hello(&self, player: enshwick_core::PlayerKey) {
+        let key = player.get();
+        let no_room = table::with(Vec::new(), |s| {
+            s.host.without_hello.remove(&key);
+            s.host.net_peers.insert(key);
+            s.commands.greeted(key)
+        });
+        for id in no_room {
+            self.tell_window_closed(player, &id);
+        }
+    }
+
     /// `player` leaves, as far as the mod's windows and permission changes
     /// go: their client holds no window any more, what waited for it is
     /// dropped, every mod's change to their permissions ends, and the mod
@@ -434,6 +471,7 @@ impl Installed {
         let key = player.get();
         table::with((), |s| {
             s.commands.carried.retain(|(k, _, _)| *k != key);
+            s.commands.pending.retain(|(k, _)| *k != key);
             s.commands.windows.retain(|(k, _, _)| *k != key);
             s.commands.waypoints.retain(|(k, _)| *k != key);
             s.permission_changes.left(player);

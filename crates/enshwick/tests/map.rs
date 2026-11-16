@@ -25,12 +25,19 @@ mod tests {
     // turns, so each start sets them afresh.
     static MAP: Mutex<Option<Map>> = Mutex::new(None);
     static ALTARS: Mutex<Option<Altars>> = Mutex::new(None);
+    /// Whether the map's reads in init found no world.
+    static NO_WORLD_IN_INIT: Mutex<Option<bool>> = Mutex::new(None);
 
     struct Cartographer;
 
     impl Mod for Cartographer {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            *MAP.lock().unwrap() = Some(load.map()?);
+            let map = load.map()?;
+            *NO_WORLD_IN_INIT.lock().unwrap() = Some(
+                map.markers() == Err(WorldError::Unavailable)
+                    && map.frame() == Err(WorldError::Unavailable),
+            );
+            *MAP.lock().unwrap() = Some(map);
             *ALTARS.lock().unwrap() = Some(load.altars()?);
             Ok(Self)
         }
@@ -98,7 +105,9 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let map = MAP.lock().unwrap().unwrap();
-        // The first call of a world starts the loader's read of the scene.
+        assert_eq!(*NO_WORLD_IN_INIT.lock().unwrap(), Some(true));
+        // The first call of a world starts the loader's read of the scene;
+        // the reads in init, with no world, started none.
         assert_eq!(map.markers(), Err(WorldError::NotLoaded));
         assert_eq!(map.frame(), Err(WorldError::NotLoaded));
         (loader, map)

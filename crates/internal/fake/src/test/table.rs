@@ -432,8 +432,10 @@ fn take_turn() -> MutexGuard<'static, ()> {
 /// initialised.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Registration {
-    /// The mod's init runs, or has not run yet.
+    /// The mod's init has not run yet.
     Open,
+    /// The mod's init runs, before the loader has a world.
+    Init,
     /// The mod's init returned; such requests come too late.
     Closed,
 }

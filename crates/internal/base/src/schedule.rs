@@ -9,7 +9,9 @@
 //! Delays and periods are wall-clock time: after a stall, a task whose time
 //! passed runs on the next pass. A wait that should stand still with the
 //! server counts on the [`StepClock`](crate::time::StepClock) instead. A
-//! panic in a task turns the mod off, as in any event handler.
+//! panic in a task turns the mod off, as in any event handler. Under the
+//! fake host the clock is the fake's own, which only its steps move, so a
+//! test waits no real time.
 //!
 //! A task queued while a game runs belongs to that game: when a client
 //! leaves the game it hosts, its tasks end, so none runs in the next game
@@ -64,7 +66,7 @@ impl Queue {
             ticking: AtomicBool::new(false),
             next_due: AtomicU64::new(IDLE),
             game: AtomicU64::new(NO_GAME),
-            epoch: Instant::now(),
+            epoch: now(),
             tasks: Mutex::new(Vec::new()),
             spare: Mutex::new(Vec::new()),
         }
@@ -80,11 +82,49 @@ impl Queue {
     }
 }
 
-/// Each mod's queue by its handle: a mod DLL holds one, the loader's own copy
-/// of this crate one per data pack or script it runs. Queues are kept for
-/// the process, so a task still running in one never loses it.
-static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
-    crate::fresh::Fresh::new();
+/// The scheduling of a mod life.
+struct Schedule {
+    /// Each mod's queue by its handle: a mod DLL holds one, the loader's
+    /// own copy of this crate one per data pack or script it runs. Queues
+    /// are kept for the process, so a task still running in one never
+    /// loses it.
+    queues: Mutex<Vec<(ModHandle, &'static Queue)>>,
+    /// Under the fake host, the life's start and how far the fake's steps
+    /// moved its clock since, in nanoseconds.
+    #[cfg(feature = "fake")]
+    clock: (Instant, AtomicU64),
+}
+
+static SCHEDULE: crate::fresh::Fresh<Schedule> = crate::fresh::Fresh::new();
+
+fn schedule() -> &'static Schedule {
+    SCHEDULE.get_or_init(|| Schedule {
+        queues: Mutex::new(Vec::new()),
+        #[cfg(feature = "fake")]
+        clock: (Instant::now(), AtomicU64::new(0)),
+    })
+}
+
+/// Now, as the scheduler counts time: the wall clock in the game.
+#[cfg(not(feature = "fake"))]
+#[inline]
+fn now() -> Instant {
+    Instant::now()
+}
+
+/// Now, as the scheduler counts time: under the fake host, its own clock.
+#[cfg(feature = "fake")]
+fn now() -> Instant {
+    let (start, moved) = &schedule().clock;
+    *start + Duration::from_nanos(moved.load(Ordering::Acquire))
+}
+
+/// Sets the fake host's clock to `nanos` past the start of the mod life,
+/// as its steps move it.
+#[cfg(feature = "fake")]
+pub(crate) fn set_fake_clock(nanos: u64) {
+    schedule().clock.1.fetch_max(nanos, Ordering::AcqRel);
+}
 
 /// Puts work on the server's game thread; get it from
 /// [`Load::scheduler`](../struct.Load.html#method.scheduler). Copy it anywhere, including
@@ -140,7 +180,7 @@ impl Scheduler {
     /// [`Scheduler::unsubscribed`].
     pub(crate) fn get(me: ModHandle) -> (Self, bool) {
         let queue = {
-            let mut queues = QUEUES.get_or_init(|| Mutex::new(Vec::new())).relock();
+            let mut queues = schedule().queues.relock();
             if let Some(&(_, queue)) = queues.iter().find(|(handle, _)| *handle == me) {
                 queue
             } else {
@@ -204,7 +244,7 @@ impl Scheduler {
         run: impl FnMut() -> ControlFlow<()> + Send + 'static,
     ) {
         // A delay past what `Instant` holds is never due.
-        let Some(due) = Instant::now().checked_add(delay) else {
+        let Some(due) = now().checked_add(delay) else {
             return;
         };
         let game = self.queue.game.load(Ordering::Acquire);
@@ -229,7 +269,7 @@ impl Scheduler {
         if next_due == IDLE {
             return;
         }
-        let now = Instant::now();
+        let now = now();
         if self.queue.nanos(now) >= next_due {
             self.run_due_at(now);
         }

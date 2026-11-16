@@ -256,3 +256,35 @@ fn a_panic_in_the_served_work_leaves_the_resource_links_wired() {
         "{listed:?}"
     );
 }
+
+#[test]
+fn a_served_key_is_named_by_the_catalogue_type_of_its_hash() {
+    use crate::engine::catalogue::types;
+
+    let guid = Guid([1; 16]);
+    let named = |type_hash| {
+        key_name(&ResourceKey {
+            guid,
+            type_hash,
+            part: 0,
+        })
+    };
+    assert_eq!(named(types::ITEM_REGISTRY), "the item registry");
+    assert_eq!(named(types::RECIPE_REGISTRY), "the recipe registry");
+    assert_eq!(named(types::WORKSHOP_REGISTRY), "the workshop registry");
+    assert_eq!(named(types::UI_BUNDLE), "the UI bundle");
+    for (type_hash, kind) in [
+        (
+            enshwick_gamedata::catalogue::type_hash(
+                enshwick_core::content::types::TEMPLATE_COLLECTION_RESOURCE.id(),
+            )
+            .unwrap(),
+            "template collection",
+        ),
+        (types::ITEM_INFO, "item"),
+        (types::TEMPLATE, "template"),
+        (types::UI_IMAGE, "image"),
+    ] {
+        assert_eq!(named(type_hash), format!("{kind} {guid}"));
+    }
+}

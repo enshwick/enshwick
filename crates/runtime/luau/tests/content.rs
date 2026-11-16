@@ -199,14 +199,17 @@ mod tests {
                 &[0, 0, 0, 0, 4, 0, 0, 0],
             ),
             r"
-            enshwick.log.info(`before {enshwick.knowledge.quest_progression(4096)}`)
-            enshwick.knowledge.set_quest_progression(4096, true)
-            enshwick.log.info(`after {enshwick.knowledge.quest_progression(4096)}`)
-            enshwick.log.info(`nobody {enshwick.knowledge.quest_progression(1)}`)
-            local ok = pcall(enshwick.knowledge.set_quest_progression, 1, true)
-            enshwick.log.info(`nobody refused {not ok}`)
+            enshwick.schedule.next_tick(function()
+                enshwick.log.info(`before {enshwick.knowledge.quest_progression(4096)}`)
+                enshwick.knowledge.set_quest_progression(4096, true)
+                enshwick.log.info(`after {enshwick.knowledge.quest_progression(4096)}`)
+                enshwick.log.info(`nobody {enshwick.knowledge.quest_progression(1)}`)
+                local ok = pcall(enshwick.knowledge.set_quest_progression, 1, true)
+                enshwick.log.info(`nobody refused {not ok}`)
+            end)
             ",
         );
+        let _ran = loader.tick(core::time::Duration::from_secs(1));
         let logs = format!("{:?}", loader.logs());
         assert!(logged(&loader, "before false"), "{logs}");
         assert!(logged(&loader, "after true"), "{logs}");

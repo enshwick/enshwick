@@ -137,18 +137,21 @@ mod tests {
         let loader = run(
             r#"
             local faction = enshwick.typed.component_type("ecs.Faction")
-            local value = faction:read(4096)
-            print(`faction {value.faction} base {type(value.base)} none {faction:read(1) == nil}`)
-            value.faction = "Vukah"
-            faction:write(4096, value)
-            print(`now {faction:read(4096).faction}`)
-            value.faction = { Other = "Dragons" }
-            faction:write(4096, value)
-            local ok, why = pcall(faction.write, faction, 4096, { faction = "Vukah", base = {}, rank = 1 })
-            print(`stray {ok} {string.find(tostring(why), "rank") ~= nil}`)
+            enshwick.schedule.next_tick(function()
+                local value = faction:read(4096)
+                print(`faction {value.faction} base {type(value.base)} none {faction:read(1) == nil}`)
+                value.faction = "Vukah"
+                faction:write(4096, value)
+                print(`now {faction:read(4096).faction}`)
+                value.faction = { Other = "Dragons" }
+                faction:write(4096, value)
+                local ok, why = pcall(faction.write, faction, 4096, { faction = "Vukah", base = {}, rank = 1 })
+                print(`stray {ok} {string.find(tostring(why), "rank") ~= nil}`)
+            end)
         "#,
             7,
         );
+        let _ran = loader.tick(core::time::Duration::from_secs(1));
         for line in [
             "faction Player base table none true",
             "now Vukah",

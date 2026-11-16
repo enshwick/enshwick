@@ -239,9 +239,52 @@ mod tests {
                 .count()
         };
         assert_eq!(late(loader.logs()), 0, "init named no template");
-        let _wolf = enshwick::content::vanilla::template("Enemy_Wolf");
-        let _again = enshwick::content::vanilla::template("Enemy_Wolf");
+        assert_eq!(
+            enshwick::content::vanilla::template("Enemy_Wolf"),
+            Ok(CREATURE)
+        );
+        assert_eq!(
+            enshwick::content::vanilla::template("Enemy_Wolf_Boss"),
+            Ok(BOSS_CREATURE)
+        );
         assert_eq!(late(loader.logs()), 1, "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn templates_a_builder_listed_by_name_stay_listed_after_the_fake_s_own() {
+        let chest = Guid([7; 16]);
+        let loader = FakeHost::new()
+            .items()
+            .workshops()
+            .vanilla_templates(&[(chest, "Prop_Chest")])
+            .meters()
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Templates)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(
+            enshwick::content::vanilla::template("Prop_Chest"),
+            Ok(chest)
+        );
+    }
+
+    #[test]
+    fn a_vanilla_template_name_with_a_typo_is_unknown_and_names_the_near_ones() {
+        use enshwick::content::vanilla::VanillaError;
+
+        let loader = FakeHost::new().items().workshops().meters().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Templates)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        match enshwick::content::vanilla::template("Enemy_Wolv") {
+            Err(VanillaError::UnknownTemplate { name, near }) => {
+                assert_eq!(name, "Enemy_Wolv");
+                assert!(near.iter().any(|n| n == "Enemy_Wolf"), "{near:?}");
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]
