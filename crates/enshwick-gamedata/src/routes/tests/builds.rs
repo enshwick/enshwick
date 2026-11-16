@@ -395,14 +395,18 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (1269579)", "input.blocked", 0xac42),
 ];
 
-/// The client control reads: the input builder's stick and look and the
-/// recipe browser's highlighted recipe and select slot, read in the
-/// decompiler on client 26430625 (research of 2026-11-14). On the other
-/// kept clients the routes found the same values, which pins them there
-/// but does not prove the routes matched the right code.
-const CLIENT_CONTROL_READS: [(&str, u64); 4] = [
+/// The client control reads: the input builder's stick, look, target
+/// selection and buttons, and the recipe browser's highlighted recipe and
+/// select slot, read in the decompiler on client 26430625 (research of
+/// 2026-11-14 and 2026-11-16: the builder clears these four while the game
+/// blocks the input). On the other kept clients the routes found the same
+/// values, which pins them there but does not prove the routes matched the
+/// right code.
+const CLIENT_CONTROL_READS: [(&str, u64); 6] = [
     ("input.movement_stick", 0x2b8),
     ("input.camera_rotation", 0x2c4),
+    ("input.target_selection", 0x2ec),
+    ("input.digital_input", 0x3a8),
     ("ui.recipe_select", 0x48),
     ("ui.recipe_highlighted", 0xe8),
 ];

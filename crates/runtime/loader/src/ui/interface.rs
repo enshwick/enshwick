@@ -54,6 +54,7 @@ use off::{PART_FUSES, dialogs_drawn, drawn_no_more, parts_off_with_interface};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::input::CLIENT_BUILD.id(),
     pinned::map::CONTEXT_STATE.id(),
     pinned::map::ENTRY_COLOR.id(),
     pinned::map::ENTRY_LABEL.id(),

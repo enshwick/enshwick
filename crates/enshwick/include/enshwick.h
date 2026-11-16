@@ -2850,7 +2850,8 @@ typedef struct EnshwickUiWidget {
   float min;
   // A slider's greatest value, a progress bar's full value.
   float max;
-  // Out: 1 when a button was clicked or a value changed this frame.
+  // Out: 1 when a button was clicked or a value changed this frame, or
+  // when the player pressed Back over a window.
   uint32_t result;
   // Where a HUD widget shows: `EnshwickUiWidget_TOP_LEFT` to
   // `EnshwickUiWidget_BOTTOM_RIGHT`; read in a HUD callback only.
@@ -2864,6 +2865,8 @@ typedef struct EnshwickUiWidget {
 // A window in the game's style, a panel over the screen that takes the
 // input while it shows: `text` is its id, unique in the mod, `detail`
 // its title. Widgets that follow go into it until `EnshwickUiWidget_END`.
+// `result` 1 when the player pressed Back (Escape, B) over it this
+// frame, which then does not open the game's pause menu.
 #define EnshwickUiWidget_WINDOW 1
 // Closes the innermost open window.
 #define EnshwickUiWidget_END 2
