@@ -218,7 +218,7 @@ shapes! {
         NetMessage { header, channel, reserved, peer, data, size, reserved_tail },
         DaytimeInfo { header, time_ns, day_start_ns, day_end_ns, day_length_ns, night_length_ns, speed, flags },
         DamageCheck { header, cause, target, source, attacker, total, amount_count, amounts },
-        StatSpec { header, ty, format, reserved, default, min, max },
+        StatSpec { header, ty, format, reserved, default, min, max, group, flags, reserved_display },
         StatRef { index, key },
         StatModifier { stat, op, reserved, value },
         StatModify { header, entity, key, modifier, flags, duration_ms },

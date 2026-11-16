@@ -250,6 +250,8 @@ mod sounds;
 mod spawns;
 #[cfg(feature = "unstable")]
 mod stat_kinds;
+#[cfg(feature = "unstable")]
+mod stat_rows;
 mod stat_watch;
 #[cfg(feature = "unstable")]
 mod static_halves;

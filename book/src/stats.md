@@ -67,11 +67,15 @@ A stat kind has a [content id](concepts/ids.md) and a `StatDef`:
 | `default` | the value without modifiers; `starting_at(v)` sets it |
 | `min`, `max` | the range the value stays in; `range(min, max)` sets it |
 | `format` | how the value reads, `Number` or `Signed`. A third format is `Percent`. |
+| `group` | where the local player's value shows as a row of [the Character screen](#the-character-screen), or none. `in_group(group)` sets it, with the `unstable` feature. |
+| `hidden` | shown nowhere: no row and no tooltip line; `hidden()` sets it |
 
 The text that names a kind is the derived part `<name>.name` in its
 owner's [texts](content/texts.md), as content derives its name. The kind
 `<mod>:luck` reads `luck.name`. A stat kind, an affix and an item of one
-mod with the same name share that text, so give them different names.
+mod with the same name share that text, so give them different names. The
+optional part `<name>.description` (`description_key`) describes a kind
+when the cursor rests on its row.
 
 `load.define_stat(id!("luck"), &def)` defines a kind of the mod's own during
 `init`, and a malformed name fails the build. Its full id is `<mod>:luck`, see
@@ -203,11 +207,54 @@ armour points, are not built-in kinds. Their sets work alike.
 ## Tooltips
 
 What an item gives is item data, so a client that runs Enshwick knows every
-item's `ItemStats`. [`affixes.lines(item)`](affixes.md#what-an-item-rolled)
-lists it a modifier per line. `stats.info(stat)` names each line's text
-key and format. Per-item tooltip lines need a client hook of their own. A mod
-item that always gives the same can show it with
-[tooltip lines](content/items.md#tooltip-lines) on its type.
+item's `ItemStats`. Its tooltip shows a line per modifier under the game's
+rows, the item's own first and then each rolled affix's. A line reads as the
+value and the kind's name, `+10% Luck`. A gain shows in the game's positive
+colour and a loss in its negative one. An addition reads with its sign, a
+factor as the change it makes in percent, and the kind's `format` picks a
+percentage. A hidden kind
+or one without a name text shows no line. These lines come before the lines
+of [`extend_item_tooltip`](interface.md#item-tooltip-lines).
+[`affixes.lines(item)`](affixes.md#what-an-item-rolled) lists the same
+modifiers for a mod's own menu. A mod item that always gives the same can
+show it with [tooltip lines](content/items.md#tooltip-lines) on its type.
+
+## The Character screen
+
+A kind with a group shows the local player's value as a row of the
+Character screen, under the game's rows of that group. The row shows the
+kind's name, and its description when the cursor rests on it. It needs the
+`unstable` feature: the rows rest on the client's code, not yet seen in the
+game.
+
+```rust
+use enshwick::content::id;
+use enshwick::content::items::StatFormat;
+use enshwick::stats::{StatDef, StatGroup};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let luck = StatDef::additive()
+        .range(0.0, 1.0)
+        .format(StatFormat::Percent)
+        .in_group(StatGroup::Primary);
+    let _luck = load.define_stat(id!("luck"), &luck)?;
+    Ok(())
+}
+```
+
+| Group | Where |
+| --- | --- |
+| `Main`, `FogSurvival` | the column beside the tabs |
+| `Primary`, `Regeneration`, `Misc` | the Basics tab |
+| `Damage`, `WeaponDamage`, `EnemyDamage` | the Damage tab |
+| `Protection` | the Protection tab |
+
+Only the server works values out. So it sends each player's client its own
+character's values of the kinds with a group, when they change and when the
+client joins. The row reads as the game's rows do: a whole number. The
+format `Signed` adds a plus sign, and `Percent` a percent sign. The game's summary of the
+`Primary` group outside the Character screen shows the row too, as a number.
+In Luau, `group = "Primary"` in the definition's table does the same.
 
 ## Testing
 

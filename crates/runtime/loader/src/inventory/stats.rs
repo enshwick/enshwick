@@ -23,11 +23,15 @@ use enshwick_base::Relock;
 mod affixes;
 mod equipment;
 mod error;
+mod own;
+mod shown;
 mod vitals;
 
 use affixes::{Affix, pool};
 pub(crate) use affixes::{RollAffixesError, affix_info, item_lines, open_affix, roll};
 pub(crate) use error::StatsError;
+pub(crate) use own::{hello, own_value};
+pub(crate) use shown::{group_kinds, item_line_texts, shown_kind};
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -885,6 +889,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
     let published = STATE.with_world(|state| {
         let entities: Vec<u32> = results.iter().map(|r| r.0).collect();
         let moved = take_values(sealed, state, results, &mut changes);
+        own::send_changed(sealed, state, &changes);
         for entity in entities {
             if let Some(watched) = state.watched.get_mut(&entity) {
                 raise_maxima(loader, sealed, Entity(entity), watched);

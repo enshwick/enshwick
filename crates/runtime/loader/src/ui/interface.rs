@@ -28,6 +28,7 @@ mod map;
 mod menu_line;
 mod mods;
 mod off;
+mod stat_rows;
 mod table_ids;
 pub(crate) mod tooltips;
 
@@ -299,6 +300,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     map::link(loader);
+    stat_rows::link(loader);
     let engine = match Engine::resolve(loader) {
         Ok(engine) => engine,
         Err(missing) => {

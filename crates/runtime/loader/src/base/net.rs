@@ -26,8 +26,8 @@ use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
 use crate::base::wire::{
-    CONTROL, ITEM_DATA, NOTICE, Peer, UI_DEMO, WELCOME, control, demo_position, hello, read_notice,
-    remote_message,
+    CONTROL, ITEM_DATA, NOTICE, Peer, STAT_VALUES, UI_DEMO, WELCOME, control, demo_position, hello,
+    read_notice, read_stat_values, remote_message,
 };
 pub(crate) use crate::base::wire::{MAX_CONTROL, MAX_MESSAGE};
 use crate::engine::loader::{Loader, Registered};
@@ -35,10 +35,12 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
 
+mod own_stats;
 mod server;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use own_stats::own_stat;
 pub(crate) use server::{keep_greeting, server_carried};
 
 /// How long a client waits for the server's answer before it says hello
@@ -354,6 +356,12 @@ pub(crate) fn item_data(key: u64, records: &[u8]) -> bool {
     sent.is_ok() && whole
 }
 
+/// Sends the client of the player with account key `key` the values of its
+/// own character's shown stat kinds; false when it took no message.
+pub(crate) fn stat_values(key: u64, values: &[(u32, f32)]) -> bool {
+    ready(key) && carry(key, CONTROL, &crate::base::wire::stat_values(values))
+}
+
 /// Sends the client of the player with account key `key`, whose hello named
 /// other mods, `mods`, the server's mods of side both, so it lists the
 /// difference once it is back in its menu. A link with no room drops it:
@@ -446,6 +454,8 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
         crate::base::join::client::kicked_for_mods(&list, complete);
     } else if let Some(records) = data.strip_prefix(control(ITEM_DATA).as_slice()) {
         crate::inventory::item_data::received(records);
+    } else if let Some(values) = data.strip_prefix(control(STAT_VALUES).as_slice()) {
+        own_stats::received(read_stat_values(values));
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())
         && let Some((entity, text)) = read_notice(rest)
     {
@@ -491,6 +501,7 @@ pub(crate) fn forget() {
     STATE.forget();
     crate::base::notices::forget();
     crate::inventory::item_data::forget_client();
+    own_stats::forget();
     crate::actions::controls::forget_carried();
     crate::ui::interface::carried::forget();
 }

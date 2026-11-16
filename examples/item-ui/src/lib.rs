@@ -1,11 +1,20 @@
 //! An example mod for the game's own item widgets: three item slots in a
 //! panel beside the backpack, the backpack slot under the cursor, and lines
 //! in the game's item tooltips, one from the mod's item data and one on a
-//! vanilla sword.
+//! vanilla sword. Its stat kind Luck shows as a row of the Character
+//! screen's Basics tab, 10% for every player who joins, and on every weapon
+//! a player crafts, which rolls the affix Lucky.
 
 use enshwick::ItemId;
+use enshwick::abi::Side;
+use enshwick::affixes::{AffixCraft, AffixDef, Range, RollRules};
+use enshwick::content::categories::ItemCategoryMask;
+use enshwick::content::id;
+use enshwick::content::items::StatFormat;
 use enshwick::content::vanilla;
+use enshwick::events::PlayerJoined;
 use enshwick::item_data::ItemData;
+use enshwick::stats::{Lasting, Modifier, Op, Stat, StatDef, StatGroup};
 use enshwick::ui::{Edge, HudScreenType, Label, Style};
 use enshwick::{Load, Mod, Off};
 
@@ -26,7 +35,14 @@ impl Mod for ItemUi {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         // The server keeps and sends the uses; a client reads what it got.
         let uses: ItemData<u16> = load.item_data("uses")?;
-        if load.host().build().side != enshwick::abi::Side::CLIENT {
+        let luck = luck(load)?;
+        if load.host().build().side != Side::CLIENT {
+            let stats = load.stats()?;
+            load.on::<PlayerJoined>(move |joined| {
+                let welcome = Modifier::new(luck, Op::Add, 0.1);
+                let _blessed = stats.set(joined.entity, "welcome", welcome, Lasting::UntilRemoved);
+            })?;
+            load.add_craft_affixes(AffixCraft::new(1.0, RollRules::new(1, 1)))?;
             return Ok(Self);
         }
         let item = |name: &str| vanilla::item(name).map(ItemId::from_guid);
@@ -60,10 +76,25 @@ impl Mod for ItemUi {
     }
 }
 
+/// Defines Luck, a percentage in the Basics tab, and the weapon affix Lucky
+/// that gives 5% to 15% of it; on both sides, so clients name them.
+fn luck(load: &mut Load<'_>) -> Result<Stat, Off> {
+    let def = StatDef::additive()
+        .range(0.0, 1.0)
+        .format(StatFormat::Percent)
+        .in_group(StatGroup::Primary);
+    let luck = load.define_stat(id!("luck"), &def)?;
+    let lucky = AffixDef::new(ItemCategoryMask::WEAPONS)
+        .with(Range::new(luck, Op::Add, 0.05, 0.15).step(0.01));
+    load.define_affix(id!("lucky"), &lucky)?;
+    Ok(luck)
+}
+
 enshwick::declare_mod!(ItemUi);
 
 #[cfg(test)]
 mod tests {
+    use enshwick::__private::ids;
     use enshwick::abi::{Side, Status, UiExtension};
     use enshwick::content::Guid;
     use enshwick::inventory::SlotRef;
@@ -82,6 +113,8 @@ mod tests {
             .side(side)
             .items()
             .workshops()
+            .inventory_requests()
+            .game_events()
             .vanilla_items(&[
                 (TORCH, "Tool_Torch01"),
                 (LOGS, "Material_T1_Wood_Logs"),
@@ -91,11 +124,28 @@ mod tests {
         for guid in [TORCH, LOGS, BOX, OLD_SWORD] {
             host = host.item(ItemId::from_guid(guid), 20, 0);
         }
+        // The craft events the craft affixes follow.
+        for (ty, hash) in [
+            (ids::CRAFT_RECIPE_EVENT, 0x52),
+            (ids::CRAFT_RECIPE_SUCCESS_EVENT, 0x53),
+        ] {
+            host = host.type_hash(ty, hash).type_size(ty, 24);
+        }
+        for (field, at) in [
+            (ids::CRAFT_RECIPE_EVENT_CRAFTING_OPERATOR_ID, 8),
+            (ids::CRAFT_RECIPE_EVENT_CRAFTING_STATION_ID, 12),
+            (ids::CRAFT_RECIPE_EVENT_RECIPE_ID, 16),
+            (ids::CRAFT_RECIPE_EVENT_RECIPE_AMOUNT, 20),
+            (ids::CRAFT_RECIPE_SUCCESS_EVENT_WORKSHOP_ID, 8),
+            (ids::CRAFT_RECIPE_SUCCESS_EVENT_RECIPE_ID, 12),
+        ] {
+            host = host.constant(field, at);
+        }
         let loader = host.install();
         // SAFETY: the exports of this crate's `declare_mod!(ItemUi)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, Status::OK);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
         loader
     }
 
