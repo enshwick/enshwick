@@ -14,7 +14,7 @@ use super::{
 /// Links the registry load that files the staff items; false once it is
 /// off.
 pub(super) fn link_registry(loader: &Loader) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         &FILED_FUSE,
         Target::Pinned(pinned::survivors::REGISTRY_LOAD),
         &REGISTRY_NEXT,
@@ -25,7 +25,7 @@ pub(super) fn link_registry(loader: &Loader) -> bool {
 
 /// Links the survivor menu's system `menu`; false once it is off.
 pub(super) fn link_menu(loader: &Loader, menu: Target<'_>) -> bool {
-    loader.link_fused(&MENU_FUSE, menu, &MENU_NEXT, menu_link, HookFlags::NONE)
+    loader.link_feature(&MENU_FUSE, menu, &MENU_NEXT, menu_link, HookFlags::NONE)
 }
 
 crate::engine::chains::chain_detour! {
@@ -166,7 +166,7 @@ crate::engine::chains::chain_detour! {
 pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
     let (Some(loader), Some(engine)) = (
         crate::engine::loader::loader(),
-        crate::engine::ecs::resolved(),
+        crate::engine::ecs::walked(),
     ) else {
         return;
     };

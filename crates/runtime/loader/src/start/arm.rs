@@ -81,7 +81,7 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         crate::log!(INFO, "diagnostics on: hook calls counted");
     }
     let reported = report_patches(loader, &patches, &verdicts);
-    crate::world::bases::report(loader, &reported);
+    crate::world::bases::report(&reported);
     crate::engine::retry::hold(loader, patches, verdicts, hooked);
 }
 

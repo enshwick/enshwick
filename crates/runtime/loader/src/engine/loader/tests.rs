@@ -40,7 +40,7 @@ fn a_panic_under_another_fuse_of_a_link_s_name_leaves_the_link_wired() {
     static TWIN: Fuse = Fuse::new("test embers");
     let loader = crate::start::tests::bare_loader();
     let target = Target::Found("ember.light", Some(0x7000));
-    assert!(loader.link_fused(&EMBERS, target, &EMBER_NEXT, lit, HookFlags::NONE));
+    assert!(loader.link_feature(&EMBERS, target, &EMBER_NEXT, lit, HookFlags::NONE));
     let head: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
     {
         let mut chains = loader.chains.relock();
@@ -67,7 +67,7 @@ fn a_feature_whose_target_fails_to_arm_is_wired_past_on_its_other_targets() {
     let loader = crate::start::tests::bare_loader();
     let feature = LAMPS.feature();
     let link = |id, at, next: &'static Next<Lit>| {
-        loader.link_fused(
+        loader.link_feature(
             &LAMPS,
             Target::Found(id, Some(at)),
             next,
@@ -105,7 +105,7 @@ fn a_feature_that_turns_off_after_arming_is_wired_past_by_the_loader() {
     static WICKS: Fuse = Fuse::new("test wicks");
     let loader = crate::start::tests::bare_loader();
     let target = Target::Found("wick.light", Some(0x4000));
-    assert!(loader.link_fused(&WICKS, target, &WICK_NEXT, lit, HookFlags::NONE));
+    assert!(loader.link_feature(&WICKS, target, &WICK_NEXT, lit, HookFlags::NONE));
     let head: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
     {
         let mut chains = loader.chains.relock();
@@ -175,7 +175,7 @@ fn a_feature_whose_second_link_fails_is_wholly_off_and_its_first_target_never_ar
     let loader = crate::start::tests::bare_loader();
     let feature = LANTERNS.feature();
     let link = |id, at, next: &'static Next<Lit>| {
-        loader.link_fused(&LANTERNS, Target::Found(id, at), next, lit, HookFlags::NONE)
+        loader.link_feature(&LANTERNS, Target::Found(id, at), next, lit, HookFlags::NONE)
     };
     assert!(link("lantern.light", Some(0x1000), &FIRST_NEXT));
     assert!(!link("lantern.glow", None, &SECOND_NEXT));

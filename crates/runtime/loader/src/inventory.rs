@@ -47,9 +47,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "inventory deliveries", |s| {
             transactions::deliver(s.now);
         })],
-        end: Some(fused!("inventory requests at a game's end", |_| {
+        end: Some(|_| {
             transactions::end();
-        })),
+        }),
         ..part!("inventory", transactions)
     },
     &Part {
@@ -70,17 +70,17 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "death steps", |s| deaths::after_step(
             s.loader
         ))],
-        forget: Some(fused!("deaths forgetting a hosted game", |_| {
+        forget: Some(|_| {
             deaths::forget();
-        })),
+        }),
         ..part!("deaths", deaths)
     },
     &Part {
         seal: Some(|_| item_actions::seal()),
         link: Some(item_actions::link),
-        forget: Some(fused!("item_actions forgetting a hosted game", |_| {
+        forget: Some(|_| {
             item_actions::forget();
-        })),
+        }),
         ..part!("item_actions", item_actions)
     },
     &Part {
@@ -90,9 +90,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "survivor steps", |s| survivors::after_step(
             s.loader
         ))],
-        forget: Some(fused!("survivors forgetting a hosted game", |_| {
+        forget: Some(|_| {
             survivors::forget();
-        })),
+        }),
         ..part!("survivors", survivors)
     },
     &Part {
@@ -106,7 +106,7 @@ pub(crate) static PARTS: &[&Part] = &[
             stats::world_event(loader, event);
         })),
         follows: Some(|_| stats::wanted()),
-        forget: Some(fused!("stats forgetting a hosted game", |_| stats::forget())),
+        forget: Some(|_| stats::forget()),
         ..part!("stats", stats)
     },
     &Part {
@@ -126,9 +126,9 @@ pub(crate) static PARTS: &[&Part] = &[
             item_data::world_event(loader, event);
         })),
         follows: Some(|_| item_data::wanted()),
-        forget: Some(fused!("item_data forgetting a hosted game", |_| {
+        forget: Some(|_| {
             item_data::forget_server();
-        })),
+        }),
         ..part!("item_data", item_data)
     },
     &Part {
@@ -139,16 +139,16 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         link: Some(drops::link),
-        hosting: Some(fused!("drops at a hosted game's start", |loader| {
+        hosting: Some(|loader| {
             drops::start(loader);
-        })),
+        }),
         ..part!("drops", drops)
     },
     &Part {
         table_ids: spawns::TABLE_IDS,
-        forget: Some(fused!("spawns forgetting a hosted game", |_| {
+        forget: Some(|_| {
             spawns::forget();
-        })),
+        }),
         ..part!("spawns", spawns)
     },
 ];

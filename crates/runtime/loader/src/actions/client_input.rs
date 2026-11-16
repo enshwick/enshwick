@@ -77,7 +77,7 @@ pub(crate) fn link(loader: &Loader) {
         return;
     }
     let target = Target::Pinned(pinned::input::CLIENT_BUILD);
-    let linked = loader.link_fused(&FUSE, target, &NEXT, client_build, HookFlags::NONE);
+    let linked = loader.link_feature(&FUSE, target, &NEXT, client_build, HookFlags::NONE);
     DRIVE.linked.store(linked, Ordering::Release);
 }
 

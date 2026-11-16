@@ -801,7 +801,7 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
         };
         let target = Target::Found(pinned::recipe::LIST_LOOKUP.id(), Some(lookup));
         loader
-            .link_fused(
+            .link_feature(
                 &LIST_LOOKUP_FUSE,
                 target,
                 &LOOKUP_NEXT,

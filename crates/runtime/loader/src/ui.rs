@@ -17,9 +17,9 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: interface::TABLE_IDS,
         seal: Some(|_| interface::seal()),
         link: Some(interface::link),
-        forget: Some(fused!("ui forgetting a hosted game", |loader| {
+        forget: Some(|loader| {
             interface::forget(loader);
-        })),
+        }),
         ..part!("ui", interface)
     },
     &Part {
@@ -30,9 +30,7 @@ pub(crate) static PARTS: &[&Part] = &[
             player.key.get()
         ))),
         hello: Some(fused!("windows at hello", |_, key| windows::hello(key))),
-        end: Some(fused!("windows at a game's end", |loader| windows::forget(
-            Some(loader)
-        ))),
+        end: Some(|loader| windows::forget(Some(loader))),
         ..part!("windows", windows)
     },
 ];

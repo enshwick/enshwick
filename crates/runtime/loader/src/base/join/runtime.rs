@@ -19,7 +19,7 @@ pub(crate) static JOIN_FUSE: Fuse = Fuse::new("join check");
 /// found in its function table and checked; true when linked.
 pub(crate) fn link(loader: &Loader, join: u64) -> bool {
     let target = Target::Found(pinned::net::JOIN_GAME.id(), Some(join));
-    loader.link_fused(&JOIN_FUSE, target, &NEXT, detour, HookFlags::NONE)
+    loader.link_feature(&JOIN_FUSE, target, &NEXT, detour, HookFlags::NONE)
 }
 
 static NAMES: OnceLock<super::Names> = OnceLock::new();

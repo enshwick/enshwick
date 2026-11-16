@@ -16,7 +16,7 @@
 
 use core::ffi::c_void;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 use enshwick_core::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
@@ -26,8 +26,10 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::parts::{Fused, Part, PlayerCall, Stage, Stepping, fused};
 use crate::engine::pending::Pending;
+use offsets::{Offsets, Slots, found};
 use session::{SESSION, Session, Step};
 
+mod offsets;
 mod session;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
@@ -39,10 +41,8 @@ use crate::{actions, world};
 pub(crate) static PART: Part = Part {
     table_ids: TABLE_IDS,
     link: Some(link),
-    forget: Some(fused!("events forgetting a hosted game", |loader| forget(
-        loader
-    ))),
-    ..Part::new("events", module_path!())
+    forget: Some(forget),
+    ..crate::engine::parts::part!("events")
 };
 
 /// The build table ids this part of the loader names.
@@ -84,25 +84,6 @@ use crate::engine::world::SLOT_IN_GAME;
 /// Slots the joined set can hold; the game has 16.
 const MAX_SLOTS: usize = 32;
 
-/// Offsets into the game's server, from the build table.
-#[derive(Debug, Clone, Copy)]
-struct Offsets {
-    entry_state: usize,
-    slots: usize,
-    slot_size: usize,
-    slot_count: usize,
-    slot_state: usize,
-    slot_entity: usize,
-    slot_key: usize,
-    ctx_player: usize,
-    ctx_replay: usize,
-    /// The pickup target's entity id and mode byte.
-    pickup_entity: usize,
-    pickup_mode: usize,
-    server_world: usize,
-    entities: usize,
-}
-
 /// The data of the every-step [`Event::TICKED`] for step `step` of `game`.
 fn tick_data(step: u64, time: StepTime, game: u64) -> TickData {
     TickData {
@@ -122,12 +103,46 @@ struct State {
     building: Pending<BuildingData>,
     /// The handle of the player seen joining in each slot, 0 for none.
     joined: [AtomicU32; MAX_SLOTS],
+    /// The character entity and account key of the player seen joining in
+    /// each slot, so a player whose slot clears or is reused before the
+    /// removal link sees them still leaves as who they were.
+    joined_as: [(AtomicU32, AtomicU64); MAX_SLOTS],
 }
 
 static STATE: State = State {
     building: Pending::new(),
     joined: [const { AtomicU32::new(0) }; MAX_SLOTS],
+    joined_as: [const { (AtomicU32::new(0), AtomicU64::new(0)) }; MAX_SLOTS],
 };
+
+/// What the step's scan of one player slot finds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SlotScan {
+    /// Nothing changed.
+    Same,
+    /// A player reached the game in an empty record.
+    Joined,
+    /// The recorded player is gone: the slot cleared, or holds a player not
+    /// in the game yet, and the removal link did not see them leave.
+    Left,
+    /// Another player is in the game in the recorded player's slot: the
+    /// recorded one left first.
+    Replaced,
+}
+
+/// The scan of a slot whose recorded join is `recorded` and whose handle
+/// is `handle` now, `in_game` when it holds a player in the game with a
+/// character; 0 is no handle.
+fn scan_slot(recorded: u32, handle: u32, in_game: bool) -> SlotScan {
+    let joining = handle != 0 && in_game;
+    match (recorded, handle) {
+        (recorded, handle) if recorded == handle => SlotScan::Same,
+        (0, _) if joining => SlotScan::Joined,
+        (0, _) => SlotScan::Same,
+        _ if joining => SlotScan::Replaced,
+        _ => SlotScan::Left,
+    }
+}
 /// One feature per group of events: a target this build lacks, or a panic in
 /// the loader's work for those events, turns off that group alone.
 static STEP_FUSE: Fuse = Fuse::new("step events");
@@ -190,32 +205,6 @@ fn own_link(symbol: Symbol, leaves: bool) -> bool {
         || (leaves && symbol == pinned::server::PLAYER_REMOVE)
 }
 
-/// The server layout from the build table, or the first constant it lacks.
-fn offsets(loader: &Loader) -> Result<Offsets, Constant> {
-    let constant = |name: Constant| {
-        loader
-            .build
-            .constant(name.id())
-            .and_then(|v| usize::try_from(v).ok())
-            .ok_or(name)
-    };
-    Ok(Offsets {
-        entry_state: constant(pinned::server::ENTRY_STATE)?,
-        slots: constant(pinned::server::PLAYER_SLOTS)?,
-        slot_size: constant(pinned::server::PLAYER_SLOT_SIZE)?,
-        slot_count: constant(pinned::server::PLAYER_SLOT_COUNT)?.min(MAX_SLOTS),
-        slot_state: constant(pinned::server::PLAYER_SLOT_STATE)?,
-        slot_entity: constant(pinned::server::PLAYER_SLOT_ENTITY)?,
-        slot_key: constant(pinned::server::PLAYER_SLOT_KEY)?,
-        ctx_player: constant(pinned::building::CTX_PLAYER)?,
-        ctx_replay: constant(pinned::building::CTX_REPLAY)?,
-        pickup_entity: constant(pinned::building::PICKUP_ENTITY)?,
-        pickup_mode: constant(pinned::building::PICKUP_MODE)?,
-        server_world: constant(pinned::server::WORLD)?,
-        entities: constant(pinned::world::ENTITIES)?,
-    })
-}
-
 /// Links what the subscriptions and the loader's own work need, each link
 /// a feature of its own; a link this build cannot make turns its feature
 /// off and says so.
@@ -236,25 +225,24 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     let place = wanted(&[Event::BUILDING_PLACED], pinned::building::SPAWN_PROP);
     let pickup = wanted(&[Event::BUILDING_REMOVED], pinned::building::PICKUP);
-    let features = [
-        (step, &STEP_FUSE),
-        (state, &STATE_FUSE),
-        (save, &SAVE_FUSE),
-        (remove, &REMOVE_FUSE),
-        (place, &PLACE_FUSE),
-        (pickup, &PICKUP_FUSE),
-    ];
-    let offsets = match offsets(loader) {
-        Ok(offsets) => offsets,
-        Err(lacking) => {
-            for (_, fuse) in features.iter().filter(|(wanted, _)| *wanted) {
-                let _off = loader.fuse_off(fuse, lacking.id(), crate::engine::builds::ABSENT);
-            }
-            untold(loader, lacking.id(), crate::engine::builds::ABSENT);
-            return;
+    let found = found(loader);
+    // A wanted link whose offsets this build lacks is off, named by the
+    // first constant it lacks; the others link.
+    let has = |wanted: bool, fuse: &'static Fuse, lacking: Option<Constant>| match lacking {
+        Some(lacking) if wanted => {
+            loader.fuse_off(fuse, lacking.id(), crate::engine::builds::ABSENT)
         }
+        _ => wanted,
     };
-    if OFFSETS.set(offsets).is_err() {
+    let step = has(step, &STEP_FUSE, found.step());
+    if state && let Err(lacking) = found.entry_state {
+        untold(loader, lacking.id(), crate::engine::builds::ABSENT);
+    }
+    let state = has(state, &STATE_FUSE, found.entry_state.err());
+    let remove = has(remove, &REMOVE_FUSE, found.slots.err());
+    let place = has(place, &PLACE_FUSE, found.building.err());
+    let pickup = has(pickup, &PICKUP_FUSE, found.building.err());
+    if OFFSETS.set(found.offsets()).is_err() {
         return;
     }
     let stepped = link_server(loader, [step, state, save, remove]);
@@ -270,7 +258,7 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
     let at = Target::Pinned;
     let none = HookFlags::NONE;
     let stepped = step
-        && loader.link_fused(
+        && loader.link_feature(
             &STEP_LINK,
             at(pinned::server::POST_STEP),
             &STEP_NEXT,
@@ -278,7 +266,7 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
             none,
         );
     let state_linked = state
-        && loader.link_fused(
+        && loader.link_feature(
             &STATE_LINK,
             at(pinned::server::SET_STATE),
             &STATE_NEXT,
@@ -289,7 +277,7 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
         untold(loader, pinned::server::SET_STATE.id(), UNTOLD);
     }
     let _save = save
-        && loader.link_fused(
+        && loader.link_feature(
             &SAVE_FUSE,
             at(pinned::server::SAVE_STEP),
             &SAVE_NEXT,
@@ -297,7 +285,7 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
             none,
         );
     let removes = remove
-        && loader.link_fused(
+        && loader.link_feature(
             &REMOVE_LINK,
             at(pinned::server::PLAYER_REMOVE),
             &REMOVE_NEXT,
@@ -339,7 +327,7 @@ fn link_building(loader: &'static Loader, stepped: bool, place: bool, pickup: bo
     }
     let none = HookFlags::NONE;
     let _place = place
-        && loader.link_fused(
+        && loader.link_feature(
             &PLACE_FUSE,
             Target::Pinned(pinned::building::SPAWN_PROP),
             &PLACE_NEXT,
@@ -347,7 +335,7 @@ fn link_building(loader: &'static Loader, stepped: bool, place: bool, pickup: bo
             none,
         );
     let _pickup = pickup
-        && loader.link_fused(
+        && loader.link_feature(
             &PICKUP_FUSE,
             Target::Pinned(pinned::building::PICKUP),
             &PICKUP_NEXT,
@@ -364,16 +352,16 @@ fn link_building(loader: &'static Loader, stepped: bool, place: bool, pickup: bo
 ///   build table's `server.player_slot_size` bytes.
 /// - Called on a thread the game reads the slot on, with no writer
 ///   meanwhile.
-unsafe fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
+unsafe fn player(slot_index: usize, slot: *const u8, slots: &Slots) -> PlayerData {
     PlayerData {
         header: Header::of::<PlayerData>(),
         slot: u32::try_from(slot_index).unwrap_or(u32::MAX),
         // SAFETY: the caller guarantees a live player slot; its u32 entity
         // sits at the build table's `server.player_slot_entity` offset.
-        entity: unsafe { read_at(slot, offsets.slot_entity) },
+        entity: unsafe { read_at(slot, slots.entity) },
         // SAFETY: the caller guarantees a live player slot; its u64 account
         // key sits at the build table's `server.player_slot_key` offset.
-        key: unsafe { read_at(slot, offsets.slot_key) },
+        key: unsafe { read_at(slot, slots.key) },
     }
 }
 
@@ -421,12 +409,14 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         }
         Step::New | Step::Same => {}
     }
-    crate::engine::world::capture(
-        server.expose_provenance(),
-        thread,
-        offsets.server_world,
-        offsets.entities,
-    );
+    if let Some(world) = offsets.world {
+        crate::engine::world::capture(
+            server.expose_provenance(),
+            thread,
+            world.server_world,
+            world.entities,
+        );
+    }
     let built = STATE.building.take();
     if !built.is_empty() {
         raise_building(loader, &built);
@@ -508,7 +498,12 @@ fn run_fused(
     call: impl Fn(&'static Part) -> Option<&'static PlayerCall>,
     player: &PlayerData,
 ) {
-    for fused in loader.parts.iter().filter_map(call) {
+    for fused in loader
+        .parts
+        .iter()
+        .filter(|part| part.runs())
+        .filter_map(call)
+    {
         let _ran = fused.call(site, |run| run(loader, player));
     }
 }
@@ -521,30 +516,41 @@ fn run_fused(
 /// As [`after_step`]: `server` is null or the game's live server, read on
 /// the game thread after its step.
 unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
-    if server.is_null() {
+    let Some(slots) = offsets.slots.filter(|_| !server.is_null()) else {
         return;
-    }
-    for (index, joined) in STATE.joined.iter().enumerate().take(offsets.slot_count) {
+    };
+    for (index, joined) in STATE.joined.iter().enumerate().take(slots.count) {
         let slot = server
             .cast_const()
-            .wrapping_add(offsets.slots + index * offsets.slot_size);
+            .wrapping_add(slots.at + index * slots.size);
         // SAFETY: `server` is non-null by the check before it and live by the
         // caller's contract, and `index` is below its slot count, so `slot`
         // is one of its player slots, which starts with its u32 handle.
         let handle: u32 = unsafe { read_at(slot, 0) };
         // SAFETY: `slot` is a live player slot of the server; its u8 state
         // sits at the build table's `server.player_slot_state` offset.
-        let state: u8 = unsafe { read_at(slot, offsets.slot_state) };
+        let state: u8 = unsafe { read_at(slot, slots.state) };
         // SAFETY: `slot` is a live player slot of the server; its u32 entity
         // sits at the build table's `server.player_slot_entity` offset.
-        let entity: u32 = unsafe { read_at(slot, offsets.slot_entity) };
-        if handle == 0 {
+        let entity: u32 = unsafe { read_at(slot, slots.entity) };
+        let scan = scan_slot(
+            joined.load(Ordering::Relaxed),
+            handle,
+            state == SLOT_IN_GAME && entity != 0,
+        );
+        if matches!(scan, SlotScan::Left | SlotScan::Replaced) {
             joined.store(0, Ordering::Relaxed);
-        } else if state == SLOT_IN_GAME && entity != 0 && joined.load(Ordering::Relaxed) != handle {
+            left_unseen(loader, index);
+        }
+        if matches!(scan, SlotScan::Joined | SlotScan::Replaced) {
             joined.store(handle, Ordering::Relaxed);
             // SAFETY: `slot` is a live player slot of the server, read on the
             // game thread after its step, as the caller guarantees.
-            let data = unsafe { player(index, slot, offsets) };
+            let data = unsafe { player(index, slot, &slots) };
+            if let Some((entity, key)) = STATE.joined_as.get(index) {
+                entity.store(data.entity.0, Ordering::Relaxed);
+                key.store(data.key.get(), Ordering::Relaxed);
+            }
             run_fused(
                 loader,
                 "a player's join",
@@ -554,6 +560,30 @@ unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
             let _raised = JOINED_EVENTS.call("a player's join", |raise| raise(loader, &data));
         }
     }
+}
+
+/// The player recorded joining in slot `index` left without the removal
+/// link seeing it: the parts and the mods hear it as who joined there.
+#[cold]
+fn left_unseen(loader: &'static Loader, index: usize) {
+    let Some((entity, key)) = STATE.joined_as.get(index) else {
+        return;
+    };
+    let data = PlayerData {
+        header: Header::of::<PlayerData>(),
+        slot: u32::try_from(index).unwrap_or(u32::MAX),
+        entity: enshwick_core::Entity(entity.load(Ordering::Relaxed)),
+        key: enshwick_core::PlayerKey::new(key.load(Ordering::Relaxed)),
+    };
+    left(loader, "a player's slot scan", &data);
+}
+
+/// Tells the parts and the mods that the player `data` left.
+fn left(loader: &'static Loader, site: &str, data: &PlayerData) {
+    run_fused(loader, site, |part| part.left.as_ref(), data);
+    let _raised = REMOVE_FUSE.run(site, || {
+        loader.emit(Event::PLAYER_LEFT, None, core::ptr::from_ref(data).cast());
+    });
 }
 
 /// Calls the periodic tick handlers due after step `step` of `game` at
@@ -689,7 +719,7 @@ crate::engine::chains::chain_detour! {
         // SAFETY: `entry` is non-null by the filter before it and is the
         // hooked function's server instance entry; its u8 state sits at the
         // build table's `server.entry_state` offset.
-        let old = linked.map(|(_, offsets)| unsafe { read_at::<u8>(entry, offsets.entry_state) });
+        let old = linked.and_then(|(_, offsets)| offsets.entry_state).map(|at| unsafe { read_at::<u8>(entry, at) });
         // Before the game's own change: loading the new server's world may
         // already move its events.
         if state == STATE_INITIALIZE
@@ -802,13 +832,16 @@ unsafe fn player_leaves(
     server: *mut u8,
     slot: *mut u8,
 ) {
-    let first = server.addr() + offsets.slots;
-    let index = slot.addr().wrapping_sub(first) / offsets.slot_size.max(1);
+    let Some(slots) = offsets.slots else {
+        return;
+    };
+    let first = server.addr() + slots.at;
+    let index = slot.addr().wrapping_sub(first) / slots.size.max(1);
     // SAFETY: `slot` is a live player slot by the caller's contract; a slot
     // starts with its u32 handle.
     let handle: u32 = unsafe { read_at(slot, 0) };
     let Some(joined) = STATE.joined.get(index).filter(|joined| {
-        handle != 0 && index < offsets.slot_count && joined.load(Ordering::Relaxed) == handle
+        handle != 0 && index < slots.count && joined.load(Ordering::Relaxed) == handle
     }) else {
         return;
     };
@@ -816,12 +849,8 @@ unsafe fn player_leaves(
     // SAFETY: `slot` is a live player slot below the slot count, read on the
     // thread the game removes it on, by the caller's contract and the
     // filter before it.
-    let data = unsafe { player(index, slot, offsets) };
-    let site = "the player removal link";
-    run_fused(loader, site, |part| part.left.as_ref(), &data);
-    let _raised = REMOVE_FUSE.run(site, || {
-        loader.emit(Event::PLAYER_LEFT, None, core::ptr::from_ref(&data).cast());
-    });
+    let data = unsafe { player(index, slot, &slots) };
+    left(loader, "the player removal link", &data);
 }
 
 crate::engine::chains::chain_detour! {
@@ -843,7 +872,7 @@ crate::engine::chains::chain_detour! {
         let entity = onward.call();
         if entity != 0
             && !context.is_null()
-            && let Some((_, offsets)) = loaded()
+            && let Some(offsets) = loaded().and_then(|(_, offsets)| offsets.building)
         {
             STATE.building.push(BuildingData {
                 header: Header::of::<BuildingData>(),
@@ -898,7 +927,8 @@ crate::engine::chains::chain_detour! {
     |onward| {
         let before = loaded()
             .filter(|_| !context.is_null() && !target.is_null())
-            .map(|(_, offsets)| {
+            .and_then(|(_, offsets)| offsets.building)
+            .map(|offsets| {
                 // SAFETY: `target` is non-null by the filter before it and is
                 // the hooked function's target, whose entity still lives; its
                 // u32 entity sits at the build table's `building.pickup_entity`

@@ -54,7 +54,7 @@ The types are in
 | `WorldLoaded` | none | The world finished loading and the server runs. | game |
 | `WorldSaved` | none | A save of the world finished writing to disk. | game |
 | `PlayerJoined` | `PlayerData` | A player's character entered the world. | game |
-| `PlayerLeft` | `PlayerData` | A player who joined is leaving. The character is still in the world. | game |
+| `PlayerLeft` | `PlayerData` | A player who joined is leaving. The character is still in the world. When the game cleared or reused the player's slot unseen, the event comes after the step with the data from the join. The character may then be gone. | game |
 | `ShutdownStarted` | none | An orderly stop begins, with the world and players alive. The final save follows unless a mod holds saves inside its handler ([saves](world.md)). | game |
 | `BuildingPlaced` | `BuildingData` | A player placed a building piece or prop. It is raised after the step that placed it. | game |
 | `BuildingRemoved` | `BuildingData` | A player picked up or tore down a placed piece. The entity no longer exists. | game |

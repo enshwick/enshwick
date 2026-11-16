@@ -69,10 +69,6 @@ struct State {
     epoch: OnceLock<Instant>,
     /// This process's number in its hellos to the game it hosts.
     nonce: OnceLock<u64>,
-    /// Set once a player without an account key entered the world.
-    unkeyed: AtomicBool,
-    /// Set once the host's hello came under a second key.
-    rehosted: AtomicBool,
 }
 
 /// The join admission: players without the world's join mods are told and
@@ -92,8 +88,6 @@ static STATE: State = State {
     next: AtomicU64::new(0),
     epoch: OnceLock::new(),
     nonce: OnceLock::new(),
-    unkeyed: AtomicBool::new(false),
-    rehosted: AtomicBool::new(false),
 };
 
 /// Takes the loaded world's `require_enshwick` rule: with it off, players
@@ -213,12 +207,10 @@ pub(crate) fn joined(key: u64) {
         return;
     };
     if key == 0 {
-        if !STATE.unkeyed.swap(true, Ordering::Relaxed) {
-            crate::log!(
-                WARN,
-                "join check: a player entered the world without an account key and is not checked"
-            );
-        }
+        crate::log_once!(
+            WARN,
+            "join check: a player entered the world without an account key and is not checked"
+        );
         return;
     }
     let _ran = ADMISSION_FUSE.run("a player's join", || {
@@ -255,8 +247,8 @@ pub(crate) fn hello(key: u64, hello: &Hello) -> bool {
                 let (answered, _) = with_gate(|gate| gate.host_hello(key, hello));
                 if answered {
                     crate::log!(INFO, "join check: the host is {key:016x}");
-                } else if !STATE.rehosted.swap(true, Ordering::Relaxed) {
-                    crate::log!(
+                } else {
+                    crate::log_once!(
                         WARN,
                         "join check: the host's hello came under {key:016x}, not the host's first key; not answered"
                     );
@@ -301,7 +293,6 @@ pub(crate) fn after_step(loader: &Loader) {
         return;
     };
     let _ran = ADMISSION_FUSE.run("the join admission step", || {
-        crate::base::net::keep_greeting(&live);
         let in_game: Vec<u64> = if serving.side == Side::CLIENT {
             crate::engine::world::players(loader)
                 .map_or_default(|players| players.iter().map(|p| p.key.get()).collect())

@@ -317,6 +317,17 @@ impl Fuse {
         self.turn_off(&Off::reported(format!("{} off: {why}", self.feature), why));
     }
 
+    /// [`Fuse::report_off`], its log line also saying what goes with the
+    /// feature, `effect`.
+    #[cfg(windows)]
+    #[cold]
+    pub(crate) fn report_off_with(&self, why: &str, effect: &str) {
+        self.turn_off(&Off::reported(
+            format!("{} off: {why}, {effect}", self.feature),
+            why.to_owned(),
+        ));
+    }
+
     /// The feature named `feature`, one for the name, made the first time
     /// a link or a report names it. A cold lookup under a lock: hot paths
     /// hold their feature.

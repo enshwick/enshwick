@@ -356,9 +356,9 @@ fn link_resources(loader: &Loader) -> bool {
         Target::Pinned(pinned::resource::RESOLVE),
         Target::Pinned(pinned::resource::KEY_OF),
     );
-    loader.link_fused(&RESOURCES_FUSE, open_at, &OPEN_NEXT, open, none)
-        && loader.link_fused(&RESOURCES_FUSE, resolve_at, &RESOLVE_NEXT, resolve, none)
-        && loader.link_fused(&RESOURCES_FUSE, key_at, &KEY_NEXT, key_of, none)
+    loader.link_feature(&RESOURCES_FUSE, open_at, &OPEN_NEXT, open, none)
+        && loader.link_feature(&RESOURCES_FUSE, resolve_at, &RESOLVE_NEXT, resolve, none)
+        && loader.link_feature(&RESOURCES_FUSE, key_at, &KEY_NEXT, key_of, none)
 }
 
 /// Adds the loader's stand-ins for the items of removed mods to `served`,

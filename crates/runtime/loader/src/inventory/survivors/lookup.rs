@@ -55,13 +55,13 @@ pub(super) fn call(
 
 /// Links the two lookups of the survivor lookup; false once it is off.
 pub(super) fn link(loader: &Loader) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         &LOOKUP_FUSE,
         Target::Pinned(pinned::npc::LOOKUP),
         &LOOKUP_NEXT,
         lookup_link,
         HookFlags::CALLER_FRAME,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &LOOKUP_FUSE,
         Target::Pinned(pinned::npc::LOOKUP_CURSOR),
         &CURSOR_NEXT,

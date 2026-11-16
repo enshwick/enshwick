@@ -19,9 +19,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "knowledge steps", |s| store::after_step(
             s.loader
         ))],
-        forget: Some(fused!("knowledge forgetting a hosted game", |_| {
+        forget: Some(|_| {
             store::forget();
-        })),
+        }),
         ..part!("knowledge", store)
     },
     &Part {
@@ -31,9 +31,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "level writes", |s| progress::after_step(
             s.loader
         ))],
-        end: Some(fused!("level writes at a game's end", |loader| {
+        end: Some(|loader| {
             progress::game_ended(loader);
-        })),
+        }),
         ..part!("progress", progress)
     },
     &Part {
@@ -46,9 +46,9 @@ pub(crate) static PARTS: &[&Part] = &[
                 store::changes::world_event(loader, event);
             }
         )),
-        forget: Some(fused!("knowledge changes forgetting a hosted game", |_| {
+        forget: Some(|_| {
             store::changes::forget();
-        })),
+        }),
         ..part!("knowledge changes", store::changes)
     },
 ];

@@ -58,9 +58,9 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: recipes::TABLE_IDS,
         link: Some(recipes::init),
-        forget: Some(fused!("recipes forgetting a hosted game", |_| {
+        forget: Some(|_| {
             recipes::forget();
-        })),
+        }),
         ..part!("recipes", recipes)
     },
     &Part {

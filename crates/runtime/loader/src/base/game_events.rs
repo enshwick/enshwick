@@ -420,7 +420,7 @@ pub(crate) fn link(loader: &'static Loader) {
     // freeing of handed lists need no stream.
     let _first = LINKED.set(stream_layout(loader, client_wanted));
     let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
-    if loader.link_fused(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
+    if loader.link_feature(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "game events: {count} subscriptions");
     } else {
         // shortcut: a move that links but fails to arm later turns off only

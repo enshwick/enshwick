@@ -76,7 +76,7 @@ pub(crate) fn link(loader: &Loader) {
         return;
     }
     let target = Target::Pinned(pinned::ui::RECIPE_DIRECTORY);
-    let linked = loader.link_fused(&FUSE, target, &NEXT, recipe_directory, HookFlags::NONE);
+    let linked = loader.link_feature(&FUSE, target, &NEXT, recipe_directory, HookFlags::NONE);
     BROWSER.linked.store(linked, Ordering::Release);
 }
 

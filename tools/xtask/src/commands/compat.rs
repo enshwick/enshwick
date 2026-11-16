@@ -390,7 +390,8 @@ fn spell(fingerprint: Fingerprint) -> String {
 struct ModOutcome {
     file: String,
     id: String,
-    version: String,
+    /// `None` for a file refused at start.
+    version: Option<String>,
     running: bool,
     reason: String,
 }
@@ -550,7 +551,7 @@ fn write_mods(out: &mut String, args: &Args) -> Result<bool, String> {
                     let _w = writeln!(
                         *out,
                         "| {name} | {} | {status} | {} |",
-                        m.version,
+                        m.version.as_deref().unwrap_or("-"),
                         why.replace('|', "/")
                     );
                 }
@@ -918,11 +919,38 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_file_s_version_is_written_null_and_reads_as_none() {
+        let read = |json: &str| {
+            serde_json::from_str::<ModOutcome>(json)
+                .map(|m| m.version)
+                .map_err(|e| e.to_string())
+        };
+        let row = |version: &str| {
+            format!(r#"{{"file":"m.dll","id":"",{version}"running":false,"reason":"x"}}"#)
+        };
+        assert_eq!(read(&row("")), Ok(None));
+        assert_eq!(read(&row(r#""version":null,"#)), Ok(None));
+        assert_eq!(
+            read(&row(r#""version":"1.2.0","#)),
+            Ok(Some("1.2.0".into()))
+        );
+        let none = ModOutcome {
+            file: "m.dll".into(),
+            id: String::new(),
+            version: None,
+            running: false,
+            reason: "x".into(),
+        };
+        let written = serde_json::to_string(&none).map_err(|e| e.to_string());
+        assert!(written.is_ok_and(|json| json.contains(r#""version":null"#)));
+    }
+
+    #[test]
     fn a_mod_off_for_its_side_is_not_broken() {
         let outcome = |running: bool, reason: &str| ModOutcome {
             file: "m.dll".into(),
             id: "m".into(),
-            version: "1.0.0".into(),
+            version: Some("1.0.0".into()),
             running,
             reason: reason.into(),
         };

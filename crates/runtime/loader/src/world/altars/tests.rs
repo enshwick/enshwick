@@ -70,7 +70,7 @@ fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
         step: 0,
     };
     {
-        let mut state = STATE.records.relock();
+        let mut state = STATE.current.records.relock();
         let placed = Placed {
             position: [0; 3],
             orientation: [0.0, 0.0, 0.0, 1.0],
@@ -92,6 +92,7 @@ fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
     );
     assert!(
         STATE
+            .current
             .targets
             .load()
             .as_ref()
@@ -255,7 +256,7 @@ fn a_range_pass_that_writes_nothing_or_panics_puts_the_row_back_and_one_that_wri
             (altar::LEVEL_ATTRIBUTE, 0),
         ],
     );
-    let engine: &'static Engine = Box::leak(Box::new(Engine::resolve(&loader).unwrap()));
+    let engine: &'static Engine = Box::leak(Box::new(Engine::found(&loader).unwrap()));
     let mut room = [0u64; 4];
     let ctx = room.as_mut_ptr();
     let pass = |keep: bool, panics: bool| {
@@ -321,21 +322,31 @@ fn a_hosted_game_s_end_forgets_the_altars_and_their_pace() {
         at: Instant::now(),
         step: 3,
     };
-    let _ = state.records.relock().placed.merge([(4096, placed)], now);
-    state.targets.store(Some(Arc::new(Targets::new())));
+    let _ = state
+        .current
+        .records
+        .relock()
+        .placed
+        .merge([(4096, placed)], now);
+    state.current.targets.store(Some(Arc::new(Targets::new())));
     state.step.store(3, Ordering::Relaxed);
-    state.sizing.asked.store(true, Ordering::Release);
-    state.sizing.running.store(2, Ordering::Release);
+    state.current.sizing.asked.store(true, Ordering::Release);
+    state.current.sizing.running.store(2, Ordering::Release);
     state.forget();
-    assert_eq!(state.records.relock().placed.iter().count(), 0);
-    assert!(state.targets.load().is_none());
+    assert_eq!(
+        format!("{:?}", state.current),
+        format!("{:?}", World::new()),
+        "the world part is new whole"
+    );
+    assert_eq!(state.current.records.relock().placed.iter().count(), 0);
+    assert!(state.current.targets.load().is_none());
     assert_eq!(
         state.step.load(Ordering::Relaxed),
         3,
         "a merge racing the forget never stamps an entry with a step from before a reset"
     );
-    assert!(!state.sizing.asked.load(Ordering::Acquire));
-    assert_eq!(state.sizing.running.load(Ordering::Acquire), 0);
+    assert!(!state.current.sizing.asked.load(Ordering::Acquire));
+    assert_eq!(state.current.sizing.running.load(Ordering::Acquire), 0);
     assert!(
         state.changed.load(Ordering::Acquire),
         "the next step sizes the zones and tells the mods"

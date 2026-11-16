@@ -14,7 +14,7 @@ use crate::engine::loader::{Loader, Target};
 /// Links the base stock at `target` as one of the interaction filters'
 /// links; true when linked.
 pub(super) fn link(loader: &Loader, target: Target<'_>, flags: HookFlags) -> bool {
-    loader.link_fused(&INTERACTIONS_FUSE, target, &STOCK_NEXT, stock, flags)
+    loader.link_feature(&INTERACTIONS_FUSE, target, &STOCK_NEXT, stock, flags)
 }
 
 /// Filtered copies of the base stock lists one thread handed out in one

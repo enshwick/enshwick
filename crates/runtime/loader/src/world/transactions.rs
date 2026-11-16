@@ -17,6 +17,7 @@ mod error;
 #[cfg(windows)]
 mod game;
 mod ledger;
+mod look;
 mod paste;
 pub(crate) mod props;
 mod record;
@@ -40,6 +41,7 @@ pub(crate) use game::{prop_placement_info, resolve, resolve_prop, saving};
 pub(crate) use ledger::Change;
 pub(crate) use ledger::Standing;
 use ledger::{Ledger, Limits};
+use look::{LedgerGuard, Look};
 #[cfg(windows)]
 pub(crate) use paste::{Erase, Paste};
 pub(crate) use settled::End;
@@ -96,6 +98,9 @@ struct Transactions {
     /// The mods' waits for their transactions' ends. Its lock is taken
     /// before the ledger's, never after.
     waits: Mutex<Waits>,
+    /// What the last look at the waits saw, so a step looks again only
+    /// once something is new.
+    look: Look,
 }
 
 impl Transactions {
@@ -107,7 +112,27 @@ impl Transactions {
             holds: crate::world::prop_holds::PropHolds::new(),
             waiting: AtomicBool::new(false),
             waits: Mutex::new(Waits::new()),
+            look: Look::new(),
         }
+    }
+
+    /// The ledger, its mutable uses counted for the waits' look.
+    fn ledger(&self) -> LedgerGuard<'_> {
+        LedgerGuard {
+            guard: self.ledger.relock(),
+            look: &self.look,
+            changed: false,
+        }
+    }
+
+    /// [`Transactions::ledger`] without waiting: `None` while another
+    /// thread holds it.
+    fn try_ledger(&self) -> Option<LedgerGuard<'_>> {
+        Some(LedgerGuard {
+            guard: self.ledger.try_relock()?,
+            look: &self.look,
+            changed: false,
+        })
     }
 
     /// Keeps `wait` for the steps to come; [`TransactionError::Unavailable`]
@@ -120,17 +145,24 @@ impl Transactions {
         }
         waits.add(wait);
         self.waiting.store(true, Ordering::Release);
+        self.look.ask();
         Ok(())
     }
 
     /// Runs the waits that end at `now`, in the order asked, outside the
-    /// locks so a callback may ask again or read the ledger. A step that
-    /// finds either lock taken leaves them to the next, as the pass does,
-    /// so the game thread never waits on a mod's thread.
+    /// locks so a callback may ask again or read the ledger. A step looks
+    /// only once the ledger changed, a mod turned off or a wait's time came
+    /// since the last look; one that finds either lock taken leaves them to
+    /// the next, as the pass does, so the game thread never waits on a
+    /// mod's thread.
     fn run_due(&self, now: Instant) {
         if !self.waiting.load(Ordering::Acquire) {
             return;
         }
+        let offs = offs();
+        let Some(changes) = self.look.due(now, offs) else {
+            return;
+        };
         let Some(mut waits) = self.waits.try_relock() else {
             return;
         };
@@ -138,6 +170,7 @@ impl Transactions {
             return;
         };
         let due = waits.due(now, |owner, id| ledger.info(owner, id), is_off);
+        self.look.looked(changes, offs, waits.earliest());
         self.waiting.store(!waits.is_empty(), Ordering::Release);
         drop(ledger);
         drop(waits);
@@ -154,7 +187,7 @@ impl Transactions {
             waits.take_all()
         };
         for wait in all {
-            let standing = self.ledger.relock().info(wait.owner, wait.id);
+            let standing = self.ledger().info(wait.owner, wait.id);
             run(wait, standing.as_ref());
         }
     }
@@ -167,6 +200,18 @@ use crate::engine::loader::is_off;
 #[cfg(not(windows))]
 const fn is_off(_: ModIndex) -> bool {
     false
+}
+
+/// How many mods the running loader turned off so far.
+#[cfg(windows)]
+fn offs() -> u64 {
+    crate::engine::loader::loader().map_or(0, crate::engine::loader::Loader::offs)
+}
+
+/// Off Windows no loader turns a mod off.
+#[cfg(not(windows))]
+const fn offs() -> u64 {
+    0
 }
 
 /// Runs `wait`'s callback as its mod's, unless the loader turned the mod
@@ -194,7 +239,7 @@ pub(crate) fn holds() -> &'static crate::world::prop_holds::PropHolds {
 fn guarded(state: &Transactions, work: impl FnOnce()) {
     if state.fuse.run("the post-step link", work).is_none() && state.fuse.is_off() {
         {
-            let mut ledger = state.ledger.relock();
+            let mut ledger = state.ledger();
             if ledger.busy() || ledger.kept() > 0 {
                 ledger.forget();
             }
@@ -266,7 +311,7 @@ pub(crate) fn commit(
     if STATE.fuse.is_off() || !game::ready(loader) {
         return Err(TransactionError::Unavailable);
     }
-    let mut ledger = STATE.ledger.relock();
+    let mut ledger = STATE.ledger();
     let id = ledger.commit(owner, actor, changes)?;
     STATE.busy.store(true, Ordering::Release);
     Ok(id)
@@ -282,7 +327,7 @@ fn undo_in(state: &Transactions, owner: ModIndex, id: u64) -> Result<(), Transac
     if state.fuse.is_off() {
         return Err(TransactionError::Unavailable);
     }
-    let mut ledger = state.ledger.relock();
+    let mut ledger = state.ledger();
     ledger.undo(owner, id)?;
     state.busy.store(ledger.busy(), Ordering::Release);
     Ok(())
@@ -291,18 +336,18 @@ fn undo_in(state: &Transactions, owner: ModIndex, id: u64) -> Result<(), Transac
 /// The entities of the props transaction `id` of `owner` placed and still
 /// holds, as [`Ledger::entities`].
 pub(crate) fn entities(owner: ModIndex, id: u64) -> Option<Vec<u32>> {
-    STATE.ledger.relock().entities(owner, id)
+    STATE.ledger().entities(owner, id)
 }
 
 /// Where transaction `id` of `owner` stands.
 pub(crate) fn info(owner: ModIndex, id: u64) -> Option<Standing> {
-    STATE.ledger.relock().info(owner, id)
+    STATE.ledger().info(owner, id)
 }
 
 /// The ledger without waiting: `None` while another thread holds it.
 #[cfg(windows)]
-fn try_ledger() -> Option<std::sync::MutexGuard<'static, Ledger>> {
-    STATE.ledger.try_relock()
+fn try_ledger() -> Option<LedgerGuard<'static>> {
+    STATE.try_ledger()
 }
 
 /// The step's work under the feature's own fuse, the one that settles what
@@ -315,6 +360,7 @@ pub(crate) const fn step() -> crate::engine::parts::Step {
             fuse: &STATE.fuse,
             run: after_step,
         },
+        part: None,
     }
 }
 
@@ -352,7 +398,7 @@ fn pass(loader: &crate::engine::loader::Loader) {
         let outcome = crate::world::voxels::changes::by(task.owner.handle(), || {
             task.run(&mut world, &mut pass)
         });
-        let mut ledger = STATE.ledger.relock();
+        let mut ledger = STATE.ledger();
         let go_on = ledger.put(task, outcome);
         STATE.busy.store(ledger.busy(), Ordering::Release);
         drop(ledger);
@@ -383,7 +429,7 @@ pub(crate) fn forget() {
 
 fn forget_in(state: &Transactions) {
     {
-        let mut ledger = state.ledger.relock();
+        let mut ledger = state.ledger();
         ledger.forget();
         state.busy.store(false, Ordering::Release);
     }
@@ -426,7 +472,7 @@ mod tests {
         guarded(&state, || panic!("in a pass"));
         assert!(state.fuse.is_off());
         assert!(!state.busy.load(Ordering::Acquire));
-        let info = state.ledger.relock().info(ME, id).unwrap();
+        let info = state.ledger().info(ME, id).unwrap();
         assert_eq!(
             (info.state, info.reason),
             (TransactionInfo::FAILED, Some(TransactionError::Unavailable))
@@ -482,7 +528,7 @@ mod tests {
         let id = waited(&state, Duration::from_secs(60), &seen);
         state.run_due(Instant::now());
         assert!(seen.relock().is_empty(), "still pending");
-        state.ledger.relock().undo(ModIndex::LOADER, id).unwrap();
+        state.ledger().undo(ModIndex::LOADER, id).unwrap();
         state.run_due(Instant::now());
         state.run_due(Instant::now());
         assert_eq!(*seen.relock(), [Some(TransactionInfo::UNDONE)]);
@@ -506,7 +552,7 @@ mod tests {
         let state = Transactions::new();
         let seen = Seen::default();
         waited(&state, Duration::ZERO, &seen);
-        let held = state.ledger.relock();
+        let held = state.ledger();
         state.run_due(Instant::now());
         assert!(seen.relock().is_empty(), "the game thread never waits");
         drop(held);

@@ -156,7 +156,7 @@ fn link_one<F: Copy>(
     detour: F,
 ) -> bool {
     wanted(symbol)
-        && loader.link_fused(
+        && loader.link_feature(
             feature,
             Target::Pinned(symbol),
             next,

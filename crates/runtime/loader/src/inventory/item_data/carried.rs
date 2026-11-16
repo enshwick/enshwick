@@ -49,18 +49,10 @@ impl Joining {
     }
 }
 
-/// Fuses of the carried item data's joins, looks and leaves: a panic in one
-/// turns off only that, not the others nor the events of every mod. The
-/// leave keeps its own, since it saves a leaving player's values.
-static JOIN_FUSE: Fuse = Fuse::new("carried item data at a join");
+/// The fuse of the carried item data's looks: a panic in one turns off only
+/// the looks, not the step's other work. The joins and leaves run under the
+/// item data part's own fuses.
 static LOOK_FUSE: Fuse = Fuse::new("carried item data looks");
-static LEAVE_FUSE: Fuse = Fuse::new("carried item data at a leave");
-
-/// A player's character `entity` joined: when records it carried wait, they
-/// look for its items once its inventories fill.
-pub(crate) fn player_joined(loader: &Loader, entity: Entity) {
-    let _ran = JOIN_FUSE.run("a player's join", || joined(loader, entity));
-}
 
 /// Looks for the joined characters' carried items, as [`find_carried`].
 pub(super) fn look_for_carried(loader: &Loader) {
@@ -73,10 +65,12 @@ pub(super) fn look_for_carried(loader: &Loader) {
 /// the items it removes with the character. Its slot still names it.
 #[cold]
 pub(crate) fn player_left(loader: &Loader, entity: Entity) {
-    let _ran = LEAVE_FUSE.run("a player's leave", || left(loader, entity));
+    left(loader, entity);
 }
 
-fn joined(loader: &Loader, entity: Entity) {
+/// A player's character `entity` joined: when records it carried wait, they
+/// look for its items once its inventories fill.
+pub(crate) fn player_joined(loader: &Loader, entity: Entity) {
     // A world whose things did not read attaches nothing this session.
     if !wanted() || !serves() || STATE.unread() {
         return;

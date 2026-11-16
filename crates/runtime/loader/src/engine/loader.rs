@@ -223,6 +223,9 @@ pub(crate) struct Loader {
     /// Set once the signature check finds a loader file without the release
     /// signature.
     pub(crate) unofficial: AtomicBool,
+    /// How many mods were turned off so far, so a reader can tell that
+    /// one was without walking every mod.
+    pub(crate) offs: AtomicU64,
     /// The code patches a thread kept out at arming, tried again later.
     pub(crate) retry: crate::engine::retry::Retry,
     /// The mods that did not load, shown as off with their reason.
@@ -276,7 +279,28 @@ pub(crate) fn install(loader: Loader) -> Option<&'static Loader> {
 }
 
 pub(crate) fn loader() -> Option<&'static Loader> {
+    #[cfg(test)]
+    if let Some(loader) = TEST_LOADER.get() {
+        return Some(loader);
+    }
     LOADER.get()
+}
+
+#[cfg(test)]
+std::thread_local! {
+    /// The loader one test runs, seen only on its own thread, so a test
+    /// that runs a loader leaves the process's one, and every other test,
+    /// alone when the tests share a process.
+    static TEST_LOADER: core::cell::Cell<Option<&'static Loader>> =
+        const { core::cell::Cell::new(None) };
+}
+
+/// Makes `loader` the one [`loader`] answers on this test's thread.
+#[cfg(test)]
+pub(crate) fn install_for_test(loader: Loader) -> &'static Loader {
+    let loader: &'static Loader = Box::leak(Box::new(loader));
+    TEST_LOADER.set(Some(loader));
+    loader
 }
 
 /// The running loader with what a part's link found of the build, kept in
@@ -286,7 +310,7 @@ pub(crate) fn linked<T>(found: &'static OnceLock<T>) -> Option<(&'static Loader,
 }
 
 /// Where one of the loader's detours goes, and how the code there is
-/// checked before [`Loader::link_fused`] links it.
+/// checked before [`Loader::link_feature`] links it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Target<'a> {
     /// A build table symbol, whose code [`Loader::code_holds`] checks.
@@ -402,7 +426,7 @@ impl Loader {
     /// or a refused link turns the whole feature off by [`Fuse::turn_off`],
     /// its links made before are dropped when the hooks arm, and its later
     /// links are not made. True when linked.
-    pub(crate) fn link_fused<F: Copy>(
+    pub(crate) fn link_feature<F: Copy>(
         &self,
         feature: &'static Fuse,
         target: Target<'_>,
@@ -428,7 +452,7 @@ impl Loader {
 
     /// Links one of the loader's own mid-function `handler`s of `feature` at
     /// `target`, ahead of every mod's handler there, checked and armed all
-    /// or none as [`Loader::link_fused`] links a detour. Declare the handler
+    /// or none as [`Loader::link_feature`] links a detour. Declare the handler
     /// with [`mid_handler!`](crate::engine::mid::mid_handler). True when
     /// linked.
     pub(crate) fn link_mid(
@@ -560,6 +584,11 @@ impl Loader {
         self.mods.iter().enumerate().find(|(_, m)| m.id == id)
     }
 
+    /// How many mods were turned off so far.
+    pub(crate) fn offs(&self) -> u64 {
+        self.offs.load(Ordering::Acquire)
+    }
+
     /// Turns a mod off: unlinks its hooks and logs why.
     pub(crate) fn turn_off(&self, index: ModIndex, reason: &str) {
         let Some(record) = self.mods.get(index.get()) else {
@@ -569,6 +598,7 @@ impl Loader {
             return;
         }
         *record.off_reason.relock() = Some(reason.to_owned());
+        let _count = self.offs.fetch_add(1, Ordering::AcqRel);
         let shown = record.off_reason_shown().unwrap_or_default();
         crate::engine::log::write(
             Level::ERROR,

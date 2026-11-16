@@ -32,31 +32,31 @@ type Clear = unsafe fn(*mut u8, &RecordFields);
 pub(super) fn link(loader: &Loader) -> bool {
     let at = Target::Pinned;
     let none = HookFlags::NONE;
-    loader.link_fused(
+    loader.link_feature(
         &PAST16,
         at(bases::NPC_TOTALS),
         &NPC_TOTALS_NEXT,
         npc_totals,
         none,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &PAST16,
         at(bases::SERVER_UPDATE),
         &SERVER_UPDATE_NEXT,
         server_update,
         none,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &PAST16,
         at(bases::BED_CLEANUP),
         &BED_CLEANUP_NEXT,
         bed_cleanup,
         none,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &PAST16,
         at(bases::COMFORT_CLEANUP),
         &COMFORT_CLEANUP_NEXT,
         comfort_cleanup,
         none,
-    ) && loader.link_fused(
+    ) && loader.link_feature(
         &PAST16,
         at(bases::PROPS_CLEANUP),
         &PROPS_CLEANUP_NEXT,

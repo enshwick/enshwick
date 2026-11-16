@@ -12,6 +12,10 @@ use crate::engine::players::{CharacterId, MAX_PLAYERS};
 
 /// Every player in game, in slot order.
 pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, WorldError> {
+    #[cfg(test)]
+    if let Some(online) = super::online() {
+        return Ok(online);
+    }
     Ok(in_game(loader, |_| true)?.collect())
 }
 

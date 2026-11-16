@@ -21,7 +21,7 @@ use super::loops;
 use crate::engine::builds::Unhooked;
 use crate::engine::chains::Next;
 use crate::engine::code::{CodePatch, Verdict};
-use crate::engine::fuse::Fuse;
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, Symbol, bases};
@@ -405,7 +405,7 @@ fn link_sides<F: Copy>(
     [server, own]: [(Symbol, &'static Next<F>, F); 2],
 ) -> bool {
     let link = |(at, next, detour)| {
-        loader.link_fused(fuse, Target::Pinned(at), next, detour, HookFlags::NONE)
+        loader.link_feature(fuse, Target::Pinned(at), next, detour, HookFlags::NONE)
     };
     link(server) && (!client || link(own))
 }
@@ -445,19 +445,19 @@ pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
 /// Tells once, after the hooks are armed, that bases past 16 are off, unless
 /// a skipped patch already reported it among `already`; a patch that waits
 /// leaves the window to its retry.
-pub(super) fn report(loader: &Loader, already: &[&Fuse]) {
+pub(super) fn report(already: &[&Fuse]) {
     let off = off_after_arming(
         SITES.get().is_some(),
         armed(),
         already,
         STATE.skipped.load(Ordering::Acquire),
     );
-    if let Some((id, why)) = off {
-        let _off = loader.fuse_off(&PAST16, id, why);
+    if let Some(why) = off {
+        PAST16.turn_off(&Off::fault(PAST16.feature(), why));
     }
 }
 
-/// The entry and reason [`PAST16`] turns off for after arming, for a window
+/// The reason [`PAST16`] turns off for after arming, for a window
 /// `found` and not `armed`: a patch that named it among `already`
 /// leaves the window's own links to this fuse when `skipped` for good, and
 /// to the patch's retry when it waits.
@@ -466,14 +466,14 @@ fn off_after_arming(
     armed: bool,
     already: &[&Fuse],
     skipped: bool,
-) -> Option<(&'static str, &'static str)> {
+) -> Option<&'static str> {
     let reported = PAST16.among(already);
     if !found || armed || (reported && !skipped) {
         None
     } else if reported {
-        Some(("the size patches", "were skipped"))
+        Some("the size patches were skipped")
     } else {
-        Some(("bases", "a hook or a size patch is not armed"))
+        Some("a hook or a size patch is not armed")
     }
 }
 
@@ -663,13 +663,13 @@ mod tests {
         let named = [&PAST16];
         let twin = Fuse::new(PAST_16);
         assert_eq!(
-            off_after_arming(true, false, &[&twin], true).map(|o| o.0),
-            Some("bases"),
+            off_after_arming(true, false, &[&twin], true),
+            Some("a hook or a size patch is not armed"),
             "another fuse of the same name is not the window's"
         );
         assert_eq!(
-            off_after_arming(true, false, &named, true).map(|o| o.0),
-            Some("the size patches")
+            off_after_arming(true, false, &named, true),
+            Some("the size patches were skipped")
         );
         assert_eq!(
             off_after_arming(true, false, &named, false),
@@ -677,8 +677,8 @@ mod tests {
             "it waits for its retry"
         );
         assert_eq!(
-            off_after_arming(true, false, &[], false).map(|o| o.0),
-            Some("bases")
+            off_after_arming(true, false, &[], false),
+            Some("a hook or a size patch is not armed")
         );
         assert_eq!(off_after_arming(true, true, &named, true), None);
         assert_eq!(off_after_arming(false, false, &[], true), None);
@@ -728,14 +728,14 @@ mod tests {
     #[test]
     fn a_fault_in_the_window_leaves_its_teardown_linked() {
         let loader = crate::start::tests::bare_loader();
-        assert!(loader.link_fused(
+        assert!(loader.link_feature(
             &TEARDOWN,
             Target::Found("destroy", Some(0x1000)),
             &SERVER_DESTROY_NEXT,
             destroy_server,
             HookFlags::NONE,
         ));
-        assert!(loader.link_fused(
+        assert!(loader.link_feature(
             &PAST16,
             Target::Found("create", Some(0x2000)),
             &SERVER_CREATE_NEXT,
@@ -760,7 +760,7 @@ mod tests {
     #[test]
     fn bases_past_16_whose_later_link_fails_arm_none_of_their_links() {
         let loader = crate::start::tests::bare_loader();
-        assert!(loader.link_fused(
+        assert!(loader.link_feature(
             &PAST16,
             Target::Found("create", Some(0x2000)),
             &CLIENT_CREATE_NEXT,

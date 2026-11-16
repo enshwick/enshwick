@@ -126,6 +126,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
         unofficial: AtomicBool::new(false),
+        offs: AtomicU64::new(0),
         retry: crate::engine::retry::Retry::default(),
         skipped,
         parts: crate::parts::parts(),

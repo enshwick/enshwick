@@ -35,6 +35,11 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::TYPE_INDEX.id(),
 ];
 
+#[cfg(test)]
+pub(crate) mod double;
+#[cfg(test)]
+mod tests;
+
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
 /// Checks that `system` still reads and writes the components the loader's
@@ -93,11 +98,54 @@ pub(crate) enum MatchComponentsError {
 
 /// The helpers on this build, resolved once; `None` when the table lacks one.
 pub(crate) fn engine(loader: &Loader) -> Option<&'static Engine> {
+    engine_found(loader).ok()
+}
+
+/// The helpers on this build, resolved once, or the id of the first table
+/// entry it lacks, for a line that names it.
+pub(crate) fn engine_found(loader: &Loader) -> Result<&'static Engine, &'static str> {
     if let Some(engine) = ENGINE.get() {
-        return Some(engine);
+        return Ok(engine);
     }
-    let engine = Engine::resolve(loader)?;
-    Some(ENGINE.get_or_init(|| engine))
+    let engine = Engine::found(loader)?;
+    Ok(ENGINE.get_or_init(|| engine))
+}
+
+/// The query walk on this build, resolved once, or the id of the first
+/// table entry it lacks: for a feature that only walks a system's query,
+/// which then does not turn off with an unrelated helper.
+pub(crate) fn walk(loader: &Loader) -> Result<&'static Walk, &'static str> {
+    if let Some(walk) = WALK.get() {
+        return Ok(walk);
+    }
+    let walk = Walk::found(loader)?;
+    Ok(WALK.get_or_init(|| walk))
+}
+
+/// The query walk once resolved, alone or with the other helpers.
+pub(crate) fn walked() -> Option<&'static Walk> {
+    WALK.get()
+        .or_else(|| ENGINE.get().map(|engine| &engine.walk))
+}
+
+static WALK: OnceLock<Walk> = OnceLock::new();
+
+/// The function at table symbol `name` on this build, or its id.
+fn function(loader: &Loader, name: Symbol) -> Result<usize, &'static str> {
+    loader
+        .build
+        .symbol(name.id())
+        .and_then(|rva| usize::try_from(loader.base + rva).ok())
+        .ok_or(name.id())
+}
+
+/// The table constant `name` as a size on this build, or its id.
+fn size(loader: &Loader, name: Constant) -> Result<usize, &'static str> {
+    loader
+        .build
+        .constant(name.id())
+        .and_then(|v| usize::try_from(v).ok())
+        .ok_or(name.id())
 }
 
 /// The helpers once resolved.
@@ -123,84 +171,54 @@ type ZoneSizeOut = [f32; 4];
 type ComponentRead =
     unsafe extern "system" fn(ctx: *mut u64, kind: *const u16, entity: u32) -> *const u8;
 
-/// The engine functions and layout on the running build.
+/// The walk over a running system's query: its iterator, row counter and
+/// row entities, all a feature that only reads rows needs.
 #[derive(Debug)]
-pub(crate) struct Engine {
+pub(crate) struct Walk {
     init: IteratorInit,
     next: IteratorNext,
-    mark: MarkChanged,
-    find: AttributeFind,
-    zone_size: ZoneSize,
-    /// Where the zone size's answer holds its valid byte, inside its
-    /// [`ZoneSizeOut`].
-    zone_size_valid: usize,
-    component_read: ComponentRead,
     context_row: usize,
     entity_records: usize,
     entity_record_size: usize,
-    entity_world: usize,
-    level_flags: usize,
-    level_data: usize,
-    attribute_slot: usize,
-    level_attribute: u32,
 }
 
-impl Engine {
-    /// The helpers on this build, if the table has them all.
-    pub(crate) fn resolve(loader: &Loader) -> Option<Self> {
-        let function = |name: Symbol| {
-            loader
-                .build
-                .symbol(name.id())
-                .and_then(|rva| usize::try_from(loader.base + rva).ok())
-        };
-        let size = |name: Constant| {
-            loader
-                .build
-                .constant(name.id())
-                .and_then(|v| usize::try_from(v).ok())
-        };
-        let (init, next, mark, find, zone_size, component_read) = (
-            function(pinned::ecs::ITERATOR_INIT)?,
-            function(pinned::ecs::ITERATOR_NEXT)?,
-            function(pinned::ecs::MARK_CHANGED)?,
-            function(pinned::ecs::ATTRIBUTE_FIND)?,
-            function(pinned::balancing::ZONE_SIZE)?,
-            function(pinned::ecs::COMPONENT_READ)?,
+impl Walk {
+    /// The walk on this build, or the id of the first table entry it lacks.
+    pub(crate) fn found(loader: &Loader) -> Result<Self, &'static str> {
+        let (init, next) = (
+            function(loader, pinned::ecs::ITERATOR_INIT)?,
+            function(loader, pinned::ecs::ITERATOR_NEXT)?,
         );
-        Some(Self {
+        Ok(Self {
             // SAFETY: the build table's `ecs.iterator_init` is the game function with the
             // `IteratorInit` signature on this build.
             init: unsafe { core::mem::transmute::<usize, IteratorInit>(init) },
             // SAFETY: the build table's `ecs.iterator_next` is the game function with the
             // `IteratorNext` signature on this build.
             next: unsafe { core::mem::transmute::<usize, IteratorNext>(next) },
-            // SAFETY: the build table's `ecs.mark_changed` is the game function with the
-            // `MarkChanged` signature on this build.
-            mark: unsafe { core::mem::transmute::<usize, MarkChanged>(mark) },
-            // SAFETY: the build table's `ecs.attribute_find` is the game function with the
-            // `AttributeFind` signature on this build.
-            find: unsafe { core::mem::transmute::<usize, AttributeFind>(find) },
-            // SAFETY: the build table's `balancing.zone_size` is the game function with the
-            // `ZoneSize` signature on this build.
-            zone_size: unsafe { core::mem::transmute::<usize, ZoneSize>(zone_size) },
-            // SAFETY: the build table's `ecs.component_read` is the game function with the
-            // `ComponentRead` signature on this build.
-            component_read: unsafe { core::mem::transmute::<usize, ComponentRead>(component_read) },
-            context_row: size(pinned::ecs::CONTEXT_ROW)?,
-            entity_records: size(pinned::ecs::DESCRIPTOR_ENTITY_RECORDS)?,
-            entity_record_size: size(pinned::ecs::ENTITY_RECORD_SIZE)?,
-            entity_world: size(pinned::ecs::CONTEXT_ENTITY_WORLD)?,
-            level_flags: size(pinned::ecs::LEVEL_FLAGS)?,
-            level_data: size(pinned::ecs::LEVEL_DATA_OFFSET)?,
-            attribute_slot: size(pinned::ecs::ATTRIBUTE_SLOT)?,
-            zone_size_valid: size(pinned::balancing::ZONE_SIZE_VALID)
-                .filter(|&at| at < size_of::<ZoneSizeOut>())?,
-            level_attribute: u32::try_from(
-                loader.build.constant(pinned::altar::LEVEL_ATTRIBUTE.id())?,
-            )
-            .ok()?,
+            context_row: size(loader, pinned::ecs::CONTEXT_ROW)?,
+            entity_records: size(loader, pinned::ecs::DESCRIPTOR_ENTITY_RECORDS)?,
+            entity_record_size: size(loader, pinned::ecs::ENTITY_RECORD_SIZE)?,
         })
+    }
+
+    /// A walk over test functions and a context laid out at these offsets,
+    /// as a running system's would be.
+    #[cfg(test)]
+    pub(crate) const fn for_test(
+        init: IteratorInit,
+        next: IteratorNext,
+        context_row: usize,
+        entity_records: usize,
+        entity_record_size: usize,
+    ) -> Self {
+        Self {
+            init,
+            next,
+            context_row,
+            entity_records,
+            entity_record_size,
+        }
     }
 
     /// Walks the system's query from its first row.
@@ -219,7 +237,7 @@ impl Engine {
         // writable words.
         unsafe { (self.init)(ctx, words.as_mut_ptr(), (N * 8) as u64) };
         Query {
-            engine: self,
+            walk: self,
             ctx,
             words,
         }
@@ -284,6 +302,107 @@ impl Engine {
         // record at the build table's `ecs.entity_record_size` stride starts
         // with the row's u32 entity.
         unsafe { read_at(records, offset) }
+    }
+}
+
+/// The engine functions and layout on the running build.
+#[derive(Debug)]
+pub(crate) struct Engine {
+    walk: Walk,
+    mark: MarkChanged,
+    find: AttributeFind,
+    zone_size: ZoneSize,
+    /// Where the zone size's answer holds its valid byte, inside its
+    /// [`ZoneSizeOut`].
+    zone_size_valid: usize,
+    component_read: ComponentRead,
+    entity_world: usize,
+    level_flags: usize,
+    level_data: usize,
+    attribute_slot: usize,
+    level_attribute: u32,
+}
+
+impl Engine {
+    /// The helpers on this build, or the id of the first table entry it
+    /// lacks.
+    pub(crate) fn found(loader: &Loader) -> Result<Self, &'static str> {
+        let walk = Walk::found(loader)?;
+        let (mark, find, zone_size, component_read) = (
+            function(loader, pinned::ecs::MARK_CHANGED)?,
+            function(loader, pinned::ecs::ATTRIBUTE_FIND)?,
+            function(loader, pinned::balancing::ZONE_SIZE)?,
+            function(loader, pinned::ecs::COMPONENT_READ)?,
+        );
+        let level_attribute = pinned::altar::LEVEL_ATTRIBUTE;
+        Ok(Self {
+            walk,
+            // SAFETY: the build table's `ecs.mark_changed` is the game function with the
+            // `MarkChanged` signature on this build.
+            mark: unsafe { core::mem::transmute::<usize, MarkChanged>(mark) },
+            // SAFETY: the build table's `ecs.attribute_find` is the game function with the
+            // `AttributeFind` signature on this build.
+            find: unsafe { core::mem::transmute::<usize, AttributeFind>(find) },
+            // SAFETY: the build table's `balancing.zone_size` is the game function with the
+            // `ZoneSize` signature on this build.
+            zone_size: unsafe { core::mem::transmute::<usize, ZoneSize>(zone_size) },
+            // SAFETY: the build table's `ecs.component_read` is the game function with the
+            // `ComponentRead` signature on this build.
+            component_read: unsafe { core::mem::transmute::<usize, ComponentRead>(component_read) },
+            entity_world: size(loader, pinned::ecs::CONTEXT_ENTITY_WORLD)?,
+            level_flags: size(loader, pinned::ecs::LEVEL_FLAGS)?,
+            level_data: size(loader, pinned::ecs::LEVEL_DATA_OFFSET)?,
+            attribute_slot: size(loader, pinned::ecs::ATTRIBUTE_SLOT)?,
+            zone_size_valid: size(loader, pinned::balancing::ZONE_SIZE_VALID)
+                .ok()
+                .filter(|&at| at < size_of::<ZoneSizeOut>())
+                .ok_or(pinned::balancing::ZONE_SIZE_VALID.id())?,
+            level_attribute: loader
+                .build
+                .constant(level_attribute.id())
+                .and_then(|v| u32::try_from(v).ok())
+                .ok_or(level_attribute.id())?,
+        })
+    }
+
+    /// [`Walk::query`].
+    ///
+    /// # Safety
+    ///
+    /// As for [`Walk::query`].
+    pub(crate) unsafe fn query<const N: usize>(&self, ctx: *mut u64) -> Query<'_, N> {
+        // SAFETY: the caller's contract is `Walk::query`'s.
+        unsafe { self.walk.query(ctx) }
+    }
+
+    /// [`Walk::row`].
+    ///
+    /// # Safety
+    ///
+    /// As for [`Walk::row`].
+    pub(crate) unsafe fn row(&self, ctx: *mut u64) -> u32 {
+        // SAFETY: the caller's contract is `Walk::row`'s.
+        unsafe { self.walk.row(ctx) }
+    }
+
+    /// [`Walk::set_row`].
+    ///
+    /// # Safety
+    ///
+    /// As for [`Walk::set_row`].
+    pub(crate) unsafe fn set_row(&self, ctx: *mut u64, row: u32) {
+        // SAFETY: the caller's contract is `Walk::set_row`'s.
+        unsafe { self.walk.set_row(ctx, row) };
+    }
+
+    /// [`Walk::entity`].
+    ///
+    /// # Safety
+    ///
+    /// As for [`Walk::entity`].
+    pub(crate) unsafe fn entity(&self, ctx: *mut u64) -> u32 {
+        // SAFETY: the caller's contract is `Walk::entity`'s.
+        unsafe { self.walk.entity(ctx) }
     }
 
     /// Whether `ctx` belongs to the entity world `world`, 0 for none.
@@ -503,7 +622,7 @@ impl Engine {
 /// A walk over a system's query; each row's iterator words.
 #[derive(Debug)]
 pub(crate) struct Query<'e, const N: usize> {
-    engine: &'e Engine,
+    walk: &'e Walk,
     ctx: *mut u64,
     words: [u64; N],
 }
@@ -511,11 +630,11 @@ pub(crate) struct Query<'e, const N: usize> {
 impl<const N: usize> Query<'_, N> {
     /// Moves to the next row and returns its words, or `None` at the end.
     pub(crate) fn next(&mut self) -> Option<&[u64; N]> {
-        // SAFETY: a `Query` comes only from `Engine::query`, whose caller
+        // SAFETY: a `Query` comes only from `Walk::query`, whose caller
         // guarantees a live context, an iterator of `N` words and a query
         // dropped before the system's run ends; `words` holds `N` writable
         // words.
-        let more = unsafe { (self.engine.next)(self.ctx, self.words.as_mut_ptr(), (N * 8) as u64) };
+        let more = unsafe { (self.walk.next)(self.ctx, self.words.as_mut_ptr(), (N * 8) as u64) };
         (more & 0xff != 0).then_some(&self.words)
     }
 }
@@ -565,20 +684,8 @@ impl Components {
     /// The reads on this build, or the id of the first table entry it
     /// lacks, for a report that names it.
     pub(crate) fn found(loader: &Loader) -> Result<Self, &'static str> {
-        let function = |name: Symbol| {
-            loader
-                .build
-                .symbol(name.id())
-                .and_then(|rva| usize::try_from(loader.base + rva).ok())
-                .ok_or(name.id())
-        };
-        let size = |name: Constant| {
-            loader
-                .build
-                .constant(name.id())
-                .and_then(|v| usize::try_from(v).ok())
-                .ok_or(name.id())
-        };
+        let function = |name: Symbol| function(loader, name);
+        let size = |name: Constant| size(loader, name);
         let (type_index, read, slot_root) = (
             function(pinned::ecs::TYPE_INDEX)?,
             function(pinned::ecs::COMPONENT_READ_RAW)?,

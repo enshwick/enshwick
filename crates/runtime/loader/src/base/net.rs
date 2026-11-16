@@ -7,7 +7,8 @@
 //! when it joins a server whose rules name Enshwick, or a game whose host's
 //! lobby does (see the lobby module), the server answers unless it keeps
 //! the player out (see the admission module), and from then on both sides
-//! send. A vanilla client never says hello, so it never receives a message,
+//! send; what the server sends a client before its answer reached it waits
+//! for that (see the outbox module), so no feature keeps its own. A vanilla client never says hello, so it never receives a message,
 //! and a server that runs join mods disconnects it. A client never opens
 //! the channel to a game that names no Enshwick.
 //!
@@ -35,13 +36,14 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
 
+mod outbox;
 mod own_stats;
 mod server;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use own_stats::own_stat;
-pub(crate) use server::{keep_greeting, server_carried};
+pub(crate) use server::{keep_greeting, link_restarted, server_carried};
 
 /// How long a client waits for the server's answer before it says hello
 /// again on the same link.
@@ -72,6 +74,9 @@ struct Links {
     /// by key, with the tries so far; it goes again with the next look at
     /// the live slots.
     owed: Vec<(u64, u8)>,
+    /// On the server: the clients that said hello but hold no welcome yet,
+    /// by key, with what waits for it.
+    unwelcomed: FxHashMap<u64, outbox::Outbox>,
 }
 
 /// What the net keeps while a game runs.
@@ -215,6 +220,58 @@ fn carry(key: u64, channel: u32, data: &[u8]) -> bool {
     crate::base::carrier::send(key, channel, data).is_ok()
 }
 
+/// Sends `data` on `channel` to the clients `keys` from the server: now to
+/// a welcomed one, else kept for its welcome (see the outbox module);
+/// `failed` hears each that took nothing, a full outbox as a full link.
+fn post(
+    keys: &[u64],
+    channel: u32,
+    data: &[u8],
+    mut failed: impl FnMut(u64, crate::base::carrier::CarrierError),
+) -> Result<(), crate::base::carrier::CarrierError> {
+    use crate::base::carrier::CarrierError;
+    let mut refused = Vec::new();
+    let ready: Vec<u64> = state(|s| {
+        keys.iter()
+            .copied()
+            .filter(|&key| match outbox::hold(s, key, channel, data) {
+                outbox::Hold::Ready => true,
+                outbox::Hold::Held => false,
+                outbox::Hold::Full => {
+                    refused.push((key, CarrierError::Full));
+                    false
+                }
+                outbox::Hold::Unknown => {
+                    refused.push((key, CarrierError::NoLink));
+                    false
+                }
+            })
+            .collect()
+    });
+    for (key, error) in refused {
+        if error == CarrierError::Full {
+            dropped();
+        }
+        failed(key, error);
+    }
+    crate::base::carrier::send_many(&ready, channel, data, failed)
+}
+
+/// [`post`] to one client, with one look at the outbox and no list: `None`
+/// when no client of `key` said hello, else whether the message went or
+/// waits for the client's welcome.
+fn post_one(key: u64, channel: u32, data: &[u8]) -> Option<bool> {
+    match state(|s| outbox::hold(s, key, channel, data)) {
+        outbox::Hold::Unknown => None,
+        outbox::Hold::Ready => Some(carry(key, channel, data)),
+        outbox::Hold::Held => Some(true),
+        outbox::Hold::Full => {
+            dropped();
+            Some(false)
+        }
+    }
+}
+
 /// Says hello to the server, on the thread that sends the client's chat: at
 /// once when its link `opened` (the caller forgot the last link's answer
 /// with [`link_lost`] first), and
@@ -325,17 +382,20 @@ pub(crate) enum NetError {
 /// Sends the client of the player with account key `key` a notice for the
 /// player's entity `entity`; the client shows `text`.
 pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), NetError> {
-    if !ready(key) {
-        return Err(NetError::NoPeer);
-    }
     let data = crate::base::wire::notice(entity.0, text);
     if data.len() > MAX_CONTROL {
         return Err(NetError::TooLong);
     }
-    if !carry(key, CONTROL, &data) {
-        return Err(NetError::NotCarried);
+    posted(post_one(key, CONTROL, &data))
+}
+
+/// The answer of a [`post_one`] to a single client.
+fn posted(sent: Option<bool>) -> Result<(), NetError> {
+    match sent {
+        None => Err(NetError::NoPeer),
+        Some(false) => Err(NetError::NotCarried),
+        Some(true) => Ok(()),
     }
-    Ok(())
 }
 
 /// Sends item data records to the client of the player with account key
@@ -358,14 +418,14 @@ pub(crate) fn item_data(key: u64, records: &[u8]) -> bool {
         .filter(|&p| p != NetMessage::SERVER.get())
         .collect();
     let mut whole = true;
-    let sent = crate::base::carrier::send_many(&peers, CONTROL, &data, |_, _| whole = false);
+    let sent = post(&peers, CONTROL, &data, |_, _| whole = false);
     sent.is_ok() && whole
 }
 
 /// Sends the client of the player with account key `key` the values of its
 /// own character's shown stat kinds; false when it took no message.
 pub(crate) fn stat_values(key: u64, values: &[(u32, f32)]) -> bool {
-    ready(key) && carry(key, CONTROL, &crate::base::wire::stat_values(values))
+    post_one(key, CONTROL, &crate::base::wire::stat_values(values)) == Some(true)
 }
 
 /// Sends the client of the player with account key `key`, whose hello named
@@ -384,17 +444,11 @@ pub(crate) fn refused_mods(key: u64, mods: &str) {
 /// Tells the client of the player with account key `key` to open the
 /// interface demo, with where the player stands.
 pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), NetError> {
-    if !ready(key) {
-        return Err(NetError::NoPeer);
-    }
     let mut data = control(UI_DEMO);
     for axis in at.iter().flatten() {
         data.extend_from_slice(&axis.to_le_bytes());
     }
-    if !carry(key, CONTROL, &data) {
-        return Err(NetError::NotCarried);
-    }
-    Ok(())
+    posted(post_one(key, CONTROL, &data))
 }
 
 /// A settings message as a control message; `None` for one too long to
@@ -410,12 +464,10 @@ fn remote_data(message: &crate::base::remote::Message) -> Option<Vec<u8>> {
 }
 
 /// Sends a settings message to the client of the player with account key
-/// `key`, when it takes messages. False when its link had no room.
+/// `key`, when it runs Enshwick, kept for its welcome until then. False
+/// when its link or its outbox had no room.
 pub(crate) fn to_player(key: u64, message: &crate::base::remote::Message) -> bool {
-    if !ready(key) {
-        return true;
-    }
-    remote_data(message).is_none_or(|data| carry(key, CONTROL, &data))
+    remote_data(message).is_none_or(|data| post_one(key, CONTROL, &data) != Some(false))
 }
 
 /// Sends a settings message to every client that runs Enshwick.
@@ -424,7 +476,7 @@ pub(crate) fn broadcast_control(message: &crate::base::remote::Message) {
     let Some(data) = remote_data(message) else {
         return;
     };
-    let _sent = crate::base::carrier::send_many(&keys, CONTROL, &data, |_, _| {});
+    let _sent = post(&keys, CONTROL, &data, |_, _| {});
 }
 
 /// Sends a settings message from the client to its server; false while the
@@ -517,6 +569,7 @@ pub(crate) fn forget_peer(key: u64) {
         s.peers.remove(&key);
         s.sending.remove(&key);
         s.greeting.remove(&key);
+        s.unwelcomed.remove(&key);
     });
 }
 
@@ -568,9 +621,30 @@ fn language_in(state: &Links, key: u64) -> Option<Language> {
 }
 
 /// Whether `peer` takes messages: on the server, a player's client that said
-/// hello; on a client, the server once it answered ([`NetMessage::SERVER`]).
+/// hello, its messages kept until its welcome went; on a client, the server
+/// once it answered ([`NetMessage::SERVER`]).
 pub(crate) fn ready(peer: u64) -> bool {
     state(|s| s.peers.contains_key(&peer))
+}
+
+/// Whether the client `key` holds the server's welcome and nothing waits
+/// for it, so what goes now arrives on its current link, on the server.
+pub(crate) fn welcomed(key: u64) -> bool {
+    state(|s| s.peers.contains_key(&key) && !s.unwelcomed.contains_key(&key))
+}
+
+/// Makes client `peer` welcomed, as after its hello and the welcome, or
+/// unknown again, for a test of a part that sends to clients.
+#[cfg(test)]
+pub(crate) fn set_ready(peer: u64, ready: bool) {
+    state(|s| {
+        s.unwelcomed.remove(&peer);
+        if ready {
+            s.peers.entry(peer).or_insert_with(Peer::new);
+        } else {
+            s.peers.remove(&peer);
+        }
+    });
 }
 
 /// The account keys of the clients that said hello, on the server.
@@ -637,7 +711,7 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), NetError>
         Ok(keys)
     })?;
     let mut failed = Vec::new();
-    crate::base::carrier::send_many(&keys, channel, data, |key, status| {
+    post(&keys, channel, data, |key, status| {
         failed.push((key, status));
     })
     .inspect_err(|_| refund(&keys))?;
@@ -701,7 +775,7 @@ fn dropped() {
     if count == 1 || count.is_multiple_of(100) {
         crate::log!(
             WARN,
-            "mod messages: {count} dropped, over a rate or unreadable"
+            "mod messages: {count} dropped, over a rate, unreadable or past a client's outbox bound"
         );
     }
 }

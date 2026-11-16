@@ -2,6 +2,7 @@
 
 use std::time::Instant;
 
+use super::outbox::{self, Taken};
 use super::{Links, deliver, dropped, item_data, remember_language, state};
 use crate::base::wire::{CONTROL, Peer, WELCOME, control, read_hello, remote_message};
 
@@ -21,7 +22,8 @@ pub(super) struct Greeting {
     pub(super) data: bool,
 }
 
-/// Makes `key` a peer after its hello at `now`.
+/// Makes `key` a peer after its hello at `now`; a new one waits for its
+/// welcome.
 pub(super) fn greet(state: &mut Links, key: u64, now: Instant) -> Greeting {
     let pending = state.greeting.remove(&key);
     let (peer, fresh) = match state.peers.entry(key) {
@@ -30,17 +32,57 @@ pub(super) fn greet(state: &mut Links, key: u64, now: Instant) -> Greeting {
         }
         std::collections::hash_map::Entry::Occupied(entry) => (entry.into_mut(), false),
     };
-    Greeting {
-        fresh,
-        data: peer.data_due(now),
+    let data = peer.data_due(now);
+    if fresh {
+        state.unwelcomed.entry(key).or_default();
+    }
+    Greeting { fresh, data }
+}
+
+/// Makes the client `key`, whose link started over, wait for its next
+/// hello's welcome; what goes to it meanwhile is kept.
+pub(crate) fn link_restarted(key: u64) {
+    state(|s| outbox::unwelcome(s, key));
+}
+
+/// Sends what client `key` holds once its welcome went, then lets the
+/// parts greet it and hands it the join data it is owed. A link with no
+/// room keeps the rest for the next look at the live slots.
+fn deliver_held(key: u64) {
+    loop {
+        match state(|s| outbox::take(s, key)) {
+            Taken::Nothing => return,
+            Taken::Messages(mut batch) => {
+                while let Some((channel, data)) = batch.front() {
+                    if !super::carry(key, *channel, data) {
+                        let over = state(|s| outbox::put_back(s, key, batch));
+                        for _ in 0..over {
+                            dropped();
+                        }
+                        return;
+                    }
+                    batch.pop_front();
+                }
+            }
+            Taken::Ready { data } => {
+                if let Some(loader) = crate::engine::loader::loader() {
+                    loader.parts.hello(loader, key);
+                }
+                if data {
+                    hand_data(key);
+                }
+                return;
+            }
+        }
     }
 }
 
 /// Takes a message on `channel` from the client `key` on the server: whether
-/// `key` is a peer, or `None` when the message is not taken. A client that
-/// is no peer yet may only send control messages, its hello; each message
-/// takes from the client's rate, but one `looped` from a hosting client's
-/// own half.
+/// `key` is a peer whose welcome went, or `None` when the message is not
+/// taken. A client that is no peer yet, or whose link started over and
+/// waits for its next welcome, may only send control messages, its hello;
+/// each message takes from the client's rate, but one `looped` from a
+/// hosting client's own half.
 pub(super) fn take_message(
     state: &mut Links,
     key: u64,
@@ -51,12 +93,13 @@ pub(super) fn take_message(
         return None;
     }
     let known = state.peers.contains_key(&key);
+    let welcomed = known && outbox::welcome_went(state, key);
+    if !welcomed && channel != CONTROL {
+        return None;
+    }
     let peer = if known {
         state.peers.get_mut(&key)?
     } else {
-        if channel != CONTROL {
-            return None;
-        }
         let room = state.greeting.len() < MAX_GREETING;
         match state.greeting.entry(key) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
@@ -68,7 +111,7 @@ pub(super) fn take_message(
         dropped();
         return None;
     }
-    Some(known)
+    Some(welcomed)
 }
 
 /// Makes room for the hello of the client `key` in a full store by
@@ -92,10 +135,13 @@ pub(super) fn make_greeting_room(
 /// player slot in `live`, and sends the join data again to the clients in
 /// `live` that are owed it.
 pub(crate) fn keep_greeting(live: &[u64]) {
-    let owed = state(|s| {
+    let (owed, stalled) = state(|s| {
         keep_greeting_in(s, live);
-        owed_in(s, live)
+        (owed_in(s, live), outbox::stalled(s, live))
     });
+    for key in stalled {
+        deliver_held(key);
+    }
     for key in owed {
         hand_data(key);
     }
@@ -209,14 +255,16 @@ pub(crate) fn server_carried(key: u64, channel: u32, data: &[u8], looped: bool) 
 /// player out.
 fn said_hello(key: u64, hello: &crate::base::admission::Hello) {
     if !crate::base::admission::hello(key, hello) {
+        state(|s| outbox::refused(s, key));
         return;
     }
     let greeting = state(|s| greet(s, key, Instant::now()));
-    // A client takes the server's settings messages only after the
-    // welcome; without it, the client says hello again.
+    // A client takes the server's messages only after the welcome; without
+    // it, the client says hello again and what was sent meanwhile waits.
     let welcomed = super::carry(key, CONTROL, &control(WELCOME));
-    if welcomed && let Some(loader) = crate::engine::loader::loader() {
-        loader.parts.hello(loader, key);
+    if welcomed {
+        state(|s| outbox::welcomed(s, key, greeting.data));
+        deliver_held(key);
     }
     if greeting.fresh {
         crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
@@ -225,8 +273,5 @@ fn said_hello(key: u64, hello: &crate::base::admission::Hello) {
             INFO,
             "mod messages: the client of {key:016x} said hello again; it gets its data again"
         );
-    }
-    if welcomed && greeting.data {
-        hand_data(key);
     }
 }

@@ -155,7 +155,7 @@ pub(crate) fn link(loader: &'static Loader) {
         }
     };
     let _first = LINKED.set(linked);
-    if loader.link_fused(
+    if loader.link_feature(
         &RULES_FUSE,
         Target::Pinned(pinned::inventory::PUT_SLOT),
         &PUT_NEXT,

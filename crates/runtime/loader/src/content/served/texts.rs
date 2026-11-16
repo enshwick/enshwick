@@ -245,21 +245,21 @@ pub(super) fn seal_texts(loader: &'static Loader) {
 fn link_texts(loader: &Loader) -> usize {
     let none = HookFlags::NONE;
     let linked = [
-        loader.link_fused(
+        loader.link_feature(
             &TEXTS_FUSE,
             Target::Pinned(pinned::text::LOOKUP),
             &TEXT_NEXT,
             lookup,
             none,
         ),
-        loader.link_fused(
+        loader.link_feature(
             &ENGLISH_FUSE,
             Target::Pinned(pinned::text::LOOKUP_ENGLISH),
             &ENGLISH_NEXT,
             lookup_english,
             none,
         ),
-        loader.link_fused(
+        loader.link_feature(
             &FORMAT_FUSE,
             Target::Pinned(pinned::text::FORMAT),
             &FORMAT_NEXT,

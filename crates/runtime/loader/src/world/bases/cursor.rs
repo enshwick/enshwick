@@ -37,7 +37,7 @@ pub(super) unsafe fn refuse_past_limit(
     if !altar || reached != 0 {
         return;
     }
-    let most = u32::try_from(STATE.asked.bases(Kind::Server)).unwrap_or(MAX_BASES);
+    let most = u32::try_from(STATE.bases(Kind::Server)).unwrap_or(MAX_BASES);
     if zones.bases < most {
         return;
     }

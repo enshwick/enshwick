@@ -189,7 +189,7 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     let _first = BUILD.set(layout);
     let target = Target::Pinned(pinned::building::CURSOR_CHECK);
-    if loader.link_fused(&BUILD_FUSE, target, &CURSOR_NEXT, cursor, HookFlags::NONE) {
+    if loader.link_feature(&BUILD_FUSE, target, &CURSOR_NEXT, cursor, HookFlags::NONE) {
         crate::engine::world::accounts::want();
         crate::log!(INFO, "build filters on: {}", builds.len());
     }

@@ -89,7 +89,7 @@ unsafe extern "system" fn grow_found(vec: *mut u8, wanted: i64, _keep: u64) -> u
 /// Links the client's logic entity rebuild under [`PAST16`]; true when
 /// linked.
 pub(super) fn link(loader: &Loader) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         &PAST16,
         Target::Pinned(bases::REBUILD),
         &REBUILD_NEXT,

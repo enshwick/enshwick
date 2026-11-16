@@ -203,7 +203,7 @@ pub(crate) fn link(loader: &'static Loader) {
             "player deaths: no hit history in this build, killers stay 0"
         );
     }
-    let _linked = loader.link_fused(
+    let _linked = loader.link_feature(
         &DEATHS_FUSE,
         Target::Pinned(pinned::player::DEATH_SINK),
         &SINK_NEXT,

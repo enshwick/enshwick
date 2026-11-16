@@ -259,7 +259,7 @@ mod runtime {
     /// checked; true when linked.
     pub(crate) fn link(loader: &Loader, start: u64) -> bool {
         let target = Target::Found(pinned::user::START_INTERACTION.id(), Some(start));
-        loader.link_fused(&HOLD_FUSE, target, &NEXT, detour, HookFlags::NONE)
+        loader.link_feature(&HOLD_FUSE, target, &NEXT, detour, HookFlags::NONE)
     }
 
     /// Where a request holds its kind, and the kind of a failed join.

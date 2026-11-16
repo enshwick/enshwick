@@ -75,8 +75,9 @@ pub struct DryMod {
     pub file: String,
     /// The mod id; empty when its manifest did not read.
     pub id: String,
-    /// The mod's version; empty when its manifest did not read.
-    pub version: String,
+    /// The mod's version; `None` for a file refused at start, whose
+    /// manifest gave none.
+    pub version: Option<String>,
     /// Whether it started and stayed on.
     pub running: bool,
     /// Why not, when it did not.
@@ -177,6 +178,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
         unofficial: std::sync::atomic::AtomicBool::new(false),
+        offs: std::sync::atomic::AtomicU64::new(0),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan, refused),
         parts: crate::parts::parts(),
@@ -219,7 +221,7 @@ fn outcomes(
             DryMod {
                 file: library.file.clone(),
                 id: record.id.clone(),
-                version: record.version.clone(),
+                version: Some(record.version.clone()),
                 running,
                 reason: if running {
                     String::new()
@@ -232,7 +234,7 @@ fn outcomes(
     mods.extend(loader.skipped.iter().map(|skipped| DryMod {
         file: skipped.file.clone(),
         id: skipped.id.clone(),
-        version: skipped.version.clone().unwrap_or_default(),
+        version: skipped.version.clone(),
         running: false,
         reason: format!("skipped: {}", skipped.reason),
     }));
@@ -271,22 +273,36 @@ mod tests {
                 id: "you.safes".into(),
             },
         });
-        let [skipped] = super::outcomes(&loader, &[], &[]).try_into().unwrap();
+        loader.skipped.push(Skipped {
+            id: "broken".into(),
+            version: None,
+            label: "broken".into(),
+            file: "broken/broken.dll".into(),
+            reason: Skip::Refused {
+                skip: crate::base::discovery::Skip::NotAMod,
+            },
+        });
+        let [skipped, refused] = super::outcomes(&loader, &[], &[]).try_into().unwrap();
         assert_eq!(
             (
                 skipped.file.as_str(),
                 skipped.id.as_str(),
-                skipped.version.as_str(),
+                skipped.version.as_deref(),
                 skipped.running,
                 skipped.reason.as_str()
             ),
             (
                 "old/you.safes.dll",
                 "you.safes",
-                "0.2.0",
+                Some("0.2.0"),
                 false,
                 "skipped: another copy of you.safes loads instead; delete this one"
             )
+        );
+        assert_eq!(
+            (refused.file.as_str(), refused.version, refused.running),
+            ("broken/broken.dll", None, false),
+            "a refused file has no version, not an empty one"
         );
     }
 }

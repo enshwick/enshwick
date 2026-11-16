@@ -14,7 +14,7 @@ use crate::world::base_groups::window;
 const PAGE_ENTITIES: u32 = 40;
 /// Links the building stock cache under [`PAST16`]; true when linked.
 pub(super) fn link(loader: &Loader) -> bool {
-    loader.link_fused(
+    loader.link_feature(
         &PAST16,
         Target::Pinned(bases::STOCK_CACHE),
         &STOCK_CACHE_NEXT,

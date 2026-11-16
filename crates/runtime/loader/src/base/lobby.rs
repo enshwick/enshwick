@@ -73,7 +73,7 @@ mod runtime {
 
     use enshwick_core::abi::UiDialog;
 
-    use crate::engine::fuse::{Fuse, Off};
+    use crate::engine::fuse::Fuse;
     use crate::engine::module::Export;
 
     /// The hosted lobby: a hosting client names its mods in its Steam
@@ -265,14 +265,10 @@ mod runtime {
     /// game's thread that runs Steam's callbacks.
     pub(crate) fn register() {
         let Some((api, register)) = load() else {
-            let why = "steam_api64.dll lacks the lobby API";
-            LOBBY_FUSE.turn_off(&Off::reported(
-                format!(
-                    "{} off: {why}, friends of a host get no join values",
-                    LOBBY_FUSE.feature()
-                ),
-                why.to_owned(),
-            ));
+            LOBBY_FUSE.report_off_with(
+                "steam_api64.dll lacks the lobby API",
+                "friends of a host get no join values",
+            );
             return;
         };
         if STATE.api.set(api).is_err() {

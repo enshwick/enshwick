@@ -3,7 +3,8 @@
 //! them one by one, each under its own guard; `guarded` calls them through
 //! references into each layer's list, each under its own guard; `walked`
 //! is the loader's walk, through a stage's steps held side by side under
-//! one guard ([`Fuse::run_each`]).
+//! one guard ([`Fuse::run_each`]); `walked_by_part` is that walk with each
+//! step also skipped while its part's own fuse is off.
 
 use std::hint::black_box;
 use std::time::Instant;
@@ -31,6 +32,8 @@ fn work(stepping: &Stepping) {
 /// A part's step as a layer lists it.
 struct Step {
     fuse: &'static Fuse,
+    /// The fuse of the part the step belongs to.
+    part: &'static Fuse,
     run: fn(&Stepping),
 }
 
@@ -40,12 +43,14 @@ static STEPS: [Step; PARTS] = {
     let mut steps = [const {
         Step {
             fuse: &FUSES[0],
+            part: &PART_FUSES[0],
             run: work,
         }
     }; PARTS];
     let mut i = 0;
     while i < PARTS {
         steps[i].fuse = &FUSES[i];
+        steps[i].part = &PART_FUSES[i];
         i += 1;
     }
     steps
@@ -75,6 +80,24 @@ fn walked(steps: &[Step], stepping: &Stepping) {
     );
 }
 
+/// The parts' own fuses, one per part, which their steps check too.
+static PART_FUSES: [Fuse; PARTS] = [const { Fuse::new("bench part whole") }; PARTS];
+
+/// [`walked`], each step also skipped while its part's own fuse is off, as
+/// the loader's walk does.
+fn walked_by_part(steps: &[Step], stepping: &Stepping) {
+    Fuse::run_each(
+        steps,
+        "the post-step link",
+        |step| step.fuse,
+        |step| {
+            if !step.part.is_off() {
+                (step.run)(stepping);
+            }
+        },
+    );
+}
+
 fn step_parts(c: &mut Criterion) {
     let mut group = c.benchmark_group("step_parts");
     let stepping = Stepping {
@@ -88,6 +111,9 @@ fn step_parts(c: &mut Criterion) {
     });
     group.bench_function("walked", |b| {
         b.iter(|| walked(black_box(&STEPS), black_box(&stepping)));
+    });
+    group.bench_function("walked_by_part", |b| {
+        b.iter(|| walked_by_part(black_box(&STEPS), black_box(&stepping)));
     });
     group.finish();
 }

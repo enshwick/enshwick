@@ -590,7 +590,7 @@ pub(crate) fn link(loader: &Loader) {
         found.map(|f| f as *const () as u64),
     );
     // A link that fails has turned the feature off and said so.
-    let _linked = loader.link_fused(&DUMP_FUSE, target, &DUMP_NEXT, dump, HookFlags::NONE);
+    let _linked = loader.link_feature(&DUMP_FUSE, target, &DUMP_NEXT, dump, HookFlags::NONE);
 }
 
 /// The report on the game's crash dumps, a loader feature.

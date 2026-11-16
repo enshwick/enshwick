@@ -257,11 +257,16 @@ pub(crate) struct Spec<'a> {
     pub(crate) hold_ms: u32,
 }
 
-/// Seals the controls; on the client reads the player's keys and the screen
+/// Seals the controls before any link.
+pub(crate) fn seal() {
+    let _declared = DECLARED.seal();
+}
+
+/// With the controls sealed, on the client reads the player's keys and the screen
 /// gate, on every side the game actions linked controls follow and the
 /// carried controls' bound.
 pub(crate) fn link(loader: &Loader) {
-    let declared = DECLARED.seal();
+    let declared = DECLARED.sealed().unwrap_or_default();
     if !declared.is_empty() {
         link_actions(loader, declared);
         too_many_carried(loader, declared);

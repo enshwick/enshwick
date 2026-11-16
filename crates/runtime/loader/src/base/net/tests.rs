@@ -1,5 +1,9 @@
 //! Tests of the hello, the owed join data and the rates each side keeps per peer.
 
+use super::outbox::{
+    Hold, MAX_HELD, MAX_HELD_BYTES, Taken, hold, put_back, refused, stalled, take, unwelcome,
+    welcomed,
+};
 use super::server::{
     Greeting, Handover, MAX_GREETING, MAX_HANDOVERS, greet, handed, keep_greeting_in,
     make_greeting_room, owed_in, take_message,
@@ -203,6 +207,9 @@ fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_
         s.peers.insert(NetMessage::SERVER.get(), Peer::new());
         let _host = greet(s, host, Instant::now());
         let _wired = greet(s, wired, Instant::now());
+        // A client sends only once the server's welcome reached it.
+        welcomed(s, host, false);
+        welcomed(s, wired, false);
     });
     let dropped = STATE.dropped.load(Ordering::Relaxed);
     let refused = (0..200)
@@ -308,6 +315,167 @@ fn a_game_s_end_forgets_its_peers_and_answer_but_keeps_the_next_join_s_flag_and_
         "a join checked before the hosted game's end keeps its answer"
     );
     assert_eq!(state.dropped.load(Ordering::Relaxed), 3);
+}
+
+#[test]
+fn a_message_between_a_hello_and_a_failed_welcome_waits_for_the_next_welcome() {
+    let mut state = Links::default();
+    let now = Instant::now();
+    assert_eq!(hold(&mut state, 7, CONTROL, b"early"), Hold::Unknown);
+    let greeting = greet(&mut state, 7, now);
+    assert!(greeting.fresh && greeting.data);
+    assert_eq!(hold(&mut state, 7, CONTROL, b"one"), Hold::Held);
+    assert_eq!(
+        take(&mut state, 7),
+        Taken::Nothing,
+        "the welcome did not go: nothing is sent"
+    );
+    assert_eq!(hold(&mut state, 7, 5, b"two"), Hold::Held);
+    let _again = greet(&mut state, 7, now + Duration::from_secs(5));
+    welcomed(&mut state, 7, greeting.data);
+    assert_eq!(
+        take(&mut state, 7),
+        Taken::Messages([(CONTROL, b"one".to_vec()), (5, b"two".to_vec())].into()),
+        "in the order sent"
+    );
+    assert_eq!(
+        hold(&mut state, 7, CONTROL, b"three"),
+        Hold::Held,
+        "behind them"
+    );
+    assert!(matches!(take(&mut state, 7), Taken::Messages(m) if m.len() == 1));
+    assert_eq!(take(&mut state, 7), Taken::Ready { data: true });
+    assert_eq!(hold(&mut state, 7, CONTROL, b"four"), Hold::Ready);
+}
+
+#[test]
+fn a_link_that_starts_over_holds_messages_until_its_next_welcome_and_owes_the_join_data_again() {
+    let mut state = Links::default();
+    let now = Instant::now();
+    let _greeting = greet(&mut state, 7, now);
+    welcomed(&mut state, 7, true);
+    assert_eq!(take(&mut state, 7), Taken::Ready { data: true });
+    handed(&mut state, 7, true, now);
+    state.peers.get_mut(&7).unwrap().language = Some(Language::UK_UA);
+    unwelcome(&mut state, 7);
+    unwelcome(&mut state, 8);
+    assert!(!state.peers.contains_key(&8), "no peer, nothing made");
+    assert_eq!(hold(&mut state, 7, CONTROL, b"held"), Hold::Held);
+    assert_eq!(state.peers[&7].language, Some(Language::UK_UA));
+    let greeting = greet(&mut state, 7, now + Duration::from_secs(1));
+    assert!(!greeting.fresh && greeting.data, "a new link gets the data");
+    welcomed(&mut state, 7, greeting.data);
+    assert_eq!(
+        take(&mut state, 7),
+        Taken::Messages([(CONTROL, b"held".to_vec())].into())
+    );
+    assert_eq!(take(&mut state, 7), Taken::Ready { data: true });
+}
+
+#[test]
+fn an_outbox_holds_up_to_its_bound_and_what_did_not_go_goes_back_first() {
+    let mut state = Links::default();
+    let _greeting = greet(&mut state, 7, Instant::now());
+    for _ in 0..MAX_HELD {
+        assert_eq!(hold(&mut state, 7, CONTROL, b"x"), Hold::Held);
+    }
+    assert_eq!(hold(&mut state, 7, CONTROL, b"x"), Hold::Full);
+    let _greeting = greet(&mut state, 8, Instant::now());
+    assert_eq!(
+        hold(&mut state, 8, CONTROL, &vec![0; MAX_HELD_BYTES + 1]),
+        Hold::Full
+    );
+    welcomed(&mut state, 7, false);
+    let Taken::Messages(mut batch) = take(&mut state, 7) else {
+        panic!("held messages go");
+    };
+    let _sent = batch.pop_front();
+    assert_eq!(hold(&mut state, 7, 5, b"later"), Hold::Held);
+    put_back(&mut state, 7, batch);
+    assert_eq!(
+        stalled(&state, &[7, 8]),
+        [7],
+        "only a welcomed one waits for room"
+    );
+    let Taken::Messages(batch) = take(&mut state, 7) else {
+        panic!("the rest goes");
+    };
+    assert_eq!(batch.len(), MAX_HELD);
+    assert_eq!(batch.back(), Some(&(5, b"later".to_vec())));
+}
+
+#[test]
+fn a_client_whose_link_started_over_sends_only_its_hello_until_its_next_welcome() {
+    let mut state = Links::default();
+    let now = Instant::now();
+    let _greeting = greet(&mut state, 7, now);
+    welcomed(&mut state, 7, true);
+    assert_eq!(take(&mut state, 7), Taken::Ready { data: true });
+    assert_eq!(take_message(&mut state, 7, 5, false), Some(true));
+    unwelcome(&mut state, 7);
+    assert_eq!(
+        take_message(&mut state, 7, 5, false),
+        None,
+        "no mod message on the new link before its welcome"
+    );
+    assert_eq!(
+        take_message(&mut state, 7, CONTROL, false),
+        Some(false),
+        "a hello, never a settings edit"
+    );
+    refused(&mut state, 7);
+    assert!(
+        !state.peers.contains_key(&7) && !state.unwelcomed.contains_key(&7),
+        "a hello kept out on the new link forgets the client"
+    );
+    let _greeting = greet(&mut state, 8, now);
+    welcomed(&mut state, 8, false);
+    refused(&mut state, 8);
+    assert!(
+        state.peers.contains_key(&8),
+        "a client whose welcome went stays"
+    );
+}
+
+#[test]
+fn what_goes_back_to_an_outbox_stays_within_its_bound_and_the_newest_are_dropped() {
+    let mut state = Links::default();
+    let _greeting = greet(&mut state, 7, Instant::now());
+    for _ in 0..MAX_HELD {
+        assert_eq!(hold(&mut state, 7, CONTROL, b"old"), Hold::Held);
+    }
+    welcomed(&mut state, 7, false);
+    let Taken::Messages(batch) = take(&mut state, 7) else {
+        panic!("held messages go");
+    };
+    for _ in 0..MAX_HELD {
+        assert_eq!(
+            hold(&mut state, 7, 5, b"new"),
+            Hold::Held,
+            "held while the batch is out"
+        );
+    }
+    assert_eq!(put_back(&mut state, 7, batch), MAX_HELD);
+    let Taken::Messages(batch) = take(&mut state, 7) else {
+        panic!("the rest goes");
+    };
+    assert_eq!(batch.len(), MAX_HELD);
+    assert!(
+        batch.iter().all(|&(channel, _)| channel == CONTROL),
+        "the oldest stay"
+    );
+    let _greeting = greet(&mut state, 8, Instant::now());
+    welcomed(&mut state, 8, false);
+    let big = vec![0; MAX_HELD_BYTES / 2 + 1];
+    assert_eq!(
+        put_back(
+            &mut state,
+            8,
+            [(CONTROL, big.clone()), (CONTROL, big)].into()
+        ),
+        1,
+        "the bytes bound holds too"
+    );
 }
 
 #[test]
