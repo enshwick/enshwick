@@ -230,6 +230,12 @@ impl Tab {
     /// next frame (index read every frame after its first, client
     /// 26430625).
     ///
+    /// The menu keeps no tab of its own: its tab keys and the links that
+    /// jump to the map or the journal switch the tab by this write alone,
+    /// plus a sound, and the menu picks the tab it draws from it each frame,
+    /// so the index read back is what the menu draws (client 26430625, read
+    /// in the decompiler).
+    ///
     /// # Safety
     ///
     /// - `state` is the interface state the in-game menu draws from, valid
