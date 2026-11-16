@@ -296,7 +296,7 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
             save_link,
             none,
         );
-    let _remove = remove
+    let removes = remove
         && loader.link_fused(
             &REMOVE_LINK,
             at(pinned::server::PLAYER_REMOVE),
@@ -304,6 +304,7 @@ fn link_server(loader: &'static Loader, wanted: [bool; 4]) -> bool {
             remove_link,
             none,
         );
+    crate::engine::world::permissions::hear_leaves(removes);
     stepped
 }
 

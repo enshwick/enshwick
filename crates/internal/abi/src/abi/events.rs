@@ -522,6 +522,13 @@ impl PlayerInfo {
     pub const CAN_EXTEND_BASE: u32 = 1 << 4;
     /// Receives experience.
     pub const CAN_RECEIVE_EXP: u32 = 1 << 5;
+    /// Every permission bit the game defines; any other bit is not one.
+    pub const ALL_PERMISSIONS: u32 = Self::CAN_KICK_BAN
+        | Self::CAN_ACCESS_INVENTORIES
+        | Self::CAN_EDIT_BASE
+        | Self::CAN_EDIT_WORLD
+        | Self::CAN_EXTEND_BASE
+        | Self::CAN_RECEIVE_EXP;
     /// The most bytes of a name: 32 characters of up to four bytes each,
     /// the longest name Steam allows.
     pub const NAME_MAX: usize = 128;

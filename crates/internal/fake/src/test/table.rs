@@ -366,6 +366,8 @@ pub(crate) struct State {
     /// The patches in `served` whose builder panicked, by place: each build
     /// runs without them, as the loader's.
     pub(crate) served_off: Vec<usize>,
+    /// The mods' changes to players' permissions.
+    pub(crate) permission_changes: permissions::Changes,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -579,6 +581,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         settings: Vec::new(),
         off: Vec::new(),
         served_off: Vec::new(),
+        permission_changes: permissions::Changes::default(),
     });
     turn
 }
@@ -813,4 +816,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     terrain_material_add,
     interaction_prompt,
     ui_item_tooltip,
+    change_permissions: permissions::change_permissions,
 };

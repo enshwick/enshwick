@@ -12,6 +12,7 @@ use enshwick_core::abi::{
 pub(crate) mod altars;
 pub(crate) mod buffs;
 pub(crate) mod environment;
+pub(crate) mod permissions;
 pub(crate) mod saves;
 pub(crate) mod transactions;
 
@@ -548,6 +549,7 @@ pub(crate) extern "system" fn account_action(
                 if let Some(at) = online {
                     s.host.players.remove(at);
                     s.removed.push(account.get());
+                    s.permission_changes.left(account);
                 }
             }
         }

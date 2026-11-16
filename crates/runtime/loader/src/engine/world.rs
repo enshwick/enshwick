@@ -29,6 +29,7 @@ use crate::engine::server_pin::{Place, ServerCell};
 mod whose;
 pub(crate) use whose::{Whose, server_left, server_starts, whose};
 
+pub(crate) mod permissions;
 mod players;
 #[cfg(test)]
 use players::{Slots, guids};
@@ -154,6 +155,7 @@ pub(crate) fn retire() {
 /// named in a warning, repeated every few seconds: a hang is better than a
 /// read of freed memory.
 pub(crate) fn tear_down() {
+    permissions::clear();
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     let retired_on = STATE.retired_on.swap(0, Ordering::AcqRel);
@@ -187,6 +189,7 @@ pub(crate) fn release() {
     STATE.server.publish(0);
     STATE.server_world.store(0, Ordering::Release);
     STATE.game_thread.store(0, Ordering::Release);
+    permissions::clear();
 }
 
 thread_local! {
@@ -219,6 +222,11 @@ crate::engine::chains::chain_detour! {
     fn world_step(world: *mut u8) -> usize;
     next WORLD_STEP_NEXT;
     |onward| {
+        if permissions::pending() {
+            onward.before(&permissions::FUSE, "the permission write before a step", || {
+                permissions::apply(world as usize);
+            });
+        }
         STEPPING.set(STEPPING.get().wrapping_add(1));
         let result = onward.call();
         STEPPING.set(STEPPING.get().wrapping_sub(1));

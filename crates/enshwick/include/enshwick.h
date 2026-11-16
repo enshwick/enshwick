@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 4
+#define ENSHWICK_ABI_MINOR 5
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -182,6 +182,8 @@ typedef struct EnshwickPlayerInfo {
 #define EnshwickPlayerInfo_CAN_EXTEND_BASE (1 << 4)
 // Receives experience.
 #define EnshwickPlayerInfo_CAN_RECEIVE_EXP (1 << 5)
+// Every permission bit the game defines; any other bit is not one.
+#define EnshwickPlayerInfo_ALL_PERMISSIONS (((((EnshwickPlayerInfo_CAN_KICK_BAN | EnshwickPlayerInfo_CAN_ACCESS_INVENTORIES) | EnshwickPlayerInfo_CAN_EDIT_BASE) | EnshwickPlayerInfo_CAN_EDIT_WORLD) | EnshwickPlayerInfo_CAN_EXTEND_BASE) | EnshwickPlayerInfo_CAN_RECEIVE_EXP)
 // The most bytes of a name: 32 characters of up to four bytes each,
 // the longest name Steam allows.
 #define EnshwickPlayerInfo_NAME_MAX 128
@@ -6520,6 +6522,26 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*ui_item_tooltip)(EnshwickModHandle me,
                                     EnshwickUiTooltipFn callback,
                                     void *user);
+  // Replaces the mod's change to the permissions of the player in game
+  // with `account`: `deny` takes bits from the player, `grant` gives
+  // bits, both masks of `EnshwickPlayerInfo`'s permission
+  // bits; both 0 ends the change. The server holds the player to
+  // `(group | every grant) & !every deny`, with `group` the bits of the
+  // player's user group, from its next step on, so the game's own checks
+  // refuse what a taken bit guards, and the loader's own reads of the
+  // player's bits give the bits in force; the player's client still acts
+  // by its group's bits. A change ends when the mod ends it or turns
+  // off, when the player leaves and when the world ends; ending one
+  // needs no player in game. `EnshwickStatus_BAD_ARGS` for account 0 or a bit
+  // past the permissions; `EnshwickStatus_REFUSED` for a new change to an
+  // account not in game; `EnshwickStatus_WRONG_THREAD` off the server's game
+  // thread; `EnshwickStatus_UNAVAILABLE` outside a server and on a build
+  // without the permission table, the step link or the player removal
+  // link. ABI 12.5.
+  EnshwickStatus (*change_permissions)(EnshwickModHandle me,
+                                       EnshwickPlayerKey account,
+                                       uint32_t deny,
+                                       uint32_t grant);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -6957,7 +6979,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1704, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1712, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7171,6 +7193,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command_status) == 1672,
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 1680, "offset of HostApi.terrain_material_add");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_prompt) == 1688, "offset of HostApi.interaction_prompt");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_item_tooltip) == 1696, "offset of HostApi.ui_item_tooltip");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_permissions) == 1704, "offset of HostApi.change_permissions");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
