@@ -43,7 +43,6 @@ pub(crate) mod types {
     pub(crate) const ITEM_REGISTRY: u32 = hash(api::ITEM_REGISTRY_RESOURCE);
     pub(crate) const RECIPE_REGISTRY: u32 = hash(api::RECIPE_REGISTRY_RESOURCE);
     pub(crate) const TEMPLATE: u32 = hash(api::TEMPLATE_RESOURCE);
-    pub(crate) const TEMPLATE_COLLECTION: u32 = hash(api::TEMPLATE_COLLECTION_RESOURCE);
     pub(crate) const WORKSHOP_REGISTRY: u32 = hash(api::WORKSHOP_REGISTRY_RESOURCE);
     pub(crate) const UI_IMAGE: u32 = hash(api::UI_TEXTURE_RESOURCE);
     pub(crate) const UI_BUNDLE: u32 = hash(api::FB_UI_BUNDLE);

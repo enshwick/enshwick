@@ -7,8 +7,9 @@ use enshwick_core::content::{Blob, EngineFacts, Guid, types};
 
 use crate::test::FakeHost;
 
-/// Where a named template's name sits, unless the host already gives one.
-const NAME_AT: u64 = 0x20;
+/// Where a named template's name sits, unless the host already gives one:
+/// where [`FakeHost::templates`] lays it out, so both name alike.
+const NAME_AT: u64 = super::templates::TEMPLATE_NAME_AT;
 
 impl FakeHost {
     /// Lists `named` in the game's template collection, each with its name,

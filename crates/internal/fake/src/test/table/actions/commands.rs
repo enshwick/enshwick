@@ -20,9 +20,63 @@ pub(crate) struct FakeCommands {
     pub(crate) windows: Vec<(u64, String, u32)>,
     /// The windows each client holds: account key, window id and text.
     pub(crate) carried: Vec<(u64, String, String)>,
+    /// The windows shown to clients that have not said hello, oldest
+    /// first: account key and window id.
+    #[cfg(feature = "unstable")]
+    pub(crate) pending: Vec<(u64, String)>,
     /// Each map holder's waypoint at the last look: account key and place.
     #[cfg(feature = "unstable")]
     pub(crate) waypoints: Vec<(u64, [f64; 3])>,
+}
+
+#[cfg(feature = "unstable")]
+impl FakeCommands {
+    /// Keeps the `change` of window `id` for client `key`, which has not
+    /// said hello, as the loader does: a show waits, a close takes the
+    /// window back, an update waits for nothing since the hello shows the
+    /// window anew. The answer is the oldest show let go past
+    /// `actions::window::MAX_HELD`, which the mod hears as closed.
+    pub(crate) fn pend(&mut self, key: u64, id: String, change: u32) -> Option<String> {
+        use enshwick_core::abi::{WINDOW_CLOSE, WINDOW_SHOW};
+        use enshwick_core::actions::window::MAX_HELD;
+
+        let theirs = |k: u64, i: &str| k == key && i == id;
+        match change {
+            WINDOW_SHOW if !self.pending.iter().any(|(k, i)| theirs(*k, i)) => {
+                self.pending.push((key, id));
+                let mine: Vec<usize> = (0..self.pending.len())
+                    .filter(|&at| self.pending[at].0 == key)
+                    .collect();
+                (mine.len() > MAX_HELD).then(|| self.pending.remove(mine[0]).1)
+            }
+            WINDOW_CLOSE => {
+                self.carried.retain(|(k, i, _)| !theirs(*k, i));
+                self.pending.retain(|(k, i)| !theirs(*k, i));
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Client `key` said hello on a link that holds no window: the windows
+    /// it held and those waiting for it show again, oldest first, before
+    /// the mod's newer changes. All go, or none past the waiting bound;
+    /// then the answer is the windows that will not show, which the mod
+    /// hears as closed.
+    pub(crate) fn greeted(&mut self, key: u64) -> Vec<String> {
+        let held = self.carried.extract_if(.., |(k, _, _)| *k == key);
+        let held = held.map(|(_, id, _)| id).collect::<Vec<_>>();
+        let pending = self.pending.extract_if(.., |(k, _)| *k == key);
+        let shows: Vec<String> = held.into_iter().chain(pending.map(|(_, id)| id)).collect();
+        if self.windows.len() + shows.len() > MAX_WAITING {
+            return shows;
+        }
+        let shows = shows
+            .into_iter()
+            .map(|id| (key, id, enshwick_core::abi::WINDOW_SHOW));
+        self.windows.splice(0..0, shows);
+        Vec::new()
+    }
 }
 
 #[cfg(feature = "unstable")]

@@ -164,12 +164,26 @@ pub(crate) fn refuses_developer(
             }
             let reason = enshwick_core::mods::DEVELOPER_TOOL_OFF;
             s.faults.push(reason.to_owned());
-            s.logs.push((
-                Level::ERROR,
-                format!("off: {reason} ({})", enshwick_core::__fake::MOD_OFF),
-            ));
+            s.logs.push((Level::ERROR, off_line(reason)));
             true
         })
+}
+
+/// The line the loader logs when it turns a mod off for `reason`.
+fn off_line(reason: &str) -> String {
+    format!("off: {reason} ({})", enshwick_core::__fake::MOD_OFF)
+}
+
+/// Turns `owner` off for `reason` as the loader does on its own: the fault
+/// recorded, the line logged and sent to the mod, its callbacks silenced.
+pub(crate) fn loader_turns_off(owner: ModHandle, reason: String) {
+    let line = off_line(&reason);
+    with((), |s| {
+        s.faults.push(reason);
+        s.sent.push((owner, Level::ERROR, line.clone()));
+        s.logs.push((Level::ERROR, line));
+    });
+    super::registered::turn_off(owner);
 }
 
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) -> Status {

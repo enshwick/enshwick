@@ -156,7 +156,7 @@ fn templates_and_components() -> Vec<Type<'static>> {
         ]),
         Type::new(COLLECTION, Kind::Struct, 8, 4).with_fields(vec![field(
             "templates",
-            0,
+            COLLECTION_TEMPLATES_AT,
             "demo::BlobArray<demo::ObjectReference<demo::ecs::TemplateResource>>",
         )]),
         component(
@@ -343,7 +343,11 @@ impl FakeHost {
     /// water pouch's, [`CREATURE`] and [`BOSS_CREATURE`]. What
     /// [`Load::add_template`](enshwick_core::Load::add_template) and
     /// [`Load::change_template`](enshwick_core::Load::change_template) resolve;
-    /// [`FakeHost::workshops`] and [`FakeHost::meters`] add it.
+    /// [`FakeHost::workshops`] and [`FakeHost::meters`] add it. The game's
+    /// template collection lists them, each with its name, unless a
+    /// collection was given before, as [`FakeHost::vanilla_templates`] gives
+    /// one; with the item layout of [`FakeHost::items`],
+    /// `vanilla::template("Enemy_Wolf")` finds [`CREATURE`].
     ///
     /// # Examples
     ///
@@ -359,14 +363,46 @@ impl FakeHost {
     pub fn templates(mut self) -> Self {
         let types = types();
         let registry = Registry::new(types.clone());
-        for (guid, bytes) in vanilla(&registry) {
+        let vanilla = vanilla(&registry);
+        let guids: Vec<u8> = vanilla.iter().flat_map(|(guid, _)| guid.0).collect();
+        for (guid, bytes) in vanilla {
             self = self.resource(guid.key_by_hash(fnv1a32(TEMPLATE.as_bytes())), bytes);
         }
         for &(id, name) in NAMED {
             self = self.type_hash(id, fnv1a32(name.as_bytes()));
         }
-        self.types(types)
+        let host = self.types(types);
+        let collection = enshwick_core::content::templates::TEMPLATE_COLLECTION
+            .key_by_hash(fnv1a32(COLLECTION.as_bytes()));
+        let given = (collection.guid, collection.type_hash, collection.part);
+        if host.resources.contains_key(&given) {
+            return host;
+        }
+        let Some(list) = listed(&guids) else {
+            return host;
+        };
+        let host = host.resource(collection, list);
+        match host.offset(ids::TEMPLATE_NAME) {
+            Ok(_) => host,
+            Err(_) => host.constant(ids::TEMPLATE_NAME, TEMPLATE_NAME_AT),
+        }
     }
+}
+
+/// Where a template's name sits in [`TEMPLATE`]: its `name` field.
+pub(crate) const TEMPLATE_NAME_AT: u64 = 0;
+
+/// Where [`COLLECTION`]'s `templates` array sits.
+const COLLECTION_TEMPLATES_AT: u32 = 0;
+
+/// A template collection, [`COLLECTION`], listing the GUIDs `guids` holds
+/// one after another; `None` when they do not fit one.
+fn listed(guids: &[u8]) -> Option<Vec<u8>> {
+    let mut list = enshwick_core::content::Blob::new(&[0; 8]);
+    let start = list.append(guids, 4);
+    let count = u32::try_from(guids.len() / 16).ok()?;
+    let at = usize::try_from(COLLECTION_TEMPLATES_AT).ok()?;
+    list.set_array(at, start, count).then(|| list.into_bytes())
 }
 
 /// The registries and the component a crafting prop is written in.

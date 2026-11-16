@@ -117,9 +117,12 @@ mod tests {
 
     #[test]
     fn a_script_reaches_the_world_and_its_players() {
-        let loader = run(r#"local players = enshwick.world.players()
-            enshwick.world.broadcast(`{#players} online, first {players[1].name}`)
-            enshwick.world.tell(players[1], "hello")"#);
+        let loader = run(r#"enshwick.schedule.next_tick(function()
+                local players = enshwick.world.players()
+                enshwick.world.broadcast(`{#players} online, first {players[1].name}`)
+                enshwick.world.tell(players[1], "hello")
+            end)"#);
+        tick(&loader);
         let chat = loader.chat();
         assert!(
             chat.iter()

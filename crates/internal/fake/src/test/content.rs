@@ -690,12 +690,14 @@ impl Installed {
     }
 
     /// Builds the served resource `key` from `base` with the mod's patches, in order, as
-    /// the game's first read of it would.
+    /// the game's first read of it would: a patch that refuses, or hands
+    /// back bytes it was not lent, turns its mod off with the loader's
+    /// reason, as in the game. A mod's own served read skips such a patch.
     ///
     /// # Errors
     ///
-    /// [`Status::MISSING`] when the mod serves no `key`, or the patch's own
-    /// status when it fails.
+    /// [`Status::MISSING`] when no patch built `key`, and
+    /// [`Status::BUILDING`] inside a build of `key` on this thread.
     ///
     /// # Examples
     ///
@@ -707,7 +709,7 @@ impl Installed {
     /// assert_eq!(loader.build_resource(&key, &[]), Err(Status::MISSING));
     /// ```
     pub fn build_resource(&self, key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
-        table::content::build_resource(key, base)
+        table::content::build_resource(key, base, table::content::Build::Game)
     }
 
     /// The texts the mod added, as `(tag, language, text)`, in order.

@@ -113,6 +113,46 @@ impl Installed {
         Self::run_ticks(elapsed, false)
     }
 
+    /// Drives the server until `done` holds, through at most `limit` of the
+    /// fake's time; whether `done` held. Each round asks `done` first, then
+    /// writes every queued transaction and undo as
+    /// [`run_transactions`](Self::run_transactions) does, then runs one
+    /// server step of [`Ticked::DEFAULT_EVERY`](enshwick_core::events::Ticked::DEFAULT_EVERY)
+    /// as [`tick`](Self::tick) does, the last one cut to end at `limit`.
+    /// Each step moves the clock the mod's
+    /// scheduler counts on by its length, so a wait of the mod runs its
+    /// course and no real time passes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let mut steps = 0;
+    /// assert!(loader.drive_until(Duration::from_secs(1), || {
+    ///     steps += 1;
+    ///     steps > 3
+    /// }));
+    /// assert!(!loader.drive_until(Duration::from_secs(1), || false));
+    /// ```
+    pub fn drive_until(&self, limit: Duration, mut done: impl FnMut() -> bool) -> bool {
+        let step = enshwick_core::events::Ticked::DEFAULT_EVERY;
+        let mut driven = Duration::ZERO;
+        loop {
+            if done() {
+                return true;
+            }
+            if driven >= limit {
+                return false;
+            }
+            let this = step.min(limit.saturating_sub(driven));
+            self.run_transactions();
+            let _ran = self.tick(this);
+            driven += this;
+        }
+    }
+
     /// As the loader at the start of a game's world, before its
     /// [`WorldLoaded`](enshwick_core::events::WorldLoaded) handlers: every
     /// periodic handler that is not paused runs once in the current game,
@@ -131,6 +171,9 @@ impl Installed {
                 ticks.nanos = ticks.nanos.saturating_add(elapsed);
             }
             let (step, now) = (ticks.step, ticks.nanos);
+            // The mod's scheduler counts on this clock, so a test waits no
+            // real time.
+            enshwick_core::__fake::move_clock(now);
             let tick = TickData {
                 elapsed_ns: elapsed,
                 step_ns: elapsed,

@@ -92,6 +92,30 @@ impl FakeHost {
             enshwick_core::net::Peer::Player(key) => key,
         };
         self.net_peers.insert(raw.get());
+        #[cfg(feature = "unstable")]
+        self.without_hello.remove(&raw.get());
+        self
+    }
+
+    /// Player `key`'s client has not said hello yet, or has no Enshwick and
+    /// never will: it takes no mod messages, and the windows the mod shows
+    /// it wait for [`Installed::say_hello`](crate::test::Installed::say_hello)
+    /// as the loader keeps them, at most `actions::window::MAX_HELD`, the
+    /// oldest told closed. Every other player online takes windows at once.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .without_hello(enshwick::PlayerKey::new(7))
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn without_hello(mut self, key: enshwick_core::PlayerKey) -> Self {
+        self.without_hello.insert(key.get());
+        self.net_peers.remove(&key.get());
         self
     }
 
