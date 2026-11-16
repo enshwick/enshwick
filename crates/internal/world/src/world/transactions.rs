@@ -162,6 +162,24 @@ pub struct Settled {
     pub props: Vec<Entity>,
 }
 
+impl Settled {
+    /// The first prop it placed once it was written whole, so a mod that
+    /// placed one prop acts on it; `None` when it ended otherwise.
+    ///
+    /// # Examples
+    ///
+    /// See [`World::when_settled`].
+    #[must_use]
+    pub fn standing(&self) -> Option<Entity> {
+        matches!(
+            self.status,
+            Some(TransactionStatus::Applied | TransactionStatus::Expired)
+        )
+        .then(|| self.props.first().copied())
+        .flatten()
+    }
+}
+
 /// Changes of the server's world that the loader writes as one, and can
 /// undo as one; start one with [`World::transaction`].
 ///
@@ -738,16 +756,14 @@ impl World {
     /// ```
     /// use std::time::Duration;
     ///
-    /// use enshwick::world::{TransactionStatus, World, WorldTransform};
+    /// use enshwick::world::{World, WorldTransform};
     /// use enshwick::{ItemId, WorldError};
     ///
     /// fn place_chest(world: World, chest: ItemId, at: WorldTransform) -> Result<(), WorldError> {
     ///     let id = world.transaction().place_prop(chest, at).commit()?;
-    ///     world.when_settled(id, Duration::from_secs(10), |settled| match (&settled.status, settled.props.first()) {
-    ///         (Some(TransactionStatus::Applied | TransactionStatus::Expired), Some(chest)) => {
-    ///             enshwick::info!("chest {chest:?} stands");
-    ///         }
-    ///         (status, _) => enshwick::warn!("no chest: {status:?}"),
+    ///     world.when_settled(id, Duration::from_secs(10), |settled| match settled.standing() {
+    ///         Some(chest) => enshwick::info!("chest {chest:?} stands"),
+    ///         None => enshwick::warn!("no chest: {:?}", settled.status),
     ///     })
     /// }
     /// ```

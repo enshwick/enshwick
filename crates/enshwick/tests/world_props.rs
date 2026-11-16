@@ -297,6 +297,7 @@ mod tests {
         assert_eq!(settled.status, Some(TransactionStatus::Applied));
         assert_eq!(settled.props, world.transaction_entities(id));
         assert_eq!(settled.props.len(), 1);
+        assert_eq!(settled.standing(), Some(settled.props[0]));
         pass(&loader);
         assert!(seen.lock().unwrap().is_none(), "the handler ran once");
     }
@@ -319,6 +320,7 @@ mod tests {
         let settled = seen.lock().unwrap().take().unwrap();
         assert_eq!(settled.status, Some(TransactionStatus::Expired));
         assert_eq!(settled.props, placed);
+        assert_eq!(settled.standing(), Some(placed[0]));
     }
 
     #[test]
@@ -365,6 +367,7 @@ mod tests {
             Some(TransactionStatus::Failed(WorldError::NotAProp))
         );
         assert!(settled.props.is_empty());
+        assert_eq!(settled.standing(), None);
     }
 
     #[test]

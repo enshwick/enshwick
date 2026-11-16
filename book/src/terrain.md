@@ -359,7 +359,8 @@ handler runs one scheduler pass later, when its props stand. The status is
 then `Applied`, or `Expired` when the loader dropped its undo data meanwhile.
 Any other end runs the handler at once. A large transaction spread over
 steps is waited for whole. The handler gets a `Settled`: the status and the
-props the transaction placed. What another end means is the mod's to
+props the transaction placed. Its `standing()` gives the first prop once
+the transaction was written whole. What another end means is the mod's to
 decide. One case is `Failed(NotLoaded)`, which the same changes committed
 again a second later may pass. Once `within` passed, the handler gets the
 transaction as it stands, still `Pending` perhaps. The wait is a scheduler
@@ -368,16 +369,14 @@ task, so it ends without the handler when its game ends.
 ```rust
 use std::time::Duration;
 
-use enshwick::world::{TransactionStatus, World, WorldTransform};
+use enshwick::world::{World, WorldTransform};
 use enshwick::{ItemId, WorldError};
 
 fn place_chest(world: World, chest: ItemId, at: [f64; 3]) -> Result<(), WorldError> {
     let id = world.transaction().place_prop(chest, WorldTransform::at(at)).commit()?;
-    world.when_settled(id, Duration::from_secs(10), |settled| match (&settled.status, settled.props.first()) {
-        (Some(TransactionStatus::Applied | TransactionStatus::Expired), Some(chest)) => {
-            enshwick::info!("chest {chest:?} stands");
-        }
-        (status, _) => enshwick::warn!("no chest: {status:?}"),
+    world.when_settled(id, Duration::from_secs(10), |settled| match settled.standing() {
+        Some(chest) => enshwick::info!("chest {chest:?} stands"),
+        None => enshwick::warn!("no chest: {:?}", settled.status),
     })
 }
 ```

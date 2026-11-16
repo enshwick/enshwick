@@ -3,7 +3,8 @@
 - `World::when_settled` runs a handler once a transaction stopped running:
   a step after it is written whole (applied, or expired meanwhile), when its
   placed props stand, or once it ended otherwise or a bound passed, with a
-  `Settled` of its status and props; Luau has
+  `Settled` of its status and props, whose `standing` gives the prop that
+  stands; Luau has
   `enshwick.world.when_settled` (#1130).
 - The fake host's `expire_transactions` drops the undo data of written
   transactions, as the loader does at its memory cap (#1130).
