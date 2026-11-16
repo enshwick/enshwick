@@ -98,10 +98,10 @@ mod tests {
             FROM_GAME.fetch_add(100, Ordering::Relaxed);
         });
 
-        // The next game's first step comes well inside the scheduler's
-        // period, and its world loads after it.
+        // The next game's world loads before any step of it, as a client's
+        // hosted game does; a world load handler queues the task.
         loader.end_game();
-        let _ran = loader.tick(Duration::from_millis(10));
+        let _handled = loader.raise::<enshwick::events::WorldLoaded>(&());
         scheduler.after(Duration::ZERO, || {
             FROM_GAME.fetch_add(1, Ordering::Relaxed);
         });

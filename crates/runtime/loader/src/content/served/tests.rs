@@ -101,6 +101,17 @@ fn a_resource_counts_as_served_only_while_a_mod_is_on_and_it_built() {
 }
 
 #[test]
+fn a_resource_whose_every_patch_panicked_no_longer_counts_as_served() {
+    let key = recipe_registry();
+    let served = [served_by(key, &[1, 2])];
+    served[0].patches[0].on.store(false, Ordering::Release);
+    assert!(serves(&served, &key, |_| true), "the other patch serves it");
+    served[0].patches[1].on.store(false, Ordering::Release);
+    assert!(!serves(&served, &key, |_| true));
+    assert!(!owner_on(&served[0]));
+}
+
+#[test]
 fn a_rebuild_writes_only_the_bytes_that_differ() {
     let mut held = vec![1u8, 2, 3, 4, 5];
     let new = [1u8, 9, 3, 4, 7];

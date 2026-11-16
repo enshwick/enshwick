@@ -113,6 +113,11 @@ impl Followed {
         self.change(|session| session.step_in_game(server, thread))
     }
 
+    /// The game the server steps or is about to step, as a step reads it.
+    pub(super) fn game(&self) -> u64 {
+        self.game.load(Ordering::Acquire)
+    }
+
     /// Runs `change` on the session under its lock and copies out what a
     /// step reads first.
     #[cold]

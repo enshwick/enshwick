@@ -158,10 +158,14 @@ static TICK_EVENTS: Fused<fn(&'static Loader, &TickData)> =
         None,
         core::ptr::from_ref(tick).cast::<c_void>()
     ));
-static PERIODIC_TICKS: Fused<fn(u64, u64, StepTime, u64)> = fused!(
-    "periodic ticks",
-    |step, nanos, time, game| periodic_ticks(step, nanos, time, game)
-);
+/// A run of the periodic tick handlers: the step and whether it enters a
+/// game's world, the time, the step's time and the game.
+type PeriodicRun = fn((u64, bool), u64, StepTime, u64);
+
+static PERIODIC_TICKS: Fused<PeriodicRun> =
+    fused!("periodic ticks", |step, nanos, time, game| periodic_ticks(
+        step, nanos, time, game
+    ));
 static JOINED_EVENTS: Fused<fn(&'static Loader, &PlayerData)> = fused!(
     "player joined events",
     |loader, data| loader.emit(Event::PLAYER_JOINED, None, core::ptr::from_ref(data).cast())
@@ -418,7 +422,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         let tick = tick_data(stepping.step, time, game);
         let site = "the post-step link";
         let _raised = TICK_EVENTS.call(site, |raise| raise(loader, &tick));
-        let _ran = PERIODIC_TICKS.call(site, |run| run(stepping.step, nanos, time, game));
+        let _ran = PERIODIC_TICKS.call(site, |run| run((stepping.step, false), nanos, time, game));
     }
     loader.parts.run(Stage::Input, &stepping);
     loader.parts.run(Stage::Output, &stepping);
@@ -532,10 +536,11 @@ unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
 }
 
 /// Calls the periodic tick handlers due after step `step` of `game` at
-/// `now`, each with its mod's recent cost when callbacks are timed.
-fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
+/// `now`, or every one not paused when `entering` its world, each with its
+/// mod's recent cost when callbacks are timed.
+fn periodic_ticks((step, entering): (u64, bool), now: u64, time: StepTime, game: u64) -> usize {
     TICKS.run(
-        (step, game),
+        (step, entering),
         now,
         time,
         |tick| !crate::engine::loader::is_off(tick.owner()),
@@ -566,6 +571,20 @@ fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
             );
         },
     )
+}
+
+/// A game's world starts: each periodic tick handler not paused runs once in
+/// that game before the world's own handlers, so a scheduler learns the
+/// game before a world load or join handler queues a task in it.
+fn enter_ticks() {
+    if !TICKS.listed() {
+        return;
+    }
+    let nanos = TICKS.nanos(Instant::now());
+    let (step, game) = (crate::engine::ticks::steps(), SESSION.game());
+    let _ran = PERIODIC_TICKS.call("the world's start", |run| {
+        run((step, true), nanos, StepTime::default(), game);
+    });
 }
 
 /// Forgets the players seen joining and the building events queued in a
@@ -670,6 +689,7 @@ fn state_changed(loader: &'static Loader, old: u8, state: u8) {
             }
             crate::base::worlds::load(loader);
             crate::start::record::write_for_world();
+            enter_ticks();
             loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
         }
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {

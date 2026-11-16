@@ -25,7 +25,7 @@ fn one(every: u64) -> Ticks {
     let ticks = Ticks::new();
     let _added = ticks.add(ModIndex::new(0), every, handler, core::ptr::null_mut());
     let time = ticks.advance(STEP);
-    let _first = ticks.run((1, 1), STEP, time, |_| true, |_, _| {});
+    let _first = ticks.run((1, false), STEP, time, |_| true, |_, _| {});
     ticks
 }
 
@@ -35,7 +35,7 @@ fn step(ticks: &Ticks, step: &mut u64) -> usize {
     let now = *step * STEP;
     let time = ticks.advance(now);
     ticks.run(
-        (*step, 1),
+        (*step, false),
         now,
         time,
         |_| true,
@@ -68,7 +68,7 @@ fn ticks(c: &mut Criterion) {
                 elapsed,
                 average: 0,
             };
-            black_box(&skipped).run((n, 1), now, time, |_| true, |_, _| {})
+            black_box(&skipped).run((n, false), now, time, |_| true, |_, _| {})
         });
     });
     let due = one(0);

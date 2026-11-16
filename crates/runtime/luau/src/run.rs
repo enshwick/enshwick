@@ -493,10 +493,10 @@ fn begin(
     let host = load.host();
     let mut namespaces = Vec::new();
     // A namespace a script asks for opens when its getter runs at start; one
-    // no script names stays shut, since an open can start work every frame,
-    // such as the input reads.
+    // whose open starts work, such as the input reads, opens only when a
+    // script names it.
     for namespace in script::NAMESPACES.iter().filter(|n| {
-        n.request_function().is_none() && (n.name().is_empty() || scripts.names(n.name()))
+        n.request_function().is_none() && (!n.opens_when_named() || scripts.names(n.name()))
     }) {
         match namespace.open(load) {
             Ok(opened) => namespaces.push((namespace, opened)),

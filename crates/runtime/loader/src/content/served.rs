@@ -80,6 +80,11 @@ impl Patch {
             on: AtomicBool::new(true),
         }
     }
+
+    /// Whether it still builds: it is on and `on` says its mod is.
+    fn runs(&self, on: impl Fn(ModIndex) -> bool) -> bool {
+        self.on.load(Ordering::Acquire) && on(self.owner)
+    }
 }
 
 /// A served resource.
@@ -647,7 +652,7 @@ fn mods_serve_recipes() -> bool {
 fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(ModIndex) -> bool) -> bool {
     served
         .iter()
-        .any(|s| s.key == *key && s.patches.iter().any(|p| on(p.owner)) && !s.state.relock().failed)
+        .any(|s| s.key == *key && s.patches.iter().any(|p| p.runs(&on)) && !s.state.relock().failed)
 }
 
 /// Whether mods that are on serve `key` and its build has not failed, as
@@ -675,7 +680,7 @@ pub(crate) fn mod_on(owner: ModIndex) -> bool {
 }
 
 fn owner_on(served: &Served) -> bool {
-    served.patches.iter().any(|p| mod_on(p.owner))
+    served.patches.iter().any(|p| p.runs(mod_on))
 }
 
 /// Copies the game's resource key at `key`.

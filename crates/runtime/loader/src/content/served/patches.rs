@@ -599,10 +599,10 @@ impl Built {
     }
 }
 
-/// Runs the patches of the mods still on, or of the mods `only` names,
-/// over the `len` bytes at `data`, each on the result of the one before,
-/// for `kind`; a failed one is skipped, and in the game's build turns its
-/// mod off. `None` when no patch built.
+/// Runs the patches still on of the mods still on, or for a rebuild every
+/// patch of the mods `only` names, over the `len` bytes at `data`, each on
+/// the result of the one before, for `kind`; a failed one is skipped, and
+/// in the game's build turns its mod off. `None` when no patch built.
 pub(super) fn run_patches(
     entry: &Served,
     data: usize,
@@ -621,12 +621,13 @@ pub(super) fn run_patches(
     let building = Building::enter(entry.key, kind);
     let (mut current, mut current_len) = (data, len);
     let mut applied = Vec::new();
-    let runs = |owner: ModIndex| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
-    for patch in entry
-        .patches
-        .iter()
-        .filter(|p| p.on.load(Ordering::Acquire) && runs(p.owner))
-    {
+    // A rebuild runs every patch the game's build applied, one whose
+    // builder panicked since included: the game holds what each added.
+    let runs = |p: &Patch| match only {
+        Some(only) => only.contains(&p.owner),
+        None => p.runs(mod_on),
+    };
+    for patch in entry.patches.iter().filter(|p| runs(p)) {
         let (mut built, mut built_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: `patch.apply` is a live mod's or the loader's
         // `ResourcePatchFn`, given the `current_len` bytes so far at

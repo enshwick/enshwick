@@ -130,10 +130,11 @@ pub(crate) fn mod_reason(texts: Option<&Texts>, why: &str) -> String {
 
 /// The reasons the API gives in the loader's texts, each key with the
 /// arguments `enshwick_core::__private` encodes for a section that does not read.
-const API_REASONS: [(&str, &[&str]); 3] = [
+const API_REASONS: [(&str, &[&str]); 4] = [
     ("mods.off.section.newer", &["format", "reads"]),
     ("mods.off.section.older", &["format", "reads"]),
     ("mods.off.section.damaged", &["byte"]),
+    (enshwick_core::resources::BUILDER_PANICKED, &[]),
 ];
 
 /// Whether `why` is one of [`API_REASONS`] with exactly its arguments, so a
@@ -482,6 +483,16 @@ mod tests {
             "його оголошення пошкоджено на байті 26: зберіть його заново з цим Enshwick"
         );
         assert_eq!(mod_reason(None, "mods.back"), "mods.back");
+    }
+
+    #[test]
+    fn a_served_resource_whose_builder_panicked_is_told_in_the_loader_s_texts() {
+        let panicked = enshwick_core::resources::BUILDER_PANICKED;
+        assert!(mod_reason(None, panicked).starts_with("its builder failed"));
+        assert!(
+            for_reader(Some(Language::UK_UA), || mod_reason(None, panicked))
+                .starts_with("його збирач")
+        );
     }
 
     #[test]

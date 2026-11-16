@@ -68,7 +68,9 @@ impl ModRecord {
 
     /// Takes its report that its feature `name` is off for `off`, or on when
     /// `off` is `None`, for the status summary, the Mods screen and the off
-    /// line at join; logs the change, if any.
+    /// line at join; logs the change, if any. It locks the texts, then the
+    /// features, from any thread a build or a mod's call runs on, so no
+    /// code holds the features while it locks the texts.
     pub(crate) fn report_feature(&self, name: &str, off: Option<&str>) {
         let texts = self.texts.relock();
         let changed =

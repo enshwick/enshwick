@@ -25,6 +25,9 @@ mod failed_ready {
             load.on_chat_said(|_| {
                 RAN.fetch_add(1, Ordering::Relaxed);
             })?;
+            load.on_tick(core::time::Duration::ZERO, |_| {
+                RAN.fetch_add(1, Ordering::Relaxed);
+            })?;
             Ok(Self)
         }
 
@@ -53,6 +56,11 @@ mod failed_ready {
             loader.say(PlayerKey::new(7), "a bad day").as_deref(),
             Some("a bad day"),
             "the line passes as if no filter were there"
+        );
+        assert_eq!(
+            loader.tick(core::time::Duration::from_millis(100)),
+            0,
+            "no tick handler of an off mod runs or counts"
         );
         assert_eq!(RAN.load(Ordering::Relaxed), 0);
     }

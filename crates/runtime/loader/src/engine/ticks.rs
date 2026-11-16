@@ -99,10 +99,6 @@ pub struct Tick {
     last_step: AtomicU64,
     /// The time of the last call, in the loader's step nanoseconds.
     last_nanos: AtomicU64,
-    /// The game of the last call, 0 before the first: the first step of
-    /// another game calls the handler whatever its period, before the
-    /// game's world loads, so it learns the game before any handler of it.
-    last_game: AtomicU64,
     /// The owner's timed event calls and their ticks at the last call, so
     /// the next call's cost covers the calls in between.
     seen_calls: AtomicU64,
@@ -249,7 +245,6 @@ impl Ticks {
             every: AtomicU64::new(every),
             last_step: AtomicU64::new(0),
             last_nanos: AtomicU64::new(0),
-            last_game: AtomicU64::new(0),
             seen_calls: AtomicU64::new(0),
             seen_ticks: AtomicU64::new(0),
         })));
@@ -281,14 +276,15 @@ impl Ticks {
         Ok(())
     }
 
-    /// Calls each due handler for step `step` of `game` at `now` through
-    /// `call`, with the steps and time since its last call, once `live`
-    /// says its mod runs; returns how many ran. A handler is due once its
-    /// period passed, and on its first step in a game. One not due costs
-    /// its loads and its comparisons only.
+    /// Calls each due handler for step `step` at `now` through `call`,
+    /// with the steps and time since its last call, once `live` says its
+    /// mod runs; returns how many ran. `entering` marks the start of a
+    /// game's world, where every handler not paused is due, so it learns
+    /// the game before any handler of that world runs. A handler not due
+    /// costs its loads and its comparison only.
     pub fn run(
         &self,
-        (step, game): (u64, u64),
+        (step, entering): (u64, bool),
         now: u64,
         time: StepTime,
         live: impl Fn(&Tick) -> bool,
@@ -305,12 +301,10 @@ impl Ticks {
         for &tick in handlers {
             let last_step = tick.last_step.load(Ordering::Relaxed);
             let last = (last_step != 0).then(|| tick.last_nanos.load(Ordering::Relaxed));
-            if !due(now, last, tick.every.load(Ordering::Relaxed))
-                && tick.last_game.load(Ordering::Relaxed) == game
-            {
+            let every = tick.every.load(Ordering::Relaxed);
+            if !(entering && every != u64::MAX || due(now, last, every)) {
                 continue;
             }
-            tick.last_game.store(game, Ordering::Relaxed);
             if !live(tick) {
                 // A mod that is off never takes this handler
                 // back, so it stops being due instead of being checked on
@@ -359,13 +353,13 @@ mod tests {
     /// Runs `count` steps of `step` nanoseconds, after `start` steps, and
     /// returns each call as `(owner, step, elapsed steps, elapsed time)`.
     fn steps(ticks: &Ticks, start: u64, count: u64, step: u64) -> Vec<(usize, u64, u64, u64)> {
-        steps_in(ticks, 1, start, count, step)
+        steps_from(ticks, false, start, count, step)
     }
 
-    /// As [`steps`], in game `game`.
-    fn steps_in(
+    /// As [`steps`], the first of them `entering` a game's world.
+    fn steps_from(
         ticks: &Ticks,
-        game: u64,
+        entering: bool,
         start: u64,
         count: u64,
         step: u64,
@@ -374,7 +368,7 @@ mod tests {
         for n in start + 1..=start + count {
             let time = ticks.advance(n * step);
             let _ran = ticks.run(
-                (n, game),
+                (n, entering && n == start + 1),
                 n * step,
                 time,
                 |_| true,
@@ -401,13 +395,13 @@ mod tests {
     }
 
     #[test]
-    fn a_handler_also_runs_on_the_first_step_of_another_game() {
-        let ticks = listed(&[1_000 * MS]);
-        assert_eq!(steps(&ticks, 0, 2, 50 * MS), [(0, 1, 1, 0)]);
+    fn a_handler_also_runs_when_a_game_s_world_starts_but_a_paused_one_does_not() {
+        let ticks = listed(&[1_000 * MS, u64::MAX]);
+        assert_eq!(steps(&ticks, 0, 2, 50 * MS), [(0, 1, 1, 0), (1, 1, 1, 0)]);
         assert_eq!(
-            steps_in(&ticks, 2, 2, 2, 50 * MS),
+            steps_from(&ticks, true, 2, 2, 50 * MS),
             [(0, 3, 2, 100 * MS)],
-            "the new game's first step, before its period passed"
+            "the world's start, before the period passed; the paused handler waits"
         );
     }
 
@@ -451,7 +445,7 @@ mod tests {
     fn a_handler_of_a_mod_not_running_is_skipped_and_never_due_again() {
         let ticks = listed(&[0]);
         let ran = ticks.run(
-            (1, 1),
+            (1, false),
             0,
             StepTime::default(),
             |_| false,
@@ -460,7 +454,7 @@ mod tests {
         assert_eq!(ran, 0);
         let checked = core::cell::Cell::new(0);
         let ran = ticks.run(
-            (2, 1),
+            (2, false),
             10,
             StepTime::default(),
             |_| {
@@ -491,7 +485,7 @@ mod tests {
         assert!(!ticks.listed());
         assert_eq!(
             ticks.run(
-                (1, 1),
+                (1, false),
                 0,
                 StepTime::default(),
                 |_| true,

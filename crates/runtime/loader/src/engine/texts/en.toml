@@ -29,6 +29,7 @@
 "mods.off.section.newer" = "its declarations are format {format}, and this Enshwick reads {reads}: update Enshwick"
 "mods.off.section.older" = "its declarations are format {format}, and this Enshwick reads {reads}: rebuild it with this Enshwick"
 "mods.off.section.damaged" = "its declarations are damaged at byte {byte}: rebuild it with this Enshwick"
+"mods.off.served.panicked" = "its builder failed with an error; the game uses the resource without this mod's change until it restarts"
 "mods.points" = "Extension points: {points}"
 "mods.feature.off" = "{feature} is off: {reason}"
 "mods.part.off" = "Enshwick part off after an error: {part} ({reason})"

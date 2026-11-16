@@ -362,10 +362,10 @@ impl Grow for Output<'_> {
 }
 
 /// Why a served resource is off once its builder panicked, as the loader
-/// and the fake report it for the mod.
+/// and the fake report it for the mod: the key of the loader's text, which
+/// the loader shows in the reader's language.
 #[doc(hidden)]
-pub const BUILDER_PANICKED: &str =
-    "its builder panicked; the resource is built without it until the game restarts";
+pub const BUILDER_PANICKED: &str = "mods.off.served.panicked";
 
 /// Serves `key` from `base` through `builder` for the mod `host` serves,
 /// as `Load::serve` does; also for a runtime that holds the mod's host

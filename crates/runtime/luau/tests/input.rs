@@ -36,6 +36,18 @@ mod tests {
     }
 
     #[test]
+    fn a_namespace_whose_open_costs_nothing_opens_though_no_script_names_it() {
+        let loader = run(
+            FakeHost::new().world(),
+            r#"
+            local name = "wor" .. "ld"
+            enshwick.log.info(`reached {enshwick[name] ~= nil}`)
+            "#,
+        );
+        assert!(logged(&loader, "reached true"), "{:?}", loader.logs());
+    }
+
+    #[test]
     fn a_mod_whose_scripts_never_name_input_starts_no_input_reads() {
         use enshwick::abi::{Header, LocalInputInfo, Side};
         let loader = run(

@@ -503,27 +503,24 @@ unsafe extern "system" fn faulted(
 }
 
 #[test]
-fn a_mod_patch_whose_builder_panicked_never_runs_again_and_the_key_builds_without_it() {
-    let (broken, building) = (ModIndex::new(3), ModIndex::new(4));
-    let entry = Served::new(
-        KEY,
-        KEY,
-        vec![
-            Patch::new(broken, faulted, 0),
-            Patch::new(building, grow, 0),
-        ],
-        false,
-    );
+fn a_patch_whose_builder_panicked_runs_again_only_in_a_rebuild() {
+    let entry = Served::new(KEY, KEY, vec![by_loader(faulted), by_loader(grow)], false);
     let base = [1u8; 2];
     let at = base.as_ptr().expose_provenance();
-    let only = [broken, building];
     for kind in [Build::Scratch, Build::Game] {
-        let built = run_patches(&entry, at, 2, Some(&only), kind).unwrap();
-        assert_eq!(built.by, vec![building], "{kind:?}");
+        let built = run_patches(&entry, at, 2, None, kind).unwrap();
+        assert_eq!(built.by, vec![ModIndex::LOADER], "{kind:?}");
     }
     assert_eq!(FAULTED_RUNS.get(), 1, "a panicked builder runs once");
     assert!(!entry.patches[0].on.load(Ordering::Acquire));
     assert!(entry.patches[1].on.load(Ordering::Acquire));
+    let rebuilt = run_patches(&entry, at, 2, Some(&[ModIndex::LOADER]), Build::Game).unwrap();
+    assert_eq!(rebuilt.by, vec![ModIndex::LOADER]);
+    assert_eq!(
+        FAULTED_RUNS.get(),
+        2,
+        "a rebuild runs every patch the game's build applied"
+    );
 }
 
 #[test]

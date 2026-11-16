@@ -9,15 +9,16 @@
 ### Changed
 
 - A served resource's builder that panics turns off only that resource:
-  the loader builds the key without it until the game restarts and never
-  calls it again, and the log, the status summary, the join line in chat
+  the loader builds the key without it until the game restarts, calling it
+  again only in a rebuild of what the game holds, and the log, the status summary, the join line in chat
   and the Mods screen name the resource off. The mod and its other
   resources stay on; a builder's `None` still turns the mod off (#1136).
-- A tick handler of any period also runs on the first step of each game,
-  before its world loads, so a scheduler task queued in a world load or
-  join handler of a new hosted game belongs to that game (#1136).
-- A Luau mod opens a namespace only when one of its scripts names it: a
-  pack that never names `input` starts no client input reads (#1136).
+- A periodic tick handler also runs once at each world's start, before
+  the world load handlers, unless it is paused, so a scheduler task queued
+  in a world load or join handler of a new hosted game belongs to that
+  game (#1136).
+- A Luau mod opens `input` only when one of its scripts names it: a pack
+  that never names `input` starts no client input reads (#1136).
 - The content helpers reserve a build's final length before they copy the
   base: listing an item in a 256 KiB item registry takes one loan instead
   of three (#1136).

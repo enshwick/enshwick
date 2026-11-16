@@ -4276,9 +4276,13 @@ typedef uint8_t (*EnshwickRenameFilterFn)(const struct EnshwickRenameCall *call,
 // on several threads at a time, each call with its own base and buffers;
 // a rebuild of a key waits for the key's other rebuild. On one thread it
 // may run nested inside another key's patch, never inside a build of its
-// own key. A failure returned from the game's build turns the mod off; a
-// panic must not leave the function. `user` is the pointer the mod served
-// with.
+// own key. A failure returned from the game's build turns the mod off,
+// but `EnshwickStatus_FAULTED`, the answer of a
+// patch whose builder panicked: that turns off only this patch for the
+// process, and its mod reports the resource as a feature off. Later builds
+// of the key run without it but a rebuild, which runs every patch the
+// game's build applied. A panic must not leave the function. `user` is
+// the pointer the mod served with.
 //
 // Null is never a callback: the loader refuses a null one with
 // `EnshwickStatus_BAD_ARGS` and keeps nothing.
@@ -4827,8 +4831,10 @@ typedef struct EnshwickHostApi {
   // Calls `callback` with `user`, `EnshwickEvent_TICKED` and a `EnshwickTickData`
   // on the server's game thread after a step, once `every_ns` of wall
   // time have passed since its last call, and on the first step after it
-  // subscribed; 0 calls it every step. Steps the handler skips cost it
-  // nothing. The data lives for the call; the loader keeps `user` and
+  // subscribed; 0 calls it every step. It is also called once at each
+  // world's start, before `EnshwickEvent_WORLD_LOADED`, with that game in
+  // `EnshwickTickData.game`, unless its period is
+  // `UINT64_MAX`. Steps the handler skips cost it nothing. The data lives for the call; the loader keeps `user` and
   // never frees it. Writes the handler's handle to `out`, the caller's,
   // writable for four bytes, on `EnshwickStatus_OK` only. `EnshwickStatus_BAD_ARGS`
   // for a null `out`; `EnshwickStatus_TOO_LATE` outside `enshwick_mod_init`.

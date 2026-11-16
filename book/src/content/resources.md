@@ -76,8 +76,9 @@ keeps the result for the life of the process. So the builder:
 - returns `None` when the base does not read as expected. That turns the mod
   off, and so does an `out` it left empty;
 - turns off only its resource when it panics. The loader builds the key
-  without this builder until the game restarts, and never calls it again.
-  The mod and its other resources stay on. The log, the status summary, the
+  without this builder until the game restarts. Only a rebuild calls it
+  again, since the game holds what it added at the first build. The mod
+  and its other resources stay on. The log, the status summary, the
   join line in chat and the Mods screen name the resource as off.
 
 When the game has no `base` in its archive, the served key stays missing and
