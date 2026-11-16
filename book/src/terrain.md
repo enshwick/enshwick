@@ -98,10 +98,11 @@ local tar_sand = enshwick.terrain.add_terrain_material({
 
 The game leaves 11 terrain ids free, 117 to 127. Mods' materials take them
 in load order, and the twelfth is refused with its reason in the log. The
-voxel id holds for one run only: saves name each voxel's material by the GUID
-of its content id, so the same world can give the material another id in
-the next run. Keep the id `add_terrain_material` returns, and use it for
-`add` and `flatten`. `materials()` lists the new material once a world runs.
+voxel id holds for one run only. Saves name each voxel's material by the
+GUID of its [content id](concepts/ids.md), so a world can give the material
+another id in the next run. Keep the id that `add_terrain_material` returns,
+and place the material with it. `materials()` lists the new material once a
+world runs.
 
 The loader serves the material's rules and effects on the server and on
 clients, and on clients the look of `like`. The mod is a mod of both sides
@@ -111,13 +112,13 @@ texture of its own is not offered.
 
 ### A world without the mod
 
-When a world that holds a mod's material loads without the mod, the ground
-of that material loads as its fallback: `like`, or the game's material set
-with `fallback`. The loader keeps every material a mod ever added, with its
-fallback, in `mods/enshwick/clones.toml`; keep that file. Once the mod is
-back, the ground is the mod's material again. The fallbacks take the free
-ids that mods' materials leave, so more than 11 materials of mods and
-removed mods together leave the last ones as air.
+A world may hold a mod's material and load without the mod. The ground of
+that material then loads as its fallback: `like`, or the game's material
+set with `fallback`. The loader keeps every material a mod ever added, with
+its fallback, in `mods/enshwick/clones.toml`; keep that file. Once the mod
+is back, the ground is the mod's material again. The fallbacks take the
+free ids that mods' materials leave. Past 11 materials of mods and removed
+mods together, the last ones load as air.
 
 A server without Enshwick loads that ground as air, and its next save keeps
 the loss.
