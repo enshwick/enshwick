@@ -111,6 +111,10 @@ mod item_changes;
 #[cfg(feature = "unstable")]
 mod item_data;
 #[cfg(feature = "unstable")]
+mod item_slots;
+#[cfg(feature = "unstable")]
+mod item_tooltips;
+#[cfg(feature = "unstable")]
 mod items;
 #[cfg(feature = "unstable")]
 mod join_rules;

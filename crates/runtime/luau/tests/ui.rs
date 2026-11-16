@@ -494,6 +494,46 @@ mod tests {
     }
 
     #[test]
+    fn a_script_draws_item_slots_reads_the_hovered_slot_and_adds_tooltip_lines() {
+        let torch = enshwick::ItemId(0x5e01);
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).item(torch, 20, 0),
+            r#"
+            enshwick.ui.extend_screen("Backpack", "Right", function(panel)
+                local input = panel:item_slot(0x5e01, 3)
+                local slot = panel:hovered_slot()
+                enshwick.log.info(`clicked {input.clicked} hovered {slot and slot.count}`)
+            end)
+            enshwick.ui.extend_item_tooltip(function(item, lines)
+                lines:push({ text = `Uses left: {item.item}`, style = "Positive" })
+            end)
+            "#,
+        );
+        loader.slot_input(torch, Input::Click);
+        loader.hover_slot(Some((0x3_0000_0041, torch, 2, enshwick::Entity(0))));
+        let drawn = loader.draw_screen(HudScreenType::Backpack);
+        assert_eq!(
+            drawn[0].1,
+            [Drawn::ItemSlot {
+                item: torch,
+                count: 3
+            }]
+        );
+        assert!(
+            logged(&loader, "clicked true hovered 2"),
+            "{:?}",
+            loader.logs()
+        );
+        assert_eq!(
+            loader.open_tooltip(torch, enshwick::Entity(900)),
+            [Drawn::Label {
+                text: format!("Uses left: {}", 0x5e01),
+                style: UiWidget::STYLE_POSITIVE
+            }]
+        );
+    }
+
+    #[test]
     fn a_server_script_is_refused_the_interface() {
         let (loader, status) = start(FakeHost::new(), "enshwick.ui.on_frame(function() end)");
         assert!(!status.is_ok());

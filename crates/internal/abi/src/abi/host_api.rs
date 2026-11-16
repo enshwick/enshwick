@@ -21,8 +21,8 @@ use crate::abi::{
     StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str,
     SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
     TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry,
-    UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
-    WeatherSample,
+    UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel,
+    WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -1994,10 +1994,15 @@ pub struct HostApi {
     pub ui_frame:
         extern "system" fn(me: ModHandle, callback: Option<UiFrameFn>, user: *mut c_void) -> Status,
     /// Draws `widget` in the frame `frame` names and writes back its
-    /// `index`, `value` and `result`. Only inside the mod's frame callback
+    /// `index`, `value` and `result`. Only inside the mod's frame callback,
+    /// or inside its tooltip callback with the [`UiTooltipItem`](crate::abi::UiTooltipItem)'s `token` as
+    /// `frame`, where a label adds a line to the item's tooltip
     /// ([`Status::WRONG_THREAD`] elsewhere); [`Status::REFUSED`] for a
-    /// widget outside a window or an [`UiWidget::END`] without one;
-    /// [`Status::MISSING`] for a widget this game build lacks.
+    /// widget outside a window, an [`UiWidget::END`] without one or a tooltip
+    /// line that is not a label; [`Status::BUSY`] for a tooltip line past
+    /// [`UiTooltipItem::MAX_LINES`](crate::abi::UiTooltipItem::MAX_LINES); [`Status::MISSING`] for a widget this game
+    /// build lacks or an item slot of an item the client does not know;
+    /// [`Status::BAD_ARGS`] for a malformed widget or an item slot of count 0.
     pub ui_widget: extern "system" fn(me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status,
     /// Queues `dialog` and calls `callback` with the answer and `user` once
     /// the player gives it, on the thread that draws the interface; dialogs
@@ -2183,6 +2188,20 @@ pub struct HostApi {
     /// without the client's text site turns the text off alone. ABI 12.3.
     pub interaction_prompt:
         extern "system" fn(me: ModHandle, spec: *const InteractionPrompt) -> Status,
+    /// Registers `callback` to add lines to the tooltip and detail panel of
+    /// every item with an entity of its own, after the game's rows. It runs
+    /// on the client's main thread, once each time the tooltip shows another
+    /// item, with a [`UiTooltipItem`](crate::abi::UiTooltipItem) whose token takes up to
+    /// [`UiTooltipItem::MAX_LINES`](crate::abi::UiTooltipItem::MAX_LINES) [`UiWidget::LABEL`] widgets through
+    /// [`HostApi::ui_widget`]; the loader keeps the lines and draws them
+    /// each frame the tooltip shows. Client only, during init:
+    /// [`Status::UNAVAILABLE`] on a server, [`Status::BAD_ARGS`] for a null
+    /// callback. ABI 12.4.
+    pub ui_item_tooltip: extern "system" fn(
+        me: ModHandle,
+        callback: Option<UiTooltipFn>,
+        user: *mut c_void,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2402,5 +2421,6 @@ const _: () = {
     assert!(offset_of!(HostApi, client_command_status) == 24 + 206 * 8);
     assert!(offset_of!(HostApi, terrain_material_add) == 24 + 207 * 8);
     assert!(offset_of!(HostApi, interaction_prompt) == 24 + 208 * 8);
-    assert!(size_of::<HostApi>() == 24 + 209 * 8);
+    assert!(offset_of!(HostApi, ui_item_tooltip) == 24 + 209 * 8);
+    assert!(size_of::<HostApi>() == 24 + 210 * 8);
 };

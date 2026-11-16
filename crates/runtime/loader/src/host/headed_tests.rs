@@ -116,6 +116,7 @@ macro_rules! headed {
             UiExtension,
             UiFrame,
             UiMarker,
+            UiTooltipItem,
             UiWidget,
             VoxelEditRequest,
             VoxelRegion,

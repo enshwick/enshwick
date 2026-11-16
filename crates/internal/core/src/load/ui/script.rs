@@ -77,4 +77,20 @@ impl Load<'_> {
         &mut self,
         handler: impl Fn(crate::ui::ScreenChanged) + Send + Sync + 'static,
     ) -> Result<(), Off>;
+
+    /// Adds lines to the tooltip of every item with an entity of its own,
+    /// with the item and its tooltip's lines lent to `handler`, as
+    /// [`Load::extend_item_tooltip`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::extend_item_tooltip`].
+    #[script(name = "extend_item_tooltip")]
+    pub(crate) fn extend_item_tooltip_script(
+        &mut self,
+        handler: impl Fn(crate::inventory::ItemInstance, enshwick_ui::__internal::ScriptTooltipLines)
+        + Send
+        + Sync
+        + 'static,
+    ) -> Result<(), Off>;
 }

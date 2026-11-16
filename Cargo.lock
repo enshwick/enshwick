@@ -627,6 +627,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-example-item-ui"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+]
+
+[[package]]
 name = "enshwick-example-trading-post"
 version = "0.0.0-dev"
 dependencies = [
@@ -826,6 +833,7 @@ dependencies = [
  "enshwick-abi",
  "enshwick-base",
  "enshwick-content",
+ "enshwick-inventory",
  "enshwick-macros",
  "enshwick-values",
  "enshwick-world",

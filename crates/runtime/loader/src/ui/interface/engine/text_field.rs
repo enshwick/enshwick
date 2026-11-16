@@ -110,8 +110,9 @@ const fn keeps_typing(clicked: bool, typing: bool, editing: bool) -> bool {
 
 /// The input's answer for Enter.
 const ENTERED: u64 = 1;
-/// The hit test's first byte for a click.
-const CLICKED: u8 = 4;
+/// The game's hit and press tests' first byte for a click, which the text
+/// field and the item slot read (client 26430625, decompiler).
+pub(in crate::ui::interface) const CLICKED: u8 = 4;
 /// The field's least height, as the rename dialog's.
 const FIELD_HEIGHT: f32 = 40.0;
 /// The look the rename dialog gives its field at `ui.text_field_look`,

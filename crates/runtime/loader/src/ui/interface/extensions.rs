@@ -116,8 +116,11 @@ impl FrameReads {
         screen_host_position: [0; 3],
     };
 
-    /// The in-game frame `token` with these reads.
+    /// The in-game frame `token` with these reads and the slot of the game's
+    /// screen under the cursor in the last whole frame; on the interface
+    /// thread.
     pub(super) fn frame(self, token: u64) -> UiFrame {
+        let hovered = super::item_slots::hovered();
         UiFrame {
             header: Header::of::<UiFrame>(),
             token,
@@ -129,6 +132,11 @@ impl FrameReads {
             screen_host: self.screen_host,
             screen_host_template: enshwick_core::content::Guid(self.screen_host_template),
             screen_host_position: enshwick_core::ecs::metres(self.screen_host_position),
+            hovered_slot: hovered.slot,
+            hovered_item: enshwick_core::ItemId::new(hovered.item),
+            hovered_count: hovered.count,
+            hovered_pide: enshwick_core::Entity(hovered.pide),
+            reserved_hovered: 0,
         }
     }
 }

@@ -13,6 +13,7 @@ struct Reads {
     verb: u32,
     host: u32,
     host_read: Option<(enshwick_core::content::Guid, [i64; 3])>,
+    hovered: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
 }
 
 /// An interface step before a draw, as the game's `player_ui` runs before
@@ -34,12 +35,15 @@ fn reads() -> Reads {
         verb: s.prompt.as_ref().map_or(0, |&(_, v)| v),
         host: s.screen_host,
         host_read: s.screen_host_read.filter(|_| s.screen_host != 0),
+        hovered: s.hovered,
     })
 }
 
 /// An in-game frame `token` with `open` the screen and `reads` its prompt
-/// and host, which it borrows.
+/// and host, which it borrows. The hovered slot shows only while a screen is
+/// open, since the loader notes it from the slots the game's screens draw.
 fn in_game(token: u64, open: &str, reads: &Reads) -> enshwick_core::abi::UiFrame {
+    let hovered = reads.hovered.filter(|_| !open.is_empty());
     enshwick_core::abi::UiFrame {
         header: Header::of::<enshwick_core::abi::UiFrame>(),
         token,
@@ -55,7 +59,18 @@ fn in_game(token: u64, open: &str, reads: &Reads) -> enshwick_core::abi::UiFrame
         screen_host_position: reads
             .host_read
             .map_or([0.0; 3], |(_, p)| enshwick_core::ecs::metres(p)),
+        hovered_slot: hovered.map_or(0, |(slot, ..)| slot),
+        hovered_item: hovered.map_or(enshwick_core::ItemId::new(0), |(_, item, ..)| item),
+        hovered_count: hovered.map_or(0, |(_, _, count, _)| count),
+        hovered_pide: hovered.map_or(enshwick_core::Entity(0), |(.., pide)| pide),
+        reserved_hovered: 0,
     }
+}
+
+/// The text the fake keys an item slot's inputs by, the slot showing
+/// `item`.
+pub(crate) fn slot_key(item: enshwick_core::ItemId) -> String {
+    format!("item slot {}", item.get())
 }
 
 #[expect(
@@ -415,6 +430,96 @@ impl Installed {
         table::with((), |s| s.inputs.push((text.to_owned(), input)));
     }
 
+    /// Gives the item slot showing `item` an input from the player in the
+    /// next frame drawn: [`Input::Click`], which also points at it, or
+    /// [`Input::Hover`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::test::Input;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.slot_input(enshwick::ItemId::new(0x5e01), Input::Hover);
+    /// ```
+    pub fn slot_input(&self, item: enshwick_core::ItemId, input: Input) {
+        table::with((), |s| s.inputs.push((slot_key(item), input)));
+    }
+
+    /// Points the cursor at a slot of the game's open inventory screen in
+    /// the frames drawn from now on: the slot, the item it holds, how many
+    /// and the item's own entity, entity 0 for none; `None` for no slot.
+    /// Frames read it only while a game screen is open.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::inventory::SlotRef;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let slot = SlotRef::new(Entity(41), 3);
+    /// loader.hover_slot(Some((slot.0, enshwick::ItemId::new(0x5e01), 2, Entity(0))));
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    pub fn hover_slot(
+        &self,
+        slot: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
+    ) {
+        table::with((), |s| s.hovered = slot);
+    }
+
+    /// Opens the tooltip of the item `item` with its own entity `pide`, as
+    /// when the player points at it, and returns the lines each of the mod's
+    /// tooltip callbacks added, in registration order: the loader calls
+    /// them once per item and keeps their lines while the tooltip shows. An
+    /// item with no entity of its own (`pide` 0, such as a stack of
+    /// materials) gets no lines, as in the game.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// let lines = loader.open_tooltip(enshwick::ItemId::new(0x5e01), enshwick::Entity(900));
+    /// assert!(lines.is_empty());
+    /// ```
+    #[must_use]
+    pub fn open_tooltip(
+        &self,
+        item: enshwick_core::ItemId,
+        pide: enshwick_core::Entity,
+    ) -> Vec<Drawn> {
+        if pide == enshwick_core::Entity(0) {
+            return Vec::new();
+        }
+        let tooltips = table::with(Vec::new(), |s| s.tooltips.clone());
+        let mut lines = Vec::new();
+        for (token, handler) in (1u64..).zip(tooltips) {
+            table::with((), |s| {
+                s.tooltip = Some((token, Vec::new()));
+                s.drawing = handler.owner();
+            });
+            let opened = enshwick_core::abi::UiTooltipItem {
+                header: Header::of::<enshwick_core::abi::UiTooltipItem>(),
+                token,
+                item,
+                pide,
+            };
+            // SAFETY: a callback the mod registered with its own pointer.
+            handler.run(|callback, user| unsafe { callback(&raw const opened, user) });
+            let added = table::with(None, |s| {
+                s.drawing = None;
+                s.tooltip.take()
+            });
+            if let Some((_, added)) = added {
+                lines.extend(added);
+            }
+        }
+        lines
+    }
+
     /// The dialogs waiting for an answer, oldest first.
     ///
     /// # Examples
@@ -548,6 +653,13 @@ pub enum Drawn {
         /// Whether a key is bound to the action, so the game drew one.
         bound: bool,
     },
+    /// An item slot in the game's style.
+    ItemSlot {
+        /// The item it shows.
+        item: enshwick_core::ItemId,
+        /// How many it shows.
+        count: u32,
+    },
 }
 
 /// A marker the mod set on the map, as [`Installed::markers`] reports it.
@@ -585,6 +697,9 @@ pub enum Input {
     Pick(usize),
     /// Presses Back (Escape, B) over a window, given by its id.
     Back,
+    /// Points the cursor at an item slot, given with
+    /// [`Installed::slot_input`].
+    Hover,
 }
 
 /// A dialog the mod queued, as [`Installed::dialogs`] reports it.

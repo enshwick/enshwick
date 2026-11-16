@@ -249,3 +249,4 @@ names every entry of the golden layout once, in that order.
 | `client_command_status` | game | fake states and every cancel reason, Luau | client |
 | `terrain_material_add` | game | — | client |
 | `interaction_prompt` | game | — | with a player, client |
+| `ui_item_tooltip` | game | — | client |

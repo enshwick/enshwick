@@ -108,6 +108,7 @@ pub use knowledge::vanilla::{
     VANILLA_EXPERIENCE, VANILLA_PERK, VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST,
     VANILLA_QUEST_EXPERIENCE, VANILLA_UNNAMED_EXPERIENCE, VANILLA_WORLD_KNOWLEDGE,
 };
+pub(crate) use ui::slot_key;
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 #[cfg(feature = "typed")]
 pub use world::tags::TAG_CONTAINER;

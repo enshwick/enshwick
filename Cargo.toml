@@ -9,6 +9,7 @@ members = [
     "examples/chest-panel",
     "examples/haggling",
     "examples/horn",
+    "examples/item-ui",
     "examples/trading-post",
     "examples/hello-c",
     "examples/waypoints",

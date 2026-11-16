@@ -10,3 +10,5 @@ pub use crate::ui::LoadMethods as _;
 pub use crate::ui::extension::LoadMethods as _;
 pub use crate::ui::hud::LoadMethods as _;
 pub use crate::ui::script::LoadMethods as _;
+#[cfg(feature = "unstable")]
+pub use crate::ui::tooltip::LoadMethods as _;

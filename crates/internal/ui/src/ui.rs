@@ -17,7 +17,11 @@
 //! `unstable` feature, shows the mod's markers on the map until it sets
 //! others. `Load::extend_screen`, with the `unstable` feature, adds a panel
 //! at an edge of one of the game's screens, such as a storage chest's, shown
-//! and hidden with it.
+//! and hidden with it. `Frame::item_slot` draws an item slot as the
+//! game's inventory screens do, `Frame::hovered_slot` reads the slot of
+//! the game's own screen under the cursor, and
+//! `Load::extend_item_tooltip` adds lines to the game's item tooltips;
+//! all three with the `unstable` feature.
 //!
 //! Everything here is client only: [`Load::ui`](../struct.Load.html#method.ui) and [`Load::on_frame`](../struct.Load.html#method.on_frame) turn
 //! a mod's server part away with [`Off`].
@@ -61,6 +65,10 @@ mod map;
 #[cfg(any(feature = "unstable", feature = "fake"))]
 pub(crate) mod screens;
 pub(crate) mod script;
+#[cfg(feature = "unstable")]
+mod slots;
+#[cfg(feature = "unstable")]
+pub(crate) mod tooltip;
 mod widgets;
 
 pub use dialog::{Dialog, Response};
@@ -79,6 +87,10 @@ pub use hud::{Anchor, Hud};
 pub use map::{MAX_MARKERS, Marker, MarkerColor};
 #[cfg(feature = "unstable")]
 pub use screens::HudScreenType;
+#[cfg(feature = "unstable")]
+pub use slots::SlotInput;
+#[cfg(feature = "unstable")]
+pub use tooltip::TooltipLines;
 
 /// The most markers a mod shows on the map at once, which the fake host
 /// holds to as well.

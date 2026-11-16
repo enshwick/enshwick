@@ -8,6 +8,7 @@ and none is released. The book's own examples cover the smaller cases.
 | ----------------------------------------------------- | ----------------------------------------------------------- |
 | [trading-post](trading-post/)                         | publishing a service, sending an event, defining a point    |
 | [chest-panel](chest-panel/)                           | a panel beside the storage chest screen that runs an action |
+| [item-ui](item-ui/)                                   | item slots beside the backpack, the slot under the cursor and item tooltip lines |
 | [haggling](haggling/)                                 | extending another mod's rule at its extension point         |
 | [hello-c](hello-c/)                                   | a mod in C and one in C++, against `enshwick.h`             |
 | [horn](horn/)                                         | a control on G that runs an action, one that follows interact |

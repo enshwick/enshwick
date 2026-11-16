@@ -833,8 +833,9 @@ const _: () = {
     assert!(size_of::<CraftCheck>() == 8 + 16);
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24 + 8);
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
-    assert!(size_of::<UiFrame>() == 64 + 16 + 24);
-    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16);
+    assert!(size_of::<UiFrame>() == 64 + 16 + 24 + 24);
+    assert!(size_of::<UiTooltipItem>() == 8 + 8 + 8);
+    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16 + 8);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(size_of::<UiDialog>() == 8 + 48 + 8);
     assert!(size_of::<GameEventData>() == 24);

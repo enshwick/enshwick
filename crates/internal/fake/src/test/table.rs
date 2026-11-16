@@ -19,7 +19,7 @@ use enshwick_core::abi::{
     InteractionFilterFn, JoinRuleFn, KnowledgeInfo, KnowledgeInputFilterFn, Level, MidHookFn,
     ModEventFn, ModHandle, NetMessageFn, RenameFilterFn, ResourceKey, ResourcePatchFn,
     SkillCheckFn, SpawnRequest, StatusFn, Str, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainMaterialInfo, UiAnswerFn, UiFrameFn, WeatherFront,
+    TeleportRequest, TerrainMaterialInfo, UiAnswerFn, UiFrameFn, UiTooltipFn, WeatherFront,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource};
@@ -269,6 +269,13 @@ pub(crate) struct State {
     /// The client commands mods queued, each with its kind, target and
     /// status, as the test drives them.
     pub(crate) client_commands: Vec<(u64, u32, String, enshwick_core::abi::ClientCommandStatus)>,
+    /// The slot of an inventory screen under the cursor, as the frames
+    /// hear it: the packed slot, item, count and item entity.
+    pub(crate) hovered: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
+    /// Item tooltip callbacks.
+    pub(crate) tooltips: Vec<Registered<UiTooltipFn>>,
+    /// The lines the tooltip callback running now added, with its token.
+    pub(crate) tooltip: Option<(u64, Vec<super::Drawn>)>,
     /// What the HUD drawing now drew, with each item's anchor, while one
     /// draws.
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
@@ -487,6 +494,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         frames: Vec::new(),
         huds: Vec::new(),
         extensions: Vec::new(),
+        hovered: None,
+        tooltips: Vec::new(),
+        tooltip: None,
         drawing: None,
         extending: None,
         open_screen: "",
@@ -794,4 +804,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     client_command_status,
     terrain_material_add,
     interaction_prompt,
+    ui_item_tooltip,
 };

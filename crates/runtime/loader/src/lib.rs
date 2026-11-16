@@ -54,6 +54,12 @@ pub use content::{served::bench_text_lookup, textures::bench_texture_request};
 pub use engine::pages::{forget as forget_read_only, read_only};
 #[cfg(windows)]
 pub use parts::table_ids;
+#[cfg(windows)]
+#[doc(hidden)]
+pub use ui::interface::item_slots::bench_item_slot;
+#[cfg(windows)]
+#[doc(hidden)]
+pub use ui::interface::tooltips::bench_tooltip_lines;
 
 /// The loader's `HostApi` table, for the benchmark of one entry call.
 #[cfg(windows)]
