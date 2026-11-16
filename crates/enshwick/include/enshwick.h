@@ -1176,7 +1176,7 @@ typedef struct EnshwickCommandInfo {
 } EnshwickCommandInfo;
 
 // A stack about to enter one slot of a container, as
-// `HostApi::container_rule` hands it on.
+// `EnshwickHostApi.container_rule` hands it on.
 // ABI 12.9.
 typedef struct EnshwickContainerPut {
   // Size and version of this struct.
@@ -7199,9 +7199,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1728, "size of HostApi");
-ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1736, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1744, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7418,10 +7416,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_item_tooltip) == 1696, "offs
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_permissions) == 1704, "offset of HostApi.change_permissions");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_settled) == 1712, "offset of HostApi.transaction_settled");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1720, "offset of HostApi.prop_placement_info");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
-ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, container_rule) == 1720, "offset of Interaction.container_rule");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, show_pickup) == 1728, "offset of Interaction.show_pickup");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, container_rule) == 1728, "offset of HostApi.container_rule");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, show_pickup) == 1736, "offset of HostApi.show_pickup");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
