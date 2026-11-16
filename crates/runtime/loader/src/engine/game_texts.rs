@@ -38,6 +38,7 @@ pub(crate) struct TextLayout {
     pub tag_text: usize,
 }
 
+#[cfg(windows)]
 impl TextLayout {
     /// The layout `reflection` gives; `None` when it lacks a field.
     fn read(reflection: &enshwick_gamedata::reflect::Reflection<'_>) -> Option<Self> {
@@ -318,6 +319,7 @@ mod tests {
     /// developers wrote that its row gives, and its name is that text in
     /// Rust casing.
     #[test]
+    #[cfg(windows)]
     fn every_verb_is_the_game_s_text_of_its_id() {
         use enshwick_core::interactions::Verb;
         use enshwick_gamedata::reflect::{Image, Layout, Reflection};
