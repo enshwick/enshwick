@@ -16,6 +16,12 @@ use crate::raw::read_at;
 use crate::{BaseLoad, Off};
 use crate::{Entity, ItemId, RecipeId};
 
+#[cfg(feature = "unstable")]
+mod spawn;
+
+#[cfg(feature = "unstable")]
+pub use spawn::{PlayerSpawnInfoChangeEvent, UniqueSceneId};
+
 /// `Some(entity)` unless it is [`Entity::NONE`].
 pub(super) fn some(entity: Entity) -> Option<Entity> {
     (!entity.is_none()).then_some(entity)

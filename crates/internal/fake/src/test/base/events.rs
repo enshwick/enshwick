@@ -127,7 +127,7 @@ impl Installed {
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
     pub fn raise_game_event(&self, type_hash: u32, bytes: &[u8]) -> usize {
-        raise_in(|s| &s.game_events, type_hash, bytes)
+        raise_server(type_hash, bytes)
     }
 
     /// Hands the event of `type_hash` with `bytes` in the client's own world
@@ -243,6 +243,12 @@ type GameEventHandlers = Vec<(u32, table::Registered<enshwick_core::abi::GameEve
 
 /// Hands the game event of `type_hash` with `bytes` to every handler of the
 /// list `kept` picks for that type or for every type; returns how many ran.
+/// Hands a server game event to the mod's handlers, as the loader raises
+/// one the game or a mod pushed; returns how many ran.
+pub(crate) fn raise_server(type_hash: u32, bytes: &[u8]) -> usize {
+    raise_in(|s| &s.game_events, type_hash, bytes)
+}
+
 fn raise_in(kept: fn(&table::State) -> &GameEventHandlers, type_hash: u32, bytes: &[u8]) -> usize {
     let handlers: Vec<_> = table::with(Vec::new(), |s| {
         kept(s)

@@ -848,6 +848,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     prop_placement_info,
     container_rule: containers::container_rule,
     show_pickup: containers::show_pickup,
+    respawn_point: crate::test::world::respawn::respawn_point,
+    set_respawn_point: crate::test::world::respawn::set_respawn_point,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

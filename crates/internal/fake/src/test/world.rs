@@ -10,6 +10,7 @@ pub(crate) mod altars;
 pub(crate) mod buffs;
 pub(crate) mod players;
 pub(crate) mod props;
+pub(crate) mod respawn;
 pub(crate) mod saves;
 #[cfg(feature = "typed")]
 pub(crate) mod tags;

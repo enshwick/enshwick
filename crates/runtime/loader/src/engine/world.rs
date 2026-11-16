@@ -666,12 +666,46 @@ pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]
         loader,
         crate::engine::catalogue::ids::CURRENT_TRANSFORM,
     )?;
-    let data = component(loader, entity, hash).ok()?;
+    field(loader, entity, hash, 0).ok()
+}
+
+/// Where `entity` stands, in 32.32 fixed-point metres, and which way it
+/// faces, both from one read of its `CurrentTransform`; on the server's game
+/// thread.
+pub(crate) fn pose(loader: &Loader, entity: Entity) -> Option<([i64; 3], [f32; 4])> {
+    use crate::engine::catalogue::{component_hash, ids, offset};
+    let hash = component_hash(loader, ids::CURRENT_TRANSFORM)?;
+    let facing = offset(loader, ids::CURRENT_TRANSFORM_TRANSFORM)?
+        + offset(loader, ids::WORLD_TRANSFORM_ORIENTATION)?;
+    let data = component(loader, entity, hash).ok()?.cast::<u8>();
     // SAFETY: `data` is the non-null data of the entity's live
     // `CurrentTransform` (checked by `component`), which starts with its
     // position, three fixed-point `i64`; read on the game thread (checked by
-    // `reader`), which alone writes it.
-    Some(unsafe { enshwick_core::raw::read_at::<[i64; 3]>(data.cast(), 0) })
+    // `reader` inside `component`), which alone writes it.
+    let position = unsafe { enshwick_core::raw::read_at(data, 0) };
+    // SAFETY: the same live `CurrentTransform` holds its orientation
+    // quaternion, four `f32`, at the reflected offset `facing`; read on the
+    // game thread, which alone writes it.
+    let orientation = unsafe { enshwick_core::raw::read_at(data, facing) };
+    Some((position, orientation))
+}
+
+/// The `T` at the reflected offset `at` in `entity`'s component of type
+/// `hash`: its own data, or for the static half of an ECS type the set-up
+/// data its template holds (see [`component`]). On the game thread.
+pub(crate) fn field<T: enshwick_core::raw::AnyBitPattern>(
+    loader: &Loader,
+    entity: Entity,
+    hash: u32,
+    at: usize,
+) -> Result<T, WorldError> {
+    let data = component(loader, entity, hash)?;
+    // SAFETY: `data` is the non-null data of the entity's live component of
+    // type `hash`, or its template's set-up data for a static half (checked
+    // by `component`), and the caller passes the reflected offset of a `T`
+    // field of that type; read on the game thread (checked by `reader`
+    // inside `component`), which alone writes it.
+    Ok(unsafe { enshwick_core::raw::read_at(data.cast(), at) })
 }
 
 /// The item `entity` was placed from, from its `UsedItem`; on the server's

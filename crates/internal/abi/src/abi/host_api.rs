@@ -17,12 +17,13 @@ use crate::abi::{
     LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
     ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
     PointSpec, PointVerdict, PropPlacementInfo, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn,
-    ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
-    SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status,
-    StatusFn, Str, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
-    TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo,
-    TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn,
-    UiMarker, UiTooltipFn, UiWidget, Voxel, WeatherFront, WeatherSample,
+    ResourceKey, ResourcePatchFn, RespawnPointInfo, SaveInfo, ServerWaitFn, ServiceFound,
+    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef,
+    StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo,
+    TickHandle, TransactionInfo, TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn,
+    UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel, WeatherFront,
+    WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2279,6 +2280,29 @@ pub struct HostApi {
     /// the event. ABI 12.9.
     pub show_pickup:
         extern "system" fn(me: ModHandle, character: Entity, item: ItemId, count: u32) -> Status,
+    /// Copies the respawn point of the player whose character is `character`
+    /// into headed `out`: the spawn point entity, its kind and where the
+    /// character respawns. [`Status::MISSING`] for an entity that is no
+    /// player's character, or a character whose respawn point is not in the
+    /// world, where the game falls back to the world's start;
+    /// [`Status::WRONG_THREAD`] off the server's game thread;
+    /// [`Status::UNAVAILABLE`] outside a server and on a build without the
+    /// layout. ABI 12.12.
+    pub respawn_point:
+        extern "system" fn(me: ModHandle, character: Entity, out: *mut RespawnPointInfo) -> Status,
+    /// Makes `spawn_point` the respawn point of the player whose character
+    /// is `character`, as the game does when the character stands in a
+    /// spawn point, and raises the game's `PlayerSpawnInfoChangeEvent` for
+    /// it when the point names a base or a scene. While the character
+    /// stands in another spawn point, the game sets that one back at its
+    /// next step. Nothing changes when a call fails. [`Status::BAD_ARGS`] for an entity that is no
+    /// spawn point, or one of kind [`RespawnPointInfo::NO_RESPAWN`];
+    /// [`Status::MISSING`] for an entity that is no player's character;
+    /// [`Status::WRONG_THREAD`] off the server's game thread or during a
+    /// step; [`Status::UNAVAILABLE`] outside a server and on a build without
+    /// the layout. ABI 12.12.
+    pub set_respawn_point:
+        extern "system" fn(me: ModHandle, character: Entity, spawn_point: Entity) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2504,5 +2528,7 @@ const _: () = {
     assert!(offset_of!(HostApi, prop_placement_info) == 24 + 212 * 8);
     assert!(offset_of!(HostApi, container_rule) == 24 + 213 * 8);
     assert!(offset_of!(HostApi, show_pickup) == 24 + 214 * 8);
-    assert!(size_of::<HostApi>() == 24 + 215 * 8);
+    assert!(offset_of!(HostApi, respawn_point) == 24 + 215 * 8);
+    assert!(offset_of!(HostApi, set_respawn_point) == 24 + 216 * 8);
+    assert!(size_of::<HostApi>() == 24 + 217 * 8);
 };

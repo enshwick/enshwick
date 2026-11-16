@@ -3,6 +3,65 @@ use crate::i18n::Language;
 use crate::{Entity, PlayerKey};
 
 use super::{Notice, Player, World, blank_info, online};
+#[cfg(feature = "unstable")]
+use crate::WorldError;
+
+/// Where a player respawns, from [`World::respawn_point`].
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Examples
+///
+/// See [`World::respawn_point`].
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
+pub struct RespawnPoint {
+    /// The spawn point entity.
+    pub entity: Entity,
+    /// Where the spawn point stands and which way it faces.
+    pub transform: super::WorldTransform,
+    /// What kind of spawn point it is.
+    pub kind: PlayerSpawnType,
+}
+
+/// The kind of a spawn point, the game's `PlayerSpawnType`.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Examples
+///
+/// See [`World::respawn_point`].
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub enum PlayerSpawnType {
+    /// The world's start location.
+    StartLocation,
+    /// A save point out in the world, such as an Ancient Spire's.
+    SavePoint,
+    /// A Flame Altar's base.
+    Base,
+    /// A spawn point nobody respawns at.
+    NoRespawn,
+    /// A kind this crate does not name.
+    Other,
+}
+
+#[cfg(feature = "unstable")]
+impl PlayerSpawnType {
+    /// The kind a [`RespawnPointInfo`](crate::abi::RespawnPointInfo) names.
+    const fn from_abi(kind: u32) -> Self {
+        use crate::abi::RespawnPointInfo as Info;
+        match kind {
+            Info::START_LOCATION => Self::StartLocation,
+            Info::SAVE_POINT => Self::SavePoint,
+            Info::BASE => Self::Base,
+            Info::NO_RESPAWN => Self::NoRespawn,
+            _ => Self::Other,
+        }
+    }
+}
 
 #[crate::script(players)]
 impl World {
@@ -202,6 +261,96 @@ impl World {
 
     pub(super) fn chat(self, to: PlayerKey, text: &str) {
         let _queued = (self.0.host.api().chat)(self.0.host.handle(), to, Str::new(text));
+    }
+
+    /// Where `player` respawns: the spawn point their character holds, its
+    /// kind and where it stands; `None` while the point is not in the world,
+    /// where the game falls back to the world's start, or the player has
+    /// left. The game moves it when the character stands in another spawn
+    /// point, and [`PlayerSpawnInfoChangeEvent`](crate::game_events::PlayerSpawnInfoChangeEvent)
+    /// tells when.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::WrongThread`] off the server's game thread;
+    /// [`WorldError::Unavailable`] where no server runs or on a build
+    /// without the layout.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::{PlayerSpawnType, World};
+    ///
+    /// fn respawns_at_a_base(world: World, player: &enshwick::world::Player) -> bool {
+    ///     matches!(world.respawn_point(player), Ok(Some(point)) if point.kind == PlayerSpawnType::Base)
+    /// }
+    /// ```
+    #[script]
+    #[cfg(feature = "unstable")]
+    pub fn respawn_point(self, player: &Player) -> Result<Option<RespawnPoint>, WorldError> {
+        let mut info = crate::abi::RespawnPointInfo {
+            header: crate::abi::Header::of::<crate::abi::RespawnPointInfo>(),
+            entity: Entity(0),
+            kind: crate::abi::RespawnPointInfo::OTHER,
+            position: [0.0; 3],
+            orientation: [0.0; 4],
+        };
+        let status =
+            (self.0.host.api().respawn_point)(self.0.host.handle(), player.entity, &raw mut info);
+        if status == crate::abi::Status::MISSING {
+            return Ok(None);
+        }
+        WorldError::from_status(status)?;
+        Ok(Some(RespawnPoint {
+            entity: info.entity,
+            transform: super::WorldTransform {
+                position: info.position,
+                orientation: info.orientation,
+            },
+            kind: PlayerSpawnType::from_abi(info.kind),
+        }))
+    }
+
+    /// Makes `spawn_point` where `player` respawns, as the game does when
+    /// their character stands in it, and raises the game's
+    /// [`PlayerSpawnInfoChangeEvent`](crate::game_events::PlayerSpawnInfoChangeEvent)
+    /// with the point's base, else its scene; a point that names neither
+    /// raises none, as in the game. While the character stands in another
+    /// spawn point, the game sets that one back at its next step. A query by
+    /// the spawn points' component lists them. On the server's game thread
+    /// between steps.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::NotASpawnPoint`] for an entity that is no spawn point,
+    /// or one of kind [`PlayerSpawnType::NoRespawn`];
+    /// [`WorldError::Gone`] for a player no longer in game;
+    /// [`WorldError::WrongThread`] off the game thread or inside a step;
+    /// [`WorldError::Unavailable`] where no server runs or on a build
+    /// without the layout.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn send_home(world: enshwick::world::World, player: &enshwick::world::Player, altar: enshwick::Entity) {
+    ///     if let Err(why) = world.set_respawn_point(player, altar) {
+    ///         enshwick::warn!("{} keeps their respawn point: {why}", player.name);
+    ///     }
+    /// }
+    /// ```
+    #[script]
+    #[cfg(feature = "unstable")]
+    pub fn set_respawn_point(self, player: &Player, spawn_point: Entity) -> Result<(), WorldError> {
+        let status =
+            (self.0.host.api().set_respawn_point)(self.0.host.handle(), player.entity, spawn_point);
+        if status == crate::abi::Status::BAD_ARGS {
+            return Err(WorldError::NotASpawnPoint);
+        }
+        WorldError::check(status, WorldError::Gone)
     }
 
     /// Every connected player with a character in the world.

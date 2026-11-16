@@ -36,6 +36,19 @@ fn account(key: enshwick_core::PlayerKey) -> Result<u64, Status> {
 }
 
 entries! {
+    fn respawn_point(
+        loader as Caller,
+        character: Entity,
+        out as HeadedOut<api_frame::RespawnPointInfo>,
+    ) -> Status {
+        out.put(crate::world::respawn::respawn_point(loader, character)?)
+    }
+
+    fn set_respawn_point(loader as Caller, character: Entity, spawn_point: Entity) -> Status {
+        crate::world::respawn::set_respawn_point(loader, character, spawn_point)?;
+        Ok(())
+    }
+
     fn prop_placement_info(
         loader as Caller,
         item: enshwick_core::ItemId,

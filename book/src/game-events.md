@@ -62,6 +62,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 | | `loot_all` |
 | `HandleEquipmentSlotChangedEvent` | `player_entity_id` and `equipment_slot` |
 | `RevivedPlayerEvent` | `target_entity_id` and `source_entity_id` |
+| `PlayerSpawnInfoChangeEvent` | `player_character_id` and `base_id`; unstable |
+| | `scene_instance_id`, for a save point outside a base |
 
 The `block` of a building event holds four values:
 

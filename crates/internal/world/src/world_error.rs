@@ -76,6 +76,12 @@ pub enum WorldError {
     #[error("not a prop")]
     #[cfg(feature = "unstable")]
     NotAProp,
+    /// The entity is no spawn point a player respawns at.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    #[error("not a spawn point players respawn at")]
+    #[cfg(feature = "unstable")]
+    NotASpawnPoint,
 }
 
 crate::load::off_from!(WorldError);

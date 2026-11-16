@@ -239,4 +239,6 @@ pub(crate) static API: HostApi = HostApi {
     prop_placement_info,
     container_rule,
     show_pickup,
+    respawn_point,
+    set_respawn_point,
 };

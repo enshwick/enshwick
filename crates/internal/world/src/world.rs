@@ -48,6 +48,8 @@ pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use join::Join;
 #[cfg(feature = "unstable")]
+pub use players::{PlayerSpawnType, RespawnPoint};
+#[cfg(feature = "unstable")]
 pub use prop_state::{HeldState, PropState};
 #[cfg(feature = "unstable")]
 pub(crate) use props::span;

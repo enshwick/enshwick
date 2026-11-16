@@ -90,6 +90,7 @@ macro_rules! headed {
             PlayerInfo,
             PropPlace,
             PropPlacementInfo,
+            RespawnPointInfo,
             PropRemove,
             PointHandle,
             PointLink,

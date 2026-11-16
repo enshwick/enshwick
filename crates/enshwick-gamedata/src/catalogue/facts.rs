@@ -1345,6 +1345,82 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::TargetInfo", "targetEntityId", ENTITY_ID),
     ),
     (ids::TARGET_TYPE, Fact::Type("keen::ecs::TargetType")),
+    (
+        ids::TARGET_TYPE_SPAWN_POINT,
+        Fact::Constant {
+            ty: "keen::ecs::TargetType",
+            name: "SpawnPoint",
+        },
+    ),
+    (
+        ids::PLAYER_SPAWN_POINT,
+        Fact::Type("keen::ecs::PlayerSpawnPoint"),
+    ),
+    (
+        ids::PLAYER_SPAWN_POINT_TARGET,
+        offset("keen::ecs::PlayerSpawnPoint", "target", PLAYER_SPAWN_TYPE),
+    ),
+    (
+        ids::PLAYER_SPAWN_TYPE_START_LOCATION,
+        Fact::Constant {
+            ty: PLAYER_SPAWN_TYPE,
+            name: "StartLocation",
+        },
+    ),
+    (
+        ids::PLAYER_SPAWN_TYPE_SAVE_POINT,
+        Fact::Constant {
+            ty: PLAYER_SPAWN_TYPE,
+            name: "SavePoint",
+        },
+    ),
+    (
+        ids::PLAYER_SPAWN_TYPE_BASE,
+        Fact::Constant {
+            ty: PLAYER_SPAWN_TYPE,
+            name: "Base",
+        },
+    ),
+    (
+        ids::PLAYER_SPAWN_TYPE_NO_RESPAWN,
+        Fact::Constant {
+            ty: PLAYER_SPAWN_TYPE,
+            name: "NoRespawn",
+        },
+    ),
+    (
+        ids::BASE_ID_COMPONENT_BASE_ID,
+        offset("keen::ecs::BaseIdComponent", "baseId", BASE_ID),
+    ),
+    (ids::STORED_SCENE_ID, Fact::Type("keen::ecs::StoredSceneId")),
+    (
+        ids::STORED_SCENE_ID_UNIQUE_ID,
+        offset("keen::ecs::StoredSceneId", "uniqueId", UNIQUE_SCENE_ID),
+    ),
+    (
+        ids::PLAYER_SPAWN_INFO_CHANGE_EVENT,
+        Fact::Type("keen::ecs::PlayerSpawnInfoChangeEvent"),
+    ),
+    (
+        ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_CHARACTER,
+        offset(
+            "keen::ecs::PlayerSpawnInfoChangeEvent",
+            "playerCharacterId",
+            CHARACTER_ID,
+        ),
+    ),
+    (
+        ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_BASE,
+        offset("keen::ecs::PlayerSpawnInfoChangeEvent", "baseId", BASE_ID),
+    ),
+    (
+        ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_SCENE,
+        offset(
+            "keen::ecs::PlayerSpawnInfoChangeEvent",
+            "sceneInstanceId",
+            HASH_KEY_32,
+        ),
+    ),
     (ids::HUD_SCREEN_TYPE, Fact::Type("keen::HudScreenType")),
     (
         ids::HUD_SCREEN_IN_GAME,
@@ -2692,3 +2768,18 @@ const IMPACT_CONFIGURATION_ARRAY: &str = "keen::impact::ConfigurationArray";
 
 /// The effect resources a buff type loads.
 const VFX_REFERENCES: &str = "keen::VfxResourceReferences";
+
+/// The kind of a spawn point a player respawns at.
+const PLAYER_SPAWN_TYPE: &str = "keen::ecs::PlayerSpawnType";
+
+/// A base's GUID.
+const BASE_ID: &str = "keen::BaseId";
+
+/// A character's GUID.
+const CHARACTER_ID: &str = "keen::CharacterId";
+
+/// A scene entity's id in the save.
+const UNIQUE_SCENE_ID: &str = "keen::UniqueSceneId";
+
+/// A 32-bit hashed key.
+const HASH_KEY_32: &str = "keen::HashKey32";

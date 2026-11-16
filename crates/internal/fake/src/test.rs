@@ -357,6 +357,10 @@ pub struct FakeHost {
     /// Each item's placement box, lowest and highest corner before it
     /// turns.
     placement_boxes: Vec<(u32, [f32; 3], [f32; 3])>,
+    /// The spawn points in the world.
+    spawn_points: Vec<world::respawn::FakeSpawnPoint>,
+    /// Each character's respawn point, by the character's entity.
+    respawn_points: FxHashMap<u32, enshwick_core::Entity>,
     building_materials: FxHashMap<u32, u8>,
 }
 
@@ -455,6 +459,8 @@ impl FakeHost {
             growing_items: Vec::new(),
             no_prop_items: Vec::new(),
             placement_boxes: Vec::new(),
+            spawn_points: Vec::new(),
+            respawn_points: FxHashMap::default(),
             building_materials: FxHashMap::default(),
         }
     }

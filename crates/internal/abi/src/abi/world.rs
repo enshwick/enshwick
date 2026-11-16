@@ -151,6 +151,56 @@ impl TeleportRequest {
     pub const ORIENTED: u32 = 2;
 }
 
+/// A player's respawn point, which
+/// [`HostApi::respawn_point`](super::HostApi::respawn_point) fills: the spawn
+/// point entity the character respawns at and where it stands.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, RespawnPointInfo};
+///
+/// let altar = RespawnPointInfo {
+///     header: Header::of::<RespawnPointInfo>(),
+///     entity: enshwick::Entity(40),
+///     kind: RespawnPointInfo::BASE,
+///     position: [100.0, 40.0, -20.0],
+///     orientation: [0.0, 0.0, 0.0, 1.0],
+/// };
+/// assert_eq!(altar.kind, RespawnPointInfo::BASE);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct RespawnPointInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The spawn point entity.
+    pub entity: Entity,
+    /// The spawn point's kind: [`RespawnPointInfo::START_LOCATION`],
+    /// [`RespawnPointInfo::SAVE_POINT`], [`RespawnPointInfo::BASE`],
+    /// [`RespawnPointInfo::NO_RESPAWN`] or [`RespawnPointInfo::OTHER`].
+    pub kind: u32,
+    /// Where the character respawns, in metres.
+    pub position: Metres,
+    /// The orientation it respawns in, a quaternion `x, y, z, w`.
+    pub orientation: [f32; 4],
+}
+
+impl_headed!(RespawnPointInfo);
+
+impl RespawnPointInfo {
+    /// The world's start location.
+    pub const START_LOCATION: u32 = 0;
+    /// A save point out in the world.
+    pub const SAVE_POINT: u32 = 1;
+    /// A Flame Altar's base.
+    pub const BASE: u32 = 2;
+    /// A spawn point nobody respawns at.
+    pub const NO_RESPAWN: u32 = 3;
+    /// A kind the loader does not know on this build.
+    pub const OTHER: u32 = u32::MAX;
+}
+
 /// A request to spawn an entity from a template, for [`HostApi::spawn`](super::HostApi::spawn).
 ///
 /// # Examples
