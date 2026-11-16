@@ -124,6 +124,28 @@ impl Installed {
         })
     }
 
+    /// The prompt the mod gave the objects placed from `item`, as the
+    /// loader keeps it; `None` for an item without one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.prompt(enshwick::ItemId::new(0x5e01)), None);
+    /// ```
+    #[must_use]
+    pub fn prompt(
+        &self,
+        item: enshwick_core::ItemId,
+    ) -> Option<enshwick_core::abi::InteractionPrompt> {
+        table::with(None, |s| {
+            s.interaction_prompts
+                .iter()
+                .find(|p| p.item == item)
+                .copied()
+        })
+    }
+
     /// Asks the mod's craft filters about `call`, as the server does
     /// before it crafts; whether the craft goes ahead.
     ///

@@ -1066,6 +1066,38 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::INTERACTION_OFFER_DISABLED,
         offset("keen::ecs::InteractionOfferRuntime", "isDisabled", BOOL),
     ),
+    (
+        ids::INTERACTION_OFFER_OVERRIDE_SEQUENCE,
+        offset(
+            "keen::ecs::InteractionOfferRuntime",
+            "overrideSequence",
+            "keen::actor::SequenceResourceId",
+        ),
+    ),
+    (
+        ids::INTERACTION_OFFER_OVERRIDE_VERB,
+        offset(
+            "keen::ecs::InteractionOfferRuntime",
+            "overrideVerbLocaId",
+            LOCA_TAG_ID,
+        ),
+    ),
+    (
+        ids::ACTOR_SEQUENCE,
+        Fact::Type("keen::actor::ActorSequenceResource"),
+    ),
+    (
+        ids::ACTOR_SEQUENCE_SUB_SEQUENCES,
+        offset(
+            "keen::actor::ActorSequenceResource",
+            "subSequences",
+            "keen::BlobArray<keen::actor::ActorSubSequenceResource>",
+        ),
+    ),
+    (
+        ids::SEQUENCE_NAME,
+        offset("keen::SequenceResource", "name", "keen::BlobString"),
+    ),
     (ids::PLAYER_INPUT, Fact::Type("keen::ecs::PlayerInput")),
     (
         ids::PLAYER_INPUT_DIGITAL,

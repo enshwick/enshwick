@@ -98,6 +98,8 @@ mod input;
 mod input_hint;
 mod interaction_filter;
 #[cfg(feature = "unstable")]
+mod interaction_prompts;
+#[cfg(feature = "unstable")]
 mod interaction_targets;
 mod internal_crates;
 #[cfg(feature = "unstable")]

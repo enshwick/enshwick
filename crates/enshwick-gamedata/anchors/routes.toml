@@ -818,6 +818,20 @@ take = "value"
 range = [0x15e0, 0x5780]
 
 [[route]]
+id = "ui.prompt_context"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov rax,[rbp+*]", "movups [rsi+?],xmm0", "movsd xmm0,[rbp+?]", "movsd [rsi+?],xmm0", "mov rcx,[rax]"]
+take = "value"
+range = [0x16af0, 0x5abc0]
+
+[[route]]
+id = "ui.prompt_site"
+sides = ["client"]
+system = "player_ui"
+shape = ["cmp [rsi+?],bl", "je ?b", "mov [rsi+?],bl", "mov rdi,[rsp+?]"]
+
+[[route]]
 id = "ui.screen_host"
 sides = ["client"]
 system = "player_ui"

@@ -60,6 +60,7 @@ macro_rules! headed {
             GameEventData,
             HookSpec,
             Interaction,
+            InteractionPrompt,
             ItemAction,
             InventoryRequest,
             InventoryResult,

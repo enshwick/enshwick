@@ -46,6 +46,14 @@ entries! {
         )
     }
 
+    fn interaction_prompt(me as Mod, spec as Headed<api_frame::InteractionPrompt>) -> Status {
+        me.claim(
+            "interaction prompt",
+            Mode::Exclusive,
+            crate::actions::interactions::prompts::register(me.loader, me.index, &spec),
+        )
+    }
+
     fn craft_filter(me as Mod, callback as Callback<api_frame::CraftFilterFn>, user: *mut core::ffi::c_void) -> Status {
         me.claim(
             "crafting veto",

@@ -248,3 +248,4 @@ names every entry of the golden layout once, in that order.
 | `client_command` | game | fake client/server, bounds, command and handoff tests, Luau | client |
 | `client_command_status` | game | fake states and every cancel reason, Luau | client |
 | `terrain_material_add` | game | — | client |
+| `interaction_prompt` | game | — | with a player, client |

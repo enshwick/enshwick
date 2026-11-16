@@ -96,6 +96,73 @@ impl Interaction {
 pub type InteractionFilterFn =
     unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
 
+/// How the prompt of every object placed from one item reads and what its
+/// press does, as [`HostApi::interaction_prompt`](super::HostApi::interaction_prompt)
+/// takes it. ABI 12.3.
+///
+/// The server writes [`verb`](Self::verb) and the replaced action, so every
+/// client sees them; a client with Enshwick also shows [`text`](Self::text)
+/// in the verb's place.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, InteractionPrompt};
+///
+/// let prompt = InteractionPrompt {
+///     header: Header::of::<InteractionPrompt>(),
+///     item: enshwick::ItemId::new(0x5e01),
+///     verb: 0xc22a_47e8,
+///     text: 0,
+///     flags: InteractionPrompt::REPLACE_ACTION,
+/// };
+/// assert_eq!(prompt.flags, InteractionPrompt::REPLACE_ACTION);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct InteractionPrompt {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The item the objects were placed from (`UsedItem`); never 0.
+    pub item: ItemId,
+    /// The game's `LocaTagId` of the verb every client shows; 0 keeps the
+    /// object's own verb.
+    pub verb: u32,
+    /// The `LocaTagId` of one of the mod's own texts, shown in the verb's
+    /// place on clients with Enshwick; 0 for none.
+    pub text: u32,
+    /// [`REPLACE_ACTION`](Self::REPLACE_ACTION) or 0.
+    pub flags: u32,
+}
+
+impl_headed!(InteractionPrompt);
+
+impl InteractionPrompt {
+    /// The press runs the game's empty interaction instead of the object's
+    /// own action, such as opening a chest, so only the mod's action runs.
+    pub const REPLACE_ACTION: u32 = 1;
+
+    /// Whether a host takes the prompt: an item, no unknown flag, and a
+    /// verb, a text or the replaced action.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, InteractionPrompt};
+    ///
+    /// let mut prompt = InteractionPrompt { header: Header::of::<InteractionPrompt>(), item: enshwick::ItemId::new(0x5e01), verb: 0, text: 0, flags: 0 };
+    /// assert!(!prompt.is_valid(), "it changes nothing");
+    /// prompt.flags = InteractionPrompt::REPLACE_ACTION;
+    /// assert!(prompt.is_valid());
+    /// ```
+    #[must_use]
+    pub const fn is_valid(&self) -> bool {
+        let known = self.flags & !Self::REPLACE_ACTION == 0;
+        let changes = self.flags != 0 || self.verb != 0 || self.text != 0;
+        self.item.get() != 0 && known && changes
+    }
+}
+
 /// The game asking whether a character unlocked a skill node, as
 /// [`HostApi::skill_override`](super::HostApi::skill_override) hands it on.
 ///

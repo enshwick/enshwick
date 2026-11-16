@@ -288,6 +288,11 @@ ids! {
     INTERACTION_OFFER_ACCEPT_TIME = "interaction_offer.accept_time";
     INTERACTION_OFFER_ACCEPT_GUEST = "interaction_offer.accept_guest";
     INTERACTION_OFFER_DISABLED = "interaction_offer.disabled";
+    INTERACTION_OFFER_OVERRIDE_SEQUENCE = "interaction_offer.override_sequence";
+    INTERACTION_OFFER_OVERRIDE_VERB = "interaction_offer.override_verb";
+    ACTOR_SEQUENCE = "actor_sequence";
+    ACTOR_SEQUENCE_SUB_SEQUENCES = "actor_sequence.sub_sequences";
+    SEQUENCE_NAME = "sequence.name";
     PLAYER_INPUT = "player_input";
     PLAYER_INPUT_DIGITAL = "player_input.digital";
     PLAYER_INPUT_TYPE = "player_input_type";

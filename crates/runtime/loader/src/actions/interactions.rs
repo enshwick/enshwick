@@ -22,6 +22,7 @@ use crate::engine::pinned::{self, Constant, Symbol};
 use crate::engine::profile::Feature;
 use crate::engine::registry::JoinFeatureError;
 
+pub(crate) mod prompts;
 mod stock;
 
 /// The build table ids this part of the loader names.
@@ -51,6 +52,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::access::UPGRADE_TARGET.id(),
     pinned::access::UPGRADE_VERSION.id(),
     pinned::ecs::COMPONENT_READ_RAW.id(),
+    pinned::ui::PROMPT_CONTEXT.id(),
+    pinned::ui::PROMPT_SITE.id(),
+    pinned::ui::PROMPT_VERB.id(),
 ];
 
 /// The offer result the game writes when it does not offer an interaction.
@@ -215,6 +219,7 @@ pub(crate) fn register(
 /// Seals the filters once every mod's init ran, before the links.
 pub(crate) fn seal() {
     let _filters = FILTERS.seal();
+    let _prompts = prompts::seal();
 }
 
 /// The system that runs players' inventory actions.
@@ -244,6 +249,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let hold_ready = link_in(loader, &STATE);
     let filters = FILTERS.sealed().map_or(0, <[_]>::len);
     crate::world::transactions::holds().linked(filters, hold_ready);
+    prompts::link(loader);
 }
 
 /// Links the filters and the inventory actions, keeping in `state` whether

@@ -11,17 +11,18 @@ use crate::abi::{
     ClientSnapshot, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContentRename, ControlFn,
     ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo, DropRequest,
     EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperienceFilterFn,
-    FogInfo, GameEventFn, Header, HookSpec, InteractionFilterFn, InventoryRequest,
-    InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo, JoinRuleFn, KnowledgeChange,
-    KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff, LocalInputInfo, LoopWaitFn,
-    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn,
-    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
-    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn, ResourceKey, ResourcePatchFn,
-    SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn,
-    StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd,
-    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn,
-    UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, WeatherSample,
+    FogInfo, GameEventFn, Header, HookSpec, InteractionFilterFn, InteractionPrompt,
+    InventoryRequest, InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo, JoinRuleFn,
+    KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff, LocalInputInfo,
+    LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn, ResourceKey,
+    ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str,
+    SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry,
+    UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2171,6 +2172,16 @@ pub struct HostApi {
         material: *const TerrainMaterialAdd,
         id: *mut u8,
     ) -> Status,
+    /// Gives every object placed from `spec`'s item, a headed
+    /// [`InteractionPrompt`], its prompt: the game verb and the replaced
+    /// action in the server's world, the mod's text on this client. One
+    /// prompt per item across all mods. Allowed during `enshwick_mod_init`
+    /// only; [`Status::BAD_ARGS`] for a null or short `spec`, item 0, an
+    /// unknown flag or a prompt that changes nothing; [`Status::REFUSED`]
+    /// for an item another prompt has; [`Status::UNAVAILABLE`] on a build
+    /// that lacks a piece. ABI 12.3.
+    pub interaction_prompt:
+        extern "system" fn(me: ModHandle, spec: *const InteractionPrompt) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2389,5 +2400,6 @@ const _: () = {
     assert!(offset_of!(HostApi, client_command) == 24 + 205 * 8);
     assert!(offset_of!(HostApi, client_command_status) == 24 + 206 * 8);
     assert!(offset_of!(HostApi, terrain_material_add) == 24 + 207 * 8);
-    assert!(size_of::<HostApi>() == 24 + 208 * 8);
+    assert!(offset_of!(HostApi, interaction_prompt) == 24 + 208 * 8);
+    assert!(size_of::<HostApi>() == 24 + 209 * 8);
 };
