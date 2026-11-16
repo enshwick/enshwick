@@ -195,6 +195,88 @@ mod tests {
         );
     }
 
+    const WOLF: Guid = Guid::parse("00000000-0000-4000-8000-00000000f001");
+    const CHEST: Guid = Guid::parse("00000000-0000-4000-8000-00000000c001");
+    const CRATE: Guid = Guid::parse("00000000-0000-4000-8000-00000000c002");
+
+    /// A host whose game names its vanilla templates: a wolf, a chest and a
+    /// crate whose names differ only by case, and ten spawners of one name.
+    fn start_named() -> enshwick::test::Installed {
+        let spawners: Vec<(Guid, &str)> = (1..=10_u8)
+            .map(|n| {
+                let mut guid = Guid::parse("00000000-0000-4000-8000-00000000a000");
+                guid.0[15] = n;
+                (guid, "Spawner")
+            })
+            .collect();
+        let named = [
+            &[
+                (WOLF, "Enemy_Wildbeast_Wolf"),
+                (CHEST, "Prop_Chest"),
+                (CRATE, "PROP_CHEST"),
+            ][..],
+            &spawners,
+        ]
+        .concat();
+        let loader = enshwick::test::FakeHost::new()
+            .player(root())
+            .items()
+            .workshops()
+            .vanilla_templates(&named)
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        loader
+    }
+
+    #[test]
+    fn the_console_names_a_vanilla_template_in_any_case_when_one_template_has_it() {
+        let loader = start_named();
+        let chat = |line: &str| loader.type_in_chat(&root(), 0, line);
+        assert_eq!(
+            chat("/m summon enemy_wildbeast_wolf 3").as_deref(),
+            Some("1ok")
+        );
+        assert_eq!(chat("/m summon Prop_Chest").as_deref(), Some("1ok"));
+        assert_eq!(
+            runs(),
+            [
+                vec![Value::Template(WOLF), Value::Number(3.0)],
+                vec![Value::Template(CHEST), Value::Number(1.0)],
+            ],
+            "an exact name wins over one in another case"
+        );
+    }
+
+    #[test]
+    fn a_template_name_several_templates_share_is_refused_with_their_guids() {
+        let loader = start_named();
+        let chat = |line: &str| loader.type_in_chat(&root(), 0, line);
+        assert_eq!(
+            chat("/m summon prop_chest").as_deref(),
+            Some(
+                format!("0Several templates are named prop_chest: {CHEST}, {CRATE}. Name one by its GUID.")
+                    .as_str()
+            )
+        );
+        let spawners = chat("/m summon spawner").unwrap();
+        assert!(
+            spawners.starts_with(
+                "0Several templates are named spawner: 00000000-0000-4000-8000-00000000a001, "
+            ),
+            "{spawners}"
+        );
+        assert!(
+            spawners.ends_with(
+                "00000000-0000-4000-8000-00000000a008 and 2 more. Name one by its GUID."
+            ),
+            "at most eight are listed: {spawners}"
+        );
+        assert!(runs().is_empty());
+    }
+
     #[test]
     fn a_last_optional_template_takes_the_rest_of_the_line_or_its_default() {
         let loader = start();

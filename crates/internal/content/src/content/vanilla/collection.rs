@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use super::super::loot_tables::template_table;
 use super::super::templates::TEMPLATE_COLLECTION;
-use super::{LootTable, Names, Vanilla, VanillaError, VanillaTemplate, near};
+use super::{LootTable, Names, Vanilla, VanillaError, VanillaTemplate, named, near};
 use crate::content::{Blob, Guid};
 
 /// The fill tables containers roll: each container template's by its name,
@@ -39,7 +39,7 @@ impl Vanilla {
     /// }
     /// ```
     pub fn template(&self, name: &str) -> Result<Guid, VanillaError> {
-        self.template_named(name, true)
+        self.template_named(name, true, false)
     }
 
     /// Every vanilla template with the name the template collection gives
@@ -76,18 +76,24 @@ impl Vanilla {
     }
 
     /// [`Vanilla::template`], warning a mod that reads the names after init
-    /// when `warn`.
-    pub(crate) fn template_named(&self, name: &str, warn: bool) -> Result<Guid, VanillaError> {
+    /// when `warn`, and also taking a name in another case when `any_case`,
+    /// as [`named`] reads it.
+    pub(crate) fn template_named(
+        &self,
+        name: &str,
+        warn: bool,
+        any_case: bool,
+    ) -> Result<Guid, VanillaError> {
         let names = self.template_names(warn)?;
-        match names.get(name).map(Vec::as_slice) {
-            Some([one]) => Ok(*one),
-            Some(several) if !several.is_empty() => Err(VanillaError::AmbiguousTemplate {
-                name: name.to_owned(),
-                templates: several.to_vec(),
-            }),
-            _ => Err(VanillaError::UnknownTemplate {
+        match &*named(names, name, any_case) {
+            [one] => Ok(*one),
+            [] => Err(VanillaError::UnknownTemplate {
                 name: name.to_owned(),
                 near: near(names, name),
+            }),
+            several => Err(VanillaError::AmbiguousTemplate {
+                name: name.to_owned(),
+                templates: several.to_vec(),
             }),
         }
     }

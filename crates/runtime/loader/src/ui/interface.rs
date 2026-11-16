@@ -354,11 +354,6 @@ pub(crate) fn window_shown() -> bool {
     WINDOWS.get()[1] || dialog::showing()
 }
 
-fn thread_id() -> u32 {
-    // SAFETY: `GetCurrentThreadId` takes no arguments and cannot fail.
-    unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() }
-}
-
 /// Registers a mod's frame callback; client only, during init.
 ///
 /// # Errors
@@ -427,7 +422,8 @@ pub(crate) fn mod_dialog(
     if loader.side != Side::CLIENT {
         return Err(DialogError::NotClient);
     }
-    if raw.flags & UiDialog::WAITING != 0 && STATE.ui_thread.load(Ordering::Acquire) == thread_id()
+    if raw.flags & UiDialog::WAITING != 0
+        && STATE.ui_thread.load(Ordering::Acquire) == crate::engine::off_thread::current_thread()
     {
         return Err(DialogError::WrongThread);
     }
@@ -617,7 +613,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     dialog::note_world(shown != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
-    engine::caret_next_frame();
+    engine::caret_next_frame(now);
     crate::engine::screens::note_window(window_shown());
     crate::actions::controls::frame(context);
     // SAFETY: inside the frame on the interface thread, `context` non-zero
@@ -633,7 +629,10 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     if vanilla {
         return;
     }
-    STATE.ui_thread.store(thread_id(), Ordering::Release);
+    STATE.ui_thread.store(
+        crate::engine::off_thread::current_thread(),
+        Ordering::Release,
+    );
     let frame = mods::next_frame();
     map::note(context);
     let asked = extensions::hosts_asked(FRAMES.sealed().is_some_and(|f| !f.is_empty()));

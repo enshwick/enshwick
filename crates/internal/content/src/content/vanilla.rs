@@ -9,6 +9,7 @@
 //! reads the running game's data; [`Vanilla::new`] reads any game's through
 //! a function of the caller's, as a tool outside the game does.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
@@ -757,16 +758,22 @@ impl Vanilla {
     ///
     /// See [`Vanilla`].
     pub fn item(&self, name: &str) -> Result<Guid, VanillaError> {
+        self.item_named(name, false)
+    }
+
+    /// [`Vanilla::item`], also taking a name in another case when
+    /// `any_case`, as [`named`] reads it.
+    pub(crate) fn item_named(&self, name: &str, any_case: bool) -> Result<Guid, VanillaError> {
         let names = self.names()?;
-        match names.get(name).map(Vec::as_slice) {
-            Some([one]) => Ok(*one),
-            Some(several) if !several.is_empty() => Err(VanillaError::Ambiguous {
-                name: name.to_owned(),
-                items: several.to_vec(),
-            }),
-            _ => Err(VanillaError::Unknown {
+        match &*named(names, name, any_case) {
+            [one] => Ok(*one),
+            [] => Err(VanillaError::Unknown {
                 name: name.to_owned(),
                 near: near(names, name),
+            }),
+            several => Err(VanillaError::Ambiguous {
+                name: name.to_owned(),
+                items: several.to_vec(),
             }),
         }
     }
@@ -879,6 +886,27 @@ fn registry_names(layout: &ItemLayout, registry: &[u8]) -> Option<Names> {
         out.entry(name.to_owned()).or_default().push(Guid(guid));
     }
     Some(out)
+}
+
+/// What `names` lists under `name`: the exact name's GUIDs, else with
+/// `any_case` those of every name equal to it but for the case of its ASCII
+/// letters (the game's debug names are ASCII), sorted and once each; empty
+/// for none.
+fn named<'a>(names: &'a Names, name: &str, any_case: bool) -> Cow<'a, [Guid]> {
+    if let Some(exact) = names.get(name) {
+        return Cow::Borrowed(exact);
+    }
+    if !any_case {
+        return Cow::Borrowed(&[]);
+    }
+    let mut found: Vec<Guid> = names
+        .iter()
+        .filter(|(known, _)| known.eq_ignore_ascii_case(name))
+        .flat_map(|(_, guids)| guids.iter().copied())
+        .collect();
+    found.sort_unstable_by_key(|guid| guid.0);
+    found.dedup();
+    Cow::Owned(found)
 }
 
 /// Names in `names` that look like `name`, as [`crate::near::near`] finds

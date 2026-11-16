@@ -14,6 +14,7 @@ use crate::test::{FakeHost, Installed, table};
 pub(crate) mod rates;
 #[cfg(feature = "typed")]
 pub(crate) mod removal;
+pub(crate) mod template_names;
 pub(crate) mod templates;
 
 /// The facts the builder holds, so a test lays out its blobs by the same

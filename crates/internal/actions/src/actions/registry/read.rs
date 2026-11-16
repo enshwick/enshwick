@@ -14,6 +14,10 @@ use super::super::sheet::ArgView;
 use super::fit::{fits, takes_line};
 use super::{Declared, Registry};
 
+/// How many GUIDs a refusal for a shared name lists before it counts the
+/// rest.
+const LISTED_GUIDS: usize = 8;
+
 impl ReadArgsError {
     /// The reason the mod's [`Refused`](super::super::request::Refused) names.
     pub(super) const fn reason(&self) -> RefusedReason {
@@ -55,16 +59,16 @@ pub(super) enum ReadArgsError {
     /// like it.
     #[error("no item {name}")]
     NoItem { name: String, near: Vec<String> },
-    /// Several items have the name.
+    /// Several items have the name: `guids`.
     #[error("several items are named {name}")]
-    SeveralItems { name: String },
+    SeveralItems { name: String, guids: Vec<Guid> },
     /// No entity template the game knows has the name; `near` lists names
     /// that look like it.
     #[error("no template {name}")]
     NoTemplate { name: String, near: Vec<String> },
-    /// Several templates have the name.
+    /// Several templates have the name: `guids`.
     #[error("several templates are named {name}")]
-    SeveralTemplates { name: String },
+    SeveralTemplates { name: String, guids: Vec<Guid> },
 }
 
 /// A word of a console line: a run without white space, or a run between
@@ -155,9 +159,11 @@ impl Registry {
                 language,
                 &[("name", name), ("near", &near.join(", "))],
             ),
-            ReadArgsError::SeveralItems { name } => {
-                self.say("actions.several_items", language, &[("name", name)])
-            }
+            ReadArgsError::SeveralItems { name, guids } => self.say(
+                "actions.several_items",
+                language,
+                &[("name", name), ("guids", &self.guid_list(guids, language))],
+            ),
             ReadArgsError::NoTemplate { name, near } if near.is_empty() => {
                 self.say("actions.no_template", language, &[("name", name)])
             }
@@ -166,9 +172,30 @@ impl Registry {
                 language,
                 &[("name", name), ("near", &near.join(", "))],
             ),
-            ReadArgsError::SeveralTemplates { name } => {
-                self.say("actions.several_templates", language, &[("name", name)])
-            }
+            ReadArgsError::SeveralTemplates { name, guids } => self.say(
+                "actions.several_templates",
+                language,
+                &[("name", name), ("guids", &self.guid_list(guids, language))],
+            ),
+        }
+    }
+
+    /// `guids` as a refusal lists them in `language`: the first
+    /// [`LISTED_GUIDS`], then how many more, so the line stays readable.
+    fn guid_list(&self, guids: &[Guid], language: Language) -> String {
+        let listed = guids
+            .iter()
+            .take(LISTED_GUIDS)
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        match guids.len().saturating_sub(LISTED_GUIDS) {
+            0 => listed,
+            more => self.say(
+                "actions.and_more",
+                language,
+                &[("list", &listed), ("count", &more.to_string())],
+            ),
         }
     }
 
@@ -330,11 +357,12 @@ impl Registry {
     }
 
     /// The item `text` names on the console: its GUID, a content id in
-    /// full, a vanilla debug name, or a name the game shows where the
-    /// server's game has its texts. A GUID or content id of an item the
-    /// server's game does not know is refused under the text typed.
+    /// full, a vanilla debug name, a name the game shows where the server's
+    /// game has its texts, or else a debug name in another case. A GUID or
+    /// content id of an item the server's game does not know is refused
+    /// under the text typed.
     pub(super) fn item_named(&self, text: &str) -> Result<Value, ReadArgsError> {
-        use crate::content::vanilla::{self, VanillaError};
+        use crate::content::vanilla::{self, Vanilla, VanillaError};
 
         if let Some(item) = Guid::try_parse(text).or_else(|| Guid::try_named(text)) {
             return if self.knows_item(item) {
@@ -346,30 +374,40 @@ impl Registry {
                 })
             };
         }
-        let several = || ReadArgsError::SeveralItems {
+        let several = |guids| ReadArgsError::SeveralItems {
             name: text.to_owned(),
+            guids,
         };
         let debug_near = match vanilla::item(text) {
             Ok(item) => return Ok(Value::Item(item)),
-            Err(VanillaError::Ambiguous { .. }) => return Err(several()),
+            Err(VanillaError::Ambiguous { items, .. }) => return Err(several(items)),
             Err(VanillaError::Unknown { near, .. }) => near,
             Err(_) => Vec::new(),
         };
-        match vanilla::item_by_display_name(text) {
-            Ok(item) => Ok(Value::Item(item)),
-            Err(VanillaError::Ambiguous { .. }) => Err(several()),
-            Err(error) => Err(ReadArgsError::NoItem {
-                name: text.to_owned(),
-                near: match error {
-                    VanillaError::Unknown { near, .. } if !near.is_empty() => near,
-                    _ => debug_near,
-                },
-            }),
+        let shown = match vanilla::item_by_display_name(text) {
+            Ok(item) => return Ok(Value::Item(item)),
+            Err(VanillaError::Ambiguous { items, .. }) => return Err(several(items)),
+            Err(error) => error,
+        };
+        // An exact debug or shown name wins over a debug name in another case.
+        if let Some(game) = Vanilla::game() {
+            match enshwick_content::__internal::item(game, text) {
+                Ok(item) => return Ok(Value::Item(item)),
+                Err(VanillaError::Ambiguous { items, .. }) => return Err(several(items)),
+                Err(_) => {}
+            }
         }
+        Err(ReadArgsError::NoItem {
+            name: text.to_owned(),
+            near: match shown {
+                VanillaError::Unknown { near, .. } if !near.is_empty() => near,
+                _ => debug_near,
+            },
+        })
     }
 
     /// The template `text` names on the console: its GUID, a content id in
-    /// full, or a vanilla template's name. A GUID or content id of a
+    /// full, or a vanilla template's name in any case. A GUID or content id of a
     /// template the server's game does not know is refused under the text
     /// typed.
     pub(super) fn template_named(&self, text: &str) -> Result<Value, ReadArgsError> {
@@ -395,9 +433,12 @@ impl Registry {
         // console run ever has to stay within a frame.
         match enshwick_content::__internal::template(vanilla, text) {
             Ok(template) => Ok(Value::Template(template)),
-            Err(VanillaError::AmbiguousTemplate { .. }) => Err(ReadArgsError::SeveralTemplates {
-                name: text.to_owned(),
-            }),
+            Err(VanillaError::AmbiguousTemplate { templates, .. }) => {
+                Err(ReadArgsError::SeveralTemplates {
+                    name: text.to_owned(),
+                    guids: templates,
+                })
+            }
             Err(VanillaError::UnknownTemplate { near, .. }) => Err(unknown(near)),
             Err(_) => Err(unknown(Vec::new())),
         }

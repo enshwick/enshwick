@@ -113,9 +113,12 @@ pub fn is_recipe(vanilla: &Vanilla, guid: Guid) -> bool {
     vanilla.is_recipe(guid)
 }
 
-/// The vanilla template named `name`, as `Vanilla::template` finds it,
-/// without the warning a mod gets for naming templates after init: the
-/// platform's console reads a name only when an admin types one.
+/// The vanilla template an admin's console names `name`, also in another
+/// case.
+///
+/// It finds it as `Vanilla::template` does, without the warning a mod gets
+/// for naming templates after init: the platform's console reads a name
+/// only when an admin types one.
 ///
 /// # Errors
 ///
@@ -124,7 +127,17 @@ pub fn template(
     vanilla: &Vanilla,
     name: &str,
 ) -> Result<Guid, crate::content::vanilla::VanillaError> {
-    vanilla.template_named(name, false)
+    vanilla.template_named(name, false, true)
+}
+
+/// The vanilla item an admin's console names by its debug name `name`, as
+/// `Vanilla::item` finds it but also in another case.
+///
+/// # Errors
+///
+/// As `Vanilla::item`.
+pub fn item(vanilla: &Vanilla, name: &str) -> Result<Guid, crate::content::vanilla::VanillaError> {
+    vanilla.item_named(name, true)
 }
 
 /// The vanilla item of the item id `id`.

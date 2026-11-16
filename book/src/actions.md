@@ -254,10 +254,15 @@ under a key of the mod's own needs `Load::declare`.
 | Where | How the player names the item |
 | --- | --- |
 | A window | a list of items by the names the game shows in the player's language, with a search field. Up to 64 matches show at once. |
-| A typed line | its debug name (`Tool_Torch01`), its GUID or a content id (`you.lamps:lamp`). A name the game shows works where the server has the game's texts. |
+| A typed line | its debug name (`Tool_Torch01`) in any case, its GUID or a content id (`you.lamps:lamp`). A name the game shows works where the server has the game's texts. |
 
 A server has the game's texts in single player and in a game a player
 hosts.
+
+A typed name matches exactly first. Without an exact match, a name in
+another case names the one item with that name. The server refuses a name
+several items share and lists their GUIDs, at most eight and then how many
+more: "Several items are named …: …. Name one by its GUID."
 
 The names come from the player's own game, so a dedicated server needs no
 texts and sends none. A window lists vanilla items and the mods' items
@@ -298,12 +303,15 @@ mod's template counts once `add_template` or `add_enemy` adds it.
 | Where | How the player names the template |
 | --- | --- |
 | A window | a list of every template by the name the game's data gives it (`Enemy_Wildbeast_Wolf`), and a mod's by its content id, with a search field. Up to 64 matches show at once. |
-| A typed line | its vanilla name, its GUID or a content id (`you.pets:tame-wolf`). |
+| A typed line | its vanilla name (`Enemy_Wildbeast_Wolf`) in any case, its GUID or a content id (`you.pets:tame-wolf`). |
 
 The game shows a name of its own for few templates, so the list shows the
 names of the game's data in every language. Their names come from the
 player's own game, so a dedicated server sends none. On a typed line the
-template takes words as a text does.
+template takes words as a text does. A typed name follows the rules of an
+item's: an exact match first, then the one template with the name in
+another case. A name several templates share is refused with their GUIDs,
+so a console can name one.
 
 ```rust
 use enshwick::actions::{Action, Arg, Value};
