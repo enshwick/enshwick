@@ -48,6 +48,82 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 enshwick.sound.change("<container GUID>", { volume = 0.2 })
 ```
 
+## Hear the sounds the server places
+
+The server places sounds in the world through notify events. A hit, a
+pickup or a survivor arriving each raises one, and every client in range
+plays it. `load.on_notify(handler)` calls the handler on the server's game
+thread for each one. Its
+[`NotifyEvent`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/game_events/notify.rs)
+names what plays in `type_guid`. For the type `Normal` that is a notifier.
+For the type `Sfx` it is a sound container. The visual effects, type
+`Vfx`, are not handed on.
+`load.on::<NotifyEvent>` hears all three types. On a client the handler
+hears only a game that client hosts.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_notify(|notify| {
+        enshwick::debug!("{:?} {:?} at {:?}", notify.r#type, notify.type_guid, notify.position);
+    })
+}
+```
+
+```luau
+enshwick.sound.on_notify(function(notify)
+    enshwick.log.info(`{notify.type} {notify.type_guid} at {notify.position}`)
+end)
+```
+
+## Raise a notifier at a place
+
+`effects.notify(&Notify::new(notifier, at))` raises a notifier at a point
+or on an entity, as the game's own systems do. Every client in range plays
+its sound, effect and camera shake after the next step, a client without
+mods too. A notifier is a `keen::NotifierResource`, named by its GUID.
+`sound_volume_hint` says whose sound it is, so the client's volume
+settings group it; the default is any sound effect.
+
+A mod raises at most 32 notifiers in one server step
+(`MAX_NOTIFIES_PER_STEP`). The call past that bound is refused, and so is
+entity 0 or a position that is not finite. The call belongs on the server's
+game thread, in a handler, never at the top of `init`. A notifier that
+misleads players in a fight does not belong in a mod.
+
+`effects.notify` needs the `unstable` feature and may change in any
+release. No client has yet been seen playing a notifier the server raised.
+
+```rust
+use enshwick::content::Guid;
+use enshwick::effects::{Notify, NotifyAt};
+use enshwick::game_events::SoundVolumeHint;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let effects = load.effects();
+    let chime = Guid([7; 16]);
+    load.on::<enshwick::events::PlayerJoined>(move |joined| {
+        let notify = Notify::new(chime, NotifyAt::Entity(joined.entity))
+            .sound_volume_hint(SoundVolumeHint::FriendlyNpc);
+        if let Err(why) = effects.notify(&notify) {
+            enshwick::debug!("no chime: {why}");
+        }
+    })
+}
+```
+
+```luau
+enshwick.on("PlayerJoined", function(joined)
+    local ok, why = pcall(enshwick.effects.notify, {
+        notifier = "<notifier GUID>",
+        at = { Entity = joined.entity },
+        sound_volume_hint = "FriendlyNpc",
+    })
+    if not ok then
+        enshwick.log.info(`no chime: {why}`)
+    end
+end)
+```
+
 ## Choose which sound a notifier plays
 
 A notifier's `NotifierResource` names the container it plays in

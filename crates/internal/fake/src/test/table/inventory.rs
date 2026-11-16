@@ -3,6 +3,8 @@
 
 use core::ffi::c_void;
 
+use enshwick_core::__fake::ids;
+
 use crate::test::SubmittedRequest;
 use crate::test::table::{Registered, Registration, with};
 
@@ -74,7 +76,7 @@ pub(crate) extern "system" fn drop_items(
 }
 
 pub(crate) extern "system" fn emit(
-    _me: ModHandle,
+    me: ModHandle,
     type_hash: u32,
     data: *const u8,
     size: u32,
@@ -82,9 +84,23 @@ pub(crate) extern "system" fn emit(
     if data.is_null() {
         return Status::BAD_ARGS;
     }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
     // SAFETY: the safe layer passes `size` bytes at `data` for the call.
     let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
     with(Status::MISSING, |s| {
+        if s.edits.stopped {
+            return Status::UNAVAILABLE;
+        }
+        let step = s.ticks.step;
+        let notify = s.host.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
+        if notify && !s.notified.has_room(me, step) {
+            return Status::REFUSED;
+        }
+        if notify {
+            s.notified.count(me, step);
+        }
         s.emits.push((type_hash, bytes));
         Status::OK
     })

@@ -15,10 +15,12 @@
 //! only entities that count their teleports, actors and characters, so the
 //! loader refuses any other.
 
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
+use enshwick_base::Relock;
+use enshwick_base::peer::{MAX_NOTIFIES_PER_STEP, PerStep};
 use enshwick_core::Entity;
-use enshwick_core::abi::TeleportRequest;
+use enshwick_core::abi::{ModHandle, TeleportRequest};
 use rustc_hash::FxHashMap;
 
 use crate::engine::catalogue::{ids, type_name};
@@ -43,11 +45,14 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 
 /// The event types mods may raise: types the server's own systems raise on
 /// the 1.0 build 1269579, each with a consumer on the server or the clients.
-const ALLOWED: [&str; 4] = [
+/// The server 26430253 raises `NotifyEvent` from 13 functions, among them
+/// `survivors.spawn` and the systems `pickup_loot` and `actor_apply_buff`.
+const ALLOWED: [&str; 5] = [
     ids::NPC_COMMAND_EVENT,
     ids::SET_TOGGLE_STATE_EVENT,
     ids::ADD_THREAT_TARGET_EVENT,
     ids::UI_PING_EVENT,
+    ids::NOTIFY_EVENT,
 ];
 
 /// The source id the game's own game-thread pushes give their events.
@@ -104,6 +109,10 @@ struct Layout {
     transform: u32,
     /// `TeleportCount`, which the game's teleport counts up on what it moves.
     teleport_count: u32,
+    /// `NotifyEvent`'s hash: every client in range plays one, so each mod
+    /// raises a bounded number a step.
+    notify: Option<u32>,
+    notified: Mutex<PerStep>,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -182,6 +191,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     ids::CURRENT_TRANSFORM,
                 )?,
                 teleport_count: hash_of("keen::ecs::TeleportCount")?,
+                notify: crate::engine::catalogue::component_hash(loader, ids::NOTIFY_EVENT),
+                notified: Mutex::new(PerStep::new(MAX_NOTIFIES_PER_STEP)),
             })
         })
         .as_ref()
@@ -205,6 +216,9 @@ pub(crate) enum EmitError {
     /// The engine refused the event or command.
     #[error("the engine refused the event")]
     Refused,
+    /// More notifiers in this step than a mod may raise.
+    #[error("more than {MAX_NOTIFIES_PER_STEP} notifiers in one step")]
+    TooMany,
     /// The build lacks the teleport, or the world has no command buffer.
     #[error("the teleport does not run here")]
     Unavailable,
@@ -228,15 +242,30 @@ fn entity_world() -> Result<usize, EmitError> {
         .ok_or(EmitError::NoWorld)
 }
 
-/// Raises the event `bytes` of the allowed type `hash`, its whole reflected
-/// size; the loader stamps it with the game time.
-pub(crate) fn emit(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), EmitError> {
+/// Raises the event `bytes` of the allowed type `hash` for the mod `me`, its
+/// whole reflected size; the loader stamps it with the game time.
+pub(crate) fn emit(
+    loader: &Loader,
+    me: ModHandle,
+    hash: u32,
+    bytes: &[u8],
+) -> Result<(), EmitError> {
     let layout = layout(loader).ok_or(EmitError::Unread)?;
     let allowed = layout.allowed.get(&hash).ok_or(EmitError::NotAllowed)?;
     if usize::try_from(allowed.size).ok() != Some(bytes.len()) {
         return Err(EmitError::BadSize);
     }
-    push(loader, hash, bytes)
+    if layout.notify != Some(hash) {
+        return push(loader, hash, bytes);
+    }
+    entity_world()?;
+    let step = crate::engine::ticks::steps();
+    if !layout.notified.relock().has_room(me, step) {
+        return Err(EmitError::TooMany);
+    }
+    push(loader, hash, bytes)?;
+    layout.notified.relock().count(me, step);
+    Ok(())
 }
 
 /// Raises the event `bytes` of type `hash` for the loader's own features,

@@ -3,7 +3,10 @@
 //!
 //! A sound plays inside a frame of the interface with
 //! [`Frame::play`](crate::ui::Frame::play), heard only on the client that
-//! plays it and from no place in the world.
+//! plays it and from no place in the world. The server places sounds through
+//! notifiers: a mod hears each one the game raises in
+//! [`Load::on_notify`](../struct.Load.html#method.on_notify) and raises one
+//! of its own, which every client in range plays, with `Effects::notify`.
 //!
 //! # Examples
 //!
@@ -33,6 +36,7 @@ use core::ops::RangeInclusive;
 use crate::Off;
 use crate::abi::Side;
 use crate::content::{Guid, types};
+use crate::game_events::{NotifyEvent, NotifyEventType};
 use crate::resources::Value;
 
 #[cfg(feature = "unstable")]
@@ -190,9 +194,26 @@ pub trait LoadMethods {
     /// As `Load::change_sound`.
     #[doc(hidden)]
     fn change_sound(&mut self, sound: SoundContainerId, change: SoundChange) -> Result<(), Off>;
+
+    /// As `Load::on_notify`.
+    #[doc(hidden)]
+    fn on_notify<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&NotifyEvent) + Send + Sync + 'static;
 }
 
 impl LoadMethods for crate::BaseLoad {
+    fn on_notify<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&NotifyEvent) + Send + Sync + 'static,
+    {
+        self.on::<NotifyEvent>(move |notify| {
+            if notify.r#type != NotifyEventType::Vfx {
+                handler(notify);
+            }
+        })
+    }
+
     fn change_sound(&mut self, sound: SoundContainerId, change: SoundChange) -> Result<(), Off> {
         let fields = change
             .fields()

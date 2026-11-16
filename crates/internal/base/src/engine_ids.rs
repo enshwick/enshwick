@@ -108,6 +108,26 @@ ids! {
     UI_PING_EVENT = "ui_ping_event";
     UI_PING_EVENT_SENDER_ENTITY_ID = "ui_ping_event.sender_entity_id";
     UI_PING_POSITION = "ui_ping_event.position";
+    NOTIFY_EVENT = "notify_event";
+    /// The id of the offset of the event's `ecs::Offset` from its place.
+    NOTIFY_EVENT_OFFSET = "notify_event.offset";
+    NOTIFY_EVENT_TRANSFORM = "notify_event.transform";
+    NOTIFY_EVENT_SOURCE_ENTITY_ID = "notify_event.source_entity_id";
+    NOTIFY_EVENT_TYPE_GUID = "notify_event.type_guid";
+    NOTIFY_EVENT_TYPE = "notify_event.type";
+    NOTIFY_EVENT_SOUND_VOLUME_HINT = "notify_event.sound_volume_hint";
+    /// The id of the offset of the turn inside an `ecs::Offset`.
+    OFFSET_ORIENTATION_OFFSET = "offset.orientation_offset";
+    NOTIFY_EVENT_TYPE_NORMAL = "notify_event_type.normal";
+    NOTIFY_EVENT_TYPE_SFX = "notify_event_type.sfx";
+    NOTIFY_EVENT_TYPE_VFX = "notify_event_type.vfx";
+    SOUND_VOLUME_HINT_GENERIC_SFX = "sound_volume_hint.generic_sfx";
+    SOUND_VOLUME_HINT_PLAYER = "sound_volume_hint.player";
+    SOUND_VOLUME_HINT_PET = "sound_volume_hint.pet";
+    SOUND_VOLUME_HINT_LIVESTOCK = "sound_volume_hint.livestock";
+    SOUND_VOLUME_HINT_FRIENDLY_NPC = "sound_volume_hint.friendly_npc";
+    SOUND_VOLUME_HINT_ENEMY = "sound_volume_hint.enemy";
+    SOUND_VOLUME_HINT_VOICEOVER = "sound_volume_hint.voiceover";
     ITEM_INFO = "item_info";
     /// The id of the offset of the item id in an item's static data.
     ITEM_INFO_ID = "item_info.id";

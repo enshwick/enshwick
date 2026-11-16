@@ -1553,9 +1553,9 @@ pub struct HostApi {
     /// `type_hash`, its whole layout; the loader stamps it with the game
     /// time and the systems of the next step see it. Only types the loader
     /// allows, which the server's own systems raise: [`Status::REFUSED`]
-    /// for any other or when the step's stream is full,
-    /// [`Status::BAD_ARGS`] for a size that is not the type's. On the
-    /// server's game thread only.
+    /// for any other, when the step's stream is full or past a mod's 32
+    /// notify events in one step, [`Status::BAD_ARGS`] for a size that is
+    /// not the type's. On the server's game thread only.
     pub emit:
         extern "system" fn(me: ModHandle, type_hash: u32, data: *const u8, size: u32) -> Status,
     /// Asks the server to move an entity as its admin teleport does, after

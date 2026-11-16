@@ -1,5 +1,5 @@
-//! Effects in the server's world: game events a mod raises, teleports and
-//! spawns.
+//! Effects in the server's world: game events a mod raises, notifiers the
+//! clients play, teleports and spawns.
 //!
 //! An event goes where the game's own events go: the loader puts it into
 //! the stream the engine moves at the start of the next step, and the
@@ -14,9 +14,9 @@
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
-//! Pings need the `unstable` feature and may change in any release: whether
-//! a client shows a ping the server raised is not yet seen in the running
-//! game. Teleports are stable: a player moved this way arrived where the
+//! Pings and notifiers need the `unstable` feature and may change in any
+//! release: whether a client shows a ping or plays a notifier the server
+//! raised is not yet seen in the running game. Teleports are stable: a player moved this way arrived where the
 //! server put them in a client-hosted game (client 26430625) and on a
 //! dedicated server (26430253), live.
 //!
@@ -44,6 +44,12 @@ use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{BaseLoad, Host, Off};
 use enshwick_world::__internal::{world_check, world_status};
+
+#[cfg(feature = "unstable")]
+mod notify;
+
+#[cfg(feature = "unstable")]
+pub use notify::{MAX_NOTIFIES_PER_STEP, Notify, NotifyAt};
 
 /// How an entity arrives, for [`Effects::teleport`].
 ///
@@ -347,6 +353,8 @@ pub struct Effects {
     threat: Option<AddThreat>,
     #[cfg(feature = "unstable")]
     ping: Option<Ping>,
+    #[cfg(feature = "unstable")]
+    notify: Option<notify::NotifyWrite>,
 }
 
 #[crate::script(events)]
@@ -396,6 +404,15 @@ impl Effects {
                 position: load.constant(ids::UI_PING_POSITION)?,
             })
         })();
+        #[cfg(feature = "unstable")]
+        let notify = (|| {
+            Ok::<_, Off>(notify::NotifyWrite {
+                layout: enshwick_base::__internal::NotifyLayout::resolve(load)?,
+                turn: load.constant(ids::NOTIFY_EVENT_OFFSET)?
+                    + load.constant(ids::OFFSET_ORIENTATION_OFFSET)?,
+                target: transform(load.constant(ids::NOTIFY_EVENT_TRANSFORM)?)?,
+            })
+        })();
         Self {
             host,
             npc: keep("survivor orders", npc),
@@ -403,6 +420,8 @@ impl Effects {
             threat: keep("threat", threat),
             #[cfg(feature = "unstable")]
             ping: keep("pings", ping),
+            #[cfg(feature = "unstable")]
+            notify: keep("notifiers", notify),
         }
     }
 
@@ -533,8 +552,9 @@ impl Effects {
     /// # Errors
     ///
     /// [`WorldError::Refused`] for a type the loader does not allow, a size
-    /// that is not the type's, or a full step; [`WorldError::WrongThread`]
-    /// off the game thread.
+    /// that is not the type's, a full step, or a notify event past the
+    /// mod's 32 in one step; [`WorldError::WrongThread`] off the game
+    /// thread.
     ///
     /// # Examples
     ///
@@ -857,9 +877,13 @@ pub trait LoadMethods {
 
 impl crate::script::Bound for Effects {
     const NAME: &'static str = "effects";
-    const DOC: &'static str = "Effects a mod has on the server's world: survivor orders, toggles, threat, pings, teleports and spawns.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_EVENTS, Self::SCRIPT_SPAWNS];
+    const DOC: &'static str = "Effects a mod has on the server's world: survivor orders, toggles, threat, pings, notifiers, teleports and spawns.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
+        Self::SCRIPT_EVENTS,
+        #[cfg(feature = "unstable")]
+        Self::SCRIPT_NOTIFIERS,
+        Self::SCRIPT_SPAWNS,
+    ];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(load.base_mut().effects())

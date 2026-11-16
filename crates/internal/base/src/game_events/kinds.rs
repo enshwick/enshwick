@@ -17,12 +17,17 @@ use crate::{BaseLoad, Off};
 use crate::{Entity, ItemId, RecipeId};
 
 /// `Some(entity)` unless it is [`Entity::NONE`].
-fn some(entity: Entity) -> Option<Entity> {
+pub(super) fn some(entity: Entity) -> Option<Entity> {
     (!entity.is_none()).then_some(entity)
 }
 
 /// Subscribes `handler` to the events `decode` turns into an `E`.
-fn on<E, D, F>(load: &mut BaseLoad, ty: EventType, decode: D, handler: F) -> Result<(), Off>
+pub(super) fn on<E, D, F>(
+    load: &mut BaseLoad,
+    ty: EventType,
+    decode: D,
+    handler: F,
+) -> Result<(), Off>
 where
     D: Fn(&RawGameEvent<'_>) -> Option<E> + Send + Sync + 'static,
     F: Fn(&E) + Send + Sync + 'static,
