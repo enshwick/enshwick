@@ -18,7 +18,7 @@ and CRT libraries the linker needs.
 ```bash
 lefthook install                            # the git hooks
 rumdl check .                               # every document, as the hooks check it
-cargo install --locked cargo-nextest@0.9.151
+cargo install --locked cargo-nextest@0.9.152
 cargo nextest run --workspace
 ```
 
