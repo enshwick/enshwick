@@ -845,6 +845,13 @@ the loader does:
 - `close_window(&player, id)` closes a window as that player's client does,
   and `player_left(key)` makes the player leave as far as windows go. The
   mod hears of both as the loader tells it.
+- `FakeHost::without_hello(key)` gives a player whose client has not said
+  hello, or has no Enshwick. `carried_windows` returns nothing for that
+  player. The shows wait as the loader keeps them: at most
+  `actions::window::MAX_HELD`, and the mod hears the oldest as closed. A
+  close takes a waiting show back. `say_hello(key)` makes the client say
+  hello, and the waiting windows show first at the next `carried_windows`.
+  Every other player online takes windows at once.
 - `set_waypoint(&player, language, at)` moves that player's waypoint to
   `at`. The newest window they hold with a map runs its marker or point
   action, and the call returns the mod's reply. A waypoint set where it

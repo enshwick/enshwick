@@ -241,6 +241,7 @@ Its methods fall into three groups, each listed in its rustdoc:
 - Playing the game to it:
   - `detour`
   - `raise`
+  - `say_hello`, for a client given with `FakeHost::without_hello`
   - `tick` and the rest
 
 Mid-function hooks run on registers you set up:

@@ -480,6 +480,91 @@ mod tests {
     }
 
     #[test]
+    fn a_window_shown_before_the_client_s_hello_waits_and_shows_at_the_hello() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .player(root)
+                .without_hello(root.key),
+        );
+        actions().show(roster("2"), &[root.key]).unwrap();
+        assert!(
+            loader.carried_windows(&root, 0).is_empty(),
+            "a client that has not said hello holds nothing"
+        );
+        assert!(
+            loader.carried_windows(&root, 0).is_empty(),
+            "and the show keeps waiting while it says nothing"
+        );
+
+        loader.say_hello(root.key);
+        actions()
+            .show(Window::new("note", "Note").text("Hello", &[]), &[root.key])
+            .unwrap();
+        let carried = loader.carried_windows(&root, 0);
+        let ids: Vec<&str> = carried.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids, ["panel", "note"], "the waiting show goes first");
+        assert_eq!(shown_count(&carried).as_deref(), Some("2 online"));
+        assert!(CLOSED.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_client_without_its_hello_keeps_only_the_newest_shows_and_its_mod_hears_of_the_oldest() {
+        use enshwick::actions::window::MAX_HELD;
+
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .player(root)
+                .without_hello(root.key),
+        );
+        for n in 0..=MAX_HELD {
+            let id = format!("w{n}");
+            actions()
+                .show(Window::new(&id, "panel"), &[root.key])
+                .unwrap();
+            assert!(loader.carried_windows(&root, 0).is_empty());
+        }
+        assert_eq!(
+            *CLOSED.lock().unwrap(),
+            [(9, Some("w0".to_owned()))],
+            "a mod that shows again in its close handler churns once per step, as in the game"
+        );
+
+        loader.say_hello(root.key);
+        let held = loader.carried_windows(&root, 0);
+        assert_eq!(held.len(), MAX_HELD);
+        assert!(held.iter().all(|(id, _)| id != "w0"), "the oldest went");
+    }
+
+    #[test]
+    fn a_close_before_the_client_s_hello_takes_the_waiting_show_back() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .player(root)
+                .without_hello(root.key),
+        );
+        actions().show(roster("2"), &[root.key]).unwrap();
+        actions()
+            .show(Window::new("note", "Note").text("Hello", &[]), &[root.key])
+            .unwrap();
+        assert!(loader.carried_windows(&root, 0).is_empty());
+        actions().close("panel", &[root.key]).unwrap();
+        actions().update(roster("3"), &[root.key]).unwrap();
+        assert!(loader.carried_windows(&root, 0).is_empty());
+
+        loader.say_hello(root.key);
+        let carried = loader.carried_windows(&root, 0);
+        let ids: Vec<&str> = carried.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids, ["note"], "the closed show and its update are gone");
+        assert!(CLOSED.lock().unwrap().is_empty(), "the mod closed it");
+
+        loader.player_left(root.key);
+        assert!(loader.carried_windows(&root, 0).is_empty());
+    }
+
+    #[test]
     fn a_window_the_mod_closes_itself_is_not_told_back_to_it() {
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
         let loader = start(enshwick::test::FakeHost::new().player(root));
