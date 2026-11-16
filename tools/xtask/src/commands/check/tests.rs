@@ -80,7 +80,7 @@ fn the_host_part_never_runs_the_trybuild_test_whatever_parts_run_beside_it() {
 }
 
 #[test]
-fn the_host_tests_take_the_xtask_nextest_settings_after_the_workspace_arguments() {
+fn the_host_tests_take_their_filter_after_the_workspace_arguments() {
     let workspace = ["--workspace".to_owned()];
     let steps = host_steps(
         &Scope::All,
@@ -96,35 +96,7 @@ fn the_host_tests_take_the_xtask_nextest_settings_after_the_workspace_arguments(
         .map(Step::line)
         .find(|step| step.starts_with("cargo nextest run"))
         .unwrap();
-    assert!(
-        nextest.contains(&format!(
-            "--workspace --tool-config-file xtask:{NEXTEST_CONFIG} -E"
-        )),
-        "{nextest}"
-    );
-    assert!(Path::new(NEXTEST_CONFIG).is_file());
-    assert!(
-        NEXTEST_CONFIG
-            .replace('\\', "/")
-            .ends_with(affected::XTASK_NEXTEST)
-    );
-}
-
-#[test]
-fn the_test_the_host_tests_start_first_still_exists_in_the_loader() {
-    let settings = std::fs::read_to_string(NEXTEST_CONFIG).unwrap();
-    let name = settings
-        .split("test(=")
-        .nth(1)
-        .and_then(|rest| rest.split(')').next())
-        .unwrap();
-    let (module, function) = name.rsplit_once("::").unwrap();
-    let file = module.strip_suffix("::tests").unwrap().replace("::", "/");
-    let source = std::fs::read_to_string(
-        workspace_root().join(format!("crates/runtime/loader/src/{file}.rs")),
-    )
-    .unwrap();
-    assert!(source.contains(&format!("fn {function}()")), "{name}");
+    assert!(nextest.contains("--workspace -E"), "{nextest}");
 }
 
 #[test]

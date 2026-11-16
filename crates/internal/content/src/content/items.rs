@@ -499,7 +499,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 ///     let layout = ItemLayout::resolve(load)?;
 ///     let staff = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 ///     let registry = types::ITEM_REGISTRY_RESOURCE.key(ITEM_REGISTRY)?;
-///     load.serve(registry, registry, move |base| list_item(&layout, base, staff, "Staff"))
+///     load.serve(registry, registry, move |base, out| out.copy_from(&list_item(&layout, base, staff, "Staff")?))
 /// }
 /// ```
 #[must_use]
@@ -610,11 +610,11 @@ impl LoadHelpers for crate::BaseLoad {
         self.serve(
             types::ITEM_INFO.key(guid)?,
             types::ITEM_INFO.key(like)?,
-            move |base| served_clone(&layout, base, &item, guid),
+            move |base, out| out.copy_from(&served_clone(&layout, base, &item, guid)?),
         )?;
         let registry = types::ITEM_REGISTRY_RESOURCE.key(ITEM_REGISTRY)?;
-        self.serve(registry, registry, move |base| {
-            list_item(&layout, base, guid, &debug_name)
+        self.serve(registry, registry, move |base, out| {
+            out.copy_from(&list_item(&layout, base, guid, &debug_name)?)
         })?;
         if let Some(meter) = meter {
             // Items of one kind may share their template: serve it once.

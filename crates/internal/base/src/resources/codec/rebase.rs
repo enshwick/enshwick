@@ -1,8 +1,10 @@
 //! Offsets moved with the bytes that hold them.
 
-use super::{CodecError, Encoder, Kind, MAX_DEPTH, Type, VARIANT_OFFSET, out_of_range, size_of};
+use super::{
+    CodecError, Encoder, Grow, Kind, MAX_DEPTH, Type, VARIANT_OFFSET, out_of_range, size_of,
+};
 
-impl<'a> Encoder<'_, 'a> {
+impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
     /// Moves every offset the value of `ty` at `at` holds by `delta`, after
     /// its bytes moved from `at + delta`, so each still points at its data.
     pub(super) fn rebase(

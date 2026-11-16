@@ -132,7 +132,7 @@ pub struct MenuEntry {
 ///         workshop: None,
 ///     };
 ///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
-///     load.serve(bundle, bundle, move |base| list_recipes(&layout, base, &[entry]))
+///     load.serve(bundle, bundle, move |base, out| out.copy_from(&list_recipes(&layout, base, &[entry])?))
 /// }
 /// ```
 #[must_use]
@@ -197,7 +197,7 @@ pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -
 ///     let planks = Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac");
 ///     let kiln = WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
 ///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
-///     load.serve(bundle, bundle, move |base| move_recipes(&layout, base, &[(planks, kiln)]))
+///     load.serve(bundle, bundle, move |base, out| out.copy_from(&move_recipes(&layout, base, &[(planks, kiln)])?))
 /// }
 /// ```
 #[must_use]
@@ -375,7 +375,7 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let bench = WorkshopId::new(id!("bench.workshop").guid());
 ///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
-///     load.serve(bundle, bundle, move |base| list_workshop(&layout, base, bench))
+///     load.serve(bundle, bundle, move |base, out| out.copy_from(&list_workshop(&layout, base, bench)?))
 /// }
 /// ```
 #[must_use]
@@ -443,11 +443,12 @@ pub(crate) fn serve(
             return Ok(());
         }
     };
-    load.serve(bundle, bundle, move |base| {
-        edit(&layout, base).or_else(|| {
+    load.serve(bundle, bundle, move |base, out| {
+        let Some(edited) = edit(&layout, base) else {
             crate::warn!("new recipes stay out of the crafting menu: the UI bundle does not read");
-            Some(base.to_vec())
-        })
+            return out.copy_from(base);
+        };
+        out.copy_from(&edited)
     })
 }
 

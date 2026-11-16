@@ -151,3 +151,8 @@ required-features = ["test"]
 name = "typed"
 harness = false
 required-features = ["test", "typed"]
+
+[[bench]]
+name = "served_read"
+harness = false
+required-features = ["test"]

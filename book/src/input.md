@@ -71,10 +71,19 @@ names a [control's](controls.md) `link` uses, such as `"ContextualAction_Tap"`.
 
 On a client, `input.local_held()` returns the game actions its own player
 holds, as an `InputMask`. It is the mask the client read in its last step.
-It returns `None` on a server and outside a game. It also returns `None`
-while no step ran for a second, as in the pause menu. The client reads the
-mask only after a mod first asks for it, so that first call returns `None`.
-The calls after the client's next step return the mask.
+The client reads the mask only once a mod opens its input with
+`load.input()`, and a Luau mod's `enshwick.input` opens as the mod starts.
+The client's first step after that reads it, so a mod's first frame in a
+game has the mask. The read costs one row of the interface's player query
+per client step, and only while a mod has its input open.
+
+`local_held()` returns `None` in these cases:
+
+- on a server;
+- outside a game;
+- before the client's first step after the input opened;
+- while no step ran for a second, as in the pause menu;
+- on a game build without the read.
 
 It holds the gameplay controls only. The client's own controls, such as the
 menu and map keys, are not in it. `local_held` runs on any thread, such as
@@ -127,8 +136,8 @@ exists and remains fresh. `age_ms` is `None` before any sample. In Luau, this is
 sample can still have an age. Luau represents the age as a decimal string, as
 it represents other `u64` values. A zero held mask is a valid sample.
 
-This getter does not request sampling. Only the existing `local_held()` call
-starts it. The flags are weakly consistent observations of cached metadata.
+This getter does not request sampling itself. Opening the input or a
+`local_held()` call starts it. The flags are weakly consistent observations of cached metadata.
 They are not world or session identity, or proof of input execution.
 They do not explain why a player row or component was not sampled.
 No new game memory is read. The getter is client-only and returns

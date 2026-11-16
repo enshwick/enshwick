@@ -76,9 +76,9 @@ impl LoadMethods for crate::BaseLoad {
         let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
         let recipe = Arc::new(recipe);
         let built = Arc::clone(&recipe);
-        self.serve(registry, registry, move |base| {
+        self.serve(registry, registry, move |base, out| {
             let recipe = NewRecipe { id, ..built() };
-            add_recipe_to(&layout, base, &recipe, workshop_limit())
+            out.copy_from(&add_recipe_to(&layout, base, &recipe, workshop_limit())?)
         })?;
         self.allow_rebuild(registry)?;
         menu::serve(self, move |menu, bundle| {
@@ -98,7 +98,7 @@ impl LoadMethods for crate::BaseLoad {
         let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
         let choose = Arc::new(choose);
         let chosen = Arc::clone(&choose);
-        self.serve(registry, registry, move |base| {
+        self.serve(registry, registry, move |base, out| {
             let vanilla =
                 vanilla_registry().and_then(|registry| recipe_guids(&layout, &registry));
             if vanilla.is_none() {
@@ -106,12 +106,13 @@ impl LoadMethods for crate::BaseLoad {
                     "derived recipes may copy recipes of other mods: the game's recipe registry does not read"
                 );
             }
-            derive_recipes_in(&layout, base, salt, workshop_limit(), &|view| {
+            let derived = derive_recipes_in(&layout, base, salt, workshop_limit(), &|view| {
                 let added = vanilla
                     .as_ref()
                     .is_some_and(|vanilla| !vanilla.contains(&view.guid()));
                 if added { None } else { chosen(view) }
-            })
+            })?;
+            out.copy_from(&derived)
         })?;
         menu::serve(self, move |menu, bundle| {
             let entries = vanilla_registry()
@@ -139,8 +140,8 @@ impl LoadHelpers for crate::BaseLoad {
         self.declare(recipe.id)?;
         let layout = RecipeLayout::resolve(self)?;
         let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
-        self.serve(registry, registry, move |base| {
-            add_recipe_to(&layout, base, &recipe, workshop_limit())
+        self.serve(registry, registry, move |base, out| {
+            out.copy_from(&add_recipe_to(&layout, base, &recipe, workshop_limit())?)
         })?;
         menu::serve(self, move |menu, bundle| {
             menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])

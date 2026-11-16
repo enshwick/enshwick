@@ -260,8 +260,8 @@ impl LoadMethods for crate::BaseLoad {
             .chain([item.guid()])
         {
             // A second link on the item, after `add_item`'s on the same base.
-            self.serve(types::ITEM_INFO.key(guid)?, base, move |info| {
-                place(info, at, placed)
+            self.serve(types::ITEM_INFO.key(guid)?, base, move |info, out| {
+                out.copy_from(&place(info, at, placed)?)
             })?;
         }
         if let Some(cost) = new.recipe_cost {

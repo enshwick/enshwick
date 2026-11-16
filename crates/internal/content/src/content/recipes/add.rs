@@ -182,8 +182,8 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
 ///     let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
-///     load.serve(registry, registry, move |base| {
-///         add_recipe_to(&layout, base, &recipe, workshop_limit())
+///     load.serve(registry, registry, move |base, out| {
+///         out.copy_from(&add_recipe_to(&layout, base, &recipe, workshop_limit())?)
 ///     })
 /// }
 /// ```

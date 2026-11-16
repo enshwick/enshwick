@@ -95,9 +95,9 @@ mod tests {
     fn a_pack_s_served_resource_builds_as_the_pack() {
         let key = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key_by_hash(1);
         let loader = installed(FakeHost::new(), |load| {
-            load.serve(key, key, |bytes| {
+            load.serve(key, key, |bytes, out| {
                 note();
-                Some(bytes.to_vec())
+                out.copy_from(bytes)
             })
         });
         assert_eq!(loader.build_resource(&key, &[1, 2, 3]), Ok(vec![1, 2, 3]));

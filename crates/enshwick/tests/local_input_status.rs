@@ -31,7 +31,8 @@ side = "both""#
         assert_eq!(status, Status::OK);
         let input = INPUT.lock().unwrap().unwrap();
         let never = input.local_status().unwrap();
-        assert!(!never.requested && !never.sample_present && !never.fresh);
+        assert!(never.requested, "opening Input started the reads");
+        assert!(!never.sample_present && !never.fresh);
         assert_eq!(never.age_ms, None);
         assert_eq!(input.local_status().unwrap(), never);
         loader.hold_locally(Some(0));
@@ -58,8 +59,9 @@ side = "both""#
         assert_eq!(live.age_ms, Some(15));
         assert!(
             input.local_held().is_none(),
-            "the first ask starts the reads"
+            "no interface step ran since opening Input started the reads"
         );
+        let _step = loader.draw_frame();
         assert_eq!(input.local_held().unwrap().bits(), 0);
         loader.set_local_input_status(Info {
             header: Header::of::<Info>(),

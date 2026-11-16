@@ -29,7 +29,7 @@ mod tests {
             load.serve(
                 types::SOUND_CONTAINER_RESOURCE.key(BELL)?,
                 types::SOUND_CONTAINER_RESOURCE.key(CHEST)?,
-                |chest| Some(chest.to_vec()),
+                |chest, out| out.copy_from(chest),
             )?;
             load.change_sound(
                 bell,
@@ -42,7 +42,7 @@ mod tests {
                 load.serve(
                     types::SOUND_CONTAINER_RESOURCE.key(BELL)?,
                     types::SOUND_CONTAINER_RESOURCE.key(Guid::named("you.bells:other"))?,
-                    |base| Some(base.to_vec()),
+                    |base, out| out.copy_from(base),
                 )
                 .is_err(),
                 "a second maker from another base is refused"

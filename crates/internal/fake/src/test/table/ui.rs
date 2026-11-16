@@ -43,18 +43,19 @@ pub(crate) extern "system" fn ui_frame(
 }
 
 /// The local player's held controls, as the test set them; the loader's
-/// answers: [`Status::MISSING`] on a server, outside a game and at the
-/// first ask, which starts the reads.
+/// answers: [`Status::UNAVAILABLE`] on a server, outside a game, and from
+/// the first ask, which starts the reads, until an interface step reads
+/// them.
 pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Status {
     if out.is_null() {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        let asked = core::mem::replace(&mut s.local_held.asked, true);
+        s.local_held.asked = true;
         match s
             .local_held
             .bits
-            .filter(|_| asked && s.host.side != Side::SERVER)
+            .filter(|_| s.local_held.stepped && s.host.side != Side::SERVER)
         {
             Some(bits) => {
                 // SAFETY: the safe layer passes a writable `u64` for the call,
@@ -494,7 +495,8 @@ pub(crate) extern "system" fn fog_read(
     })
 }
 
-/// A cached client sampler status supplied by the test; no sampling is requested.
+/// A cached client sampler status supplied by the test, requested once a
+/// `local_held` ask started the reads; this getter requests nothing.
 pub(crate) extern "system" fn local_input_status(
     _me: ModHandle,
     out: *mut enshwick_core::abi::LocalInputInfo,
@@ -506,7 +508,12 @@ pub(crate) extern "system" fn local_input_status(
         if s.host.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        super::put_headed(out, s.local_input_info)
+        // As the loader: the first `local_held` ask started the reads.
+        let mut info = s.local_input_info;
+        if s.local_held.asked {
+            info.flags |= enshwick_core::abi::LocalInputInfo::REQUESTED;
+        }
+        super::put_headed(out, info)
     })
 }
 

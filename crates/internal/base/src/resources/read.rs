@@ -51,13 +51,13 @@ impl Host {
     ///     let resin = types::ITEM_INFO.key(Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc"))?;
     ///     let wood = types::ITEM_INFO.key(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"))?;
     ///     let host = load.host();
-    ///     load.serve(resin, resin, move |resin| {
+    ///     load.serve(resin, resin, move |resin, out| {
     ///         // Wood as other mods serve it; inside a build of wood, resin
     ///         // stays as it is rather than failing.
     ///         if let Ok(wood) = host.served_resource(wood) {
     ///             enshwick::info!("wood is served as {} bytes", wood.len());
     ///         }
-    ///         Some(resin.to_vec())
+    ///         out.copy_from(resin)
     ///     })
     /// }
     /// ```

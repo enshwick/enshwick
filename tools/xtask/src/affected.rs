@@ -98,10 +98,6 @@ impl Lane {
 /// local limit on the Windows PC (669 s, 2026-11-14).
 pub(crate) const MAX_LOCAL_PACKAGES: usize = 9;
 
-/// The nextest settings every host test run of `cargo xtask check` reads,
-/// beside the repository's own `.config/nextest.toml`.
-pub(crate) const XTASK_NEXTEST: &str = "tools/xtask/nextest.toml";
-
 /// A package's own changelog and change files, which no build reads.
 const CHANGELOG: &str = "CHANGELOG.md";
 const CHANGES_DIR: &str = "changes/";
@@ -129,7 +125,6 @@ const GLOBAL_FILES: &[&str] = &[
     "clippy.toml",
     ".cargo/config.toml",
     ".cargo/config",
-    XTASK_NEXTEST,
 ];
 /// Directories of tool settings every test run reads, such as nextest's
 /// `.config/nextest.toml`.

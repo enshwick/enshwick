@@ -720,3 +720,50 @@ fn a_changed_string_never_writes_over_bytes_another_header_shares() {
     assert_eq!(pair.field("a"), Some(&Value::Text("xyz".into())));
     assert_eq!(pair.field("b"), Some(&Value::Text("abc".into())));
 }
+
+/// Bytes that stop growing past a cap, as an [`Output`] the loader refuses.
+struct Capped(Vec<u8>, usize);
+
+impl core::ops::Deref for Capped {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for Capped {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
+impl Grow for Capped {
+    fn grow(&mut self, len: usize) {
+        if len <= self.1 {
+            self.0.resize(len, 0);
+        }
+    }
+
+    fn put(&mut self, bytes: &[u8]) {
+        if self.0.len() + bytes.len() <= self.1 {
+            self.0.extend_from_slice(bytes);
+        }
+    }
+}
+
+#[test]
+fn a_grown_array_into_bytes_that_stop_growing_fails_instead_of_panicking() {
+    let registry = element_registry();
+    let holder = Value::Struct(vec![("elems".into(), Value::List(vec![elem("first", 1)]))]);
+    let base = registry.encode("demo::Holder", &holder, None).unwrap();
+    let grown = Value::Struct(vec![(
+        "elems".into(),
+        Value::List(vec![elem("first", 1), elem("second", 2)]),
+    )]);
+    let mut out = Capped(Vec::new(), base.len());
+    let error = registry
+        .encode_in("demo::Holder", &grown, Some(&base), &mut out)
+        .unwrap_err();
+    assert!(error.to_string().contains("lent no buffer"), "{error}");
+}

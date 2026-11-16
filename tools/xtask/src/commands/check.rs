@@ -38,11 +38,6 @@ const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask
 /// under `target/tests/trybuild`: only [`Part::Trybuild`] runs it.
 const TRYBUILD: &str = "binary_id(enshwick::main) & test(/^(config_files|internals)::/)";
 
-/// The host tests' nextest settings ([`affected::XTASK_NEXTEST`]), which
-/// start the slowest first; a tool config, so `.config/nextest.toml` still
-/// applies over it.
-const NEXTEST_CONFIG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/nextest.toml");
-
 /// The API crate's features the trybuild test builds with: trybuild builds
 /// its cases with the features of the test, and none of them needs the
 /// generated typed API, the costliest part of the crate to build.
@@ -647,12 +642,7 @@ fn host_steps(
             None => Some(format!("not ({TRYBUILD})")),
         };
         if let Some(filter) = filter {
-            steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&[
-                "--tool-config-file",
-                &format!("xtask:{NEXTEST_CONFIG}"),
-                "-E",
-                &filter,
-            ]));
+            steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
         }
     }
     if parts.contains(&Part::Trybuild) && touches(scope, FACADE) && !wide(scope) {

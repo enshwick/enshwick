@@ -69,10 +69,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let Some(key) = load.host().resource_keys(Some(ty))?.into_iter().next() else {
         return Ok(());
     };
-    load.serve(key, key, move |base| {
+    load.serve(key, key, move |base, out| {
         let mut notifier = registry.decode(NOTIFIER, base).ok()?;
         *notifier.field_mut("defaultSound")? = Value::Guid(bell.guid());
-        registry.encode(NOTIFIER, &notifier, Some(base)).ok()
+        registry.encode_into(NOTIFIER, &notifier, Some(base), out).ok()
     })
 }
 ```

@@ -453,8 +453,8 @@ impl LoadMethods for crate::BaseLoad {
         ) else {
             return Ok(());
         };
-        self.serve(key, like, move |base| {
-            Some(build(&layout, base, icon.pixels))
+        self.serve(key, like, move |base, out| {
+            out.copy_from(&build(&layout, base, icon.pixels))
         })
     }
 }

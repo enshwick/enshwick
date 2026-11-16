@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn the_first_ask_for_the_held_controls_answers_none_as_in_the_game() {
+    fn a_mod_that_opened_input_in_init_reads_the_held_controls_in_its_first_frame() {
         let loader = enshwick::test::FakeHost::new()
             .side(Side::CLIENT)
             .player_input()
@@ -95,10 +95,12 @@ mod tests {
         assert_eq!(status, Status::OK);
         loader.hold_locally(Some(1 << 30));
         let _first = loader.draw_frame();
-        let _second = loader.draw_frame();
         let read = READ.lock().unwrap();
-        assert_eq!(read[0].2, None, "the first ask starts the reads");
-        assert_eq!(read[1].2, Some(vec![GameAction::Block]));
+        assert_eq!(
+            read[0].2,
+            Some(vec![GameAction::Block]),
+            "opening Input started the reads, and the frame's step read them"
+        );
     }
 
     #[test]

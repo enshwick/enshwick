@@ -521,9 +521,11 @@ impl Map {
     /// no fog: the loader sends the circle to the loader on the player's
     /// client, which hands it to the game's own reveal within a frame, and
     /// the character's save keeps it, in every world the character enters.
-    /// A client without Enshwick is not reached, and the mod decides what
-    /// to tell whoever asked. Returns once the circle is sent; any thread,
-    /// on a dedicated server or a client that hosts.
+    /// On a client that hosts, the hosting player's own fog uncovers on that
+    /// client, with no message. A client without Enshwick is not reached,
+    /// and the mod decides what to tell whoever asked. Returns once the
+    /// circle is sent; any thread, on a dedicated server or a client that
+    /// hosts.
     ///
     /// # Errors
     ///

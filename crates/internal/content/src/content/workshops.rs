@@ -404,7 +404,7 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let items = ItemLayout::resolve(load)?;
 ///     let (item, like) = (types::ITEM_INFO.key(new.id.guid())?, types::ITEM_INFO.key(new.like.item)?);
-///     load.serve(item, like, move |base| clone_station(&items, &layout, base, &new))
+///     load.serve(item, like, move |base, out| out.copy_from(&clone_station(&items, &layout, base, &new)?))
 /// }
 /// ```
 #[must_use]
@@ -445,7 +445,7 @@ pub fn clone_station(
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let registry = types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?;
-///     load.serve(registry, registry, move |base| list_workshop(&layout, base, &new))
+///     load.serve(registry, registry, move |base, out| out.copy_from(&list_workshop(&layout, base, &new)?))
 /// }
 /// ```
 #[must_use]
@@ -528,17 +528,17 @@ impl LoadMethods for crate::BaseLoad {
         self.serve(
             types::ITEM_INFO.key(new.id.guid())?,
             types::ITEM_INFO.key(like.item)?,
-            move |base| clone_station(&item_layout, &layout, base, &station),
+            move |base, out| out.copy_from(&clone_station(&item_layout, &layout, base, &station)?),
         )?;
         let (item, debug_name) = (new.id.guid(), new.debug_name.clone());
         let registry = types::ITEM_REGISTRY_RESOURCE.key(items::ITEM_REGISTRY)?;
-        self.serve(registry, registry, move |base| {
-            items::list_item(&item_layout, base, item, &debug_name)
+        self.serve(registry, registry, move |base, out| {
+            out.copy_from(&items::list_item(&item_layout, base, item, &debug_name)?)
         })?;
         let cost = new.recipe_cost;
         let registry = types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?;
-        self.serve(registry, registry, move |base| {
-            list_workshop(&layout, base, &new)
+        self.serve(registry, registry, move |base, out| {
+            out.copy_from(&list_workshop(&layout, base, &new)?)
         })?;
         super::menu::serve(self, move |menu, bundle| {
             super::menu::list_workshop(menu, bundle, workshop)

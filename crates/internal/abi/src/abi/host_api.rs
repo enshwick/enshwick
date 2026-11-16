@@ -2096,10 +2096,13 @@ pub struct HostApi {
     /// client-only ones such as menu keys. The bits are the game's, which a
     /// game build may renumber: find each by its name among the constants
     /// [`HostApi::types`] lists for `PlayerInputType`, never as a fixed
-    /// value. Client only; [`Status::UNAVAILABLE`]
-    /// outside a game, while no step read it for a second, or on a build
-    /// without the read; [`Status::BAD_ARGS`] for a null `out`. Any thread;
-    /// `out` is borrowed for the call.
+    /// value. The loader reads the mask only once a mod asked for it: the
+    /// first call, of any mod, starts the reads, and the interface's next
+    /// step reads it; the safe layer calls it when a mod opens its input.
+    /// Client only; [`Status::UNAVAILABLE`] on a server, outside a game,
+    /// from the first call until that step, while no step read it for a
+    /// second, or on a build without the read; [`Status::BAD_ARGS`] for a
+    /// null `out`. Any thread; `out` is borrowed for the call.
     pub local_held: extern "system" fn(me: ModHandle, out: *mut u64) -> Status,
     /// Copies the local input sampler's cached diagnostics without requesting reads.
     /// Client only ([`Status::UNAVAILABLE`] on a server); callable on any thread.
