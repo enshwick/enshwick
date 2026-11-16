@@ -8,6 +8,7 @@ use std::time::Duration;
 
 /// The system's id of the calling thread, which the loader compares to tell
 /// the game's threads apart.
+#[cfg(windows)]
 pub(crate) fn current_thread() -> u32 {
     // SAFETY: `GetCurrentThreadId` takes no arguments and cannot fail.
     unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() }
