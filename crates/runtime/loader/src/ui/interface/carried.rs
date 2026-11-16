@@ -259,12 +259,9 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
     // Back (Escape, B), bound to the window's panel from the last frame so
     // the press does not also open the pause menu, steps back; a dialog over
     // the window draws after it and takes its own Back.
-    let node = engine.node_id(&drawn.window);
-    let back = node != 0
-        && !super::dialog::showing()
-        // SAFETY: in a frame of the interface update on its thread, by this
-        // function's `# Safety`.
-        && unsafe { engine.back_pressed(node) };
+    // SAFETY: in a frame of the interface update on its thread, by this
+    // function's `# Safety`, with the window drawn in the last frame.
+    let back = unsafe { super::dialog::back_over(engine, &drawn.window) };
     let stepped = if back { drawn.back() } else { Click::Nothing };
     let (mod_id, id) = &drawn.key;
     let name = copy(&[b"enshwick/carried/", mod_id.as_bytes(), b"/", id.as_bytes()]);

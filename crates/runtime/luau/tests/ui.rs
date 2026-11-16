@@ -21,6 +21,9 @@ mod tests {
             local same = kept == nil or rawequal(kept, frame)
             kept = frame
             frame:window("main", "Panel", function(w)
+                if w:back() then
+                    enshwick.log.info(`back {frame:back()}`)
+                end
                 w:label({ text = "Settings", style = "H2" })
                 fast = w:toggle({ label = "Fast" }, fast)
                 volume = w:slider({ label = "Volume", min = 0, max = 1, steps = 11 }, volume)
@@ -109,6 +112,16 @@ mod tests {
         );
 
         assert!(second.contains(&Drawn::Progress { fraction: 0.8 }));
+
+        // The script's dialog shows over the window and would take Back.
+        assert!(loader.answer(None));
+        loader.input("main", Input::Back);
+        let _backed = loader.draw_frame();
+        assert!(
+            logged(&loader, "back false"),
+            "Back reaches the window's body, not the frame around it: {:?}",
+            loader.logs()
+        );
 
         loader.input("Close", Input::Click);
         let closing = loader.draw_frame();

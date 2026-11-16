@@ -247,7 +247,8 @@ pub struct UiWidget {
     pub min: f32,
     /// A slider's greatest value, a progress bar's full value.
     pub max: f32,
-    /// Out: 1 when a button was clicked or a value changed this frame.
+    /// Out: 1 when a button was clicked or a value changed this frame, or
+    /// when the player pressed Back over a window.
     pub result: u32,
     /// Where a HUD widget shows: [`UiWidget::TOP_LEFT`] to
     /// [`UiWidget::BOTTOM_RIGHT`]; read in a HUD callback only.
@@ -265,6 +266,8 @@ impl UiWidget {
     /// A window in the game's style, a panel over the screen that takes the
     /// input while it shows: `text` is its id, unique in the mod, `detail`
     /// its title. Widgets that follow go into it until [`UiWidget::END`].
+    /// `result` 1 when the player pressed Back (Escape, B) over it this
+    /// frame, which then does not open the game's pause menu.
     pub const WINDOW: u32 = 1;
     /// Closes the innermost open window.
     pub const END: u32 = 2;

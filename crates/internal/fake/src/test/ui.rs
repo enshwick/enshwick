@@ -576,6 +576,8 @@ pub enum Input {
     Value(f32),
     /// Picks a dropdown row's option.
     Pick(usize),
+    /// Presses Back (Escape, B) over a window, given by its id.
+    Back,
 }
 
 /// A dialog the mod queued, as [`Installed::dialogs`] reports it.

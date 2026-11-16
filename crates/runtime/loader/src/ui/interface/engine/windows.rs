@@ -5,6 +5,11 @@ use super::{
     Window,
 };
 
+/// The navigation kind of a popup window.
+const NAV_WINDOW: u32 = 2;
+/// The navigation kind of a scrolled column.
+pub(super) const NAV_COLUMN: u32 = 3;
+
 /// The game's alignment word for a panel at `edge` of its parent, centred
 /// along it: the vertical part in the high byte, the horizontal in the low,
 /// 1 for the start, 2 the centre, 3 the end, as the HUD's columns take it.
@@ -149,15 +154,7 @@ impl Engine {
             // the panel frame opened above is the window `title` asks for.
             unsafe { self.title(context, title) };
         }
-        let mut nav = Buf::<NAV_CONFIG>::zeroed();
-        let [kind, wrap, axis, flags, input, layer, sound] = self.layout.nav;
-        nav.u32(kind, 2);
-        nav.u8(wrap, 1);
-        nav.u32(axis, 3);
-        nav.u16(flags, 0x101);
-        nav.u32(input, 2);
-        nav.u16(layer, 0x1b);
-        nav.u16(sound, 1);
+        let mut nav = self.nav_config(NAV_WINDOW);
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's
         // `ui.nav_extent` bytes and `nav` its `ui.nav_config_size`
@@ -177,6 +174,21 @@ impl Engine {
         // function's `# Safety`; the group stays in place in `window` until
         // `Engine::window_end` drops it, by the same contract.
         unsafe { (self.nav_push)(context, window.nav.ptr()) };
+    }
+
+    /// A navigation config of `kind`, as the game's popups, scrolled columns
+    /// and chat field fill theirs: wrapping, both axes, every input.
+    pub(super) fn nav_config(&self, kind: u32) -> Buf<NAV_CONFIG> {
+        let mut nav = Buf::<NAV_CONFIG>::zeroed();
+        let [kind_at, wrap, axis, flags, input, layer, sound] = self.layout.nav;
+        nav.u32(kind_at, kind);
+        nav.u8(wrap, 1);
+        nav.u32(axis, 3);
+        nav.u16(flags, 0x101);
+        nav.u32(input, 2);
+        nav.u16(layer, 0x1b);
+        nav.u16(sound, 1);
+        nav
     }
 
     /// Ends a window started with [`Engine::window_begin`].

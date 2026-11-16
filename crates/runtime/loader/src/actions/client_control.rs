@@ -23,12 +23,23 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::input::CAMERA_ROTATION.id(),
     pinned::input::CLIENT_BUILD.id(),
     pinned::input::MOVEMENT_STICK.id(),
+    pinned::input::TARGET_SELECTION.id(),
+    pinned::input::DIGITAL_INPUT.id(),
     pinned::ui::MENU_TAB.id(),
     pinned::ui::RECIPE_DIRECTORY.id(),
     pinned::ui::RECIPE_HIGHLIGHTED.id(),
     pinned::ui::RECIPE_SELECT.id(),
     pinned::ui::TOGGLE_HUD_SCREEN.id(),
 ];
+
+/// The input builder's passes, by its mode argument (client 26430625,
+/// seen live).
+pub(crate) mod pass {
+    /// The pass that writes the stick, once per game step.
+    pub(crate) const STEP: u32 = 0;
+    /// The pass that writes only the look, once per frame.
+    pub(crate) const FRAME: u32 = 1;
+}
 
 /// Why a group's entry fails: the table lacks it.
 const ABSENT: &str = "this build lacks it";
@@ -96,6 +107,9 @@ pub(crate) struct Groups {
     pub(crate) toggle: Group<Toggle>,
     /// The input builder's stick and look.
     pub(crate) input: Group<InputLayout>,
+    /// The input builder's buttons and target selection, which only the hold
+    /// under loader windows writes, so their entries turn off only it.
+    pub(crate) buttons: Group<Buttons>,
     /// The crafting menu's recipe browser.
     pub(crate) recipes: Group<Recipes>,
 }
@@ -105,6 +119,7 @@ pub(crate) static GROUPS: Groups = Groups {
     tab: Group::new("the in-game menu's tab"),
     toggle: Group::new("the HUD's screen toggle"),
     input: Group::new("the client's look and stick input"),
+    buttons: Group::new("the player's buttons held under loader windows"),
     recipes: Group::new("the crafting menu's recipe browser"),
 };
 
@@ -139,6 +154,17 @@ pub(crate) struct InputLayout {
     blocked: usize,
 }
 
+/// The rest of what the input builder writes in `ClientPlayerInput`, which
+/// the hold under loader windows clears.
+#[derive(Debug)]
+pub(crate) struct Buttons {
+    /// `ClientPlayerInput.data.targetSelectionInput`, a float pair.
+    target_selection: usize,
+    /// `ClientPlayerInput.data.digitalInput`, the 64-bit mask of the
+    /// buttons held: interact, attack, jump, dodge and the rest.
+    digital_input: usize,
+}
+
 /// The crafting menu's recipe browser, whose block `client_recipes` takes
 /// at `doRecipeDirectoryColumn(node, book, browser, ctx)`, which the group
 /// needs too.
@@ -168,6 +194,13 @@ fn reflected_size(loader: &Loader, id: &'static str) -> Result<usize, &'static s
         .map_err(|_| id)?
         .size();
     usize::try_from(size).map_err(|_| id)
+}
+
+/// The table entry `id` as an offset where `size` bytes fit inside the
+/// build's `ClientPlayerInput`, or its id when they do not.
+fn in_input(loader: &Loader, id: pinned::Constant, size: usize) -> Result<usize, &'static str> {
+    let input = reflected_size(loader, catalogue::ids::CLIENT_PLAYER_INPUT)?;
+    offset(loader, id).and_then(|at| fits(at, size, input).then_some(at).ok_or(id.id()))
 }
 
 impl Tab {
@@ -231,20 +264,36 @@ impl Tab {
 
 impl InputLayout {
     fn resolve(loader: &Loader) -> Result<Self, &'static str> {
-        let input = reflected_size(loader, catalogue::ids::CLIENT_PLAYER_INPUT)?;
         let look = reflected_size(loader, catalogue::ids::MULTI_DEVICE_DIRECTIONAL_INPUT)?;
         if look != size_of::<Look>() {
             return Err(catalogue::ids::MULTI_DEVICE_DIRECTIONAL_INPUT);
         }
-        let inside = |id: pinned::Constant, size: usize| {
-            offset(loader, id).and_then(|at| fits(at, size, input).then_some(at).ok_or(id.id()))
-        };
         address(loader, pinned::input::CLIENT_BUILD)?;
         Ok(Self {
-            movement_stick: inside(pinned::input::MOVEMENT_STICK, size_of::<[f32; 2]>())?,
-            camera_rotation: inside(pinned::input::CAMERA_ROTATION, size_of::<Look>())?,
+            movement_stick: in_input(loader, pinned::input::MOVEMENT_STICK, size_of::<[f32; 2]>())?,
+            camera_rotation: in_input(loader, pinned::input::CAMERA_ROTATION, size_of::<Look>())?,
             blocked: offset(loader, pinned::input::BLOCKED)?,
         })
+    }
+
+    /// Holds the stick in the step pass or the look in the frame pass the
+    /// builder just wrote, as the builder leaves them while the game blocks
+    /// the input. Each is cleared only in the pass that writes it, so a mod's
+    /// move or look command written after this pass stays.
+    ///
+    /// # Safety
+    ///
+    /// - `input` is valid for writes of the build's `ClientPlayerInput`,
+    ///   which nothing else touches during the call.
+    #[cold]
+    pub(crate) unsafe fn hold(&self, input: *mut u8, mode: u32) {
+        match mode {
+            // SAFETY: the caller's record, by this function's `# Safety`.
+            pass::STEP => unsafe { self.set_movement_stick(input, [0.0; 2]) },
+            // SAFETY: the caller's record, by this function's `# Safety`.
+            pass::FRAME => unsafe { self.set_camera_rotation(input, Look::default()) },
+            _ => {}
+        }
     }
 
     /// Whether the game blocks the player's input, as the builder's own
@@ -303,6 +352,37 @@ impl InputLayout {
         // SAFETY: the caller's record, which `resolve` checked holds the
         // look at `camera_rotation`.
         unsafe { enshwick_core::raw::read_at(input, self.camera_rotation) }
+    }
+}
+
+impl Buttons {
+    fn resolve(loader: &Loader) -> Result<Self, &'static str> {
+        Ok(Self {
+            target_selection: in_input(
+                loader,
+                pinned::input::TARGET_SELECTION,
+                size_of::<[f32; 2]>(),
+            )?,
+            digital_input: in_input(loader, pinned::input::DIGITAL_INPUT, size_of::<u64>())?,
+        })
+    }
+
+    /// Holds the buttons and target selection the builder just wrote, in
+    /// either pass, as the builder leaves them while the game blocks the
+    /// input.
+    ///
+    /// # Safety
+    ///
+    /// - `input` is valid for writes of the build's `ClientPlayerInput`,
+    ///   which nothing else touches during the call.
+    #[cold]
+    pub(crate) unsafe fn hold(&self, input: *mut u8) {
+        // SAFETY: the caller's record, which `resolve` checked holds a
+        // 64-bit mask at `digital_input`.
+        unsafe { enshwick_core::raw::write_at(input, self.digital_input, 0u64) };
+        // SAFETY: the caller's record, which `resolve` checked holds a float
+        // pair at `target_selection`.
+        unsafe { enshwick_core::raw::write_at(input, self.target_selection, [0f32; 2]) };
     }
 }
 
@@ -432,6 +512,7 @@ pub(crate) fn link(loader: &Loader) {
     GROUPS.tab.link(loader, Tab::resolve(loader));
     GROUPS.toggle.link(loader, Toggle::resolve(loader));
     GROUPS.input.link(loader, InputLayout::resolve(loader));
+    GROUPS.buttons.link(loader, Buttons::resolve(loader));
     GROUPS.recipes.link(loader, Recipes::resolve(loader));
 }
 
@@ -521,17 +602,58 @@ mod tests {
         let look: Look = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]];
         put(&mut input, 0x2b8, [0.5f32, -1.0]);
         put(&mut input, 0x2c4, look);
-        let layout = InputLayout {
-            movement_stick: 0x2b8,
-            camera_rotation: 0x2c4,
-            blocked: 0xad5a,
-        };
+        let layout = BENCH_INPUT;
         // SAFETY: the record above, of the build's size.
         let stick = unsafe { layout.movement_stick(input.as_ptr()) };
         // SAFETY: the same record.
         let read = unsafe { layout.camera_rotation(input.as_ptr()) };
         assert_eq!(stick, [0.5, -1.0]);
         assert_eq!(read, look);
+    }
+
+    #[test]
+    fn the_hold_clears_the_buttons_every_pass_and_the_stick_or_look_only_in_its_own() {
+        fn at<T: bytemuck::AnyBitPattern>(input: &[u8], at: usize) -> T {
+            bytemuck::pod_read_unaligned(&input[at..at + size_of::<T>()])
+        }
+        let look: Look = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]];
+        let written = || {
+            let mut input = vec![0u8; 0x600];
+            put(&mut input, 0x2b8, [0.5f32, -1.0]);
+            put(&mut input, 0x2c4, look);
+            put(&mut input, 0x2ec, [0.25f32, 0.75]);
+            put(&mut input, 0x3a8, u64::MAX);
+            input
+        };
+        let layout = BENCH_INPUT;
+        let buttons = Buttons {
+            target_selection: 0x2ec,
+            digital_input: 0x3a8,
+        };
+        let hold = |input: &mut [u8], mode| {
+            // SAFETY: a record of the build's size, not shared.
+            unsafe { layout.hold(input.as_mut_ptr(), mode) };
+            // SAFETY: the same test record of the build's size, not shared.
+            unsafe { buttons.hold(input.as_mut_ptr()) };
+        };
+        let read = |input: &[u8]| {
+            (
+                at::<[f32; 2]>(input, 0x2b8),
+                at::<Look>(input, 0x2c4),
+                at::<[f32; 2]>(input, 0x2ec),
+                at::<u64>(input, 0x3a8),
+            )
+        };
+        let mut step = written();
+        hold(&mut step, pass::STEP);
+        assert_eq!(read(&step), ([0.0; 2], look, [0.0; 2], 0), "the step pass");
+        let mut frame = written();
+        hold(&mut frame, pass::FRAME);
+        assert_eq!(
+            read(&frame),
+            ([0.5, -1.0], Look::default(), [0.0; 2], 0),
+            "the frame pass"
+        );
     }
 
     #[test]
@@ -612,6 +734,7 @@ mod tests {
             &GROUPS.tab.fuse,
             &GROUPS.toggle.fuse,
             &GROUPS.input.fuse,
+            &GROUPS.buttons.fuse,
             &GROUPS.recipes.fuse,
         ] {
             assert!(fuse.is_off(), "{}", fuse.feature());
@@ -620,5 +743,9 @@ mod tests {
         let listed = crate::engine::diag::parts_off();
         let parts: Vec<&str> = listed.iter().map(|p| p.part.as_str()).collect();
         assert!(parts.contains(&"the in-game menu's tab"), "{parts:?}");
+        assert!(
+            parts.contains(&GROUPS.buttons.fuse.feature()),
+            "the held buttons are a part of their own, so their entries never turn off the look and move: {parts:?}"
+        );
     }
 }

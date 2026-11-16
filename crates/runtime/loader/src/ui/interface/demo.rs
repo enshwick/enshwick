@@ -247,6 +247,9 @@ unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
     // until `window_end` below, and `name` and `title` live in the frame's
     // text arena.
     unsafe { engine.window_begin(context, &mut demo.window, &name, &title) };
+    // SAFETY: in this frame of the interface update, on its thread, by this
+    // function's `# Safety`, with the window begun one call earlier.
+    let back = unsafe { super::dialog::back_over(engine, &demo.window) };
     // SAFETY: the window started one call earlier in this frame, on its
     // thread, with the frame's `context`, and `paint` is not used after
     // `window_end` below.
@@ -263,7 +266,7 @@ unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
     if demo.page > 0 && paint.button(words("mods.page.previous").as_bytes(), true) {
         demo.page -= 1;
     }
-    let close = paint.button(words("actions.close").as_bytes(), true);
+    let close = paint.button(words("actions.close").as_bytes(), true) || back;
     // SAFETY: `window_begin` started `demo.window` in this frame, on this
     // thread, with this `context`; it did not move, and the painter's widgets
     // close every frame they open.

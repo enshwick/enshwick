@@ -18,11 +18,11 @@ use crate::engine::registry::{JoinFeatureError, Registry};
 
 mod arena;
 pub(crate) mod carried;
-mod cursor;
 pub(crate) mod demo;
 mod dialog;
 mod engine;
 mod extensions;
+mod hold;
 mod map;
 mod menu_line;
 mod mods;
@@ -54,6 +54,7 @@ use off::{PART_FUSES, dialogs_drawn, drawn_no_more, parts_off_with_interface};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::input::CLIENT_BUILD.id(),
     pinned::map::CONTEXT_STATE.id(),
     pinned::map::ENTRY_COLOR.id(),
     pinned::map::ENTRY_LABEL.id(),
@@ -204,7 +205,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::SLIDER_READ_ONLY.id(),
     pinned::ui::SLIDER_EXTENT.id(),
     pinned::ui::SLIDER_STEPS.id(),
-    pinned::ui::SLIDER_TEXT.id(),
     pinned::ui::SLIDER_STOP_CAPACITY.id(),
     pinned::ui::SLIDER_STOP_COUNT.id(),
     pinned::ui::SLIDER_STOPS.id(),
@@ -495,7 +495,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
         menu_line::link(loader, engine);
-        cursor::link(loader);
+        hold::link(loader);
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
         link_hud(loader, &HUD_FUSE);

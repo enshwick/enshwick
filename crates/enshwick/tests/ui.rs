@@ -14,6 +14,8 @@ mod tests {
     static UI: OnceLock<Ui> = OnceLock::new();
     static ANSWERS: Mutex<Vec<Option<Response>>> = Mutex::new(Vec::new());
     static CLOSED: AtomicU32 = AtomicU32::new(0);
+    static BACKS: AtomicU32 = AtomicU32::new(0);
+    static SAME_LABEL: AtomicU32 = AtomicU32::new(0);
 
     struct Panel;
 
@@ -30,7 +32,11 @@ mod tests {
                 if !open {
                     return;
                 }
+                assert!(!frame.back(), "no window, no Back");
                 frame.window("main", "Panel", |w| {
+                    if w.back() {
+                        BACKS.fetch_add(1, Ordering::Relaxed);
+                    }
                     w.label(Label::new("Settings").style(Style::H2));
                     w.toggle(Toggle::new("Fast"), &mut fast);
                     w.slider(Slider::new("Volume", 0.0..=1.0).steps(11), &mut volume);
@@ -40,6 +46,9 @@ mod tests {
                     w.progress(f32::NAN);
                     w.toggle(Toggle::new("Synced").read_only(true), &mut fast);
                     w.progress(volume);
+                    if w.button("main") {
+                        SAME_LABEL.fetch_add(1, Ordering::Relaxed);
+                    }
                     if w.button("Close") {
                         CLOSED.fetch_add(1, Ordering::Relaxed);
                         open = false;
@@ -57,6 +66,36 @@ mod tests {
         side = "both"
         "#
     );
+
+    /// Back reaches the window for its frame only, never as a click on a
+    /// widget of the same label, and not while a dialog takes it.
+    fn back_reaches_only_the_window(loader: &enshwick::test::Installed) {
+        loader.input("main", Input::Click);
+        let _clicked = loader.draw_frame();
+        assert_eq!(
+            SAME_LABEL.load(Ordering::Relaxed),
+            1,
+            "a click stays the button's"
+        );
+        assert_eq!(BACKS.load(Ordering::Relaxed), 0);
+
+        UI.get()
+            .unwrap()
+            .dialog(&Dialog::new("Sure?", "Leave?"), |_| {})
+            .unwrap();
+        loader.input("main", Input::Back);
+        let _under = loader.draw_frame();
+        assert_eq!(BACKS.load(Ordering::Relaxed), 0, "the dialog takes Back");
+        assert!(loader.answer(None));
+        let _after = loader.draw_frame();
+        assert_eq!(BACKS.load(Ordering::Relaxed), 0, "and the press is spent");
+
+        loader.input("main", Input::Back);
+        assert!(!loader.draw_frame().is_empty(), "the mod decides: it stays");
+        assert_eq!(BACKS.load(Ordering::Relaxed), 1, "Back reaches the window");
+        let _next = loader.draw_frame();
+        assert_eq!(BACKS.load(Ordering::Relaxed), 1, "for its frame only");
+    }
 
     #[test]
     fn a_window_draws_each_frame_takes_inputs_and_closes() {
@@ -125,6 +164,8 @@ mod tests {
             on: true,
             read_only: true
         }));
+
+        back_reaches_only_the_window(&loader);
 
         loader.input("Close", Input::Click);
         assert!(!loader.draw_frame().is_empty());

@@ -46,7 +46,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
             w.slider(Slider::new("Volume", 0.0..=1.0).steps(11), &mut volume);
             w.dropdown(Dropdown::new("Labels", &["Off", "Owner", "Everyone"]), &mut mode);
             w.progress(volume);
-            if w.button("Close") {
+            if w.button("Close") || w.back() {
                 open = false;
             }
         });
@@ -67,7 +67,7 @@ enshwick.ui.on_frame(function(frame)
         volume = w:slider({ label = "Volume", min = 0, max = 1, steps = 11 }, volume)
         mode = w:dropdown({ label = "Labels", options = { "Off", "Owner", "Everyone" } }, mode)
         w:progress(volume)
-        if w:button({ text = "Close" }) then
+        if w:button({ text = "Close" }) or w:back() then
             open = false
         end
     end)
@@ -85,7 +85,16 @@ window's `body` is a new function each frame, so its frame is a new object.
 A window is the game's popup panel over a dimmed screen. It takes the input
 while it shows, and it shows for as long as the mod draws it. `id` names it
 among the mod's windows. One window is open at a time per callback, and
-widgets draw only inside one. The widgets:
+widgets draw only inside one. While a window shows over the world, the
+mouse cursor shows and the character takes no input. The camera does not
+turn, and the character does not move, attack or interact.
+
+Back (Escape, or B on a gamepad) over a window goes to the mod. `back` is
+true in the window's body in the frame the player pressed it. The game's
+pause menu does not open. The mod decides what Back does. The examples
+close the window: they stop drawing it.
+
+The widgets:
 
 | Widget                   | Looks like                                    | Returns                   |
 | ------------------------ | --------------------------------------------- | ------------------------- |
@@ -614,8 +623,9 @@ developer mod's tests build it with `FakeHost::developer_tools(true)`.
 With the `test` feature, the [fake loader](testing.md) runs frame callbacks
 with `draw_frame`. It returns what they drew as `Drawn` values. `input`
 takes the player's inputs for the next frame, such as `Input::Click` for the
-button labelled "Close". The fake loader tests the rest of the interface with
-these calls:
+button labelled "Close". `Input::Back` presses Back over the window with
+the id given, such as "options". The fake loader tests the rest of the
+interface with these calls:
 
 - `draw_hud` runs the HUD callbacks and returns their items with their
   anchors.

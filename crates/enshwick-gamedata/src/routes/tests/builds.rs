@@ -395,14 +395,18 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (1269579)", "input.blocked", 0xac42),
 ];
 
-/// The client control reads: the input builder's stick and look and the
-/// recipe browser's highlighted recipe and select slot, read in the
-/// decompiler on client 26430625 (research of 2026-11-14). On the other
-/// kept clients the routes found the same values, which pins them there
-/// but does not prove the routes matched the right code.
-const CLIENT_CONTROL_READS: [(&str, u64); 4] = [
+/// The client control reads: the input builder's stick, look, target
+/// selection and buttons, and the recipe browser's highlighted recipe and
+/// select slot, read in the decompiler on client 26430625 (research of
+/// 2026-11-14 and 2026-11-16: the builder clears these four while the game
+/// blocks the input). On the other kept clients the routes found the same
+/// values, which pins them there but does not prove the routes matched the
+/// right code.
+const CLIENT_CONTROL_READS: [(&str, u64); 6] = [
     ("input.movement_stick", 0x2b8),
     ("input.camera_rotation", 0x2c4),
+    ("input.target_selection", 0x2ec),
+    ("input.digital_input", 0x3a8),
     ("ui.recipe_select", 0x48),
     ("ui.recipe_highlighted", 0xe8),
 ];
@@ -421,11 +425,10 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
     ("voxel.grid_slots", 0x58),
 ];
 
-/// The slider config's own value text, which `ui.slider` shows for format
-/// 2, and the text field's kept byte that starts its typing at its next
-/// input, as its navigation's confirm does; read in the decompiler on
-/// client 26430625 (2026-11-16), the same on every kept client.
-const WIDGET_READS: [(&str, u64); 2] = [("ui.slider_text", 0x58), ("ui.text_field_start", 0x198a)];
+/// The text field's kept byte that starts its typing at its next input, as
+/// its navigation's confirm does; read in the decompiler on client 26430625
+/// (2026-11-16), the same on every kept client.
+const WIDGET_READS: [(&str, u64); 1] = [("ui.text_field_start", 0x198a)];
 
 /// The interaction prompt's title, valid byte and verb in the interface's
 /// play data, and the open screen's host entity, the same on every kept
