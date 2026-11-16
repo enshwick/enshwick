@@ -6,7 +6,8 @@
 //! [`Frame`] in order. Windows look like the game's own panels, labels take
 //! the game's named text styles, and the rows are the game's settings rows.
 //! A widget's state lives with the mod: a toggle draws the `bool` it is
-//! handed and says when the player changed it.
+//! handed and says when the player changed it, and a window says when the
+//! player pressed Back over it ([`Frame::back`]).
 //!
 //! [`Ui::dialog`] queues a dialog in the game's own style, from any thread;
 //! [`Ui::ask`] waits for the answer on a thread of the mod's own.
@@ -36,7 +37,7 @@
 //!         frame.window("hello", "Hello", |w| {
 //!             w.label(Label::new("A window in the game's style.").style(Style::Secondary));
 //!             w.slider(Slider::new("Volume", 0.0..=1.0).steps(11), &mut volume);
-//!             if w.button("Close") {
+//!             if w.button("Close") || w.back() {
 //!                 open = false;
 //!             }
 //!         });

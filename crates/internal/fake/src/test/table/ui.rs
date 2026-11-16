@@ -200,10 +200,15 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
         let read_only = w.flags & UiWidget::READ_ONLY != 0;
         w.result = 0;
         let drawn = match w.kind {
-            UiWidget::WINDOW if !open => Drawn::Window {
-                id: label,
-                title: text(w.detail),
-            },
+            UiWidget::WINDOW if !open => {
+                if matches!(input(s, &label), Some(Input::Back)) {
+                    w.result = 1;
+                }
+                Drawn::Window {
+                    id: label,
+                    title: text(w.detail),
+                }
+            }
             UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND if w.sound == enshwick_core::content::Guid::NIL => {
                 Drawn::Sound(w.style)

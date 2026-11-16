@@ -14,6 +14,7 @@ mod tests {
     static UI: OnceLock<Ui> = OnceLock::new();
     static ANSWERS: Mutex<Vec<Option<Response>>> = Mutex::new(Vec::new());
     static CLOSED: AtomicU32 = AtomicU32::new(0);
+    static BACKS: AtomicU32 = AtomicU32::new(0);
 
     struct Panel;
 
@@ -30,7 +31,11 @@ mod tests {
                 if !open {
                     return;
                 }
+                assert!(!frame.back(), "no window, no Back");
                 frame.window("main", "Panel", |w| {
+                    if w.back() {
+                        BACKS.fetch_add(1, Ordering::Relaxed);
+                    }
                     w.label(Label::new("Settings").style(Style::H2));
                     w.toggle(Toggle::new("Fast"), &mut fast);
                     w.slider(Slider::new("Volume", 0.0..=1.0).steps(11), &mut volume);
@@ -125,6 +130,13 @@ mod tests {
             on: true,
             read_only: true
         }));
+
+        assert_eq!(BACKS.load(Ordering::Relaxed), 0);
+        loader.input("main", Input::Back);
+        assert!(!loader.draw_frame().is_empty(), "the mod decides: it stays");
+        assert_eq!(BACKS.load(Ordering::Relaxed), 1, "Back reaches the window");
+        let _next = loader.draw_frame();
+        assert_eq!(BACKS.load(Ordering::Relaxed), 1, "for its frame only");
 
         loader.input("Close", Input::Click);
         assert!(!loader.draw_frame().is_empty());

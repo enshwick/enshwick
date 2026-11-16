@@ -125,6 +125,7 @@ pub struct ScriptFrame {
     token: u64,
     screen: Screen,
     raw: crate::abi::UiFrame,
+    back: bool,
 }
 
 impl ScriptFrame {
@@ -134,6 +135,7 @@ impl ScriptFrame {
             token: frame.token,
             screen: frame.screen,
             raw: frame.raw,
+            back: frame.back,
         }
     }
 
@@ -145,6 +147,7 @@ impl ScriptFrame {
             token: self.token,
             screen: self.screen,
             raw: self.raw,
+            back: self.back,
             _life: core::marker::PhantomData,
             _thread: core::marker::PhantomData,
         }
@@ -241,7 +244,15 @@ impl ScriptFrame {
         title: &str,
         body: impl Fn(Self) + Send + Sync + 'static,
     ) -> bool {
-        self.frame().window(id, title, |_| body(*self))
+        self.frame()
+            .window(id, title, |inner| body(Self::of(inner)))
+    }
+
+    /// Whether the player pressed Back over the window whose body is
+    /// drawing, as [`Frame::back`] says.
+    #[script(name = "back")]
+    pub(crate) const fn back_script(&self) -> bool {
+        self.back
     }
 
     /// Draws a line of text, as [`Frame::label`] does.

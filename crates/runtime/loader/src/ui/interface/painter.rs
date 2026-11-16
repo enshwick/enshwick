@@ -346,10 +346,14 @@ pub(super) fn draw(
             // a frame callback runs inside the frame on the interface thread,
             // with its non-zero `context`; the window object stays in the
             // thread-local `WINDOW` until it ends, and `name` and `title` live
-            // in the frame's arena.
-            WINDOW.with_borrow_mut(|window| unsafe {
+            // in the frame's arena. Back is asked in the same frame on the
+            // same thread, of the window begun one call earlier: its own
+            // node, since the slot is shared by every mod window of the frame.
+            let back = WINDOW.with_borrow_mut(|window| unsafe {
                 engine.window_begin(context, window, &name, &title);
+                super::dialog::back_over(engine, window)
             });
+            raw.result = u32::from(back);
             drawing.window_open = true;
             Ok(())
         }
