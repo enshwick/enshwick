@@ -117,7 +117,7 @@ impl Registry<'_> {
                 true
             }
         };
-        if bytes.len() < size {
+        if bytes.as_ref().len() < size {
             return Err(CodecError::new(REFUSED));
         }
         Encoder {

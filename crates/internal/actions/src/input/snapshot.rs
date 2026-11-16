@@ -18,7 +18,8 @@ use enshwick_world::__internal::world_status;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum SnapshotState {
-    /// No frame drew a game since the first ask, which starts the reads.
+    /// No frame drew a game since the reads started, when the first mod
+    /// opened its input.
     Never,
     /// The reads are off on this build or after a fault; the log and the
     /// Mods screen say why.
@@ -341,8 +342,15 @@ impl ClientSnapshot {
 impl Input {
     /// The client's state in one copy, for any thread: its session and
     /// world, the open screens and menu tab, the local player and its held
-    /// controls. The first ask starts the reads, so it answers
-    /// [`SnapshotState::Never`].
+    /// controls.
+    ///
+    /// The reads start when the mod opens its input, so the client's first
+    /// interface step after that answers, in the mod's first frame in a
+    /// game. It is [`SnapshotState::Never`] before that step, and while no
+    /// frame drew a game since, as in the main menu before the first world.
+    /// The reads cost one look at the interface's screen state and menu tab
+    /// per frame, which client commands share, and a copy of four words;
+    /// the held controls cost their own row, as [`Input::local_held`] says.
     ///
     /// # Errors
     ///

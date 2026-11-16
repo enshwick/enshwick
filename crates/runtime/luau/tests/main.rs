@@ -38,6 +38,7 @@ mod shrine;
 mod sound;
 mod terrain_pages;
 mod trail;
+mod transactions;
 mod typed;
 mod ui;
 mod vetoes;

@@ -35,7 +35,10 @@ pub(crate) struct FakeStats {
     modifiers: Modifiers,
     buffs: Vec<(u32, StatModifier)>,
     handlers: Vec<Registered<StatChangeFn>>,
+    /// The entities a modifier keeps watched.
     watched: BTreeSet<u32>,
+    /// Each mod's asks to watch an entity, by entity and mod handle.
+    asked: BTreeSet<(u32, usize)>,
     /// What each entity wears.
     pub(crate) worn: BTreeMap<u32, Vec<ItemInstance>>,
     /// The values the last settle raised, by entity and stat.
@@ -385,16 +388,17 @@ pub(crate) extern "system" fn stat_sources(
 }
 
 pub(crate) extern "system" fn stat_watch(
-    _me: ModHandle,
+    me: ModHandle,
     entity: enshwick_core::Entity,
     watch: u8,
 ) -> Status {
     with(Status::MISSING, |s| {
         let stats = state_stats(s);
+        let ask = (entity.0, me.0);
         if watch == 0 {
-            stats.watched.remove(&entity.0);
+            stats.asked.remove(&ask);
         } else {
-            stats.watched.insert(entity.0);
+            stats.asked.insert(ask);
         }
         Status::OK
     })
@@ -407,6 +411,7 @@ pub(crate) fn settle() -> usize {
     let (changes, handlers) = with((Vec::new(), Vec::new()), |s| {
         let stats = state_stats(s);
         let mut entities: BTreeSet<u32> = stats.watched.clone();
+        entities.extend(stats.asked.iter().map(|&(entity, _)| entity));
         entities.extend(stats.worn.keys());
         entities.extend(s.host.players.iter().map(|p| p.entity.0));
         let kinds = u32::try_from(s.stats.kinds.len()).unwrap_or(0);

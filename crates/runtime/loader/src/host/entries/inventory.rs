@@ -123,8 +123,8 @@ entries! {
         out.put(&crate::inventory::stats::sources(loader, entity, stat)?)
     }
 
-    fn stat_watch(_loader as Caller, entity: Entity, watch: u8) -> Status {
-        crate::inventory::stats::watch(entity, watch != 0)?;
+    fn stat_watch(me as Mod, entity: Entity, watch: u8) -> Status {
+        crate::inventory::stats::watch(me.index, entity, watch != 0)?;
         Ok(())
     }
 

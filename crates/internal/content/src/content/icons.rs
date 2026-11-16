@@ -16,6 +16,7 @@ use crate::Off;
 use crate::abi::HostApi;
 
 use super::{Blob, EngineFacts, Guid, Id, types};
+use crate::resources::{Grow, Output};
 
 /// The widest and tallest PNG an icon may be, in pixels; a larger one does
 /// not decode.
@@ -314,7 +315,7 @@ impl ImageLayout {
     }
 
     /// The content hash, size, format and levels of the UI image `image`.
-    fn read(&self, image: &Blob) -> Option<([u32; 4], u32, u32, u8)> {
+    fn read(&self, image: &Blob<impl AsRef<[u8]>>) -> Option<([u32; 4], u32, u32, u8)> {
         let word = |at: usize| image.read_u32(at);
         let hash = [
             word(self.content)?,
@@ -337,7 +338,8 @@ impl ImageLayout {
 /// use enshwick::content::icons::{ImageLayout, clone_image};
 ///
 /// let layout = ImageLayout { content: 0, width: 0x28, height: 0x2c, flags: 0x30, format: 0x31, levels: 0x32 };
-/// let image = clone_image(&layout, &[0; 0x34], [4, 1, 2, 3], 1, 1).ok_or("too short")?;
+/// let mut image = Vec::new();
+/// clone_image(&layout, &[0; 0x34], [4, 1, 2, 3], 1, 1, &mut image).ok_or("too short")?;
 /// assert_eq!((image[0x31], image[0x32]), (0x25, 1));
 /// # Ok::<(), &str>(())
 /// ```
@@ -348,8 +350,9 @@ pub fn clone_image(
     hash: [u32; 4],
     width: u32,
     height: u32,
-) -> Option<Vec<u8>> {
-    let mut image = Blob::new(base);
+    out: &mut impl Grow,
+) -> Option<()> {
+    let mut image = Blob::over(out, base);
     let mut content = [0u8; 16];
     for (bytes, word) in content.as_chunks_mut::<4>().0.iter_mut().zip(hash) {
         bytes.copy_from_slice(&word.to_le_bytes());
@@ -359,7 +362,7 @@ pub fn clone_image(
         && image.write(layout.height, &height.to_le_bytes())
         && image.write(layout.format, &[formats::RGBA8])
         && image.write(layout.levels, &[1]);
-    written.then(|| image.into_bytes())
+    written.then_some(())
 }
 
 /// The game's own content `hash` from its archive.
@@ -384,7 +387,7 @@ fn pixels_of(
     api: &HostApi,
     handle: crate::abi::ModHandle,
     layout: &ImageLayout,
-    base: &Blob,
+    base: &Blob<impl AsRef<[u8]>>,
     pixels: Pixels,
 ) -> Option<(Vec<u8>, u32, u32)> {
     match pixels {
@@ -399,15 +402,15 @@ fn pixels_of(
     }
 }
 
-/// Builds the icon's UI image from the vanilla one in `base`: makes its
-/// pixels, serves them as content and names them. When the pixels cannot be
-/// made, the vanilla image itself: the icon shows the vanilla picture and
+/// Builds in `out` the icon's UI image from the vanilla one in `base`: makes
+/// its pixels, serves them as content and names them. When the pixels cannot
+/// be made, the vanilla image itself: the icon shows the vanilla picture and
 /// the mod stays on.
-fn build(layout: &ImageLayout, base: &[u8], pixels: Pixels) -> Vec<u8> {
+fn build(layout: &ImageLayout, base: &[u8], pixels: Pixels, out: &mut Output<'_>) -> Option<()> {
     let built = (|| {
         let host = crate::host()?;
         let api = host.api();
-        let image = Blob::new(base);
+        let image = Blob(base);
         let (rgba, width, height) = pixels_of(api, host.handle(), layout, &image, pixels)?;
         let mut hash = [0u32; 4];
         let status = (api.content_serve)(
@@ -419,12 +422,13 @@ fn build(layout: &ImageLayout, base: &[u8], pixels: Pixels) -> Vec<u8> {
         if !status.is_ok() {
             return None;
         }
-        clone_image(layout, base, hash, width, height)
+        clone_image(layout, base, hash, width, height, out)
     })();
     if built.is_none() {
         crate::warn!("an icon's pixels could not be made: it shows the vanilla picture");
+        return out.copy_from(base);
     }
-    built.unwrap_or_else(|| base.to_vec())
+    Some(())
 }
 
 /// Whether this client shows served icons now.
@@ -454,7 +458,7 @@ impl LoadMethods for crate::BaseLoad {
             return Ok(());
         };
         self.serve(key, like, move |base, out| {
-            out.copy_from(&build(&layout, base, icon.pixels))
+            build(&layout, base, icon.pixels, out)
         })
     }
 }
@@ -521,14 +525,18 @@ mod tests {
         };
         let mut base = vec![0u8; 0x40];
         base[0x30..0x33].copy_from_slice(&[1, formats::BC7, 9]);
-        let image = clone_image(&layout, &base, [16, 1, 2, 3], 2, 2).unwrap();
+        let image =
+            crate::content::built(|out| clone_image(&layout, &base, [16, 1, 2, 3], 2, 2, out))
+                .unwrap();
         let blob = Blob::new(&image);
         assert_eq!(
             layout.read(&blob),
             Some(([16, 1, 2, 3], 2, 2, formats::RGBA8))
         );
         assert_eq!((image[0x30], image[0x32]), (1, 1), "flags kept, one level");
-        assert!(clone_image(&layout, &[0; 8], [0; 4], 1, 1).is_none());
+        assert!(
+            crate::content::built(|out| clone_image(&layout, &[0; 8], [0; 4], 1, 1, out)).is_none()
+        );
     }
 
     #[test]

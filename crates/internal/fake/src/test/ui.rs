@@ -16,9 +16,13 @@ struct Reads {
 }
 
 /// An interface step before a draw, as the game's `player_ui` runs before
-/// the interface draws: the held reads a mod started read from now on.
+/// the interface draws: the held and snapshot reads a mod started read from
+/// now on.
 fn step() {
-    table::with((), |s| s.local_held.stepped |= s.local_held.asked);
+    table::with((), |s| {
+        s.local_held.stepped |= s.local_held.asked;
+        s.snapshot_reads.1 |= s.snapshot_reads.0;
+    });
 }
 
 fn reads() -> Reads {
@@ -314,7 +318,10 @@ impl Installed {
 
     /// Sets the client snapshot the loader would write, as one
     /// [`ClientSnapshot`](enshwick_core::abi::ClientSnapshot) with its
-    /// header set; a server still answers unavailable.
+    /// header set; a server still answers unavailable. As the loader, the
+    /// first ask, which opening `Input` makes, starts the reads, and the
+    /// snapshot answers from the next draw on: before it, it is empty, its
+    /// state never read.
     ///
     /// # Examples
     ///

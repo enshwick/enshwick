@@ -57,7 +57,7 @@ pub use rename::Rename;
 pub use saves::{SaveInfo, WorldGuid};
 pub use stats::{Meter, Progress, Skill, Vitals};
 #[cfg(feature = "unstable")]
-pub use transactions::{Transaction, TransactionId, TransactionStatus};
+pub use transactions::{Settled, Transaction, TransactionId, TransactionStatus};
 
 /// A reflected component type a mod may write, resolved once at init with
 /// [`WritableType::resolve`]: one the server owns, not a copy the game keeps
@@ -382,7 +382,10 @@ impl crate::script::Bound for World {
 
 impl LoadMethods for BaseLoad {
     fn world(&mut self) -> Result<World, Off> {
-        World::resolve(self)
+        let world = World::resolve(self)?;
+        #[cfg(feature = "unstable")]
+        transactions::take_scheduler(self);
+        Ok(world)
     }
 }
 

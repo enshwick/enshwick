@@ -482,6 +482,7 @@ fn coerce<'v>(ty: &Type<'_>, value: &'v Value) -> Result<Cow<'v, Value>, CodecEr
 impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
     fn write(&mut self, at: usize, data: &[u8]) -> Result<(), CodecError> {
         self.bytes
+            .as_mut()
             .get_mut(at..at + data.len())
             .ok_or_else(|| out_of_range(at))?
             .copy_from_slice(data);
@@ -489,7 +490,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
     }
 
     fn read(&self, at: usize, len: usize) -> Option<&[u8]> {
-        self.bytes.get(at..at.checked_add(len)?)
+        self.bytes.as_ref().get(at..at.checked_add(len)?)
     }
 
     /// Appends `len` zero bytes at the next multiple of `align` and returns
@@ -499,10 +500,10 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
     ///
     /// [`CodecError`] when the bytes did not grow: a refused\n    /// [`Output`](crate::resources::Output).
     fn append(&mut self, len: usize, align: usize) -> Result<usize, CodecError> {
-        let start = self.bytes.len().next_multiple_of(align.max(1));
+        let start = self.bytes.as_ref().len().next_multiple_of(align.max(1));
         let end = start.checked_add(len).ok_or_else(|| out_of_range(start))?;
         self.bytes.grow(end);
-        if self.bytes.len() < end {
+        if self.bytes.as_ref().len() < end {
             return Err(CodecError::new(encode::REFUSED));
         }
         Ok(start)
@@ -518,7 +519,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
     /// Where the data of the header at `at` lies when `len` bytes of it are
     /// inside the bytes.
     fn existing(&self, at: usize, from: usize, len: usize) -> Option<usize> {
-        let start = target(self.bytes, at, from).ok()?;
+        let start = target(self.bytes.as_ref(), at, from).ok()?;
         self.read(start, len).map(|_| start)
     }
 
@@ -611,7 +612,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
             (Kind::BlobString, Value::Bytes(data)) => self.string(data, at, fresh),
             (Kind::BlobOptional, value) => self.optional(ty, value, at, fresh, depth),
             (Kind::BlobVariant, Value::Nil) => {
-                if word(self.bytes, at)? != 0 {
+                if word(self.bytes.as_ref(), at)? != 0 {
                     self.write(at, &[0; 12])?;
                 }
                 Ok(())
@@ -723,7 +724,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
         fresh: bool,
         depth: usize,
     ) -> Result<(), CodecError> {
-        let set = word(self.bytes, at)? != 0;
+        let set = word(self.bytes.as_ref(), at)? != 0;
         if *value == Value::Nil {
             if set {
                 self.write(at, &[0; 4])?;
@@ -751,7 +752,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
         let held = self.registry.require(variant.type_name())?;
         let len = size_of(held);
         let from = at + VARIANT_OFFSET;
-        let existing = if !fresh && word(self.bytes, at)? == held.qualified_hash() {
+        let existing = if !fresh && word(self.bytes.as_ref(), at)? == held.qualified_hash() {
             self.existing(from, from, len)
         } else {
             None
@@ -850,7 +851,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
             .len()
             .checked_mul(stride)
             .ok_or_else(|| not_fit(items.len(), ty))?;
-        let current = word(self.bytes, at + 4)?;
+        let current = word(self.bytes.as_ref(), at + 4)?;
         let place = if !fresh && current == count {
             if count == 0 {
                 return Ok(());
@@ -879,6 +880,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
                 let kept = match old {
                     Some(old_start) => {
                         self.bytes
+                            .as_mut()
                             .copy_within(old_start..old_start + old_count * stride, start);
                         for i in 0..old_count {
                             let (from, to) = (old_start + i * stride, start + i * stride);
@@ -902,7 +904,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
 
     fn string(&mut self, data: &[u8], at: usize, fresh: bool) -> Result<(), CodecError> {
         let count = u32::try_from(data.len()).map_err(|_| CodecError::new("text past 4 GiB"))?;
-        let current = word(self.bytes, at + 4)?;
+        let current = word(self.bytes.as_ref(), at + 4)?;
         if !fresh && current == count {
             if count == 0 {
                 return Ok(());

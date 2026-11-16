@@ -5,7 +5,11 @@ use super::*;
 fn a_stopped_game_leaves_no_entities_or_values_behind() {
     let state = State::new();
     state.with_world(|world| {
-        world.watched.entry(7).or_default().asked = true;
+        world
+            .watched
+            .entry(7)
+            .or_default()
+            .ask(ModIndex::new(1), true);
     });
     let mut values = Snapshot::default();
     values.values.insert(7, Box::new([2.0]));
@@ -194,4 +198,19 @@ fn saved_modifiers_round_trip() {
     }];
     let bytes = postcard::to_allocvec(&saved).unwrap();
     assert_eq!(postcard::from_bytes::<Vec<Saved>>(&bytes).unwrap(), saved);
+}
+
+#[test]
+fn one_mod_stopping_its_watch_leaves_another_mods_watch() {
+    let (a, b) = (ModIndex::new(1), ModIndex::new(2));
+    let mut watched = Watched::default();
+    watched.ask(a, true);
+    watched.ask(b, true);
+    watched.ask(b, true);
+    watched.ask(b, false);
+    assert_eq!(watched.asked, [a], "b's second ask is the same ask");
+    watched.ask(b, false);
+    assert_eq!(watched.asked, [a], "b took back no ask of a");
+    watched.ask(a, false);
+    assert!(watched.asked.is_empty(), "nobody watches it");
 }

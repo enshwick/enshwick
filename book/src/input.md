@@ -183,7 +183,7 @@ the reads are, and `age_ms()` gives the age in milliseconds:
 
 | State | Means |
 | --- | --- |
-| `Never` | no frame read yet |
+| `Never` | no frame drew a game yet |
 | `Fresh` | read within a second |
 | `Stale` | older, as while a world loads |
 | `Off` | the build lacks the reads |
@@ -193,7 +193,17 @@ shows. It follows a click on a tile and the arrow keys; the mouse pointer
 over a tile does not move it. It is `None` while no crafting menu draws,
 and while the open menu highlights no recipe.
 
-The first call starts the reads, so it returns `Never`. A part the running
+The client reads the snapshot once a mod opens its input, as it does the
+held controls. So a mod's first frame in a game has it. The state is
+`Never` in two cases:
+
+- before the client's first interface step after the mod opened its input;
+- while no frame drew a game since, as in the main menu before the first
+  world.
+
+The reads cost one look at the interface's screen state and menu tab per
+frame, which client commands share, and a copy of four words. The held
+controls cost their own row, as for `local_held()`. A part the running
 build lacks returns `None`, and `reads(part)` tells "none now" from
 "unread". The call returns `WorldError::Unavailable` on a server.
 

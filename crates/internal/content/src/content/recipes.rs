@@ -78,12 +78,12 @@ impl LoadMethods for crate::BaseLoad {
         let built = Arc::clone(&recipe);
         self.serve(registry, registry, move |base, out| {
             let recipe = NewRecipe { id, ..built() };
-            out.copy_from(&add_recipe_to(&layout, base, &recipe, workshop_limit())?)
+            add_recipe_to(&layout, base, &recipe, workshop_limit(), out)
         })?;
         self.allow_rebuild(registry)?;
-        menu::serve(self, move |menu, bundle| {
+        menu::serve(self, move |menu, bundle, out| {
             let recipe = NewRecipe { id, ..recipe() };
-            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
+            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)], out)
         })
     }
 
@@ -106,24 +106,24 @@ impl LoadMethods for crate::BaseLoad {
                     "derived recipes may copy recipes of other mods: the game's recipe registry does not read"
                 );
             }
-            let derived = derive_recipes_in(&layout, base, salt, workshop_limit(), &|view| {
+            let choose = |view: &RecipeView<'_>| {
                 let added = vanilla
                     .as_ref()
                     .is_some_and(|vanilla| !vanilla.contains(&view.guid()));
                 if added { None } else { chosen(view) }
-            })?;
-            out.copy_from(&derived)
+            };
+            derive_recipes_in(&layout, base, salt, workshop_limit(), &choose, out)
         })?;
-        menu::serve(self, move |menu, bundle| {
+        menu::serve(self, move |menu, bundle, out| {
             let entries = vanilla_registry()
                 .and_then(|registry| derived_entries(&layout, &registry, salt, &*choose));
             let Some(entries) = entries else {
                 crate::warn!(
                     "derived recipes stay out of the crafting menu: the recipe registry does not read"
                 );
-                return Some(bundle.to_vec());
+                return out.copy_from(bundle);
             };
-            menu::list_recipes(menu, bundle, &entries)
+            menu::list_recipes(menu, bundle, &entries, out)
         })
     }
 }
@@ -141,10 +141,10 @@ impl LoadHelpers for crate::BaseLoad {
         let layout = RecipeLayout::resolve(self)?;
         let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
         self.serve(registry, registry, move |base, out| {
-            out.copy_from(&add_recipe_to(&layout, base, &recipe, workshop_limit())?)
+            add_recipe_to(&layout, base, &recipe, workshop_limit(), out)
         })?;
-        menu::serve(self, move |menu, bundle| {
-            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
+        menu::serve(self, move |menu, bundle, out| {
+            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)], out)
         })
     }
 }
@@ -291,7 +291,7 @@ mod tests {
         let output_at = blob.append(&output, 8);
         assert!(blob.set_array(recipe + 0x30, output_at, 1));
         let view = RecipeView {
-            blob: &blob,
+            blob: blob.view(),
             at: recipe,
             layout: &LAYOUT,
         };
@@ -322,8 +322,12 @@ mod tests {
             cost: 2,
             workshop: None,
         };
-        let built =
-            Blob::new(&add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).unwrap());
+        let built = Blob::new(
+            &crate::content::built(|out| {
+                add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES, out)
+            })
+            .unwrap(),
+        );
         let (recipes, count) = built.array(8).unwrap();
         assert_eq!(count, 2);
         let copy = recipes + 0xa8;
@@ -358,19 +362,28 @@ mod tests {
             assert!(blob.set_array(at + 0x78, name_at, u32::try_from(name.len() - 1).unwrap()));
         }
         assert!(blob.set_array(8, first, 2));
-        let built = derive_recipes_in(&LAYOUT, blob.bytes(), 7, WORKSHOP_RECIPES, &|r| {
-            r.debug_name().starts_with("Block_").then_some(Derived {
-                output: 2,
-                cost: 1,
-                workshop: None,
-            })
+        let built = crate::content::built(|out| {
+            derive_recipes_in(
+                &LAYOUT,
+                blob.bytes(),
+                7,
+                WORKSHOP_RECIPES,
+                &|r| {
+                    r.debug_name().starts_with("Block_").then_some(Derived {
+                        output: 2,
+                        cost: 1,
+                        workshop: None,
+                    })
+                },
+                out,
+            )
         })
         .unwrap();
         let built = Blob::new(&built);
         let (recipes, count) = built.array(8).unwrap();
         assert_eq!(count, 3);
         let copy = RecipeView {
-            blob: &built,
+            blob: built.view(),
             at: recipes + 2 * 0xa8,
             layout: &LAYOUT,
         };
@@ -378,7 +391,7 @@ mod tests {
         assert_eq!(copy.output().unwrap().1, 200);
         assert_eq!(copy.guid(), derived_guid(Guid([0; 16]), 7));
         let original = RecipeView {
-            blob: &built,
+            blob: built.view(),
             at: recipes,
             layout: &LAYOUT,
         };
@@ -404,7 +417,10 @@ mod tests {
             cost: 1,
             workshop: Some(bench),
         };
-        let built = add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).unwrap();
+        let built = crate::content::built(|out| {
+            add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES, out)
+        })
+        .unwrap();
         let built = Blob::new(&built);
         let (recipes, _) = built.array(8).unwrap();
         let copy = recipes + 0xa8;
@@ -413,12 +429,21 @@ mod tests {
         assert_eq!(u32_at(built.bytes(), recipes + 0x24), 7);
 
         // Derived copies move too, and count against the new workshop.
-        let derived = derive_recipes_in(&LAYOUT, blob.bytes(), 7, 1, &|_| {
-            Some(Derived {
-                output: 2,
-                cost: 1,
-                workshop: Some(bench),
-            })
+        let derived = crate::content::built(|out| {
+            derive_recipes_in(
+                &LAYOUT,
+                blob.bytes(),
+                7,
+                1,
+                &|_| {
+                    Some(Derived {
+                        output: 2,
+                        cost: 1,
+                        workshop: Some(bench),
+                    })
+                },
+                out,
+            )
         })
         .unwrap();
         assert_eq!(
@@ -426,12 +451,21 @@ mod tests {
             1,
             "limit 1, held 0"
         );
-        let derived = derive_recipes_in(&LAYOUT, blob.bytes(), 7, RESERVED_FOR_SINGLE + 1, &|_| {
-            Some(Derived {
-                output: 2,
-                cost: 1,
-                workshop: Some(bench),
-            })
+        let derived = crate::content::built(|out| {
+            derive_recipes_in(
+                &LAYOUT,
+                blob.bytes(),
+                7,
+                RESERVED_FOR_SINGLE + 1,
+                &|_| {
+                    Some(Derived {
+                        output: 2,
+                        cost: 1,
+                        workshop: Some(bench),
+                    })
+                },
+                out,
+            )
         })
         .unwrap();
         let derived = Blob::new(&derived);
@@ -474,7 +508,7 @@ mod tests {
         let (recipes, count) = built.array(8).unwrap();
         assert_eq!(count, 2);
         let view = |at| RecipeView {
-            blob: &built,
+            blob: built.view(),
             at,
             layout: &LAYOUT,
         };
@@ -491,7 +525,7 @@ mod tests {
         .unwrap();
         let again = Blob::new(&again);
         let view = |at| RecipeView {
-            blob: &again,
+            blob: again.view(),
             at,
             layout: &LAYOUT,
         };
@@ -511,6 +545,15 @@ mod tests {
             cost: 1,
             workshop: None,
         };
-        assert!(add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).is_none());
+        assert!(
+            crate::content::built(|out| add_recipe_to(
+                &LAYOUT,
+                blob.bytes(),
+                &new,
+                WORKSHOP_RECIPES,
+                out
+            ))
+            .is_none()
+        );
     }
 }

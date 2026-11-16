@@ -68,6 +68,9 @@ side = "both""#
             highlighted_recipe: RecipeId(0x7cd8_0a04),
             ..Raw::EMPTY
         });
+        // Opening `Input` in init started the reads: the first ask after one
+        // interface step answers, with no throwaway ask before it.
+        let _drawn = loader.draw_frame();
         let snapshot = input.client_snapshot().unwrap();
         assert_eq!(snapshot.state(), SnapshotState::Fresh);
         assert_eq!(snapshot.session(), 3);
@@ -91,6 +94,7 @@ side = "both""#
             hud_screen: Str::new("SystemMenu"),
             ..Raw::EMPTY
         });
+        let _drawn = loader.draw_frame();
         let snapshot = input.client_snapshot().unwrap();
         assert_eq!(snapshot.state(), SnapshotState::Stale);
         assert_eq!(snapshot.age_ms(), Some(4200));

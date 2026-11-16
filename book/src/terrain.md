@@ -350,6 +350,51 @@ A transaction that places props is `Applied` once they stand in the
 world, usually a step after the place. The loader notes then what a fresh
 prop starts with: a logic trigger's settings and a plant's level.
 
+#### Waiting for a placed prop
+
+To act on a placed prop, such as to fill a chest, wait with
+`world.when_settled(id, within, handler)`. Its handler runs on the game
+thread once the transaction stopped running. Once it is written whole, the
+handler runs one scheduler pass later, when its props stand. The status is
+then `Applied`, or `Expired` when the loader dropped its undo data meanwhile.
+Any other end runs the handler at once. A large transaction spread over
+steps is waited for whole. The handler gets a `Settled`: the status and the
+props the transaction placed. Its `standing()` gives the first prop once
+the transaction was written whole. What another end means is the mod's to
+decide. One case is `Failed(NotLoaded)`, which the same changes committed
+again a second later may pass. Once `within` passed, the handler gets the
+transaction as it stands, still `Pending` perhaps. The wait is a scheduler
+task, so it ends without the handler when its game ends.
+
+```rust
+use std::time::Duration;
+
+use enshwick::world::{World, WorldTransform};
+use enshwick::{ItemId, WorldError};
+
+fn place_chest(world: World, chest: ItemId, at: [f64; 3]) -> Result<(), WorldError> {
+    let id = world.transaction().place_prop(chest, WorldTransform::at(at)).commit()?;
+    world.when_settled(id, Duration::from_secs(10), |settled| match settled.standing() {
+        Some(chest) => enshwick::info!("chest {chest:?} stands"),
+        None => enshwick::warn!("no chest: {:?}", settled.status),
+    })
+}
+```
+
+From Luau the status is a string for each status without a reason:
+
+```luau
+local function place_chest(chest: number, at)
+    local id = enshwick.world.transaction():place_prop(chest, at):commit()
+    enshwick.world.when_settled(id, 10, function(settled)
+        local whole = settled.status == "Applied" or settled.status == "Expired"
+        if whole and settled.props[1] then
+            enshwick.log.info(`chest {settled.props[1]} stands`)
+        end
+    end)
+end
+```
+
 An undo keeps to the same rule. It takes a placed prop away only while it
 holds no state, a trigger's settings and a plant's level as they first
 were. A chest it placed may get items, a plant may grow or a player may set

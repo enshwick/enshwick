@@ -1651,8 +1651,9 @@ pub struct HostApi {
         count: *mut u32,
     ) -> Status,
     /// Watches `entity` for the items it wears and the buffs it has, or
-    /// stops for `watch` 0: players are always watched, and so is every
-    /// entity a mod keeps a modifier on. Any thread.
+    /// stops `me`'s watch for `watch` 0: the entity stays watched while any
+    /// mod watches it, players are always watched, and so is every entity a
+    /// mod keeps a modifier on. Any thread.
     pub stat_watch: extern "system" fn(me: ModHandle, entity: Entity, watch: u8) -> Status,
     /// Defines the affix `id` with `def` and writes its index and key to
     /// `out`. `id` is a full content id in the mod's namespace,
@@ -2112,9 +2113,11 @@ pub struct HostApi {
     /// Writes to `out`, a headed [`ClientSnapshot`], the client's state in
     /// one copy: its session, the open screens and the in-game menu's tab
     /// from the interface's last frame, and the local player's held
-    /// controls. The first call starts the interface's reads and the held
-    /// controls' reads, so it answers [`ClientSnapshot::NEVER`]; every call
-    /// after a frame drew a game answers its copy. Client only:
+    /// controls. The first call, of any mod, starts the interface's reads
+    /// and the held controls' reads, so it answers [`ClientSnapshot::NEVER`];
+    /// the safe layer calls it when a mod opens its input. Every call after
+    /// a frame drew a game answers its copy; until one did, as in the main
+    /// menu before the first world, it answers `NEVER`. Client only:
     /// [`Status::UNAVAILABLE`] on a server; [`Status::BAD_ARGS`] for a null
     /// or unheaded `out`. Any thread; it runs no mod callback, and `out` is
     /// borrowed for the call. ABI 12.1.
