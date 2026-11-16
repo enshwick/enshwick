@@ -9297,3 +9297,96 @@ callers = "ui.column"
 shape = ["mov [?+*],?r", "lea r8,[rbx+rbx*8]", "shl r8,0x3"]
 take = "value"
 range = [0x74, 0x1d0]
+
+[[route]]
+id = "ui.item_slot"
+sides = ["client"]
+loads = ["doItemSlot", "slotDisplayParent"]
+check = ["mov rax,rsp", "mov [rax+0x18],r8", "mov [rax+0x8],rcx"]
+
+[[route]]
+id = "ui.item_slot_init"
+sides = ["client"]
+callers = "ui.item_slot"
+shape = ["lea rcx,[rsp+?]", "movzx esi,dl", "call *", "mov [rsp+?],sil"]
+take = "address"
+check = ["sub rsp,?i", "movups xmm0,[rip+?]", "mov qword [rcx+0x18],?i"]
+
+[[route]]
+id = "ui.item_slot_clickable"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["cmp [r15+*],sil", "je ?b", "mov rax,[rbp+?]", "lea rcx,[rbp-?]"]
+take = "value"
+range = [49, 159]
+
+[[route]]
+id = "ui.context_player"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["mov r8,[rdx+*]", "mov rdx,[r8]", "test rdx,rdx"]
+take = "value"
+range = [104, 416]
+
+[[route]]
+id = "ui.player_data"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["test rdx,rdx", "jne ?b", "mov edx,eax", "jmp ?b", "mov rdx,[rdx+*]"]
+take = "value"
+range = [28, 112]
+
+[[route]]
+id = "~fn:ui.item_viewer"
+sides = ["client"]
+loads = ["mainContentArea", "item Base Info Column"]
+
+[[route]]
+id = "ui.tooltip_panel_site"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["lea rcx,[rbp+?]", "call {ui.frame_close}", "lea rcx,[rbp+?]", "call {ui.scroll_end}", "cmp dword [rsi+0xf4],0x0"]
+
+[[route]]
+id = "ui.tooltip_plain_site"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["cmp dword [rsi+0xf4],0x0", "je ?b", "movaps xmm0,xmm7"]
+
+[[route]]
+id = "ui.viewer_layout"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["mov edi,[rcx+*]", "mov rsi,rcx"]
+take = "value"
+range = [94, 376]
+
+[[route]]
+id = "ui.viewer_unknown"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["cmp byte [rsi+*],0x0", "je ?b", "mov rax,[rip+?]", "mov rbx,[rax+?]"]
+take = "value"
+range = [113, 454]
+
+[[route]]
+id = "ui.viewer_item"
+sides = ["client"]
+field = ["keen::ItemInstanceInfo.itemId"]
+type = "keen::ItemId"
+range = [4, 16]
+
+[[route]]
+id = "ui.viewer_pide"
+sides = ["client"]
+field = ["keen::ItemInstanceInfo.pide"]
+type = "keen::ecs::EntityId"
+range = [6, 24]
+
+[[route]]
+id = "ui.player_items"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["mov rdx,[rdx+*]", "mov ecx,[rcx+0x8]", "call {item.info}"]
+take = "value"
+range = [0x200000, 0x900000]

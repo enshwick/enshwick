@@ -48,6 +48,14 @@ entries! {
         Ok(crate::ui::interface::register_frame(me.loader, me.index, callback, user)?)
     }
 
+    fn ui_item_tooltip(
+        me as Mod,
+        callback as Callback<api_frame::UiTooltipFn>,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        Ok(crate::ui::interface::tooltips::register(me.loader, me.index, callback, user)?)
+    }
+
     fn ui_widget(me as Mod, frame: u64, widget as HeadedInOut<api_frame::UiWidget>) -> Status {
         let (mut copy, slot) = widget;
         let drawn = crate::ui::interface::widget(me.loader, me.index, frame, &mut copy);

@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 
 use crate::abi::Metres;
-use crate::abi::{Entity, Header, Status, Str};
+use crate::abi::{Entity, Header, ItemId, Status, Str};
 use crate::content::Guid;
 
 /// A frame of the client's interface, handed to the callbacks registered with
@@ -26,6 +26,11 @@ use crate::content::Guid;
 ///     screen_host: enshwick::Entity(512),
 ///     screen_host_template: enshwick::abi::Guid::NIL,
 ///     screen_host_position: [0.0; 3],
+///     hovered_slot: 0,
+///     hovered_item: enshwick::ItemId::new(0),
+///     hovered_count: 0,
+///     hovered_pide: enshwick::Entity(0),
+///     reserved_hovered: 0,
 /// };
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
@@ -68,9 +73,24 @@ pub struct UiFrame {
     /// metres, from the same step; meaningful only while
     /// `screen_host_template` is not all zero.
     pub screen_host_position: Metres,
+    /// The slot of the game's inventory screen under the cursor in this
+    /// frame, as the game packs it, `inventory | index << 32`, the
+    /// inventory an entity of the client's world; 0 while the cursor is on
+    /// none, outside an inventory screen and on a build where the loader
+    /// does not find the game's slot widget.
+    pub hovered_slot: u64,
+    /// The item id in `hovered_slot`; 0 for an empty slot.
+    pub hovered_item: ItemId,
+    /// How many `hovered_slot` holds.
+    pub hovered_count: u32,
+    /// The entity of the item in `hovered_slot`, for an item with one of
+    /// its own; entity 0 for none.
+    pub hovered_pide: Entity,
+    /// Zero.
+    pub reserved_hovered: u32,
 }
 
-impl_headed!(UiFrame);
+impl_headed!(UiFrame, born = 104);
 
 impl UiFrame {
     /// The title screen and the menus before a game.
@@ -258,9 +278,13 @@ pub struct UiWidget {
     /// The sound container a [`UiWidget::SOUND`] widget plays; nil for the
     /// game's own sound `style`.
     pub sound: Guid,
+    /// The item an [`UiWidget::ITEM_SLOT`] shows.
+    pub item: ItemId,
+    /// How many of `item` an [`UiWidget::ITEM_SLOT`] shows, at least 1.
+    pub count: u32,
 }
 
-impl_headed!(UiWidget);
+impl_headed!(UiWidget, born = 112);
 
 impl UiWidget {
     /// A window in the game's style, a panel over the screen that takes the
@@ -301,6 +325,19 @@ impl UiWidget {
     /// [`Status::UNAVAILABLE`](super::Status::UNAVAILABLE) on a build where
     /// the loader does not find the game's hint. Client only.
     pub const INPUT_HINT: u32 = 10;
+    /// An item slot in the game's style, with the icon, count and frame of
+    /// `count` of `item`, as the game's inventory screens draw it. `result`
+    /// holds [`UiWidget::SLOT_CLICKED`] and [`UiWidget::SLOT_HOVERED`];
+    /// [`Status::MISSING`](super::Status::MISSING) for an item the client
+    /// does not know, [`Status::UNAVAILABLE`](super::Status::UNAVAILABLE) on
+    /// a build where the loader does not find the game's slot. Client only.
+    pub const ITEM_SLOT: u32 = 11;
+
+    /// An [`UiWidget::ITEM_SLOT`]'s `result` bit: the player clicked the
+    /// slot this frame.
+    pub const SLOT_CLICKED: u32 = 1;
+    /// An [`UiWidget::ITEM_SLOT`]'s `result` bit: the cursor is on the slot.
+    pub const SLOT_HOVERED: u32 = 2;
 
     /// The row shows its value and does not take changes; a button does not
     /// take clicks.
@@ -355,6 +392,8 @@ impl UiWidget {
         anchor: 0,
         reserved: 0,
         sound: Guid::NIL,
+        item: ItemId(0),
+        count: 0,
     };
 
     /// The HUD's top left corner.
@@ -370,6 +409,61 @@ impl UiWidget {
     /// The HUD's bottom right corner.
     pub const BOTTOM_RIGHT: u32 = 5;
 }
+
+/// The item whose tooltip opened, handed to the callbacks registered with
+/// [`HostApi::ui_item_tooltip`](super::HostApi::ui_item_tooltip); the lines
+/// a callback adds are [`UiWidget::LABEL`] widgets drawn with
+/// [`HostApi::ui_widget`](super::HostApi::ui_widget) naming its `token`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, UiTooltipItem};
+///
+/// let item = UiTooltipItem {
+///     header: Header::of::<UiTooltipItem>(),
+///     token: 7,
+///     item: enshwick::ItemId::new(0x5e01),
+///     pide: enshwick::Entity(900),
+/// };
+/// assert_eq!(item.pide, enshwick::Entity(900));
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct UiTooltipItem {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Names this tooltip in [`HostApi::ui_widget`](super::HostApi::ui_widget);
+    /// valid until the callback returns.
+    pub token: u64,
+    /// The item id.
+    pub item: ItemId,
+    /// The item's own entity in the client's world.
+    pub pide: Entity,
+}
+
+impl_headed!(UiTooltipItem);
+
+impl UiTooltipItem {
+    /// The most lines one callback adds to a tooltip; the loader refuses
+    /// more with [`Status::BUSY`](super::Status::BUSY).
+    pub const MAX_LINES: u32 = 16;
+}
+
+/// A mod's callback for an item's tooltip opening: the item and the pointer
+/// given at registration. It adds its lines with
+/// [`HostApi::ui_widget`](super::HostApi::ui_widget) and must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the client's main thread, which draws the interface, once each
+/// time the tooltip shows another item, never once per frame.
+///
+/// # Examples
+///
+/// The safe layer wraps it in
+/// `Load::extend_item_tooltip`, with the `unstable` feature.
+pub type UiTooltipFn = unsafe extern "system" fn(item: *const UiTooltipItem, user: *mut c_void);
 
 /// A marker on the client's map, one of the set [`HostApi::ui_markers`](super::HostApi::ui_markers)
 /// hands over.

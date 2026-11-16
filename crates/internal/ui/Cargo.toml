@@ -18,6 +18,7 @@ enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-content.workspace = true
 enshwick-values.workspace = true
+enshwick-inventory = { workspace = true, optional = true }
 enshwick-world = { workspace = true, optional = true }
 hound = { workspace = true, optional = true }
 thiserror.workspace = true
@@ -36,6 +37,8 @@ unstable = [
     "dep:hound",
     "enshwick-base/unstable",
     "enshwick-content/unstable",
+    "dep:enshwick-inventory",
+    "enshwick-inventory/unstable",
     "dep:enshwick-world",
     "enshwick-world/unstable",
 ]

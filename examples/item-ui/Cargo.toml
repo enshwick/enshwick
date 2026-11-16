@@ -1,0 +1,29 @@
+[package]
+name = "enshwick-example-item-ui"
+version = "0.0.0-dev"
+description = "Example: item slots beside the backpack, the slot under the cursor, and lines in the game's item tooltips"
+keywords = ["enshrouded", "mod", "example"]
+categories = ["game-development"]
+readme = "../README.md"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.enshwick]
+id = "you.item-ui"
+side = "both"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick = { workspace = true, features = ["unstable"] }
+
+[dev-dependencies]
+enshwick = { workspace = true, features = ["test", "unstable"] }
+
+[lints]
+workspace = true

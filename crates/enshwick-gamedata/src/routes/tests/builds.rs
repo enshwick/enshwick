@@ -455,6 +455,44 @@ const PLAY_DATA_READS: [(&str, u64); 5] = [
     ("ui.return_screen", 0x1cd9),
 ];
 
+/// The game's item slot widget and its data's init, and the item viewer's
+/// two sites after its last row, by table, read in the decompiler on client
+/// 26430625 (2026-11-16, research notes item-tooltip-lines and
+/// ui-native-rows); the older clients' by the same routes.
+const ITEM_UI_SYMBOLS: &[(&str, &str, u64)] = &[
+    ("1.0 client (26430625)", "ui.item_slot", 0xc0_46c0),
+    ("1.0 client (26430625)", "ui.item_slot_init", 0xb1_f4e0),
+    ("1.0 client (26430625)", "ui.tooltip_panel_site", 0xc1_1fa0),
+    ("1.0 client (26430625)", "ui.tooltip_plain_site", 0xc1_1fb5),
+    ("1.0 client (26320373)", "ui.item_slot", 0xc0_4600),
+    ("1.0 client (26320373)", "ui.item_slot_init", 0xb1_f420),
+    ("1.0 client (26320373)", "ui.tooltip_panel_site", 0xc1_1ee0),
+    ("1.0 client (26320373)", "ui.tooltip_plain_site", 0xc1_1ef5),
+    ("1.0 client (26082781)", "ui.item_slot", 0xbf_5070),
+    ("1.0 client (26082781)", "ui.item_slot_init", 0xb0_fd50),
+    ("1.0 client (26082781)", "ui.tooltip_panel_site", 0xc0_2880),
+    ("1.0 client (26082781)", "ui.tooltip_plain_site", 0xc0_2895),
+    ("1.0 client (1269579)", "ui.item_slot", 0xbf_34f0),
+    ("1.0 client (1269579)", "ui.item_slot_init", 0xb0_e230),
+    ("1.0 client (1269579)", "ui.tooltip_panel_site", 0xc0_0d00),
+    ("1.0 client (1269579)", "ui.tooltip_plain_site", 0xc0_0d15),
+];
+
+/// The item slot's click flag, the local player's data and item table it reads, and
+/// the item viewer's layout, unknown-item flag, item and item entity, the
+/// same on every kept client (client 26430625 in the decompiler,
+/// 2026-11-16).
+const ITEM_UI_READS: [(&str, u64); 8] = [
+    ("ui.item_slot_clickable", 0x62),
+    ("ui.context_player", 0xd0),
+    ("ui.player_data", 0x38),
+    ("ui.player_items", 0x46_67b8),
+    ("ui.viewer_layout", 0xbc),
+    ("ui.viewer_unknown", 0xe3),
+    ("ui.viewer_item", 0x8),
+    ("ui.viewer_pide", 0xc),
+];
+
 /// The kept client tables, by name.
 const CLIENT_TABLES: [&str; 4] = [
     "1.0 client (1269579)",
@@ -463,17 +501,20 @@ const CLIENT_TABLES: [&str; 4] = [
     "1.0 client (26430625)",
 ];
 
-/// [`ROUTED_ONLY`], and the [`PLAY_DATA_READS`], [`CLIENT_CONTROL_READS`]
-/// and [`WIDGET_READS`] of each of [`CLIENT_TABLES`].
+/// [`ROUTED_ONLY`] and [`ITEM_UI_SYMBOLS`], and the [`PLAY_DATA_READS`],
+/// [`CLIENT_CONTROL_READS`], [`WIDGET_READS`] and [`ITEM_UI_READS`] of each
+/// of [`CLIENT_TABLES`].
 fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
     ROUTED_ONLY
         .iter()
+        .chain(ITEM_UI_SYMBOLS)
         .copied()
         .chain(CLIENT_TABLES.into_iter().flat_map(|table| {
             PLAY_DATA_READS
                 .into_iter()
                 .chain(CLIENT_CONTROL_READS)
                 .chain(WIDGET_READS)
+                .chain(ITEM_UI_READS)
                 .map(move |(id, value)| (table, id, value))
         }))
 }

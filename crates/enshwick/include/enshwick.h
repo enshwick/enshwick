@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 3
+#define ENSHWICK_ABI_MINOR 4
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -2861,6 +2861,10 @@ typedef struct EnshwickUiWidget {
   // The sound container a `EnshwickUiWidget_SOUND` widget plays; nil for the
   // game's own sound `style`.
   struct EnshwickGuid sound;
+  // The item an `EnshwickUiWidget_ITEM_SLOT` shows.
+  EnshwickItemId item;
+  // How many of `item` an `EnshwickUiWidget_ITEM_SLOT` shows, at least 1.
+  uint32_t count;
 } EnshwickUiWidget;
 // A window in the game's style, a panel over the screen that takes the
 // input while it shows: `text` is its id, unique in the mod, `detail`
@@ -2900,6 +2904,18 @@ typedef struct EnshwickUiWidget {
 // `EnshwickStatus_UNAVAILABLE` on a build where
 // the loader does not find the game's hint. Client only.
 #define EnshwickUiWidget_INPUT_HINT 10
+// An item slot in the game's style, with the icon, count and frame of
+// `count` of `item`, as the game's inventory screens draw it. `result`
+// holds `EnshwickUiWidget_SLOT_CLICKED` and `EnshwickUiWidget_SLOT_HOVERED`;
+// `EnshwickStatus_MISSING` for an item the client
+// does not know, `EnshwickStatus_UNAVAILABLE` on
+// a build where the loader does not find the game's slot. Client only.
+#define EnshwickUiWidget_ITEM_SLOT 11
+// An `EnshwickUiWidget_ITEM_SLOT`'s `result` bit: the player clicked the
+// slot this frame.
+#define EnshwickUiWidget_SLOT_CLICKED 1
+// An `EnshwickUiWidget_ITEM_SLOT`'s `result` bit: the cursor is on the slot.
+#define EnshwickUiWidget_SLOT_HOVERED 2
 // The row shows its value and does not take changes; a button does not
 // take clicks.
 #define EnshwickUiWidget_READ_ONLY 1
@@ -3913,6 +3929,21 @@ typedef struct EnshwickUiFrame {
   // metres, from the same step; meaningful only while
   // `screen_host_template` is not all zero.
   EnshwickMetres screen_host_position;
+  // The slot of the game's inventory screen under the cursor in this
+  // frame, as the game packs it, `inventory | index << 32`, the
+  // inventory an entity of the client's world; 0 while the cursor is on
+  // none, outside an inventory screen and on a build where the loader
+  // does not find the game's slot widget.
+  uint64_t hovered_slot;
+  // The item id in `hovered_slot`; 0 for an empty slot.
+  EnshwickItemId hovered_item;
+  // How many `hovered_slot` holds.
+  uint32_t hovered_count;
+  // The entity of the item in `hovered_slot`, for an item with one of
+  // its own; entity 0 for none.
+  EnshwickEntity hovered_pide;
+  // Zero.
+  uint32_t reserved_hovered;
 } EnshwickUiFrame;
 // The title screen and the menus before a game.
 #define EnshwickUiFrame_MENU 0
@@ -3920,6 +3951,25 @@ typedef struct EnshwickUiFrame {
 #define EnshwickUiFrame_LOADING 1
 // In a game.
 #define EnshwickUiFrame_IN_GAME 2
+
+// The item whose tooltip opened, handed to the callbacks registered with
+// `EnshwickHostApi.ui_item_tooltip`; the lines
+// a callback adds are `EnshwickUiWidget_LABEL` widgets drawn with
+// `EnshwickHostApi.ui_widget` naming its `token`.
+typedef struct EnshwickUiTooltipItem {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Names this tooltip in `EnshwickHostApi.ui_widget`;
+  // valid until the callback returns.
+  uint64_t token;
+  // The item id.
+  EnshwickItemId item;
+  // The item's own entity in the client's world.
+  EnshwickEntity pide;
+} EnshwickUiTooltipItem;
+// The most lines one callback adds to a tooltip; the loader refuses
+// more with `EnshwickStatus_BUSY`.
+#define EnshwickUiTooltipItem_MAX_LINES 16
 
 // One voxel a committed edit changed, as `EnshwickVoxelEditRequest` lists it: where
 // it is and what it was and is.
@@ -4379,6 +4429,16 @@ typedef void (*EnshwickUiAnswerFn)(uint32_t answer, void *user);
 // `EnshwickStatus_BAD_ARGS` and keeps nothing.
 // Runs on the client's main thread, which draws the interface.
 typedef void (*EnshwickUiFrameFn)(const struct EnshwickUiFrame *frame, void *user);
+
+// A mod's callback for an item's tooltip opening: the item and the pointer
+// given at registration. It adds its lines with
+// `EnshwickHostApi.ui_widget` and must not unwind.
+//
+// Null is never a callback: the loader refuses a null one with
+// `EnshwickStatus_BAD_ARGS` and keeps nothing.
+// Runs on the client's main thread, which draws the interface, once each
+// time the tooltip shows another item, never once per frame.
+typedef void (*EnshwickUiTooltipFn)(const struct EnshwickUiTooltipItem *item, void *user);
 
 // A request to run a handler at an instruction inside a game function.
 //
@@ -6256,10 +6316,15 @@ typedef struct EnshwickHostApi {
                              EnshwickUiFrameFn callback,
                              void *user);
   // Draws `widget` in the frame `frame` names and writes back its
-  // `index`, `value` and `result`. Only inside the mod's frame callback
+  // `index`, `value` and `result`. Only inside the mod's frame callback,
+  // or inside its tooltip callback with the `EnshwickUiTooltipItem`'s `token` as
+  // `frame`, where a label adds a line to the item's tooltip
   // (`EnshwickStatus_WRONG_THREAD` elsewhere); `EnshwickStatus_REFUSED` for a
-  // widget outside a window or an `EnshwickUiWidget_END` without one;
-  // `EnshwickStatus_MISSING` for a widget this game build lacks.
+  // widget outside a window, an `EnshwickUiWidget_END` without one or a tooltip
+  // line that is not a label; `EnshwickStatus_BUSY` for a tooltip line past
+  // `EnshwickUiTooltipItem_MAX_LINES`; `EnshwickStatus_MISSING` for a widget this game
+  // build lacks or an item slot of an item the client does not know;
+  // `EnshwickStatus_BAD_ARGS` for a malformed widget or an item slot of count 0.
   EnshwickStatus (*ui_widget)(EnshwickModHandle me, uint64_t frame, struct EnshwickUiWidget *widget);
   // Queues `dialog` and calls `callback` with the answer and `user` once
   // the player gives it, on the thread that draws the interface; dialogs
@@ -6437,6 +6502,18 @@ typedef struct EnshwickHostApi {
   // without the client's text site turns the text off alone. ABI 12.3.
   EnshwickStatus (*interaction_prompt)(EnshwickModHandle me,
                                        const struct EnshwickInteractionPrompt *spec);
+  // Registers `callback` to add lines to the tooltip and detail panel of
+  // every item with an entity of its own, after the game's rows. It runs
+  // on the client's main thread, once each time the tooltip shows another
+  // item, with a `EnshwickUiTooltipItem` whose token takes up to
+  // `EnshwickUiTooltipItem_MAX_LINES` `EnshwickUiWidget_LABEL` widgets through
+  // `EnshwickHostApi.ui_widget`; the loader keeps the lines and draws them
+  // each frame the tooltip shows. Client only, during init:
+  // `EnshwickStatus_UNAVAILABLE` on a server, `EnshwickStatus_BAD_ARGS` for a null
+  // callback. ABI 12.4.
+  EnshwickStatus (*ui_item_tooltip)(EnshwickModHandle me,
+                                    EnshwickUiTooltipFn callback,
+                                    void *user);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -6874,7 +6951,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1696, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1704, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7087,6 +7164,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command) == 1664, "offse
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command_status) == 1672, "offset of HostApi.client_command_status");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 1680, "offset of HostApi.terrain_material_add");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_prompt) == 1688, "offset of HostApi.interaction_prompt");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_item_tooltip) == 1696, "offset of HostApi.ui_item_tooltip");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -7681,7 +7759,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, reserved) == 28, "offset of
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, hosts) == 32, "offset of UiExtension.hosts");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, host_count) == 40, "offset of UiExtension.host_count");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, reserved_hosts) == 44, "offset of UiExtension.reserved_hosts");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiFrame) == 104, "size of UiFrame");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiFrame) == 128, "size of UiFrame");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickUiFrame) == 8, "alignment of UiFrame");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, header) == 0, "offset of UiFrame.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, token) == 8, "offset of UiFrame.token");
@@ -7693,6 +7771,11 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, prompt_verb) == 56, "offset of 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, screen_host) == 60, "offset of UiFrame.screen_host");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, screen_host_template) == 64, "offset of UiFrame.screen_host_template");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, screen_host_position) == 80, "offset of UiFrame.screen_host_position");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, hovered_slot) == 104, "offset of UiFrame.hovered_slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, hovered_item) == 112, "offset of UiFrame.hovered_item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, hovered_count) == 116, "offset of UiFrame.hovered_count");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, hovered_pide) == 120, "offset of UiFrame.hovered_pide");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, reserved_hovered) == 124, "offset of UiFrame.reserved_hovered");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiMarker) == 56, "size of UiMarker");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickUiMarker) == 8, "alignment of UiMarker");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiMarker, header) == 0, "offset of UiMarker.header");
@@ -7700,7 +7783,13 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiMarker, position) == 8, "offset of UiM
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiMarker, label) == 32, "offset of UiMarker.label");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiMarker, color) == 48, "offset of UiMarker.color");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiMarker, marker_type) == 52, "offset of UiMarker.marker_type");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiWidget) == 112, "size of UiWidget");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiTooltipItem) == 24, "size of UiTooltipItem");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickUiTooltipItem) == 8, "alignment of UiTooltipItem");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiTooltipItem, header) == 0, "offset of UiTooltipItem.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiTooltipItem, token) == 8, "offset of UiTooltipItem.token");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiTooltipItem, item) == 16, "offset of UiTooltipItem.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiTooltipItem, pide) == 20, "offset of UiTooltipItem.pide");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiWidget) == 120, "size of UiWidget");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickUiWidget) == 8, "alignment of UiWidget");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, header) == 0, "offset of UiWidget.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, kind) == 8, "offset of UiWidget.kind");
@@ -7719,6 +7808,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, result) == 84, "offset of UiWi
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, anchor) == 88, "offset of UiWidget.anchor");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, reserved) == 92, "offset of UiWidget.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, sound) == 96, "offset of UiWidget.sound");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, item) == 112, "offset of UiWidget.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiWidget, count) == 116, "offset of UiWidget.count");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickVoxel) == 4, "size of Voxel");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickVoxel) == 1, "alignment of Voxel");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickVoxel, kind) == 0, "offset of Voxel.kind");

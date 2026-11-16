@@ -6,7 +6,7 @@ use crate::test::table::{Registered, State, text, with};
 use enshwick_core::__fake::SCREENS;
 use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
-    UiFrameFn, UiMarker, UiWidget,
+    UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
 
 /// The screens on which the player is in the world with no window open,
@@ -142,6 +142,70 @@ pub(crate) fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -
     Some(Status::OK)
 }
 
+/// Records a tooltip callback's line, as the loader keeps it: labels only,
+/// at most [`UiTooltipItem::MAX_LINES`]; `None` outside a tooltip callback.
+fn tooltip_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -> Option<Status> {
+    let (token, lines) = s.tooltip.as_mut()?;
+    if *token != frame {
+        return None;
+    }
+    if w.kind != UiWidget::LABEL {
+        return Some(Status::REFUSED);
+    }
+    if lines.len() >= UiTooltipItem::MAX_LINES as usize {
+        return Some(Status::BUSY);
+    }
+    lines.push(crate::test::Drawn::Label {
+        text: label.to_owned(),
+        style: w.style,
+    });
+    Some(Status::OK)
+}
+
+/// Draws an item slot as the loader does, taking its waiting click or
+/// hover; `Err` with the loader's answer for a count of 0 or an item the
+/// fake build does not know.
+fn item_slot(s: &mut State, w: &mut UiWidget) -> Result<crate::test::Drawn, Status> {
+    if w.count == 0 {
+        return Err(Status::BAD_ARGS);
+    }
+    if !s.host.items.contains_key(&w.item.get()) {
+        return Err(Status::MISSING);
+    }
+    match input(s, &crate::test::slot_key(w.item)) {
+        Some(crate::test::Input::Click) => {
+            w.result = UiWidget::SLOT_CLICKED | UiWidget::SLOT_HOVERED;
+        }
+        Some(crate::test::Input::Hover) => w.result = UiWidget::SLOT_HOVERED,
+        _ => {}
+    }
+    Ok(crate::test::Drawn::ItemSlot {
+        item: w.item,
+        count: w.count,
+    })
+}
+
+/// Registers an item tooltip callback, refusing what the loader refuses.
+pub(crate) extern "system" fn ui_item_tooltip(
+    me: ModHandle,
+    callback: Option<UiTooltipFn>,
+    user: *mut c_void,
+) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if s.host.side == Side::SERVER {
+            return Status::UNAVAILABLE;
+        }
+        s.tooltips.push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
 pub(crate) extern "system" fn ui_widget(
     me: ModHandle,
     frame: u64,
@@ -191,21 +255,26 @@ fn window(s: &mut State, w: &mut UiWidget, id: String) -> crate::test::Drawn {
     }
 }
 
+/// A dropdown's options, copied; none for a null list.
+fn options(w: &UiWidget) -> Vec<String> {
+    if w.options.is_null() {
+        return Vec::new();
+    }
+    // SAFETY: the safe layer passes `option_count` texts.
+    unsafe { core::slice::from_raw_parts(w.options, w.option_count as usize) }
+        .iter()
+        .map(|o| text(*o))
+        .collect()
+}
+
 /// Draws the widget `w` in `frame` and writes its answer into it.
 fn draw(frame: u64, w: &mut UiWidget) -> Status {
     use crate::test::{Drawn, Input};
     let label = text(w.text);
-    let options: Vec<String> = if w.options.is_null() {
-        Vec::new()
-    } else {
-        // SAFETY: the safe layer passes `option_count` texts.
-        unsafe { core::slice::from_raw_parts(w.options, w.option_count as usize) }
-            .iter()
-            .map(|o| text(*o))
-            .collect()
-    };
+    let options = options(w);
     with(Status::MISSING, |s| {
-        if let Some(status) = hud_widget(s, frame, w, &label) {
+        let gathered = hud_widget(s, frame, w, &label);
+        if let Some(status) = gathered.or_else(|| tooltip_widget(s, frame, w, &label)) {
             return status;
         }
         let open = match s.frame.as_ref() {
@@ -277,6 +346,10 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
             UiWidget::INPUT_HINT => match input_hint(s, w, label) {
                 Some(drawn) => drawn,
                 None => return Status::MISSING,
+            },
+            UiWidget::ITEM_SLOT => match item_slot(s, w) {
+                Ok(drawn) => drawn,
+                Err(status) => return status,
             },
             _ => return Status::MISSING,
         };

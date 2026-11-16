@@ -29,6 +29,15 @@ pub enum WidgetError {
     /// What the widget shows is not there: a sound or a key hint.
     #[error("what the widget shows is not there")]
     Unavailable,
+    /// An item slot of an item the client does not know.
+    #[error("the client knows no such item")]
+    NoItem,
+    /// A tooltip line of a kind a tooltip does not show; it shows labels.
+    #[error("a tooltip shows only labels")]
+    TooltipRefused,
+    /// A tooltip line past the most one handler adds.
+    #[error("the handler added the most tooltip lines")]
+    TooltipFull,
 }
 
 /// Whether a widget of `kind` may draw now, or why not.
@@ -65,6 +74,7 @@ pub const fn needs_window(kind: u32) -> bool {
             | UiWidget::DROPDOWN
             | UiWidget::PROGRESS
             | UiWidget::INPUT_HINT
+            | UiWidget::ITEM_SLOT
     )
 }
 

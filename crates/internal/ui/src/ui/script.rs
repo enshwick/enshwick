@@ -163,6 +163,8 @@ impl Object for ScriptFrame {
         Self::SCRIPT_FRAME,
         #[cfg(feature = "unstable")]
         Self::SCRIPT_OPEN_SCREEN,
+        #[cfg(feature = "unstable")]
+        Self::SCRIPT_ITEM_SLOTS,
         #[cfg(feature = "typed")]
         Self::SCRIPT_INPUT_HINT,
     ];
@@ -223,6 +225,68 @@ impl ScriptFrame {
     #[script(name = "screen_host_position")]
     pub(crate) fn screen_host_position_script(&self) -> Option<[f64; 3]> {
         self.frame().screen_host_position()
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(item_slots)]
+impl ScriptFrame {
+    /// Draws an item slot of `count` of `item` in the game's style, as
+    /// [`Frame::item_slot`] does, and says whether it was clicked or is
+    /// under the cursor.
+    #[script(name = "item_slot")]
+    pub(crate) fn item_slot_script(&self, item: crate::ItemId, count: u32) -> super::SlotInput {
+        self.frame().item_slot(item, count)
+    }
+
+    /// The slot of the game's own inventory screen under the cursor, as
+    /// [`Frame::hovered_slot`] says.
+    #[script(name = "hovered_slot")]
+    pub(crate) fn hovered_slot_script(&self) -> Option<crate::inventory::Slot> {
+        self.frame().hovered_slot()
+    }
+}
+
+/// The lines a script adds to one item's tooltip, lent to the handler of
+/// `extend_item_tooltip`: [`TooltipLines`](super::TooltipLines)'s push as a
+/// method.
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug)]
+pub struct ScriptTooltipLines {
+    host: Host,
+    token: u64,
+}
+
+#[cfg(feature = "unstable")]
+impl ScriptTooltipLines {
+    fn lines(&self) -> super::TooltipLines<'_> {
+        super::TooltipLines {
+            host: self.host,
+            token: self.token,
+            _life: core::marker::PhantomData,
+            _thread: core::marker::PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl Object for ScriptTooltipLines {
+    const CLASS: &'static Class = &Class::lent::<Self>(
+        "TooltipLines",
+        "The lines of one item's tooltip: what it pushes shows under the game's rows, during its callback.",
+    );
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_TOOLTIP_LINES];
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(tooltip_lines)]
+impl ScriptTooltipLines {
+    /// Adds a line under the game's rows, as
+    /// [`TooltipLines::push`](super::TooltipLines::push) does; false when
+    /// the loader refused it.
+    #[script(name = "push")]
+    pub(crate) fn push_script(&self, label: &ScriptLabel) -> bool {
+        self.lines().push(label.label())
     }
 }
 
@@ -460,6 +524,14 @@ pub trait LoadMethods {
         &mut self,
         handler: impl Fn(crate::ui::ScreenChanged) + Send + Sync + 'static,
     ) -> Result<(), Off>;
+
+    /// As `Load::extend_item_tooltip_script`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn extend_item_tooltip_script(
+        &mut self,
+        handler: impl Fn(crate::inventory::ItemInstance, ScriptTooltipLines) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
 }
 
 impl LoadMethods for crate::BaseLoad {
@@ -511,6 +583,22 @@ impl LoadMethods for crate::BaseLoad {
         handler: impl Fn(crate::ui::ScreenChanged) + Send + Sync + 'static,
     ) -> Result<(), Off> {
         self.on_screen_changed(move |change| handler(*change))
+    }
+
+    #[cfg(feature = "unstable")]
+    fn extend_item_tooltip_script(
+        &mut self,
+        handler: impl Fn(crate::inventory::ItemInstance, ScriptTooltipLines) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.extend_item_tooltip(move |item, lines| {
+            handler(
+                item,
+                ScriptTooltipLines {
+                    host: lines.host,
+                    token: lines.token,
+                },
+            );
+        })
     }
 }
 

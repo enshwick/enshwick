@@ -1,4 +1,4 @@
-abi 12.3
+abi 12.4
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -381,7 +381,7 @@ HookSpec size 40 align 8 born 40
     next at 24 size 8 type *const Atomic<usize>
     priority at 32 size 4 type i32
     flags at 36 size 4 type HookFlags
-HostApi size 1696 align 8
+HostApi size 1704 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(ModHandle, *mut BuildInfo) -> Status
@@ -593,6 +593,7 @@ HostApi size 1696 align 8
     client_command_status at 1672 size 8 type extern "system" fn(ModHandle, u64, *mut ClientCommandStatus) -> Status
     terrain_material_add at 1680 size 8 type extern "system" fn(ModHandle, *const TerrainMaterialAdd, *mut u8) -> Status
     interaction_prompt at 1688 size 8 type extern "system" fn(ModHandle, *const InteractionPrompt) -> Status
+    ui_item_tooltip at 1696 size 8 type extern "system" fn(ModHandle, Option<unsafe extern "system" fn(*const UiTooltipItem, *mut c_void)>, *mut c_void) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -1119,7 +1120,7 @@ UiExtension size 48 align 8 born 48
     hosts at 32 size 8 type *const Guid
     host_count at 40 size 4 type u32
     reserved_hosts at 44 size 4 type u32
-UiFrame size 104 align 8 born 104
+UiFrame size 128 align 8 born 104
     header at 0 size 8 type Header
     token at 8 size 8 type u64
     screen at 16 size 4 type u32
@@ -1130,13 +1131,23 @@ UiFrame size 104 align 8 born 104
     screen_host at 60 size 4 type Entity
     screen_host_template at 64 size 16 type Guid
     screen_host_position at 80 size 24 type [f64; 3]
+    hovered_slot at 104 size 8 type u64
+    hovered_item at 112 size 4 type ItemId
+    hovered_count at 116 size 4 type u32
+    hovered_pide at 120 size 4 type Entity
+    reserved_hovered at 124 size 4 type u32
 UiMarker size 56 align 8 born 56
     header at 0 size 8 type Header
     position at 8 size 24 type [f64; 3]
     label at 32 size 16 type Str
     color at 48 size 4 type u32
     marker_type at 52 size 4 type u32
-UiWidget size 112 align 8 born 112
+UiTooltipItem size 24 align 8 born 24
+    header at 0 size 8 type Header
+    token at 8 size 8 type u64
+    item at 16 size 4 type ItemId
+    pide at 20 size 4 type Entity
+UiWidget size 120 align 8 born 112
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     flags at 12 size 4 type u32
@@ -1154,6 +1165,8 @@ UiWidget size 112 align 8 born 112
     anchor at 88 size 4 type u32
     reserved at 92 size 4 type u32
     sound at 96 size 16 type Guid
+    item at 112 size 4 type ItemId
+    count at 116 size 4 type u32
 Voxel size 4 align 1
     kind at 0 size 1 type u8
     material at 1 size 1 type u8
@@ -1580,6 +1593,7 @@ const UiMarker::RED = 1
 const UiMarker::TURQUOISE = 6
 const UiMarker::WHITE = 0
 const UiMarker::YELLOW = 4
+const UiTooltipItem::MAX_LINES = 16
 const UiWidget::BOTTOM_CENTER = 4
 const UiWidget::BOTTOM_LEFT = 3
 const UiWidget::BOTTOM_RIGHT = 5
@@ -1588,10 +1602,13 @@ const UiWidget::CENTER = 4
 const UiWidget::DROPDOWN = 7
 const UiWidget::END = 2
 const UiWidget::INPUT_HINT = 10
+const UiWidget::ITEM_SLOT = 11
 const UiWidget::LABEL = 3
 const UiWidget::PROGRESS = 8
 const UiWidget::READ_ONLY = 1
 const UiWidget::SLIDER = 6
+const UiWidget::SLOT_CLICKED = 1
+const UiWidget::SLOT_HOVERED = 2
 const UiWidget::SOUND = 9
 const UiWidget::SOUND_BACK = 2
 const UiWidget::SOUND_CLICK = 0

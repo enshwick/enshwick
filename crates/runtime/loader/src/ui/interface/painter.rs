@@ -23,6 +23,9 @@ pub(crate) fn widget(
     let Some(engine) = ENGINE.get() else {
         return Err(WidgetError::NoEngine);
     };
+    if let Some(gathered) = super::tooltips::gather(owner, token, raw) {
+        return gathered;
+    }
     let Some(mut drawing) = DRAWING.get() else {
         return Err(WidgetError::WrongThread);
     };
@@ -412,6 +415,10 @@ pub(super) fn draw(
             row(engine, context, copy(&[text]), raw, read_only)
         }
         UiWidget::INPUT_HINT => input_hint(engine, text, raw),
+        // SAFETY: `window_open`, checked by `widget_checks::order`, means
+        // this callback's window, or its screen extension's, is open in this
+        // frame on the interface thread, with its non-zero `context`.
+        UiWidget::ITEM_SLOT => unsafe { super::item_slots::draw(context, raw) },
         UiWidget::PROGRESS => {
             let Some(value) = widget_checks::progress(raw.value, raw.min, raw.max) else {
                 return Err(WidgetError::Malformed);

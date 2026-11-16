@@ -956,6 +956,10 @@ export type Frame = {
 	screen_host_template: (self: Frame) -> string?,
 	--- Where the open screen's host stands, as `Frame.screen_host_position` says.
 	screen_host_position: (self: Frame) -> vector?,
+	--- Draws an item slot of `count` of `item` in the game's style, as `Frame.item_slot` does, and says whether it was clicked or is under the cursor.
+	item_slot: (self: Frame, item: number, count: number) -> SlotInput,
+	--- The slot of the game's own inventory screen under the cursor, as `Frame.hovered_slot` says.
+	hovered_slot: (self: Frame) -> Slot?,
 	--- Draws the key the player bound to `action` with `label` beside it, as `Frame.input_hint` does; true when the game drew a key.
 	input_hint: (self: Frame, action: typed_input_mapping_runtime_GameplayAction, label: string) -> boolean,
 }
@@ -2662,6 +2666,14 @@ export type Slot = {
 	pide: number?,
 }
 
+--- What the player did to an item slot in one frame, from `Frame.item_slot`. The name is enshwick's.
+export type SlotInput = {
+	--- The player clicked the slot in this frame.
+	clicked: boolean,
+	--- The cursor is on the slot.
+	hovered: boolean,
+}
+
 --- One of the game's interface sounds.
 export type Sound = "Click" | "Confirm" | "Back" | "Error"
 
@@ -3043,6 +3055,12 @@ export type Toggle = {
 
 --- What a dead character leaves behind. The loader reads the game's value of each variant by its constant's name.
 export type TombstoneMode = "AddBackpackMaterials" | "Everything" | "NoTombstone" | { Other: number }
+
+--- The lines of one item's tooltip: what it pushes shows under the game's rows, during its callback.
+export type TooltipLines = {
+	--- Adds a line under the game's rows, as `TooltipLines.push` does; false when the loader refused it.
+	push: (self: TooltipLines, label: Label) -> boolean,
+}
 
 --- A batch of world edits, written together and undone together once committed.
 export type Transaction = {
@@ -4437,6 +4455,9 @@ declare enshwick: {
 		--- Calls `handler` with each change of the game's screen the player has open, as `Load.on_screen_changed` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_screen_changed: (handler: (arg1: ScreenChanged) -> ()) -> (),
+		--- Adds lines to the tooltip of every item with an entity of its own, with the item and its tooltip's lines lent to `handler`, as `Load.extend_item_tooltip` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		extend_item_tooltip: (handler: (arg1: ItemInstance, arg2: TooltipLines) -> ()) -> (),
 	},
 	sound: {
 		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.

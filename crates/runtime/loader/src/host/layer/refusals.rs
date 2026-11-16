@@ -864,15 +864,17 @@ impl Refusal for crate::ui::interface::DialogError {
     }
 }
 
-/// A widget out of order or the HUD's no refused; an unknown one missing;
-/// no engine or nothing to show unavailable; outside its callback the wrong thread; a
-/// malformed one a bad argument.
+/// A widget out of order or the HUD's or a tooltip's no refused; an unknown
+/// one or an unknown item missing; no engine or nothing to show unavailable;
+/// a full tooltip busy; outside its callback the wrong thread; a malformed
+/// one a bad argument.
 impl Refusal for crate::ui::widget_checks::WidgetError {
     fn status(&self) -> Status {
         match self {
-            Self::OutOfOrder | Self::HudRefused => Status::REFUSED,
+            Self::OutOfOrder | Self::HudRefused | Self::TooltipRefused => Status::REFUSED,
             Self::NoEngine | Self::Unavailable => Status::UNAVAILABLE,
-            Self::Unknown => Status::MISSING,
+            Self::Unknown | Self::NoItem => Status::MISSING,
+            Self::TooltipFull => Status::BUSY,
             Self::WrongThread => Status::WRONG_THREAD,
             Self::Malformed => Status::BAD_ARGS,
         }

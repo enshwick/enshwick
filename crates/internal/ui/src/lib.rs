@@ -30,6 +30,9 @@ pub(crate) use enshwick_base::locks;
 pub use enshwick_base::{ecs, mods, resources, script};
 #[doc(hidden)]
 pub use enshwick_content::content;
+#[cfg(feature = "unstable")]
+#[doc(hidden)]
+pub use enshwick_inventory::inventory;
 #[cfg(feature = "typed")]
 #[doc(hidden)]
 pub use enshwick_world::typed;

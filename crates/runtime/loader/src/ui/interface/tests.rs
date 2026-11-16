@@ -20,6 +20,28 @@ fn a_hud_that_cannot_link_is_off_for_its_draw_too() {
 }
 
 #[test]
+fn item_slots_list_off_only_when_a_mod_asks_and_turn_off_with_the_interface() {
+    let loader = crate::start::tests::bare_loader();
+    item_slots::link(&loader, false);
+    assert!(
+        !item_slots::SLOTS_FUSE.is_off() && !item_slots::HOVER_FUSE.is_off(),
+        "a build without the slots and no mod asking lists nothing off"
+    );
+    parts_off_with_interface();
+    for fuse in [
+        &item_slots::SLOTS_FUSE,
+        &item_slots::HOVER_FUSE,
+        &tooltips::FUSE,
+    ] {
+        assert!(
+            fuse.is_off(),
+            "{} is off with the interface",
+            fuse.feature()
+        );
+    }
+}
+
+#[test]
 fn each_optional_part_turns_off_the_feature_its_work_runs_under() {
     let same = |a: &Fuse, b: &Fuse| core::ptr::from_ref(a) == core::ptr::from_ref(b);
     for (part, fuse) in Part::ALL.iter().zip(PART_FUSES) {
