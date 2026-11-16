@@ -192,6 +192,48 @@ impl Inventories {
         })
     }
 
+    /// Shows `character`'s player the game's pickup message for `count` of
+    /// `item`, with nothing entering the inventory: a reward that is no
+    /// item, or a give made elsewhere. The server raises the game's pickup
+    /// event, which every reader of it hears, the item filters but; a count
+    /// above 65535 shows 65535, the game's most. On the server's game
+    /// thread between steps (a game event or a
+    /// [`Scheduler`](crate::schedule::Scheduler) task).
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`](crate::WorldError::Refused) for item 0, count
+    /// 0 or an entity that is no player in game;
+    /// [`WorldError::WrongThread`](crate::WorldError::WrongThread) off the
+    /// server's game thread; [`WorldError::Unavailable`](crate::WorldError::Unavailable)
+    /// outside a server or on a build without the event.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::inventory::Inventories;
+    ///
+    /// fn reward(inventories: &Inventories, player: Entity) -> Result<(), enshwick::WorldError> {
+    ///     // The quest pays in reputation; the message shows a token.
+    ///     inventories.show_pickup(player, enshwick::ItemId::new(0x5e01), 3)
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[script]
+    pub fn show_pickup(
+        &self,
+        character: Entity,
+        item: ItemId,
+        count: u32,
+    ) -> Result<(), crate::WorldError> {
+        let host = self.host;
+        let status = (host.api().show_pickup)(host.handle(), character, item, count);
+        enshwick_world::__internal::world_status(status)
+    }
+
     /// Submits `batch` from any thread. `done` runs on the game thread after
     /// a later step with the outcome, which the returned [`Ticket`] also
     /// holds. A batch that breaks a limit is refused without reaching the

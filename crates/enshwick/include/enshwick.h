@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 8
+#define ENSHWICK_ABI_MINOR 9
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1174,6 +1174,26 @@ typedef struct EnshwickCommandInfo {
   // The id of the mod that named them.
   struct EnshwickStr mod_id;
 } EnshwickCommandInfo;
+
+// A stack about to enter one slot of a container, as
+// `HostApi::container_rule` hands it on.
+// ABI 12.9.
+typedef struct EnshwickContainerPut {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The container: the placed entity whose inventory holds the slot.
+  EnshwickEntity container;
+  // The item the container was placed from (`UsedItem`), the one the
+  // rule was registered for.
+  EnshwickItemId container_item;
+  // The item of the stack.
+  EnshwickItemId item;
+  // How many items enter.
+  uint32_t count;
+  // The slot, as a sub-inventory entity in the low 32 bits and its slot
+  // index above them.
+  uint64_t slot;
+} EnshwickContainerPut;
 
 // One content rename for `EnshwickHostApi.rename_content`:
 // content saved under `from` reads as the content now under `to`.
@@ -2580,6 +2600,10 @@ typedef struct EnshwickInventoryRequest {
 #define EnshwickInventoryRequest_ALLOW_PARTIAL 1
 // Show the actor the pickup and inventory-full messages.
 #define EnshwickInventoryRequest_NOTIFY 2
+// With `NOTIFY`, raise the pickup event marked hidden,
+// so no pickup message shows while the event's readers still hear it.
+// ABI 12.9.
+#define EnshwickInventoryRequest_HIDE_IN_UI 4
 
 // A request to move an entity, for `EnshwickHostApi.teleport`.
 typedef struct EnshwickTeleportRequest {
@@ -3309,7 +3333,63 @@ typedef struct EnshwickInteraction {
   uint8_t reserved[3];
   // Where the target stands, in metres, when `known`.
   EnshwickMetres position;
+  // The item of the stack in `from_slot`, when `moving`; 0 for a move
+  // that names no source slot. ABI 12.9.
+  EnshwickItemId moved;
+  // How many items the stack in `from_slot` holds, when `moving`.
+  // ABI 12.9.
+  uint32_t stack;
+  // The amount the player asked for, which counts only for
+  // `ACTION_AMOUNT`. ABI 12.9.
+  uint32_t amount;
+  // The container the items leave: the source entity, or the owner of
+  // `from_slot`; 0 when unknown. ABI 12.9.
+  EnshwickEntity from;
+  // The container the items enter: the target entity, or the owner of
+  // `to_slot`; 0 for none, as when items are destroyed. ABI 12.9.
+  EnshwickEntity to;
+  // What the player moves, one of the `ACTION_` constants; 0 when
+  // unknown. ABI 12.9.
+  uint8_t action;
+  // How the move travels, a mask of the `TRANSFER_` constants; 0 for a
+  // plain move. ABI 12.9.
+  uint8_t transfer;
+  // 1 when the fields of ABI 12.9 were read from a
+  // `MOVE`. ABI 12.9.
+  uint8_t moving;
+  // Zero.
+  uint8_t reserved_move;
+  // The source slot, as a sub-inventory entity in the low 32 bits and
+  // its slot index above them; 0 for a move of a whole inventory.
+  // ABI 12.9.
+  uint64_t from_slot;
+  // The target slot, encoded as `from_slot`; 0 when the game picks the
+  // slots. ABI 12.9.
+  uint64_t to_slot;
 } EnshwickInteraction;
+// `action`: one item.
+#define EnshwickInteraction_ACTION_ONE 1
+// `action`: half the stack.
+#define EnshwickInteraction_ACTION_HALF 2
+// `action`: the whole stack, or every stack of a
+// whole-inventory move.
+#define EnshwickInteraction_ACTION_ALL 3
+// `action`: `amount` items.
+#define EnshwickInteraction_ACTION_AMOUNT 4
+// `action`: the stack is destroyed.
+#define EnshwickInteraction_ACTION_DESTROY 5
+// `transfer`: a gift to another player nearby.
+#define EnshwickInteraction_TRANSFER_GIFT 1
+// `transfer`: only the stacks of items the target
+// already holds move, as Deposit Stacks and Refill Stacks do.
+#define EnshwickInteraction_TRANSFER_REFILL_STACKS 2
+// `transfer`: every stack moves, as a storage
+// window's Take All and Deposit All do.
+#define EnshwickInteraction_TRANSFER_MOVE_ALL_STACKS 4
+// `transfer`: the stack goes to the action bar.
+#define EnshwickInteraction_TRANSFER_TO_ACTIONBAR 8
+// `transfer`: the stack goes to the backpack.
+#define EnshwickInteraction_TRANSFER_TO_BACKPACK 16
 // The game offers to open the target.
 #define EnshwickInteraction_OPEN 1
 // Items move out of or into the target.
@@ -4207,6 +4287,18 @@ typedef int32_t (*EnshwickComfortFilterFn)(const struct EnshwickComfort *comfort
 typedef EnshwickStatus (*EnshwickConfigCheckFn)(struct EnshwickStr text,
                                                 struct EnshwickStr *why,
                                                 void *user);
+
+// A mod's container rule: the stack and the pointer given at registration;
+// returns `FILTER_REFUSE` to keep the stack out.
+//
+// The game handles a refusal as a slot that does not take the stack, so it
+// stays where it was or goes to another slot.
+//
+// Null is never a callback: the loader refuses a null one with
+// `EnshwickStatus_BAD_ARGS` and keeps nothing.
+// Runs on the thread of the game system that moves the items, the game
+// thread or a task worker, so several calls may run at once.
+typedef uint8_t (*EnshwickContainerRuleFn)(const struct EnshwickContainerPut *put, void *user);
 
 // A mod's control callback: the event and the pointer given with
 // `EnshwickHostApi.control`.
@@ -6634,6 +6726,34 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*prop_placement_info)(EnshwickModHandle me,
                                         EnshwickItemId item,
                                         struct EnshwickPropPlacementInfo *out);
+  // Registers `callback` to rule which stacks enter the containers placed
+  // from `item`, vanilla or a mod's own. The loader asks the rules of the
+  // container's item in load order, until one refuses, before a stack
+  // enters one of its slots, whatever moves it: a player's move, a swap, Take All, Deposit
+  // All or Stacks, an area deposit; a stack a rule refuses stays where it
+  // was, or goes to another slot when the game picks the slots. Gives
+  // through `EnshwickHostApi.inventory_submit` and the game's own loot are not
+  // asked. Allowed during `enshwick_mod_init` only; `EnshwickStatus_BAD_ARGS`
+  // for item 0 or a null callback; `EnshwickStatus_UNAVAILABLE` on a build
+  // without the slot link. ABI 12.9.
+  EnshwickStatus (*container_rule)(EnshwickModHandle me,
+                                   EnshwickItemId item,
+                                   EnshwickContainerRuleFn callback,
+                                   void *user);
+  // Shows `character`'s player the game's pickup message for `count` of
+  // `item`, as if the items had entered the player's inventory, which
+  // they do not: the loader raises the game's pickup event on the server,
+  // and every reader of that event, but the loader's item filters, hears
+  // it. `count` above 65535 shows 65535, the game's most. On the server's
+  // game thread between steps only; the systems of the next step see the
+  // event. `EnshwickStatus_BAD_ARGS` for item 0, count 0 or an entity that is
+  // no player; `EnshwickStatus_WRONG_THREAD` off the game thread or during a
+  // step; `EnshwickStatus_UNAVAILABLE` outside a server and on a build without
+  // the event. ABI 12.9.
+  EnshwickStatus (*show_pickup)(EnshwickModHandle me,
+                                EnshwickEntity character,
+                                EnshwickItemId item,
+                                uint32_t count);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -6910,6 +7030,14 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickCommandInfo, header) == 0, "offset of Co
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickCommandInfo, name) == 8, "offset of CommandInfo.name");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickCommandInfo, alias) == 24, "offset of CommandInfo.alias");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickCommandInfo, mod_id) == 40, "offset of CommandInfo.mod_id");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickContainerPut) == 32, "size of ContainerPut");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickContainerPut) == 8, "alignment of ContainerPut");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickContainerPut, header) == 0, "offset of ContainerPut.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickContainerPut, container) == 8, "offset of ContainerPut.container");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickContainerPut, container_item) == 12, "offset of ContainerPut.container_item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickContainerPut, item) == 16, "offset of ContainerPut.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickContainerPut, count) == 20, "offset of ContainerPut.count");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickContainerPut, slot) == 24, "offset of ContainerPut.slot");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickContentRename) == 32, "size of ContentRename");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickContentRename) == 1, "alignment of ContentRename");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickContentRename, from) == 0, "offset of ContentRename.from");
@@ -7072,6 +7200,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSp
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1728, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1736, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7290,6 +7420,10 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_settled) == 1712, "
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1720, "offset of HostApi.prop_placement_info");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, container_rule) == 1720, "offset of Interaction.container_rule");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, show_pickup) == 1728, "offset of Interaction.show_pickup");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, kind) == 8, "offset of Interaction.kind");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, character) == 12, "offset of Interaction.character");
@@ -7298,6 +7432,17 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, item) == 20, "offset of Int
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, known) == 24, "offset of Interaction.known");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, reserved) == 25, "offset of Interaction.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, position) == 32, "offset of Interaction.position");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, moved) == 56, "offset of Interaction.moved");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, stack) == 60, "offset of Interaction.stack");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, amount) == 64, "offset of Interaction.amount");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, from) == 68, "offset of Interaction.from");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, to) == 72, "offset of Interaction.to");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, action) == 76, "offset of Interaction.action");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, transfer) == 77, "offset of Interaction.transfer");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, moving) == 78, "offset of Interaction.moving");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, reserved_move) == 79, "offset of Interaction.reserved_move");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, from_slot) == 80, "offset of Interaction.from_slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, to_slot) == 88, "offset of Interaction.to_slot");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteractionPrompt) == 24, "size of InteractionPrompt");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteractionPrompt) == 4, "alignment of InteractionPrompt");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteractionPrompt, header) == 0, "offset of InteractionPrompt.header");

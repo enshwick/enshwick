@@ -167,7 +167,7 @@ graph BT
     ui --> content
     inventory --> world
     knowledge --> world
-    actions --> world
+    actions --> inventory
     knowledge -. unstable .-> inventory
     ui -. unstable .-> inventory
     packs --> inventory

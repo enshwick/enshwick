@@ -98,19 +98,10 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{Header, Interaction};
+    /// use enshwick::abi::Interaction;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let call = Interaction {
-    ///     header: Header::of::<Interaction>(),
-    ///     kind: Interaction::OPEN,
-    ///     character: enshwick::Entity(1),
-    ///     target: enshwick::Entity(2),
-    ///     item: enshwick::ItemId::new(0),
-    ///     known: 0,
-    ///     reserved: [0; 3],
-    ///     position: [0.0; 3],
-    /// };
+    /// let call = Interaction::new(Interaction::OPEN, enshwick::Entity(1), enshwick::Entity(2));
     /// assert!(loader.interaction(&call));
     /// ```
     #[must_use]

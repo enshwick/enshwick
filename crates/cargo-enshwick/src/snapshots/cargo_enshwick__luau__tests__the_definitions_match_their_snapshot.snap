@@ -274,6 +274,8 @@ export type Batch = {
 	allow_partial: boolean?,
 	--- Whether players see the game's notices of what they got.
 	notify: boolean?,
+	--- Whether the pickup events are raised hidden, so no pickup message shows.
+	hide_in_ui: boolean?,
 	--- The player it acts for; their character's entity.
 	actor: number?,
 }
@@ -618,6 +620,20 @@ export type Container = {
 	area_loot: boolean?,
 	--- Its interaction offer; nil without one.
 	offer: InteractionOfferRuntime?,
+}
+
+--- A stack about to enter one slot of a container, from `Load.container_rule`. The name is enshwick's: the loader hooks the game's put of one stack into one slot.
+export type ContainerPut = {
+	--- The container: the placed entity whose inventory holds the slot.
+	container: number,
+	--- The item the container was placed from, the one the rule names.
+	container_item: number,
+	--- The item of the stack.
+	item: number,
+	--- How many items enter.
+	count: number,
+	--- The slot they enter.
+	slot: string,
 }
 
 --- One content GUID the save holds and the GUID it reads as from now on.
@@ -1118,6 +1134,8 @@ export type Interaction = {
 	item: number?,
 	--- Where the target stands, in metres, when the platform could read it.
 	position: vector?,
+	--- What a `Kind.Move` moves, when the platform could read it. Unstable: needs the `unstable` feature and may change in any release.
+	moved: Move?,
 }
 
 --- What a player does with the target.
@@ -1135,6 +1153,9 @@ export type InteractionOfferRuntime = {
 
 --- A verb the game shows on interaction prompts, named after its English text, for `ObjectPrompt.verb`. The game's own data gives each one; a vanilla client shows it in the player's language. Unstable: needs the `unstable` feature and may change in any release.
 export type InteractionVerb = "Open" | "Close" | "Use" | "Activate" | "Deactivate" | "Flip" | "Talk" | "Read" | "Inspect" | "Search" | "Loot" | "Collect" | "Harvest" | "Pick" | "Craft" | "Cook" | "Sit" | "Sleep" | "Enter" | "Edit" | "Recover" | "RepairEquipment" | "DepositItems" | "DrinkFrom" | "Upgrade" | "Disarm" | "Pet" | "Chop" | "Cleanse" | "Adopt" | "PickLock" | "Repot" | "TearOut" | "PlaceInto"
+
+--- How much of a stack a player moves, as the game's `InventoryActionType` names it. Unstable: needs the `unstable` feature and may change in any release.
+export type InventoryActionType = "One" | "Half" | "All" | "CustomAmount" | "Destroy"
 
 --- One change in a `Batch`.
 export type InventoryOp = { Give: InventoryOpGive } | { Take: InventoryOpTake } | { DestroySlot: string } | { MoveSlot: InventoryOpMoveSlot } | { Renew: InventoryOpRenew } | { MoveAll: InventoryOpMoveAll }
@@ -1671,6 +1692,28 @@ export type Modifier = {
 	value: number,
 }
 
+--- What a player moves, beside the containers each call of a move names. A move of a whole inventory, such as Take All, names no slot and no item: the game moves stack after stack, and a `container rule` answers for each stack that enters a container. Unstable: needs the `unstable` feature and may change in any release.
+export type Move = {
+	--- The kind of move.
+	transfer: Transfer,
+	--- How much of the stack moves; nil when the platform could not read it.
+	action: InventoryActionType?,
+	--- The amount the player asked for, which counts only for `InventoryActionType.CustomAmount`.
+	amount: number,
+	--- The item of the stack in `from_slot`; nil for a move of a whole inventory.
+	item: number?,
+	--- How many items that stack holds.
+	stack: number,
+	--- The container the items leave.
+	from: number?,
+	--- The container the items enter; nil when the items are destroyed.
+	to: number?,
+	--- The slot the items leave; nil for a move of a whole inventory.
+	from_slot: string?,
+	--- The slot the items enter; nil when the game picks the slots.
+	to_slot: string?,
+}
+
 --- A new arsenal for `Load.add_arsenal`: a copy of the vanilla arsenal `like` under `id`, with `change` applied.
 export type NewArsenal = {
 	--- The new arsenal's content id.
@@ -1679,6 +1722,14 @@ export type NewArsenal = {
 	like: string,
 	--- What the copy changes.
 	change: ArsenalChange?,
+}
+
+--- A new container type for `Load.add_container`: a prop copied from a vanilla container, holding `slots` slots.
+export type NewContainer = {
+	--- The prop, whose item copies a vanilla container's.
+	prop: NewProp,
+	--- How many slots it holds: a multiple of 8, the game's row, from 8 to `MAX_SLOTS`.
+	slots: number,
 }
 
 --- A new enemy for `Load.add_enemy`: a copy of the vanilla enemy template `like` under `id`, with the values it gives set, then `changes` applied in order.
@@ -3147,6 +3198,9 @@ export type Transaction = {
 --- Where a committed `Transaction` stands, from `World.transaction_status`.
 export type TransactionStatus = "Pending" | "Applied" | "Undoing" | "Undone" | { Failed: WorldError } | { NotAllowed: BuildRefusal } | "Expired" | { UndoRefused: WorldError }
 
+--- The kind of move a player makes; the names are enshwick's, after the buttons and gestures the game offers. Unstable: needs the `unstable` feature and may change in any release.
+export type Transfer = "Slot" | "TakeAll" | "DepositAll" | "DepositStacks" | "RefillStacks" | "Gift" | "ToActionbar" | "ToBackpack"
+
 --- A skill node a character unlocked, from `World.skills`. The name is enshwick's: one entry of the game's unlocked skill nodes and their levels.
 export type UnlockedSkill = {
 	--- The node in the game's skill tree.
@@ -4165,6 +4219,8 @@ declare enshwick: {
 	inventory: {
 		--- The static data of `item`; none for an unknown item, or while no world runs. Any thread.
 		item_info: (item: number) -> ItemInfo?,
+		--- Shows `character`'s player the game's pickup message for `count` of `item`, with nothing entering the inventory: a reward that is no item, or a give made elsewhere. The server raises the game's pickup event, which every reader of it hears, the item filters but; a count above 65535 shows 65535, the game's most. On the server's game thread between steps (a game event or a `Scheduler` task). Unstable: needs the `unstable` feature and may change in any release.
+		show_pickup: (character: number, item: number, count: number) -> (),
 		--- Submits `batch` from any thread. `done` runs on the game thread after a later step with the outcome, which the returned `Ticket` also holds. A batch that breaks a limit is refused without reaching the game. If the mod is turned off first, `done` never runs.
 		submit: (batch: Batch, done: (arg1: Outcome) -> ()) -> (),
 		--- Every slot of the inventory `root`, as a reader reads it on the server's game thread; empty elsewhere.
@@ -4193,6 +4249,12 @@ declare enshwick: {
 		durability: (pide: number) -> Bar?,
 		--- The meter of the item `pide`, as `Reader.meter` reads it.
 		meter: (pide: number) -> Bar?,
+		--- Adds a container type, on the server and the client alike: a prop as `Load.add_prop` adds it, whose template holds `NewContainer.slots` slots. A placed container keeps the slots it was placed with; the loader serves the vanilla template when the mod is removed, as for any prop. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_container: (new: NewContainer) -> PropId,
+		--- Runs `rule` before a stack enters a slot of a container placed from `item`, the mod's own or a vanilla one; returning `false` keeps the stack out as a slot that does not take it does: it stays where it was, or goes to another slot when the game picks the slots. The mods' rules for the item are asked in load order until one keeps the stack out; the rules after it are not called for that stack. It answers for whatever moves the stack: a player's move, a swap, Take All, Deposit All or Stacks, Refill Stacks and an area deposit, one call per stack. Gives through `Inventories` and the game's own loot are not asked. It runs on the thread of the system that moves the items, in the server's world and in a client's own prediction: keep it quick and never block. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		container_rule: (item: number, rule: (arg1: ContainerPut) -> boolean?) -> (),
 	},
 	damage: {
 		--- Runs `filter` on damage about to reach an entity's health, as `Load.on_damage` does: it gets the damage as an object whose methods change it.

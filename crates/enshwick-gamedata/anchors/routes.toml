@@ -9503,3 +9503,36 @@ nth = 1
 of = 10
 take = "value"
 range = [0x150, 0x540]
+
+[[route]]
+id = "~move_slot_worker"
+in = "inventory.move_slot"
+shape = ["movaps [rsp+?],xmm0", "mov [rsp+?],rax", "call *"]
+take = "address"
+
+[[route]]
+id = "inventory.put_slot"
+in = "~move_slot_worker"
+shape = ["mov r8,rdi", "mov rdx,r15", "call *", "mov eax,[rsp+?]"]
+take = "address"
+check = [
+  "mov [rsp+0x10],rbx",
+  "mov [rsp+0x18],rbp",
+  "mov [rsp+0x20],rsi",
+  "push rdi",
+  "push r14",
+  "push r15",
+]
+
+[[route]]
+id = "inventory.txn_owners"
+in = "inventory.txn_init"
+shape = [
+  "mov [rcx+?],al",
+  "mov rax,[rdx+?]",
+  "mov [rcx+?],rax",
+  "mov rax,[rdx+?]",
+  "mov [rcx+*],rax",
+]
+take = "value"
+range = [72, 0x120]

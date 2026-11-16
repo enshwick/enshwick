@@ -8,8 +8,8 @@ use crate::abi::{
     AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BedCheckFn, BuffRequest,
     BuffTypeInfo, BuildFilterFn, BuildInfo, BuildRights, BuildingZoneFilterFn, CallFn, CallSpec,
     CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ClientCommand, ClientCommandStatus,
-    ClientSnapshot, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContentRename, ControlFn,
-    ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo, DropRequest,
+    ClientSnapshot, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContainerRuleFn, ContentRename,
+    ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo, DropRequest,
     EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperienceFilterFn,
     FogInfo, GameEventFn, Header, HookSpec, InteractionFilterFn, InteractionPrompt,
     InventoryRequest, InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo, JoinRuleFn,
@@ -2251,6 +2251,34 @@ pub struct HostApi {
     /// server, registry or required reads. Any thread, read-only. ABI 12.8.
     pub prop_placement_info:
         extern "system" fn(me: ModHandle, item: ItemId, out: *mut PropPlacementInfo) -> Status,
+    /// Registers `callback` to rule which stacks enter the containers placed
+    /// from `item`, vanilla or a mod's own. The loader asks the rules of the
+    /// container's item in load order, until one refuses, before a stack
+    /// enters one of its slots, whatever moves it: a player's move, a swap, Take All, Deposit
+    /// All or Stacks, an area deposit; a stack a rule refuses stays where it
+    /// was, or goes to another slot when the game picks the slots. Gives
+    /// through [`HostApi::inventory_submit`] and the game's own loot are not
+    /// asked. Allowed during `enshwick_mod_init` only; [`Status::BAD_ARGS`]
+    /// for item 0 or a null callback; [`Status::UNAVAILABLE`] on a build
+    /// without the slot link. ABI 12.9.
+    pub container_rule: extern "system" fn(
+        me: ModHandle,
+        item: ItemId,
+        callback: Option<ContainerRuleFn>,
+        user: *mut c_void,
+    ) -> Status,
+    /// Shows `character`'s player the game's pickup message for `count` of
+    /// `item`, as if the items had entered the player's inventory, which
+    /// they do not: the loader raises the game's pickup event on the server,
+    /// and every reader of that event, but the loader's item filters, hears
+    /// it. `count` above 65535 shows 65535, the game's most. On the server's
+    /// game thread between steps only; the systems of the next step see the
+    /// event. [`Status::BAD_ARGS`] for item 0, count 0 or an entity that is
+    /// no player; [`Status::WRONG_THREAD`] off the game thread or during a
+    /// step; [`Status::UNAVAILABLE`] outside a server and on a build without
+    /// the event. ABI 12.9.
+    pub show_pickup:
+        extern "system" fn(me: ModHandle, character: Entity, item: ItemId, count: u32) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2474,5 +2502,7 @@ const _: () = {
     assert!(offset_of!(HostApi, change_permissions) == 24 + 210 * 8);
     assert!(offset_of!(HostApi, transaction_settled) == 24 + 211 * 8);
     assert!(offset_of!(HostApi, prop_placement_info) == 24 + 212 * 8);
-    assert!(size_of::<HostApi>() == 24 + 213 * 8);
+    assert!(offset_of!(HostApi, container_rule) == 24 + 213 * 8);
+    assert!(offset_of!(HostApi, show_pickup) == 24 + 214 * 8);
+    assert!(size_of::<HostApi>() == 24 + 215 * 8);
 };

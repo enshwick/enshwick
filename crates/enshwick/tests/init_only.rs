@@ -229,6 +229,10 @@ mod tests {
             ),
             ("commands", (api.commands)(me, Str::new("late"))),
             ("join_rule", (api.join_rule)(me, callback(), user)),
+            (
+                "container_rule",
+                (api.container_rule)(me, ItemId::new(0x5e01), callback(), user),
+            ),
         ]
     }
 

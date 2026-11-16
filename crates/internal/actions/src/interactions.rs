@@ -492,7 +492,17 @@ pub struct Interaction {
     pub item: Option<ItemId>,
     /// Where the target stands, in metres, when the platform could read it.
     pub position: Option<[f64; 3]>,
+    /// What a [`Kind::Move`] moves, when the platform could read it.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    #[cfg(feature = "unstable")]
+    pub moved: Option<Move>,
 }
+
+#[cfg(feature = "unstable")]
+mod moves;
+#[cfg(feature = "unstable")]
+pub use moves::{InventoryActionType, Move, Transfer};
 
 unsafe extern "system" fn run_filter<F>(call: *const RawInteraction, user: *mut c_void) -> u8
 where
@@ -522,6 +532,8 @@ where
         target: call.target,
         item: known.then_some(call.item),
         position: known.then_some(call.position),
+        #[cfg(feature = "unstable")]
+        moved: Move::of(call),
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };

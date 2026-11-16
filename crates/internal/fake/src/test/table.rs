@@ -372,6 +372,8 @@ pub(crate) struct State {
     pub(crate) permission_changes: permissions::Changes,
     /// The waits on transactions' ends, in the order asked.
     pub(crate) settle_waits: Vec<SettleWait>,
+    /// The mods' container rules and the pickup messages they showed.
+    pub(crate) containers: containers::Containers,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -588,6 +590,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         served_off: Vec::new(),
         permission_changes: permissions::Changes::default(),
         settle_waits: Vec::new(),
+        containers: containers::Containers::default(),
     });
     turn
 }
@@ -825,6 +828,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     change_permissions: permissions::change_permissions,
     transaction_settled,
     prop_placement_info,
+    container_rule: containers::container_rule,
+    show_pickup: containers::show_pickup,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

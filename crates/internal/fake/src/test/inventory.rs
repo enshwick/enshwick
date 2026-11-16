@@ -10,6 +10,7 @@ use enshwick_core::abi::InventoryResult;
 
 use crate::test::{FakeHost, Installed, table};
 
+pub(crate) mod containers;
 pub(crate) mod items;
 pub(crate) mod stats;
 pub(crate) mod survivors;

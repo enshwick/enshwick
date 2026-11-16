@@ -237,4 +237,6 @@ pub(crate) static API: HostApi = HostApi {
     change_permissions,
     transaction_settled,
     prop_placement_info,
+    container_rule,
+    show_pickup,
 };

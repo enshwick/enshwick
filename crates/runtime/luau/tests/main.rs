@@ -9,6 +9,7 @@ mod book;
 mod calls;
 mod chat;
 mod commands;
+mod containers;
 mod content;
 mod controls;
 mod damage;

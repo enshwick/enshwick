@@ -61,6 +61,7 @@ change in any release, a patch included.
 | `Load::prompt`. `interactions::ObjectPrompt`, `interactions::Verb`. | the verb on a vanilla client, the empty action and the mod's text are not yet seen in the game |
 | `Frame::screen_host_template` and `Frame::screen_host_position`. Also `Load::extend_screen_for`. | the host's template and position are not yet seen in the game |
 | `Load::extend_screen`. `ui::Edge`, `ui::ScreenChanged`, `ui::HudScreenType`. | how a panel shows beside each of the game's screens is not yet seen in the game |
+| Containers of a mod and their rules, what a move carries, and pickup messages. `inventory::containers`, `Load::add_container`, `Load::container_rule`. `Interaction::moved`, `Interaction::transfer`, `interactions::Move`, `interactions::Transfer`, `interactions::InventoryActionType`. `Inventories::show_pickup`, `Batch::hide_in_ui`. | the slot put, the kinds of move and the pickup message are read from the game's code only, not yet seen in the game |
 | `Load::on_client_raw_game_event` and `Load::on_every_client_raw_game_event`. Also `EventType::on_client`. | that the client moves its own world's events as the server does is read from its code only, not yet seen in the game |
 | `Load::add_sound`. `sound::NewSound`, `sound::SoundContainerScene`, `sound::SAMPLE_RATE`, `sound::MAX_FILE_BYTES`, `sound::MAX_MOD_BYTES`. | whether a client plays a sound a mod added is not yet seen in the game |
 

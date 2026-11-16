@@ -1,4 +1,4 @@
-abi 12.8
+abi 12.9
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -240,6 +240,13 @@ CommandInfo size 56 align 8 born 56
     name at 8 size 16 type Str
     alias at 24 size 16 type Str
     mod_id at 40 size 16 type Str
+ContainerPut size 32 align 8 born 32
+    header at 0 size 8 type Header
+    container at 8 size 4 type Entity
+    container_item at 12 size 4 type ItemId
+    item at 16 size 4 type ItemId
+    count at 20 size 4 type u32
+    slot at 24 size 8 type u64
 ContentRename size 32 align 1
     from at 0 size 16 type Guid
     to at 16 size 16 type Guid
@@ -381,7 +388,7 @@ HookSpec size 40 align 8 born 40
     next at 24 size 8 type *const Atomic<usize>
     priority at 32 size 4 type i32
     flags at 36 size 4 type HookFlags
-HostApi size 1728 align 8
+HostApi size 1744 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(ModHandle, *mut BuildInfo) -> Status
@@ -597,7 +604,9 @@ HostApi size 1728 align 8
     change_permissions at 1704 size 8 type extern "system" fn(ModHandle, PlayerKey, u32, u32) -> Status
     transaction_settled at 1712 size 8 type extern "system" fn(ModHandle, u64, u64, Option<unsafe extern "system" fn(u64, *const TransactionInfo, *mut c_void)>, *mut c_void) -> Status
     prop_placement_info at 1720 size 8 type extern "system" fn(ModHandle, ItemId, *mut PropPlacementInfo) -> Status
-Interaction size 56 align 8 born 56
+    container_rule at 1728 size 8 type extern "system" fn(ModHandle, ItemId, Option<unsafe extern "system" fn(*const ContainerPut, *mut c_void) -> u8>, *mut c_void) -> Status
+    show_pickup at 1736 size 8 type extern "system" fn(ModHandle, Entity, ItemId, u32) -> Status
+Interaction size 96 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     character at 12 size 4 type Entity
@@ -606,6 +615,17 @@ Interaction size 56 align 8 born 56
     known at 24 size 1 type u8
     reserved at 25 size 3 type [u8; 3]
     position at 32 size 24 type [f64; 3]
+    moved at 56 size 4 type ItemId
+    stack at 60 size 4 type u32
+    amount at 64 size 4 type u32
+    from at 68 size 4 type Entity
+    to at 72 size 4 type Entity
+    action at 76 size 1 type u8
+    transfer at 77 size 1 type u8
+    moving at 78 size 1 type u8
+    reserved_move at 79 size 1 type u8
+    from_slot at 80 size 8 type u64
+    to_slot at 88 size 8 type u64
 InteractionPrompt size 24 align 4 born 24
     header at 0 size 8 type Header
     item at 8 size 4 type ItemId
@@ -1365,12 +1385,22 @@ const FILTER_YES = 1
 const HookFlags::CALLER_FRAME = 2
 const HookFlags::EXCLUSIVE = 1
 const HookFlags::NONE = 0
+const Interaction::ACTION_ALL = 3
+const Interaction::ACTION_AMOUNT = 4
+const Interaction::ACTION_DESTROY = 5
+const Interaction::ACTION_HALF = 2
+const Interaction::ACTION_ONE = 1
 const Interaction::DISMANTLE = 5
 const Interaction::MOVE = 2
 const Interaction::OPEN = 1
 const Interaction::QUICK_STASH = 6
 const Interaction::SORT = 3
 const Interaction::STOCK = 4
+const Interaction::TRANSFER_GIFT = 1
+const Interaction::TRANSFER_MOVE_ALL_STACKS = 4
+const Interaction::TRANSFER_REFILL_STACKS = 2
+const Interaction::TRANSFER_TO_ACTIONBAR = 8
+const Interaction::TRANSFER_TO_BACKPACK = 16
 const Interaction::UPGRADE = 7
 const InteractionPrompt::REPLACE_ACTION = 1
 const InventoryOp::DESTROY_SLOT = 3
@@ -1383,6 +1413,7 @@ const InventoryOp::RENEW = 6
 const InventoryOp::TAKE = 2
 const InventoryOpResult::NOT_RUN = 256
 const InventoryRequest::ALLOW_PARTIAL = 1
+const InventoryRequest::HIDE_IN_UI = 4
 const InventoryRequest::NOTIFY = 2
 const InventoryResult::COMMITTED = 0
 const InventoryResult::ROLLED_BACK = 1

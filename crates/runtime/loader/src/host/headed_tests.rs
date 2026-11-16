@@ -46,6 +46,7 @@ macro_rules! headed {
             ChunkData,
             Comfort,
             CommandInfo,
+            ContainerPut,
             ControlEvent,
             ControlSpec,
             CraftCheck,

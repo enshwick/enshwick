@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, Interaction};
+    use enshwick::abi::Interaction;
     use enshwick::test::FakeHost;
     use enshwick::{Entity, ItemId};
 
@@ -10,14 +10,10 @@ mod tests {
 
     fn opening(item: u32) -> Interaction {
         Interaction {
-            header: Header::of::<Interaction>(),
-            kind: Interaction::OPEN,
-            character: Entity(2),
-            target: Entity(9),
             item: ItemId::new(item),
             known: 1,
-            reserved: [0; 3],
             position: [1.0, 2.0, 3.0],
+            ..Interaction::new(Interaction::OPEN, Entity(2), Entity(9))
         }
     }
 
