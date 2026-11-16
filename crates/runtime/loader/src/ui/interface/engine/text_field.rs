@@ -120,49 +120,6 @@ const LOOK_BOXED: u32 = 2;
 /// label's default is the centre.
 const ALIGN_LEFT: u16 = 0x101;
 
-/// The text field that had the caret in the last frame, and whether the
-/// player pressed Enter for it in this one.
-#[derive(Clone, Copy, Default)]
-struct Caret {
-    /// The field's node id; 0 for none.
-    node: u64,
-    entered: bool,
-}
-
-thread_local! {
-    /// The interface thread's field with the caret, kept across frames.
-    static CARET: core::cell::Cell<Caret> = const {
-        core::cell::Cell::new(Caret { node: 0, entered: false })
-    };
-}
-
-impl Engine {
-    /// Takes Enter for the text field that had the caret in the last frame,
-    /// before the navigation of `window`, the window it shows in, reads its
-    /// input: the window would take it as Confirm on its focused button, as
-    /// Enter pressed the Mods screen's Back while a field typed. The press
-    /// binds to the window's panel, as Back does: bound to the field, which
-    /// is not the navigation's focus, the game gives none (client 26430625,
-    /// seen live).
-    ///
-    /// # Safety
-    ///
-    /// - Called inside a frame of the game's interface update, on its
-    ///   thread, before the window's navigation reads its input.
-    pub(super) unsafe fn take_enter(&self, window: &super::Window) {
-        let caret = CARET.get();
-        let panel = self.node_id(window);
-        if caret.node != 0 && !caret.entered && panel != 0 {
-            // SAFETY: this function's `# Safety`.
-            let entered = unsafe { self.confirm_pressed(panel) };
-            if entered {
-                crate::log!(INFO, "DIAG take_enter panel {panel:#x} entered");
-            }
-            CARET.set(Caret { entered, ..caret });
-        }
-    }
-}
-
 /// The text field's functions.
 #[derive(Debug)]
 pub(super) struct TextFields {
@@ -394,39 +351,13 @@ impl Engine {
         // bytes to the live `pointer`.
         unsafe { (fns.hit)(field.ptr(), &raw mut pointer, 1, 0, 0) };
         let clicked = pointer[0] == CLICKED && !ending;
-        let node = self.frame_node(&field);
-        let id = if node == 0 {
-            0
-        } else {
-            // SAFETY: `node` is non-zero, the field's node the game wrote into
-            // it above, whose id sits at the table's `ui.node_id`.
-            unsafe { crate::engine::memory::read::<u64>(node, self.layout.node_id) }
-        };
-        let caret = CARET.get();
-        let confirmed = editing && !ending && id != 0 && caret.node == id && caret.entered;
-        if editing != (caret.node == id && id != 0) || ending || answer != 0 {
-            crate::log!(
-                INFO,
-                "DIAG field {id:#x} editing {editing} caret {:#x} entered {} ending {ending} answer {answer:#x}",
-                caret.node,
-                caret.entered
-            );
-        }
-        if editing && !confirmed {
-            CARET.set(Caret {
-                node: id,
-                entered: false,
-            });
-        } else if caret.node == id {
-            CARET.set(Caret::default());
-        }
         if clicked {
             // SAFETY: `fns.focus` is the game's `ui.focus_request`, checked in
             // `TextFields::resolve`, on the field built above.
             unsafe { (fns.focus)(field.ptr()) };
         }
         buffer.typing = keeps_typing(clicked, buffer.typing, editing);
-        if editing && (ending || confirmed) {
+        if editing && ending {
             // SAFETY: `state` is non-zero, checked by `editing`, and points at
             // the field's kept state, whose editing byte at `at` lies inside
             // it as `TextLayout::read` checked; the game touches the state
@@ -443,7 +374,7 @@ impl Engine {
         // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
         Some(Typed {
-            entered: confirmed || answer & u64::from(u32::MAX) == ENTERED,
+            entered: answer & u64::from(u32::MAX) == ENTERED,
             editing,
         })
     }

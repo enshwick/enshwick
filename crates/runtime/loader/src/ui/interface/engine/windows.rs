@@ -154,9 +154,6 @@ impl Engine {
             // the panel frame opened above is the window `title` asks for.
             unsafe { self.title(context, title) };
         }
-        // SAFETY: in a frame on its thread by this function's `# Safety`,
-        // before the window's navigation reads its input below.
-        unsafe { self.take_enter(window) };
         let mut nav = self.nav_config(NAV_WINDOW);
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's
