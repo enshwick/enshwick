@@ -93,7 +93,8 @@ entries! {
         material as Headed<TerrainMaterialAdd>,
         id as Out<u8>,
     ) -> Status {
-        id.put(crate::content::terrain_materials::add(me.loader, &material)?)
+        let owner = (me.index, me.record.joins_when_on());
+        id.put(crate::content::terrain_materials::add(me.loader, owner, &material)?)
     }
 
     fn terrain_edit(me as Asker, edit as Headed<TerrainEdit>, amount as Out<f32>) -> Status {

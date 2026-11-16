@@ -223,13 +223,7 @@ fn build_with(apply: ResourcePatchFn, user: *mut c_void, base: &[u8]) -> Status 
 
 #[test]
 fn a_stand_in_that_panics_is_refused_alone_and_the_others_keep_building() {
-    let stand_in = |builder: crate::content::standins::Builder| {
-        let patch = StandInPatch {
-            builder,
-            fuse: Fuse::new(STAND_INS),
-        };
-        own_patch(patch)
-    };
+    let stand_in = |builder: Builder| own_patch(BuilderPatch::new(builder, STAND_INS));
     let (broken, broken_user) = stand_in(Box::new(|_| panic!("broken stand-in")));
     let (sound, sound_user) = stand_in(Box::new(|base| Some(base.to_vec())));
     assert_eq!(build_with(broken, broken_user, &[1]), Status::REFUSED);

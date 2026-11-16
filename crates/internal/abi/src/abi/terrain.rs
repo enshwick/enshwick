@@ -97,8 +97,8 @@ pub struct TerrainMaterialAdd {
     /// [`TerrainMaterialAdd::HARDNESS`], [`TerrainMaterialAdd::HEALTH`] and
     /// [`TerrainMaterialAdd::FLATTENS`], or none.
     pub changes: u8,
-    /// How hard it is to dig, the game's hardness category from 0, with
-    /// [`TerrainMaterialAdd::HARDNESS`].
+    /// How hard it is to dig, the game's hardness category from 0 (`Soft`)
+    /// to 5 (`Unbreakable`), with [`TerrainMaterialAdd::HARDNESS`].
     pub hardness: u8,
     /// [`TerrainMaterialInfo::FLATTENS`] or none, with
     /// [`TerrainMaterialAdd::FLATTENS`].

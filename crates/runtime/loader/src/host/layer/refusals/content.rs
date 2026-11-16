@@ -23,13 +23,14 @@ impl Refusal for crate::content::terrain_materials::TerrainMaterialError {
             Self::TooLate => Status::TOO_LATE,
             Self::Unread => Status::UNAVAILABLE,
             Self::NotVanilla(_) | Self::BadChanges => Status::BAD_ARGS,
-            Self::Taken | Self::Full(_) => Status::REFUSED,
+            Self::NotBoth | Self::Taken | Self::Full(_) => Status::REFUSED,
         }
     }
 
     fn policy(&self) -> Policy {
         match self {
             Self::TooLate => Policy::Quiet,
+            Self::NotBoth => Policy::TurnOff,
             _ => Policy::Warn,
         }
     }

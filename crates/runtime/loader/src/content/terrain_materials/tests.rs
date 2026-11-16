@@ -4,6 +4,8 @@ use super::*;
 
 const SAND: u8 = 9;
 const ROCK: u8 = 24;
+/// The mod the tests add materials as.
+const MOD: ModIndex = ModIndex::new(1);
 
 fn guid(n: u8) -> Guid {
     Guid([n; 16])
@@ -70,7 +72,7 @@ fn add_all(requests: &[TerrainMaterialAdd]) -> (Vec<Material>, Vec<TerrainMateri
     let palette = palette();
     let (mut added, mut refused) = (Vec::new(), Vec::new());
     for request in requests {
-        match place(&palette, &added, request) {
+        match place(&palette, &added, MOD, request) {
             Ok(material) => added.push(material),
             Err(error) => refused.push(error),
         }
@@ -213,6 +215,7 @@ fn a_removed_mods_material_takes_a_free_id_after_the_mods_as_a_copy_of_its_fallb
     assert_eq!(
         kept,
         [Material {
+            owner: ModIndex::LOADER,
             guid: guid(150),
             id: 118,
             like: ROCK,
@@ -243,6 +246,89 @@ fn an_orphan_without_a_free_id_or_a_known_fallback_is_lost() {
         (vec![], vec![]),
         "a GUID the game names is no orphan"
     );
+}
+
+#[test]
+fn a_hardness_past_unbreakable_is_refused() {
+    let mut hard = request(150);
+    hard.changes = TerrainMaterialAdd::HARDNESS;
+    hard.hardness = 5;
+    let mut harder = request(151);
+    harder.changes = TerrainMaterialAdd::HARDNESS;
+    harder.hardness = 6;
+    let (added, refused) = add_all(&[hard, harder]);
+    assert_eq!(added.len(), 1);
+    assert_eq!(refused, [TerrainMaterialError::BadChanges]);
+}
+
+#[test]
+fn a_guid_the_game_names_already_is_refused() {
+    let (added, refused) = add_all(&[request(ROCK)]);
+    assert!(added.is_empty());
+    assert_eq!(refused, [TerrainMaterialError::Taken]);
+}
+
+#[test]
+fn an_orphan_whose_fallback_the_game_lacks_leaves_its_free_id_to_the_next() {
+    let recorded = [(guid(170), guid(250)), (guid(171), guid(SAND))];
+    let (kept, lost) = orphans(&palette(), &[], &recorded);
+    assert_eq!(lost, [guid(170)]);
+    assert_eq!(
+        kept.iter().map(|m| (m.guid, m.id)).collect::<Vec<_>>(),
+        [(guid(171), 117)]
+    );
+}
+
+#[test]
+fn rules_without_a_material_s_like_leave_it_out_and_keep_the_others() {
+    let mut rock = request(151);
+    rock.like = ROCK;
+    let (added, _) = add_all(&[request(150), rock]);
+    let mut rules = Value::Struct(vec![(
+        TERRAIN_CONFIGS.into(),
+        Value::List(vec![config(u64::from(SAND))]),
+    )]);
+    assert_eq!(add_rules(&mut rules, &added), Some(()));
+    let Some(Value::List(configs)) = rules.field(TERRAIN_CONFIGS) else {
+        panic!()
+    };
+    assert_eq!(
+        configs.iter().map(config_id).collect::<Vec<_>>(),
+        [Some(SAND), Some(117)]
+    );
+}
+
+#[test]
+fn a_change_whose_rule_field_is_missing_fails_the_rules_instead_of_vanishing() {
+    let mut weak = request(150);
+    weak.changes = TerrainMaterialAdd::HEALTH;
+    weak.health = 7;
+    let (added, _) = add_all(&[weak]);
+    let mut renamed = config(u64::from(SAND));
+    let Value::Struct(fields) = &mut renamed else {
+        panic!()
+    };
+    fields.retain(|(name, _)| name != HEALTH_POINTS);
+    let mut rules = Value::Struct(vec![(TERRAIN_CONFIGS.into(), Value::List(vec![renamed]))]);
+    assert_eq!(add_rules(&mut rules, &added), None);
+}
+
+#[test]
+fn a_material_of_a_mod_turned_off_keeps_its_id_as_a_copy_of_its_fallback() {
+    let mut tar = request(150);
+    tar.fallback = ROCK;
+    tar.changes = TerrainMaterialAdd::HEALTH;
+    tar.health = 7;
+    let (mut added, _) = add_all(&[tar, request(151)]);
+    added[1].owner = ModIndex::new(2);
+    let served = serving(&added, |owner| owner != MOD);
+    assert_eq!(
+        served.iter().map(|m| (m.id, m.like)).collect::<Vec<_>>(),
+        [(117, ROCK), (118, SAND)],
+        "the ids the mods were told hold"
+    );
+    assert_eq!(served[0].changes, Changes::default());
+    assert_eq!(serving(&added, |_| true), added);
 }
 
 #[test]

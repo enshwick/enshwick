@@ -49,6 +49,8 @@ mod tests {
             answers.push(load.add_terrain_material(unknown));
             let weak = NewTerrainMaterial::new(Id::new("you.sands:weak"), SAND).health_points(0);
             answers.push(load.add_terrain_material(weak));
+            let harder = NewTerrainMaterial::new(Id::new("you.sands:harder"), SAND).hardness(6);
+            answers.push(load.add_terrain_material(harder));
             let _first = TERRAIN.set(load.terrain());
             *ADDED.lock().unwrap() = answers
                 .into_iter()
@@ -95,6 +97,11 @@ mod tests {
             added[12]
         );
         assert!(added[13].is_err(), "a health of 0: {:?}", added[13]);
+        assert!(
+            added[14].is_err(),
+            "a hardness past Unbreakable: {:?}",
+            added[14]
+        );
 
         loader.set_terrain(&[sand()]);
         let materials = TERRAIN.get().unwrap().materials();
@@ -113,5 +120,50 @@ mod tests {
         );
         assert!(!tar.can_be_flattened);
         assert_eq!(materials.len(), 12, "the sand and the 11 added");
+    }
+}
+
+#[cfg(test)]
+mod server_only {
+    use std::sync::Mutex;
+
+    use enshwick::abi::Status;
+    use enshwick::content::Id;
+    use enshwick::terrain::NewTerrainMaterial;
+    use enshwick::{Load, Mod, Off};
+
+    /// What the add answered.
+    static ADDED: Mutex<Option<Result<u8, String>>> = Mutex::new(None);
+
+    struct Tar;
+
+    impl Mod for Tar {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let tar = NewTerrainMaterial::new(Id::new("you.tar:tar-sand"), 9);
+            *ADDED.lock().unwrap() = Some(
+                load.add_terrain_material(tar)
+                    .map_err(|off| off.to_string()),
+            );
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Tar,
+        r#"
+        id = "you.tar"
+        side = "server"
+        "#
+    );
+
+    #[test]
+    fn a_mod_clients_do_not_run_is_refused_a_terrain_material() {
+        let loader = enshwick::test::FakeHost::new().install();
+        // SAFETY: both functions are the exports of this module's `declare_mod!(Tar)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let added = ADDED.lock().unwrap().clone().unwrap();
+        assert!(added.is_err(), "a server-only mod: {added:?}");
     }
 }

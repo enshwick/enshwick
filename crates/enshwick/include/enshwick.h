@@ -3167,8 +3167,8 @@ typedef struct EnshwickTerrainMaterialAdd {
   // `EnshwickTerrainMaterialAdd_HARDNESS`, `EnshwickTerrainMaterialAdd_HEALTH` and
   // `EnshwickTerrainMaterialAdd_FLATTENS`, or none.
   uint8_t changes;
-  // How hard it is to dig, the game's hardness category from 0, with
-  // `EnshwickTerrainMaterialAdd_HARDNESS`.
+  // How hard it is to dig, the game's hardness category from 0 (`Soft`)
+  // to 5 (`Unbreakable`), with `EnshwickTerrainMaterialAdd_HARDNESS`.
   uint8_t hardness;
   // `EnshwickTerrainMaterialInfo_FLATTENS` or none, with
   // `EnshwickTerrainMaterialAdd_FLATTENS`.

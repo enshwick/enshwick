@@ -69,7 +69,8 @@ game's, named by voxel id in `like`. It takes that material's look and every
 rule `new` does not change. `NewTerrainMaterial` can change these rules:
 
 - the item digging it yields (`terrain_item`, by the item's GUID)
-- the game's hardness category (`hardness`)
+- the game's hardness category, from 0 (soft) to 5 (unbreakable)
+  (`hardness`)
 - a voxel's health against tools, 1 or more (`health_points`)
 - whether a player's tool can flatten it (`can_be_flattened`)
 
@@ -105,9 +106,11 @@ and place the material with it. `materials()` lists the new material once a
 world runs.
 
 The loader serves the material's rules and effects on the server and on
-clients, and on clients the look of `like`. The mod is a mod of both sides
-(`side = "both"`), since every client draws the ground from its own tables.
-A material of a mod's own has the game's default behaviour in water, and a
+clients, and on clients the look of `like`. Only a mod of both sides
+(`side = "both"`) may add one, since every client names the ids in load
+order too. A server-only mod that asks is turned off. A mod turned off
+after it added a material leaves that material its id, as a copy of its
+fallback. A material of a mod's own has the game's default behaviour in water, and a
 texture of its own is not offered.
 
 ### A world without the mod
@@ -118,7 +121,9 @@ set with `fallback`. The loader keeps every material a mod ever added, with
 its fallback, in `mods/enshwick/clones.toml`; keep that file. Once the mod
 is back, the ground is the mod's material again. The fallbacks take the
 free ids that mods' materials leave. Past 11 materials of mods and removed
-mods together, the last ones load as air.
+mods together, the last ones load as air. The record is one per game
+folder, not per world, and each side reads its own. A client whose record
+differs from the server's can draw that ground otherwise.
 
 A server without Enshwick loads that ground as air, and its next save keeps
 the loss.

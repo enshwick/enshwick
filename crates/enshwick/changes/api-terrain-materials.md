@@ -4,7 +4,9 @@
   terrain material of a mod's own: a copy of one of the game's, its look
   included, with its own drop item, hardness, health and flattening. Mods'
   materials take the 11 terrain ids the game leaves free, 117 to 127, in
-  load order, and the twelfth is refused with its reason; Luau
+  load order, and the twelfth is refused with its reason, as are a
+  server-only mod, a GUID the game names and a hardness past `Unbreakable`;
+  Luau
   `enshwick.terrain.add_terrain_material()` (#1131).
 - ABI 12.2: `HostApi::terrain_material_add` with `TerrainMaterialAdd`
   (#1131).

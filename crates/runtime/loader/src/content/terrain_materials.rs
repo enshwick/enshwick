@@ -20,6 +20,7 @@ use enshwick_base::resources::Value;
 use enshwick_core::abi::TerrainMaterialAdd;
 use enshwick_core::content::Guid;
 
+use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Sealed;
 
 /// Terrain ids, below the building ids: one look entry each.
@@ -54,6 +55,14 @@ pub(crate) enum TerrainMaterialError {
         expect(dead_code, reason = "only the running game reads the archive")
     )]
     Unread,
+    /// Its mod does not run on the clients that join, which name terrain
+    /// ids too.
+    #[error("a terrain material needs a mod of side both, as clients take its id too")]
+    #[cfg_attr(
+        all(not(windows), test),
+        expect(dead_code, reason = "only the running game knows a mod's side")
+    )]
+    NotBoth,
     /// A material it copies or falls back to that the game lacks.
     #[error("terrain id {0} is none of the game's terrain materials")]
     NotVanilla(u8),
@@ -100,25 +109,21 @@ impl Changes {
         })
     }
 
-    /// Writes the changes into the terraforming rule `config`.
-    fn apply(&self, config: &mut Value) {
-        let mut set = |name: &str, value: Value| {
-            if let Some(field) = config.field_mut(name) {
-                *field = value;
+    /// Writes the changes into the terraforming rule `config`; `None` when
+    /// it lacks a field one of them sets, so no change is lost unseen.
+    fn apply(&self, config: &mut Value) -> Option<()> {
+        let changes = [
+            (TERRAIN_ITEM, self.item.map(Value::Guid)),
+            (HARDNESS, self.hardness.map(|h| Value::Uint(u64::from(h)))),
+            (HEALTH_POINTS, self.health.map(|h| Value::Int(i64::from(h)))),
+            (CAN_BE_FLATTENED, self.flattens.map(Value::Bool)),
+        ];
+        for (name, value) in changes {
+            if let Some(value) = value {
+                *config.field_mut(name)? = value;
             }
-        };
-        if let Some(item) = self.item {
-            set(TERRAIN_ITEM, Value::Guid(item));
         }
-        if let Some(hardness) = self.hardness {
-            set(HARDNESS, Value::Uint(u64::from(hardness)));
-        }
-        if let Some(health) = self.health {
-            set(HEALTH_POINTS, Value::Int(i64::from(health)));
-        }
-        if let Some(flattens) = self.flattens {
-            set(CAN_BE_FLATTENED, Value::Bool(flattens));
-        }
+        Some(())
     }
 }
 
@@ -126,6 +131,8 @@ impl Changes {
 /// as its fallback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Material {
+    /// The mod that added it, or the loader for a removed mod's.
+    owner: ModIndex,
     /// The GUID the palette names it by.
     guid: Guid,
     /// Its terrain id for this run.
@@ -213,11 +220,12 @@ fn config_id(config: &Value) -> Option<u8> {
     }
 }
 
-/// The material `request` asks for, placed after `added` in `free`: its
-/// terrain id.
+/// The material `request` of mod `owner` asks for, placed after `added` in
+/// `free`: its terrain id.
 fn place(
     palette: &Palette,
     added: &[Material],
+    owner: ModIndex,
     request: &TerrainMaterialAdd,
 ) -> Result<Material, TerrainMaterialError> {
     for id in [request.like, request.fallback] {
@@ -226,7 +234,10 @@ fn place(
         }
     }
     let changes = Changes::of(request).ok_or(TerrainMaterialError::BadChanges)?;
-    if request.guid == Guid::NIL || added.iter().any(|m| m.guid == request.guid) {
+    if request.guid == Guid::NIL
+        || palette.id_of(request.guid).is_some()
+        || added.iter().any(|m| m.guid == request.guid)
+    {
         return Err(TerrainMaterialError::Taken);
     }
     let free = palette.free();
@@ -234,6 +245,7 @@ fn place(
         .get(added.len())
         .ok_or(TerrainMaterialError::Full(free.len()))?;
     Ok(Material {
+        owner,
         guid: request.guid,
         id,
         like: request.like,
@@ -257,21 +269,41 @@ fn orphans(
         if added.iter().any(|m| m.guid == guid) || palette.id_of(guid).is_some() {
             continue;
         }
-        match (
-            palette.id_of(fallback).filter(|&id| palette.holds(id)),
-            free.next(),
-        ) {
-            (Some(fallback), Some(id)) => kept.push(Material {
+        // The fallback first: an orphan the game cannot copy takes no id.
+        let fallback = palette.id_of(fallback).filter(|&id| palette.holds(id));
+        match fallback.and_then(|fallback| Some((fallback, free.next()?))) {
+            Some((fallback, id)) => kept.push(Material {
+                owner: ModIndex::LOADER,
                 guid,
                 id,
                 like: fallback,
                 fallback,
                 changes: Changes::default(),
             }),
-            _ => lost.push(guid),
+            None => lost.push(guid),
         }
     }
     (kept, lost)
+}
+
+/// The materials `added` as served this run: the material of a mod `on`
+/// does not name as a copy of its fallback, in the id the mod was told,
+/// so the ids of the mods after it hold and its ground loads as an orphan's.
+fn serving(added: &[Material], on: impl Fn(ModIndex) -> bool) -> Vec<Material> {
+    added
+        .iter()
+        .map(|&m| {
+            if on(m.owner) {
+                m
+            } else {
+                Material {
+                    like: m.fallback,
+                    changes: Changes::default(),
+                    ..m
+                }
+            }
+        })
+        .collect()
 }
 
 /// Names `materials` in the palette world `world`.
@@ -286,20 +318,24 @@ fn name_in(world: &mut Value, materials: &[Material]) -> Option<()> {
 }
 
 /// Adds the terraforming rule of each of `materials` to `rules`: a copy of
-/// its `like`'s with its changes.
+/// its `like`'s with its changes. A material whose `like` these rules do
+/// not hold gets none here, and the others still do.
 fn add_rules(rules: &mut Value, materials: &[Material]) -> Option<()> {
     let Value::List(configs) = rules.field_mut(TERRAIN_CONFIGS)? else {
         return None;
     };
     for material in materials {
-        let mut config = configs
+        let Some(like) = configs
             .iter()
-            .find(|config| config_id(config) == Some(material.like))?
-            .clone();
+            .find(|config| config_id(config) == Some(material.like))
+        else {
+            continue;
+        };
+        let mut config = like.clone();
         *config
             .field_mut(TERRAIN_MATERIAL)?
             .field_mut(MATERIAL_ID_VALUE)? = Value::Uint(u64::from(material.id));
-        material.changes.apply(&mut config);
+        material.changes.apply(&mut config)?;
         configs.push(config);
     }
     Some(())
@@ -340,8 +376,12 @@ fn copy_looks(blending: &mut Value, materials: &[Material]) -> Option<()> {
     Some(())
 }
 
+/// The feature every terrain material patch's switch names.
 #[cfg(windows)]
-pub(crate) use running::{Builder, TerrainPatch, add, record, sealed, serve};
+pub(crate) const FEATURE: &str = "terrain materials";
+
+#[cfg(windows)]
+pub(crate) use running::{add, record, sealed, serve};
 
 /// The materials in the running game: mods' registrations, the archive's
 /// palette, and the loader's patches.
@@ -361,18 +401,27 @@ mod running {
 
     use super::{
         Material, Palette, TerrainMaterialError, add_rules, copy_effects, copy_looks, name_in,
-        orphans, place,
+        orphans, place, serving,
     };
-    use crate::content::served::OwnPatch;
-    use crate::engine::fuse::Fuse;
+    use crate::content::served::{Builder, mod_on};
     use crate::engine::loader::Loader;
+    use crate::engine::mod_index::ModIndex;
     use crate::engine::registry::Registry;
 
-    /// The materials mods added, in load order.
-    static MATERIALS: Registry<Material> = Registry::new();
+    /// The terrain materials of the run.
+    struct Terrain {
+        /// The materials mods added, in load order.
+        materials: Registry<Material>,
+        /// The game's palette and the keys of its palette worlds, read once
+        /// from the archive; `None` when the archive or reflection lacks
+        /// them.
+        palette: OnceLock<Option<(Palette, Vec<ResourceKey>)>>,
+    }
 
-    /// The feature every terrain material patch's switch names.
-    const FEATURE: &str = "terrain materials";
+    static TERRAIN: Terrain = Terrain {
+        materials: Registry::new(),
+        palette: OnceLock::new(),
+    };
 
     /// The engine name and resource type hash of a resource type the loader
     /// patches.
@@ -381,11 +430,11 @@ mod running {
         (name, fnv1a32(name.as_bytes()))
     }
 
-    /// The game's palette and the keys of its palette worlds, read once
-    /// from the archive; `None` when the archive or reflection lacks them.
+    /// The game's palette and the keys of its palette worlds; `None` when
+    /// the archive or reflection lacks them.
     fn palette(loader: &Loader) -> Option<&'static (Palette, Vec<ResourceKey>)> {
-        static PALETTE: OnceLock<Option<(Palette, Vec<ResourceKey>)>> = OnceLock::new();
-        PALETTE
+        TERRAIN
+            .palette
             .get_or_init(|| {
                 let archive = crate::engine::archive::game()?;
                 let codec = loader.reflection.registry();
@@ -422,24 +471,32 @@ mod running {
         )
     }
 
-    /// Adds the material `request` asks for and returns its terrain id for
-    /// this run.
+    /// Adds the material `request` of mod `owner` asks for and returns its
+    /// terrain id for this run; `owner` pairs the mod with whether it runs
+    /// on the clients that join.
     ///
     /// # Errors
     ///
     /// [`TerrainMaterialError`] after init, without the archive's palette,
-    /// for a material the game lacks, an unknown change, a GUID added before
-    /// and once every free id is taken.
+    /// for a mod clients do not run, a material the game lacks, an unknown
+    /// change, a GUID the game or a mod named before and once every free id
+    /// is taken.
     pub(crate) fn add(
         loader: &Loader,
+        (owner, joins): (ModIndex, bool),
         request: &TerrainMaterialAdd,
     ) -> Result<u8, TerrainMaterialError> {
-        if MATERIALS.is_sealed() {
+        if TERRAIN.materials.is_sealed() {
             return Err(TerrainMaterialError::TooLate);
         }
         let (palette, _) = palette(loader).ok_or(TerrainMaterialError::Unread)?;
-        MATERIALS.edit(|added| {
-            let material = place(palette, added, request)?;
+        // Clients name terrain ids in load order too, so a material they
+        // lack would shift every id after it.
+        if !joins {
+            return Err(TerrainMaterialError::NotBoth);
+        }
+        TERRAIN.materials.edit(|added| {
+            let material = place(palette, added, owner, request)?;
             added.push(material);
             Ok(material.id)
         })?
@@ -447,12 +504,15 @@ mod running {
 
     /// Seals the mods' materials: none is added after.
     pub(crate) fn sealed() -> &'static [Material] {
-        MATERIALS.seal()
+        TERRAIN.materials.seal()
     }
 
     /// What the clone record keeps of `materials`: each GUID with its
     /// fallback's.
     pub(crate) fn record(loader: &Loader, materials: &[Material]) -> Vec<(Guid, Guid)> {
+        if materials.is_empty() {
+            return Vec::new();
+        }
         let Some((palette, _)) = palette(loader) else {
             return Vec::new();
         };
@@ -462,9 +522,6 @@ mod running {
             .collect()
     }
 
-    /// Builds a served resource from its base's bytes.
-    pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
-
     /// The loader's patch of each key the materials `added` and the orphans
     /// of `recorded` change, with its builder; none when there are none.
     pub(crate) fn serve(
@@ -472,17 +529,19 @@ mod running {
         added: &[Material],
         recorded: &[(Guid, Guid)],
     ) -> Vec<(ResourceKey, Builder)> {
+        if added.is_empty() && recorded.is_empty() {
+            return Vec::new();
+        }
         let Some((palette, worlds)) = palette(loader) else {
-            if !added.is_empty() || !recorded.is_empty() {
-                crate::log!(
-                    WARN,
-                    "terrain materials off: this build's archive lacks the terrain palette"
-                );
-            }
+            crate::log!(
+                WARN,
+                "terrain materials off: this build's archive lacks the terrain palette"
+            );
             return Vec::new();
         };
-        let (kept, lost) = orphans(palette, added, recorded);
-        log(added, &kept, &lost);
+        let added = serving(added, mod_on);
+        let (kept, lost) = orphans(palette, &added, recorded);
+        log(&added, &kept, &lost);
         let materials: Vec<Material> = added.iter().chain(&kept).copied().collect();
         if materials.is_empty() {
             return Vec::new();
@@ -547,36 +606,6 @@ mod running {
                 WARN,
                 "terrain material {guid} of a removed mod loads as air: no free terrain id is left, or the game lacks its fallback"
             );
-        }
-    }
-
-    /// The loader's own patch of a resource terrain materials change.
-    pub(crate) struct TerrainPatch {
-        pub(crate) builder: Builder,
-        /// This patch's switch alone: a palette world that panics stays
-        /// vanilla, and the other keys keep their materials.
-        pub(crate) fuse: Fuse,
-    }
-
-    impl TerrainPatch {
-        /// The patch `builder` makes, under a switch of its own.
-        pub(crate) fn new(builder: Builder) -> Self {
-            Self {
-                builder,
-                fuse: Fuse::new(FEATURE),
-            }
-        }
-    }
-
-    impl OwnPatch for TerrainPatch {
-        const SITE: &'static str = "a terrain material build";
-
-        fn fuse(&self) -> &Fuse {
-            &self.fuse
-        }
-
-        fn build(&self, base: Vec<u8>) -> Option<Vec<u8>> {
-            (self.builder)(&base)
         }
     }
 }

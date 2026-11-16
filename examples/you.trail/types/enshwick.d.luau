@@ -1888,7 +1888,7 @@ export type NewTerrainMaterial = {
 	fallback: number?,
 	--- The item digging it yields, by its GUID.
 	terrain_item: string?,
-	--- How hard it is to dig: the game's hardness category from 0.
+	--- How hard it is to dig: the game's hardness category, from 0 (`Soft`) to 5 (`Unbreakable`).
 	hardness: number?,
 	--- The health a voxel of it has against tools, 1 or more.
 	health_points: number?,

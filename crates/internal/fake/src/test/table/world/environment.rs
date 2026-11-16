@@ -239,7 +239,7 @@ fn added_info(
 }
 
 pub(crate) extern "system" fn terrain_material_add(
-    _me: ModHandle,
+    me: ModHandle,
     material: *const TerrainMaterialAdd,
     id: *mut u8,
 ) -> Status {
@@ -250,16 +250,22 @@ pub(crate) extern "system" fn terrain_material_add(
         return Status::BAD_ARGS;
     }
     let vanilla = |id| GAME_TERRAIN.contains(&id);
-    if !vanilla(material.like)
-        || !vanilla(material.fallback)
-        || !enshwick_core::__fake::rules::terrain_material_changes_valid(&material)
-    {
-        return Status::BAD_ARGS;
-    }
     with(Status::MISSING, |s| {
+        // In the loader's order: the seal, the mod's side, the request.
         if s.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
+        if !crate::test::table::base::mods::joins(s, me) {
+            return Status::REFUSED;
+        }
+        if !vanilla(material.like)
+            || !vanilla(material.fallback)
+            || !enshwick_core::__fake::rules::terrain_material_changes_valid(&material)
+        {
+            return Status::BAD_ARGS;
+        }
+        // The fake game names its terrain ids by no GUID, so it cannot
+        // refuse one of the game's as the loader does.
         if material.guid == enshwick_core::content::Guid::NIL
             || s.terrain_added.iter().any(|m| m.guid == material.guid)
         {

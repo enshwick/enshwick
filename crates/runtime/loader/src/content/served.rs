@@ -101,7 +101,8 @@ struct State {
     base_handle: u32,
     /// The built resource, once built: address and length.
     built: Option<(usize, usize)>,
-    /// Set when building failed; the resource then reads as missing.
+    /// Set when building failed; a new resource then reads as missing, a
+    /// changed vanilla one as the archive has it.
     failed: bool,
     /// A copy of the base as first built from, when a mod keeps it.
     base: Option<Box<[u8]>>,
@@ -348,19 +349,9 @@ fn link_resources(loader: &Loader) -> bool {
 fn serve_stand_ins(
     served: &mut Vec<Served>,
     items: Vec<crate::content::standins::StandIn>,
-    registry: crate::content::standins::Builder,
+    registry: Builder,
 ) -> usize {
-    fn patch(builder: crate::content::standins::Builder) -> Patch {
-        let (apply, user) = own_patch(StandInPatch {
-            builder,
-            fuse: Fuse::new(STAND_INS),
-        });
-        Patch {
-            owner: ModIndex::LOADER,
-            apply,
-            user: user.expose_provenance(),
-        }
-    }
+    let patch = |builder| BuilderPatch::new(builder, STAND_INS).patch();
     let count = items.len();
     for (key, base, builder) in items {
         served.push(Served::new(key, base, vec![patch(builder)], false));
@@ -374,22 +365,14 @@ fn serve_stand_ins(
     count
 }
 
-/// Adds the loader's patches for terrain materials to `served`, first on
-/// each key, so a mod's patch of the rules sees the new ones; how many keys.
-fn serve_terrain(
-    served: &mut Vec<Served>,
-    patches: Vec<(ResourceKey, crate::content::terrain_materials::Builder)>,
-) -> usize {
+/// Adds the loader's patches for terrain materials to `served`, before
+/// every mod's patch on each key, so a mod's patch of the rules sees the
+/// new ones; the loader's changes of vanilla values, served after, go
+/// first again, so a material copies the rules as changed. How many keys.
+fn serve_terrain(served: &mut Vec<Served>, patches: Vec<(ResourceKey, Builder)>) -> usize {
     let count = patches.len();
     for (key, builder) in patches {
-        let (apply, user) = own_patch(crate::content::terrain_materials::TerrainPatch::new(
-            builder,
-        ));
-        let patch = Patch {
-            owner: ModIndex::LOADER,
-            apply,
-            user: user.expose_provenance(),
-        };
+        let patch = BuilderPatch::new(builder, crate::content::terrain_materials::FEATURE).patch();
         match served.iter_mut().find(|s| s.key == key) {
             Some(entry) => entry.patches.insert(0, patch),
             None => served.push(Served::new(key, key, vec![patch], false)),
@@ -451,18 +434,42 @@ fn serve_changes(
     count
 }
 
-/// The loader's own patch of a stand-in, or of the item registry that lists
-/// them: what its builder makes of the base.
-struct StandInPatch {
-    builder: crate::content::standins::Builder,
-    /// This patch's switch alone: a stand-in that panics is refused, and
-    /// the others, and the registry that lists them, keep building, so the
-    /// items they stand in for keep their stacks in the save.
+/// Builds a served resource from its base's bytes.
+pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
+
+/// One of the loader's own patches that a [`Builder`] makes: a stand-in,
+/// the item registry that lists them, or a resource terrain materials
+/// change.
+struct BuilderPatch {
+    builder: Builder,
+    /// This patch's switch alone: a build that panics is refused, and the
+    /// other keys keep building, so what they keep stays in the save.
     fuse: Fuse,
 }
 
-impl OwnPatch for StandInPatch {
-    const SITE: &'static str = "a stand-in build";
+impl BuilderPatch {
+    /// The patch `builder` makes, under a switch of its own that names
+    /// `feature`.
+    fn new(builder: Builder, feature: &'static str) -> Self {
+        Self {
+            builder,
+            fuse: Fuse::new(feature),
+        }
+    }
+
+    /// The patch as the loader's on a served key, leaked for the process.
+    fn patch(self) -> Patch {
+        let (apply, user) = own_patch(self);
+        Patch {
+            owner: ModIndex::LOADER,
+            apply,
+            user: user.expose_provenance(),
+        }
+    }
+}
+
+impl OwnPatch for BuilderPatch {
+    const SITE: &'static str = "a loader build";
 
     fn fuse(&self) -> &Fuse {
         &self.fuse
@@ -659,7 +666,8 @@ fn served(handle: u32) -> Option<&'static Served> {
     RESOURCES.sealed()?.get(index)
 }
 
-fn mod_on(owner: ModIndex) -> bool {
+/// Whether `owner` is the loader or a mod still on.
+pub(crate) fn mod_on(owner: ModIndex) -> bool {
     owner == ModIndex::LOADER
         || crate::engine::loader::loader()
             .and_then(|loader| loader.mods.get(owner.get()))
