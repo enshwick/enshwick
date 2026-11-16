@@ -12,6 +12,8 @@ use crate::survivors::SurvivorFns;
 pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::of::<Inventories>(),
     #[cfg(feature = "unstable")]
+    Namespace::starting("inventory", "", &[Load::SCRIPT_CONTAINERS]),
+    #[cfg(feature = "unstable")]
     Namespace::starting("damage", "", &[Load::SCRIPT_DAMAGE_FILTER]),
     Namespace::of::<Effects>(),
     Namespace::of::<SurvivorFns>(),

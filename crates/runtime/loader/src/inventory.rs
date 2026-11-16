@@ -2,6 +2,8 @@
 //! survivors, deaths and loot.
 
 #[cfg(windows)]
+pub(crate) mod containers;
+#[cfg(windows)]
 pub(crate) mod damage;
 #[cfg(windows)]
 pub(crate) mod deaths;
@@ -21,6 +23,8 @@ pub mod item_records;
 pub(crate) mod loot_slot;
 #[cfg(windows)]
 pub(crate) mod spawns;
+#[cfg(windows)]
+pub(crate) mod stacks;
 #[cfg(windows)]
 pub(crate) mod stats;
 #[cfg(windows)]
@@ -47,6 +51,12 @@ pub(crate) static PARTS: &[&Part] = &[
             transactions::end();
         })),
         ..part!("inventory", transactions)
+    },
+    &Part {
+        table_ids: containers::TABLE_IDS,
+        seal: Some(|_| containers::seal()),
+        link: Some(containers::link),
+        ..part!("containers", containers)
     },
     &Part {
         table_ids: damage::TABLE_IDS,

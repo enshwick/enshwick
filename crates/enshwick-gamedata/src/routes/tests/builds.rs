@@ -405,6 +405,17 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "ui.prompt_context", 0x2_d5e0),
     ("1.0 client (26082781)", "ui.prompt_context", 0x2_d570),
     ("1.0 client (1269579)", "ui.prompt_context", 0x2_d570),
+    // The put of one stack into one slot, which every player's move reaches;
+    // read in the decompiler on server 26430253 and client 26430625, found
+    // by the route, its start checked, on the other kept builds.
+    ("1.0 server (26430253)", "inventory.put_slot", 0x1b_7100),
+    ("1.0 server (26319703)", "inventory.put_slot", 0x1b_7100),
+    ("1.0 server (26083076)", "inventory.put_slot", 0x1b_1900),
+    ("1.0 server (1269579)", "inventory.put_slot", 0x1b_0a50),
+    ("1.0 client (26430625)", "inventory.put_slot", 0x41_7170),
+    ("1.0 client (26320373)", "inventory.put_slot", 0x41_7090),
+    ("1.0 client (26082781)", "inventory.put_slot", 0x41_0200),
+    ("1.0 client (1269579)", "inventory.put_slot", 0x40_fe80),
 ];
 
 /// The client control reads: the input builder's stick, look, target
@@ -435,6 +446,10 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
     // The first column grid's slot pointer, beside `voxel.grid_depth` at
     // 0x4c; on server 26430253 checked live.
     ("voxel.grid_slots", 0x58),
+    // Where `inventory.txn_init` copies the descriptor's owner index; read
+    // in the decompiler on server 26430253 and client 26430625, found by the
+    // route on every kept build.
+    ("inventory.txn_owners", 0x90),
 ];
 
 /// The text field's kept byte that starts its typing at its next input, as

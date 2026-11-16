@@ -113,8 +113,12 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bytes kept for the descriptor before the transaction, which is 16-aligned.
 const DESC_AREA: usize = 0x100; // bound, not a game offset: the loader's room
-/// Descriptor flags: emit `PickupEvent` and `InventoryFull`.
+/// Descriptor flags: emit `PickupEvent` and `InventoryFull`; with
+/// [`HIDDEN_FLAG`] the pickup event is marked `hideInUi`, which the client's
+/// loot log skips (static on server 26430253 and client 26430625: the notify
+/// step at 0x1401b8820 copies descriptor flag 2 into `hideInUi`).
 const NOTIFY_FLAGS: u8 = 1 | 4;
+const HIDDEN_FLAG: u8 = 2;
 /// Descriptor flag the game sets for some actors.
 const ACTOR_FLAG: u8 = 0x20;
 
@@ -974,6 +978,19 @@ unsafe fn in_server_world(executor: &Executor, ctx: usize) -> bool {
     // `ecs.context_entity_world`.
     let world = unsafe { enshwick_core::raw::read_ptr_at::<u8>(descriptor, executor.entity_world) };
     world.addr() as u64 == server
+}
+
+/// The descriptor flags a request's `flags` ask for: the messages with
+/// [`InventoryRequest::NOTIFY`], hidden with [`InventoryRequest::HIDE_IN_UI`]
+/// besides; none without `NOTIFY`.
+const fn descriptor_flags(request: u32) -> u8 {
+    if request & InventoryRequest::NOTIFY == 0 {
+        0
+    } else if request & InventoryRequest::HIDE_IN_UI == 0 {
+        NOTIFY_FLAGS
+    } else {
+        NOTIFY_FLAGS | HIDDEN_FLAG
+    }
 }
 
 mod run;

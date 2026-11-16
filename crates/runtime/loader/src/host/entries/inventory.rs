@@ -209,6 +209,31 @@ entries! {
         )
     }
 
+    fn container_rule(
+        me as Mod,
+        item: enshwick_core::ItemId,
+        callback as Callback<api_frame::ContainerRuleFn>,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        if item.get() == 0 {
+            return Err(Status::BAD_ARGS.into());
+        }
+        me.claim(
+            "container rule",
+            Mode::Chained,
+            crate::inventory::containers::register(me.loader, me.index, item, callback, user),
+        )
+    }
+
+    fn show_pickup(loader as Caller, character: Entity, item: enshwick_core::ItemId, count: u32) -> Status {
+        if item.get() == 0 || count == 0 {
+            return Err(Status::BAD_ARGS.into());
+        }
+        crate::inventory::containers::show_pickup(loader, character, item, count)?;
+        Ok(())
+    }
+
+
     fn emit(me as Asker, type_hash: u32, [data, size] as List<u8>) -> Status {
         crate::base::emits::emit(me.loader, me.handle, type_hash, data)?;
         Ok(())

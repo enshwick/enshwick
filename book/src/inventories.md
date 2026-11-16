@@ -188,8 +188,78 @@ The one-operation calls above are batches of one. A batch also sets:
   what does not fit, show its inventory-full message, as the game's own
   looting does. A batch with a give always does; moves are silent without
   it;
+- `hide_in_ui()`: raise the game's pickup events marked hidden, so the
+  player sees no pickup message. Every reader of the events, the item
+  filters among them, still hears them. Unstable: it needs the `unstable`
+  feature;
 - `actor(player)`: the player the game credits with the change, for those
   messages. By default it is the destination of the first give or move.
+
+## Pickup messages without a give
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
+`show_pickup` shows a player the game's pickup message for a count of an
+item. Nothing enters the inventory. It suits a reward that is no item, or a
+give made elsewhere. The server raises the game's pickup
+event, which every reader of it hears, the item filters but. A count above
+65535 shows 65535, the game's most. Call it on the server's game thread
+between steps, as from a game event or a scheduled task.
+
+```rust
+use enshwick::Entity;
+use enshwick::inventory::Inventories;
+
+const TOKEN: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
+
+fn reward(inventories: &Inventories, player: Entity) -> Result<(), enshwick::WorldError> {
+    // The quest pays in reputation; the message shows three tokens.
+    inventories.show_pickup(player, TOKEN, 3)
+}
+```
+
+## Containers and what they take
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
+[`load.add_container(NewContainer)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/inventory/containers.rs)
+adds a container type: a prop copied from a vanilla container, as
+[`add_prop`](content/props.md) adds it, whose template holds a slot count of
+its own. The count is whole rows of 8, from 8 to 128, the most an inventory
+links.
+
+[`load.container_rule(item, rule)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/inventory/containers.rs)
+decides which stacks enter the containers placed from `item`, a mod's own or
+a vanilla one. The loader asks it before each stack enters a slot, whatever
+moves the stack. A drag, a swap, Take All, Deposit All or Stacks, Refill
+Stacks and an area deposit are all asked. A refused stack stays where it was,
+as for a slot that does not take it. When the game picks the slots, the stack
+goes to another slot. The mods' rules for the item are asked in load order
+until one keeps the stack out; the rules after it are not called. Gives
+through `Inventories` and the game's own loot are not asked.
+
+```rust
+use enshwick::content::{Guid, id};
+use enshwick::content::items::NewItem;
+use enshwick::content::props::NewProp;
+use enshwick::inventory::containers::NewContainer;
+
+const SMALL_BOX: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+const IRON_ORE: enshwick::ItemId = enshwick::ItemId::new(0x0e17);
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let bin = load.add_container(NewContainer::new(NewProp::new(NewItem::new(id!("ore-bin"), SMALL_BOX)), 16))?;
+    // The ore bin takes iron ore and nothing else.
+    load.container_rule(bin.item, |put| put.item == IRON_ORE)
+}
+```
+
+The rule runs once per stack, on the thread of the system that moves the
+items. It runs in the server's world and in a client's own prediction. Keep
+it quick and never block. An [interaction filter](vetoes.md) sees the whole move
+first, with its kind, such as Take All.
 
 ### Limits and splitting
 
@@ -357,6 +427,22 @@ end)
 - `Unavailable`
 - `TimedOut`
 - `Refused`
+
+`enshwick.inventory.show_pickup` shows a pickup message without a give.
+`add_container` and `container_rule` in the same table add a container and
+rule what it takes:
+
+```luau
+local IRON_ORE = 0x0e17
+
+local bin = enshwick.inventory.add_container({
+    prop = { item = { id = "you.bins:ore-bin", like = "6943053a-32c1-4718-ae22-e61427ddf54d" } },
+    slots = 16,
+})
+enshwick.inventory.container_rule(bin.item, function(put)
+    return put.item == IRON_ORE
+end)
+```
 
 Each entry of `outcome.ops` has the operation's `error` by name and the count
 it fell short by. A slot is a `string` key. `slots` returns it in `at`.

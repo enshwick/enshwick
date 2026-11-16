@@ -301,3 +301,14 @@ fn the_holder_s_registry_stands_in_until_the_inventory_system_runs() {
 fn registries_that_differ_keep_the_captured_one_and_say_so() {
     assert_eq!(pick_registry(0x1000, 0x2000), (0x1000, true));
 }
+
+#[test]
+fn a_hidden_request_still_raises_the_pickup_event_and_only_a_notifying_one_does() {
+    assert_eq!(descriptor_flags(0), 0);
+    assert_eq!(descriptor_flags(InventoryRequest::HIDE_IN_UI), 0);
+    assert_eq!(descriptor_flags(InventoryRequest::NOTIFY), NOTIFY_FLAGS);
+    assert_eq!(
+        descriptor_flags(InventoryRequest::NOTIFY | InventoryRequest::HIDE_IN_UI),
+        NOTIFY_FLAGS | HIDDEN_FLAG
+    );
+}

@@ -264,6 +264,7 @@ pub struct Batch {
     pub(super) ops: Vec<Op>,
     pub(super) allow_partial: bool,
     notify: bool,
+    hide_in_ui: bool,
     pub(super) actor: Entity,
 }
 
@@ -288,6 +289,11 @@ impl crate::script::Typed for Batch {
                 &crate::script::Ty::Bool,
             ),
             crate::script::Field::defaulted(
+                "hide_in_ui",
+                "Whether the pickup events are raised hidden, so no pickup message shows.",
+                &crate::script::Ty::Bool,
+            ),
+            crate::script::Field::defaulted(
                 "actor",
                 "The player it acts for; their character's entity.",
                 <Entity as crate::script::Typed>::TY,
@@ -302,6 +308,7 @@ impl crate::script::IntoScript for Batch {
             self.ops.into_value(),
             self.allow_partial.into_value(),
             self.notify.into_value(),
+            self.hide_in_ui.into_value(),
             self.actor.into_value(),
         ])
     }
@@ -309,7 +316,7 @@ impl crate::script::IntoScript for Batch {
 
 impl crate::script::FromScript for Batch {
     fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
-        let mut fields = crate::script::convert::record_fields(value, 4)?;
+        let mut fields = crate::script::convert::record_fields(value, 5)?;
         Ok(Self {
             ops: crate::script::convert::argument(&mut fields, "ops")?,
             allow_partial: crate::script::convert::argument_or_default(
@@ -317,6 +324,7 @@ impl crate::script::FromScript for Batch {
                 "allow_partial",
             )?,
             notify: crate::script::convert::argument_or_default(&mut fields, "notify")?,
+            hide_in_ui: crate::script::convert::argument_or_default(&mut fields, "hide_in_ui")?,
             actor: crate::script::convert::argument_or_default(&mut fields, "actor")?,
         })
     }
@@ -395,6 +403,29 @@ impl Batch {
     #[must_use]
     pub const fn notify(mut self) -> Self {
         self.notify = true;
+        self
+    }
+
+    /// Raises the game's pickup events of the batch marked hidden, so the
+    /// player sees no pickup message while every reader of the events, the
+    /// item filters among them, still
+    /// hears them; the inventory-full message still shows.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::inventory::{Batch, Op};
+    ///
+    /// // A quiet reward.
+    /// let _ = Batch::new().with(Op::Give { to: Entity(2), item: enshwick::ItemId::new(7), count: 5, fill: None }).hide_in_ui();
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub const fn hide_in_ui(mut self) -> Self {
+        self.hide_in_ui = true;
         self
     }
 
@@ -503,6 +534,9 @@ impl Batch {
         }
         if self.notify || self.ops.iter().any(|op| matches!(op, Op::Give { .. })) {
             flags |= InventoryRequest::NOTIFY;
+        }
+        if self.hide_in_ui {
+            flags |= InventoryRequest::HIDE_IN_UI;
         }
         flags
     }

@@ -25,17 +25,13 @@ pub const FILTER_REFUSE: u8 = 2;
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, Interaction};
+/// use enshwick::abi::Interaction;
 ///
 /// let call = Interaction {
-///     header: Header::of::<Interaction>(),
-///     kind: Interaction::OPEN,
-///     character: enshwick::Entity(4096),
-///     target: enshwick::Entity(5000),
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     known: 1,
-///     reserved: [0; 3],
 ///     position: [1.0, 2.0, 3.0],
+///     ..Interaction::new(Interaction::OPEN, enshwick::Entity(4096), enshwick::Entity(5000))
 /// };
 /// assert_eq!(call.kind, Interaction::OPEN);
 /// ```
@@ -59,11 +55,99 @@ pub struct Interaction {
     pub reserved: [u8; 3],
     /// Where the target stands, in metres, when `known`.
     pub position: Metres,
+    /// The item of the stack in `from_slot`, when `moving`; 0 for a move
+    /// that names no source slot. ABI 12.9.
+    pub moved: ItemId,
+    /// How many items the stack in `from_slot` holds, when `moving`.
+    /// ABI 12.9.
+    pub stack: u32,
+    /// The amount the player asked for, which counts only for
+    /// [`ACTION_AMOUNT`](Self::ACTION_AMOUNT). ABI 12.9.
+    pub amount: u32,
+    /// The container the items leave: the source entity, or the owner of
+    /// `from_slot`; 0 when unknown. ABI 12.9.
+    pub from: Entity,
+    /// The container the items enter: the target entity, or the owner of
+    /// `to_slot`; 0 for none, as when items are destroyed. ABI 12.9.
+    pub to: Entity,
+    /// What the player moves, one of the `ACTION_` constants; 0 when
+    /// unknown. ABI 12.9.
+    pub action: u8,
+    /// How the move travels, a mask of the `TRANSFER_` constants; 0 for a
+    /// plain move. ABI 12.9.
+    pub transfer: u8,
+    /// 1 when the fields of ABI 12.9 were read from a
+    /// [`MOVE`](Self::MOVE). ABI 12.9.
+    pub moving: u8,
+    /// Zero.
+    pub reserved_move: u8,
+    /// The source slot, as a sub-inventory entity in the low 32 bits and
+    /// its slot index above them; 0 for a move of a whole inventory.
+    /// ABI 12.9.
+    pub from_slot: u64,
+    /// The target slot, encoded as `from_slot`; 0 when the game picks the
+    /// slots. ABI 12.9.
+    pub to_slot: u64,
 }
 
-impl_headed!(Interaction);
+impl_headed!(Interaction, born = 56);
 
 impl Interaction {
+    /// A call of `kind` by `character` on `target`, its other fields zero:
+    /// nothing read of the target or a move.
+    ///
+    /// # Examples
+    ///
+    /// See [`Interaction`].
+    #[must_use]
+    pub const fn new(kind: u32, character: Entity, target: Entity) -> Self {
+        Self {
+            header: Header::of::<Self>(),
+            kind,
+            character,
+            target,
+            item: ItemId::new(0),
+            known: 0,
+            reserved: [0; 3],
+            position: [0.0; 3],
+            moved: ItemId::new(0),
+            stack: 0,
+            amount: 0,
+            from: Entity(0),
+            to: Entity(0),
+            action: 0,
+            transfer: 0,
+            moving: 0,
+            reserved_move: 0,
+            from_slot: 0,
+            to_slot: 0,
+        }
+    }
+
+    /// [`action`](Self::action): one item.
+    pub const ACTION_ONE: u8 = 1;
+    /// [`action`](Self::action): half the stack.
+    pub const ACTION_HALF: u8 = 2;
+    /// [`action`](Self::action): the whole stack, or every stack of a
+    /// whole-inventory move.
+    pub const ACTION_ALL: u8 = 3;
+    /// [`action`](Self::action): [`amount`](Self::amount) items.
+    pub const ACTION_AMOUNT: u8 = 4;
+    /// [`action`](Self::action): the stack is destroyed.
+    pub const ACTION_DESTROY: u8 = 5;
+    /// [`transfer`](Self::transfer): a gift to another player nearby.
+    pub const TRANSFER_GIFT: u8 = 1;
+    /// [`transfer`](Self::transfer): only the stacks of items the target
+    /// already holds move, as Deposit Stacks and Refill Stacks do.
+    pub const TRANSFER_REFILL_STACKS: u8 = 2;
+    /// [`transfer`](Self::transfer): every stack moves, as a storage
+    /// window's Take All and Deposit All do.
+    pub const TRANSFER_MOVE_ALL_STACKS: u8 = 4;
+    /// [`transfer`](Self::transfer): the stack goes to the action bar.
+    pub const TRANSFER_TO_ACTIONBAR: u8 = 8;
+    /// [`transfer`](Self::transfer): the stack goes to the backpack.
+    pub const TRANSFER_TO_BACKPACK: u8 = 16;
+
     /// The game offers to open the target.
     pub const OPEN: u32 = 1;
     /// Items move out of or into the target.
@@ -95,6 +179,63 @@ impl Interaction {
 /// The safe layer wraps it in [`Load::on_interaction`](../struct.Load.html#method.on_interaction).
 pub type InteractionFilterFn =
     unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
+
+/// A stack about to enter one slot of a container, as
+/// [`HostApi::container_rule`](super::HostApi::container_rule) hands it on.
+/// ABI 12.9.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{ContainerPut, Header};
+///
+/// let put = ContainerPut {
+///     header: Header::of::<ContainerPut>(),
+///     container: enshwick::Entity(5000),
+///     container_item: enshwick::ItemId::new(0x5e01),
+///     item: enshwick::ItemId::new(0x0e17),
+///     count: 20,
+///     slot: 5001 | 3 << 32,
+/// };
+/// assert_eq!(put.count, 20);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct ContainerPut {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The container: the placed entity whose inventory holds the slot.
+    pub container: Entity,
+    /// The item the container was placed from (`UsedItem`), the one the
+    /// rule was registered for.
+    pub container_item: ItemId,
+    /// The item of the stack.
+    pub item: ItemId,
+    /// How many items enter.
+    pub count: u32,
+    /// The slot, as a sub-inventory entity in the low 32 bits and its slot
+    /// index above them.
+    pub slot: u64,
+}
+
+impl_headed!(ContainerPut);
+
+/// A mod's container rule: the stack and the pointer given at registration;
+/// returns [`FILTER_REFUSE`] to keep the stack out.
+///
+/// The game handles a refusal as a slot that does not take the stack, so it
+/// stays where it was or goes to another slot.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that moves the items, the game
+/// thread or a task worker, so several calls may run at once.
+///
+/// # Examples
+///
+/// The safe layer wraps it in `Load::container_rule`, with the `unstable` feature.
+pub type ContainerRuleFn =
+    unsafe extern "system" fn(put: *const ContainerPut, user: *mut c_void) -> u8;
 
 /// How the prompt of every object placed from one item reads and what its
 /// press does, as [`HostApi::interaction_prompt`](super::HostApi::interaction_prompt)

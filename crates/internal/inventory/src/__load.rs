@@ -14,6 +14,8 @@ pub use crate::entity_data::LoadMethods as _;
 #[cfg(feature = "unstable")]
 pub use crate::entity_data::script::LoadMethods as _;
 pub use crate::inventory::LoadMethods as _;
+#[cfg(feature = "unstable")]
+pub use crate::inventory::containers::LoadMethods as _;
 pub(crate) use crate::item_data::LoadHelpers as _;
 #[cfg(feature = "unstable")]
 pub use crate::item_data::LoadMethods as _;

@@ -35,7 +35,9 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::profile::Feature;
 use crate::engine::registry::JoinFeatureError;
-pub(crate) use uses::forget;
+use crate::inventory::stacks::Stacks;
+use enshwick_base::Relock as _;
+use uses::forget as forget_uses;
 use uses::{USES, moves};
 
 /// The system that runs the players' equips and unequips.
@@ -51,6 +53,32 @@ fn linked() -> Option<(&'static Loader, &'static Layout, &'static Components)> {
     Some((loader, layout, components))
 }
 static EVENTS: OnceLock<Events> = OnceLock::new();
+
+/// What the item filters follow while the game runs.
+struct State {
+    /// The pickups the loader raised itself, as `(player, item, count)`,
+    /// which the event screen leaves out once each; listed only while the
+    /// filters hear pickups.
+    own_pickups: std::sync::Mutex<Vec<(u32, u32, u32)>>,
+    /// How many `own_pickups` wait, so the screen takes no lock while none
+    /// does.
+    own_waiting: std::sync::atomic::AtomicUsize,
+    /// The pickup event's layout, resolved once for the screen and the
+    /// pickups the loader raises alike.
+    pickup: OnceLock<Option<Heard>>,
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            own_pickups: std::sync::Mutex::new(Vec::new()),
+            own_waiting: std::sync::atomic::AtomicUsize::new(0),
+            pickup: OnceLock::new(),
+        }
+    }
+}
+
+static STATE: State = State::new();
 
 /// The switch of the item filters.
 static ITEMS_FUSE: Fuse = Fuse::new("item filters");
@@ -83,12 +111,7 @@ struct Versioned {
 struct Layout {
     player_input: u32,
     consumed_input: u32,
-    inventory: u32,
-    stack: usize,
-    /// Where a stack holds its `u32` item id.
-    stack_item: usize,
-    stack_count: usize,
-    slots: usize,
+    stacks: Stacks,
     slot_entity: usize,
     slot_index: usize,
     item: Versioned,
@@ -122,12 +145,12 @@ impl Layout {
 /// A game event the filters hear after the fact: its hash, its size and
 /// where its fields sit.
 #[derive(Debug, Clone, Copy)]
-struct Heard {
-    hash: u32,
-    size: usize,
-    item: usize,
-    count: Option<usize>,
-    player: usize,
+pub(crate) struct Heard {
+    pub(crate) hash: u32,
+    pub(crate) size: usize,
+    pub(crate) item: usize,
+    pub(crate) count: Option<usize>,
+    pub(crate) player: usize,
     kind: u32,
 }
 
@@ -159,30 +182,10 @@ fn layout(loader: &Loader) -> Option<Layout> {
     let item = input + field(data, "itemAction")?;
     let change = input + field(data, "changeEquipmentAction")?;
     let (action, equipment) = ("keen::ecs::ItemAction", "keen::ecs::ChangeEquipmentAction");
-    let stack = crate::engine::catalogue::size(loader, crate::engine::catalogue::ids::ITEM_STACK)?;
-    let inventory =
-        crate::engine::catalogue::size(loader, crate::engine::catalogue::ids::INVENTORY)?;
-    let stack_item = field(
-        enshwick_gamedata::catalogue::type_name(crate::engine::catalogue::ids::ITEM_STACK),
-        "id",
-    )?;
-    let stack_count =
-        crate::engine::catalogue::offset(loader, crate::engine::catalogue::ids::ITEM_STACK_COUNT)?;
-    // Both u32 reads lie inside the reflected stack.
-    if stack_item.max(stack_count) + 4 > stack {
-        return None;
-    }
     Some(Layout {
-        stack_item,
         player_input: hash("keen::ecs::PlayerInput")?,
         consumed_input: hash(consumed)?,
-        inventory: crate::engine::catalogue::component_hash(
-            loader,
-            crate::engine::catalogue::ids::INVENTORY,
-        )?,
-        stack,
-        stack_count,
-        slots: inventory.checked_div(stack)?,
+        stacks: Stacks::resolve(loader)?,
         slot_entity: field("keen::InventorySlotId", "entityId")?,
         slot_index: field("keen::InventorySlotId", "slotIndex")?,
         item: Versioned {
@@ -210,37 +213,56 @@ fn layout(loader: &Loader) -> Option<Layout> {
     })
 }
 
-fn events(loader: &Loader) -> Events {
+/// Where the event `name` keeps the fields the filters read, on this build.
+fn heard(
+    loader: &Loader,
+    name: &str,
+    item: &str,
+    count: Option<&str>,
+    player: &str,
+    kind: u32,
+) -> Option<Heard> {
     let reflection = &loader.reflection;
-    let heard = |name: &str, item: &str, count: Option<&str>, player: &str, kind: u32| {
-        let info = reflection.type_info(name).ok()?;
-        let field = |field: &str| {
-            reflection
-                .field_offset(name, field)
-                .ok()
-                .and_then(|v| usize::try_from(v).ok())
-        };
-        Some(Heard {
-            hash: crate::engine::world::type_hash(info.va())?,
-            size: usize::try_from(info.size()).ok()?,
-            item: field(item)?,
-            count: match count {
-                Some(count) => Some(field(count)?),
-                None => None,
-            },
-            player: field(player)?,
-            kind,
-        })
+    let info = reflection.type_info(name).ok()?;
+    let field = |field: &str| {
+        reflection
+            .field_offset(name, field)
+            .ok()
+            .and_then(|v| usize::try_from(v).ok())
     };
-    Events {
-        pickup: heard(
+    Some(Heard {
+        hash: crate::engine::world::type_hash(info.va())?,
+        size: usize::try_from(info.size()).ok()?,
+        item: field(item)?,
+        count: match count {
+            Some(count) => Some(field(count)?),
+            None => None,
+        },
+        player: field(player)?,
+        kind,
+    })
+}
+
+/// The pickup event's layout on this build, which the screen reads and the
+/// loader's own pickups write.
+pub(crate) fn pickup_event(loader: &Loader) -> Option<Heard> {
+    *STATE.pickup.get_or_init(|| {
+        heard(
+            loader,
             "keen::ecs::PickupEvent",
             "itemId",
             Some("itemCount"),
             "pickedUpByEntityId",
             ItemAction::PICKUP,
-        ),
+        )
+    })
+}
+
+fn events(loader: &Loader) -> Events {
+    Events {
+        pickup: pickup_event(loader),
         place: heard(
+            loader,
             "keen::ecs::BuildingPlaceEvent",
             "trackingItemId",
             None,
@@ -427,7 +449,11 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             let slot = u8::try_from(call.slot).ok()?;
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
-            let stack = unsafe { holding(components, layout, ctx, call.inventory.0, slot) }?;
+            let stack = unsafe {
+                layout
+                    .stacks
+                    .holding(components, ctx, call.inventory.0, slot)
+            }?;
             // SAFETY: `consumed` is the player's live
             // `ServerConsumedPlayerInput` component.
             Some((stack, unsafe { moves(layout, consumed) }))
@@ -471,8 +497,8 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
         let index: u8 = unsafe { read_at(input, at.slot + layout.slot_index) };
         // SAFETY: the caller guarantees the system's live context, at its
         // entry on its thread.
-        let Some((item, count)) = (unsafe { stack(components, layout, ctx, inventory, index) })
-        else {
+        let held = unsafe { layout.stacks.holding(components, ctx, inventory, index) };
+        let Some((item, count)) = held.filter(|&(item, count)| item != 0 && count != 0) else {
             continue;
         };
         let call = ItemAction {
@@ -516,56 +542,48 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
     }
 }
 
-/// The item and count in slot `index` of the inventory `inventory`; `None`
-/// for an empty slot, an index past the inventory or no inventory.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of a running system, used on its thread.
-unsafe fn stack(
-    components: &Components,
-    layout: &Layout,
-    ctx: *mut u64,
-    inventory: u32,
-    index: u8,
-) -> Option<(u32, u32)> {
-    // SAFETY: `ctx` is the live context of a running system on its thread,
-    // by this function's `# Safety`, all `holding` asks for.
-    unsafe { holding(components, layout, ctx, inventory, index) }
-        .filter(|&(item, count)| item != 0 && count != 0)
+/// Lists a pickup the loader raised itself, so the filters do not hear it
+/// as one the game made; called after the push, and listed only while the
+/// screen reads pickups, so each entry meets its event at the next merge.
+pub(crate) fn own_pickup(player: u32, item: u32, count: u32) {
+    if screens_pickups() {
+        STATE.own_pickups.relock().push((player, item, count));
+        STATE
+            .own_waiting
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+    }
 }
 
-/// The item and count in slot `index` of the inventory `inventory`, both 0
-/// for an empty slot; `None` for an index past the inventory or no
-/// inventory.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of a running system, used on its thread.
-unsafe fn holding(
-    components: &Components,
-    layout: &Layout,
-    ctx: *mut u64,
-    inventory: u32,
-    index: u8,
-) -> Option<(u32, u32)> {
-    let index = usize::from(index);
-    if index >= layout.slots {
-        return None;
+/// Whether [`screen`] reads the pickups the server's streams hold: a mod
+/// filters items, the event filters are on and the build reflects the event.
+fn screens_pickups() -> bool {
+    wanted() && !EVENTS_FUSE.is_off() && EVENTS.get().is_some_and(|e| e.pickup.is_some())
+}
+
+/// Whether the pickup is one the loader raised itself, which it then
+/// forgets.
+fn own(player: u32, item: u32, count: u32) -> bool {
+    if STATE.own_waiting.load(std::sync::atomic::Ordering::Acquire) == 0 {
+        return false;
     }
-    // SAFETY: the caller guarantees the system's live context on its thread.
-    let slots = unsafe { components.component(ctx, inventory, layout.inventory) }?;
-    let at = index * layout.stack;
-    // SAFETY: `slots` is the live `Inventory` component, `layout.slots`
-    // stacks of the reflected `ItemStack` size, and `index` is below it; the
-    // stack's u32 item id sits at the reflected `stack_item`, inside it
-    // (checked by `layout`).
-    let item: u32 = unsafe { read_at(slots, at + layout.stack_item) };
-    // SAFETY: `slots` is the live `Inventory` component and `at` the start of
-    // stack `index`, below `layout.slots`; the stack's u32 count sits at the
-    // catalogue's `item_stack.count` offset within it.
-    let count: u32 = unsafe { read_at(slots, at + layout.stack_count) };
-    Some((item, count))
+    let mut own = STATE.own_pickups.relock();
+    let Some(at) = own.iter().position(|&p| p == (player, item, count)) else {
+        return false;
+    };
+    own.swap_remove(at);
+    STATE
+        .own_waiting
+        .fetch_sub(1, std::sync::atomic::Ordering::Release);
+    true
+}
+
+/// Forgets a hosted game's watched uses and the loader's own pickups.
+pub(crate) fn forget() {
+    forget_uses();
+    STATE.own_pickups.relock().clear();
+    STATE
+        .own_waiting
+        .store(0, std::sync::atomic::Ordering::Release);
 }
 
 /// Whether the filters hear events of `type_hash`, so the event link copies
@@ -612,7 +630,10 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
             // at the reflected `at`.
             unsafe { read_at::<u32>(payload, at) }
         });
-        if item == 0 || player == 0 {
+        if item == 0
+            || player == 0
+            || (heard.kind == ItemAction::PICKUP && own(player, item, count))
+        {
             return;
         }
         let call = ItemAction {
@@ -635,11 +656,10 @@ mod tests {
     pub(super) const LAYOUT: Layout = Layout {
         player_input: 1,
         consumed_input: 2,
-        inventory: 3,
-        stack: 12,
-        stack_item: 0,
-        stack_count: 4,
-        slots: 8,
+        stacks: match Stacks::new(3, 12, 0, 4, 8) {
+            Some(stacks) => stacks,
+            None => panic!("the test stacks fit"),
+        },
         slot_entity: 0,
         slot_index: 4,
         item: Versioned {
@@ -686,6 +706,19 @@ mod tests {
             off.as_deref()
                 .is_some_and(|r| r.starts_with("ecs.event_streams")),
             "{off:?}"
+        );
+    }
+
+    #[test]
+    fn a_pickup_the_screen_never_reads_is_not_listed_as_the_loaders_own() {
+        own_pickup(10, 0x0e17, 3);
+        assert_eq!(
+            STATE.own_waiting.load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+        assert!(
+            !own(10, 0x0e17, 3),
+            "a later real pickup of the same stack reaches the filters"
         );
     }
 

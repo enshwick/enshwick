@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFilterFn, Side};
+use enshwick_core::abi::{HookFlags, Interaction, InteractionFilterFn, Side};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::UNREFLECTED;
@@ -22,7 +22,10 @@ use crate::engine::pinned::{self, Constant, Symbol};
 use crate::engine::profile::Feature;
 use crate::engine::registry::JoinFeatureError;
 
+mod moves;
 mod stock;
+
+use moves::{Moved, Moves, moved};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -85,6 +88,9 @@ struct Layout {
     transform: u32,
     player_input: u32,
     consumed_input: u32,
+    /// What a move's call carries beside its targets; `None` on a build
+    /// whose reflection lacks a part, which leaves the calls without it.
+    moves: Option<Moves>,
 }
 
 static FILTERS: Filters<InteractionFilterFn> = Filters::new(Feature::Interactions);
@@ -163,11 +169,16 @@ fn layout(loader: &Loader) -> Result<Layout, Lacks> {
     } else {
         0
     };
+    let (transfer_source, transfer_target) = (
+        size(pinned::access::TRANSFER_SOURCE)?,
+        size(pinned::access::TRANSFER_TARGET)?,
+    );
     Ok(Layout {
         state_input: size(pinned::access::STATE_INPUT)?,
         state_owner_index: size(pinned::access::STATE_OWNER_INDEX)?,
-        transfer_source: size(pinned::access::TRANSFER_SOURCE)?,
-        transfer_target: size(pinned::access::TRANSFER_TARGET)?,
+        transfer_source,
+        transfer_target,
+        moves: Moves::resolve(loader, transfer_source, transfer_target),
         transfer_source_slot: size(pinned::access::TRANSFER_SOURCE_SLOT)?,
         transfer_target_slot: size(pinned::access::TRANSFER_TARGET_SLOT)?,
         sort_target: size(pinned::access::SORT_TARGET)?,
@@ -404,16 +415,11 @@ fn allowed(call: &Interaction) -> bool {
 /// - `ctx` is null or the live context of a running system, used on its
 ///   thread.
 unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Interaction {
-    let mut call = Interaction {
-        header: Header::of::<Interaction>(),
+    let mut call = Interaction::new(
         kind,
-        character: enshwick_core::Entity(player),
-        target: enshwick_core::Entity(target),
-        item: enshwick_core::ItemId::new(0),
-        known: 0,
-        reserved: [0; 3],
-        position: [0.0; 3],
-    };
+        enshwick_core::Entity(player),
+        enshwick_core::Entity(target),
+    );
     if let Some((_, layout, components)) = linked()
         && !ctx.is_null()
     {
@@ -529,7 +535,8 @@ crate::engine::chains::chain_detour! {
 }
 
 /// Whether the player acting in `ctx` may touch every inventory in `targets`
-/// and the roots of `slots`.
+/// and the roots of `slots`; `moved` reads what the action moves, only once
+/// a server's player acts.
 ///
 /// # Safety
 ///
@@ -542,6 +549,7 @@ unsafe fn may_touch(
     state: *mut u8,
     targets: &[u32],
     slots: &[u64],
+    moved: impl FnOnce() -> Option<Moved>,
 ) -> bool {
     let Some((_, layout, components)) = linked() else {
         return true;
@@ -551,6 +559,7 @@ unsafe fn may_touch(
     let Some(player) = (unsafe { server_player(ctx) }) else {
         return true;
     };
+    let moved = moved();
     // SAFETY: the caller guarantees the action's live state; its
     // `OwnerRelationship` index sits at the build table's
     // `access.state_owner_index` offset.
@@ -566,9 +575,15 @@ unsafe fn may_touch(
         .copied()
         .chain(roots)
         .filter(|&target| target != 0)
-        // SAFETY: the caller guarantees `ctx` is null or the live system
-        // context on its thread.
-        .all(|target| allowed(&unsafe { interaction(kind, player, target, ctx) }))
+        .all(|target| {
+            // SAFETY: the caller guarantees `ctx` is null or the live system
+            // context on its thread.
+            let mut call = unsafe { interaction(kind, player, target, ctx) };
+            if let Some(moved) = &moved {
+                moved.fill(&mut call);
+            }
+            allowed(&call)
+        })
 }
 
 crate::engine::chains::chain_detour! {
@@ -598,7 +613,7 @@ unsafe fn transfer_refused(ctx: *mut u64, state: *mut u8) -> bool {
     if crate::world::transactions::holds().quiet() || state.is_null() {
         return false;
     }
-    let Some((_, layout, _)) = linked() else {
+    let Some((_, layout, components)) = linked() else {
         return false;
     };
     // SAFETY: `state` is non-null by the check before it and is the
@@ -621,6 +636,26 @@ unsafe fn transfer_refused(ctx: *mut u64, state: *mut u8) -> bool {
     // SAFETY: `input` is the player's non-null input; its u64 target slot
     // sits at the build table's `access.transfer_target_slot` offset.
     let target_slot: u64 = unsafe { read_at(input, layout.transfer_target_slot) };
+    let read_moved = || {
+        layout.moves.as_ref().map(|moves| {
+            // SAFETY: `may_touch` reads it only once a server's player acts,
+            // so `ctx` is the caller's live, non-null context; `state` is the
+            // running transfer's non-null state on its thread, and `input`
+            // the non-null player input it reads.
+            unsafe {
+                moved(
+                    moves,
+                    layout,
+                    components,
+                    ctx,
+                    state,
+                    input,
+                    [source, target],
+                    [source_slot, target_slot],
+                )
+            }
+        })
+    };
     // SAFETY: the caller's `ctx` and non-null `state`, on the system's
     // thread.
     !unsafe {
@@ -630,6 +665,7 @@ unsafe fn transfer_refused(ctx: *mut u64, state: *mut u8) -> bool {
             state,
             &[source, target],
             &[source_slot, target_slot],
+            read_moved,
         )
     }
 }
@@ -675,7 +711,7 @@ unsafe fn sort_refused(ctx: *mut u64, state: *mut u8) -> bool {
     let target: u32 = unsafe { read_at(input, layout.sort_target) };
     // SAFETY: the caller's `ctx` and non-null `state`, on the system's
     // thread.
-    !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[]) }
+    !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[], || None) }
 }
 
 crate::engine::chains::chain_detour! {

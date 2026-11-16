@@ -156,6 +156,47 @@ server or a hosting client. They run on the thread of the system that checks
 the interaction, so keep them quick and never block. Several mods may filter; any
 refusal wins.
 
+### What a move moves
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
+A `Move` carries `moved` when the loader could read it. It holds the kind of
+move, whose names are enshwick's. It holds the action, the game's
+`InventoryActionType`, with the amount the player asked for. It also holds
+the item and count of the source stack, both containers and both slots. In
+Rust, `i.transfer()` names the kind; in Luau, `i.moved.transfer` does:
+
+| Kind | The player |
+| --- | --- |
+| `Slot` | drags, splits or destroys one stack, or takes one stack from a loot viewer |
+| `TakeAll` | presses Take All in a storage window, or in the loot viewer of a corpse or loot bag |
+| `DepositAll` | presses Deposit All |
+| `DepositStacks` | presses Deposit Stacks: the stacks of items the container holds already |
+| `RefillStacks` | presses Refill Stacks: the container's stacks of items the player holds already |
+| `Gift` | gives a stack to another player nearby |
+| `ToActionbar`, `ToBackpack` | sends a stack to the action bar or the backpack |
+
+A move of a whole inventory names no slot and no item: the game moves stack
+after stack. To decide per item, use a
+[container rule](inventories.md#containers-and-what-they-take), which the
+loader asks for each stack that enters a container.
+
+```rust
+use enshwick::interactions::{Kind, Transfer};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    // Nobody empties a container with one press.
+    load.on_interaction(|i| i.kind != Kind::Move || i.transfer() != Some(Transfer::TakeAll))
+}
+```
+
+```luau
+enshwick.interactions.on_interaction(function(i)
+    return not (i.moved and i.moved.transfer == "TakeAll")
+end)
+```
+
 ### What a player's prompt offers now
 
 With the `unstable` feature, `load.interaction_targets()` returns the

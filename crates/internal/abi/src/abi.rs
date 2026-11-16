@@ -846,7 +846,8 @@ const _: () = {
     // Frozen: one character's row; what concerns the pass grows in the headed ExperiencePass.
     assert!(size_of::<ExperienceRow>() == 20);
     assert!(size_of::<ExperiencePass>() == 40);
-    assert!(size_of::<Interaction>() == 8 + 16 + 8 + 24);
+    assert!(size_of::<Interaction>() == 8 + 16 + 8 + 24 + 24 + 16);
+    assert!(size_of::<ContainerPut>() == 8 + 16 + 8);
     assert!(size_of::<SurvivorLookup>() == 8 + 16 + 24 + 16);
     assert!(size_of::<BedCheck>() == 8 + 12 + 4 + 48);
     assert!(size_of::<Summon>() == 8 + 8 + 16 + 24 + 8 + 4 + 4 + 4 + 4);

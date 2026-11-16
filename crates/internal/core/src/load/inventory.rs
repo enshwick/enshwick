@@ -4,6 +4,9 @@ use crate::Load;
 use crate::inventory::Inventories;
 use enshwick_inventory::__load::*;
 
+#[cfg(feature = "unstable")]
+mod containers;
+
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Inventory reads and transactions in the game server, dedicated or

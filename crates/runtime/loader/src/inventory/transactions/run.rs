@@ -4,7 +4,7 @@ use crate::engine::memory::{read, read_ptr, write};
 
 use enshwick_core::__private::rules::inventory_checks::{fill, renew_give, slot_ref};
 
-use super::{ACTOR_FLAG, DESC_AREA, Executor, Finished, NOTIFY_FLAGS, Request, Res, commits};
+use super::{ACTOR_FLAG, DESC_AREA, Executor, Finished, Request, Res, commits, descriptor_flags};
 
 /// Runs one request as one transaction.
 ///
@@ -44,7 +44,7 @@ pub(super) unsafe fn run(
     } else {
         request.actor
     };
-    let notify = request.flags & InventoryRequest::NOTIFY != 0;
+    let notify = descriptor_flags(request.flags);
     // SAFETY: this function's own contract, passed on: the system's thread
     // inside its row loop, its live context and its filled view, and the
     // scratch block free.
@@ -183,7 +183,7 @@ pub(super) unsafe fn describe(
     executor: &Executor,
     ctx: usize,
     view: usize,
-    notify: bool,
+    notify_flags: u8,
     actor: u32,
     source: u32,
 ) {
@@ -192,7 +192,7 @@ pub(super) unsafe fn describe(
     // `DESC_AREA` bytes from `desc`, at least the table's
     // `inventory.desc_size` that `desc_zero` clears.
     unsafe { (executor.desc_zero)(core::ptr::with_exposed_provenance_mut(desc)) };
-    let mut flags = if notify { NOTIFY_FLAGS } else { 0 };
+    let mut flags = notify_flags;
     // SAFETY: the caller's contract makes `view` the system's filled view,
     // which holds its `u64` actors handle at the table's
     // `inventory.view_actors`.

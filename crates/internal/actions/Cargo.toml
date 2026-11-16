@@ -17,6 +17,7 @@ enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.17" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-content.workspace = true
+enshwick-inventory.workspace = true
 enshwick-values.workspace = true
 enshwick-world.workspace = true
 bytemuck.workspace = true
@@ -36,6 +37,7 @@ test = []
 unstable = [
     "enshwick-base/unstable",
     "enshwick-content/unstable",
+    "enshwick-inventory/unstable",
     "enshwick-world/unstable",
 ]
 

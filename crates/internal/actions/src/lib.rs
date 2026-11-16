@@ -32,6 +32,8 @@ pub(crate) use enshwick_base::{engine_ids, locks, near};
 #[doc(hidden)]
 pub use enshwick_content::{content, rates};
 #[doc(hidden)]
+pub use enshwick_inventory::inventory;
+#[doc(hidden)]
 pub use enshwick_world::WorldError;
 #[cfg(feature = "unstable")]
 #[doc(hidden)]

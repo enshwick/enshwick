@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, Interaction, Status};
+    use enshwick::abi::{Interaction, Status};
     use enshwick::interactions::Kind;
     use enshwick::{Entity, ItemId, Load, Mod, Off};
 
@@ -30,14 +30,10 @@ mod tests {
 
     fn call(kind: u32, item: ItemId, known: u8, player: Entity) -> Interaction {
         Interaction {
-            header: Header::of::<Interaction>(),
-            kind,
-            character: player,
-            target: Entity(4096),
             item,
             known,
-            reserved: [0; 3],
             position: [1.0, 2.0, 3.0],
+            ..Interaction::new(kind, player, Entity(4096))
         }
     }
 

@@ -15,6 +15,8 @@ mod action_targets;
 #[cfg(feature = "unstable")]
 mod actions;
 #[cfg(feature = "unstable")]
+mod add_container;
+#[cfg(feature = "unstable")]
 mod affixes;
 mod altar_kinds;
 mod altar_limit;
@@ -43,6 +45,8 @@ mod config_errors;
 mod config_files;
 mod config_groups;
 mod config_lists;
+#[cfg(feature = "unstable")]
+mod container_rules;
 #[cfg(feature = "unstable")]
 mod containers;
 mod content_renames;

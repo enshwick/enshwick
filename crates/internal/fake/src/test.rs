@@ -102,6 +102,7 @@ pub use content::templates::{
 };
 pub use content::{LiveChange, ServedResource};
 pub use inventory::SubmittedRequest;
+pub use inventory::containers::{CHEST_ITEM, CHEST_SLOTS};
 #[cfg(feature = "typed")]
 pub use knowledge::vanilla::{
     ATTRIBUTE_NODE, BALANCING_TABLE, LORE_CATEGORY, PROGRESSION, QUEST_ITEM, ROOT_NODE, SKILL_ROOM,

@@ -72,6 +72,8 @@ impl LoadMethods for crate::BaseLoad {
 
 #[doc(hidden)]
 pub(crate) mod checks;
+#[cfg(feature = "unstable")]
+pub mod containers;
 mod ops;
 mod read;
 mod results;

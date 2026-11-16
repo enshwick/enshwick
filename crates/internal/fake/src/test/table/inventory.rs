@@ -8,6 +8,8 @@ use enshwick_core::__fake::ids;
 use crate::test::SubmittedRequest;
 use crate::test::table::{Registered, Registration, with};
 
+pub(crate) mod containers;
+
 /// A submitted inventory request and where its result goes.
 pub(crate) struct OpenRequest {
     pub(crate) request: SubmittedRequest,
