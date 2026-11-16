@@ -252,3 +252,4 @@ names every entry of the golden layout once, in that order.
 | `ui_item_tooltip` | game | — | client |
 | `change_permissions` | game | — | with a player |
 | `transaction_settled` | game | probe: transaction | — |
+| `prop_placement_info` | game | fake metadata, unknown bounds and guarded headers | not exercised |

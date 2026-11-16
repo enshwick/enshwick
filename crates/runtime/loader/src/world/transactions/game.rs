@@ -16,7 +16,7 @@ use crate::engine::loader::Loader;
 use crate::engine::pinned;
 use crate::world::voxels::ReadBox;
 pub(crate) use blocks::resolve;
-pub(crate) use props::resolve as resolve_prop;
+pub(crate) use props::{placement_info as prop_placement_info, resolve as resolve_prop};
 
 /// The editor's undo write: puts the voxels of `record`'s box back through
 /// the same write as an edit, which marks them for clients and the save;

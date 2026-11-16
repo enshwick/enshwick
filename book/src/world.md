@@ -674,6 +674,34 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 In Luau, `enshwick.world.change_permissions(key, { "CanEditWorld" }, {})`
 takes the same lists.
 
+## Prop placement metadata
+
+Enable `unstable` and use a matching ABI 12.8 loader.
+Read metadata with `world.prop_placement_info(item)`.
+The returned optional `PropPlacementBox` holds local corners in metres.
+Its `min` and `max` fields preserve declared values.
+The loader uses the same published item resolver as prop transactions; it
+neither spawns an entity nor allocates a transaction receipt for this read.
+The read can run on any thread through the server's item-registry pin.
+
+```rust
+fn inspect(world: enshwick::world::World, item: enshwick::ItemId) -> Result<(), enshwick::WorldError> {
+    let info = world.prop_placement_info(item)?;
+    if let Some(bounds) = info.local_box {
+        enshwick::info!("Declared local corners: {:?} to {:?}", bounds.min, bounds.max);
+    }
+    Ok(())
+}
+```
+
+An absent, invalid or unreadable box stays `None`. The API does not replace
+it with the loader's fallback permission box or normalize the returned
+corners. These metadata do not establish a complete physical footprint,
+collision, build permission, persistence, label ownership or safe recovery.
+An unknown item or one placing nothing is refused; creatures and flame
+altars return `NotAProp`. Without the running server, registry or required
+reads, the call is unavailable.
+
 ## Labels
 
 `world.set_label(entity, text)` names an entity as a player's rename does.

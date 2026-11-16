@@ -824,6 +824,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_item_tooltip,
     change_permissions: permissions::change_permissions,
     transaction_settled,
+    prop_placement_info,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

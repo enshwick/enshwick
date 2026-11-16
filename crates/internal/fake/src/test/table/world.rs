@@ -608,3 +608,45 @@ pub(crate) extern "system" fn chat_muted(
         None => Status::UNAVAILABLE,
     }
 }
+
+/// Copies the fake item's template and optional local corners without edits.
+pub(crate) extern "system" fn prop_placement_info(
+    _me: ModHandle,
+    item: enshwick_core::ItemId,
+    out: *mut enshwick_core::abi::PropPlacementInfo,
+) -> Status {
+    use enshwick_core::abi::{Header, PropPlacementInfo};
+    with(Status::UNAVAILABLE, |s| {
+        if s.edits.stopped || !(s.host.side == Side::SERVER || s.host.hosting) {
+            return Status::UNAVAILABLE;
+        }
+        let Some(info) = s.host.items.get(&item.get()) else {
+            return Status::BAD_ARGS;
+        };
+        if s.host.no_prop_items.contains(&item.get()) {
+            return Status::NOT_A_PROP;
+        }
+        if info.placed_entity == enshwick_core::content::Guid::NIL {
+            return Status::BAD_ARGS;
+        }
+        let bounds = s
+            .host
+            .placement_boxes
+            .iter()
+            .find(|(id, ..)| *id == item.get())
+            .filter(|&&(_, min, max)| PropPlacementInfo::declares_box(min, max));
+        let (min, max, flags) = bounds.map_or(([0.0; 3], [0.0; 3], 0), |&(_, min, max)| {
+            (min, max, PropPlacementInfo::HAS_LOCAL_BOX)
+        });
+        super::put_headed(
+            out,
+            PropPlacementInfo {
+                header: Header::of::<PropPlacementInfo>(),
+                template: info.placed_entity,
+                min,
+                max,
+                flags,
+            },
+        )
+    })
+}
