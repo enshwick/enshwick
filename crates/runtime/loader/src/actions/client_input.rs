@@ -206,7 +206,8 @@ unsafe fn hold_player(layout: &InputLayout, input: *mut u8, mode: u32) {
     match mode {
         // SAFETY: the caller's record, on the builder's thread.
         FRAME => unsafe { layout.set_camera_rotation(input, Look::default()) },
-        // SAFETY: as above.
+        // SAFETY: the caller's record, by this function's `# Safety`, which
+        // nothing else touches on the builder's thread during the write.
         STEP => unsafe { layout.set_movement_stick(input, [0.0; 2]) },
         _ => {}
     }
