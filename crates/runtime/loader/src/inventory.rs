@@ -50,6 +50,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: damage::TABLE_IDS,
+        seal: Some(|_| damage::seal()),
         link: Some(damage::link),
         ..part!("damage", damage)
     },
