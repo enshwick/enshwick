@@ -106,6 +106,7 @@ macro_rules! headed {
             SurvivorLookup,
             TeleportRequest,
             TerrainEdit,
+            TerrainMaterialAdd,
             TerrainMaterialInfo,
             TerrainPageData,
             TickData,
