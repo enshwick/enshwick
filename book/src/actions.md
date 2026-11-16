@@ -618,6 +618,7 @@ A `Window` holds a title and items, in order:
 | `.text(key, values)` | a line |
 | `.row(Row::new(key, values).button(label, action, values))` | a line with up to 4 buttons |
 | `.action(id)` | the action whole: its fields above a Run button, or a list's players with a switch each |
+| `.map(WindowMap)` | a line that says to open the map; the [map's markers](#a-map-in-a-window) show there |
 
 Texts are keys of the mod's texts, filled with the values in each player's
 language. A button runs its action with the values it gives. When the
@@ -740,6 +741,79 @@ A client without Enshwick gets no window and plays on. A dedicated server, a
 game a player hosts and single player work alike. The host gets its own
 windows inside the game. Joined friends get theirs over the network.
 
+### A map in a window
+
+A window may hold one map. Its markers show on the player's own Map screen
+while the player holds the window, and the window steps aside while that
+screen is open. The waypoint the player sets on the map runs the mod's
+actions:
+
+| Builder | What it does |
+| --- | --- |
+| `WindowMap::new()` | a map without markers or actions |
+| `.marker(position, label, values)` | a marker at `position` in metres; `values` are all the values its action takes |
+| `.on_marker(action)` | a waypoint within 16 m of a marker, across the ground, runs `action` with the nearest marker's values |
+| `.on_point(action)` | a waypoint anywhere else runs `action` with its x, y and z; the action takes three numbers |
+
+Only a waypoint the player moves while they hold the window runs anything;
+the server looks at it every 100 ms. Each run is an ordinary run from that
+player, checked again on the server. The player gets the window only when
+they may run both actions. A map holds at most 64 markers. To move the
+markers, show or update the window again, such as once a second for the
+players' positions.
+
+```rust
+use enshwick::actions::{Action, Arg, Outcome, Value, Window, WindowMap};
+use enshwick::i18n::Texts;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let actions = load.actions(Texts::default())?;
+    actions.add(
+        Action::new("goto", "Go to").admins().arg(Arg::player("Player")),
+        |_| Outcome::done("On the way"),
+    )?;
+    let axis = |name| Arg::number(name, -20_000.0..=20_000.0, 0.5);
+    actions.add(
+        Action::new("place", "Teleport here").admins().arg(axis("X")).arg(axis("Y")).arg(axis("Z")),
+        |_| Outcome::done("Teleported"),
+    )?;
+    let shown = actions.clone();
+    actions.add(Action::new("players", "Players on the map").admins(), move |request| {
+        let ann = Value::Player { key: enshwick::PlayerKey::new(7), name: "Ann".into() };
+        let map = WindowMap::new()
+            .marker([120.0, 41.5, -36.0], "Ann", &[ann])
+            .on_marker("goto")
+            .on_point("place");
+        match shown.show(Window::new("players", "Players").map(map), &[request.player.key]) {
+            Ok(()) => Outcome::done(""),
+            Err(why) => Outcome::refused(why.to_string()),
+        }
+    })?;
+    Ok(())
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:add({ id = "goto", label = "Go to", admins = true, args = { enshwick.actions.player("Player") } },
+    function() return enshwick.actions.done("On the way") end)
+local axis = function(name) return enshwick.actions.number(name, -20000, 20000, 0.5) end
+actions:add({ id = "place", label = "Teleport here", admins = true, args = { axis("X"), axis("Y"), axis("Z") } },
+    function() return enshwick.actions.done("Teleported") end)
+actions:add({ id = "players", label = "Players on the map", admins = true }, function(request)
+    actions:show({
+        id = "players",
+        title = "Players",
+        items = { { Map = {
+            markers = { { position = vector.create(120, 41.5, -36), label = "Ann", args = { { Player = { key = "7", name = "Ann" } } } } },
+            on_marker = "goto",
+            on_point = "place",
+        } } },
+    }, { request:player().key })
+    return enshwick.actions.done("")
+end)
+```
+
 ## Worked example
 
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
@@ -769,6 +843,9 @@ the loader does:
 - `close_window(&player, id)` closes a window as that player's client does,
   and `player_left(key)` makes the player leave as far as windows go. The
   mod hears of both as the loader tells it.
+- `set_waypoint(&player, language, at)` moves that player's waypoint to
+  `at`. The newest window they hold with a map runs its marker or point
+  action, and the call returns the mod's reply.
 - `console::run("<mod id> <action> ...")` runs the console form. The fake
   hands a line to the mod's own actions unless `console_answer` gave its first
   word an answer.

@@ -34,7 +34,7 @@ use enshwick_base::Relock;
 use super::engine::{Buf, UiText};
 
 /// The most markers one mod shows.
-const MAX_MARKERS: usize = 256;
+pub(super) const MAX_MARKERS: usize = 256;
 /// Frames an old marker set stays alive after it was replaced, since the map
 /// may still read a label it was handed the frame before.
 const RETIRED_FRAMES: u64 = 2;

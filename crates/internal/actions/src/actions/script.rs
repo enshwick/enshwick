@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::registry::Registry;
 use super::{
     Action, ActionTarget, Actions, Arg, Ask, FindSubjectError, Outcome, RefusedReason, Request,
-    Row, Subject, Value, Via, Window,
+    Row, Subject, Value, Via, Window, WindowMap,
 };
 use crate::__load::*;
 use crate::i18n::{Language, Texts};
@@ -125,6 +125,52 @@ pub(crate) enum WindowItem {
     Row(WindowRow),
     /// An action drawn whole, by id, as [`Window::action`] adds it.
     Action(String),
+    /// The window's map, as [`Window::map`] adds it.
+    Map(ScriptWindowMap),
+}
+
+/// The map of a script's window: the fields of [`WindowMap`]'s builder.
+#[derive(Clone, Debug, crate::Script)]
+#[script(name = "WindowMap")]
+pub(crate) struct ScriptWindowMap {
+    /// Its markers, as [`WindowMap::marker`] adds them.
+    #[script(default)]
+    pub markers: Vec<WindowMarker>,
+    /// The action a waypoint on a marker runs, as [`WindowMap::on_marker`]
+    /// sets it.
+    pub on_marker: Option<String>,
+    /// The action a waypoint elsewhere runs, as [`WindowMap::on_point`]
+    /// sets it.
+    pub on_point: Option<String>,
+}
+
+/// A marker of a script window's map, as [`WindowMap::marker`] takes it.
+#[derive(Clone, Debug, crate::Script)]
+pub(crate) struct WindowMarker {
+    /// Where, in metres.
+    pub position: [f64; 3],
+    /// Its label, a text key.
+    pub label: String,
+    /// The values a waypoint on it gives the map's marker action.
+    #[script(default)]
+    pub args: Vec<Value>,
+}
+
+impl ScriptWindowMap {
+    /// The Rust map.
+    fn into_map(self) -> WindowMap {
+        let map = self.markers.into_iter().fold(WindowMap::new(), |map, m| {
+            map.marker(m.position, &m.label, &m.args)
+        });
+        let map = match self.on_marker {
+            Some(action) => map.on_marker(&action),
+            None => map,
+        };
+        match self.on_point {
+            Some(action) => map.on_point(&action),
+            None => map,
+        }
+    }
 }
 
 /// A text key and the values it is filled with.
@@ -183,6 +229,7 @@ impl ScriptWindow {
                         }),
                 ),
                 WindowItem::Action(action) => window.action(&action),
+                WindowItem::Map(map) => window.map(map.into_map()),
             },
         )
     }

@@ -7,21 +7,29 @@
 //! action on the server, which checks it again, and a button whose action
 //! takes more values opens a form for the rest. An action drawn whole shows
 //! its fields above a button that runs it. Long windows scroll.
+//!
+//! The markers of the held windows' maps show on the game's own map as the
+//! loader's, and the windows step aside while the Map screen is open, so
+//! the player sees the map and sets the waypoint the server reads.
 
 use core::cell::RefCell;
 use std::sync::Arc;
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::UiWidget;
+use enshwick_core::abi::{Header, Str, UiMarker, UiWidget};
 use enshwick_core::actions::Value;
 use enshwick_core::actions::sheet::{ArgView, Entry, encode_args};
-use enshwick_core::actions::window::{ButtonView, ItemView, View, decode};
+use enshwick_core::actions::window::{ButtonView, ItemView, MapView, View, decode};
 
 use super::engine::{Engine, Scroll, Window};
 use super::{Painter, Widgets, copy};
 use crate::base::remote::Message;
+use crate::engine::mod_index::ModIndex;
 use crate::engine::texts;
 use crate::ui::windows::MAX_HELD;
+
+/// The game's name of the `HudScreenType` member of the Map screen.
+const MAP_SCREEN: &str = "Map";
 
 mod fields;
 
@@ -43,13 +51,44 @@ struct Held {
 static STATE: ArcSwapOption<Vec<Held>> = ArcSwapOption::const_empty();
 
 /// Changes the windows the client holds with `change`, which may run more
-/// than once.
+/// than once, then their markers on the map.
 fn change(change: impl Fn(&mut Vec<Held>)) {
     STATE.rcu(|held| {
         let mut held = held.as_deref().cloned().unwrap_or_default();
         change(&mut held);
         (!held.is_empty()).then(|| Arc::new(held))
     });
+    mark();
+}
+
+/// The maps of `held`, the newest window's first.
+fn maps(held: &[Held]) -> impl Iterator<Item = &MapView> {
+    held.iter().rev().flat_map(|h| {
+        h.view.items.iter().filter_map(|item| match item {
+            ItemView::Map(map) => Some(map),
+            _ => None,
+        })
+    })
+}
+
+/// Puts the markers of the held windows' maps on the game's map as the
+/// loader's own, the newest window's first, as many as the map takes.
+fn mark() {
+    let held = STATE.load();
+    let markers: Vec<UiMarker> = maps(held.as_deref().map_or(&[], Vec::as_slice))
+        .flat_map(|map| &map.markers)
+        .take(super::map::MAX_MARKERS)
+        .map(|marker| UiMarker {
+            header: Header::of::<UiMarker>(),
+            position: marker.position,
+            label: Str::new(&marker.label),
+            color: UiMarker::YELLOW,
+            marker_type: 0,
+        })
+        .collect();
+    // Refused only while the map markers are off, which their fuse logs
+    // once; `take` keeps the count in bounds.
+    let _off = super::map::set(ModIndex::LOADER, &markers);
 }
 
 /// `held` once the server sent mod `id`'s window `window` as `view`: in
@@ -95,6 +134,7 @@ pub(crate) fn closed(id: &str, window: &str) {
 /// its link to it.
 pub(crate) fn forget() {
     STATE.store(None);
+    mark();
 }
 
 /// A button's form: the values its button gave, and fields for the rest.
@@ -207,6 +247,12 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         DRAWN.set(None);
         return;
     };
+    // SAFETY: this function's `# Safety` gives the frame's live, non-zero
+    // `context` on the interface thread.
+    let screen = unsafe { super::extensions::screen_view(engine, context) };
+    if screen.is_some_and(|s| Some(s.screen) == crate::engine::screens::byte(MAP_SCREEN)) {
+        return;
+    }
     let click = DRAWN.with_borrow_mut(|slot| {
         let shows = |drawn: &Drawn| drawn.key.0 == top.mod_id && drawn.key.1 == top.window;
         if !slot.as_ref().is_some_and(shows) {
@@ -336,6 +382,11 @@ fn items(paint: &impl Widgets, view: &View, drawn: &mut Drawn) -> Click {
             }
             ItemView::Action(_) => {
                 entry.map_or(Click::Nothing, |entry| action(paint, entry, drawn))
+            }
+            ItemView::Map(_) => {
+                let line = texts::text("windows.map");
+                paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+                Click::Nothing
             }
             _ => Click::Nothing,
         };
@@ -822,6 +873,44 @@ mod tests {
         assert_eq!(drawn.field("ban", 0, &arg).pick, 0, "another argument");
         assert_eq!(drawn.field("ban", 1, &arg).pick, 3, "the same field");
         assert_eq!(drawn.fields.len(), 3);
+    }
+
+    #[test]
+    fn a_map_draws_its_line_and_the_newest_window_s_markers_go_first() {
+        use enshwick_core::actions::window::MarkerView;
+
+        let map = |x: f64| {
+            ItemView::Map(MapView {
+                markers: vec![MarkerView {
+                    position: [x, 0.0, 0.0],
+                    label: "m".into(),
+                    args: Vec::new(),
+                }],
+                ..MapView::default()
+            })
+        };
+        let window = |id: &str, x| Held {
+            mod_id: "you.admin".into(),
+            window: id.into(),
+            view: View {
+                items: vec![map(x)],
+                ..View::default()
+            },
+        };
+        let held = [window("old", 1.0), window("new", 2.0)];
+        let order: Vec<f64> = maps(&held)
+            .flat_map(|m| &m.markers)
+            .map(|m| m.position[0])
+            .collect();
+        assert_eq!(order, [2.0, 1.0]);
+
+        let paint = Recorder::default();
+        let click = items(&paint, &held[0].view, &mut drawn());
+        assert_eq!(click, Click::Nothing);
+        assert_eq!(
+            paint.drew(),
+            [Drew::Label(texts::text("windows.map").into())]
+        );
     }
 
     fn held() -> Vec<(String, String)> {

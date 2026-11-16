@@ -6,7 +6,7 @@ mod read;
 
 #[cfg(test)]
 pub(super) use fit::fits;
-pub(super) use fit::{button_fault, optional_fault};
+pub(super) use fit::{optional_fault, use_fault};
 #[cfg(test)]
 pub(super) use read::toggle_word;
 use read::{ReadArgsError, words};

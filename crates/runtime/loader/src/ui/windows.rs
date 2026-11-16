@@ -28,6 +28,7 @@ use enshwick_core::abi::{WINDOW_CLOSE, WINDOW_SHOW, WINDOW_UPDATE};
 use crate::base::remote::Message;
 use crate::engine::mod_index::ModIndex;
 
+pub mod maps;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
