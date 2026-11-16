@@ -10,16 +10,24 @@
 //! (`0x1`); `?` for the base of memory through any register but RIP
 //! (`[?+*]`); memory with its size first where the registers do not give it
 //! (`dword [rcx+0xb8]`); `?` for any operand; `?r`, `?i`, `?b` and `?m` for
-//! any register, immediate, branch target and memory operand; `*` for any operand whose value the route
-//! takes; and `{id}` for the address of another entry, as a branch target or
-//! a RIP-relative operand. A `*` or `?` displacement is not zero and has the
-//! sign written.
+//! any register, immediate, branch target and memory operand; `?1` to `?9`
+//! for a register bound across the shape, any register at its first use and
+//! the same one, in any width, at every other use in the run, as an operand
+//! or a memory base (`mov [?1+*],eax`, `mov [?1],al`); `*` for any operand
+//! whose value the route takes; and `{id}` for the value of another entry:
+//! a symbol's address as a branch target or a RIP-relative operand, a
+//! constant's value as an immediate or a displacement (`[?+{id}]`), such as
+//! a reflected field offset. A `*` or `?` displacement is not zero and has
+//! the sign written.
 
 use iced_x86::{Instruction, InstructionInfoFactory, Mnemonic, OpAccess, OpKind, Register};
 use rustc_hash::FxHashMap;
 
+/// How many registers a shape can bind, `?1` to `?9`.
+const BINDS: usize = 9;
+
 /// What a memory operand's displacement must be.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum Disp {
     /// No displacement.
     None,
@@ -27,15 +35,29 @@ enum Disp {
     Signed { negative: bool, take: bool },
     /// This displacement.
     Exact(i64),
+    /// The value of the constant entry of this id.
+    Entry(String),
+}
+
+/// What a memory operand's base register must be.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Base {
+    /// Any register but RIP.
+    Any,
+    /// This register.
+    Exact(Register),
+    /// The register bound to this hole, from 0, any but RIP.
+    Bound(usize),
 }
 
 /// One operand of a step.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Op {
     Register(Register),
+    /// The register bound to this hole, from 0.
+    Bound(usize),
     Memory {
-        /// The base register; `None` for any but RIP.
-        base: Option<Register>,
+        base: Base,
         /// The index register and its scale; `Register::None` for none.
         index: (Register, u32),
         disp: Disp,
@@ -49,6 +71,27 @@ enum Op {
     /// Any operand of one kind.
     Wild(Wild),
     Entry(String),
+}
+
+/// What one run of a shape has gathered so far: the value it takes and the
+/// register each hole is bound to, so every step of the run sees the same.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Run {
+    pub(crate) taken: Option<u64>,
+    /// The full register of each hole, `Register::None` while unbound.
+    bound: [Register; BINDS],
+}
+
+impl Run {
+    /// Whether hole `hole` is `register`, binding it on its first use.
+    fn binds(&mut self, hole: usize, register: Register) -> bool {
+        let full = register.full_register();
+        let held = &mut self.bound[hole];
+        if *held == Register::None {
+            *held = full;
+        }
+        *held == full
+    }
 }
 
 /// The kind a typed wildcard operand must be.
@@ -208,13 +251,17 @@ impl Step {
     /// The ids of the entries the step names.
     pub(crate) fn entries(&self) -> impl Iterator<Item = &str> {
         self.ops.iter().filter_map(|op| match op {
-            Op::Entry(id) => Some(id.as_str()),
+            Op::Entry(id)
+            | Op::Memory {
+                disp: Disp::Entry(id),
+                ..
+            } => Some(id.as_str()),
             _ => None,
         })
     }
 
     /// Whether the step pins an operand to one value: an exact immediate,
-    /// an exact displacement or another entry's address.
+    /// an exact displacement or another entry's value.
     pub(crate) fn is_exact(&self) -> bool {
         self.ops.iter().any(|op| {
             matches!(
@@ -222,7 +269,7 @@ impl Step {
                 Op::Immediate(_)
                     | Op::Entry(_)
                     | Op::Memory {
-                        disp: Disp::Exact(_),
+                        disp: Disp::Exact(_) | Disp::Entry(_),
                         ..
                     }
             )
@@ -239,7 +286,7 @@ impl Step {
                 Op::Memory {
                     base, index, disp, ..
                 } => {
-                    value == 0 && *disp == Disp::None && *base != Some(Register::RIP)
+                    value == 0 && *disp == Disp::None && *base != Base::Exact(Register::RIP)
                         || index.0 != Register::None && u64::from(index.1) == value
                 }
                 Op::Immediate(v) => *v == value,
@@ -247,13 +294,14 @@ impl Step {
             })
     }
 
-    /// Whether `ins` is this step, with `entry` giving the address of a named
-    /// entry; the taken value, if the step takes one, goes to `taken`.
+    /// Whether `ins` is this step, with `entry` giving the value of a named
+    /// entry, in `run`: the taken value, if the step takes one, and a
+    /// register a hole binds go there.
     pub(crate) fn matches(
         &self,
         ins: &Instruction,
         entry: &impl Fn(&str) -> Option<u64>,
-        taken: &mut Option<u64>,
+        run: &mut Run,
     ) -> bool {
         if ins.mnemonic() != self.mnemonic || ins.op_count() as usize != self.ops.len() {
             return false;
@@ -263,6 +311,7 @@ impl Step {
             let kind = ins.op_kind(i);
             match op {
                 Op::Register(want) => kind == OpKind::Register && ins.op_register(i) == *want,
+                Op::Bound(hole) => kind == OpKind::Register && run.binds(*hole, ins.op_register(i)),
                 Op::Memory {
                     base,
                     index,
@@ -270,21 +319,26 @@ impl Step {
                     size,
                 } => {
                     let have = ins.memory_base();
+                    let any = have != Register::RIP && have != Register::None;
                     kind == OpKind::Memory
                         && size.is_none_or(|bytes| ins.memory_size().size() == bytes)
-                        && base.map_or(have != Register::RIP && have != Register::None, |b| {
-                            have == b
-                        })
+                        && match *base {
+                            Base::Any => any,
+                            Base::Exact(want) => have == want,
+                            Base::Bound(hole) => any && run.binds(hole, have),
+                        }
                         && ins.memory_index() == index.0
                         && (index.0 == Register::None || ins.memory_index_scale() == index.1)
-                        && memory(ins, have, *disp, taken)
+                        && memory(ins, have, disp, entry, &mut run.taken)
                 }
                 Op::Immediate(want) => {
                     kind != OpKind::Memory
                         && kind != OpKind::NearBranch64
                         && value(ins, i, kind) == Some(*want)
                 }
-                Op::Any { take } => !take || value(ins, i, kind).is_some_and(|v| set(taken, v)),
+                Op::Any { take } => {
+                    !take || value(ins, i, kind).is_some_and(|v| set(&mut run.taken, v))
+                }
                 Op::Wild(wild) => wild.holds(kind),
                 Op::Entry(id) => entry(id).is_some_and(|want| value(ins, i, kind) == Some(want)),
             }
@@ -298,18 +352,26 @@ fn set(taken: &mut Option<u64>, value: u64) -> bool {
 }
 
 /// Whether the memory operand of `ins` through `base` has the displacement
-/// `disp` asks for; a RIP-relative one takes its target address.
-fn memory(ins: &Instruction, base: Register, disp: Disp, taken: &mut Option<u64>) -> bool {
+/// `disp` asks for, with `entry` giving a named constant; a RIP-relative one
+/// takes its target address.
+fn memory(
+    ins: &Instruction,
+    base: Register,
+    disp: &Disp,
+    entry: &impl Fn(&str) -> Option<u64>,
+    taken: &mut Option<u64>,
+) -> bool {
     if base == Register::RIP {
-        return match disp {
+        return match *disp {
             Disp::Signed { take, .. } => !take || set(taken, ins.ip_rel_memory_address()),
-            Disp::None | Disp::Exact(_) => false,
+            Disp::None | Disp::Exact(_) | Disp::Entry(_) => false,
         };
     }
     let signed = ins.memory_displacement64().cast_signed();
-    match disp {
+    match *disp {
         Disp::None => signed == 0,
         Disp::Exact(want) => signed == want,
+        Disp::Entry(ref id) => entry(id).is_some_and(|want| signed == want.cast_signed()),
         Disp::Signed { negative, take } => {
             (signed < 0) == negative && signed != 0 && (!take || set(taken, signed.unsigned_abs()))
         }
@@ -347,7 +409,10 @@ fn operand(text: &str, names: &ShapeNames) -> Result<Op, ShapeError> {
     if let Some(&(_, wild)) = Wild::TOKENS.iter().find(|(token, _)| *token == text) {
         return Ok(Op::Wild(wild));
     }
-    if let Some(id) = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')) {
+    if let Some(hole) = hole(text) {
+        return hole.map(Op::Bound);
+    }
+    if let Some(id) = entry_id(text) {
         return Ok(Op::Entry(id.to_owned()));
     }
     if let Some(value) = hex(text) {
@@ -366,14 +431,40 @@ fn operand(text: &str, names: &ShapeNames) -> Result<Op, ShapeError> {
     memory_operand(inner, size, names)
 }
 
+/// The hole `?1` to `?9` that `text` names, from 0; `None` for no hole
+/// token, an error for a `?` and a number out of that range.
+fn hole(text: &str) -> Option<Result<usize, ShapeError>> {
+    let number = text.strip_prefix('?')?;
+    if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    Some(
+        number
+            .parse::<usize>()
+            .ok()
+            .filter(|n| (1..=BINDS).contains(n))
+            .map(|n| n - 1)
+            .ok_or_else(|| ShapeError(format!("?{number}: a bound register is ?1 to ?{BINDS}"))),
+    )
+}
+
+/// The id inside `{id}`.
+fn entry_id(text: &str) -> Option<&str> {
+    text.strip_prefix('{')?.strip_suffix('}')
+}
+
 /// Reads the inside of a memory operand: `base`, then `+index*scale`, then
-/// a signed `*`, `?` or hexadecimal displacement, each but the base optional.
+/// a signed `*`, `?`, hexadecimal or `+{id}` displacement, each but the base
+/// optional.
 fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Result<Op, ShapeError> {
     let cut = |text: &str| text.find(['+', '-']).unwrap_or(text.len());
     let at = cut(inner);
     let base = match &inner[..at] {
-        "?" => None,
-        name => Some(names.register(name)?),
+        "?" => Base::Any,
+        name => match hole(name) {
+            Some(hole) => Base::Bound(hole?),
+            None => Base::Exact(names.register(name)?),
+        },
     };
     let mut rest = &inner[at..];
     let mut index = (Register::None, 1);
@@ -402,21 +493,27 @@ fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Resul
                     negative,
                     take: false,
                 },
-                other => {
-                    let exact = hex(other)
+                other => match entry_id(other) {
+                    Some(_) if negative => {
+                        return Err(ShapeError(format!("-{other}: an entry's value is added")));
+                    }
+                    Some(id) => Disp::Entry(id.to_owned()),
+                    None => {
+                        let exact = hex(other)
                         .and_then(|v| i64::try_from(v).ok())
                         .filter(|&v| v != 0)
                         .ok_or_else(|| {
                             ShapeError(format!(
-                                "{other:?}: a displacement is `*`, `?` or a hexadecimal number"
+                                "{other:?}: a displacement is `*`, `?`, `{{id}}` or a hexadecimal number"
                             ))
                         })?;
-                    Disp::Exact(if negative { -exact } else { exact })
-                }
+                        Disp::Exact(if negative { -exact } else { exact })
+                    }
+                },
             }
         }
     };
-    let rip = base == Some(Register::RIP);
+    let rip = base == Base::Exact(Register::RIP);
     if rip && !matches!(disp, Disp::Signed { .. }) {
         return Err(ShapeError(
             "a RIP-relative operand is `[rip+*]` or `[rip+?]`".to_owned(),
@@ -448,16 +545,16 @@ pub(crate) fn matches<'s>(
     instructions: &'s [Instruction],
     entry: &'s impl Fn(&str) -> Option<u64>,
 ) -> impl Iterator<Item = Match> + 's {
-    instructions.windows(steps.len()).filter_map(move |run| {
-        let mut taken = None;
+    instructions.windows(steps.len()).filter_map(move |code| {
+        let mut run = Run::default();
         steps
             .iter()
-            .zip(run)
-            .all(|(step, ins)| step.matches(ins, entry, &mut taken))
+            .zip(code)
+            .all(|(step, ins)| step.matches(ins, entry, &mut run))
             .then(|| Match {
-                start: run[0].ip(),
-                end: run[run.len() - 1].next_ip(),
-                taken,
+                start: code[0].ip(),
+                end: code[code.len() - 1].next_ip(),
+                taken: run.taken,
             })
     })
 }

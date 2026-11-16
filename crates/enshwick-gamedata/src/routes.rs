@@ -16,6 +16,7 @@
 //! | `loads` | the one function whose code loads every listed string |
 //! | `system` or `in`, with `shape` | the one run of instructions of the [shape](shape) in the listed function's code |
 //! | `callers`, with `shape` | among the functions that call the listed function directly, the one whose code the shape matches; a call in a chained fragment counts for its function |
+//! | `callees`, with `shape` | among the functions the listed function calls directly, the one whose code the shape matches, such as the one of several builders that reads its own reflected field |
 //! | `vtable`, with `slot` | the function the 64-bit pointer at the listed vtable + 8 · `slot` points at, which must start a function |
 //! | `field` | a constant: the sum of the reflected offsets of each `<type>.<field>` listed, each field holding the next type |
 //! | `size` | a constant: the reflected size of the type |
@@ -148,10 +149,10 @@ enum How {
         within: String,
         steps: Vec<Step>,
     },
-    /// The one function among the direct callers of `callee` whose code the
-    /// shape matches.
-    Callers {
-        callee: String,
+    /// The one function among the direct callers or callees of a function
+    /// whose code the shape matches.
+    Among {
+        kin: Kin,
         steps: Vec<Step>,
     },
     /// The function a slot of a vtable points at: the 64-bit pointer at
@@ -164,6 +165,16 @@ enum How {
     Field(Vec<(String, String)>),
     /// A reflected type's size.
     Size(String),
+}
+
+/// The functions an [`How::Among`] route looks through, by the function they
+/// are named for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Kin {
+    /// The functions that call this one directly.
+    Callers(String),
+    /// The functions this one calls directly.
+    Callees(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -260,6 +271,7 @@ struct RouteRow {
     field: Option<Vec<String>>,
     size: Option<String>,
     callers: Option<String>,
+    callees: Option<String>,
     vtable: Option<String>,
     slot: Option<u32>,
     after: Option<Vec<String>>,
@@ -290,7 +302,7 @@ impl RouteRow {
         }
         let take = self.take.unwrap_or(Take::Start);
         let steps: &[Step] = match &how {
-            How::Shape { steps, .. } | How::Callers { steps, .. } => steps,
+            How::Shape { steps, .. } | How::Among { steps, .. } => steps,
             _ => &[],
         };
         let shaped = !steps.is_empty();
@@ -388,6 +400,7 @@ impl RouteRow {
             self.field.is_some(),
             self.size.is_some(),
             self.callers.is_some(),
+            self.callees.is_some(),
             self.vtable.is_some(),
         ];
         if self.shape.as_ref().is_some_and(Vec::is_empty) {
@@ -410,6 +423,11 @@ impl RouteRow {
             return Err(bad("`slot` goes with `vtable`"));
         }
         let within_given = self.within.is_some();
+        let kin = match (self.callers.take(), self.callees.take()) {
+            (Some(callee), _) => Some(Kin::Callers(callee)),
+            (_, Some(caller)) => Some(Kin::Callees(caller)),
+            _ => None,
+        };
         let how = match (
             listed(self.called_by.take()),
             listed(self.calls.take()),
@@ -417,7 +435,7 @@ impl RouteRow {
             self.system.take().or(self.within.take()),
             listed(self.field.take()),
             self.size.take(),
-            self.callers.take(),
+            kin,
         ) {
             _ if ways.iter().filter(|&&w| w).count() != 1 => None,
             (Some(names), ..) if !shaped => Some(How::CalledBy(names)),
@@ -428,8 +446,8 @@ impl RouteRow {
                 steps: parse_steps(shape, names).map_err(|e| bad(&e.to_string()))?,
             }),
             (_, _, _, Some(system), ..) if !within_given => Some(How::System(system)),
-            (.., Some(callee)) if shaped => Some(How::Callers {
-                callee,
+            (.., Some(kin)) if shaped => Some(How::Among {
+                kin,
                 steps: parse_steps(shape, names).map_err(|e| bad(&e.to_string()))?,
             }),
             (.., Some(path), None, None) if !shaped => Some(How::Field(
@@ -445,7 +463,7 @@ impl RouteRow {
             _ => None,
         };
         how.ok_or_else(|| {
-            bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, `vtable` with `slot`, or `system`, `in` or `callers` with `shape`, each not empty")
+            bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, `vtable` with `slot`, or `system`, `in`, `callers` or `callees` with `shape`, each not empty")
         })
     }
 }
