@@ -26,7 +26,7 @@
 //! use enshwick::Entity;
 //! use enshwick::effects::Effects;
 //!
-//! fn alarm(effects: &Effects, sender: Entity, signal: u32) -> Result<(), enshwick::WorldError> {
+//! fn alarm(effects: Effects, sender: Entity, signal: u32) -> Result<(), enshwick::WorldError> {
 //!     effects.set_toggle(sender, signal, true)
 //! }
 //!
@@ -345,9 +345,22 @@ pub enum NpcCommandType {
 /// # Examples
 ///
 /// See the [module](self).
+///
+/// `Effects` is a pointer to what the mod resolved once, so a copy is
+/// cheap: pass it by value and move it into closures.
 #[derive(Clone, Copy, Debug)]
-pub struct Effects {
+pub struct Effects(&'static Resolved);
+
+// A copy of the effects is one pointer, whatever features they resolve.
+const _: () = assert!(size_of::<Effects>() == size_of::<usize>());
+
+/// The events and layouts the effects write, resolved once per mod life;
+/// a feature the running build lacks is `None`.
+#[derive(Debug)]
+struct Resolved {
     host: Host,
+    /// The `CurrentTransform` component, read for where a player stands.
+    transform: Option<ComponentType>,
     npc: Option<NpcCommand>,
     toggle: Option<SetToggle>,
     threat: Option<AddThreat>,
@@ -357,9 +370,14 @@ pub struct Effects {
     notify: Option<notify::NotifyWrite>,
 }
 
+static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
+
 #[crate::script(events)]
 impl Effects {
     pub(crate) fn resolve(load: &BaseLoad) -> Self {
+        if let Some(resolved) = RESOLVED.get() {
+            return Self(resolved);
+        }
         let host = load.host();
         let transform = |base: u64| -> Result<TransformAt, Off> {
             Ok(TransformAt {
@@ -413,8 +431,9 @@ impl Effects {
                 target: transform(load.constant(ids::NOTIFY_EVENT_TRANSFORM)?)?,
             })
         })();
-        Self {
+        Self(RESOLVED.get_or_init(|| Resolved {
             host,
+            transform: ComponentType::named(host, ids::CURRENT_TRANSFORM).ok(),
             npc: keep("survivor orders", npc),
             toggle: keep("toggles", toggle),
             threat: keep("threat", threat),
@@ -422,7 +441,7 @@ impl Effects {
             ping: keep("pings", ping),
             #[cfg(feature = "unstable")]
             notify: keep("notifiers", notify),
-        }
+        }))
     }
 
     /// Orders survivor `npc`, by its survivor id, as the game does when a
@@ -440,15 +459,15 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, NpcCommandType};
     ///
-    /// fn gather(effects: &Effects, survivor: u32, at: [f64; 3]) {
+    /// fn gather(effects: Effects, survivor: u32, at: [f64; 3]) {
     ///     if let Err(why) = effects.npc_command(survivor, NpcCommandType::GoToPosition(at)) {
     ///         enshwick::debug!("survivor {survivor} stays: {why}");
     ///     }
     /// }
     /// ```
     #[script]
-    pub fn npc_command(&self, npc: u32, order: NpcCommandType) -> Result<(), WorldError> {
-        let event = self.npc.ok_or(WorldError::Unavailable)?;
+    pub fn npc_command(self, npc: u32, order: NpcCommandType) -> Result<(), WorldError> {
+        let event = self.0.npc.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         let (kind, at) = match order {
             NpcCommandType::Reset => (0, None),
@@ -479,8 +498,8 @@ impl Effects {
     /// }
     /// ```
     #[script]
-    pub fn set_toggle(&self, sender: Entity, signal: u32, on: bool) -> Result<(), WorldError> {
-        let event = self.toggle.ok_or(WorldError::Unavailable)?;
+    pub fn set_toggle(self, sender: Entity, signal: u32, on: bool) -> Result<(), WorldError> {
+        let event = self.0.toggle.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         put(&mut bytes, event.sender, sender)?;
         put(&mut bytes, event.signal, signal)?;
@@ -506,12 +525,12 @@ impl Effects {
     /// ```
     #[script]
     pub fn add_threat(
-        &self,
+        self,
         attacker: Entity,
         target: Entity,
         threat: f32,
     ) -> Result<(), WorldError> {
-        let event = self.threat.ok_or(WorldError::Unavailable)?;
+        let event = self.0.threat.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         put(&mut bytes, event.attacker, attacker)?;
         put(&mut bytes, event.target, target)?;
@@ -537,8 +556,8 @@ impl Effects {
     /// ```
     #[script]
     #[cfg(feature = "unstable")]
-    pub fn ping(&self, sender: Entity, position: [f64; 3]) -> Result<(), WorldError> {
-        let event = self.ping.ok_or(WorldError::Unavailable)?;
+    pub fn ping(self, sender: Entity, position: [f64; 3]) -> Result<(), WorldError> {
+        let event = self.0.ping.ok_or(WorldError::Unavailable)?;
         let mut bytes = blank(event.ty)?;
         put(&mut bytes, event.sender, sender)?;
         put_position(&mut bytes, event.position, position)?;
@@ -570,9 +589,10 @@ impl Effects {
     ///     })
     /// }
     /// ```
-    pub fn emit_raw(&self, ty: EventType, bytes: &[u8]) -> Result<(), WorldError> {
+    pub fn emit_raw(self, ty: EventType, bytes: &[u8]) -> Result<(), WorldError> {
         let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Refused)?;
-        let status = (self.host.api().emit)(self.host.handle(), ty.hash(), bytes.as_ptr(), size);
+        let status =
+            (self.0.host.api().emit)(self.0.host.handle(), ty.hash(), bytes.as_ptr(), size);
         world_status(status)
     }
 
@@ -593,13 +613,13 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, Teleport};
     ///
-    /// fn home(effects: &Effects, me: enshwick::Entity) -> Result<(), enshwick::WorldError> {
+    /// fn home(effects: Effects, me: enshwick::Entity) -> Result<(), enshwick::WorldError> {
     ///     effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position())
     /// }
     /// ```
     #[script]
     pub fn teleport(
-        &self,
+        self,
         entity: Entity,
         position: [f64; 3],
         how: Teleport,
@@ -619,7 +639,7 @@ impl Effects {
             orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
         };
         world_check(
-            (self.host.api().teleport)(self.host.handle(), &raw const request),
+            (self.0.host.api().teleport)(self.0.host.handle(), &raw const request),
             WorldError::Gone,
         )
     }
@@ -641,18 +661,19 @@ impl Effects {
     /// use enshwick::PlayerKey;
     /// use enshwick::effects::{Effects, Teleport};
     ///
-    /// fn to_spawn(effects: &Effects, player: PlayerKey) -> Result<(), enshwick::WorldError> {
+    /// fn to_spawn(effects: Effects, player: PlayerKey) -> Result<(), enshwick::WorldError> {
     ///     effects.teleport_player(player, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position())
     /// }
     /// ```
     #[script]
     pub fn teleport_player(
-        &self,
+        self,
         player: PlayerKey,
         position: [f64; 3],
         how: Teleport,
     ) -> Result<(), WorldError> {
-        self.teleport(self.character(player)?, position, how)
+        let [character] = self.characters([player])?;
+        self.teleport(character, position, how)
     }
 
     /// Asks the server to move the character of the connected player
@@ -672,38 +693,41 @@ impl Effects {
     /// use enshwick::PlayerKey;
     /// use enshwick::effects::{Effects, Teleport};
     ///
-    /// fn join(effects: &Effects, guest: PlayerKey, host: PlayerKey) -> Result<(), enshwick::WorldError> {
+    /// fn join(effects: Effects, guest: PlayerKey, host: PlayerKey) -> Result<(), enshwick::WorldError> {
     ///     effects.teleport_player_to(guest, host, Teleport::new())
     /// }
     /// ```
     #[script]
     pub fn teleport_player_to(
-        &self,
+        self,
         player: PlayerKey,
         to: PlayerKey,
         how: Teleport,
     ) -> Result<(), WorldError> {
-        let character = self.character(player)?;
-        let target = self.character(to)?;
+        let [character, target] = self.characters([player, to])?;
         let position = self.position(target).ok_or(WorldError::Gone)?;
         self.teleport(character, position, how.search_best_spawn_position())
     }
 
-    /// The character of the connected player `key`.
-    fn character(&self, key: PlayerKey) -> Result<Entity, WorldError> {
-        let players = enshwick_world::__internal::listed(self.host)
+    /// The characters of the connected players `keys`, from one list of the
+    /// players.
+    fn characters<const N: usize>(self, keys: [PlayerKey; N]) -> Result<[Entity; N], WorldError> {
+        let players = enshwick_world::__internal::listed(self.0.host)
             .or_else(|status| world_check(status, WorldError::Unavailable).map(|()| Vec::new()))?;
-        players
-            .into_iter()
-            .find(|player| player.key == key && player.entity != Entity(0))
-            .map(|player| player.entity)
-            .ok_or(WorldError::Gone)
+        let mut characters = [Entity::NONE; N];
+        for (character, key) in characters.iter_mut().zip(keys) {
+            *character = players
+                .iter()
+                .find(|player| player.key == key && player.entity != Entity::NONE)
+                .map(|player| player.entity)
+                .ok_or(WorldError::Gone)?;
+        }
+        Ok(characters)
     }
 
     /// Where `entity` stands, in metres, from its transform.
-    fn position(&self, entity: Entity) -> Option<[f64; 3]> {
-        let transform = ComponentType::named(self.host, ids::CURRENT_TRANSFORM).ok()?;
-        let data = enshwick_base::__internal::component(transform, self.host, entity)?;
+    fn position(self, entity: Entity) -> Option<[f64; 3]> {
+        let data = enshwick_base::__internal::component(self.0.transform?, self.0.host, entity)?;
         // SAFETY: `component` returned the entity's live CurrentTransform, valid
         // until the game thread moves on, and it is read at once.
         Some(unsafe { crate::ecs::transform_position(data.cast()) })
@@ -733,13 +757,13 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, ItemDrop};
     ///
-    /// fn logs(effects: &Effects, wood: enshwick::ItemId, at: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
+    /// fn logs(effects: Effects, wood: enshwick::ItemId, at: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
     ///     effects.drop_items(wood, 5, at, ItemDrop::new())
     /// }
     /// ```
     #[script]
     pub fn drop_items(
-        &self,
+        self,
         item: crate::ItemId,
         count: u32,
         at: [f64; 3],
@@ -755,7 +779,11 @@ impl Effects {
         };
         let mut entity = Entity::NONE;
         world_check(
-            (self.host.api().drop_items)(self.host.handle(), &raw const request, &raw mut entity),
+            (self.0.host.api().drop_items)(
+                self.0.host.handle(),
+                &raw const request,
+                &raw mut entity,
+            ),
             WorldError::Refused,
         )?;
         Ok(entity)
@@ -778,18 +806,18 @@ impl Effects {
     /// ```
     /// use enshwick::effects::{Effects, Spawn};
     ///
-    /// fn beside(effects: &Effects, template: enshwick::content::Guid, [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
+    /// fn beside(effects: Effects, template: enshwick::content::Guid, [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
     ///     effects.spawn(template, [x + 2.0, y, z], Spawn::new())
     /// }
     /// ```
     #[script]
     pub fn spawn(
-        &self,
+        self,
         template: crate::content::Guid,
         position: [f64; 3],
         how: Spawn,
     ) -> Result<Entity, WorldError> {
-        let api = self.host.api();
+        let api = self.0.host.api();
         let lifetime = how.despawn_after.map_or(0, |time| {
             u64::try_from(time.as_nanos()).unwrap_or(u64::MAX).max(1)
         });
@@ -808,7 +836,7 @@ impl Effects {
         };
         let mut entity = Entity::NONE;
         world_status((api.spawn)(
-            self.host.handle(),
+            self.0.host.handle(),
             &raw const request,
             &raw mut entity,
         ))?;

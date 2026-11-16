@@ -479,8 +479,9 @@ pub enum Kind {
 ///
 /// # Examples
 ///
-/// See the [module](self).
+/// See the [module](self) and [`Interaction::new`].
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Interaction {
     /// What the player does.
     pub kind: Kind,
@@ -497,6 +498,65 @@ pub struct Interaction {
     /// Unstable: needs the `unstable` feature and may change in any release.
     #[cfg(feature = "unstable")]
     pub moved: Option<Move>,
+}
+
+impl Interaction {
+    /// An interaction of `kind` by `player` on `target` with nothing read of
+    /// the target or a move, for a test of a filter; the `with_` methods add the rest.
+    ///
+    /// Luau has no constructor: a script writes the record as a table and
+    /// leaves out the optional fields.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::interactions::{Interaction, Kind};
+    /// use enshwick::{Entity, ItemId};
+    ///
+    /// const LOCKED_CHEST: ItemId = ItemId::new(0x5e01);
+    ///
+    /// fn allowed(i: &Interaction) -> bool {
+    ///     i.item != Some(LOCKED_CHEST)
+    /// }
+    ///
+    /// let open = Interaction::new(Kind::Open, Entity(4096), Entity(5000));
+    /// assert!(allowed(&open));
+    /// assert!(!allowed(&open.with_item(LOCKED_CHEST).with_position([1.0, 2.0, 3.0])));
+    /// ```
+    #[must_use]
+    pub const fn new(kind: Kind, player: Entity, target: Entity) -> Self {
+        Self {
+            kind,
+            player,
+            target,
+            item: None,
+            position: None,
+            #[cfg(feature = "unstable")]
+            moved: None,
+        }
+    }
+
+    /// This interaction with the item the target was placed from.
+    ///
+    /// # Examples
+    ///
+    /// See [`Interaction::new`].
+    #[must_use]
+    pub const fn with_item(mut self, item: ItemId) -> Self {
+        self.item = Some(item);
+        self
+    }
+
+    /// This interaction with where the target stands, in metres.
+    ///
+    /// # Examples
+    ///
+    /// See [`Interaction::new`].
+    #[must_use]
+    pub const fn with_position(mut self, position: [f64; 3]) -> Self {
+        self.position = Some(position);
+        self
+    }
 }
 
 #[cfg(feature = "unstable")]

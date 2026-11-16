@@ -25,6 +25,21 @@ impl Interaction {
     pub fn transfer(&self) -> Option<Transfer> {
         self.moved.map(|moved| moved.transfer)
     }
+
+    /// This interaction with the move it carries, for a test of a filter.
+    ///
+    /// Luau has no setter: a script writes the `moved` field of the table.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Examples
+    ///
+    /// See [`Move::new`].
+    #[must_use]
+    pub const fn with_moved(mut self, moved: Move) -> Self {
+        self.moved = Some(moved);
+        self
+    }
 }
 
 /// What a player moves, beside the containers each call of a move names.
@@ -38,7 +53,7 @@ impl Interaction {
 ///
 /// # Examples
 ///
-/// See [`Interaction::transfer`].
+/// See [`Interaction::transfer`] and [`Move::new`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct Move {
@@ -63,6 +78,50 @@ pub struct Move {
     pub from_slot: Option<crate::inventory::SlotRef>,
     /// The slot the items enter; `None` when the game picks the slots.
     pub to_slot: Option<crate::inventory::SlotRef>,
+}
+
+impl Move {
+    /// A `transfer` from container `from` into `to` as a whole-inventory move
+    /// is handed to a filter: action [`InventoryActionType::All`] and no slot,
+    /// item or amount, for a test of a filter; the other fields are public to
+    /// set.
+    ///
+    /// Luau has no constructor: a script writes the record as a table.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::interactions::{InventoryActionType, Interaction, Kind, Move, Transfer};
+    ///
+    /// const OWNER: Entity = Entity(4096);
+    ///
+    /// fn allowed(i: &Interaction) -> bool {
+    ///     i.player == OWNER || i.moved.is_none_or(|m| m.transfer != Transfer::TakeAll)
+    /// }
+    ///
+    /// let (stranger, chest) = (Entity(4097), Entity(5000));
+    /// let take_all = Move::new(Transfer::TakeAll, Some(chest), Some(stranger));
+    /// assert_eq!(take_all.action, Some(InventoryActionType::All));
+    /// let call = Interaction::new(Kind::Move, stranger, chest).with_moved(take_all);
+    /// assert!(!allowed(&call));
+    /// ```
+    #[must_use]
+    pub const fn new(transfer: Transfer, from: Option<Entity>, to: Option<Entity>) -> Self {
+        Self {
+            transfer,
+            action: Some(InventoryActionType::All),
+            amount: 0,
+            item: None,
+            stack: 0,
+            from,
+            to,
+            from_slot: None,
+            to_slot: None,
+        }
+    }
 }
 
 /// How much of a stack a player moves, as the game's `InventoryActionType`

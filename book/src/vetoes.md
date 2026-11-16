@@ -157,6 +157,11 @@ Each refusal takes the game's own path for a refused action, so nothing moves
 and nothing is lost. `Stock` is asked without the target's item or position:
 answer it from what the mod has already seen of the target.
 
+A test of a filter builds an `Interaction` with `Interaction::new(kind, player, target)`.
+`with_item` and `with_position` add what the loader read of the target. With
+the `unstable` feature, `with_moved(Move::new(transfer, from, to))` adds a
+whole-inventory move.
+
 An interaction without a player's character or without a target is allowed
 without asking. The filters run in the server's world only, in the dedicated
 server or a hosting client. They run on the thread of the system that checks

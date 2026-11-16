@@ -691,7 +691,9 @@ mod tests;
 /// extension point's handle or a world store. In a `ModLocal` it reads as
 /// empty again when the next test installs the fake host, so tests that
 /// share a process under `cargo test` each see their own mod. A value is
-/// never dropped, so a reference to it lives for the process.
+/// never dropped, so a reference to it lives for the process. The loader's
+/// own copy of the API runs every data pack, and there each pack has a value
+/// of its own, as each mod DLL does in its own copy.
 ///
 /// # Examples
 ///
@@ -717,6 +719,14 @@ impl<T> ModLocal<T> {
     pub const fn new() -> Self {
         Self(crate::fresh::Fresh::new())
     }
+}
+
+impl<T: Send + Sync + 'static> ModLocal<T> {
+    /// The cell of the data pack this thread runs, or this one outside a
+    /// pack.
+    fn mine(&'static self) -> &'static crate::fresh::Fresh<T> {
+        crate::__private::for_pack(&self.0)
+    }
 
     /// The value of this mod life, once set.
     ///
@@ -724,8 +734,8 @@ impl<T> ModLocal<T> {
     ///
     /// See [`ModLocal`].
     #[must_use]
-    pub fn get(&self) -> Option<&T> {
-        self.0.get()
+    pub fn get(&'static self) -> Option<&'static T> {
+        self.mine().get()
     }
 
     /// Sets the value of this mod life.
@@ -737,8 +747,8 @@ impl<T> ModLocal<T> {
     /// # Examples
     ///
     /// See [`ModLocal`].
-    pub fn set(&self, value: T) -> Result<(), T> {
-        self.0.set(value)
+    pub fn set(&'static self, value: T) -> Result<(), T> {
+        self.mine().set(value)
     }
 
     /// The value of this mod life, made by `init` when there is none yet.
@@ -746,8 +756,8 @@ impl<T> ModLocal<T> {
     /// # Examples
     ///
     /// See [`ModLocal`].
-    pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
-        self.0.get_or_init(init)
+    pub fn get_or_init(&'static self, init: impl FnOnce() -> T) -> &'static T {
+        self.mine().get_or_init(init)
     }
 }
 

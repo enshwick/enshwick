@@ -123,15 +123,15 @@ impl Effects {
     /// use enshwick::content::Guid;
     /// use enshwick::effects::{Effects, Notify, NotifyAt};
     ///
-    /// fn chime(effects: &Effects, notifier: Guid, at: [f64; 3]) {
+    /// fn chime(effects: Effects, notifier: Guid, at: [f64; 3]) {
     ///     if let Err(why) = effects.notify(&Notify::new(notifier, NotifyAt::Position(at))) {
     ///         enshwick::debug!("no chime: {why}");
     ///     }
     /// }
     /// ```
     #[script]
-    pub fn notify(&self, notify: &Notify) -> Result<(), WorldError> {
-        let event = self.notify.ok_or(WorldError::Unavailable)?;
+    pub fn notify(self, notify: &Notify) -> Result<(), WorldError> {
+        let event = self.0.notify.ok_or(WorldError::Unavailable)?;
         let layout = event.layout;
         let (source, position) = match notify.at {
             NotifyAt::Entity(entity) if entity.is_none() => return Err(WorldError::Refused),

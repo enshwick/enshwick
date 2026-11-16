@@ -614,4 +614,46 @@ mod tests {
             "the lock is free again"
         );
     }
+
+    #[test]
+    fn each_pack_keeps_its_own_mod_local_value() {
+        use enshwick::state::ModLocal;
+
+        static LIMIT: ModLocal<u32> = ModLocal::new();
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        let as_pack = |me, limit| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick_base::__internal::as_pack(loader.api(), ModHandle(me), || {
+                    *LIMIT.get_or_init(|| limit)
+                })
+            }
+        };
+        assert_eq!(as_pack(2, 20), 20);
+        assert_eq!(as_pack(3, 30), 30, "not the first pack's");
+        assert_eq!(as_pack(2, 0), 20, "the pack's own, kept");
+        assert_eq!(LIMIT.get(), None, "the loader's own is apart");
+    }
+
+    #[test]
+    fn each_pack_s_effects_act_under_its_own_handle() {
+        use enshwick::abi::Side;
+
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        for me in [ModHandle(1), ModHandle(2)] {
+            // SAFETY: the fake host's table lives for the process.
+            let status = unsafe {
+                enshwick::__private::init_pack(loader.api(), me, Side::SERVER, |load| {
+                    let effects = format!("{:?}", load.effects());
+                    assert!(effects.contains(&format!("{me:?}")), "{effects}");
+                    Ok(())
+                })
+            };
+            assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        }
+    }
 }
