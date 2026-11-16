@@ -351,6 +351,38 @@ mod tests {
     }
 
     #[test]
+    fn a_placed_prop_stands_where_it_was_placed_until_its_undo() {
+        let (loader, world) = started();
+        let id = world
+            .transaction()
+            .place_prop(CHEST, here())
+            .commit()
+            .unwrap();
+        loader.run_transactions();
+        let placed = world.transaction_entities(id)[0];
+        assert_eq!(world.position(placed), Some([100.0, 40.0, 100.0]));
+        world.undo(id).unwrap();
+        loader.run_transactions();
+        assert_eq!(world.position(placed), None);
+    }
+
+    #[test]
+    fn a_wait_on_a_loader_that_refused_the_mod_its_tick_is_unavailable() {
+        let (_loader, world) = started_from(enshwick::test::FakeHost::new().refuse_tick(0));
+        let id = world
+            .transaction()
+            .place_prop(CHEST, here())
+            .commit()
+            .unwrap();
+        assert_eq!(
+            world
+                .when_settled(id, Duration::from_secs(60), |_| unreachable!())
+                .err(),
+            Some(WorldError::Unavailable)
+        );
+    }
+
+    #[test]
     fn a_wait_for_a_failed_transaction_hands_over_its_failure() {
         let (loader, world) = started();
         let id = world

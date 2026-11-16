@@ -66,6 +66,23 @@ impl Scripts {
         self.0.is_empty()
     }
 
+    /// Whether a script names `word` as a whole word, as one that reaches a
+    /// namespace `enshwick.<word>` must.
+    pub(crate) fn names(&self, word: &str) -> bool {
+        let ident = |byte: &u8| byte.is_ascii_alphanumeric() || *byte == b'_';
+        let word = word.as_bytes();
+        self.0.values().any(|source| {
+            source.windows(word.len()).enumerate().any(|(at, window)| {
+                window == word
+                    && !at
+                        .checked_sub(1)
+                        .and_then(|before| source.get(before))
+                        .is_some_and(ident)
+                    && !source.get(at + word.len()).is_some_and(ident)
+            })
+        })
+    }
+
     /// Whether they hold a `main.luau`, which makes a pack a Luau mod.
     ///
     /// # Examples
@@ -219,5 +236,22 @@ impl Require for Requirer {
             .set_name(format!("@{path}"))
             .set_mode(mlua::chunk::ChunkMode::Text)
             .into_function()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Scripts;
+
+    #[test]
+    fn a_script_names_a_word_only_where_it_stands_whole() {
+        let scripts = Scripts::new()
+            .with("main.luau", "local held = enshwick.input.held(1)")
+            .with("other.luau", "local inputs = 1 -- output");
+        assert!(scripts.names("input"));
+        assert!(!scripts.names("put"));
+        let near = Scripts::new().with("main.luau", "local inputs, my_input = 1, 2");
+        assert!(!near.names("input"));
+        assert!(!Scripts::new().names("input"));
     }
 }

@@ -27,6 +27,8 @@ pub(crate) struct FakeTicks {
     /// The hosted games that ended: the steps run in game one more.
     games_ended: u64,
     ticks: Vec<FakeTick>,
+    /// The periodic tick subscriptions asked for, refused ones included.
+    asked: usize,
 }
 
 pub(crate) extern "system" fn subscribe_tick(
@@ -45,6 +47,11 @@ pub(crate) extern "system" fn subscribe_tick(
     with(Status::MISSING, |s| {
         if s.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
+        }
+        let asked = s.ticks.asked;
+        s.ticks.asked += 1;
+        if s.host.refused_tick == Some(asked) {
+            return Status::REFUSED;
         }
         let Ok(handle) = u32::try_from(s.ticks.ticks.len()) else {
             return Status::REFUSED;
@@ -103,10 +110,26 @@ impl Installed {
     #[must_use = "the count says whether the mod handles the step"]
     pub fn tick(&self, elapsed: Duration) -> usize {
         let elapsed = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
+        Self::run_ticks(elapsed, false)
+    }
+
+    /// As the loader at the start of a game's world, before its
+    /// [`WorldLoaded`](enshwick_core::events::WorldLoaded) handlers: every
+    /// periodic handler that is not paused runs once in the current game,
+    /// with no step run.
+    pub(crate) fn enter_ticks(&self) {
+        let _ran = Self::run_ticks(0, true);
+    }
+
+    /// Runs a step `elapsed` after the last, or with `entering` only the
+    /// periodic handlers of a world's start; returns how many ran.
+    fn run_ticks(elapsed: u64, entering: bool) -> usize {
         let calls: Vec<(Registered<EventFn>, TickData)> = with(Vec::new(), |s| {
             let ticks = &mut s.ticks;
-            ticks.step += 1;
-            ticks.nanos = ticks.nanos.saturating_add(elapsed);
+            if !entering {
+                ticks.step += 1;
+                ticks.nanos = ticks.nanos.saturating_add(elapsed);
+            }
             let (step, now) = (ticks.step, ticks.nanos);
             let tick = TickData {
                 elapsed_ns: elapsed,
@@ -114,20 +137,24 @@ impl Installed {
                 game: ticks.games_ended + 1,
                 ..TickData::new(step)
             };
+            let off = &s.off;
             let every_step = s
                 .subscriptions
                 .iter()
-                .filter(|sub| sub.0 == Event::TICKED)
+                .filter(|sub| !entering && sub.0 == Event::TICKED && !sub.1.owner_off(off))
                 .map(|sub| (sub.1, tick));
             let periodic = ticks
                 .ticks
                 .iter_mut()
-                .filter(|t| due(now, t.last, t.every))
+                .filter(|t| !t.handler.owner_off(off))
+                .filter(|t| entering && t.every != u64::MAX || due(now, t.last, t.every))
                 .map(|t| {
                     let (steps, nanos) = t
                         .last
                         .map_or((1, elapsed), |(at_step, at)| (step - at_step, now - at));
-                    t.last = Some((step, now));
+                    // As the loader's: a call before the first step leaves
+                    // the handler to run on that step too.
+                    t.last = (step != 0).then_some((step, now));
                     let data = TickData {
                         elapsed_steps: steps,
                         elapsed_ns: nanos,

@@ -171,6 +171,10 @@ time, so a tick handler runs on a period of wall time:
 - `load.on_every_step(f)` runs `f` on every step, always. Use it for state
   that changes each step, input or the camera.
 
+A periodic handler also runs once when a world starts, before the
+`WorldLoaded` handlers, so it learns the new game first. A handler paused
+with `Duration::MAX` waits.
+
 A call costs about 1 µs (measured on a server copy with 11 mods, build 399).
 Most of it is the processor fetching the mod's code and data afresh. Steps a handler skips never enter the mod and cost it nothing.
 

@@ -29,11 +29,7 @@ fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
         part: 0,
     };
     let patches = [3, 4]
-        .map(|owner| Patch {
-            owner: ModIndex::new(owner),
-            apply: add_one,
-            user: 0,
-        })
+        .map(|owner| Patch::new(ModIndex::new(owner), add_one, 0))
         .into();
     let entry = Served::new(key, key, patches, true);
     let base = [7u8; 4];
@@ -52,11 +48,7 @@ fn a_change_of_a_new_resource_chains_onto_its_maker_in_either_order() {
         type_hash: 1,
         part: 0,
     };
-    let patch = |owner: usize| Patch {
-        owner: ModIndex::new(owner),
-        apply: no_patch,
-        user: 0,
-    };
+    let patch = |owner: usize| Patch::new(ModIndex::new(owner), no_patch, 0);
     let owners = |served: &Served| served.patches.iter().map(|p| p.owner).collect::<Vec<_>>();
     let (new, base, other) = (key(2), key(1), key(3));
     for maker_first in [true, false] {
@@ -91,11 +83,7 @@ unsafe extern "system" fn no_patch(
 fn served_by(key: ResourceKey, owners: &[usize]) -> Served {
     let patches = owners
         .iter()
-        .map(|&owner| Patch {
-            owner: ModIndex::new(owner),
-            apply: no_patch,
-            user: 0,
-        })
+        .map(|&owner| Patch::new(ModIndex::new(owner), no_patch, 0))
         .collect();
     Served::new(key, key, patches, false)
 }
@@ -110,6 +98,17 @@ fn a_resource_counts_as_served_only_while_a_mod_is_on_and_it_built() {
     assert!(!serves(&served, &key, |_| true));
     let other = ResourceKey { part: 1, ..key };
     assert!(!serves(&[served_by(other, &[1])], &key, |_| true));
+}
+
+#[test]
+fn a_resource_whose_every_patch_panicked_no_longer_counts_as_served() {
+    let key = recipe_registry();
+    let served = [served_by(key, &[1, 2])];
+    served[0].patches[0].on.store(false, Ordering::Release);
+    assert!(serves(&served, &key, |_| true), "the other patch serves it");
+    served[0].patches[1].on.store(false, Ordering::Release);
+    assert!(!serves(&served, &key, |_| true));
+    assert!(!owner_on(&served[0]));
 }
 
 #[test]
@@ -226,7 +225,7 @@ fn a_stand_in_that_panics_is_refused_alone_and_the_others_keep_building() {
     let stand_in = |builder: Builder| own_patch(BuilderPatch::new(builder, STAND_INS));
     let (broken, broken_user) = stand_in(Box::new(|_| panic!("broken stand-in")));
     let (sound, sound_user) = stand_in(Box::new(|base| Some(base.to_vec())));
-    assert_eq!(build_with(broken, broken_user, &[1]), Status::REFUSED);
+    assert_eq!(build_with(broken, broken_user, &[1]), Status::FAULTED);
     assert_eq!(
         build_with(sound, sound_user, &[1]),
         Status::OK,

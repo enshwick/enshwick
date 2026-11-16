@@ -69,6 +69,7 @@ mod example_manifest;
 mod experience_content;
 mod export_dir;
 mod exports;
+mod fake_mod_off;
 mod fake_per_test;
 mod fake_reach;
 mod fake_refusals;
@@ -228,6 +229,7 @@ mod schedule;
 mod screen_extensions;
 #[cfg(feature = "unstable")]
 mod screen_hosts;
+mod served_panic;
 #[cfg(feature = "typed")]
 mod served_reads;
 #[cfg(feature = "unstable")]

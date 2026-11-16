@@ -13,7 +13,7 @@ use crate::engine_ids as ids;
 use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
 use super::templates::{ComponentChange, NewTemplate};
-use super::{Blob, EngineFacts, Guid, Id, types};
+use super::{Blob, EngineFacts, Guid, Id, Room, types};
 use crate::resources::Grow;
 
 /// The game's workshop registry resource.
@@ -455,7 +455,7 @@ pub fn list_workshop(
     new: &NewWorkshop,
     out: &mut impl Grow,
 ) -> Option<()> {
-    let mut blob = Blob::over(out, registry);
+    let blob = Blob::reading(registry);
     let (start, count) = blob.array(layout.workshops)?;
     let like = new.like.item.fnv1a();
     let vanilla = (0..usize::try_from(count).ok()?)
@@ -479,6 +479,8 @@ pub fn list_workshop(
         let name = new.id.try_part(NAME)?.guid();
         put(layout.entry_name, &name.fnv1a().to_le_bytes())?;
     }
+    let room = Room::new(registry).grow_array(layout.workshops, layout.entry, 4, 1)?;
+    let mut blob = Blob::over_with_room(out, room);
     blob.grow_array(layout.workshops, layout.entry, 4, &[], &[(entry, None)])?;
     Some(())
 }

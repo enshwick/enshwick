@@ -32,6 +32,7 @@ pub(super) const NAMESPACES: &[Namespace] = &[
             crate::Load::SCRIPT_INTERACTION_PROMPTS,
         ],
     ),
+    // Opening it starts the client's input reads every frame.
     #[cfg(feature = "unstable")]
-    Namespace::of::<crate::input::Input>(),
+    Namespace::when_named::<crate::input::Input>(),
 ];

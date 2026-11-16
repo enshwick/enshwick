@@ -51,9 +51,13 @@ pub struct ContentRename {
 /// on several threads at a time, each call with its own base and buffers;
 /// a rebuild of a key waits for the key's other rebuild. On one thread it
 /// may run nested inside another key's patch, never inside a build of its
-/// own key. A failure returned from the game's build turns the mod off; a
-/// panic must not leave the function. `user` is the pointer the mod served
-/// with.
+/// own key. A failure returned from the game's build turns the mod off,
+/// but [`Status::FAULTED`](crate::abi::Status::FAULTED), the answer of a
+/// patch whose builder panicked: that turns off only this patch for the
+/// process, and its mod reports the resource as a feature off. Later builds
+/// of the key run without it but a rebuild, which runs every patch the
+/// game's build applied. A panic must not leave the function. `user` is
+/// the pointer the mod served with.
 ///
 /// Null is never a callback: the loader refuses a null one with
 /// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.

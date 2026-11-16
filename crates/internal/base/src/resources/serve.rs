@@ -293,6 +293,22 @@ pub trait Grow: AsRef<[u8]> + AsMut<[u8]> + sealed::Sealed {
     ///
     /// See [`Grow`].
     fn put(&mut self, bytes: &[u8]);
+
+    /// Makes room for `additional` more bytes at once, so a build that
+    /// knows its final length grows in one buffer: an output's first loan
+    /// is then that long and its build moves nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::resources::Grow;
+    ///
+    /// let mut bytes = Vec::new();
+    /// bytes.reserve(8);
+    /// bytes.put(&[1, 2]);
+    /// assert!(bytes.capacity() >= 8);
+    /// ```
+    fn reserve(&mut self, additional: usize);
 }
 
 /// Keeps [`Grow`] to the byte stores this crate knows.
@@ -311,6 +327,10 @@ impl<G: Grow + ?Sized> Grow for &mut G {
     fn put(&mut self, bytes: &[u8]) {
         (**self).put(bytes);
     }
+
+    fn reserve(&mut self, additional: usize) {
+        (**self).reserve(additional);
+    }
 }
 
 impl Grow for Vec<u8> {
@@ -320,6 +340,10 @@ impl Grow for Vec<u8> {
 
     fn put(&mut self, bytes: &[u8]) {
         self.extend_from_slice(bytes);
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        self.reserve_exact(additional);
     }
 }
 
@@ -331,7 +355,17 @@ impl Grow for Output<'_> {
     fn put(&mut self, bytes: &[u8]) {
         self.extend_from_slice(bytes);
     }
+
+    fn reserve(&mut self, additional: usize) {
+        Output::reserve(self, additional);
+    }
 }
+
+/// Why a served resource is off once its builder panicked, as the loader
+/// and the fake report it for the mod: the key of the loader's text, which
+/// the loader shows in the reader's language.
+#[doc(hidden)]
+pub const BUILDER_PANICKED: &str = "mods.off.served.panicked";
 
 /// Serves `key` from `base` through `builder` for the mod `host` serves,
 /// as `Load::serve` does; also for a runtime that holds the mod's host
@@ -397,8 +431,12 @@ unsafe extern "system" fn build(
         unsafe { core::slice::from_raw_parts(base, base_len as usize) }
     };
     let mut output = Output::new();
-    let built = crate::host::caught(|| builder(base, &mut output));
-    let Ok(Some(())) = built else {
+    // A panic turns off only this resource: the loader runs it without this
+    // builder from then on, and the mod stays on.
+    let Ok(built) = crate::host::caught(|| builder(base, &mut output)) else {
+        return Status::FAULTED;
+    };
+    let Some(()) = built else {
         return Status::REFUSED;
     };
     let Some((at, len)) = output.finish() else {
@@ -529,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn a_panicking_builder_refuses_its_resource_and_writes_nothing() {
+    fn a_panicking_builder_answers_faulted_and_writes_nothing() {
         /// A panic payload whose own drop panics again.
         struct Bomb;
         impl Drop for Bomb {
@@ -543,7 +581,7 @@ mod tests {
         // SAFETY: a null base, `user` points at the `Builder` alive in this
         // frame, and both out pointers are writable locals.
         let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };
-        assert_eq!(status, Status::REFUSED);
+        assert_eq!(status, Status::FAULTED);
         assert!(out.is_null());
         assert_eq!(out_len, 0);
     }

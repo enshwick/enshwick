@@ -66,6 +66,26 @@ impl ModRecord {
         crate::base::worlds::view_schema(&self.settings_files.relock())
     }
 
+    /// Takes its report that its feature `name` is off for `off`, or on when
+    /// `off` is `None`, for the status summary, the Mods screen and the off
+    /// line at join; logs the change, if any. It locks the texts, then the
+    /// features, from any thread a build or a mod's call runs on, so no
+    /// code holds the features while it locks the texts.
+    pub(crate) fn report_feature(&self, name: &str, off: Option<&str>) {
+        let texts = self.texts.relock();
+        let changed =
+            crate::engine::features::report(&mut self.features.relock(), name, off, texts.as_ref());
+        drop(texts);
+        if let Some(line) = changed {
+            let level = if off.is_some() {
+                Level::WARN
+            } else {
+                Level::INFO
+            };
+            crate::engine::log::write(level, &self.id, &line);
+        }
+    }
+
     /// Its folder in `mods/`, which holds its installation hold.
     pub(crate) fn folder(&self) -> &str {
         let file = self.file.strip_prefix("mods/").unwrap_or(&self.file);

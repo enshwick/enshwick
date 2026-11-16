@@ -74,8 +74,12 @@ keeps the result for the life of the process. So the builder:
   move what it needs into it;
 - runs once per resource, not per read, unless the mod rebuilds it;
 - returns `None` when the base does not read as expected. That turns the mod
-  off. A panic in the builder counts the same, and so does an `out` it left
-  empty.
+  off, and so does an `out` it left empty;
+- turns off only its resource when it panics. The loader builds the key
+  without this builder until the game restarts. Only a rebuild calls it
+  again, since the game holds what it added at the first build. The mod
+  and its other resources stay on. The log, the status summary, the
+  join line in chat and the Mods screen name the resource as off.
 
 When the game has no `base` in its archive, the served key stays missing and
 the builder never runs.
@@ -118,7 +122,8 @@ The rules:
   another base for a key already served is refused, and `serve` returns
   `Err(Off)`;
 - a patch that fails turns its mod off and is skipped; the next patch runs
-  on the result so far;
+  on the result so far. A patch that panics is skipped from then on, and its
+  mod stays on;
 - when every patch fails, the resource reads as missing;
 - the patches of a mod already turned off are skipped.
 

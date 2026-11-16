@@ -360,6 +360,12 @@ pub(crate) struct State {
     run_out: Option<Box<str>>,
     /// The settings texts handed out, alive while the fake is installed.
     settings: Vec<Box<str>>,
+    /// The handles turned off, as the loader turns a mod off: its init or
+    /// ready failed, or it faulted. None of their callbacks runs again.
+    pub(crate) off: Vec<ModHandle>,
+    /// The patches in `served` whose builder panicked, by place: each build
+    /// runs without them, as the loader's.
+    pub(crate) served_off: Vec<usize>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -571,6 +577,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         commands: FakeCommands::default(),
         run_out: None,
         settings: Vec::new(),
+        off: Vec::new(),
+        served_off: Vec::new(),
     });
     turn
 }

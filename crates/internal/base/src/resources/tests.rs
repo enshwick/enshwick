@@ -750,6 +750,8 @@ impl Grow for Capped {
             self.0.extend_from_slice(bytes);
         }
     }
+
+    fn reserve(&mut self, _additional: usize) {}
 }
 
 #[test]

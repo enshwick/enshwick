@@ -13,8 +13,11 @@
 //!
 //! A task queued while a game runs belongs to that game: when a client
 //! leaves the game it hosts, its tasks end, so none runs in the next game
-//! with the last one's entities. A task queued before the first step, as in
-//! `init`, belongs to no game and runs in every one.
+//! with the last one's entities. The scheduler passes at each world's
+//! start, before the world's load handlers, so a task queued in a handler of
+//! that game, such as a world load's or a join's, belongs to it. A task
+//! queued before that, as in `init`, belongs to no game and runs in every
+//! one.
 
 use std::ops::ControlFlow;
 use std::sync::Mutex;

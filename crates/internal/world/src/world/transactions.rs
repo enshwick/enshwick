@@ -740,8 +740,8 @@ impl World {
     /// whole, and an undo of it that is still running counts as its end. Once
     /// `within` passed, the handler gets the transaction as it stands, still
     /// pending perhaps. `handler` runs on the server's game thread as a
-    /// [`Scheduler`] task of this mod, so it belongs to the game of the
-    /// scheduler's last pass ([`schedule`](crate::schedule)). The handler
+    /// [`Scheduler`] task of this mod, so it belongs to the game it was asked
+    /// in ([`schedule`](crate::schedule)). The handler
     /// decides what an end other than written whole means, such as a
     /// [`TransactionStatus::Failed`] with [`WorldError::NotLoaded`], which the
     /// same changes committed again may pass.

@@ -288,6 +288,8 @@ pub struct FakeHost {
     mods: Vec<ModInfo>,
     hosting: bool,
     developer_tools: bool,
+    /// The periodic tick subscription, by the order asked, to refuse.
+    refused_tick: Option<usize>,
     host_key: Option<enshwick_core::PlayerKey>,
     server_world: u64,
     join_missing: Vec<ModInfo>,
@@ -397,6 +399,7 @@ impl FakeHost {
             mods: Vec::new(),
             hosting: false,
             developer_tools: false,
+            refused_tick: None,
             host_key: None,
             server_world: 0,
             join_missing: Vec::new(),
@@ -505,6 +508,25 @@ impl FakeHost {
         self
     }
 
+    /// Refuses the periodic tick subscription number `index`, from 0, in
+    /// the order the mod asks
+    /// ([`Status::REFUSED`](enshwick_core::abi::Status::REFUSED)), as the
+    /// loader refuses a tick it cannot list. The first world a mod opens
+    /// asks for one to wait on transactions: refusing it leaves
+    /// `World::when_settled` unavailable while a later
+    /// [`Scheduler`](enshwick_core::schedule::Scheduler) still gets its own.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let _loader = enshwick::test::FakeHost::new().refuse_tick(0).install();
+    /// ```
+    #[must_use]
+    pub const fn refuse_tick(mut self, index: usize) -> Self {
+        self.refused_tick = Some(index);
+        self
+    }
+
     /// Makes this the loader of the process until the returned fake drops.
     ///
     /// Waits while another test of the process holds an installed fake.
@@ -573,7 +595,9 @@ impl Installed {
         self.handle
     }
 
-    /// Initialises the mod as the loader does, and returns its answer.
+    /// Initialises the mod as the loader does, and returns its answer. An
+    /// answer other than [`Status::OK`] turns the mod off, as the loader
+    /// does: none of the callbacks it registered runs from then on.
     ///
     /// # Safety
     ///
@@ -590,10 +614,12 @@ impl Installed {
         // The loader arms once every mod is initialised; what only init may
         // ask for comes too late from here on.
         table::with((), |s| s.registration = table::Registration::Closed);
-        status
+        self.off_unless_ok(status)
     }
 
     /// Tells the mod its hooks are armed, and returns what its ready answers.
+    /// An answer other than [`Status::OK`] turns the mod off, as the loader
+    /// does: none of its callbacks runs from then on.
     ///
     /// # Safety
     ///
@@ -608,7 +634,29 @@ impl Installed {
         table::with((), |s| s.base_limit.armed = true);
         // SAFETY: the caller guarantees `ready` is the `enshwick_mod_ready` of
         // a `declare_mod!` whose init succeeded on this fake.
-        unsafe { ready(self.api(), self.handle) }
+        self.off_unless_ok(unsafe { ready(self.api(), self.handle) })
+    }
+
+    /// Turns the mod off when `status` is not [`Status::OK`]; `status`.
+    fn off_unless_ok(&self, status: Status) -> Status {
+        if !status.is_ok() {
+            table::base::registered::turn_off(self.handle);
+        }
+        status
+    }
+
+    /// Whether the mod is off: its init or ready failed or it faulted, as
+    /// the loader turns a mod off. Its callbacks no longer run.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(!loader.is_off());
+    /// ```
+    #[must_use]
+    pub fn is_off(&self) -> bool {
+        table::base::registered::is_off(self.handle)
     }
 
     /// Reads the mod's manifest, initialises the mod unless the loader would

@@ -64,6 +64,27 @@ struct Patch {
     owner: ModIndex,
     apply: ResourcePatchFn,
     user: usize,
+    /// Cleared for the process when the patch answers
+    /// [`Status::FAULTED`](enshwick_core::abi::Status::FAULTED), its
+    /// builder having panicked: later builds of the key run without it,
+    /// and its mod and the mod's other patches stay on.
+    on: AtomicBool,
+}
+
+impl Patch {
+    const fn new(owner: ModIndex, apply: ResourcePatchFn, user: usize) -> Self {
+        Self {
+            owner,
+            apply,
+            user,
+            on: AtomicBool::new(true),
+        }
+    }
+
+    /// Whether it still builds: it is on and `on` says its mod is.
+    fn runs(&self, on: impl Fn(ModIndex) -> bool) -> bool {
+        self.on.load(Ordering::Acquire) && on(self.owner)
+    }
 }
 
 /// A served resource.
@@ -196,11 +217,7 @@ pub(crate) fn register(
     patch: ResourcePatchFn,
     user: *mut c_void,
 ) -> Result<(), ServeResourceError> {
-    let patch = Patch {
-        owner,
-        apply: patch,
-        user: user.expose_provenance(),
-    };
+    let patch = Patch::new(owner, patch, user.expose_provenance());
     RESOURCES.edit(|pending| add(pending, key, base, patch))?
 }
 
@@ -389,11 +406,7 @@ fn serve_rates(served: &mut Vec<Served>, patch: Option<ResourcePatchFn>) -> usiz
         return 0;
     };
     let key = recipe_registry();
-    let patch = Patch {
-        owner: ModIndex::LOADER,
-        apply,
-        user: 0,
-    };
+    let patch = Patch::new(ModIndex::LOADER, apply, 0);
     match served.iter_mut().find(|s| s.key == key) {
         Some(entry) => {
             entry.patches.push(patch);
@@ -414,11 +427,7 @@ fn serve_changes(
 ) -> usize {
     let count = patches.len();
     for (key, apply, user) in patches {
-        let patch = Patch {
-            owner: ModIndex::LOADER,
-            apply,
-            user: user.expose_provenance(),
-        };
+        let patch = Patch::new(ModIndex::LOADER, apply, user.expose_provenance());
         match served.iter_mut().find(|s| s.key == key) {
             Some(entry) if crate::content::data_changes::goes_first(&key, &entry.base) => {
                 entry.patches.insert(0, patch);
@@ -460,11 +469,7 @@ impl BuilderPatch {
     /// The patch as the loader's on a served key, leaked for the process.
     fn patch(self) -> Patch {
         let (apply, user) = own_patch(self);
-        Patch {
-            owner: ModIndex::LOADER,
-            apply,
-            user: user.expose_provenance(),
-        }
+        Patch::new(ModIndex::LOADER, apply, user.expose_provenance())
     }
 }
 
@@ -647,7 +652,7 @@ fn mods_serve_recipes() -> bool {
 fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(ModIndex) -> bool) -> bool {
     served
         .iter()
-        .any(|s| s.key == *key && s.patches.iter().any(|p| on(p.owner)) && !s.state.relock().failed)
+        .any(|s| s.key == *key && s.patches.iter().any(|p| p.runs(&on)) && !s.state.relock().failed)
 }
 
 /// Whether mods that are on serve `key` and its build has not failed, as
@@ -675,7 +680,7 @@ pub(crate) fn mod_on(owner: ModIndex) -> bool {
 }
 
 fn owner_on(served: &Served) -> bool {
-    served.patches.iter().any(|p| mod_on(p.owner))
+    served.patches.iter().any(|p| p.runs(mod_on))
 }
 
 /// Copies the game's resource key at `key`.

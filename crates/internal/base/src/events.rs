@@ -295,7 +295,8 @@ with_data! {
 
 impl Ticked {
     /// How often a tick handler runs unless it asks otherwise: on the first
-    /// step at least this long after its last call.
+    /// step at least this long after its last call. A handler of any period
+    /// also runs on the first step of each game, before its world loads.
     ///
     /// An empty dedicated server steps about 20 to 22 times a second, so a
     /// handler runs about every third step, about 7 times a second (server
