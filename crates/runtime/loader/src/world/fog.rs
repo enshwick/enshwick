@@ -607,8 +607,9 @@ mod tests {
             .map(|p| p.reason)
     }
 
+    /// The only test that queues uncovers, which are the process's own.
     #[test]
-    fn a_host_s_own_circle_is_queued_here_and_another_player_needs_a_link() {
+    fn a_host_s_own_circle_queues_here_and_a_hosted_game_s_end_drops_what_waits() {
         let loader = crate::start::tests::pinning_loader(Side::SERVER, &[], &[]);
         STATE.uncovers.linked.store(true, Ordering::Release);
         assert_eq!(uncover_as(&loader, 7, true, [1.0, 2.0], 3.0), Ok(()));
@@ -623,14 +624,9 @@ mod tests {
             Err(UncoverError::NotSent),
             "the host's own fog is off"
         );
-    }
-
-    /// Queues uncovers, which are the process's own.
-    #[test]
-    fn a_hosted_game_s_end_drops_its_skipped_tiles_and_waiting_uncovers() {
-        STATE.uncovers.circles.relock().push(([1.0, 2.0], 3.0));
+        assert!(STATE.uncovers.warned.load(Ordering::Acquire));
+        assert_eq!(STATE.uncovers.circles.relock().len(), 1);
         STATE.uncovers.waiting.store(true, Ordering::Release);
-        STATE.uncovers.warned.store(true, Ordering::Release);
         STATE.skipped.store(7, Ordering::Release);
         forget_world();
         assert!(STATE.mirror.relock().is_none());

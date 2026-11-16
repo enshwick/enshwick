@@ -4,6 +4,9 @@
 use super::{CodecError, Encoder, size_of};
 use crate::resources::{Grow, Output, Registry, Value};
 
+/// Why an encode into a refused [`Output`] fails.
+pub(super) const REFUSED: &str = "the loader lent no buffer for the output";
+
 impl Registry<'_> {
     /// Writes `value`, of the type qualified as `type_name`, as resource
     /// bytes: over `base`, the bytes it was read from, keeping every byte
@@ -88,7 +91,7 @@ impl Registry<'_> {
     }
 
     /// Writes `value` into the empty `bytes`, as [`Registry::encode`].
-    fn encode_in<B: Grow>(
+    pub(in crate::resources) fn encode_in<B: Grow>(
         &self,
         type_name: &str,
         value: &Value,
@@ -115,7 +118,7 @@ impl Registry<'_> {
             }
         };
         if bytes.len() < size {
-            return Err(CodecError::new("the loader lent no buffer for the output"));
+            return Err(CodecError::new(REFUSED));
         }
         Encoder {
             registry: self,

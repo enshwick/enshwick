@@ -318,7 +318,7 @@ fn items_in(
             archive
                 .keys_of(crate::engine::catalogue::types::TEMPLATE)
                 .into_iter()
-                .filter(|key| asked.contains(&key.guid))
+                .filter(|key| placed_template(key, &asked))
                 .filter_map(|key| {
                     let slots = container_slots(&layout, &archive.resource(&key)?)?;
                     Some((key.guid, slots))
@@ -356,6 +356,12 @@ pub(crate) fn wanted(loader: &Loader) -> bool {
 }
 
 /// Whether mod `index` is on.
+/// Whether `key` is the first part of a template an item asked for: the
+/// part that holds its container slots.
+fn placed_template(key: &ResourceKey, asked: &rustc_hash::FxHashSet<Guid>) -> bool {
+    key.part == 0 && asked.contains(&key.guid)
+}
+
 fn on(loader: &Loader, index: ModIndex) -> bool {
     loader
         .mods
@@ -680,6 +686,19 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_first_part_of_an_asked_template_gives_an_item_its_slots() {
+        let asked = rustc_hash::FxHashSet::from_iter([Guid([1; 16])]);
+        let key = |guid: u8, part| ResourceKey {
+            guid: Guid([guid; 16]),
+            type_hash: crate::engine::catalogue::types::TEMPLATE,
+            part,
+        };
+        assert!(placed_template(&key(1, 0), &asked));
+        assert!(!placed_template(&key(1, 1), &asked), "a later part");
+        assert!(!placed_template(&key(2, 0), &asked), "no item asked");
+    }
 
     /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, with
     /// the archive beside it (each skipped without it), the selections by

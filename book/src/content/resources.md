@@ -72,7 +72,8 @@ keeps the result for the life of the process. So the builder:
   move what it needs into it;
 - runs once per resource, not per read, unless the mod rebuilds it;
 - returns `None` when the base does not read as expected. That turns the mod
-  off. A panic in the builder counts the same.
+  off. A panic in the builder counts the same, and so does an `out` it left
+  empty.
 
 When the game has no `base` in its archive, the served key stays missing and
 the builder never runs.

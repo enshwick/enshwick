@@ -494,10 +494,18 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
 
     /// Appends `len` zero bytes at the next multiple of `align` and returns
     /// where.
-    fn append(&mut self, len: usize, align: usize) -> usize {
+    ///
+    /// # Errors
+    ///
+    /// [`CodecError`] when the bytes did not grow: a refused\n    /// [`Output`](crate::resources::Output).
+    fn append(&mut self, len: usize, align: usize) -> Result<usize, CodecError> {
         let start = self.bytes.len().next_multiple_of(align.max(1));
-        self.bytes.grow(start + len);
-        start
+        let end = start.checked_add(len).ok_or_else(|| out_of_range(start))?;
+        self.bytes.grow(end);
+        if self.bytes.len() < end {
+            return Err(CodecError::new(encode::REFUSED));
+        }
+        Ok(start)
     }
 
     /// Points the `i32` offset at `from` to `start`, counted from `origin`.
@@ -702,7 +710,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
         if let Some(start) = existing {
             return Ok((start, false));
         }
-        let start = self.append(len, usize::from(align));
+        let start = self.append(len, usize::from(align))?;
         self.point(from, from, start)?;
         Ok((start, true))
     }
@@ -867,7 +875,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
                     self.existing(at, at, old_count.saturating_mul(stride))
                 };
                 let align = usize::from(inner.align().max(inner.element_align()));
-                let start = self.append(len, align);
+                let start = self.append(len, align)?;
                 let kept = match old {
                     Some(old_start) => {
                         self.bytes
@@ -909,7 +917,7 @@ impl<'a, B: Grow> Encoder<'_, 'a, '_, B> {
             return self.write(at, &[0; 8]);
         }
         // The engine's strings end in a NUL byte past their length.
-        let start = self.append(data.len() + 1, 1);
+        let start = self.append(data.len() + 1, 1)?;
         self.write(start, data)?;
         self.point(at, at, start)?;
         self.write(at + 4, &count.to_le_bytes())

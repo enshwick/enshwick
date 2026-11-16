@@ -15,11 +15,14 @@ type Builder = Box<dyn Fn(&[u8], &mut Output<'_>) -> Option<()> + Send + Sync>;
 /// The bytes a served resource's builder writes its resource into, which the
 /// loader lends for the build, so the build copies nothing out.
 ///
-/// It grows like a `Vec<u8>`: when it runs short, the loader lends a larger
-/// buffer and the bytes move there once. A builder that knows its length
-/// calls [`Output::reserve`] first and builds in one buffer. When the loader
+/// It grows like a `Vec<u8>`: when it runs short, the loader lends a buffer
+/// at least twice as large and the bytes move there. A builder that knows
+/// its length calls [`Output::reserve`] first and builds in one buffer; one
+/// that wrote fewer bytes than it holds moves them once more into an exact
+/// buffer when it ends, since the game keeps that buffer. When the loader
 /// lends nothing, the output is refused: later writes do nothing and the
-/// build fails, as a builder's `None` does.
+/// build fails, as a builder's `None` does. An output with no bytes fails
+/// the build too: the game reads no resource from nothing.
 ///
 /// # Examples
 ///
@@ -47,10 +50,10 @@ pub struct Output<'b> {
     capacity: usize,
     /// Bytes written from `at`.
     len: usize,
-    /// Whether the loader lent a buffer yet.
-    loaned: bool,
     /// The loader lent no buffer when one was needed.
     refused: bool,
+    /// Lends a buffer of the given length: [`lent`], or a test's own.
+    lender: fn(usize) -> Option<*mut u8>,
     /// The build the loans belong to, which frees them when it ends.
     build: PhantomData<&'b mut [u8]>,
 }
@@ -58,28 +61,39 @@ pub struct Output<'b> {
 impl Output<'_> {
     /// An output with no loan yet, as a build starts it.
     pub(crate) const fn new() -> Self {
+        Self::with_lender(lent)
+    }
+
+    /// An output whose loans come from `lender`.
+    const fn with_lender(lender: fn(usize) -> Option<*mut u8>) -> Self {
         Self {
             at: NonNull::dangling(),
             capacity: 0,
             len: 0,
-            loaned: false,
             refused: false,
+            lender,
             build: PhantomData,
         }
     }
 
-    /// Makes room for `additional` more bytes in one loan, so a builder that
-    /// knows its length builds without moving its bytes.
+    /// Makes room for `additional` more bytes, in one loan of that size when
+    /// none was taken yet, so a builder that knows its length builds without
+    /// moving its bytes.
     ///
     /// # Examples
     ///
     /// See [`Output`].
     pub fn reserve(&mut self, additional: usize) {
-        if let Some(needed) = self.len.checked_add(additional) {
-            self.lend(needed, needed);
-        } else {
+        let Some(needed) = self.len.checked_add(additional) else {
             self.refused = true;
-        }
+            return;
+        };
+        let wanted = if self.capacity == 0 {
+            needed
+        } else {
+            needed.max(self.capacity.saturating_mul(2))
+        };
+        self.lend(needed, wanted);
     }
 
     /// Appends `bytes`, lending a larger buffer when this one is short.
@@ -160,22 +174,28 @@ impl Output<'_> {
     /// Moves the bytes into a loan of `wanted` bytes, at least `needed`,
     /// when the buffer holds fewer than `needed`.
     fn lend(&mut self, needed: usize, wanted: usize) {
-        if self.refused || self.loaned && needed <= self.capacity {
+        if self.refused || needed <= self.capacity {
             return;
         }
         let capacity = wanted.min(u32::MAX as usize);
-        let Some(at) = (capacity >= needed)
-            .then(|| lent(capacity))
-            .flatten()
-            .and_then(NonNull::new)
-        else {
+        if capacity < needed {
+            self.refused = true;
+            return;
+        }
+        self.move_to(capacity);
+    }
+
+    /// Moves the bytes into a new loan of `capacity >= len` bytes; refuses
+    /// the output when the loader lends none.
+    fn move_to(&mut self, capacity: usize) {
+        let Some(at) = (self.lender)(capacity).and_then(NonNull::new) else {
             self.refused = true;
             return;
         };
         if self.len > 0 {
             // SAFETY: `self.at` holds `self.len` written bytes of an earlier
             // loan, still lent for this build, and the new loan of
-            // `capacity >= needed > self.len` bytes is apart from it.
+            // `capacity >= self.len` bytes is apart from it.
             unsafe {
                 at.as_ptr()
                     .copy_from_nonoverlapping(self.at.as_ptr(), self.len);
@@ -183,16 +203,20 @@ impl Output<'_> {
         }
         self.at = at;
         self.capacity = capacity;
-        self.loaned = true;
     }
 
-    /// The loan the output lies in and its length; `None` when refused.
+    /// The loan the output lies in, exactly as long as its bytes, and their
+    /// length; `None` when refused or empty.
     fn finish(mut self) -> Option<(*mut u8, u32)> {
-        self.lend(0, 0);
-        if self.refused {
-            return None;
+        let len = u32::try_from(self.len)
+            .ok()
+            .filter(|&len| len > 0 && !self.refused)?;
+        // The game's first build keeps the loan for the process, so it holds
+        // no spare bytes.
+        if self.capacity > self.len {
+            self.move_to(self.len);
         }
-        Some((self.at.as_ptr(), u32::try_from(self.len).ok()?))
+        (!self.refused).then_some((self.at.as_ptr(), len))
     }
 }
 
@@ -209,7 +233,10 @@ impl core::ops::Deref for Output<'_> {
 
 impl core::ops::DerefMut for Output<'_> {
     fn deref_mut(&mut self) -> &mut [u8] {
-        // SAFETY: as in `deref`; `&mut self` makes this the only reference.
+        // SAFETY: `at` is a loan of `capacity >= len` writable bytes, valid
+        // while the build that owns `self` runs, or dangling, aligned and
+        // non-null with `len` 0 before the first loan; `&mut self` makes the
+        // slice the only reference to them.
         unsafe { core::slice::from_raw_parts_mut(self.at.as_ptr(), self.len) }
     }
 }
@@ -340,8 +367,64 @@ fn lent(len: usize) -> Option<*mut u8> {
 }
 
 #[cfg(test)]
+thread_local! {
+    /// The buffers [`test_lent`] lent on this thread, kept as a build keeps
+    /// its loans.
+    static LOANS: core::cell::RefCell<Vec<Box<[u8]>>> =
+        const { core::cell::RefCell::new(Vec::new()) };
+}
+
+/// Lends `len` zero bytes, as the loader does during a build.
+#[cfg(test)]
+fn test_lent(len: usize) -> Option<*mut u8> {
+    LOANS.with_borrow_mut(|loans| {
+        loans.push(vec![0; len].into_boxed_slice());
+        loans.last_mut().map(|loan| loan.as_mut_ptr())
+    })
+}
+
+/// An output whose loans the test thread keeps, as a build the loader runs.
+#[cfg(test)]
+pub(crate) const fn test_output() -> Output<'static> {
+    Output::with_lender(test_lent)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_output_reserved_a_byte_at_a_time_grows_by_doubling() {
+        let mut output = Output::with_lender(test_lent);
+        let bytes: Vec<u8> = (0..=u8::MAX).cycle().take(1000).collect();
+        for byte in &bytes {
+            output.reserve(1);
+            output.extend_from_slice(&[*byte]);
+        }
+        assert_eq!(*output, bytes[..]);
+        let loans = LOANS.with_borrow(Vec::len);
+        assert!(loans <= 11, "{loans} loans for 1000 bytes");
+    }
+
+    #[test]
+    fn a_finished_output_lies_in_a_loan_exactly_as_long_as_its_bytes() {
+        let mut output = Output::with_lender(test_lent);
+        output.reserve(4);
+        output.extend_from_slice(&[1, 2, 3, 4, 5]);
+        let (at, len) = output.finish().unwrap();
+        assert_eq!(len, 5);
+        LOANS.with_borrow(|loans| {
+            let kept = loans.iter().find(|loan| loan.as_ptr() == at.cast_const());
+            assert_eq!(kept.map(|loan| &loan[..]), Some(&[1, 2, 3, 4, 5][..]));
+        });
+    }
+
+    #[test]
+    fn an_output_with_no_bytes_fails_its_build() {
+        let mut output = Output::with_lender(test_lent);
+        output.reserve(16);
+        assert!(output.finish().is_none());
+    }
 
     #[test]
     fn a_builder_reads_a_null_base_as_empty_and_refuses_without_a_lent_buffer() {

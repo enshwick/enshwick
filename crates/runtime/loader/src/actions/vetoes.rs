@@ -143,7 +143,9 @@ pub(crate) fn crafting() -> bool {
 
 /// Lists the craft filters off, by the event stream entry `id` the build
 /// lacks for `reason`, when they screen craft requests: only the copy of the
-/// server's event streams screens them.
+/// server's event streams screens them. Wanted with no filter too: recipe
+/// rules and the admin command may disable a recipe at any world load, and a
+/// client may host one.
 pub(crate) fn unscreened(loader: &Loader, id: &str, reason: &str) {
     if crafting() {
         let _off = loader.fuse_off(&CRAFT_FUSE, id, reason);
@@ -452,6 +454,34 @@ mod tests {
         assert!(
             off.as_deref()
                 .is_some_and(|r| r.starts_with("ecs.event_streams")),
+            "{off:?}"
+        );
+    }
+
+    #[test]
+    fn a_build_whose_event_move_does_not_link_lists_the_craft_filters_off_by_the_move() {
+        use crate::engine::pinned::ecs;
+        let layout = [
+            ecs::EVENT_STREAMS,
+            ecs::EVENT_STREAM_COUNT,
+            ecs::EVENT_STREAM_SIZE,
+            ecs::EVENT_STREAM_USED,
+            ecs::EVENT_RECORD_SIZE,
+            ecs::EVENT_RECORD_HEADER,
+            ecs::EVENT_RECORD_ALIGN,
+        ]
+        .map(|constant| (constant, 8));
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::pinning_loader(
+            enshwick_core::abi::Side::SERVER,
+            &[],
+            &layout,
+        )));
+        let _first = CRAFT.set(LAYOUT);
+        crate::base::game_events::link(loader);
+        let off = crate::base::off_reason(&CRAFT_FUSE);
+        assert!(
+            off.as_deref()
+                .is_some_and(|r| r.starts_with(ecs::EVENT_MERGE.id())),
             "{off:?}"
         );
     }

@@ -31,7 +31,8 @@ side = "both""#
         assert_eq!(status, Status::OK);
         let input = INPUT.lock().unwrap().unwrap();
         let never = input.local_status().unwrap();
-        assert!(!never.requested && !never.sample_present && !never.fresh);
+        assert!(never.requested, "opening Input started the reads");
+        assert!(!never.sample_present && !never.fresh);
         assert_eq!(never.age_ms, None);
         assert_eq!(input.local_status().unwrap(), never);
         loader.hold_locally(Some(0));

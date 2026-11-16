@@ -495,7 +495,8 @@ pub(crate) extern "system" fn fog_read(
     })
 }
 
-/// A cached client sampler status supplied by the test; no sampling is requested.
+/// A cached client sampler status supplied by the test, requested once a
+/// `local_held` ask started the reads; this getter requests nothing.
 pub(crate) extern "system" fn local_input_status(
     _me: ModHandle,
     out: *mut enshwick_core::abi::LocalInputInfo,
@@ -507,7 +508,12 @@ pub(crate) extern "system" fn local_input_status(
         if s.host.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        super::put_headed(out, s.local_input_info)
+        // As the loader: the first `local_held` ask started the reads.
+        let mut info = s.local_input_info;
+        if s.local_held.asked {
+            info.flags |= enshwick_core::abi::LocalInputInfo::REQUESTED;
+        }
+        super::put_headed(out, info)
     })
 }
 

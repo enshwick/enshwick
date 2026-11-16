@@ -637,8 +637,10 @@ mod tests {
             type_hash: 7,
             part: 0,
         };
-        let mut out = super::super::Output::new();
+        let mut out = super::super::serve::test_output();
+        out.extend_from_slice(b"an edit that failed halfway");
         assert_eq!(super::fallback(key(1), key(1), b"base", &mut out), Some(()));
+        assert_eq!(*out, b"base"[..], "the base bytes, served as they are");
         assert_eq!(
             super::fallback(key(2), key(1), b"base", &mut out),
             None,

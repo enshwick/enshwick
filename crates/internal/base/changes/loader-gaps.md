@@ -6,4 +6,5 @@
 
 ### Changed
 
-- A served builder takes `(base, out)` and returns `Option<()>` (#1124).
+- A served builder takes `(base, out)` and returns `Option<()>`; an `Output`
+  left empty fails the build (#1124).
