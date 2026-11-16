@@ -44,7 +44,7 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          tools: cargo-nextest@0.9.151,cargo-llvm-cov@0.9.1
+          tools: cargo-nextest@0.9.152,cargo-llvm-cov@0.9.1
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
