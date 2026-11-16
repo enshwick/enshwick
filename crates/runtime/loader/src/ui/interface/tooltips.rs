@@ -129,7 +129,7 @@ pub(super) fn end_frame() {
 /// Links both sites on a client build that has them, when a mod gave a
 /// handler.
 pub(super) fn link(loader: &Loader) {
-    if HANDLERS.sealed().is_none_or(<[_]>::is_empty) {
+    if HANDLERS.sealed().is_none_or(<[_]>::is_empty) && !crate::inventory::stats::wanted() {
         return;
     }
     let offset = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
@@ -296,13 +296,16 @@ fn lines_of(kept: &mut [Kept; KEPT], item: u32, pide: u32) -> &Kept {
     &kept[at]
 }
 
-/// Asks every handler of a mod that runs for its lines of the item, in
-/// registration order.
+/// The item's lines: the loader's own for its stat modifiers and affixes,
+/// then every handler's of a mod that runs, in registration order.
 fn ask(item: u32, pide: u32) -> Vec<Line> {
+    GATHERED.with_borrow_mut(|lines| {
+        lines.clear();
+        lines.extend(stat_lines(item, pide));
+    });
     let Some(handlers) = HANDLERS.sealed() else {
-        return Vec::new();
+        return GATHERED.take();
     };
-    GATHERED.with_borrow_mut(Vec::clear);
     let _none: Option<(_, ())> =
         crate::engine::filters::ask(handlers, Feature::Interface, |callback| {
             let token = next_token();
@@ -325,6 +328,28 @@ fn ask(item: u32, pide: u32) -> Vec<Line> {
             ControlFlow::Continue(())
         });
     GATHERED.take()
+}
+
+/// The lines of the item's stat modifiers and affixes, in the player's
+/// language, a gain in the game's positive style and a loss in its negative
+/// one.
+fn stat_lines(item: u32, pide: u32) -> Vec<Line> {
+    let Some(loader) = crate::engine::loader::loader() else {
+        return Vec::new();
+    };
+    let language = crate::content::served::language();
+    crate::inventory::stats::item_line_texts(loader, pide, item, language)
+        .into_iter()
+        .map(|line| Line {
+            style: match line.sign {
+                core::cmp::Ordering::Greater => UiWidget::STYLE_POSITIVE,
+                core::cmp::Ordering::Less => UiWidget::STYLE_NEGATIVE,
+                core::cmp::Ordering::Equal => UiWidget::STYLE_BODY,
+            },
+            flags: 0,
+            text: line.text.into_bytes().into(),
+        })
+        .collect()
 }
 
 /// Keeps a tooltip handler's line; `None` when no handler of `owner` with

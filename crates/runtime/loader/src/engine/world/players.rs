@@ -120,7 +120,10 @@ pub(crate) fn characters(loader: &Loader) -> ArrayVec<(Entity, CharacterId), MAX
 ///   `slots.first`, each with its `u32` handle at 0, its state byte at
 ///   `slots.state` and its `u32` entity at `slots.entity`.
 /// - Nothing writes them while the iterator runs: on the game thread.
-unsafe fn occupied(slots: Slots, server: usize) -> impl Iterator<Item = (usize, usize, u8, u32)> {
+pub(super) unsafe fn occupied(
+    slots: Slots,
+    server: usize,
+) -> impl Iterator<Item = (usize, usize, u8, u32)> {
     (0..slots.count).filter_map(move |index| {
         let slot = server + slots.first + index * slots.size;
         // SAFETY: `index < count`, so `slot` is one of the caller's player
@@ -168,7 +171,7 @@ pub(super) struct Slots {
 }
 
 impl Layout {
-    const fn player_slots(&self) -> Slots {
+    pub(super) const fn player_slots(&self) -> Slots {
         Slots {
             first: self.slots,
             size: self.slot_size,
@@ -240,36 +243,18 @@ fn player_at(
         unsafe { crate::engine::memory::read_bytes(data, 0, &mut name[..kept]) };
         name_len = kept;
     }
-    let permissions = if infos == 0 {
-        0
-    } else {
-        let table = infos + layout.permission_table;
-        let index = (entity.0 as usize).wrapping_sub(1);
-        if index < layout.permission_entries {
-            let entry = table + index * layout.permission_entry;
-            // SAFETY: `infos` is non-zero (`infos == 0` gives 0 first); the
-            // table's `server.permission_table`, `permission_entries` and
-            // `permission_entry_size` place that many entries there, `index`
-            // is below their count (the enclosing condition), and each starts
-            // with its `u32` entity; read on the game thread.
-            let owner: u32 = unsafe { read(entry, 0) };
-            if owner == entity.0 {
-                // SAFETY: `entry` is a permission entry inside the table
-                // (below `permission_entries`, the enclosing condition); the
-                // table's `server.permission_mask` offset holds its mask byte;
-                // read on the game thread.
-                u32::from(unsafe { read::<u8>(entry, layout.permission_mask) })
-            } else {
-                0
-            }
-        } else {
-            0
-        }
-    };
     // SAFETY: `slot` is a player slot `players` found in the server on the
     // game thread; the table's `server.player_slot_key` offset holds its
     // `u64` account key.
-    let key = unsafe { read(slot, layout.slot_key) };
+    let key: enshwick_core::PlayerKey = unsafe { read(slot, layout.slot_key) };
+    let permissions = super::permissions::entry(layout, infos, entity).map_or(0, |entry| {
+        // SAFETY: `entry` is `entity`'s own entry of the permission table
+        // (checked by `entry`); the table's `server.permission_mask` offset
+        // holds its mask byte; read on the game thread.
+        let byte = unsafe { read::<u8>(entry, layout.permission_mask) };
+        // Before the step the frame has put the group's bits back.
+        u32::from(super::permissions::in_force(key.get(), byte))
+    });
     let text = String::from_utf8_lossy(&name[..name_len]);
     let mut info = PlayerInfo::with_name(entity, key, permissions, &text);
     info.slot = u32::try_from(index).unwrap_or(u32::MAX);

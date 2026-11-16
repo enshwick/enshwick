@@ -171,12 +171,18 @@ impl Installed {
                 callback(Event::TICKED, (&raw const *data).cast(), user);
             });
         }
+        // A world's start is no step: the loader's step work waits for one.
+        if !entering {
+            crate::test::table::after_step();
+        }
         calls.len()
     }
 
     /// Ends the game a client hosts, as the loader does when the player
     /// leaves it: the next [`tick`](Self::tick) is the first step of the next
-    /// game, with [`TickData::game`] one more, and no mod holds saves.
+    /// game, with [`TickData::game`] one more, and no mod holds saves. Its
+    /// transactions fail or expire, and every `World::when_settled` handler
+    /// still waiting runs with them now, never in the next game.
     ///
     /// # Examples
     ///
@@ -193,6 +199,7 @@ impl Installed {
             s.save.held = false;
             s.save.shut = false;
         });
+        crate::test::table::end_game();
     }
 }
 

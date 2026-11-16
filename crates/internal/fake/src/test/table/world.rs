@@ -12,6 +12,7 @@ use enshwick_core::abi::{
 pub(crate) mod altars;
 pub(crate) mod buffs;
 pub(crate) mod environment;
+pub(crate) mod permissions;
 pub(crate) mod saves;
 pub(crate) mod transactions;
 
@@ -25,6 +26,8 @@ pub(crate) struct WorldEdits {
     pub(crate) terrain: Vec<TerrainEdit>,
     /// Committed transactions, oldest first.
     pub(crate) transactions: Vec<crate::test::FakeTransaction>,
+    /// The newest id the fake forgot, so a new transaction never takes it.
+    pub(crate) forgotten: u64,
     /// Whether the world has stopped, as between two worlds.
     pub(crate) stopped: bool,
     /// Whether the scene's map markers are held as still being read.
@@ -548,6 +551,7 @@ pub(crate) extern "system" fn account_action(
                 if let Some(at) = online {
                     s.host.players.remove(at);
                     s.removed.push(account.get());
+                    s.permission_changes.left(account);
                 }
             }
         }

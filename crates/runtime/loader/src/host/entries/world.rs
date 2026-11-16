@@ -209,6 +209,19 @@ entries! {
         Ok(())
     }
 
+    /// `HostApi::change_permissions`: replaces the mod's change to a
+    /// player's permissions.
+    fn change_permissions(
+        me as Mod,
+        key: enshwick_core::PlayerKey,
+        deny: u32,
+        grant: u32,
+    ) -> Status {
+        let account = account(key)?;
+        crate::world::permissions::change(me.loader, me.index, account, deny, grant)?;
+        Ok(())
+    }
+
     /// `HostApi::chat_muted`: whether `account` is muted in chat.
     fn chat_muted(loader as Caller, key: enshwick_core::PlayerKey, muted as Out<u8>) -> Status {
         let account = account(key)?;

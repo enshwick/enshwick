@@ -1,6 +1,6 @@
 ---
 source: crates/runtime/loader/src/host/layer/refusals/tests.rs
-expression: "answers![VoxelError::World(world), RightsError::World(world),\nTransactionError::World(world),\nTransactionError::Terrain(TerrainError::OutsideWorld),\nTransactionError::Item(ItemInfoError::NoItem),\nTransactionError::Spawn(SpawnError::BadRequest),\nTransactionError::Entity(EntityError::Player),]"
+expression: "answers![VoxelError::World(world), RightsError::World(world),\nTransactionError::World(world),\nTransactionError::Terrain(TerrainError::OutsideWorld),\nTransactionError::Item(ItemInfoError::NoItem),\nTransactionError::Spawn(SpawnError::BadRequest),\nTransactionError::Entity(EntityError::Player), PermissionError::BadBits,\nPermissionError::NotInGame, PermissionError::World(world),]"
 ---
 VoxelError::World(world) => WRONG_THREAD Quiet
 RightsError::World(world) => WRONG_THREAD Quiet
@@ -9,3 +9,6 @@ TransactionError::Terrain(TerrainError::OutsideWorld) => OUTSIDE_WORLD Quiet
 TransactionError::Item(ItemInfoError::NoItem) => MISSING Quiet
 TransactionError::Spawn(SpawnError::BadRequest) => BAD_ARGS Quiet
 TransactionError::Entity(EntityError::Player) => REFUSED Quiet
+PermissionError::BadBits => BAD_ARGS Quiet
+PermissionError::NotInGame => REFUSED Quiet
+PermissionError::World(world) => WRONG_THREAD Quiet

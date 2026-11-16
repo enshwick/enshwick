@@ -1,5 +1,5 @@
 //! `enshwick.world` level and experience writes and revives, and
-//! `enshwick.effects.drop_items`, as a Rust mod's.
+//! `enshwick.effects.drop_items` and permission changes, as a Rust mod's.
 
 #[cfg(test)]
 mod tests {
@@ -67,6 +67,34 @@ mod tests {
         );
         assert_eq!(request.item, ItemId(42));
         assert_eq!((request.count, request.level, request.rarity), (5, 3, 2));
+    }
+
+    #[test]
+    fn a_script_takes_a_player_s_permission_and_gives_it_back() {
+        let player = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: 0,
+            entity: Entity(7),
+            key: enshwick::PlayerKey::new(7),
+            permissions: PlayerInfo::CAN_EDIT_WORLD | PlayerInfo::CAN_EDIT_BASE,
+            name_len: 0,
+            name: [0; PlayerInfo::NAME_MAX],
+        };
+        let loader = run(
+            FakeHost::new().world().world_key("world0").player(player),
+            r#"
+            enshwick.on_tick(0.1, function()
+                local key = enshwick.world.players()[1].key
+                enshwick.world.change_permissions(key, { "CanEditWorld" }, {})
+                enshwick.log.info(`taken {enshwick.world.players()[1].permissions}`)
+                enshwick.world.change_permissions(key, {}, {})
+                enshwick.log.info(`back {enshwick.world.players()[1].permissions}`)
+            end)
+            "#,
+        );
+        let _ran = loader.tick(std::time::Duration::from_millis(100));
+        assert!(logged(&loader, "taken 4"), "{:?}", loader.logs());
+        assert!(logged(&loader, "back 12"), "{:?}", loader.logs());
     }
 
     #[test]

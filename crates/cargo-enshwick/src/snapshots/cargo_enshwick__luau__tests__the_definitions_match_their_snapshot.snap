@@ -2600,9 +2600,9 @@ export type SettingsRead = {
 
 --- What a committed `Transaction` came to once it stopped running, which `World.when_settled` hands its handler.
 export type Settled = {
-	--- `TransactionStatus.Applied` once it is written whole, or `TransactionStatus.Expired` when its undo data was dropped since; else how it ended; still `TransactionStatus.Pending` when the wait's bound passed first; nil once the loader no longer remembers it.
+	--- `TransactionStatus.Applied` once it is written whole, or `TransactionStatus.Expired` when its undo data was dropped since or the world ended; else how it ended; still `TransactionStatus.Pending` when the wait's bound passed first; nil once the loader no longer remembers it.
 	status: TransactionStatus?,
-	--- The props it placed and held, oldest first, as `World.transaction_entities` lists them; once it is written whole they stand in the world.
+	--- The props it placed and did not undo, oldest first, as `World.transaction_entities` lists them; once it is written whole they stand in the world, and none is left once the world ended.
 	props: {number},
 }
 
@@ -2789,10 +2789,17 @@ export type StatDef = {
 	max: number,
 	--- How the value reads.
 	format: StatFormat,
+	--- The group of the Character screen's attributes where the local player's value shows as a row; nil for no row. Unstable: needs the `unstable` feature and may change in any release.
+	group: StatGroup?,
+	--- Shown nowhere: no row on the Character screen and no line in item tooltips, for a number only mods read.
+	hidden: boolean?,
 }
 
 --- How a `ImpactUiValue`'s number reads. The name is enshwick's: the game's number format together with its signed flag.
 export type StatFormat = "Number" | "Signed" | "Percent"
+
+--- A group of the Character screen's attributes, where a stat's row shows. The names are the game's groups; the column beside the tabs shows the first two, the Basics, Damage and Protection tabs the others. Unstable: needs the `unstable` feature and may change in any release.
+export type StatGroup = "Main" | "FogSurvival" | "Primary" | "Regeneration" | "Misc" | "Damage" | "WeaponDamage" | "EnemyDamage" | "Protection"
 
 --- What a stat kind is called and how it reads, from `Stats.info`.
 export type StatInfo = {
@@ -2839,6 +2846,8 @@ export type Stats = {
 	key_of: (self: Stats, id: string) -> number,
 	--- The text key that names the stat `id`, as `name_key` gives it.
 	name_key: (self: Stats, id: string) -> string?,
+	--- The text key that describes the stat `id`, as `description_key` gives it.
+	description_key: (self: Stats, id: string) -> string?,
 	--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 	aggregate: (self: Stats, def: StatDef, modifiers: {ScriptModifier}) -> number,
 }
@@ -3844,6 +3853,8 @@ declare enshwick: {
 		can_build: (player: Player, a: vector, b: vector) -> (),
 		--- Whether a save keeps changes in the box between corners `a` and `b`, in metres. The game saves a world only inside its bases, the flame altars' build zones: a prop placed or terrain changed anywhere else is gone after a restart, a player's as well as a mod's. The box must lie wholly inside one base's zone, half a metre in from its edges.
 		persists: (a: vector, b: vector) -> boolean,
+		--- Takes the permissions in `deny` from the player in game with account `key` and gives those in `grant`, on top of their user group's, so the game's own server checks follow: a taken `CanEditWorld` stops digging, bombs, building and breaking anywhere, `CanEditBase` inside bases, `CanAccessInventories` opening chests in bases. Each call replaces the mod's own change; both lists empty ends it, also for a player no longer in game. A permission any mod takes is gone even when another gives it. The change holds from the server's next step until the mod ends it or turns off, the player leaves or the world ends; `Player.permissions` and the loader's own admin checks then read the bits in force. The player's client still acts by its group's bits: it may show an edit the server then refuses, and it never starts an edit that only a granted bit allows.
+		change_permissions: (key: string, deny: {PlayerPermissions}, grant: {PlayerPermissions}) -> (),
 		--- Every entity with a component of type `ty` and a place in the world, such as every bed or every chest; with `World.transform_type`, every placed entity. The engine walks every such archetype, so call it now and then, not every step. On the game thread only; empty elsewhere.
 		entities: (ty: number) -> {Placed},
 		--- The entities with a component of type `ty` within `radius` metres of `point`, nearest first; with `World.transform_type`, every placed entity there. On the game thread only; empty elsewhere.
@@ -3864,7 +3875,7 @@ declare enshwick: {
 		undo: (id: string) -> (),
 		--- The props transaction `id` of this mod placed and still holds, oldest first; empty for an id the loader no longer remembers, or not this mod's. A prop is in the world from the step after the one that placed it.
 		transaction_entities: (id: string) -> {number},
-		--- Runs `handler` once transaction `id` of this mod stopped running, so a mod acts on its placed props without polling. Once the transaction is written whole (`TransactionStatus.Applied`, or `TransactionStatus.Expired` when the loader dropped its undo data meanwhile), the handler runs one scheduler pass later, when the props it placed stand in the world; it gets the props the transaction held when it was written, even when it expired since. Any other end runs it at once; a large transaction spread over steps is waited for whole, and an undo of it that is still running counts as its end. Once `within` passed, the handler gets the transaction as it stands, still pending perhaps. `handler` runs on the server's game thread as a `Scheduler` task of this mod, so it belongs to the game it was asked in (`schedule`). The handler decides what an end other than written whole means, such as a `TransactionStatus.Failed` with `WorldError.NotLoaded`, which the same changes committed again may pass.
+		--- Runs `handler` once transaction `id` of this mod stopped running, so a mod acts on its placed props without polling. The loader runs it on the server's game thread after the step that ends the transaction's run. Written whole (`TransactionStatus.Applied`) means each prop it placed stands in the world, and the handler gets them; the loader waits up to 3,600 steps for a prop to appear, and one still absent then, or whose state does not read, is applied all the same. Any other end, a failure, a refusal, or an undo still running, runs it after that step too. A large transaction spread over steps is waited for whole. A step once `within` passed runs it with the transaction as it stands, still pending perhaps. When the world ends, it runs with the transaction failed or expired, never in the next game. The handler decides what an end other than written whole means, such as a `TransactionStatus.Failed` with `WorldError.NotLoaded`, which the same changes committed again may pass. It never runs when the loader turned the mod off first.
 		when_settled: (id: string, within: number, handler: (arg1: Settled) -> ()) -> (),
 		--- Where transaction `id` of this mod stands; nil for an id the loader no longer remembers (it keeps the newest few thousand) or not this mod's.
 		transaction_status: (id: string) -> TransactionStatus?,
@@ -4243,6 +4254,8 @@ declare enshwick: {
 		key_of: (id: string) -> number,
 		--- The text key that names the stat `id`, as `name_key` gives it.
 		name_key: (id: string) -> string?,
+		--- The text key that describes the stat `id`, as `description_key` gives it.
+		description_key: (id: string) -> string?,
 		--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 		aggregate: (def: StatDef, modifiers: {ScriptModifier}) -> number,
 		--- Stats of entities and items: values, modifiers, sources and definitions.

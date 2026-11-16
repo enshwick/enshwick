@@ -301,14 +301,14 @@ impl Record {
         self.reason = reason;
     }
 
-    /// Drops its undo data.
+    /// Drops its undo data; the props it placed still stand, so it keeps
+    /// their entities.
     fn drop_work(&mut self) {
         if let Some(work) = &mut self.work {
             work.done.clear();
             work.now.clear();
         }
         self.kept = 0;
-        self.created.clear();
         self.undoable = false;
     }
 }

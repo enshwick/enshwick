@@ -46,6 +46,104 @@ pub struct StatDef {
     pub max: f32,
     /// How the value reads.
     pub format: StatFormat,
+    /// The group of the Character screen's attributes where the local
+    /// player's value shows as a row; `None` for no row. Unstable: needs the
+    /// `unstable` feature and may change in any release.
+    #[cfg(feature = "unstable")]
+    #[script(default)]
+    pub group: Option<StatGroup>,
+    /// Shown nowhere: no row on the Character screen and no line in item
+    /// tooltips, for a number only mods read.
+    #[script(default)]
+    pub hidden: bool,
+}
+
+/// A group of the Character screen's attributes, where a stat's row shows.
+///
+/// The names are the game's groups; the column beside the tabs shows the
+/// first two, the Basics, Damage and Protection tabs the others.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::stats::{StatDef, StatGroup};
+///
+/// let luck = StatDef::additive().in_group(StatGroup::Primary);
+/// assert_eq!(luck.group, Some(StatGroup::Primary));
+/// ```
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub enum StatGroup {
+    /// The column beside the tabs, with the attribute points.
+    Main,
+    /// The column beside the tabs, under the shroud survival rows.
+    FogSurvival,
+    /// The Basics tab's first group.
+    Primary,
+    /// The Basics tab's regeneration group.
+    Regeneration,
+    /// The Basics tab's last group.
+    Misc,
+    /// The Damage tab's first group.
+    Damage,
+    /// The Damage tab's weapon damage group.
+    WeaponDamage,
+    /// The Damage tab's damage against enemies.
+    EnemyDamage,
+    /// The Protection tab.
+    Protection,
+}
+
+#[cfg(feature = "unstable")]
+impl StatGroup {
+    /// Every group, in the order the screen shows them.
+    pub const ALL: &'static [Self] = &[
+        Self::Main,
+        Self::FogSurvival,
+        Self::Primary,
+        Self::Regeneration,
+        Self::Misc,
+        Self::Damage,
+        Self::WeaponDamage,
+        Self::EnemyDamage,
+        Self::Protection,
+    ];
+
+    /// The group's number in a [`StatSpec`]: its place in [`StatGroup::ALL`]
+    /// plus one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::StatSpec;
+    /// use enshwick::stats::StatGroup;
+    ///
+    /// assert_eq!(StatGroup::Protection.to_raw(), StatSpec::GROUP_PROTECTION);
+    /// ```
+    #[must_use]
+    pub const fn to_raw(self) -> u8 {
+        self as u8 + 1
+    }
+
+    /// The group numbered `raw` in a [`StatSpec`]; `None` for none or a
+    /// number this build does not know.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::StatSpec;
+    /// use enshwick::stats::StatGroup;
+    ///
+    /// assert_eq!(StatGroup::from_raw(StatSpec::GROUP_MAIN), Some(StatGroup::Main));
+    /// assert_eq!(StatGroup::from_raw(StatSpec::GROUP_NONE), None);
+    /// ```
+    #[must_use]
+    pub fn from_raw(raw: u8) -> Option<Self> {
+        Self::ALL.get(usize::from(raw).checked_sub(1)?).copied()
+    }
 }
 
 impl StatDef {
@@ -56,7 +154,41 @@ impl StatDef {
             min: f32::MIN,
             max: f32::MAX,
             format,
+            #[cfg(feature = "unstable")]
+            group: None,
+            hidden: false,
         }
+    }
+
+    /// The same, shown as a row of `group` on the Character screen with the
+    /// local player's value.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Examples
+    ///
+    /// See [`StatGroup`].
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub const fn in_group(mut self, group: StatGroup) -> Self {
+        self.group = Some(group);
+        self
+    }
+
+    /// The same, shown nowhere: neither a row on the Character screen nor a
+    /// line in item tooltips.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::stats::StatDef;
+    ///
+    /// assert!(StatDef::flag().hidden().hidden);
+    /// ```
+    #[must_use]
+    pub const fn hidden(mut self) -> Self {
+        self.hidden = true;
+        self
     }
 
     /// A sum of points, 0 by default.
@@ -174,6 +306,12 @@ impl StatDef {
             default: self.default,
             min: self.min,
             max: self.max,
+            #[cfg(feature = "unstable")]
+            group: self.group.map_or(StatSpec::GROUP_NONE, StatGroup::to_raw),
+            #[cfg(not(feature = "unstable"))]
+            group: StatSpec::GROUP_NONE,
+            flags: if self.hidden { StatSpec::HIDDEN } else { 0 },
+            reserved_display: 0,
         }
     }
 
@@ -207,6 +345,9 @@ impl StatDef {
             min: data.min,
             max: data.max,
             format,
+            #[cfg(feature = "unstable")]
+            group: StatGroup::from_raw(data.group),
+            hidden: data.flags & StatSpec::HIDDEN != 0,
         };
         def.check().is_ok().then_some(def)
     }

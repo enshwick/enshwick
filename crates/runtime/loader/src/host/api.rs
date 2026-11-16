@@ -234,4 +234,6 @@ pub(crate) static API: HostApi = HostApi {
     terrain_material_add,
     interaction_prompt,
     ui_item_tooltip,
+    change_permissions,
+    transaction_settled,
 };

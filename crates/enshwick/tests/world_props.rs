@@ -2,13 +2,12 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex, OnceLock};
-    use std::time::Duration;
+    use std::sync::OnceLock;
 
     use enshwick::Entity;
     use enshwick::WorldError;
     use enshwick::abi::{Header, PlayerInfo, Status, TerrainMaterialInfo};
-    use enshwick::world::{HeldState, Settled, TransactionStatus, World, WorldTransform};
+    use enshwick::world::{HeldState, TransactionStatus, World, WorldTransform};
     use enshwick::{ItemId, Load, Mod, Off};
 
     static WORLD: OnceLock<World> = OnceLock::new();
@@ -255,101 +254,6 @@ mod tests {
         assert_eq!((props[0].1, props[0].2), (CHEST, [50.0, 40.0, 50.0]));
     }
 
-    /// Where `World::when_settled` puts what it hands its handler.
-    fn settled_into(
-        world: World,
-        id: enshwick::world::TransactionId,
-    ) -> Arc<Mutex<Option<Settled>>> {
-        let seen = Arc::new(Mutex::new(None));
-        let kept = Arc::clone(&seen);
-        world
-            .when_settled(id, Duration::from_secs(60), move |settled| {
-                *kept.lock().unwrap() = Some(settled.clone());
-            })
-            .unwrap();
-        seen
-    }
-
-    /// One scheduler pass.
-    fn pass(loader: &enshwick::test::Installed) {
-        let _ran = loader.tick(Duration::from_secs(1));
-    }
-
-    #[test]
-    fn a_wait_for_a_placement_hands_over_the_prop_a_pass_after_it_is_applied() {
-        let (loader, world) = started();
-        let id = world
-            .transaction()
-            .place_prop(CHEST, here())
-            .commit()
-            .unwrap();
-        let seen = settled_into(world, id);
-        pass(&loader);
-        assert!(seen.lock().unwrap().is_none(), "pending");
-        loader.run_transactions();
-        pass(&loader);
-        assert!(
-            seen.lock().unwrap().is_none(),
-            "applied, its prop stands a step later"
-        );
-        pass(&loader);
-        let settled = seen.lock().unwrap().take().unwrap();
-        assert_eq!(settled.status, Some(TransactionStatus::Applied));
-        assert_eq!(settled.props, world.transaction_entities(id));
-        assert_eq!(settled.props.len(), 1);
-        assert_eq!(settled.standing(), Some(settled.props[0]));
-        pass(&loader);
-        assert!(seen.lock().unwrap().is_none(), "the handler ran once");
-    }
-
-    #[test]
-    fn a_wait_for_a_placement_that_expires_hands_over_the_prop_it_placed() {
-        let (loader, world) = started();
-        let id = world
-            .transaction()
-            .place_prop(CHEST, here())
-            .commit()
-            .unwrap();
-        let seen = settled_into(world, id);
-        loader.run_transactions();
-        pass(&loader);
-        let placed = world.transaction_entities(id);
-        assert_eq!(placed.len(), 1);
-        loader.expire_transactions();
-        pass(&loader);
-        let settled = seen.lock().unwrap().take().unwrap();
-        assert_eq!(settled.status, Some(TransactionStatus::Expired));
-        assert_eq!(settled.props, placed);
-        assert_eq!(settled.standing(), Some(placed[0]));
-    }
-
-    #[test]
-    fn a_wait_whose_bound_passed_still_waits_a_pass_for_an_applied_prop() {
-        let (loader, world) = started();
-        let id = world
-            .transaction()
-            .place_prop(CHEST, here())
-            .commit()
-            .unwrap();
-        let seen = Arc::new(Mutex::new(None));
-        let kept = Arc::clone(&seen);
-        world
-            .when_settled(id, Duration::ZERO, move |settled| {
-                *kept.lock().unwrap() = Some(settled.clone());
-            })
-            .unwrap();
-        loader.run_transactions();
-        pass(&loader);
-        assert!(
-            seen.lock().unwrap().is_none(),
-            "its prop stands a step later"
-        );
-        pass(&loader);
-        let settled = seen.lock().unwrap().take().unwrap();
-        assert_eq!(settled.status, Some(TransactionStatus::Applied));
-        assert_eq!(settled.props.len(), 1);
-    }
-
     #[test]
     fn a_placed_prop_stands_where_it_was_placed_until_its_undo() {
         let (loader, world) = started();
@@ -364,63 +268,6 @@ mod tests {
         world.undo(id).unwrap();
         loader.run_transactions();
         assert_eq!(world.position(placed), None);
-    }
-
-    #[test]
-    fn a_wait_on_a_loader_that_refused_the_mod_its_tick_is_unavailable() {
-        let (_loader, world) = started_from(enshwick::test::FakeHost::new().refuse_tick(0));
-        let id = world
-            .transaction()
-            .place_prop(CHEST, here())
-            .commit()
-            .unwrap();
-        assert_eq!(
-            world
-                .when_settled(id, Duration::from_secs(60), |_| unreachable!())
-                .err(),
-            Some(WorldError::Unavailable)
-        );
-    }
-
-    #[test]
-    fn a_wait_for_a_failed_transaction_hands_over_its_failure() {
-        let (loader, world) = started();
-        let id = world
-            .transaction()
-            .remove_prop(Entity(999))
-            .commit()
-            .unwrap();
-        let seen = settled_into(world, id);
-        loader.run_transactions();
-        pass(&loader);
-        let settled = seen.lock().unwrap().take().unwrap();
-        assert_eq!(
-            settled.status,
-            Some(TransactionStatus::Failed(WorldError::NotAProp))
-        );
-        assert!(settled.props.is_empty());
-        assert_eq!(settled.standing(), None);
-    }
-
-    #[test]
-    fn a_wait_past_its_bound_hands_over_the_transaction_still_pending() {
-        let (loader, world) = started();
-        let id = world
-            .transaction()
-            .place_prop(CHEST, here())
-            .commit()
-            .unwrap();
-        let seen = Arc::new(Mutex::new(None));
-        let kept = Arc::clone(&seen);
-        world
-            .when_settled(id, Duration::ZERO, move |settled| {
-                *kept.lock().unwrap() = Some(settled.clone());
-            })
-            .unwrap();
-        pass(&loader);
-        let settled = seen.lock().unwrap().take().unwrap();
-        assert_eq!(settled.status, Some(TransactionStatus::Pending));
-        assert!(settled.props.is_empty());
     }
 
     #[test]

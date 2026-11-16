@@ -20,9 +20,9 @@ use crate::abi::{
     ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
     StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str,
     SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry,
-    UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel,
-    WeatherFront, WeatherSample,
+    TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
+    TransactionSettledFn, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker,
+    UiTooltipFn, UiWidget, Voxel, WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -1261,7 +1261,7 @@ pub struct HostApi {
     /// inside a step, [`Status::UNAVAILABLE`] while no world runs.
     pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the entities of the props transaction `id` of this mod placed
-    /// and still holds, oldest first, up to `capacity` of them at `out`,
+    /// and did not undo, kept when its undo data expires, oldest first, up to `capacity` of them at `out`,
     /// and their number to `count`; a prop is in the world from the step
     /// after the one that placed it. `out` may be null with `capacity` 0 to
     /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
@@ -2204,6 +2204,47 @@ pub struct HostApi {
         callback: Option<UiTooltipFn>,
         user: *mut c_void,
     ) -> Status,
+    /// Replaces the mod's change to the permissions of the player in game
+    /// with `account`: `deny` takes bits from the player, `grant` gives
+    /// bits, both masks of [`PlayerInfo`](super::PlayerInfo)'s permission
+    /// bits; both 0 ends the change. The server holds the player to
+    /// `(group | every grant) & !every deny`, with `group` the bits of the
+    /// player's user group, from its next step on, so the game's own checks
+    /// refuse what a taken bit guards, and the loader's own reads of the
+    /// player's bits give the bits in force; the player's client still acts
+    /// by its group's bits. A change ends when the mod ends it or turns
+    /// off, when the player leaves and when the world ends; ending one
+    /// needs no player in game. [`Status::BAD_ARGS`] for account 0 or a bit
+    /// past the permissions; [`Status::REFUSED`] for a new change to an
+    /// account not in game; [`Status::WRONG_THREAD`] off the server's game
+    /// thread; [`Status::UNAVAILABLE`] outside a server and on a build
+    /// without the permission table, the step link or the player removal
+    /// link. ABI 12.5.
+    pub change_permissions:
+        extern "system" fn(me: ModHandle, account: PlayerKey, deny: u32, grant: u32) -> Status,
+    /// Calls `callback` once for transaction `id` of this mod, with where it
+    /// stands and `user`, on the server's game thread after the first step
+    /// that ends with it no longer [`TransactionInfo::PENDING`]: written
+    /// whole ([`TransactionInfo::APPLIED`], which says when a prop may still
+    /// be absent), or failed, refused, undoing or undone. A step at least
+    /// `within_ns` nanoseconds after the call runs it as it stands, still
+    /// pending perhaps. The `info` is null when the loader forgot the
+    /// transaction meanwhile. A step runs its due callbacks in the order
+    /// they were asked, and a callback may ask again. When a client's hosted
+    /// game ends, every callback kept runs with its transaction failed or
+    /// expired, never in the next game; a dedicated server that stops runs
+    /// none. A mod the loader turned off loses its callbacks unrun. [`Status::BAD_ARGS`] for a null `callback`;
+    /// [`Status::MISSING`] for an id this mod did not get or one the loader
+    /// forgot; [`Status::UNAVAILABLE`] once the transactions are off, which
+    /// runs every callback kept at once. Nothing is kept on an error. Any
+    /// thread. ABI 12.7.
+    pub transaction_settled: extern "system" fn(
+        me: ModHandle,
+        id: u64,
+        within_ns: u64,
+        callback: Option<TransactionSettledFn>,
+        user: *mut c_void,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2424,5 +2465,7 @@ const _: () = {
     assert!(offset_of!(HostApi, terrain_material_add) == 24 + 207 * 8);
     assert!(offset_of!(HostApi, interaction_prompt) == 24 + 208 * 8);
     assert!(offset_of!(HostApi, ui_item_tooltip) == 24 + 209 * 8);
-    assert!(size_of::<HostApi>() == 24 + 210 * 8);
+    assert!(offset_of!(HostApi, change_permissions) == 24 + 210 * 8);
+    assert!(offset_of!(HostApi, transaction_settled) == 24 + 211 * 8);
+    assert!(size_of::<HostApi>() == 24 + 212 * 8);
 };

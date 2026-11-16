@@ -1,5 +1,6 @@
 //! Whether a player may edit a box of the world, by the server's own rule.
 
+use crate::PlayerKey;
 use crate::abi::{BuildRights, Header, PlayerInfo};
 
 use super::{Player, World, WorldError};
@@ -45,7 +46,8 @@ impl PlayerPermissions {
         Self::CanReceiveExp,
     ];
 
-    /// Every permission's bit at once, as the server's console holds them.
+    /// Every permission's bit at once, as the server's console holds them:
+    /// [`PlayerInfo::ALL_PERMISSIONS`].
     pub const ALL_BITS: u32 = {
         let mut bits = 0;
         let mut i = 0;
@@ -53,6 +55,10 @@ impl PlayerPermissions {
             bits |= Self::ALL[i].bit();
             i += 1;
         }
+        assert!(
+            bits == PlayerInfo::ALL_PERMISSIONS,
+            "every permission, no other bit"
+        );
         bits
     };
 
@@ -202,6 +208,56 @@ impl World {
         );
         WorldError::from_status(status)?;
         Ok(kept != 0)
+    }
+
+    /// Takes the permissions in `deny` from the player in game with account
+    /// `key` and gives those in `grant`, on top of their user group's, so
+    /// the game's own server checks follow: a taken `CanEditWorld` stops
+    /// digging, bombs, building and breaking anywhere, `CanEditBase` inside
+    /// bases, `CanAccessInventories` opening chests in bases. Each call
+    /// replaces the mod's own change; both lists empty ends it, also for a
+    /// player no longer in game. A permission any mod takes is gone even
+    /// when another gives it. The change holds from the server's next step
+    /// until the mod ends it or turns off, the player leaves or the world
+    /// ends; [`Player::permissions`] and the loader's own admin checks then
+    /// read the bits in force. The player's client still acts by its
+    /// group's bits: it may show an edit the server then refuses, and it
+    /// never starts an edit that only a granted bit allows.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for account 0 and a new change to an account
+    /// not in game; [`WorldError::WrongThread`] off
+    /// the server's game thread; [`WorldError::Unavailable`] outside a
+    /// server and on a game build without the permission table, the step
+    /// link or the player removal link.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::{Player, PlayerPermissions, World};
+    ///
+    /// fn read_only(world: World, player: &Player) {
+    ///     let taken = [PlayerPermissions::CanEditWorld, PlayerPermissions::CanEditBase];
+    ///     if let Err(why) = world.change_permissions(player.key, &taken, &[]) {
+    ///         enshwick::warn!("{} keeps their permissions: {why}", player.name);
+    ///     }
+    /// }
+    /// ```
+    #[script]
+    pub fn change_permissions(
+        self,
+        key: PlayerKey,
+        deny: &[PlayerPermissions],
+        grant: &[PlayerPermissions],
+    ) -> Result<(), WorldError> {
+        let bits = |list: &[PlayerPermissions]| list.iter().fold(0, |bits, p| bits | p.bit());
+        WorldError::from_status((self.0.host.api().change_permissions)(
+            self.0.host.handle(),
+            key,
+            bits(deny),
+            bits(grant),
+        ))
     }
 }
 

@@ -735,7 +735,7 @@ const _: () = {
     assert!(size_of::<AffixModifierSpec>() == 20);
     assert!(size_of::<ItemLine>() == 16);
     assert!(size_of::<AffixRoll>() == 8 + 12 + 4 + 8);
-    assert!(size_of::<StatSpec>() == 8 + 16);
+    assert!(size_of::<StatSpec>() == 8 + 16 + 4);
     // Frozen: a stat reference, a modifier and its source are plain values (HostApi list rule).
     assert!(size_of::<StatRef>() == 8);
     assert!(size_of::<StatModifier>() == 12);

@@ -9390,3 +9390,116 @@ in = "ui.item_slot"
 shape = ["mov rdx,[rdx+*]", "mov ecx,[rcx+0x8]", "call {item.info}"]
 take = "value"
 range = [0x200000, 0x900000]
+
+[[route]]
+id = "~fn:ui.attributes"
+sides = ["client"]
+loads = ["doAttributesSubmenu"]
+
+[[route]]
+id = "ui.attribute_rows_main"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
+nth = 1
+of = 7
+take = "address"
+check = ["push rbp", "push rbx", "push r12", "lea rbp,[rsp-?]"]
+
+[[route]]
+id = "ui.attribute_rows_fog_survival"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
+nth = 2
+of = 7
+take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x10],rsi", "mov [rax+0x18],rdi"]
+
+[[route]]
+id = "ui.attribute_rows_weapon_damage"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
+nth = 3
+of = 7
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r12"]
+
+[[route]]
+id = "ui.attribute_rows_enemy_damage"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
+nth = 4
+of = 7
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "mov [rsp+0x20],r14"]
+
+[[route]]
+id = "ui.attribute_rows_regeneration"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
+nth = 5
+of = 7
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "mov [rsp+0x20],r13"]
+
+[[route]]
+id = "ui.attribute_rows_misc"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
+nth = 6
+of = 7
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r12"]
+
+[[route]]
+id = "ui.attribute_rows_protection"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "call *"]
+nth = 1
+of = 4
+take = "address"
+check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rsi", "mov [rax+0x20],rdi"]
+
+[[route]]
+id = "ui.attribute_rows_damage"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "call *"]
+nth = 3
+of = 4
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r14"]
+
+[[route]]
+id = "ui.attribute_rows_primary"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["mov qword [rbp+?],0x14", "call *"]
+nth = 4
+of = 4
+take = "address"
+check = ["push rbp", "push rsi", "push rdi", "push r12", "push r14"]
+
+[[route]]
+id = "ui.attribute_row_push"
+sides = ["client"]
+in = "ui.attribute_rows_main"
+shape = ["mov rcx,?r", "call *", "movaps xmm13,[rsp+?]"]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "push rdi", "sub rsp,0x20", "mov rbx,rdx", "lea r8,[rcx+0x10]"]
+
+[[route]]
+id = "ui.attribute_row_size"
+sides = ["client"]
+in = "~fn:ui.attributes"
+shape = ["inc ?r", "add ?r,*", "cmp ?r,[rbp+?]"]
+nth = 1
+of = 10
+take = "value"
+range = [0x150, 0x540]

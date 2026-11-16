@@ -43,9 +43,8 @@ mod tests {
             let _ran = loader.tick(Duration::from_secs(1));
         };
         pass();
-        loader.run_transactions();
-        pass();
         assert!(!logged(&loader, "settled"), "{:?}", loader.logs());
+        loader.run_transactions();
         pass();
         assert!(
             logged(&loader, "settled Applied with 1 prop"),

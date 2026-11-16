@@ -2,13 +2,13 @@
 
 use enshwick_core::abi::{
     BlockPlace, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
-    VoxelRegion, VoxelWrite,
+    TransactionSettledFn, VoxelRegion, VoxelWrite,
 };
 
 use crate::host::layer::{
-    HeadedOut, ListOut, Mod, Out, Refusal, Refused, UnalignedList, Values, entries,
+    Callback, HeadedOut, ListOut, Mod, Out, Refusal, Refused, UnalignedList, Values, entries,
 };
-use crate::world::transactions::{Change, Erase, Paste};
+use crate::world::transactions::{Change, Erase, Paste, Standing};
 
 entries! {
     fn transaction_commit(
@@ -34,23 +34,51 @@ entries! {
 
     fn transaction_status(me as Mod, id: u64, out as HeadedOut<TransactionInfo>) -> Status {
         let standing = crate::world::transactions::info(me.index, id).ok_or(Status::MISSING)?;
-        out.put(TransactionInfo {
-            header: enshwick_core::abi::Header::of::<TransactionInfo>(),
-            state: standing.state,
-            reason: standing.reason.map_or(Status::OK, |reason| reason.status()),
-            ops: u32::try_from(standing.ops).unwrap_or(u32::MAX),
-            applied: u32::try_from(standing.applied).unwrap_or(u32::MAX),
-            bricks: standing.bricks as u64,
-            refusal: standing.refusal,
-            reserved: 0,
-            holds: standing.holds,
-            created: u32::try_from(standing.created).unwrap_or(u32::MAX),
-        })
+        out.put(info(&standing))
     }
 
     fn transaction_undo(me as Mod, id: u64) -> Status {
         crate::world::transactions::undo(me.index, id)?;
         Ok(())
+    }
+
+    fn transaction_settled(
+        me as Mod,
+        id: u64,
+        within_ns: u64,
+        callback as Callback<TransactionSettledFn>,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        crate::world::transactions::info(me.index, id).ok_or(Status::MISSING)?;
+        let within = core::time::Duration::from_nanos(within_ns);
+        let user = user.expose_provenance();
+        let end = Box::new(move |standing: Option<&Standing>| {
+            let info = standing.map(info);
+            let info = info.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
+            // SAFETY: the callback lives in the mod's DLL, which stays
+            // loaded, with the pointer the mod asked with; `info` is null or
+            // lives for the call; the waits run each end once, on the
+            // server's game thread.
+            unsafe { callback(id, info, core::ptr::with_exposed_provenance_mut(user)) };
+        });
+        crate::world::transactions::when_settled(me.index, id, within, end)?;
+        Ok(())
+    }
+}
+
+/// Where a transaction stands as its mod reads it, counts saturating.
+fn info(standing: &Standing) -> TransactionInfo {
+    TransactionInfo {
+        header: enshwick_core::abi::Header::of::<TransactionInfo>(),
+        state: standing.state,
+        reason: standing.reason.map_or(Status::OK, |reason| reason.status()),
+        ops: u32::try_from(standing.ops).unwrap_or(u32::MAX),
+        applied: u32::try_from(standing.applied).unwrap_or(u32::MAX),
+        bricks: standing.bricks as u64,
+        refusal: standing.refusal,
+        reserved: 0,
+        holds: standing.holds,
+        created: u32::try_from(standing.created).unwrap_or(u32::MAX),
     }
 }
 

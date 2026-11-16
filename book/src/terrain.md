@@ -420,18 +420,21 @@ prop starts with: a logic trigger's settings and a plant's level.
 #### Waiting for a placed prop
 
 To act on a placed prop, such as to fill a chest, wait with
-`world.when_settled(id, within, handler)`. Its handler runs on the game
-thread once the transaction stopped running. Once it is written whole, the
-handler runs one scheduler pass later, when its props stand. The status is
-then `Applied`, or `Expired` when the loader dropped its undo data meanwhile.
-Any other end runs the handler at once. A large transaction spread over
-steps is waited for whole. The handler gets a `Settled`: the status and the
-props the transaction placed. Its `standing()` gives the first prop once
-the transaction was written whole. What another end means is the mod's to
+`world.when_settled(id, within, handler)`. The loader runs the handler on
+the game thread after the step that ends the transaction's run. The mod
+neither polls nor subscribes a tick. Written whole, the status is
+`Applied` and the props it placed stand in the world. The loader waits up
+to 3,600 steps for a prop to appear. A prop still absent then, or one whose
+state does not read, still counts as `Applied`. Any other end runs the
+handler after its step too. A large transaction spread over steps is
+waited for whole. The handler gets a `Settled`: the status and the props
+the transaction placed. Its `standing()` gives the first prop once the
+transaction was written whole. What another end means is the mod's to
 decide. One case is `Failed(NotLoaded)`, which the same changes committed
 again a second later may pass. Once `within` passed, the handler gets the
-transaction as it stands, still `Pending` perhaps. The wait is a scheduler
-task, so it ends without the handler when its game ends.
+transaction as it stands, still `Pending` perhaps. When a hosted game ends,
+the handler runs at once with the transaction failed or expired. It never
+runs in the next game.
 
 ```rust
 use std::time::Duration;

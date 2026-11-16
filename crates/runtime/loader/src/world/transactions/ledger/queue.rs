@@ -202,8 +202,8 @@ impl Ledger {
     }
 
     /// Drops what the ledger holds for a world that ended: transactions in
-    /// work fail, kept undo data goes, and work in hand is dropped on its
-    /// return.
+    /// work fail, kept undo data and the props placed go with the world,
+    /// and work in hand is dropped on its return.
     pub(crate) fn forget(&mut self) {
         for record in &mut self.records {
             match record.state {
@@ -216,6 +216,7 @@ impl Ledger {
                 _ => {}
             }
             record.drop_work();
+            record.created.clear();
             record.undo_asked = false;
         }
         self.work.clear();

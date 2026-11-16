@@ -250,6 +250,8 @@ mod sounds;
 mod spawns;
 #[cfg(feature = "unstable")]
 mod stat_kinds;
+#[cfg(feature = "unstable")]
+mod stat_rows;
 mod stat_watch;
 #[cfg(feature = "unstable")]
 mod static_halves;
@@ -294,6 +296,8 @@ mod world_props;
 #[cfg(feature = "unstable")]
 mod world_queries;
 mod world_settings;
+#[cfg(feature = "unstable")]
+mod world_settled;
 #[cfg(feature = "unstable")]
 mod world_writes;
 mod worlds;

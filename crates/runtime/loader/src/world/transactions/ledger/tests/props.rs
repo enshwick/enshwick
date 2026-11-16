@@ -22,6 +22,31 @@ fn a_placed_prop_is_listed_and_its_undo_removes_it() {
 }
 
 #[test]
+fn a_placement_whose_undo_data_expired_lists_its_prop_until_the_world_ends() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let placed = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    run_out(&mut ledger, &mut world);
+    for at in [40.0, 60.0, 80.0, 100.0, 120.0] {
+        ledger.commit(ME, None, vec![dig(at)]).unwrap();
+        ledger.step(&mut world, 1000);
+    }
+    assert_eq!(state(&ledger, placed).0, TransactionInfo::EXPIRED);
+    assert_eq!(
+        ledger.entities(ME, placed),
+        Some(vec![1]),
+        "it still stands"
+    );
+    assert_eq!(ledger.info(ME, placed).unwrap().created, 1);
+
+    ledger.forget();
+    assert_eq!(ledger.entities(ME, placed), Some(vec![]));
+    assert_eq!(ledger.info(ME, placed).unwrap().created, 0);
+}
+
+#[test]
 fn an_undo_of_a_placed_prop_that_is_gone_is_refused() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
