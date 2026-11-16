@@ -302,6 +302,32 @@ mod tests {
     }
 
     #[test]
+    fn sampler_age_keeps_full_u64_precision_and_the_never_sampled_sentinel() {
+        use enshwick::abi::{Header, LocalInputInfo as Info};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local status = enshwick.input.local_status()
+                enshwick.log.info(`boundary age {status.age_ms}`)
+            end)
+            ",
+        );
+        for age_ms in [u64::MAX - 1, u64::MAX] {
+            loader.set_local_input_status(Info {
+                header: Header::of::<Info>(),
+                flags: Info::SAMPLE_PRESENT | (1 << 31),
+                reserved: 0,
+                age_ms,
+            });
+            let _drawn = loader.draw_frame();
+        }
+        for line in ["boundary age 18446744073709551614", "boundary age nil"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_cannot_read_client_sampler_status_on_a_server() {
         let loader = run(
             FakeHost::new().player_input(),
