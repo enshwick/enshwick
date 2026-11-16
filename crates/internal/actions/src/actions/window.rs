@@ -10,9 +10,10 @@
 //! the loader and [`Actions`](super::Actions) share it.
 //!
 //! The text is a line per item and tab-separated fields: `W` the title,
-//! `T` a line, `R` a row, `B` a button of the row before it and `E` an
-//! action drawn whole. The sheet's own lines follow, with the entries of
-//! the actions the window names. Texts never hold a tab or a line break.
+//! `T` a line, `R` a row, `B` a button of the row before it, `E` an
+//! action drawn whole, and `M` a map with a `K` line per marker. The
+//! sheet's own lines follow, with the entries of the actions the window
+//! names. Texts never hold a tab or a line break.
 
 use core::fmt::Write as _;
 use std::sync::Arc;
@@ -20,6 +21,10 @@ use std::sync::Arc;
 use super::Value;
 use super::sheet::{self, Entry, clean};
 use crate::PlayerKey;
+
+mod map;
+
+pub use map::{MAX_MARKERS, MapView, MarkerView, NEAR, WindowMap};
 
 /// The most items a window holds: lines, rows and actions.
 pub const MAX_ITEMS: usize = 64;
@@ -50,9 +55,21 @@ pub const MAX_BYTES: usize = 7_168;
 /// Fills a text key with values in one reader's language.
 type Say<'a> = &'a dyn Fn(&str, &[(&str, &str)]) -> String;
 
-/// Says what is wrong with an action an item names and the values a button
-/// gives it, `None` for an action drawn whole.
-type Check<'a> = &'a dyn Fn(&str, Option<&[Value]>) -> Option<String>;
+/// Says what is wrong with an action an item names, used as `Use` says.
+type Check<'a> = &'a dyn Fn(&str, Use<'_>) -> Option<String>;
+
+/// How a window uses one of the mod's actions, which its check follows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Use<'a> {
+    /// Drawn whole, its fields filled on the client.
+    Whole,
+    /// Run by a button that gives these values first.
+    Button(&'a [Value]),
+    /// Run by a waypoint on a map's marker, with all of these values.
+    Marker(&'a [Value]),
+    /// Run by a waypoint away from a map's markers, with its x, y and z.
+    Point,
+}
 
 /// A text key and the values it is filled with, in each player's language.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -98,6 +115,7 @@ enum Item {
     Text(Text),
     Row(Row),
     Action(String),
+    Map(WindowMap),
 }
 
 /// A window of a mod of side server, drawn on players' clients with the
@@ -189,26 +207,59 @@ impl Window {
         self
     }
 
-    /// The ids of the actions the window names, rows' buttons included,
-    /// in order and maybe more than once.
+    /// Adds a map: its markers show on the player's own map while they hold
+    /// the window, and the waypoint they set there runs its actions. The
+    /// window draws a line saying so and steps aside while the map is open.
+    /// A window holds one map.
+    ///
+    /// # Examples
+    ///
+    /// See [`WindowMap`].
+    #[must_use]
+    pub fn map(mut self, map: WindowMap) -> Self {
+        self.items.push(Item::Map(map));
+        self
+    }
+
+    /// The ids of the actions the window names, rows' buttons and its map
+    /// included, in order and maybe more than once.
     pub(super) fn actions(&self) -> impl Iterator<Item = &str> {
         self.items.iter().flat_map(|item| {
             let ids: Vec<&str> = match item {
                 Item::Text(_) => Vec::new(),
                 Item::Row(row) => row.buttons.iter().map(|b| b.action.as_str()).collect(),
                 Item::Action(action) => vec![action.as_str()],
+                Item::Map(map) => map.actions().collect(),
             };
             ids
         })
     }
 
-    /// Why the window cannot be shown: too many items or buttons, or what
-    /// `check` finds wrong with an action an item names and the values a
-    /// button gives it, `None` for an action drawn whole; `None` when it
-    /// can.
+    /// Whether an item the client draws names action `id`: a row's button
+    /// or an action drawn whole, which need its sheet entry; a map's
+    /// actions run on the server and need none.
+    pub(super) fn draws(&self, id: &str) -> bool {
+        self.items.iter().any(|item| match item {
+            Item::Row(row) => row.buttons.iter().any(|b| b.action == id),
+            Item::Action(action) => action == id,
+            Item::Text(_) | Item::Map(_) => false,
+        })
+    }
+
+    /// Why the window cannot be shown: too many items, buttons or maps, or
+    /// what `check` finds wrong with how an item uses an action; `None`
+    /// when it can.
     pub(super) fn fault(&self, check: Check<'_>) -> Option<String> {
         if self.items.len() > MAX_ITEMS {
             return Some(format!("{} items, at most {MAX_ITEMS}", self.items.len()));
+        }
+        let maps = self
+            .items
+            .iter()
+            .filter(|item| matches!(item, Item::Map(_)))
+            .count();
+        if maps > 1 {
+            return Some(format!("{maps} maps, at most one"));
         }
         self.items.iter().find_map(|item| match item {
             Item::Row(row) if row.buttons.len() > MAX_BUTTONS => Some(format!(
@@ -218,8 +269,9 @@ impl Window {
             Item::Row(row) => row
                 .buttons
                 .iter()
-                .find_map(|button| check(&button.action, Some(&button.args))),
-            Item::Action(action) => check(action, None),
+                .find_map(|button| check(&button.action, Use::Button(&button.args))),
+            Item::Action(action) => check(action, Use::Whole),
+            Item::Map(map) => map.fault(check),
             Item::Text(_) => None,
         })
     }
@@ -265,6 +317,12 @@ impl Window {
                 }
                 Item::Action(action) => {
                     let _ = writeln!(lines, "E\t{}", clean(action));
+                }
+                Item::Map(map) => {
+                    let room = MAX_BYTES.saturating_sub(out.len() + tail.len());
+                    let (kept, every) = map.lines(say, room);
+                    whole &= every;
+                    lines = kept;
                 }
             }
             if out.len() + lines.len() + tail.len() > MAX_BYTES {
@@ -417,6 +475,8 @@ pub enum ItemView {
     },
     /// An action drawn whole, by id; its entry is in [`View::entries`].
     Action(String),
+    /// The window's map, its markers and the actions a waypoint runs.
+    Map(MapView),
 }
 
 /// A button of a row, as the client reads it.
@@ -463,6 +523,13 @@ pub fn decode(text: &str) -> Option<View> {
                 buttons: Vec::new(),
             },
             ["E", action] if super::is_valid_id(action) => ItemView::Action((*action).to_owned()),
+            ["M", on_marker, on_point] => ItemView::Map(MapView::of(on_marker, on_point)),
+            ["K", x, y, z, label, args] => {
+                if let Some(ItemView::Map(map)) = view.items.last_mut() {
+                    map.add([*x, *y, *z, *label, *args], cut);
+                }
+                continue;
+            }
             ["B", label, action, args] => {
                 if let (Some(ItemView::Row { buttons, .. }), true, Some(args)) = (
                     view.items.last_mut(),
@@ -687,13 +754,11 @@ mod tests {
 
     #[test]
     fn a_window_names_its_faults() {
-        let check = |action: &str, values: Option<&[Value]>| {
+        let check = |action: &str, used: Use<'_>| {
             if action != "kick" {
                 return Some(format!("no action {action}"));
             }
-            values
-                .is_some_and(|v| v.len() > 1)
-                .then(|| "too many".to_owned())
+            matches!(used, Use::Button(v) if v.len() > 1).then(|| "too many".to_owned())
         };
         let fine = Window::new("w", "W")
             .row(Row::new("r", &[]).button("Kick", "kick", &[]))

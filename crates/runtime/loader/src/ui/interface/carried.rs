@@ -7,15 +7,19 @@
 //! action on the server, which checks it again, and a button whose action
 //! takes more values opens a form for the rest. An action drawn whole shows
 //! its fields above a button that runs it. Long windows scroll.
+//!
+//! The markers of the held windows' maps show on the game's own map as the
+//! loader's, and the windows step aside while the Map screen is open, so
+//! the player sees the map and sets the waypoint the server reads.
 
 use core::cell::RefCell;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
 use enshwick_core::abi::UiWidget;
 use enshwick_core::actions::Value;
 use enshwick_core::actions::sheet::{ArgView, Entry, encode_args};
-use enshwick_core::actions::window::{ButtonView, ItemView, View, decode};
+use enshwick_core::actions::window::{ButtonView, ItemView, MapView, View, decode};
 
 use super::engine::{Engine, Scroll, Window};
 use super::{Painter, Widgets, copy};
@@ -23,9 +27,14 @@ use crate::base::remote::Message;
 use crate::engine::texts;
 use crate::ui::windows::MAX_HELD;
 
+/// The game's name of the `HudScreenType` member of the Map screen.
+const MAP_SCREEN: &str = "Map";
+
 mod fields;
+mod markers;
 
 use fields::{Field, field, value};
+use markers::mark;
 
 /// Rows of a window this far apart.
 const GAP: f32 = 14.0;
@@ -38,18 +47,30 @@ struct Held {
     view: View,
 }
 
-/// The windows the client holds, the newest last, and `None` while it
-/// holds none: swapped whole, so a frame reads them without a lock.
-static STATE: ArcSwapOption<Vec<Held>> = ArcSwapOption::const_empty();
+/// The carried windows' state on the client.
+struct Carried {
+    /// The windows the client holds, the newest last, and `None` while it
+    /// holds none: swapped whole, so a frame reads them without a lock.
+    held: ArcSwapOption<Vec<Held>>,
+    /// The map whose markers are on the game's map, `None` for none; locked
+    /// while they are set, so the last change's markers stay.
+    marked: Mutex<Option<MapView>>,
+}
+
+static STATE: Carried = Carried {
+    held: ArcSwapOption::const_empty(),
+    marked: Mutex::new(None),
+};
 
 /// Changes the windows the client holds with `change`, which may run more
-/// than once.
+/// than once, then their markers on the map.
 fn change(change: impl Fn(&mut Vec<Held>)) {
-    STATE.rcu(|held| {
+    STATE.held.rcu(|held| {
         let mut held = held.as_deref().cloned().unwrap_or_default();
         change(&mut held);
         (!held.is_empty()).then(|| Arc::new(held))
     });
+    mark();
 }
 
 /// `held` once the server sent mod `id`'s window `window` as `view`: in
@@ -94,7 +115,8 @@ pub(crate) fn closed(id: &str, window: &str) {
 /// Forgets every window, as when the client leaves its server or loses
 /// its link to it.
 pub(crate) fn forget() {
-    STATE.store(None);
+    STATE.held.store(None);
+    mark();
 }
 
 /// A button's form: the values its button gave, and fields for the rest.
@@ -112,6 +134,9 @@ struct Drawn {
     scroll: Scroll,
     fields: Vec<((String, usize), Field)>,
     form: Option<Form>,
+    /// The HUD screen byte of the Map screen, which the window steps
+    /// aside for.
+    map_screen: Option<u8>,
 }
 
 impl Drawn {
@@ -122,7 +147,15 @@ impl Drawn {
             scroll: Scroll::new(),
             fields: Vec::new(),
             form: None,
+            map_screen: crate::engine::screens::byte(MAP_SCREEN),
         }
+    }
+
+    /// Leaves the window undrawn while the Map screen is open, keeping its
+    /// form and fields; its panel starts afresh, so the Back that closes the
+    /// map is not read as Back over the window when it draws again.
+    fn step_aside(&mut self) {
+        self.window = Window::new();
     }
 
     /// The field of action `action`'s argument `index`, made for `arg`.
@@ -201,8 +234,8 @@ enum Click {
 /// - Called inside a frame of the game's interface update, on its thread.
 /// - `context` is the non-zero context `Engine::context` read in this frame.
 /// - No other window is open.
-pub(super) unsafe fn draw(engine: &Engine, context: usize) {
-    let held = STATE.load();
+pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
+    let held = STATE.held.load();
     let Some(top) = held.as_deref().and_then(|held| held.last()) else {
         DRAWN.set(None);
         return;
@@ -215,6 +248,10 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         let Some(drawn) = slot.as_mut() else {
             return Click::Nothing;
         };
+        if screen.is_some() && screen == drawn.map_screen {
+            drawn.step_aside();
+            return Click::Nothing;
+        }
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window; `drawn` stays in the
         // thread-local `DRAWN`, borrowed and unmoved for the call.
@@ -336,6 +373,11 @@ fn items(paint: &impl Widgets, view: &View, drawn: &mut Drawn) -> Click {
             }
             ItemView::Action(_) => {
                 entry.map_or(Click::Nothing, |entry| action(paint, entry, drawn))
+            }
+            ItemView::Map(_) => {
+                let line = texts::text("windows.map");
+                paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+                Click::Nothing
             }
             _ => Click::Nothing,
         };
@@ -610,6 +652,25 @@ mod tests {
         Drawn::new(("you.admin".into(), "panel".into()))
     }
 
+    #[test]
+    fn a_window_stepping_aside_for_the_map_keeps_its_form_and_fields() {
+        let mut drawn = drawn();
+        let form = Form {
+            label: "Kick".into(),
+            action: "kick".into(),
+            given: Vec::new(),
+        };
+        drawn.form = Some(form.clone());
+        let reason = ArgView {
+            kind: ArgView::TEXT,
+            ..ArgView::default()
+        };
+        drawn.field("kick", 0, &reason);
+        drawn.step_aside();
+        assert_eq!(drawn.form, Some(form));
+        assert_eq!(drawn.fields.len(), 1);
+    }
+
     fn run_button(drew: &[Drew]) -> Option<bool> {
         drew.iter().find_map(|widget| match widget {
             Drew::Button { text, enabled } if text == texts::text("windows.run") => Some(*enabled),
@@ -824,8 +885,23 @@ mod tests {
         assert_eq!(drawn.fields.len(), 3);
     }
 
+    #[test]
+    fn a_map_draws_the_line_that_says_to_open_the_map() {
+        let view = View {
+            items: vec![ItemView::Map(MapView::default())],
+            ..View::default()
+        };
+        let paint = Recorder::default();
+        let click = items(&paint, &view, &mut drawn());
+        assert_eq!(click, Click::Nothing);
+        assert_eq!(
+            paint.drew(),
+            [Drew::Label(texts::text("windows.map").into())]
+        );
+    }
+
     fn held() -> Vec<(String, String)> {
-        let held = STATE.load();
+        let held = STATE.held.load();
         let held = held.as_deref().map_or_default(Vec::as_slice);
         held.iter()
             .map(|h| (h.mod_id.clone(), h.window.clone()))
@@ -848,7 +924,7 @@ mod tests {
         );
         closed("you.admin", "bans");
         closed("you.other", "panel");
-        assert!(STATE.load().is_none(), "nothing held");
+        assert!(STATE.held.load().is_none(), "nothing held");
     }
 
     #[test]
@@ -856,6 +932,6 @@ mod tests {
         heard("you.admin", "panel", true, "W\tPanel\n");
         assert_eq!(held().len(), 1);
         crate::base::net::link_lost();
-        assert!(STATE.load().is_none());
+        assert!(STATE.held.load().is_none());
     }
 }

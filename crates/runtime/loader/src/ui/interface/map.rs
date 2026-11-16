@@ -34,7 +34,7 @@ use enshwick_base::Relock;
 use super::engine::{Buf, UiText};
 
 /// The most markers one mod shows.
-const MAX_MARKERS: usize = 256;
+pub(super) const MAX_MARKERS: usize = 256;
 /// Frames an old marker set stays alive after it was replaced, since the map
 /// may still read a label it was handed the frame before.
 const RETIRED_FRAMES: u64 = 2;
@@ -263,14 +263,30 @@ pub(crate) enum MarkersError {
     TooMany,
 }
 
+/// The set of the carried windows' markers, which the loader owns beside
+/// its own set: an index no mod's place in load order reaches.
+const CARRIED: usize = usize::MAX - 1;
+
 /// Replaces mod `owner`'s markers with `markers`.
 pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Result<(), MarkersError> {
-    set_under(&MARKERS_FUSE, owner, given)
+    set_under(&MARKERS_FUSE, owner.get(), owner, given)
 }
 
-/// [`set`] while `feature`, [`MARKERS_FUSE`] outside tests, is on: missing
-/// once it is off, so a mod learns its markers will not show.
-fn set_under(feature: &Fuse, owner: ModIndex, given: &[UiMarker]) -> Result<(), MarkersError> {
+/// Replaces the carried windows' markers with `given`, a set apart from
+/// the loader's own, which its developer tools use.
+pub(super) fn set_carried(given: &[UiMarker]) -> Result<(), MarkersError> {
+    set_under(&MARKERS_FUSE, CARRIED, ModIndex::LOADER, given)
+}
+
+/// Replaces set `slot`'s markers, which `owner` shows, while `feature`,
+/// [`MARKERS_FUSE`] outside tests, is on: missing once it is off, so a
+/// mod learns its markers will not show.
+fn set_under(
+    feature: &Fuse,
+    slot: usize,
+    owner: ModIndex,
+    given: &[UiMarker],
+) -> Result<(), MarkersError> {
     if feature.is_off() {
         return Err(MarkersError::Off);
     }
@@ -288,9 +304,9 @@ fn set_under(feature: &Fuse, owner: ModIndex, given: &[UiMarker]) -> Result<(), 
         })
         .collect();
     let mut sets = MARKERS.sets.relock();
-    sets.retain(|(o, _)| *o != owner.get());
+    sets.retain(|(o, _)| *o != slot);
     if !copied.is_empty() {
-        sets.push((owner.get(), copied.into()));
+        sets.push((slot, copied.into()));
     }
     let next: Sets = sets.iter().map(|(_, list)| Arc::clone(list)).collect();
     drop(sets);
@@ -639,8 +655,40 @@ mod tests {
         feature.blow("a test");
         let none: [UiMarker; 0] = [];
         assert_eq!(
-            set_under(&feature, ModIndex::LOADER, &none),
+            set_under(&feature, ModIndex::LOADER.get(), ModIndex::LOADER, &none),
             Err(MarkersError::Off)
+        );
+    }
+
+    #[test]
+    fn the_carried_windows_markers_and_the_loader_s_own_keep_apart() {
+        let feature = Fuse::new("test markers apart");
+        let marker = |label| UiMarker {
+            header: enshwick_core::abi::Header::of::<UiMarker>(),
+            position: [0.0; 3],
+            label: enshwick_core::abi::Str::new(label),
+            color: UiMarker::YELLOW,
+            marker_type: 0,
+        };
+        let loader = ModIndex::LOADER;
+        assert_eq!(
+            set_under(&feature, CARRIED, loader, &[marker("map")]),
+            Ok(())
+        );
+        assert_eq!(
+            set_under(&feature, loader.get(), loader, &[marker("demo")]),
+            Ok(())
+        );
+        assert_eq!(set_under(&feature, loader.get(), loader, &[]), Ok(()));
+        let labels: Vec<Box<[u8]>> = snapshot()
+            .load()
+            .iter()
+            .flat_map(|set| set.iter().map(|m| m.label.clone()))
+            .collect();
+        assert_eq!(
+            labels,
+            [Box::from(*b"map")],
+            "clearing the demo's keeps the map's"
         );
     }
 

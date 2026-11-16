@@ -6,7 +6,7 @@ mod read;
 
 #[cfg(test)]
 pub(super) use fit::fits;
-pub(super) use fit::{button_fault, optional_fault};
+pub(super) use fit::{optional_fault, use_fault};
 #[cfg(test)]
 pub(super) use read::toggle_word;
 use read::{ReadArgsError, words};
@@ -376,6 +376,7 @@ impl Registry {
         let others = self.others(player);
         let entries: Vec<Entry> = named
             .iter()
+            .filter(|d| window.draws(&d.action.id))
             .map(|d| self.entry(d, player, language, &others))
             .collect();
         window.render(&|key, values| self.say(key, language, values), &entries)

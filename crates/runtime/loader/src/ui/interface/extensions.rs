@@ -102,7 +102,7 @@ pub(super) struct FrameReads {
     /// The host's fixed-point position, from the same step.
     pub(super) screen_host_position: [i64; 3],
     /// The HUD screen byte, `None` outside a game.
-    screen: Option<u8>,
+    pub(super) screen: Option<u8>,
 }
 
 impl FrameReads {

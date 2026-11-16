@@ -338,6 +338,85 @@ impl Installed {
         }
     }
 
+    /// `player` moves their waypoint to `at` while holding the mod's
+    /// windows, as the loader reads it after the step: the newest window
+    /// they hold with a map runs what `MapView::run_at` picks, the action of
+    /// a marker within `actions::window::NEAR` or the action of a point,
+    /// as a run through [`ask_actions`](Self::ask_actions); the mod's reply,
+    /// `None` when they hold no map or it runs nothing there. As in the
+    /// game, only a move runs anything: a waypoint set where it already was
+    /// runs nothing, and one set while the player held no map is forgotten.
+    /// Call
+    /// [`carried_windows`](Self::carried_windows) first, so the client holds
+    /// what the mod showed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, PlayerInfo};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 128],
+    /// };
+    /// assert_eq!(loader.set_waypoint(&player, 0, [10.0, 0.0, 10.0]), None);
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn set_waypoint(&self, player: &PlayerInfo, language: u32, at: [f64; 3]) -> Option<String> {
+        use enshwick_core::actions::window::{ItemView, decode};
+
+        let key = player.key.get();
+        let texts: Vec<String> = table::with(Vec::new(), |s| {
+            let carried = s.commands.carried.iter().filter(|(k, _, _)| *k == key);
+            carried.map(|(_, _, text)| text.clone()).collect()
+        });
+        let map = texts.iter().rev().find_map(|text| {
+            decode(text)?.items.into_iter().find_map(|item| match item {
+                ItemView::Map(map) => Some(map),
+                _ => None,
+            })
+        });
+        let moved = table::with(false, |s| {
+            let waypoints = &mut s.commands.waypoints;
+            let last = waypoints.iter().position(|(k, _)| *k == key);
+            match (&map, last) {
+                (None, Some(last)) => {
+                    waypoints.remove(last);
+                    false
+                }
+                (None, None) => false,
+                (Some(_), Some(last)) => {
+                    let before = core::mem::replace(&mut waypoints[last].1, at);
+                    before.map(f64::to_bits) != at.map(f64::to_bits)
+                }
+                (Some(_), None) => {
+                    waypoints.push((key, at));
+                    true
+                }
+            }
+        });
+        if !moved {
+            return None;
+        }
+        let map = map?;
+        let (action, args) = map.run_at(at)?;
+        let args = enshwick_core::actions::sheet::encode_args(&args);
+        self.ask_actions(
+            enshwick_core::abi::ActionCall::RUN,
+            player,
+            language,
+            action,
+            &args,
+        )
+    }
+
     /// `player` leaves, as far as the mod's windows and permission changes
     /// go: their client holds no window any more, what waited for it is
     /// dropped, every mod's change to their permissions ends, and the mod
@@ -356,6 +435,7 @@ impl Installed {
         table::with((), |s| {
             s.commands.carried.retain(|(k, _, _)| *k != key);
             s.commands.windows.retain(|(k, _, _)| *k != key);
+            s.commands.waypoints.retain(|(k, _)| *k != key);
             s.permission_changes.left(player);
         });
         self.tell_window_closed(player, "");

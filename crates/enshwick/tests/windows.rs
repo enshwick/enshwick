@@ -10,7 +10,7 @@ mod tests {
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Side, Status};
     use enshwick::actions::sheet::ArgView;
     use enshwick::actions::window::{ButtonView, ItemView, decode};
-    use enshwick::actions::{Action, Actions, Arg, Outcome, Row, Value, Window};
+    use enshwick::actions::{Action, Actions, Arg, Outcome, Row, Value, Window, WindowMap};
     use enshwick::i18n::Language;
     use enshwick::{Load, Mod, Off, PlayerKey};
 
@@ -95,6 +95,29 @@ mod tests {
             for list in LISTS {
                 actions.add(Action::per_player(list, list, |_, _| listed()), done)?;
             }
+            actions.add(
+                Action::new("goto", "Go to")
+                    .admins()
+                    .arg(Arg::player("Player")),
+                |request| match request.args {
+                    [Value::Player { key, .. }] => Outcome::done(format!("goto {}", key.get())),
+                    _ => Outcome::refused("no player"),
+                },
+            )?;
+            let axis = |name| Arg::number(name, -1e6..=1e6, 0.5);
+            actions.add(
+                Action::new("place", "Place")
+                    .admins()
+                    .arg(axis("X"))
+                    .arg(axis("Y"))
+                    .arg(axis("Z")),
+                |request| match request.args {
+                    [Value::Number(x), Value::Number(y), Value::Number(z)] => {
+                        Outcome::done(format!("place {x} {y} {z}"))
+                    }
+                    _ => Outcome::refused("no point"),
+                },
+            )?;
             let shown = actions.clone();
             actions.add(
                 Action::new("open", "Open the panel"),
@@ -198,6 +221,80 @@ mod tests {
             loader.carried_windows(&bob, 0).is_empty(),
             "Bob may not run the actions the window names"
         );
+    }
+
+    fn bob_value() -> Value {
+        Value::Player {
+            key: PlayerKey::new(8),
+            name: "Bob".into(),
+        }
+    }
+
+    fn players_map() -> WindowMap {
+        WindowMap::new()
+            .marker([100.0, 5.0, 100.0], "Bob", &[bob_value()])
+            .on_marker("goto")
+            .on_point("place")
+    }
+
+    #[test]
+    fn a_waypoint_on_a_held_map_runs_its_marker_or_point_action_for_admins_only() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let bob = player(5, 8, "Bob", 0);
+        let loader = start(enshwick::test::FakeHost::new().player(root).player(bob));
+        let window = Window::new("map", "Players").map(players_map());
+        actions().show(window, &[root.key, bob.key]).unwrap();
+
+        let carried = loader.carried_windows(&root, 0);
+        let view = decode(&carried[0].1).unwrap();
+        let [ItemView::Map(map)] = view.items.as_slice() else {
+            panic!("one map: {:?}", view.items);
+        };
+        assert_eq!(map.markers[0].label, "Bob");
+        assert_eq!(map.markers[0].position, [100.0, 5.0, 100.0]);
+        assert!(
+            loader.carried_windows(&bob, 0).is_empty(),
+            "Bob may not run goto or place"
+        );
+
+        let near = loader.set_waypoint(&root, 0, [104.0, 0.0, 98.0]);
+        assert_eq!(near.as_deref(), Some("1goto 8"));
+        let far = loader.set_waypoint(&root, 0, [400.0, 2.0, -3.5]);
+        assert_eq!(far.as_deref(), Some("1place 400 2 -3.5"));
+        assert_eq!(
+            loader.set_waypoint(&root, 0, [400.0, 2.0, -3.5]),
+            None,
+            "a waypoint where it already was runs nothing"
+        );
+        assert_eq!(loader.set_waypoint(&bob, 0, [400.0, 2.0, -3.5]), None);
+
+        loader.close_window(&root, "map");
+        assert_eq!(
+            loader.set_waypoint(&root, 0, [104.0, 0.0, 98.0]),
+            None,
+            "a closed window's map runs nothing"
+        );
+    }
+
+    #[test]
+    fn a_map_that_runs_an_action_it_cannot_is_refused_at_show() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let _loader = start(enshwick::test::FakeHost::new().player(root));
+        let point = Window::new("map", "Map").map(WindowMap::new().on_point("goto"));
+        let why = actions().show(point, &[root.key]).unwrap_err().to_string();
+        assert!(why.contains("x, y and z"), "{why}");
+        let bare = WindowMap::new()
+            .marker([0.0; 3], "Ann", &[])
+            .on_marker("goto");
+        let why = actions()
+            .show(Window::new("map", "Map").map(bare), &[root.key])
+            .unwrap_err()
+            .to_string();
+        assert!(why.contains("which needs 1"), "{why}");
+        let two = Window::new("map", "Map")
+            .map(players_map())
+            .map(players_map());
+        assert!(actions().show(two, &[root.key]).is_err());
     }
 
     #[test]

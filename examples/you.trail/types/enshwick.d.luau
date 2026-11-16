@@ -3242,7 +3242,27 @@ export type WindowButton = {
 }
 
 --- An item of a script's window.
-export type WindowItem = { Text: WindowText } | { Row: WindowRow } | { Action: string }
+export type WindowItem = { Text: WindowText } | { Row: WindowRow } | { Action: string } | { Map: WindowMap }
+
+--- The map of a script's window: the fields of `WindowMap`'s builder.
+export type WindowMap = {
+	--- Its markers, as `WindowMap.marker` adds them.
+	markers: {WindowMarker}?,
+	--- The action a waypoint on a marker runs, as `WindowMap.on_marker` sets it.
+	on_marker: string?,
+	--- The action a waypoint elsewhere runs, as `WindowMap.on_point` sets it.
+	on_point: string?,
+}
+
+--- A marker of a script window's map, as `WindowMap.marker` takes it.
+export type WindowMarker = {
+	--- Where, in metres.
+	position: vector,
+	--- Its label, a text key.
+	label: string,
+	--- The values a waypoint on it gives the map's marker action.
+	args: {ActionValue}?,
+}
 
 --- A row of a script's window: the fields of `Row`'s builder.
 export type WindowRow = {

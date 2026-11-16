@@ -572,7 +572,9 @@ shows the mod's markers on the map, at most 256. Each has a position in
 metres, a label and one of the game's eight custom marker colours. The next
 call replaces them all, and `clear_markers` takes them off. It works from any
 thread and copies what it is handed. By default a marker uses one of the
-game's custom marker types with a label. The compass does not show them.
+game's custom marker types with a label. The compass does not show them. A
+mod of side `server` puts markers on players' maps through a
+[window's map](actions.md#a-map-in-a-window) instead.
 When the game build lacks a part of the map's layout, the markers stay off
 and `set_markers` returns `UiError::Unavailable`. The log and the Mods
 screen say why.

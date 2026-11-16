@@ -53,7 +53,7 @@ use crate::locks::RelockRw;
 pub mod sheet;
 pub mod window;
 
-pub use window::{Row, Window};
+pub use window::{Row, Window, WindowMap};
 
 use std::sync::{Arc, RwLock};
 
@@ -807,8 +807,8 @@ impl Actions {
         let fault = {
             let declared = self.registry.declared.relock_read();
             window.fault(
-                &|action, values| match declared.iter().find(|d| d.action.id == action) {
-                    Some(d) => values.and_then(|v| registry::button_fault(&d.action, v)),
+                &|action, used| match declared.iter().find(|d| d.action.id == action) {
+                    Some(d) => registry::use_fault(&d.action, used),
                     None => Some(format!("no action {action}")),
                 },
             )

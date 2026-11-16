@@ -4,6 +4,7 @@
 use super::super::Action;
 use super::super::request::{Arg, Value};
 use super::super::sheet::ArgView;
+use super::super::window::Use;
 
 /// What is wrong with the optional arguments among `args`: one before an
 /// argument that is not optional, an optional player, or a default its
@@ -58,6 +59,38 @@ fn takes(value: &Value, arg: &Arg) -> bool {
         }
         (Value::Text(text), ArgView::TEXT) => arg.takes_text(text),
         _ => false,
+    }
+}
+
+/// What is wrong with how a window uses `action`, as `used` says; `None`
+/// when it fits.
+pub(in crate::actions) fn use_fault(action: &Action, used: Use<'_>) -> Option<String> {
+    let id = &action.id;
+    match used {
+        Use::Whole => None,
+        Use::Button(values) => button_fault(action, values),
+        Use::Marker(values) => button_fault(action, values).or_else(|| {
+            let needs = action.args.iter().filter(|a| a.default.is_none()).count();
+            (action.on.is_none() && values.len() < needs).then(|| {
+                format!(
+                    "a marker gives {} values to {id}, which needs {needs}",
+                    values.len()
+                )
+            })
+        }),
+        Use::Point => {
+            let numbers = action.args.iter().take(3);
+            let rest = action.args.iter().skip(3);
+            let takes_point = action.on.is_none()
+                && action.args.len() >= 3
+                && numbers
+                    .clone()
+                    .all(|a| a.kind == ArgView::NUMBER && a.default.is_none())
+                && rest.clone().all(|a| a.default.is_some());
+            (!takes_point).then(|| {
+                format!("a map's point runs {id}, which does not take x, y and z as its numbers")
+            })
+        }
     }
 }
 
@@ -140,6 +173,61 @@ mod tests {
         assert!(
             blank.unwrap().contains("argument 1"),
             "an empty text stands only for a text"
+        );
+    }
+
+    #[test]
+    fn a_marker_gives_all_its_action_needs_and_a_point_runs_an_action_of_three_numbers() {
+        let ann = Value::Player {
+            key: PlayerKey::new(7),
+            name: "Ann".into(),
+        };
+        let goto = Action::new("goto", "Go to")
+            .arg(Arg::player("Player"))
+            .arg(Arg::number("Height", 0.0..=10.0, 1.0).optional(Value::Number(0.0)));
+        let ann_only = core::slice::from_ref(&ann);
+        assert_eq!(use_fault(&goto, Use::Marker(ann_only)), None);
+        let short = use_fault(&goto, Use::Marker(&[])).unwrap();
+        assert!(short.contains("0 values to goto, which needs 1"), "{short}");
+        assert!(
+            use_fault(&goto, Use::Marker(&[Value::Toggle(true)])).is_some(),
+            "a value its argument does not take"
+        );
+        assert_eq!(
+            use_fault(&goto, Use::Button(&[])),
+            None,
+            "a button opens a form"
+        );
+        assert_eq!(use_fault(&goto, Use::Whole), None);
+        assert!(use_fault(&goto, Use::Point).is_some());
+
+        let axis = |name| Arg::number(name, -1e6..=1e6, 0.5);
+        let place = Action::new("place", "Place")
+            .arg(axis("X"))
+            .arg(axis("Y"))
+            .arg(axis("Z"));
+        assert_eq!(use_fault(&place, Use::Point), None);
+        let noted = Action::new("place", "Place")
+            .arg(axis("X"))
+            .arg(axis("Y"))
+            .arg(axis("Z"))
+            .arg(Arg::text("Note", 8).optional(Value::Text(String::new())));
+        assert_eq!(use_fault(&noted, Use::Point), None, "an optional rest");
+        let two = Action::new("place", "Place").arg(axis("X")).arg(axis("Z"));
+        assert!(use_fault(&two, Use::Point).unwrap().contains("x, y and z"));
+        let named = Action::new("place", "Place")
+            .arg(axis("X"))
+            .arg(axis("Y"))
+            .arg(axis("Z"))
+            .arg(Arg::text("Name", 8));
+        assert!(use_fault(&named, Use::Point).is_some(), "a fourth it needs");
+        let list = Action::per_player("allowed", "Allowed", |_, _| Vec::new());
+        assert!(use_fault(&list, Use::Point).is_some());
+        let switched = [ann, Value::Toggle(true)];
+        assert_eq!(
+            use_fault(&list, Use::Marker(&switched)),
+            None,
+            "a list's marker gives its player and on or off"
         );
     }
 

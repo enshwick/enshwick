@@ -560,7 +560,7 @@ static DRAWS: [Draw; 6] = [
         site: "the carried windows' draw",
         // SAFETY: `Draw::run`'s contract, and `demo::draw` ends its window
         // before it returns.
-        run: |drawn| unsafe { carried::draw(drawn.engine, drawn.context) },
+        run: |drawn| unsafe { carried::draw(drawn.engine, drawn.context, drawn.reads.screen) },
     },
     Draw {
         fuse: &MODS_SCREEN_FUSE,

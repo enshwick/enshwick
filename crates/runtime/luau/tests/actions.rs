@@ -404,6 +404,43 @@ mod tests {
     }
 
     #[test]
+    fn a_script_s_window_map_runs_its_actions_from_a_waypoint() {
+        let root = player(4, 9, "Root", true);
+        let loader = run(
+            FakeHost::new().player(root),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({ id = "goto", label = "Go to", admins = true, args = { enshwick.actions.player("Player") } },
+                function(request) return enshwick.actions.done(`goto {request:args()[1].Player.key}`) end)
+            local axis = function(name) return enshwick.actions.number(name, -1000, 1000, 1) end
+            actions:add({ id = "place", label = "Place", admins = true, args = { axis("X"), axis("Y"), axis("Z") } },
+                function(request) return enshwick.actions.done(`place {request:args()[1].Number}`) end)
+            actions:add({ id = "open", label = "Open" }, function(request)
+                actions:show({
+                    id = "map",
+                    title = "Players",
+                    items = {
+                        { Map = {
+                            markers = { { position = vector.create(10, 0, 10), label = "Root", args = { { Player = { key = "9", name = "Root" } } } } },
+                            on_marker = "goto",
+                            on_point = "place",
+                        } },
+                    },
+                }, { request:player().key })
+                return enshwick.actions.done("")
+            end)
+            "#,
+        );
+        let run = |id: &str| loader.ask_actions(ActionCall::RUN, &root, 0, id, "");
+        assert_eq!(run("open").as_deref(), Some("1"), "{:?}", loader.logs());
+        assert_eq!(loader.carried_windows(&root, 0).len(), 1);
+        let near = loader.set_waypoint(&root, 0, [12.0, 0.0, 10.0]);
+        assert_eq!(near.as_deref(), Some("1goto 9"), "{:?}", loader.logs());
+        let far = loader.set_waypoint(&root, 0, [300.0, 0.0, 10.0]);
+        assert_eq!(far.as_deref(), Some("1place 300"));
+    }
+
+    #[test]
     fn a_script_updates_a_window_where_it_shows_and_hears_of_a_close_and_a_leave() {
         let root = player(4, 9, "Root", true);
         let loader = run(
