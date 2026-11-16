@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 11
+#define ENSHWICK_ABI_MINOR 12
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -3376,6 +3376,34 @@ typedef struct EnshwickPropPlacementInfo {
 // geometry check. Without it, bounds are unknown,
 // not an empty box or the loader's fallback permission box.
 #define EnshwickPropPlacementInfo_HAS_LOCAL_BOX 1
+
+// A player's respawn point, which
+// `EnshwickHostApi.respawn_point` fills: the spawn
+// point entity the character respawns at and where it stands.
+typedef struct EnshwickRespawnPointInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The spawn point entity.
+  EnshwickEntity entity;
+  // The spawn point's kind: `EnshwickRespawnPointInfo_START_LOCATION`,
+  // `EnshwickRespawnPointInfo_SAVE_POINT`, `EnshwickRespawnPointInfo_BASE`,
+  // `EnshwickRespawnPointInfo_NO_RESPAWN` or `EnshwickRespawnPointInfo_OTHER`.
+  uint32_t kind;
+  // Where the character respawns, in metres.
+  EnshwickMetres position;
+  // The orientation it respawns in, a quaternion `x, y, z, w`.
+  float orientation[4];
+} EnshwickRespawnPointInfo;
+// The world's start location.
+#define EnshwickRespawnPointInfo_START_LOCATION 0
+// A save point out in the world.
+#define EnshwickRespawnPointInfo_SAVE_POINT 1
+// A Flame Altar's base.
+#define EnshwickRespawnPointInfo_BASE 2
+// A spawn point nobody respawns at.
+#define EnshwickRespawnPointInfo_NO_RESPAWN 3
+// A kind the loader does not know on this build.
+#define EnshwickRespawnPointInfo_OTHER UINT32_MAX
 
 
 // A player about to interact with an entity, as
@@ -6823,6 +6851,31 @@ typedef struct EnshwickHostApi {
                                 EnshwickEntity character,
                                 EnshwickItemId item,
                                 uint32_t count);
+  // Copies the respawn point of the player whose character is `character`
+  // into headed `out`: the spawn point entity, its kind and where the
+  // character respawns. `EnshwickStatus_MISSING` for an entity that is no
+  // player's character, or a character whose respawn point is not in the
+  // world, where the game falls back to the world's start;
+  // `EnshwickStatus_WRONG_THREAD` off the server's game thread;
+  // `EnshwickStatus_UNAVAILABLE` outside a server and on a build without the
+  // layout. ABI 12.12.
+  EnshwickStatus (*respawn_point)(EnshwickModHandle me,
+                                  EnshwickEntity character,
+                                  struct EnshwickRespawnPointInfo *out);
+  // Makes `spawn_point` the respawn point of the player whose character
+  // is `character`, as the game does when the character stands in a
+  // spawn point, and raises the game's `PlayerSpawnInfoChangeEvent` for
+  // it when the point names a base or a scene. While the character
+  // stands in another spawn point, the game sets that one back at its
+  // next step. Nothing changes when a call fails. `EnshwickStatus_BAD_ARGS` for an entity that is no
+  // spawn point, or one of kind `EnshwickRespawnPointInfo_NO_RESPAWN`;
+  // `EnshwickStatus_MISSING` for an entity that is no player's character;
+  // `EnshwickStatus_WRONG_THREAD` off the server's game thread or during a
+  // step; `EnshwickStatus_UNAVAILABLE` outside a server and on a build without
+  // the layout. ABI 12.12.
+  EnshwickStatus (*set_respawn_point)(EnshwickModHandle me,
+                                      EnshwickEntity character,
+                                      EnshwickEntity spawn_point);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7273,7 +7326,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1744, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1760, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7492,6 +7545,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_settled) == 1712, "
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1720, "offset of HostApi.prop_placement_info");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, container_rule) == 1728, "offset of HostApi.container_rule");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, show_pickup) == 1736, "offset of HostApi.show_pickup");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, respawn_point) == 1744, "offset of HostApi.respawn_point");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_respawn_point) == 1752, "offset of HostApi.set_respawn_point");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -7858,6 +7913,13 @@ ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickResourceKey) == 4, "alignment of
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickResourceKey, guid) == 0, "offset of ResourceKey.guid");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickResourceKey, type_hash) == 16, "offset of ResourceKey.type_hash");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickResourceKey, part) == 20, "offset of ResourceKey.part");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickRespawnPointInfo) == 56, "size of RespawnPointInfo");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickRespawnPointInfo) == 8, "alignment of RespawnPointInfo");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickRespawnPointInfo, header) == 0, "offset of RespawnPointInfo.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickRespawnPointInfo, entity) == 8, "offset of RespawnPointInfo.entity");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickRespawnPointInfo, kind) == 12, "offset of RespawnPointInfo.kind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickRespawnPointInfo, position) == 16, "offset of RespawnPointInfo.position");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickRespawnPointInfo, orientation) == 40, "offset of RespawnPointInfo.orientation");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickSaveInfo) == 48, "size of SaveInfo");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickSaveInfo) == 8, "alignment of SaveInfo");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSaveInfo, header) == 0, "offset of SaveInfo.header");

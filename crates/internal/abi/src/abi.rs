@@ -829,6 +829,7 @@ const _: () = {
     assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
     assert!(size_of::<ActionCall>() == 8 + 8 + 8 + 16 + 16 + 8 + 8 + 16 + 4 + 4);
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
+    assert!(size_of::<RespawnPointInfo>() == 8 + 8 + 24 + 16);
     assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24 + 8 + 8);

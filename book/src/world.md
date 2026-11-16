@@ -702,6 +702,40 @@ An unknown item or one placing nothing is refused; creatures and flame
 altars return `NotAProp`. Without the running server, registry or required
 reads, the call is unavailable.
 
+## Where does a player respawn?
+
+Enable `unstable`. A player respawns at a spawn point: the world's start, a
+save point out in the world, or a Flame Altar's base. The game sets the
+point when the character stands in one.
+
+| Call | Does |
+| --- | --- |
+| `world.respawn_point(&player)` | the spawn point entity, its kind and where it stands. `None` while the point is not in the world, where the game uses the world's start. An error off the game thread |
+| `world.set_respawn_point(&player, entity)` | moves the point, as the game does, and raises `PlayerSpawnInfoChangeEvent` when the point names a base or a scene |
+| `load.on::<PlayerSpawnInfoChangeEvent>(...)` | hears each move, the game's and a mod's, with the character, the base or the save point's scene |
+
+```rust
+use enshwick::events::PlayerDied;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    let altar = enshwick::Entity(40);
+    load.on::<PlayerDied>(move |died| {
+        if let Some(player) = world.player(died.entity) {
+            if let Err(why) = world.set_respawn_point(&player, altar) {
+                enshwick::warn!("{} keeps their respawn point: {why}", player.name);
+            }
+        }
+    })
+}
+```
+
+A set refuses an entity that is no spawn point, or one of kind `NoRespawn`,
+with `NotASpawnPoint`. It runs on the server's game thread between steps.
+While the character stands in a spawn point, the game sets that point
+again at its next step. So a set lasts only once the character stands in
+no other spawn point, for example after a death.
+
 ## Labels
 
 `world.set_label(entity, text)` names an entity as a player's rename does.

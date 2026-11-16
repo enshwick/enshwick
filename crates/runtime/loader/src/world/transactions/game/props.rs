@@ -300,14 +300,11 @@ fn field<T: enshwick_core::raw::AnyBitPattern>(
     hash: u32,
     at: usize,
 ) -> Result<Option<T>, TransactionError> {
-    let Some(data) = inline(loader, entity, hash)? else {
-        return Ok(None);
-    };
-    // SAFETY: `data` is the entity's live component of type `hash`, or its
-    // template's set-up data for a static half, and the caller passes the
-    // reflected offset of a `T` field of that type, from `Facts`; read on
-    // the game thread, which alone writes it.
-    Ok(Some(unsafe { enshwick_core::raw::read_at(data, at) }))
+    match crate::engine::world::field(loader, Entity(entity), hash, at) {
+        Ok(value) => Ok(Some(value)),
+        Err(WorldError::Absent | WorldError::Unread | WorldError::NoWorld) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// The prop `entity` is and the state it holds, as `HOLDS_` bits;
@@ -335,9 +332,8 @@ pub(super) fn read(loader: &Loader, entity: u32) -> Result<(Prop, u32), Transact
     if placed != template {
         return Err(TransactionError::NotAProp);
     }
-    let position = crate::engine::world::fixed_position(loader, Entity(entity))
-        .ok_or(TransactionError::Gone)?;
-    let orientation = orientation(loader, entity).ok_or(TransactionError::Gone)?;
+    let (position, orientation) =
+        crate::engine::world::pose(loader, Entity(entity)).ok_or(TransactionError::Gone)?;
     let prop = Prop {
         template,
         item,
@@ -347,14 +343,6 @@ pub(super) fn read(loader: &Loader, entity: u32) -> Result<(Prop, u32), Transact
         logic,
     };
     Ok((prop, state(loader, &facts, entity)?.holds()))
-}
-
-/// Which way `entity` faces, from its `CurrentTransform`.
-fn orientation(loader: &Loader, entity: u32) -> Option<[f32; 4]> {
-    let hash = type_of(loader, catalogue::ids::CURRENT_TRANSFORM).ok()?;
-    let at = offset(loader, catalogue::ids::CURRENT_TRANSFORM_TRANSFORM).ok()?
-        + offset(loader, catalogue::ids::WORLD_TRANSFORM_ORIENTATION).ok()?;
-    field(loader, entity, hash, at).ok().flatten()
 }
 
 /// Whether a prop like `prop` stands where it stood: an entity of its

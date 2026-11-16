@@ -384,6 +384,27 @@ ids! {
     /// The id of a target's `u32` entity, 0 for none.
     TARGET_INFO_ENTITY = "target_info.entity";
     TARGET_TYPE = "target_type";
+    /// The id of the target a player's character respawns at.
+    TARGET_TYPE_SPAWN_POINT = "target_type.spawn_point";
+    /// The id of the component that makes an entity a spawn point.
+    PLAYER_SPAWN_POINT = "player_spawn_point";
+    /// The id of a spawn point's `PlayerSpawnType`.
+    PLAYER_SPAWN_POINT_TARGET = "player_spawn_point.target";
+    PLAYER_SPAWN_TYPE_START_LOCATION = "player_spawn_type.start_location";
+    PLAYER_SPAWN_TYPE_SAVE_POINT = "player_spawn_type.save_point";
+    PLAYER_SPAWN_TYPE_BASE = "player_spawn_type.base";
+    PLAYER_SPAWN_TYPE_NO_RESPAWN = "player_spawn_type.no_respawn";
+    /// The id of the GUID of the base a [`BASE_ID_COMPONENT`] names.
+    BASE_ID_COMPONENT_BASE_ID = "base_id_component.base_id";
+    /// The id of the component that names a scene entity's id in the save.
+    STORED_SCENE_ID = "stored_scene_id";
+    STORED_SCENE_ID_UNIQUE_ID = "stored_scene_id.unique_id";
+    /// The id of the event that tells the server a player's respawn point
+    /// moved to another base or scene.
+    PLAYER_SPAWN_INFO_CHANGE_EVENT = "player_spawn_info_change_event";
+    PLAYER_SPAWN_INFO_CHANGE_EVENT_CHARACTER = "player_spawn_info_change_event.player_character_id";
+    PLAYER_SPAWN_INFO_CHANGE_EVENT_BASE = "player_spawn_info_change_event.base_id";
+    PLAYER_SPAWN_INFO_CHANGE_EVENT_SCENE = "player_spawn_info_change_event.scene_instance_id";
     HUD_SCREEN_TYPE = "hud_screen_type";
     HUD_SCREEN_IN_GAME = "hud_screen_type.in_game";
     BOSS = "boss";

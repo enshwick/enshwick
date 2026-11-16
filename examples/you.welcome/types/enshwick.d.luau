@@ -2222,6 +2222,19 @@ export type PlayerDeathData = {
 --- A permission the server grants a player through its user groups, one bit of the game's `PlayerPermissions` (server 26430253). The groups are `userGroups` in `enshrouded_server.json`, and a player holds the permissions of the group whose password they joined with.
 export type PlayerPermissions = "CanKickBan" | "CanAccessInventories" | "CanEditBase" | "CanEditWorld" | "CanExtendBase" | "CanReceiveExp"
 
+--- A player's respawn point moved to another base or save point. The game raises it when the character stands in a spawn point, and `World.set_respawn_point` raises it too; the server's player record and the save follow it. Unstable: needs the `unstable` feature and may change in any release.
+export type PlayerSpawnInfoChangeEvent = {
+	--- The player's character, as the save names it.
+	player_character_id: string,
+	--- The base of the Flame Altar the character respawns at, if any.
+	base_id: string?,
+	--- The save point's scene, for a respawn point outside a base.
+	scene_instance_id: number?,
+}
+
+--- The kind of a spawn point, the game's `PlayerSpawnType`. Unstable: needs the `unstable` feature and may change in any release.
+export type PlayerSpawnType = "StartLocation" | "SavePoint" | "Base" | "NoRespawn" | "Other"
+
 --- A character's level and experience, from `World.progress`. The name is enshwick's: read from the game's attribute sets.
 export type Progress = {
 	--- The level.
@@ -2539,6 +2552,16 @@ export type ResourceType = {
 	game_value: (self: ResourceType, key: any) -> any,
 	--- Serves the resource `key`, made from the resource `base` the first time the game reads it: `change` gets the base's value as a table by the generated struct's field names and returns the value to serve, every field given, or nil to serve the base unchanged; the bytes of what the struct does not hold stay as the base has them. A change that fails or does not fit the type is logged, and the base is served unchanged. Allowed while the mod starts.
 	serve: (self: ResourceType, key: any, base: any, change: (arg1: any) -> any) -> (),
+}
+
+--- Where a player respawns, from `World.respawn_point`. Unstable: needs the `unstable` feature and may change in any release.
+export type RespawnPoint = {
+	--- The spawn point entity.
+	entity: number,
+	--- Where the spawn point stands and which way it faces.
+	transform: WorldTransform,
+	--- What kind of spawn point it is.
+	kind: PlayerSpawnType,
 }
 
 --- An answer the player gives a dialog; each has a button labelled by the game in the player's language.
@@ -3428,7 +3451,7 @@ export type WorkshopSurvivor = {
 }
 
 --- Why the server's world refused a request.
-export type WorldError = "WrongThread" | "Gone" | "Unavailable" | "Busy" | "Failed" | "Refused" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp"
+export type WorldError = "WrongThread" | "Gone" | "Unavailable" | "Busy" | "Failed" | "Refused" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp" | "NotASpawnPoint"
 
 --- The mod's data for the world running now, saved beside it.
 export type WorldStore = {
@@ -3537,6 +3560,7 @@ declare enshwick: {
 		& ((event: "BuildingTearDownEvent", handler: (data: BuildingTearDownEvent) -> ()) -> ())
 		& ((event: "BuildingPickUpEvent", handler: (data: BuildingPickUpEvent) -> ()) -> ())
 		& ((event: "FlameAltarEvent", handler: (data: FlameAltarEvent) -> ()) -> ())
+		& ((event: "PlayerSpawnInfoChangeEvent", handler: (data: PlayerSpawnInfoChangeEvent) -> ()) -> ())
 		& ((event: "LootInteractionEvent", handler: (data: LootInteractionEvent) -> ()) -> ())
 		& ((event: "HandleEquipmentSlotChangedEvent", handler: (data: HandleEquipmentSlotChangedEvent) -> ()) -> ())
 		& ((event: "RevivedPlayerEvent", handler: (data: RevivedPlayerEvent) -> ()) -> ())
@@ -3977,6 +4001,10 @@ declare enshwick: {
 		notify: (player: Player, text: string) -> Notice,
 		--- Sends a notice to every connected player, as `notify` does to one.
 		notify_all: (text: string) -> (),
+		--- Where `player` respawns: the spawn point their character holds, its kind and where it stands; nil while the point is not in the world, where the game falls back to the world's start, or the player has left. The game moves it when the character stands in another spawn point, and `PlayerSpawnInfoChangeEvent` tells when. Unstable: needs the `unstable` feature and may change in any release.
+		respawn_point: (player: Player) -> RespawnPoint?,
+		--- Makes `spawn_point` where `player` respawns, as the game does when their character stands in it, and raises the game's `PlayerSpawnInfoChangeEvent` with the point's base, else its scene; a point that names neither raises none, as in the game. While the character stands in another spawn point, the game sets that one back at its next step. A query by the spawn points' component lists them. On the server's game thread between steps. Unstable: needs the `unstable` feature and may change in any release.
+		set_respawn_point: (player: Player, spawn_point: number) -> (),
 		--- Every connected player with a character in the world.
 		players: () -> {Player},
 		--- `entity`'s position in metres.

@@ -391,6 +391,25 @@ impl Refusal for crate::world::permissions::PermissionError {
     }
 }
 
+/// A character that is no player, or a point gone, is missing; an entity
+/// that is no spawn point a bad argument; an event this build lays out
+/// wrong unavailable, so a mod never reads a layout gap as its own mistake;
+/// the rest the world's, the write's or the event's own answer.
+#[cfg(windows)]
+impl Refusal for crate::world::respawn::RespawnError {
+    fn status(&self) -> Status {
+        use crate::base::emits::EmitError;
+        match self {
+            Self::Unread | Self::Emit(EmitError::BadSize) => Status::UNAVAILABLE,
+            Self::NotPlayer | Self::NoPoint => Status::MISSING,
+            Self::NotASpawnPoint => Status::BAD_ARGS,
+            Self::World(error) => error.status(),
+            Self::Write(error) => error.status(),
+            Self::Emit(error) => error.status(),
+        }
+    }
+}
+
 /// A link or patch after arming is too late, a malformed one a bad
 /// argument, one another holds refused.
 impl Refusal for crate::engine::chains::LinkError {

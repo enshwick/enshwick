@@ -41,6 +41,11 @@ pub(crate) mod openers;
 pub(crate) mod permissions;
 pub mod prop_holds;
 #[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build reads the game's targets")
+)]
+pub(crate) mod respawn;
+#[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the Windows build asks the game's zones")
 )]

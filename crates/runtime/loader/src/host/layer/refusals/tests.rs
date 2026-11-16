@@ -46,6 +46,8 @@ use crate::world::label::LabelError;
 #[cfg(windows)]
 use crate::world::permissions::PermissionError;
 use crate::world::prop_holds::HoldError;
+#[cfg(windows)]
+use crate::world::respawn::RespawnError;
 use crate::world::rights::RightsError;
 use crate::world::scene::SceneError;
 use crate::world::terrain::TerrainError;
@@ -388,5 +390,12 @@ fn every_windows_only_domain_error_answers_mods_the_status_it_answered_before() 
         PermissionError::BadBits,
         PermissionError::NotInGame,
         PermissionError::World(world),
+        RespawnError::Unread,
+        RespawnError::NotPlayer,
+        RespawnError::NoPoint,
+        RespawnError::NotASpawnPoint,
+        RespawnError::World(world),
+        RespawnError::Emit(EmitError::BadSize),
+        RespawnError::Emit(EmitError::Refused),
     ]);
 }

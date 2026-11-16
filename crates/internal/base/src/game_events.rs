@@ -30,6 +30,8 @@ pub use kinds::{
     FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent, LevelUpEvent, LootInteractionEvent,
     RevivedPlayerEvent, XpGainedEvent,
 };
+#[cfg(feature = "unstable")]
+pub use kinds::{PlayerSpawnInfoChangeEvent, UniqueSceneId};
 pub use notify::NotifyEvent;
 pub use values::{
     AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
@@ -44,12 +46,12 @@ mod sealed {
 /// [`events::Kind`](crate::events::Kind) for each, so a type implements it
 /// only from here, and that scripts read.
 macro_rules! typed_kinds {
-    ($($kind:ident),* $(,)?) => {
-        $(impl crate::events::sealed::Sealed for $kind {})*
+    ($($(#[$cfg:meta])* $kind:ident),* $(,)?) => {
+        $($(#[$cfg])* impl crate::events::sealed::Sealed for $kind {})*
 
         /// Every typed game event, for script languages.
         pub(crate) const SCRIPT_KINDS: &[crate::script::GameEventKind] =
-            &[$(crate::script::GameEventKind::of::<$kind>()),*];
+            &[$($(#[$cfg])* crate::script::GameEventKind::of::<$kind>()),*];
     };
 }
 
@@ -65,6 +67,8 @@ typed_kinds!(
     BuildingTearDownEvent,
     BuildingPickUpEvent,
     FlameAltarEvent,
+    #[cfg(feature = "unstable")]
+    PlayerSpawnInfoChangeEvent,
     LootInteractionEvent,
     HandleEquipmentSlotChangedEvent,
     RevivedPlayerEvent,

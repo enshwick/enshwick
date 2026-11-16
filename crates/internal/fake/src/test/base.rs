@@ -16,10 +16,10 @@ pub(crate) mod settings;
 pub(crate) mod ticks;
 
 impl FakeHost {
-    /// The hit, death and equipment change game events, with the hit
-    /// history and experience credit a death reads its killer from, and
-    /// damage bits, an attack category and an equipment slot numbered unlike
-    /// the API's own.
+    /// The hit, death, equipment change and respawn point change game
+    /// events, with the hit history and experience credit a death reads its
+    /// killer from, and damage bits, an attack category and an equipment
+    /// slot numbered unlike the API's own.
     ///
     /// # Examples
     ///
@@ -42,6 +42,7 @@ impl FakeHost {
                 ids::HIT_HISTORY,
                 ids::EXPERIENCE_CREDIT,
                 ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT,
+                ids::PLAYER_SPAWN_INFO_CHANGE_EVENT,
             ],
             &[
                 (ids::HIT_EVENT, 64),
@@ -49,6 +50,7 @@ impl FakeHost {
                 (ids::HIT_HISTORY, 152),
                 (ids::EXPERIENCE_CREDIT, 8),
                 (ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT, 16),
+                (ids::PLAYER_SPAWN_INFO_CHANGE_EVENT, 48),
             ],
             &[
                 (ids::HIT_EVENT_ROOT_SOURCE_ID, 8),
@@ -71,6 +73,9 @@ impl FakeHost {
                 (ids::DAMAGE_TYPE_PHYSICAL_CUT, 5),
                 (ids::ATTACK_CATEGORY_MELEE, 2),
                 (ids::EQUIPMENT_SLOT_SHIELD, 40),
+                (ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_CHARACTER, 8),
+                (ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_BASE, 24),
+                (ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_SCENE, 40),
             ],
         )
     }

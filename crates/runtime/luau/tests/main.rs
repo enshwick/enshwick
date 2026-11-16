@@ -33,6 +33,7 @@ mod parity;
 mod ported;
 mod progress;
 mod resources;
+mod respawn_point;
 mod rewards;
 mod saves;
 mod scripts;
