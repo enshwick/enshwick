@@ -2,7 +2,7 @@ use enshwick_core::abi::UiExtension;
 
 use super::{
     Buf, EXTENSION_WIDTH, Engine, HUD_MARGIN, NAV_CONFIG, PANEL_CONFIG, UiText, WINDOW_WIDTH,
-    Window,
+    Window, text_field,
 };
 
 /// The navigation kind of a popup window.
@@ -64,7 +64,6 @@ impl Engine {
             crate::ui::interface::window_drawn();
         }
         window.saved_nav = self.nav(context);
-        self.caret.begin();
         super::widgets::twins_window(name.hash);
         let name = [name.ptr.expose_provenance() as u64, name.len];
         // SAFETY: `self.window_begin` is the game's `ui.window_begin`, its
@@ -156,13 +155,6 @@ impl Engine {
             unsafe { self.title(context, title) };
         }
         let mut nav = self.nav_config(NAV_WINDOW);
-        if window.typing {
-            // The low byte of the config's flags 0 reads no move from the
-            // arrows and the stick while a field types, as the game's text
-            // popup writes it (client 26430625).
-            let [_, _, _, flags, ..] = self.layout.nav;
-            nav.u8(flags, 0);
-        }
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's
         // `ui.nav_extent` bytes and `nav` its `ui.nav_config_size`
@@ -185,14 +177,15 @@ impl Engine {
     }
 
     /// A navigation config of `kind`, as the game's popups, scrolled columns
-    /// and chat field fill theirs: wrapping, both axes, every input.
+    /// and chat field fill theirs: wrapping, both axes, every input, and no
+    /// moves while a text field types.
     pub(super) fn nav_config(&self, kind: u32) -> Buf<NAV_CONFIG> {
         let mut nav = Buf::<NAV_CONFIG>::zeroed();
         let [kind_at, wrap, axis, flags, input, layer, sound] = self.layout.nav;
         nav.u32(kind_at, kind);
         nav.u8(wrap, 1);
         nav.u32(axis, 3);
-        nav.u16(flags, 0x101);
+        nav.u16(flags, text_field::nav_flags(text_field::typed_last_frame()));
         nav.u32(input, 2);
         nav.u16(layer, 0x1b);
         nav.u16(sound, 1);
@@ -208,9 +201,7 @@ impl Engine {
     /// - `window` did not move since it started.
     /// - Every frame opened inside `window` is closed.
     pub(in crate::ui::interface) unsafe fn window_end(&self, context: usize, window: &mut Window) {
-        // `ui.nav_end` gives the focus back to the group's own member, so it
-        // waits while a field types, or Enter would press that button.
-        if !core::mem::replace(&mut window.typing, self.caret.end()) {
+        if !text_field::typed_last_frame() {
             // SAFETY: `self.nav_end` is the game's `ui.nav_end`, its entry
             // bytes checked in `Engine::resolve`, on the group `window_begin`
             // pushed in this frame, unmoved by this function's `# Safety`.

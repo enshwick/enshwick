@@ -9,7 +9,7 @@
 use super::{
     Buf, Engine, Loader, Lookup, Missing, NodeFloatFn, OneFn, Ptr, UiText, field, game_fn, stretch,
 };
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::cell::Cell;
 
 use crate::base::configure::rows::{ENTRY_BYTES, typed};
 use crate::engine::pinned;
@@ -216,29 +216,39 @@ impl TextBuffer {
     }
 }
 
-/// Whether a text field drawn in the open window has the caret. The
-/// window's navigation would hand the focus back to its own member, so
-/// Enter would press that button instead of the field's confirm; the game's
-/// text popup skips its navigation's end while its field typed in the last
-/// frame (client 26430625, seen live).
-#[derive(Debug, Default)]
-pub(super) struct Caret(AtomicBool);
+thread_local! {
+    /// Whether a text field had the caret in this interface frame and in
+    /// the last one.
+    static CARET: Cell<[bool; 2]> = const { Cell::new([false; 2]) };
+}
 
-impl Caret {
-    /// A window begins: a field drawn outside it does not count.
-    pub(super) fn begin(&self) {
-        self.0.store(false, Ordering::Relaxed);
-    }
+/// Starts the next interface frame, on its thread: this frame's caret
+/// becomes the last frame's.
+pub(in crate::ui::interface) fn caret_next_frame() {
+    let [now, _] = CARET.get();
+    CARET.set([false, now]);
+}
 
-    /// A field of the open window has the caret after its input.
-    fn seen(&self) {
-        self.0.store(true, Ordering::Relaxed);
-    }
+/// Notes a field with the caret in this frame.
+fn caret_seen() {
+    let [_, last] = CARET.get();
+    CARET.set([true, last]);
+}
 
-    /// The window ends: whether one of its fields had the caret.
-    pub(super) fn end(&self) -> bool {
-        self.0.swap(false, Ordering::Relaxed)
-    }
+/// Whether a field had the caret in the last frame, on the interface
+/// thread. The loader's windows and scroll areas then read no move, and no
+/// window calls `ui.nav_end`, as the game's text popup does (client
+/// 26430625, seen live): a field joins the scroll area's group, so a
+/// window's `ui.nav_end` would give the focus to the window's own button
+/// and Enter would press it instead of the field's confirm.
+pub(super) fn typed_last_frame() -> bool {
+    CARET.get()[1]
+}
+
+/// The navigation config's flags: the low byte 0 reads no move from the
+/// arrows and the stick (client 26430625).
+pub(super) const fn nav_flags(typed_last_frame: bool) -> u16 {
+    if typed_last_frame { 0x100 } else { 0x101 }
 }
 
 /// What the player did in a text field this frame.
@@ -401,7 +411,7 @@ impl Engine {
         // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
         if editing {
-            self.caret.seen();
+            caret_seen();
         }
         Some(Typed {
             entered: answer & u64::from(u32::MAX) == ENTERED,
@@ -432,16 +442,29 @@ mod tests {
     }
 
     #[test]
-    fn a_window_knows_its_field_had_the_caret_only_for_the_frame_it_did() {
-        let caret = Caret::default();
-        caret.seen();
-        caret.begin();
-        assert!(!caret.end(), "a field drawn before the window");
-        caret.begin();
-        caret.seen();
-        assert!(caret.end(), "a field of the window types");
-        caret.begin();
-        assert!(!caret.end(), "the typing ended with Enter");
+    fn navigation_stays_quiet_only_in_the_frame_after_a_field_had_the_caret() {
+        caret_next_frame();
+        caret_next_frame();
+        assert!(!typed_last_frame(), "no field typed");
+        caret_seen();
+        assert!(!typed_last_frame(), "the frame the typing starts in");
+        caret_next_frame();
+        assert!(typed_last_frame(), "the frame after a field typed");
+        caret_seen();
+        caret_next_frame();
+        assert!(typed_last_frame(), "a field keeps typing");
+        caret_next_frame();
+        assert!(
+            !typed_last_frame(),
+            "the frame after Enter ended the typing"
+        );
+    }
+
+    #[test]
+    fn navigation_reads_no_move_only_while_a_field_typed() {
+        assert_eq!(nav_flags(false), 0x101);
+        assert_eq!(nav_flags(true) & 0xff, 0, "no move from arrows or stick");
+        assert_eq!(nav_flags(true) >> 8, 1, "the high byte stays");
     }
 
     #[test]
