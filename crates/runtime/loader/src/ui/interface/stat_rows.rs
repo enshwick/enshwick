@@ -11,8 +11,11 @@
 //! last sent it. The game formats the value as it formats its own rows, an
 //! integer with a sign or a percent sign.
 //!
-//! A detour links only for a group some kind shows in. Per hit it pays a
-//! lookup of the group's kinds; a group without kinds never links.
+//! A detour links only for a group some kind shows in, under a fuse of its
+//! own, so a builder this build lacks or changed turns off only its group.
+//! Per hit it pays, for each kind of its group, a load of the player's
+//! value and a lookup of texts kept with their hashes; a group without kinds
+//! never links.
 
 use core::cell::RefCell;
 use std::sync::OnceLock;
@@ -28,8 +31,11 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 
-/// The rows of every group: the builders' detours and the push.
-pub(super) static FUSE: Fuse = Fuse::new("stat rows");
+/// How many groups the Character screen has.
+const GROUPS: usize = StatGroup::ALL.len();
+
+/// What every group's rows need: the push and the row layout.
+static FUSE: Fuse = Fuse::new("stat rows");
 static LINKED: OnceLock<Linked> = OnceLock::new();
 
 type BuilderFn = unsafe extern "system" fn(list: *mut u8);
@@ -81,17 +87,43 @@ struct List {
 #[derive(Clone, Copy, Debug)]
 struct Linked {
     push: PushFn,
-    /// The kinds of each group, in the order of [`StatGroup::ALL`].
-    groups: &'static [Box<[u32]>; 9],
+    /// The kinds of each group and their stat keys, in the order of
+    /// [`StatGroup::ALL`].
+    groups: &'static [Box<[(u32, u32)]>; GROUPS],
 }
 
-/// A kind as its rows show it in one language: bytes that live as long as
-/// the process, since a row the game keeps for the frame points at them.
+/// A kind as its rows show it in one language: its texts escaped for the
+/// game's markup, as the words a row holds, worked out once; the bytes they
+/// point at live as long as the process, since a row the game keeps for the
+/// frame points at them.
 #[derive(Debug)]
 struct Texts {
-    name: Box<[u8]>,
-    description: Box<[u8]>,
+    label: UiTextWords,
+    tooltip: UiTextWords,
     format: StatFormat,
+    _bytes: [Box<[u8]>; 2],
+}
+
+impl Texts {
+    /// The texts of `name` and `description`, escaped.
+    fn new(name: &str, description: &str, format: StatFormat) -> Self {
+        let escaped = |text: &str| {
+            let mut out = Vec::with_capacity(text.len());
+            super::arena::escape(&mut out, text.as_bytes());
+            out.into_boxed_slice()
+        };
+        let (name, description) = (escaped(name), escaped(description));
+        let words = |bytes: &[u8]| {
+            let text = UiText::new(bytes);
+            [text.ptr.expose_provenance() as u64, text.len, text.hash]
+        };
+        Self {
+            label: words(&name),
+            tooltip: words(&description),
+            format,
+            _bytes: [name, description],
+        }
+    }
 }
 
 thread_local! {
@@ -101,47 +133,52 @@ thread_local! {
 }
 
 macro_rules! row_detours {
-    ($($name:ident, $next:ident, $group:ident;)*) => {
-        $(crate::engine::chains::chain_detour! {
-            /// The loader's link on one of the Character screen's row
-            /// builders, `ui.attribute_rows_*`: the game's rows, then a row
-            /// per kind of its group.
-            fn $name(list: *mut u8) -> ();
-            next $next;
-            fuse &FUSE, "the Character screen's stat rows";
-            |onward| {
-                onward.call();
-                // SAFETY: the builder returned and filled its row list, the
-                // one the submenu passed it, live on the interface thread
-                // (client 26430625, decompiler).
-                unsafe { push_rows(list.expose_provenance(), StatGroup::$group) };
-            }
-        })*
+    ($($name:ident, $next:ident, $fuse:ident, $group:ident;)*) => {
+        $(
+            static $fuse: Fuse = Fuse::new(concat!("stat rows of ", stringify!($group)));
 
-        /// The builders' detours and their slots, in the order of
-        /// [`StatGroup::ALL`].
-        static DETOURS: [(BuilderFn, &Next<BuilderFn>); 9] = [$(($name as BuilderFn, &$next)),*];
+            crate::engine::chains::chain_detour! {
+                /// The loader's link on one of the Character screen's row
+                /// builders, `ui.attribute_rows_*`: the game's rows, then a
+                /// row per kind of its group.
+                fn $name(list: *mut u8) -> ();
+                next $next;
+                fuse &$fuse, "the Character screen's stat rows";
+                |onward| {
+                    onward.call();
+                    // SAFETY: the builder returned and filled its row list,
+                    // the one the submenu passed it, live on the interface
+                    // thread (client 26430625, decompiler).
+                    unsafe { push_rows(list.expose_provenance(), StatGroup::$group) };
+                }
+            }
+        )*
+
+        /// The builders' detours, their slots and their fuses, in the order
+        /// of [`StatGroup::ALL`].
+        static DETOURS: [(BuilderFn, &Next<BuilderFn>, &Fuse); GROUPS] =
+            [$(($name as BuilderFn, &$next, &$fuse)),*];
     };
 }
 
 row_detours! {
-    main_rows, MAIN_NEXT, Main;
-    fog_survival_rows, FOG_SURVIVAL_NEXT, FogSurvival;
-    primary_rows, PRIMARY_NEXT, Primary;
-    regeneration_rows, REGENERATION_NEXT, Regeneration;
-    misc_rows, MISC_NEXT, Misc;
-    damage_rows, DAMAGE_NEXT, Damage;
-    weapon_damage_rows, WEAPON_DAMAGE_NEXT, WeaponDamage;
-    enemy_damage_rows, ENEMY_DAMAGE_NEXT, EnemyDamage;
-    protection_rows, PROTECTION_NEXT, Protection;
+    main_rows, MAIN_NEXT, MAIN_FUSE, Main;
+    fog_survival_rows, FOG_SURVIVAL_NEXT, FOG_SURVIVAL_FUSE, FogSurvival;
+    primary_rows, PRIMARY_NEXT, PRIMARY_FUSE, Primary;
+    regeneration_rows, REGENERATION_NEXT, REGENERATION_FUSE, Regeneration;
+    misc_rows, MISC_NEXT, MISC_FUSE, Misc;
+    damage_rows, DAMAGE_NEXT, DAMAGE_FUSE, Damage;
+    weapon_damage_rows, WEAPON_DAMAGE_NEXT, WEAPON_DAMAGE_FUSE, WeaponDamage;
+    enemy_damage_rows, ENEMY_DAMAGE_NEXT, ENEMY_DAMAGE_FUSE, EnemyDamage;
+    protection_rows, PROTECTION_NEXT, PROTECTION_FUSE, Protection;
 }
 
 /// Links the builder of each group some kind shows in, on a client whose
 /// build has the push and the row layout; a group whose builder the build
-/// lacks shows no rows, the others do.
+/// lacks shows no rows, with the reason, the others do.
 pub(super) fn link(loader: &Loader) {
-    let groups: [Box<[u32]>; 9] =
-        StatGroup::ALL.map(|group| crate::inventory::stats::group_kinds(group).into());
+    let groups: [Box<[(u32, u32)]>; GROUPS] =
+        core::array::from_fn(|at| crate::inventory::stats::group_kinds(StatGroup::ALL[at]).into());
     if groups.iter().all(|kinds| kinds.is_empty()) {
         return;
     }
@@ -155,7 +192,7 @@ pub(super) fn link(loader: &Loader) {
     let groups = Box::leak(Box::new(groups));
     let _first = LINKED.set(Linked { push, groups });
     let mut linked = 0;
-    for ((kinds, &(detour, next)), builder) in
+    for ((kinds, &(detour, next, fuse)), builder) in
         groups.iter().zip(&DETOURS).zip(pinned::ui::ATTRIBUTE_ROWS)
     {
         if kinds.is_empty() {
@@ -165,20 +202,10 @@ pub(super) fn link(loader: &Loader) {
             let reason = loader
                 .build
                 .reason(builder.id(), crate::engine::builds::ABSENT);
-            crate::log!(
-                WARN,
-                "interface: no stat rows in one group: {} {reason}",
-                builder.id()
-            );
+            loader.fuse_off(fuse, builder.id(), reason);
             continue;
         }
-        if loader.link_fused(
-            &FUSE,
-            Target::Pinned(builder),
-            next,
-            detour,
-            HookFlags::NONE,
-        ) {
+        if loader.link_fused(fuse, Target::Pinned(builder), next, detour, HookFlags::NONE) {
             linked += 1;
         }
     }
@@ -254,12 +281,17 @@ unsafe fn push_rows(list: usize, group: StatGroup) {
     if rows == 0 {
         return;
     }
-    // SAFETY: the list's last row, `filled` rows of `Row`s from `rows`; the
-    // table's row size is `Row`'s, checked at the link.
-    let template = unsafe { read::<Row>(rows + newest * size_of::<Row>(), 0) };
+    let game_row = |at: usize| {
+        // SAFETY: row `at` of the list's `filled` rows of `Row`s from
+        // `rows`; the table's row size is `Row`'s, checked at the link.
+        unsafe { read::<Row>(rows + at * size_of::<Row>(), 0) }
+    };
+    let Some(template) = (0..=newest).rev().map(game_row).find(is_template) else {
+        return;
+    };
     let language = crate::content::served::language().0;
-    for &kind in kinds {
-        let Some(value) = crate::inventory::stats::own_value(kind) else {
+    for &(kind, key) in kinds {
+        let Some(value) = crate::inventory::stats::own_value(kind, key) else {
             continue;
         };
         TEXTS.with_borrow_mut(|texts| {
@@ -286,23 +318,22 @@ fn texts_of(kind: u32, language: u32) -> Option<Texts> {
     let loader = crate::engine::loader::loader()?;
     let shown =
         crate::inventory::stats::shown_kind(loader, kind, enshwick_core::i18n::Language(language))?;
-    Some(Texts {
-        name: shown.name.into_bytes().into(),
-        description: shown.description.into_bytes().into(),
-        format: shown.format,
-    })
+    Some(Texts::new(&shown.name, &shown.description, shown.format))
+}
+
+/// Whether a game row can stand as the template of a kind's: a row with a
+/// label, not one of the blank rows the builders put between parts of a
+/// group (client 26430625, decompiler).
+fn is_template(row: &Row) -> bool {
+    row.label[1] != 0
 }
 
 /// A row for `texts` with `value`, from the game's row `template`.
 fn row(template: &Row, texts: &Texts, value: f32) -> Row {
-    let words = |bytes: &[u8]| {
-        let text = UiText::new(bytes);
-        [text.ptr.expose_provenance() as u64, text.len, text.hash]
-    };
     let (value, percent, plus) = shown_value(value, texts.format);
     Row {
-        label: words(&texts.name),
-        tooltip: words(&texts.description),
+        label: texts.label,
+        tooltip: texts.tooltip,
         value,
         second: 0,
         pair: 0,
@@ -357,11 +388,7 @@ mod tests {
     fn a_row_keeps_the_game_s_layout_and_sets_only_its_own_fields() {
         let mut template: Row = bytemuck::cast([0xab_u8; 0x2a0]);
         template.layout[5] = 7;
-        let texts = Texts {
-            name: b"Luck".as_slice().into(),
-            description: Box::default(),
-            format: StatFormat::Percent,
-        };
+        let texts = Texts::new("Luck", "", StatFormat::Percent);
         let row = row(&template, &texts, 0.1);
         assert_eq!(row.layout[5], 7, "the game's layout");
         assert_eq!(row.entries, template.entries);
@@ -371,5 +398,23 @@ mod tests {
             (row.percent, row.plus, row.breakdown, row.pair, row.trend),
             (1, 0, 0, 0, 0)
         );
+    }
+
+    #[test]
+    fn a_row_s_texts_keep_their_backslashes_in_the_game_s_markup() {
+        let texts = Texts::new(r"Crit\Luck", r"a\b", StatFormat::Number);
+        assert_eq!(
+            (texts.label[1], texts.tooltip[1]),
+            (10, 4),
+            "each backslash doubled"
+        );
+    }
+
+    #[test]
+    fn a_blank_separator_row_is_no_template_and_a_labelled_row_is() {
+        let mut row: Row = bytemuck::Zeroable::zeroed();
+        assert!(!is_template(&row), "a separator's label is empty");
+        row.label = Texts::new("Strength", "", StatFormat::Number).label;
+        assert!(is_template(&row));
     }
 }

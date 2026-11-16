@@ -178,6 +178,9 @@ struct World {
     /// The world's key, where its saved modifiers go.
     key: Option<String>,
     next_expiry: Option<Instant>,
+    /// The watched players whose shown values found no room on their link,
+    /// sent again at the next step.
+    values_owed: Vec<u32>,
 }
 
 /// The values every reader sees: by entity, each kind's value, and the
@@ -856,9 +859,11 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         None
     };
     let mut forgot = false;
+    let mut owing = false;
     let mut due = Vec::new();
     STATE.with_world(|state| {
         expire(state, now);
+        owing = !state.values_owed.is_empty();
         if let Some(players) = &players {
             forgot = follow(loader, state, players);
         }
@@ -882,7 +887,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
             results.push((entity, seen, work_out(sealed, &list)));
         }
     }
-    if results.is_empty() && !forgot {
+    if results.is_empty() && !forgot && !owing {
         return;
     }
     let mut changes = Vec::new();

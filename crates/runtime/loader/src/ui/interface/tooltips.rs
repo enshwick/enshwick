@@ -340,21 +340,16 @@ fn stat_lines(item: u32, pide: u32) -> Vec<Line> {
     let language = crate::content::served::language();
     crate::inventory::stats::item_line_texts(loader, pide, item, language)
         .into_iter()
-        .map(|text| Line {
-            style: line_style(&text),
+        .map(|line| Line {
+            style: match line.sign {
+                core::cmp::Ordering::Greater => UiWidget::STYLE_POSITIVE,
+                core::cmp::Ordering::Less => UiWidget::STYLE_NEGATIVE,
+                core::cmp::Ordering::Equal => UiWidget::STYLE_BODY,
+            },
             flags: 0,
-            text: text.into_bytes().into(),
+            text: line.text.into_bytes().into(),
         })
         .collect()
-}
-
-/// The style of a stat line: positive for a gain, negative for a loss.
-fn line_style(text: &str) -> u32 {
-    match text.as_bytes().first() {
-        Some(b'+') => UiWidget::STYLE_POSITIVE,
-        Some(b'-') => UiWidget::STYLE_NEGATIVE,
-        _ => UiWidget::STYLE_BODY,
-    }
 }
 
 /// Keeps a tooltip handler's line; `None` when no handler of `owner` with

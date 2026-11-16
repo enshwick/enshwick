@@ -100,7 +100,7 @@ pub enum StatGroup {
 #[cfg(feature = "unstable")]
 impl StatGroup {
     /// Every group, in the order the screen shows them.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: &'static [Self] = &[
         Self::Main,
         Self::FogSurvival,
         Self::Primary,

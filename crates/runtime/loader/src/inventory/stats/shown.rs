@@ -2,10 +2,12 @@
 //! of the Character screen's groups, and the lines an item's modifiers and
 //! affixes add to its tooltip.
 
+use core::cmp::Ordering;
+
 use enshwick_core::abi::StatModifier;
 use enshwick_core::content::items::StatFormat;
 use enshwick_core::i18n::Language;
-use enshwick_core::stats::{StatGroup, description_key};
+use enshwick_core::stats::{StatGroup, description_key, key_of};
 
 use super::SEALED;
 use super::own::shown;
@@ -13,13 +15,18 @@ use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
 
-/// The kinds whose rows show in the Character screen's `group`, by index in
-/// definition order.
-pub(crate) fn group_kinds(group: StatGroup) -> Vec<u32> {
+/// The kinds whose rows show in the Character screen's `group`, each by its
+/// index in definition order and its stat key.
+pub(crate) fn group_kinds(group: StatGroup) -> Vec<(u32, u32)> {
     SEALED.get().map_or_else(Vec::new, |sealed| {
         (0..sealed.kinds.len())
             .filter(|&index| sealed.defs[index].group == Some(group) && shown(sealed, index))
-            .filter_map(|index| u32::try_from(index).ok())
+            .filter_map(|index| {
+                Some((
+                    u32::try_from(index).ok()?,
+                    key_of(&sealed.kinds[index].id).0,
+                ))
+            })
             .collect()
     })
 }
@@ -38,9 +45,10 @@ pub(crate) struct ShownKind {
 /// from the loader's texts, a mod's from that mod's.
 pub(crate) fn shown_kind(loader: &Loader, index: u32, language: Language) -> Option<ShownKind> {
     let sealed = SEALED.get()?;
-    let kind = sealed.kinds.get(usize::try_from(index).ok()?)?;
+    let at = usize::try_from(index).ok()?;
+    let kind = sealed.kinds.get(at)?;
     let (def, name_key, owner) = kind.def.as_ref()?;
-    if def.hidden {
+    if def.hidden || !super::own::runs(loader, sealed, at) {
         return None;
     }
     let description_key = description_key(&kind.id).unwrap_or_default();
@@ -64,6 +72,18 @@ pub(crate) fn shown_kind(loader: &Loader, index: u32, language: Language) -> Opt
     })
 }
 
+/// The loader's text of a stat modifier's tooltip line, with `{value}` and
+/// `{name}`.
+const STAT_LINE: &str = "stat.line";
+
+/// A tooltip line of an item's stat modifier.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StatLine {
+    pub(crate) text: String,
+    /// A gain is greater, a loss less, a value that is neither equal.
+    pub(crate) sign: Ordering,
+}
+
 /// The tooltip lines of the item `pide` holding `item`: one per modifier of
 /// its own and of each affix it rolled, `+10% Luck`, in `language`; none
 /// for a hidden kind or one without a name.
@@ -72,7 +92,7 @@ pub(crate) fn item_line_texts(
     pide: u32,
     item: u32,
     language: Language,
-) -> Vec<String> {
+) -> Vec<StatLine> {
     let Ok(lines) = super::item_lines(pide, item) else {
         return Vec::new();
     };
@@ -81,9 +101,23 @@ pub(crate) fn item_line_texts(
         .filter_map(|line| {
             let shown = shown_kind(loader, line.modifier.stat, language)?;
             let value = modifier_value(line.modifier.op, line.modifier.value, shown.format);
-            Some(format!("{value} {}", shown.name))
+            Some(stat_line(&value, &shown.name, language))
         })
         .collect()
+}
+
+/// The line of a modifier that reads `value` on the kind named `name`, in
+/// `language`.
+fn stat_line(value: &str, name: &str, language: Language) -> StatLine {
+    let sign = match value.as_bytes().first() {
+        Some(b'+') => Ordering::Greater,
+        Some(b'-') => Ordering::Less,
+        _ => Ordering::Equal,
+    };
+    let text = crate::engine::texts::for_reader(Some(language), || {
+        crate::engine::texts::fill(STAT_LINE, &[("value", value), ("name", name)])
+    });
+    StatLine { text, sign }
 }
 
 /// A modifier's value as its line reads: an addition with its sign, a
@@ -139,5 +173,23 @@ mod tests {
         for (op, value, format, read) in cases {
             assert_eq!(modifier_value(op, value, format), read, "{op} {value}");
         }
+    }
+
+    #[test]
+    fn a_line_reads_as_its_language_s_text_and_keeps_its_value_s_sign() {
+        let gain = stat_line("+10%", "Luck", Language::FALLBACK);
+        assert_eq!(
+            (gain.text.as_str(), gain.sign),
+            ("+10% Luck", Ordering::Greater)
+        );
+        let loss = stat_line("-2", "Удача", Language::UK_UA);
+        assert_eq!(
+            (loss.text.as_str(), loss.sign),
+            ("-2 Удача", Ordering::Less)
+        );
+        assert_eq!(
+            stat_line("2", "Luck", Language::FALLBACK).sign,
+            Ordering::Equal
+        );
     }
 }

@@ -491,6 +491,13 @@ fn begin(
     limits: Limits,
 ) -> Result<Runtime, Off> {
     let host = load.host();
+    if let Some(toml) = load
+        .mod_dir()
+        .ok()
+        .and_then(|dir| std::fs::read_to_string(dir.join(enshwick_core::i18n::TEXTS_FILE)).ok())
+    {
+        enshwick_core::i18n::hand_own(host, &toml);
+    }
     let mut namespaces = Vec::new();
     // A namespace a script asks for opens when its getter runs at start; one
     // whose open starts work, such as the input reads, opens only when a

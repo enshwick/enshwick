@@ -295,7 +295,7 @@ pub fn stat_values(values: &[(u32, f32)]) -> Vec<u8> {
 }
 
 /// The stat keys and values of a stat values message, after its control
-/// kind; a cut entry at the end is left out.
+/// kind, at most [`MAX_STAT_VALUES`]; a cut entry at the end is left out.
 ///
 /// # Examples
 ///
@@ -307,12 +307,15 @@ pub fn stat_values(values: &[(u32, f32)]) -> Vec<u8> {
 /// ```
 pub fn read_stat_values(bytes: &[u8]) -> impl Iterator<Item = (u32, f32)> + '_ {
     let (entries, _cut) = bytes.as_chunks::<8>();
-    entries.iter().map(|&[a, b, c, d, e, f, g, h]| {
-        (
-            u32::from_le_bytes([a, b, c, d]),
-            f32::from_le_bytes([e, f, g, h]),
-        )
-    })
+    entries
+        .iter()
+        .take(MAX_STAT_VALUES)
+        .map(|&[a, b, c, d, e, f, g, h]| {
+            (
+                u32::from_le_bytes([a, b, c, d]),
+                f32::from_le_bytes([e, f, g, h]),
+            )
+        })
 }
 
 /// The position a demo message carries: three little-endian `i64`.

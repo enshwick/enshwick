@@ -87,6 +87,9 @@ struct State {
     /// Messages dropped this run, over a rate or unreadable, for the status
     /// summary; no game's end resets it.
     dropped: AtomicU64,
+    /// On a client: the stat values its server last sent for its player's
+    /// own character, by stat key.
+    own_stats: arc_swap::ArcSwapOption<FxHashMap<u32, f32>>,
 }
 
 impl State {
@@ -96,6 +99,7 @@ impl State {
             server_runs_enshwick: AtomicBool::new(false),
             answered: AtomicBool::new(false),
             dropped: AtomicU64::new(0),
+            own_stats: arc_swap::ArcSwapOption::const_empty(),
         }
     }
 
@@ -104,6 +108,7 @@ impl State {
     /// before a hosted game's end reaches this on another thread.
     fn forget(&self) {
         self.answered.store(false, Ordering::Release);
+        self.own_stats.store(None);
         *self.links.relock() = None;
     }
 }
@@ -253,6 +258,7 @@ pub(crate) fn client_tick(opened: bool) {
 /// client's link went.
 pub(crate) fn link_lost() {
     STATE.answered.store(false, Ordering::Release);
+    STATE.own_stats.store(None);
     state(|s| {
         s.peers.remove(&NetMessage::SERVER.get());
         s.sending.remove(&NetMessage::SERVER.get());
@@ -501,7 +507,6 @@ pub(crate) fn forget() {
     STATE.forget();
     crate::base::notices::forget();
     crate::inventory::item_data::forget_client();
-    own_stats::forget();
     crate::actions::controls::forget_carried();
     crate::ui::interface::carried::forget();
 }

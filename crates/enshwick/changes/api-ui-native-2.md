@@ -9,9 +9,11 @@
   item's own and of each affix it rolled, `+10% Luck`, before the lines of
   `Load::extend_item_tooltip`.
 - `StatDef::hidden` shows a kind nowhere: no row and no tooltip line.
-- `Load::define_stat` hands the loader the mod's `src/texts.toml` for a
-  kind that shows, so its row and tooltip lines have its name without a
-  call to `Load::texts`.
+- The loader gets a mod's `src/texts.toml`, and a Luau mod's `texts.toml`,
+  as the mod starts, beneath the texts it hands itself, so a stat kind's
+  row and tooltip lines have its name without a call to `Load::texts`.
+- An item's stat line reads through the loader's text `stat.line`, so a
+  language can order the value and the name its own way.
 - The `item-ui` example defines Luck in the Basics tab and the weapon affix
   Lucky that crafted weapons roll.
 - ABI 12.6: `StatSpec::group` and `StatSpec::flags` with `StatSpec::GROUP_*`

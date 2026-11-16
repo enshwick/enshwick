@@ -616,13 +616,7 @@ impl LoadMethods for crate::BaseLoad {
     fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off> {
         def.check()
             .map_err(|why| Off::new(format!("stat {:?}: {why}", id.to_string())))?;
-        let stat = self.open_stat_with(id, Some(def))?;
-        // The loader names a shown kind's rows and tooltip lines from the
-        // mod's texts, which it holds only once they are handed.
-        if !def.hidden && self.embedded_texts().is_some() {
-            let _handed = self.texts()?;
-        }
-        Ok(stat)
+        self.open_stat_with(id, Some(def))
     }
 
     fn open_stat(&mut self, id: Id) -> Result<Stat, Off> {

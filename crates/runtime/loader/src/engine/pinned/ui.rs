@@ -11,7 +11,7 @@ pub(crate) const ATTRIBUTE_ROW_PUSH: Symbol = Symbol::new("ui.attribute_row_push
 pub(crate) const ATTRIBUTE_ROW_SIZE: Constant = Constant::new("ui.attribute_row_size");
 /// The Character screen's row builders, one per group, in the order of
 /// `StatGroup::ALL`.
-pub(crate) const ATTRIBUTE_ROWS: [Symbol; 9] = [
+pub(crate) const ATTRIBUTE_ROWS: [Symbol; enshwick_core::stats::StatGroup::ALL.len()] = [
     Symbol::new("ui.attribute_rows_main"),
     Symbol::new("ui.attribute_rows_fog_survival"),
     Symbol::new("ui.attribute_rows_primary"),

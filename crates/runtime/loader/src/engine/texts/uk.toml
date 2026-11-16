@@ -255,6 +255,7 @@
 "menu.line.settings" = "{line} · у enshwick.toml є помилки, дивіться журнал"
 "menu.line.developer" = "{line} · ІНСТРУМЕНТИ РОЗРОБНИКА УВІМКНЕНО"
 "developer.on" = "УВІМКНЕНО ІНСТРУМЕНТИ РОЗРОБНИКА. ВОНИ ЛИШЕ ДЛЯ ПЕРЕВІРКИ МОДІВ."
+"stat.line" = "{value} {name}"
 "health_max.name" = "Макс. здоров'я"
 "stamina_max.name" = "Макс. витривалість"
 "mana_max.name" = "Макс. мана"

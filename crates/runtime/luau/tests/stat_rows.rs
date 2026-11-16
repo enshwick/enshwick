@@ -33,4 +33,22 @@ mod tests {
         );
         assert!(logged(&loader, "described by luck.description"));
     }
+
+    #[test]
+    fn a_script_s_folder_texts_name_its_kinds_without_a_call_for_them() {
+        use enshwick::i18n::{Language, Texts};
+
+        let dir = std::env::temp_dir().join(format!("enshwick-luau-rows-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("texts.toml"), "[en]\n\"luck.name\" = \"Luck\"\n").unwrap();
+        let loader = run(
+            FakeHost::new().mod_dir(dir.to_str().unwrap()),
+            r#"enshwick.stats.define_stat("you.luau:luck", {
+                ty = "Additive", default = 0, min = 0, max = 1, format = "Percent", group = "Primary",
+            })"#,
+        );
+        let _cleaned = std::fs::remove_dir_all(&dir);
+        let handed = Texts::parse(&loader.published_texts().unwrap()).unwrap();
+        assert_eq!(handed.get("luck.name", Language::EN_US), Some("Luck"));
+    }
 }

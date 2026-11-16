@@ -1,7 +1,7 @@
 //! How stat kinds show through the fake loader: a kind's group of the
 //! Character screen, a hidden kind and a description text cross the ABI and
-//! read back as they were defined, and defining a shown kind hands the
-//! loader the mod's texts, which name its rows.
+//! read back as they were defined, and the mod's texts, which name its
+//! rows, reach the loader as it starts, beneath the texts it hands itself.
 
 #[cfg(test)]
 mod tests {
@@ -20,6 +20,7 @@ mod tests {
 
     impl Mod for Rpg {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let _renamed = load.texts_from("[en]\n\"luck.name\" = \"Fortune\"\n")?;
             let luck = StatDef::additive()
                 .range(0.0, 1.0)
                 .format(StatFormat::Percent)
@@ -59,6 +60,11 @@ mod tests {
         assert_eq!(
             handed.get(&described, Language::UK_UA),
             Some("Щастить у бою й під час здобичі")
+        );
+        assert_eq!(
+            handed.get("luck.name", Language::EN_US),
+            Some("Fortune"),
+            "a text the mod handed itself stays over its file's"
         );
 
         let curse = stats.info(curse).unwrap();
