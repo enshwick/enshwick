@@ -138,7 +138,6 @@ pub(crate) const SLIDER_ON_RELEASE: Constant = Constant::new("ui.slider_on_relea
 pub(crate) const SLIDER_READ_ONLY: Constant = Constant::new("ui.slider_read_only");
 pub(crate) const SLIDER_STEPS: Constant = Constant::new("ui.slider_steps");
 pub(crate) const SLIDER_STOPS: Constant = Constant::new("ui.slider_stops");
-pub(crate) const SLIDER_TEXT: Constant = Constant::new("ui.slider_text");
 pub(crate) const SLIDER_STOP_CAPACITY: Constant = Constant::new("ui.slider_stop_capacity");
 pub(crate) const SLIDER_STOP_COUNT: Constant = Constant::new("ui.slider_stop_count");
 pub(crate) const SOUND: Symbol = Symbol::new("ui.sound");

@@ -204,7 +204,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::SLIDER_READ_ONLY.id(),
     pinned::ui::SLIDER_EXTENT.id(),
     pinned::ui::SLIDER_STEPS.id(),
-    pinned::ui::SLIDER_TEXT.id(),
     pinned::ui::SLIDER_STOP_CAPACITY.id(),
     pinned::ui::SLIDER_STOP_COUNT.id(),
     pinned::ui::SLIDER_STOPS.id(),

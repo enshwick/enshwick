@@ -23,42 +23,26 @@ pub(super) const BUTTON_ALIGN_RIGHT: u16 = 0x203;
 const ICON_MARGIN: f32 = 25.0;
 /// The height of an icon button, which an empty slot keeps free.
 const ICON_SLOT: f32 = 50.0;
-/// The slider's value format that shows the caller's text at
-/// `ui.slider_text`, as the game's own sliders with a text of their own set
-/// it; 3 is a whole number and 5 two decimals there (client 26430625).
-const SLIDER_OWN_TEXT: u32 = 2;
-/// The slider's value format with one decimal (%.1f), which the game fills
-/// itself; the loader's sliders used it before they had a text of their own,
-/// and still do where `ui.slider_text` misses (client 26430625).
-const SLIDER_ONE_DECIMAL: u32 = 4;
-/// Room for a slider's value text, far past any setting's range; a longer
-/// one is cut.
-pub(super) const SLIDER_TEXT_BYTES: usize = 32;
+/// The slider's value format that the game fills as a rounded whole number.
+/// Formats 3 to 5 show the value the player drags while the drag lasts, and
+/// the caller's value otherwise; format 2 shows only a text the caller wrote
+/// (client 26430625).
+pub(super) const SLIDER_WHOLE: u32 = 3;
+/// The slider's value format that the game fills with two decimals (%.2f).
+pub(super) const SLIDER_TWO_DECIMALS: u32 = 5;
 
-/// The slider's value text for `value`: a whole number for a `whole`
-/// setting or when every stop is one, else two decimals.
-pub(super) fn slider_text(
-    value: f32,
-    (min, max): (f32, f32),
-    steps: u32,
-    whole: bool,
-) -> ([u8; SLIDER_TEXT_BYTES], usize) {
-    use std::io::Write as _;
+/// The slider's value format: a whole number for a `whole` setting or when
+/// every stop is one, else two decimals.
+pub(super) fn slider_format((min, max): (f32, f32), steps: u32, whole: bool) -> u32 {
     let is_whole = |v: f32| v.fract() == 0.0;
     #[expect(clippy::cast_precision_loss, reason = "a count of stops")]
     let unit =
         steps >= 2 && is_whole(min) && is_whole(max) && is_whole((max - min) / (steps - 1) as f32);
-    let decimals = if whole || unit { 0 } else { 2 };
-    let scale = 10f32.powi(decimals);
-    // Adding zero turns a rounded -0 into 0, so the text never reads "-0".
-    let shown = (value * scale).round() / scale + 0.0;
-    let mut bytes = [0; SLIDER_TEXT_BYTES];
-    let mut out = std::io::Cursor::new(&mut bytes[..]);
-    let width = usize::try_from(decimals).unwrap_or(0);
-    // A value too long for the room is cut, never refused.
-    let _cut = write!(out, "{shown:.width$}");
-    let len = usize::try_from(out.position()).unwrap_or(0);
-    (bytes, len)
+    if whole || unit {
+        SLIDER_WHOLE
+    } else {
+        SLIDER_TWO_DECIMALS
+    }
 }
 
 /// When a slider gives its value.
@@ -487,14 +471,10 @@ impl Engine {
         config.u8(layout.slider_bounded, 1);
         config.u8(layout.slider_read_only, u8::from(read_only));
         config.u8(layout.slider_on_release, u8::from(on_release));
-        if let Some(at) = layout.slider_text {
-            let (text, len) = slider_text(value, (min, max), steps, whole);
-            let text = super::super::copy(&[text.get(..len).unwrap_or_default()]);
-            config.u32(layout.slider_format, SLIDER_OWN_TEXT);
-            config.text(at, &text);
-        } else {
-            config.u32(layout.slider_format, SLIDER_ONE_DECIMAL);
-        }
+        config.u32(
+            layout.slider_format,
+            slider_format((min, max), steps, whole),
+        );
         let most = u32::try_from(layout.slider_stop_capacity).unwrap_or(0);
         if (2..=most).contains(&steps) {
             for (i, slot) in (0..steps).zip((layout.slider_stops..).step_by(4)) {

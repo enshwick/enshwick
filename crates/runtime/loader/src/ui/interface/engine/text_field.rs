@@ -7,7 +7,8 @@
 //! answer to 1; its kept state says whether it has the caret.
 
 use super::{
-    Buf, Engine, Loader, Lookup, Missing, NodeFloatFn, OneFn, Ptr, UiText, field, game_fn, stretch,
+    Buf, Engine, Loader, Lookup, Missing, NAV_SIZE, NodeFloatFn, OneFn, Ptr, UiText, field,
+    game_fn, stretch,
 };
 use crate::base::configure::rows::{ENTRY_BYTES, typed};
 use crate::engine::pinned;
@@ -254,6 +255,17 @@ impl Engine {
         buffer.text.data = buffer.bytes.as_mut_ptr();
         buffer.text.capacity = ENTRY_BYTES as u64;
         buffer.text.grow = 0;
+        // The field takes a navigation group of its own, as the chat's does,
+        // so the window's group does not take Enter from it to press its
+        // focused button (client 26430625).
+        let mut nav = self.nav_config(super::windows::NAV_COLUMN);
+        let mut group = Buf::<NAV_SIZE>::zeroed();
+        // SAFETY: `self.nav_init` is the game's `ui.nav_init`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `group` holds the table's `ui.nav_extent` bytes and `nav`
+        // its `ui.nav_config_size` (`Layout::read`), and `group` stays in
+        // place until `nav_drop` below.
+        unsafe { (self.nav_init)(group.ptr(), nav.ptr()) };
         let mut field = Buf::<FIELD_SIZE>::zeroed();
         // SAFETY: `fns.field` is the game's `ui.text_field`, checked in
         // `TextFields::resolve`, inside the window this function's `# Safety`
@@ -367,12 +379,25 @@ impl Engine {
             editing = false;
         }
         buffer.text.len = buffer.text.len.min(ENTRY_BYTES as u64);
+        let mut input = [0u64; 2];
+        // SAFETY: `self.nav_input` is the game's `ui.nav_input`, checked in
+        // `Engine::resolve`; it writes sixteen bytes to the live `input` and
+        // reads the navigation config `nav`.
+        unsafe { (self.nav_input)(&raw mut input, nav.ptr(), 1) };
+        // SAFETY: `self.nav_set` is the game's `ui.nav_set`, checked in
+        // `Engine::resolve`, on the group `nav_init` filled above, with the
+        // live `input`.
+        unsafe { (self.nav_set)(group.ptr(), &raw const input) };
         // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
         // `Engine::resolve`, on the field built above, which draws and closes
         // it as the game's callers do; it reads the text through the
         // `GameText` at `ui.text_field_text`, which points at `buffer`, still
         // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
+        // SAFETY: `self.nav_drop` is the game's `ui.nav_drop`, checked in
+        // `Engine::resolve`, on the group `nav_init` made above, unmoved; it
+        // hands the window's group back as the current one.
+        unsafe { (self.nav_drop)(group.ptr()) };
         Some(Typed {
             entered: answer & u64::from(u32::MAX) == ENTERED,
             editing,

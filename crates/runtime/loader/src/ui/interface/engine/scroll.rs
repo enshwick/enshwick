@@ -68,8 +68,6 @@ const CONFIG_FLAGS_SET: u8 = 0x18;
 /// The navigation config's highlight sound, which the window's navigation
 /// leaves empty.
 const SOUND_SIZE: usize = 16;
-/// The navigation kind of a scrolled column.
-const NAV_SCROLLED: u32 = 3;
 
 /// The scroll area's functions and the bundle's looks for its scrollbar.
 #[derive(Debug)]
@@ -548,15 +546,7 @@ impl Engine {
     /// The scroll's navigation config: the window's, as a scrolled column
     /// with the highlight sound.
     fn scroll_nav(&self, fns: &Scrolling, bundle: usize) -> Buf<NAV_CONFIG> {
-        let mut nav = Buf::<NAV_CONFIG>::zeroed();
-        let [kind, wrap, axis, flags, input, layer, sound] = self.layout.nav;
-        nav.u32(kind, NAV_SCROLLED);
-        nav.u8(wrap, 1);
-        nav.u32(axis, 3);
-        nav.u16(flags, 0x101);
-        nav.u32(input, 2);
-        nav.u16(layer, 0x1b);
-        nav.u16(sound, 1);
+        let mut nav = self.nav_config(super::windows::NAV_COLUMN);
         // SAFETY: `bundle` is the frame's look bundle, read from the live
         // context, and `fns.highlight` the reflected offset of a 16-byte
         // sound reference inside it.
