@@ -267,7 +267,8 @@ pub(crate) enum Part {
     Docs,
     /// The API crate's stable-surface checks ([`stable_api_steps`]): a
     /// build of its own without `unstable`, which shares nothing with the
-    /// docs part's, so CI runs it beside that part.
+    /// other parts' builds, so CI runs it as a job of its own, on pull
+    /// requests too.
     StableApi,
     /// clippy for the Windows target through cargo-xwin, off Windows.
     WindowsLint,

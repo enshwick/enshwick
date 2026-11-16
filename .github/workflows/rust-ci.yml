@@ -5,8 +5,8 @@ name: Rust CI
 # build cached between runs; a push to main runs the full suite and fills the
 # caches pull requests start from. With `split` the host check, the doctests
 # and rustdoc, the API's stable surface, the Windows lint, the trybuild test
-# and cargo-semver-checks run as parallel jobs, the doctests, rustdoc and the
-# stable surface only in the merge queue, on main and with `full`. The
+# and cargo-semver-checks run as parallel jobs, the doctests and rustdoc only
+# in the merge queue, on main and with `full`. The
 # Windows tests run natively on a Windows runner. The job
 # `check` sums them up and is the required check.
 
@@ -58,7 +58,7 @@ jobs:
 
       # Work already proven is not repeated: a merge queue group whose tree
       # is its pull request's own head passed that pull request's check
-      # (split, all but the docs and stable-api parts), and a change to files that never
+      # (split, all but the docs part), and a change to files that never
       # build (documents outside the book, repository settings, other
       # workflows) has nothing to compile or test.
       - name: What is left to prove
@@ -103,7 +103,7 @@ jobs:
           if [ -n "$reason" ]; then
             echo "nothing to check: $reason" | tee -a "$GITHUB_STEP_SUMMARY"
           elif [ -n "$proven" ]; then
-            echo "only the docs and stable-api parts to check: $proven" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "only the docs part to check: $proven" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           echo "skip=$reason" >> "$GITHUB_OUTPUT"
           echo "proven=$proven" >> "$GITHUB_OUTPUT"
@@ -130,15 +130,18 @@ jobs:
           if [ "$SPLIT" != true ]; then
             parts='{"part":"all","xtask":true}'
           elif [ -n "$PROVEN" ]; then
-            parts='{"part":"docs","xtask":true},{"part":"stable-api","xtask":true}'
+            parts='{"part":"docs","xtask":true}'
           else
-            parts='{"part":"host","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":true}'
-            # The doctests, rustdoc and the stable surface run in the merge
-            # queue, on main and in the full suite, which keeps the pull
-            # request lane short; the stable surface's own build runs beside
-            # the docs part's.
+            # The stable surface runs on pull requests too: it is the one
+            # build without `unstable`, so an item moved behind it, or code
+            # only unstable items use, breaks there alone. About 80 s of
+            # checks, shorter than the host part beside it.
+            parts='{"part":"host","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":true},{"part":"stable-api","xtask":true}'
+            # The workspace's doctests and rustdoc run in the merge queue, on
+            # main and in the full suite, which keeps the pull request lane
+            # short.
             if [ "$EVENT" != pull_request ] || [ "$FULL" = true ]; then
-              parts+=',{"part":"docs","xtask":true},{"part":"stable-api","xtask":true}'
+              parts+=',{"part":"docs","xtask":true}'
             fi
             # A pull request also fuzzes, briefly, the targets its change
             # reaches; a push to main fuzzes every target and fills the fuzz
