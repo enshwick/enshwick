@@ -143,9 +143,9 @@ pub(crate) struct Palette {
 }
 
 impl Palette {
-    /// The palette of the palette worlds `worlds` and the rules `rules`:
+    /// The palette of the palette worlds `worlds` and the rules `terraforming`:
     /// a terrain id any world names takes the first world's name for it.
-    fn read<'a>(worlds: impl IntoIterator<Item = &'a Value>, rules: &Value) -> Option<Self> {
+    fn read<'a>(worlds: impl IntoIterator<Item = &'a Value>, terraforming: &Value) -> Option<Self> {
         let mut names = [None; TERRAIN_IDS];
         for world in worlds {
             let Some(Value::List(guids)) = world.field(MATERIAL_GUIDS) else {
@@ -159,7 +159,7 @@ impl Palette {
                 }
             }
         }
-        let Some(Value::List(configs)) = rules.field(TERRAIN_CONFIGS) else {
+        let Some(Value::List(configs)) = terraforming.field(TERRAIN_CONFIGS) else {
             return None;
         };
         let mut ruled = [false; TERRAIN_IDS];

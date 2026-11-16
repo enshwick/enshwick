@@ -152,8 +152,8 @@ pub(crate) fn update(
             (Clones::default(), false)
         }
     };
-    let cloned = clones.add(served);
-    if (clones.add_terrain(terrain) || cloned) && readable {
+    let new_clone = clones.add(served);
+    if (clones.add_terrain(terrain) || new_clone) && readable {
         let written = toml::to_string(&clones)
             .map_err(|error| error.to_string())
             .and_then(|text| write(&path, &text).map_err(|error| error.to_string()));
