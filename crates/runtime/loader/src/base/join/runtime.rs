@@ -1,6 +1,7 @@
 //! The join hook on the client.
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use enshwick_core::abi::UiDialog;
 
@@ -27,6 +28,27 @@ static LAYOUT: OnceLock<super::Layout> = OnceLock::new();
 /// Sets the build's join target layout, before the hook links.
 pub(crate) fn set_layout(layout: super::Layout) {
     let _first = LAYOUT.set(layout);
+}
+
+/// The build's join target layout, once the join check linked it.
+pub(crate) fn layout() -> Option<super::Layout> {
+    LAYOUT.get().copied()
+}
+
+/// The join check's counts, one per process.
+struct State {
+    /// How many joins the check refused, so a caller that started a join
+    /// tells a refusal from another failure.
+    refusals: AtomicU64,
+}
+
+static STATE: State = State {
+    refusals: AtomicU64::new(0),
+};
+
+/// The count of joins the check refused so far.
+pub(crate) fn refusals() -> u64 {
+    STATE.refusals.load(Ordering::Acquire)
 }
 
 /// Sets the names of all the client's mods.
@@ -82,6 +104,7 @@ crate::engine::chains::chain_detour! {
             return onward.call();
         }
         crate::log!(WARN, "join refused: the server runs mods this client lacks");
+        STATE.refusals.fetch_add(1, Ordering::AcqRel);
         super::interaction::joining(true);
         // The provider copies the target into its own state before it
         // returns, and the caller keeps its target, so the caller's copy

@@ -402,6 +402,31 @@ impl Installed {
         });
     }
 
+    /// Moves join or leave `id` to `phase`, and a failed join to `failure`,
+    /// as the loader's frame would ([`ClientCommandStatus`](enshwick_core::abi::ClientCommandStatus)
+    /// constants); its state stays as [`Installed::set_command_status`] set it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::ClientCommandStatus;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_command_phase(1, ClientCommandStatus::PHASE_LOADING, 0);
+    /// ```
+    pub fn set_command_phase(&self, id: u64, phase: u32, failure: u32) {
+        table::with((), |s| {
+            if let Some((.., status)) = s
+                .client_commands
+                .iter_mut()
+                .find(|(queued, ..)| *queued == id)
+            {
+                status.phase = phase;
+                status.failure = failure;
+            }
+        });
+    }
+
     /// The mod's markers on the map, as it set them last.
     ///
     /// # Examples

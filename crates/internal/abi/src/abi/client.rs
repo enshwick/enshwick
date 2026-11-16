@@ -102,9 +102,14 @@ pub struct ClientSnapshot {
     pub highlighted_recipe: RecipeId,
     /// Zero.
     pub reserved: u32,
+    /// The server a [`ClientCommand::JOIN`] of this loader joins or joined,
+    /// as `host:query_port`, while the client is on its way there or in its
+    /// world; empty in the menu and in a world the client hosts or joined
+    /// another way. ABI 12.11.
+    pub server: Str,
 }
 
-impl_headed!(ClientSnapshot);
+impl_headed!(ClientSnapshot, born = 120);
 
 impl ClientSnapshot {
     /// No interface read yet.
@@ -142,6 +147,7 @@ impl ClientSnapshot {
         host: Entity(0),
         highlighted_recipe: RecipeId(0),
         reserved: 0,
+        server: Str::EMPTY,
     };
 }
 
@@ -173,7 +179,7 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::HIGHLIGHT_RECIPE`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::LEAVE`].
     pub kind: u32,
     /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`].
     pub hold_ms: u32,
@@ -188,7 +194,8 @@ pub struct ClientCommand {
     pub expected_screen: Str,
     /// What the command opens or chooses: a screen for
     /// [`ClientCommand::OPEN_SCREEN`], a tab for [`ClientCommand::CHOOSE_TAB`], by the
-    /// `HudScreenType` member it stands for.
+    /// `HudScreenType` member it stands for; the server, `host:query_port`,
+    /// for [`ClientCommand::JOIN`].
     pub target: Str,
     /// A look's turn in radians of yaw and pitch, before the player's
     /// camera sensitivity; each at most [`ClientCommand::MAX_LOOK`]. A positive yaw
@@ -202,9 +209,14 @@ pub struct ClientCommand {
     pub reserved: u32,
     /// The command [`ClientCommand::CANCEL`] cancels.
     pub cancels: u64,
+    /// The server's password for [`ClientCommand::JOIN`], at most
+    /// [`ClientCommand::MAX_PASSWORD`] bytes, empty for none; borrowed for
+    /// the call. The loader hands it to the game's own join and never
+    /// keeps, logs or returns it. ABI 12.11.
+    pub password: Str,
 }
 
-impl_headed!(ClientCommand);
+impl_headed!(ClientCommand, born = 88);
 
 impl ClientCommand {
     /// Opens `target`, one of the screens the game opens from a key in the
@@ -222,6 +234,14 @@ impl ClientCommand {
     pub const MOVE: u32 = 6;
     /// Highlights `recipe` in the open crafting menu, crafting nothing.
     pub const HIGHLIGHT_RECIPE: u32 = 7;
+    /// Joins the dedicated server `target`, `host:query_port`, with
+    /// `password` from the main menu with a character selected; `session`
+    /// is 0. Refused while a join or a world runs. ABI 12.11.
+    pub const JOIN: u32 = 8;
+    /// Leaves the world back to the main menu. ABI 12.11.
+    pub const LEAVE: u32 = 9;
+    /// The longest password, in bytes, the game's join takes.
+    pub const MAX_PASSWORD: usize = 0x400;
     /// The longest move.
     pub const MAX_HOLD_MS: u32 = 250;
     /// The largest turn of one look, in radians, a quarter turn.
@@ -239,6 +259,7 @@ impl ClientCommand {
         recipe: RecipeId(0),
         reserved: 0,
         cancels: 0,
+        password: Str::EMPTY,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
@@ -271,6 +292,7 @@ impl ClientCommand {
                     && (1..=Self::MAX_HOLD_MS).contains(&self.hold_ms)
             }
             Self::HIGHLIGHT_RECIPE => self.recipe.0 != 0,
+            Self::JOIN => self.session == 0 && self.password.len() <= Self::MAX_PASSWORD,
             _ => true,
         }
     }
@@ -282,9 +304,11 @@ impl ClientCommand {
 ///
 /// A command is [`ClientCommandStatus::PENDING`] until the game took it
 /// ([`ClientCommandStatus::APPLIED`]), then [`ClientCommandStatus::OBSERVED`] once the client's own state
-/// shows its effect. It may end [`ClientCommandStatus::CANCELLED`] for `reason` or
-/// [`ClientCommandStatus::UNAVAILABLE`] on a build that lacks what it needs. Nothing
-/// answers a guessed success.
+/// shows its effect. It may end [`ClientCommandStatus::CANCELLED`] for `reason`,
+/// [`ClientCommandStatus::UNAVAILABLE`] on a build that lacks what it needs, or,
+/// for a join, [`ClientCommandStatus::FAILED`]. A join follows its `phase` with the
+/// game's own pace: no two-second limit cancels it. Nothing answers a guessed
+/// success.
 ///
 /// # Examples
 ///
@@ -310,9 +334,17 @@ pub struct ClientCommandStatus {
     pub reserved: u32,
     /// Milliseconds since the command was queued.
     pub age_ms: u64,
+    /// Where the client stands on a [`ClientCommand::JOIN`] or
+    /// [`ClientCommand::LEAVE`]: [`ClientCommandStatus::PHASE_QUEUED`] to
+    /// [`ClientCommandStatus::PHASE_LEFT`]; 0 for other kinds. ABI 12.11.
+    pub phase: u32,
+    /// Why a [`ClientCommandStatus::FAILED`] join failed, as far as the
+    /// client can tell: [`ClientCommandStatus::WRONG_PASSWORD`] to
+    /// [`ClientCommandStatus::UNKNOWN`]; 0 otherwise. ABI 12.11.
+    pub failure: u32,
 }
 
-impl_headed!(ClientCommandStatus);
+impl_headed!(ClientCommandStatus, born = 32);
 
 impl ClientCommandStatus {
     /// Queued; the game has not taken it yet.
@@ -343,6 +375,39 @@ impl ClientCommandStatus {
     pub const INPUT_BLOCKED: u32 = 6;
     /// The mod or the feature turned off.
     pub const MOD_OFF: u32 = 7;
+    /// The game ended a join without reaching the world, for `failure`.
+    /// ABI 12.11.
+    pub const FAILED: u32 = 5;
+    /// Waiting to start: the loader asks the server for its address.
+    pub const PHASE_QUEUED: u32 = 1;
+    /// The main menu took the join and starts play.
+    pub const PHASE_MENU: u32 = 2;
+    /// Play started; the client connects to the server.
+    pub const PHASE_CONNECTING: u32 = 3;
+    /// Connected; the client loads the world.
+    pub const PHASE_LOADING: u32 = 4;
+    /// The client is in the server's world.
+    pub const PHASE_IN_WORLD: u32 = 5;
+    /// The client left play, back to the main menu.
+    pub const PHASE_LEFT: u32 = 6;
+    /// The server refused the password, or asks for one and none was given.
+    pub const WRONG_PASSWORD: u32 = 1;
+    /// The server is full.
+    pub const FULL: u32 = 2;
+    /// The server was not found.
+    pub const NOT_FOUND: u32 = 3;
+    /// The server is reserved for others.
+    pub const RESERVED: u32 = 4;
+    /// The server runs another game version.
+    pub const VERSION_MISMATCH: u32 = 5;
+    /// The loader's join check or the server refused the client.
+    pub const REFUSED: u32 = 6;
+    /// The game did not start or finish the join in time.
+    pub const JOIN_TIMED_OUT: u32 = 7;
+    /// The server's query port did not answer with its address.
+    pub const UNREACHABLE: u32 = 8;
+    /// The join failed for a reason the client does not show.
+    pub const UNKNOWN: u32 = 9;
     /// A command queued now, its header set.
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
@@ -351,5 +416,7 @@ impl ClientCommandStatus {
         kind: 0,
         reserved: 0,
         age_ms: 0,
+        phase: 0,
+        failure: 0,
     };
 }

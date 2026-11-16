@@ -175,6 +175,50 @@ impl Layout {
         self.host
     }
 
+    /// How many bytes from a target's start hold its address: up to its
+    /// has-address flag, which ends it.
+    #[must_use]
+    pub const fn address_len(&self) -> usize {
+        self.has_address + 1
+    }
+
+    /// A join target that leads to the dedicated server `host` at `game`,
+    /// asked at its query port `query`, as the game's server list writes
+    /// one; [`Layout::destination`] reads it back. Only its first
+    /// [`Layout::address_len`] bytes count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::base::join::{Destination, Layout};
+    ///
+    /// # let rows = [
+    /// #     ("join.target_host", 0),
+    /// #     ("join.target_copy", 0x50),
+    /// #     ("join.target_ip_read", 0x58),
+    /// #     ("join.target_word_copy", 0x48),
+    /// #     ("join.target_game_port_read", 0x4c),
+    /// #     ("join.target_query_port_read", 0x4e),
+    /// #     ("join.target_has_address", 32),
+    /// #     ("join.target_password", 36),
+    /// # ];
+    /// # let layout = Layout::from_table(|id| rows.iter().find(|row| row.0 == id).map(|row| row.1))?;
+    /// let target = layout.server(7, "10.0.0.2:15636".parse()?, 15637);
+    /// assert_eq!(layout.destination(&target), Destination::Server { query: "10.0.0.2:15637".parse()? });
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[must_use]
+    pub fn server(&self, host: u64, game: std::net::SocketAddrV4, query: u16) -> Target {
+        let mut target = [0u8; TARGET_BYTES];
+        let mut put = |at: usize, bytes: &[u8]| target[at..at + bytes.len()].copy_from_slice(bytes);
+        put(self.host, &host.to_le_bytes());
+        put(self.ip, &u32::from(*game.ip()).to_le_bytes());
+        put(self.game_port, &game.port().to_le_bytes());
+        put(self.query_port, &query.to_le_bytes());
+        put(self.has_address, &[1]);
+        target
+    }
+
     /// Reads where a join target leads: a dedicated server when its address
     /// is set with an IPv4 and a game port, as the game decides, else a
     /// lobby.

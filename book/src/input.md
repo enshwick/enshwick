@@ -377,3 +377,84 @@ local function highlight(recipe: number)
     })
 end
 ```
+
+## Joining a server and leaving it
+
+`CommandAction::Join { server, password }` joins a dedicated server from the
+main menu, as the game's own server list does. `server` is the server's
+`host:query_port`, an address or a name. `password` is the server's
+password, `None` for none. The loader hands the password to the game's own
+join, which keeps only a hash of it. The loader never keeps, logs or returns
+it, and its `Debug` shows none of it. The game keeps no passwords of its
+own, so no call reads a saved one.
+
+A join starts at the main menu with a character selected, with session 0.
+The loader refuses a join while another join or leave runs, or while the
+client is in a world. It never turns a join into a leave.
+
+The loader first asks the server's query port for the server's Steam id and
+game port, which the game's join needs. A server that does not answer fails
+the join with `Unreachable` before anything reaches the game. Each join
+adds the server to Steam's history, as every join from the game does.
+
+`CommandStatus::phase` follows the join at the game's own pace. No two-second
+limit cancels a join:
+
+| Phase | Means |
+| --- | --- |
+| `Queued` | the loader asks the server for its address |
+| `Menu` | the main menu took the join and starts play |
+| `Connecting` | play started; the client connects |
+| `Loading` | connected; the client loads the world |
+| `InWorld` | the client is in the server's world; the join is `Observed` |
+| `Left` | the client left play, back to the main menu |
+
+A join that ends back at the main menu is `CommandState::Failed(failure)`.
+The failure is what the client can tell:
+
+| Failure | Means |
+| --- | --- |
+| `Unreachable` | the query port did not answer with the server's address |
+| `Refused` | the loader's join check refused it: the server runs mods this client lacks |
+| `Full` | the server was full when it answered |
+| `WrongPassword` | the server asks for a password and the mod gave none |
+| `TimedOut` | the game did not start play within 20 seconds |
+| `Unknown` | any other reason; the client does not show it |
+
+The game also names a server not found, reserved or on another version.
+The loader does not read these reasons yet, so they show as `Unknown`.
+
+`input.cancel_command(id)` cancels a join. Once the game took the join, the
+loader also takes the client back to the main menu, out of a world that
+loads too. A join that times out goes back the same way. A mod that turns
+off leaves its join to the game. `CommandAction::Leave` takes the client
+from a world back to the main menu, as the pause menu's own entry does. It
+is `Observed`, in phase `Left`, once the main menu shows. The loader refuses
+a leave outside a world, or while another join or leave runs. While the client joins a server through
+the loader, and while it is in that server's world, the snapshot's
+`server()` names the server.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction, Password};
+
+fn join(input: enshwick::input::Input) -> Option<enshwick::input::CommandId> {
+    let action = CommandAction::Join {
+        server: "203.0.113.5:15637".to_owned(),
+        password: Some(Password::new("open sesame")),
+    };
+    input.client_command(&ClientCommand::new(action, 0)).ok()
+}
+```
+
+```luau
+local id = enshwick.input.client_command({
+    kind = "join",
+    session = "0",
+    target = "203.0.113.5:15637",
+    password = "open sesame",
+})
+enshwick.ui.on_frame(function()
+    local status = enshwick.input.command_status(id)
+    enshwick.log.info(`{status.state} {status.phase}`)
+end)
+```

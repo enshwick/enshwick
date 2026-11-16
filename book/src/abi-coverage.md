@@ -245,8 +245,8 @@ names every entry of the golden layout once, in that order.
 | `local_input_status` | loader | fake client/server and cached-state tests | not exercised |
 | `client_snapshot` | game | fake client/server, snapshot composition and session tests | client |
 | `loader_off` | loader | fake listing and kept-text tests | — |
-| `client_command` | game | fake client/server, bounds, command and handoff tests, Luau | client |
-| `client_command_status` | game | fake states and every cancel reason, Luau | client |
+| `client_command` | game | fake client/server, bounds, command and handoff tests, join and leave refusal, duplicate and cancel, Luau | client |
+| `client_command_status` | game | fake states, every cancel reason, join phases and failures, Luau | client |
 | `terrain_material_add` | game | — | client |
 | `interaction_prompt` | game | — | with a player, client |
 | `ui_item_tooltip` | game | — | client |

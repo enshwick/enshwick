@@ -22,6 +22,7 @@
 use std::collections::BTreeMap;
 
 mod difference;
+mod info;
 pub mod interaction;
 #[cfg_attr(
     all(not(windows), not(test)),
@@ -35,6 +36,7 @@ mod rules;
 mod target;
 
 pub use difference::{Difference, Line, MAX_LINES, Row, difference};
+pub use info::{ServerInfo, parse_info, query_info};
 pub(crate) use plan::entries;
 use plan::label;
 pub use plan::{Plan, differences, plan, wanted};
@@ -61,4 +63,4 @@ pub(crate) mod client;
 mod runtime;
 
 #[cfg(windows)]
-pub(crate) use runtime::{JOIN_FUSE, link, names, set_layout, set_names};
+pub(crate) use runtime::{JOIN_FUSE, layout, link, names, refusals, set_layout, set_names};

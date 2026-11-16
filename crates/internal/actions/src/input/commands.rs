@@ -50,6 +50,51 @@ pub enum CommandAction {
     },
     /// Highlights `recipe` in the open crafting menu, crafting nothing.
     HighlightRecipe(RecipeId),
+    /// Joins the dedicated server `server`, `host:query_port`, from the main
+    /// menu with a character selected, giving `password` when it asks for
+    /// one. Its [`CommandStatus::phase`] follows the join at the game's own
+    /// pace. Its command's session is 0.
+    Join {
+        /// The server, as `host:query_port`.
+        server: String,
+        /// The server's password, `None` for none.
+        password: Option<Password>,
+    },
+    /// Leaves the world back to the main menu.
+    Leave,
+}
+
+/// A server's password for [`CommandAction::Join`]: the loader hands it to
+/// the game's own join and keeps, logs and returns none of it, and its
+/// `Debug` shows none of it either.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::input::Password;
+///
+/// let password = Password::new("hunter2");
+/// assert!(!format!("{password:?}").contains("hunter2"));
+/// ```
+#[derive(Clone, PartialEq, Eq)]
+pub struct Password(String);
+
+impl Password {
+    /// The password `text`; the game takes at most 1024 bytes.
+    ///
+    /// # Examples
+    ///
+    /// See [`Password`].
+    #[must_use]
+    pub fn new(text: impl Into<String>) -> Self {
+        Self(text.into())
+    }
+}
+
+impl core::fmt::Debug for Password {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Password(..)")
+    }
 }
 
 /// A command for the client, from [`Input::client_command`]: what it does,
@@ -132,6 +177,12 @@ impl ClientCommand {
                 raw.kind = RawCommand::HIGHLIGHT_RECIPE;
                 raw.recipe = *recipe;
             }
+            CommandAction::Join { server, password } => {
+                raw.kind = RawCommand::JOIN;
+                raw.target = Str::new(server);
+                raw.password = password.as_ref().map_or(Str::EMPTY, |p| Str::new(&p.0));
+            }
+            CommandAction::Leave => raw.kind = RawCommand::LEAVE,
         }
         raw
     }
@@ -244,6 +295,8 @@ pub enum CommandState {
     Cancelled(CancelReason),
     /// The running build lacks what it needs, or the target is not there.
     Unavailable,
+    /// The game ended a join without reaching the world.
+    Failed(JoinFailure),
 }
 
 impl CommandState {
@@ -253,23 +306,150 @@ impl CommandState {
             Raw::OBSERVED => Self::Observed,
             Raw::CANCELLED => Self::Cancelled(CancelReason::from_raw(raw.reason)),
             Raw::UNAVAILABLE => Self::Unavailable,
+            Raw::FAILED => Self::Failed(JoinFailure::from_raw(raw.failure)),
             _ => Self::Pending,
         }
     }
 }
 
-/// [`ClientCommand`] as Luau gives it.
-#[derive(Clone, Debug, PartialEq, crate::Script)]
+/// Why a join failed, as far as the client can tell.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::input::JoinFailure;
+///
+/// assert_ne!(JoinFailure::Full, JoinFailure::Unknown);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum JoinFailure {
+    /// The server refused the password, or asks for one and none was given.
+    WrongPassword,
+    /// The server is full.
+    Full,
+    /// The server was not found.
+    NotFound,
+    /// The server is reserved for others.
+    Reserved,
+    /// The server runs another game version.
+    VersionMismatch,
+    /// The loader's join check or the server refused the client.
+    Refused,
+    /// The game did not start or finish the join in time.
+    TimedOut,
+    /// The server's query port did not answer with its address.
+    Unreachable,
+    /// The client does not show why.
+    Unknown,
+    /// A failure a newer loader gives that this build of the API does not
+    /// name, as its raw value.
+    Other(u32),
+}
+
+impl JoinFailure {
+    const ALL: [(u32, Self, &'static str); 9] = [
+        (Raw::WRONG_PASSWORD, Self::WrongPassword, "wrong_password"),
+        (Raw::FULL, Self::Full, "full"),
+        (Raw::NOT_FOUND, Self::NotFound, "not_found"),
+        (Raw::RESERVED, Self::Reserved, "reserved"),
+        (
+            Raw::VERSION_MISMATCH,
+            Self::VersionMismatch,
+            "version_mismatch",
+        ),
+        (Raw::REFUSED, Self::Refused, "refused"),
+        (Raw::JOIN_TIMED_OUT, Self::TimedOut, "timed_out"),
+        (Raw::UNREACHABLE, Self::Unreachable, "unreachable"),
+        (Raw::UNKNOWN, Self::Unknown, "unknown"),
+    ];
+
+    fn from_raw(failure: u32) -> Self {
+        Self::ALL
+            .iter()
+            .find(|(raw, ..)| *raw == failure)
+            .map_or(Self::Other(failure), |(_, failure, _)| *failure)
+    }
+
+    fn name(self) -> &'static str {
+        Self::ALL
+            .iter()
+            .find(|(_, failure, _)| *failure == self)
+            .map_or("other", |(.., name)| name)
+    }
+}
+
+/// Where the client stands on a [`CommandAction::Join`] or
+/// [`CommandAction::Leave`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::input::JoinPhase;
+///
+/// assert_ne!(JoinPhase::Loading, JoinPhase::InWorld);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum JoinPhase {
+    /// Waiting to start: the loader asks the server for its address.
+    Queued,
+    /// The main menu took the join and starts play.
+    Menu,
+    /// Play started; the client connects to the server.
+    Connecting,
+    /// Connected; the client loads the world.
+    Loading,
+    /// The client is in the server's world.
+    InWorld,
+    /// The client left play, back to the main menu.
+    Left,
+    /// A phase a newer loader gives that this build of the API does not
+    /// name, as its raw value.
+    Other(u32),
+}
+
+impl JoinPhase {
+    const ALL: [(u32, Self, &'static str); 6] = [
+        (Raw::PHASE_QUEUED, Self::Queued, "queued"),
+        (Raw::PHASE_MENU, Self::Menu, "menu"),
+        (Raw::PHASE_CONNECTING, Self::Connecting, "connecting"),
+        (Raw::PHASE_LOADING, Self::Loading, "loading"),
+        (Raw::PHASE_IN_WORLD, Self::InWorld, "in_world"),
+        (Raw::PHASE_LEFT, Self::Left, "left"),
+    ];
+
+    /// The phase of `raw`, `None` for 0: no join or leave.
+    fn from_raw(raw: u32) -> Option<Self> {
+        (raw != 0).then(|| {
+            Self::ALL
+                .iter()
+                .find(|(value, ..)| *value == raw)
+                .map_or(Self::Other(raw), |(_, phase, _)| *phase)
+        })
+    }
+
+    fn name(self) -> &'static str {
+        Self::ALL
+            .iter()
+            .find(|(_, phase, _)| *phase == self)
+            .map_or("other", |(.., name)| name)
+    }
+}
+
+/// [`ClientCommand`] as Luau gives it; its `Debug` shows none of the
+/// password.
+#[derive(Clone, PartialEq, crate::Script)]
 #[script(name = "ClientCommand")]
 struct LuauCommand {
     /// `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`,
-    /// `"move"` or `"highlight_recipe"`.
+    /// `"move"`, `"highlight_recipe"`, `"join"` or `"leave"`.
     pub kind: String,
     /// The session, as `client_snapshot().session` gives it.
     pub session: u64,
     /// The HUD screen the client must show.
     pub expected_screen: Option<String>,
-    /// The screen to open or the tab to choose.
+    /// The screen to open, the tab to choose or the server to join.
     pub target: Option<String>,
     /// A look's yaw and pitch in radians.
     pub look: Option<[f32; 2]>,
@@ -279,6 +459,24 @@ struct LuauCommand {
     pub hold_ms: Option<u32>,
     /// The recipe to highlight.
     pub recipe: Option<RecipeId>,
+    /// A join's server password.
+    pub password: Option<String>,
+}
+
+impl core::fmt::Debug for LuauCommand {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LuauCommand")
+            .field("kind", &self.kind)
+            .field("session", &self.session)
+            .field("expected_screen", &self.expected_screen)
+            .field("target", &self.target)
+            .field("look", &self.look)
+            .field("direction", &self.direction)
+            .field("hold_ms", &self.hold_ms)
+            .field("recipe", &self.recipe)
+            .field("password", &self.password.as_ref().map(|_| "<secret>"))
+            .finish()
+    }
 }
 
 impl TryFrom<LuauCommand> for ClientCommand {
@@ -306,6 +504,11 @@ impl TryFrom<LuauCommand> for ClientCommand {
             "highlight_recipe" => {
                 CommandAction::HighlightRecipe(luau.recipe.ok_or_else(|| missing("a recipe"))?)
             }
+            "join" => CommandAction::Join {
+                server: luau.target.clone().ok_or_else(|| missing("a target"))?,
+                password: luau.password.clone().map(Password),
+            },
+            "leave" => CommandAction::Leave,
             other => {
                 return Err(crate::script::Error::new(format!(
                     "no client command kind {other:?}"
@@ -334,14 +537,18 @@ impl crate::script::FromScript for ClientCommand {
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 #[script(name = "CommandStatus")]
 struct LuauStatus {
-    /// `"pending"`, `"applied"`, `"observed"`, `"cancelled"` or
-    /// `"unavailable"`.
+    /// `"pending"`, `"applied"`, `"observed"`, `"cancelled"`,
+    /// `"unavailable"` or `"failed"`.
     pub state: String,
-    /// Why a cancelled command ended, such as `"timed_out"`; `"other"` for
-    /// a reason a newer loader gives.
+    /// Why a cancelled command ended, such as `"timed_out"`, or why a
+    /// `"failed"` join failed, such as `"full"`; `"other"` for one a newer
+    /// loader gives.
     pub reason: Option<String>,
     /// Milliseconds since the command was queued.
     pub age_ms: u64,
+    /// A join or leave's phase: `"queued"`, `"menu"`, `"connecting"`,
+    /// `"loading"`, `"in_world"` or `"left"`.
+    pub phase: Option<String>,
 }
 
 /// Where a command stands and how long ago it was queued, from
@@ -363,6 +570,8 @@ pub struct CommandStatus {
     pub state: CommandState,
     /// Milliseconds since it was queued.
     pub age_ms: u64,
+    /// Where the client stands on a join or leave; `None` for other kinds.
+    pub phase: Option<JoinPhase>,
 }
 
 impl crate::script::Typed for CommandStatus {
@@ -377,11 +586,13 @@ impl crate::script::IntoScript for CommandStatus {
             CommandState::Observed => ("observed", None),
             CommandState::Cancelled(reason) => ("cancelled", Some(reason.name().to_owned())),
             CommandState::Unavailable => ("unavailable", None),
+            CommandState::Failed(failure) => ("failed", Some(failure.name().to_owned())),
         };
         LuauStatus {
             state: state.to_owned(),
             reason,
             age_ms: self.age_ms,
+            phase: self.phase.map(|phase| phase.name().to_owned()),
         }
         .into_value()
     }
@@ -467,6 +678,7 @@ impl Input {
         Ok(CommandStatus {
             state: CommandState::from_raw(&raw),
             age_ms: raw.age_ms,
+            phase: JoinPhase::from_raw(raw.phase),
         })
     }
 }
@@ -511,6 +723,7 @@ mod tests {
             direction: None,
             hold_ms: None,
             recipe: None,
+            password: None,
         };
         assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
@@ -533,6 +746,62 @@ mod tests {
             CommandState::Cancelled(CancelReason::PlayerInput)
         );
         assert_eq!(CancelReason::PlayerInput.name(), "player_input");
+    }
+
+    #[test]
+    fn a_luau_join_never_shows_its_password_in_a_debug_print() {
+        let luau = LuauCommand {
+            kind: "join".to_owned(),
+            session: 0,
+            expected_screen: None,
+            target: Some("127.0.0.1:15637".to_owned()),
+            look: None,
+            direction: None,
+            hold_ms: None,
+            recipe: None,
+            password: Some("hunter2".to_owned()),
+        };
+        let shown = format!("{luau:?}");
+        assert!(!shown.contains("hunter2"), "{shown}");
+        assert!(shown.contains("127.0.0.1:15637"));
+    }
+
+    #[test]
+    fn a_join_carries_its_server_and_password_and_a_failed_one_names_why() {
+        let join = ClientCommand::new(
+            CommandAction::Join {
+                server: "127.0.0.1:15637".to_owned(),
+                password: Some(Password::new("hunter2")),
+            },
+            0,
+        );
+        let raw = join.raw();
+        assert_eq!(raw.kind, RawCommand::JOIN);
+        // SAFETY: the view points at `join`'s server, alive here.
+        let target = unsafe { raw.target.as_str() };
+        // SAFETY: the view points at `join`'s password, alive here.
+        let password = unsafe { raw.password.as_str() };
+        assert_eq!(
+            (target, password),
+            (Some("127.0.0.1:15637"), Some("hunter2"))
+        );
+        assert!(
+            !format!("{join:?}").contains("hunter2"),
+            "the password never shows"
+        );
+        let failed = Raw {
+            state: Raw::FAILED,
+            failure: Raw::FULL,
+            phase: Raw::PHASE_MENU,
+            ..Raw::EMPTY
+        };
+        assert_eq!(
+            CommandState::from_raw(&failed),
+            CommandState::Failed(JoinFailure::Full)
+        );
+        assert_eq!(JoinPhase::from_raw(failed.phase), Some(JoinPhase::Menu));
+        assert_eq!(JoinPhase::from_raw(0), None, "no phase for other kinds");
+        assert_eq!(JoinFailure::from_raw(99), JoinFailure::Other(99));
     }
 
     #[test]

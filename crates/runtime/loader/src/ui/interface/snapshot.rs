@@ -75,6 +75,34 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
             unsafe { apply(context, view.state, kind) }
         },
     );
+    // SAFETY: the caller's contract: inside the frame on the interface
+    // thread, with its own non-zero context.
+    unsafe { play(engine, context, || view().is_some()) };
+}
+
+/// Notes the app's stage and runs a join or leave in this frame, posting
+/// through the menu's own commands; `game` answers whether the frame reads
+/// the client's play data, asked only while one runs.
+///
+/// # Safety
+///
+/// - Called inside a frame on the interface thread, with `context` the
+///   frame's own and non-zero.
+unsafe fn play(engine: &Engine, context: usize, game: impl FnOnce() -> bool) {
+    crate::actions::client_commands::play_frame(
+        || engine.app_state(context),
+        game,
+        |post| {
+            crate::actions::client_control::GROUPS
+                .menu
+                .get()
+                .is_some_and(|menu| {
+                    // SAFETY: inside the frame on the interface thread, with
+                    // its own live context, as this function's contract gives.
+                    unsafe { menu.post(context, post) }
+                })
+        },
+    );
 }
 
 /// Hands `kind` to the game in this frame.
@@ -107,7 +135,9 @@ unsafe fn apply(context: usize, state: usize, kind: Kind) -> Applied {
             unsafe { layout.choose(core::ptr::with_exposed_provenance_mut(state), tab) };
             Applied::Taken
         }
-        // Handed to their detours by the commands, never applied here.
-        Kind::Look(_) | Kind::Move(..) | Kind::Highlight(_) => Applied::Unavailable,
+        // Handed to their detours or the play module, never applied here.
+        Kind::Look(_) | Kind::Move(..) | Kind::Highlight(_) | Kind::Join | Kind::Leave => {
+            Applied::Unavailable
+        }
     }
 }

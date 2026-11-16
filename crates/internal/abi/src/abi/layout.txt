@@ -1,4 +1,4 @@
-abi 12.10
+abi 12.11
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -197,7 +197,7 @@ ChunkData size 20 align 4 born 20
     x at 8 size 4 type u32
     z at 12 size 4 type u32
     size at 16 size 4 type u32
-ClientCommand size 88 align 8 born 88
+ClientCommand size 104 align 8 born 88
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     hold_ms at 12 size 4 type u32
@@ -209,14 +209,17 @@ ClientCommand size 88 align 8 born 88
     recipe at 72 size 4 type RecipeId
     reserved at 76 size 4 type u32
     cancels at 80 size 8 type u64
-ClientCommandStatus size 32 align 8 born 32
+    password at 88 size 16 type Str
+ClientCommandStatus size 40 align 8 born 32
     header at 0 size 8 type Header
     state at 8 size 4 type u32
     reason at 12 size 4 type u32
     kind at 16 size 4 type u32
     reserved at 20 size 4 type u32
     age_ms at 24 size 8 type u64
-ClientSnapshot size 120 align 8 born 120
+    phase at 32 size 4 type u32
+    failure at 36 size 4 type u32
+ClientSnapshot size 136 align 8 born 120
     header at 0 size 8 type Header
     state at 8 size 4 type u32
     available at 12 size 4 type u32
@@ -231,6 +234,7 @@ ClientSnapshot size 120 align 8 born 120
     host at 108 size 4 type Entity
     highlighted_recipe at 112 size 4 type RecipeId
     reserved at 116 size 4 type u32
+    server at 120 size 16 type Str
 Comfort size 40 align 8 born 40
     header at 0 size 8 type Header
     category at 8 size 4 type u32
@@ -1288,23 +1292,42 @@ const ClientCommand::CANCEL = 4
 const ClientCommand::CHOOSE_TAB = 3
 const ClientCommand::CLOSE_SCREEN = 2
 const ClientCommand::HIGHLIGHT_RECIPE = 7
+const ClientCommand::JOIN = 8
+const ClientCommand::LEAVE = 9
 const ClientCommand::LOOK = 5
 const ClientCommand::MAX_HOLD_MS = 250
 const ClientCommand::MAX_LOOK = 1.5707964
+const ClientCommand::MAX_PASSWORD = 1024
 const ClientCommand::MOVE = 6
 const ClientCommand::OPEN_SCREEN = 1
 const ClientCommandStatus::APPLIED = 1
 const ClientCommandStatus::BY_MOD = 4
 const ClientCommandStatus::CANCELLED = 3
+const ClientCommandStatus::FAILED = 5
+const ClientCommandStatus::FULL = 2
 const ClientCommandStatus::INPUT_BLOCKED = 6
+const ClientCommandStatus::JOIN_TIMED_OUT = 7
 const ClientCommandStatus::MOD_OFF = 7
+const ClientCommandStatus::NOT_FOUND = 3
 const ClientCommandStatus::OBSERVED = 2
 const ClientCommandStatus::OTHER_SCREEN = 2
 const ClientCommandStatus::PENDING = 0
+const ClientCommandStatus::PHASE_CONNECTING = 3
+const ClientCommandStatus::PHASE_IN_WORLD = 5
+const ClientCommandStatus::PHASE_LEFT = 6
+const ClientCommandStatus::PHASE_LOADING = 4
+const ClientCommandStatus::PHASE_MENU = 2
+const ClientCommandStatus::PHASE_QUEUED = 1
 const ClientCommandStatus::PLAYER_INPUT = 3
+const ClientCommandStatus::REFUSED = 6
+const ClientCommandStatus::RESERVED = 4
 const ClientCommandStatus::SESSION_CHANGED = 1
 const ClientCommandStatus::TIMED_OUT = 5
 const ClientCommandStatus::UNAVAILABLE = 4
+const ClientCommandStatus::UNKNOWN = 9
+const ClientCommandStatus::UNREACHABLE = 8
+const ClientCommandStatus::VERSION_MISMATCH = 5
+const ClientCommandStatus::WRONG_PASSWORD = 1
 const ClientSnapshot::FRESH = 3
 const ClientSnapshot::HELD = 4
 const ClientSnapshot::MENU_TAB = 2

@@ -53,6 +53,7 @@ mod snapshot;
 
 pub use commands::{
     CancelReason, ClientCommand, CommandAction, CommandId, CommandState, CommandStatus,
+    JoinFailure, JoinPhase, Password,
 };
 pub use snapshot::{ClientSnapshot, SnapshotPart, SnapshotState};
 

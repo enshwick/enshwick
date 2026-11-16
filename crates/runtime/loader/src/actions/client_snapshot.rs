@@ -179,7 +179,7 @@ pub(crate) fn session() -> u64 {
 pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
     ask();
     let off = FUSE.is_off() || crate::engine::screens::READS_FUSE.is_off();
-    compose(
+    let snapshot = compose(
         Kept {
             words: STATE.copy.load(),
             off,
@@ -189,7 +189,11 @@ pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
         },
         local_held::now_ms(),
         crate::engine::screens::name,
-    )
+    );
+    ClientSnapshot {
+        server: crate::actions::client_commands::server_str(),
+        ..snapshot
+    }
 }
 
 /// What a snapshot is made of: the frame's last whole copy, whether the

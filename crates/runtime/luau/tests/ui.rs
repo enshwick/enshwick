@@ -428,6 +428,44 @@ mod tests {
     }
 
     #[test]
+    fn a_script_joins_a_server_and_reads_the_join_s_phase_and_failure() {
+        use enshwick::abi::ClientCommandStatus as Status;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local join = enshwick.input.client_command({ kind = "join", session = "0", target = "127.0.0.1:15637", password = "hunter2" })
+            local bare = pcall(enshwick.input.client_command, { kind = "join", session = "0" })
+            enshwick.log.info(`queued {join} bare {bare}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.command_status(join)
+                enshwick.log.info(`join {s.state} {s.reason} {s.phase}`)
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [(
+                1,
+                enshwick::abi::ClientCommand::JOIN,
+                "127.0.0.1:15637".to_owned()
+            )]
+        );
+        loader.set_command_status(1, Status::FAILED, 0);
+        loader.set_command_phase(1, Status::PHASE_MENU, Status::FULL);
+        let _drawn = loader.draw_frame();
+        for line in ["queued 1 bare false", "join failed full menu"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+        assert!(
+            !loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("hunter2")),
+            "the password is never logged"
+        );
+    }
+
+    #[test]
     fn a_script_reads_the_prompt_the_screen_s_host_and_the_local_held_controls() {
         let loader = run(
             FakeHost::new().side(Side::CLIENT).player_input(),
