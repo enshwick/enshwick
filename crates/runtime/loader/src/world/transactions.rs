@@ -240,11 +240,11 @@ pub fn bench_settle_step(pending: usize) -> impl Fn() {
         protect: [0; 16],
     };
     for _ in 0..pending {
-        let committed =
-            state
-                .ledger
-                .relock()
-                .commit(ModIndex::LOADER, None, vec![Change::Terrain(dig)]);
+        let committed = state.ledger.relock().commit(
+            ModIndex::LOADER,
+            None,
+            vec![ledger::Change::Terrain(dig)],
+        );
         if let Ok(id) = committed {
             let _kept = state.add_wait(Wait::new(ModIndex::LOADER, id, None, Box::new(|_| {})));
         }
