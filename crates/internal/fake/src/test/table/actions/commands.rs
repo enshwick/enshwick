@@ -21,6 +21,7 @@ pub(crate) struct FakeCommands {
     /// The windows each client holds: account key, window id and text.
     pub(crate) carried: Vec<(u64, String, String)>,
     /// Each map holder's waypoint at the last look: account key and place.
+    #[cfg(feature = "unstable")]
     pub(crate) waypoints: Vec<(u64, [f64; 3])>,
 }
 
