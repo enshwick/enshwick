@@ -438,6 +438,7 @@ mod tests {
             version: String::new(),
             dir: dir.to_owned(),
             deps: Vec::new(),
+            doc_deps: Vec::new(),
             lib: None,
             windows_only: false,
             windows_tests: false,

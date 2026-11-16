@@ -457,7 +457,13 @@ fn a_facade_change_with_many_dependents_leaves_trybuild_and_the_stable_surface_t
         &wide,
         &format!("cargo clippy --all-targets {stable_line}")
     ));
-    assert!(has(&wide, "cargo nextest") && has(&wide, "cargo doc --no-deps"));
+    assert!(has(&wide, "cargo nextest"));
+    assert!(
+        !wide.iter().any(|step| step == "cargo doc --no-deps"),
+        "{wide:?}"
+    );
+    assert!(has(&wide, "cargo doc --no-deps -p enshwick"), "{wide:?}");
+    assert!(has(&wide, "doc-links"), "{wide:?}");
     // Every package it reaches changed: no dependent is only tested, and it is wide all the same.
     let changed = steps(&Scope::Some {
         code: ["enshwick", "enshwick-abi", "enshwick-loader"]
@@ -480,6 +486,7 @@ fn package(name: &str, dir: &str, windows_only: bool) -> Package {
         version: "0.0.0-dev".to_owned(),
         dir: dir.to_owned(),
         deps: Vec::new(),
+        doc_deps: Vec::new(),
         lib: None,
         windows_only,
         windows_tests: windows_only,
@@ -545,9 +552,42 @@ fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
 
 #[test]
 fn a_change_to_code_builds_the_workspace_rustdoc_outside_the_full_suite() {
-    assert!(workspace_rustdoc(true, false));
-    assert!(workspace_rustdoc(false, true));
-    assert!(!workspace_rustdoc(false, false));
+    assert!(workspace_rustdoc(true, false, false));
+    assert!(workspace_rustdoc(false, false, true));
+    assert!(!workspace_rustdoc(false, false, false));
+}
+
+#[test]
+fn a_wide_change_leaves_the_workspace_rustdoc_to_the_full_suite() {
+    assert!(!workspace_rustdoc(true, true, false));
+    assert!(workspace_rustdoc(true, true, true));
+}
+
+#[test]
+fn a_wide_change_documents_the_packages_it_changed_that_the_host_builds() {
+    let scope = Scope::Some {
+        code: ["enshwick-abi", "enshwick-loader-stub"]
+            .map(str::to_owned)
+            .into(),
+        docs: BTreeSet::new(),
+        tested: ["enshwick-ui".to_owned()].into(),
+        built: BTreeSet::new(),
+        wide: true,
+    };
+    let workspace = ["--workspace", "--exclude", "enshwick-loader-stub"].map(str::to_owned);
+    let lines: Vec<String> = changed_rustdoc(&scope, &workspace)
+        .iter()
+        .map(Step::line)
+        .collect();
+    assert_eq!(lines, ["cargo doc --no-deps -p enshwick-abi"]);
+    let stub_only = Scope::Some {
+        code: ["enshwick-loader-stub".to_owned()].into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: true,
+    };
+    assert!(changed_rustdoc(&stub_only, &workspace).is_empty());
 }
 
 #[test]

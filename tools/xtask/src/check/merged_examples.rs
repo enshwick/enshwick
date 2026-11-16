@@ -199,6 +199,7 @@ mod tests {
             version: "0.0.0-dev".to_owned(),
             dir: dir.to_owned(),
             deps: Vec::new(),
+            doc_deps: Vec::new(),
             lib: Some(dir.to_owned()),
             windows_only: false,
             windows_tests: false,

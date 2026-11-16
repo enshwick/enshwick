@@ -16,9 +16,9 @@ mod cargo_files;
 mod check;
 mod commands;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use affected::Package;
@@ -121,7 +121,7 @@ fn run(task: Task) -> Result<ExitCode, String> {
 
 /// The workspace root, two levels above this crate.
 fn workspace_root() -> PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// The kinds cargo metadata gives a library target.
@@ -145,7 +145,10 @@ fn packages() -> Result<Vec<Package>, String> {
     let list = metadata["packages"]
         .as_array()
         .ok_or("cargo metadata lists no packages")?;
-    let names: BTreeSet<&str> = list.iter().filter_map(|p| p["name"].as_str()).collect();
+    let libs: BTreeMap<&str, Option<String>> = list
+        .iter()
+        .filter_map(|p| Some((p["name"].as_str()?, lib_name(p))))
+        .collect();
     Ok(list
         .iter()
         .map(|package| {
@@ -158,32 +161,14 @@ fn packages() -> Result<Vec<Package>, String> {
                 .and_then(|path| path.strip_suffix("/Cargo.toml"))
                 .unwrap_or_default()
                 .to_owned();
-            let deps = package["dependencies"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|dep| dep["name"].as_str())
-                .filter(|name| names.contains(name))
-                .map(str::to_owned)
-                .collect();
-            let lib = package["targets"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .find(|target| {
-                    target["kind"].as_array().is_some_and(|kinds| {
-                        kinds
-                            .iter()
-                            .any(|kind| LIB_KINDS.contains(&kind.as_str().unwrap_or_default()))
-                    })
-                })
-                .and_then(|target| target["name"].as_str())
-                .map(|name| name.replace('-', "_"));
+            let (deps, doc_deps) = split_deps(package, &libs);
+            let lib = lib_name(package);
             Package {
                 name: package["name"].as_str().unwrap_or_default().to_owned(),
                 version: package["version"].as_str().unwrap_or_default().to_owned(),
                 dir,
                 deps,
+                doc_deps,
                 lib,
                 windows_only: package["metadata"]["xtask"]["windows-only"].as_bool() == Some(true),
                 windows_tests: ["windows-tests", "windows-only"]
@@ -194,6 +179,99 @@ fn packages() -> Result<Vec<Package>, String> {
             }
         })
         .collect())
+}
+
+/// The name Rust paths give the library target of `package`, a `cargo
+/// metadata` entry, if it has one.
+fn lib_name(package: &serde_json::Value) -> Option<String> {
+    package["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|target| {
+            target["kind"].as_array().is_some_and(|kinds| {
+                kinds
+                    .iter()
+                    .any(|kind| LIB_KINDS.contains(&kind.as_str().unwrap_or_default()))
+            })
+        })
+        .and_then(|target| target["name"].as_str())
+        .map(|name| name.replace('-', "_"))
+}
+
+/// The target kind of a build script, which has no tests and cannot use a
+/// dev-dependency.
+const BUILD_SCRIPT: &str = "custom-build";
+
+/// The name the library of `package`, a `cargo metadata` entry, gives
+/// itself ([`affected::idents::self_alias`]), when the library is its only
+/// target with tests: an integration test, bench, example or binary is a
+/// crate of its own, where the alias does not hold.
+fn self_alias(package: &serde_json::Value) -> Option<String> {
+    let targets = package["targets"].as_array()?;
+    let mut lib = None;
+    for target in targets {
+        let kinds = target["kind"].as_array()?;
+        if kinds.iter().any(|kind| kind == BUILD_SCRIPT) {
+            continue;
+        }
+        if !kinds
+            .iter()
+            .all(|kind| LIB_KINDS.contains(&kind.as_str().unwrap_or_default()))
+        {
+            return None;
+        }
+        lib = target["src_path"].as_str();
+    }
+    affected::idents::self_alias(&std::fs::read_to_string(lib?).ok()?)
+}
+
+/// The workspace packages `package`, a `cargo metadata` entry, depends on:
+/// those its builds or tests use, and the dev-dependencies only its doc
+/// examples can use ([`Package::doc_deps`]): those its library shadows by
+/// the name it gives itself ([`self_alias`]). `libs` gives each workspace
+/// package's library name.
+fn split_deps(
+    package: &serde_json::Value,
+    libs: &BTreeMap<&str, Option<String>>,
+) -> (Vec<String>, Vec<String>) {
+    let mut built = BTreeSet::new();
+    // Each dev-dependency with a library, by the name its code writes it by.
+    let mut dev = BTreeMap::new();
+    for dep in package["dependencies"].as_array().into_iter().flatten() {
+        let Some((name, lib)) = dep["name"]
+            .as_str()
+            .and_then(|name| libs.get_key_value(name))
+        else {
+            continue;
+        };
+        let written = dep["rename"]
+            .as_str()
+            .map(|rename| rename.replace('-', "_"))
+            .or_else(|| lib.clone());
+        match written {
+            Some(written) if dep["kind"] == "dev" => {
+                dev.insert(written, (*name).to_owned());
+            }
+            _ => {
+                built.insert((*name).to_owned());
+            }
+        }
+    }
+    let alias = if dev.is_empty() {
+        None
+    } else {
+        self_alias(package)
+    };
+    let mut doc_deps = Vec::new();
+    for (written, name) in dev {
+        if alias.as_ref() != Some(&written) || built.contains(&name) {
+            built.insert(name);
+        } else {
+            doc_deps.push(name);
+        }
+    }
+    (built.into_iter().collect(), doc_deps)
 }
 
 /// Whether the examples of `package`, a `cargo metadata` entry, name the
@@ -253,7 +331,7 @@ pub(crate) fn tool_path() -> std::ffi::OsString {
     let path = std::env::var_os("PATH").unwrap_or_default();
     let llvm = std::env::var_os("ProgramFiles")
         .filter(|_| cfg!(windows))
-        .map(|programs| std::path::Path::new(&programs).join("LLVM").join("bin"));
+        .map(|programs| Path::new(&programs).join("LLVM").join("bin"));
     std::env::join_paths(std::env::split_paths(&path).chain(llvm)).unwrap_or(path)
 }
 
@@ -277,6 +355,29 @@ mod tests {
             "{:?}",
             loader.deps
         );
+    }
+
+    #[test]
+    fn the_domain_crates_use_the_facade_only_in_their_doc_examples() {
+        let packages = packages().unwrap();
+        let ui = packages.iter().find(|p| p.name == "enshwick-ui").unwrap();
+        assert!(ui.doc_deps.iter().any(|dep| dep == FACADE), "{ui:?}");
+        assert!(!ui.deps.iter().any(|dep| dep == FACADE), "{ui:?}");
+    }
+
+    #[test]
+    fn a_self_alias_holds_only_when_the_library_is_the_only_crate_with_tests() {
+        let dir = std::env::temp_dir().join(format!("xtask-alias-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lib = dir.join("lib.rs");
+        std::fs::write(&lib, "extern crate self as enshwick;").unwrap();
+        let target = |kind: &str| serde_json::json!({ "kind": [kind], "src_path": lib });
+        let package = |targets: &[serde_json::Value]| serde_json::json!({ "targets": targets });
+        let alone = self_alias(&package(&[target("lib"), target(BUILD_SCRIPT)]));
+        let with_test = self_alias(&package(&[target("lib"), target("test")]));
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(alone.as_deref(), Some(FACADE));
+        assert_eq!(with_test, None);
     }
 
     #[test]
