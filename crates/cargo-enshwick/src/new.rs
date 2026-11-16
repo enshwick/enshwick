@@ -111,12 +111,11 @@ fn plan_join(manifest: &Path, root: &Path) -> anyhow::Result<Place> {
         doc.get("workspace")
             .and_then(|w| w.get(key))
             .and_then(toml_edit::Item::as_array)
-            .map(|a| {
+            .map_or_default(|a| {
                 a.iter()
                     .filter_map(|v| v.as_str().map(str::to_owned))
                     .collect()
             })
-            .unwrap_or_default()
     };
     if patterns("exclude").iter().any(|p| {
         let p = p.trim_start_matches("./").trim_end_matches('/');
@@ -468,6 +467,17 @@ mod tests {
                 assert!(!text.contains(hole), "{} keeps {hole}", path.display());
             }
         }
+    }
+
+    #[test]
+    fn a_new_mod_pins_the_toolchain_and_rust_version_this_workspace_builds_with() {
+        assert_eq!(RUST_TOOLCHAIN, include_str!("../../../rust-toolchain.toml"));
+        let files = files("you.lockers", Side::Server, None, &Place::Alone).unwrap();
+        let cargo: toml::Table = text(&files, "Cargo.toml").parse().unwrap();
+        assert_eq!(
+            cargo["package"]["rust-version"].as_str(),
+            Some(env!("CARGO_PKG_RUST_VERSION"))
+        );
     }
 
     #[test]

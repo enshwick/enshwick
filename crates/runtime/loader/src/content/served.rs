@@ -41,6 +41,7 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
+use enshwick_core::content::Guid;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -63,6 +64,27 @@ struct Patch {
     owner: ModIndex,
     apply: ResourcePatchFn,
     user: usize,
+    /// Cleared for the process when the patch answers
+    /// [`Status::FAULTED`](enshwick_core::abi::Status::FAULTED), its
+    /// builder having panicked: later builds of the key run without it,
+    /// and its mod and the mod's other patches stay on.
+    on: AtomicBool,
+}
+
+impl Patch {
+    const fn new(owner: ModIndex, apply: ResourcePatchFn, user: usize) -> Self {
+        Self {
+            owner,
+            apply,
+            user,
+            on: AtomicBool::new(true),
+        }
+    }
+
+    /// Whether it still builds: it is on and `on` says its mod is.
+    fn runs(&self, on: impl Fn(ModIndex) -> bool) -> bool {
+        self.on.load(Ordering::Acquire) && on(self.owner)
+    }
 }
 
 /// A served resource.
@@ -100,7 +122,8 @@ struct State {
     base_handle: u32,
     /// The built resource, once built: address and length.
     built: Option<(usize, usize)>,
-    /// Set when building failed; the resource then reads as missing.
+    /// Set when building failed; a new resource then reads as missing, a
+    /// changed vanilla one as the archive has it.
     failed: bool,
     /// A copy of the base as first built from, when a mod keeps it.
     base: Option<Box<[u8]>>,
@@ -125,7 +148,7 @@ static SERVING_FUSE: Fuse = Fuse::new("served resource builds");
 static RESOURCES: Registry<Served> = Registry::new();
 /// Cloned templates ever served, clone GUID to vanilla GUID: read in place of
 /// a clone no mod serves now.
-static ALIASES: OnceLock<rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
+static ALIASES: OnceLock<rustc_hash::FxHashMap<Guid, Guid>> = OnceLock::new();
 // SAFETY: `OpenFn` is the signature of the build table's `resource.open`,
 // and `seal_and_link` uses this slot only as that function's next.
 static OPEN_NEXT: Next<OpenFn> = unsafe { Next::new() };
@@ -194,11 +217,7 @@ pub(crate) fn register(
     patch: ResourcePatchFn,
     user: *mut c_void,
 ) -> Result<(), ServeResourceError> {
-    let patch = Patch {
-        owner,
-        apply: patch,
-        user: user.expose_provenance(),
-    };
+    let patch = Patch::new(owner, patch, user.expose_provenance());
     RESOURCES.edit(|pending| add(pending, key, base, patch))?
 }
 
@@ -259,13 +278,20 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let mut made = None;
     RESOURCES.seal_with(|mut served| {
         let count = served.len();
-        let aliases = crate::content::clones::update(
+        let materials = crate::content::terrain_materials::sealed();
+        let recorded = crate::content::clones::update(
             &loader.mods_dir,
             served.iter().map(|s| (s.key, s.base)),
+            crate::content::terrain_materials::record(loader, materials),
         );
+        let aliases = recorded.aliases;
         let standing = stand_ins.map_or(0, |(items, registry)| {
             serve_stand_ins(&mut served, items, registry)
         });
+        let grounded = serve_terrain(
+            &mut served,
+            crate::content::terrain_materials::serve(loader, materials, &recorded.terrain),
+        );
         let changed = serve_changes(
             &mut served,
             crate::content::data_changes::serve(loader),
@@ -275,10 +301,10 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
             &mut served,
             crate::content::rate_links::recipe_patch(loader),
         );
-        made = Some((count, aliases, standing, changed, rated));
+        made = Some((count, aliases, standing, grounded, changed, rated));
         served
     });
-    let Some((count, aliases, standing, changed, rated)) = made else {
+    let Some((count, aliases, standing, grounded, changed, rated)) = made else {
         return;
     };
     let served = RESOURCES.sealed().unwrap_or_default();
@@ -288,7 +314,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         .count();
     let recorded = aliases.len();
     if ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing + changed + rated == 0
+        || count + recorded + renames.len() + standing + grounded + changed + rated == 0
     {
         return;
     }
@@ -340,19 +366,9 @@ fn link_resources(loader: &Loader) -> bool {
 fn serve_stand_ins(
     served: &mut Vec<Served>,
     items: Vec<crate::content::standins::StandIn>,
-    registry: crate::content::standins::Builder,
+    registry: Builder,
 ) -> usize {
-    fn patch(builder: crate::content::standins::Builder) -> Patch {
-        let (apply, user) = own_patch(StandInPatch {
-            builder,
-            fuse: Fuse::new(STAND_INS),
-        });
-        Patch {
-            owner: ModIndex::LOADER,
-            apply,
-            user: user.expose_provenance(),
-        }
-    }
+    let patch = |builder| BuilderPatch::new(builder, STAND_INS).patch();
     let count = items.len();
     for (key, base, builder) in items {
         served.push(Served::new(key, base, vec![patch(builder)], false));
@@ -366,6 +382,22 @@ fn serve_stand_ins(
     count
 }
 
+/// Adds the loader's patches for terrain materials to `served`, before
+/// every mod's patch on each key, so a mod's patch of the rules sees the
+/// new ones; the loader's changes of vanilla values, served after, go
+/// first again, so a material copies the rules as changed. How many keys.
+fn serve_terrain(served: &mut Vec<Served>, patches: Vec<(ResourceKey, Builder)>) -> usize {
+    let count = patches.len();
+    for (key, builder) in patches {
+        let patch = BuilderPatch::new(builder, crate::content::terrain_materials::FEATURE).patch();
+        match served.iter_mut().find(|s| s.key == key) {
+            Some(entry) => entry.patches.insert(0, patch),
+            None => served.push(Served::new(key, key, vec![patch], false)),
+        }
+    }
+    count
+}
+
 /// Adds the loader's patch for the recipe output rates to `served`, last on
 /// the recipe registry, after every mod's and every data change, and keeps
 /// the registry's base, since a changed factor rebuilds it; how many keys.
@@ -374,11 +406,7 @@ fn serve_rates(served: &mut Vec<Served>, patch: Option<ResourcePatchFn>) -> usiz
         return 0;
     };
     let key = recipe_registry();
-    let patch = Patch {
-        owner: ModIndex::LOADER,
-        apply,
-        user: 0,
-    };
+    let patch = Patch::new(ModIndex::LOADER, apply, 0);
     match served.iter_mut().find(|s| s.key == key) {
         Some(entry) => {
             entry.patches.push(patch);
@@ -399,11 +427,7 @@ fn serve_changes(
 ) -> usize {
     let count = patches.len();
     for (key, apply, user) in patches {
-        let patch = Patch {
-            owner: ModIndex::LOADER,
-            apply,
-            user: user.expose_provenance(),
-        };
+        let patch = Patch::new(ModIndex::LOADER, apply, user.expose_provenance());
         match served.iter_mut().find(|s| s.key == key) {
             Some(entry) if crate::content::data_changes::goes_first(&key, &entry.base) => {
                 entry.patches.insert(0, patch);
@@ -419,18 +443,38 @@ fn serve_changes(
     count
 }
 
-/// The loader's own patch of a stand-in, or of the item registry that lists
-/// them: what its builder makes of the base.
-struct StandInPatch {
-    builder: crate::content::standins::Builder,
-    /// This patch's switch alone: a stand-in that panics is refused, and
-    /// the others, and the registry that lists them, keep building, so the
-    /// items they stand in for keep their stacks in the save.
+/// Builds a served resource from its base's bytes.
+pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
+
+/// One of the loader's own patches that a [`Builder`] makes: a stand-in,
+/// the item registry that lists them, or a resource terrain materials
+/// change.
+struct BuilderPatch {
+    builder: Builder,
+    /// This patch's switch alone: a build that panics is refused, and the
+    /// other keys keep building, so what they keep stays in the save.
     fuse: Fuse,
 }
 
-impl OwnPatch for StandInPatch {
-    const SITE: &'static str = "a stand-in build";
+impl BuilderPatch {
+    /// The patch `builder` makes, under a switch of its own that names
+    /// `feature`.
+    fn new(builder: Builder, feature: &'static str) -> Self {
+        Self {
+            builder,
+            fuse: Fuse::new(feature),
+        }
+    }
+
+    /// The patch as the loader's on a served key, leaked for the process.
+    fn patch(self) -> Patch {
+        let (apply, user) = own_patch(self);
+        Patch::new(ModIndex::LOADER, apply, user.expose_provenance())
+    }
+}
+
+impl OwnPatch for BuilderPatch {
+    const SITE: &'static str = "a loader build";
 
     fn fuse(&self) -> &Fuse {
         &self.fuse
@@ -459,8 +503,8 @@ pub(crate) fn new_keys_of_type(type_hash: u32) -> Vec<ResourceKey> {
 /// Cloned templates no mod that is on serves now, each with the vanilla
 /// template read in its place: the game registers them from its listing, so
 /// a world's placed clones of a removed mod load as the vanilla one.
-pub(crate) fn orphan_templates() -> Vec<([u8; 16], [u8; 16])> {
-    let served: Vec<[u8; 16]> = new_keys_of_type(crate::engine::catalogue::types::TEMPLATE)
+pub(crate) fn orphan_templates() -> Vec<(Guid, Guid)> {
+    let served: Vec<Guid> = new_keys_of_type(crate::engine::catalogue::types::TEMPLATE)
         .iter()
         .map(|key| key.guid)
         .collect();
@@ -506,7 +550,7 @@ fn key_name(key: &ResourceKey) -> String {
         types::UI_IMAGE => "image",
         _ => "resource",
     };
-    format!("{kind} {}", enshwick_core::content::Guid(key.guid))
+    format!("{kind} {}", key.guid)
 }
 
 /// What mods serve, for the status summary.
@@ -539,7 +583,7 @@ fn alias(key: &ResourceKey) -> Option<ResourceKey> {
 }
 
 /// Content mods renamed, old GUID to new.
-static RENAMES: OnceLock<&'static rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
+static RENAMES: OnceLock<&'static rustc_hash::FxHashMap<Guid, Guid>> = OnceLock::new();
 
 /// The key a mod renamed `key` to.
 fn renamed(key: &ResourceKey) -> Option<ResourceKey> {
@@ -608,7 +652,7 @@ fn mods_serve_recipes() -> bool {
 fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(ModIndex) -> bool) -> bool {
     served
         .iter()
-        .any(|s| s.key == *key && s.patches.iter().any(|p| on(p.owner)) && !s.state.relock().failed)
+        .any(|s| s.key == *key && s.patches.iter().any(|p| p.runs(&on)) && !s.state.relock().failed)
 }
 
 /// Whether mods that are on serve `key` and its build has not failed, as
@@ -627,7 +671,8 @@ fn served(handle: u32) -> Option<&'static Served> {
     RESOURCES.sealed()?.get(index)
 }
 
-fn mod_on(owner: ModIndex) -> bool {
+/// Whether `owner` is the loader or a mod still on.
+pub(crate) fn mod_on(owner: ModIndex) -> bool {
     owner == ModIndex::LOADER
         || crate::engine::loader::loader()
             .and_then(|loader| loader.mods.get(owner.get()))
@@ -635,7 +680,7 @@ fn mod_on(owner: ModIndex) -> bool {
 }
 
 fn owner_on(served: &Served) -> bool {
-    served.patches.iter().any(|p| mod_on(p.owner))
+    served.patches.iter().any(|p| p.runs(mod_on))
 }
 
 /// Copies the game's resource key at `key`.
@@ -837,7 +882,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
             DEBUG,
             "served resource {:08x}:{} built by {}, {current_len} bytes",
             entry.key.type_hash,
-            hex(&entry.key.guid),
+            hex(&entry.key.guid.0),
             by.join(", ")
         );
     }
@@ -890,7 +935,7 @@ crate::engine::chains::chain_detour! {
             // Status byte, a word, then the key padded to 32 bytes, as the
             // game writes it.
             let mut bytes = [0u8; 0x28];
-            bytes[8..24].copy_from_slice(&entry.key.guid);
+            bytes[8..24].copy_from_slice(&entry.key.guid.0);
             bytes[24..28].copy_from_slice(&entry.key.type_hash.to_le_bytes());
             bytes[28..32].copy_from_slice(&entry.key.part.to_le_bytes());
             // SAFETY: `out` is non-null by the check before it and is the

@@ -248,11 +248,11 @@ pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, DaytimeError> {
     let is_day: u8 = unsafe { crate::engine::memory::read(daytime, layout.is_day) };
     Ok(DaytimeInfo {
         header: Header::of::<DaytimeInfo>(),
-        time,
-        day_start,
-        day_end,
-        day_length,
-        night_length,
+        time_ns: time,
+        day_start_ns: day_start,
+        day_end_ns: day_end,
+        day_length_ns: day_length,
+        night_length_ns: night_length,
         speed,
         flags: if is_day == 0 { 0 } else { DaytimeInfo::DAY },
     })
@@ -396,9 +396,14 @@ fn same(a: f32, b: f32) -> bool {
     (a - b).abs() <= b.abs() * SPEED_EPSILON
 }
 
-/// Seals the speed mods and links the speed setter when any asked.
+/// Seals the mods that asked to set the day's speed, before any link.
+pub(crate) fn seal() {
+    let _speeders = STATE.speeders.seal();
+}
+
+/// Links the speed setter when any mod asked before the seal.
 pub(crate) fn link(loader: &'static Loader) {
-    let mods = STATE.speeders.seal();
+    let mods = STATE.speeders.sealed();
     let wanted = !mods.is_empty();
     let _first = STATE.factors.set(
         mods.iter()

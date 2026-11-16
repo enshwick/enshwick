@@ -197,7 +197,9 @@ fn moved_recipes(patch: &MenuPatch, bytes: &[u8]) -> Option<Vec<u8>> {
             Some((recipe, *workshop))
         })
         .collect();
-    move_recipes(&patch.layout, bytes, &moves)
+    let mut menu = Vec::new();
+    move_recipes(&patch.layout, bytes, &moves, &mut menu)?;
+    Some(menu)
 }
 
 /// What the loader's patch of the recipe registry needs.

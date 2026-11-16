@@ -7,6 +7,15 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Changed
+
+- Granting and revoking knowledge go through one `change_knowledge` with a
+  `KnowledgeChange` (#1106).
+
+## [1.0.0-alpha.16] - 2026-11-15
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

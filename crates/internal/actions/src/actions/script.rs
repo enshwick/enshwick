@@ -778,6 +778,14 @@ impl ActionFns {
         Arg::item(label)
     }
 
+    /// One of the game's entity templates, which the client lists by the
+    /// names its game data gives them, as [`Arg::template`] makes it.
+    #[script]
+    #[must_use]
+    pub fn template(self, label: &str) -> Arg {
+        Arg::template(label)
+    }
+
     /// Whether `id` can name an action or a window, as
     /// [`is_valid_id`](super::is_valid_id) says.
     #[script]

@@ -22,10 +22,16 @@ pub(crate) mod demo;
 mod dialog;
 mod engine;
 mod extensions;
+mod hold;
+pub(crate) mod item_slots;
 mod map;
 mod menu_line;
 mod mods;
 mod off;
+mod table_ids;
+pub(crate) mod tooltips;
+
+pub(crate) use table_ids::TABLE_IDS;
 
 use core::cell::{Cell, RefCell};
 use core::ops::ControlFlow;
@@ -50,188 +56,6 @@ use crate::engine::fuse::Fuse;
 use crate::engine::interface_parts::Part;
 use crate::engine::loader::{Loader, Registered, Target};
 use off::{PART_FUSES, dialogs_drawn, drawn_no_more, parts_off_with_interface};
-
-/// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &[
-    pinned::map::CONTEXT_STATE.id(),
-    pinned::map::ENTRY_COLOR.id(),
-    pinned::map::ENTRY_LABEL.id(),
-    pinned::map::ENTRY_POSITION.id(),
-    pinned::map::ENTRY_SIZE.id(),
-    pinned::map::ENTRY_TYPE.id(),
-    pinned::map::ENTRY_VISIBILITY.id(),
-    pinned::map::LIST.id(),
-    pinned::map::LIST_CAPACITY.id(),
-    pinned::map::LIST_COUNT.id(),
-    pinned::map::REGISTRY.id(),
-    pinned::map::REGISTRY_BLOB.id(),
-    pinned::map::STATE_PLAY_DATA.id(),
-    pinned::ui::ACTION_BOUND.id(),
-    pinned::ui::ACTION_EXTENT.id(),
-    pinned::ui::ACTION_NEW.id(),
-    pinned::ui::ACTION_NODE.id(),
-    pinned::ui::ACTION_QUERY.id(),
-    pinned::ui::BUTTON.id(),
-    pinned::ui::BUTTON_ALIGN.id(),
-    pinned::ui::BUTTON_CENTERED.id(),
-    pinned::ui::BUTTON_ENABLED.id(),
-    pinned::ui::BUTTON_EXTENT.id(),
-    pinned::ui::BUTTON_PADDING_X.id(),
-    pinned::ui::BUTTON_PADDING_Y.id(),
-    pinned::ui::BUTTON_SCALE.id(),
-    pinned::ui::BUTTON_SIZE_MODE.id(),
-    pinned::ui::BUTTON_SOUND.id(),
-    pinned::ui::BUTTON_KIND.id(),
-    pinned::ui::BUTTON_ICON.id(),
-    pinned::ui::BUTTON_ICON_SHOWN.id(),
-    pinned::ui::COLUMN.id(),
-    pinned::ui::CONTEXT.id(),
-    pinned::ui::CONTEXT_BUNDLE.id(),
-    pinned::ui::CONTEXT_HOST.id(),
-    pinned::ui::CONTEXT_NAV.id(),
-    pinned::ui::CONTEXT_STATE.id(),
-    pinned::ui::DROPDOWN.id(),
-    pinned::ui::DROPDOWN_CAPACITY.id(),
-    pinned::ui::DROPDOWN_COUNT.id(),
-    pinned::ui::DROPDOWN_ENABLED.id(),
-    pinned::ui::DROPDOWN_EXTERNAL.id(),
-    pinned::ui::DROPDOWN_ENTRY_TEXT.id(),
-    pinned::ui::DROPDOWN_EXTENT.id(),
-    pinned::ui::DROPDOWN_INIT.id(),
-    pinned::ui::ENTRY_SIZE.id(),
-    pinned::ui::ENTRY_TEXT.id(),
-    pinned::ui::ENTRY_VALUE.id(),
-    pinned::ui::FIRST_USE.id(),
-    pinned::ui::FOCUS_REQUEST.id(),
-    pinned::ui::FRAME_CLOSE.id(),
-    pinned::ui::FRAME_COLOR.id(),
-    pinned::ui::FRAME_EXTENT.id(),
-    pinned::ui::FRAME_FROM_NODE.id(),
-    pinned::ui::FRAME_HIT.id(),
-    pinned::ui::FRAME_NODE.id(),
-    pinned::ui::FRAME_OPEN.id(),
-    pinned::ui::FRAME_STRETCH.id(),
-    pinned::ui::HOST_ANSWER.id(),
-    pinned::ui::HOST_ANSWERED.id(),
-    pinned::ui::HUD.id(),
-    pinned::ui::HUD_SCREEN.id(),
-    pinned::ui::PROMPT_TITLE.id(),
-    pinned::ui::PROMPT_VALID.id(),
-    pinned::ui::PROMPT_VERB.id(),
-    pinned::ui::SCREEN_HOST.id(),
-    pinned::ui::HUD_VISIBLE.id(),
-    pinned::ui::INPUT_HINT.id(),
-    pinned::ui::LABEL_ALIGN.id(),
-    pinned::ui::LABEL_DRAW.id(),
-    pinned::ui::LABEL_EXTENT.id(),
-    pinned::ui::LABEL_FLAGS.id(),
-    pinned::ui::LABEL_FONT_SIZE.id(),
-    pinned::ui::LABEL_NEW.id(),
-    pinned::ui::LABEL_SHOWN.id(),
-    pinned::ui::LEGAL_LINE_SITE.id(),
-    pinned::ui::LOCA_ID.id(),
-    pinned::ui::LOCA_TEXT.id(),
-    pinned::ui::MAIN_ENTRY.id(),
-    pinned::ui::MAIN_MENU_SITE.id(),
-    pinned::ui::MENU_ENTRY_EXTENT.id(),
-    pinned::ui::MENU_ENTRY_FONT.id(),
-    pinned::ui::MENU_ENTRY_TEXT.id(),
-    pinned::ui::NAV_AXIS.id(),
-    pinned::ui::NAV_CONFIG.id(),
-    pinned::ui::NAV_CONFIG_SIZE.id(),
-    pinned::ui::NAV_DROP.id(),
-    pinned::ui::NAV_END.id(),
-    pinned::ui::NAV_EXTENT.id(),
-    pinned::ui::NAV_FLAGS.id(),
-    pinned::ui::NAV_HIGHLIGHT.id(),
-    pinned::ui::NAV_INIT.id(),
-    pinned::ui::NAV_INPUT.id(),
-    pinned::ui::NAV_INPUT_KIND.id(),
-    pinned::ui::NAV_KIND.id(),
-    pinned::ui::NAV_LAYER.id(),
-    pinned::ui::NAV_PUSH.id(),
-    pinned::ui::NAV_SET.id(),
-    pinned::ui::NAV_SOUND.id(),
-    pinned::ui::NAV_WRAP.id(),
-    pinned::ui::NODE_ALIGN.id(),
-    pinned::ui::NODE_HEIGHT.id(),
-    pinned::ui::NODE_ID.id(),
-    pinned::ui::NODE_ID_GET.id(),
-    pinned::ui::NODE_MIN_HEIGHT.id(),
-    pinned::ui::NODE_PADDING.id(),
-    pinned::ui::NODE_SPACING.id(),
-    pinned::ui::NODE_STRETCH.id(),
-    pinned::ui::NODE_WIDTH.id(),
-    pinned::ui::NO_CONSTRUCT.id(),
-    pinned::ui::PANEL.id(),
-    pinned::ui::PANEL_ALPHA.id(),
-    pinned::ui::PANEL_EXTENT.id(),
-    pinned::ui::PANEL_KIND.id(),
-    pinned::ui::PAUSE_ENTRY.id(),
-    pinned::ui::PAUSE_MENU_SITE.id(),
-    pinned::ui::PERSIST.id(),
-    pinned::ui::POPUP.id(),
-    pinned::ui::POPUP_ACTIVE.id(),
-    pinned::ui::POPUP_BUTTONS.id(),
-    pinned::ui::POPUP_DETAIL.id(),
-    pinned::ui::POPUP_DETAIL_LEN.id(),
-    pinned::ui::POPUP_EXTENT.id(),
-    pinned::ui::POPUP_MESSAGE.id(),
-    pinned::ui::POPUP_TITLE.id(),
-    pinned::ui::PROGRESS.id(),
-    pinned::ui::SCROLLBAR_LOOK.id(),
-    pinned::ui::SCROLL_BEGIN.id(),
-    pinned::ui::SCROLL_CONFIG.id(),
-    pinned::ui::SCROLL_CONFIG_EXTENT.id(),
-    pinned::ui::SCROLL_END.id(),
-    pinned::ui::SCROLL_EXTENT.id(),
-    pinned::ui::SCROLL_FOCUS.id(),
-    pinned::ui::SCROLL_INPUT.id(),
-    pinned::ui::SCROLL_NAV.id(),
-    pinned::ui::SCROLL_SET_FOCUS.id(),
-    pinned::ui::SCROLL_STATE_SIZE.id(),
-    pinned::ui::SLIDER.id(),
-    pinned::ui::SLIDER_BOUNDED.id(),
-    pinned::ui::SLIDER_DISCRETE.id(),
-    pinned::ui::SLIDER_FORMAT.id(),
-    pinned::ui::SLIDER_INIT.id(),
-    pinned::ui::SLIDER_MAX.id(),
-    pinned::ui::SLIDER_MIN.id(),
-    pinned::ui::SLIDER_ON_RELEASE.id(),
-    pinned::ui::SLIDER_READ_ONLY.id(),
-    pinned::ui::SLIDER_EXTENT.id(),
-    pinned::ui::SLIDER_STEPS.id(),
-    pinned::ui::SLIDER_STOP_CAPACITY.id(),
-    pinned::ui::SLIDER_STOP_COUNT.id(),
-    pinned::ui::SLIDER_STOPS.id(),
-    pinned::ui::SOUND.id(),
-    pinned::ui::STATE_SCREEN.id(),
-    pinned::ui::TEXT_FIELD.id(),
-    pinned::ui::TEXT_FIELD_EDITING.id(),
-    pinned::ui::TEXT_FIELD_EXTENT.id(),
-    pinned::ui::TEXT_FIELD_INPUT.id(),
-    pinned::ui::TEXT_FIELD_LOOK.id(),
-    pinned::ui::ROW.id(),
-    pinned::ui::SEPARATOR.id(),
-    pinned::ui::SEPARATOR_HEIGHT.id(),
-    pinned::ui::SEPARATOR_MARGIN.id(),
-    pinned::ui::SEPARATOR_OFFSET.id(),
-    pinned::ui::TEXT_FIELD_STATE.id(),
-    pinned::ui::TEXT_FIELD_STATE_KEY.id(),
-    pinned::ui::TEXT_FIELD_STATE_SIZE.id(),
-    pinned::ui::TEXT_FIELD_TEXT.id(),
-    pinned::ui::TOGGLE.id(),
-    pinned::ui::TOGGLE_COUNT.id(),
-    pinned::ui::TOGGLE_ENABLED.id(),
-    pinned::ui::TOGGLE_EXPLAIN.id(),
-    pinned::ui::TOGGLE_EXPLAINER.id(),
-    pinned::ui::TOGGLE_EXTENT.id(),
-    pinned::ui::TOGGLE_LABEL.id(),
-    pinned::ui::WINDOW_BEGIN.id(),
-    pinned::ui::WINDOW_END.id(),
-    pinned::ui::WINDOW_EXTENT.id(),
-    pinned::ui::WINDOW_NODE.id(),
-];
 
 // SAFETY: `PopupFn` is the signature of the game's `ui.popup`, and `link`
 // uses this slot only as the `next` of `detour`, its link on that function.
@@ -260,16 +84,25 @@ struct State {
     /// The thread that draws the interface, once it drew: the game's main
     /// thread, the same for every world.
     ui_thread: AtomicU32,
+    /// The count of the next frame id a scroll area takes; never reset, so
+    /// no area takes the node of another.
+    next_scroll: AtomicU64,
 }
 
 static STATE: State = State {
     next_token: AtomicU64::new(1),
     ui_thread: AtomicU32::new(0),
+    next_scroll: AtomicU64::new(1),
 };
 
 /// A token for the frame callback about to draw, unique in the process.
 fn next_token() -> u64 {
     STATE.next_token.fetch_add(1, Ordering::Relaxed)
+}
+
+/// A count for the next scroll area's frame id, unique in the process.
+fn next_scroll() -> u64 {
+    STATE.next_scroll.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Forgets what the interface kept of a client's hosted game that ended.
@@ -283,9 +116,7 @@ pub(crate) fn forget(_loader: &'static Loader) {
 // unbalanced every frame.
 static FRAMES_FUSE: Fuse = Fuse::new("mods' windows");
 static EXTENSIONS_FUSE: Fuse = Fuse::new("screen extensions");
-/// Turns the screen, prompt and host reads off at their first panic; the
-/// frames then read as outside a game.
-static READS_FUSE: Fuse = Fuse::new("screen reads");
+use crate::engine::screens::READS_FUSE;
 static DEMO_FUSE: Fuse = Fuse::new("interface demo");
 static CARRIED_FUSE: Fuse = Fuse::new("carried windows");
 static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
@@ -340,11 +171,6 @@ fn window_drawn() {
 /// thread.
 pub(crate) fn window_shown() -> bool {
     WINDOWS.get()[1] || dialog::showing()
-}
-
-fn thread_id() -> u32 {
-    // SAFETY: `GetCurrentThreadId` takes no arguments and cannot fail.
-    unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() }
 }
 
 /// Registers a mod's frame callback; client only, during init.
@@ -415,7 +241,8 @@ pub(crate) fn mod_dialog(
     if loader.side != Side::CLIENT {
         return Err(DialogError::NotClient);
     }
-    if raw.flags & UiDialog::WAITING != 0 && STATE.ui_thread.load(Ordering::Acquire) == thread_id()
+    if raw.flags & UiDialog::WAITING != 0
+        && STATE.ui_thread.load(Ordering::Acquire) == crate::engine::off_thread::current_thread()
     {
         return Err(DialogError::WrongThread);
     }
@@ -453,13 +280,21 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     dialog::text(id)
 }
 
-/// Seals the frame callbacks and links the popup on the client. Without its
-/// functions on this build, the interface stays off: mods draw nothing and
-/// dialogs show as system message boxes.
-pub(crate) fn link(loader: &'static Loader) {
-    let count = FRAMES.seal().len();
-    let hud_count = HUDS.seal().len();
+/// Seals the frame and HUD callbacks and the screen extensions, before any
+/// link.
+pub(crate) fn seal() {
+    let _frames = FRAMES.seal();
+    let _huds = HUDS.seal();
     extensions::seal();
+    tooltips::seal();
+}
+
+/// Links the popup on the client. Without its functions on this build, the
+/// interface stays off: mods draw nothing and dialogs show as system
+/// message boxes.
+pub(crate) fn link(loader: &'static Loader) {
+    let count = FRAMES.sealed().map_or(0, <[_]>::len);
+    let hud_count = HUDS.sealed().map_or(0, <[_]>::len);
     if loader.side != Side::CLIENT {
         return;
     }
@@ -476,6 +311,9 @@ pub(crate) fn link(loader: &'static Loader) {
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
         menu_line::link(loader, engine);
+        hold::link(loader);
+        item_slots::link(loader, extensions::hosts_asked(count + hud_count > 0));
+        tooltips::link(loader);
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
         link_hud(loader, &HUD_FUSE);
@@ -580,6 +418,8 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     let nav = if context == 0 { 0 } else { engine.nav(context) };
     onward.call();
     ARENA.with_borrow_mut(Arena::next_frame);
+    item_slots::end_frame();
+    tooltips::end_frame();
     // A client that never hosts never steps, so its waiting patches are also
     // tried here; one atomic compare until a check is due.
     if let Some(loader) = crate::engine::loader::loader() {
@@ -588,6 +428,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
         });
     }
     if context == 0 || state.is_null() {
+        crate::engine::screens::note_window(false);
         return;
     }
     let shown = READS_FUSE
@@ -596,7 +437,12 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     dialog::note_world(shown != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
+    engine::caret_next_frame(now);
+    crate::engine::screens::note_window(window_shown());
     crate::actions::controls::frame(context);
+    // SAFETY: inside the frame on the interface thread, `context` non-zero
+    // by the guard before it.
+    unsafe { snapshot::note(engine, context) };
     engine.restore_nav(context, nav);
     // SAFETY: `state` is non-null, checked by the guard before it, and is the
     // popup state the game passed to `ui.popup`; its active byte sits at the
@@ -607,7 +453,10 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     if vanilla {
         return;
     }
-    STATE.ui_thread.store(thread_id(), Ordering::Release);
+    STATE.ui_thread.store(
+        crate::engine::off_thread::current_thread(),
+        Ordering::Release,
+    );
     let frame = mods::next_frame();
     map::note(context);
     let asked = extensions::hosts_asked(FRAMES.sealed().is_some_and(|f| !f.is_empty()));
@@ -954,6 +803,7 @@ fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::Frame
 mod painter;
 #[cfg(test)]
 mod recorder;
+mod snapshot;
 pub(crate) use painter::{Painter, widget};
 #[cfg(test)]
 mod tests;

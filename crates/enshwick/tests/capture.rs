@@ -47,10 +47,10 @@ mod tests {
     );
 
     /// The template a player places from `item`.
-    fn template_of(item: u32) -> [u8; 16] {
+    fn template_of(item: u32) -> enshwick::content::Guid {
         let mut guid = [0x5a; 16];
         guid[..4].copy_from_slice(&item.to_le_bytes());
-        guid
+        enshwick::content::Guid(guid)
     }
 
     /// A placed prop through the fake's entity builders: its `UsedItem`,
@@ -136,7 +136,8 @@ mod tests {
         let fake = prop(fake, 10, 1_042, [11.0, 1.0, 12.0], TURNED);
         let fake = prop(fake, 11, 77, [10.0, 0.0, 10.0], STILL);
         let fake = prop(fake, 12, 77, [30.0, 0.0, 10.0], STILL);
-        let fake = thing(fake, 13, 77, [12.0, 0.0, 12.0], STILL).template(Entity(13), [0x11; 16]);
+        let fake = thing(fake, 13, 77, [12.0, 0.0, 12.0], STILL)
+            .template(Entity(13), enshwick::content::Guid([0x11; 16]));
         let (_loader, world) = start(fake);
 
         let props = world
@@ -187,7 +188,7 @@ mod tests {
         let (_loader, world) = start(prop(fake, 10, 50, [10.0; 3], STILL));
         assert_eq!(
             world.props_in([0.0; 3], [20.0; 3]),
-            Err(WorldError::Missing)
+            Err(WorldError::Unavailable)
         );
     }
 
@@ -206,7 +207,10 @@ mod tests {
         let fake = fake().without_fact(facts::WORLD_TRANSFORM_ORIENTATION);
         let (_loader, world) = start(prop(fake, 10, 1, [1.0; 3], STILL));
 
-        assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));
+        assert_eq!(
+            world.props_in([0.0; 3], [2.0; 3]),
+            Err(WorldError::Unavailable)
+        );
     }
 
     #[test]
@@ -214,7 +218,10 @@ mod tests {
         let fake = fake().without_fact(facts::ITEM_INFO_PLACED_ENTITY);
         let (_loader, world) = start(prop(fake, 10, 1, [1.0; 3], STILL));
 
-        assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));
+        assert_eq!(
+            world.props_in([0.0; 3], [2.0; 3]),
+            Err(WorldError::Unavailable)
+        );
     }
 
     #[test]
@@ -222,7 +229,10 @@ mod tests {
         let fake = thing(fake(), 10, 1, [1.0; 3], STILL).template(Entity(10), template_of(1));
         let (_loader, world) = start(fake);
 
-        assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));
+        assert_eq!(
+            world.props_in([0.0; 3], [2.0; 3]),
+            Err(WorldError::Unavailable)
+        );
         assert_eq!(world.props_in([5.0; 3], [6.0; 3]), Ok(Vec::new()));
     }
 

@@ -66,7 +66,6 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
     for (owner, target, reason) in owners {
         let id = named(target);
         if owner.is_loader() {
-            crate::engine::diag::part_off(&id, &format!("its hook could not be armed: {reason}"));
             loader.unarmed(target, &id, &format!("could not be armed: {reason}"));
         } else {
             loader.turn_off(
@@ -87,16 +86,16 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
 }
 
 /// Logs what became of each code patch and turns off the owners of skipped
-/// ones: a mod whole, a loader feature by its name. The loader features
+/// ones: a mod whole, a loader feature by its fuse. The loader features
 /// turned off or waiting, each once.
 fn report_patches(
     loader: &Loader,
     patches: &[crate::engine::code::CodePatch],
     verdicts: &[crate::engine::code::Verdict],
-) -> Vec<&'static str> {
+) -> Vec<&'static crate::engine::fuse::Fuse> {
     use crate::engine::code::Verdict;
 
-    let mut reported: Vec<&'static str> = Vec::new();
+    let mut reported = Vec::new();
     crate::engine::diag::record_patches(crate::engine::code::tally(verdicts));
     for (patch, verdict) in patches.iter().zip(verdicts) {
         let owner = crate::engine::code::owner_id(loader, patch.owner);
@@ -120,12 +119,19 @@ fn report_patches(
                      its hooks off until then",
                     patch.address
                 );
-                if patch.owner.is_loader() && !reported.contains(&patch.feature) {
-                    reported.push(patch.feature);
+                if let Some(feature) = patch.feature.filter(|_| patch.owner.is_loader())
+                    && !feature.among(&reported)
+                {
+                    reported.push(feature);
                 }
             }
             Verdict::Skip(reason) => {
-                crate::engine::code::skipped(loader, patch, reason, &mut reported);
+                crate::engine::code::skipped(
+                    loader,
+                    patch,
+                    (crate::engine::code::SkipCause::Build, reason),
+                    &mut reported,
+                );
             }
         }
     }

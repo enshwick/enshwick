@@ -104,7 +104,7 @@ impl Installed {
     /// let call = Interaction {
     ///     header: Header::of::<Interaction>(),
     ///     kind: Interaction::OPEN,
-    ///     player: enshwick::Entity(1),
+    ///     character: enshwick::Entity(1),
     ///     target: enshwick::Entity(2),
     ///     item: enshwick::ItemId::new(0),
     ///     known: 0,
@@ -118,7 +118,31 @@ impl Installed {
         let filters = table::with(Vec::new(), |s| s.interaction_filters.clone());
         filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the mod's pointer.
-            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
+            filter.run(|callback, user| unsafe {
+                callback(call, user) != enshwick_core::abi::FILTER_REFUSE
+            })
+        })
+    }
+
+    /// The prompt the mod gave the objects placed from `item`, as the
+    /// loader keeps it; `None` for an item without one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.prompt(enshwick::ItemId::new(0x5e01)), None);
+    /// ```
+    #[must_use]
+    pub fn prompt(
+        &self,
+        item: enshwick_core::ItemId,
+    ) -> Option<enshwick_core::abi::InteractionPrompt> {
+        table::with(None, |s| {
+            s.interaction_prompts
+                .iter()
+                .find(|p| p.item == item)
+                .copied()
         })
     }
 
@@ -139,7 +163,9 @@ impl Installed {
         let filters = table::with(Vec::new(), |s| s.craft_filters.clone());
         filters.iter().all(|filter| {
             // SAFETY: a filter the mod registered with its own pointer.
-            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
+            filter.run(|callback, user| unsafe {
+                callback(call, user) != enshwick_core::abi::FILTER_REFUSE
+            })
         })
     }
 
@@ -160,9 +186,9 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let wall = BuildCheck {
     ///     header: Header::of::<BuildCheck>(),
-    ///     player: enshwick::Entity(2),
+    ///     character: enshwick::Entity(2),
     ///     item: enshwick::ItemId::new(7),
-    ///     position: [0; 3],
+    ///     position: [0.0; 3],
     ///     reason: core::ptr::null_mut(),
     /// };
     /// assert_eq!(loader.build(&wall), Ok(()));
@@ -176,7 +202,7 @@ impl Installed {
             // SAFETY: a filter the mod registered with its own pointer; `asked`
             // and its `reason` slot live on this stack for the call.
             let allowed = filter.run(|callback, user| unsafe { callback(&raw const asked, user) });
-            if allowed == 0 {
+            if allowed == enshwick_core::abi::FILTER_REFUSE {
                 // SAFETY: the refusing filter wrote a text it keeps until its
                 // next call on this thread, or left the empty one.
                 let reason = unsafe { reason.as_str() }.filter(|r| !r.is_empty());

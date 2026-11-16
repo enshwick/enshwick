@@ -23,7 +23,7 @@ use enshwick_core::abi::{ChatLine, HookFlags};
 use crate::base::wire::{Drops, Outbox, strays};
 use crate::engine::builds::ABSENT;
 use crate::engine::chains::{Next, Onward};
-use crate::engine::fuse::{Fuse, Off};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
@@ -255,10 +255,7 @@ impl State {
             let why = format!(
                 "a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
             );
-            ONE_FUSE.turn_off(&Off::reported(
-                format!("{} off: {why}", ONE_FUSE.feature()),
-                why,
-            ));
+            ONE_FUSE.report_off(why);
         }
     }
 

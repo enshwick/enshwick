@@ -7,7 +7,7 @@ use enshwick_core::{Entity, abi as api_frame};
 use crate::actions::console::accounts::Act;
 use crate::engine::conflicts::Mode;
 use crate::host::layer::{
-    Caller, HeadedInOut, HeadedListOut, HeadedOut, In, ListOut, Mod, Out, SizedListOut, Text,
+    Callback, Caller, HeadedInOut, HeadedOut, In, ListOut, Mod, Out, SizedListOut, Text, YesNo,
     entries,
 };
 
@@ -17,12 +17,12 @@ pub(crate) mod environment;
 pub(crate) mod saves;
 pub(crate) mod transactions;
 
-/// [`Status::MISSING`] when chat mutes are not served, as on a client.
+/// [`Status::UNAVAILABLE`] when chat mutes are not served, as on a client.
 fn mutes_served(loader: &crate::engine::loader::Loader) -> Result<(), Status> {
     if crate::actions::chat_mute::serving(loader) {
         Ok(())
     } else {
-        Err(Status::MISSING)
+        Err(Status::UNAVAILABLE)
     }
 }
 
@@ -36,8 +36,8 @@ fn account(key: enshwick_core::PlayerKey) -> Result<u64, Status> {
 }
 
 entries! {
-    fn language_of(_me as Mod, key: enshwick_core::PlayerKey) -> u32 {
-        Ok(crate::base::net::language_number(key.get()))
+    fn language_of(_me as Mod, key: enshwick_core::PlayerKey, out as Out<u32>) -> Status {
+        out.put(crate::base::net::language_number(key.get()))
     }
 
     fn progress_write(me as Mod, entity: Entity, what: u32, value: u32) -> Status {
@@ -48,7 +48,7 @@ entries! {
     fn item_info(
         loader as Caller,
         item: enshwick_core::ItemId,
-        out as HeadedOut<api_frame::ItemData>,
+        out as HeadedOut<api_frame::ItemTypeInfo>,
     ) -> Status {
         out.put(crate::inventory::transactions::item_info(loader, item.get())?)
     }
@@ -59,13 +59,21 @@ entries! {
 
     fn players(
         loader as Caller,
-        [out, capacity, count] as HeadedListOut<api_frame::PlayerInfo>,
+        [out, entry_size, capacity, count] as SizedListOut<api_frame::PlayerInfo>,
     ) -> Status {
         out.put(&crate::engine::world::players(loader)?)
     }
 
     fn chat(_loader as Caller, to: enshwick_core::PlayerKey, message as Text) -> Status {
+        // `send` reads key 0 as everyone; here it names no player.
+        if to.get() == 0 {
+            return Err(Status::BAD_ARGS.into());
+        }
         Ok(crate::actions::chat::send_for_mod(to.get(), message)?)
+    }
+
+    fn chat_all(_loader as Caller, message as Text) -> Status {
+        Ok(crate::actions::chat::send_for_mod(0, message)?)
     }
 
     fn set_label(loader as Caller, entity: Entity, label as Text) -> Status {
@@ -74,7 +82,7 @@ entries! {
 
     fn rename_filter(
         me as Mod,
-        callback: api_frame::RenameCallFn,
+        callback as Callback<api_frame::RenameFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -86,7 +94,7 @@ entries! {
 
     fn join_rule(
         me as Mod,
-        callback: api_frame::JoinRuleFn,
+        callback as Callback<api_frame::JoinRuleFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -115,7 +123,7 @@ entries! {
     }
 
     fn world_key(loader as Caller, out as Out<Str>) -> Status {
-        let key = crate::base::saves::world_key(loader).ok_or(Status::MISSING)?;
+        let key = crate::base::saves::world_key(loader).ok_or(Status::UNAVAILABLE)?;
         out.put(Str::new(crate::base::saves::stem(key)))
     }
 
@@ -185,27 +193,24 @@ entries! {
         let act = match action {
             AccountActionType::KICK => Act::Kick,
             AccountActionType::BAN => Act::Ban,
-            AccountActionType::UN_BAN => Act::Unban,
+            AccountActionType::UNBAN => Act::Unban,
             _ => return Err(Status::BAD_ARGS.into()),
         };
         crate::actions::console::account_action(loader, act, account.get())?;
         Ok(())
     }
 
-    /// `HostApi::chat_mute_set`: mutes `account` in chat or lifts its mute.
-    fn chat_mute_set(me as Mod, key: enshwick_core::PlayerKey, muted: u8) -> Status {
+    /// `HostApi::set_chat_mute`: mutes `account` in chat or lifts its mute.
+    fn set_chat_mute(me as Mod, key: enshwick_core::PlayerKey, muted as YesNo) -> Status {
         let account = account(key)?;
-        if muted > 1 {
-            return Err(Status::BAD_ARGS.into());
-        }
         mutes_served(me.loader)?;
         let who = format!("the mod {}", me.record.id);
-        crate::actions::chat_mute::set(me.loader, account, muted == 1, &who)?;
+        crate::actions::chat_mute::set(me.loader, account, muted, &who)?;
         Ok(())
     }
 
-    /// `HostApi::chat_mute_has`: whether `account` is muted in chat.
-    fn chat_mute_has(loader as Caller, key: enshwick_core::PlayerKey, muted as Out<u8>) -> Status {
+    /// `HostApi::chat_muted`: whether `account` is muted in chat.
+    fn chat_muted(loader as Caller, key: enshwick_core::PlayerKey, muted as Out<u8>) -> Status {
         let account = account(key)?;
         mutes_served(loader)?;
         muted.put(u8::from(crate::actions::chat_mute::has(loader, account)))

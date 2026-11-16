@@ -40,18 +40,14 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
-    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    ///     actions.add(Action::new("full", "Restore your health"), move |request| {
-    ///         let me = request.player.entity;
+    ///     // Run on the game thread: restores `me` to full health.
+    ///     let _restore = move |me: enshwick::Entity| {
     ///         let max = world.vitals(me).map_or(0, |v| v.health.max);
-    ///         match world.set_health(me, max) {
-    ///             Ok(health) => Outcome::done(format!("{} of {} health", health.current, health.max)),
-    ///             Err(why) => Outcome::refused(format!("{why}")),
-    ///         }
-    ///     })
+    ///         world.set_health(me, max)
+    ///     };
+    ///     Ok(())
     /// }
     /// ```
     #[script]
@@ -176,7 +172,7 @@ impl World {
     /// # Errors
     ///
     /// [`WorldError::Lacks`] for an entity without a meter;
-    /// [`WorldError::Missing`] on a build without the writes; otherwise as
+    /// [`WorldError::Unavailable`] on a build without the writes; otherwise as
     /// for [`World::update`].
     ///
     /// # Examples
@@ -220,7 +216,7 @@ impl World {
     /// # Errors
     ///
     /// [`WorldError::Lacks`] for an entity without it;
-    /// [`WorldError::Missing`] on a build without it; otherwise as for
+    /// [`WorldError::Unavailable`] on a build without it; otherwise as for
     /// [`World::update`].
     ///
     /// # Examples
@@ -281,7 +277,7 @@ impl World {
     ) -> Result<Meter, WorldError> {
         self.0
             .stats
-            .ok_or(WorldError::Missing)?
+            .ok_or(WorldError::Unavailable)?
             .write(self, entity, pool, change)
     }
 
@@ -320,7 +316,7 @@ impl World {
     /// [`WorldError::Refused`] for an entity that is not a player's
     /// character in the game, or while 256 writes wait for the step;
     /// [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] during `init`, on a client, a build without the level
+    /// [`WorldError::Unavailable`] during `init`, on a client, a build without the level
     /// step, or once a panic turned the writes off.
     ///
     /// # Examples

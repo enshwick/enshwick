@@ -23,18 +23,26 @@ pub(super) const BUTTON_ALIGN_RIGHT: u16 = 0x203;
 const ICON_MARGIN: f32 = 25.0;
 /// The height of an icon button, which an empty slot keeps free.
 const ICON_SLOT: f32 = 50.0;
-/// The slider's value text without decimals, for a setting that holds whole
-/// numbers whatever its stops.
-const SLIDER_WHOLE: u32 = 2;
+/// The slider's value format that the game fills as a rounded whole number.
+/// Formats 3 to 5 show the value the player drags while the drag lasts, and
+/// the caller's value otherwise; format 2 shows only a text the caller wrote
+/// (client 26430625).
+pub(super) const SLIDER_WHOLE: u32 = 3;
+/// The slider's value format that the game fills with two decimals (%.2f).
+pub(super) const SLIDER_TWO_DECIMALS: u32 = 5;
 
-/// The slider's value text: whole numbers for a `whole` setting or when
+/// The slider's value format: a whole number for a `whole` setting or when
 /// every stop is one, else two decimals.
-pub(super) fn slider_format(min: f32, max: f32, steps: u32, whole: bool) -> u32 {
+pub(super) fn slider_format((min, max): (f32, f32), steps: u32, whole: bool) -> u32 {
     let is_whole = |v: f32| v.fract() == 0.0;
     #[expect(clippy::cast_precision_loss, reason = "a count of stops")]
     let unit =
         steps >= 2 && is_whole(min) && is_whole(max) && is_whole((max - min) / (steps - 1) as f32);
-    if whole || unit { SLIDER_WHOLE } else { 4 }
+    if whole || unit {
+        SLIDER_WHOLE
+    } else {
+        SLIDER_TWO_DECIMALS
+    }
 }
 
 /// When a slider gives its value.
@@ -463,7 +471,10 @@ impl Engine {
         config.u8(layout.slider_bounded, 1);
         config.u8(layout.slider_read_only, u8::from(read_only));
         config.u8(layout.slider_on_release, u8::from(on_release));
-        config.u32(layout.slider_format, slider_format(min, max, steps, whole));
+        config.u32(
+            layout.slider_format,
+            slider_format((min, max), steps, whole),
+        );
         let most = u32::try_from(layout.slider_stop_capacity).unwrap_or(0);
         if (2..=most).contains(&steps) {
             for (i, slot) in (0..steps).zip((layout.slider_stops..).step_by(4)) {

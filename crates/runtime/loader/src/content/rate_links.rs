@@ -70,11 +70,15 @@ pub(crate) fn wanted(symbol: Symbol) -> bool {
         .any(|&(rate, symbols)| symbols.contains(&symbol) && RATES.declared(rate))
 }
 
-/// Seals the rates mods declared and links the functions they need; the
-/// comfort rate rides on the comfort link of [`crate::knowledge::progress`], which
-/// links after this.
-pub(crate) fn link(loader: &'static Loader) {
+/// Seals the rates mods declared, before any link asks which are.
+pub(crate) fn seal() {
     RATES.seal();
+}
+
+/// Links the functions the declared rates need; the comfort rate rides on
+/// the comfort link of [`crate::knowledge::progress`], which links after
+/// this.
+pub(crate) fn link(loader: &'static Loader) {
     let slot = SlotFields::reflect(&loader.reflection);
     let _first = LINKED.set(Linked {
         experience: experience_rates(|id| {
@@ -349,17 +353,17 @@ pub(crate) fn world_event(event: Event) {
 ///   are writable, as [`enshwick_core::abi::ResourcePatchFn`] says.
 unsafe extern "system" fn scale_recipes(
     base: *const u8,
-    len: usize,
+    len: u32,
     _user: *mut core::ffi::c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     if base.is_null() || out.is_null() || out_len.is_null() {
         return Status::BAD_ARGS;
     }
     // SAFETY: the loader's resource chain passes `len` readable bytes at
     // the non-null `base` (checked above) for the call.
-    let registry = unsafe { core::slice::from_raw_parts(base, len) };
+    let registry = unsafe { core::slice::from_raw_parts(base, len as usize) };
     let built = RECIPE_RATES
         .layout
         .get()

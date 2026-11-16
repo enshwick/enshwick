@@ -3,19 +3,22 @@
 //! the local player: its `ClientPlayerInput`'s digital mask, kept for any
 //! thread to read.
 //!
-//! `player_ui` takes its row's entity first thing (client 26430625), so the
-//! context reads the same at its entry; the mask is the last step's, since
-//! the system writes the new one as it runs.
+//! `player_ui` walks a query over the players and serves only the row whose
+//! entity is the local player's (client 26430625); at its entry no row is
+//! taken yet, so the read walks the query itself and puts the row counter
+//! back. The mask is the last step's, since the system writes the new one
+//! as it runs.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering, fence};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{HookFlags, Side};
 use enshwick_gamedata::catalogue;
 
-use crate::engine::ecs::Components;
+use crate::engine::copied::Copied;
+use crate::engine::ecs::{Components, Engine};
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
@@ -24,7 +27,11 @@ use crate::engine::world::TemplateWalk;
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::COMPONENT_READ_RAW.id(),
-    pinned::ecs::ROW_ENTITY.id(),
+    pinned::ecs::ITERATOR_NEXT.id(),
+    pinned::ecs::LOCAL_PLAYER_ID.id(),
+    pinned::ecs::PLAYER_UI_ITERATOR.id(),
+    pinned::ecs::PLAYER_UI_ITERATOR_SIZE.id(),
+    pinned::ecs::PLAYER_UI_LOCAL_PLAYER.id(),
     pinned::ecs::ENTITY_SLOT.id(),
 ];
 
@@ -35,17 +42,49 @@ const FEATURE: &str = "the local player's held controls";
 /// The host reads' own name in the log and on the Mods screen.
 const HOST_FEATURE: &str = "the open screen's host template and position";
 /// How long a read stays the answer: past it, no step ran, as in a menu.
-const FRESH_MS: u64 = 1000;
-
-type RowEntity = unsafe extern "system" fn(ctx: *mut u64, out: *mut u32) -> *const u32;
+pub(crate) const FRESH_MS: u64 = 1000;
+/// `player_ui`'s components, in the order its iterator lays them out.
+/// Found on client 26430625 and checked against the system's reflected
+/// components on every build.
+const READS: [&str; 19] = [
+    "BuffContainer",
+    "ClientActor",
+    "ClientCameraControl",
+    "ClientCursor",
+    "ClientInteractionQuery",
+    "CspHackInventoryStockSelection",
+    "InventorySetup",
+    "NetworkCursor",
+    "NetworkFishing",
+    "DynamicNetworkLocomotion",
+    "NetworkPlayerAttributes",
+    "NetworkRangedWeapon",
+    "NetworkSelectedTargets",
+    "PlayerPinnedRecipes",
+    "PlayerQuestProgressionMode",
+    "PlayerSkillsUi",
+    "PlayerState",
+    "RenderTransform",
+    "SlotSelection",
+];
+const WRITES: [&str; 1] = ["ClientPlayerInput"];
+/// `player_ui`'s iterator size in words, 0x3c8 bytes (client 26430625);
+/// a build whose routed `ecs.player_ui_iterator_size` differs has the read
+/// off.
+const WORDS: usize = 121;
 
 /// Where the mask is read on this build.
 #[derive(Debug)]
 struct Layout {
+    engine: &'static Engine,
     components: Components,
-    row_entity: RowEntity,
     input: u32,
     digital: usize,
+    /// Where the local player check's word holds the local player's id.
+    local_player_id: usize,
+    /// The iterator word `player_ui` hands its local player check with each
+    /// row's entity.
+    local_player: usize,
 }
 
 /// Where the open screen host's template and position are read.
@@ -60,55 +99,28 @@ struct HostLayout {
 }
 
 /// The open screen host's last read: its entity, then its template's two
-/// words and its fixed-point position, behind a sequence count that is odd
-/// while the game thread writes, so the interface thread never takes half
-/// of one read without a lock.
-struct HostRead {
-    seq: AtomicU32,
-    entity: AtomicU32,
-    words: [AtomicU64; 5],
-}
+/// words and its fixed-point position, copied whole, so the interface
+/// thread never takes half of one read without a lock.
+struct HostRead(Copied<6>);
 
 impl HostRead {
     const fn new() -> Self {
-        Self {
-            seq: AtomicU32::new(0),
-            entity: AtomicU32::new(0),
-            words: [const { AtomicU64::new(0) }; 5],
-        }
+        Self(Copied::new())
     }
 
     /// Stores a read; only the system's thread writes.
     fn write(&self, entity: u32, template: [u8; 16], position: [i64; 3]) {
-        let seq = self.seq.load(Ordering::Relaxed);
-        self.seq.store(seq.wrapping_add(1), Ordering::Relaxed);
-        fence(Ordering::Release);
-        self.entity.store(entity, Ordering::Relaxed);
         let [lo, hi] = bytemuck::cast::<[u8; 16], [u64; 2]>(template);
         let [x, y, z] = position.map(i64::cast_unsigned);
-        for (word, value) in self.words.iter().zip([lo, hi, x, y, z]) {
-            word.store(value, Ordering::Relaxed);
-        }
-        self.seq.store(seq.wrapping_add(2), Ordering::Release);
+        self.0.write([u64::from(entity), lo, hi, x, y, z]);
     }
 
     /// The last whole read, or `None` while the writer stays mid-write.
     fn snapshot(&self) -> Option<(u32, [u8; 16], [i64; 3])> {
-        for _ in 0..4 {
-            let before = self.seq.load(Ordering::Acquire);
-            if before % 2 == 1 {
-                core::hint::spin_loop();
-                continue;
-            }
-            let entity = self.entity.load(Ordering::Relaxed);
-            let [lo, hi, x, y, z] = self.words.each_ref().map(|w| w.load(Ordering::Relaxed));
-            fence(Ordering::Acquire);
-            if self.seq.load(Ordering::Relaxed) == before {
-                let template = bytemuck::cast::<[u64; 2], [u8; 16]>([lo, hi]);
-                return Some((entity, template, [x, y, z].map(u64::cast_signed)));
-            }
-        }
-        None
+        let [entity, lo, hi, x, y, z] = self.0.load()?;
+        let template = bytemuck::cast::<[u64; 2], [u8; 16]>([lo, hi]);
+        let entity = u32::try_from(entity).unwrap_or(0);
+        Some((entity, template, [x, y, z].map(u64::cast_signed)))
     }
 }
 
@@ -121,7 +133,14 @@ struct State {
     linked: AtomicBool,
     start: OnceLock<Instant>,
     bits: AtomicU64,
+    /// The local player's entity at the last mask read, 0 before one.
+    player: AtomicU32,
     read_ms: AtomicU64,
+    /// Why the last step that tried found no mask, a [`Miss`], or 0 when
+    /// it read one.
+    miss: AtomicU8,
+    /// When a step last found no mask, as `read_ms` counts.
+    miss_ms: AtomicU64,
     /// Where the host reads run, once linked on a build that has them.
     host_layout: OnceLock<HostLayout>,
     /// The open screen's host the interface asks about, 0 for none.
@@ -137,7 +156,10 @@ static STATE: State = State {
     linked: AtomicBool::new(false),
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
+    player: AtomicU32::new(0),
     read_ms: AtomicU64::new(0),
+    miss: AtomicU8::new(0),
+    miss_ms: AtomicU64::new(0),
     host_layout: OnceLock::new(),
     host_wanted: AtomicU32::new(0),
     host: HostRead::new(),
@@ -150,16 +172,12 @@ static HOST_FUSE: Fuse = Fuse::new(HOST_FEATURE);
 /// linked.
 static LINK_FUSE: Fuse = Fuse::new("the local player's interface reads");
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     let start = STATE.start.get_or_init(Instant::now);
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX - 1) + 1
 }
 
 fn layout(loader: &Loader) -> Result<Layout, &'static str> {
-    let row = loader
-        .address(pinned::ecs::ROW_ENTITY)
-        .and_then(|at| usize::try_from(at).ok())
-        .ok_or(pinned::ecs::ROW_ENTITY.id())?;
     let digital = catalogue::constant(
         catalogue::ids::CLIENT_PLAYER_INPUT_DIGITAL,
         &loader.reflection,
@@ -174,14 +192,36 @@ fn layout(loader: &Loader) -> Result<Layout, &'static str> {
     if digital + size_of::<u64>() > usize::try_from(size).unwrap_or(0) {
         return Err(catalogue::ids::CLIENT_PLAYER_INPUT_DIGITAL);
     }
+    let routed = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    let local_player = local_player_word(
+        routed(pinned::ecs::PLAYER_UI_ITERATOR_SIZE)?,
+        routed(pinned::ecs::PLAYER_UI_ITERATOR)?,
+        routed(pinned::ecs::PLAYER_UI_LOCAL_PLAYER)?,
+    )
+    .ok_or(pinned::ecs::PLAYER_UI_ITERATOR_SIZE.id())?;
     Ok(Layout {
+        local_player,
+        engine: crate::engine::ecs::engine(loader).ok_or(pinned::ecs::ITERATOR_NEXT.id())?,
         components: Components::resolve(loader).ok_or(pinned::ecs::COMPONENT_READ_RAW.id())?,
-        // SAFETY: the build table pins `ecs.row_entity` to this signature.
-        row_entity: unsafe { core::mem::transmute::<usize, RowEntity>(row) },
         input: catalogue::type_hash(catalogue::ids::CLIENT_PLAYER_INPUT)
             .ok_or(catalogue::ids::CLIENT_PLAYER_INPUT)?,
         digital,
+        local_player_id: loader
+            .offset(pinned::ecs::LOCAL_PLAYER_ID)
+            .ok_or(pinned::ecs::LOCAL_PLAYER_ID.id())?,
     })
+}
+
+/// The iterator word `player_ui` hands its local player check, from its
+/// routed iterator size and the frame offsets of its iterator and that word;
+/// `None` unless the iterator is the [`WORDS`] the read lays out and the
+/// word is a whole word inside it, so a reshuffled build turns the read off.
+fn local_player_word(size: usize, iterator: usize, word: usize) -> Option<usize> {
+    let at = word.checked_sub(iterator)?;
+    (size == WORDS * size_of::<u64>()
+        && at % size_of::<u64>() == 0
+        && at / size_of::<u64>() < WORDS)
+        .then_some(at / size_of::<u64>())
 }
 
 /// Where the host reads run on this build, or the id of what it lacks.
@@ -204,11 +244,24 @@ pub(crate) fn link(loader: &Loader) {
     if loader.side != Side::CLIENT {
         return;
     }
+    let entry = loader
+        .reflection
+        .system(SYSTEM)
+        .ok()
+        .map(enshwick_gamedata::reflect::System::entry);
+    if entry.is_none() {
+        // Without the system neither read links: one cause, one entry off.
+        let _linked = link_system(loader, None);
+        return;
+    }
     let mut any = false;
-    match layout(loader) {
+    let held = crate::engine::ecs::components_match(loader, SYSTEM, &READS, &WRITES)
+        .map_err(|why| (SYSTEM, why.to_string()))
+        .and_then(|()| layout(loader).map_err(|id| (id, "this build lacks it".to_owned())));
+    match held {
         Ok(layout) => any |= STATE.layout.set(layout).is_ok(),
-        Err(id) => {
-            let _off = loader.fuse_off(&FUSE, id, "this build lacks it");
+        Err((id, why)) => {
+            let _off = loader.fuse_off(&FUSE, id, &why);
         }
     }
     match host_layout(loader) {
@@ -220,11 +273,6 @@ pub(crate) fn link(loader: &Loader) {
     if !any {
         return;
     }
-    let entry = loader
-        .reflection
-        .system(SYSTEM)
-        .ok()
-        .map(enshwick_gamedata::reflect::System::entry);
     let _linked = link_system(loader, entry);
 }
 
@@ -243,21 +291,21 @@ fn link_system(loader: &Loader, entry: Option<u64>) -> bool {
 /// # Safety
 ///
 /// - `ctx` is the `player_ui` system's live, non-null context, at its entry
-///   on its thread.
+///   on its thread; the caller puts its row counter back afterwards, even
+///   after a panic.
 unsafe fn read(ctx: *mut u64, layout: &Layout) {
-    let mut entity = 0u32;
-    // SAFETY: the game's `ecs.row_entity` on the system's live context, at
-    // its entry on its thread, as `player_ui` calls it itself first thing
-    // (client 26430625), with our own out word.
-    let found = unsafe { (layout.row_entity)(ctx, &raw mut entity) };
-    if found.is_null() {
+    // SAFETY: the caller's live context, on its thread, which alone writes
+    // the row counter while the system runs; the caller puts it back.
+    unsafe { layout.engine.set_row(ctx, 0) };
+    // SAFETY: the caller's live `player_ui` context at its entry on its
+    // thread, its row counter set to 0 above.
+    let Some(player) = (unsafe { local_player(ctx, layout) }) else {
+        missed(Miss::NoPlayer);
         return;
-    }
-    // SAFETY: `ecs.row_entity` returned a non-null pointer to the row's u32
-    // entity id, live for the call.
-    let player: u32 = unsafe { enshwick_core::raw::read_at(found.cast(), 0) };
+    };
     // SAFETY: the caller's live context at the system's entry on its thread.
-    let Some(input) = (unsafe { layout.components.component(ctx, player, layout.input) }) else {
+    let Some(input) = (unsafe { layout.components.component(ctx, player.0, layout.input) }) else {
+        missed(Miss::NoInput);
         return;
     };
     // SAFETY: `input` is the player's live `ClientPlayerInput`, unwritten
@@ -265,7 +313,56 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     // inside the type.
     let bits: u64 = unsafe { enshwick_core::raw::read_at(input, layout.digital) };
     STATE.bits.store(bits, Ordering::Relaxed);
+    STATE.player.store(player.0, Ordering::Relaxed);
+    STATE.miss.store(0, Ordering::Relaxed);
     STATE.read_ms.store(now_ms(), Ordering::Release);
+}
+
+/// Keeps why a step found no mask, logging a new cause once.
+fn missed(miss: Miss) {
+    STATE.miss_ms.store(now_ms(), Ordering::Relaxed);
+    if STATE.miss.swap(miss as u8, Ordering::Relaxed) != miss as u8 {
+        log_miss(miss);
+    }
+}
+
+/// The local player's entity: the row of `player_ui`'s query that passes
+/// the system's own local player check, or `None` when no row does.
+///
+/// # Safety
+///
+/// - `ctx` is the `player_ui` system's live, non-null context, at its entry
+///   on its thread, with its row counter at 0; the caller puts it back.
+unsafe fn local_player(ctx: *mut u64, layout: &Layout) -> Option<Entity> {
+    let engine = layout.engine;
+    // SAFETY: the caller's contract; `link` checked the routed iterator size
+    // is `WORDS`, and `query` drops at the end of this function, inside the
+    // system's run.
+    let mut query = unsafe { engine.query::<WORDS>(ctx) };
+    let rows = core::iter::from_fn(|| {
+        let words = query.next()?;
+        let local = usize::try_from(words[layout.local_player]).unwrap_or(0);
+        if local == 0 {
+            return Some(None);
+        }
+        // SAFETY: `local` is the non-null word `player_ui` itself reads its
+        // local player id from at `ecs.local_player_id` for this row, at the
+        // routed iterator word, live while the system runs.
+        let id: u32 = unsafe { crate::engine::memory::read(local, layout.local_player_id) };
+        // SAFETY: the caller's live context on its thread, whose row counter
+        // `query` set to this row.
+        let row = unsafe { engine.entity(ctx) };
+        Some(Some((Entity(id), Entity(row))))
+    });
+    first_local(rows.flatten())
+}
+
+/// The first row entity that equals the local player id read beside it,
+/// from `(id, row entity)` pairs; entity 0, the answer before a query takes
+/// a row, is never the local player.
+fn first_local(rows: impl IntoIterator<Item = (Entity, Entity)>) -> Option<Entity> {
+    rows.into_iter()
+        .find_map(|(id, row)| (row.0 != 0 && row == id).then_some(row))
 }
 
 /// Reads the template and position of the open screen's host, `host`, in
@@ -317,7 +414,7 @@ fn answer(
 
 /// Whether a read at `read` milliseconds is still the answer at `now`; 0 is
 /// never read.
-fn fresh(read: u64, now: u64) -> bool {
+pub(crate) fn fresh(read: u64, now: u64) -> bool {
     read != 0 && now.saturating_sub(read) <= FRESH_MS
 }
 
@@ -344,7 +441,15 @@ crate::engine::chains::chain_detour! {
         {
             // SAFETY: `ctx` is non-null by the check before it and is the
             // system's own context, at its entry on its thread.
+            let row = unsafe { layout.engine.row(ctx) };
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context, at its entry on its thread; its row
+            // counter goes back below, whether the read panics or not.
             let _read = FUSE.run(FEATURE, || unsafe { read(ctx, layout) });
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context on its thread, which alone writes the row
+            // counter while the system runs.
+            unsafe { layout.engine.set_row(ctx, row) };
         }
         onward.call()
     }
@@ -356,17 +461,127 @@ crate::engine::chains::chain_detour! {
 #[error("the held controls are not read")]
 pub(crate) struct HeldError;
 
-/// The local player's held mask, or [`HeldError`] while it is unread. The
-/// first ask starts the reads, so it answers [`HeldError`].
-pub(crate) fn held() -> Result<u64, HeldError> {
+/// Why a step that tried to read the mask found none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum Miss {
+    /// No row of `player_ui`'s query passed its local player check.
+    NoPlayer = 1,
+    /// The local player's row had no `ClientPlayerInput`.
+    NoInput = 2,
+}
+
+impl Miss {
+    fn from_raw(raw: u8) -> Option<Self> {
+        [Self::NoPlayer, Self::NoInput]
+            .into_iter()
+            .find(|miss| *miss as u8 == raw)
+    }
+}
+
+/// The held mask as the reads keep it: a mask read with no control held is
+/// a sample of zero bits, and a stale one stays apart from none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Sample {
+    /// The read, or the link both reads share, is off on this build or
+    /// after a panic.
+    Off,
+    /// No step read a mask yet; `miss` says why the last one that tried
+    /// found none.
+    Never { miss: Option<Miss> },
+    /// The last mask read, older than [`FRESH_MS`], as in a menu; `miss`
+    /// says why the steps since found none, when one tried.
+    Stale {
+        bits: u64,
+        age_ms: u64,
+        miss: Option<Miss>,
+    },
+    /// A mask a step read within [`FRESH_MS`].
+    Fresh { bits: u64, age_ms: u64 },
+}
+
+/// The reads' raw state: `read` and `miss_ms` in milliseconds as
+/// [`now_ms`] counts, 0 for never, the mask `bits` and the raw `miss`.
+#[derive(Clone, Copy, Debug)]
+struct Raw {
+    off: bool,
+    read: u64,
+    bits: u64,
+    miss: u8,
+    miss_ms: u64,
+}
+
+/// The sample at `now` from `raw`; a miss counts only while recent, so
+/// one the last step left before the steps stopped names no cause.
+fn sample_at(raw: Raw, now: u64) -> Sample {
+    let miss = Miss::from_raw(raw.miss).filter(|_| fresh(raw.miss_ms, now));
+    let age_ms = now.saturating_sub(raw.read);
+    if raw.off {
+        Sample::Off
+    } else if raw.read == 0 {
+        Sample::Never { miss }
+    } else if fresh(raw.read, now) {
+        Sample::Fresh {
+            bits: raw.bits,
+            age_ms,
+        }
+    } else {
+        Sample::Stale {
+            bits: raw.bits,
+            age_ms,
+            miss,
+        }
+    }
+}
+
+/// The held mask's sample now; asking starts the reads.
+pub(crate) fn sample() -> Sample {
     if !STATE.asked.load(Ordering::Relaxed) {
         STATE.asked.store(true, Ordering::Relaxed);
     }
-    let read = STATE.read_ms.load(Ordering::Acquire);
-    if read == 0 || FUSE.is_off() || now_ms().saturating_sub(read) > FRESH_MS {
-        return Err(HeldError);
+    sample_at(raw(), now_ms())
+}
+
+/// The reads' raw state now, without asking.
+fn raw() -> Raw {
+    Raw {
+        off: FUSE.is_off() || LINK_FUSE.is_off(),
+        read: STATE.read_ms.load(Ordering::Acquire),
+        bits: STATE.bits.load(Ordering::Relaxed),
+        miss: STATE.miss.load(Ordering::Relaxed),
+        miss_ms: STATE.miss_ms.load(Ordering::Relaxed),
     }
-    Ok(STATE.bits.load(Ordering::Relaxed))
+}
+
+/// The local player's held mask, zero bits when none is held, or
+/// [`HeldError`] while no fresh one is read. The first ask starts the
+/// reads, so it answers [`HeldError`]; a step that tries and finds no mask
+/// logs why, once per cause.
+pub(crate) fn held() -> Result<u64, HeldError> {
+    match sample() {
+        Sample::Fresh { bits, .. } => Ok(bits),
+        Sample::Never { .. } | Sample::Stale { .. } | Sample::Off => Err(HeldError),
+    }
+}
+
+/// The local player's entity at the last mask read; `None` before one.
+pub(crate) fn player() -> Option<Entity> {
+    let player = STATE.player.load(Ordering::Relaxed);
+    (player != 0).then_some(Entity(player))
+}
+
+#[cold]
+fn log_miss(miss: Miss) {
+    match miss {
+        Miss::NoPlayer => crate::log_once!(
+            INFO,
+            "{FEATURE}: no row of {SYSTEM}'s query passed its local player check"
+        ),
+        Miss::NoInput => crate::log_once!(
+            INFO,
+            "{FEATURE}: the local player's row has no ClientPlayerInput"
+        ),
+    }
 }
 
 /// Cached loader metadata only; never starts sampling or accesses a game object.
@@ -520,6 +735,80 @@ mod tests {
     }
 
     #[test]
+    fn a_client_without_player_ui_lists_only_the_shared_link_off() {
+        let mut loader = crate::start::tests::bare_loader();
+        loader.side = Side::CLIENT;
+        link(&loader);
+        let listed = crate::engine::diag::parts_off();
+        let parts: Vec<&str> = listed.iter().map(|p| p.part.as_str()).collect();
+        assert_eq!(parts, [LINK_FUSE.feature()], "one cause, one entry");
+        assert!(!FUSE.is_off() && !HOST_FUSE.is_off());
+    }
+
+    #[test]
+    fn the_held_read_takes_the_first_row_whose_entity_is_the_local_player() {
+        let rows = |pairs: &[(u32, u32)]| {
+            first_local(pairs.iter().map(|&(id, row)| (Entity(id), Entity(row))))
+        };
+        assert_eq!(
+            rows(&[(0, 0)]),
+            None,
+            "entity 0, as at the system's entry, is never the local player"
+        );
+        assert_eq!(rows(&[(7, 3), (7, 7), (9, 9)]), Some(Entity(7)));
+        assert_eq!(rows(&[(7, 3), (7, 4)]), None, "another player's rows");
+        assert_eq!(rows(&[]), None);
+    }
+
+    #[test]
+    fn the_local_player_word_comes_from_the_routed_frame_and_a_reshuffled_one_turns_the_read_off() {
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x190),
+            Some(36),
+            "client 26430625"
+        );
+        assert_eq!(
+            local_player_word(0x3d0, 0x70, 0x190),
+            None,
+            "another iterator size"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x194),
+            None,
+            "not a whole word"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x190, 0x70),
+            None,
+            "before the iterator"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x70 + 0x3c8),
+            None,
+            "past its end"
+        );
+        assert_eq!(
+            local_player_word(0x3c8, 0x70, 0x70 + 0x3c0),
+            Some(WORDS - 1)
+        );
+    }
+
+    #[test]
+    fn the_held_read_s_iterator_layout_matches_player_ui_on_the_installed_client() {
+        use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+
+        let Some(exe) = std::env::var_os("ENSH_CLIENT_EXE") else {
+            return;
+        };
+        let bytes = std::fs::read(exe).unwrap();
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let system = reflection.system(SYSTEM).unwrap();
+        assert_eq!(system.reads(), READS);
+        assert_eq!(system.writes(), WRITES);
+    }
+
+    #[test]
     fn the_first_ask_starts_the_reads_and_answers_missing() {
         assert!(
             !STATE.asked.load(Ordering::Relaxed),
@@ -527,6 +816,99 @@ mod tests {
         );
         assert_eq!(held(), Err(HeldError));
         assert!(STATE.asked.load(Ordering::Relaxed));
+    }
+
+    /// The raw state of a mask `bits` read at `read`, on and with no miss.
+    fn raw(read: u64, bits: u64) -> Raw {
+        Raw {
+            off: false,
+            read,
+            bits,
+            miss: 0,
+            miss_ms: 0,
+        }
+    }
+
+    #[test]
+    fn a_mask_read_with_no_control_held_is_a_fresh_sample_of_zero_bits() {
+        assert_eq!(
+            sample_at(raw(100, 0), 150),
+            Sample::Fresh {
+                bits: 0,
+                age_ms: 50
+            }
+        );
+    }
+
+    #[test]
+    fn a_stale_sample_keeps_its_mask_and_age_and_stays_apart_from_never_read() {
+        let now = 101 + FRESH_MS;
+        let missed = |read: u64, bits: u64, miss: Miss| Raw {
+            miss: miss as u8,
+            miss_ms: now,
+            ..raw(read, bits)
+        };
+        let stale = sample_at(missed(100, 1 << 30, Miss::NoPlayer), now);
+        assert_eq!(
+            stale,
+            Sample::Stale {
+                bits: 1 << 30,
+                age_ms: FRESH_MS + 1,
+                miss: Some(Miss::NoPlayer)
+            }
+        );
+        assert_eq!(
+            sample_at(missed(0, 0, Miss::NoInput), now),
+            Sample::Never {
+                miss: Some(Miss::NoInput)
+            }
+        );
+        assert_eq!(sample_at(raw(0, 0), 5), Sample::Never { miss: None });
+        assert_eq!(
+            sample_at(
+                Raw {
+                    off: true,
+                    ..raw(100, 1)
+                },
+                150
+            ),
+            Sample::Off,
+            "a read turned off answers off, however fresh"
+        );
+    }
+
+    #[test]
+    fn a_miss_the_last_step_left_before_the_steps_stopped_names_no_cause() {
+        let left = Raw {
+            miss: Miss::NoPlayer as u8,
+            miss_ms: 200,
+            ..raw(100, 1)
+        };
+        assert_eq!(
+            sample_at(left, 201 + FRESH_MS),
+            Sample::Stale {
+                bits: 1,
+                age_ms: FRESH_MS + 101,
+                miss: None
+            }
+        );
+    }
+
+    #[test]
+    fn a_client_whose_shared_link_is_off_samples_off_not_never_read() {
+        let mut loader = crate::start::tests::bare_loader();
+        loader.side = Side::CLIENT;
+        link(&loader);
+        assert!(LINK_FUSE.is_off() && !FUSE.is_off());
+        assert_eq!(sample_at(super::raw(), now_ms()), Sample::Off);
+    }
+
+    #[test]
+    fn an_unknown_raw_miss_reads_as_none() {
+        assert_eq!(Miss::from_raw(0), None);
+        assert_eq!(Miss::from_raw(1), Some(Miss::NoPlayer));
+        assert_eq!(Miss::from_raw(2), Some(Miss::NoInput));
+        assert_eq!(Miss::from_raw(3), None);
     }
 
     #[test]
@@ -539,7 +921,7 @@ mod tests {
             read.snapshot(),
             Some((42, template, [1 << 32, -(5 << 32), 7]))
         );
-        read.seq.fetch_add(1, Ordering::Relaxed);
+        read.0.begin_write();
         assert_eq!(read.snapshot(), None, "mid-write");
     }
 

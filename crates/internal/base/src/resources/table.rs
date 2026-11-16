@@ -298,7 +298,7 @@ impl Host {
         );
         crate::load::ok(status, (), || "resource keys".to_owned())?;
         let empty = crate::abi::ResourceKey {
-            guid: [0; 16],
+            guid: crate::content::Guid::NIL,
             type_hash: 0,
             part: 0,
         };
@@ -362,8 +362,10 @@ impl Host {
             0,
             &raw mut len,
         );
-        if status != Status::BAD_ARGS {
-            return None;
+        match status {
+            Status::OK => return Some(Vec::new()),
+            Status::TOO_SMALL => {}
+            _ => return None,
         }
         let mut buffer = vec![0u8; usize::try_from(len).ok()?];
         let status = (api.content_read)(
@@ -452,12 +454,9 @@ impl Host {
     /// }
     /// ```
     pub fn game_value(&self, key: crate::abi::ResourceKey) -> Result<super::Value, Off> {
-        let bytes = self.game_resource(key).ok_or_else(|| {
-            Off::new(format!(
-                "resource {}: not in the archive",
-                crate::content::Guid(key.guid)
-            ))
-        })?;
+        let bytes = self
+            .game_resource(key)
+            .ok_or_else(|| Off::new(format!("resource {}: not in the archive", key.guid)))?;
         decode(key, &bytes)
     }
 
@@ -532,21 +531,25 @@ pub fn serve_value(
         .hashed(base.type_hash)
         .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
         .qualified_name();
-    crate::resources::serve(host, key, base, move |bytes| {
-        let keep = |error: &dyn std::fmt::Display| {
+    crate::resources::serve(host, key, base, move |bytes, out| {
+        let keep = |error: &dyn std::fmt::Display, out: &mut super::Output<'_>| {
             host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
-            fallback(key, base, bytes)
+            fallback(key, base, bytes, out)
         };
         let value = match registry.decode(name, bytes) {
             Ok(value) => value,
-            Err(error) => return keep(&error),
+            Err(error) => return keep(&error, out),
         };
         match patch(value) {
-            Ok(super::Value::Nil) => Some(bytes.to_vec()),
-            Ok(edited) => registry
-                .encode(name, &edited, Some(bytes))
-                .map_or_else(|error| keep(&error), Some),
-            Err(error) => keep(&error),
+            Ok(super::Value::Nil) => {
+                out.extend_from_slice(bytes);
+                Some(())
+            }
+            Ok(edited) => match registry.encode_into(name, &edited, Some(bytes), out) {
+                Ok(()) => Some(()),
+                Err(error) => keep(&error, out),
+            },
+            Err(error) => keep(&error, out),
         }
     })
 }
@@ -558,8 +561,12 @@ fn fallback(
     key: crate::abi::ResourceKey,
     base: crate::abi::ResourceKey,
     bytes: &[u8],
-) -> Option<Vec<u8>> {
-    (key == base).then(|| bytes.to_vec())
+    out: &mut super::Output<'_>,
+) -> Option<()> {
+    (key == base).then(|| {
+        out.resize(0);
+        out.extend_from_slice(bytes);
+    })
 }
 
 /// Serves `value` as the new resource `key`, of the type its key names; the
@@ -592,7 +599,10 @@ pub fn serve_new(
         .next()
         .ok_or_else(|| Off::new(format!("the game has no {name} to build a new one from")))?;
     let bytes = registry.encode(name, value, None)?;
-    crate::resources::serve(host, key, base, move |_| Some(bytes.clone()))
+    crate::resources::serve(host, key, base, move |_, out| {
+        out.extend_from_slice(&bytes);
+        Some(())
+    })
 }
 
 impl crate::BaseLoad {
@@ -611,11 +621,9 @@ impl crate::BaseLoad {
 /// and returns its GUID.
 #[doc(hidden)]
 pub fn declare(host: Host, id: &str) -> Result<crate::content::Guid, Off> {
-    let mut out = [0u8; 16];
+    let mut out = crate::content::Guid::NIL;
     let status = (host.api().declare_content)(host.handle(), Str::new(id), &raw mut out);
-    crate::load::ok(status, crate::content::Guid(out), || {
-        format!("content id {id}")
-    })
+    crate::load::ok(status, out, || format!("content id {id}"))
 }
 
 #[cfg(test)]
@@ -625,16 +633,16 @@ mod tests {
     #[test]
     fn a_failed_patch_keeps_a_game_resource_and_serves_no_new_one() {
         let key = |guid: u8| ResourceKey {
-            guid: [guid; 16],
+            guid: crate::content::Guid([guid; 16]),
             type_hash: 7,
             part: 0,
         };
+        let mut out = super::super::serve::test_output();
+        out.extend_from_slice(b"an edit that failed halfway");
+        assert_eq!(super::fallback(key(1), key(1), b"base", &mut out), Some(()));
+        assert_eq!(*out, b"base"[..], "the base bytes, served as they are");
         assert_eq!(
-            super::fallback(key(1), key(1), b"base"),
-            Some(b"base".to_vec())
-        );
-        assert_eq!(
-            super::fallback(key(2), key(1), b"base"),
+            super::fallback(key(2), key(1), b"base", &mut out),
             None,
             "a copy turns the mod off"
         );

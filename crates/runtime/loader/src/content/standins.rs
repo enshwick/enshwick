@@ -11,6 +11,7 @@ use enshwick_core::abi::ResourceKey;
 use enshwick_core::content::items::{ItemLayout, NewItem, clone_item, list_item};
 use enshwick_core::content::{Guid, Id};
 
+use crate::content::served::Builder;
 use crate::engine::catalogue::{Reflected, types};
 use crate::engine::loader::Loader;
 
@@ -18,8 +19,6 @@ use crate::engine::loader::Loader;
 const NAME: Id = Id::new("enshwick:stand-in.name");
 /// The tag of a stand-in's description.
 const DESCRIPTION: Id = Id::new("enshwick:stand-in.description");
-/// Builds a served resource from its base's bytes.
-pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
 
 /// One stand-in: its key, the vanilla item's key and its builder.
 pub(crate) type StandIn = (ResourceKey, ResourceKey, Builder);
@@ -29,9 +28,9 @@ pub(crate) type StandIn = (ResourceKey, ResourceKey, Builder);
 /// (`renamed`, whose new GUID the game reads instead).
 #[must_use]
 pub(crate) fn orphans(
-    recorded: &[([u8; 16], [u8; 16])],
+    recorded: &[(Guid, Guid)],
     served: &[ResourceKey],
-    renamed: impl Fn(&[u8; 16]) -> bool,
+    renamed: impl Fn(&Guid) -> bool,
 ) -> Vec<(Guid, Guid)> {
     recorded
         .iter()
@@ -41,7 +40,7 @@ pub(crate) fn orphans(
                 .any(|key| key.type_hash == types::ITEM_INFO && key.guid == *item)
                 && !renamed(item)
         })
-        .map(|&(item, vanilla)| (Guid(item), Guid(vanilla)))
+        .copied()
         .collect()
 }
 
@@ -71,8 +70,11 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
             let mut stand_in = NewItem::new(NAME, vanilla);
             stand_in.name = Some(NAME.guid());
             stand_in.description = Some(DESCRIPTION.guid());
-            let build: Builder =
-                Box::new(move |base: &[u8]| clone_item(&layout, base, &stand_in, item));
+            let build: Builder = Box::new(move |base: &[u8]| {
+                let mut built = Vec::new();
+                clone_item(&layout, base, &stand_in, item, &mut built)?;
+                Some(built)
+            });
             (
                 item.key_by_hash(types::ITEM_INFO),
                 vanilla.key_by_hash(types::ITEM_INFO),
@@ -82,9 +84,19 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
         .collect();
     let listed: Vec<Guid> = orphans.iter().map(|&(item, _)| item).collect();
     let registry: Builder = Box::new(move |base: &[u8]| {
-        listed.iter().try_fold(base.to_vec(), |registry, &item| {
-            list_item(&layout, &registry, item, &format!("stand-in {item}"))
-        })
+        // Two buffers in turn: each listing builds from the last one's bytes.
+        let (mut registry, mut next) = (base.to_vec(), Vec::new());
+        for &item in &listed {
+            list_item(
+                &layout,
+                &registry,
+                item,
+                &format!("stand-in {item}"),
+                &mut next,
+            )?;
+            core::mem::swap(&mut registry, &mut next);
+        }
+        Some(registry)
     });
     for (tag, key) in [
         (NAME, "stand-in.name"),
@@ -101,21 +113,21 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
 mod tests {
     use super::*;
 
-    const ITEM: [u8; 16] = [1; 16];
-    const RENAMED: [u8; 16] = [2; 16];
-    const SERVED: [u8; 16] = [3; 16];
-    const CHEST: [u8; 16] = [9; 16];
+    const ITEM: Guid = Guid([1; 16]);
+    const RENAMED: Guid = Guid([2; 16]);
+    const SERVED: Guid = Guid([3; 16]);
+    const CHEST: Guid = Guid([9; 16]);
 
     #[test]
     fn only_items_no_mod_serves_get_a_stand_in() {
         let recorded = [(ITEM, CHEST), (RENAMED, CHEST), (SERVED, CHEST)];
         let served = [
-            Guid(SERVED).key_by_hash(types::ITEM_INFO),
+            SERVED.key_by_hash(types::ITEM_INFO),
             // Another type under the item's GUID does not count.
-            Guid(ITEM).key_by_hash(types::TEMPLATE),
+            ITEM.key_by_hash(types::TEMPLATE),
         ];
         let orphans = orphans(&recorded, &served, |guid| *guid == RENAMED);
-        assert_eq!(orphans, [(Guid(ITEM), Guid(CHEST))]);
+        assert_eq!(orphans, [(ITEM, CHEST)]);
     }
 
     #[test]

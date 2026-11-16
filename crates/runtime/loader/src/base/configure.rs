@@ -249,8 +249,7 @@ pub fn set(
             });
         }
         crate::base::worlds::value_at(doc.as_table(), key)
-            .map(|v| v.clone().decorated("", "").to_string())
-            .unwrap_or_default()
+            .map_or_default(|v| v.clone().decorated("", "").to_string())
     };
     Ok(Change {
         text: doc.to_string(),

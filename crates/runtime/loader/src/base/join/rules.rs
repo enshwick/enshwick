@@ -331,16 +331,16 @@ mod tests {
         let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 3, 0];
         for part in [
             "enshwick.mods",
-            "a@1,b@1",
+            "you.a@1,you.b@1",
             "enshwick.mods.1",
-            "c@1",
+            "you.c@1",
             "enshwick",
             "x",
         ] {
             reply.extend_from_slice(part.as_bytes());
             reply.push(0);
         }
-        assert_eq!(mod_rules_value(&reply), "a@1,b@1,c@1");
+        assert_eq!(mod_rules_value(&reply), "you.a@1,you.b@1,you.c@1");
         assert!(mods_complete(&reply));
     }
 
@@ -349,23 +349,23 @@ mod tests {
         let names = Names::new();
         let cut = reply(&[
             ("enshwick", "cd"),
-            ("enshwick.mods", "a@1"),
+            ("enshwick.mods", "you.a@1"),
             ("enshwick.mods.count", "3"),
         ]);
         assert!(!mods_complete(&cut));
-        let plan_cut = plan("ab", "a@1,z@1", Some(("cd", "a@1")), false);
+        let plan_cut = plan("ab", "you.a@1,you.z@1", Some(("cd", "you.a@1")), false);
         assert!(plan_cut.turn_off.is_empty() && plan_cut.joins());
         assert_eq!(plan_cut.note(&names), None);
         let whole = reply(&[
             ("enshwick", "cd"),
-            ("enshwick.mods", "a@1,b@1,c@1"),
+            ("enshwick.mods", "you.a@1,you.b@1,you.c@1"),
             ("enshwick.mods.count", "3"),
         ]);
         assert!(mods_complete(&whole));
-        let plan_whole = plan("ab", "a@1,z@1", Some(("cd", "a@1")), true);
-        assert_eq!(plan_whole.turn_off, ["z"]);
+        let plan_whole = plan("ab", "you.a@1,you.z@1", Some(("cd", "you.a@1")), true);
+        assert_eq!(plan_whole.turn_off, ["you.z"]);
         // A server without a cut list sends no count.
-        assert!(mods_complete(&reply(&[("enshwick.mods", "a@1")])));
+        assert!(mods_complete(&reply(&[("enshwick.mods", "you.a@1")])));
     }
 
     fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
@@ -381,13 +381,12 @@ mod tests {
 
     #[test]
     fn a_server_s_ids_and_versions_are_checked_before_anyone_reads_them() {
-        let server =
-            "ok@1.2.0,../evil@1.0.0,x\ny@1.0.0,Caps@1.0.0,pack@0.1.0+ab12,bad@1.0\nInstall,@1";
+        let server = "you.ok@1.2.0,../you.evil@1.0.0,x\ny@1.0.0,Caps@1.0.0,old@1.0.0,you.pack@0.1.0+ab12,you.bad@1.0\nInstall,@1";
         assert_eq!(
             wanted(server, ""),
             [
-                ("ok".to_owned(), "1.2.0".to_owned()),
-                ("pack".to_owned(), "0.1.0+ab12".to_owned())
+                ("you.ok".to_owned(), "1.2.0".to_owned()),
+                ("you.pack".to_owned(), "0.1.0+ab12".to_owned())
             ]
         );
         let missing = plan("ab", "", Some(("cd", server)), true);
@@ -397,12 +396,12 @@ mod tests {
     #[test]
     fn a_rule_is_found_in_a_rules_reply() {
         let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 2, 0];
-        for part in ["enshwick", "989b6a71", "enshwick.mods", "a@1"] {
+        for part in ["enshwick", "989b6a71", "enshwick.mods", "you.a@1"] {
             reply.extend_from_slice(part.as_bytes());
             reply.push(0);
         }
         assert_eq!(rule(&reply, "enshwick").as_deref(), Some("989b6a71"));
-        assert_eq!(rule(&reply, "enshwick.mods").as_deref(), Some("a@1"));
+        assert_eq!(rule(&reply, "enshwick.mods").as_deref(), Some("you.a@1"));
         assert_eq!(rule(&reply, "missing"), None);
     }
 }

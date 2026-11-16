@@ -149,8 +149,8 @@ impl LoadMethods for crate::BaseLoad {
             .list
             .iter()
             .map(|(from, to)| ContentRename {
-                from: from.0,
-                to: to.0,
+                from: *from,
+                to: *to,
             })
             .collect();
         if KEPT.set(renames).is_err() {

@@ -75,7 +75,7 @@ impl ChatLine {
         // SAFETY: the loader's `text` views bytes readable for the call.
         let text = unsafe { line.text.as_str() }.unwrap_or_default();
         Self {
-            player: (line.player.0 != 0).then_some(line.player),
+            player: (line.account.0 != 0).then_some(line.account),
             entity: (line.entity.0 != 0).then_some(line.entity),
             kind: match line.kind {
                 abi::ChatLine::PLAYER => ChatKind::Player,
@@ -218,7 +218,7 @@ impl LoadMethods for crate::BaseLoad {
         };
         crate::load::hand_over(
             filter,
-            |user| (host.api().chat_filter)(host.handle(), run_chat::<F>, user),
+            |user| (host.api().chat_filter)(host.handle(), Some(run_chat::<F>), user),
             "chat filter",
         )
     }
@@ -248,7 +248,7 @@ mod tests {
     fn a_line_names_its_kind_and_no_sender_or_character_when_the_loader_gives_none() {
         let line = |player, entity, kind| abi::ChatLine {
             header: abi::Header::of::<abi::ChatLine>(),
-            player: PlayerKey::new(player),
+            account: PlayerKey::new(player),
             entity: Entity(entity),
             kind,
             loca: [0; 2],

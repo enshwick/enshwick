@@ -153,12 +153,12 @@ fn due(next: &AtomicU64, now: u64) -> bool {
 /// key; `None` while its player was not in the world yet.
 #[derive(Debug, Default)]
 pub(super) struct Rights {
-    sent: FxHashMap<u64, Option<u8>>,
+    sent: FxHashMap<u64, Option<u32>>,
 }
 
 impl Rights {
     /// Client `key` got the controls its player's `permissions` allow.
-    pub(super) fn sent(&mut self, key: u64, permissions: Option<u8>) {
+    pub(super) fn sent(&mut self, key: u64, permissions: Option<u32>) {
         self.sent.insert(key, permissions);
     }
 
@@ -230,7 +230,7 @@ mod tests {
         }
     }
 
-    fn player(key: u64, permissions: u8) -> PlayerInfo {
+    fn player(key: u64, permissions: u32) -> PlayerInfo {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,
@@ -238,7 +238,7 @@ mod tests {
             key: PlayerKey::new(key),
             permissions,
             name_len: 0,
-            name: [0; 64],
+            name: [0; 128],
         }
     }
 
@@ -254,7 +254,7 @@ mod tests {
             control(0, "look", ""),
             control(1, "other", "greet"),
         ];
-        // What each one's sheet lists: the mod's allow keeps `wipe` for admins.
+        // What the mod allows each: its allow keeps `wipe` for admins.
         let admin = ["greet".to_owned(), "wipe".to_owned()];
         let player = ["greet".to_owned()];
         assert_eq!(names(carried_for(&declared, 0, &admin)), ["greet", "wipe"]);

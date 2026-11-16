@@ -107,11 +107,7 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed, krate: &TokenStream) 
     let doc = schema_doc(&input.attrs);
     let shown: Vec<&syn::Field> = named.named.iter().filter(|f| !hidden(f)).collect();
     let entries = shown.iter().map(|f| {
-        let field = f
-            .ident
-            .as_ref()
-            .map(|i| i.unraw().to_string())
-            .unwrap_or_default();
+        let field = f.ident.as_ref().map_or_default(|i| i.unraw().to_string());
         let doc = schema_doc(&f.attrs);
         let ty = &f.ty;
         let new = if defaulted(f) {
@@ -149,7 +145,7 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed, krate: &TokenStream) 
         let count = shown.len();
         let fields = shown.iter().map(|f| {
             let field = &f.ident;
-            let label = field.as_ref().map(|i| i.unraw().to_string()).unwrap_or_default();
+            let label = field.as_ref().map_or_default(|i| i.unraw().to_string());
             let read = if defaulted(f) {
                 quote!(argument_or_default)
             } else {

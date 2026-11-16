@@ -23,8 +23,8 @@ macro_rules! __declare_exports {
 
         /// The ABI major this mod was built for.
         #[cfg_attr(not(test), unsafe(no_mangle))]
-        pub extern "system" fn enshwick_mod_abi() -> u32 {
-            ::core::primitive::u32::from($crate::abi::ABI_MAJOR)
+        pub extern "system" fn enshwick_mod_abi() -> u16 {
+            $crate::abi::ABI_MAJOR
         }
 
         /// The mod's manifest, or null when it does not build.
@@ -72,8 +72,8 @@ macro_rules! __declare_exports {
         pub unsafe extern "system" fn enshwick_mod_ready(
             _api: *const $crate::abi::HostApi,
             _me: $crate::abi::ModHandle,
-        ) {
-            $crate::__private::ready::<$ty>(&__ENSHWICK_INSTANCE);
+        ) -> $crate::abi::Status {
+            $crate::__private::ready::<$ty>(&__ENSHWICK_INSTANCE)
         }
     };
 }

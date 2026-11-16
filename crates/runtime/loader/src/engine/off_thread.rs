@@ -6,6 +6,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+/// The system's id of the calling thread, which the loader compares to tell
+/// the game's threads apart.
+#[cfg(windows)]
+pub(crate) fn current_thread() -> u32 {
+    // SAFETY: `GetCurrentThreadId` takes no arguments and cannot fail.
+    unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() }
+}
+
 /// Starts `work` on the thread `enshwick {what}`; false, with a warning
 /// naming `what`, when no thread starts.
 pub(crate) fn start(what: &str, work: impl FnOnce() + Send + 'static) -> bool {
@@ -97,6 +105,60 @@ mod tests {
             sent.lock().unwrap().send(found).unwrap();
         });
         got.recv_timeout(Duration::from_secs(10)).unwrap()
+    }
+
+    /// The loader's code outside its tests, file by file, below `src`.
+    fn shipped_sources() -> Vec<(std::path::PathBuf, String)> {
+        let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        let mut files = Vec::new();
+        while let Some(dir) = dirs.pop() {
+            for path in std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()) {
+                let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if path.extension().is_some_and(|e| e == "rs") && name != "tests.rs" {
+                    let text = std::fs::read_to_string(&path).unwrap();
+                    let shipped = match text.find("#[cfg(test)]\nmod tests {") {
+                        Some(at) => text[..at].to_owned(),
+                        None => text,
+                    };
+                    files.push((path, shipped));
+                }
+            }
+        }
+        files
+    }
+
+    /// A thread this helper does not start runs in the loader's tests with
+    /// a fuse scope of its own, so a test that drives it would not see what
+    /// it turned off.
+    #[test]
+    fn every_thread_the_loader_starts_goes_through_this_helper() {
+        let starts: Vec<_> = shipped_sources()
+            .into_iter()
+            .filter(|(path, _)| !path.ends_with("off_thread.rs"))
+            .filter(|(_, text)| {
+                let text = text.replace("off_thread::spawn(", "");
+                text.contains("thread::spawn(") || text.contains("thread::Builder")
+            })
+            .map(|(path, _)| path)
+            .collect();
+        assert!(
+            starts.is_empty(),
+            "start threads with off_thread: {starts:?}"
+        );
+    }
+
+    #[test]
+    fn a_fuse_blown_on_a_started_thread_is_off_for_the_test_that_started_it() {
+        static LAMP: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("started lamp");
+        let (done, ran) = mpsc::channel();
+        assert!(start("test lamp", move || {
+            LAMP.blow("a started thread");
+            done.send(()).unwrap();
+        }));
+        ran.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(LAMP.is_off());
     }
 
     #[test]

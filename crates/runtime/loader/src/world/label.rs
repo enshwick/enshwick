@@ -12,7 +12,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Str};
+use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameFilterFn, Str};
 
 use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
@@ -75,7 +75,7 @@ struct Layout {
 static LAYOUT: OnceLock<Result<Layout, &'static str>> = OnceLock::new();
 /// The switch of the mods' rename filters.
 static FUSE: Fuse = Fuse::new("rename filters");
-static FILTERS: Filters<RenameCallFn> = Filters::new(Feature::Renames);
+static FILTERS: Filters<RenameFilterFn> = Filters::new(Feature::Renames);
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     found(loader).as_ref().ok()
@@ -141,7 +141,7 @@ fn found(loader: &Loader) -> &'static Result<Layout, &'static str> {
 /// [`Sealed`] after init.
 pub(crate) fn register(
     owner: ModIndex,
-    callback: RenameCallFn,
+    callback: RenameFilterFn,
     user: *mut c_void,
 ) -> Result<(), Sealed> {
     FILTERS.register(owner, callback, user)
@@ -352,24 +352,17 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
     let call = RenameCall {
         header: Header::of::<RenameCall>(),
         entity: Entity(entity),
-        known: u8::from(player.is_some()),
-        player: player.unwrap_or(PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
-            slot: u32::MAX,
-            entity: Entity(0),
-            key: enshwick_core::PlayerKey::new(0),
-            permissions: 0,
-            name_len: 0,
-            name: [0; 64],
-        }),
+        player: player
+            .as_ref()
+            .map_or(core::ptr::null(), core::ptr::from_ref),
         text: Str::new(&name),
     };
-    // SAFETY: the filter is the mod's registered `RenameCallFn` in its DLL,
+    // SAFETY: the filter is the mod's registered `RenameFilterFn` in its DLL,
     // which stays loaded for the process, called with a `RenameCall` that
     // outlives the call and the mod's own `user` word; the mod's safe layer
     // catches its panics.
     let refused = FILTERS
-        .refuser(|filter, user| unsafe { filter(&raw const call, user) } != 0)
+        .refuser(|filter, user| unsafe { filter(&raw const call, user) } != enshwick_core::abi::FILTER_REFUSE)
         .is_some();
     if refused {
         crate::log!(INFO, "rename of entity {entity} refused");

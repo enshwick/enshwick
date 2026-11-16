@@ -4,7 +4,9 @@
 use crate::engine::fuse::{Fuse, Off};
 use crate::engine::interface_parts::Part;
 
-use super::{DIALOGS_FUSE, HUD_FUSE, INTERFACE_FUSE, MODS_SCREEN_FUSE, dialog, mods};
+use super::{
+    DIALOGS_FUSE, HUD_FUSE, INTERFACE_FUSE, MODS_SCREEN_FUSE, dialog, item_slots, mods, tooltips,
+};
 
 /// The feature of each of the interface's optional parts, in the order of
 /// [`Part::ALL`]: its links and its work run under it.
@@ -15,8 +17,9 @@ pub(super) static PART_FUSES: [&Fuse; Part::ALL.len()] =
 const WITH_INTERFACE: &str = "the interface it runs in is off";
 
 /// Turns off with the interface the parts only it serves: the menus' Mods
-/// entries, which open a screen it draws, the Mods screen and the mod
-/// control keys, which it reads each frame.
+/// entries, which open a screen it draws, the Mods screen, the item slots,
+/// the hovered slot and the tooltip lines, which draw or turn in its frame,
+/// and the mod control keys, which it reads each frame.
 #[cold]
 #[inline(never)]
 pub(super) fn parts_off_with_interface() {
@@ -24,6 +27,9 @@ pub(super) fn parts_off_with_interface() {
         &mods::MAIN_MENU_FUSE,
         &mods::PAUSE_MENU_FUSE,
         &MODS_SCREEN_FUSE,
+        &item_slots::SLOTS_FUSE,
+        &item_slots::HOVER_FUSE,
+        &tooltips::FUSE,
     ] {
         fuse.turn_off(&Off::fault(fuse.feature(), WITH_INTERFACE));
     }

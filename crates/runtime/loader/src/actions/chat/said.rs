@@ -121,7 +121,7 @@ pub(crate) fn filter(player: u64, loca: [u32; 2], text: String, max_text: usize)
     let dropped = FILTERS.ask(|callback| {
         let line = ChatLine {
             header: Header::of::<ChatLine>(),
-            player: PlayerKey::new(player),
+            account: PlayerKey::new(player),
             entity,
             kind: ChatLine::PLAYER,
             loca,
@@ -219,7 +219,7 @@ pub(crate) fn raise(loader: &Loader) {
             .map_or(Entity(0), |p| p.entity);
         let line = ChatLine {
             header: Header::of::<ChatLine>(),
-            player: PlayerKey::new(said.player),
+            account: PlayerKey::new(said.player),
             entity,
             kind: said.kind,
             loca: said.loca,

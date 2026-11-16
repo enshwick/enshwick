@@ -415,7 +415,7 @@ impl Map {
     /// [`WorldError::NotLoaded`] while the loader still reads the scene,
     /// a second or two after the first call: ask again later;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] while no world runs or when the scene
+    /// step; [`WorldError::Unavailable`] while no world runs or when the scene
     /// does not read on this game build.
     ///
     /// # Examples
@@ -452,7 +452,8 @@ impl Map {
 
     fn scan(self, keep: impl Fn([f64; 3]) -> bool) -> Result<Vec<MapMarker>, WorldError> {
         let host = self.0.host;
-        let size = u32::try_from(size_of::<MapMarkerInfo>()).map_err(|_| WorldError::Missing)?;
+        let size =
+            u32::try_from(size_of::<MapMarkerInfo>()).map_err(|_| WorldError::Unavailable)?;
         let mut capacity = 1024u32;
         let infos = loop {
             let mut infos = vec![MapMarkerInfo::EMPTY; capacity as usize];
@@ -491,7 +492,7 @@ impl Map {
     ///
     /// [`WorldError::NotLoaded`] while the loader still reads the scene:
     /// ask again later; [`WorldError::WrongThread`] off the server's game
-    /// thread or inside a step; [`WorldError::Missing`] while no world
+    /// thread or inside a step; [`WorldError::Unavailable`] while no world
     /// runs, for a scene without a map, or when the scene does not read on
     /// this game build.
     ///
@@ -510,7 +511,7 @@ impl Map {
         let host = self.0.host;
         let mut info = MapFrameInfo::EMPTY;
         WorldError::from_status((host.api().map_frame)(host.handle(), &raw mut info))?;
-        MapFrame::from_info(&info).ok_or(WorldError::Missing)
+        MapFrame::from_info(&info).ok_or(WorldError::Unavailable)
     }
 
     /// Uncovers the fog of war of `player` in the circle of `radius` metres
@@ -520,13 +521,15 @@ impl Map {
     /// no fog: the loader sends the circle to the loader on the player's
     /// client, which hands it to the game's own reveal within a frame, and
     /// the character's save keeps it, in every world the character enters.
-    /// A client without Enshwick is not reached, and the mod decides what
-    /// to tell whoever asked. Returns once the circle is sent; any thread,
-    /// on a dedicated server or a client that hosts.
+    /// On a client that hosts, the hosting player's own fog uncovers on that
+    /// client, with no message. A client without Enshwick is not reached,
+    /// and the mod decides what to tell whoever asked. Returns once the
+    /// circle is sent; any thread, on a dedicated server or a client that
+    /// hosts.
     ///
     /// # Errors
     ///
-    /// [`WorldError::Missing`] for a player whose client takes no messages
+    /// [`WorldError::Unavailable`] for a player whose client takes no messages
     /// from the loader, as one without Enshwick or not online, and on a
     /// client in another's game; [`WorldError::Refused`] for a place that
     /// is not finite, a radius that is not above 0 and at most 100 000
@@ -604,7 +607,7 @@ impl Map {
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] before a world runs or on a game build
+    /// step; [`WorldError::Unavailable`] before a world runs or on a game build
     /// without waypoints.
     ///
     /// # Examples
@@ -612,7 +615,7 @@ impl Map {
     /// See the [module](self).
     #[script]
     pub fn waypoint(self, player: Entity) -> Result<Option<[f64; 3]>, WorldError> {
-        let waypoint = self.0.waypoint.as_ref().ok_or(WorldError::Missing)?;
+        let waypoint = self.0.waypoint.as_ref().ok_or(WorldError::Unavailable)?;
         let host = self.0.host;
         WorldError::from_status((host.api().world_quiet)(host.handle()))?;
         let Some(data) = self.live(player, waypoint.ty)? else {
@@ -673,7 +676,7 @@ impl Map {
     pub fn snapshot(self, altars: Option<Altars>) -> Result<MapSnapshot, WorldError> {
         let world = self.0.world;
         let frame = match self.frame() {
-            Err(WorldError::Missing) => Ok(None),
+            Err(WorldError::Unavailable) => Ok(None),
             found => found.map(Some),
         };
         let markers = self.markers();
@@ -691,7 +694,7 @@ impl Map {
         let mut players = Vec::with_capacity(online.len());
         for player in online {
             let waypoint = match self.waypoint(player.entity) {
-                Err(WorldError::Missing) => None,
+                Err(WorldError::Unavailable) => None,
                 found => found?,
             };
             players.push(MapPlayer {
@@ -703,7 +706,7 @@ impl Map {
         }
         Ok(MapSnapshot {
             players,
-            altars: altars.map(snapshot_altars).unwrap_or_default(),
+            altars: altars.map_or_default(snapshot_altars),
             markers,
             frame,
         })
@@ -729,6 +732,6 @@ fn snapshot_altars(altars: Altars) -> Vec<MapAltar> {
 }
 
 /// `guid`, unless it is all zero, which the game writes for none.
-fn set(guid: [u8; 16]) -> Option<Guid> {
-    (guid != [0; 16]).then_some(Guid(guid))
+fn set(guid: Guid) -> Option<Guid> {
+    (guid != Guid::NIL).then_some(guid)
 }

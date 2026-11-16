@@ -144,12 +144,12 @@ side = "both""#
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         // SAFETY: the fake table remains valid throughout its installation.
-        let register = unsafe { &*loader.api() }.client_game_event;
+        let register = unsafe { &*loader.api() }.subscribe_client_game_event;
         assert_eq!(
             register(
                 enshwick::abi::ModHandle(0),
                 42,
-                unused,
+                Some(unused),
                 core::ptr::null_mut()
             ),
             Status::TOO_LATE,
@@ -186,9 +186,9 @@ side = "both""#
         use enshwick::abi::ModHandle;
         let loader = enshwick::test::FakeHost::new().side(Side::SERVER).install();
         // SAFETY: the fake's table is readable and lives for the installation.
-        let register = unsafe { &*loader.api() }.client_game_event;
+        let register = unsafe { &*loader.api() }.subscribe_client_game_event;
         assert_eq!(
-            register(ModHandle(0), 42, unused, core::ptr::null_mut()),
+            register(ModHandle(0), 42, Some(unused), core::ptr::null_mut()),
             Status::OK
         );
         assert_eq!(loader.raise_client_game_event(42, &[0; 8]), 0);
@@ -199,14 +199,14 @@ side = "both""#
         use enshwick::abi::ModHandle;
         let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
         // SAFETY: the fake's table is readable and lives for the installation.
-        let register = unsafe { &*loader.api() }.client_game_event;
+        let register = unsafe { &*loader.api() }.subscribe_client_game_event;
         assert_eq!(
-            register(ModHandle(0), 0, unused, core::ptr::null_mut()),
+            register(ModHandle(0), 0, Some(unused), core::ptr::null_mut()),
             Status::OK
         );
         for _ in 0..100 {
             assert_eq!(
-                register(ModHandle(0), 42, unused, core::ptr::null_mut()),
+                register(ModHandle(0), 42, Some(unused), core::ptr::null_mut()),
                 Status::OK
             );
         }
@@ -224,9 +224,9 @@ side = "both""#
                 unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
             assert_eq!(status, Status::OK, "{:?}", loader.logs());
             // SAFETY: the fake's table is readable and lives for the installation.
-            let register = unsafe { &*loader.api() }.client_game_event;
+            let register = unsafe { &*loader.api() }.subscribe_client_game_event;
             assert_eq!(
-                register(ModHandle(0), 42, unused, core::ptr::null_mut()),
+                register(ModHandle(0), 42, Some(unused), core::ptr::null_mut()),
                 Status::TOO_LATE,
                 "{side:?}"
             );
@@ -237,12 +237,12 @@ side = "both""#
     fn client_event_api_refuses_an_older_or_short_loader_table() {
         use enshwick::abi::{ABI_MINOR, HostApi, ModHandle};
         let loader = enshwick::test::FakeHost::new().install();
-        for minor in [ABI_MINOR - 1, ABI_MINOR] {
+        for minor in [ABI_MINOR.saturating_sub(1), ABI_MINOR] {
             // SAFETY: the fake table is readable for its full size.
             let mut old = unsafe { *loader.api() };
             old.header.abi_minor = minor;
             old.header.size =
-                u32::try_from(core::mem::offset_of!(HostApi, client_game_event)).unwrap();
+                u32::try_from(core::mem::offset_of!(HostApi, subscribe_client_game_event)).unwrap();
             let old = Box::leak(Box::new(old));
             // SAFETY: this aligned table is readable for its declared prefix
             // and remains valid and unchanged for the rest of the process.

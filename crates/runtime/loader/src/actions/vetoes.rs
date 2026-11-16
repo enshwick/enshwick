@@ -20,7 +20,7 @@ use core::ops::ControlFlow;
 use std::sync::OnceLock;
 
 use enshwick_core::abi::{
-    BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Str,
+    BuildCheck, BuildFilterFn, CraftCheck, CraftFilterFn, Header, HookFlags, Str,
 };
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
@@ -39,8 +39,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::building::CURSOR_NO_PERMISSION.id(),
 ];
 
-static CRAFT_FILTERS: Filters<CraftCheckFn> = Filters::new(Feature::Vetoes);
-static BUILD_FILTERS: Filters<BuildCheckFn> = Filters::new(Feature::Vetoes);
+static CRAFT_FILTERS: Filters<CraftFilterFn> = Filters::new(Feature::Vetoes);
+static BUILD_FILTERS: Filters<BuildFilterFn> = Filters::new(Feature::Vetoes);
 static CRAFT: OnceLock<CraftLayout> = OnceLock::new();
 static BUILD: OnceLock<BuildLayout> = OnceLock::new();
 /// The switch of the craft filters, and of the screen of craft requests
@@ -77,7 +77,7 @@ struct BuildLayout {
 pub(crate) fn register_craft(
     loader: &Loader,
     owner: ModIndex,
-    callback: CraftCheckFn,
+    callback: CraftFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     let available = || craft_layout(loader).is_some();
@@ -92,7 +92,7 @@ pub(crate) fn register_craft(
 pub(crate) fn register_build(
     loader: &Loader,
     owner: ModIndex,
-    callback: BuildCheckFn,
+    callback: BuildFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     let available = || {
@@ -141,11 +141,23 @@ pub(crate) fn crafting() -> bool {
     CRAFT.get().is_some()
 }
 
-/// Seals the craft filters and finds the craft request's layout, before any
-/// link: game events link the event move when craft requests are screened.
-/// Craft requests are screened whenever the build reads them, as any recipe
-/// may be disabled later.
+/// Lists the craft filters off, by the event stream entry `id` the build
+/// lacks for `reason`, when they screen craft requests: only the copy of the
+/// server's event streams screens them. Wanted with no filter too: recipe
+/// rules and the admin command may disable a recipe at any world load, and a
+/// client may host one.
+pub(crate) fn unscreened(loader: &Loader, id: &str, reason: &str) {
+    if crafting() {
+        let _off = loader.fuse_off(&CRAFT_FUSE, id, reason);
+    }
+}
+
+/// Seals the build and craft filters and finds the craft request's layout,
+/// before any link: game events link the event move when craft requests are
+/// screened. Craft requests are screened whenever the build reads them, as
+/// any recipe may be disabled later.
 pub(crate) fn seal(loader: &Loader) {
+    let _builds = BUILD_FILTERS.seal();
     let crafts = CRAFT_FILTERS.seal();
     if let Some(layout) = craft_layout(loader) {
         let _first = CRAFT.set(layout);
@@ -161,10 +173,10 @@ pub(crate) fn seal(loader: &Loader) {
     }
 }
 
-/// Seals the build filters and links the cursor check when a mod registered
-/// one.
+/// Links the cursor check when a mod registered a build filter before the
+/// seal phase.
 pub(crate) fn link(loader: &'static Loader) {
-    let builds = BUILD_FILTERS.seal();
+    let builds = BUILD_FILTERS.sealed().unwrap_or_default();
     if builds.is_empty() {
         return;
     }
@@ -243,7 +255,7 @@ unsafe fn request(layout: &CraftLayout, payload: *mut u8) {
             // SAFETY: a filter's mod runs, so its DLL that holds the callback
             // stays loaded; it gets the user pointer its mod registered, and
             // `call` lives on this stack for the call.
-            .refuser(|filter, user| unsafe { filter(&raw const call, user) != 0 })
+            .refuser(|filter, user| unsafe { filter(&raw const call, user) != enshwick_core::abi::FILTER_REFUSE })
             .is_none();
     if !allowed {
         // SAFETY: the event is a `CraftRecipeEvent` writable for its reflected
@@ -337,12 +349,12 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
     let mut reason = Str::new("");
     let call = BuildCheck {
         header: Header::of::<BuildCheck>(),
-        player: enshwick_core::Entity(player),
+        character: enshwick_core::Entity(player),
         item: enshwick_core::ItemId::new(item),
         // SAFETY: `transform` is non-null (the null checks return first) and
         // the check's live cursor transform (the caller's contract), which
         // starts with its 32.32 position, three `i64`.
-        position: unsafe { read_at(transform.cast(), 0) },
+        position: enshwick_core::ecs::metres(unsafe { read_at::<[i64; 3]>(transform.cast(), 0) }),
         reason: &raw mut reason,
     };
     // SAFETY: `call.reason` points at `reason`, live on this stack for the
@@ -357,7 +369,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
                 // live, on the thread running that system (the caller's
                 // contract), all `is_world` asks for.
                 || unsafe { engine.is_world(system, crate::engine::world::server_world()) };
-            crate::actions::build_reasons::refused(filter.owner, call.player, text, server);
+            crate::actions::build_reasons::refused(filter.owner, call.character, text, server);
         }
         // SAFETY: `flags` is non-null (the null checks return first) and the
         // check's live `u32` flags word, which nothing else writes during the
@@ -374,9 +386,9 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
 ///
 /// - `call.reason` is valid for writes of one `Str` throughout the call.
 unsafe fn refuser<'a>(
-    filters: &'a Filters<BuildCheckFn>,
+    filters: &'a Filters<BuildFilterFn>,
     call: &BuildCheck,
-) -> Option<&'a Registered<BuildCheckFn>> {
+) -> Option<&'a Registered<BuildFilterFn>> {
     filters
         .ask(|filter| {
             // SAFETY: the caller keeps `reason` writable for the call.
@@ -384,7 +396,9 @@ unsafe fn refuser<'a>(
             // SAFETY: a filter's mod runs, so its DLL that holds the callback
             // stays loaded; it gets the user pointer its mod registered, and
             // `call` and the reason it points at live for the call.
-            if filter.call(|filter, user| unsafe { filter(call, user) != 0 }) {
+            if filter.call(|filter, user| unsafe {
+                filter(call, user) != enshwick_core::abi::FILTER_REFUSE
+            }) {
                 ControlFlow::Continue(())
             } else {
                 ControlFlow::Break(())
@@ -431,6 +445,48 @@ mod tests {
     }
 
     #[test]
+    fn a_build_without_the_event_streams_lists_the_craft_filters_off_by_the_entry() {
+        let loader = crate::start::tests::bare_loader();
+        let _first = CRAFT.set(LAYOUT);
+        unscreened(&loader, "ecs.event_streams", "absent");
+        assert!(CRAFT_FUSE.is_off());
+        let off = crate::base::off_reason(&CRAFT_FUSE);
+        assert!(
+            off.as_deref()
+                .is_some_and(|r| r.starts_with("ecs.event_streams")),
+            "{off:?}"
+        );
+    }
+
+    #[test]
+    fn a_build_whose_event_move_does_not_link_lists_the_craft_filters_off_by_the_move() {
+        use crate::engine::pinned::ecs;
+        let layout = [
+            ecs::EVENT_STREAMS,
+            ecs::EVENT_STREAM_COUNT,
+            ecs::EVENT_STREAM_SIZE,
+            ecs::EVENT_STREAM_USED,
+            ecs::EVENT_RECORD_SIZE,
+            ecs::EVENT_RECORD_HEADER,
+            ecs::EVENT_RECORD_ALIGN,
+        ]
+        .map(|constant| (constant, 8));
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::pinning_loader(
+            enshwick_core::abi::Side::SERVER,
+            &[],
+            &layout,
+        )));
+        let _first = CRAFT.set(LAYOUT);
+        crate::base::game_events::link(loader);
+        let off = crate::base::off_reason(&CRAFT_FUSE);
+        assert!(
+            off.as_deref()
+                .is_some_and(|r| r.starts_with(ecs::EVENT_MERGE.id())),
+            "{off:?}"
+        );
+    }
+
+    #[test]
     fn a_build_without_the_craft_request_lists_the_craft_filters_off() {
         seal(&crate::start::tests::bare_loader());
         assert!(CRAFT_FUSE.is_off());
@@ -448,12 +504,12 @@ mod tests {
             let reason = unsafe { (*call).reason };
             // SAFETY: the check's reason points at a `Str` on the test's stack.
             unsafe { reason.write(Str::new("chatty but allowing")) };
-            1
+            enshwick_core::abi::FILTER_PASS
         }
         unsafe extern "system" fn silent(_: *const BuildCheck, _: *mut c_void) -> u8 {
-            0
+            enshwick_core::abi::FILTER_REFUSE
         }
-        let filters = Filters::<BuildCheckFn>::new(Feature::Vetoes);
+        let filters = Filters::<BuildFilterFn>::new(Feature::Vetoes);
         let (first, second) = (
             core::ptr::without_provenance_mut(1),
             core::ptr::without_provenance_mut(2),
@@ -465,9 +521,9 @@ mod tests {
         let mut reason = Str::EMPTY;
         let call = BuildCheck {
             header: Header::of::<BuildCheck>(),
-            player: enshwick_core::Entity(1),
+            character: enshwick_core::Entity(1),
             item: enshwick_core::ItemId::new(2),
-            position: [0; 3],
+            position: [0.0; 3],
             reason: &raw mut reason,
         };
         // SAFETY: `call.reason` points at `reason` on this stack for the call.

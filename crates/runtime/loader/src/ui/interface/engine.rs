@@ -157,7 +157,7 @@ type NavInputFn =
     unsafe extern "system" fn(out: *mut [u64; 2], config: *const u8, flag: u8) -> *mut [u64; 2];
 type NavSetFn = unsafe extern "system" fn(nav: Ptr, input: *const [u64; 2]);
 type NavPushFn = unsafe extern "system" fn(context: usize, nav: Ptr) -> usize;
-type NavEndFn = unsafe extern "system" fn(nav: Ptr, flag: u32);
+type NavEndFn = unsafe extern "system" fn(nav: Ptr, flag: u32) -> u8;
 type LabelNewFn =
     unsafe extern "system" fn(label: Ptr, text: *const UiText, style: usize, wrap: u8) -> Ptr;
 type ButtonFn = unsafe extern "system" fn(config: Ptr, text: *const UiText) -> u8;
@@ -975,5 +975,5 @@ pub(in crate::ui::interface) use looks::Icon;
 use looks::{BUNDLE, Legal, Looks, looks, path, sound};
 pub(super) use rows::Row;
 pub(super) use scroll::Scroll;
-pub(super) use text_field::{TextBuffer, Typed};
+pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame};
 pub(super) use widgets::Takes;

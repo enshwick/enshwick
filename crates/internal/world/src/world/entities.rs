@@ -1,4 +1,5 @@
 use crate::Entity;
+use crate::abi::EntityPlace;
 
 use super::{ComponentType, ContainerKinds, Placed, World, WorldError};
 
@@ -74,16 +75,13 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::actions::{Action, Outcome};
     /// use enshwick::world::ContainerKinds;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
-    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    ///     actions.add(Action::new("chests", "Count the built chests"), move |_request| {
-    ///         let built = world.containers(ContainerKinds::default()).len();
-    ///         Outcome::done(format!("{built} built containers"))
-    ///     })
+    ///     // Run on the game thread now and then: counts the built containers.
+    ///     let _built = move || world.containers(ContainerKinds::default()).len();
+    ///     Ok(())
     /// }
     /// ```
     #[must_use]
@@ -91,8 +89,7 @@ impl World {
     pub fn containers(self, kinds: ContainerKinds) -> Vec<Placed> {
         self.0
             .containers
-            .map(|containers| containers.of(self, kinds))
-            .unwrap_or_default()
+            .map_or_default(|containers| containers.of(self, kinds))
     }
 
     /// Asks the server to destroy `entity` after the systems of the next
@@ -103,7 +100,7 @@ impl World {
     /// [`WorldError::Refused`] for a player's character,
     /// [`WorldError::Gone`] for an entity not in the world,
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] where no server runs, on a build without the
+    /// [`WorldError::Unavailable`] where no server runs, on a build without the
     /// command, or on any other refusal.
     ///
     /// # Examples
@@ -121,5 +118,31 @@ impl World {
             (self.0.host.api().destroy)(self.0.host.handle(), entity),
             WorldError::Gone,
         )
+    }
+}
+
+impl World {
+    /// Every entity with a component of type `hash` and a place in the
+    /// world, as the loader answers.
+    pub(crate) fn placed_with(self, hash: u32) -> Result<Vec<EntityPlace>, WorldError> {
+        let entities = self.0.host.api().entities;
+        let mut capacity = 1024u32;
+        loop {
+            let mut places = vec![EntityPlace::default(); capacity as usize];
+            let mut count = 0u32;
+            let status = entities(
+                self.0.host.handle(),
+                hash,
+                places.as_mut_ptr(),
+                capacity,
+                &raw mut count,
+            );
+            WorldError::from_status(status)?;
+            if count <= capacity {
+                places.truncate(count as usize);
+                return Ok(places);
+            }
+            capacity = count;
+        }
     }
 }

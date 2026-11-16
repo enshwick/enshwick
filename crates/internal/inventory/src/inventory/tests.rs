@@ -46,10 +46,10 @@ fn batches_are_checked_against_the_game_limits() {
     assert_eq!(Batch::new().with(renew).check(), Ok(()));
     let raw = renew.raw();
     assert_eq!(
-        (raw.kind, raw.target, raw.other & 0xffff_ffff),
-        (InventoryOp::RENEW, SlotRef::new(Entity(41), 2).0, 40)
+        (raw.kind, raw.target, raw.slot, raw.other),
+        (InventoryOp::RENEW, Entity(41), 2, Entity(40))
     );
-    assert_eq!(raw.other >> 32, u64::from(1.0f32.to_bits()));
+    assert!((raw.fill - 1.0).abs() < f32::EPSILON);
     assert_eq!(
         Batch::new()
             .with(Op::Renew {
@@ -143,8 +143,8 @@ fn operations_become_the_loaders_records() {
     }
     .raw();
     assert_eq!(
-        (raw.kind, raw.target, raw.other, raw.count),
-        (InventoryOp::MOVE_SLOT, slot.0, 2, 3)
+        (raw.kind, raw.target, raw.slot, raw.other, raw.count),
+        (InventoryOp::MOVE_SLOT, slot.inventory(), 2, Entity(2), 3)
     );
     let special = Op::MoveAll {
         from: Entity(40),

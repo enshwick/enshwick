@@ -4,7 +4,7 @@
 use enshwick_core::__fake::IMAGE_FIELDS;
 use enshwick_core::__fake::ids;
 use enshwick_core::abi::Header;
-use enshwick_core::abi::ItemData;
+use enshwick_core::abi::ItemTypeInfo;
 use enshwick_core::abi::ResourceKey;
 use enshwick_core::abi::Status;
 use enshwick_core::content::Guid;
@@ -14,6 +14,7 @@ use crate::test::{FakeHost, Installed, table};
 pub(crate) mod rates;
 #[cfg(feature = "typed")]
 pub(crate) mod removal;
+pub(crate) mod template_names;
 pub(crate) mod templates;
 
 /// The facts the builder holds, so a test lays out its blobs by the same
@@ -251,23 +252,23 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::ItemData;
+    /// use enshwick::abi::ItemTypeInfo;
     ///
-    /// let loader = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, ItemData::HAS_PIDE).install();
+    /// let loader = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, ItemTypeInfo::HAS_PIDE).install();
     /// # let _ = loader;
     /// ```
     #[must_use]
     pub fn item(mut self, item: enshwick_core::ItemId, max_stack: u16, flags: u32) -> Self {
         self.items.insert(
             item.get(),
-            ItemData {
-                header: Header::of::<ItemData>(),
+            ItemTypeInfo {
+                header: Header::of::<ItemTypeInfo>(),
                 id: item,
                 max_stack,
                 category: 0,
                 rarity: 0,
                 flags,
-                placed_entity: [0; 16],
+                placed_entity: Guid::NIL,
             },
         );
         self
@@ -296,11 +297,11 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// let host = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, 0).item_places(enshwick::ItemId::new(0x5e01), [0x3a; 16]);
+    /// let host = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, 0).item_places(enshwick::ItemId::new(0x5e01), enshwick::content::Guid([0x3a; 16]));
     /// let _loader = host.install();
     /// ```
     #[must_use]
-    pub fn item_places(mut self, item: enshwick_core::ItemId, template: [u8; 16]) -> Self {
+    pub fn item_places(mut self, item: enshwick_core::ItemId, template: Guid) -> Self {
         if let Some(data) = self.items.get_mut(&item.get()) {
             data.placed_entity = template;
         }
@@ -672,19 +673,20 @@ impl Installed {
         table::with(Vec::new(), |s| s.rebuilds.clone())
     }
 
-    /// How many patch outputs the fake's builds got as bytes of the patch's
-    /// own, which stay for the process, rather than in a buffer it lent
-    /// ([`HostApi::resource_buffer`](enshwick_core::abi::HostApi::resource_buffer)).
+    /// How many buffers the fake lent patch outputs
+    /// ([`HostApi::resource_buffer`](enshwick_core::abi::HostApi::resource_buffer))
+    /// and has not freed yet: none once its builds end, as the loader frees
+    /// every buffer but the one the game's first build keeps.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.kept_outputs(), 0);
+    /// assert_eq!(loader.lent_buffers(), 0);
     /// ```
     #[must_use]
-    pub fn kept_outputs(&self) -> usize {
-        table::with(0, |s| s.kept_outputs)
+    pub fn lent_buffers(&self) -> usize {
+        table::with(0, |s| s.lent_buffers)
     }
 
     /// Builds the served resource `key` from `base` with the mod's patches, in order, as
@@ -701,7 +703,7 @@ impl Installed {
     /// use enshwick::abi::{ResourceKey, Status};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let key = ResourceKey { guid: [0x3a; 16], type_hash: 0xb5ce_8765, part: 0 };
+    /// let key = ResourceKey { guid: enshwick::abi::Guid([0x3a; 16]), type_hash: 0xb5ce_8765, part: 0 };
     /// assert_eq!(loader.build_resource(&key, &[]), Err(Status::MISSING));
     /// ```
     pub fn build_resource(&self, key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
@@ -816,7 +818,6 @@ impl Installed {
         table::with(None, |s| s.content_renames.clone())
             .unwrap_or_default()
             .into_iter()
-            .map(|(from, to)| (Guid(from), Guid(to)))
             .collect()
     }
 }

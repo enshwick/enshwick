@@ -99,11 +99,11 @@ mod tests {
         );
         loader.set_daytime(enshwick::abi::DaytimeInfo {
             header: enshwick::abi::Header::of::<enshwick::abi::DaytimeInfo>(),
-            time: 12 * 3_600_000_000_000,
-            day_start: 6 * 3_600_000_000_000,
-            day_end: 22 * 3_600_000_000_000,
-            day_length: 1_800_000_000_000,
-            night_length: 720_000_000_000,
+            time_ns: 12 * 3_600_000_000_000,
+            day_start_ns: 6 * 3_600_000_000_000,
+            day_end_ns: 22 * 3_600_000_000_000,
+            day_length_ns: 1_800_000_000_000,
+            night_length_ns: 720_000_000_000,
             speed: 1.0,
             flags: enshwick::abi::DaytimeInfo::DAY,
         });

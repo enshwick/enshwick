@@ -66,6 +66,26 @@ impl ModRecord {
         crate::base::worlds::view_schema(&self.settings_files.relock())
     }
 
+    /// Takes its report that its feature `name` is off for `off`, or on when
+    /// `off` is `None`, for the status summary, the Mods screen and the off
+    /// line at join; logs the change, if any. It locks the texts, then the
+    /// features, from any thread a build or a mod's call runs on, so no
+    /// code holds the features while it locks the texts.
+    pub(crate) fn report_feature(&self, name: &str, off: Option<&str>) {
+        let texts = self.texts.relock();
+        let changed =
+            crate::engine::features::report(&mut self.features.relock(), name, off, texts.as_ref());
+        drop(texts);
+        if let Some(line) = changed {
+            let level = if off.is_some() {
+                Level::WARN
+            } else {
+                Level::INFO
+            };
+            crate::engine::log::write(level, &self.id, &line);
+        }
+    }
+
     /// Its folder in `mods/`, which holds its installation hold.
     pub(crate) fn folder(&self) -> &str {
         let file = self.file.strip_prefix("mods/").unwrap_or(&self.file);
@@ -200,12 +220,15 @@ pub(crate) struct Loader {
     pub(crate) settings_problems: Vec<String>,
     /// A newer Enshwick release, once the release check found one.
     pub(crate) newer_release: OnceLock<crate::base::releases::Release>,
+    /// Set once the signature check finds a loader file without the release
+    /// signature.
+    pub(crate) unofficial: AtomicBool,
     /// The code patches a thread kept out at arming, tried again later.
     pub(crate) retry: crate::engine::retry::Retry,
     /// The mods that did not load, shown as off with their reason.
     pub(crate) skipped: Vec<crate::base::resolve::Skipped>,
     /// Every part of the loader's layers, which the start hands down.
-    pub(crate) parts: crate::engine::parts::Parts,
+    pub(crate) parts: &'static crate::engine::parts::Parts,
 }
 
 /// Wires every armed chain of the running loader past the mods that are off
@@ -263,7 +286,7 @@ pub(crate) fn linked<T>(found: &'static OnceLock<T>) -> Option<(&'static Loader,
 }
 
 /// Where one of the loader's detours goes, and how the code there is
-/// checked before [`Loader::link_feature`] links it.
+/// checked before [`Loader::link_fused`] links it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Target<'a> {
     /// A build table symbol, whose code [`Loader::code_holds`] checks.
@@ -372,19 +395,6 @@ impl Loader {
         ])
     }
 
-    /// [`Loader::link_fused`] for the feature named `feature`, the one
-    /// [`Fuse::named`] keeps for the name.
-    pub(crate) fn link_feature<F: Copy>(
-        &self,
-        feature: &str,
-        target: Target<'_>,
-        next: &'static Next<F>,
-        detour: F,
-        flags: HookFlags,
-    ) -> bool {
-        self.link_fused(Fuse::named(feature), target, next, detour, flags)
-    }
-
     /// Links one of the loader's own detours of `feature` on `target`, ahead
     /// of every mod's link there, after checking the target: a table
     /// symbol's code must hold by [`Loader::code_holds`]. A feature arms all
@@ -490,13 +500,6 @@ impl Loader {
     }
 
     /// Turns `feature` off on this build because its entry `id` failed for
-    /// `reason`, by [`Loader::fuse_off`]. Always false, for the caller to
-    /// return.
-    pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
-        self.fuse_off(Fuse::named(feature), id, reason)
-    }
-
-    /// Turns `feature` off on this build because its entry `id` failed for
     /// `reason`, by [`Fuse::turn_off`]: one warning that names the build, the
     /// feature off on the Mods screen and in the status summary, and its
     /// links wired past. Always false, for the caller to return.
@@ -531,7 +534,7 @@ impl Loader {
     /// loader's own links never are. The one rule [`is_off`] and
     /// [`bypassed`] follow too; only atomic loads, for hook calls.
     #[inline]
-    fn passed(&self, owner: ModIndex, waiting: bool) -> bool {
+    pub(crate) fn passed(&self, owner: ModIndex, waiting: bool) -> bool {
         owner != ModIndex::LOADER
             && self.mods.get(owner.get()).is_none_or(|m| {
                 m.off.load(Ordering::Acquire) || (waiting && m.waiting.load(Ordering::Acquire))

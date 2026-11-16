@@ -15,6 +15,7 @@ use enshwick_core::__private::rules::{patch_fits, spans_overlap as overlaps};
 use enshwick_core::abi::HookFlags;
 
 use crate::engine::chains::LinkError;
+use crate::engine::fuse::Fuse;
 use rustc_hash::FxHashMap;
 
 use crate::engine::loader::{Loader, Target};
@@ -35,20 +36,22 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::recipe::LIMIT_STOP.id(),
     pinned::recipe::LIST_LOOKUP.id(),
 ];
-/// The bytes the stop block's replacement needs: `inc r13` and a `jmp`.
-const JUMP_LEN: usize = 8;
+
+mod stop;
+pub(crate) use stop::stop_len;
+use stop::{MOST_STOP, stop_replacement};
 
 /// The feature of a mod's patch: every patch of a mod is one feature.
-pub(crate) const WHOLE_MOD: &str = "";
+pub(crate) const WHOLE_MOD: Option<&'static Fuse> = None;
 
 /// A patch of game code, registered during init.
 #[derive(Clone, Debug)]
 pub(crate) struct CodePatch {
     /// The owning mod's index, or [`ModIndex::LOADER`].
     pub(crate) owner: ModIndex,
-    /// The feature of its owner it serves, empty for a mod: the patches of
-    /// one feature go in together, so a skipped one turns off only that.
-    pub(crate) feature: &'static str,
+    /// The loader feature it serves, none for a mod's: the patches of one
+    /// feature go in together, so a skipped one turns off only that.
+    pub(crate) feature: Option<&'static Fuse>,
     /// The first byte.
     pub(crate) address: usize,
     /// What the bytes must read at arming.
@@ -476,8 +479,10 @@ pub(crate) fn check(
 /// skipped one, and sets waiting every patch to be written whose feature has
 /// a waiting one: a feature's patches go in together.
 pub(crate) fn skip_with_feature(patches: &[CodePatch], verdicts: &mut [Verdict]) {
-    let key = |patch: &CodePatch| (patch.owner, patch.feature);
-    let marked = |verdicts: &[Verdict], wanted: fn(&Verdict) -> bool| -> Vec<(ModIndex, &str)> {
+    let key = |patch: &CodePatch| (patch.owner, patch.feature.map(core::ptr::from_ref));
+    let marked = |verdicts: &[Verdict],
+                  wanted: fn(&Verdict) -> bool|
+     -> Vec<(ModIndex, Option<*const Fuse>)> {
         patches
             .iter()
             .zip(verdicts)
@@ -517,13 +522,24 @@ pub(crate) fn owner_id(loader: &Loader, owner: ModIndex) -> &str {
         .map_or(crate::engine::settings::LOADER_ID, |m| m.id.as_str())
 }
 
-/// Logs that `patch` is skipped for `reason` and turns off its owner: a mod
-/// whole, a loader feature by its name, once, kept in `off`.
+/// Why a patch is skipped, which names the error code of a loader feature
+/// it turns off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SkipCause {
+    /// At arming: the build's code is not what the patch expects.
+    Build,
+    /// While the game ran: the patch could not be written after it waited.
+    Fault,
+}
+
+/// Logs that `patch` is skipped for `reason`, for `cause`, and turns off its
+/// owner: a mod whole, a loader feature by its fuse, once, the fuse kept in
+/// `off`.
 pub(crate) fn skipped(
     loader: &Loader,
     patch: &CodePatch,
-    reason: &str,
-    off: &mut Vec<&'static str>,
+    (cause, reason): (SkipCause, &str),
+    off: &mut Vec<&'static Fuse>,
 ) {
     let owner = owner_id(loader, patch.owner);
     crate::log!(
@@ -536,9 +552,20 @@ pub(crate) fn skipped(
             patch.owner,
             &format!("its code patch at {:#x} was skipped", patch.address),
         );
-    } else if !off.contains(&patch.feature) {
-        off.push(patch.feature);
-        loader.feature_off(patch.feature, &format!("{:#x}", patch.address), reason);
+    } else if let Some(feature) = patch.feature
+        && !feature.among(off)
+    {
+        off.push(feature);
+        let at = format!("{:#x}", patch.address);
+        match cause {
+            SkipCause::Build => {
+                let _off = loader.fuse_off(feature, &at, reason);
+            }
+            SkipCause::Fault => {
+                let why = format!("its code patch at {at} was skipped: {reason}");
+                feature.turn_off(&crate::engine::fuse::Off::fault(feature.feature(), &why));
+            }
+        }
     }
 }
 
@@ -590,56 +617,14 @@ static LIFT: OnceLock<Lift> = OnceLock::new();
 /// Full recipe lists of the workshops past the game's limit, as addresses.
 static WORKSHOPS: OnceLock<FxHashMap<u32, Box<[usize]>>> = OnceLock::new();
 
-/// The replacement of the `len` bytes of the stop block at `stop`: `inc r13`
-/// (the loop counter the skipped append would have raised), then `jmp` to
-/// the next recipe at `next`, the rest `int3`; `None` when the block is too
-/// short or the jump too far.
-fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
-    if len < JUMP_LEN {
-        return None;
-    }
-    let from = i64::try_from(stop.checked_add(JUMP_LEN)?).ok()?;
-    let rel = i32::try_from(i64::try_from(next).ok()? - from).ok()?;
-    let mut bytes = vec![0xcc; len];
-    bytes[..4].copy_from_slice(&[0x49, 0xff, 0xc5, 0xe9]);
-    bytes[4..JUMP_LEN].copy_from_slice(&rel.to_le_bytes());
-    Some(bytes.into())
-}
-
-/// The most bytes [`stop_len`] decodes before it gives up.
-const MOST_STOP: usize = 64; // bound, not a game offset: a stop block is a few instructions
-
-/// The length of the stop block whose `code` starts at `stop`, for a block an
-/// engine route found, which carries no table body: up to and with its
-/// unconditional jump to the next recipe at `next`, or up to the `int3`
-/// padding after its last call, which does not return on 1.0 builds;
-/// `None` without either in its first [`MOST_STOP`] bytes, or when the block
-/// leaves first by another jump or a return, so the patch never covers code
-/// past the block.
-pub(crate) fn stop_len(code: &[u8], stop: u64, next: u64) -> Option<usize> {
-    use iced_x86::{Code, Decoder, DecoderOptions, FlowControl};
-    let code = code.get(..code.len().min(MOST_STOP))?;
-    let mut decoder = Decoder::with_ip(64, code, stop, DecoderOptions::NONE);
-    decoder
-        .iter()
-        .take_while(|i| !i.is_invalid())
-        .find_map(|i| match (i.code(), i.flow_control()) {
-            (Code::Int3, _) => Some(Some(i.ip())),
-            (_, FlowControl::UnconditionalBranch) => {
-                Some((i.near_branch_target() == next).then(|| i.next_ip()))
-            }
-            (_, FlowControl::IndirectBranch | FlowControl::Return) => Some(None),
-            _ => None,
-        })
-        .flatten()
-        .and_then(|end| usize::try_from(end - stop).ok())
-}
-
-/// The lift of the workshop limit, as the log and the Mods screen name it.
-const LIFT_FEATURE: &str = "workshop recipe limit";
+/// The lift of the workshop limit, a loader feature.
+static LIFT_FUSE: Fuse = Fuse::new("workshop recipe limit");
 
 /// The per-workshop list lookup, as the log and the Mods screen name it.
 const LOOKUP_FEATURE: &str = "recipe list lookup";
+
+/// The per-workshop list lookup, a loader feature.
+static LIST_LOOKUP_FUSE: Fuse = Fuse::new(LOOKUP_FEATURE);
 
 /// Why the lift is off, by the table entry it names.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -739,7 +724,7 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, LiftLimitError> {
     unsafe { crate::engine::memory::read_bytes(stop, 0, &mut expected) };
     Ok(CodePatch {
         owner: ModIndex::LOADER,
-        feature: LIFT_FEATURE,
+        feature: Some(&LIFT_FUSE),
         address: stop,
         expected: expected.into(),
         replacement,
@@ -773,7 +758,7 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
     let (layout, patch, lookup) = match found {
         Ok(found) => found,
         Err(off) => {
-            let _off = loader.feature_off(LIFT_FEATURE, off.entry(), &off.to_string());
+            let _off = loader.fuse_off(&LIFT_FUSE, off.entry(), &off.to_string());
             return;
         }
     };
@@ -810,14 +795,14 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
         let lookup = match checked(loader, pinned::recipe::LIST_LOOKUP) {
             Ok(at) => at as u64,
             Err(off) => {
-                let _off = loader.feature_off(LOOKUP_FEATURE, off.entry(), &off.to_string());
+                let _off = loader.fuse_off(&LIST_LOOKUP_FUSE, off.entry(), &off.to_string());
                 return None;
             }
         };
         let target = Target::Found(pinned::recipe::LIST_LOOKUP.id(), Some(lookup));
         loader
-            .link_feature(
-                LOOKUP_FEATURE,
+            .link_fused(
+                &LIST_LOOKUP_FUSE,
                 target,
                 &LOOKUP_NEXT,
                 lookup_detour,
@@ -971,7 +956,7 @@ crate::engine::chains::chain_detour! {
 }
 
 /// The switch of the recipe list lookup's filter.
-static LOOKUP_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("disabled recipes");
+static LOOKUP_FUSE: Fuse = Fuse::new("disabled recipes");
 
 #[cfg(test)]
 mod tests;

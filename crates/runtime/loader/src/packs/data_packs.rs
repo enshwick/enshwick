@@ -65,12 +65,15 @@ fn keep(text: &str) -> Str {
 }
 
 /// A slice for the process; null for none.
-fn keep_slice<T: 'static>(items: Vec<T>) -> (*const T, usize) {
+fn keep_slice<T: 'static>(items: Vec<T>) -> (*const T, u32) {
     if items.is_empty() {
         return (core::ptr::null(), 0);
     }
     let items: &'static [T] = Box::leak(items.into_boxed_slice());
-    (items.as_ptr(), items.len())
+    (
+        items.as_ptr(),
+        u32::try_from(items.len()).unwrap_or(u32::MAX),
+    )
 }
 
 /// The manifest a mod would declare for the pack `manifest` says.
@@ -131,8 +134,7 @@ pub(crate) fn discover(mods_dir: &Path) -> Vec<Found> {
     for dir in dirs {
         let name = dir
             .file_name()
-            .map(|f| f.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|f| f.to_string_lossy().into_owned());
         if name == crate::engine::settings::LOADER_ID || name.starts_with('.') {
             continue;
         }

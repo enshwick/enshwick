@@ -57,7 +57,7 @@ pub struct ModInfo {
     /// The authors' names.
     pub authors: *const Str,
     /// How many names `authors` points at.
-    pub author_count: usize,
+    pub author_count: u32,
     /// An SPDX licence expression.
     pub license: Str,
     /// Where players read about the mod.
@@ -101,6 +101,55 @@ unsafe impl Send for ModInfo {}
 // for the life of the process and nothing writes through them, so threads
 // sharing a `&ModInfo` only read immutable data.
 unsafe impl Sync for ModInfo {}
+
+/// A part or feature of the loader that is off, which
+/// [`HostApi::loader_off`](super::HostApi::loader_off) lists.
+///
+/// The loader turns off only what a build lacks or what faulted, and keeps
+/// running the rest; every part or feature it does not list runs. The
+/// names are the ones the log and the Mods screen show, and a new part of
+/// a later loader appears with no new field.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, LoaderOff};
+///
+/// let off = LoaderOff { header: Header::of::<LoaderOff>(), ..LoaderOff::EMPTY };
+/// assert_eq!(off.at, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct LoaderOff {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The part or feature, as its log line names it.
+    pub name: Str,
+    /// Why it is off, as the log says: the build entry it lacks and why,
+    /// or the fault that turned it off.
+    pub reason: Str,
+    /// When it turned off, in seconds since the Unix epoch.
+    pub at: u64,
+}
+
+impl_headed!(LoaderOff);
+
+impl LoaderOff {
+    /// An entry with every field empty, to fill with `..LoaderOff::EMPTY`.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        name: Str::EMPTY,
+        reason: Str::EMPTY,
+        at: 0,
+    };
+}
+
+// SAFETY: the loader keeps each listed name and reason alive and unchanged
+// for the life of the process, as `Str` itself is shared.
+unsafe impl Send for LoaderOff {}
+// SAFETY: the same text, which nothing writes through, so threads sharing a
+// `&LoaderOff` only read immutable data.
+unsafe impl Sync for LoaderOff {}
 
 /// An opaque handle the loader gives each mod; every call names its caller
 /// with it.

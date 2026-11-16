@@ -176,13 +176,13 @@ mod world_cap {
         assert_eq!(status, Status::OK);
         let bases = || enshwick::altars::base_limit().unwrap().bases;
         assert_eq!(bases(), 179);
-        enshwick::altars::set_base_cap(20).unwrap();
+        enshwick::altars::set_base_limit(20).unwrap();
         assert_eq!(bases(), 20);
-        enshwick::altars::set_base_cap(16).unwrap();
+        enshwick::altars::set_base_limit(16).unwrap();
         assert_eq!(bases(), 16, "the latest cap replaces the mod's last");
-        enshwick::altars::set_base_cap(500).unwrap();
+        enshwick::altars::set_base_limit(500).unwrap();
         assert_eq!(bases(), 179, "a cap past the request leaves the request");
-        assert!(enshwick::altars::set_base_cap(15).is_err());
+        assert!(enshwick::altars::set_base_limit(15).is_err());
         assert_eq!(bases(), 179);
         assert_eq!(enshwick::altars::base_limit().unwrap().zones, 64);
     }

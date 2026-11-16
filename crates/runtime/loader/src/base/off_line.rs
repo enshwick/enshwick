@@ -138,7 +138,9 @@ pub(crate) fn names(loader: &crate::engine::loader::Loader) -> Vec<String> {
         if record.off.load(Ordering::Acquire) {
             continue;
         }
-        let features = record.features.relock();
+        // A copy, since `label` locks the texts, which a report locks
+        // before the features (`ModRecord::report_feature`).
+        let features = record.features.relock().clone();
         names.extend(
             features
                 .iter()

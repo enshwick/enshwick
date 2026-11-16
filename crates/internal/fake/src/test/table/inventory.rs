@@ -12,21 +12,24 @@ pub(crate) struct OpenRequest {
     pub(crate) done: Registered<InventoryResultFn>,
 }
 use enshwick_core::abi::{
-    BedCheckFn, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemActionFn, ModHandle, Side,
-    SpawnRequest, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    BedCheckFn, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemFilterFn, ModHandle, Side,
+    SpawnRequest, Status, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
 };
 
 pub(crate) extern "system" fn item_filter(
     me: ModHandle,
-    callback: ItemActionFn,
+    callback: Option<ItemFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
         if s.host.no_item_filters {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         s.item_filters.push(Registered::new(callback, user, me));
         Status::OK
@@ -54,7 +57,7 @@ pub(crate) extern "system" fn drop_items(
     }
     let entity = with(None, |s| {
         if !s.host.items.contains_key(&request.item.get()) {
-            return Some(Err(Status::REFUSED));
+            return Some(Err(Status::MISSING));
         }
         // Above every spawn's id, so the two never share one.
         let entity = crate::test::table::world::FIRST_SPAWNED
@@ -117,7 +120,7 @@ pub(crate) extern "system" fn spawn(
     let Some(request) = crate::test::table::get_headed(request) else {
         return Status::BAD_ARGS;
     };
-    if request.template == [0; 16] {
+    if request.template == enshwick_core::content::Guid::NIL {
         return Status::BAD_ARGS;
     }
     let entity = with(None, |s| {
@@ -135,10 +138,16 @@ pub(crate) extern "system" fn spawn(
 
 pub(crate) extern "system" fn damage_filter(
     me: ModHandle,
-    callback: DamageFilterFn,
+    callback: Option<DamageFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.damage_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -146,24 +155,42 @@ pub(crate) extern "system" fn damage_filter(
 
 pub(crate) extern "system" fn survivor_lookup(
     me: ModHandle,
-    callback: SurvivorLookupFn,
+    callback: Option<SurvivorLookupFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
-        if s.survivor_lookup.is_some() {
-            return Status::REFUSED;
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
         }
-        s.survivor_lookup = Some(Registered::new(callback, user, me));
+        hold_each(&mut s.survivor_lookup, Registered::new(callback, user, me));
         Status::OK
     })
 }
 
+/// As the loader: each mod holds one registration, in load order, and a
+/// second replaces its first.
+fn hold_each<F: Copy>(held: &mut Vec<Registered<F>>, registered: Registered<F>) {
+    match held.iter_mut().find(|r| r.owner() == registered.owner()) {
+        Some(own) => *own = registered,
+        None => held.push(registered),
+    }
+}
+
 pub(crate) extern "system" fn survivor_bed_check(
     me: ModHandle,
-    callback: BedCheckFn,
+    callback: Option<BedCheckFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.bed_checks.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -171,10 +198,16 @@ pub(crate) extern "system" fn survivor_bed_check(
 
 pub(crate) extern "system" fn summon_filter(
     me: ModHandle,
-    callback: SummonFn,
+    callback: Option<SummonFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.summons.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -182,10 +215,16 @@ pub(crate) extern "system" fn summon_filter(
 
 pub(crate) extern "system" fn summoned(
     me: ModHandle,
-    callback: SummonFn,
+    callback: Option<SummonFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.summoned.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -197,6 +236,9 @@ pub(crate) extern "system" fn summon_item(
     survivor: enshwick_core::survivors::NpcId,
 ) -> Status {
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.summon_items.push((item, survivor));
         Status::OK
     })
@@ -204,30 +246,31 @@ pub(crate) extern "system" fn summon_item(
 
 pub(crate) extern "system" fn survivor_status(
     me: ModHandle,
-    callback: SurvivorStatusFn,
+    callback: Option<SurvivorStatusFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
         if s.host.side != Side::CLIENT {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
-        if s.survivor_status
-            .is_some_and(|held| held.owner() != Some(me))
-        {
-            return Status::REFUSED;
-        }
-        s.survivor_status = Some(Registered::new(callback, user, me));
+        hold_each(&mut s.survivor_status, Registered::new(callback, user, me));
         Status::OK
     })
 }
 
-pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
+pub(crate) extern "system" fn request_inventory(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         if s.host.no_inventories {
-            Status::MISSING
+            Status::UNAVAILABLE
         } else {
             Status::OK
         }
@@ -237,9 +280,12 @@ pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
 pub(crate) extern "system" fn inventory_submit(
     me: ModHandle,
     request: *const InventoryRequest,
-    done: InventoryResultFn,
+    done: Option<InventoryResultFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(done) = done else {
+        return Status::BAD_ARGS;
+    };
     // The loader requires only the fields through `op_count`.
     let required = core::mem::offset_of!(InventoryRequest, op_count) + size_of::<u32>();
     // SAFETY: the safe layer passes null or its version of the request,
@@ -249,7 +295,7 @@ pub(crate) extern "system" fn inventory_submit(
     };
     with(Status::MISSING, |s| {
         if s.host.no_inventories || (s.host.side != Side::SERVER && !s.host.hosting) {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         // SAFETY: the request holds `op_count` operations, read during the
         // call.
@@ -288,11 +334,12 @@ mod tests {
     fn give(count: u32) -> InventoryOp {
         InventoryOp {
             kind: InventoryOp::GIVE,
-            flags: 0,
-            target: 7,
-            other: 0,
+
+            target: enshwick_core::Entity(7),
+
             item: enshwick_core::ItemId::new(3),
             count,
+            ..InventoryOp::default()
         }
     }
 
@@ -308,7 +355,7 @@ mod tests {
         super::inventory_submit(
             ModHandle(1),
             &raw const request,
-            ignored,
+            Some(ignored),
             core::ptr::null_mut(),
         )
     }
@@ -329,7 +376,7 @@ mod tests {
     #[test]
     fn the_fake_refuses_inventory_requests_on_a_client_that_hosts_nothing() {
         let _loader = FakeHost::new().side(Side::CLIENT).install();
-        assert_eq!(submit(&[give(1)]), Status::MISSING);
+        assert_eq!(submit(&[give(1)]), Status::UNAVAILABLE);
     }
 
     #[test]
@@ -346,9 +393,9 @@ mod tests {
         let status = super::inventory_submit(
             ModHandle(1),
             &raw const request,
-            ignored,
+            Some(ignored),
             core::ptr::null_mut(),
         );
-        assert_eq!(status, Status::MISSING);
+        assert_eq!(status, Status::UNAVAILABLE);
     }
 }

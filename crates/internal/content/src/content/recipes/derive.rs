@@ -2,14 +2,20 @@
 
 use super::super::menu::MenuEntry;
 use super::super::workshops::WorkshopId;
-use super::super::{Blob, Guid, types};
+use super::super::{Blob, Guid, Room, types};
 use super::RecipeKind;
 use super::add::{
     NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, retarget, workshop_counts,
 };
+use crate::resources::Grow;
 
 /// Whether the recipe at `at` makes `item`.
-pub(super) fn makes(layout: &RecipeLayout, registry: &Blob, at: usize, item: Guid) -> bool {
+pub(super) fn makes(
+    layout: &RecipeLayout,
+    registry: &Blob<impl AsRef<[u8]>>,
+    at: usize,
+    item: Guid,
+) -> bool {
     let Some((outputs, count)) = registry.array(at + layout.output) else {
         return false;
     };
@@ -36,7 +42,7 @@ pub(super) fn recipe_guids(
         (0..usize::try_from(count).ok()?)
             .map(|i| {
                 RecipeView {
-                    blob: &blob,
+                    blob: blob.view(),
                     at: start + i * layout.recipe,
                     layout,
                 }
@@ -54,7 +60,7 @@ pub(super) fn recipe_making(layout: &RecipeLayout, registry: &[u8], item: Guid) 
         .map(|i| start + i * layout.recipe)
         .find(|&at| makes(layout, &registry, at, item))?;
     let view = RecipeView {
-        blob: &registry,
+        blob: registry.view(),
         at,
         layout,
     };
@@ -87,7 +93,7 @@ pub(super) fn derived_entries(
         (0..usize::try_from(count).ok()?)
             .filter_map(|i| {
                 let view = RecipeView {
-                    blob: &blob,
+                    blob: blob.view(),
                     at: start + i * layout.recipe,
                     layout,
                 };
@@ -106,7 +112,7 @@ pub(super) fn derived_entries(
 /// comes first in it.
 pub(super) fn scaled_inputs(
     layout: &RecipeLayout,
-    registry: &Blob,
+    registry: &Blob<impl AsRef<[u8]>>,
     at: usize,
     cost: u32,
 ) -> Option<Vec<u8>> {
@@ -134,7 +140,7 @@ pub(crate) fn list(
         (0..usize::try_from(count).ok()?)
             .map(|i| {
                 let view = RecipeView {
-                    blob: &blob,
+                    blob: blob.view(),
                     at: start + i * layout.recipe,
                     layout,
                 };
@@ -155,7 +161,7 @@ pub(crate) fn list(
 /// See `Load::derive_recipes`.
 #[derive(Clone, Copy, Debug)]
 pub struct RecipeView<'a> {
-    pub(super) blob: &'a Blob,
+    pub(super) blob: Blob<&'a [u8]>,
     pub(super) at: usize,
     pub(super) layout: &'a RecipeLayout,
 }
@@ -189,8 +195,7 @@ impl RecipeView<'_> {
         self.blob
             .array(self.at + self.layout.relative[3])
             .and_then(|(start, len)| self.blob.bytes().get(start..start + len as usize))
-            .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
-            .unwrap_or_default()
+            .map_or_default(|bytes| String::from_utf8_lossy(bytes).into_owned())
     }
 
     /// The item the recipe makes and how many.
@@ -282,8 +287,8 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
     Guid(guid)
 }
 
-/// The recipe registry with a derived copy after the others for each vanilla
-/// recipe `choose` picks.
+/// Builds in `out` the recipe registry with a derived copy after the others
+/// for each vanilla recipe `choose` picks.
 ///
 /// With a workshop `limit` other than [`usize::MAX`], copies stop
 /// [`RESERVED_FOR_SINGLE`] short of it. `Load::derive_recipes` serves it;
@@ -293,21 +298,22 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 ///
 /// ```
 /// use enshwick::content::recipes::{
-///     Derived, RECIPE_REGISTRY, RecipeLayout, derive_recipes_in, workshop_limit,
+///     Derived, RECIPE_REGISTRY, RecipeLayout, RecipeView, derive_recipes_in, workshop_limit,
 /// };
 /// use enshwick::content::types;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
 ///     let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
-///     load.serve(registry, registry, move |base| {
-///         derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &|recipe| {
+///     load.serve(registry, registry, move |base, out| {
+///         let choose = |recipe: &RecipeView<'_>| {
 ///             recipe.debug_name().starts_with("Block_").then_some(Derived {
 ///                 output: 2,
 ///                 cost: 1,
 ///                 workshop: None,
 ///             })
-///         })
+///         };
+///         derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &choose, out)
 ///     })
 /// }
 /// ```
@@ -318,20 +324,22 @@ pub fn derive_recipes_in(
     salt: u32,
     limit: usize,
     choose: &dyn Fn(&RecipeView<'_>) -> Option<Derived>,
-) -> Option<Vec<u8>> {
+    out: &mut impl Grow,
+) -> Option<()> {
     let cap = if limit == usize::MAX {
         limit
     } else {
         limit.saturating_sub(RESERVED_FOR_SINGLE)
     };
-    let mut blob = Blob::new(registry);
+    let base = registry;
+    let blob = Blob::reading(base);
     let (start, count) = blob.array(layout.recipes)?;
     let mut counts = workshop_counts(layout, &blob)?;
     let mut skipped = 0usize;
     let mut picked: Vec<(usize, Derived, Guid)> = Vec::new();
     for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.recipe) {
         let view = RecipeView {
-            blob: &blob,
+            blob: blob.view(),
             at,
             layout,
         };
@@ -356,7 +364,8 @@ pub fn derive_recipes_in(
         );
     }
     if picked.is_empty() {
-        return Some(blob.into_bytes());
+        Blob::over(out, base);
+        return Some(());
     }
     let extra: Vec<(Vec<u8>, Option<usize>)> = picked
         .iter()
@@ -375,6 +384,11 @@ pub fn derive_recipes_in(
         count_field.copy_from_slice(&made.saturating_mul(derived.output).to_le_bytes());
         changes.push((inputs, output));
     }
+    let mut room = Room::new(base).grow_array(layout.recipes, layout.recipe, 8, picked.len())?;
+    for (inputs, output) in &changes {
+        room = room.append(inputs.len(), 8)?.append(output.len(), 8)?;
+    }
+    let mut blob = Blob::over_with_room(out, room);
     let first = blob.grow_array(layout.recipes, layout.recipe, 8, &layout.relative, &extra)?;
     let (start, _) = blob.array(layout.recipes)?;
     for (index, ((_, derived, guid), (inputs, output))) in picked.iter().zip(changes).enumerate() {
@@ -396,7 +410,7 @@ pub fn derive_recipes_in(
             return None;
         }
     }
-    Some(blob.into_bytes())
+    Some(())
 }
 
 /// A recipe in the registry as [`modify_recipes_in`] shows it, with its
@@ -415,7 +429,7 @@ impl RecipeEdit<'_> {
     #[must_use]
     pub fn view(&self) -> RecipeView<'_> {
         RecipeView {
-            blob: self.blob,
+            blob: self.blob.view(),
             at: self.at,
             layout: self.layout,
         }

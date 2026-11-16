@@ -635,7 +635,7 @@ impl Voxels {
     /// voxels or one past 2³⁰ voxels on an axis;
     /// [`WorldError::NotLoaded`] while part of the box is not loaded yet,
     /// which this read starts loading: try again in a second or so;
-    /// [`WorldError::Missing`] before a world runs or on
+    /// [`WorldError::Unavailable`] before a world runs or on
     /// a game build without the read; [`WorldError::WrongThread`] off the
     /// game thread or inside a step; [`WorldError::OutsideWorld`] for a box
     /// past the world's edge or above the height the loader takes, 1,024
@@ -655,7 +655,7 @@ impl Voxels {
             &raw const corner,
             &raw const size,
             raw.as_mut_ptr(),
-            count,
+            u32::try_from(count).map_err(|_| WorldError::Refused)?,
         );
         WorldError::from_status(status)?;
         Ok(VoxelBox {

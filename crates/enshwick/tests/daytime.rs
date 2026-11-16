@@ -43,14 +43,14 @@ mod tests {
         let (clock, speed) = CLOCK.get().unwrap();
 
         assert_eq!(clock.now(), None, "no world runs yet");
-        assert_eq!(clock.set_hours(3.0), Err(WorldError::Missing));
+        assert_eq!(clock.set_hours(3.0), Err(WorldError::Unavailable));
         loader.set_daytime(DaytimeInfo {
             header: Header::of::<DaytimeInfo>(),
-            time: 7 * HOUR,
-            day_start: 6 * HOUR,
-            day_end: 18 * HOUR,
-            day_length: 1_800_000_000_000,
-            night_length: 720_000_000_000,
+            time_ns: 7 * HOUR,
+            day_start_ns: 6 * HOUR,
+            day_end_ns: 18 * HOUR,
+            day_length_ns: 1_800_000_000_000,
+            night_length_ns: 720_000_000_000,
             speed: 1.0,
             flags: DaytimeInfo::DAY,
         });

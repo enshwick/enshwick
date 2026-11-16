@@ -60,12 +60,12 @@ mod tests {
     );
 
     fn start_with(recipes: &[(Guid, u32, u32)]) -> (Installed, Status) {
-        let kind = WIDE.part("template").guid().0;
+        let kind = WIDE.part("template").guid();
         let loader = FakeHost::new()
             .props()
             .upgrade_recipes(recipes)
             .template(KIND_ALTAR, kind)
-            .template(OTHER_ALTAR, [7; 16])
+            .template(OTHER_ALTAR, Guid([7; 16]))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Kinds)`.
         let status =

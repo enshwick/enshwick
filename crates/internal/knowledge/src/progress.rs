@@ -126,7 +126,7 @@ pub struct Comfort {
     /// The comfort it registers, after the filters before this one.
     pub value: i32,
     /// Where the provider stands, in metres.
-    pub position: [f32; 3],
+    pub position: [f64; 3],
 }
 
 /// The game's level table, during an experience pass.
@@ -230,7 +230,9 @@ where
     } else {
         // SAFETY: `row_count` writable rows, valid for the call; an
         // `Experience` has the layout of an `ExperienceRow`.
-        unsafe { core::slice::from_raw_parts_mut(pass.rows.cast::<Experience>(), pass.row_count) }
+        unsafe {
+            core::slice::from_raw_parts_mut(pass.rows.cast::<Experience>(), pass.row_count as usize)
+        }
     };
     let levels = Levels {
         cap: pass.level_cap,
@@ -281,7 +283,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             handler,
-            |user| (host.api().skill_override)(host.handle(), node, run_skill::<F>, user),
+            |user| (host.api().skill_override)(host.handle(), node, Some(run_skill::<F>), user),
             "the skill override",
         )
     }
@@ -293,7 +295,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().comfort_filter)(host.handle(), run_comfort::<F>, user),
+            |user| (host.api().comfort_filter)(host.handle(), Some(run_comfort::<F>), user),
             "the comfort filter",
         )
     }
@@ -305,7 +307,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().experience_filter)(host.handle(), run_experience::<F>, user),
+            |user| (host.api().experience_filter)(host.handle(), Some(run_experience::<F>), user),
             "the experience filter",
         )
     }

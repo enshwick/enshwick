@@ -181,5 +181,23 @@ mod tests {
         );
         settings.forget_kept().unwrap();
         assert!(loader.kept_game_settings().is_empty());
+
+        // SAFETY: the fake's table is a static, aligned and never written.
+        let api = unsafe { &*loader.api() };
+        let mask = [1u8; 4];
+        let forget = |mask: *const u8, size| {
+            (api.set_game_settings)(loader.handle(), core::ptr::null(), mask, size)
+        };
+        assert_eq!(
+            forget(mask.as_ptr(), 4),
+            Status::BAD_ARGS,
+            "a mask with no data"
+        );
+        assert_eq!(
+            forget(core::ptr::null(), 4),
+            Status::BAD_ARGS,
+            "a size with no data"
+        );
+        assert_eq!(forget(core::ptr::null(), 0), Status::OK);
     }
 }

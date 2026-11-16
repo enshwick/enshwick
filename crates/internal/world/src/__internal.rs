@@ -4,12 +4,13 @@
 //! such as a world call's status as its outcome and a player as the loader
 //! hands them over.
 
+use crate::Host;
 #[cfg(feature = "unstable")]
 use crate::abi::RecipeId;
 #[cfg(feature = "unstable")]
 use crate::content::Guid;
 #[cfg(feature = "unstable")]
-use crate::{Entity, Host, Off};
+use crate::{Entity, Off};
 
 /// The handles of the typed API a script holds, which the scripts' start
 /// functions on `Load` return.
@@ -63,6 +64,23 @@ pub fn terrain_edit_valid(edit: &crate::abi::TerrainEdit) -> bool {
         }
 }
 
+/// Whether the loader takes the changes of the terrain material `material`.
+///
+/// The loader and the fake host share it: changes it knows, a health of 1
+/// or more and a hardness the game names when it sets them.
+#[must_use]
+pub fn terrain_material_changes_valid(material: &crate::abi::TerrainMaterialAdd) -> bool {
+    use crate::abi::TerrainMaterialAdd;
+    let sets = |change| material.changes & change != 0;
+    material.changes & !TerrainMaterialAdd::ALL_CHANGES == 0
+        && (!sets(TerrainMaterialAdd::HEALTH) || material.health >= 1)
+        && (!sets(TerrainMaterialAdd::HARDNESS) || material.hardness <= HARDEST)
+}
+
+/// The hardest of the game's hardness categories, `Unbreakable`
+/// (`HardnessCategory`, reflection 26430625).
+pub const HARDEST: u8 = 5;
+
 /// `status` of a world call as its outcome.
 ///
 /// # Errors
@@ -86,17 +104,25 @@ pub fn world_check(
 }
 
 /// The player `info` describes, as the loader hands them over.
-#[cfg(feature = "unstable")]
 #[must_use]
 pub fn player(info: &crate::abi::PlayerInfo) -> crate::world::Player {
     crate::world::Player::from_info(info)
 }
 
 /// The players connected now, from the loader.
-#[cfg(feature = "unstable")]
 #[must_use]
 pub fn online(host: Host) -> Vec<crate::world::Player> {
     crate::world::online(host)
+}
+
+/// The players connected now, or the loader's status when it cannot list
+/// them.
+///
+/// # Errors
+///
+/// The loader's status of its players list.
+pub fn listed(host: Host) -> Result<Vec<crate::world::Player>, crate::abi::Status> {
+    crate::world::listed(host)
 }
 
 /// The map marker type `info` describes, as the loader lists them.

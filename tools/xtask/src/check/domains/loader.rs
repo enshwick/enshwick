@@ -227,8 +227,7 @@ fn roots_and_types(
     let mut roots = parsed
         .iter()
         .find(|(path, _)| *path == "lib.rs")
-        .map(|(_, lib)| root_exports(lib))
-        .unwrap_or_default();
+        .map_or_default(|(_, lib)| root_exports(lib));
     let mut types: BTreeMap<String, Vec<Place>> = BTreeMap::new();
     for (path, file) in parsed {
         for name in exported_macros(file) {

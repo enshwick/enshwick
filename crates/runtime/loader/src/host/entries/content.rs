@@ -8,7 +8,8 @@ use enshwick_core::content::changes::{Change, Field, ItemsChange, RecipesChange,
 use crate::host::entries::base::services::exported;
 use crate::host::layer::guards::before_delivery;
 use crate::host::layer::{
-    BytesOut, Caller, Headed, HeadedSince, In, List, Mod, Out, RuleOff, Text, entries,
+    BytesOut, Caller, HeadedSince, In, List, MaybeOut, Mod, Out, Refused, RuleOff, Slot, Text,
+    YesNo, entries,
 };
 use crate::host::memory::text;
 
@@ -18,12 +19,13 @@ pub(crate) mod resources;
 /// `select` and `categories` read zero from a mod built before them.
 const CHANGE_REQUIRED: usize = core::mem::offset_of!(api_frame::DataChange, item);
 
-/// [`Status::MISSING`] when the build lacks what a change of `field` writes.
+/// [`Status::UNAVAILABLE`] when the build lacks what a change of `field`
+/// writes.
 fn reachable(loader: &crate::engine::loader::Loader, field: Field) -> Result<(), Status> {
     if crate::content::data_changes::reachable(loader, field) {
         Ok(())
     } else {
-        Err(Status::MISSING)
+        Err(Status::UNAVAILABLE)
     }
 }
 
@@ -32,13 +34,13 @@ entries! {
         me as Mod,
         kind: enshwick_core::abi::RecipeRuleKind,
         name as Text,
-        disable: u32,
+        disable as YesNo,
     ) -> Status {
-        Ok(crate::content::recipes::rule(me.index, kind, name, disable != 0)?)
+        Ok(crate::content::recipes::rule(me.index, kind, name, disable)?)
     }
 
-    fn recipe_disabled(_loader as Caller, recipe: enshwick_core::RecipeId, out as Out<u32>) -> Status {
-        out.put(u32::from(crate::content::recipes::is_disabled(recipe.get())))
+    fn recipe_disabled(_loader as Caller, recipe: enshwick_core::RecipeId, out as Out<u8>) -> Status {
+        out.put(u8::from(crate::content::recipes::is_disabled(recipe.get())))
     }
 
     fn recipe_kind(
@@ -53,7 +55,14 @@ entries! {
         )
     }
 
-    fn change_data(me as Mod, raw as HeadedSince<api_frame::DataChange, CHANGE_REQUIRED>) -> Status {
+    fn change_data(
+        me as Mod,
+        raw as HeadedSince<api_frame::DataChange, CHANGE_REQUIRED>,
+        out as MaybeOut<api_frame::ChangeId>,
+    ) -> Status {
+        if let Some(out) = out {
+            return live_change(me, raw, out);
+        }
         let source = text(raw.source).unwrap_or_default().to_owned();
         if let Ok(Some(change)) = RecipesChange::from_abi(&raw) {
             reachable(me.loader, change.field)?;
@@ -70,41 +79,6 @@ entries! {
         let change = Change::from_abi(&raw).ok().flatten().ok_or(Status::BAD_ARGS)?;
         reachable(me.loader, change.field)?;
         Ok(crate::content::data_changes::declare(me.index, change, source)?)
-    }
-
-    fn declare_change(
-        me as Mod,
-        raw as Headed<api_frame::DataChange>,
-        out as Out<api_frame::ChangeId>,
-    ) -> Status {
-        let mut raw = raw;
-        raw.op = api_frame::ChangeOp::TIMES;
-        raw.value = 1.0;
-        let source = text(raw.source).unwrap_or_default().to_owned();
-        let (target, field) = if raw.select == api_frame::DataSelect::ENTRY {
-            let change = Change::from_abi(&raw).ok().flatten().ok_or(Status::BAD_ARGS)?;
-            (
-                crate::content::data_changes::LiveTarget::Entry(change.entry, source),
-                change.field,
-            )
-        } else {
-            let change = ItemsChange::from_abi(&raw)
-                .ok()
-                .flatten()
-                .ok_or(Status::BAD_ARGS)?;
-            (
-                crate::content::data_changes::LiveTarget::Items(change.items, source),
-                change.field,
-            )
-        };
-        if field == Field::Ingredient {
-            return Err(Status::BAD_ARGS.into());
-        }
-        if field.seen_by_clients() && !me.record.joins_when_on() {
-            return Err(Status::REFUSED.into());
-        }
-        reachable(me.loader, field)?;
-        out.put(crate::content::data_changes::declare_change(me.index, target, field)?)
     }
 
     fn set_change(
@@ -126,11 +100,11 @@ entries! {
         Ok(crate::content::served::add_text(id, language, text)?)
     }
 
-    fn item_data_open(me as Mod, id as Text, out as Out<u32>) -> Status {
+    fn define_item_data(me as Mod, id as Text, out as Out<u32>) -> Status {
         out.put(crate::inventory::item_data::open(me.loader, me.index, id)?)
     }
 
-    fn entity_data_open(
+    fn define_entity_data(
         me as Mod,
         id as Text,
         flags: api_frame::EntityDataFlags,
@@ -150,7 +124,7 @@ entries! {
         out.put(&crate::inventory::item_data::get(kind, pide.0, item.get())?)
     }
 
-    fn item_data_set(
+    fn set_item_data(
         _loader as Caller,
         kind: u32,
         pide: enshwick_core::Entity,
@@ -170,7 +144,7 @@ entries! {
         if crate::content::textures::ready() {
             Ok(())
         } else {
-            Err(Status::MISSING.into())
+            Err(Status::UNAVAILABLE.into())
         }
     }
 
@@ -178,7 +152,7 @@ entries! {
         // The archive lives for the process.
         let version = crate::engine::archive::game()
             .and_then(crate::engine::archive::Archive::version)
-            .ok_or(Status::MISSING)?;
+            .ok_or(Status::UNAVAILABLE)?;
         out.put(Str::new(version))
     }
 
@@ -206,31 +180,34 @@ entries! {
         Ok(())
     }
 
-    fn read_only(_me: ModHandle, address: usize, max: usize, out as Out<usize>) -> Status {
-        out.put(crate::engine::pages::read_only(address, max))
+    fn read_only(_me: ModHandle, address: u64, max: u32, out as Out<u32>) -> Status {
+        // An address past `usize` lies in no region, and a run never passes `max`.
+        let Ok(address) = usize::try_from(address) else {
+            return out.put(0);
+        };
+        let run = crate::engine::pages::read_only(address, max as usize);
+        out.put(u32::try_from(run).unwrap_or(max))
     }
 
-    fn declare_content(me as Mod, id as Text, out as Out<[u8; 16]>) -> Status {
+    fn declare_content(me as Mod, id as Text, out as Out<enshwick_core::content::Guid>) -> Status {
         before_delivery(me.loader)?;
-        out.put(crate::base::ids::declare_content(&me.record.id, id)?.0)
+        out.put(crate::base::ids::declare_content(&me.record.id, id)?)
     }
 
-    fn content_name(_me as Mod, guid as In<[u8; 16]>, out as Out<Str>) -> Status {
+    fn content_name(_me as Mod, guid as In<enshwick_core::content::Guid>, out as Out<Str>) -> Status {
         out.put(
-            crate::base::ids::content_named(enshwick_core::content::Guid(guid))
+            crate::base::ids::content_named(guid)
                 .ok_or(Status::MISSING)?,
         )
     }
 
     fn crafting_prop(
         me as Mod,
-        prop as In<[u8; 16]>,
-        first: u8,
-        width: u8,
+        prop as In<enshwick_core::content::Guid>,
         out as Out<u8>,
     ) -> Status {
         before_delivery(me.loader)?;
-        let prop = enshwick_core::content::Guid(prop);
+
         // The server sends clients its bits in base and crafting components,
         // so a prop clients lack would shift every bit after it.
         if !me.record.joins_when_on() {
@@ -239,6 +216,11 @@ entries! {
             ))
             .into());
         }
+        let (first, width) = crate::content::crafting_props::bounds().ok_or_else(|| {
+            RuleOff(format!(
+                "crafting prop {prop}: the game's crafting prop mask or its workshop registry does not read"
+            ))
+        })?;
         out.put(crate::base::ids::with(|ids| ids.crafting_prop(prop, first, width))?)
     }
 
@@ -249,4 +231,45 @@ entries! {
         exported(me.loader, me.record, crate::base::manifest::Kind::Content, id)?;
         Ok(())
     }
+}
+
+/// A live change of a field, which `set_change` puts in force: `op` and
+/// `value` start as "times 1", no change, whatever the mod passed.
+fn live_change(
+    me: Mod,
+    mut raw: api_frame::DataChange,
+    out: Slot<'_, api_frame::ChangeId>,
+) -> Result<(), Refused> {
+    raw.op = api_frame::ChangeOp::TIMES;
+    raw.value = 1.0;
+    let source = text(raw.source).unwrap_or_default().to_owned();
+    let (target, field) = if raw.select == api_frame::DataSelect::ENTRY {
+        let change = Change::from_abi(&raw)
+            .ok()
+            .flatten()
+            .ok_or(Status::BAD_ARGS)?;
+        (
+            crate::content::data_changes::LiveTarget::Entry(change.entry, source),
+            change.field,
+        )
+    } else {
+        let change = ItemsChange::from_abi(&raw)
+            .ok()
+            .flatten()
+            .ok_or(Status::BAD_ARGS)?;
+        (
+            crate::content::data_changes::LiveTarget::Items(change.items, source),
+            change.field,
+        )
+    };
+    if field == Field::Ingredient {
+        return Err(Status::BAD_ARGS.into());
+    }
+    if field.seen_by_clients() && !me.record.joins_when_on() {
+        return Err(Status::REFUSED.into());
+    }
+    reachable(me.loader, field)?;
+    out.put(crate::content::data_changes::declare_change(
+        me.index, target, field,
+    )?)
 }

@@ -10,9 +10,6 @@ inputs:
   sanitizers:
     description: Install clang's sanitizer headers, for C and C++ that dependencies build under a sanitizer.
     default: "false"
-  gh:
-    description: Install the GitHub CLI, for steps that publish releases.
-    default: "false"
   ast-grep:
     description: Install ast-grep, for the code rules of sgconfig.yml that `cargo xtask check` runs.
     default: "false"
@@ -124,25 +121,6 @@ runs:
       with:
         tool: cargo-xwin@0.23.1${{ inputs.tools != '' && format(',{0}', inputs.tools) || '' }}
 
-    - name: Install gh
-      if: inputs.gh == 'true'
-      shell: bash
-      env:
-        GH_TAG: v2.103.3
-        GH_SHA256: 4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
-      run: | # zizmor: ignore[github-env] fixed paths only
-        # The pin names the release tag, which Renovate looks releases up by.
-        GH_VERSION="${GH_TAG#v}"
-        dir="$RUNNER_TEMP/gh"
-        archive="$RUNNER_TEMP/gh.tar.gz"
-        curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-all-errors -o "$archive" \
-          "https://github.com/cli/cli/releases/download/v$GH_VERSION/gh_${GH_VERSION}_linux_amd64.tar.gz"
-        echo "$GH_SHA256  $archive" | sha256sum -c -
-        mkdir -p "$dir"
-        tar -xzf "$archive" -C "$dir" --strip-components 1
-        echo "$dir/bin" >> "$GITHUB_PATH"
-        "$dir/bin/gh" --version
-
     # install-action has no manifest for ast-grep, and building it from
     # crates.io takes minutes: the release binary, checked against its digest.
     - name: Install ast-grep
@@ -171,7 +149,7 @@ runs:
       if: inputs.fuzz == 'true'
       shell: bash
       env:
-        NIGHTLY: nightly-2026-11-02
+        NIGHTLY: nightly-2026-11-13
         # renovate: datasource=github-release-attachments depName=rust-fuzz/cargo-fuzz
         CARGO_FUZZ_VERSION: 0.13.2
         CARGO_FUZZ_SHA256: b5b704018b63e0f151c17a057ac53b5111e1db545d1b9f72fee79f08a545931c

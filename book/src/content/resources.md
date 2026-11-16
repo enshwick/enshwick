@@ -31,7 +31,7 @@ builds it from the bytes of the resource `base`:
   registry with one more entry.
 
 ```rust
-use enshwick::content::{Blob, Guid, Id, id, types, vanilla};
+use enshwick::content::{Guid, Id, id, types, vanilla};
 
 const LOCKER_ID: Id = id!("locker");
 
@@ -39,14 +39,23 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const LOCKER: Guid = LOCKER_ID.guid();
     let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
     load.declare(LOCKER_ID)?;
-    load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(storage_box)?, |base| {
-        let mut item = Blob::new(base);
+    load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(storage_box)?, |base, out| {
+        out.reserve(base.len());
+        out.extend_from_slice(base);
         // Offsets for illustration: a real mod reads them from reflection.
-        let written = item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes()) && item.write(4, &LOCKER.0);
-        written.then(|| item.into_bytes())
+        out.get_mut(0..4)?.copy_from_slice(&enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes());
+        out.get_mut(4..20)?.copy_from_slice(&LOCKER.0);
+        Some(())
     })
 }
 ```
+
+The builder writes into `out`, bytes the loader lends for the build, so the
+resource is never copied out of the mod. `out` grows as a `Vec<u8>` does.
+A builder that calls `out.reserve(len)` first builds in one buffer.
+`Blob::over(out, base)` edits a blob right in `out`. The content helpers, such
+as `items::clone_item`, build in `out` too. A resource built elsewhere goes
+in with `out.copy_from(&bytes)`.
 
 Field offsets change between game builds. During `init`, resolve a layout
 such as
@@ -61,11 +70,16 @@ and `load.type_size(type)` read the game's reflection. See
 the resource the first time it reads it, on whatever thread it reads it. It
 keeps the result for the life of the process. So the builder:
 
-- is `Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static`: move what it
-  needs into it;
+- is `Fn(&[u8], &mut Output<'_>) -> Option<()> + Send + Sync + 'static`:
+  move what it needs into it;
 - runs once per resource, not per read, unless the mod rebuilds it;
 - returns `None` when the base does not read as expected. That turns the mod
-  off. A panic in the builder counts the same.
+  off, and so does an `out` it left empty;
+- turns off only its resource when it panics. The loader builds the key
+  without this builder until the game restarts. Only a rebuild calls it
+  again, since the game holds what it added at the first build. The mod
+  and its other resources stay on. The log, the status summary, the
+  join line in chat and the Mods screen name the resource as off.
 
 When the game has no `base` in its archive, the served key stays missing and
 the builder never runs.
@@ -108,7 +122,8 @@ The rules:
   another base for a key already served is refused, and `serve` returns
   `Err(Off)`;
 - a patch that fails turns its mod off and is skipped; the next patch runs
-  on the result so far;
+  on the result so far. A patch that panics is skipped from then on, and its
+  mod stays on;
 - when every patch fails, the resource reads as missing;
 - the patches of a mod already turned off are skipped.
 
@@ -129,8 +144,9 @@ offsets that move with it.
 
 | Method | What it does |
 | --- | --- |
-| `Blob::new(base)` | A copy of `base` to edit. |
-| `bytes()`, `into_bytes()` | The bytes as edited, borrowed or owned. |
+| `Blob::new(base)` | A copy of `base` to edit, in a `Vec<u8>` of its own. |
+| `Blob::over(out, base)` | A copy of `base` to edit in a builder's output, or in another `resources::Grow`. |
+| `bytes()`, `into_bytes()` | The bytes as edited, borrowed or, for `Blob::new`, owned. |
 | `read_u32(at)` | The `u32` at `at`. It is `None` past the end. |
 | `write(at, bytes)` | Writes `bytes` at `at`. Returns `false` when they do not fit. |
 | `array(field)` | The array whose header is at `field`: where its elements start and how many there are. |
@@ -173,7 +189,7 @@ assert_eq!(blob.array(header), Some((text, 4)));
 ```
 
 The API's own content files are worked examples. Each builds its resources
-with `Blob` alone:
+with `Blob` alone, in the builder's `out`:
 
 - [`items.rs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/items.rs)
 - [`recipes.rs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/recipes.rs)

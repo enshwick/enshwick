@@ -261,6 +261,23 @@ pub(super) fn showing() -> bool {
     CURRENT.with_borrow(Option::is_some)
 }
 
+/// Whether the player pressed Back (Escape, B) over `window` in this frame:
+/// the press binds to the window's panel, so it does not also open the
+/// pause menu; a dialog over the window takes its own Back instead.
+///
+/// # Safety
+///
+/// - Called in a frame of the interface update, on its thread, after
+///   `window` began in this frame or the last one.
+pub(super) unsafe fn back_over(engine: &Engine, window: &engine::Window) -> bool {
+    let node = engine.node_id(window);
+    node != 0
+        && !showing()
+        // SAFETY: in a frame of the interface update on its thread, by this
+        // function's `# Safety`.
+        && unsafe { engine.back_pressed(node) }
+}
+
 /// The GUIDs of the loader's dialog text tags: title and message per slot.
 #[expect(clippy::cast_possible_truncation, reason = "the index fits a byte")]
 const TAGS: [[u8; 16]; 2 * KEPT] = {
@@ -466,6 +483,16 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         // which draws the frame, writes it.
         let answered = unsafe { crate::engine::memory::read::<u8>(host, layout.answered) };
         if answered == 0 {
+            // Back (Escape, B) closes the dialog without an answer, as its
+            // buttons need the mouse or Enter; a button pressed in the same
+            // frame wins, so its flag is cleared below.
+            // SAFETY: in a frame of the interface update on its thread, by
+            // this function's `# Safety`.
+            if unsafe { engine.back_pressed(0) }
+                && let Some(gone) = current.take()
+            {
+                gone.answerer.answer(UiDialog::CLOSED);
+            }
             return;
         }
         // SAFETY: `host` is non-zero, checked by the guard before it, and is

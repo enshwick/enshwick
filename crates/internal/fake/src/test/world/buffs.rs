@@ -19,7 +19,7 @@ impl Installed {
     /// use enshwick::abi::{BuffTypeInfo, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let ty = BuffTypeInfo { header: Header::of::<BuffTypeInfo>(), id: enshwick::buffs::BuffTypeId::new(7), slot: 1, flags: 0, name: 0, duration: 60_000_000_000 };
+    /// let ty = BuffTypeInfo { header: Header::of::<BuffTypeInfo>(), id: enshwick::buffs::BuffTypeId::new(7), slot: 1, flags: 0, name: 0, duration_ns: 60_000_000_000 };
     /// loader.set_buffs(&[ty], &[enshwick::Entity(2)]);
     /// assert_eq!(loader.buffs_of(enshwick::Entity(2)), Some(Vec::new()));
     /// ```

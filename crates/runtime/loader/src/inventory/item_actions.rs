@@ -25,7 +25,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side};
+use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemFilterFn, Side};
 use enshwick_core::raw::{read_at, write_at};
 
 use crate::engine::ecs::{Components, Engine};
@@ -41,7 +41,7 @@ use uses::{USES, moves};
 /// The system that runs the players' equips and unequips.
 const EQUIPMENT_SYSTEM: &str = "equipment_actions";
 
-static FILTERS: Filters<ItemActionFn> = Filters::new(Feature::Items);
+static FILTERS: Filters<ItemFilterFn> = Filters::new(Feature::Items);
 /// The layout and components the links read, once linked.
 static LINKED: OnceLock<(Layout, Components)> = OnceLock::new();
 
@@ -58,6 +58,11 @@ static ITEMS_FUSE: Fuse = Fuse::new("item filters");
 /// The switch of the equips the filters see, apart from the uses and events
 /// so a build without the equipment system leaves those on.
 static EQUIPS_FUSE: Fuse = Fuse::new("item equips");
+
+/// The switch of the pickups and placements the filters hear from the
+/// server's event streams, apart from the uses so a build without the
+/// streams leaves those on.
+static EVENTS_FUSE: Fuse = Fuse::new("item event filters");
 
 /// Where one versioned action sits in the player's input, and where its
 /// handled version sits in the consumed input, in bytes.
@@ -253,7 +258,7 @@ fn events(loader: &Loader) -> Events {
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
-    callback: ItemActionFn,
+    callback: ItemFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     let available = || {
@@ -268,6 +273,15 @@ pub(crate) fn register(
 /// event streams screened for it.
 pub(crate) fn wanted() -> bool {
     FILTERS.has_sealed()
+}
+
+/// Lists the item event filters off, by the event stream entry `id` the
+/// build lacks for `reason`, when a mod filters items: only the copy of the
+/// server's event streams hears pickups and placements.
+pub(crate) fn unscreened(loader: &Loader, id: &str, reason: &str) {
+    if wanted() {
+        let _off = loader.fuse_off(&EVENTS_FUSE, id, reason);
+    }
 }
 
 /// Seals the filters before any link: game events link the event move when
@@ -323,7 +337,9 @@ fn ask(call: &ItemAction, refusable: bool) -> bool {
     // SAFETY: a filter's mod runs, so its DLL that holds the callback stays
     // loaded; it gets the user pointer its mod registered and `call`, which
     // lives for the call.
-    let allows = |filter: &ItemActionFn, user| unsafe { filter(call, user) != 0 };
+    let allows = |filter: &ItemFilterFn, user| unsafe {
+        filter(call, user) != enshwick_core::abi::FILTER_REFUSE
+    };
     if refusable {
         FILTERS.refuser(allows).is_none()
     } else {
@@ -407,7 +423,7 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
             let consumed =
-                unsafe { components.component(ctx, call.player.0, layout.consumed_input) }?;
+                unsafe { components.component(ctx, call.character.0, layout.consumed_input) }?;
             let slot = u8::try_from(call.slot).ok()?;
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
@@ -462,7 +478,7 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
         let call = ItemAction {
             header: Header::of::<ItemAction>(),
             kind,
-            player: enshwick_core::Entity(player),
+            character: enshwick_core::Entity(player),
             item: enshwick_core::ItemId::new(item),
             count: if kind == ItemAction::CONSUME {
                 1
@@ -581,7 +597,7 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
     else {
         return;
     };
-    let _done = ITEMS_FUSE.run("the item events", || {
+    let _done = EVENTS_FUSE.run("the item events", || {
         // SAFETY: the event is of `heard`'s type and at least its reflected
         // size (`find` checks both), readable for `size` bytes (the caller's
         // contract); its u32 item id sits at the reflected `heard.item`.
@@ -602,7 +618,7 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
         let call = ItemAction {
             header: Header::of::<ItemAction>(),
             kind: heard.kind,
-            player: enshwick_core::Entity(player),
+            character: enshwick_core::Entity(player),
             item: enshwick_core::ItemId::new(item),
             count,
             inventory: enshwick_core::Entity(0),
@@ -649,14 +665,28 @@ mod tests {
         0
     }
 
+    /// The one test that registers a filter: the registry is the process's,
+    /// and a sealed one takes no more.
     #[test]
-    fn a_registered_filter_is_wanted_once_sealed_before_any_link() {
+    fn a_registered_filter_is_wanted_once_sealed_and_its_events_go_off_without_the_streams() {
+        let loader = crate::start::tests::bare_loader();
+        unscreened(&loader, "ecs.event_streams", "absent");
+        assert!(!EVENTS_FUSE.is_off(), "no mod filters items yet");
         FILTERS
             .register(ModIndex::new(0), filter, core::ptr::null_mut())
             .unwrap();
         assert!(!wanted(), "open filters answer nothing yet");
         seal();
         assert!(wanted(), "game events read it before this part links");
+        unscreened(&loader, "ecs.event_streams", "absent");
+        assert!(EVENTS_FUSE.is_off());
+        assert!(!ITEMS_FUSE.is_off(), "the item uses still run");
+        let off = crate::base::off_reason(&EVENTS_FUSE);
+        assert!(
+            off.as_deref()
+                .is_some_and(|r| r.starts_with("ecs.event_streams")),
+            "{off:?}"
+        );
     }
 
     #[test]

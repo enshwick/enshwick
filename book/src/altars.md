@@ -196,7 +196,7 @@ asks the same limit:
 
 <!-- altar-count -->
 ```rust,standalone_crate
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick::{Load, Mod, Off};
 
@@ -204,7 +204,7 @@ use enshwick::{Load, Mod, Off};
 #[enshwick::config]
 struct Settings {
     /// Altars allowed at every Flame level, 1 to 16.
-    altars: u8,
+    altars: u32,
 }
 
 impl Default for Settings {
@@ -214,7 +214,7 @@ impl Default for Settings {
 }
 
 /// What the limit answers; replaced as each world loads.
-static ALTARS: AtomicU8 = AtomicU8::new(16);
+static ALTARS: AtomicU32 = AtomicU32::new(16);
 
 struct AltarCount;
 
@@ -275,7 +275,7 @@ A server holds the bases its mods asked for. A joined client with bases past
 not arm groups 16, and its log says so.
 
 Settings arrive only as a world loads, so a mod whose bases count is a setting
-asks for its most at init. It then calls `altars::set_base_cap(bases)` from
+asks for its most at init. It then calls `altars::set_base_limit(bases)` from
 its settings handler, and the server refuses an altar that would start a base
 past the cap. Each call replaces the mod's own cap. The lowest cap of every
 mod holds. A cap at or past the request leaves the request, and a cap below 16
@@ -293,7 +293,7 @@ Vanilla accepts a placed object only when both corners of its box lie in one
 zone.
 [`load.on_building_zone_check`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/altars.rs)
 runs a filter when the game refuses an object for that reason. The filter gets
-the zones, the object's box and the margin in 32.32 fixed-point metres.
+the zones, the object's box and the margin, all in metres.
 Returning `true` accepts the object after all.
 
 ```rust

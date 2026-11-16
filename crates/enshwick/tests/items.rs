@@ -47,7 +47,7 @@ mod tests {
         ItemAction {
             header: Header::of::<ItemAction>(),
             kind,
-            player: Entity(4096),
+            character: Entity(4096),
             item,
             count: 3,
             inventory: Entity(inventory),
@@ -69,10 +69,6 @@ mod tests {
             "a use without a slot is refused by the handler"
         );
         assert!(!loader.item_action(&action(ItemAction::TRASH, tonic(), 4100)));
-        assert!(
-            loader.item_action(&action(ItemAction::EQUIP, tonic(), 4100)),
-            "a panic in a filter allows the action"
-        );
         assert!(loader.item_action(&action(ItemAction::UNEQUIP, tonic(), 4100)));
         assert!(
             loader.item_action(&action(ItemAction::PICKUP, tonic(), 0)),
@@ -92,8 +88,18 @@ mod tests {
 
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
-        let late = (api.item_filter)(loader.handle(), refuse_all, core::ptr::null_mut());
+        let late = (api.item_filter)(loader.handle(), Some(refuse_all), core::ptr::null_mut());
         assert_eq!(late, Status::TOO_LATE, "a filter after init is refused");
+
+        assert!(
+            loader.item_action(&action(ItemAction::EQUIP, tonic(), 4100)),
+            "a panic in a filter allows the action"
+        );
+        assert!(loader.is_off(), "the panic turned the mod off");
+        assert!(
+            loader.item_action(&action(ItemAction::TRASH, tonic(), 4100)),
+            "an off mod's filter refuses nothing"
+        );
     }
 
     unsafe extern "system" fn refuse_all(_: *const ItemAction, _: *mut core::ffi::c_void) -> u8 {

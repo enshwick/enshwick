@@ -46,7 +46,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
             w.slider(Slider::new("Volume", 0.0..=1.0).steps(11), &mut volume);
             w.dropdown(Dropdown::new("Labels", &["Off", "Owner", "Everyone"]), &mut mode);
             w.progress(volume);
-            if w.button("Close") {
+            if w.button("Close") || w.back() {
                 open = false;
             }
         });
@@ -67,7 +67,7 @@ enshwick.ui.on_frame(function(frame)
         volume = w:slider({ label = "Volume", min = 0, max = 1, steps = 11 }, volume)
         mode = w:dropdown({ label = "Labels", options = { "Off", "Owner", "Everyone" } }, mode)
         w:progress(volume)
-        if w:button({ text = "Close" }) then
+        if w:button({ text = "Close" }) or w:back() then
             open = false
         end
     end)
@@ -85,7 +85,16 @@ window's `body` is a new function each frame, so its frame is a new object.
 A window is the game's popup panel over a dimmed screen. It takes the input
 while it shows, and it shows for as long as the mod draws it. `id` names it
 among the mod's windows. One window is open at a time per callback, and
-widgets draw only inside one. The widgets:
+widgets draw only inside one. While a window shows over the world, the
+mouse cursor shows and the character takes no input. The camera does not
+turn, and the character does not move, attack or interact.
+
+Back (Escape, or B on a gamepad) over a window goes to the mod. `back` is
+true in the window's body in the frame the player pressed it. The game's
+pause menu does not open. The mod decides what Back does. The examples
+close the window: they stop drawing it.
+
+The widgets:
 
 | Widget                   | Looks like                                    | Returns                   |
 | ------------------------ | --------------------------------------------- | ------------------------- |
@@ -389,6 +398,104 @@ end)
 The prompt and the screen's host come from the client's last step. Both are
 unstable, and neither is seen in the game yet (see [Stability](stability.md)).
 
+## Item slots
+
+Unstable: needs the `unstable` feature and may change in any release.
+
+`item_slot(item, count)` draws an item slot as the game's inventory screens
+draw one. It shows the item's icon in the game's slot frame, with the count
+on it when it is more than one. It draws inside a window or a panel. It
+returns a `SlotInput`. Its `clicked` is true in the frame the player clicks
+the slot, and `hovered` while the cursor is on it. A count of 0, an item the client does not know,
+and a frame outside a game draw nothing.
+
+`hovered_slot()` returns the slot of the game's own inventory screen under the
+cursor, such as one of the backpack's or an open chest's. It is a `Slot` with
+the slot's inventory and index, the item, the count and the item's own entity.
+Its inventory is an entity of the client's world. Its category reads
+`INVALID`, since the screen does not say. A slot the mod draws itself is
+never this slot.
+
+```rust
+use enshwick::ItemId;
+use enshwick::ui::{Edge, HudScreenType, Label, Style};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let torch = ItemId::new(0x5e01);
+    load.extend_screen(HudScreenType::Backpack, Edge::Right, move |panel| {
+        if panel.item_slot(torch, 3).clicked {
+            // Send the server a player action of the mod's own.
+        }
+        if let Some(slot) = panel.hovered_slot() {
+            let line = format!("Slot {} holds {}", slot.at.index(), slot.count);
+            panel.label(Label::new(&line).style(Style::Secondary));
+        }
+    })
+}
+```
+
+```luau
+enshwick.ui.extend_screen("Backpack", "Right", function(panel)
+    if panel:item_slot(0x5e01, 3).clicked then
+        -- Send the server a player action of the mod's own.
+    end
+    local slot = panel:hovered_slot()
+    if slot ~= nil then
+        panel:label({ text = `Holds {slot.count}`, style = "Secondary" })
+    end
+end)
+```
+
+The slot of the game's screen is the one the screen drew under the cursor in
+the last whole frame. Both calls are unstable, and neither is seen in the game
+yet (see [Stability](stability.md)).
+
+## Item tooltip lines
+
+Unstable: needs the `unstable` feature and may change in any release.
+
+`load.extend_item_tooltip` adds lines under the game's rows in an item's
+tooltip and detail panel. It works for every item with an entity of its own,
+such as a weapon or a staff. The handler gets the item as an `ItemInstance` and its tooltip's
+`TooltipLines`. It runs once each time the tooltip shows another item, never
+once per frame. The lines it pushes show until the tooltip shows another
+item. A handler adds at most 16 lines. Each line is a label, which wraps or
+centres only when it asks to. Stackable items without an entity of their own
+get no lines.
+
+The handler runs on the client, so it reads what the client holds, such as
+the mod's [item data](item-and-entity-data.md), which the server sends. A client without
+Enshwick shows the game's rows alone.
+
+```rust
+use enshwick::item_data::ItemData;
+use enshwick::ui::{Label, Style};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let uses: ItemData<u16> = load.item_data("uses")?;
+    if load.host().build().side == enshwick::abi::Side::CLIENT {
+        load.extend_item_tooltip(move |item, lines| {
+            if let Some(left) = uses.get(item) {
+                let line = format!("Uses left: {left}");
+                let _shown = lines.push(Label::new(&line).style(Style::Positive));
+            }
+        })?;
+    }
+    Ok(())
+}
+```
+
+```luau
+enshwick.ui.extend_item_tooltip(function(item, lines)
+    lines:push({ text = `Item {item.item}`, style = "Secondary" })
+end)
+```
+
+The item tooltip lines are unstable and not yet seen in the game (see
+[Stability](stability.md)).
+[`examples/item-ui`](https://github.com/enshwick/enshwick/tree/main/examples/item-ui)
+shows both parts in one mod.
+
 ## A prompt on the mod's object
 
 A mod's object gets the game's own prompt when it is placed from a template
@@ -400,10 +507,60 @@ prompt with parts that work on every client, with or without Enshwick:
 | The prompt's title                | the object's label, [`world.set_label`](world.md#labels)                  |
 | No prompt for a player            | refuse `Kind::Open` in [`load.on_interaction`](vetoes.md#interactions)    |
 | The mod's own action on the press | the game event `AcceptOfferedInteractionEvent` ([Game events](game-events.md)), its `host_entity_id` the object |
+| The verb, the action on the press and the mod's own text | `load.prompt`, below |
 
-The game's data shows the object's own action, such as opening the chest,
-running on the press as well. The mod's action runs beside it on the server.
-This is not yet checked in the running game.
+Unstable: `load.prompt` needs the `unstable` feature and may change in any
+release ([Stability](stability.md)).
+
+`load.prompt(item, prompt)` sets the prompt of every object placed from
+`item`:
+
+| Part of `ObjectPrompt` | What it does | Who sees it |
+| ---------------------- | ------------ | ----------- |
+| `verb(Verb::Use)` | one of the game's own verbs in place of the object's | every client |
+| `replace_action()` | the press plays the game's empty interaction, a short reach, so only the mod's action runs, not the object's own, such as opening a chest | every client |
+| `text(tag)` | one of the mod's own texts, by its tag, in the verb's place, in the player's language | clients with Enshwick |
+
+The server writes the verb and the action each step, so a vanilla client
+sees them too. A client with Enshwick shows the text instead of the verb.
+When the object is locked, the game's lock reason shows in the verb's
+place. Call `load.prompt` in the mod on both sides, with the same item, as
+the server and the client each do their part. One prompt per item counts
+across all mods; a second one is refused.
+
+```rust
+use enshwick::content::{Id, id};
+use enshwick::interactions::{ObjectPrompt, Verb};
+use enshwick::ItemId;
+
+const SHRINE: Id = id!("shrine");
+const PRAY: Id = SHRINE.part("pray");
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let texts = load.texts()?;
+    load.add_texts(&texts, &[("shrine.pray", PRAY)])?;
+    load.prompt(
+        ItemId::from_guid(SHRINE.guid()),
+        ObjectPrompt::new().verb(Verb::Use).text(PRAY.guid()).replace_action(),
+    )
+}
+```
+
+```luau
+local SHRINE = "you.shrine:shrine"
+
+enshwick.i18n.add_texts(enshwick.i18n.texts(), { { "shrine.pray", `{SHRINE}.pray` } })
+enshwick.interactions.prompt(enshwick.content.item_id(SHRINE), {
+    verb = "Use",
+    text = enshwick.content.guid(`{SHRINE}.pray`),
+    replace_action = true,
+})
+```
+
+The verbs and the empty interaction come from the game's data and are
+checked against the game's files. The running game has not yet shown the
+verb on a vanilla client, the empty action or the text. On clients older
+than game version 1283531 the text stays off.
 
 ## Map markers
 
@@ -614,8 +771,9 @@ developer mod's tests build it with `FakeHost::developer_tools(true)`.
 With the `test` feature, the [fake loader](testing.md) runs frame callbacks
 with `draw_frame`. It returns what they drew as `Drawn` values. `input`
 takes the player's inputs for the next frame, such as `Input::Click` for the
-button labelled "Close". The fake loader tests the rest of the interface with
-these calls:
+button labelled "Close". `Input::Back` presses Back over the window with
+the id given, such as "options". The fake loader tests the rest of the
+interface with these calls:
 
 - `draw_hud` runs the HUD callbacks and returns their items with their
   anchors.
@@ -623,6 +781,10 @@ these calls:
   with its edge.
 - `markers` lists the mod's markers.
 - `dialogs` lists the dialogs waiting, and `answer` answers the oldest.
+- `slot_input` clicks or points at the item slot that shows an item.
+- `hover_slot` points at a slot of the game's screen.
+- `open_tooltip` runs the tooltip handlers for an item and returns their
+  lines.
 
 A fake built with `.side(Side::CLIENT)` serves the interface. The default
 server side turns it away, as a real server does.

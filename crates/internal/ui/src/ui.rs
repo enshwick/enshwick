@@ -6,7 +6,8 @@
 //! [`Frame`] in order. Windows look like the game's own panels, labels take
 //! the game's named text styles, and the rows are the game's settings rows.
 //! A widget's state lives with the mod: a toggle draws the `bool` it is
-//! handed and says when the player changed it.
+//! handed and says when the player changed it, and a window says when the
+//! player pressed Back over it ([`Frame::back`]).
 //!
 //! [`Ui::dialog`] queues a dialog in the game's own style, from any thread;
 //! [`Ui::ask`] waits for the answer on a thread of the mod's own.
@@ -16,7 +17,11 @@
 //! `unstable` feature, shows the mod's markers on the map until it sets
 //! others. `Load::extend_screen`, with the `unstable` feature, adds a panel
 //! at an edge of one of the game's screens, such as a storage chest's, shown
-//! and hidden with it.
+//! and hidden with it. `Frame::item_slot` draws an item slot as the
+//! game's inventory screens do, `Frame::hovered_slot` reads the slot of
+//! the game's own screen under the cursor, and
+//! `Load::extend_item_tooltip` adds lines to the game's item tooltips;
+//! all three with the `unstable` feature.
 //!
 //! Everything here is client only: [`Load::ui`](../struct.Load.html#method.ui) and [`Load::on_frame`](../struct.Load.html#method.on_frame) turn
 //! a mod's server part away with [`Off`].
@@ -36,7 +41,7 @@
 //!         frame.window("hello", "Hello", |w| {
 //!             w.label(Label::new("A window in the game's style.").style(Style::Secondary));
 //!             w.slider(Slider::new("Volume", 0.0..=1.0).steps(11), &mut volume);
-//!             if w.button("Close") {
+//!             if w.button("Close") || w.back() {
 //!                 open = false;
 //!             }
 //!         });
@@ -60,6 +65,10 @@ mod map;
 #[cfg(any(feature = "unstable", feature = "fake"))]
 pub(crate) mod screens;
 pub(crate) mod script;
+#[cfg(feature = "unstable")]
+mod slots;
+#[cfg(feature = "unstable")]
+pub(crate) mod tooltip;
 mod widgets;
 
 pub use dialog::{Dialog, Response};
@@ -78,6 +87,10 @@ pub use hud::{Anchor, Hud};
 pub use map::{MAX_MARKERS, Marker, MarkerColor};
 #[cfg(feature = "unstable")]
 pub use screens::HudScreenType;
+#[cfg(feature = "unstable")]
+pub use slots::SlotInput;
+#[cfg(feature = "unstable")]
+pub use tooltip::TooltipLines;
 
 /// The most markers a mod shows on the map at once, which the fake host
 /// holds to as well.
@@ -205,7 +218,7 @@ impl Ui {
         let status = (api.ui_dialog)(
             self.host.handle(),
             &raw const raw,
-            answered::<F>,
+            Some(answered::<F>),
             user.cast(),
         );
         if status.is_ok() {
@@ -213,8 +226,7 @@ impl Ui {
         }
         // SAFETY: refused, so the loader keeps no copy of the pointer.
         drop(unsafe { Box::from_raw(user) });
-        // A dialog the loader refuses waits behind one already open.
-        if status == Status::REFUSED {
+        if status == Status::BUSY {
             return Err(UiError::Busy);
         }
         enshwick_base::load::outcome(status)
@@ -224,7 +236,7 @@ impl Ui {
 impl enshwick_base::load::StatusError for UiError {
     fn of(status: Status) -> Self {
         match status {
-            Status::MISSING => Self::Unavailable,
+            Status::UNAVAILABLE | Status::MISSING => Self::Unavailable,
             Status::WRONG_THREAD => Self::WrongThread,
             _ => Self::Refused,
         }
@@ -269,7 +281,7 @@ impl LoadMethods for crate::BaseLoad {
                 host,
                 draw: Mutex::new(draw),
             },
-            |user| (host.api().ui_frame)(host.handle(), draw_frame::<F>, user),
+            |user| (host.api().ui_frame)(host.handle(), Some(draw_frame::<F>), user),
             "frame callback",
         )
     }

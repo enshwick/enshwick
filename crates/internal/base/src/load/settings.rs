@@ -40,7 +40,7 @@ impl BaseLoad {
         let _checked = (host.api().config_check)(
             host.handle(),
             Str::new(T::FILE),
-            check_text::<T>,
+            Some(check_text::<T>),
             core::ptr::null_mut(),
         );
         handler(&T::default());

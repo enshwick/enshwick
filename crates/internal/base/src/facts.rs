@@ -65,14 +65,14 @@ impl EngineFacts for crate::Host {
 
     fn size(&self, id: &str) -> Result<usize, Off> {
         let mut out = 0u32;
-        let status = (self.api().type_size)(Str::new(id), &raw mut out);
+        let status = (self.api().type_size)(self.handle(), Str::new(id), &raw mut out);
         let size = crate::load::ok(status, out, || format!("type {id}"))?;
         usize::try_from(size).map_err(|_| Off::new(format!("type {id} is out of range")))
     }
 
     fn hash(&self, id: &str) -> Result<u32, Off> {
         let mut out = 0u32;
-        let status = (self.api().type_hash)(Str::new(id), &raw mut out);
+        let status = (self.api().type_hash)(self.handle(), Str::new(id), &raw mut out);
         crate::load::ok(status, out, || format!("type {id}"))
     }
 }

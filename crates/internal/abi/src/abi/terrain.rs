@@ -1,6 +1,8 @@
 //! Terrain and voxels: the terrain materials, terrain edits, and the voxels the server reads and the edits it reports.
 
+use crate::abi::Metres;
 use crate::abi::{Header, ItemId, ModHandle};
+use crate::content::Guid;
 
 /// A terrain material of the running game, written by
 /// [`HostApi::terrain_materials`](super::HostApi::terrain_materials).
@@ -47,6 +49,79 @@ impl TerrainMaterialInfo {
     pub const FLATTENS: u8 = 1;
 }
 
+/// A terrain material of a mod's own, for
+/// [`HostApi::terrain_material_add`](super::HostApi::terrain_material_add):
+/// a copy of a vanilla material, its look included, with the rules
+/// `changes` names set from this struct.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, TerrainMaterialAdd, TerrainMaterialInfo};
+/// use enshwick::content::{Guid, Id};
+///
+/// let tar_sand = TerrainMaterialAdd {
+///     header: Header::of::<TerrainMaterialAdd>(),
+///     guid: Id::new("you.sands:tar-sand").guid(),
+///     item: Guid([7; 16]),
+///     health: 7,
+///     like: 9,
+///     fallback: 9,
+///     changes: TerrainMaterialAdd::ITEM | TerrainMaterialAdd::HEALTH,
+///     hardness: 0,
+///     flags: TerrainMaterialInfo::FLATTENS,
+///     reserved: [0; 3],
+/// };
+/// assert_eq!(tar_sand.changes & TerrainMaterialAdd::HARDNESS, 0, "the hardness of 9 stays");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct TerrainMaterialAdd {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The GUID saves name its voxels by: its content id's.
+    pub guid: Guid,
+    /// The item digging it yields, by its GUID, with
+    /// [`TerrainMaterialAdd::ITEM`].
+    pub item: Guid,
+    /// The health a voxel of it has against tools, with
+    /// [`TerrainMaterialAdd::HEALTH`].
+    pub health: i32,
+    /// The game's terrain material it copies, its look and every rule it
+    /// does not change, by voxel id.
+    pub like: u8,
+    /// The game's terrain material its voxels load as while no mod adds it,
+    /// by voxel id.
+    pub fallback: u8,
+    /// The rules it sets: [`TerrainMaterialAdd::ITEM`],
+    /// [`TerrainMaterialAdd::HARDNESS`], [`TerrainMaterialAdd::HEALTH`] and
+    /// [`TerrainMaterialAdd::FLATTENS`], or none.
+    pub changes: u8,
+    /// How hard it is to dig, the game's hardness category from 0 (`Soft`)
+    /// to 5 (`Unbreakable`), with [`TerrainMaterialAdd::HARDNESS`].
+    pub hardness: u8,
+    /// [`TerrainMaterialInfo::FLATTENS`] or none, with
+    /// [`TerrainMaterialAdd::FLATTENS`].
+    pub flags: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+}
+
+impl_headed!(TerrainMaterialAdd);
+
+impl TerrainMaterialAdd {
+    /// Sets the item digging it yields.
+    pub const ITEM: u8 = 1;
+    /// Sets its hardness.
+    pub const HARDNESS: u8 = 1 << 1;
+    /// Sets its health.
+    pub const HEALTH: u8 = 1 << 2;
+    /// Sets whether a player's tool can flatten it.
+    pub const FLATTENS: u8 = 1 << 3;
+    /// Every change it may set.
+    pub const ALL_CHANGES: u8 = Self::ITEM | Self::HARDNESS | Self::HEALTH | Self::FLATTENS;
+}
+
 /// A terrain edit, for [`HostApi::terrain_edit`](super::HostApi::terrain_edit).
 ///
 /// # Examples
@@ -83,7 +158,7 @@ pub struct TerrainEdit {
     /// dig.
     pub material: u32,
     /// Where, in metres; every axis 0 or more.
-    pub position: [f32; 3],
+    pub position: Metres,
     /// How far it reaches, in metres, above 0 and up to 16: a mound's or a
     /// flattened disc's radius, a dug sphere's.
     pub radius: f32,
@@ -117,8 +192,9 @@ impl TerrainEdit {
 /// [`HostApi::voxel_read`](super::HostApi::voxel_read). The loader decodes
 /// the game's voxel into it, so a mod never reads the game's own encoding.
 ///
-/// Its layout is frozen: [`HostApi::voxel_read`](super::HostApi::voxel_read)
-/// writes an array of it with no entry size.
+/// Frozen, written as an array by
+/// [`HostApi::voxel_read`](super::HostApi::voxel_read): it is the game's own
+/// packed four-byte voxel.
 ///
 /// # Examples
 ///
@@ -194,11 +270,11 @@ impl Voxel {
     }
 }
 
-/// One voxel a committed edit changed, as [`VoxelEditData`] lists it: where
+/// One voxel a committed edit changed, as [`VoxelEditRequest`] lists it: where
 /// it is and what it was and is.
 ///
-/// Its layout is frozen: [`VoxelEditData`] points at an array of it with no
-/// entry size.
+/// Frozen, read as an array from [`VoxelEditRequest`]: a cell and its voxel
+/// before and after are all a change is.
 ///
 /// # Examples
 ///
@@ -230,16 +306,16 @@ pub struct VoxelChange {
 /// The game writes a whole box, aligned to its bricks of 8 voxels and
 /// larger than the edit, so `changes` lists only the voxels that differ
 /// from the box as it was. Layout grows only by appending; read a later
-/// field after [`Header::covers`].
+/// field once the header's `size` covers it.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, ModHandle, VoxelChange, VoxelEditData};
+/// use enshwick::abi::{Header, ModHandle, VoxelChange, VoxelEditRequest};
 ///
 /// let changes = [VoxelChange::default()];
-/// let edit = VoxelEditData {
-///     header: Header::of::<VoxelEditData>(),
+/// let edit = VoxelEditRequest {
+///     header: Header::of::<VoxelEditRequest>(),
 ///     by: ModHandle::NONE,
 ///     min: [192, 72, 192],
 ///     size: [16, 16, 16],
@@ -250,7 +326,7 @@ pub struct VoxelChange {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
-pub struct VoxelEditData {
+pub struct VoxelEditRequest {
     /// Size and version of this struct.
     pub header: Header,
     /// The mod whose call through the API made the edit, such as a
@@ -266,7 +342,7 @@ pub struct VoxelEditData {
     /// fastest, then y, then z. Valid for the call only.
     pub changes: *const VoxelChange,
     /// How many voxels changed, at least one.
-    pub count: u64,
+    pub count: u32,
 }
 
-impl_headed!(VoxelEditData);
+impl_headed!(VoxelEditRequest);

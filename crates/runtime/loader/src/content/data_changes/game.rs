@@ -296,19 +296,40 @@ fn items_in(
         placed: at(catalogue::ids::ITEM_INFO_PLACED_ENTITY)?,
         backpack,
     };
-    let layout = ContainerLayout::resolve(&catalogue::Reflected(reflection)).ok();
-    let slots = |template: Guid| {
-        let layout = layout.as_ref()?;
-        let data =
-            archive.resource(&template.key_by_hash(crate::engine::catalogue::types::TEMPLATE))?;
-        container_slots(layout, &data)
-    };
-    let mut items: Vec<(Guid, ItemTraits)> = archive
+    // Items and the templates they place lie in different chunks of the
+    // archive, which keeps few unpacked: read every item, then every template
+    // they ask for, each in archive order, so each chunk unpacks once.
+    let infos: Vec<(Guid, Vec<u8>)> = archive
         .keys_of(crate::engine::catalogue::types::ITEM_INFO)
         .into_iter()
-        .filter_map(|key| {
-            let bytes = archive.resource(&key)?;
-            Some((Guid(key.guid), traits_of(&bytes, offsets, slots)?))
+        .filter_map(|key| Some((key.guid, archive.resource(&key)?)))
+        .collect();
+    let asked = core::cell::RefCell::new(rustc_hash::FxHashSet::default());
+    for (_, bytes) in &infos {
+        let _unread = traits_of(bytes, offsets, |template| {
+            asked.borrow_mut().insert(template);
+            None
+        });
+    }
+    let asked = asked.into_inner();
+    let slots: FxHashMap<Guid, u8> = ContainerLayout::resolve(&catalogue::Reflected(reflection))
+        .ok()
+        .map_or_default(|layout| {
+            archive
+                .keys_of(crate::engine::catalogue::types::TEMPLATE)
+                .into_iter()
+                .filter(|key| placed_template(key, &asked))
+                .filter_map(|key| {
+                    let slots = container_slots(&layout, &archive.resource(&key)?)?;
+                    Some((key.guid, slots))
+                })
+                .collect()
+        });
+    let mut items: Vec<(Guid, ItemTraits)> = infos
+        .iter()
+        .filter_map(|(item, bytes)| {
+            let traits = traits_of(bytes, offsets, |template| slots.get(&template).copied())?;
+            Some((*item, traits))
         })
         .collect();
     items.sort_unstable_by_key(|(item, _)| item.0);
@@ -335,6 +356,12 @@ pub(crate) fn wanted(loader: &Loader) -> bool {
 }
 
 /// Whether mod `index` is on.
+/// Whether `key` is the first part of a template an item asked for: the
+/// part that holds its container slots.
+fn placed_template(key: &ResourceKey, asked: &rustc_hash::FxHashSet<Guid>) -> bool {
+    key.part == 0 && asked.contains(&key.guid)
+}
+
 fn on(loader: &Loader, index: ModIndex) -> bool {
     loader
         .mods
@@ -611,7 +638,7 @@ pub(crate) enum ApplyChangesError {
 /// `keys` as `<guid>:<type hash>`, joined.
 fn shown(keys: &[ResourceKey]) -> String {
     keys.iter()
-        .map(|key| format!("{}:{:08x}", Guid(key.guid), key.type_hash))
+        .map(|key| format!("{}:{:08x}", key.guid, key.type_hash))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -659,6 +686,19 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_first_part_of_an_asked_template_gives_an_item_its_slots() {
+        let asked = rustc_hash::FxHashSet::from_iter([Guid([1; 16])]);
+        let key = |guid: u8, part| ResourceKey {
+            guid: Guid([guid; 16]),
+            type_hash: crate::engine::catalogue::types::TEMPLATE,
+            part,
+        };
+        assert!(placed_template(&key(1, 0), &asked));
+        assert!(!placed_template(&key(1, 1), &asked), "a later part");
+        assert!(!placed_template(&key(2, 0), &asked), "no item asked");
+    }
 
     /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, with
     /// the archive beside it (each skipped without it), the selections by

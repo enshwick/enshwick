@@ -476,14 +476,16 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, WeatherError>
             // SAFETY: `data` is a live instance, checked by `instance`; its
             // position sits at the build table's `weather.instance_position`
             // offset.
-            position: unsafe { read(data, layout.instance_position) },
+            position: enshwick_core::ecs::metres(unsafe {
+                read::<[i64; 3]>(data, layout.instance_position)
+            }),
             // SAFETY: `data` is a live instance, checked by `instance`; its
             // radius sits at the build table's `weather.instance_radius`
             // offset.
             radius: unsafe { read(data, layout.instance_radius) },
             reserved: 0,
-            remaining: despawn.saturating_sub(now).max(0),
-            phenomenon,
+            remaining_ns: despawn.saturating_sub(now).max(0),
+            phenomenon: enshwick_core::content::Guid(phenomenon),
         });
     }
     Ok(out)
@@ -970,7 +972,6 @@ unsafe fn record(event: Event, entities: *mut u8, chunk: *mut u8) {
     }
     let data = ChunkData {
         header: Header::of::<ChunkData>(),
-        index,
         x: index % width,
         z: index / width,
         size: CHUNK_METRES,

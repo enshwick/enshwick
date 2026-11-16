@@ -65,8 +65,7 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
         let lib = Path::new(dir).join("src").join("lib.rs");
         let test_only: BTreeSet<String> = tests
             .get(package)
-            .map(|reached| reached.difference(features).cloned().collect())
-            .unwrap_or_default();
+            .map_or_default(|reached| reached.difference(features).cloned().collect());
         let mut found = Vec::new();
         if let Err(error) = gated_items(root, &lib, features, &test_only, &mut found) {
             problems.push(error);
@@ -237,7 +236,7 @@ impl ModuleFile {
     /// The module file at `path`: a crate root or `mod.rs` holds its
     /// children beside it, any other file in the directory of its name.
     fn new(path: PathBuf) -> Self {
-        let parent = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let parent = path.parent().map_or_default(Path::to_path_buf);
         let stem = path
             .file_stem()
             .and_then(|s| s.to_str())

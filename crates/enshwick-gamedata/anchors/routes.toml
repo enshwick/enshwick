@@ -818,6 +818,20 @@ take = "value"
 range = [0x15e0, 0x5780]
 
 [[route]]
+id = "ui.prompt_context"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov rax,[rbp+*]", "movups [rsi+?],xmm0", "movsd xmm0,[rbp+?]", "movsd [rsi+?],xmm0", "mov rcx,[rax]"]
+take = "value"
+range = [0x16af0, 0x5abc0]
+
+[[route]]
+id = "ui.prompt_site"
+sides = ["client"]
+system = "player_ui"
+shape = ["cmp [rsi+?],bl", "je ?b", "mov [rsi+?],bl", "mov rdi,[rsp+?]"]
+
+[[route]]
 id = "ui.screen_host"
 sides = ["client"]
 system = "player_ui"
@@ -4435,6 +4449,21 @@ called_by = ["npc_recipe_comfort_requirements"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
+id = "recipe.menu_known"
+sides = ["client"]
+callers = "item.info"
+shape = [
+  "mov ecx,[rcx+?]",
+  "call {item.info}",
+  "test rax,rax",
+  "je ?",
+  "cmp [rbx+?],?",
+  "jne ?",
+  "mov r15d,[rbx+?]",
+]
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rbp", "push rsi", "push rdi"]
+
+[[route]]
 id = "resource.key_of"
 in = "~loader:resource.key_of"
 shape = [
@@ -6570,6 +6599,20 @@ in = "ui.slider"
 shape = ["mov eax,[r14+*]", "test eax,eax"]
 take = "value"
 range = [38, 152]
+
+[[route]]
+id = "ui.screen_shows_cursor"
+sides = ["client"]
+system = "local_player_ui_render_setup"
+shape = [
+  "movzx ecx,[rcx+?]",
+  "call *",
+  "test al,al",
+  "je ?",
+  "xor edx,edx",
+]
+take = "address"
+check = ["cmp cl,?", "ja ?", "movzx eax,cl"]
 
 [[route]]
 id = "ui.slider_init"
@@ -8809,6 +8852,21 @@ sides = ["client"]
 loads = ["mainMenuTextContentBoundingBox"]
 
 [[route]]
+id = "~text_field_step"
+sides = ["client"]
+in = "ui.text_field_input"
+shape = ["mov r8,r14", "lea rdx,[rsp+?]", "mov rcx,rbx", "call *"]
+take = "address"
+
+[[route]]
+id = "ui.text_field_start"
+sides = ["client"]
+in = "~text_field_step"
+shape = ["cmp [rsi+*],?", "je ?", "movups xmm0,[r15]"]
+take = "value"
+range = [0xcc4, 0x3310]
+
+[[route]]
 id = "~fn:ui.text_field_editing"
 sides = ["client"]
 loads = ["textInputWindow"]
@@ -9100,3 +9158,235 @@ in = "session.join_game"
 shape = ["je ?b", "cmp byte [r14+*],0x3", "jne ?b", "mov r8d,[rsi]"]
 take = "value"
 range = [0x40, 0x100]
+
+[[route]]
+id = "~local_player_check"
+sides = ["client"]
+system = "player_ui"
+shape = ["call {ecs.row_entity}", "mov rdx,rbx", "mov ecx,[rax]", "call *"]
+take = "address"
+
+[[route]]
+id = "ecs.local_player_id"
+sides = ["client"]
+in = "~local_player_check"
+shape = ["cmp [rdx+*],ecx", "sete al"]
+take = "value"
+range = [2, 16]
+
+[[route]]
+id = "ecs.player_ui_iterator_size"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov r8d,*", "lea rdx,[rbp+?]", "mov ?r,rcx", "call {ecs.iterator_init}"]
+take = "value"
+range = [0x1e4, 0x790]
+
+[[route]]
+id = "ecs.player_ui_iterator"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov r8d,?", "lea rdx,[rbp+*]", "mov ?r,rcx", "call {ecs.iterator_init}"]
+take = "value"
+range = [0x38, 0xe0]
+
+[[route]]
+id = "ecs.player_ui_local_player"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov rbx,[rbp+*]", "lea rdx,[rbp+?]", "mov rcx,?r", "call {ecs.row_entity}", "mov rdx,rbx", "mov ecx,[rax]", "call {~local_player_check}"]
+take = "value"
+range = [0xc8, 0x320]
+
+[[route]]
+id = "input.client_build"
+sides = ["client"]
+callers = "item.info"
+shape = ["mov dword [rsp+0x38],0x1", "mov [rsp+0x30],?r", "mov ?r,[?+?]", "mov [rsp+0x28],?r", "mov [rsp+0x20],?r", "call *"]
+take = "address"
+check = ["mov [rsp+0x20],r9", "mov [rsp+0x18],r8", "mov [rsp+0x10],rdx", "push rbp"]
+
+[[route]]
+id = "input.movement_stick"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.movementStick"]
+type = "keen::float2"
+range = [0x15c, 0x570]
+
+[[route]]
+id = "input.target_selection"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.targetSelectionInput"]
+type = "keen::float2"
+range = [0x15c, 0x570]
+
+[[route]]
+id = "input.digital_input"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.digitalInput"]
+type = "keen::ecs::PlayerDigitalInput"
+range = [0x15c, 0x570]
+
+[[route]]
+id = "input.camera_rotation"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.cameraRotationInput"]
+type = "keen::input_mapping::MultiDeviceDirectionalInput"
+range = [0x162, 0x588]
+
+[[route]]
+id = "~input_blocked"
+sides = ["client"]
+in = "input.client_build"
+shape = ["mov rsi,rcx", "mov rcx,r15", "call *", "xor edi,edi", "test al,al"]
+take = "address"
+
+[[route]]
+id = "input.blocked"
+sides = ["client"]
+in = "~input_blocked"
+shape = ["cmp byte [rcx+*],0x1", "sete al"]
+take = "value"
+range = [0x8000, 0x15000]
+
+[[route]]
+id = "ui.toggle_hud_screen"
+sides = ["client"]
+loads = ["[GameUi] toggleHudScreen to %k"]
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi", "push rdi"]
+
+[[route]]
+id = "~in_game_menu"
+sides = ["client"]
+loads = ["codexTab"]
+
+[[route]]
+id = "ui.menu_tab"
+sides = ["client"]
+in = "~in_game_menu"
+shape = ["lea rax,[r15+*]", "mov ecx,?", "cmovne rcx,rax", "mov qword [rcx],0x6"]
+take = "value"
+range = [0x18f38, 0x63d10]
+
+[[route]]
+id = "ui.return_screen"
+sides = ["client"]
+in = "~in_game_menu"
+shape = ["movzx eax,[?+*]", "mov rcx,?r", "test al,al", "cmovne ?r,eax", "movzx edx,?r", "call {ui.toggle_hud_screen}"]
+take = "value"
+range = [0xe6c, 0x39b2]
+
+[[route]]
+id = "ui.recipe_directory"
+sides = ["client"]
+loads = ["doRecipeDirectoryColumn"]
+check = ["mov r11,rsp", "mov [r11+0x8],rbx", "mov [r11+0x10],rbp"]
+
+[[route]]
+id = "ui.recipe_select"
+sides = ["client"]
+callers = "ui.column"
+shape = ["xor bl,bl", "cmp [?+*],eax", "jne ?b", "mov bl,0x1"]
+take = "value"
+range = [0x24, 0x90]
+
+[[route]]
+id = "ui.recipe_highlighted"
+sides = ["client"]
+callers = "ui.column"
+shape = ["mov [?+*],?r", "lea r8,[rbx+rbx*8]", "shl r8,0x3"]
+take = "value"
+range = [0x74, 0x1d0]
+
+[[route]]
+id = "ui.item_slot"
+sides = ["client"]
+loads = ["doItemSlot", "slotDisplayParent"]
+check = ["mov rax,rsp", "mov [rax+0x18],r8", "mov [rax+0x8],rcx"]
+
+[[route]]
+id = "ui.item_slot_init"
+sides = ["client"]
+callers = "ui.item_slot"
+shape = ["lea rcx,[rsp+?]", "movzx esi,dl", "call *", "mov [rsp+?],sil"]
+take = "address"
+check = ["sub rsp,?i", "movups xmm0,[rip+?]", "mov qword [rcx+0x18],?i"]
+
+[[route]]
+id = "ui.item_slot_clickable"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["cmp [r15+*],sil", "je ?b", "mov rax,[rbp+?]", "lea rcx,[rbp-?]"]
+take = "value"
+range = [49, 159]
+
+[[route]]
+id = "ui.context_player"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["mov r8,[rdx+*]", "mov rdx,[r8]", "test rdx,rdx"]
+take = "value"
+range = [104, 416]
+
+[[route]]
+id = "ui.player_data"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["test rdx,rdx", "jne ?b", "mov edx,eax", "jmp ?b", "mov rdx,[rdx+*]"]
+take = "value"
+range = [28, 112]
+
+[[route]]
+id = "~fn:ui.item_viewer"
+sides = ["client"]
+loads = ["mainContentArea", "item Base Info Column"]
+
+[[route]]
+id = "ui.tooltip_panel_site"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["lea rcx,[rbp+?]", "call {ui.frame_close}", "lea rcx,[rbp+?]", "call {ui.scroll_end}", "cmp dword [rsi+0xf4],0x0"]
+
+[[route]]
+id = "ui.tooltip_plain_site"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["cmp dword [rsi+0xf4],0x0", "je ?b", "movaps xmm0,xmm7"]
+
+[[route]]
+id = "ui.viewer_layout"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["mov edi,[rcx+*]", "mov rsi,rcx"]
+take = "value"
+range = [94, 376]
+
+[[route]]
+id = "ui.viewer_unknown"
+sides = ["client"]
+in = "~fn:ui.item_viewer"
+shape = ["cmp byte [rsi+*],0x0", "je ?b", "mov rax,[rip+?]", "mov rbx,[rax+?]"]
+take = "value"
+range = [113, 454]
+
+[[route]]
+id = "ui.viewer_item"
+sides = ["client"]
+field = ["keen::ItemInstanceInfo.itemId"]
+type = "keen::ItemId"
+range = [4, 16]
+
+[[route]]
+id = "ui.viewer_pide"
+sides = ["client"]
+field = ["keen::ItemInstanceInfo.pide"]
+type = "keen::ecs::EntityId"
+range = [6, 24]
+
+[[route]]
+id = "ui.player_items"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["mov rdx,[rdx+*]", "mov ecx,[rcx+0x8]", "call {item.info}"]
+take = "value"
+range = [0x200000, 0x900000]

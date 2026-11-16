@@ -169,7 +169,7 @@ where
     }
 
     fn write(&self, entity: Entity, bytes: &[u8]) -> Result<(), SetError> {
-        let status = (self.host.api().item_data_set)(
+        let status = (self.host.api().set_item_data)(
             self.host.handle(),
             self.kind,
             entity,
@@ -210,7 +210,7 @@ impl LoadMethods for crate::BaseLoad {
         };
         let mut kind = 0;
         let status =
-            (host.api().entity_data_open)(host.handle(), Str::new(id), flags, &raw mut kind);
+            (host.api().define_entity_data)(host.handle(), Str::new(id), flags, &raw mut kind);
         crate::load::ok(
             status,
             EntityData {

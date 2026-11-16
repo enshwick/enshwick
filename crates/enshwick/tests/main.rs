@@ -30,8 +30,12 @@ mod calls;
 mod capture;
 #[cfg(feature = "unstable")]
 mod chat;
+#[cfg(feature = "unstable")]
+mod client_commands;
 #[cfg(all(feature = "unstable", feature = "typed"))]
 mod client_game_events;
+#[cfg(feature = "unstable")]
+mod client_snapshot;
 #[cfg(feature = "unstable")]
 mod commands;
 mod config_check;
@@ -65,6 +69,7 @@ mod example_manifest;
 mod experience_content;
 mod export_dir;
 mod exports;
+mod fake_mod_off;
 mod fake_per_test;
 mod fake_reach;
 mod fake_refusals;
@@ -87,11 +92,14 @@ mod hud;
 mod icons;
 mod icons_hidden;
 mod init_off;
+mod init_only;
 #[cfg(feature = "unstable")]
 mod input;
 #[cfg(feature = "typed")]
 mod input_hint;
 mod interaction_filter;
+#[cfg(feature = "unstable")]
+mod interaction_prompts;
 #[cfg(feature = "unstable")]
 mod interaction_targets;
 mod internal_crates;
@@ -103,6 +111,10 @@ mod item_arguments;
 mod item_changes;
 #[cfg(feature = "unstable")]
 mod item_data;
+#[cfg(feature = "unstable")]
+mod item_slots;
+#[cfg(feature = "unstable")]
+mod item_tooltips;
 #[cfg(feature = "unstable")]
 mod items;
 #[cfg(feature = "unstable")]
@@ -124,6 +136,7 @@ mod language_of;
 mod lifecycle;
 mod live_changes;
 mod live_changes_join;
+mod loader_off;
 #[cfg(feature = "unstable")]
 mod local_input_status;
 mod loot_drops;
@@ -144,6 +157,7 @@ mod no_mod_points;
 mod no_ui;
 #[cfg(feature = "unstable")]
 mod notices;
+mod null_callbacks;
 #[cfg(feature = "unstable")]
 mod open_screen;
 mod pacing;
@@ -215,6 +229,7 @@ mod schedule;
 mod screen_extensions;
 #[cfg(feature = "unstable")]
 mod screen_hosts;
+mod served_panic;
 #[cfg(feature = "typed")]
 mod served_reads;
 #[cfg(feature = "unstable")]
@@ -246,9 +261,12 @@ mod survivor_lookup;
 mod symbols;
 mod table_config;
 mod task_workers;
+#[cfg(feature = "unstable")]
+mod template_arguments;
 #[cfg(feature = "typed")]
 mod templates;
 mod terrain;
+mod terrain_materials;
 mod terrain_pages;
 mod ticks;
 #[cfg(feature = "unstable")]

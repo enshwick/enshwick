@@ -45,6 +45,10 @@ enum Task {
         /// The folder to write it into.
         #[arg(long, default_value = "target/dist")]
         out: PathBuf,
+        /// Refuses to write the archive without `ENSHWICK_SIGNING_KEY`, as a
+        /// release does.
+        #[arg(long)]
+        signed: bool,
     },
     /// Writes the notes of the alpha the workspace carries.
     Notes(commands::notes::Args),
@@ -89,7 +93,7 @@ fn run(task: Task) -> Result<ExitCode, String> {
     let root = workspace_root();
     let passed = match task {
         Task::Check(args) => commands::check::run(&args)?,
-        Task::Dist { out } => commands::dist::run(&out)?,
+        Task::Dist { out, signed } => commands::dist::run(&out, signed)?,
         Task::Notes(args) => commands::notes::run(&args)?,
         Task::Close(args) => {
             say(&commands::close::run(&root, &packages()?, &args)?);

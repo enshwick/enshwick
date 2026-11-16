@@ -45,6 +45,10 @@ pub enum Value {
     /// The item picked for an [`Arg::item`]: one the server's game knows,
     /// checked before the handler runs.
     Item(Guid),
+    /// The entity template picked for an [`Arg::template`]: one the
+    /// server's game knows, vanilla or a mod's, checked before the handler
+    /// runs.
+    Template(Guid),
 }
 
 /// An argument of an action: a typed choice, or a line of text of at most
@@ -219,6 +223,38 @@ impl Arg {
     pub fn item(label: &str) -> Self {
         Self {
             kind: ArgView::ITEM,
+            ..Self::text(label, super::MAX_TEXT)
+        }
+    }
+
+    /// One of the game's entity templates, vanilla or a mod's: what a
+    /// creature or a placed object is made of, for a spawn or a summon. A
+    /// window lists every template by the name the game's data gives it,
+    /// such as `Enemy_Wildbeast_Wolf`, and a mod's by its content id,
+    /// searched by typing; the names come from the client's own game, so
+    /// the server needs none. A console line names a template by its GUID,
+    /// content id or vanilla name, and takes words as a [text](Self::text)
+    /// does; an optional template, like an optional text, is the last
+    /// argument. The server refuses a template its game does not know
+    /// before the handler runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Arg, Outcome, Value};
+    ///
+    /// let summon = Action::new("summon", "Summon a creature").admins().arg(Arg::template("Creature"));
+    /// assert_eq!(summon.id(), "summon");
+    /// let picked = |args: &[Value]| match args {
+    ///     [Value::Template(template)] => Outcome::done(format!("summoned {template}")),
+    ///     _ => Outcome::refused("no template"),
+    /// };
+    /// assert!(!picked(&[]).is_done());
+    /// ```
+    #[must_use]
+    pub fn template(label: &str) -> Self {
+        Self {
+            kind: ArgView::TEMPLATE,
             ..Self::text(label, super::MAX_TEXT)
         }
     }
@@ -506,6 +542,10 @@ pub enum RefusedReason {
     Busy,
     /// The object the run names stands out of the caller's reach.
     OutOfReach,
+    /// No entity template the server's game knows has the name.
+    UnknownTemplate,
+    /// Several templates have the name.
+    SeveralTemplates,
 }
 
 /// A run of one of the mod's actions that the platform refused before its

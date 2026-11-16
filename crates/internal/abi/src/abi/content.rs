@@ -3,6 +3,7 @@
 use core::ffi::c_void;
 
 use crate::abi::{Header, Status, Str};
+use crate::content::Guid;
 
 #[doc(inline)]
 pub use enshwick_values::abi::ResourceKey;
@@ -10,54 +11,66 @@ pub use enshwick_values::abi::ResourceKey;
 /// One content rename for [`HostApi::rename_content`](super::HostApi::rename_content):
 /// content saved under `from` reads as the content now under `to`.
 ///
-/// Frozen: written as an array.
+/// Frozen, written as an array: a rename is two content GUIDs.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::abi::ContentRename;
 ///
-/// let rename = ContentRename { from: [1; 16], to: [2; 16] };
+/// let rename = ContentRename { from: enshwick::abi::Guid([1; 16]), to: enshwick::abi::Guid([2; 16]) };
 /// assert_ne!(rename.from, rename.to);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ContentRename {
-    /// The GUID the content had, in memory order.
-    pub from: [u8; 16],
-    /// The GUID the content has now, in memory order.
-    pub to: [u8; 16],
+    /// The GUID the content had.
+    pub from: Guid,
+    /// The GUID the content has now.
+    pub to: Guid,
 }
 
-/// Builds a served resource from its base: `base` is the base resource's bytes,
-/// valid for the call.
+/// Builds a served resource from its base: `base` is the base resource's
+/// `base_len` bytes, readable and unchanged for the call.
 ///
-/// On [`Status::OK`] the function writes a pointer and length of its
-/// output: bytes in a buffer from
-/// [`HostApi::resource_buffer`](super::HostApi::resource_buffer), which the
-/// loader frees once no build reads them, or bytes of its own, which stay
-/// valid and writable for the life of the process. A rebuild
+/// On [`Status::OK`] the function writes to `out` and `out_len` where its
+/// output lies: bytes inside one buffer it took during this call from
+/// [`HostApi::resource_buffer`](super::HostApi::resource_buffer), the only
+/// place an output may lie. The loader owns the buffer: the game's first
+/// build keeps it for the process, as the game holds those bytes, and frees
+/// every other buffer when the build that lent it ends, a rebuild's and a
+/// served read's included. An output anywhere else is a failure, as is a
+/// null one. A rebuild
 /// ([`HostApi::rebuild_resource`](super::HostApi::rebuild_resource)) writes
-/// over the bytes the game's first build kept.
+/// the bytes of its output that differ over those the first build kept.
 ///
 /// The loader calls it on the thread that builds: the game's resource
 /// thread for the game's first build, the calling thread for a rebuild or a
 /// served read ([`HostApi::resource_served`](super::HostApi::resource_served)).
-/// It runs again for each served read, possibly on two threads at once,
-/// and nested inside another key's patch on the same thread, though never
-/// inside a build of its own key there. A failure returned from
-/// the game's build turns the mod off; a panic must not leave the
-/// function. `user` is the pointer the mod served with.
+/// Builds of one key on different threads run at once, so a patch may run
+/// on several threads at a time, each call with its own base and buffers;
+/// a rebuild of a key waits for the key's other rebuild. On one thread it
+/// may run nested inside another key's patch, never inside a build of its
+/// own key. A failure returned from the game's build turns the mod off,
+/// but [`Status::FAULTED`](crate::abi::Status::FAULTED), the answer of a
+/// patch whose builder panicked: that turns off only this patch for the
+/// process, and its mod reports the resource as a feature off. Later builds
+/// of the key run without it but a rebuild, which runs every patch the
+/// game's build applied. A panic must not leave the function. `user` is
+/// the pointer the mod served with.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::serve`](../struct.Load.html#method.serve).
 pub type ResourcePatchFn = unsafe extern "system" fn(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status;
 
 /// What a recipe rule of [`HostApi::recipe_rule`](super::HostApi::recipe_rule) names.
@@ -198,7 +211,7 @@ impl ChangeOp {
 }
 
 /// A change a mod declared with
-/// [`HostApi::declare_change`](super::HostApi::declare_change), whose value it
+/// [`HostApi::change_data`](super::HostApi::change_data), whose value it
 /// sets later; numbered by the loader, unique in the process.
 ///
 /// # Examples
@@ -223,12 +236,12 @@ pub struct ChangeId(pub u32);
 ///
 /// let change = DataChange {
 ///     header: Header::of::<DataChange>(),
-///     entry: [0x3a; 16],
+///     entry: enshwick::abi::Guid([0x3a; 16]),
 ///     field: DataField::MAX_STACK,
 ///     op: ChangeOp::SET,
 ///     value: 999.0,
 ///     source: Str::new("items.toml:3"),
-///     item: [0; 16],
+///     item: enshwick::abi::Guid::NIL,
 ///     select: DataSelect::ENTRY,
 ///     categories: 0,
 /// };
@@ -239,8 +252,8 @@ pub struct ChangeId(pub u32);
 pub struct DataChange {
     /// Size and version of this struct.
     pub header: Header,
-    /// The GUID of the vanilla entry, in memory order.
-    pub entry: [u8; 16],
+    /// The GUID of the vanilla entry.
+    pub entry: Guid,
     /// The value changed.
     pub field: DataField,
     /// Whether `value` replaces it or scales it.
@@ -252,7 +265,7 @@ pub struct DataChange {
     pub source: Str,
     /// The item the field names inside its entry, such as a recipe's
     /// ingredient; all zero for none.
-    pub item: [u8; 16],
+    pub item: Guid,
     /// Which vanilla entries the change reaches: `entry` alone, or every
     /// item or recipe a selection picks, with `entry` all zero but for
     /// [`DataSelect::WORKSHOP`].
@@ -297,7 +310,7 @@ impl DataSelect {
     pub const BACKPACKS: Self = Self(6);
 }
 
-/// Flags of [`HostApi::entity_data_open`](super::HostApi::entity_data_open).
+/// Flags of [`HostApi::define_entity_data`](super::HostApi::define_entity_data).
 ///
 /// # Examples
 ///
@@ -321,8 +334,8 @@ impl EntityDataFlags {
 /// [`TypeField`]: the engine's name for it, the type of its value and the
 /// value as the engine's text.
 ///
-/// Frozen: read as an array. Its strings are the loader's, valid and
-/// unchanged for the life of the process.
+/// Frozen, read as an array: the reflection's own attribute record. Its
+/// strings are the loader's, valid and unchanged for the life of the process.
 ///
 /// # Examples
 ///
@@ -345,8 +358,8 @@ pub struct TypeAttribute {
 
 /// A named constant of a reflected enum, in a [`TypeEntry`].
 ///
-/// Frozen: read as an array. Its name is the loader's, valid and unchanged
-/// for the life of the process.
+/// Frozen, read as an array: the reflection's own constant record. Its name
+/// is the loader's, valid and unchanged for the life of the process.
 ///
 /// # Examples
 ///
@@ -367,8 +380,9 @@ pub struct TypeConstant {
 
 /// A field of a reflected struct, in a [`TypeEntry`].
 ///
-/// Frozen: read as an array. Its strings and attributes are the loader's,
-/// valid and unchanged for the life of the process.
+/// Frozen, read as an array: the reflection's own field record; more about
+/// the field is read from its type by name. Its strings and attributes are
+/// the loader's, valid and unchanged for the life of the process.
 ///
 /// # Examples
 ///
@@ -424,7 +438,7 @@ pub struct TypeEntry {
     pub name: Str,
     /// The name the engine's scripts use, such as `ecs.TemplateResource`.
     pub impact_name: Str,
-    /// The full name, such as `demo::ecs::TemplateResource`.
+    /// The full name with its namespaces, as the game reflects it.
     pub qualified_name: Str,
     /// The qualified name of a struct's base or of the type an array,
     /// optional, typedef or bitmask holds; empty for none.
@@ -437,8 +451,8 @@ pub struct TypeEntry {
     pub align: u16,
     /// The alignment as an array element.
     pub element_align: u16,
-    /// The descriptor's kind byte, as [`Kind::from_byte`](../resources/enum.Kind.html#method.from_byte)
-    /// reads it.
+    /// The descriptor's kind byte, the game's numbering of type kinds
+    /// (struct, array, enum and the others).
     pub kind: u8,
     /// The descriptor's flags byte.
     pub flags: u8,

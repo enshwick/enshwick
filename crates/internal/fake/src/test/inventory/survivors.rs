@@ -51,9 +51,7 @@ impl Installed {
                 .map_or(Entity::NONE, |(_, bed)| *bed)
         }
         use enshwick_core::survivors::Answer;
-        let Some(registered) = table::with(None, |s| s.survivor_lookup) else {
-            return Answer::Vanilla;
-        };
+        let lookups = table::with(Vec::new(), |s| s.survivor_lookup.clone());
         let mut beds = beds;
         let lookup = SurvivorLookup {
             header: Header::of::<SurvivorLookup>(),
@@ -65,15 +63,21 @@ impl Installed {
             bed_of: Some(bed_of),
             token: (&raw mut beds).cast(),
         };
-        let mut out = Entity::NONE;
-        // SAFETY: a valid call and out pointer; `user` is the mod's pointer.
-        let answered =
-            registered.run(|answer, user| unsafe { answer(&raw const lookup, user, &raw mut out) });
-        match (answered != 0, Entity::from_raw(out.0)) {
-            (false, _) => Answer::Vanilla,
-            (true, Some(entity)) => Answer::Entity(entity),
-            (true, None) => Answer::Nobody,
-        }
+        // As the loader: in load order, the first that answers decides.
+        lookups
+            .iter()
+            .find_map(|registered| {
+                let mut out = Entity::NONE;
+                // SAFETY: a valid call and out pointer; `user` is the mod's
+                // pointer.
+                let answered = registered
+                    .run(|answer, user| unsafe { answer(&raw const lookup, user, &raw mut out) });
+                (answered != 0).then(|| match Entity::from_raw(out.0) {
+                    Some(entity) => Answer::Entity(entity),
+                    None => Answer::Nobody,
+                })
+            })
+            .unwrap_or(Answer::Vanilla)
     }
 
     /// Asks the mod's bed checks as the game would; whether every one keeps
@@ -93,7 +97,9 @@ impl Installed {
         let filters = table::with(Vec::new(), |s| s.bed_checks.clone());
         filters.iter().all(|filter| {
             // SAFETY: a valid check; `user` is the mod's pointer.
-            filter.run(|callback, user| unsafe { callback(check, user) != 0 })
+            filter.run(|callback, user| unsafe {
+                callback(check, user) != enshwick_core::abi::FILTER_REFUSE
+            })
         })
     }
 
@@ -111,7 +117,7 @@ impl Installed {
     ///     header: Header::of::<Summon>(),
     ///     item: enshwick::ItemId::new(1),
     ///     ammo: enshwick::ItemId::new(0),
-    ///     template: [0; 16],
+    ///     template: enshwick::abi::Guid::NIL,
     ///     target: [0; 3],
     ///     slot: 0,
     ///     pide: enshwick::Entity(0),
@@ -129,8 +135,8 @@ impl Installed {
             // SAFETY: a valid summon; `user` is the mod's pointer.
             match filter.run(|callback, user| unsafe { callback(summon, user) }) {
                 Summon::REFUSE => return Summon::REFUSE,
-                0 => {}
-                _ => verdict = Summon::TAKE,
+                Summon::TAKE => verdict = Summon::TAKE,
+                _ => {}
             }
         }
         verdict
@@ -149,7 +155,7 @@ impl Installed {
     ///     header: Header::of::<Summon>(),
     ///     item: enshwick::ItemId::new(1),
     ///     ammo: enshwick::ItemId::new(0),
-    ///     template: [0; 16],
+    ///     template: enshwick::abi::Guid::NIL,
     ///     target: [0; 3],
     ///     slot: 0,
     ///     pide: enshwick::Entity(0),
@@ -182,8 +188,9 @@ impl Installed {
         table::with(Vec::new(), |s| s.summon_items.clone())
     }
 
-    /// Asks the mod's survivor menu merge about `statuses`; the byte to show,
-    /// or `None` for the game's.
+    /// Asks the mods' survivor menu merges about `statuses` in load order,
+    /// as the loader does; the first byte one returns, or `None` for the
+    /// game's.
     ///
     /// # Examples
     ///
@@ -197,11 +204,18 @@ impl Installed {
         survivor: enshwick_core::survivors::NpcId,
         statuses: &[u8],
     ) -> Option<u8> {
-        let registered = table::with(None, |s| s.survivor_status)?;
-        // SAFETY: valid statuses for the call; `user` is the mod's pointer.
-        let answer = registered.run(|callback, user| unsafe {
-            callback(survivor, statuses.as_ptr(), statuses.len(), user)
-        });
-        (answer & enshwick_core::abi::SURVIVOR_STATUS_SET != 0).then(|| answer.to_le_bytes()[0])
+        let merges = table::with(Vec::new(), |s| s.survivor_status.clone());
+        merges.iter().find_map(|registered| {
+            // SAFETY: valid statuses for the call; `user` is the mod's pointer.
+            let answer = registered.run(|callback, user| unsafe {
+                callback(
+                    survivor,
+                    statuses.as_ptr(),
+                    u32::try_from(statuses.len()).unwrap_or(u32::MAX),
+                    user,
+                )
+            });
+            (answer & enshwick_core::abi::SURVIVOR_STATUS_SET != 0).then(|| answer.to_le_bytes()[0])
+        })
     }
 }

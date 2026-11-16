@@ -8,16 +8,23 @@ use criterion::{Criterion, criterion_group, criterion_main};
 fn host_entry(c: &mut Criterion) {
     use std::hint::black_box;
 
-    use enshwick_core::abi::{ModHandle, Str};
+    use enshwick_core::abi::{Level, ModHandle, Str};
 
     let api = enshwick_loader::host_api();
     let mut group = c.benchmark_group("host_entry");
     group.bench_function("log_level", |b| {
-        b.iter(|| (api.log_level)(black_box(ModHandle(7))));
+        let mut level = Level::INFO;
+        b.iter(|| (api.log_level)(black_box(ModHandle(7)), black_box(&raw mut level)));
     });
     group.bench_function("type_hash_refused", |b| {
         let mut out = 0u32;
-        b.iter(|| (api.type_hash)(black_box(Str::new("Item")), black_box(&raw mut out)));
+        b.iter(|| {
+            (api.type_hash)(
+                black_box(ModHandle(7)),
+                black_box(Str::new("Item")),
+                black_box(&raw mut out),
+            )
+        });
     });
     group.finish();
 }

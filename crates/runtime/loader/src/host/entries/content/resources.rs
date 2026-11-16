@@ -5,7 +5,8 @@ use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{ModHandle, ResourceKey, Status};
 
 use crate::host::layer::{
-    BytesOut, BytesSlot, Caller, In, List, ListOut, Mod, Out, Refused, SizedListOut, entries,
+    BytesOut, BytesSlot, Callback, Caller, In, List, ListOut, Mod, Out, Refused, SizedListOut,
+    entries,
 };
 
 entries! {
@@ -13,7 +14,7 @@ entries! {
         me as Mod,
         key as In<ResourceKey>,
         base as In<ResourceKey>,
-        patch: api_frame::ResourcePatchFn,
+        patch as Callback<api_frame::ResourcePatchFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         Ok(crate::content::served::register(me.index, key, base, patch, user)?)
@@ -72,7 +73,7 @@ entries! {
         let keys = RESOURCE_KEYS
             .get_or_init(|| crate::engine::archive::game().map(crate::engine::archive::Archive::keys))
             .as_ref()
-            .ok_or(Status::MISSING)?;
+            .ok_or(Status::UNAVAILABLE)?;
         if type_hash == 0 {
             return out.put(keys);
         }
@@ -90,7 +91,7 @@ entries! {
                 crate::engine::archive::game().map(crate::engine::archive::Archive::contents)
             })
             .as_ref()
-            .ok_or(Status::MISSING)?;
+            .ok_or(Status::UNAVAILABLE)?;
         out.put(hashes)
     }
 
@@ -105,13 +106,13 @@ entries! {
                     .then(|| enshwick_core::resources::TypeTable::new(registry.iter()))
             })
             .as_ref()
-            .ok_or(Status::MISSING)?;
+            .ok_or(Status::UNAVAILABLE)?;
         out.put(table.entries())
     }
 }
 
-/// Copies `key`'s bytes for `call` to `out`; [`Status::BAD_ARGS`] when `out`
-/// is null or short. A short buffer keeps the bytes for this thread's retry
+/// Copies `key`'s bytes for `call` to `out`; [`Status::TOO_SMALL`], with the
+/// length written, when `out` is null or short. A short buffer keeps the bytes for this thread's retry
 /// of the same `call` and key; a call that only asks the length keeps
 /// nothing, since it may never come back.
 fn copy_keeping(
@@ -124,7 +125,7 @@ fn copy_keeping(
     let copied = out.put(&data);
     if copied
         .as_ref()
-        .is_err_and(|refused| refused.status() == Status::BAD_ARGS)
+        .is_err_and(|refused| refused.status() == Status::TOO_SMALL)
         && !out.asks_length()
     {
         keep(call, key, data);
@@ -195,7 +196,7 @@ mod tests {
     use crate::host::layer::BytesSlot;
 
     const KEY: ResourceKey = ResourceKey {
-        guid: [4; 16],
+        guid: enshwick_core::content::Guid([4; 16]),
         type_hash: 2,
         part: 0,
     };
@@ -221,14 +222,14 @@ mod tests {
         // SAFETY: `out` is null and `len` a local `u32` that outlives the slot.
         let asks = unsafe { BytesSlot::from_raw(core::ptr::null_mut(), 0, &raw mut len) };
         let status = copy_keeping("resource_served", KEY, &asks, read).map_err(|r| r.status());
-        assert_eq!((status, len), (Err(Status::BAD_ARGS), 3));
+        assert_eq!((status, len), (Err(Status::TOO_SMALL), 3));
         assert!(SHORT.take().is_none(), "a length-only call keeps nothing");
         let mut short = [0u8; 2];
         // SAFETY: `short` is writable for its 2 bytes and `len` a local
         // `u32`, both outliving the slot.
         let too_short = unsafe { BytesSlot::from_raw(short.as_mut_ptr(), 2, &raw mut len) };
         let status = copy_keeping("resource_served", KEY, &too_short, read).map_err(|r| r.status());
-        assert_eq!(status, Err(Status::BAD_ARGS));
+        assert_eq!(status, Err(Status::TOO_SMALL));
         assert!(
             SHORT.take().is_some(),
             "a short buffer keeps them for its retry"

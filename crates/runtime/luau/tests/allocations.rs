@@ -132,17 +132,25 @@ mod tests {
     );
 
     fn fire() -> DamageCheck {
-        let mut amounts = [0.0; enshwick::abi::DAMAGE_TYPES];
-        amounts[enshwick::damage::DamageTypeNew::MagicalFire.index()] = 40.0;
         DamageCheck {
             header: Header::of::<DamageCheck>(),
             cause: DamageCheck::IMPACT,
             target: enshwick::Entity(2),
             source: enshwick::Entity(3),
             attacker: enshwick::Entity(3),
-            amounts,
             total: 40.0,
+            amount_count: 0,
+            amounts: core::ptr::null_mut(),
         }
+    }
+
+    /// The fire a hit of 40 fire leaves after the filters.
+    fn fire_left(loader: &enshwick::test::Installed) -> f32 {
+        let fire_at = enshwick::damage::DamageTypeNew::MagicalFire.index();
+        let mut amounts = [0.0; enshwick::abi::DAMAGE_TYPES];
+        amounts[fire_at] = 40.0;
+        let _hit = loader.damage(fire(), &mut amounts);
+        amounts[fire_at]
     }
 
     #[test]
@@ -152,13 +160,12 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        let fire_at = enshwick::damage::DamageTypeNew::MagicalFire.index();
         for _ in 0..200 {
-            assert!((loader.damage(fire()).amounts[fire_at] - 20.0).abs() < 1e-6);
+            assert!((fire_left(&loader) - 20.0).abs() < 1e-6);
         }
         let before = MADE.with(Cell::get);
         for _ in 0..1_000 {
-            let _hit = loader.damage(fire());
+            let _left = fire_left(&loader);
         }
         let made = MADE.with(Cell::get) - before;
         assert_eq!(made, 0, "allocations in 1000 warm hits");
@@ -182,18 +189,17 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         for (total, (kind, _, per_call)) in (1u8..).map(f32::from).zip(KINDS) {
             for _ in 0..20 {
-                let _warm = loader.damage(calls_of(total));
+                let _warm = loader.damage(calls_of(total), &mut []);
             }
             let before = MADE.with(Cell::get);
             for _ in 0..100 {
-                let _hit = loader.damage(calls_of(total));
+                let _hit = loader.damage(calls_of(total), &mut []);
             }
             let made = MADE.with(Cell::get) - before;
             assert_eq!(made, per_call * 100 * CALLS, "{kind}: {:?}", loader.logs());
         }
-        let fire_at = enshwick::damage::DamageTypeNew::MagicalFire.index();
         assert!(
-            (loader.damage(fire()).amounts[fire_at] - 20.0).abs() < 1e-6,
+            (fire_left(&loader) - 20.0).abs() < 1e-6,
             "the mod still runs: {:?}",
             loader.logs()
         );

@@ -5,7 +5,11 @@ use super::*;
 fn a_stopped_game_leaves_no_entities_or_values_behind() {
     let state = State::new();
     state.with_world(|world| {
-        world.watched.entry(7).or_default().asked = true;
+        world
+            .watched
+            .entry(7)
+            .or_default()
+            .ask(ModIndex::new(1), true);
     });
     let mut values = Snapshot::default();
     values.values.insert(7, Box::new([2.0]));
@@ -128,9 +132,9 @@ fn ids_are_content_ids_and_say_whose_they_are() {
 fn values_follow_the_sources_in_their_order() {
     let sealed = combat_kinds();
     let list = [
-        source(StatSource::ITEM, StatModifierData::MULTIPLY, 2, 1.5, 900, 7),
-        source(StatSource::BUFF, StatModifierData::ADD, 3, 0.25, 0x99, 0),
-        source(StatSource::ENTITY, StatModifierData::ADD, 3, 0.25, 1, 0),
+        source(StatSource::ITEM, StatModifier::MULTIPLY, 2, 1.5, 900, 7),
+        source(StatSource::BUFF, StatModifier::ADD, 3, 0.25, 0x99, 0),
+        source(StatSource::ENTITY, StatModifier::ADD, 3, 0.25, 1, 0),
     ];
     let values = work_out(&sealed, &list);
     let want = [1.0f32, 0.0, 1.5, 0.5];
@@ -189,9 +193,24 @@ fn saved_modifiers_round_trip() {
         owner: "rpg".into(),
         key: 5,
         stat: "rpg:crit".into(),
-        op: StatModifierData::ADD,
+        op: StatModifier::ADD,
         value: 0.1,
     }];
     let bytes = postcard::to_allocvec(&saved).unwrap();
     assert_eq!(postcard::from_bytes::<Vec<Saved>>(&bytes).unwrap(), saved);
+}
+
+#[test]
+fn one_mod_stopping_its_watch_leaves_another_mods_watch() {
+    let (a, b) = (ModIndex::new(1), ModIndex::new(2));
+    let mut watched = Watched::default();
+    watched.ask(a, true);
+    watched.ask(b, true);
+    watched.ask(b, true);
+    watched.ask(b, false);
+    assert_eq!(watched.asked, [a], "b's second ask is the same ask");
+    watched.ask(b, false);
+    assert_eq!(watched.asked, [a], "b took back no ask of a");
+    watched.ask(a, false);
+    assert!(watched.asked.is_empty(), "nobody watches it");
 }

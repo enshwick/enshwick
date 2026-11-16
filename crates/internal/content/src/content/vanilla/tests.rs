@@ -166,6 +166,62 @@ fn a_template_is_found_by_its_name_or_its_near_names_or_its_twins_named() {
 }
 
 #[test]
+fn a_console_s_template_name_in_another_case_is_found_when_one_template_has_it() {
+    use super::super::loot_tables::fixtures::FILL;
+
+    let vanilla = game_with_tables(&[
+        ("Enemy_Wolf", Guid([1; 16])),
+        ("Prop_Chest", Guid([2; 16])),
+        ("PROP_chest", Guid([3; 16])),
+    ])
+    .with_template_names(Some(FILL.name));
+    assert!(
+        vanilla.template("enemy_wolf").is_err(),
+        "a mod names templates exactly"
+    );
+    assert_eq!(
+        vanilla.template_named("enemy_wolf", false, true),
+        Ok(Guid([0x40; 16]))
+    );
+    assert_eq!(
+        vanilla.template_named("Prop_Chest", false, true),
+        Ok(Guid([0x41; 16])),
+        "an exact name wins over one in another case"
+    );
+    assert_eq!(
+        vanilla.template_named("prop_chest", false, true),
+        Err(VanillaError::AmbiguousTemplate {
+            name: "prop_chest".into(),
+            templates: vec![Guid([0x41; 16]), Guid([0x42; 16])],
+        }),
+        "names that differ only by case list every template"
+    );
+}
+
+#[test]
+fn a_console_s_item_name_in_another_case_is_found_when_one_item_has_it() {
+    let (forge, chest, crate_) = (Guid([1; 16]), Guid([2; 16]), Guid([3; 16]));
+    let vanilla = game(&[
+        (forge, "Prop_Production_T1_Forge"),
+        (chest, "Prop_Chest"),
+        (crate_, "prop_CHEST"),
+    ]);
+    assert!(vanilla.item("prop_production_t1_forge").is_err());
+    assert_eq!(
+        vanilla.item_named("prop_production_t1_forge", true),
+        Ok(forge)
+    );
+    assert_eq!(vanilla.item_named("Prop_Chest", true), Ok(chest));
+    assert_eq!(
+        vanilla.item_named("PROP_CHEST", true),
+        Err(VanillaError::Ambiguous {
+            name: "PROP_CHEST".into(),
+            items: vec![chest, crate_],
+        })
+    );
+}
+
+#[test]
 fn a_chest_s_slots_are_read_from_the_template_it_places() {
     let chest = Guid([1; 16]);
     let vanilla = game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);

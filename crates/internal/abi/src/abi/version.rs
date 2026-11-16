@@ -15,7 +15,7 @@
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_major, ABI_MAJOR);
 /// ```
-pub const ABI_MAJOR: u16 = 11;
+pub const ABI_MAJOR: u16 = 12;
 
 /// The minor version of this interface: one more for each append to the
 /// layout of this [`ABI_MAJOR`], a field at the end of a struct that starts
@@ -23,7 +23,7 @@ pub const ABI_MAJOR: u16 = 11;
 ///
 /// A loader loads mods built for its minor or an older one, and reads a
 /// field appended after the mod's minor only where
-/// [`Header::covers`](super::Header::covers) it.
+/// the header's `size` covers it.
 ///
 /// # Examples
 ///
@@ -32,7 +32,7 @@ pub const ABI_MAJOR: u16 = 11;
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_minor, ABI_MINOR);
 /// ```
-pub const ABI_MINOR: u16 = 31;
+pub const ABI_MINOR: u16 = 4;
 
 /// Why a loader or its tools refuse a mod built for another ABI, naming the
 /// mod's version, this build's and what to do.
@@ -61,24 +61,14 @@ pub enum CheckAbiError {
     },
     /// The mod was built for an older major: it needs a rebuild.
     #[error(
-        "built for ABI major {major}, and Enshwick {} runs ABI {ABI_MAJOR}.{ABI_MINOR}: \
-         rebuild it for Enshwick {}",
-        crate::VERSION,
-        crate::VERSION
+        "built for ABI major {major}, and Enshwick {version} runs ABI {ABI_MAJOR}.{ABI_MINOR}: \
+         rebuild it for Enshwick {version}",
+        version = crate::VERSION
     )]
     OtherMajor {
         /// The major the mod was built for.
         major: u16,
     },
-    /// The mod was built for an Enshwick older than ABI majors, whose
-    /// `enshwick_mod_abi` returned a layout hash: it needs a rebuild.
-    #[error(
-        "built for an older Enshwick, and Enshwick {} runs ABI {ABI_MAJOR}.{ABI_MINOR}: \
-         rebuild it for Enshwick {}",
-        crate::VERSION,
-        crate::VERSION
-    )]
-    BeforeMajors,
     /// The mod was built for a newer minor of this major: the loader needs
     /// an update.
     #[error(
@@ -99,24 +89,21 @@ pub enum CheckAbiError {
 ///
 /// # Errors
 ///
-/// [`CheckAbiError`] for another major, and
-/// [`BeforeMajors`](CheckAbiError::BeforeMajors) for a value past `u16`, the
-/// layout hash mods returned before majors.
+/// [`CheckAbiError`] for another major.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::abi::{ABI_MAJOR, CheckAbiError, check_major};
 ///
-/// assert!(check_major(u32::from(ABI_MAJOR)).is_ok());
-/// assert_eq!(check_major(0x0dc8_5f01), Err(CheckAbiError::BeforeMajors));
+/// assert!(check_major(ABI_MAJOR).is_ok());
+/// assert_eq!(check_major(ABI_MAJOR + 1), Err(CheckAbiError::NewerMajor { major: ABI_MAJOR + 1 }));
 /// ```
-pub fn check_major(major: u32) -> Result<(), CheckAbiError> {
-    match u16::try_from(major) {
-        Ok(ours) if ours == ABI_MAJOR => Ok(()),
-        Ok(newer) if newer > ABI_MAJOR => Err(CheckAbiError::NewerMajor { major: newer }),
-        Ok(older) => Err(CheckAbiError::OtherMajor { major: older }),
-        Err(_) => Err(CheckAbiError::BeforeMajors),
+pub fn check_major(major: u16) -> Result<(), CheckAbiError> {
+    match major {
+        ABI_MAJOR => Ok(()),
+        newer if newer > ABI_MAJOR => Err(CheckAbiError::NewerMajor { major: newer }),
+        older => Err(CheckAbiError::OtherMajor { major: older }),
     }
 }
 
@@ -137,7 +124,7 @@ pub fn check_major(major: u32) -> Result<(), CheckAbiError> {
 /// assert!(check_abi(ABI_MAJOR, ABI_MINOR + 1).is_err());
 /// ```
 pub fn check_abi(major: u16, minor: u16) -> Result<(), CheckAbiError> {
-    check_major(u32::from(major))?;
+    check_major(major)?;
     if minor > ABI_MINOR {
         return Err(CheckAbiError::NewerMinor { minor });
     }
@@ -150,7 +137,7 @@ mod tests {
 
     #[test]
     fn this_major_loads_up_to_this_minor() {
-        for minor in [0, ABI_MINOR - 1, ABI_MINOR] {
+        for minor in [0, ABI_MINOR.saturating_sub(1), ABI_MINOR] {
             assert_eq!(check_abi(ABI_MAJOR, minor), Ok(()), "{minor}");
         }
         assert_eq!(
@@ -163,7 +150,7 @@ mod tests {
 
     #[test]
     fn a_newer_major_asks_for_an_update_and_an_older_one_for_a_rebuild() {
-        let major = u32::from(ABI_MAJOR);
+        let major = ABI_MAJOR;
         assert_eq!(check_major(major), Ok(()));
         let newer = check_major(major + 1).unwrap_err();
         assert_eq!(
@@ -175,7 +162,7 @@ mod tests {
         assert!(newer.to_string().ends_with("update Enshwick"), "{newer}");
         for older in [ABI_MAJOR - 1, 1] {
             assert_eq!(
-                check_major(u32::from(older)),
+                check_major(older),
                 Err(CheckAbiError::OtherMajor { major: older })
             );
         }
@@ -185,18 +172,5 @@ mod tests {
                 major: ABI_MAJOR + 1
             })
         );
-    }
-
-    #[test]
-    fn a_layout_hash_of_an_enshwick_before_majors_asks_for_a_rebuild() {
-        for hash in [0x0dc8_5f01, 0x1aea_51a4, u32::MAX] {
-            let why = check_major(hash).unwrap_err();
-            assert_eq!(why, CheckAbiError::BeforeMajors);
-            assert!(
-                why.to_string().starts_with("built for an older Enshwick"),
-                "{why}"
-            );
-            assert!(!why.to_string().contains(&hash.to_string()), "{why}");
-        }
     }
 }

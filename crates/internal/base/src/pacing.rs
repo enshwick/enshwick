@@ -165,7 +165,14 @@ impl BaseLoad {
         let mut sites = LoopWaitSites::NONE;
         crate::load::hand_over(
             handler,
-            |user| (host.api().loop_wait)(host.handle(), run_loop_wait::<F>, user, &raw mut sites),
+            |user| {
+                (host.api().loop_wait)(
+                    host.handle(),
+                    Some(run_loop_wait::<F>),
+                    user,
+                    &raw mut sites,
+                )
+            },
             "the loop wait handler",
         )?;
         Ok(LoopWaits {
@@ -185,7 +192,12 @@ impl BaseLoad {
         crate::load::hand_over(
             handler,
             |user| {
-                (host.api().server_wait)(host.handle(), run_server_wait::<F>, user, &raw mut found)
+                (host.api().server_wait)(
+                    host.handle(),
+                    Some(run_server_wait::<F>),
+                    user,
+                    &raw mut found,
+                )
             },
             "the server wait handler",
         )?;

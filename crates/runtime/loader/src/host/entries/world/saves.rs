@@ -3,14 +3,14 @@
 use enshwick_core::Entity;
 use enshwick_core::abi::{Header, SaveInfo, Status};
 
-use crate::host::layer::{Caller, HeadedOut, Mod, entries};
+use crate::host::layer::{Caller, HeadedOut, Mod, YesNo, entries};
 
 entries! {
     fn save_info(loader as Caller, out as HeadedOut<SaveInfo>) -> Status {
         let info = crate::base::saves::info(loader)?.ok_or(Status::MISSING)?;
         out.put(SaveInfo {
             header: Header::of::<SaveInfo>(),
-            world: info.world,
+            world: enshwick_core::content::Guid(info.world),
             saved_at: u64::from(info.saved_at),
             size: info.size,
             backups: u32::from(info.backups),
@@ -18,11 +18,8 @@ entries! {
         })
     }
 
-    fn hold_saves(me as Mod, held: u8) -> Status {
-        if held > 1 {
-            return Err(Status::BAD_ARGS.into());
-        }
-        Ok(crate::base::saves::hold(me.loader, me.index, held == 1)?)
+    fn hold_saves(me as Mod, held as YesNo) -> Status {
+        Ok(crate::base::saves::hold(me.loader, me.index, held)?)
     }
 
     fn set_saved(loader as Caller, entity: Entity, saved: u8) -> Status {

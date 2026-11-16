@@ -27,7 +27,7 @@ pub(crate) use crate::engine::server_pin::ServerAccess;
 use crate::engine::server_pin::{Place, ServerCell};
 
 mod whose;
-pub(crate) use whose::{Whose, server_starts, whose};
+pub(crate) use whose::{Whose, server_left, server_starts, whose};
 
 mod players;
 #[cfg(test)]
@@ -74,8 +74,8 @@ const STALL_FIRST_WARNING: Duration = Duration::from_secs(1);
 const STALL_WARNING_EVERY: Duration = Duration::from_secs(5);
 
 /// What the loader knows of the running server: the server's own lifecycle
-/// (its capture, release and teardown) sets and clears it, so a hosted
-/// game's end needs no `forget` here.
+/// (its start, capture, release, teardown and leaving the server list) sets
+/// and clears it, so a hosted game's end needs no `forget` here.
 #[derive(Debug)]
 struct State {
     /// The server object, seen by the post-step hook, and the pins of
@@ -132,7 +132,7 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
     let entity_world = if world == 0 { 0 } else { world + entities };
     STATE.server_world.store(entity_world, Ordering::Release);
     if entity_world != 0 {
-        STATE.hosted.server_seen(thread);
+        whose::server_stepped(thread);
     }
 }
 
@@ -179,7 +179,6 @@ pub(crate) fn tear_down() {
     });
     STATE.server_world.store(0, Ordering::Release);
     STATE.game_thread.store(0, Ordering::Release);
-    STATE.hosted.server_gone();
 }
 
 /// Forgets the server of a hosted game that stopped, after [`retire`]; its
@@ -200,9 +199,10 @@ thread_local! {
 /// Links the world step, which runs every ECS system of a world, the
 /// server's on its game thread and on a client its own as well.
 pub(crate) fn link(loader: &'static Loader) {
+    static STEP_GATE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("world-step gate");
     let target = Target::Pinned(pinned::world::STEP);
-    let linked = loader.link_feature(
-        "world-step gate",
+    let linked = loader.link_fused(
+        &STEP_GATE,
         target,
         &WORLD_STEP_NEXT,
         world_step,
@@ -374,10 +374,14 @@ pub(crate) enum WorldError {
     /// No server or world runs in this process.
     #[error("no world runs")]
     NoWorld,
-    /// No server runs in this process, or the build lacks the world's
-    /// reads, for an entity call, whose absent entity is [`Self::Absent`].
+    /// No server runs in this process for an entity call, whose absent
+    /// entity is [`Self::Absent`].
     #[error("no server runs for an entity call")]
     NoServer,
+    /// The build's table lacks the reads an entity call needs, while a
+    /// server may run.
+    #[error("this build lacks the reads an entity call needs")]
+    UnreadForCall,
     /// The caller is off the game thread.
     #[error("called off the game thread")]
     WrongThread,
@@ -414,7 +418,7 @@ pub(crate) fn server() -> Result<usize, WorldError> {
 /// The server, as [`server`] finds it, for an entity call (destroy, keep out
 /// of the save, teleport, a component write).
 pub(crate) fn entity_call(loader: &Loader) -> Result<usize, WorldError> {
-    layout(loader).ok_or(WorldError::NoServer)?;
+    layout(loader).ok_or(WorldError::UnreadForCall)?;
     server().map_err(|error| match error {
         WorldError::NoWorld => WorldError::NoServer,
         other => other,
@@ -704,6 +708,12 @@ mod tests {
         assert!(!state.quiet());
         STEPPING.set(0);
         assert!(state.quiet());
+    }
+
+    #[test]
+    fn an_entity_call_on_a_build_without_the_world_reads_names_the_reads_not_the_server() {
+        let loader = crate::start::tests::bare_loader();
+        assert_eq!(entity_call(&loader), Err(WorldError::UnreadForCall));
     }
 
     #[test]

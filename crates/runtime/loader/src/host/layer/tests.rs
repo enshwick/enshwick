@@ -42,10 +42,6 @@ entries! {
     fn lamp_name(name as Text, out as Out<u32>) -> Status {
         out.put(u32::try_from(name.len()).unwrap_or(u32::MAX))
     }
-
-    fn lamp_level() -> u32 {
-        Ok(7)
-    }
 }
 
 entries! {
@@ -83,12 +79,32 @@ impl Drop for Smoke {
 }
 
 entries! {
-    fn wick() -> u32 {
+    fn wick() -> Status {
         crate::engine::profile::call(ModIndex::new(3), Feature::Calls, || -> u32 {
             panic!("the mod's wick snapped")
         });
-        Ok(1)
+        Ok(())
     }
+}
+
+/// How often [`light`]'s body ran.
+static LIT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+unsafe extern "system" fn flame(_: u32) {}
+
+entries! {
+    fn light(_flame as Callback<unsafe extern "system" fn(u32)>) -> Status {
+        LIT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+#[test]
+fn a_null_callback_is_a_bad_argument_before_the_body_runs() {
+    assert_eq!(light(None), Status::BAD_ARGS);
+    assert_eq!(LIT.load(core::sync::atomic::Ordering::Relaxed), 0);
+    assert_eq!(light(Some(flame)), Status::OK);
+    assert_eq!(LIT.load(core::sync::atomic::Ordering::Relaxed), 1);
 }
 
 entries! {
@@ -123,6 +139,27 @@ fn an_unaligned_list_and_out_are_read_and_written_where_the_mod_put_them() {
     assert_eq!(oil_total(core::ptr::null(), 1, total), Status::BAD_ARGS);
 }
 
+/// The last yes or no [`switch`]'s body got.
+static SWITCHED: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(9);
+
+entries! {
+    fn switch(on as YesNo) -> Status {
+        SWITCHED.store(u8::from(on), core::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+#[test]
+fn a_yes_or_no_is_one_or_zero_and_any_other_byte_a_bad_argument() {
+    assert_eq!(switch(1), Status::OK);
+    assert_eq!(SWITCHED.load(core::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(switch(0), Status::OK);
+    assert_eq!(SWITCHED.load(core::sync::atomic::Ordering::Relaxed), 0);
+    assert_eq!(switch(2), Status::BAD_ARGS);
+    assert_eq!(switch(0xff), Status::BAD_ARGS);
+    assert_eq!(SWITCHED.load(core::sync::atomic::Ordering::Relaxed), 0);
+}
+
 #[test]
 fn a_buffer_past_the_address_space_is_refused_before_the_body_runs() {
     let mut cans = [0u32; 2];
@@ -154,7 +191,6 @@ fn a_refusal_to_warn_of_answers_its_status_and_logs_its_reason() {
 #[test]
 fn a_body_s_answer_becomes_the_entry_s_return_value() {
     assert_eq!(lamp(3), Status::OK);
-    assert_eq!(lamp_level(), 7);
 }
 
 #[test]
@@ -170,8 +206,8 @@ fn a_text_and_an_out_are_read_and_written_and_a_null_out_is_refused() {
 
 #[test]
 fn a_panicking_entry_turns_itself_off_and_later_calls_answer_as_the_panic_did() {
-    assert_eq!(glow(1), Status::REFUSED);
-    assert_eq!(glow(0), Status::REFUSED);
+    assert_eq!(glow(1), Status::LOADER_FAULT);
+    assert_eq!(glow(0), Status::LOADER_FAULT);
     let off = crate::engine::diag::parts_off();
     let glow_off = off.iter().find(|part| part.part == "glow");
     assert_eq!(
@@ -182,29 +218,33 @@ fn a_panicking_entry_turns_itself_off_and_later_calls_answer_as_the_panic_did() 
 
 #[test]
 fn a_panicking_entry_leaves_the_other_entries_of_its_file_on() {
-    assert_eq!(glow(2), Status::REFUSED);
+    assert_eq!(glow(2), Status::LOADER_FAULT);
     assert_eq!(glow_beside(), Status::OK);
 }
 
 #[test]
 fn an_entry_that_is_off_still_checks_its_arguments_first() {
     let mut lit = 0u32;
-    assert_eq!(glow_into(&raw mut lit, 1), Status::REFUSED);
+    assert_eq!(glow_into(&raw mut lit, 1), Status::LOADER_FAULT);
     assert_eq!(glow_into(core::ptr::null_mut(), 0), Status::BAD_ARGS);
-    assert_eq!(glow_into(&raw mut lit, 0), Status::REFUSED);
+    assert_eq!(glow_into(&raw mut lit, 0), Status::LOADER_FAULT);
     assert_eq!(lit, 0);
 }
 
 #[test]
 fn a_panic_whose_payload_panics_as_it_drops_never_unwinds_into_the_mod() {
     let answered = std::panic::catch_unwind(|| snuff());
-    assert_eq!(answered.ok(), Some(Status::REFUSED));
+    assert_eq!(answered.ok(), Some(Status::LOADER_FAULT));
 }
 
 #[test]
 fn a_panic_inside_a_mod_s_callback_blames_the_mod_and_leaves_the_entry_on() {
     let before = crate::engine::profile::marker();
-    assert_eq!(wick(), 0);
+    assert_eq!(
+        wick(),
+        Status::FAULTED,
+        "the mod is off, the loader is fine"
+    );
     let off = crate::engine::diag::parts_off();
     assert!(off.iter().all(|part| part.part != "wick"), "{off:?}");
     assert_eq!(

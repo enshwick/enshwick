@@ -102,8 +102,12 @@ impl WritableType {
     pub(crate) fn field_script(&self, name: &str, kind: FieldKind) -> Result<ScriptField, Off> {
         let host = crate::host().ok_or_else(|| Off::new("no loader runs"))?;
         let mut offset = 0;
-        let status =
-            (host.api().field_offset)(Str::new(self.name()), Str::new(name), &raw mut offset);
+        let status = (host.api().field_offset)(
+            host.handle(),
+            Str::new(self.name()),
+            Str::new(name),
+            &raw mut offset,
+        );
         crate::load::ok(status, (), || format!("field {}.{name}", self.name()))?;
         let field = ScriptField {
             type_hash: self.ty().hash(),
@@ -221,7 +225,7 @@ impl World {
                 let value: $t = $value.ok_or(WorldError::Refused)?;
                 self.set(
                     entity,
-                    field.typed::<$t>().ok_or(WorldError::Missing)?,
+                    field.typed::<$t>().ok_or(WorldError::Unavailable)?,
                     value,
                 )
             }};

@@ -264,12 +264,11 @@ impl Index {
             let name = blob
                 .array(at + layout.relative[3])
                 .and_then(|(text, len)| registry.get(text..text + usize::try_from(len).ok()?))
-                .map(|bytes| {
+                .map_or_default(|bytes| {
                     String::from_utf8_lossy(bytes)
                         .trim_end_matches('\0')
                         .to_owned()
-                })
-                .unwrap_or_default();
+                });
             let (outputs, made) = blob.array(at + layout.output).unwrap_or((0, 0));
             let outputs = (0..usize::try_from(made).ok()?)
                 .map_while(|i| blob.read_u32(outputs + i * layout.stack_size + layout.stack_item))
@@ -618,8 +617,8 @@ pub fn describe(recipe: &Recipe, names: &Names) -> String {
 
 #[cfg(windows)]
 pub(crate) use live::{
-    RecipeRuleError, command, filter, forget, hello, init, is_disabled, item_words, joining, poll,
-    received, recipe_words, registry_built, rule, world_changed,
+    RecipeRuleError, TABLE_IDS, command, filter, forget, hello, init, is_disabled, item_words,
+    joining, poll, received, recipe_words, registry_built, rule, world_changed,
 };
 
 #[cfg(all(windows, test))]

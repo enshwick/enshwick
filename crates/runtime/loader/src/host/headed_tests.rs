@@ -10,7 +10,7 @@ use enshwick_core::abi::{Headed, Header};
 
 use enshwick_core::abi::Status;
 
-use super::memory::{headed_in, headed_list_in, put_headed, put_headed_list};
+use super::memory::{headed_in, headed_list_in, put_headed, put_sized_list};
 
 /// The fill of a value's own bytes.
 const VALUE: u8 = 0xAB;
@@ -26,7 +26,7 @@ macro_rules! headed {
             ActionReply,
             ActionTarget,
             ActiveBuff,
-            AffixDefData,
+            AffixSpec,
             AffixRoll,
             AltarInfo,
             AltarLimit,
@@ -58,20 +58,28 @@ macro_rules! headed {
             ExperiencePass,
             FogInfo,
             GameEventData,
+            HookSpec,
             Interaction,
+            InteractionPrompt,
             ItemAction,
             InventoryRequest,
             InventoryResult,
-            ItemData,
+            ItemTypeInfo,
             JoinCall,
+            KnowledgeChange,
             KnowledgeData,
             KnowledgeInfo,
             KnowledgeInput,
+            LoaderOff,
+            ClientCommand,
+            ClientCommandStatus,
             LocalInputInfo,
+            ClientSnapshot,
             LoopWaitData,
             MapFrameInfo,
             MapMarkerInfo,
             MapMarkerTypeInfo,
+            MidHookSpec,
             TypeEntry,
             Manifest,
             ModInfo,
@@ -93,12 +101,13 @@ macro_rules! headed {
             SkillCheck,
             SpawnRequest,
             StatChange,
-            StatDefData,
+            StatSpec,
             StatModify,
             Summon,
             SurvivorLookup,
             TeleportRequest,
             TerrainEdit,
+            TerrainMaterialAdd,
             TerrainMaterialInfo,
             TerrainPageData,
             TickData,
@@ -107,11 +116,13 @@ macro_rules! headed {
             UiExtension,
             UiFrame,
             UiMarker,
+            UiTooltipItem,
             UiWidget,
-            VoxelEditData,
+            VoxelEditRequest,
             VoxelRegion,
             VoxelWrite,
             WeatherFront,
+            WeatherSample,
             BuildingZoneCheck
         )
     };
@@ -320,11 +331,19 @@ fn round_trip<T: Headed>(name: &str) {
     set_size(&mut list, 0, room);
     let items = [value::<T>(); 4];
     let mut count = 0;
+    let stride = u32::try_from(room).unwrap();
     // SAFETY: `list` is a local buffer writable for `room * capacity + 16`
-    // bytes, `capacity` entries of the `room` bytes its first header states,
-    // and `count` a local `u32`; nothing else touches either.
-    let status =
-        unsafe { put_headed_list(&items, list.as_mut_ptr().cast::<T>(), 3, &raw mut count) };
+    // bytes, `capacity` entries of `room` bytes, and `count` a local `u32`;
+    // nothing else touches either.
+    let status = unsafe {
+        put_sized_list(
+            &items,
+            list.as_mut_ptr().cast::<T>(),
+            stride,
+            3,
+            &raw mut count,
+        )
+    };
     assert_eq!((status, count), (Status::OK, 4), "{name}");
     for entry in 0..capacity {
         assert_eq!(size_at(&list, entry * room), room, "{name}: entry {entry}");
@@ -396,23 +415,23 @@ fn no_entry_point_requires_more_than_the_born_size_of_a_mod_s_struct() {
 }
 
 #[test]
-fn a_list_whose_first_header_is_shorter_than_a_header_is_refused() {
+fn a_list_whose_entry_size_is_shorter_than_a_header_is_refused() {
     let mut list = guarded(64);
-    set_size(&mut list, 0, 4);
     let mut count = 0;
     let out = list.as_mut_ptr().cast::<api_frame::WeatherFront>();
     // SAFETY: `out` is a local buffer writable for 64 bytes and `count` a
     // local `u32`; nothing else touches either.
     let status = unsafe {
-        put_headed_list(
+        put_sized_list(
             &[value::<api_frame::WeatherFront>()],
             out,
+            4,
             1,
             &raw mut count,
         )
     };
     assert_eq!(status, Status::BAD_ARGS);
-    assert!(bytes_of(&list)[4..].iter().all(|&b| b == GUARD));
+    assert!(bytes_of(&list).iter().all(|&b| b == GUARD));
 }
 
 /// Every entry point that takes a pointer to a headed struct reads or writes
@@ -420,14 +439,13 @@ fn a_list_whose_first_header_is_shorter_than_a_header_is_refused() {
 /// through the raw pointer itself.
 #[test]
 fn every_entry_point_passes_headed_pointers_through_a_sized_helper() {
-    const HEADED_KINDS: [&str; 8] = [
+    const HEADED_KINDS: [&str; 7] = [
         "Headed<",
         "HeadedOut<",
         "HeadedInOut<",
         "HeadedSince<",
         "MaybeHeaded<",
         "HeadedList<",
-        "HeadedListOut<",
         "SizedListOut<",
     ];
     const HELPERS: [&str; 4] = [

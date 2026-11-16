@@ -136,3 +136,20 @@ fn a_rule_from_the_console_needs_a_running_world() {
     );
     assert_eq!(answer, texts::fill("recipes.no_world", &[]));
 }
+
+#[test]
+fn the_menus_check_one_flag_while_nothing_is_disabled_and_hide_only_what_is() {
+    let recipes = Recipes::new();
+    assert!(!recipes.any_disabled());
+    recipes.set_disabled([7].into_iter().collect());
+    assert!(recipes.any_disabled());
+    assert!(recipes.is_disabled(7));
+    assert!(!recipes.is_disabled(8));
+    let generation = recipes.disabled.load().generation;
+    recipes.set_disabled(FxHashSet::default());
+    assert!(
+        !recipes.any_disabled(),
+        "an emptied set leaves the menus alone"
+    );
+    assert_eq!(recipes.disabled.load().generation, generation + 1);
+}

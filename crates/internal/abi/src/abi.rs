@@ -6,6 +6,21 @@
 //! mods built for its own [`ABI_MAJOR`] and its [`ABI_MINOR`] or an older
 //! one ([`check_abi`]). Mods normally use the safe layer of `enshwick`
 //! instead of these types.
+//!
+//! Every status, kind, cause and flag set grows only by appending. A mod
+//! treats a [`Status`] it does not know as a failure and a kind or cause it
+//! does not know as "other"; it ignores flag bits it does not know, and the
+//! loader refuses an unknown bit a mod sends with [`Status::BAD_ARGS`].
+//!
+//! A filter's answer of 0 lets the game decide, or the filters after it
+//! ([`FILTER_PASS`]); 1 is the filter's own yes where it has one, such as
+//! [`SkillCheck::UNLOCKED`], and 2 its no ([`FILTER_REFUSE`]). The loader
+//! reads an answer it does not know as 0, so a zeroed answer is always safe.
+//!
+//! A yes or no is a `u8`, 1 or 0, in every field, parameter and answer; the
+//! loader refuses any other byte a mod sends with [`Status::BAD_ARGS`]. Every
+//! GUID is a [`Guid`], and every length, count or capacity a `u32`, but a
+//! [`Str`]'s length, a `usize` as a Rust `&str` has.
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -47,38 +62,6 @@ pub const fn is_valid_id(id: &str) -> bool {
         Some(at) => at > 0 && at + 1 < bytes.len(),
         None => false,
     }
-}
-
-/// Whether `id` is a mod id of either form `replaces` takes: a valid id, or
-/// 1 to 64 characters of `[a-z0-9-]`, the old form without an author.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::abi::is_valid_old_form_id;
-///
-/// assert!(is_valid_old_form_id("trading-post"));
-/// assert!(is_valid_old_form_id("you.trading-post"));
-/// assert!(!is_valid_old_form_id("Trading Post"));
-/// ```
-#[must_use]
-pub const fn is_valid_old_form_id(id: &str) -> bool {
-    if is_valid_id(id) {
-        return true;
-    }
-    let bytes = id.as_bytes();
-    if bytes.is_empty() || bytes.len() > 64 {
-        return false;
-    }
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
-            return false;
-        }
-        i += 1;
-    }
-    true
 }
 
 /// The start of every struct that crosses the boundary on its own: its size
@@ -173,7 +156,7 @@ pub unsafe trait Headed: bytemuck::Zeroable + Copy {
     /// Where the fields every writer of this [`ABI_MAJOR`] knows end: the
     /// struct's size at minor 0 of the major. A reader of a struct the other
     /// side wrote requires this much, and reads a later field only where
-    /// [`Header::covers`] it; the layout tests hold it to the golden file.
+    /// the header's `size` covers it; the layout tests hold it to the golden file.
     const BORN: usize;
 }
 
@@ -204,7 +187,7 @@ macro_rules! impl_headed {
 /// Reads only the bytes the writer's header covers; the fields it does not
 /// know stay zero. `None` when `raw` is null or the writer's struct ends
 /// before byte `required`, the end of the fields every version has. The copy
-/// keeps the writer's header, so check [`Header::covers`] before trusting a
+/// keeps the writer's header, so check the header's `size` before trusting a
 /// field newer than `required` that zero does not default well.
 ///
 /// # Safety
@@ -315,6 +298,7 @@ mod altars;
 mod buffs;
 mod chat;
 mod checks;
+mod client;
 mod content;
 mod controls;
 mod events;
@@ -340,11 +324,23 @@ mod version;
 mod world;
 mod writes;
 
+/// The GUID every ABI field holds.
+#[doc(no_inline)]
+pub use crate::content::Guid;
+
+/// A place in the world in metres, y up: the one form of every position the
+/// ABI passes; the loader converts the engine's own forms.
+pub type Metres = [f64; 3];
+
+/// A whole cell of the engine's 0.5 m grid, y up, as survivors and altar
+/// zones count them.
+pub type Cell = [i64; 3];
 pub use actions::*;
 pub use altars::*;
 pub use buffs::*;
 pub use chat::*;
 pub use checks::*;
+pub use client::*;
 pub use content::*;
 pub use controls::*;
 pub use events::*;
@@ -471,6 +467,17 @@ impl Str {
 
 /// The outcome of a call across the interface.
 ///
+/// Each status has one meaning. [`Status::MISSING`] names only a thing that
+/// is absent, [`Status::UNAVAILABLE`] a call that cannot run in this process
+/// or on this build, [`Status::REFUSED`] a refusal by the loader's rules or
+/// another mod, [`Status::BUSY`] a full queue or rate that a later call may
+/// pass, [`Status::TOO_SMALL`] a buffer too short for an answer whose length
+/// the call wrote, [`Status::BAD_ARGS`] an argument that is malformed, and
+/// [`Status::LOADER_FAULT`] a fault inside the loader itself.
+///
+/// Values only append in later minors, and a mod treats a status it does
+/// not know as a failure.
+///
 /// # Examples
 ///
 /// ```
@@ -486,16 +493,19 @@ pub struct Status(pub u32);
 impl Status {
     /// Success.
     pub const OK: Self = Self(0);
-    /// What was asked for does not exist on this game build.
+    /// What the call names is not there: an id, entity, key, file or symbol
+    /// that does not exist.
     pub const MISSING: Self = Self(1);
     /// More than one candidate answers a lookup.
     pub const AMBIGUOUS: Self = Self(2);
-    /// The request conflicts with another mod or with the loader's rules.
+    /// The loader's rules or another mod refuse the request, and asking
+    /// again unchanged gets the same answer.
     pub const REFUSED: Self = Self(3);
-    /// An argument is malformed.
+    /// An argument is malformed: a null pointer the call needs, a value out
+    /// of range, text that is not UTF-8.
     pub const BAD_ARGS: Self = Self(4);
-    /// The call came in a phase where it is not allowed, such as a hook after
-    /// arming.
+    /// The call came in a phase where it is not allowed, such as a
+    /// registration after `enshwick_mod_init`.
     pub const TOO_LATE: Self = Self(5);
     /// The mod has faulted and is off.
     pub const FAULTED: Self = Self(6);
@@ -519,17 +529,22 @@ impl Status {
     /// The entity has nothing the world's next load finds it again by: a
     /// player's character, or an entity with no place in the world.
     pub const NOT_KEPT: Self = Self(12);
-    /// The call cannot run in this process: no server runs here, as on a
-    /// client in another's game, or this build lacks the pieces the call
-    /// needs; [`Status::MISSING`] then means only that what the call names
-    /// is not there. A mod built for an older minor reads it as any status
-    /// it does not know.
+    /// The call cannot run here: no server runs in this process, as on a
+    /// client in another's game, no world runs, the side is the other one,
+    /// or this game build lacks the pieces the call needs.
     pub const UNAVAILABLE: Self = Self(13);
     /// The resource asked about is being built on this thread, by a patch
     /// further up the call, so reading it would build it again without
-    /// end. A mod built for an older minor reads it as any status it does
-    /// not know.
+    /// end.
     pub const BUILDING: Self = Self(14);
+    /// The loader failed inside its own code; the entry turns off and
+    /// answers this until the process ends, and the mod stays on.
+    pub const LOADER_FAULT: Self = Self(15);
+    /// A queue is full or a rate is spent: the same call may pass later.
+    pub const BUSY: Self = Self(16);
+    /// The caller's buffer is too short; the call wrote the length the
+    /// answer needs and nothing else.
+    pub const TOO_SMALL: Self = Self(17);
 
     /// Whether this is [`Status::OK`].
     ///
@@ -678,7 +693,7 @@ pub struct ParseLevelError;
 /// assert_eq!(enshwick::abi::exports::INIT, "enshwick_mod_init");
 /// ```
 pub mod exports {
-    /// `extern "system" fn() -> u32`: the [`ABI_MAJOR`](super::ABI_MAJOR)
+    /// `extern "system" fn() -> u16`: the [`ABI_MAJOR`](super::ABI_MAJOR)
     /// the mod was built for; its manifest's header holds the minor.
     pub const ABI: &str = "enshwick_mod_abi";
     /// `extern "system" fn() -> *const Manifest`: the manifest, or null.
@@ -690,8 +705,9 @@ pub mod exports {
     /// `extern "system" fn(*const HostApi, ModHandle) -> Status`: registers
     /// hooks, services and settings.
     pub const INIT: &str = "enshwick_mod_init";
-    /// `extern "system" fn(*const HostApi, ModHandle)`: after every chain is
-    /// armed.
+    /// `extern "system" fn(*const HostApi, ModHandle) -> Status`: after every
+    /// chain is armed; any status but [`Status::OK`](super::Status::OK) turns
+    /// the mod off, as a failed init does.
     pub const READY: &str = "enshwick_mod_ready";
 }
 
@@ -700,25 +716,29 @@ const _: () = {
     assert!(size_of::<Str>() == 16);
     assert!(size_of::<Status>() == 4);
     assert!(size_of::<Fingerprint>() == 20);
+    // Frozen: a symbol is a name and an address, a dependency an id, a range and a relation,
+    // a build row a build and its lists, which grow by their counts.
     assert!(size_of::<Symbol>() == 24);
+    assert!(size_of::<BuildRow>() == 56);
+    assert!(size_of::<Dependency>() == 40);
     assert!(core::mem::offset_of!(Manifest, header) == 0);
     assert!(core::mem::offset_of!(Manifest, id) == 8);
     assert!(core::mem::offset_of!(Manifest, version) == 24);
     assert!(core::mem::offset_of!(Manifest, side) == 40);
     assert!(core::mem::offset_of!(Manifest, flags) == 44);
     assert!(core::mem::offset_of!(Manifest, dependencies) == 48);
-    assert!(core::mem::offset_of!(HookSpec, target) == 0);
-    assert!(core::mem::offset_of!(HookSpec, next) == 16);
-    assert!(core::mem::offset_of!(HookSpec, flags) == 28);
-    assert!(size_of::<AffixDefData>() == 8 + 32 + 8 + 16);
-    // Frozen: read and written as arrays.
-    assert!(size_of::<AffixModifierData>() == 20);
+    assert!(core::mem::offset_of!(HookSpec, target) == 8);
+    assert!(core::mem::offset_of!(HookSpec, next) == 24);
+    assert!(core::mem::offset_of!(HookSpec, flags) == 36);
+    assert!(size_of::<AffixSpec>() == 8 + 16 + 8 + 16);
+    // Frozen: a modifier is the game's stat, op and range; an item line adds only its affix.
+    assert!(size_of::<AffixModifierSpec>() == 20);
     assert!(size_of::<ItemLine>() == 16);
     assert!(size_of::<AffixRoll>() == 8 + 12 + 4 + 8);
-    assert!(size_of::<StatDefData>() == 8 + 16 + 16);
-    // Frozen: written as arrays.
+    assert!(size_of::<StatSpec>() == 8 + 16);
+    // Frozen: a stat reference, a modifier and its source are plain values (HostApi list rule).
     assert!(size_of::<StatRef>() == 8);
-    assert!(size_of::<StatModifierData>() == 12);
+    assert!(size_of::<StatModifier>() == 12);
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
@@ -730,7 +750,7 @@ const _: () = {
     assert!(size_of::<ControlSpec>() == 8 + 2 * 16 + 8 + 16 + 8 + 16);
     assert!(core::mem::offset_of!(ControlEvent, player) == 8 + 16 + 8);
     assert!(size_of::<TypeEntry>() == 8 + 4 * 16 + 8 + 8 + 16 + 3 * 8);
-    // Frozen: read as arrays.
+    // Frozen: the reflection's own field, constant and attribute records; more is read by type name.
     assert!(size_of::<TypeField>() == 16 + 16 + 8 + 8);
     assert!(size_of::<TypeConstant>() == 16 + 8);
     assert!(size_of::<TypeAttribute>() == 3 * 16);
@@ -749,81 +769,83 @@ const _: () = {
     assert!(size_of::<VoxelRegion>() == 8 + 24);
     assert!(size_of::<BlockPlace>() == 8 + 8 + 24 + 16);
     assert!(size_of::<BuildRights>() == 8 + 8 + 48);
-    // Frozen: read as an array.
+    // Frozen: a kind and a pointer to its headed record, which grows instead.
     assert!(size_of::<TransactionOp>() == 16);
     assert!(size_of::<TransactionInfo>() == 8 + 16 + 8 + 8 + 8);
-    // Frozen: written as an array.
+    // Frozen: the game's packed four-byte voxel.
     assert!(size_of::<Voxel>() == 4);
-    // Frozen: read as an array.
+    // Frozen: a cell with its voxel before and after, all a change is.
     assert!(size_of::<VoxelChange>() == 12 + 4 + 4);
-    assert!(size_of::<VoxelEditData>() == 8 + 8 + 24 + 8 + 8);
-    assert!(size_of::<AltarLimit>() == 8 + 8);
+    assert!(size_of::<VoxelEditRequest>() == 8 + 8 + 24 + 8 + 8);
+    assert!(size_of::<AltarLimit>() == 8 + 16);
     assert!(size_of::<BaseLimitInfo>() == 8 + 28);
     assert!(size_of::<AltarZone>() == 8 + 8 + 16);
     assert!(size_of::<LoopWaitData>() == 8 + 8 + 8);
     assert!(size_of::<DataChange>() == 8 + 16 + 4 + 4 + 8 + 16 + 16 + 4 + 4);
     assert!(size_of::<RecipeKind>() == 4);
     assert!(size_of::<KnowledgeInput>() == 8 + 24);
-    // Frozen: written as an array.
+    // Frozen: a rename is two content GUIDs.
     assert!(size_of::<ContentRename>() == 16 + 16);
     assert!(size_of::<PointSpec>() == 8 + 16 + 4 + 4 + 16 + 16);
     assert!(size_of::<PointLink>() == 8 + 3 * 8 + 3 * 4 + 4);
     assert!(size_of::<PointHandle>() == 8 + 8 + 8);
-    // Frozen: written as an array.
+    // Frozen: a field is its name and the hash of its type, all a layout compares.
     assert!(size_of::<LayoutField>() == 24);
     assert!(size_of::<Layout>() == 16);
     assert!(size_of::<ServiceSpec>() == 8 + 16 + 8 + 16 + 8);
     assert!(size_of::<ServiceFound>() == 8 + 8 + 8 + 3 * 16);
     assert!(size_of::<EventSpec>() == 8 + 16 + 16);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
-    assert!(size_of::<DamageCheck>() == 8 + 16 + 13 * 4 + 4);
-    // Frozen: written as arrays.
+    assert!(size_of::<DamageCheck>() == 8 + 16 + 4 + 4 + 8);
+    // Headed: written at the entry size the caller states.
     assert!(size_of::<BuffTypeInfo>() == 8 + 12 + 4 + 8);
     assert!(size_of::<ActiveBuff>() == 8 + 16 + 16);
     assert!(size_of::<BuffRequest>() == 8 + 16 + 8);
     assert!(size_of::<KnowledgeInfo>() == 8 + 16);
     assert!(size_of::<KnowledgeData>() == 8 + 12);
-    assert!(size_of::<PlayerDeathData>() == 8 + 8 + 8 + 12 + 16 + 4 + 8);
+    assert!(size_of::<PlayerDeathData>() == 8 + 4 + 4 + 8 + 24 + 16 + 4 + 4);
     assert!(size_of::<QuestData>() == 8 + 8);
-    // Written as an array at the stride of the mod's own header.
+    // Headed: written at the entry size the caller states.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);
-    assert!(size_of::<ChunkData>() == 8 + 16);
+    assert!(size_of::<WeatherSample>() == 8 + 16);
+    assert!(size_of::<ChunkData>() == 8 + 12);
     assert!(size_of::<TerrainPageData>() == 8 + 12);
     assert!(size_of::<ProgressWriteData>() == 8 + 28);
-    // Frozen: written as an array.
+    // Headed: written at the entry size the caller states.
     assert!(size_of::<TerrainMaterialInfo>() == 8 + 12);
-    assert!(size_of::<TerrainEdit>() == 8 + 16 + 12 + 8 + 16);
+    assert!(size_of::<TerrainEdit>() == 8 + 16 + 24 + 8 + 16);
+    // Frozen: each kind fits these fields; a kind that needs more is a new entry.
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
     assert!(size_of::<InventoryResult>() == 24);
-    assert!(size_of::<ItemData>() == 20 + 16);
-    // Frozen: embedded in calls and written as an array.
-    assert!(size_of::<PlayerInfo>() == 96);
-    assert!(core::mem::offset_of!(PlayerInfo, name) == 26);
+    assert!(size_of::<ItemTypeInfo>() == 20 + 16);
+    assert!(size_of::<PlayerInfo>() == 8 + 4 + 4 + 8 + 4 + 4 + 128);
+    // Frozen: the whole x64 general-purpose set; vector registers get an entry of their own.
     assert!(size_of::<Registers>() == 17 * 8);
     assert!(core::mem::offset_of!(Registers, rsp) == 4 * 8);
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);
-    assert!(size_of::<MidHookSpec>() == 32);
+    assert!(size_of::<MidHookSpec>() == 8 + 32);
     assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
-    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16 + 40 + 8 + 16 + 4 + 4);
+    assert!(size_of::<ActionCall>() == 8 + 8 + 8 + 16 + 16 + 8 + 8 + 16 + 4 + 4);
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
-    assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8 + 8);
+    assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24 + 8);
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
-    assert!(size_of::<UiFrame>() == 64 + 16 + 24);
-    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16);
+    assert!(size_of::<UiFrame>() == 64 + 16 + 24 + 24);
+    assert!(size_of::<UiTooltipItem>() == 8 + 8 + 8);
+    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16 + 8);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(size_of::<UiDialog>() == 8 + 48 + 8);
     assert!(size_of::<GameEventData>() == 24);
-    // Frozen: written as an array.
+    // Frozen: an entity and its place, a plain value (HostApi list rule).
     assert!(size_of::<EntityPlace>() == 32);
     assert!(size_of::<SkillCheck>() == 20);
-    assert!(size_of::<Comfort>() == 28);
-    // Frozen: passed as an array.
+    assert!(size_of::<Comfort>() == 40);
+    // Frozen: one character's row; what concerns the pass grows in the headed ExperiencePass.
     assert!(size_of::<ExperienceRow>() == 20);
-    assert!(size_of::<ExperiencePass>() == 48);
+    assert!(size_of::<ExperiencePass>() == 40);
     assert!(size_of::<Interaction>() == 8 + 16 + 8 + 24);
     assert!(size_of::<SurvivorLookup>() == 8 + 16 + 24 + 16);
     assert!(size_of::<BedCheck>() == 8 + 12 + 4 + 48);

@@ -207,8 +207,7 @@ fn drop_orphans(doc: &mut DocumentMut) {
     let symbols: Vec<String> = doc
         .get("symbols")
         .and_then(Item::as_table)
-        .map(|t| t.iter().map(|(id, _)| id.to_owned()).collect())
-        .unwrap_or_default();
+        .map_or_default(|t| t.iter().map(|(id, _)| id.to_owned()).collect());
     let Some(constants) = doc.get_mut("constants").and_then(Item::as_table_mut) else {
         return;
     };
@@ -372,12 +371,11 @@ fn patterns_into(
 fn values(doc: &DocumentMut, section: &str) -> Vec<(String, u64)> {
     doc.get(section)
         .and_then(Item::as_table)
-        .map(|t| {
+        .map_or_default(|t| {
             t.iter()
                 .filter_map(|(id, item)| Some((id.to_owned(), number(item)?)))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// The pattern of the symbol `id` at `rva`: through its anchor, or from its
@@ -628,7 +626,7 @@ fn constant_text(value: u64, pattern: &ConstantPattern, plus: i64, extra: &str) 
 fn pattern_texts(doc: &DocumentMut, section: &str) -> FxHashMap<String, String> {
     doc.get(section)
         .and_then(Item::as_table)
-        .map(|t| {
+        .map_or_default(|t| {
             t.iter()
                 .filter_map(|(id, item)| {
                     let Item::Value(Value::InlineTable(inline)) = item else {
@@ -638,7 +636,6 @@ fn pattern_texts(doc: &DocumentMut, section: &str) -> FxHashMap<String, String> 
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Runs `f` over `items` on all cores, in order; a part whose thread

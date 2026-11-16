@@ -54,6 +54,10 @@ impl NetMessage {
 /// A mod's handler for messages on its channel: the message and the pointer
 /// given at registration. It must not unwind.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Its thread is not fixed, so it must be thread-safe.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::channel`](../struct.Load.html#method.channel).

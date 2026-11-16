@@ -80,7 +80,7 @@ mod tests {
         side = "both"
 
         [requires]
-        other = { id = "other", version = "^1" }
+        other = { id = "you.other", version = "^1" }
         "#
     );
 
@@ -92,7 +92,7 @@ mod tests {
         // SAFETY: the id points at a `'static` string literal of `declare_mod!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.test-mod"));
         assert_eq!(manifest.dependency_count, 1);
-        assert_eq!(enshwick_mod_abi(), u32::from(enshwick::abi::ABI_MAJOR));
+        assert_eq!(enshwick_mod_abi(), enshwick::abi::ABI_MAJOR);
 
         let target = address(original as extern "system" fn(u32) -> u32);
         let loader = FakeHost::new()
@@ -142,15 +142,6 @@ mod tests {
         // SAFETY: the chain ends in `tripled`, which takes any value.
         assert_eq!(unsafe { halve(4) }, 6);
 
-        // A panic in the detour reports a fault and falls through to the original.
-        let calls = ORIGINAL_CALLS.load(Ordering::Relaxed);
-        assert_eq!(entry(13), 14);
-        assert_eq!(ORIGINAL_CALLS.load(Ordering::Relaxed), calls + 1);
-        assert_eq!(
-            loader.faults(),
-            ["panic in hook DOUBLE: assertion `left != right` failed: unlucky"]
-        );
-
         // SAFETY: `enshwick_mod_ready` is the export of this file's `declare_mod!(Test)`,
         // and its `enshwick_mod_init` returned `Status::OK`.
         unsafe { loader.ready(enshwick_mod_ready) };
@@ -176,5 +167,23 @@ mod tests {
                 == "settings.toml: limit takes a whole number; the default applies")
         );
         assert_eq!(loader.raise::<events::LoaderSettingsChanged>(&()), 1);
+
+        // A panic in the detour reports a fault, falls through to the original
+        // and turns the mod off: its handlers run no more.
+        let calls = ORIGINAL_CALLS.load(Ordering::Relaxed);
+        assert_eq!(entry(13), 14);
+        assert_eq!(ORIGINAL_CALLS.load(Ordering::Relaxed), calls + 1);
+        assert_eq!(
+            loader.faults(),
+            ["panic in hook DOUBLE: assertion `left != right` failed: unlucky"]
+        );
+        assert!(loader.is_off());
+        loader.set_settings("settings", "limit = 9\n");
+        let _ran = loader.raise::<events::SettingsChanged>(&());
+        assert_eq!(
+            LIVE_LIMIT.load(Ordering::Relaxed),
+            0,
+            "an off mod hears nothing"
+        );
     }
 }

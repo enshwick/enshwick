@@ -25,11 +25,6 @@ impl Limits {
         zones: VANILLA_ZONES,
         bases: MAX_BASES,
     };
-    /// What raising the limit asks for.
-    pub(crate) const RAISED: Self = Self {
-        zones: 32,
-        bases: MAX_BASES,
-    };
     /// The most a mod may ask for: every zone the game lists, in the bases
     /// its array and the window behind it hold.
     #[expect(

@@ -169,7 +169,7 @@ graph BT
     knowledge --> world
     actions --> world
     knowledge -. unstable .-> inventory
-    ui -. unstable .-> world
+    ui -. unstable .-> inventory
     packs --> inventory
     packs --> knowledge
     packs --> ui

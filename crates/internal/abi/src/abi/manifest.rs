@@ -1,22 +1,23 @@
 //! A mod's manifest: its id, version, dependencies and build rows.
 
 use crate::abi::{Header, Side, Str};
+use crate::content::Guid;
 
-/// A game build's identity: the CodeView GUID, in file order, and age.
+/// A game build's identity: the CodeView GUID and age.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::abi::Fingerprint;
 ///
-/// let build = Fingerprint { guid: [0x1c; 16], age: 387 };
+/// let build = Fingerprint { guid: enshwick::abi::Guid([0x1c; 16]), age: 387 };
 /// assert_eq!(build.age, 387);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct Fingerprint {
-    /// The GUID in file order.
-    pub guid: [u8; 16],
+    /// The CodeView GUID.
+    pub guid: Guid,
     /// The linker's age counter.
     pub age: u32,
 }
@@ -26,14 +27,14 @@ pub struct Fingerprint {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{BuildInfo, BuildTable, Fingerprint, Header, Side};
+/// use enshwick::abi::{BuildInfo, Fingerprint, Header, Side};
 ///
 /// let build = BuildInfo {
 ///     header: Header::of::<BuildInfo>(),
 ///     side: Side::SERVER,
 ///     base: 0x1_4000_0000,
-///     fingerprint: Fingerprint { guid: [0; 16], age: 0 },
-///     table: BuildTable::EXACT,
+///     fingerprint: Fingerprint { guid: enshwick::abi::Guid::NIL, age: 0 },
+///     complete: 1,
 /// };
 /// assert_eq!(build.side, Side::SERVER);
 /// ```
@@ -48,33 +49,13 @@ pub struct BuildInfo {
     pub base: u64,
     /// The build fingerprint.
     pub fingerprint: Fingerprint,
-    /// Whether the loader found every entry it knows on this build.
-    pub table: BuildTable,
+    /// 1 when the loader found every entry it knows on this build, by its
+    /// engine routes and anchors; 0 when some are missing, and what needs
+    /// one stays off until a loader release finds it.
+    pub complete: u8,
 }
 
 impl_headed!(BuildInfo);
-
-/// Whether the loader found every entry it knows on the running build, by
-/// its engine routes and anchors.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::abi::BuildTable;
-///
-/// assert_ne!(BuildTable::EXACT, BuildTable::PATTERNS);
-/// ```
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
-pub struct BuildTable(pub u8);
-
-impl BuildTable {
-    /// Every entry the loader knows is there.
-    pub const EXACT: Self = Self(0);
-    /// Some entries are missing: what needs one stays off until a loader
-    /// release finds it.
-    pub const PATTERNS: Self = Self(1);
-}
 
 /// One symbol pinned for one game build: a name and its address relative to
 /// the image base.
@@ -109,10 +90,10 @@ pub struct Symbol {
 /// ```
 /// use enshwick::abi::guid;
 ///
-/// assert_eq!(guid("1c129660cd6efc4f9f0b21652d5ff2bf")[0], 0x1c);
+/// assert_eq!(guid("1c129660cd6efc4f9f0b21652d5ff2bf").0[0], 0x1c);
 /// ```
 #[must_use]
-pub const fn guid(hex: &str) -> [u8; 16] {
+pub const fn guid(hex: &str) -> Guid {
     let bytes = hex.as_bytes();
     assert!(bytes.len() == 32, "a GUID is 32 hex digits");
     let mut out = [0u8; 16];
@@ -121,7 +102,7 @@ pub const fn guid(hex: &str) -> [u8; 16] {
         out[i] = (digit(bytes[2 * i]) << 4) | digit(bytes[2 * i + 1]);
         i += 1;
     }
-    out
+    Guid(out)
 }
 
 #[expect(
@@ -147,9 +128,9 @@ const fn digit(c: u8) -> u8 {
 /// static SYMBOLS: [Symbol; 1] = [Symbol { name: Str::new("npc.update"), rva: 0x20_55f0 }];
 /// let row = BuildRow {
 ///     side: Side::SERVER,
-///     fingerprint: Fingerprint { guid: [0; 16], age: 0 },
+///     fingerprint: Fingerprint { guid: enshwick::abi::Guid::NIL, age: 0 },
 ///     symbols: SYMBOLS.as_ptr(),
-///     symbol_count: SYMBOLS.len(),
+///     symbol_count: 1,
 ///     constants: core::ptr::null(),
 ///     constant_count: 0,
 /// };
@@ -165,12 +146,12 @@ pub struct BuildRow {
     /// The pinned symbols.
     pub symbols: *const Symbol,
     /// How many symbols `symbols` points at.
-    pub symbol_count: usize,
+    pub symbol_count: u32,
     /// Engine constants the mod pins for the build, such as offsets in the
     /// caller frames it reads; the `rva` field holds the value.
     pub constants: *const Symbol,
     /// How many constants `constants` points at.
-    pub constant_count: usize,
+    pub constant_count: u32,
 }
 
 // SAFETY: a build row is immutable static data pointing at static symbols.
@@ -307,11 +288,11 @@ pub struct Manifest {
     /// Relations to other mods.
     pub dependencies: *const Dependency,
     /// How many entries `dependencies` points at.
-    pub dependency_count: usize,
+    pub dependency_count: u32,
     /// Symbols and constants the mod pins itself, per build.
     pub builds: *const BuildRow,
     /// How many rows `builds` points at.
-    pub build_count: usize,
+    pub build_count: u32,
     /// The name players read, such as `Survivors per Altar`; empty for the
     /// id.
     pub name: Str,
@@ -320,14 +301,14 @@ pub struct Manifest {
     /// The authors' names.
     pub authors: *const Str,
     /// How many names `authors` points at.
-    pub author_count: usize,
+    pub author_count: u32,
     /// An SPDX licence expression, such as `MIT OR Apache-2.0`.
     pub license: Str,
     /// Where players read about the mod, an `https://` address.
     pub homepage: Str,
     /// The schemas of the extension points, calls, mod events and services
     /// the mod defines, as TOML that `cargo enshwick deps` reads; empty for none.
-    /// `declare_mod!` collects them from the DLL's `.enshpt` section, where
+    /// A Rust mod's build collects them from the DLL's `.enshpt` section, where
     /// a tool reads them without running the mod.
     pub points: Str,
     /// What other mods may use, each `<kind>:<local name>` with a kind of
@@ -337,7 +318,7 @@ pub struct Manifest {
     /// kind.
     pub exports: *const Str,
     /// How many names `exports` points at.
-    pub export_count: usize,
+    pub export_count: u32,
 }
 
 impl_headed!(Manifest);

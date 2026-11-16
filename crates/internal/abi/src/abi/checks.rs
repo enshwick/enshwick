@@ -2,7 +2,18 @@
 
 use core::ffi::c_void;
 
+use crate::abi::Metres;
 use crate::abi::{Entity, Header, ItemId, SkillNode};
+
+/// A filter's answer that lets the game decide, or the filters after it.
+pub const FILTER_PASS: u8 = 0;
+
+/// A filter's answer that lets through what the game or the filters before
+/// it refused, in a filter that can; elsewhere the same as [`FILTER_PASS`].
+pub const FILTER_YES: u8 = 1;
+
+/// A filter's answer that refuses what it is asked about.
+pub const FILTER_REFUSE: u8 = 2;
 
 /// A player about to interact with an entity, as
 /// [`HostApi::interaction_filter`](super::HostApi::interaction_filter) hands it
@@ -19,7 +30,7 @@ use crate::abi::{Entity, Header, ItemId, SkillNode};
 /// let call = Interaction {
 ///     header: Header::of::<Interaction>(),
 ///     kind: Interaction::OPEN,
-///     player: enshwick::Entity(4096),
+///     character: enshwick::Entity(4096),
 ///     target: enshwick::Entity(5000),
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     known: 1,
@@ -36,7 +47,7 @@ pub struct Interaction {
     /// What the player does; one of the constants on this type.
     pub kind: u32,
     /// The player's character entity.
-    pub player: Entity,
+    pub character: Entity,
     /// The entity they act on: a chest, a placed piece, the inventory a slot
     /// belongs to.
     pub target: Entity,
@@ -47,7 +58,7 @@ pub struct Interaction {
     /// Zero.
     pub reserved: [u8; 3],
     /// Where the target stands, in metres, when `known`.
-    pub position: [f64; 3],
+    pub position: Metres,
 }
 
 impl_headed!(Interaction);
@@ -71,14 +82,86 @@ impl Interaction {
 }
 
 /// A mod's interaction filter: the call and the pointer given at
-/// registration; returns 0 to refuse, which the game handles as its own
+/// registration; returns [`FILTER_REFUSE`] to refuse, which the game handles as its own
 /// refusal, so nothing moves and nothing is lost.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
 ///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_interaction`](../struct.Load.html#method.on_interaction).
-pub type InteractionFn =
+pub type InteractionFilterFn =
     unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
+
+/// How the prompt of every object placed from one item reads and what its
+/// press does, as [`HostApi::interaction_prompt`](super::HostApi::interaction_prompt)
+/// takes it. ABI 12.3.
+///
+/// The server writes [`verb`](Self::verb) and the replaced action, so every
+/// client sees them; a client with Enshwick also shows [`text`](Self::text)
+/// in the verb's place.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, InteractionPrompt};
+///
+/// let prompt = InteractionPrompt {
+///     header: Header::of::<InteractionPrompt>(),
+///     item: enshwick::ItemId::new(0x5e01),
+///     verb: 0xc22a_47e8,
+///     text: 0,
+///     flags: InteractionPrompt::REPLACE_ACTION,
+/// };
+/// assert_eq!(prompt.flags, InteractionPrompt::REPLACE_ACTION);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct InteractionPrompt {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The item the objects were placed from (`UsedItem`); never 0.
+    pub item: ItemId,
+    /// The game's `LocaTagId` of the verb every client shows; 0 keeps the
+    /// object's own verb.
+    pub verb: u32,
+    /// The `LocaTagId` of one of the mod's own texts, shown in the verb's
+    /// place on clients with Enshwick; 0 for none.
+    pub text: u32,
+    /// [`REPLACE_ACTION`](Self::REPLACE_ACTION) or 0.
+    pub flags: u32,
+}
+
+impl_headed!(InteractionPrompt);
+
+impl InteractionPrompt {
+    /// The press runs the game's empty interaction instead of the object's
+    /// own action, such as opening a chest, so only the mod's action runs.
+    pub const REPLACE_ACTION: u32 = 1;
+
+    /// Whether a host takes the prompt: an item, no unknown flag, and a
+    /// verb, a text or the replaced action.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, InteractionPrompt};
+    ///
+    /// let mut prompt = InteractionPrompt { header: Header::of::<InteractionPrompt>(), item: enshwick::ItemId::new(0x5e01), verb: 0, text: 0, flags: 0 };
+    /// assert!(!prompt.is_valid(), "it changes nothing");
+    /// prompt.flags = InteractionPrompt::REPLACE_ACTION;
+    /// assert!(prompt.is_valid());
+    /// ```
+    #[must_use]
+    pub const fn is_valid(&self) -> bool {
+        let known = self.flags & !Self::REPLACE_ACTION == 0;
+        let changes = self.flags != 0 || self.verb != 0 || self.text != 0;
+        self.item.get() != 0 && known && changes
+    }
+}
 
 /// The game asking whether a character unlocked a skill node, as
 /// [`HostApi::skill_override`](super::HostApi::skill_override) hands it on.
@@ -125,6 +208,11 @@ impl SkillCheck {
 /// returns [`SkillCheck::VANILLA`], [`SkillCheck::UNLOCKED`] or
 /// [`SkillCheck::LOCKED`].
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_skill`](../struct.Load.html#method.on_skill).
@@ -152,7 +240,7 @@ pub struct Comfort {
     /// The comfort it registers.
     pub value: i32,
     /// Where the provider stands, in metres.
-    pub position: [f32; 3],
+    pub position: Metres,
 }
 
 impl_headed!(Comfort);
@@ -160,13 +248,20 @@ impl_headed!(Comfort);
 /// A comfort filter: the registration and the pointer given at
 /// registration; returns the comfort to register.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_comfort`](../struct.Load.html#method.on_comfort).
-pub type ComfortFn = unsafe extern "system" fn(comfort: *const Comfort, user: *mut c_void) -> i32;
+pub type ComfortFilterFn =
+    unsafe extern "system" fn(comfort: *const Comfort, user: *mut c_void) -> i32;
 
 /// One character's experience before the game applies it, in an
-/// [`ExperiencePass`]. Its layout is frozen: it is passed as an array.
+/// [`ExperiencePass`]. Frozen, passed as an array: what concerns the whole
+/// pass grows in the headed [`ExperiencePass`].
 ///
 /// # Examples
 ///
@@ -211,7 +306,7 @@ pub struct ExperiencePass {
     /// The characters, valid and writable for the call.
     pub rows: *mut ExperienceRow,
     /// How many rows there are.
-    pub row_count: usize,
+    pub row_count: u32,
     /// The highest level.
     pub level_cap: u32,
     /// What level `level` (1 or more) needs; valid during the call with
@@ -225,10 +320,16 @@ impl_headed!(ExperiencePass);
 
 /// An experience filter: the pass and the pointer given at registration.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::on_experience`](../struct.Load.html#method.on_experience).
-pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
+pub type ExperienceFilterFn =
+    unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
 /// How many altars a Flame level allows, as the loader asks every
 /// [`HostApi::altar_limit_filter`](super::HostApi::altar_limit_filter) in
@@ -239,7 +340,7 @@ pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass,
 /// ```
 /// use enshwick::abi::{AltarLimit, Header};
 ///
-/// let limit = AltarLimit { header: Header::of::<AltarLimit>(), flame_level: 3, vanilla: 6, allowed: 6, reserved: [0; 2] };
+/// let limit = AltarLimit { header: Header::of::<AltarLimit>(), flame_level: 3, vanilla: 6, allowed: 6, reserved: 0 };
 /// assert_eq!(limit.allowed, limit.vanilla);
 /// ```
 #[repr(C)]
@@ -250,12 +351,12 @@ pub struct AltarLimit {
     /// The Flame level.
     pub flame_level: u32,
     /// The altars the game itself allows at that level.
-    pub vanilla: u8,
+    pub vanilla: u32,
     /// The altars allowed so far, as the filters before have left it; the
     /// filter's answer.
-    pub allowed: u8,
+    pub allowed: u32,
     /// Zero.
-    pub reserved: [u8; 2],
+    pub reserved: u32,
 }
 
 impl_headed!(AltarLimit);
@@ -306,6 +407,11 @@ impl_headed!(BaseLimitInfo);
 
 /// An altar limit filter: the limit so far, writable, and the pointer given
 /// at registration. It must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the thread of the game system that asks, the game thread or a task
+/// worker, so several calls may run at once.
 ///
 /// # Examples
 ///

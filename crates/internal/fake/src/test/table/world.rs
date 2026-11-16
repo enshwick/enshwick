@@ -5,8 +5,8 @@ use core::ffi::c_void;
 
 use crate::test::table::{Registered, Registration, put, text, with};
 use enshwick_core::abi::{
-    AccountActionType, EntityPlace, JoinRuleFn, ModHandle, PlayerInfo, RenameCallFn, Side, Status,
-    Str, TerrainEdit,
+    AccountActionType, EntityPlace, JoinRuleFn, ModHandle, PlayerInfo, RenameFilterFn, Side,
+    Status, Str, TerrainEdit,
 };
 
 pub(crate) mod altars;
@@ -74,11 +74,12 @@ pub(crate) extern "system" fn player(
 pub(crate) extern "system" fn players(
     _me: ModHandle,
     out: *mut PlayerInfo,
+    entry_size: u32,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
     let players = with(Vec::new(), |s| s.host.players.clone());
-    super::put_headed_list(&players, out, capacity, count)
+    super::base::io::list(&players, out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn chat(
@@ -86,9 +87,20 @@ pub(crate) extern "system" fn chat(
     to: enshwick_core::PlayerKey,
     value: Str,
 ) -> Status {
+    if to.get() == 0 {
+        return Status::BAD_ARGS;
+    }
     let value = text(value);
     with(Status::MISSING, |s| {
         s.chat.push((to, value));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn chat_all(_me: ModHandle, value: Str) -> Status {
+    let value = text(value);
+    with(Status::MISSING, |s| {
+        s.chat.push((enshwick_core::PlayerKey::new(0), value));
         Status::OK
     })
 }
@@ -107,10 +119,16 @@ pub(crate) extern "system" fn set_label(
 
 pub(crate) extern "system" fn rename_filter(
     me: ModHandle,
-    callback: RenameCallFn,
+    callback: Option<RenameFilterFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.rename_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -118,9 +136,12 @@ pub(crate) extern "system" fn rename_filter(
 
 pub(crate) extern "system" fn join_rule(
     me: ModHandle,
-    callback: JoinRuleFn,
+    callback: Option<JoinRuleFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
@@ -141,7 +162,7 @@ pub(crate) extern "system" fn entities(
         return Status::WRONG_THREAD;
     }
     if with(true, |s| s.edits.stopped) {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     }
     let found: Vec<EntityPlace> = with(Vec::new(), |s| {
         s.host
@@ -164,7 +185,7 @@ pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
     }
     with(Status::MISSING, |s| {
         if s.edits.stopped {
-            Status::MISSING
+            Status::UNAVAILABLE
         } else {
             Status::OK
         }
@@ -202,7 +223,7 @@ pub(crate) extern "system" fn save_world(_me: ModHandle) -> Status {
 pub(crate) extern "system" fn world_key(_me: ModHandle, out: *mut Str) -> Status {
     with(Status::MISSING, |s| {
         let Some(key) = s.host.world_key.clone() else {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         };
         let kept = s.world_key.insert(key.into_boxed_str());
         put(out, Str::new(kept))
@@ -243,7 +264,7 @@ pub(crate) extern "system" fn component_write(
 pub(crate) extern "system" fn item_info(
     _me: ModHandle,
     item: enshwick_core::ItemId,
-    out: *mut enshwick_core::abi::ItemData,
+    out: *mut enshwick_core::abi::ItemTypeInfo,
 ) -> Status {
     crate::test::table::found_headed(with(None, |s| s.host.items.get(&item.get()).copied()), out)
 }
@@ -256,21 +277,26 @@ pub(crate) extern "system" fn notify(
     let value = text(value);
     with(Status::MISSING, |s| {
         if !s.host.net_peers.contains(&key.get()) {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         s.notices.push((key, value));
         Status::OK
     })
 }
 
-pub(crate) extern "system" fn language_of(_me: ModHandle, key: enshwick_core::PlayerKey) -> u32 {
-    with(0, |s| {
+pub(crate) extern "system" fn language_of(
+    _me: ModHandle,
+    key: enshwick_core::PlayerKey,
+    out: *mut u32,
+) -> Status {
+    let language = with(0, |s| {
         s.host
             .player_languages
             .get(&key.get())
             .copied()
             .unwrap_or(0)
-    })
+    });
+    put(out, language)
 }
 
 /// The first entity id the fake hands out for a spawn.
@@ -307,7 +333,7 @@ pub(crate) extern "system" fn progress_write(
         }
         // The loader's level step links after `init`.
         if s.registration != Registration::Closed {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         let in_game = s.host.players.iter().any(|p| p.entity == entity);
         let step = s.ticks.step;
@@ -355,8 +381,10 @@ pub(crate) extern "system" fn fog_uncover(
         {
             return Status::BAD_ARGS;
         }
-        // As the loader: only a client that takes its messages is reached.
-        if !s.host.net_peers.contains(&player.get()) {
+        // As the loader: a client that hosts uncovers its own player's fog
+        // itself; another player only when its client takes the messages.
+        let own = s.host.hosting && s.host.host_key == Some(player);
+        if !own && !s.host.net_peers.contains(&player.get()) {
             return Status::UNAVAILABLE;
         }
         s.uncovers.push((player, [x, z], radius));
@@ -388,12 +416,12 @@ pub(crate) extern "system" fn build_rights(
             .host
             .players
             .iter()
-            .find(|p| p.entity == request.player)
+            .find(|p| p.entity == request.character)
             .map_or(0, |p| p.permissions);
         Some(s.host.zones.refusal(permissions, request.min, request.max))
     });
     let Some(refusal) = refusal else {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     };
     request.refusal = refusal;
     // SAFETY: the safe layer passes `check` non-null (read above) and
@@ -420,7 +448,7 @@ pub(crate) extern "system" fn map_markers(
         (!s.edits.stopped)
             .then(|| (!first && !s.edits.markers_pending).then(|| s.host.map_markers.clone()))
     }) else {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     };
     let Some(markers) = markers else {
         return Status::NOT_LOADED;
@@ -439,13 +467,13 @@ pub(crate) extern "system" fn map_frame(
         let first = s.edits.first_ask(SceneRead::Frame);
         (!s.edits.stopped).then(|| (!first && !s.edits.markers_pending).then_some(s.host.map_frame))
     }) else {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     };
     let Some(frame) = frame else {
         return Status::NOT_LOADED;
     };
     let Some(frame) = frame else {
-        return Status::MISSING;
+        return Status::UNAVAILABLE;
     };
     // SAFETY: the safe layer passes a headed struct for the call.
     if unsafe { enshwick_core::abi::write_headed(out, frame) } {
@@ -493,7 +521,7 @@ pub(crate) extern "system" fn account_action(
     action: AccountActionType,
     account: enshwick_core::PlayerKey,
 ) -> Status {
-    if account == enshwick_core::PlayerKey::new(0) || action.0 > AccountActionType::UN_BAN.0 {
+    if account == enshwick_core::PlayerKey::new(0) || action.0 > AccountActionType::UNBAN.0 {
         return Status::BAD_ARGS;
     }
     if !crate::test::table::on_game_thread() {
@@ -501,7 +529,7 @@ pub(crate) extern "system" fn account_action(
     }
     with(Status::MISSING, |s| {
         if s.edits.stopped {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         let online = s.host.players.iter().position(|p| p.key == account);
         let admin = s
@@ -510,7 +538,7 @@ pub(crate) extern "system" fn account_action(
             .iter()
             .any(|p| p.key == account && p.is_admin());
         match action {
-            AccountActionType::UN_BAN => s.banned.retain(|&banned| banned != account),
+            AccountActionType::UNBAN => s.banned.retain(|&banned| banned != account),
             _ if admin || s.host.host_key == Some(account) => return Status::REFUSED,
             _ if online.is_none() => return Status::REFUSED,
             _ => {
@@ -532,7 +560,7 @@ fn serving(s: &super::State) -> bool {
     s.host.side == Side::SERVER || s.host.hosting
 }
 
-pub(crate) extern "system" fn chat_mute_set(
+pub(crate) extern "system" fn set_chat_mute(
     _me: ModHandle,
     account: enshwick_core::PlayerKey,
     muted: u8,
@@ -542,7 +570,7 @@ pub(crate) extern "system" fn chat_mute_set(
     }
     with(Status::MISSING, |s| {
         if !serving(s) || s.host.world_key.is_none() {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         let admin = s
             .host
@@ -562,7 +590,7 @@ pub(crate) extern "system" fn chat_mute_set(
     })
 }
 
-pub(crate) extern "system" fn chat_mute_has(
+pub(crate) extern "system" fn chat_muted(
     _me: ModHandle,
     account: enshwick_core::PlayerKey,
     muted: *mut u8,
@@ -573,6 +601,6 @@ pub(crate) extern "system" fn chat_mute_has(
     let has = with(None, |s| serving(s).then(|| s.muted.contains(&account)));
     match has {
         Some(has) => put(muted, u8::from(has)),
-        None => Status::MISSING,
+        None => Status::UNAVAILABLE,
     }
 }

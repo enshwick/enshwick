@@ -62,15 +62,15 @@ struct Linked {
     context_state: usize,
     state_play_data: usize,
     hud_screen: usize,
-    /// The game's name of each screen by its value; empty for a value no
-    /// constant names.
-    names: Vec<&'static str>,
     /// Where the play data keeps the interaction prompt, on a build whose
     /// table has it.
     prompt: Option<PromptAt>,
     /// Where the play data keeps the open screen's `u32` host entity, on a
     /// build whose table has it.
     screen_host: Option<usize>,
+    /// Where the play data keeps the screen a stacked screen returns to, on
+    /// a build whose table has it.
+    return_screen: Option<usize>,
     /// A bit for each screen byte with no window open, as
     /// [`crate::actions::controls::open_screens`] reads them; 0 on a build without.
     open_screens: u64,
@@ -116,8 +116,11 @@ impl FrameReads {
         screen_host_position: [0; 3],
     };
 
-    /// The in-game frame `token` with these reads.
+    /// The in-game frame `token` with these reads and the slot of the game's
+    /// screen under the cursor in the last whole frame; on the interface
+    /// thread.
     pub(super) fn frame(self, token: u64) -> UiFrame {
+        let hovered = super::item_slots::hovered();
         UiFrame {
             header: Header::of::<UiFrame>(),
             token,
@@ -127,8 +130,13 @@ impl FrameReads {
             prompt_title: self.prompt_title,
             prompt_verb: self.prompt_verb,
             screen_host: self.screen_host,
-            screen_host_template: self.screen_host_template,
-            screen_host_position: self.screen_host_position,
+            screen_host_template: enshwick_core::content::Guid(self.screen_host_template),
+            screen_host_position: enshwick_core::ecs::metres(self.screen_host_position),
+            hovered_slot: hovered.slot,
+            hovered_item: enshwick_core::ItemId::new(hovered.item),
+            hovered_count: hovered.count,
+            hovered_pide: enshwick_core::Entity(hovered.pide),
+            reserved_hovered: 0,
         }
     }
 }
@@ -233,12 +241,14 @@ pub(super) fn seal() {
 /// the build lacks and why, as [`Loader::fuse_off`] takes them.
 type OffFn<'a> = &'a dyn Fn(&'static Fuse, &str, &str);
 
-/// Seals the extensions and reads where the screen, the prompt and the
-/// hosts sit. What this build lacks is listed off when mods' frames, HUD
-/// items (`frames`) or extensions read it, else only logged.
+/// Reads where the screen, the prompt and the hosts sit. What this build
+/// lacks is listed off when mods' frames, HUD items (`frames`), the
+/// extensions sealed before or, on a client, the client snapshot and
+/// commands read it, else only logged.
 pub(super) fn link(loader: &Loader, frames: bool) {
-    let extensions = EXTENSIONS.seal();
-    let used = frames || !extensions.is_empty();
+    let extensions = EXTENSIONS.sealed().unwrap_or_default();
+    // Any mod may ask a client's snapshot or command after init.
+    let used = frames || !extensions.is_empty() || loader.side == Side::CLIENT;
     let off = |fuse: &'static Fuse, id: &str, reason: &str| {
         if used {
             loader.fuse_off(fuse, id, reason);
@@ -270,13 +280,18 @@ pub(super) fn link(loader: &Loader, frames: bool) {
 /// first table entry the screen reads lack.
 fn linked(loader: &Loader, off: OffFn<'_>) -> Result<Linked, &'static str> {
     let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    let context_state = table(pinned::map::CONTEXT_STATE)?;
+    let state_play_data = table(pinned::map::STATE_PLAY_DATA)?;
+    let hud_screen = table(pinned::ui::HUD_SCREEN)?;
+    // After the reads' own entries: a build without them lists one cause.
+    link_names(loader, off);
     Ok(Linked {
-        context_state: table(pinned::map::CONTEXT_STATE)?,
-        state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
-        hud_screen: table(pinned::ui::HUD_SCREEN)?,
-        names: screen_names(loader, off),
+        context_state,
+        state_play_data,
+        hud_screen,
         prompt: prompt_at(loader, off),
         screen_host: loader.offset(pinned::ui::SCREEN_HOST),
+        return_screen: loader.offset(pinned::ui::RETURN_SCREEN),
         open_screens: crate::actions::controls::open_screens(loader).unwrap_or(0),
     })
 }
@@ -288,22 +303,12 @@ fn screen_lacked(id: &str, off: OffFn<'_>) {
     off(&super::EXTENSIONS_FUSE, id, ABSENT);
 }
 
-fn screen_names(loader: &Loader, off: OffFn<'_>) -> Vec<&'static str> {
-    let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
-    let mut names = vec![""; usize::from(u8::MAX) + 1];
-    let Ok(info) = loader.reflection.type_info(screens) else {
+/// Links the screens' names, listing them off on a build that does not
+/// reflect them.
+fn link_names(loader: &Loader, off: OffFn<'_>) {
+    if let Err(screens) = crate::engine::screens::link(loader) {
         off(&SCREEN_NAMES_FUSE, screens, NOT_REFLECTED);
-        return names;
-    };
-    for constant in info.enum_values() {
-        if let Some(slot) = usize::try_from(constant.value())
-            .ok()
-            .and_then(|value| names.get_mut(value))
-        {
-            *slot = constant.name();
-        }
     }
-    names
 }
 
 /// Where the play data keeps the interaction prompt, or `None` with its
@@ -403,24 +408,15 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: b
         return FrameReads::NONE;
     };
     // SAFETY: the caller's contract.
-    let Some(data) = (unsafe { play(engine, context, linked) }) else {
+    let Some(view) = (unsafe { screen_view(engine, context) }) else {
         return FrameReads::NONE;
     };
-    // SAFETY: `data` is the non-null play data of this frame, on the
-    // interface thread, whose HUD screen byte sits at `ui.hud_screen`.
-    let screen = unsafe { crate::engine::memory::read::<u8>(data, linked.hud_screen) };
-    // SAFETY: `data` is the live play data of this frame, on the interface
-    // thread, with the prompt at the table's `ui.prompt_*`.
+    let (screen, host) = (view.screen, view.host);
+    // SAFETY: `view.play` is the live play data of this frame, on the
+    // interface thread, with the prompt at the table's `ui.prompt_*`.
     let (prompt_title, prompt_verb) = linked
         .prompt
-        .map_or((Str::EMPTY, 0), |at| unsafe { prompt(data, at) });
-    let host = open_host(screen, linked.open_screens, || {
-        // SAFETY: `data` is the live play data of this frame, whose screen
-        // host `u32` sits at the table's `ui.screen_host` (every kept client).
-        linked.screen_host.map_or(0, |at| unsafe {
-            crate::engine::memory::read::<u32>(data, at)
-        })
-    });
+        .map_or((Str::EMPTY, 0), |at| unsafe { prompt(view.play, at) });
     // Each step walks the host only for a mod that draws on frames.
     let (template, position) = if hosts_asked {
         crate::actions::local_held::screen_host(host).unwrap_or_default()
@@ -429,7 +425,7 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: b
     };
     FrameReads {
         screen: Some(screen),
-        hud_screen: screen_name(linked, Some(screen)),
+        hud_screen: screen_name(Some(screen)),
         prompt_title,
         prompt_verb,
         screen_host: enshwick_core::Entity(host),
@@ -456,10 +452,69 @@ pub(super) fn hosts_asked(frames: bool) -> bool {
 }
 
 /// The game's name of screen byte `screen`; empty for `None`.
-fn screen_name(linked: &Linked, screen: Option<u8>) -> Str {
-    screen
-        .and_then(|s| linked.names.get(usize::from(s)))
-        .map_or(Str::EMPTY, |name| Str::new(name))
+fn screen_name(screen: Option<u8>) -> Str {
+    screen.map_or(Str::EMPTY, |s| Str::new(screen_named(s)))
+}
+
+/// The game's name of screen byte `screen` on this build: empty for a byte
+/// no constant names, and before the screen reads link.
+pub(crate) fn screen_named(screen: u8) -> &'static str {
+    crate::engine::screens::name(screen)
+}
+
+/// One frame's open screens, read in the game the player is in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ScreenView {
+    /// The play data's address, inside the client's game object, so a new
+    /// object moves it.
+    pub(crate) play: usize,
+    /// The HUD screen byte.
+    pub(crate) screen: u8,
+    /// The screen byte a stacked screen returns to, 0 for the world and on
+    /// a build without the read.
+    pub(crate) return_to: u8,
+    /// The open screen's host entity, 0 for none.
+    pub(crate) host: u32,
+    /// The interface state the in-game menu draws from.
+    pub(crate) state: usize,
+}
+
+/// This frame's open screens; `None` outside a game and before the screen
+/// reads link.
+///
+/// # Safety
+///
+/// - `context` is 0 or the live interface context of the frame being
+///   drawn, on the interface thread.
+pub(super) unsafe fn screen_view(engine: &Engine, context: usize) -> Option<ScreenView> {
+    let linked = LINKED.get()?;
+    // SAFETY: the caller's contract.
+    let data = unsafe { play(engine, context, linked) }?;
+    // SAFETY: `data` is the non-null play data of this frame, on the
+    // interface thread, whose HUD screen byte sits at `ui.hud_screen`.
+    let screen = unsafe { crate::engine::memory::read::<u8>(data, linked.hud_screen) };
+    // SAFETY: the same play data, whose return-to byte sits at the table's
+    // `ui.return_screen` (every kept client).
+    let return_to = linked.return_screen.map_or(0, |at| unsafe {
+        crate::engine::memory::read::<u8>(data, at)
+    });
+    let host = open_host(screen, linked.open_screens, || {
+        // SAFETY: `data` is the live play data of this frame, whose screen
+        // host `u32` sits at the table's `ui.screen_host` (every kept client).
+        linked.screen_host.map_or(0, |at| unsafe {
+            crate::engine::memory::read::<u32>(data, at)
+        })
+    });
+    // SAFETY: `play` above read the context's state pointer at
+    // `map.context_state` of this live, non-zero context.
+    let state = unsafe { crate::engine::memory::read::<usize>(context, linked.context_state) };
+    Some(ScreenView {
+        play: data,
+        screen,
+        return_to,
+        host,
+        state,
+    })
 }
 
 /// The panels of `screen`, edge by edge and in registration order within
@@ -598,13 +653,8 @@ mod tests {
     #[test]
     fn a_build_without_the_screens_reflected_names_none_and_lists_the_names_off() {
         let asked = Asked::default();
-        let names = screen_names(&crate::start::tests::bare_loader(), &recorder(&asked));
-        assert_eq!(
-            names.len(),
-            usize::from(u8::MAX) + 1,
-            "a slot per screen byte"
-        );
-        assert!(names.iter().all(|name| name.is_empty()));
+        link_names(&crate::start::tests::bare_loader(), &recorder(&asked));
+        assert_eq!(screen_named(1), "");
         let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
         assert_eq!(
             asked.into_inner(),

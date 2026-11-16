@@ -62,7 +62,7 @@ mod tests {
         let schema = enshwick::packs::PackManifest::parse(&read("pack.toml"))
             .unwrap()
             .settings_schema();
-        let mut name = [0u8; 64];
+        let mut name = [0u8; PlayerInfo::NAME_MAX];
         name[..3].copy_from_slice(b"Ann");
         let ann = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
@@ -383,7 +383,7 @@ mod tests {
             .enemies()
             .props()
             .upgrade_recipes(&[(Guid([0xc0; 16]), 7, 0), (upgrade, 7, 1)])
-            .template(enshwick::Entity(10), kind.0);
+            .template(enshwick::Entity(10), kind);
         let (loader, status) = start_with(host, &main, Scripts::new(), None);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let line = format!("altars of {kind}");

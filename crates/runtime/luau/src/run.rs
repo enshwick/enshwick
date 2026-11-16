@@ -492,11 +492,12 @@ fn begin(
 ) -> Result<Runtime, Off> {
     let host = load.host();
     let mut namespaces = Vec::new();
-    // A namespace a script asks for opens when its getter runs at start.
-    for namespace in script::NAMESPACES
-        .iter()
-        .filter(|n| n.request_function().is_none())
-    {
+    // A namespace a script asks for opens when its getter runs at start; one
+    // whose open starts work, such as the input reads, opens only when a
+    // script names it.
+    for namespace in script::NAMESPACES.iter().filter(|n| {
+        n.request_function().is_none() && (!n.opens_when_named() || scripts.names(n.name()))
+    }) {
         match namespace.open(load) {
             Ok(opened) => namespaces.push((namespace, opened)),
             Err(off) => host.log(
@@ -507,8 +508,7 @@ fn begin(
     }
     let event_types = load
         .game_event_types()
-        .map(|types| types.iter().map(|t| (t.name(), t.size())).collect())
-        .unwrap_or_default();
+        .map_or_default(|types| types.iter().map(|t| (t.name(), t.size())).collect());
     let inner = Arc::new_cyclic(|me| Inner {
         me: Weak::clone(me),
         id: id.to_owned(),

@@ -6,6 +6,53 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- `signature`: the release signature of Enshwick's own files, which
+  release CI makes with `sign` and the loader checks with `verify` (#1106).
+- `releases::stated` gives the version a build states: the release's own,
+  or for a development build of a commit the release with `+dev.<commit>`,
+  which keeps the release's precedence and channel; `releases::version_line`
+  names the ABI version beside it (#1114).
+- Routes find the client's input builder (`input.client_build`), its stick
+  and look fields, `toggleHudScreen` (`ui.toggle_hud_screen`), the in-game
+  menu's tab index (`ui.menu_tab`), the recipe directory column
+  (`ui.recipe_directory`) and the recipe browser's highlighted recipe and
+  select slot on every kept client build, with checks on the functions'
+  first instructions (#1114).
+- A route finds the input mapping's blocked byte (`input.blocked`), which
+  the client's input builder checks first, on every kept client build
+  (#1118).
+
+### Changed
+
+- The compatibility reports count the 8 new routed entries (#1114).
+- The compatibility reports count the new routed entry (#1118).
+
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- Routes find the session's join message handler (`session.join_game`), its
+  reply send (`session.join_reply`), its machine lookup
+  (`session.find_machine`), the join message's account list, the
+  banned reply's flags and the session's peer slots on every kept server and
+  client build, with checks on the three functions' first instructions
+  (#1100).
+
+### Changed
+
+- Each compatibility report records the day `cargo xtask compat` checked its build (`checked`).
+- The compatibility reports count the 17 new routed entries (#1100).
+- The compatibility reports carry new seals: the report tool now reads the lock file through the check tool's shared reader. Their findings are unchanged.
+
+### Fixed
+
+- The route check covers `server.application` and `server.exit_reason` on
+  the older kept server builds too (#1103).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

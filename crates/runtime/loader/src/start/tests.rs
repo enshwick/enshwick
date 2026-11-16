@@ -27,8 +27,13 @@ unsafe extern "system" fn failing_init(_: *const HostApi, handle: ModHandle) -> 
     Status::FAULTED
 }
 
-unsafe extern "system" fn on_ready(_: *const HostApi, handle: ModHandle) {
+unsafe extern "system" fn on_ready(_: *const HostApi, handle: ModHandle) -> Status {
     CALLS.with_borrow_mut(|calls| calls.push(("ready", handle.0)));
+    Status::OK
+}
+
+unsafe extern "system" fn failing_ready(_: *const HostApi, _: ModHandle) -> Status {
+    Status::FAULTED
 }
 
 /// A mod whose `init` answers as `init` does.
@@ -120,9 +125,10 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
+        unofficial: AtomicBool::new(false),
         retry: crate::engine::retry::Retry::default(),
         skipped,
-        parts: Parts::new(crate::parts::LAYERS),
+        parts: crate::parts::parts(),
     };
     (loader, order)
 }
@@ -175,9 +181,9 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
         (
             skipped.id.as_str(),
             skipped.label.as_str(),
-            skipped.version.as_str()
+            skipped.version.as_deref()
         ),
-        ("you.safes", "you.safes", "1.0.0")
+        ("you.safes", "you.safes", Some("1.0.0"))
     );
     assert_eq!(
         skipped.reason,
@@ -208,7 +214,7 @@ fn the_status_summary_lists_a_mod_skipped_at_start_and_does_not_count_a_second_c
         crate::base::status::summary(&loader).skipped,
         [crate::engine::diag::SkippedMod {
             id: "you.safes".into(),
-            version: "1.0.0".into(),
+            version: Some("1.0.0".into()),
             file: "you.safes/you.safes.dll".into(),
             reason: "another copy of you.safes loads instead; delete this one".into(),
             shown: resolve::Skip::Copy {
@@ -237,7 +243,7 @@ fn the_off_names_and_count_follow_a_mod_that_turns_off() {
     let mut loader = loader;
     loader.skipped.push(resolve::Skipped {
         id: "you.map".into(),
-        version: "1.0.0".into(),
+        version: Some("1.0.0".into()),
         label: "Map".into(),
         file: "you.map/you.map.dll".into(),
         reason: resolve::Skip::Missing { id: "you.x".into() },
@@ -406,4 +412,30 @@ fn ready_skips_the_mods_that_are_off() {
     CALLS.with_borrow_mut(Vec::clear);
     ready(&loader, &order, None);
     assert_eq!(called(), [("ready", handle_of(&loader, "you.lanterns"))]);
+}
+
+#[test]
+fn a_mod_whose_ready_fails_is_turned_off_and_the_others_stay_on() {
+    let (loader, mut libraries) = loader(
+        &[TestMod::plain("you.lanterns"), TestMod::plain("you.stalls")],
+        false,
+    );
+    let stalls = loader
+        .mods
+        .iter()
+        .position(|m| m.id == "you.stalls")
+        .unwrap();
+    libraries[stalls].ready = failing_ready;
+    let order: Vec<&Library> = libraries.iter().collect();
+    initialise(&loader, &order, None);
+    ready(&loader, &order, None);
+    let off = |id: &str| {
+        loader
+            .mods
+            .iter()
+            .find(|m| m.id == id)
+            .is_some_and(|m| m.off.load(Ordering::Acquire))
+    };
+    assert!(off("you.stalls"));
+    assert!(!off("you.lanterns"));
 }

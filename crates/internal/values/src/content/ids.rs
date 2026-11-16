@@ -1,21 +1,5 @@
+pub use crate::abi::Guid;
 use crate::abi::ResourceKey;
-
-/// A GUID in memory order: the `bytes_le` of its textual form.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::Guid;
-///
-/// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-/// assert_eq!(enshwick::ItemId::from_guid(CHEST).get(), 1_302_084_846);
-/// ```
-#[repr(transparent)]
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape, serde::Serialize, serde::Deserialize,
-)]
-#[shape(api = "guid")]
-pub struct Guid(pub [u8; 16]);
 
 impl Guid {
     /// Parses `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`; a malformed literal
@@ -154,7 +138,7 @@ impl Guid {
     #[must_use]
     pub const fn key_by_hash(self, type_hash: u32) -> ResourceKey {
         ResourceKey {
-            guid: self.0,
+            guid: self,
             type_hash,
             part: 0,
         }
@@ -566,7 +550,7 @@ impl Id {
     /// use enshwick::content::Id;
     ///
     /// let key = Id::new("you.lockers:locker").key_by_hash(7);
-    /// assert_eq!(key.guid, Id::new("you.lockers:locker").guid().0);
+    /// assert_eq!(key.guid, Id::new("you.lockers:locker").guid());
     /// ```
     #[must_use]
     pub const fn key_by_hash(self, type_hash: u32) -> ResourceKey {

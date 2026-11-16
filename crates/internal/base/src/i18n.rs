@@ -66,7 +66,9 @@ impl Host {
     /// ```
     #[must_use]
     pub fn language(&self) -> Language {
-        Language::known_or_fallback((self.api().language)(self.handle()))
+        let mut language = 0;
+        let _ = (self.api().language)(self.handle(), &raw mut language);
+        Language::known_or_fallback(language)
     }
 }
 

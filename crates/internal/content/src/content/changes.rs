@@ -688,17 +688,17 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
+    /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Guid, Header, Str};
     /// use enshwick::content::changes::{Change, Field, Value};
     ///
     /// let raw = DataChange {
     ///     header: Header::of::<DataChange>(),
-    ///     entry: [1; 16],
+    ///     entry: Guid([1; 16]),
     ///     field: DataField::MAX_STACK,
     ///     op: ChangeOp::TIMES,
     ///     value: 4.0,
     ///     source: Str::EMPTY,
-    ///     item: [0; 16],
+    ///     item: Guid::NIL,
     ///     select: DataSelect::ENTRY,
     ///     categories: 0,
     /// };
@@ -714,9 +714,9 @@ impl Change {
             return Ok(None);
         };
         let change = Self {
-            entry: Guid(raw.entry),
+            entry: raw.entry,
             field,
-            item: (raw.item != [0; 16]).then_some(Guid(raw.item)),
+            item: (raw.item != Guid::NIL).then_some(raw.item),
             value,
         };
         change.check()?;
@@ -732,12 +732,12 @@ impl Change {
         };
         DataChange {
             header: Header::of::<DataChange>(),
-            entry: self.entry.0,
+            entry: self.entry,
             field: self.field.to_abi(),
             op,
             value,
             source: Str::new(source),
-            item: self.item.map_or([0; 16], |item| item.0),
+            item: self.item.unwrap_or(Guid::NIL),
             select: DataSelect::ENTRY,
             categories: 0,
         }
@@ -787,7 +787,7 @@ impl LoadMethods for crate::BaseLoad {
             .map_err(|why| Off::new(format!("change of {}: {why}", change.entry)))?;
         let raw = change.to_abi(source);
         let api = self.host().api();
-        let status = (api.change_data)(self.host().handle(), &raw const raw);
+        let status = (api.change_data)(self.host().handle(), &raw const raw, core::ptr::null_mut());
         crate::load::ok(status, (), || {
             format!("change {} of {}", change.field, change.entry)
         })

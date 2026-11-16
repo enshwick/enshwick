@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader"
-version = "1.0.0-alpha.15"
+version = "1.0.0-alpha.17"
 description = "Runtime of Enshwick, shipped in enshwick.zip, not a dependency of a mod: the Enshwick loader DLL that finds the game build, loads mods and links their hooks inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "hooks"]
 categories = ["game-development"]
@@ -67,6 +67,7 @@ loom = { version = "0.7.2", default-features = false }
 criterion.workspace = true
 # The discovery tests build mods against `crates/enshwick` by path.
 enshwick.workspace = true
+enshwick-core = { workspace = true, features = ["unstable", "test"] }
 enshwick-gamedata = { workspace = true, features = ["test"] }
 insta.workspace = true
 proptest.workspace = true
@@ -137,4 +138,12 @@ harness = false
 
 [[bench]]
 name = "content_detours"
+harness = false
+
+[[bench]]
+name = "client_build"
+harness = false
+
+[[bench]]
+name = "item_ui"
 harness = false

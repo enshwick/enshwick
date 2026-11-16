@@ -51,7 +51,7 @@ mod tests {
             slot: BuffTypeInfo::DEBUFF,
             flags: 0,
             name: 0,
-            duration: 60_000_000_000,
+            duration_ns: 60_000_000_000,
         };
         loader.set_buffs(&[cursed], &[ENEMY]);
         buffs.apply(ENEMY, CURSED, Apply::new()).unwrap();
@@ -74,6 +74,14 @@ mod tests {
             loader.settle_stats(),
             1,
             "watched again, the lifted curse counts"
+        );
+        stats.watch(ENEMY, true);
+        stats.watch(ENEMY, false);
+        buffs.apply(ENEMY, CURSED, Apply::new()).unwrap();
+        assert_eq!(
+            loader.settle_stats(),
+            0,
+            "a mod's second watch is the same watch, which it stopped"
         );
     }
 }

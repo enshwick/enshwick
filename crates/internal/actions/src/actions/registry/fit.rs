@@ -19,7 +19,7 @@ pub(in crate::actions) fn optional_fault(args: &[Arg]) -> Option<String> {
     let last = args.len().saturating_sub(1);
     let early_text = |(i, arg): (usize, &Arg)| i < last && takes_line(arg) && arg.default.is_some();
     if args.iter().enumerate().any(early_text) {
-        return Some("an optional text or item must be its last argument".to_owned());
+        return Some("an optional text, item or template must be its last argument".to_owned());
     }
     let at = args.iter().position(|arg| match &arg.default {
         None => false,
@@ -34,9 +34,9 @@ pub(in crate::actions) fn optional_fault(args: &[Arg]) -> Option<String> {
 }
 
 /// Whether `arg` reads words as a text does, so that, last on a typed line,
-/// it takes the rest of the line: a text or an item.
+/// it takes the rest of the line: a text, an item or a template.
 pub(in crate::actions) fn takes_line(arg: &Arg) -> bool {
-    matches!(arg.kind, ArgView::TEXT | ArgView::ITEM)
+    matches!(arg.kind, ArgView::TEXT | ArgView::ITEM | ArgView::TEMPLATE)
 }
 
 /// Whether `value` fits `arg`: its type and range, or the default the
@@ -50,7 +50,8 @@ fn takes(value: &Value, arg: &Arg) -> bool {
     match (value, arg.kind) {
         (Value::Player { .. }, ArgView::PLAYER)
         | (Value::Toggle(_), ArgView::TOGGLE)
-        | (Value::Item(_), ArgView::ITEM) => true,
+        | (Value::Item(_), ArgView::ITEM)
+        | (Value::Template(_), ArgView::TEMPLATE) => true,
         (Value::Choice(index), ArgView::CHOICE) => *index < arg.choices.len(),
         (Value::Number(n), ArgView::NUMBER) => {
             n.is_finite() && *n >= arg.range.0 && *n <= arg.range.1
@@ -110,7 +111,7 @@ mod tests {
         let note = || Arg::text("Note", 8).optional(Value::Text(String::new()));
         let mid = optional_fault(&[note(), count().optional(one.clone())]).unwrap();
         assert!(
-            mid.contains("an optional text or item must be its last"),
+            mid.contains("an optional text, item or template must be its last"),
             "{mid}"
         );
         let torch = Value::Item(crate::content::Guid([1; 16]));

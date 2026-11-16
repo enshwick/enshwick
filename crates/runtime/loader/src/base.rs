@@ -13,11 +13,7 @@ pub mod configure;
     expect(dead_code, reason = "only the running game reads the marker")
 )]
 pub(crate) mod developer_tools;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game discovers mods")
-)]
-pub(crate) mod discovery;
+pub mod discovery;
 #[cfg(windows)]
 pub(crate) mod emits;
 #[cfg(windows)]
@@ -27,7 +23,10 @@ pub mod game_events;
     expect(dead_code, reason = "players read the greeting only in the game")
 )]
 pub(crate) mod greeting;
-#[cfg(windows)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "the game reads handed texts only on Windows")
+)]
 pub(crate) mod handed;
 pub mod holds;
 #[cfg(windows)]
@@ -49,6 +48,11 @@ pub(crate) mod notices;
     expect(dead_code, reason = "only the running server tells a joining player")
 )]
 pub(crate) mod off_line;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game checks its own files")
+)]
+pub(crate) mod official;
 #[cfg(windows)]
 pub(crate) mod points;
 pub mod record;
@@ -110,27 +114,31 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Output, "world saving", |s| saves::after_step(
             s.loader
         ))],
-        hosting: Some(|_| saves::hosting_begins()),
-        forget: Some(|_| saves::forget()),
+        hosting: Some(fused!("saves at a hosted game's start", |_| {
+            saves::hosting_begins();
+        })),
+        forget: Some(fused!("saves forgetting a hosted game", |_| saves::forget())),
         ..part!("saves", saves)
     },
     &Part {
-        link: Some(|_| net::link()),
+        seal: Some(|_| net::seal()),
         left: Some(fused!("the wire at leave", |_, player| net::forget_peer(
             player.key.get()
         ))),
-        forget: Some(|_| net::forget()),
+        forget: Some(fused!("net forgetting a hosted game", |_| net::forget())),
         ..part!("net", net)
     },
     &Part {
-        forget: Some(|_| lobby::forget()),
+        forget: Some(fused!("lobby forgetting a hosted game", |_| lobby::forget())),
         ..part!("lobby", lobby)
     },
     &Part {
         left: Some(fused!("remote edits at leave", |_, player| {
             remote::forget_player(player.key.get());
         })),
-        forget: Some(|_| remote::forget_game()),
+        forget: Some(fused!("remote forgetting a hosted game", |_| {
+            remote::forget_game();
+        })),
         ..part!("remote", remote)
     },
     &Part {
@@ -144,7 +152,9 @@ pub(crate) static PARTS: &[&Part] = &[
         left: Some(fused!("join admission at leave", |_, player| {
             admission::left(player.key.get());
         })),
-        forget: Some(|_| admission::forget()),
+        forget: Some(fused!("admission forgetting a hosted game", |_| {
+            admission::forget();
+        })),
         ..part!("admission", admission)
     },
     &Part {
@@ -162,7 +172,9 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("greeting", greeting)
     },
     &Part {
-        hosting: Some(|_| join::client::back_on()),
+        hosting: Some(fused!("join at a hosted game's start", |_| {
+            join::client::back_on();
+        })),
         ..part!("join", join)
     },
     &Part {

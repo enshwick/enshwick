@@ -133,7 +133,7 @@ mod tests {
             slot: BuffTypeInfo::BUFF,
             flags: 0,
             name: 0,
-            duration: 60_000_000_000,
+            duration_ns: 60_000_000_000,
         };
         loader.set_buffs(&[blessed], &[player]);
         buffs.apply(player, BLESSED, Apply::new()).unwrap();

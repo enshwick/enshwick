@@ -28,6 +28,9 @@ pub fn off_status(what: &str, status: Status) -> Off {
         Status::NOT_KEPT => "not found again after a load",
         Status::UNAVAILABLE => "not available here or on this game build",
         Status::BUILDING => "being built further up this call",
+        Status::LOADER_FAULT => "failed inside the loader",
+        Status::BUSY => "busy; try again later",
+        Status::TOO_SMALL => "the buffer is too short",
         _ => "failed",
     };
     Off::new(format!("{what}: {why}"))
@@ -270,8 +273,7 @@ impl BaseLoad {
         self.add_status(move || {
             shown
                 .shut_reason()
-                .map(|why| format!("world store {named} kept shut: {why}"))
-                .unwrap_or_default()
+                .map_or_default(|why| format!("world store {named} kept shut: {why}"))
         })?;
         let closed = store.clone();
         self.on::<crate::events::ShutdownStarted>(move |()| {

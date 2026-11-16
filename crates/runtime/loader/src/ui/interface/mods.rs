@@ -229,6 +229,14 @@ struct Screen {
     scroll: Scroll,
 }
 
+impl Screen {
+    /// Shows `page`, from its top.
+    fn open(&mut self, page: Page) {
+        self.page = page;
+        self.scroll.start_over();
+    }
+}
+
 thread_local! {
     static SCREEN: RefCell<Option<Screen>> = const { RefCell::new(None) };
 }
@@ -281,10 +289,14 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     let frame = STATE.frame.load(Ordering::Relaxed);
     STATE.seen(from).store(frame, Ordering::Relaxed);
     let showing = SCREEN.with_borrow(|s| s.as_ref().map(|s| s.from)) == Some(from);
-    // SAFETY: `entry` runs only from the main and pause menu hooks, which
-    // the game reaches while drawing its menu inside a frame on the
-    // interface thread.
-    if showing && unsafe { engine.back_pressed(STATE.node.load(Ordering::Relaxed)) } {
+    // A dialog over the screen draws after it, so its Back is left to it.
+    if showing
+        && !super::dialog::showing()
+        // SAFETY: `entry` runs only from the main and pause menu hooks,
+        // which the game reaches while drawing its menu inside a frame on
+        // the interface thread.
+        && unsafe { engine.back_pressed(STATE.node.load(Ordering::Relaxed)) }
+    {
         STATE.back.store(BACK_PRESSED, Ordering::Relaxed);
     }
     let text = copy(&[texts::text("mods.title").as_bytes()]);
@@ -422,7 +434,7 @@ fn back(screen: &mut Screen) -> bool {
     screen.message = None;
     match mods_screen::back(screen.page.kind()) {
         Back::Close => return true,
-        Back::List => screen.page = Page::List { first: 0 },
+        Back::List => screen.open(Page::List { first: 0 }),
         Back::ServerList => open_server_list(screen),
         Back::Inside => {
             let done = match &mut screen.page {
@@ -432,7 +444,7 @@ fn back(screen: &mut Screen) -> bool {
                 _ => true,
             };
             if done {
-                screen.page = Page::List { first: 0 };
+                screen.open(Page::List { first: 0 });
             }
         }
     }
@@ -450,7 +462,7 @@ fn open_server_list(screen: &mut Screen) {
     crate::base::remote::forget();
     let asked =
         crate::base::net::to_server(&crate::base::remote::Message::Query { id: String::new() });
-    screen.page = Page::ServerList { first: 0 };
+    screen.open(Page::ServerList { first: 0 });
     screen.message = (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false));
 }
 
@@ -527,7 +539,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             return false;
         }
         Next::Page(page, message) => {
-            screen.page = *page;
+            screen.open(*page);
             screen.message = message;
             return false;
         }

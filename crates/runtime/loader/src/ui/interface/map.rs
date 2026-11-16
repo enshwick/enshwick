@@ -281,7 +281,7 @@ fn set_under(feature: &Fuse, owner: ModIndex, given: &[UiMarker]) -> Result<(), 
         .iter()
         .map(|m| Owned {
             owner,
-            position: m.position,
+            position: enshwick_core::ecs::fixed(m.position),
             label: label(m),
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
             marker_type: NonZeroU32::new(m.marker_type),
@@ -703,7 +703,7 @@ mod tests {
     fn a_marker_label_shows_each_backslash_as_written() {
         let marker = UiMarker {
             header: enshwick_core::abi::Header::of::<UiMarker>(),
-            position: [0; 3],
+            position: [0.0; 3],
             label: enshwick_core::abi::Str::new(r"C:\new\owners"),
             color: UiMarker::GREEN,
             marker_type: 0,

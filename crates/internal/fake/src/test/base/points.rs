@@ -176,9 +176,12 @@ pub(crate) extern "system" fn define_point(
 pub(crate) extern "system" fn attach_point(
     me: ModHandle,
     link: *const PointLink,
-    callback: PointFn,
+    callback: Option<PointFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     if with(false, |s| s.registration == Registration::Closed) {
         return Status::TOO_LATE;
     }
@@ -254,7 +257,7 @@ fn run(
         match answer {
             PointVerdict::SET if changes => verdict = PointVerdict::SET,
             PointVerdict::REFUSE if changes && refuse => return (PointVerdict::REFUSE, panicked),
-            PointVerdict::PANICKED => panicked.push(i),
+            PointVerdict::FAILED => panicked.push(i),
             _ => {}
         }
     }

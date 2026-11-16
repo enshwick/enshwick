@@ -195,5 +195,7 @@ fn resized(patch: &ContainerPatch, bytes: &[u8]) -> Option<Vec<u8>> {
             "container slots stay at {old}: a container never shrinks, as an upgraded chest moves every item it holds"
         );
     }
-    resize_container(&patch.layout, bytes, new)
+    let mut resized = Vec::new();
+    resize_container(&patch.layout, bytes, new, &mut resized)?;
+    Some(resized)
 }

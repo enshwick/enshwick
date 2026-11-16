@@ -2,7 +2,9 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, Status, Str};
+use crate::abi::Metres;
+use crate::abi::{Entity, Header, ItemId, Status, Str};
+use crate::content::Guid;
 
 /// A frame of the client's interface, handed to the callbacks registered with
 /// [`HostApi::ui_frame`](super::HostApi::ui_frame); widgets drawn with [`HostApi::ui_widget`](super::HostApi::ui_widget) name its
@@ -22,8 +24,13 @@ use crate::abi::{Header, Status, Str};
 ///     prompt_title: Str::EMPTY,
 ///     prompt_verb: 0,
 ///     screen_host: enshwick::Entity(512),
-///     screen_host_template: [0; 16],
-///     screen_host_position: [0; 3],
+///     screen_host_template: enshwick::abi::Guid::NIL,
+///     screen_host_position: [0.0; 3],
+///     hovered_slot: 0,
+///     hovered_item: enshwick::ItemId::new(0),
+///     hovered_count: 0,
+///     hovered_pide: enshwick::Entity(0),
+///     reserved_hovered: 0,
 /// };
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
@@ -48,28 +55,42 @@ pub struct UiFrame {
     /// The title of what the player's interaction prompt offers now, such
     /// as a chest's name, as the game shows it; empty while it offers
     /// nothing, outside a game and on a build where the loader does not
-    /// find it. The game's own text, borrowed for the callback. ABI 11.14.
+    /// find it. The game's own text, borrowed for the callback.
     pub prompt_title: Str,
     /// The game's text id (`LocaTagId`) of the prompt's verb, such as the
-    /// one for "Open"; 0 while the prompt offers nothing. ABI 11.14.
+    /// one for "Open"; 0 while the prompt offers nothing.
     pub prompt_verb: u32,
     /// The entity of the client's world the open screen belongs to, such
     /// as the chest whose inventory shows; entity 0 for a screen of no
     /// object, outside a game and on a build where the
-    /// loader does not find it. ABI 11.14.
-    pub screen_host: crate::Entity,
+    /// loader does not find it.
+    pub screen_host: Entity,
     /// The template GUID of `screen_host` in the client's world, as the
     /// client's last step read it; all zero for no host, before a step read
     /// this host, and on a build where the loader does not find it.
-    /// ABI 11.18.
-    pub screen_host_template: [u8; 16],
-    /// Where `screen_host` stands in the client's world, in 32.32
-    /// fixed-point metres, y up, from the same step; meaningful only while
-    /// `screen_host_template` is not all zero. ABI 11.18.
-    pub screen_host_position: [i64; 3],
+    pub screen_host_template: Guid,
+    /// Where `screen_host` stands in the client's world, in
+    /// metres, from the same step; meaningful only while
+    /// `screen_host_template` is not all zero.
+    pub screen_host_position: Metres,
+    /// The slot of the game's inventory screen under the cursor in this
+    /// frame, as the game packs it, `inventory | index << 32`, the
+    /// inventory an entity of the client's world; 0 while the cursor is on
+    /// none, outside an inventory screen and on a build where the loader
+    /// does not find the game's slot widget.
+    pub hovered_slot: u64,
+    /// The item id in `hovered_slot`; 0 for an empty slot.
+    pub hovered_item: ItemId,
+    /// How many `hovered_slot` holds.
+    pub hovered_count: u32,
+    /// The entity of the item in `hovered_slot`, for an item with one of
+    /// its own; entity 0 for none.
+    pub hovered_pide: Entity,
+    /// Zero.
+    pub reserved_hovered: u32,
 }
 
-impl_headed!(UiFrame, born = 24);
+impl_headed!(UiFrame, born = 104);
 
 impl UiFrame {
     /// The title screen and the menus before a game.
@@ -82,6 +103,10 @@ impl UiFrame {
 
 /// A mod's callback for each frame of the client's interface: the frame and
 /// the pointer given at registration. It must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the client's main thread, which draws the interface.
 ///
 /// # Examples
 ///
@@ -125,16 +150,15 @@ pub struct UiExtension {
     /// `host_count` template GUIDs: the panel shows only while the open
     /// screen's host was made from one of them; null with a count of 0 for
     /// a panel of every host. Borrowed for the call: the loader copies
-    /// them. ABI 11.18.
-    pub hosts: *const [u8; 16],
+    /// them.
+    pub hosts: *const Guid,
     /// How many GUIDs `hosts` holds, at most [`UiExtension::MAX_HOSTS`].
-    /// ABI 11.18.
     pub host_count: u32,
     /// Zero.
     pub reserved_hosts: u32,
 }
 
-impl_headed!(UiExtension, born = 32);
+impl_headed!(UiExtension);
 
 impl UiExtension {
     /// The left edge, centred from top to bottom.
@@ -145,7 +169,7 @@ impl UiExtension {
     pub const TOP: u32 = 2;
     /// The bottom edge, centred from left to right.
     pub const BOTTOM: u32 = 3;
-    /// The most host templates one panel names. ABI 11.18.
+    /// The most host templates one panel names.
     pub const MAX_HOSTS: u32 = 64;
 
     /// The host templates the panel names, empty for every host, as the
@@ -162,8 +186,9 @@ impl UiExtension {
     ///
     /// ```
     /// use enshwick::abi::{Header, Str, UiExtension};
+    /// use enshwick::content::Guid;
     ///
-    /// let ours = [[7u8; 16]];
+    /// let ours = [Guid([7; 16])];
     /// let mut spec = UiExtension {
     ///     header: Header::of::<UiExtension>(),
     ///     screen: Str::new("StorageChest"),
@@ -180,7 +205,7 @@ impl UiExtension {
     /// assert_eq!(unsafe { spec.host_list() }, None);
     /// ```
     #[must_use]
-    pub unsafe fn host_list(&self) -> Option<&[[u8; 16]]> {
+    pub unsafe fn host_list(&self) -> Option<&[Guid]> {
         match (self.host_count, self.hosts.is_null()) {
             (0, _) => Some(&[]),
             (count, false) if count <= Self::MAX_HOSTS => {
@@ -242,24 +267,31 @@ pub struct UiWidget {
     pub min: f32,
     /// A slider's greatest value, a progress bar's full value.
     pub max: f32,
-    /// Out: 1 when a button was clicked or a value changed this frame.
+    /// Out: 1 when a button was clicked or a value changed this frame, or
+    /// when the player pressed Back over a window.
     pub result: u32,
     /// Where a HUD widget shows: [`UiWidget::TOP_LEFT`] to
     /// [`UiWidget::BOTTOM_RIGHT`]; read in a HUD callback only.
     pub anchor: u32,
     /// Zero.
     pub reserved: u32,
-    /// The sound container a [`UiWidget::PLAY`] widget plays, its GUID in
-    /// memory order. ABI 11.14.
-    pub sound: [u8; 16],
+    /// The sound container a [`UiWidget::SOUND`] widget plays; nil for the
+    /// game's own sound `style`.
+    pub sound: Guid,
+    /// The item an [`UiWidget::ITEM_SLOT`] shows.
+    pub item: ItemId,
+    /// How many of `item` an [`UiWidget::ITEM_SLOT`] shows, at least 1.
+    pub count: u32,
 }
 
-impl_headed!(UiWidget, born = 96);
+impl_headed!(UiWidget, born = 112);
 
 impl UiWidget {
     /// A window in the game's style, a panel over the screen that takes the
     /// input while it shows: `text` is its id, unique in the mod, `detail`
     /// its title. Widgets that follow go into it until [`UiWidget::END`].
+    /// `result` 1 when the player pressed Back (Escape, B) over it this
+    /// frame, which then does not open the game's pause menu.
     pub const WINDOW: u32 = 1;
     /// Closes the innermost open window.
     pub const END: u32 = 2;
@@ -277,22 +309,35 @@ impl UiWidget {
     pub const DROPDOWN: u32 = 7;
     /// A bar filled from `min` to `max` at `value`.
     pub const PROGRESS: u32 = 8;
-    /// Plays the interface sound `style`.
+    /// Plays an interface sound, heard only on this client and from no place
+    /// in the world: the sound container `sound`, or the game's own sound
+    /// `style` when `sound` is nil; [`Status::MISSING`](super::Status::MISSING)
+    /// for a container neither the client's archive nor a mod holds. Needs
+    /// no window.
     pub const SOUND: u32 = 9;
-    /// Plays the sound container `sound` as an interface sound, heard only
-    /// on this client and from no place in the world;
-    /// [`Status::MISSING`](super::Status::MISSING) for a container neither
-    /// the client's archive nor a mod holds. Needs no window. ABI 11.14.
-    pub const PLAY: u32 = 10;
     /// The key or button the player bound to a game action, as the game
     /// draws it beside its own prompts, so it follows a rebind: `text` is
     /// the action's reflected `GameplayAction` name, such as
     /// `ContextualAction`, and `detail` a label beside the key, empty for
     /// none. `result` 1 when the game drew a key, 0 when the action has no
     /// binding; [`Status::MISSING`](super::Status::MISSING) for an action
-    /// this build does not name, or on a build where the loader does not
-    /// find the game's hint. Client only. ABI 11.18.
-    pub const INPUT_HINT: u32 = 11;
+    /// this build does not name,
+    /// [`Status::UNAVAILABLE`](super::Status::UNAVAILABLE) on a build where
+    /// the loader does not find the game's hint. Client only.
+    pub const INPUT_HINT: u32 = 10;
+    /// An item slot in the game's style, with the icon, count and frame of
+    /// `count` of `item`, as the game's inventory screens draw it. `result`
+    /// holds [`UiWidget::SLOT_CLICKED`] and [`UiWidget::SLOT_HOVERED`];
+    /// [`Status::MISSING`](super::Status::MISSING) for an item the client
+    /// does not know, [`Status::UNAVAILABLE`](super::Status::UNAVAILABLE) on
+    /// a build where the loader does not find the game's slot. Client only.
+    pub const ITEM_SLOT: u32 = 11;
+
+    /// An [`UiWidget::ITEM_SLOT`]'s `result` bit: the player clicked the
+    /// slot this frame.
+    pub const SLOT_CLICKED: u32 = 1;
+    /// An [`UiWidget::ITEM_SLOT`]'s `result` bit: the cursor is on the slot.
+    pub const SLOT_HOVERED: u32 = 2;
 
     /// The row shows its value and does not take changes; a button does not
     /// take clicks.
@@ -346,7 +391,9 @@ impl UiWidget {
         result: 0,
         anchor: 0,
         reserved: 0,
-        sound: [0; 16],
+        sound: Guid::NIL,
+        item: ItemId(0),
+        count: 0,
     };
 
     /// The HUD's top left corner.
@@ -363,6 +410,61 @@ impl UiWidget {
     pub const BOTTOM_RIGHT: u32 = 5;
 }
 
+/// The item whose tooltip opened, handed to the callbacks registered with
+/// [`HostApi::ui_item_tooltip`](super::HostApi::ui_item_tooltip); the lines
+/// a callback adds are [`UiWidget::LABEL`] widgets drawn with
+/// [`HostApi::ui_widget`](super::HostApi::ui_widget) naming its `token`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, UiTooltipItem};
+///
+/// let item = UiTooltipItem {
+///     header: Header::of::<UiTooltipItem>(),
+///     token: 7,
+///     item: enshwick::ItemId::new(0x5e01),
+///     pide: enshwick::Entity(900),
+/// };
+/// assert_eq!(item.pide, enshwick::Entity(900));
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct UiTooltipItem {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Names this tooltip in [`HostApi::ui_widget`](super::HostApi::ui_widget);
+    /// valid until the callback returns.
+    pub token: u64,
+    /// The item id.
+    pub item: ItemId,
+    /// The item's own entity in the client's world.
+    pub pide: Entity,
+}
+
+impl_headed!(UiTooltipItem);
+
+impl UiTooltipItem {
+    /// The most lines one callback adds to a tooltip; the loader refuses
+    /// more with [`Status::BUSY`](super::Status::BUSY).
+    pub const MAX_LINES: u32 = 16;
+}
+
+/// A mod's callback for an item's tooltip opening: the item and the pointer
+/// given at registration. It adds its lines with
+/// [`HostApi::ui_widget`](super::HostApi::ui_widget) and must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Runs on the client's main thread, which draws the interface, once each
+/// time the tooltip shows another item, never once per frame.
+///
+/// # Examples
+///
+/// The safe layer wraps it in
+/// `Load::extend_item_tooltip`, with the `unstable` feature.
+pub type UiTooltipFn = unsafe extern "system" fn(item: *const UiTooltipItem, user: *mut c_void);
+
 /// A marker on the client's map, one of the set [`HostApi::ui_markers`](super::HostApi::ui_markers)
 /// hands over.
 ///
@@ -373,7 +475,7 @@ impl UiWidget {
 ///
 /// let marker = UiMarker {
 ///     header: Header::of::<UiMarker>(),
-///     position: [100 << 32, 40 << 32, -(20 << 32)],
+///     position: [100.0, 40.0, -20.0],
 ///     label: Str::new("Locker of Bob"),
 ///     color: UiMarker::GREEN,
 ///     marker_type: 0,
@@ -385,8 +487,8 @@ impl UiWidget {
 pub struct UiMarker {
     /// Size and version of this struct.
     pub header: Header,
-    /// Where, in 32.32 fixed-point metres, y up.
-    pub position: [i64; 3],
+    /// Where, in metres.
+    pub position: Metres,
     /// The label the map shows beside the icon.
     pub label: Str,
     /// The colour, one of the game's custom marker colours,
@@ -465,9 +567,9 @@ impl MarkerTypeSorting {
 pub struct MapMarkerTypeInfo {
     /// Size and version of this struct.
     pub header: Header,
-    /// Its name's text tag (`typeName`), a GUID in memory order; zero for
+    /// Its name's text tag (`typeName`); zero for
     /// none.
-    pub type_name: [u8; 16],
+    pub type_name: Guid,
     /// Its registry key (`markerId`), as
     /// [`UiMarker::marker_type`] takes it.
     pub marker_id: u32,
@@ -491,7 +593,7 @@ impl MapMarkerTypeInfo {
     /// A marker type with nothing known, its header set.
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
-        type_name: [0; 16],
+        type_name: Guid::NIL,
         marker_id: 0,
         sorting_category: MarkerTypeSorting::NONE,
         is_fast_travel_destination: 0,
@@ -574,6 +676,9 @@ impl UiDialog {
 /// Called once, on the thread that draws the interface, or on a thread of the
 /// loader's when the dialog shows as a system window. It must not unwind.
 ///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Ui::dialog`](../ui/struct.Ui.html#method.dialog).
@@ -589,6 +694,10 @@ pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 /// reason shows as written. A name holds no `=`; neither holds a tab.
 ///
 /// It must not unwind.
+///
+/// Null is never a callback: the loader refuses a null one with
+/// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.
+/// Its thread is not fixed, so it must be thread-safe.
 ///
 /// # Examples
 ///
@@ -632,20 +741,20 @@ pub struct FogInfo {
     pub session: u64,
     /// Counts the closed windows of uncovering in this session: the
     /// loader closes the pixels uncovered since the last window into a
-    /// new one at most once a second; 0 before the first. ABI 11.14.
+    /// new one at most once a second; 0 before the first.
     pub uncovered: u64,
-    /// The pixels the last window turned from hidden to shown. ABI 11.14.
+    /// The pixels the last window turned from hidden to shown.
     pub uncovered_pixels: u32,
     /// Zero.
     pub reserved: u32,
     /// The lowest pixel of the box around the last window's pixels, as
-    /// x and row. ABI 11.14.
+    /// x and row.
     pub uncovered_min: [u32; 2],
-    /// The box's width and height in pixels. ABI 11.14.
+    /// The box's width and height in pixels.
     pub uncovered_size: [u32; 2],
 }
 
-impl_headed!(FogInfo, born = 40);
+impl_headed!(FogInfo);
 
 impl FogInfo {
     /// No fog, its header set.
@@ -663,35 +772,4 @@ impl FogInfo {
         uncovered_min: [0; 2],
         uncovered_size: [0; 2],
     };
-}
-
-/// Cached diagnostics of the client's local gameplay-input sampler.
-/// Flags and age are weakly consistent observations, not world or session identity.
-/// Reading this does not request sampling. ABI 11.31.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
-pub struct LocalInputInfo {
-    /// Size and version of this struct.
-    pub header: Header,
-    /// A combination of this type's flag constants; unknown flags are ignored.
-    pub flags: u32,
-    /// Reserved; 0.
-    pub reserved: u32,
-    /// Age of the last cached sample in milliseconds; `u64::MAX` means never sampled.
-    pub age_ms: u64,
-}
-impl_headed!(LocalInputInfo);
-impl LocalInputInfo {
-    /// A mod requested sampling through `local_held`.
-    pub const REQUESTED: u32 = 1;
-    /// The sampler's existing layout resolved.
-    pub const LAYOUT_AVAILABLE: u32 = 2;
-    /// The existing sampler link succeeded and its fuse remains on.
-    pub const LINK_AVAILABLE: u32 = 4;
-    /// The sampler's read fuse remains on; this alone does not mean reads can run.
-    pub const READ_ENABLED: u32 = 8;
-    /// At least one sample was cached, including a zero mask.
-    pub const SAMPLE_PRESENT: u32 = 16;
-    /// Requested, available, enabled and sampled within the existing 1000 ms window.
-    pub const FRESH: u32 = 32;
 }

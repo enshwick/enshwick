@@ -2,7 +2,7 @@
 //! core nor the facade re-exports it.
 
 use crate::__load::*;
-use crate::abi::{Header, ItemData, StatDefData};
+use crate::abi::{Header, ItemTypeInfo, StatSpec};
 use crate::content::items::StatFormat;
 #[cfg(feature = "typed")]
 use crate::content::knowledge::{KnowledgeQuery, KnowledgeTest};
@@ -64,24 +64,24 @@ pub fn push_recipe(load: &mut impl Loading, recipe: NewRecipe) -> Result<(), Off
 #[must_use]
 pub const fn stat_format(format: StatFormat) -> u8 {
     match format {
-        StatFormat::Number => StatDefData::NUMBER,
-        StatFormat::Signed => StatDefData::SIGNED,
-        StatFormat::Percent => StatDefData::PERCENT,
+        StatFormat::Number => StatSpec::NUMBER,
+        StatFormat::Signed => StatSpec::SIGNED,
+        StatFormat::Percent => StatSpec::PERCENT,
     }
 }
 
 /// The static data of `item` as the loader answers it; none for an unknown
 /// item, or while no world runs. Any thread.
 #[must_use]
-pub fn item_data(host: &Host, item: ItemId) -> Option<ItemData> {
-    let mut out = ItemData {
-        header: Header::of::<ItemData>(),
+pub fn item_data(host: &Host, item: ItemId) -> Option<ItemTypeInfo> {
+    let mut out = ItemTypeInfo {
+        header: Header::of::<ItemTypeInfo>(),
         id: ItemId::new(0),
         max_stack: 0,
         category: 0,
         rarity: 0,
         flags: 0,
-        placed_entity: [0; 16],
+        placed_entity: Guid::NIL,
     };
     let status = (host.api().item_info)(host.handle(), item, &raw mut out);
     status.is_ok().then_some(out)
@@ -98,7 +98,7 @@ pub fn knows_item(host: &Host, item: ItemId) -> bool {
 /// answers it; `None` for a GUID no mod declared, such as a vanilla item's.
 #[must_use]
 pub fn content_id(host: &Host, guid: Guid) -> Option<String> {
-    host.content_name(guid.0)
+    host.content_name(guid)
 }
 
 /// Whether `guid` is one of `vanilla`'s items.
@@ -111,6 +111,33 @@ pub fn is_item(vanilla: &Vanilla, guid: Guid) -> bool {
 #[must_use]
 pub fn is_recipe(vanilla: &Vanilla, guid: Guid) -> bool {
     vanilla.is_recipe(guid)
+}
+
+/// The vanilla template an admin's console names `name`, also in another
+/// case.
+///
+/// It finds it as `Vanilla::template` does, without the warning a mod gets
+/// for naming templates after init: the platform's console reads a name
+/// only when an admin types one.
+///
+/// # Errors
+///
+/// As `Vanilla::template`.
+pub fn template(
+    vanilla: &Vanilla,
+    name: &str,
+) -> Result<Guid, crate::content::vanilla::VanillaError> {
+    vanilla.template_named(name, false, true)
+}
+
+/// The vanilla item an admin's console names by its debug name `name`, as
+/// `Vanilla::item` finds it but also in another case.
+///
+/// # Errors
+///
+/// As `Vanilla::item`.
+pub fn item(vanilla: &Vanilla, name: &str) -> Result<Guid, crate::content::vanilla::VanillaError> {
+    vanilla.item_named(name, true)
 }
 
 /// The vanilla item of the item id `id`.

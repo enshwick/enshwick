@@ -38,3 +38,5 @@ impl Load<'_> {
 mod extension;
 mod hud;
 mod script;
+#[cfg(feature = "unstable")]
+mod tooltip;

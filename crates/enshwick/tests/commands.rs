@@ -7,7 +7,6 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
-    use enshwick::actions::sheet::decode;
     use enshwick::actions::{Action, Actions, Arg, Outcome, Value, Via};
     use enshwick::commands::{self, Caller, CommandSet, MAX_LINE, RunCommandError};
     use enshwick::i18n::{Language, Texts};
@@ -91,15 +90,15 @@ mod tests {
         "#
     );
 
-    fn player(entity: u32, key: u64, name: &str, permissions: u8) -> PlayerInfo {
+    fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
         let mut info = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,
             entity: enshwick::Entity(entity),
             key: enshwick::PlayerKey::new(key),
             permissions,
-            name_len: u8::try_from(name.len()).unwrap(),
-            name: [0; 64],
+            name_len: u32::try_from(name.len()).unwrap(),
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
@@ -369,10 +368,8 @@ mod tests {
         );
         let loader = start(enshwick::test::FakeHost::new().player(guest).player(friend));
         let ids = |p: &PlayerInfo| -> Vec<String> {
-            decode(&loader.ask_actions(ActionCall::SHEET, p, 0, "", "").unwrap())
-                .into_iter()
-                .map(|entry| entry.id)
-                .collect()
+            let allowed = loader.ask_actions(ActionCall::ALLOWED, p, 0, "", "");
+            allowed.unwrap().lines().map(str::to_owned).collect()
         };
 
         assert_eq!(ids(&guest), ["online", "boom"]);

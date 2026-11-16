@@ -51,7 +51,7 @@ mod tests {
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 3,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..3].copy_from_slice(b"Ann");
         info
@@ -114,5 +114,23 @@ mod tests {
         assert_eq!(loader.chat(), [(ann, "psst in chat".to_owned())]);
         assert_eq!(loader.notices(), [(ann, "psst on screen".to_owned())]);
         assert_eq!(warned(&loader), 0);
+    }
+
+    #[test]
+    fn the_raw_chat_entry_refuses_key_0_and_only_broadcast_reaches_everyone() {
+        let loader = start();
+        // SAFETY: the fake's table is a static, aligned and never written.
+        let api = unsafe { &*loader.api() };
+
+        let status = (api.chat)(
+            loader.handle(),
+            PlayerKey::new(0),
+            enshwick::abi::Str::new("admin output"),
+        );
+        assert_eq!(status, Status::BAD_ARGS);
+        assert!(loader.chat().is_empty(), "{:?}", loader.chat());
+
+        WORLD.get().unwrap().broadcast("to all");
+        assert_eq!(loader.chat(), [(PlayerKey::new(0), "to all".to_owned())]);
     }
 }

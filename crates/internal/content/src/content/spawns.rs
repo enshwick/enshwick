@@ -283,7 +283,7 @@ impl LoadHelpers for crate::BaseLoad {
             }
             let value = registry.decode(template.qualified_name(), &bytes)?;
             if lists(&value, spawner, listed) {
-                found.push(Guid(key.guid));
+                found.push(key.guid);
             }
         }
         if found.is_empty() {

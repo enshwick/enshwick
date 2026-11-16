@@ -2,12 +2,13 @@
 //! voxels.
 
 use enshwick_core::abi::{
-    DaytimeInfo, Status, TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
+    DaytimeInfo, Header, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, Voxel,
+    WeatherFront, WeatherSample,
 };
 
 use crate::engine::conflicts::Mode;
 use crate::host::layer::{
-    Asker, Buffer, Caller, Headed, HeadedListOut, HeadedOut, In, List, Mod, Out, entries,
+    Asker, Buffer, Caller, Headed, HeadedOut, In, Mod, Out, SizedListOut, entries,
 };
 use crate::host::memory::slice;
 
@@ -21,10 +22,10 @@ entries! {
         Ok(())
     }
 
-    fn time_speed_control(me as Mod) -> Status {
+    fn request_time_speed(me as Mod) -> Status {
         me.claim(
             "time speed",
-            Mode::Exclusive,
+            Mode::Chained,
             crate::world::daytime::register_speed(me.loader, me.index),
         )
     }
@@ -38,41 +39,40 @@ entries! {
         preset.put(u32::from(crate::world::game_settings::read(loader, out)?))
     }
 
-    fn set_game_settings(loader as Caller, [data, size] as List<u8>) -> Status {
-        crate::world::game_settings::write(loader, data)?;
-        Ok(())
-    }
-
-    fn keep_game_settings(
+    fn set_game_settings(
         loader as Caller,
         data: *const u8,
         mask: *const u8,
         size: u32,
     ) -> Status {
-        if data.is_null() || mask.is_null() {
-            return Err(Status::BAD_ARGS.into());
+        if data.is_null() {
+            if !mask.is_null() || size != 0 {
+                return Err(Status::BAD_ARGS.into());
+            }
+            crate::world::game_settings::forget(loader)?;
+            return Ok(());
         }
         let len = usize::try_from(size).map_err(|_| Status::BAD_ARGS)?;
         // SAFETY: `data` is non-null, checked at the top; the ABI has the mod
         // pass `size` readable bytes there, unchanged for the call.
         let bytes = unsafe { slice(data, len) };
-        // SAFETY: `mask` is non-null, checked at the top; the ABI has the mod
+        if mask.is_null() {
+            crate::world::game_settings::write(loader, bytes)?;
+            return Ok(());
+        }
+        // SAFETY: `mask` is non-null, checked just before; the ABI has the mod
         // pass `size` readable bytes there, unchanged for the call.
         let mask = unsafe { slice(mask, len) };
         crate::world::game_settings::keep(loader, bytes, mask)?;
         Ok(())
     }
 
-    fn forget_game_settings(loader as Caller) -> Status {
-        crate::world::game_settings::forget(loader)?;
-        Ok(())
+    fn weather_at(loader as Caller, position as In<[f64; 3]>, out as HeadedOut<WeatherSample>) -> Status {
+        let [clear, rain, snow, blizzard] = crate::world::weather::sample(loader, enshwick_core::ecs::fixed(position))?;
+        out.put(WeatherSample { header: Header::of::<WeatherSample>(), clear, rain, snow, blizzard })
     }
 
-    fn weather_at(loader as Caller, position as In<[i64; 3]>, out as Out<[f32; 4]>) -> Status {
-        out.put(crate::world::weather::sample(loader, position)?)
-    }
-
-    fn weather_fronts(loader as Caller, [out, capacity, count] as HeadedListOut<WeatherFront>) -> Status {
+    fn weather_fronts(loader as Caller, [out, entry_size, capacity, count] as SizedListOut<WeatherFront>) -> Status {
         out.put(&crate::world::weather::fronts(loader)?)
     }
 
@@ -83,9 +83,18 @@ entries! {
 
     fn terrain_materials(
         loader as Caller,
-        [out, capacity, count] as HeadedListOut<TerrainMaterialInfo>,
+        [out, entry_size, capacity, count] as SizedListOut<TerrainMaterialInfo>,
     ) -> Status {
         out.put(&crate::world::terrain::materials(loader)?)
+    }
+
+    fn terrain_material_add(
+        me as Mod,
+        material as Headed<TerrainMaterialAdd>,
+        id as Out<u8>,
+    ) -> Status {
+        let owner = (me.index, me.record.joins_when_on());
+        id.put(crate::content::terrain_materials::add(me.loader, owner, &material)?)
     }
 
     fn terrain_edit(me as Asker, edit as Headed<TerrainEdit>, amount as Out<f32>) -> Status {
@@ -99,7 +108,7 @@ entries! {
         loader as Caller,
         min as In<[u32; 3]>,
         size as In<[u32; 3]>,
-        [out, capacity] as Buffer<Voxel, u64>,
+        [out, capacity] as Buffer<Voxel>,
     ) -> Status {
         let request = crate::world::voxels::ReadBox::new(min, size, capacity_of(out))?;
         let words = crate::world::voxels::read(loader, &request)?;

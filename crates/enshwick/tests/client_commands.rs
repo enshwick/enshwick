@@ -1,0 +1,246 @@
+//! Client commands through the safe layer on the fake host.
+#[cfg(test)]
+mod tests {
+    use enshwick::abi::{ClientCommand as Raw, ClientCommandStatus as Status, Side};
+    use enshwick::input::{CancelReason, ClientCommand, CommandAction, CommandState, Input};
+    use enshwick::{Load, Mod, Off, WorldError};
+    use std::sync::Mutex;
+
+    static INPUT: Mutex<Option<Input>> = Mutex::new(None);
+
+    struct Driver;
+
+    impl Mod for Driver {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            *INPUT.lock().unwrap() = Some(load.input()?);
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Driver,
+        r#"id = "you.client-commands"
+side = "both""#
+    );
+
+    fn input(side: Side) -> (enshwick::test::Installed, Input) {
+        let loader = enshwick::test::FakeHost::new()
+            .side(side)
+            .player_input()
+            .install();
+        // SAFETY: these are this file's generated exports.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, enshwick::abi::Status::OK);
+        (loader, INPUT.lock().unwrap().unwrap())
+    }
+
+    fn open_backpack() -> ClientCommand {
+        ClientCommand::new(CommandAction::OpenScreen("Backpack".to_owned()), 1).on_screen("InGame")
+    }
+
+    #[test]
+    fn a_command_goes_from_queued_to_applied_to_observed() {
+        let (loader, input) = input(Side::CLIENT);
+        let id = input.client_command(&open_backpack()).unwrap();
+        assert_eq!(
+            loader.client_commands(),
+            [(1, Raw::OPEN_SCREEN, "Backpack".to_owned())]
+        );
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Pending
+        );
+        loader.set_command_status(1, Status::APPLIED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Applied
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        let observed = input.command_status(id).unwrap().state;
+        assert_eq!(observed, CommandState::Observed);
+    }
+
+    #[test]
+    fn one_command_of_a_kind_waits_and_a_cancelled_one_frees_its_kind() {
+        let (_loader, input) = input(Side::CLIENT);
+        let id = input.client_command(&open_backpack()).unwrap();
+        assert!(matches!(
+            input.client_command(&open_backpack()),
+            Err(WorldError::Refused)
+        ));
+        let tab = ClientCommand::new(CommandAction::ChooseTab("Character".to_owned()), 1);
+        assert!(input.client_command(&tab).is_ok(), "another kind");
+        input.cancel_command(id).unwrap();
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Cancelled(CancelReason::ByMod)
+        );
+        assert!(input.client_command(&open_backpack()).is_ok());
+    }
+
+    #[test]
+    fn each_cancel_reason_and_unavailable_reach_the_mod() {
+        let (loader, input) = input(Side::CLIENT);
+        for (reason, expected) in [
+            (Status::SESSION_CHANGED, CancelReason::SessionChanged),
+            (Status::OTHER_SCREEN, CancelReason::OtherScreen),
+            (Status::PLAYER_INPUT, CancelReason::PlayerInput),
+            (Status::TIMED_OUT, CancelReason::TimedOut),
+            (Status::MOD_OFF, CancelReason::ModOff),
+        ] {
+            let id = input.client_command(&open_backpack()).unwrap();
+            let raw = loader.client_commands().last().unwrap().0;
+            loader.set_command_status(raw, Status::CANCELLED, reason);
+            assert_eq!(
+                input.command_status(id).unwrap().state,
+                CommandState::Cancelled(expected)
+            );
+        }
+        let id = input.client_command(&open_backpack()).unwrap();
+        let raw = loader.client_commands().last().unwrap().0;
+        loader.set_command_status(raw, Status::UNAVAILABLE, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Unavailable
+        );
+    }
+
+    fn walk(hold_ms: u32) -> ClientCommand {
+        let action = CommandAction::Move {
+            direction: [0.0, 1.0],
+            hold_ms,
+        };
+        ClientCommand::new(action, 1)
+    }
+
+    fn look(yaw: f32) -> ClientCommand {
+        ClientCommand::new(CommandAction::Look { yaw, pitch: 0.0 }, 1)
+    }
+
+    #[test]
+    fn a_move_holds_until_observed_and_frees_its_kind_once_it_ends() {
+        let (loader, input) = input(Side::CLIENT);
+        let id = input.client_command(&walk(250)).unwrap();
+        assert_eq!(loader.client_commands(), [(1, Raw::MOVE, String::new())]);
+        loader.set_command_status(1, Status::APPLIED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Applied,
+            "the builder holds the stick"
+        );
+        assert!(
+            matches!(input.client_command(&walk(100)), Err(WorldError::Refused)),
+            "one move at a time"
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed,
+            "the hold ran out"
+        );
+        assert!(input.client_command(&walk(100)).is_ok(), "released");
+    }
+
+    #[test]
+    fn a_look_or_move_past_its_bounds_is_refused() {
+        let (_loader, input) = input(Side::CLIENT);
+        for refused in [
+            walk(251),
+            walk(0),
+            look(Raw::MAX_LOOK * 2.0),
+            look(f32::NAN),
+            ClientCommand::new(
+                CommandAction::Move {
+                    direction: [1.0, 1.0],
+                    hold_ms: 100,
+                },
+                1,
+            ),
+        ] {
+            assert!(
+                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                "{refused:?}"
+            );
+        }
+        assert!(input.client_command(&look(Raw::MAX_LOOK)).is_ok());
+    }
+
+    #[test]
+    fn a_screen_tab_or_expected_screen_the_loader_refuses_the_fake_refuses_too() {
+        let (_loader, input) = input(Side::CLIENT);
+        for refused in [
+            ClientCommand::new(CommandAction::OpenScreen("StorageChest".to_owned()), 1),
+            ClientCommand::new(CommandAction::ChooseTab("Inventory".to_owned()), 1),
+            look(0.5).on_screen("Backpack"),
+        ] {
+            assert!(
+                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                "{refused:?}"
+            );
+        }
+        assert!(input.client_command(&look(0.5).on_screen("InGame")).is_ok());
+    }
+
+    #[test]
+    fn the_player_s_input_and_a_block_cancel_a_look_or_move() {
+        let (loader, input) = input(Side::CLIENT);
+        for (command, reason, expected) in [
+            (walk(250), Status::PLAYER_INPUT, CancelReason::PlayerInput),
+            (look(0.5), Status::PLAYER_INPUT, CancelReason::PlayerInput),
+            (walk(250), Status::INPUT_BLOCKED, CancelReason::InputBlocked),
+            (look(0.5), Status::OTHER_SCREEN, CancelReason::OtherScreen),
+            (
+                walk(250),
+                Status::SESSION_CHANGED,
+                CancelReason::SessionChanged,
+            ),
+            (look(0.5), Status::MOD_OFF, CancelReason::ModOff),
+        ] {
+            let id = input.client_command(&command).unwrap();
+            let raw = loader.client_commands().last().unwrap().0;
+            loader.set_command_status(raw, Status::CANCELLED, reason);
+            assert_eq!(
+                input.command_status(id).unwrap().state,
+                CommandState::Cancelled(expected),
+                "{command:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_recipe_is_highlighted_or_unavailable_when_the_menu_lacks_it() {
+        let (loader, input) = input(Side::CLIENT);
+        let torch = ClientCommand::new(
+            CommandAction::HighlightRecipe(enshwick::RecipeId(0x7cd8_0a04)),
+            1,
+        );
+        let id = input.client_command(&torch).unwrap();
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed
+        );
+        let other = input.client_command(&torch).unwrap();
+        loader.set_command_status(2, Status::UNAVAILABLE, 0);
+        assert_eq!(
+            input.command_status(other).unwrap().state,
+            CommandState::Unavailable,
+            "another workshop's recipe"
+        );
+        let none = ClientCommand::new(CommandAction::HighlightRecipe(enshwick::RecipeId(0)), 1);
+        assert!(matches!(
+            input.client_command(&none),
+            Err(WorldError::Refused)
+        ));
+    }
+
+    #[test]
+    fn a_server_runs_no_client_command() {
+        let (_loader, input) = input(Side::SERVER);
+        assert!(matches!(
+            input.client_command(&open_backpack()),
+            Err(WorldError::Unavailable)
+        ));
+    }
+}

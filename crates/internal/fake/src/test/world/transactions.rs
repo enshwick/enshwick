@@ -152,6 +152,30 @@ impl Installed {
         }
     }
 
+    /// Drops the undo data of every written transaction, as the loader does
+    /// to stay within its memory cap: each applied one turns expired and
+    /// forgets the props it placed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.expire_transactions();
+    /// assert!(loader.transactions().is_empty());
+    /// ```
+    pub fn expire_transactions(&self) {
+        table::with((), |s| {
+            for transaction in &mut s.edits.transactions {
+                if transaction.info.state == TransactionInfo::APPLIED {
+                    transaction.info.state = TransactionInfo::EXPIRED;
+                    transaction.info.bricks = 0;
+                    transaction.info.created = 0;
+                    transaction.created.clear();
+                }
+            }
+        });
+    }
+
     /// Makes the loader's next step meet `reason` for transaction `id`, as
     /// the game would where the world is not loaded yet
     /// ([`Status::NOT_LOADED`]) or after a change in its region
@@ -235,8 +259,8 @@ impl FakeChange {
             Self::Terrain(edit) => {
                 let reach = f64::from(edit.radius);
                 (
-                    edit.position.map(|at| (f64::from(at) - reach).max(0.0)),
-                    edit.position.map(|at| f64::from(at) + reach),
+                    edit.position.map(|at| (at - reach).max(0.0)),
+                    edit.position.map(|at| at + reach),
                 )
             }
             Self::Voxels { min, size, .. } | Self::Erase { min, size } => (

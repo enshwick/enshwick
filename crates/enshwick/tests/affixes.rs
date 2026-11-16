@@ -6,7 +6,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{ItemData, Status};
+    use enshwick::abi::{ItemTypeInfo, Status};
     use enshwick::affixes::{AffixDef, Affixes, ItemRarity, Range, RollError, RollRules};
 
     use enshwick::Entity;
@@ -63,9 +63,9 @@ mod tests {
     #[test]
     fn items_roll_once_the_same_from_a_seed_and_count_when_worn() {
         let loader = enshwick::test::FakeHost::new()
-            .item(enshwick::ItemId::new(RING), 1, ItemData::HAS_PIDE)
+            .item(enshwick::ItemId::new(RING), 1, ItemTypeInfo::HAS_PIDE)
             .item_category(enshwick::ItemId::new(RING), 1)
-            .item(enshwick::ItemId::new(SWORD), 1, ItemData::HAS_PIDE)
+            .item(enshwick::ItemId::new(SWORD), 1, ItemTypeInfo::HAS_PIDE)
             .item_category(enshwick::ItemId::new(SWORD), 2)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Loot)`.

@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: A mod declares what players and administrators can do as actions, and the platform offers them on the Mods screen, from the mod's controls and on the console.
+description: A mod declares what players and administrators can do as actions, offered from its controls, in windows from the server and on the console.
 -->
 
 # Player actions
@@ -209,7 +209,7 @@ order, as far as each reads as its argument:
 | `give Ann "Stone 5"` | `Stone 5` | 1 |
 | `give Ann Stone Axe 5000` | `Stone Axe 5000` | 1 |
 
-An optional text or item is always the last argument, and takes what is
+An optional text, item or template is always the last argument, and takes what is
 left of the line itself. The arguments before it then take one word each, or a run in
 double quotes:
 
@@ -254,10 +254,15 @@ under a key of the mod's own needs `Load::declare`.
 | Where | How the player names the item |
 | --- | --- |
 | A window | a list of items by the names the game shows in the player's language, with a search field. Up to 64 matches show at once. |
-| A typed line | its debug name (`Tool_Torch01`), its GUID or a content id (`you.lamps:lamp`). A name the game shows works where the server has the game's texts. |
+| A typed line | its debug name (`Tool_Torch01`) in any case, its GUID or a content id (`you.lamps:lamp`). A name the game shows works where the server has the game's texts. |
 
 A server has the game's texts in single player and in a game a player
 hosts.
+
+A typed name matches exactly first. Without an exact match, a name in
+another case names the one item with that name. The server refuses a name
+several items share and lists their GUIDs, at most eight and then how many
+more: "Several items are named …: …. Name one by its GUID."
 
 The names come from the player's own game, so a dedicated server needs no
 texts and sends none. A window lists vanilla items and the mods' items
@@ -283,6 +288,49 @@ local spawn = {
     args = {
         enshwick.actions.item("Item"),
         enshwick.actions.number("Count", 1, 999, 1):optional({ Number = 1 }),
+    },
+}
+```
+
+## Templates from the game's list
+
+`Arg::template(label)` asks for one of the game's entity templates: what a
+creature or a placed object is made of, for a spawn or a summon. The handler
+gets `Value::Template` with the template's GUID. The server refuses a
+template its game does not know before the handler runs: "No template …". A
+mod's template counts once `add_template` or `add_enemy` adds it.
+
+| Where | How the player names the template |
+| --- | --- |
+| A window | a list of every template by the name the game's data gives it (`Enemy_Wildbeast_Wolf`), and a mod's by its content id, with a search field. Up to 64 matches show at once. |
+| A typed line | its vanilla name (`Enemy_Wildbeast_Wolf`) in any case, its GUID or a content id (`you.pets:tame-wolf`). |
+
+The game shows a name of its own for few templates, so the list shows the
+names of the game's data in every language. Their names come from the
+player's own game, so a dedicated server sends none. On a typed line the
+template takes words as a text does. A typed name follows the rules of an
+item's: an exact match first, then the one template with the name in
+another case. A name several templates share is refused with their GUIDs,
+so a console can name one.
+
+```rust
+use enshwick::actions::{Action, Arg, Value};
+
+let summon = Action::new("summon", "Summon a creature")
+    .admins()
+    .arg(Arg::template("Creature"))
+    .arg(Arg::number("Count", 1.0..=9.0, 1.0).optional(Value::Number(1.0)));
+assert_eq!(summon.id(), "summon");
+```
+
+```luau
+local summon = {
+    id = "summon",
+    label = "Summon a creature",
+    admins = true,
+    args = {
+        enshwick.actions.template("Creature"),
+        enshwick.actions.number("Count", 1, 9, 1):optional({ Number = 1 }),
     },
 }
 ```
@@ -395,6 +443,11 @@ every run, whatever the client sent. It refuses values outside their
 types and ranges before the handler sees them. A mod's own permission rules,
 [extension points](extending.md) included, belong in `.at`, so the
 mod's controls and panels and the console all follow them.
+
+The rights alone choose which of a mod's controls the server carries to a
+player: `.allow` and `.admins()`. A `.needs` counts as well. The server asks them at
+the player's join and at a change of their permissions or the mod's rules.
+`.at` runs only when a window draws the action or a run asks for it.
 
 The platform's replies, such as "No player named Bob.", are under
 `actions.*` keys and take the mod's texts over them.
@@ -706,11 +759,13 @@ the loader does:
 - `ask_action_at(&player, language, id, args, target)` runs one on a named
   object.
 - `action_targets()` lists the objects a client's runs named.
-- `ask_actions(ActionCall::SHEET, &player, language, "", "")` returns the
-  mod's sheet, which `actions::sheet::decode` reads.
+- `ask_actions(ActionCall::ALLOWED, &player, 0, "", "")` returns the ids of
+  the actions that player may run, one per line, as the server asks them to
+  choose the player's controls.
 - `carried_windows(&player, language)` returns the windows that player's
   client holds after the mod's shows, updates and closes, which
-  `actions::window::decode` reads.
+  `actions::window::decode` reads. A window's `entries` are the actions it
+  draws whole, as `actions::sheet` holds them.
 - `close_window(&player, id)` closes a window as that player's client does,
   and `player_left(key)` makes the player leave as far as windows go. The
   mod hears of both as the loader tells it.

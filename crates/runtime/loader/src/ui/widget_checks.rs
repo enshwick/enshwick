@@ -29,6 +29,15 @@ pub enum WidgetError {
     /// What the widget shows is not there: a sound or a key hint.
     #[error("what the widget shows is not there")]
     Unavailable,
+    /// An item slot of an item the client does not know.
+    #[error("the client knows no such item")]
+    NoItem,
+    /// A tooltip line of a kind a tooltip does not show; it shows labels.
+    #[error("a tooltip shows only labels")]
+    TooltipRefused,
+    /// A tooltip line past the most one handler adds.
+    #[error("the handler added the most tooltip lines")]
+    TooltipFull,
 }
 
 /// Whether a widget of `kind` may draw now, or why not.
@@ -45,7 +54,7 @@ pub const fn order(kind: u32, window_open: bool) -> Result<(), WidgetError> {
     match kind {
         UiWidget::WINDOW if window_open => Err(WidgetError::OutOfOrder),
         UiWidget::END if !window_open => Err(WidgetError::OutOfOrder),
-        UiWidget::WINDOW | UiWidget::END | UiWidget::SOUND | UiWidget::PLAY => Ok(()),
+        UiWidget::WINDOW | UiWidget::END | UiWidget::SOUND => Ok(()),
         _ if !window_open => Err(WidgetError::OutOfOrder),
         kind if needs_window(kind) => Ok(()),
         _ => Err(WidgetError::Unknown),
@@ -65,6 +74,7 @@ pub const fn needs_window(kind: u32) -> bool {
             | UiWidget::DROPDOWN
             | UiWidget::PROGRESS
             | UiWidget::INPUT_HINT
+            | UiWidget::ITEM_SLOT
     )
 }
 
@@ -124,10 +134,8 @@ mod tests {
             assert_eq!(order(kind, true), Ok(()), "{kind}");
             assert_eq!(order(kind, false), Err(WidgetError::OutOfOrder), "{kind}");
         }
-        for sound in [UiWidget::SOUND, UiWidget::PLAY] {
-            assert_eq!(order(sound, false), Ok(()), "{sound}");
-            assert_eq!(order(sound, true), Ok(()), "{sound}");
-        }
+        assert_eq!(order(UiWidget::SOUND, false), Ok(()));
+        assert_eq!(order(UiWidget::SOUND, true), Ok(()));
     }
 
     #[test]
@@ -135,13 +143,7 @@ mod tests {
         for kind in [UiWidget::LABEL, UiWidget::BUTTON, UiWidget::PROGRESS] {
             assert!(needs_window(kind), "{kind}");
         }
-        for kind in [
-            UiWidget::WINDOW,
-            UiWidget::END,
-            UiWidget::SOUND,
-            UiWidget::PLAY,
-            u32::MAX,
-        ] {
+        for kind in [UiWidget::WINDOW, UiWidget::END, UiWidget::SOUND, u32::MAX] {
             assert!(!needs_window(kind), "{kind}");
         }
     }

@@ -7,17 +7,17 @@ mod tests {
     use enshwick::abi::{ActionCall, Header, PlayerInfo};
     use enshwick::test::FakeHost;
 
-    use crate::harness::{logged, run};
+    use crate::harness::{LOOK, logged, looked, run};
 
-    fn player(entity: u32, key: u64, name: &str, permissions: u8) -> PlayerInfo {
+    fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
         let mut info = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,
             entity: enshwick::Entity(entity),
             key: enshwick::PlayerKey::new(key),
             permissions,
-            name_len: u8::try_from(name.len()).unwrap(),
-            name: [0; 64],
+            name_len: u32::try_from(name.len()).unwrap(),
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
@@ -106,7 +106,7 @@ mod tests {
         let friend = player(4, 8, "Friend", 0);
         let loader = run(
             FakeHost::new().player(guest).player(friend),
-            r#"
+            &(r#"
             local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
             actions:add({ id = "online", label = "Players online" }, function()
                 return enshwick.actions.done("2 online")
@@ -136,7 +136,9 @@ mod tests {
             }, function() end)
             enshwick.log.info(`optional first {early}`)
             actions:commands("lk")
-            "#,
+            "#
+            .to_owned()
+                + LOOK),
         );
         assert!(
             logged(&loader, "optional first false"),
@@ -158,6 +160,7 @@ mod tests {
             Some(
                 "1you.luau: /lk <action> runs one, /lk help <action> explains one.\n\
                  online: Players online\n\
+                 look <Action>: Look\n\
                  Items:\n\
                  give <player> <Item> [1-99]: Give"
             ),
@@ -167,12 +170,7 @@ mod tests {
             chat("/lk help give").as_deref(),
             Some("1give <player> <Item> [1-99]: Give\nGives the item.")
         );
-        let sheet = enshwick::actions::sheet::decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &guest, 0, "", "")
-                .unwrap(),
-        );
-        let give = sheet.iter().find(|entry| entry.id == "give").unwrap();
+        let give = looked(&loader, &guest, enshwick::i18n::Language::FALLBACK, "give");
         assert_eq!(
             give.args[0].players.first().map(|(_, name)| name.as_str()),
             Some("Guest"),

@@ -28,7 +28,7 @@ impl Installed {
     /// let call = ItemAction {
     ///     header: Header::of::<ItemAction>(),
     ///     kind: ItemAction::CONSUME,
-    ///     player: enshwick::Entity(1),
+    ///     character: enshwick::Entity(1),
     ///     item: enshwick::ItemId::new(0x5e01),
     ///     count: 1,
     ///     inventory: enshwick::Entity(2),
@@ -63,7 +63,7 @@ impl Installed {
     /// let call = ItemAction {
     ///     header: Header::of::<ItemAction>(),
     ///     kind: ItemAction::CONSUME,
-    ///     player: enshwick::Entity(1),
+    ///     character: enshwick::Entity(1),
     ///     item: enshwick::ItemId::new(0x5e01),
     ///     count: 1,
     ///     inventory: enshwick::Entity(2),
@@ -92,7 +92,9 @@ fn ask(call: &ItemAction) -> bool {
             break;
         }
         // SAFETY: a valid call; `user` is the mod's pointer.
-        allowed &= filter.run(|callback, user| unsafe { callback(call, user) != 0 });
+        allowed &= filter.run(|callback, user| unsafe {
+            callback(call, user) != enshwick_core::abi::FILTER_REFUSE
+        });
     }
     allowed || !refusable
 }

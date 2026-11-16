@@ -71,8 +71,21 @@ names a [control's](controls.md) `link` uses, such as `"ContextualAction_Tap"`.
 
 On a client, `input.local_held()` returns the game actions its own player
 holds, as an `InputMask`. It is the mask the client read in its last step.
-It returns `None` on a server and outside a game. It also returns `None`
-while no step ran for a second, as in the pause menu.
+The client reads the mask only once a mod opens its input with
+`load.input()`. A Luau mod's `enshwick.input` opens as the mod starts, and
+only when one of its scripts names `input`. A Luau mod that never names it
+starts no reads, and neither does a data pack without scripts.
+The client's first step after that reads it, so a mod's first frame in a
+game has the mask. The read costs one row of the interface's player query
+per client step, and only while a mod has its input open.
+
+`local_held()` returns `None` in these cases:
+
+- on a server;
+- outside a game;
+- before the client's first step after the input opened;
+- while no step ran for a second, as in the pause menu;
+- on a game build without the read.
 
 It holds the gameplay controls only. The client's own controls, such as the
 menu and map keys, are not in it. `local_held` runs on any thread, such as
@@ -125,12 +138,12 @@ exists and remains fresh. `age_ms` is `None` before any sample. In Luau, this is
 sample can still have an age. Luau represents the age as a decimal string, as
 it represents other `u64` values. A zero held mask is a valid sample.
 
-This getter does not request sampling. Only the existing `local_held()` call
-starts it. The flags are weakly consistent observations of cached metadata.
+This getter does not request sampling itself. Opening the input or a
+`local_held()` call starts it. The flags are weakly consistent observations of cached metadata.
 They are not world or session identity, or proof of input execution.
 They do not explain why a player row or component was not sampled.
 No new game memory is read. The getter is client-only and returns
-`WorldError::Missing` on a server. It requires ABI 11.31 or newer.
+`WorldError::Unavailable` on a server. It requires ABI 12.1 or newer.
 An older loader rejects this SDK at mod initialization before accessing its
 appended host slot.
 
@@ -138,5 +151,229 @@ appended host slot.
 local status = enshwick.input.local_status()
 if status.sample_present then
     enshwick.log.info(`Cached sample age: {status.age_ms} ms`)
+end
+```
+
+## Reading the client's state in one copy
+
+On a client, `input.client_snapshot()` returns a `ClientSnapshot`. It holds
+what the interface read in its last frame. That is the open HUD screen, the
+screen it returns to, the open screen's host and the in-game menu's tab. It
+also holds the local player, its held controls and the world's name. One
+call copies all of it at once, on any thread.
+
+The menu's tab and the HUD screen are two different things. The `V` key
+opens the crafting screen. The `E` key then shows the backpack's tab, while
+the HUD screen stays `PlayerCrafting`. So read `menu_tab()` for the page the
+player sees. It names the tab as the screen it stands for, and it is `None`
+while no menu shows:
+
+| Tab | Shows |
+| --- | --- |
+| `Social` | the players of the world |
+| `Map` | the map |
+| `Journal` | the journal |
+| `PlayerCrafting` | the crafting menu |
+| `Backpack` | the backpack |
+| `Character` | the character |
+| `SkillTree` | the skill tree |
+
+`session()` counts the client's sessions from 1. It grows when the
+client's game object, the local player or the world changes. So two
+snapshots with the same value belong to one session. `state()` says how old
+the reads are, and `age_ms()` gives the age in milliseconds:
+
+| State | Means |
+| --- | --- |
+| `Never` | no frame drew a game yet |
+| `Fresh` | read within a second |
+| `Stale` | older, as while a world loads |
+| `Off` | the build lacks the reads |
+
+`highlighted_recipe()` names the recipe the crafting menu's details column
+shows. It follows a click on a tile and the arrow keys; the mouse pointer
+over a tile does not move it. It is `None` while no crafting menu draws,
+and while the open menu highlights no recipe.
+
+The client reads the snapshot once a mod opens its input, as it does the
+held controls. So a mod's first frame in a game has it. The state is
+`Never` in two cases:
+
+- before the client's first interface step after the mod opened its input;
+- while no frame drew a game since, as in the main menu before the first
+  world.
+
+The reads cost one look at the interface's screen state and menu tab per
+frame, which client commands share, and a copy of four words. The held
+controls cost their own row, as for `local_held()`. A part the running
+build lacks returns `None`, and `reads(part)` tells "none now" from
+"unread". The call returns `WorldError::Unavailable` on a server.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let input = load.input()?;
+    load.on_frame(move |frame| {
+        if let Ok(snapshot) = input.client_snapshot()
+            && snapshot.menu_tab() == Some("Backpack")
+        {
+            frame.label("The backpack shows");
+        }
+    })
+}
+```
+
+```luau
+enshwick.ui.on_frame(function(frame)
+    local snapshot = enshwick.input.client_snapshot()
+    if snapshot.menu_tab == "Backpack" then
+        frame:label("The backpack shows")
+    end
+end)
+```
+
+In Luau, `reads` lists the parts the build reads by name. The `session` and
+`age_ms` fields are decimal strings, as other 64-bit values are.
+
+## Driving the client's own screens
+
+On a client, `input.client_command(&command)` asks the game to open or
+close one of its screens, or to show a tab of the in-game menu. It returns
+a `CommandId`. The call only queues the command. `input.command_status(id)`
+then tells what came of it:
+
+| State | Means |
+| --- | --- |
+| `Pending` | queued; the game has not taken it yet |
+| `Applied` | the game took it, such as its interface queue the screen change |
+| `Observed` | the client's own state shows the screen or tab |
+| `Cancelled(reason)` | it ended without its effect |
+| `Unavailable` | the build lacks what it needs, or the open menu lacks the recipe |
+
+A command belongs to one session and, if you name one, to one HUD screen.
+Take both from a [snapshot](#reading-the-clients-state-in-one-copy). Session
+0, from a snapshot taken before the first frame, means the session of the
+first frame that runs the command. A command whose effect already shows,
+such as opening the screen that is open, is `Observed` at once. The loader
+cancels a command in these cases:
+
+- the session changes;
+- another screen shows;
+- the player presses a control;
+- the mod turns off;
+- two seconds pass without its effect, in a world or outside one.
+
+A reason a newer loader gives reads as `CancelReason::Other`, `"other"` in
+Luau.
+
+One command of each kind waits per mod. A second answers
+`WorldError::Refused` until the first ends.
+
+A command opens the screens the game opens from a key in the world. These
+are the seven tabs of the [snapshot](#reading-the-clients-state-in-one-copy)
+and three more:
+
+| Screen | Shows |
+| --- | --- |
+| `SystemMenu` | the pause menu |
+| `InGameMenu` | the in-game menu |
+| `TextChat` | the chat line |
+
+The loader runs every command in the client's own frame, never inside a
+mod's callback.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn open_backpack(input: enshwick::input::Input) {
+    let Ok(snapshot) = input.client_snapshot() else {
+        return;
+    };
+    let command = ClientCommand::new(CommandAction::OpenScreen("Backpack".to_owned()), snapshot.session())
+        .on_screen("InGame");
+    if let Ok(id) = input.client_command(&command) {
+        enshwick::info!("queued {id:?}");
+    }
+}
+```
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+local id = enshwick.input.client_command({
+    kind = "open_screen",
+    session = snapshot.session,
+    expected_screen = "InGame",
+    target = "Backpack",
+})
+```
+
+## Turning the camera and taking a short step
+
+`CommandAction::Look { yaw, pitch }` turns the camera once, and
+`CommandAction::Move { direction, hold_ms }` holds a direction for a short
+time. The loader writes both into the local player's input right after the
+game builds it, so they act through the game's own camera and movement.
+
+| Command | Bounds | Applied | Observed |
+| --- | --- | --- | --- |
+| `Look` | each turn at most a quarter turn, in radians | with Observed | the frame's look was written |
+| `Move` | x right and y forward, length above 0 and at most 1; 1 to 250 ms | the first step holds the direction | the hold ran out |
+
+A command outside its bounds returns `WorldError::Refused`. A look is in
+radians before the player's camera sensitivity. The camera turns by the
+look times the sensitivity, so a turn of an exact angle divides by it. A
+positive yaw turns right.
+
+Both run only on the world's own screen, `InGame`. The player's own input
+wins: a stick or mouse move, or a pressed control, cancels the command with
+`PlayerInput`. The command is also cancelled in these cases:
+
+- another screen shows;
+- a new session starts;
+- the game blocks the player's input, with `InputBlocked`;
+- the mod turns off.
+
+When a move ends for any reason, the stick is the game's own again in the
+same step. One look or move runs at a time across all mods. Another mod's
+command waits until the first ends.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn step_forward(input: enshwick::input::Input) {
+    let Ok(snapshot) = input.client_snapshot() else {
+        return;
+    };
+    let action = CommandAction::Move { direction: [0.0, 1.0], hold_ms: 250 };
+    let _queued = input.client_command(&ClientCommand::new(action, snapshot.session()));
+}
+```
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+enshwick.input.client_command({
+    kind = "move",
+    session = snapshot.session,
+    direction = { 0, 1 },
+    hold_ms = 250,
+})
+```
+
+## Highlighting a recipe
+
+`CommandAction::HighlightRecipe(recipe)` asks the open crafting menu to
+highlight a recipe, as a click on its tile does. It crafts nothing, pins
+nothing and moves no item. The command waits until a crafting menu draws.
+It is `Observed` once the snapshot's `highlighted_recipe()` names the
+recipe. It is `Unavailable` when the open menu does not list the recipe,
+such as a recipe of another workshop.
+
+```luau
+local function highlight(recipe: number)
+    local snapshot = enshwick.input.client_snapshot()
+    return enshwick.input.client_command({
+        kind = "highlight_recipe",
+        session = snapshot.session,
+        recipe = recipe,
+    })
 end
 ```

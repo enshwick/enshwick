@@ -4,17 +4,18 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
-    use enshwick::actions::sheet::{ArgView, decode};
-    use enshwick::actions::{Action, Arg, Outcome, Value};
+    use enshwick::actions::sheet::ArgView;
+    use enshwick::actions::{Action, Actions, Arg, Outcome, Value, Window, window};
     use enshwick::content::Guid;
     use enshwick::i18n::Texts;
     use enshwick::{ItemId, Load, Mod, Off, PlayerKey};
 
     /// The values each run handed its handler.
     static RUNS: Mutex<Vec<Vec<Value>>> = Mutex::new(Vec::new());
+    static ACTIONS: OnceLock<Actions> = OnceLock::new();
 
     const TORCH: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const LAMP: Guid = Guid::named("you.spawner:lamp");
@@ -46,6 +47,7 @@ mod tests {
                 },
             )?;
             actions.commands("s")?;
+            let _first = ACTIONS.set(actions);
             Ok(Self)
         }
     }
@@ -66,7 +68,7 @@ mod tests {
             key: PlayerKey::new(9),
             permissions: PlayerInfo::CAN_KICK_BAN,
             name_len: 4,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..4].copy_from_slice(b"Root");
         info
@@ -90,13 +92,12 @@ mod tests {
     }
 
     #[test]
-    fn the_sheet_offers_an_item_argument_and_the_interface_sends_the_picked_guid() {
+    fn a_window_offers_an_item_argument_and_the_interface_sends_the_picked_guid() {
         let loader = start();
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &root(), 0, "", "")
-                .unwrap(),
-        );
+        let spawn = Window::new("spawn", "Spawn").action("spawn");
+        ACTIONS.get().unwrap().show(spawn, &[root().key]).unwrap();
+        let carried = loader.carried_windows(&root(), 0);
+        let sheet = window::decode(&carried[0].1).unwrap().entries;
         assert_eq!(sheet[0].args[0].kind, ArgView::ITEM);
         assert_eq!(sheet[0].group, "Items");
         assert_eq!(sheet[0].args[0].default, None);
@@ -207,6 +208,47 @@ mod tests {
             chat("/s help spawn").as_deref(),
             Some("1spawn <Item> [1-99]: Spawn")
         );
+    }
+
+    #[test]
+    fn the_console_names_a_vanilla_item_in_any_case_and_lists_the_guids_of_a_shared_name() {
+        const CHEST: Guid = Guid::parse("00000000-0000-4000-8000-00000000c001");
+        const CRATE: Guid = Guid::parse("00000000-0000-4000-8000-00000000c002");
+        let loader = enshwick::test::FakeHost::new()
+            .player(root())
+            .items()
+            .workshops()
+            .vanilla_items(&[
+                (TORCH, "Tool_Torch01"),
+                (CHEST, "Prop_Chest"),
+                (CRATE, "PROP_CHEST"),
+            ])
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let chat = |line: &str| loader.type_in_chat(&root(), 0, line);
+        assert_eq!(chat("/s spawn tool_torch01 4").as_deref(), Some("1ok"));
+        assert_eq!(chat("/s spawn PROP_CHEST").as_deref(), Some("1ok"));
+        assert_eq!(
+            runs(),
+            [
+                vec![Value::Item(TORCH), Value::Number(4.0)],
+                vec![Value::Item(CRATE), Value::Number(1.0)],
+            ],
+            "an exact name wins over one in another case"
+        );
+        assert_eq!(
+            chat("/s spawn prop_chest").as_deref(),
+            Some(
+                format!(
+                    "0Several items are named prop_chest: {CHEST}, {CRATE}. Name one by its GUID."
+                )
+                .as_str()
+            )
+        );
+        assert!(runs().is_empty());
     }
 
     #[test]

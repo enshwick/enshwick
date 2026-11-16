@@ -747,7 +747,7 @@ fn dependencies_read_by_alias_with_their_relations() {
         "id = \"you.stalls\"\nversion = \"1.0.0\"\n\
          [requires]\nlockers = { id = \"you.lockers\", version = \">=0.1\" }\n\
          [after]\nlights = \"you.lanterns\"\n\
-         [breaks]\nold = { id = \"old-stalls\", version = \"<0.3\" }\n",
+         [breaks]\nold = { id = \"you.old-stalls\", version = \"<0.3\" }\n",
     )
     .unwrap();
     let read: Vec<_> = manifest
@@ -759,7 +759,7 @@ fn dependencies_read_by_alias_with_their_relations() {
         [
             (Relation::REQUIRES, "lockers", "you.lockers", ">=0.1"),
             (Relation::AFTER, "lights", "you.lanterns", ""),
-            (Relation::BREAKS, "old", "old-stalls", "<0.3"),
+            (Relation::BREAKS, "old", "you.old-stalls", "<0.3"),
         ]
     );
 }

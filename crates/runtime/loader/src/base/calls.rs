@@ -610,13 +610,7 @@ mod tests {
         let (routes, offers) = registry.seal(&mods);
         let reasons: Vec<String> = routes
             .iter()
-            .map(|r| {
-                r.server
-                    .as_ref()
-                    .err()
-                    .map(ToString::to_string)
-                    .unwrap_or_default()
-            })
+            .map(|r| r.server.as_ref().err().map_or_default(ToString::to_string))
             .collect();
         assert_eq!(reasons[0], "");
         assert!(reasons[1].contains("serves v2, this mod asks for v1; update this mod"));
@@ -668,14 +662,12 @@ mod tests {
         assert_eq!(registry.unmatched(&price(2), &mods), None);
         let older = registry
             .unmatched(&price(1), &mods)
-            .map(|e| e.to_string())
-            .unwrap_or_default();
+            .map_or_default(|e| e.to_string());
         assert!(older.contains("serves v2, this mod asks for v1"), "{older}");
         let rent = declared("you.trading-post:rent", 1, &[], 0);
         let none = registry
             .unmatched(&rent, &mods)
-            .map(|e| e.to_string())
-            .unwrap_or_default();
+            .map_or_default(|e| e.to_string());
         assert!(none.contains("serves no such call"), "{none}");
     }
 }

@@ -767,7 +767,7 @@ mod tests {
     #[test]
     fn the_loader_s_patch_goes_first_on_a_vanilla_key_and_last_on_a_new_one() {
         let key = |b: u8| enshwick_core::abi::ResourceKey {
-            guid: [b; 16],
+            guid: Guid([b; 16]),
             type_hash: 1,
             part: 0,
         };

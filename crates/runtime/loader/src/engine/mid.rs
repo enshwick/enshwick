@@ -279,16 +279,14 @@ impl Mids {
     pub(crate) fn owners(&self, address: u64) -> Vec<ModIndex> {
         self.sites
             .get(&address)
-            .map(|links| links.iter().map(|(l, _)| l.owner).collect())
-            .unwrap_or_default()
+            .map_or_default(|links| links.iter().map(|(l, _)| l.owner).collect())
     }
 
     /// The loader features with a link at `address`.
     pub(crate) fn features_at(&self, address: u64) -> Vec<&'static Fuse> {
         self.sites
             .get(&address)
-            .map(|links| links.iter().filter_map(|&(_, feature)| feature).collect())
-            .unwrap_or_default()
+            .map_or_default(|links| links.iter().filter_map(|&(_, feature)| feature).collect())
     }
 
     /// Every address with handlers.

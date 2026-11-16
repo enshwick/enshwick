@@ -2,7 +2,7 @@
 //! loader turns into one change per item from the game's data.
 
 use crate::Off;
-use crate::abi::{ChangeOp, DataChange, DataSelect, Header, ItemData, Str};
+use crate::abi::{ChangeOp, DataChange, DataSelect, Header, ItemTypeInfo, Str};
 use crate::content::Guid;
 use crate::content::categories::ItemCategoryMask;
 
@@ -49,7 +49,7 @@ pub struct ItemTraits {
     pub max_stack: u16,
     /// The number of its `ItemCategory`.
     pub category: u8,
-    /// Its flags, such as [`ItemData::HAS_PIDE`].
+    /// Its flags, such as [`ItemTypeInfo::HAS_PIDE`].
     pub flags: u32,
     /// How many slots the container it places holds; `None` when it places
     /// none.
@@ -75,7 +75,9 @@ impl Items {
         };
         selected
             && match field {
-                Field::MaxStackSize => item.max_stack > 1 && item.flags & ItemData::HAS_PIDE == 0,
+                Field::MaxStackSize => {
+                    item.max_stack > 1 && item.flags & ItemTypeInfo::HAS_PIDE == 0
+                }
                 Field::Slots => match self {
                     Self::Containers => item.slots.is_some(),
                     Self::Backpacks => item.backpack_slots.is_some(),
@@ -215,17 +217,17 @@ impl ItemsChange {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
+    /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Guid, Header, Str};
     /// use enshwick::content::changes::{Items, ItemsChange, Value};
     ///
     /// let raw = DataChange {
     ///     header: Header::of::<DataChange>(),
-    ///     entry: [0; 16],
+    ///     entry: Guid::NIL,
     ///     field: DataField::MAX_STACK,
     ///     op: ChangeOp::TIMES,
     ///     value: 4.0,
     ///     source: Str::EMPTY,
-    ///     item: [0; 16],
+    ///     item: Guid::NIL,
     ///     select: DataSelect::STACKABLE,
     ///     categories: 0,
     /// };
@@ -254,12 +256,12 @@ impl ItemsChange {
         let (select, categories) = self.items.to_abi();
         DataChange {
             header: Header::of::<DataChange>(),
-            entry: [0; 16],
+            entry: Guid::NIL,
             field: self.field.to_abi(),
             op,
             value,
             source: Str::new(source),
-            item: [0; 16],
+            item: Guid::NIL,
             select,
             categories,
         }
@@ -283,7 +285,7 @@ impl LoadMethods for crate::BaseLoad {
             .map_err(|why| Off::new(format!("change of {:?}: {why}", change.items)))?;
         let raw = change.to_abi(source);
         let api = self.host().api();
-        let status = (api.change_data)(self.host().handle(), &raw const raw);
+        let status = (api.change_data)(self.host().handle(), &raw const raw, core::ptr::null_mut());
         crate::load::ok(status, (), || {
             format!("change {} of {:?}", change.field, change.items)
         })
@@ -304,7 +306,7 @@ mod tests {
     const SWORD: ItemTraits = ItemTraits {
         max_stack: 1,
         category: 2,
-        flags: ItemData::HAS_PIDE,
+        flags: ItemTypeInfo::HAS_PIDE,
         slots: None,
         backpack_slots: None,
     };
@@ -318,7 +320,7 @@ mod tests {
     const BACKPACK: ItemTraits = ItemTraits {
         max_stack: 1,
         category: 1,
-        flags: ItemData::HAS_PIDE,
+        flags: ItemTypeInfo::HAS_PIDE,
         slots: None,
         backpack_slots: Some(16),
     };
@@ -340,7 +342,7 @@ mod tests {
         assert!(!every.picks(Field::MaxStackSize, &CHEST));
         let held = ItemTraits {
             max_stack: 5,
-            flags: ItemData::HAS_PIDE,
+            flags: ItemTypeInfo::HAS_PIDE,
             ..WOOD
         };
         assert!(!Items::Stackable.picks(Field::MaxStackSize, &held));

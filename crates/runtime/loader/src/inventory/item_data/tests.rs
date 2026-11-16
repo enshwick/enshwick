@@ -24,8 +24,17 @@ fn ids_take_the_mod_s_namespace_unless_they_name_one() {
         Some("you.lanterns:oil")
     );
     assert_eq!(
-        full_id("you.lanterns", "other:fire_damage").as_deref(),
-        Some("other:fire_damage")
+        full_id("you.lanterns", "you.other:fire_damage").as_deref(),
+        Some("you.other:fire_damage")
+    );
+    assert_eq!(
+        full_id("you.lanterns", "other:fire_damage"),
+        None,
+        "a namespace without an author is no mod's"
+    );
+    assert_eq!(
+        full_id("enshwick", "charges").as_deref(),
+        Some("enshwick:charges")
     );
     assert_eq!(full_id("you.lanterns", "Charges"), None);
     assert_eq!(full_id("you.lanterns", "a:b:c"), None);

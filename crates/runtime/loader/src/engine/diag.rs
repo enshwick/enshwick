@@ -16,12 +16,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use menu::{KeptLine, MenuNote, menu_line};
-pub(crate) use summary::clock;
 #[cfg(windows)]
 pub(crate) use summary::{GAME_CRASHED, crash_heading};
 pub use summary::{
     HookStat, ModStatus, Served, SkippedMod, Summary, duration, messages_line, part_line,
 };
+pub(crate) use summary::{clock, mod_named};
 
 use crate::engine::settings::Settings;
 use enshwick_base::Relock;
@@ -155,8 +155,10 @@ pub struct PartOff {
 
 /// Remembers that the loader's `part` is off for `reason`, for the status
 /// summary and the Mods screen. A part keeps its first reason; past
-/// [`HISTORY`] parts, later ones reach only the log.
-pub fn part_off(part: &str, reason: &str) {
+/// [`HISTORY`] parts, later ones reach only the log. Only
+/// [`Fuse::turn_off`](crate::engine::fuse::Fuse) lists a part, so every part
+/// off is also logged, with its code when its cause has one, and wired past.
+pub(in crate::engine) fn part_off(part: &str, reason: &str) {
     let at = now();
     with_parts_off(|parts| keep_part(parts, HISTORY, (part, reason), at));
     STATE.any_part_off.store(true, Ordering::Release);
@@ -193,6 +195,29 @@ fn keep_part(parts: &mut Vec<PartOff>, cap: usize, (part, reason): (&str, &str),
 #[must_use]
 pub fn parts_off() -> Vec<PartOff> {
     with_parts_off(|parts| parts.clone())
+}
+
+/// The parts off as mods read them, each name and reason viewing the kept
+/// text: a record is never changed or dropped once kept, and a `String`'s
+/// text stays in place when the list grows, so the views stay valid for the
+/// process.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build has a host table")
+)]
+pub(crate) fn parts_off_listed() -> Vec<enshwick_core::abi::LoaderOff> {
+    use enshwick_core::abi::{LoaderOff, Str};
+    with_parts_off(|parts| {
+        parts
+            .iter()
+            .map(|off| LoaderOff {
+                name: Str::new(&off.part),
+                reason: Str::new(&off.reason),
+                at: off.at,
+                ..LoaderOff::EMPTY
+            })
+            .collect()
+    })
 }
 
 /// Runs `work` on the parts off.
@@ -593,7 +618,7 @@ conflicts:
     fn a_mod_skipped_at_start_shows_with_its_file_and_reason_and_a_second_copy_is_not_counted() {
         let skipped = |id: &str, file: &str, reason: &str, off| SkippedMod {
             id: id.into(),
-            version: "0.2.0".into(),
+            version: Some("0.2.0".into()),
             file: file.into(),
             reason: reason.into(),
             shown: format!("[{reason}]"),
@@ -633,6 +658,24 @@ conflicts:
         assert!(
             !short.contains("old/you.lockers.dll"),
             "a second copy of a loaded mod is not off: {short}"
+        );
+    }
+
+    #[test]
+    fn a_file_refused_before_its_manifest_read_shows_in_the_summary_without_a_version() {
+        let mut s = summary();
+        s.skipped = vec![SkippedMod {
+            id: "lanterns".into(),
+            version: None,
+            file: "mods/lanterns/lanterns.dll".into(),
+            reason: "not a mod".into(),
+            shown: "[not a mod]".into(),
+            off: true,
+        }];
+        let text = s.render();
+        assert!(
+            text.contains("  lanterns skipped, mods/lanterns/lanterns.dll: not a mod\n"),
+            "{text}"
         );
     }
 
@@ -712,6 +755,40 @@ conflicts:
         assert!(history().is_empty(), "another test's mod stays its own");
         part_off("own part", "off");
         assert!(any_part_off());
+    }
+
+    #[test]
+    fn mods_read_each_part_off_once_with_its_first_reason_viewing_the_kept_text() {
+        part_off("screen reads", "this build lacks ui.hud_screen");
+        part_off("screen reads", "a later reason");
+        part_off("the client snapshot", "a fault");
+        let listed = parts_off_listed();
+        // SAFETY: the views point at the records this test's list keeps.
+        let text = |s: enshwick_core::abi::Str| unsafe { s.as_str() }.map(str::to_owned);
+        let shown: Vec<_> = listed
+            .iter()
+            .map(|off| (text(off.name), text(off.reason)))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                (
+                    Some("screen reads".to_owned()),
+                    Some("this build lacks ui.hud_screen".to_owned())
+                ),
+                (
+                    Some("the client snapshot".to_owned()),
+                    Some("a fault".to_owned())
+                ),
+            ]
+        );
+        part_off("a third part", "grows the list");
+        assert_eq!(
+            text(listed[0].reason).as_deref(),
+            Some("this build lacks ui.hud_screen"),
+            "a view taken before the list grew"
+        );
+        assert!(listed.iter().all(|off| off.at > 0));
     }
 
     #[test]

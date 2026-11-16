@@ -88,7 +88,7 @@ impl VoxelEdit {
     ///
     /// `data.changes` points at `data.count` changes readable for the call,
     /// or `data.count` is 0.
-    unsafe fn of(data: &abi::VoxelEditData, me: abi::ModHandle) -> Self {
+    unsafe fn of(data: &abi::VoxelEditRequest, me: abi::ModHandle) -> Self {
         let changes = match usize::try_from(data.count) {
             Ok(count) if count > 0 && !data.changes.is_null() => {
                 // SAFETY: the caller guarantees `count` changes readable at
@@ -136,17 +136,17 @@ impl LoadMethods for crate::BaseLoad {
         let me = self.host().handle();
         self.on_raw_event(abi::Event::VOXELS_CHANGED, move |raw| {
             // SAFETY: subscribed under `Event::VOXELS_CHANGED`, whose data
-            // the loader passes as a `VoxelEditData`, null or valid for the
+            // the loader passes as a `VoxelEditRequest`, null or valid for the
             // call.
             let data = unsafe {
                 abi::read_headed(
-                    raw.cast::<abi::VoxelEditData>(),
-                    size_of::<abi::VoxelEditData>(),
+                    raw.cast::<abi::VoxelEditRequest>(),
+                    size_of::<abi::VoxelEditRequest>(),
                 )
             };
             if let Some(data) = data {
                 // SAFETY: the loader's `changes` point at `count` changes
-                // readable for this call, by `VoxelEditData`'s contract.
+                // readable for this call, by `VoxelEditRequest`'s contract.
                 handler(&unsafe { VoxelEdit::of(&data, me) });
             }
         })

@@ -79,9 +79,9 @@ The data types have these fields:
 - `TickData::step` counts steps since the loader started counting, from 1.
   The other fields of `TickData` are in [Ticks](#ticks):
   - `elapsed_steps`
-  - `elapsed_nanos`
-  - `step_nanos`
-  - `cost_nanos`
+  - `elapsed_ns`
+  - `step_ns`
+  - `cost_ns`
   - `game`
 - `PlayerData` has three fields. [`World::player`](world.md) gives the rest,
   such as the name.
@@ -112,14 +112,13 @@ The data types have these fields:
   - `x`
   - `z`
   - `size`
-- `PlayerDeathData` has eight fields:
+- `PlayerDeathData` has six fields:
   - `entity`
-  - `cause`
+  - `cause`: numbered as the damage filter numbers its causes, with the
+    deadly shroud apart from the shroud
   - `key`
   - `position`
   - `cause_guid`
-  - `was_deadly_fog`
-  - `drowned`
   - `killer_entity`
 - `TerrainPageData` has three fields:
   - `x`
@@ -171,6 +170,10 @@ time, so a tick handler runs on a period of wall time:
   runs `f` on every step.
 - `load.on_every_step(f)` runs `f` on every step, always. Use it for state
   that changes each step, input or the camera.
+
+A periodic handler also runs once when a world starts, before the
+`WorldLoaded` handlers, so it learns the new game first. A handler paused
+with `Duration::MAX` waits.
 
 A call costs about 1 µs (measured on a server copy with 11 mods, build 399).
 Most of it is the processor fetching the mod's code and data afresh. Steps a handler skips never enter the mod and cost it nothing.

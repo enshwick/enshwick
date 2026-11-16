@@ -288,6 +288,11 @@ ids! {
     INTERACTION_OFFER_ACCEPT_TIME = "interaction_offer.accept_time";
     INTERACTION_OFFER_ACCEPT_GUEST = "interaction_offer.accept_guest";
     INTERACTION_OFFER_DISABLED = "interaction_offer.disabled";
+    INTERACTION_OFFER_OVERRIDE_SEQUENCE = "interaction_offer.override_sequence";
+    INTERACTION_OFFER_OVERRIDE_VERB = "interaction_offer.override_verb";
+    ACTOR_SEQUENCE = "actor_sequence";
+    ACTOR_SEQUENCE_SUB_SEQUENCES = "actor_sequence.sub_sequences";
+    SEQUENCE_NAME = "sequence.name";
     PLAYER_INPUT = "player_input";
     PLAYER_INPUT_DIGITAL = "player_input.digital";
     PLAYER_INPUT_TYPE = "player_input_type";
@@ -299,6 +304,8 @@ ids! {
     /// The id of its `u64` of the game controls held, a `Bitmask64` of
     /// `PlayerInputType`.
     CLIENT_PLAYER_INPUT_DIGITAL = "client_player_input.digital";
+    /// The id of the client's look input per device, a float pair each.
+    MULTI_DEVICE_DIRECTIONAL_INPUT = "multi_device_directional_input";
     /// The id of the server-only component of a player's targets, one
     /// `TargetInfo` per `TargetType`.
     SELECTED_TARGETS = "selected_targets";
@@ -391,6 +398,7 @@ ids! {
     GAME_SETTINGS_NIGHT_TIME_DURATION = "game_settings.night_time_duration";
     GAME_SETTINGS_CURSE_MODIFIER = "game_settings.curse_modifier";
     GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL = "game_settings.flame_level_fog_removal";
+    DAMAGE_TYPE = "damage_type";
     DAMAGE_TYPE_PHYSICAL_CUT = "damage_type.physical_cut";
     DAMAGE_TYPE_PHYSICAL_PIERCE = "damage_type.physical_pierce";
     DAMAGE_TYPE_PHYSICAL_BLUNT = "damage_type.physical_blunt";

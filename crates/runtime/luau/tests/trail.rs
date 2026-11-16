@@ -83,7 +83,7 @@ mod tests {
 
         let data = std::env::temp_dir().join(format!("enshwick-trail-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
-        let mut name = [0u8; 64];
+        let mut name = [0u8; PlayerInfo::NAME_MAX];
         name[..3].copy_from_slice(b"Ann");
         let ann = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
@@ -137,7 +137,7 @@ mod tests {
                 requests[0].ops[0].item,
                 requests[0].ops[0].count
             ),
-            (2, enshwick::ItemId::from_guid(torch), 1)
+            (Entity(2), enshwick::ItemId::from_guid(torch), 1)
         );
         assert!(loader.finish_inventory(InventoryResult::TIMED_OUT, &[]));
         assert!(logged("torch not given: TimedOut"), "{:?}", loader.logs());

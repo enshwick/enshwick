@@ -1,4 +1,4 @@
-use super::widgets::slider_format;
+use super::widgets::{SLIDER_TWO_DECIMALS, SLIDER_WHOLE, slider_format};
 use super::*;
 
 #[test]
@@ -163,11 +163,15 @@ fn client_tables() -> Vec<enshwick_gamedata::Table> {
 }
 
 /// A table's constant by id; the entries only their engine routes find
-/// stand in: the text field's kept-state key as 1, the dropdown's external
-/// mode byte as 0xc76, its offset on every kept client build.
+/// stand in: the text field's kept-state key as 1, its start byte as
+/// 0x198a and the dropdown's external mode byte as 0xc76, their offsets on
+/// every kept client build.
 fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
     if id == pinned::ui::TEXT_FIELD_STATE_KEY.id() {
         return Some(1);
+    }
+    if id == pinned::ui::TEXT_FIELD_START.id() {
+        return Some(0x198a);
     }
     if id == pinned::ui::DROPDOWN_EXTERNAL.id() {
         return Some(0xc76);
@@ -378,16 +382,40 @@ fn client_tables_pin_the_scroll_area_and_the_text_field_whole() {
 }
 
 #[test]
-fn whole_stops_show_whole_numbers() {
-    assert_eq!(slider_format(1.0, 20.0, 20, false), 2);
-    assert_eq!(slider_format(0.0, 1.0, 11, false), 4);
-    assert_eq!(slider_format(0.0, 10.0, 0, false), 4);
+fn a_scroll_area_keeps_its_frame_until_it_starts_over_and_shares_it_with_none() {
+    let mut page = Scroll::new();
+    let mut other = Scroll::new();
+    let first = page.frame_id();
+    assert_ne!(first, 0);
+    assert_eq!(page.frame_id(), first, "the same frame each draw");
+    assert_ne!(
+        other.frame_id(),
+        first,
+        "another area takes a node of its own"
+    );
+    page.start_over();
+    let next = page.frame_id();
+    assert_ne!(next, first, "a new page starts at its top");
+    assert_ne!(next, 0);
+}
+
+#[test]
+fn whole_stops_show_whole_numbers_and_other_sliders_two_decimals() {
+    assert_eq!(slider_format((1.0, 20.0), 20, false), SLIDER_WHOLE);
+    assert_eq!(slider_format((-1.0, 1.0), 3, false), SLIDER_WHOLE);
+    assert_eq!(slider_format((0.0, 1.0), 11, false), SLIDER_TWO_DECIMALS);
+    assert_eq!(slider_format((0.0, 10.0), 0, false), SLIDER_TWO_DECIMALS);
+    assert_eq!(
+        slider_format((0.5, 10.5), 11, false),
+        SLIDER_TWO_DECIMALS,
+        "whole steps from a fractional start"
+    );
 }
 
 #[test]
 fn a_whole_setting_s_slider_shows_no_decimals_whatever_its_stops() {
-    assert_eq!(slider_format(0.0, 1000.0, 0, true), 2);
-    assert_eq!(slider_format(0.0, 1.0, 11, true), 2);
+    assert_eq!(slider_format((0.0, 1000.0), 0, true), SLIDER_WHOLE);
+    assert_eq!(slider_format((0.0, 1.0), 11, true), SLIDER_WHOLE);
 }
 
 #[test]

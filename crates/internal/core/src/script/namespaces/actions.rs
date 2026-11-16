@@ -23,7 +23,16 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::starting("chat", "", &[crate::Load::SCRIPT_CHAT]),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::interactions::Targets>(),
-    Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),
+    Namespace::starting(
+        "interactions",
+        "",
+        &[
+            crate::Load::SCRIPT_INTERACTIONS,
+            #[cfg(feature = "unstable")]
+            crate::Load::SCRIPT_INTERACTION_PROMPTS,
+        ],
+    ),
+    // Opening it starts the client's input reads every frame.
     #[cfg(feature = "unstable")]
-    Namespace::of::<crate::input::Input>(),
+    Namespace::when_named::<crate::input::Input>(),
 ];

@@ -8,6 +8,7 @@
 
 use crate::Off;
 use crate::abi::{ResourceKey, Str};
+use crate::resources::Grow;
 
 pub mod categories;
 pub mod changes;
@@ -141,7 +142,8 @@ pub mod types {
     pub const SOUND_RESOURCE: ResourceType = ResourceType::new(ids::SOUND);
 }
 
-/// A resource blob being edited.
+/// A resource blob being edited, in its own `Vec<u8>` or, through
+/// [`Blob::over`], in a served resource's [`Output`](crate::resources::Output).
 ///
 /// # Examples
 ///
@@ -158,8 +160,116 @@ pub mod types {
 /// assert_eq!(blob.read_u32(start + 8), Some(3));
 /// # Ok::<(), &str>(())
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Blob(Vec<u8>);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Blob<B = Vec<u8>>(B);
+
+impl<B: Grow> Blob<B> {
+    /// A blob that edits in `out`, which first becomes a copy of `base`;
+    /// over a builder's [`Output`](crate::resources::Output), the build
+    /// copies nothing out.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::{Blob, Guid, types};
+    ///
+    /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let chest = types::ITEM_INFO.key(CHEST)?;
+    ///     load.serve(chest, chest, |base, out| {
+    ///         Blob::over(out, base).write(8, &[1]).then_some(())
+    ///     })
+    /// }
+    /// ```
+    pub fn over(mut out: B, base: &[u8]) -> Self {
+        out.grow(0);
+        out.put(base);
+        Self(out)
+    }
+
+    /// A blob that edits in `out`, which first becomes a copy of the base
+    /// of `room` with room for all `room` counted, so the edits grow `out`
+    /// in place: over an [`Output`](crate::resources::Output), its build
+    /// takes one loan and moves nothing.
+    pub(crate) fn over_with_room(mut out: B, room: Room<'_>) -> Self {
+        out.grow(0);
+        out.reserve(room.len);
+        out.put(room.base);
+        Self(out)
+    }
+}
+
+impl<'a> Blob<&'a [u8]> {
+    /// A blob that only reads `base`, for what a helper decides before it
+    /// copies the base.
+    pub(crate) const fn reading(base: &'a [u8]) -> Self {
+        Self(base)
+    }
+}
+
+/// The length a blob over a base reaches through the appends and array
+/// growths a helper makes, worked out on the base before the blob copies
+/// it, with the arithmetic [`Blob::append`] and [`Blob::grow_array`] use.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Room<'a> {
+    base: &'a [u8],
+    len: usize,
+}
+
+impl<'a> Room<'a> {
+    /// The room `base` takes as it is.
+    pub(crate) const fn new(base: &'a [u8]) -> Self {
+        Self {
+            base,
+            len: base.len(),
+        }
+    }
+
+    /// The room after [`Blob::append`] of `len` bytes at `align`.
+    pub(crate) fn append(self, len: usize, align: usize) -> Option<Self> {
+        Some(Self {
+            len: aligned(self.len, align).checked_add(len)?,
+            ..self
+        })
+    }
+
+    /// The room after [`Blob::grow_array`] of the base's array at `field`,
+    /// of `size`-byte elements, by `extra` elements; `None` when the base
+    /// has no array there.
+    pub(crate) fn grow_array(
+        self,
+        field: usize,
+        size: usize,
+        align: usize,
+        extra: usize,
+    ) -> Option<Self> {
+        let (_, count) = Blob::reading(self.base).array(field)?;
+        let elements = usize::try_from(count).ok()?.checked_add(extra)?;
+        self.append(elements.checked_mul(size)?, align)
+    }
+}
+
+/// Edits a copy of `base` with `edit` in a `Vec`, then hands the bytes to
+/// `out` in one reserve: one loan of the final length and one more copy,
+/// for a helper whose edits decide the room the next one needs.
+pub(crate) fn built_apart(
+    out: impl Grow,
+    base: &[u8],
+    edit: impl FnOnce(&mut Blob) -> Option<()>,
+) -> Option<()> {
+    let mut edited = Blob::new(base);
+    edit(&mut edited)?;
+    let edited = edited.into_bytes();
+    Blob::over_with_room(out, Room::new(&edited));
+    Some(())
+}
+
+/// `len` rounded up to the next multiple of `align`, where an append or a
+/// grown array starts.
+const fn aligned(len: usize, align: usize) -> usize {
+    len.next_multiple_of(if align == 0 { 1 } else { align })
+}
 
 impl Blob {
     /// A copy of `base` to edit.
@@ -181,7 +291,9 @@ impl Blob {
     pub fn into_bytes(self) -> Vec<u8> {
         self.0
     }
+}
 
+impl<B: AsRef<[u8]>> Blob<B> {
     /// The bytes as edited.
     ///
     /// # Examples
@@ -189,7 +301,7 @@ impl Blob {
     /// See [`Blob`].
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
-        &self.0
+        self.0.as_ref()
     }
 
     /// The `u32` at `at`.
@@ -199,30 +311,8 @@ impl Blob {
     /// See [`Blob`].
     #[must_use]
     pub fn read_u32(&self, at: usize) -> Option<u32> {
-        let bytes = self.0.get(at..at.checked_add(4)?)?;
+        let bytes = self.bytes().get(at..at.checked_add(4)?)?;
         Some(u32::from_le_bytes(bytes.try_into().ok()?))
-    }
-
-    /// Writes `bytes` at `at`; false when they do not fit.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let mut blob = enshwick::content::Blob::new(&[0; 8]);
-    /// assert!(blob.write(4, &7u32.to_le_bytes()));
-    /// assert_eq!(blob.read_u32(4), Some(7));
-    /// ```
-    pub fn write(&mut self, at: usize, bytes: &[u8]) -> bool {
-        match at
-            .checked_add(bytes.len())
-            .and_then(|end| self.0.get_mut(at..end))
-        {
-            Some(target) => {
-                target.copy_from_slice(bytes);
-                true
-            }
-            None => false,
-        }
     }
 
     /// The array whose header is at `field`: where its elements start and how
@@ -237,6 +327,35 @@ impl Blob {
         let count = self.read_u32(field + 4)?;
         let start = field.checked_add_signed(isize::try_from(offset).ok()?)?;
         Some((start, count))
+    }
+
+    /// The bytes as a blob that reads them, for a view that outlives no edit.
+    pub(crate) fn view(&self) -> Blob<&[u8]> {
+        Blob(self.bytes())
+    }
+}
+
+impl<B: Grow> Blob<B> {
+    /// Writes `bytes` at `at`; false when they do not fit.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut blob = enshwick::content::Blob::new(&[0; 8]);
+    /// assert!(blob.write(4, &7u32.to_le_bytes()));
+    /// assert_eq!(blob.read_u32(4), Some(7));
+    /// ```
+    pub fn write(&mut self, at: usize, bytes: &[u8]) -> bool {
+        match at
+            .checked_add(bytes.len())
+            .and_then(|end| self.0.as_mut().get_mut(at..end))
+        {
+            Some(target) => {
+                target.copy_from_slice(bytes);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Points the array header at `field` to `count` elements at `start`.
@@ -260,9 +379,9 @@ impl Blob {
     /// assert_eq!(blob.append(&[9], 4), 4);
     /// ```
     pub fn append(&mut self, data: &[u8], align: usize) -> usize {
-        let start = self.0.len().next_multiple_of(align.max(1));
-        self.0.resize(start, 0);
-        self.0.extend_from_slice(data);
+        let start = aligned(self.bytes().len(), align);
+        self.0.grow(start);
+        self.0.put(data);
         start
     }
 
@@ -287,39 +406,45 @@ impl Blob {
         relative: &[usize],
         extra: &[(Vec<u8>, Option<usize>)],
     ) -> Option<u32> {
-        let (start, count) = self.array(field)?;
-        let old = usize::try_from(count).ok()?;
-        let moved = self
-            .0
-            .get(start..start.checked_add(old.checked_mul(size)?)?)?
-            .to_vec();
-        let mut elements: Vec<(Vec<u8>, Option<usize>)> = moved
-            .chunks_exact(size)
-            .enumerate()
-            .map(|(i, chunk)| (chunk.to_vec(), Some(start + i * size)))
-            .collect();
-        if extra.iter().any(|(bytes, _)| bytes.len() != size) {
+        if size == 0 {
             return None;
         }
-        elements.extend(extra.iter().cloned());
-        let new_start = self.0.len().next_multiple_of(align.max(1));
-        self.0.resize(new_start, 0);
-        for (index, (mut bytes, from)) in elements.into_iter().enumerate() {
+        let (start, count) = self.array(field)?;
+        let old = usize::try_from(count).ok()?;
+        let old_end = start.checked_add(old.checked_mul(size)?)?;
+        if old_end > self.bytes().len() || extra.iter().any(|(bytes, _)| bytes.len() != size) {
+            return None;
+        }
+        let new_start = aligned(self.bytes().len(), align);
+        let end = new_start.checked_add(old.checked_add(extra.len())?.checked_mul(size)?)?;
+        self.0.grow(end);
+        let bytes = self.0.as_mut();
+        if bytes.len() < end {
+            return None;
+        }
+        bytes.copy_within(start..old_end, new_start);
+        let added = bytes.get_mut(new_start + old * size..end)?;
+        for (slot, (element, _)) in added.chunks_exact_mut(size).zip(extra) {
+            slot.copy_from_slice(element);
+        }
+        let sources = (0..old)
+            .map(|i| Some(start + i * size))
+            .chain(extra.iter().map(|&(_, from)| from));
+        for (index, from) in sources.enumerate() {
+            let Some(from) = from else { continue };
             let to = new_start + index * size;
-            if let Some(from) = from {
-                let delta = from.cast_signed() - to.cast_signed();
-                for &at in relative {
-                    let header = bytes.get(at..at + 4)?;
-                    let offset = i32::from_le_bytes(header.try_into().ok()?);
-                    if offset != 0 {
-                        let fixed = i32::try_from(isize::try_from(offset).ok()? + delta).ok()?;
-                        bytes
-                            .get_mut(at..at + 4)?
-                            .copy_from_slice(&fixed.to_le_bytes());
-                    }
+            let delta = from.cast_signed() - to.cast_signed();
+            for &at in relative {
+                if at.checked_add(4)? > size {
+                    return None;
+                }
+                let header = bytes.get_mut(to + at..to + at + 4)?;
+                let offset = i32::from_le_bytes((&*header).try_into().ok()?);
+                if offset != 0 {
+                    let fixed = i32::try_from(isize::try_from(offset).ok()? + delta).ok()?;
+                    header.copy_from_slice(&fixed.to_le_bytes());
                 }
             }
-            self.0.extend_from_slice(&bytes);
         }
         let total = count.checked_add(u32::try_from(extra.len()).ok()?)?;
         self.set_array(field, new_start, total).then_some(count)
@@ -404,7 +529,7 @@ pub trait LoadMethods {
         &mut self,
         key: ResourceKey,
         base: ResourceKey,
-        builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
+        builder: impl Fn(&[u8], &mut crate::resources::Output<'_>) -> Option<()> + Send + Sync + 'static,
     ) -> Result<(), Off>;
 
     /// As `Load::allow_rebuild`.
@@ -430,7 +555,7 @@ impl LoadMethods for crate::BaseLoad {
         &mut self,
         key: ResourceKey,
         base: ResourceKey,
-        builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
+        builder: impl Fn(&[u8], &mut crate::resources::Output<'_>) -> Option<()> + Send + Sync + 'static,
     ) -> Result<(), Off> {
         crate::resources::serve(self.host(), key, base, builder)
     }
@@ -440,6 +565,22 @@ impl LoadMethods for crate::BaseLoad {
         let status = (api.rebuild_resource)(self.host().handle(), &raw const key);
         crate::load::ok(status, (), || "allow rebuild".to_owned())
     }
+}
+
+/// What `build` writes into new bytes, for a test of a helper that builds in
+/// an output; asserts the helper reserved its final length, so over a
+/// builder's output it would take one loan and move nothing.
+#[cfg(test)]
+pub(crate) fn built(build: impl FnOnce(&mut Vec<u8>) -> Option<()>) -> Option<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let answer = build(&mut bytes);
+    assert!(
+        answer.is_none() || bytes.capacity() == bytes.len(),
+        "{} bytes in {}: the build grew past what it reserved",
+        bytes.len(),
+        bytes.capacity()
+    );
+    answer.map(|()| bytes)
 }
 
 #[cfg(test)]

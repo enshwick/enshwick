@@ -1,26 +1,30 @@
 name: Release files
 description: >-
   Builds the release archive reproducibly with `cargo xtask dist`, each DLL
-  carrying its dependency tree, and puts the PDB and a CycloneDX SBOM of every
-  DLL beside it. Needs setup-rust with cargo-cyclonedx and cargo-auditable.
+  carrying its dependency tree and, for a release, its signature, and puts
+  the PDB and a CycloneDX SBOM of every DLL beside it. Needs setup-rust with
+  cargo-cyclonedx and cargo-auditable.
 
 inputs:
   out:
     description: The directory the archive, PDBs and SBOMs go to.
     required: true
+  signing-key:
+    description: >-
+      The release key's secret, 64 hex digits; the archive then holds each
+      DLL's signature, which the loader checks at start.
+    required: false
+    default: ""
+  signed:
+    description: >-
+      "true" fails the build without a signing key, as a release must.
+    required: false
+    default: "false"
 
 runs:
   using: composite
   steps:
-    # Reproducible builds: no machine paths in the DLLs and PDBs, no
-    # timestamps from the linker, and the PDB named without its path.
-    - name: Reproducible build flags
-      shell: bash
-      run: | # zizmor: ignore[github-env] fixed paths only
-        {
-          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS=--remap-path-prefix=$GITHUB_WORKSPACE=/build --remap-path-prefix=$CARGO_HOME=/cargo --remap-path-prefix=$RUSTUP_HOME=/rustup -C link-arg=/Brepro -C link-arg=/PDBALTPATH:%_PDB%"
-          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
-        } >> "$GITHUB_ENV"
+    - uses: ./.github/actions/reproducible
 
     - name: cargo xtask dist
       shell: bash
@@ -28,7 +32,14 @@ runs:
         OUT: ${{ inputs.out }}
         # Each DLL carries its dependency tree, for `cargo audit bin`.
         ENSHWICK_AUDITABLE: "1"
-      run: cargo xtask dist --out "$OUT"
+        ENSHWICK_SIGNING_KEY: ${{ inputs.signing-key }}
+        SIGNED: ${{ inputs.signed }}
+      run: |
+        if [ "$SIGNED" = true ]; then
+          cargo xtask dist --out "$OUT" --signed
+        else
+          cargo xtask dist --out "$OUT"
+        fi
 
     # A CycloneDX SBOM and the PDB of every DLL this build made.
     - name: SBOMs and PDBs

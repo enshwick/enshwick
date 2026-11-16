@@ -2,8 +2,13 @@ use enshwick_core::abi::UiExtension;
 
 use super::{
     Buf, EXTENSION_WIDTH, Engine, HUD_MARGIN, NAV_CONFIG, PANEL_CONFIG, UiText, WINDOW_WIDTH,
-    Window,
+    Window, text_field,
 };
+
+/// The navigation kind of a popup window.
+const NAV_WINDOW: u32 = 2;
+/// The navigation kind of a scrolled column.
+pub(super) const NAV_COLUMN: u32 = 3;
 
 /// The game's alignment word for a panel at `edge` of its parent, centred
 /// along it: the vertical part in the high byte, the horizontal in the low,
@@ -149,15 +154,7 @@ impl Engine {
             // the panel frame opened above is the window `title` asks for.
             unsafe { self.title(context, title) };
         }
-        let mut nav = Buf::<NAV_CONFIG>::zeroed();
-        let [kind, wrap, axis, flags, input, layer, sound] = self.layout.nav;
-        nav.u32(kind, 2);
-        nav.u8(wrap, 1);
-        nav.u32(axis, 3);
-        nav.u16(flags, 0x101);
-        nav.u32(input, 2);
-        nav.u16(layer, 0x1b);
-        nav.u16(sound, 1);
+        let mut nav = self.nav_config(NAV_WINDOW);
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's
         // `ui.nav_extent` bytes and `nav` its `ui.nav_config_size`
@@ -179,6 +176,27 @@ impl Engine {
         unsafe { (self.nav_push)(context, window.nav.ptr()) };
     }
 
+    /// A navigation config of `kind`, as the game's popups, scrolled columns
+    /// and chat field fill theirs: wrapping, both axes, every input, no
+    /// moves while a text field types, and a window's focus held back after
+    /// one typed.
+    pub(super) fn nav_config(&self, kind: u32) -> Buf<NAV_CONFIG> {
+        let mut nav = Buf::<NAV_CONFIG>::zeroed();
+        // The table's `ui.nav_sound` is the focus byte (client 26430625).
+        let [kind_at, wrap, axis, flags, input, layer, focus] = self.layout.nav;
+        nav.u32(kind_at, kind);
+        nav.u8(wrap, 1);
+        nav.u32(axis, 3);
+        nav.u16(flags, text_field::nav_flags(text_field::typed_last_frame()));
+        nav.u32(input, 2);
+        nav.u16(layer, 0x1b);
+        nav.u16(
+            focus,
+            text_field::focus_byte(kind == NAV_WINDOW && text_field::focus_held()),
+        );
+        nav
+    }
+
     /// Ends a window started with [`Engine::window_begin`].
     ///
     /// # Safety
@@ -188,13 +206,17 @@ impl Engine {
     /// - `window` did not move since it started.
     /// - Every frame opened inside `window` is closed.
     pub(in crate::ui::interface) unsafe fn window_end(&self, context: usize, window: &mut Window) {
-        // SAFETY: `self.nav_end` is the game's `ui.nav_end`, its entry bytes
-        // checked in `Engine::resolve`, on the group `window_begin` pushed in
-        // this frame, unmoved by this function's `# Safety`.
-        unsafe { (self.nav_end)(window.nav.ptr(), 0) };
+        if !text_field::typed_last_frame() {
+            // SAFETY: `self.nav_end` is the game's `ui.nav_end`, its entry
+            // bytes checked in `Engine::resolve`, on the group `window_begin`
+            // pushed in this frame, unmoved by this function's `# Safety`.
+            let moved = unsafe { (self.nav_end)(window.nav.ptr(), 0) };
+            text_field::nav_ended(moved);
+        }
         // SAFETY: `self.nav_drop` is the game's `ui.nav_drop`, its entry bytes
         // checked in `Engine::resolve`, on the group `window_begin` pushed in
-        // this frame and `nav_end` just ended.
+        // this frame; the game's text popup drops its group with or without
+        // `nav_end` (client 26430625).
         unsafe { (self.nav_drop)(window.nav.ptr()) };
         self.restore_nav(context, window.saved_nav);
         // SAFETY: `self.frame_close` is the game's `ui.frame_close`, its entry

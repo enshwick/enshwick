@@ -2,17 +2,17 @@
 name = "{crate}"
 version = "0.1.0"
 # The loader shows the description, authors, license and homepage to players
-# on the Mods screen; the homepage is where players are sent to get the mod.
+# on the Mods screen; the homepage is where players are sent to get the mod,
+# and the repository stands for it until a `homepage` of its own is set.
 description = "{description}"
 keywords = ["enshrouded", "mod"]
 categories = ["game-development"]
 readme = "README.md"
 authors = ["Your Name"]
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.100"
 license = "MIT"
 repository = "https://github.com/you/{crate}"
-homepage = "https://github.com/you/{crate}"
 publish = false
 
 # What the mod is, read when it builds: `id` names its settings and data

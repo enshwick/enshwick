@@ -8,10 +8,22 @@ pub(crate) mod build_reasons;
 #[cfg(windows)]
 pub(crate) mod chat;
 pub mod chat_mute;
+#[cfg(windows)]
+pub(crate) mod client_commands;
+#[cfg(windows)]
+pub(crate) mod client_control;
+#[cfg(windows)]
+pub(crate) mod client_input;
+#[cfg(windows)]
+pub(crate) mod client_recipes;
+#[cfg(windows)]
+pub(crate) mod client_snapshot;
 pub mod commands;
 pub mod console;
 #[cfg(windows)]
 pub(crate) mod controls;
+#[cfg(windows)]
+pub(crate) mod interaction_prompts;
 #[cfg(windows)]
 pub(crate) mod interactions;
 pub mod linked_controls;
@@ -46,7 +58,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Input, "console lines", |s| console::after_step(
             s.loader
         ))],
-        forget: Some(|_| console::forget()),
+        forget: Some(fused!("console forgetting a hosted game", |_| {
+            console::forget();
+        })),
         ..part!("console", console)
     },
     &Part {
@@ -54,7 +68,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Input, "chat commands", |s| commands::after_step(
             s.loader
         ))],
-        forget: Some(|_| commands::forget()),
+        forget: Some(fused!("commands forgetting a hosted game", |_| {
+            commands::forget();
+        })),
         ..part!("commands", commands)
     },
     // After the commands: the lines it raises and posts take their replies
@@ -64,7 +80,7 @@ pub(crate) static PARTS: &[&Part] = &[
         seal: Some(|_| chat::seal()),
         link: Some(chat::link),
         steps: &[step!(Input, "chat sending", |_| chat::drain())],
-        forget: Some(|_| chat::forget()),
+        forget: Some(fused!("chat forgetting a hosted game", |_| chat::forget())),
         ..part!("chat", chat)
     },
     &Part {
@@ -77,13 +93,37 @@ pub(crate) static PARTS: &[&Part] = &[
         joined: Some(fused!("the players' screens at join", |loader, _| {
             interactions::player_joined(loader);
         })),
-        forget: Some(|_| interactions::forget()),
+        forget: Some(fused!("interactions forgetting a hosted game", |_| {
+            interactions::forget();
+        })),
         ..part!("interactions", interactions)
+    },
+    &Part {
+        table_ids: interaction_prompts::TABLE_IDS,
+        seal: Some(|_| {
+            let _prompts = interaction_prompts::seal();
+        }),
+        link: Some(interaction_prompts::link),
+        ..part!("interaction_prompts", interaction_prompts)
     },
     &Part {
         table_ids: local_held::TABLE_IDS,
         link: Some(local_held::link),
         ..part!("local_held", local_held)
+    },
+    &Part {
+        table_ids: client_control::TABLE_IDS,
+        link: Some(client_control::link),
+        ..part!("client_control", client_control)
+    },
+    // After client_control: each links only on the group it resolved.
+    &Part {
+        link: Some(client_input::link),
+        ..part!("client_input", client_input)
+    },
+    &Part {
+        link: Some(client_recipes::link),
+        ..part!("client_recipes", client_recipes)
     },
     &Part {
         link: Some(controls::link),
@@ -98,20 +138,28 @@ pub(crate) static PARTS: &[&Part] = &[
         left: Some(fused!("controls at leave", |_, player| controls::left(
             player.key.get()
         ))),
-        hosting: Some(|_| controls::forget_carried()),
-        forget: Some(|_| controls::forget()),
+        hosting: Some(fused!("controls at a hosted game's start", |_| {
+            controls::forget_carried();
+        })),
+        forget: Some(fused!("controls forgetting a hosted game", |_| {
+            controls::forget();
+        })),
         ..part!("controls", controls)
     },
     &Part {
         seal: Some(|_| player_actions::seal()),
-        forget: Some(|_| admission::forget()),
+        forget: Some(fused!("player_actions forgetting a hosted game", |_| {
+            admission::forget();
+        })),
         ..part!("player_actions", player_actions)
     },
     &Part {
         steps: &[step!(Follow, "build refusals", |s| {
             build_reasons::after_step(s.loader);
         })],
-        forget: Some(|_| build_reasons::forget()),
+        forget: Some(fused!("build_reasons forgetting a hosted game", |_| {
+            build_reasons::forget();
+        })),
         ..part!("build_reasons", build_reasons)
     },
     &Part {

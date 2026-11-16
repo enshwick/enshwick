@@ -249,9 +249,7 @@ pub fn label(name: &str, id: &str) -> String {
 /// ```
 #[must_use]
 pub fn all() -> Vec<ModEntry> {
-    crate::host()
-        .map(|host| host.listing(host.api().mods, true))
-        .unwrap_or_default()
+    crate::host().map_or_default(|host| host.listing(host.api().mods, true))
 }
 
 /// Whether the mod `id` is loaded and runs: what an optional dependency's
@@ -300,41 +298,14 @@ pub fn is_running(id: &str) -> bool {
 /// ```
 #[must_use]
 pub fn join_missing() -> Vec<ModEntry> {
-    crate::host()
-        .map(|host| host.listing(host.api().join_missing, false))
-        .unwrap_or_default()
+    crate::host().map_or_default(|host| host.listing(host.api().join_missing, false))
 }
 
 impl Host {
     /// The entries a listing function of the table writes; `load_order`
     /// numbers them as [`all`] lists them, the loader first.
-    pub(crate) fn listing(&self, list: Listing, load_order: bool) -> Vec<ModEntry> {
-        let entry_size = u32::try_from(size_of::<ModInfo>()).unwrap_or(u32::MAX);
-        let mut count = 0u32;
-        let status = list(
-            self.handle(),
-            core::ptr::null_mut(),
-            entry_size,
-            0,
-            &raw mut count,
-        );
-        if !status.is_ok() {
-            return Vec::new();
-        }
-        let mut infos = vec![ModInfo::EMPTY; count as usize];
-        let capacity = u32::try_from(infos.len()).unwrap_or(u32::MAX);
-        let status = list(
-            self.handle(),
-            infos.as_mut_ptr(),
-            entry_size,
-            capacity,
-            &raw mut count,
-        );
-        if !status.is_ok() {
-            return Vec::new();
-        }
-        infos.truncate(count as usize);
-        infos
+    pub(crate) fn listing(&self, list: Listing<ModInfo>, load_order: bool) -> Vec<ModEntry> {
+        self.sized(list, ModInfo::EMPTY)
             .iter()
             .enumerate()
             .filter_map(|(at, info)| {
@@ -375,14 +346,104 @@ pub fn stays_inside(relative: &str) -> bool {
     })
 }
 
-/// [`HostApi::mods`] and [`HostApi::join_missing`].
-type Listing = extern "system" fn(
+/// A listing function of the table, such as [`HostApi::mods`] and
+/// [`HostApi::loader_off`]: up to `capacity` entries `entry_size` bytes
+/// apart, and how many there are.
+type Listing<T> = extern "system" fn(
     me: crate::abi::ModHandle,
-    out: *mut ModInfo,
+    out: *mut T,
     entry_size: u32,
     capacity: u32,
     count: *mut u32,
 ) -> crate::abi::Status;
+
+impl Host {
+    /// Every entry `list` writes, each of the caller's size from `empty`;
+    /// none when the loader refuses either call.
+    fn sized<T: Copy>(&self, list: Listing<T>, empty: T) -> Vec<T> {
+        let entry_size = u32::try_from(size_of::<T>()).unwrap_or(u32::MAX);
+        let mut count = 0u32;
+        let status = list(
+            self.handle(),
+            core::ptr::null_mut(),
+            entry_size,
+            0,
+            &raw mut count,
+        );
+        if !status.is_ok() {
+            return Vec::new();
+        }
+        let mut entries = vec![empty; count as usize];
+        let capacity = u32::try_from(entries.len()).unwrap_or(u32::MAX);
+        let status = list(
+            self.handle(),
+            entries.as_mut_ptr(),
+            entry_size,
+            capacity,
+            &raw mut count,
+        );
+        if !status.is_ok() {
+            return Vec::new();
+        }
+        entries.truncate(count as usize);
+        entries
+    }
+}
+
+/// A part or feature of the loader that is off, from [`loader_off`].
+///
+/// # Examples
+///
+/// See [`loader_off`].
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct LoaderOff {
+    /// The part or feature, as the log and the Mods screen name it.
+    pub name: String,
+    /// Why it is off: the build entry it lacks and why, or the fault.
+    pub reason: String,
+    /// When it turned off, in seconds since the Unix epoch.
+    pub at: u64,
+}
+
+/// Every part and feature of the loader that is off, in the order they
+/// turned off, with why and when; everything else runs.
+///
+/// The loader turns off only what the game build lacks or what faulted, so
+/// a mod tells a read that failed from one that never ran, such as the
+/// local player's held controls on a build without them. Each entry keeps
+/// its first reason. Empty before the loader initialises this mod, and on
+/// a loader older than ABI 12.1.
+///
+/// # Examples
+///
+/// ```
+/// for off in enshwick::mods::loader_off() {
+///     enshwick::warn!("{} is off: {}", off.name, off.reason);
+/// }
+/// ```
+#[must_use]
+pub fn loader_off() -> Vec<LoaderOff> {
+    let Some(host) = crate::host() else {
+        return Vec::new();
+    };
+    host.sized(host.api().loader_off, crate::abi::LoaderOff::EMPTY)
+        .iter()
+        .filter_map(|off| {
+            // SAFETY: the loader keeps each listed name and reason alive and
+            // unchanged for the process (`HostApi::loader_off`); the text is
+            // copied here.
+            let name = unsafe { off.name.as_str() }?;
+            // SAFETY: the reason's text, kept the same way.
+            let reason = unsafe { off.reason.as_str() }?;
+            Some(LoaderOff {
+                name: name.to_owned(),
+                reason: reason.to_owned(),
+                at: off.at,
+            })
+        })
+        .collect()
+}
 
 /// An owned copy of one listed mod; `None` when its id, version or file is
 /// not UTF-8.
@@ -412,7 +473,7 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
     } else {
         // SAFETY: the caller guarantees a non-null `authors` points at
         // `author_count` initialised `Str`s alive for the call.
-        unsafe { core::slice::from_raw_parts(info.authors, info.author_count) }
+        unsafe { core::slice::from_raw_parts(info.authors, info.author_count as usize) }
     };
     let (name, description, authors, license, homepage) = (
         text(&info.name),
@@ -454,7 +515,7 @@ mod tests {
             name: Str::new("Trading Post"),
             description: Str::new("A chest only its owner opens"),
             authors: AUTHORS.as_ptr(),
-            author_count: AUTHORS.len(),
+            author_count: u32::try_from(AUTHORS.len()).unwrap(),
             license: Str::new("MIT"),
             homepage: Str::EMPTY,
         };

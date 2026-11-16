@@ -3,6 +3,7 @@
 
 use crate::content::changes::Field;
 use crate::content::{Blob, Guid};
+use crate::resources::Grow;
 
 use super::RecipeLayout;
 
@@ -117,7 +118,7 @@ fn whole(value: f64) -> u32 {
 /// Changes the count of each item the recipe at `at` makes.
 fn scale_outputs(
     layout: &RecipeLayout,
-    blob: &mut Blob,
+    blob: &mut Blob<impl Grow>,
     at: usize,
     recipe: Guid,
     changes: &dyn RecipeChanges,
@@ -151,7 +152,7 @@ fn names_item(input: &[u8]) -> bool {
 /// 0 and added when missing.
 fn change_inputs(
     layout: &RecipeLayout,
-    blob: &mut Blob,
+    blob: &mut Blob<impl Grow>,
     at: usize,
     recipe: Guid,
     keys: &[(Field, Option<Guid>)],
@@ -228,7 +229,7 @@ fn change_inputs(
 
 /// Changes the time of a recipe, kept at `at` in nanoseconds.
 fn change_time(
-    blob: &mut Blob,
+    blob: &mut Blob<impl Grow>,
     at: usize,
     recipe: Guid,
     changes: &dyn RecipeChanges,
@@ -282,7 +283,7 @@ pub fn recipe_workshops(
 /// made at, by the workshop's game id.
 fn workshop_guids(
     layout: &RecipeLayout,
-    blob: &Blob,
+    blob: &Blob<impl AsRef<[u8]>>,
     start: usize,
     count: usize,
 ) -> Option<Vec<(u32, [u8; 16])>> {
@@ -308,7 +309,7 @@ fn workshop_guids(
 /// with a warning.
 fn change_station(
     layout: &RecipeLayout,
-    blob: &mut Blob,
+    blob: &mut Blob<impl Grow>,
     at: usize,
     recipe: Guid,
     stations: &[(u32, [u8; 16])],

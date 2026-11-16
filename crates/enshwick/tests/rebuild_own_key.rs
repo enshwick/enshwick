@@ -18,10 +18,10 @@ mod tests {
     impl Mod for Rebuilder {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let other = types::ITEM_INFO.key(OTHER_ITEM)?;
-            load.serve(other, other, move |item| {
+            load.serve(other, other, move |item, out| {
                 let answer = if rebuild(other).is_ok() { 1 } else { 2 };
                 ANSWER.store(answer, Ordering::Relaxed);
-                Some(item.to_vec())
+                out.copy_from(item)
             })?;
             Ok(Self)
         }

@@ -52,13 +52,13 @@ impl Loader {
                 // than `Manifest`, so `builds` and `build_count` were read
                 // from the mod, and `manifest::own` copied the rows into
                 // leaked loader memory: `build_count` rows, `'static`.
-                unsafe { core::slice::from_raw_parts(m.builds, m.build_count) }
+                unsafe { core::slice::from_raw_parts(m.builds, m.build_count as usize) }
             }
             _ => &[],
         };
         rows.iter().filter(|row| {
             row.side == self.side
-                && row.fingerprint.guid == self.fingerprint.guid()
+                && row.fingerprint.guid == enshwick_core::content::Guid(self.fingerprint.guid())
                 && row.fingerprint.age == self.fingerprint.age()
         })
     }
@@ -67,7 +67,7 @@ impl Loader {
         let own = self.own_rows(index).find_map(|row| {
             // SAFETY: a manifest's build row points at `symbol_count` symbols in
             // the mod's statics, and the mod's DLL stays loaded for the process.
-            let symbols = unsafe { slice(row.symbols, row.symbol_count) };
+            let symbols = unsafe { slice(row.symbols, row.symbol_count as usize) };
             find(symbols, name)
         });
         own.or_else(|| self.build.symbol(name))
@@ -79,7 +79,7 @@ impl Loader {
             // SAFETY: a manifest's build row points at `constant_count`
             // constants in the mod's statics, and the mod's DLL stays loaded for
             // the process.
-            let constants = unsafe { slice(row.constants, row.constant_count) };
+            let constants = unsafe { slice(row.constants, row.constant_count as usize) };
             find(constants, name)
         });
         own.or_else(|| self.build.constant(name))

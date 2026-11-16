@@ -61,10 +61,10 @@ impl Recipes {
     }
 
     /// The selection's number in the ABI, its entry and its categories.
-    const fn to_abi(self) -> (DataSelect, [u8; 16], u32) {
+    const fn to_abi(self) -> (DataSelect, Guid, u32) {
         match self {
-            Self::Kind(kind) => (DataSelect::RECIPE_KIND, [0; 16], kind.code().0),
-            Self::Workshop(workshop) => (DataSelect::WORKSHOP, workshop.guid().0, 0),
+            Self::Kind(kind) => (DataSelect::RECIPE_KIND, Guid::NIL, kind.code().0),
+            Self::Workshop(workshop) => (DataSelect::WORKSHOP, workshop.guid(), 0),
         }
     }
 
@@ -75,7 +75,7 @@ impl Recipes {
                 let kind = RecipeKind::from(crate::abi::RecipeKind(raw.categories));
                 (kind.code().0 == raw.categories).then_some(Self::Kind(kind))
             }
-            DataSelect::WORKSHOP => Some(Self::Workshop(WorkshopId::new(Guid(raw.entry)))),
+            DataSelect::WORKSHOP => Some(Self::Workshop(WorkshopId::new(raw.entry))),
             _ => None,
         }
     }
@@ -173,17 +173,17 @@ impl RecipesChange {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, RecipeKind, Str};
+    /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Guid, Header, RecipeKind, Str};
     /// use enshwick::content::changes::{Recipes, RecipesChange};
     ///
     /// let raw = DataChange {
     ///     header: Header::of::<DataChange>(),
-    ///     entry: [0; 16],
+    ///     entry: Guid::NIL,
     ///     field: DataField::RECIPE_TIME,
     ///     op: ChangeOp::TIMES,
     ///     value: 0.5,
     ///     source: Str::EMPTY,
-    ///     item: [0; 16],
+    ///     item: Guid::NIL,
     ///     select: DataSelect::RECIPE_KIND,
     ///     categories: RecipeKind::ROOF.0,
     /// };
@@ -217,7 +217,7 @@ impl RecipesChange {
             op,
             value,
             source: Str::new(source),
-            item: [0; 16],
+            item: Guid::NIL,
             select,
             categories,
         }
@@ -241,7 +241,7 @@ impl LoadMethods for crate::BaseLoad {
             .map_err(|why| Off::new(format!("change of {:?}: {why}", change.recipes)))?;
         let raw = change.to_abi(source);
         let api = self.host().api();
-        let status = (api.change_data)(self.host().handle(), &raw const raw);
+        let status = (api.change_data)(self.host().handle(), &raw const raw, core::ptr::null_mut());
         crate::load::ok(status, (), || {
             format!("change {} of {:?}", change.field, change.recipes)
         })

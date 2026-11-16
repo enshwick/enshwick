@@ -11,10 +11,7 @@ pub(crate) mod drops;
 pub(crate) mod item_actions;
 #[cfg(windows)]
 pub(crate) mod item_data;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the client's interface lists items")
-)]
+#[cfg(windows)]
 pub(crate) mod item_names;
 pub mod item_records;
 #[cfg_attr(
@@ -62,13 +59,17 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "death steps", |s| deaths::after_step(
             s.loader
         ))],
-        forget: Some(|_| deaths::forget()),
+        forget: Some(fused!("deaths forgetting a hosted game", |_| {
+            deaths::forget();
+        })),
         ..part!("deaths", deaths)
     },
     &Part {
         seal: Some(|_| item_actions::seal()),
         link: Some(item_actions::link),
-        forget: Some(|_| item_actions::forget()),
+        forget: Some(fused!("item_actions forgetting a hosted game", |_| {
+            item_actions::forget();
+        })),
         ..part!("item_actions", item_actions)
     },
     &Part {
@@ -78,7 +79,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "survivor steps", |s| survivors::after_step(
             s.loader
         ))],
-        forget: Some(|_| survivors::forget()),
+        forget: Some(fused!("survivors forgetting a hosted game", |_| {
+            survivors::forget();
+        })),
         ..part!("survivors", survivors)
     },
     &Part {
@@ -91,7 +94,7 @@ pub(crate) static PARTS: &[&Part] = &[
             stats::world_event(loader, event);
         })),
         follows: Some(|_| stats::wanted()),
-        forget: Some(|_| stats::forget()),
+        forget: Some(fused!("stats forgetting a hosted game", |_| stats::forget())),
         ..part!("stats", stats)
     },
     &Part {
@@ -111,7 +114,9 @@ pub(crate) static PARTS: &[&Part] = &[
             item_data::world_event(loader, event);
         })),
         follows: Some(|_| item_data::wanted()),
-        forget: Some(|_| item_data::forget_server()),
+        forget: Some(fused!("item_data forgetting a hosted game", |_| {
+            item_data::forget_server();
+        })),
         ..part!("item_data", item_data)
     },
     &Part {
@@ -122,12 +127,16 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         link: Some(drops::link),
-        hosting: Some(drops::start),
+        hosting: Some(fused!("drops at a hosted game's start", |loader| {
+            drops::start(loader);
+        })),
         ..part!("drops", drops)
     },
     &Part {
         table_ids: spawns::TABLE_IDS,
-        forget: Some(|_| spawns::forget()),
+        forget: Some(fused!("spawns forgetting a hosted game", |_| {
+            spawns::forget();
+        })),
         ..part!("spawns", spawns)
     },
 ];

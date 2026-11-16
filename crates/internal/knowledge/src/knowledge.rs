@@ -56,7 +56,7 @@ use crate::WorldError;
 pub use crate::abi::KnowledgeId;
 #[cfg(feature = "unstable")]
 use crate::abi::KnowledgeInput;
-use crate::abi::{Header, KnowledgeInfo, Status};
+use crate::abi::{Header, KnowledgeChange, KnowledgeInfo, Status};
 use crate::{Entity, Host, PlayerKey};
 use enshwick_world::__internal::world_status;
 
@@ -173,21 +173,21 @@ pub enum Revoke {
 
 #[cfg(feature = "unstable")]
 impl Revoke {
-    const fn raw(self) -> (u32, u32) {
+    const fn raw(self) -> (u8, u32) {
         match self {
-            Self::Clear => (KnowledgeInfo::BOOL as u32, 0),
-            Self::Sub(amount) => (KnowledgeInfo::COUNTER as u32, amount),
-            Self::Unflag(bit) => (KnowledgeInfo::FLAGS as u32, bit),
+            Self::Clear => (KnowledgeInfo::BOOL, 0),
+            Self::Sub(amount) => (KnowledgeInfo::COUNTER, amount),
+            Self::Unflag(bit) => (KnowledgeInfo::FLAGS, bit),
         }
     }
 }
 
 impl Grant {
-    const fn raw(self) -> (u32, u32) {
+    const fn raw(self) -> (u8, u32) {
         match self {
-            Self::Set => (KnowledgeInfo::BOOL as u32, 0),
-            Self::Add(amount) => (KnowledgeInfo::COUNTER as u32, amount),
-            Self::Flag(bit) => (KnowledgeInfo::FLAGS as u32, bit),
+            Self::Set => (KnowledgeInfo::BOOL, 0),
+            Self::Add(amount) => (KnowledgeInfo::COUNTER, amount),
+            Self::Flag(bit) => (KnowledgeInfo::FLAGS, bit),
         }
     }
 }
@@ -273,9 +273,10 @@ impl Knowledge {
     ///
     /// [`WorldError::Refused`] for an id the game does not know, a grant
     /// that does not fit the id's kind,
-    /// a bit the game does not expect, a player not in the game, or a step
-    /// with too many grants; [`WorldError::WrongThread`] off the game
-    /// thread; [`WorldError::Missing`] on a build without knowledge.
+    /// a bit the game does not expect or a player not in the game;
+    /// [`WorldError::Busy`] for a step with too many grants, which a later
+    /// step may take; [`WorldError::WrongThread`] off the game
+    /// thread; [`WorldError::Unavailable`] on a build without knowledge.
     ///
     /// # Examples
     ///
@@ -283,13 +284,14 @@ impl Knowledge {
     #[script]
     pub fn grant(&self, player: Entity, id: KnowledgeId, grant: Grant) -> Result<(), WorldError> {
         let (kind, value) = grant.raw();
-        world_status((self.host.api().grant_knowledge)(
-            self.host.handle(),
+        self.change(
+            PlayerKey::new(0),
             player,
             id,
             kind,
             value,
-        ))
+            KnowledgeChange::GRANT,
+        )
     }
 
     /// Grants knowledge `id` of the world's, as [`Knowledge::grant`] does.
@@ -329,7 +331,7 @@ impl Knowledge {
     /// that does not fit the id's kind, a bit past 31, or a player not in
     /// the game or whose save has not loaded yet;
     /// [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] on a build without it.
+    /// [`WorldError::Unavailable`] on a build without it.
     ///
     /// # Examples
     ///
@@ -349,13 +351,14 @@ impl Knowledge {
         revoke: Revoke,
     ) -> Result<(), WorldError> {
         let (kind, value) = revoke.raw();
-        world_status((self.host.api().revoke_knowledge)(
-            self.host.handle(),
+        self.change(
+            PlayerKey::new(0),
             player,
             id,
             kind,
             value,
-        ))
+            KnowledgeChange::REVOKE,
+        )
     }
 
     /// Takes knowledge `id` of the world's back, as [`Knowledge::revoke`]
@@ -394,7 +397,7 @@ impl Knowledge {
     /// the world's or a grant that does not fit the id's kind, and as for
     /// [`Knowledge::grant`] when the character is in the game;
     /// [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] while no world runs.
+    /// [`WorldError::Unavailable`] while no world runs.
     ///
     /// # Examples
     ///
@@ -413,7 +416,7 @@ impl Knowledge {
         grant: Grant,
     ) -> Result<(), WorldError> {
         let (kind, value) = grant.raw();
-        self.for_account(account, id, kind, value, false)
+        self.change(account, Entity(0), id, kind, value, KnowledgeChange::GRANT)
     }
 
     /// Takes knowledge `id` of a player's back from the account whose
@@ -445,24 +448,31 @@ impl Knowledge {
         revoke: Revoke,
     ) -> Result<(), WorldError> {
         let (kind, value) = revoke.raw();
-        self.for_account(account, id, kind, value, true)
+        self.change(account, Entity(0), id, kind, value, KnowledgeChange::REVOKE)
     }
 
-    fn for_account(
+    fn change(
         &self,
         account: PlayerKey,
+        entity: Entity,
         id: KnowledgeId,
-        kind: u32,
+        kind: u8,
         value: u32,
-        revoke: bool,
+        op: u8,
     ) -> Result<(), WorldError> {
-        world_status((self.host.api().account_knowledge)(
-            self.host.handle(),
+        let change = KnowledgeChange {
+            header: Header::of::<KnowledgeChange>(),
             account,
+            entity,
             id,
-            kind,
             value,
-            u32::from(revoke),
+            kind,
+            op,
+            reserved: 0,
+        };
+        world_status((self.host.api().change_knowledge)(
+            self.host.handle(),
+            &raw const change,
         ))
     }
 
@@ -657,7 +667,7 @@ where
     };
     let allowed = call.allowed != 0;
     let request = KnowledgeRequest {
-        player: call.player,
+        player: call.character,
         id: call.id,
         kind: kind_of(call.kind),
         scope: match call.scope {
@@ -671,11 +681,17 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    u8::from(crate::host::guard(
+    crate::host::guard(
         "panic in a knowledge input filter",
-        || allowed,
-        || filter(&request),
-    ))
+        || crate::abi::FILTER_PASS,
+        || {
+            if filter(&request) {
+                crate::abi::FILTER_YES
+            } else {
+                crate::abi::FILTER_REFUSE
+            }
+        },
+    )
 }
 
 const fn kind_of(raw: u8) -> KnowledgeType {
@@ -713,7 +729,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().knowledge_input_filter)(host.handle(), run_input::<F>, user),
+            |user| (host.api().knowledge_input_filter)(host.handle(), Some(run_input::<F>), user),
             "knowledge input filter",
         )
     }

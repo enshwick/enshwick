@@ -52,7 +52,10 @@ impl Installed {
     /// Raises the event `E` with `data` to every handler of the mod, on this
     /// thread; returns how many ran. [`Ticked`](enshwick_core::events::Ticked)
     /// reaches every tick handler, periodic ones too, whatever their period;
-    /// [`tick`](Self::tick) runs a step as the loader does.
+    /// [`tick`](Self::tick) runs a step as the loader does. Before
+    /// [`WorldLoaded`](enshwick_core::events::WorldLoaded), every periodic
+    /// handler that is not paused runs once in the current game, as the
+    /// loader runs them at a world's start; that count is not returned.
     ///
     /// # Examples
     ///
@@ -92,6 +95,9 @@ impl Installed {
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
     pub unsafe fn raise_raw(&self, event: Event, data: *const core::ffi::c_void) -> usize {
+        if event == Event::WORLD_LOADED {
+            self.enter_ticks();
+        }
         // SAFETY: the caller's guarantees, passed on.
         unsafe { dispatch(event, data) }
     }
@@ -275,9 +281,10 @@ pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> u
         let periodic = (event == Event::TICKED).then(|| s.ticks.handlers());
         s.subscriptions
             .iter()
-            .filter(|s| s.0 == event)
-            .map(|s| s.1)
+            .filter(|sub| sub.0 == event)
+            .map(|sub| sub.1)
             .chain(periodic.into_iter().flatten())
+            .filter(|handler| !handler.owner_off(&s.off))
             .collect()
     });
     // As the loader, a building event reads in its player's language.
@@ -286,7 +293,7 @@ pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> u
         // struct, which a building event's is a `BuildingData`, readable for
         // the call.
         unsafe { data.cast::<enshwick_core::abi::BuildingData>().as_ref() }
-            .and_then(|built| table::base::mods::language_of_character(built.player))
+            .and_then(|built| table::base::mods::language_of_character(built.character))
     } else {
         None
     };

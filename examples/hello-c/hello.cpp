@@ -4,7 +4,9 @@
 
 namespace {
 
-const EnshwickManifest MANIFEST = {
+// constinit: the manifest is in the DLL's data from the start, as a mod built
+// without the C++ runtime needs.
+constinit const EnshwickManifest MANIFEST = {
     .header = {sizeof(EnshwickManifest), ENSHWICK_ABI_MAJOR, ENSHWICK_ABI_MINOR},
     .id = ENSHWICK_STR_INIT("you.hello-cpp"),
     .version = ENSHWICK_STR_INIT("0.1.0"),
@@ -17,7 +19,7 @@ const EnshwickManifest MANIFEST = {
 
 } // namespace
 
-uint32_t enshwick_mod_abi(void) { return ENSHWICK_ABI_MAJOR; }
+uint16_t enshwick_mod_abi(void) { return ENSHWICK_ABI_MAJOR; }
 
 const EnshwickManifest *enshwick_mod_query(void) { return &MANIFEST; }
 
@@ -27,4 +29,4 @@ EnshwickStatus enshwick_mod_init(const EnshwickHostApi *host, EnshwickModHandle 
     return EnshwickStatus_OK;
 }
 
-void enshwick_mod_ready(const EnshwickHostApi *, EnshwickModHandle) {}
+EnshwickStatus enshwick_mod_ready(const EnshwickHostApi *, EnshwickModHandle) { return EnshwickStatus_OK; }

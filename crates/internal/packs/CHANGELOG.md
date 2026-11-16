@@ -7,6 +7,14 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Changed
+
+- A pack id is only `<author>.<name>` (#1106).
+
+## [1.0.0-alpha.16] - 2026-11-15
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

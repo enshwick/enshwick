@@ -40,7 +40,7 @@ mod tests {
             key: PlayerKey::new(u64::from(entity)),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 

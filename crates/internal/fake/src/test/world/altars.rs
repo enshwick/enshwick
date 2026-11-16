@@ -1,13 +1,15 @@
 //! The fake's altars: their list, zones, limits and the base limit.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{AltarInfo, AltarLimit, AltarZone, Bounds, BuildingZoneCheck, Header};
+use enshwick_core::abi::{
+    AltarInfo, AltarLimit, AltarZone, BuildingZoneCheck, Extent, FILTER_YES, Header,
+};
 
 use crate::test::{BaseCode, FakeHost, Installed, table};
 
 impl FakeHost {
     /// Plays a game build whose base code the platform does not know:
-    /// `raise_base_limit` and `request_base_limits` answer
+    /// `request_base_limits` answers
     /// [`Status::MISSING`](enshwick_core::abi::Status::MISSING), and the game
     /// keeps its own limits.
     ///
@@ -131,24 +133,24 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::Bounds;
+    /// use enshwick::abi::Extent;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(!loader.building_zone_check(&[], Bounds::default(), 0));
+    /// assert!(!loader.building_zone_check(&[], Extent::default(), 0.0));
     /// ```
     #[must_use]
-    pub fn building_zone_check(&self, zones: &[Bounds], object: Bounds, margin: i64) -> bool {
+    pub fn building_zone_check(&self, zones: &[Extent], object: Extent, margin: f64) -> bool {
         let filters = table::with(Vec::new(), |s| s.zone_filters.clone());
         let call = BuildingZoneCheck {
             header: Header::of::<BuildingZoneCheck>(),
             zones: zones.as_ptr(),
-            zone_count: zones.len(),
+            zone_count: u32::try_from(zones.len()).unwrap_or(u32::MAX),
             object,
             margin,
         };
         filters.iter().any(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
-            filter.run(|callback, user| unsafe { callback(&raw const call, user) != 0 })
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) == FILTER_YES })
         })
     }
 
@@ -163,14 +165,14 @@ impl Installed {
     /// assert_eq!(loader.altar_limit(3, 6), 6);
     /// ```
     #[must_use]
-    pub fn altar_limit(&self, flame_level: u32, vanilla: u8) -> u8 {
+    pub fn altar_limit(&self, flame_level: u32, vanilla: u32) -> u32 {
         let filters = table::with(Vec::new(), |s| s.altar_limits.clone());
         let mut limit = AltarLimit {
             header: Header::of::<AltarLimit>(),
             flame_level,
             vanilla,
             allowed: vanilla,
-            reserved: [0; 2],
+            reserved: 0,
         };
         for filter in filters {
             // SAFETY: a valid limit; `user` is the mod's pointer.
@@ -179,7 +181,7 @@ impl Installed {
             limit.vanilla = vanilla;
         }
         let (zones, _) = table::world::altars::zones_and_bases();
-        limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
+        limit.allowed.min(zones)
     }
 
     /// The largest altar zones and bases the mod asked for, each at least

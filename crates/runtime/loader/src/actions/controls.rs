@@ -487,7 +487,7 @@ fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
         kind,
         server: u8::from(player.is_some()),
         reserved: [0; 3],
-        player: player.copied().unwrap_or_else(bytemuck::Zeroable::zeroed),
+        player: player.map_or(core::ptr::null(), core::ptr::from_ref),
     };
     // SAFETY: the callback lives in the mod's DLL, which stays loaded, and
     // gets a live event and the pointer its mod declared it with; the safe
@@ -754,9 +754,7 @@ pub(crate) fn rows() -> Vec<Row> {
             Row {
                 index,
                 mod_id: d.mod_id().to_owned(),
-                mod_name: record
-                    .map(crate::engine::loader::ModRecord::label)
-                    .unwrap_or_default(),
+                mod_name: record.map_or_default(crate::engine::loader::ModRecord::label),
                 label: record.map_or_else(|| d.label.clone(), |r| label_of(r, &d.label)),
                 keys: *k,
             }

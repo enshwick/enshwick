@@ -36,8 +36,8 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use enshwick_core::abi::{
-    Event, Header, PlayerData, StatChange, StatChangeFn, StatDefData, StatModifierData, StatModify,
-    StatRef, StatSource, Str,
+    Event, Header, PlayerData, StatChange, StatChangeFn, StatModifier, StatModify, StatRef,
+    StatSource, StatSpec, Str,
 };
 use enshwick_core::affixes::lines_of;
 use enshwick_core::content::Id;
@@ -87,7 +87,7 @@ struct Sealed {
     by_key: FxHashMap<u32, u32>,
     defaults: Box<[f32]>,
     defs: Box<[StatDef]>,
-    buffs: FxHashMap<u32, Box<[StatModifierData]>>,
+    buffs: FxHashMap<u32, Box<[StatModifier]>>,
     handlers: Box<[Registered<StatChangeFn>]>,
     /// The built-in damage and resistance kinds: every type, then by type.
     damage: u32,
@@ -103,7 +103,7 @@ struct Sealed {
 #[derive(Debug, Default)]
 struct Pending {
     kinds: Vec<Kind>,
-    buffs: Vec<(u32, StatModifierData)>,
+    buffs: Vec<(u32, StatModifier)>,
     handlers: Vec<Registered<StatChangeFn>>,
     affixes: Vec<Affix>,
     used: bool,
@@ -125,8 +125,8 @@ struct Held {
 #[derive(Debug, Default)]
 struct Watched {
     modifiers: Vec<Held>,
-    /// A mod asked to watch it.
-    asked: bool,
+    /// The mods that ask to watch it, in index order.
+    asked: Vec<ModIndex>,
     /// The account of the player it is.
     player: Option<u64>,
     /// What it wore and had at the last look, hashed.
@@ -137,6 +137,20 @@ struct Watched {
     /// The points the loader added to the entity's maximum health, stamina
     /// and mana.
     applied: [i32; 3],
+}
+
+impl Watched {
+    /// Adds mod `owner`'s ask to watch it, or takes that ask back; another
+    /// mod's ask stays.
+    fn ask(&mut self, owner: ModIndex, on: bool) {
+        match (self.asked.binary_search(&owner), on) {
+            (Err(at), true) => self.asked.insert(at, owner),
+            (Ok(at), false) => {
+                self.asked.remove(at);
+            }
+            _ => {}
+        }
+    }
 }
 
 /// A saved modifier, kept by the player's account, the mod's id and the
@@ -386,7 +400,7 @@ pub(crate) fn open(
 }
 
 /// Gives buff `buff` modifiers. During init only.
-pub(crate) fn buff(buff: u32, modifiers: &[StatModifierData]) -> Result<(), StatsError> {
+pub(crate) fn buff(buff: u32, modifiers: &[StatModifier]) -> Result<(), StatsError> {
     if modifiers.iter().any(|m| Op::from_raw(m.op).is_none()) {
         return Err(StatsError::BadDef);
     }
@@ -442,7 +456,7 @@ pub(crate) fn seal() {
             )
         })
         .collect();
-    let mut buffs: FxHashMap<u32, Vec<StatModifierData>> = FxHashMap::default();
+    let mut buffs: FxHashMap<u32, Vec<StatModifier>> = FxHashMap::default();
     for (id, m) in pending.buffs {
         buffs.entry(id).or_default().push(m);
     }
@@ -484,17 +498,14 @@ pub(crate) fn seal() {
 }
 
 /// The definition and id of kind `stat`.
-pub(crate) fn info(stat: u32) -> Result<(StatDefData, Str), StatsError> {
+pub(crate) fn info(stat: u32) -> Result<(StatSpec, Str), StatsError> {
     let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
     let kind = sealed
         .kinds
         .get(usize::try_from(stat).map_err(|_| StatsError::BadStat)?)
         .ok_or(StatsError::BadStat)?;
-    let (def, text, _) = kind.def.as_ref().ok_or(StatsError::Undefined)?;
-    let mut data = def.to_data();
-    // The kinds live as long as the process, so their text does too.
-    data.text = Str::new(text);
-    Ok((data, Str::new(&kind.id)))
+    let (def, _, _) = kind.def.as_ref().ok_or(StatsError::Undefined)?;
+    Ok((def.to_data(), Str::new(&kind.id)))
 }
 
 /// The value of kind `stat` on `entity`, from the snapshot; any thread.
@@ -575,7 +586,7 @@ pub(crate) fn modify(
             && let Some(player) = player
         {
             let record = loader.mods.get(owner.get());
-            let mod_id = record.map(|m| m.id.clone()).unwrap_or_default();
+            let mod_id = record.map_or_default(|m| m.id.clone());
             let stat_id = sealed.kinds[stat as usize].id.to_string();
             state.saved.retain(|s| {
                 !(s.player == player
@@ -599,8 +610,9 @@ pub(crate) fn modify(
     })
 }
 
-/// Watches or stops watching `entity` for a mod.
-pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), StatsError> {
+/// Watches or stops watching `entity` for mod `owner`; it stays watched
+/// while any mod asks.
+pub(crate) fn watch(owner: ModIndex, entity: Entity, on: bool) -> Result<(), StatsError> {
     if SEALED.get().is_none() || entity == Entity(0) {
         return Err(StatsError::NothingToWatch);
     }
@@ -610,10 +622,10 @@ pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), StatsError> {
     STATE.with_world(|state| {
         if on {
             let watched = state.watched.entry(entity.0).or_default();
-            watched.asked = true;
+            watched.ask(owner, true);
             watched.dirty = true;
         } else if let Some(watched) = state.watched.get_mut(&entity.0) {
-            watched.asked = false;
+            watched.ask(owner, false);
         }
     });
     Ok(())
@@ -754,8 +766,7 @@ pub(crate) fn sources(
         state
             .watched
             .get(&entity.0)
-            .map(|w| w.modifiers.clone())
-            .unwrap_or_default()
+            .map_or_default(|w| w.modifiers.clone())
     });
     let (mut list, _) = gather(loader, sealed, entity, &held);
     list.retain(|s| stat == u32::MAX || s.stat == stat);

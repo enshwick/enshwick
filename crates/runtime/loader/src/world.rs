@@ -73,20 +73,26 @@ use crate::engine::parts::{Part, fused, part, step};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: altars::TABLE_IDS,
+        seal: Some(|_| altars::seal()),
         link: Some(altars::link),
         steps: &[step!(Follow, "altar steps", |s| altars::after_step(
             s.loader, s.now
         ))],
-        forget: Some(|_| altars::forget()),
+        forget: Some(fused!("altars forgetting a hosted game", |_| {
+            altars::forget();
+        })),
         ..part!("altars", altars)
     },
     &Part {
         table_ids: daytime::TABLE_IDS,
+        seal: Some(|_| daytime::seal()),
         link: Some(daytime::link),
         steps: &[step!(Follow, "day steps", |s| daytime::after_step(
             s.loader
         ))],
-        forget: Some(|_| daytime::forget()),
+        forget: Some(fused!("daytime forgetting a hosted game", |_| {
+            daytime::forget();
+        })),
         ..part!("daytime", daytime)
     },
     &Part {
@@ -97,7 +103,9 @@ pub(crate) static PARTS: &[&Part] = &[
         world_event: Some(fused!("game settings at world events", |loader, event| {
             game_settings::world_event(loader, event);
         })),
-        forget: Some(|_| game_settings::forget_world()),
+        forget: Some(fused!("game_settings forgetting a hosted game", |_| {
+            game_settings::forget_world();
+        })),
         ..part!("game_settings", game_settings)
     },
     &Part {
@@ -110,7 +118,9 @@ pub(crate) static PARTS: &[&Part] = &[
             weather::world_event(loader, event);
         })),
         follows: Some(weather::follows),
-        forget: Some(|_| weather::forget()),
+        forget: Some(fused!("weather forgetting a hosted game", |_| {
+            weather::forget();
+        })),
         ..part!("weather", weather)
     },
     &Part {
@@ -126,21 +136,24 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: bases::TABLE_IDS,
         link: Some(bases::link),
-        forget: Some(|_| bases::forget()),
+        forget: Some(fused!("bases forgetting a hosted game", |_| bases::forget())),
         ..part!("bases", bases)
     },
     &Part {
         table_ids: fog::TABLE_IDS,
+        seal: Some(|_| fog::seal()),
         link: Some(fog::link),
-        forget: Some(|_| fog::forget_world()),
+        forget: Some(fused!("fog forgetting a hosted game", |_| {
+            fog::forget_world();
+        })),
         ..part!("fog", fog)
     },
     &Part {
         table_ids: transactions::TABLE_IDS,
-        steps: &[step!(Output, "world edits", |s| transactions::after_step(
-            s.loader
-        ))],
-        forget: Some(|_| transactions::forget()),
+        steps: &[transactions::step()],
+        forget: Some(fused!("transactions forgetting a hosted game", |_| {
+            transactions::forget();
+        })),
         ..part!("transactions", transactions)
     },
     &Part {
@@ -149,7 +162,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Output, "voxel edits", |s| {
             voxels::changes::after_step(s.loader);
         })],
-        forget: Some(|_| voxels::changes::forget()),
+        forget: Some(fused!("voxels forgetting a hosted game", |_| {
+            voxels::changes::forget();
+        })),
         ..part!("voxels", voxels)
     },
     &Part {
@@ -157,7 +172,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Output, "terrain pages", |s| {
             terrain_pages::after_step(s.loader);
         })],
-        forget: Some(|_| terrain_pages::forget()),
+        forget: Some(fused!("terrain_pages forgetting a hosted game", |_| {
+            terrain_pages::forget();
+        })),
         ..part!("terrain_pages", terrain_pages)
     },
     &Part {
@@ -174,7 +191,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: scene::TABLE_IDS,
-        forget: Some(|_| scene::forget()),
+        forget: Some(fused!("scene forgetting a hosted game", |_| scene::forget())),
         ..part!("scene", scene)
     },
     &Part {

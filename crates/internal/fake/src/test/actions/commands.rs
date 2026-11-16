@@ -78,7 +78,8 @@ impl FakeHost {
 )]
 impl Installed {
     /// Asks the mod's player actions as the loader does: `kind` is one of
-    /// [`ActionCall::SHEET`](enshwick_core::abi::ActionCall::SHEET),
+    /// [`ActionCall::ALLOWED`](enshwick_core::abi::ActionCall::ALLOWED), as
+    /// at a join or a change of the player's permissions,
     /// [`ActionCall::RUN`](enshwick_core::abi::ActionCall::RUN) or
     /// [`ActionCall::CONSOLE`](enshwick_core::abi::ActionCall::CONSOLE), for
     /// `player` reading `language`; `action` and `args` for a run. `None` when the
@@ -99,9 +100,9 @@ impl Installed {
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
-    ///     name: [0; 64],
+    ///     name: [0; 128],
     /// };
-    /// assert_eq!(loader.ask_actions(ActionCall::SHEET, &player, 0, "", ""), None);
+    /// assert_eq!(loader.ask_actions(ActionCall::ALLOWED, &player, 0, "", ""), None);
     /// ```
     #[must_use]
     pub fn ask_actions(
@@ -159,7 +160,7 @@ impl Installed {
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
-    ///     name: [0; 64],
+    ///     name: [0; 128],
     /// };
     /// assert_eq!(loader.type_in_chat(&player, 0, "/adm online"), None);
     /// ```
@@ -221,7 +222,7 @@ impl Installed {
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
-    ///     name: [0; 64],
+    ///     name: [0; 128],
     /// };
     /// assert!(loader.carried_windows(&player, 0).is_empty());
     /// ```
@@ -317,7 +318,7 @@ impl Installed {
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
-    ///     name: [0; 64],
+    ///     name: [0; 128],
     /// };
     /// loader.close_window(&player, "panel");
     /// assert!(loader.carried_windows(&player, 0).is_empty());
@@ -376,7 +377,7 @@ impl Installed {
             key: player,
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; 128],
         };
         let closed = enshwick_core::abi::ActionCall::WINDOW_CLOSED;
         let _heard = ask(
@@ -409,7 +410,7 @@ impl Installed {
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
-    ///     name: [0; 64],
+    ///     name: [0; 128],
     /// };
     /// let chest = ActionTarget::at([1.0, 2.0, 3.0]);
     /// assert_eq!(loader.ask_action_at(&player, 0, "open", "", chest), None);
@@ -533,10 +534,10 @@ fn tell_refused(
             header: Header::of::<enshwick_core::abi::ActionCall>(),
             kind: enshwick_core::abi::ActionCall::REFUSED,
             language: 0,
-            player: *player,
+            player: core::ptr::from_ref(player),
             action: Str::new(action),
             args: Str::new(args),
-            target: enshwick_core::abi::ActionTarget::NONE,
+            target: core::ptr::null(),
             reply: core::ptr::null_mut(),
             word: Str::EMPTY,
             via,
@@ -575,10 +576,15 @@ pub(crate) fn ask(
         header: Header::of::<enshwick_core::abi::ActionCall>(),
         kind,
         language,
-        player: *player,
+        player: core::ptr::from_ref(player),
         action: Str::new(action),
         args: Str::EMPTY,
-        target,
+        // A target without flags names no object.
+        target: if target.flags == 0 {
+            core::ptr::null()
+        } else {
+            &raw const target
+        },
         reply: core::ptr::null_mut(),
         word: Str::EMPTY,
         via: 0,
@@ -604,7 +610,9 @@ fn ask_call(
     mut call: enshwick_core::abi::ActionCall,
 ) -> String {
     let mut written: enshwick_core::abi::ActionReply = bytemuck::Zeroable::zeroed();
-    if call.kind != enshwick_core::abi::ActionCall::SHEET {
+    if call.kind != enshwick_core::abi::ActionCall::ALLOWED
+        && call.kind != enshwick_core::abi::ActionCall::WINDOW
+    {
         call.reply = &raw mut written;
     }
     let mut reply = Str::EMPTY;

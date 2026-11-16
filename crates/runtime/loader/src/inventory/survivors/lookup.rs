@@ -15,23 +15,23 @@ use crate::engine::pinned;
 
 use super::{LOOKUP_FUSE, Layout, SKIP_UPDATE, STATE, layout};
 
-/// Asks the registered lookup; `None` for the game's own answer.
+/// Asks the registered lookups in load order, the first that answers
+/// deciding; `None` for the game's own answer.
 pub(super) fn ask(call: &SurvivorLookup) -> Option<u32> {
-    let registered = STATE.registrations.lookup()?;
-    if crate::engine::loader::is_off(registered.owner) {
-        return None;
-    }
-    let mut out = Entity(0);
-    let user = core::ptr::with_exposed_provenance_mut(registered.user);
-    // SAFETY: the registered `SurvivorLookupFn` lives in the mod's DLL, which
-    // stays loaded for the process, and takes the `user` word it registered;
-    // `call` and `out` outlive the call.
-    let answered = crate::engine::profile::call(
-        registered.owner,
-        crate::engine::profile::Feature::Survivors,
-        || unsafe { (registered.callback)(call, user, &raw mut out) },
-    );
-    (answered != 0).then_some(out.0)
+    let on = |owner| !crate::engine::loader::is_off(owner);
+    super::first_answer(STATE.registrations.lookup(), on, |registered| {
+        let mut out = Entity(0);
+        let user = core::ptr::with_exposed_provenance_mut(registered.user);
+        // SAFETY: the registered `SurvivorLookupFn` lives in the mod's DLL,
+        // which stays loaded for the process, and takes the `user` word it
+        // registered; `call` and `out` outlive the call.
+        let answered = crate::engine::profile::call(
+            registered.owner,
+            crate::engine::profile::Feature::Survivors,
+            || unsafe { (registered.callback)(call, user, &raw mut out) },
+        );
+        (answered != 0).then_some(out.0)
+    })
 }
 
 pub(super) fn call(

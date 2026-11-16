@@ -5,7 +5,7 @@ use super::super::{Patch, State};
 use super::*;
 
 const KEY: ResourceKey = ResourceKey {
-    guid: [9; 16],
+    guid: enshwick_core::content::Guid([9; 16]),
     type_hash: 1,
     part: 0,
 };
@@ -18,118 +18,128 @@ std::thread_local! {
 /// The byte [`value`] serves.
 static VALUE: AtomicU8 = AtomicU8::new(1);
 
+/// Notes what the thread builds and hands its base out unchanged.
 unsafe extern "system" fn note_building(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     _user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     SEEN_BUILDING.set(building(&KEY));
     SEEN_SCRATCH.set(scratch());
-    // SAFETY: `run_patches` passes `out` pointing at a local, writable
-    // for the call; `base` is the test's own array, which outlives it.
-    unsafe { out.write(base) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+    // SAFETY: `run_patches` passes `base_len` readable bytes at `base`.
+    let bytes = unsafe { core::slice::from_raw_parts(base, base_len as usize) }.to_vec();
+    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
     // writable for the call.
+    unsafe { hand_out(bytes, out, out_len) }
+}
+
+/// Hands its base back as its output: bytes no buffer of the build holds.
+unsafe extern "system" fn own_bytes(
+    base: *const u8,
+    base_len: u32,
+    _user: *mut c_void,
+    out: *mut *mut u8,
+    out_len: *mut u32,
+) -> Status {
+    // SAFETY: `run_patches` passes `out` pointing at a local, writable for
+    // the call.
+    unsafe { out.write(base.cast_mut()) };
+    // SAFETY: as `out`, for `out_len`.
     unsafe { out_len.write(base_len) };
     Status::OK
 }
 
 unsafe extern "system" fn fail(
     _base: *const u8,
-    _base_len: usize,
+    _base_len: u32,
     _user: *mut c_void,
-    _out: *mut *const u8,
-    _out_len: *mut usize,
+    _out: *mut *mut u8,
+    _out_len: *mut u32,
 ) -> Status {
     Status::REFUSED
+}
+
+/// Copies the `base_len` bytes at `base` to `skip` bytes into a buffer the
+/// loader lends, `extra` bytes longer, sets the byte after the copy to 1
+/// when the buffer has one, and writes `len` bytes from `skip` as the
+/// output.
+///
+/// # Safety
+///
+/// - As [`enshwick_core::abi::ResourcePatchFn`] says, in a build.
+unsafe fn lent_output(
+    (base, base_len): (*const u8, u32),
+    (skip, extra, len): (usize, usize, u32),
+    (out, out_len): (*mut *mut u8, *mut u32),
+) -> Status {
+    let base_len = base_len as usize;
+    let Some(at) = lend(base_len + extra) else {
+        return Status::REFUSED;
+    };
+    // SAFETY: `lend` gave `base_len + extra` writable bytes at `at`, owned by
+    // the build and touched by nothing else during this call.
+    let lent = unsafe { core::slice::from_raw_parts_mut(at, base_len + extra) };
+    // SAFETY: the caller guarantees `base_len` readable bytes at `base`.
+    let base = unsafe { core::slice::from_raw_parts(base, base_len) };
+    lent[skip..skip + base_len].copy_from_slice(base);
+    if let Some(after) = lent.get_mut(skip + base_len) {
+        *after = 1;
+    }
+    let output = lent[skip..].as_mut_ptr();
+    // SAFETY: the caller guarantees `out` writable for one pointer.
+    unsafe { out.write(output) };
+    // SAFETY: the caller guarantees `out_len` writable for one `u32`.
+    unsafe { out_len.write(len) };
+    Status::OK
 }
 
 /// Builds its base and one more byte in a buffer the loader lends.
 unsafe extern "system" fn grow(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     _user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
-    let Some(at) = lend(base_len + 1) else {
-        return Status::REFUSED;
-    };
-    // SAFETY: `lend` gave `base_len + 1` writable bytes at `at`, apart from
-    // the `base_len` bytes `run_patches` passes readable at `base`.
-    unsafe { core::ptr::copy_nonoverlapping(base, at, base_len) };
-    // SAFETY: `base_len` is below the `base_len + 1` bytes `lend` gave.
-    let last = unsafe { at.add(base_len) };
-    // SAFETY: `last` is the last of the bytes `lend` gave, writable.
-    unsafe { last.write(1) };
-    // SAFETY: `run_patches` passes `out` pointing at a local, writable for
-    // the call.
-    unsafe { out.write(at.cast_const()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
-    // writable for the call.
-    unsafe { out_len.write(base_len + 1) };
-    Status::OK
+    // SAFETY: `run_patches` passes a base and outs as `ResourcePatchFn` says.
+    unsafe { lent_output((base, base_len), (0, 1, base_len + 1), (out, out_len)) }
 }
 
 /// Builds its base after one byte it skips: the output starts inside the
 /// buffer the loader lent.
 unsafe extern "system" fn skip_first(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     _user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
-    let Some(at) = lend(base_len + 1) else {
-        return Status::REFUSED;
-    };
-    // SAFETY: `base_len` is below the `base_len + 1` bytes `lend` gave.
-    let rest = unsafe { at.add(1) };
-    // SAFETY: `rest` has `base_len` writable bytes, apart from the
-    // `base_len` bytes `run_patches` passes readable at `base`.
-    unsafe { core::ptr::copy_nonoverlapping(base, rest, base_len) };
-    // SAFETY: `run_patches` passes `out` pointing at a local, writable for
-    // the call.
-    unsafe { out.write(rest.cast_const()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
-    // writable for the call.
-    unsafe { out_len.write(base_len) };
-    Status::OK
+    // SAFETY: `run_patches` passes a base and outs as `ResourcePatchFn` says.
+    unsafe { lent_output((base, base_len), (1, 1, base_len), (out, out_len)) }
 }
 
 /// Builds its base at the start of a buffer one byte longer: the output
 /// fills only part of the buffer the loader lent.
 unsafe extern "system" fn short_of_buffer(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     _user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
-    let Some(at) = lend(base_len + 1) else {
-        return Status::REFUSED;
-    };
-    // SAFETY: `lend` gave `base_len + 1` writable bytes at `at`, apart from
-    // the `base_len` bytes `run_patches` passes readable at `base`.
-    unsafe { core::ptr::copy_nonoverlapping(base, at, base_len) };
-    // SAFETY: `run_patches` passes `out` pointing at a local, writable for
-    // the call.
-    unsafe { out.write(at.cast_const()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
-    // writable for the call.
-    unsafe { out_len.write(base_len) };
-    Status::OK
+    // SAFETY: `run_patches` passes a base and outs as `ResourcePatchFn` says.
+    unsafe { lent_output((base, base_len), (0, 1, base_len), (out, out_len)) }
 }
 
 /// Serves one byte, [`VALUE`].
 unsafe extern "system" fn value(
     _base: *const u8,
-    _base_len: usize,
+    _base_len: u32,
     _user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     // SAFETY: `run_patches` passes `out` and `out_len` writable for the call.
     unsafe { hand_out(vec![VALUE.load(Ordering::Relaxed)], out, out_len) }
@@ -138,10 +148,10 @@ unsafe extern "system" fn value(
 /// Serves the served entry at `user` as a mod's served read finds it now.
 unsafe extern "system" fn read_other(
     _base: *const u8,
-    _base_len: usize,
+    _base_len: u32,
     user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     // SAFETY: `user` is a served entry the test leaked for the process.
     let other = unsafe { &*user.cast::<Served>() };
@@ -159,11 +169,7 @@ fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, ServedError> {
 }
 
 fn by_loader(apply: enshwick_core::abi::ResourcePatchFn) -> Patch {
-    Patch {
-        owner: ModIndex::LOADER,
-        apply,
-        user: 0,
-    }
+    Patch::new(ModIndex::LOADER, apply, 0)
 }
 
 /// The game's first build of each of `entries` from a base of one zero byte.
@@ -181,16 +187,7 @@ fn build_each(entries: &[Served]) {
 #[test]
 fn a_key_counts_as_building_only_while_its_patches_run() {
     let owner = ModIndex::new(3);
-    let entry = Served::new(
-        KEY,
-        KEY,
-        vec![Patch {
-            owner,
-            apply: note_building,
-            user: 0,
-        }],
-        false,
-    );
+    let entry = Served::new(KEY, KEY, vec![Patch::new(owner, note_building, 0)], false);
     let base = [1u8; 4];
     let at = base.as_ptr().expose_provenance();
     let built = run_patches(&entry, at, base.len(), Some(&[owner]), Build::Game);
@@ -211,16 +208,8 @@ fn a_failed_patch_in_a_served_read_is_skipped_and_the_rest_builds() {
         KEY,
         KEY,
         vec![
-            Patch {
-                owner: failing,
-                apply: fail,
-                user: 0,
-            },
-            Patch {
-                owner: building,
-                apply: note_building,
-                user: 0,
-            },
+            Patch::new(failing, fail, 0),
+            Patch::new(building, note_building, 0),
         ],
         false,
     );
@@ -256,6 +245,29 @@ fn a_served_read_whose_every_patch_fails_reads_a_changed_key_as_archived_and_a_n
         read_served(&added, vec![5; 3], unarchived),
         Err(ServedError::NotInArchive)
     );
+}
+
+#[test]
+fn the_game_s_build_whose_every_patch_fails_serves_a_changed_key_as_archived_and_a_new_one_as_missing()
+ {
+    let base = [5u8; 3];
+    let at = base.as_ptr().expose_provenance();
+    let changed = Served::new(KEY, KEY, vec![by_loader(fail)], false);
+    let mut state = State::default();
+    // SAFETY: `base` holds three readable bytes, unchanged for the call.
+    let (data, len) = unsafe { build_first(&changed, &mut state, at, base.len()) }.unwrap();
+    assert_ne!(data, at, "a copy the loader keeps, not the game's bytes");
+    // SAFETY: `build_first` kept `len` bytes at `data` for the process.
+    let kept =
+        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(data), len) };
+    assert_eq!(kept, base);
+    assert!(state.failed, "no mod counts as serving it");
+    let new = ResourceKey { part: 1, ..KEY };
+    let added = Served::new(new, KEY, vec![by_loader(fail)], false);
+    let mut state = State::default();
+    // SAFETY: `base` holds three readable bytes, unchanged for the call.
+    assert!(unsafe { build_first(&added, &mut state, at, base.len()) }.is_none());
+    assert!(state.failed);
 }
 
 #[test]
@@ -416,29 +428,99 @@ fn a_served_read_whose_every_patch_fails_reads_a_vanilla_key_from_another_base_a
     );
 }
 
-/// Runs `build` through [`patched`] under `fuse` on the base `[1, 2]`: the
-/// status and the bytes handed out.
+/// Runs `build` through [`patched`] under `fuse` on the base `[1, 2]` in a
+/// game build: the status and the bytes handed out.
 fn patch_with(
     fuse: &Fuse,
     build: impl FnOnce(Vec<u8>) -> Option<Vec<u8>>,
 ) -> (Status, Option<Vec<u8>>) {
+    let _build = enter_build(KEY);
     let base = [1u8, 2];
-    let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+    let (mut out, mut out_len) = (core::ptr::null_mut::<u8>(), 0u32);
     // SAFETY: `base` holds two readable bytes, and `out` and `out_len` are
     // locals, writable for the call.
     let status = unsafe {
         patched(
             fuse,
             "a test patch",
-            (base.as_ptr(), base.len()),
+            (base.as_ptr(), 2),
             (&raw mut out, &raw mut out_len),
             build,
         )
     };
-    // SAFETY: a patch that built handed out `out_len` bytes at `out`, which
-    // stay for the process outside a build.
-    let made = (!out.is_null()).then(|| unsafe { core::slice::from_raw_parts(out, out_len) });
-    (status, made.map(<[u8]>::to_vec))
+    let made = (!out.is_null()).then(|| {
+        // SAFETY: a patch that built handed out `out_len` bytes at `out`, in
+        // a buffer of the build `_build` holds open.
+        unsafe { core::slice::from_raw_parts(out, out_len as usize) }.to_vec()
+    });
+    (status, made)
+}
+
+#[test]
+fn a_loader_patch_hands_out_nothing_outside_a_build() {
+    let (mut out, mut out_len) = (core::ptr::null_mut::<u8>(), 0u32);
+    // SAFETY: `out` and `out_len` are locals, writable for the call.
+    let status = unsafe { hand_out(vec![1], &raw mut out, &raw mut out_len) };
+    assert_eq!(status, Status::REFUSED);
+    assert!(out.is_null());
+    assert_eq!(LIVE.get(), 0, "nothing is kept for the process");
+}
+
+#[test]
+fn an_output_outside_the_buffers_its_build_lent_fails_the_patch() {
+    let (own, building) = (ModIndex::new(3), ModIndex::new(4));
+    let entry = Served::new(
+        KEY,
+        KEY,
+        vec![Patch::new(own, own_bytes, 0), Patch::new(building, grow, 0)],
+        false,
+    );
+    let base = [1u8; 2];
+    let at = base.as_ptr().expose_provenance();
+    let built = run_patches(&entry, at, 2, Some(&[own, building]), Build::Scratch).unwrap();
+    assert_eq!((built.len, built.by.clone()), (3, vec![building]));
+    assert_eq!(built.into_bytes(), [1, 1, 1]);
+    assert_eq!(LIVE.get(), 0);
+    let alone = Served::new(KEY, KEY, vec![by_loader(own_bytes)], false);
+    assert!(run_patches(&alone, at, 2, None, Build::Scratch).is_none());
+}
+
+std::thread_local! {
+    /// How often [`faulted`] ran on the test's thread.
+    static FAULTED_RUNS: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
+
+/// Answers as a patch whose builder panicked.
+unsafe extern "system" fn faulted(
+    _base: *const u8,
+    _base_len: u32,
+    _user: *mut c_void,
+    _out: *mut *mut u8,
+    _out_len: *mut u32,
+) -> Status {
+    FAULTED_RUNS.set(FAULTED_RUNS.get() + 1);
+    Status::FAULTED
+}
+
+#[test]
+fn a_patch_whose_builder_panicked_runs_again_only_in_a_rebuild() {
+    let entry = Served::new(KEY, KEY, vec![by_loader(faulted), by_loader(grow)], false);
+    let base = [1u8; 2];
+    let at = base.as_ptr().expose_provenance();
+    for kind in [Build::Scratch, Build::Game] {
+        let built = run_patches(&entry, at, 2, None, kind).unwrap();
+        assert_eq!(built.by, vec![ModIndex::LOADER], "{kind:?}");
+    }
+    assert_eq!(FAULTED_RUNS.get(), 1, "a panicked builder runs once");
+    assert!(!entry.patches[0].on.load(Ordering::Acquire));
+    assert!(entry.patches[1].on.load(Ordering::Acquire));
+    let rebuilt = run_patches(&entry, at, 2, Some(&[ModIndex::LOADER]), Build::Game).unwrap();
+    assert_eq!(rebuilt.by, vec![ModIndex::LOADER]);
+    assert_eq!(
+        FAULTED_RUNS.get(),
+        2,
+        "a rebuild runs every patch the game's build applied"
+    );
 }
 
 #[test]
@@ -452,14 +534,14 @@ fn a_loader_patch_that_panics_turns_its_feature_off_and_refuses_from_then_on() {
     assert_eq!(patch_with(&STACKS, |_| None), (Status::REFUSED, None));
     assert!(!STACKS.is_off(), "a patch that builds nothing is no fault");
     let broken = patch_with(&STACKS, |_| panic!("broken stack"));
-    assert_eq!(broken, (Status::REFUSED, None));
+    assert_eq!(broken, (Status::FAULTED, None));
     assert!(STACKS.is_off());
     let mut ran = false;
     let after = patch_with(&STACKS, |bytes| {
         ran = true;
         Some(bytes)
     });
-    assert_eq!(after, (Status::REFUSED, None));
+    assert_eq!(after, (Status::FAULTED, None));
     assert!(!ran, "an off feature's patch never runs");
     let listed = crate::engine::diag::parts_off();
     assert!(

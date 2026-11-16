@@ -61,6 +61,73 @@ the terrain materials of the running game. For each it gives:
 A mod that wants dirt or stone finds the material whose item is the dirt or
 stone item.
 
+## Add a terrain material of your own
+
+`load.add_terrain_material(new)` adds a terrain material during `init` and
+returns its voxel id for this run. The material is a copy of one of the
+game's, named by voxel id in `like`. It takes that material's look and every
+rule `new` does not change. `NewTerrainMaterial` can change these rules:
+
+- the item digging it yields (`terrain_item`, by the item's GUID)
+- the game's hardness category, from 0 (soft) to 5 (unbreakable)
+  (`hardness`)
+- a voxel's health against tools, 1 or more (`health_points`)
+- whether a player's tool can flatten it (`can_be_flattened`)
+
+```rust
+use enshwick::content::{Guid, Id};
+use enshwick::terrain::NewTerrainMaterial;
+
+fn tar_sand(load: &mut enshwick::Load<'_>, sand: u8, tar: Guid) -> Result<u8, enshwick::Off> {
+    let new = NewTerrainMaterial::new(Id::new("you.sands:tar-sand"), sand)
+        .terrain_item(tar)
+        .health_points(7);
+    load.add_terrain_material(new)
+}
+```
+
+In Luau, `enshwick.terrain.add_terrain_material` takes the same fields as
+a table, at the top level of `main.luau`:
+
+```luau
+local tar_sand = enshwick.terrain.add_terrain_material({
+    id = "you.sands:tar-sand",
+    like = 9,
+    health_points = 7,
+})
+```
+
+The game leaves 11 terrain ids free, 117 to 127. Mods' materials take them
+in load order, and the twelfth is refused with its reason in the log. The
+voxel id holds for one run only. Saves name each voxel's material by the
+GUID of its [content id](concepts/ids.md), so a world can give the material
+another id in the next run. Keep the id that `add_terrain_material` returns,
+and place the material with it. `materials()` lists the new material once a
+world runs.
+
+The loader serves the material's rules and effects on the server and on
+clients, and on clients the look of `like`. Only a mod of both sides
+(`side = "both"`) may add one, since every client names the ids in load
+order too. A server-only mod that asks is turned off. A mod turned off
+after it added a material leaves that material its id, as a copy of its
+fallback. A material of a mod's own has the game's default behaviour in water, and a
+texture of its own is not offered.
+
+### A world without the mod
+
+A world may hold a mod's material and load without the mod. The ground of
+that material then loads as its fallback: `like`, or the game's material
+set with `fallback`. The loader keeps every material a mod ever added, with
+its fallback, in `mods/enshwick/clones.toml`; keep that file. Once the mod
+is back, the ground is the mod's material again. The fallbacks take the
+free ids that mods' materials leave. Past 11 materials of mods and removed
+mods together, the last ones load as air. The record is one per game
+folder, not per world, and each side reads its own. A client whose record
+differs from the server's can draw that ground otherwise.
+
+A server without Enshwick loads that ground as air, and its next save keeps
+the loss.
+
 ## Edits
 
 Every edit changes the ground at once and clients see it; the save keeps
@@ -349,6 +416,51 @@ open to players again.
 A transaction that places props is `Applied` once they stand in the
 world, usually a step after the place. The loader notes then what a fresh
 prop starts with: a logic trigger's settings and a plant's level.
+
+#### Waiting for a placed prop
+
+To act on a placed prop, such as to fill a chest, wait with
+`world.when_settled(id, within, handler)`. Its handler runs on the game
+thread once the transaction stopped running. Once it is written whole, the
+handler runs one scheduler pass later, when its props stand. The status is
+then `Applied`, or `Expired` when the loader dropped its undo data meanwhile.
+Any other end runs the handler at once. A large transaction spread over
+steps is waited for whole. The handler gets a `Settled`: the status and the
+props the transaction placed. Its `standing()` gives the first prop once
+the transaction was written whole. What another end means is the mod's to
+decide. One case is `Failed(NotLoaded)`, which the same changes committed
+again a second later may pass. Once `within` passed, the handler gets the
+transaction as it stands, still `Pending` perhaps. The wait is a scheduler
+task, so it ends without the handler when its game ends.
+
+```rust
+use std::time::Duration;
+
+use enshwick::world::{World, WorldTransform};
+use enshwick::{ItemId, WorldError};
+
+fn place_chest(world: World, chest: ItemId, at: [f64; 3]) -> Result<(), WorldError> {
+    let id = world.transaction().place_prop(chest, WorldTransform::at(at)).commit()?;
+    world.when_settled(id, Duration::from_secs(10), |settled| match settled.standing() {
+        Some(chest) => enshwick::info!("chest {chest:?} stands"),
+        None => enshwick::warn!("no chest: {:?}", settled.status),
+    })
+}
+```
+
+From Luau the status is a string for each status without a reason:
+
+```luau
+local function place_chest(chest: number, at)
+    local id = enshwick.world.transaction():place_prop(chest, at):commit()
+    enshwick.world.when_settled(id, 10, function(settled)
+        local whole = settled.status == "Applied" or settled.status == "Expired"
+        if whole and settled.props[1] then
+            enshwick.log.info(`chest {settled.props[1]} stands`)
+        end
+    end)
+end
+```
 
 An undo keeps to the same rule. It takes a placed prop away only while it
 holds no state, a trigger's settings and a plant's level as they first

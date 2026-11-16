@@ -28,6 +28,8 @@ pub struct Frame<'f> {
     /// the game screen's name, kept for the process, the prompt's title,
     /// borrowed for the callback, and the screen's host.
     pub(super) raw: UiFrame,
+    /// The player pressed Back over the window whose body is drawing.
+    pub(super) back: bool,
     pub(super) _life: PhantomData<&'f mut ()>,
     pub(super) _thread: PhantomData<*const ()>,
 }
@@ -180,7 +182,7 @@ impl Frame<'_> {
     #[must_use]
     pub fn screen_host_template(&self) -> Option<crate::content::Guid> {
         let template = self.raw.screen_host_template;
-        (template != [0; 16]).then_some(crate::content::Guid(template))
+        (template != crate::content::Guid::NIL).then_some(template)
     }
 
     /// Unstable: needs the `unstable` feature and may change in any release.
@@ -206,7 +208,7 @@ impl Frame<'_> {
     #[must_use]
     pub fn screen_host_position(&self) -> Option<[f64; 3]> {
         self.screen_host_template()
-            .map(|_| crate::ecs::metres(self.raw.screen_host_position))
+            .map(|_| self.raw.screen_host_position)
     }
 
     fn draw(&mut self, widget: &mut UiWidget) -> bool {
@@ -234,13 +236,29 @@ impl Frame<'_> {
         if !status.is_ok() {
             return false;
         }
+        let outer = core::mem::replace(&mut self.back, open.result != 0);
         body(self);
+        self.back = outer;
         let mut end = UiWidget {
             kind: UiWidget::END,
             ..UiWidget::EMPTY
         };
         let _closed = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut end);
         true
+    }
+
+    /// Whether the player pressed Back (Escape, or B on a gamepad) over the
+    /// window whose body is drawing, in this frame; false outside a
+    /// [`Frame::window`] body. The press goes to the window and does not open
+    /// the game's pause menu, so the mod decides what Back does, such as
+    /// closing the window by no longer drawing it.
+    ///
+    /// # Examples
+    ///
+    /// See the [module](crate::ui).
+    #[must_use]
+    pub const fn back(&self) -> bool {
+        self.back
     }
 
     /// Draws a line of text.
@@ -408,16 +426,15 @@ impl Frame<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a container neither the game's archive nor a mod holds,
-    /// and on a loader older than ABI 11.14.
+    /// [`Off`] for a container neither the game's archive nor a mod holds.
     ///
     /// # Examples
     ///
     /// See the [`sound`](crate::sound) module.
     pub fn play(&mut self, sound: SoundContainerId) -> Result<(), Off> {
         let mut widget = UiWidget {
-            kind: UiWidget::PLAY,
-            sound: sound.guid().0,
+            kind: UiWidget::SOUND,
+            sound: sound.guid(),
             ..UiWidget::EMPTY
         };
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
@@ -509,6 +526,7 @@ where
                 token: raw.token,
                 screen,
                 raw,
+                back: false,
                 _life: PhantomData,
                 _thread: PhantomData,
             });

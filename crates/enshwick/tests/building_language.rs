@@ -39,7 +39,7 @@ mod tests {
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 
@@ -47,11 +47,11 @@ mod tests {
         BuildingData {
             header: Header::of::<BuildingData>(),
             entity: Entity(4096),
-            player: Entity(player),
+            character: Entity(player),
             item: ItemId::new(1_302_084_846),
             kind,
             replay: 0,
-            template: [0; 16],
+            template: enshwick::content::Guid([0; 16]),
             position: [1.0, 2.0, 3.0],
         }
     }

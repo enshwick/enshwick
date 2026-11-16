@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::WorldError;
-    use enshwick::abi::{Header, KnowledgeData, KnowledgeInfo, Status};
+    use enshwick::abi::{Header, KnowledgeChange, KnowledgeData, KnowledgeInfo, Status};
     use enshwick::events::KnowledgeChanged;
     use enshwick::knowledge::{Grant, Knowledge, KnowledgeId, KnowledgeType, Scope};
     use enshwick::{Load, Mod, Off};
@@ -112,5 +112,34 @@ mod tests {
             value: 3,
         };
         assert_eq!(loader.raise::<KnowledgeChanged>(&changed), 1);
+    }
+
+    #[test]
+    fn a_change_naming_both_an_account_and_a_character_or_no_operation_is_refused() {
+        let loader = enshwick::test::FakeHost::new().install();
+        let recipe = info(RECIPE, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER, 0, 0);
+        loader.set_knowledge(&[(Some(Entity(2)), recipe)], &[]);
+        // SAFETY: the fake's table is a static, aligned and never written.
+        let api = unsafe { &*loader.api() };
+        let change = |account: u64, entity: u32, op: u8| {
+            let change = KnowledgeChange {
+                header: Header::of::<KnowledgeChange>(),
+                account: enshwick::PlayerKey::new(account),
+                entity: Entity(entity),
+                id: RECIPE,
+                value: 0,
+                kind: KnowledgeInfo::FLAGS,
+                op,
+                reserved: 0,
+            };
+            (api.change_knowledge)(loader.handle(), &raw const change)
+        };
+        assert_eq!(change(7, 2, KnowledgeChange::GRANT), Status::BAD_ARGS);
+        assert_eq!(change(0, 2, 2), Status::BAD_ARGS, "an unknown operation");
+        assert!(loader.grants().is_empty() && loader.account_changes().is_empty());
+        assert_eq!(change(0, 2, KnowledgeChange::GRANT), Status::OK);
+        assert_eq!(change(7, 0, KnowledgeChange::REVOKE), Status::OK);
+        assert_eq!(loader.grants().len(), 1);
+        assert_eq!(loader.account_changes().len(), 1);
     }
 }

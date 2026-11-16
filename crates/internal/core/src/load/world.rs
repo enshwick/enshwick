@@ -13,8 +13,6 @@ impl Load<'_> {
     /// The server's [`World`]: reads, queries and requests; on a client,
     /// the built-in server's while it hosts a game.
     ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
     /// # Errors
     ///
     /// [`Off`] when the game build lacks a type the reads need.

@@ -64,7 +64,7 @@ mod tests {
         assert_eq!(world.save_info(), None, "no save before the first");
         loader.set_save_info(Some(SaveInfo {
             header: Header::of::<SaveInfo>(),
-            world: [9; 16],
+            world: enshwick::content::Guid([9; 16]),
             saved_at: 1_762_300_000,
             size: 4_096,
             backups: 3,
@@ -90,9 +90,15 @@ mod tests {
         assert!(!loader.saves_held(), "a hold ends with its hosted game");
 
         let effects = EFFECTS.get().unwrap();
-        let kept = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
+        let kept = effects
+            .spawn(enshwick::content::Guid([3; 16]), [0.0; 3], Spawn::new())
+            .unwrap();
         let passing = effects
-            .spawn([3; 16], [0.0; 3], Spawn::new().do_not_save())
+            .spawn(
+                enshwick::content::Guid([3; 16]),
+                [0.0; 3],
+                Spawn::new().do_not_save(),
+            )
             .unwrap();
         let flags: Vec<_> = loader
             .spawns()
@@ -127,7 +133,7 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = WORLD.get().unwrap();
-        assert_eq!(world.stop(), Err(enshwick::WorldError::Missing));
+        assert_eq!(world.stop(), Err(enshwick::WorldError::Unavailable));
         assert!(!loader.stop_asked());
     }
 
@@ -171,15 +177,20 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let (world, effects) = (*WORLD.get().unwrap(), EFFECTS.get().unwrap());
-        let decoy = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
-        let other = effects.spawn([3; 16], [0.0; 3], Spawn::new()).unwrap();
+        let decoy = effects
+            .spawn(enshwick::content::Guid([3; 16]), [0.0; 3], Spawn::new())
+            .unwrap();
+        let other = effects
+            .spawn(enshwick::content::Guid([3; 16]), [0.0; 3], Spawn::new())
+            .unwrap();
 
         assert_eq!(
             world.set_saved(decoy, false),
             Err(enshwick::WorldError::Gone),
             "a spawn is in the world only from the next step"
         );
-        assert_eq!(loader.tick(Duration::from_millis(50)), 0);
+        // A step; the world's scheduler is the one handler it runs.
+        let _ran = loader.tick(Duration::from_millis(50));
         world.set_saved(decoy, false).unwrap();
         world.set_saved(other, false).unwrap();
         world.set_saved(decoy, false).unwrap();

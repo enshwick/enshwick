@@ -160,8 +160,9 @@ pub unsafe fn headed_list_in<T: Headed>(
         .collect()
 }
 
-/// Writes up to `capacity` of `items` to `out` and their number to `count`:
-/// [`Status::BAD_ARGS`] for a null `count`, the items written all the same.
+/// Writes up to `capacity` of `items` to `out` and their number to `count`,
+/// as `HostApi`'s list rule says: [`Status::BAD_ARGS`] for a null `count` or
+/// a null `out` with a nonzero `capacity`, with nothing written.
 ///
 /// # Safety
 ///
@@ -179,6 +180,9 @@ pub unsafe fn put_list<T: Copy>(
     let Ok(total) = u32::try_from(items.len()) else {
         return Status::BAD_ARGS;
     };
+    if count.is_null() || (out.is_null() && capacity != 0) {
+        return Status::BAD_ARGS;
+    }
     if !out.is_null() {
         for (i, item) in items.iter().take(capacity as usize).enumerate() {
             // SAFETY: `out` is non-null, checked just before, and `i` is below
@@ -200,8 +204,9 @@ pub unsafe fn put_list<T: Copy>(
 /// their number to `count`.
 ///
 /// Each entry gets as much as both sides know, with its header saying so;
-/// [`Status::BAD_ARGS`] for a stride shorter than a [`Header`] or a null
-/// `count`.
+/// as `HostApi`'s list rule says, [`Status::BAD_ARGS`] for a null `count`, a
+/// null `out` with a nonzero `capacity` or, with an `out`, a stride shorter
+/// than a [`Header`], with nothing written.
 ///
 /// # Safety
 ///
@@ -220,6 +225,9 @@ pub unsafe fn put_sized_list<T: Copy>(
     let Ok(total) = u32::try_from(items.len()) else {
         return Status::BAD_ARGS;
     };
+    if count.is_null() || (out.is_null() && capacity != 0) {
+        return Status::BAD_ARGS;
+    }
     if !out.is_null() {
         let stride = stride as usize;
         if stride < size_of::<Header>() {
@@ -249,44 +257,11 @@ pub unsafe fn put_sized_list<T: Copy>(
     unsafe { put(count, total) }
 }
 
-/// [`put_sized_list`] for a mod's list of headed entries, each as large as
-/// the header of its first entry says.
-///
-/// # Safety
-///
-/// - Unless `out` is null or `capacity` zero, `out` points at `capacity`
-///   consecutive entries of the mod's version of `T`, each starting with its
-///   header and writable for the size the first entry's header states; no
-///   alignment is needed.
-/// - `count` is null or points at a writable, aligned `u32`.
-/// - No other thread reads or writes the list or `count` during the call.
-pub unsafe fn put_headed_list<T: Headed>(
-    items: &[T],
-    out: *mut T,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    if out.is_null() || capacity == 0 {
-        // SAFETY: a null list writes no entry; `count` is as this function's
-        // `# Safety` gives it.
-        return unsafe { put_sized_list(items, core::ptr::null_mut(), 0, 0, count) };
-    }
-    // SAFETY: `out` is non-null and `capacity` non-zero, checked just above,
-    // so this function's `# Safety` gives a first entry starting with the
-    // header the mod filled in, with no concurrent writer.
-    let Some(stride) = (unsafe { room(out) }) else {
-        return Status::BAD_ARGS;
-    };
-    let stride = u32::try_from(stride).unwrap_or(u32::MAX);
-    // SAFETY: this function's `# Safety` gives `capacity` entries of the
-    // first entry's size at `out` and `count` as `put_sized_list` needs them.
-    unsafe { put_sized_list(items, out, stride, capacity, count) }
-}
-
 /// Copies `data` to `out` and writes its length to `len`.
 ///
-/// [`Status::BAD_ARGS`] when `capacity` is short or `out` is null, with
-/// `len` written, so the caller grows its buffer and asks again;
+/// [`Status::TOO_SMALL`] when `capacity` is short or `out` is null for data
+/// that is not empty, with `len` written, so the caller grows its buffer
+/// and asks again;
 /// [`Status::REFUSED`] for data past `u32::MAX` bytes, which no length
 /// the ABI carries can name.
 ///
@@ -303,8 +278,11 @@ pub unsafe fn copy_out(data: &[u8], out: *mut u8, capacity: u32, len: *mut u32) 
         // guarantees it writable and aligned.
         unsafe { len.write(size) };
     }
+    if size == 0 {
+        return Status::OK;
+    }
     if size > capacity || out.is_null() {
-        return Status::BAD_ARGS;
+        return Status::TOO_SMALL;
     }
     // SAFETY: `out` is non-null and `data` is at most `capacity` bytes, both
     // checked just before; the caller guarantees `capacity` writable bytes

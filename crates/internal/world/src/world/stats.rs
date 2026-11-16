@@ -297,8 +297,8 @@ impl Stats {
             Pool::Health | Pool::Revival => (&self.health, 1),
             Pool::Stamina => (&self.stamina, 0),
             Pool::Mana => (&self.mana, 0),
-            Pool::Meter => (self.meter.as_ref().ok_or(WorldError::Missing)?, 0),
-            Pool::Shroud => (self.shroud.as_ref().ok_or(WorldError::Missing)?, 0),
+            Pool::Meter => (self.meter.as_ref().ok_or(WorldError::Unavailable)?, 0),
+            Pool::Shroud => (self.shroud.as_ref().ok_or(WorldError::Unavailable)?, 0),
         };
         let data = world.component_mut(entity, set.ty)?.cast::<u8>();
         // SAFETY: `component_mut` returned the entity's live attribute set,

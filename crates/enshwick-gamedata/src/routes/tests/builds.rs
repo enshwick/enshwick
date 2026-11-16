@@ -84,6 +84,32 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "text.format", 0xaf_f930),
     ("1.0 client (26082781)", "ui.dropdown_external", 0xc76),
     ("1.0 client (26320373)", "ui.dropdown_external", 0xc76),
+    // The crafting menus' question whether a recipe shows, which their book
+    // and the recipe tiles ask; read in the decompiler on 26430625, found by
+    // the route on the other kept clients.
+    ("1.0 client (26430625)", "recipe.menu_known", 0xd6_63b0),
+    ("1.0 client (26320373)", "recipe.menu_known", 0xd6_62f0),
+    ("1.0 client (1269579)", "recipe.menu_known", 0xd5_0c90),
+    ("1.0 client (26082781)", "recipe.menu_known", 0xd5_2710),
+    // The predicate the client tick shows the cursor by in the world, from
+    // the HUD screen byte; read in the decompiler on 26430625, found by the
+    // route on the other kept clients.
+    (
+        "1.0 client (26430625)",
+        "ui.screen_shows_cursor",
+        0x122_19f0,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.screen_shows_cursor",
+        0x122_26c0,
+    ),
+    ("1.0 client (1269579)", "ui.screen_shows_cursor", 0x120_3360),
+    (
+        "1.0 client (26082781)",
+        "ui.screen_shows_cursor",
+        0x120_5610,
+    ),
     // The text field's look, which its constructor zeroes and the rename
     // dialog sets; read in both on 26082781 and 26430625.
     ("1.0 client (1269579)", "ui.text_field_look", 0x148),
@@ -306,6 +332,95 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 server (26083076)", "session.reply_banned_a", 0x2ac),
     ("1.0 server (26083076)", "session.reply_banned_b", 0x2a4),
     ("1.0 server (26083076)", "session.reply_frame", 0x250),
+    // `player_ui`'s local player check reads the id at +4 of its iterator
+    // word; read in the decompiler, its live check is in-game.
+    ("1.0 client (26430625)", "ecs.local_player_id", 4),
+    // `player_ui`'s iterator, 0x3c8 bytes at its frame's +0x70, and the
+    // word at +0x190 it hands its local player check; read in the
+    // disassembly, live in the same check as `ecs.local_player_id`.
+    (
+        "1.0 client (26430625)",
+        "ecs.player_ui_iterator_size",
+        0x3c8,
+    ),
+    ("1.0 client (26430625)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (26430625)", "ecs.player_ui_local_player", 0x190),
+    ("1.0 client (26320373)", "ecs.local_player_id", 4),
+    (
+        "1.0 client (26320373)",
+        "ecs.player_ui_iterator_size",
+        0x3c8,
+    ),
+    ("1.0 client (26320373)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (26320373)", "ecs.player_ui_local_player", 0x190),
+    // One word shorter on 1269579, so the loader leaves the held read off
+    // there.
+    ("1.0 client (1269579)", "ecs.local_player_id", 4),
+    ("1.0 client (1269579)", "ecs.player_ui_iterator_size", 0x3c0),
+    ("1.0 client (1269579)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (1269579)", "ecs.player_ui_local_player", 0x190),
+    ("1.0 client (26082781)", "ecs.local_player_id", 4),
+    (
+        "1.0 client (26082781)",
+        "ecs.player_ui_iterator_size",
+        0x3c0,
+    ),
+    ("1.0 client (26082781)", "ecs.player_ui_iterator", 0x70),
+    ("1.0 client (26082781)", "ecs.player_ui_local_player", 0x190),
+    // The client's input builder, `toggleHudScreen`, the recipe directory
+    // column and the in-game menu's tab index; read in the decompiler on
+    // 26430625, the older clients' by the same routes and checks.
+    ("1.0 client (26430625)", "input.client_build", 0x24_77d0),
+    ("1.0 client (26430625)", "ui.toggle_hud_screen", 0xd7_4850),
+    ("1.0 client (26430625)", "ui.recipe_directory", 0xc7_5660),
+    ("1.0 client (26430625)", "ui.menu_tab", 0x3_1e88),
+    ("1.0 client (26320373)", "input.client_build", 0x24_76f0),
+    ("1.0 client (26320373)", "ui.toggle_hud_screen", 0xd7_4790),
+    ("1.0 client (26320373)", "ui.recipe_directory", 0xc7_55a0),
+    ("1.0 client (26320373)", "ui.menu_tab", 0x3_1e88),
+    ("1.0 client (26082781)", "input.client_build", 0x24_37c0),
+    ("1.0 client (26082781)", "ui.toggle_hud_screen", 0xd6_0260),
+    ("1.0 client (26082781)", "ui.recipe_directory", 0xc6_2a40),
+    ("1.0 client (26082781)", "ui.menu_tab", 0x3_1e70),
+    ("1.0 client (1269579)", "input.client_build", 0x24_3620),
+    ("1.0 client (1269579)", "ui.toggle_hud_screen", 0xd5_e7e0),
+    ("1.0 client (1269579)", "ui.recipe_directory", 0xc6_0ec0),
+    ("1.0 client (1269579)", "ui.menu_tab", 0x3_1e70),
+    // The input mapping's blocked byte, which the input builder checks
+    // first; read in the decompiler on 26430625 (`mapping+0xad5a == 1`),
+    // the older clients' by the same route.
+    ("1.0 client (26430625)", "input.blocked", 0xad5a),
+    ("1.0 client (26320373)", "input.blocked", 0xad5a),
+    ("1.0 client (26082781)", "input.blocked", 0xac42),
+    ("1.0 client (1269579)", "input.blocked", 0xac42),
+    // The prompt's site in `player_ui`, after the title and the verb are
+    // stored and before a lock may put its reason in the verb's place, and
+    // the system's context in its home slot, which the site reads; read in
+    // the decompiler on 26430625 (2026-11-16), the same bytes on 26320373;
+    // the older clients' context by the same route, where the site compares
+    // with an immediate the route does not match.
+    ("1.0 client (26430625)", "ui.prompt_site", 0x2b_c3b6),
+    ("1.0 client (26430625)", "ui.prompt_context", 0x2_d5e0),
+    ("1.0 client (26320373)", "ui.prompt_site", 0x2b_c2d6),
+    ("1.0 client (26320373)", "ui.prompt_context", 0x2_d5e0),
+    ("1.0 client (26082781)", "ui.prompt_context", 0x2_d570),
+    ("1.0 client (1269579)", "ui.prompt_context", 0x2_d570),
+];
+
+/// The client control reads: the input builder's stick, look, target
+/// selection and buttons, and the recipe browser's highlighted recipe and
+/// select slot, read in the decompiler on client 26430625 (research of
+/// 2026-11-14 and 2026-11-16: the builder clears these four while the game
+/// blocks the input). On the other kept clients the routes found the same
+/// values, which pins them there but does not prove the routes matched the
+/// right code.
+const CLIENT_CONTROL_READS: [(&str, u64); 6] = [
+    ("input.movement_stick", 0x2b8),
+    ("input.camera_rotation", 0x2c4),
+    ("input.target_selection", 0x2ec),
+    ("input.digital_input", 0x3a8),
+    ("ui.recipe_select", 0x48),
+    ("ui.recipe_highlighted", 0xe8),
 ];
 
 /// Entries no table pins, found only by their route, with the value the
@@ -322,14 +437,60 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
     ("voxel.grid_slots", 0x58),
 ];
 
+/// The text field's kept byte that starts its typing at its next input, as
+/// its navigation's confirm does; read in the decompiler on client 26430625
+/// (2026-11-16), the same on every kept client.
+const WIDGET_READS: [(&str, u64); 1] = [("ui.text_field_start", 0x198a)];
+
 /// The interaction prompt's title, valid byte and verb in the interface's
 /// play data, and the open screen's host entity, the same on every kept
-/// client (static, research of 2026-11-06).
-const PLAY_DATA_READS: [(&str, u64); 4] = [
+/// client (static, research of 2026-11-06); the screen a stacked screen
+/// returns to, beside the HUD screen byte (`set_screen`, client 26430625,
+/// 2026-11-15).
+const PLAY_DATA_READS: [(&str, u64); 5] = [
     ("ui.prompt_title", 0x2bc0),
     ("ui.prompt_valid", 0x2bdd),
     ("ui.prompt_verb", 0x2bd8),
     ("ui.screen_host", 0x2c50),
+    ("ui.return_screen", 0x1cd9),
+];
+
+/// The game's item slot widget and its data's init, and the item viewer's
+/// two sites after its last row, by table, read in the decompiler on client
+/// 26430625 (2026-11-16, research notes item-tooltip-lines and
+/// ui-native-rows); the older clients' by the same routes.
+const ITEM_UI_SYMBOLS: &[(&str, &str, u64)] = &[
+    ("1.0 client (26430625)", "ui.item_slot", 0xc0_46c0),
+    ("1.0 client (26430625)", "ui.item_slot_init", 0xb1_f4e0),
+    ("1.0 client (26430625)", "ui.tooltip_panel_site", 0xc1_1fa0),
+    ("1.0 client (26430625)", "ui.tooltip_plain_site", 0xc1_1fb5),
+    ("1.0 client (26320373)", "ui.item_slot", 0xc0_4600),
+    ("1.0 client (26320373)", "ui.item_slot_init", 0xb1_f420),
+    ("1.0 client (26320373)", "ui.tooltip_panel_site", 0xc1_1ee0),
+    ("1.0 client (26320373)", "ui.tooltip_plain_site", 0xc1_1ef5),
+    ("1.0 client (26082781)", "ui.item_slot", 0xbf_5070),
+    ("1.0 client (26082781)", "ui.item_slot_init", 0xb0_fd50),
+    ("1.0 client (26082781)", "ui.tooltip_panel_site", 0xc0_2880),
+    ("1.0 client (26082781)", "ui.tooltip_plain_site", 0xc0_2895),
+    ("1.0 client (1269579)", "ui.item_slot", 0xbf_34f0),
+    ("1.0 client (1269579)", "ui.item_slot_init", 0xb0_e230),
+    ("1.0 client (1269579)", "ui.tooltip_panel_site", 0xc0_0d00),
+    ("1.0 client (1269579)", "ui.tooltip_plain_site", 0xc0_0d15),
+];
+
+/// The item slot's click flag, the local player's data and item table it reads, and
+/// the item viewer's layout, unknown-item flag, item and item entity, the
+/// same on every kept client (client 26430625 in the decompiler,
+/// 2026-11-16).
+const ITEM_UI_READS: [(&str, u64); 8] = [
+    ("ui.item_slot_clickable", 0x62),
+    ("ui.context_player", 0xd0),
+    ("ui.player_data", 0x38),
+    ("ui.player_items", 0x46_67b8),
+    ("ui.viewer_layout", 0xbc),
+    ("ui.viewer_unknown", 0xe3),
+    ("ui.viewer_item", 0x8),
+    ("ui.viewer_pide", 0xc),
 ];
 
 /// The kept client tables, by name.
@@ -340,13 +501,22 @@ const CLIENT_TABLES: [&str; 4] = [
     "1.0 client (26430625)",
 ];
 
-/// [`ROUTED_ONLY`] and the [`PLAY_DATA_READS`] of each of [`CLIENT_TABLES`].
+/// [`ROUTED_ONLY`] and [`ITEM_UI_SYMBOLS`], and the [`PLAY_DATA_READS`],
+/// [`CLIENT_CONTROL_READS`], [`WIDGET_READS`] and [`ITEM_UI_READS`] of each
+/// of [`CLIENT_TABLES`].
 fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
-    ROUTED_ONLY.iter().copied().chain(
-        CLIENT_TABLES
-            .into_iter()
-            .flat_map(|table| PLAY_DATA_READS.map(|(id, value)| (table, id, value))),
-    )
+    ROUTED_ONLY
+        .iter()
+        .chain(ITEM_UI_SYMBOLS)
+        .copied()
+        .chain(CLIENT_TABLES.into_iter().flat_map(|table| {
+            PLAY_DATA_READS
+                .into_iter()
+                .chain(CLIENT_CONTROL_READS)
+                .chain(WIDGET_READS)
+                .chain(ITEM_UI_READS)
+                .map(move |(id, value)| (table, id, value))
+        }))
 }
 
 /// Entries a kept build's table pins that the loader needs on no build of

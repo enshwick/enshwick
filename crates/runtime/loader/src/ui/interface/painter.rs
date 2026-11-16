@@ -23,6 +23,9 @@ pub(crate) fn widget(
     let Some(engine) = ENGINE.get() else {
         return Err(WidgetError::NoEngine);
     };
+    if let Some(gathered) = super::tooltips::gather(owner, token, raw) {
+        return gathered;
+    }
     let Some(mut drawing) = DRAWING.get() else {
         return Err(WidgetError::WrongThread);
     };
@@ -342,14 +345,19 @@ pub(super) fn draw(
             };
             let name = copy(&[b"enshwick/", record.id.as_bytes(), b"/", text]);
             let title = copy(&[title]);
-            // SAFETY: `widget` found this thread's `DRAWING`, set only while
-            // a frame callback runs inside the frame on the interface thread,
-            // with its non-zero `context`; the window object stays in the
-            // thread-local `WINDOW` until it ends, and `name` and `title` live
-            // in the frame's arena.
-            WINDOW.with_borrow_mut(|window| unsafe {
-                engine.window_begin(context, window, &name, &title);
+            let back = WINDOW.with_borrow_mut(|window| {
+                // SAFETY: `widget` found this thread's `DRAWING`, set only
+                // while a frame callback runs inside the frame on the
+                // interface thread, with its non-zero `context`; the window
+                // object stays in the thread-local `WINDOW` until it ends, and
+                // `name` and `title` live in the frame's arena.
+                unsafe { engine.window_begin(context, window, &name, &title) };
+                // SAFETY: in the same frame on the interface thread, of the
+                // window begun one call earlier: Back binds to its own node,
+                // since the slot is shared by every mod window of the frame.
+                unsafe { super::dialog::back_over(engine, window) }
             });
+            raw.result = u32::from(back);
             drawing.window_open = true;
             Ok(())
         }
@@ -362,21 +370,21 @@ pub(super) fn draw(
             drawing.window_open = false;
             Ok(())
         }
-        UiWidget::SOUND => {
+        UiWidget::SOUND if raw.sound == enshwick_core::content::Guid::NIL => {
             // SAFETY: `widget` found this thread's `DRAWING`, set only while
             // a frame callback runs inside the frame on the interface thread,
             // with its non-zero `context`.
             unsafe { engine.sound(context, raw.style) };
             Ok(())
         }
-        UiWidget::PLAY => {
-            if !holds_sound(raw.sound) {
+        UiWidget::SOUND => {
+            if !holds_sound(raw.sound.0) {
                 return Err(WidgetError::Unavailable);
             }
             // SAFETY: `widget` found this thread's `DRAWING`, set only while
             // a frame callback runs inside the frame on the interface thread,
             // with its non-zero `context`.
-            unsafe { engine.play(context, &raw.sound) };
+            unsafe { engine.play(context, &raw.sound.0) };
             Ok(())
         }
         UiWidget::LABEL => {
@@ -407,6 +415,10 @@ pub(super) fn draw(
             row(engine, context, copy(&[text]), raw, read_only)
         }
         UiWidget::INPUT_HINT => input_hint(engine, text, raw),
+        // SAFETY: `window_open`, checked by `widget_checks::order`, means
+        // this callback's window, or its screen extension's, is open in this
+        // frame on the interface thread, with its non-zero `context`.
+        UiWidget::ITEM_SLOT => unsafe { super::item_slots::draw(context, raw) },
         UiWidget::PROGRESS => {
             let Some(value) = widget_checks::progress(raw.value, raw.min, raw.max) else {
                 return Err(WidgetError::Malformed);
@@ -456,7 +468,7 @@ fn holds_sound(guid: [u8; 16]) -> bool {
         return false;
     };
     let key = enshwick_core::abi::ResourceKey {
-        guid,
+        guid: enshwick_core::content::Guid(guid),
         type_hash,
         part: 0,
     };

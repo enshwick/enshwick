@@ -47,13 +47,19 @@ pub(crate) struct FakeControls {
 pub(crate) extern "system" fn control(
     me: ModHandle,
     spec: *const ControlSpec,
-    callback: ControlFn,
+    callback: Option<ControlFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     // SAFETY: the safe layer passes a live `ControlSpec` for the call.
     let Some(spec) = (unsafe { read_headed(spec, size_of::<ControlSpec>()) }) else {
         return Status::BAD_ARGS;
     };
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     let name = text(spec.name);
     let link = text(spec.link);
     let key = |bits: u32| (bits != 0).then(|| Key::from_bits(bits));
@@ -100,19 +106,7 @@ pub(crate) extern "system" fn control(
     })
 }
 
-pub(crate) extern "system" fn run_action(_me: ModHandle, action: Str, args: Str) -> Status {
-    let (action, args) = (text(action), text(args));
-    with(Status::MISSING, |s| {
-        if s.host.side != enshwick_core::abi::Side::CLIENT {
-            return Status::MISSING;
-        }
-        s.controls.runs.push((action, args));
-        s.controls.targets.push(None);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn run_action_at(
+pub(crate) extern "system" fn run_action(
     _me: ModHandle,
     action: Str,
     args: Str,
@@ -129,7 +123,7 @@ pub(crate) extern "system" fn run_action_at(
     let (action, args) = (text(action), text(args));
     with(Status::MISSING, |s| {
         if s.host.side != enshwick_core::abi::Side::CLIENT {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         s.controls.runs.push((action, args));
         s.controls.targets.push(named);
@@ -185,15 +179,6 @@ fn advance(fake: &mut FakeControls, after: Duration) -> u64 {
 }
 
 fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
-    let zero = PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: 0,
-        entity: enshwick_core::Entity(0),
-        key: enshwick_core::PlayerKey::new(0),
-        permissions: 0,
-        name_len: 0,
-        name: [0; 64],
-    };
     for call in calls {
         let event = ControlEvent {
             header: Header::of::<ControlEvent>(),
@@ -201,7 +186,7 @@ fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
             kind: call.kind,
             server: u8::from(server.is_some()),
             reserved: [0; 3],
-            player: *server.unwrap_or(&zero),
+            player: server.map_or(core::ptr::null(), core::ptr::from_ref),
         };
         // SAFETY: `event` lives for the call and `user` is the pointer the
         // mod declared `callback` with.
@@ -300,7 +285,7 @@ impl Installed {
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
-    ///     name: [0; 64],
+    ///     name: [0; 128],
     /// };
     /// let held = [GameAction::ContextualAction];
     /// assert_eq!(loader.game_actions(&player, &held, Duration::from_millis(50)), 0);
@@ -424,7 +409,7 @@ mod tests {
         control(
             ModHandle(1),
             &raw const spec,
-            nothing,
+            Some(nothing),
             core::ptr::null_mut(),
         )
     }

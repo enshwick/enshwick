@@ -1,15 +1,16 @@
 //! `enshwick.actions`: a script declares player actions as tables, and the
-//! loader's sheet, runs and console reach its functions as a Rust mod's.
+//! loader's rights question, windows, runs and console reach its functions
+//! as a Rust mod's.
 
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Side};
-    use enshwick::actions::sheet::{ArgView, decode};
+    use enshwick::actions::sheet::ArgView;
     use enshwick::console;
     use enshwick::i18n::Language;
     use enshwick::test::FakeHost;
 
-    use crate::harness::{logged, run};
+    use crate::harness::{LOOK, logged, looked, run};
 
     const MAIN: &str = r#"
         local texts = enshwick.i18n.parse([[
@@ -87,8 +88,8 @@ mod tests {
             entity: enshwick::Entity(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: if admin { PlayerInfo::CAN_KICK_BAN } else { 0 },
-            name_len: u8::try_from(name.len()).unwrap(),
-            name: [0; 64],
+            name_len: u32::try_from(name.len()).unwrap(),
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
@@ -101,21 +102,21 @@ mod tests {
         let admin = player(4, 9, "Root", true);
         let loader = run(
             FakeHost::new().player(owner).player(ann).player(admin),
-            MAIN,
+            &format!("{MAIN}{LOOK}"),
         );
         assert!(logged(&loader, "taken false"), "{:?}", loader.logs());
 
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &owner, Language::UK_UA.0, "", "")
-                .unwrap(),
+        let allowed = loader.ask_actions(ActionCall::ALLOWED, &owner, 0, "", "");
+        assert_eq!(
+            allowed.as_deref(),
+            Some("greet\naccess\nlook\n"),
+            "the administrators' action is not the owner's"
         );
-        let sheet: Vec<_> = sheet.into_iter().filter(|e| e.id == "access").collect();
-        assert_eq!(sheet.len(), 1, "the administrators' action is hidden");
-        assert_eq!(sheet[0].label, "Хто може користуватися");
-        assert_eq!(sheet[0].help, "Let players open the locker");
-        assert_eq!(sheet[0].subject, "Твоя шафка", "{:?}", loader.logs());
-        assert!(sheet[0].per_player && sheet[0].offered);
+        let access = looked(&loader, &owner, Language::UK_UA, "access");
+        assert_eq!(access.label, "Хто може користуватися");
+        assert_eq!(access.help, "Let players open the locker");
+        assert_eq!(access.subject, "Твоя шафка", "{:?}", loader.logs());
+        assert!(access.per_player && access.offered);
 
         let reply = loader.ask_actions(
             ActionCall::RUN,
@@ -130,12 +131,7 @@ mod tests {
             "{:?}",
             loader.logs()
         );
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &owner, 0, "", "")
-                .unwrap(),
-        );
-        let access = sheet.iter().find(|e| e.id == "access").unwrap();
+        let access = looked(&loader, &owner, Language::FALLBACK, "access");
         assert!(
             access
                 .players
@@ -158,12 +154,7 @@ mod tests {
             Some("0No locker of yours here")
         );
 
-        let wipe = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &admin, 0, "", "")
-                .unwrap(),
-        );
-        let args = &wipe.iter().find(|e| e.id == "wipe").unwrap().args;
+        let args = &looked(&loader, &admin, Language::FALLBACK, "wipe").args;
         assert_eq!(
             (args[0].kind, args[1].kind),
             (ArgView::CHOICE, ArgView::NUMBER)
@@ -324,7 +315,7 @@ mod tests {
         let root = player(4, 9, "Root", true);
         let loader = run(
             FakeHost::new().player(root),
-            r#"
+            &(r#"
             local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
             actions:add({
                 id = "ban",
@@ -338,7 +329,9 @@ mod tests {
                 local args = request:args()
                 return enshwick.actions.done(`{args[1].Player.name} {args[1].Player.key}: {args[2].Text}`)
             end)
-            "#,
+            "#
+            .to_owned()
+                + LOOK),
         );
         assert_eq!(
             loader
@@ -348,12 +341,7 @@ mod tests {
             "{:?}",
             loader.logs()
         );
-        let sheet = decode(
-            &loader
-                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
-                .unwrap(),
-        );
-        let args = &sheet[0].args;
+        let args = &looked(&loader, &root, Language::FALLBACK, "ban").args;
         assert_eq!((args[1].kind, args[1].max), (ArgView::TEXT, 16.0));
         assert_eq!(
             args[0].players,
@@ -493,6 +481,45 @@ mod tests {
             logged(&loader, "refused Ann Interface wipe Rate 0"),
             "{:?}",
             loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_script_s_template_argument_hands_its_handler_the_picked_template() {
+        let admin = player(4, 9, "Root", true);
+        let loader = run(
+            FakeHost::new().player(admin).templates(),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({
+                id = "summon",
+                label = "Summon",
+                admins = true,
+                args = { enshwick.actions.template("Creature") },
+            }, function(request)
+                return enshwick.actions.done(request:args()[1].Template)
+            end)
+            "#,
+        );
+        let creature = enshwick::test::CREATURE;
+        let reply = loader.ask_actions(
+            ActionCall::RUN,
+            &admin,
+            0,
+            "summon",
+            &format!("e{creature}"),
+        );
+        assert_eq!(reply, Some(format!("1{creature}")), "{:?}", loader.logs());
+        let unknown = loader.ask_actions(
+            ActionCall::RUN,
+            &admin,
+            0,
+            "summon",
+            "e00000000-0000-4000-8000-000000000001",
+        );
+        assert_eq!(
+            unknown.as_deref(),
+            Some("0No template 00000000-0000-4000-8000-000000000001.")
         );
     }
 }

@@ -27,7 +27,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let quest = KnowledgeInput {
     ///     header: Header::of::<KnowledgeInput>(),
-    ///     player: enshwick::Entity(2),
+    ///     character: enshwick::Entity(2),
     ///     id: enshwick::knowledge::KnowledgeId::new(0x51),
     ///     kind: KnowledgeInfo::BOOL,
     ///     scope: KnowledgeInfo::PLAYER,
@@ -35,6 +35,7 @@ impl Installed {
     ///     value: 0,
     ///     refusal: KnowledgeInput::QUEST,
     ///     allowed: 0,
+    ///     reserved_tail: [0; 3],
     /// };
     /// assert!(!loader.knowledge_input(quest), "no filters, the guard's verdict");
     /// ```
@@ -43,9 +44,11 @@ impl Installed {
         let filters = table::with(Vec::new(), |s| s.knowledge_input_filters.clone());
         for filter in filters {
             // SAFETY: the filter the mod registered, with its pointer.
-            let verdict =
-                filter.run(|callback, user| unsafe { callback(&raw const request, user) });
-            request.allowed = u32::from(verdict != 0);
+            match filter.run(|callback, user| unsafe { callback(&raw const request, user) }) {
+                enshwick_core::abi::FILTER_YES => request.allowed = 1,
+                enshwick_core::abi::FILTER_REFUSE => request.allowed = 0,
+                _ => {}
+            }
         }
         request.allowed != 0
     }
@@ -231,7 +234,7 @@ impl Installed {
             let mut pass = ExperiencePass {
                 header: Header::of::<ExperiencePass>(),
                 rows: rows.as_mut_ptr().cast::<ExperienceRow>(),
-                row_count: rows.len(),
+                row_count: u32::try_from(rows.len()).unwrap_or(u32::MAX),
                 level_cap: cap,
                 need_for: Some(need_for),
                 token: (&raw mut need).cast(),

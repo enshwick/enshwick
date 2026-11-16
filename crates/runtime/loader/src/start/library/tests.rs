@@ -40,6 +40,10 @@ name = "no_manifest"
 crate-type = ["cdylib"]
 
 [[example]]
+name = "bad_id"
+crate-type = ["cdylib"]
+
+[[example]]
 name = "imports"
 crate-type = ["cdylib"]
 
@@ -71,14 +75,13 @@ enshwick::test::declare_mod!(
 /// The interface's version alone, without the three functions beside it.
 const HALF: &str = r#"
 #[unsafe(no_mangle)]
-pub extern "system" fn enshwick_mod_abi() -> u32 {
-    u32::from(enshwick::abi::ABI_MAJOR)
+pub extern "system" fn enshwick_mod_abi() -> u16 {
+    enshwick::abi::ABI_MAJOR
 }
 "#;
 
-/// What `enshwick_mod_abi` returned before ABI majors: a hash of the
-/// layout, here the last one.
-const HASHED_ABI: u32 = 0x0dc8_5f01;
+/// The major a mod built for an older Enshwick returns.
+const OLDER_ABI: u16 = enshwick_core::abi::ABI_MAJOR - 1;
 
 /// All four exports; `{abi}` is the version it says and `{query}` its
 /// manifest.
@@ -86,7 +89,7 @@ const RAW: &str = r#"
 use enshwick::abi::{HostApi, Manifest, ModHandle, Status};
 
 #[unsafe(no_mangle)]
-pub extern "system" fn enshwick_mod_abi() -> u32 {
+pub extern "system" fn enshwick_mod_abi() -> u16 {
     {abi}
 }
 
@@ -101,8 +104,27 @@ pub unsafe extern "system" fn enshwick_mod_init(_: *const HostApi, _: ModHandle)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle) {}
+pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle) -> Status {
+    Status::OK
+}
 "#;
+
+/// A manifest that reads but does not parse: its id is not of the form mods
+/// take, which `declare_mod!` would refuse to compile. The fields it leaves
+/// zero are empty strings and lists.
+const BAD_ID_MANIFEST: &str = r#"{
+    use enshwick::abi::{Header, Manifest, Side, Str};
+    let manifest = Manifest {
+        header: Header::of::<Manifest>(),
+        id: Str::new("Lanterns"),
+        version: Str::new("0.1.0"),
+        side: Side::BOTH,
+        // SAFETY: a manifest of zeros is empty strings and lists, which the
+        // loader reads as absent.
+        ..unsafe { core::mem::zeroed() }
+    };
+    Box::leak(Box::new(manifest))
+}"#;
 
 /// The DLL the `imports` fixture links against, by name only; the tests
 /// place it where the search must not look.
@@ -186,13 +208,18 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
         ("half", HALF.to_owned()),
         (
             "old_abi",
-            RAW.replace("{abi}", &HASHED_ABI.to_string())
+            RAW.replace("{abi}", &OLDER_ABI.to_string())
                 .replace("{query}", "core::ptr::null()"),
         ),
         (
             "no_manifest",
-            RAW.replace("{abi}", "u32::from(enshwick::abi::ABI_MAJOR)")
+            RAW.replace("{abi}", "enshwick::abi::ABI_MAJOR")
                 .replace("{query}", "core::ptr::null()"),
+        ),
+        (
+            "bad_id",
+            RAW.replace("{abi}", "enshwick::abi::ABI_MAJOR")
+                .replace("{query}", BAD_ID_MANIFEST),
         ),
         ("imports", IMPORTS.replace("{dependency}", DEPENDENCY)),
     ];
@@ -264,7 +291,8 @@ fn loader_lines() -> Vec<(Level, String)> {
 /// Fills `mods` from the fixtures in `built`, one folder each: two mods,
 /// one beside a copy of itself and one beside a second mod in its folder,
 /// one DLL for each other reason to skip, and mods where none is read: a
-/// top-level DLL and one in the loader's folder.
+/// top-level DLL and one in the loader's folder; beside the two mods, a file
+/// that is no PE file before and after each, as a mod's own helper.
 fn fill_mods(built: &Path, mods: &Path) {
     for (from, to) in [
         ("lanterns", "lanterns/lanterns.dll"),
@@ -274,6 +302,7 @@ fn fill_mods(built: &Path, mods: &Path) {
         ("half", "half/half.dll"),
         ("old_abi", "old-abi/old-abi.dll"),
         ("no_manifest", "no-manifest/no-manifest.dll"),
+        ("bad_id", "bad-id/bad-id.dll"),
         ("lockers", "top.dll"),
         ("lanterns", "enshwick/lanterns.dll"),
     ] {
@@ -282,24 +311,130 @@ fn fill_mods(built: &Path, mods: &Path) {
         std::fs::copy(built.join(format!("{from}.dll")), to).unwrap();
     }
     std::fs::create_dir_all(mods.join("not-pe")).unwrap();
-    std::fs::write(mods.join("not-pe/not-pe.dll"), "not a DLL").unwrap();
+    for file in [
+        "not-pe/not-pe.dll",
+        "lanterns/a-helper.dll",
+        "lockers/z-helper.dll",
+    ] {
+        std::fs::write(mods.join(file), "not a DLL").unwrap();
+    }
 }
 
-/// The fixtures' second lanterns file reaches the screens and the status as
-/// the one skipped copy, the file the log `line` names.
-fn assert_one_copy_of_lanterns(copies: &[crate::base::resolve::Skipped], line: &str) {
-    let [copy] = copies else {
-        panic!("one copy for the screens and the status: {copies:?}");
+/// A DLL freed for its exports or ABI still ran while it loaded, so the code
+/// watch needs where it was mapped; only a file that never mapped has no
+/// range, and a helper after its folder's mod is never loaded at all.
+fn assert_only_unloadable_files_unmapped(
+    mapped: &[(String, Option<(usize, usize)>)],
+    lines: &[(Level, String)],
+) {
+    let unmapped: Vec<&str> = mapped
+        .iter()
+        .filter_map(|(file, range)| range.is_none().then_some(file.as_str()))
+        .collect();
+    assert_eq!(
+        unmapped,
+        ["lanterns/a-helper.dll", "not-pe/not-pe.dll"],
+        "{mapped:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|(_, text)| text.starts_with("lanterns/a-helper.dll could not be loaded: ")),
+        "a helper that fails beside its mod is logged: {lines:#?}"
+    );
+}
+
+/// A DLL the discovery refused after loading it, such as one whose manifest
+/// does not parse, is unloaded before the discovery returns.
+fn assert_not_loaded(dll: &Path) {
+    let wide: Vec<u16> = std::os::windows::ffi::OsStrExt::encode_wide(dll.as_os_str())
+        .chain([0])
+        .collect();
+    // SAFETY: `wide` is a null-terminated wide path, read for the call.
+    let module =
+        unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(wide.as_ptr()) };
+    assert!(module.is_null(), "{} is still loaded", dll.display());
+}
+
+/// Every refused fixture reaches the screens and the status by its folder,
+/// with the line the log wrote for it, and the second lanterns file as the
+/// one skipped copy, the file the log `line` names.
+fn assert_refused_reach_the_screens(
+    refused: &[crate::base::resolve::Skipped],
+    lines: &[(Level, String)],
+    line: &str,
+) {
+    let [half, second, no_manifest, not_pe, old_abi, bad_id, copy] = refused else {
+        panic!("each refused file for the screens and the status: {refused:?}");
     };
+    for (skipped, folder) in [
+        (half, "half"),
+        (second, "lockers"),
+        (no_manifest, "no-manifest"),
+        (not_pe, "not-pe"),
+        (old_abi, "old-abi"),
+        (bad_id, "bad-id"),
+    ] {
+        assert_eq!(
+            (
+                skipped.id.as_str(),
+                skipped.label.as_str(),
+                skipped.version.as_deref()
+            ),
+            (folder, folder, None),
+            "{skipped:?}"
+        );
+        let crate::base::resolve::Skip::Refused { skip } = &skipped.reason else {
+            panic!("refused at start: {skipped:?}");
+        };
+        let line = skip.line(&skipped.file);
+        assert!(
+            lines.iter().any(|(_, text)| *text == line),
+            "the line the log wrote: {skipped:?}"
+        );
+        assert_eq!(
+            skipped.counts_off(|_| true),
+            folder != "lockers",
+            "a second mod file beside the running Lockers is no mod that is off"
+        );
+    }
+    assert!(
+        matches!(
+            &not_pe.reason,
+            crate::base::resolve::Skip::Refused {
+                skip: super::Skip::Unloadable {
+                    code: Some(193),
+                    ..
+                },
+                ..
+            }
+        ),
+        "{not_pe:?}"
+    );
+    let crate::base::resolve::Skip::Refused {
+        skip: super::Skip::Manifest(reason),
+    } = &bad_id.reason
+    else {
+        panic!("refused for its manifest: {bad_id:?}");
+    };
+    assert_eq!(
+        reason,
+        &crate::base::manifest::ManifestError::BadId("Lanterns".into())
+    );
+    assert_eq!(
+        bad_id.reason.shown(),
+        crate::engine::texts::fill("mods.skipped.manifest", &[("reason", &reason.to_string())]),
+        "the Mods screen shows why"
+    );
     assert!(
         line.starts_with(&copy.file),
         "the copy the log names: {copy:?}"
     );
     assert_eq!(
-        (copy.id.as_str(), copy.version.as_str(), &copy.reason),
+        (copy.id.as_str(), copy.version.as_deref(), &copy.reason),
         (
             "fixture.lanterns",
-            "0.1.0",
+            Some("0.1.0"),
             &crate::base::resolve::Skip::Copy {
                 id: "fixture.lanterns".into()
             }
@@ -338,14 +473,8 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     let lines = loader_lines();
     drop(turn);
 
-    // A DLL freed for its exports or ABI still ran while it loaded, so the
-    // code watch needs where it was mapped; only a file that never mapped
-    // has no range.
-    let unmapped: Vec<&str> = mapped
-        .iter()
-        .filter_map(|(file, range)| range.is_none().then_some(file.as_str()))
-        .collect();
-    assert_eq!(unmapped, ["not-pe/not-pe.dll"], "{mapped:?}");
+    assert_only_unloadable_files_unmapped(&mapped, &lines);
+    assert_not_loaded(&mods.join("bad-id").join("bad-id.dll"));
 
     let (found, candidates, others) = (all.libraries, all.candidates, all.others);
     let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();
@@ -376,7 +505,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         Level::WARN,
         &format!(
             "old-abi/old-abi.dll skipped: {} ({})",
-            enshwick_core::abi::check_major(HASHED_ABI).unwrap_err(),
+            enshwick_core::abi::check_major(OLDER_ABI).unwrap_err(),
             errors::OTHER_ABI
         ),
     );
@@ -409,7 +538,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         "{}",
         duplicates[0]
     );
-    assert_one_copy_of_lanterns(&all.copies, duplicates[0]);
+    assert_refused_reach_the_screens(&all.refused, &lines, duplicates[0]);
 
     for library in &found {
         super::unload(library);
@@ -514,5 +643,5 @@ fn imports_load_in_this_process() {
         return;
     };
     let (library, _) = super::load(Path::new(&path), "imports", "imports/imports.dll");
-    println!("{LOADED}{}", library.is_some());
+    println!("{LOADED}{}", library.is_ok());
 }

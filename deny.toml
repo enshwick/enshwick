@@ -6,7 +6,7 @@ yanked = "deny"
 unmaintained = "workspace"
 
 [licenses]
-allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "Zlib", "Unicode-3.0"]
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "Unicode-3.0"]
 confidence-threshold = 0.9
 # cbindgen writes the C header in xtask and is in no shipped binary.
 exceptions = [{ crate = "cbindgen", allow = ["MPL-2.0"] }]
@@ -20,14 +20,15 @@ skip-tree = [
 ]
 allow-wildcard-paths = true
 wildcards = "deny"
-# The game process makes no HTTP or TLS calls and checks no signatures:
-# players install and update through a mod manager.
+# The game process makes no HTTP or TLS calls: players install and update
+# through a mod manager. The one signature it checks is the release signature
+# of its own files, with ed25519-dalek.
 deny = [
     { crate = "ureq", reason = "no HTTP client in the game process" },
     { crate = "rustls", reason = "no TLS in the game process" },
     { crate = "ring", reason = "no TLS in the game process" },
     { crate = "webpki-roots", reason = "no TLS in the game process" },
-    { crate = "minisign-verify", reason = "releases are not signature-checked in game" },
+    { crate = "minisign-verify", reason = "the release signature is Ed25519, checked with ed25519-dalek" },
     { crate = "percent-encoding", reason = "no HTTP client in the game process" },
     { crate = "enshwick-loader", wrappers = ["xtask"], reason = "cargo-enshwick shares code with the loader only through the gamedata crate" },
 ]

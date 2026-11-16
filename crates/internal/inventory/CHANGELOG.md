@@ -7,6 +7,27 @@ see is in the changelog of `enshwick`.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- `ItemInfo::placed_entity_template` names the template a player places
+  from an item, `None` for one that places nothing (#1118).
+
+### Changed
+
+- Damage amounts follow the running game's damage types; survivor lookups
+  and survivor status menus chain across mods in load order (#1106).
+
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Changed
+
+- The check of an inventory request lives once here, for the loader and the
+  fake host (#1083).
+- Item and entity data map the loader's statuses through the shared status
+  rule (#1083).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

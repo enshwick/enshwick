@@ -147,13 +147,36 @@ impl Drawn {
             Click::Form(form) => (Some(form.clone()), form.action.clone()),
             Click::Run(action, _) => (None, action.clone()),
             Click::Cancel => {
-                let left = self.form.take().map(|form| form.action);
+                let left = self.form.as_ref().map(|form| form.action.clone());
                 (None, left.unwrap_or_default())
             }
             Click::Nothing | Click::Close => return,
         };
+        if self.form != form {
+            self.scroll.start_over();
+        }
         self.form = form;
         self.fields.retain(|((of, _), _)| *of != action);
+    }
+
+    /// What Back does, one step a press as on the Mods screen: it ends the
+    /// typing of a field that has the caret, else leaves an open form, else
+    /// closes the window.
+    fn back(&mut self) -> Click {
+        let mut ended = false;
+        for (_, field) in &mut self.fields {
+            if field.text.typing() {
+                field.text.end_typing();
+                ended = true;
+            }
+        }
+        if ended {
+            Click::Nothing
+        } else if self.form.is_some() {
+            Click::Cancel
+        } else {
+            Click::Close
+        }
     }
 }
 
@@ -233,6 +256,13 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
 ///
 /// As [`draw`]; `drawn` stays in place until it returns.
 unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn) -> Click {
+    // Back (Escape, B), bound to the window's panel from the last frame so
+    // the press does not also open the pause menu, steps back; a dialog over
+    // the window draws after it and takes its own Back.
+    // SAFETY: in a frame of the interface update on its thread, by this
+    // function's `# Safety`, with the window drawn in the last frame.
+    let back = unsafe { super::dialog::back_over(engine, &drawn.window) };
+    let stepped = if back { drawn.back() } else { Click::Nothing };
     let (mod_id, id) = &drawn.key;
     let name = copy(&[b"enshwick/carried/", mod_id.as_bytes(), b"/", id.as_bytes()]);
     let title = copy(&[view.title.as_bytes()]);
@@ -262,6 +292,8 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
     paint.set_scrolled(false);
     if paint.button(texts::text("actions.close").as_bytes(), true) {
         click = Click::Close;
+    } else if stepped != Click::Nothing {
+        click = stepped;
     }
     // SAFETY: `window_begin` started `drawn.window` in this frame, on this
     // thread, with this `context`; it did not move, and the scroll area and
@@ -467,6 +499,51 @@ mod tests {
         }
         assert_eq!(held.len(), MAX_HELD);
         assert!(held.iter().all(|h| h.window != "panel"), "the oldest goes");
+    }
+
+    #[test]
+    fn back_ends_the_typing_then_leaves_the_form_then_closes_the_window() {
+        let mut drawn = Drawn::new(("you.admin".into(), "panel".into()));
+        drawn.form = Some(Form {
+            label: "Ban".into(),
+            action: "ban".into(),
+            given: Vec::new(),
+        });
+        let text = ArgView {
+            kind: ArgView::TEXT,
+            ..ArgView::default()
+        };
+        drawn.field("ban", 0, &text).text.start_typing();
+        assert_eq!(drawn.back(), Click::Nothing, "the typing ends first");
+        assert_eq!(drawn.back(), Click::Cancel, "then the form closes");
+        drawn.after(&Click::Cancel);
+        assert_eq!(drawn.back(), Click::Close, "then the window");
+    }
+
+    #[test]
+    fn opening_or_leaving_a_form_starts_its_scroll_area_at_the_top() {
+        let mut drawn = Drawn::new(("you.admin".into(), "panel".into()));
+        let list = drawn.scroll.frame_id();
+        let form = Form {
+            label: "Ban".into(),
+            action: "ban".into(),
+            given: Vec::new(),
+        };
+        drawn.after(&Click::Form(form));
+        let opened = drawn.scroll.frame_id();
+        assert_ne!(opened, list, "the form opens at its top");
+        drawn.after(&Click::Nothing);
+        assert_eq!(
+            drawn.scroll.frame_id(),
+            opened,
+            "nothing done keeps the place"
+        );
+        drawn.after(&Click::Cancel);
+        assert_ne!(
+            drawn.scroll.frame_id(),
+            opened,
+            "the list comes back at its top"
+        );
     }
 
     #[test]
@@ -749,7 +826,7 @@ mod tests {
 
     fn held() -> Vec<(String, String)> {
         let held = STATE.load();
-        let held = held.as_deref().map(Vec::as_slice).unwrap_or_default();
+        let held = held.as_deref().map_or_default(Vec::as_slice);
         held.iter()
             .map(|h| (h.mod_id.clone(), h.window.clone()))
             .collect()

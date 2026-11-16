@@ -16,7 +16,7 @@ fn patch(owner: ModIndex, address: usize, expected: &[u8], replacement: &[u8]) -
 #[test]
 fn a_missing_recipe_list_lookup_is_off_on_its_build_and_in_the_status() {
     // Its own fuse, so the process's recipe list lookup stays linkable.
-    static LOOKUP: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new(LOOKUP_FEATURE);
+    static LOOKUP: Fuse = Fuse::new(LOOKUP_FEATURE);
     let Some(build) = crate::engine::builds::kept(enshwick_core::abi::Side::SERVER) else {
         return;
     };
@@ -96,14 +96,16 @@ fn an_owner_s_patches_go_in_together_or_not_at_all() {
 
 #[test]
 fn a_skipped_loader_patch_leaves_out_only_its_own_feature() {
-    let feature = |name, at| CodePatch {
-        feature: name,
+    static ONE: Fuse = Fuse::new("test patches");
+    static TWO: Fuse = Fuse::new("test patches");
+    let feature = |fuse, at| CodePatch {
+        feature: Some(fuse),
         ..patch(ModIndex::LOADER, at, &[0x90], &[0xcc])
     };
     let patches = [
-        feature("one", 0x10),
-        feature("one", 0x20),
-        feature("two", 0x30),
+        feature(&ONE, 0x10),
+        feature(&ONE, 0x20),
+        feature(&TWO, 0x30),
     ];
     let mut verdicts = [
         Verdict::Skip("stuck".into()),
@@ -113,6 +115,73 @@ fn a_skipped_loader_patch_leaves_out_only_its_own_feature() {
     skip_with_feature(&patches, &mut verdicts);
     assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("another patch")));
     assert_eq!(verdicts[2], Verdict::Write);
+}
+
+#[test]
+fn a_skipped_loader_patch_turns_off_its_feature_s_own_fuse_once() {
+    static LIFT: Fuse = Fuse::new("test lift");
+    let loader = crate::start::tests::bare_loader();
+    let lift = CodePatch {
+        feature: Some(&LIFT),
+        ..patch(ModIndex::LOADER, 0x10, &[0x90], &[0xcc])
+    };
+    let second = CodePatch {
+        address: 0x20,
+        ..lift.clone()
+    };
+    let mut off = Vec::new();
+    skipped(&loader, &lift, (SkipCause::Build, "stuck"), &mut off);
+    skipped(&loader, &second, (SkipCause::Build, "stuck"), &mut off);
+    assert!(LIFT.is_off(), "the feature's links are wired past");
+    assert!(off.len() == 1 && LIFT.among(&off));
+    let listed = crate::engine::diag::parts_off();
+    let entries = listed.iter().filter(|p| p.part == "test lift").count();
+    assert_eq!(entries, 1, "{listed:?}");
+}
+
+#[test]
+fn two_skipped_loader_features_that_share_a_name_both_turn_off() {
+    static ONE: Fuse = Fuse::new("test twins");
+    static TWO: Fuse = Fuse::new("test twins");
+    let loader = crate::start::tests::bare_loader();
+    let one = CodePatch {
+        feature: Some(&ONE),
+        ..patch(ModIndex::LOADER, 0x10, &[0x90], &[0xcc])
+    };
+    let two = CodePatch {
+        feature: Some(&TWO),
+        address: 0x20,
+        ..one.clone()
+    };
+    let mut off = Vec::new();
+    skipped(&loader, &one, (SkipCause::Build, "stuck"), &mut off);
+    skipped(&loader, &two, (SkipCause::Build, "stuck"), &mut off);
+    assert!(ONE.is_off() && TWO.is_off(), "a name is not a feature");
+    assert_eq!(off.len(), 2);
+}
+
+#[test]
+fn a_loader_patch_given_up_while_the_game_runs_turns_its_feature_off_as_a_fault() {
+    static STOPS: Fuse = Fuse::new("test stops");
+    let loader = crate::start::tests::bare_loader();
+    let stop = CodePatch {
+        feature: Some(&STOPS),
+        ..patch(ModIndex::LOADER, 0x40, &[0x90], &[0xcc])
+    };
+    let _turn = crate::engine::log::capture_turn();
+    let reason = "a thread stayed inside it through every wait";
+    skipped(&loader, &stop, (SkipCause::Fault, reason), &mut Vec::new());
+    assert!(STOPS.is_off());
+    let line = format!(
+        "test stops off: its code patch at 0x40 was skipped: {reason}; the game runs it vanilla ({})",
+        crate::engine::errors::FEATURE_FAULT
+    );
+    assert!(
+        crate::engine::log::captured()
+            .iter()
+            .any(|(_, _, l)| *l == line),
+        "{line}"
+    );
 }
 
 #[test]

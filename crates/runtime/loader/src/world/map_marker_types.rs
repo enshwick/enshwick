@@ -155,7 +155,7 @@ pub fn types(
             let flag = |field: usize| u8::from(byte(field) != 0);
             Ok(MapMarkerTypeInfo {
                 header: Header::of::<MapMarkerTypeInfo>(),
-                type_name,
+                type_name: enshwick_core::content::Guid(type_name),
                 marker_id: u32::from_le_bytes(marker_id),
                 sorting_category,
                 is_fast_travel_destination: flag(layout.is_fast_travel_destination),
@@ -253,7 +253,7 @@ mod tests {
         let read = types(&LAYOUT, &GROUPS, &data).unwrap();
         assert_eq!(read.len(), 2);
         assert_eq!(read[0].marker_id, 0xaa);
-        assert_eq!(read[0].type_name[0], 0x11);
+        assert_eq!(read[0].type_name.0[0], 0x11);
         assert_eq!(read[0].sorting_category, MarkerTypeSorting::FLAME_RELATED);
         assert_eq!(
             (

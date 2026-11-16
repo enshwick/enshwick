@@ -3,7 +3,9 @@
 //! When a player's health reaches 0, the system that took it, for a hit, a
 //! fall, the shroud or drowning, hands the game's tracking a `PlayerDeath`
 //! record: the account, the cause, the place, the killer's template for a
-//! hit, whether the shroud was deadly and whether the player drowned. The
+//! hit, whether the shroud was deadly and whether the player drowned, which
+//! on server build 26430253 only its oxygen system sets, always with the
+//! cause `Suffocated`, so the event leaves it out. The
 //! loader detours that sink, which runs on the systems' worker threads,
 //! copies the record and raises [`Event::PLAYER_DIED`] after the step, with
 //! the attacker of the last hit in the player's `HitHistory` for a hit.
@@ -13,7 +15,7 @@
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Event, Header, HookFlags, PlayerDeathData};
+use enshwick_core::abi::{DamageCheck, Event, Header, HookFlags, PlayerDeathData};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -35,7 +37,8 @@ struct Record {
     position: usize,
     cause_guid: usize,
     was_deadly_fog: usize,
-    drowned: usize,
+    /// The game's code of each of [`CAUSES`], in its order.
+    causes: [u8; CAUSES.len()],
 }
 
 /// Where a `HitHistory` keeps the attacker of its last hit, from reflection.
@@ -112,6 +115,47 @@ static SEEN: Pending<[u8; 64]> = Pending::new();
 /// The record the sink takes.
 const DEATH_RECORD: &str = "keen::PlayerDeath";
 
+/// The enum of the record's cause.
+const DEATH_CAUSE: &str = "keen::DeathCause";
+
+/// The game's death causes by name, with the damage filter's number each
+/// becomes; the shroud's deadly kind becomes [`DamageCheck::DEADLY_FOG`].
+const CAUSES: [(&str, u32); 4] = [
+    ("Impact", DamageCheck::IMPACT),
+    ("FallDamage", DamageCheck::FALL_DAMAGE),
+    ("Fog", DamageCheck::FOG),
+    ("Suffocated", DamageCheck::SUFFOCATED),
+];
+
+/// The cause of a record whose game code is none of [`CAUSES`]: a number
+/// no cause has, which a mod reads as another cause.
+const UNNAMED_CAUSE: u32 = u32::MAX;
+
+/// The game's code of each of [`CAUSES`], from reflection.
+fn cause_codes(loader: &Loader) -> Option<[u8; CAUSES.len()]> {
+    let mut codes = [0; CAUSES.len()];
+    for (code, (name, _)) in codes.iter_mut().zip(CAUSES) {
+        let value = loader.reflection.enum_value(DEATH_CAUSE, name).ok()?;
+        *code = u8::try_from(value).ok()?;
+    }
+    Some(codes)
+}
+
+/// The damage filter's number for a record's game `code`.
+fn cause(layout: &Record, code: u8, deadly_fog: bool) -> u32 {
+    let cause = layout
+        .causes
+        .iter()
+        .zip(CAUSES)
+        .find(|&(&game, _)| game == code)
+        .map_or(UNNAMED_CAUSE, |(_, (_, ours))| ours);
+    if cause == DamageCheck::FOG && deadly_fog {
+        DamageCheck::DEADLY_FOG
+    } else {
+        cause
+    }
+}
+
 fn record(loader: &Loader) -> Option<Record> {
     let ty = DEATH_RECORD;
     let field = |name: &str| {
@@ -134,7 +178,7 @@ fn record(loader: &Loader) -> Option<Record> {
         position: field("position")?,
         cause_guid: field("causeGuid")?,
         was_deadly_fog: field("wasDeadlyFog")?,
-        drowned: field("drowned")?,
+        causes: cause_codes(loader)?,
     })
 }
 
@@ -217,13 +261,14 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
     PlayerDeathData {
         header: Header::of::<PlayerDeathData>(),
         entity: Entity(entity_of(key)),
-        cause: u32::from(field::<1>(bytes, layout.cause)[0]),
+        cause: cause(
+            layout,
+            field::<1>(bytes, layout.cause)[0],
+            field::<1>(bytes, layout.was_deadly_fog)[0] != 0,
+        ),
         key: enshwick_core::PlayerKey::new(key),
-        position: [coordinate(0), coordinate(1), coordinate(2)],
-        cause_guid: field(bytes, layout.cause_guid),
-        was_deadly_fog: field::<1>(bytes, layout.was_deadly_fog)[0],
-        drowned: field::<1>(bytes, layout.drowned)[0],
-        reserved: 0,
+        position: [coordinate(0), coordinate(1), coordinate(2)].map(f64::from),
+        cause_guid: enshwick_core::content::Guid(field(bytes, layout.cause_guid)),
         killer_entity: Entity(0),
         reserved_tail: 0,
     }
@@ -247,7 +292,7 @@ pub(crate) fn after_step(loader: &Loader) {
                 .find(|p| p.key == enshwick_core::PlayerKey::new(key))
                 .map_or(0, |p| p.entity.0)
         });
-        if death.cause == PlayerDeathData::IMPACT
+        if death.cause == DamageCheck::IMPACT
             && death.entity != Entity(0)
             && let Some(history) = history
         {
@@ -276,21 +321,36 @@ mod tests {
             position: 16,
             cause_guid: 28,
             was_deadly_fog: 44,
-            drowned: 45,
+            causes: [0, 1, 2, 3],
         };
         let mut bytes = [0u8; 64];
         bytes[..8].copy_from_slice(&7u64.to_le_bytes());
         bytes[12] = 3;
         bytes[16..20].copy_from_slice(&1.5f32.to_le_bytes());
         bytes[28] = 0xab;
-        bytes[45] = 1;
         let death = data(&layout, &bytes, |key| if key == 7 { 2 } else { 0 });
         assert_eq!(death.entity, Entity(2));
         assert_eq!(death.key, enshwick_core::PlayerKey::new(7));
-        assert_eq!(death.cause, PlayerDeathData::SUFFOCATED);
-        assert!((death.position[0] - 1.5).abs() < f32::EPSILON);
-        assert_eq!(death.cause_guid[0], 0xab);
-        assert_eq!((death.was_deadly_fog, death.drowned), (0, 1));
+        assert_eq!(death.cause, DamageCheck::SUFFOCATED);
+        assert!((death.position[0] - 1.5).abs() < f64::EPSILON);
+        assert_eq!(death.cause_guid.0[0], 0xab);
+    }
+
+    #[test]
+    fn the_deadly_shroud_and_a_cause_the_loader_has_no_name_for_get_their_own_numbers() {
+        let layout = Record {
+            size: 48,
+            account: 0,
+            cause: 12,
+            position: 16,
+            cause_guid: 28,
+            was_deadly_fog: 44,
+            causes: [0, 1, 2, 3],
+        };
+        assert_eq!(cause(&layout, 2, false), DamageCheck::FOG);
+        assert_eq!(cause(&layout, 2, true), DamageCheck::DEADLY_FOG);
+        assert_eq!(cause(&layout, 1, true), DamageCheck::FALL_DAMAGE);
+        assert_eq!(cause(&layout, 9, false), UNNAMED_CAUSE);
     }
 
     #[test]

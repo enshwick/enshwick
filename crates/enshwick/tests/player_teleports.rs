@@ -38,7 +38,7 @@ mod tests {
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 
@@ -57,8 +57,8 @@ mod tests {
         let loader = host
             .player(player(5, 7))
             .player(player(6, 8))
-            .template(Entity(5), [5; 16])
-            .template(Entity(6), [6; 16])
+            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .template(Entity(6), enshwick::content::Guid([6; 16]))
             .component(Entity(6), transform, &standing([40, 12, -3]))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!`.
@@ -93,13 +93,13 @@ mod tests {
         assert_eq!(teleports.len(), 2);
         assert_eq!(teleports[0].entity, Entity(5));
         assert_eq!(teleports[0].flags, TeleportRequest::ORIENTED);
-        assert_eq!(teleports[0].position, [1 << 32, 2 << 32, 3 << 32]);
+        assert_eq!(teleports[0].position, [1.0, 2.0, 3.0]);
         assert_eq!(teleports[1].entity, Entity(5));
         assert_eq!(
             teleports[1].flags,
             TeleportRequest::BEST_SPAWN,
             "beside another player, the game finds a free spot"
         );
-        assert_eq!(teleports[1].position, [40 << 32, 12 << 32, -3 << 32]);
+        assert_eq!(teleports[1].position, [40.0, 12.0, -3.0]);
     }
 }

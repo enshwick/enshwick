@@ -114,8 +114,14 @@ and three flags, read with these methods:
 - `is_container()`;
 - `is_blueprint()`.
 
+`placed_entity_template` is the template a player places from the item, such
+as a lantern's, with the GUID's bytes in the game's file order. It is `None`
+for an item that places nothing. It is not the template of the item's own
+entity, and it does not say that a placement would succeed.
+
 `item_info` returns `None` for
-an unknown item, and while no world runs.
+an unknown item, and while no world runs. So `Some` with no placed template
+means the item places nothing, not that its data is unread.
 
 ## Changes
 

@@ -8,18 +8,19 @@ use rustc_hash::FxHashMap;
 
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
+use enshwick_core::content::Guid;
 
 /// One mod's renames, old GUID to new.
 #[derive(Debug)]
 struct Declared {
     owner: ModIndex,
-    renames: Vec<([u8; 16], [u8; 16])>,
+    renames: Vec<(Guid, Guid)>,
 }
 
 /// Open while mods initialise, sealed by [`renamed`].
 static DECLARED: Registry<Declared> = Registry::new();
 /// Each old GUID to the end of its chain, once sealed.
-static RENAMES: OnceLock<FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
+static RENAMES: OnceLock<FxHashMap<Guid, Guid>> = OnceLock::new();
 
 /// Why a mod's renames were refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -63,15 +64,12 @@ fn add(
 
 /// The renames of every mod `on` keeps, old GUID to the end of its chain:
 /// sealed on the first call, after every mod is initialised.
-pub(crate) fn renamed(on: impl Fn(ModIndex) -> bool) -> &'static FxHashMap<[u8; 16], [u8; 16]> {
+pub(crate) fn renamed(on: impl Fn(ModIndex) -> bool) -> &'static FxHashMap<Guid, Guid> {
     RENAMES.get_or_init(|| sealed(&DECLARED, on))
 }
 
-fn sealed(
-    declared: &Registry<Declared>,
-    on: impl Fn(ModIndex) -> bool,
-) -> FxHashMap<[u8; 16], [u8; 16]> {
-    let direct: FxHashMap<[u8; 16], [u8; 16]> = declared
+fn sealed(declared: &Registry<Declared>, on: impl Fn(ModIndex) -> bool) -> FxHashMap<Guid, Guid> {
+    let direct: FxHashMap<Guid, Guid> = declared
         .seal()
         .iter()
         .filter(|d| on(d.owner))
@@ -82,7 +80,7 @@ fn sealed(
 
 /// Each old GUID to the end of its chain of renames, A to C for A to B and
 /// B to C; a cycle stops where it would come back.
-fn follow(direct: &FxHashMap<[u8; 16], [u8; 16]>) -> FxHashMap<[u8; 16], [u8; 16]> {
+fn follow(direct: &FxHashMap<Guid, Guid>) -> FxHashMap<Guid, Guid> {
     direct
         .iter()
         .map(|(&from, &first)| {
@@ -104,8 +102,8 @@ mod tests {
 
     fn rename(from: u8, to: u8) -> ContentRename {
         ContentRename {
-            from: [from; 16],
-            to: [to; 16],
+            from: Guid([from; 16]),
+            to: Guid([to; 16]),
         }
     }
 
@@ -116,9 +114,9 @@ mod tests {
         assert_eq!(add(&declared, first, &[rename(1, 2)]), Ok(()));
         assert_eq!(add(&declared, second, &[rename(2, 3)]), Ok(()));
         let renames = sealed(&declared, |_| true);
-        assert_eq!(renames[&[1; 16]], [3; 16]);
-        assert_eq!(renames[&[2; 16]], [3; 16]);
-        assert!(!renames.contains_key(&[3; 16]));
+        assert_eq!(renames[&Guid([1; 16])], Guid([3; 16]));
+        assert_eq!(renames[&Guid([2; 16])], Guid([3; 16]));
+        assert!(!renames.contains_key(&Guid([3; 16])));
     }
 
     #[test]
@@ -129,7 +127,7 @@ mod tests {
         assert_eq!(add(&declared, off, &[rename(4, 5)]), Ok(()));
         let renames = sealed(&declared, |owner| owner == on);
         assert_eq!(renames.len(), 1);
-        assert_eq!(renames[&[1; 16]], [2; 16]);
+        assert_eq!(renames[&Guid([1; 16])], Guid([2; 16]));
     }
 
     #[test]
@@ -154,11 +152,14 @@ mod tests {
 
     #[test]
     fn a_cycle_of_renames_stops_before_it_comes_back() {
-        let direct = [([1; 16], [2; 16]), ([2; 16], [1; 16])]
-            .into_iter()
-            .collect();
+        let direct = [
+            (Guid([1; 16]), Guid([2; 16])),
+            (Guid([2; 16]), Guid([1; 16])),
+        ]
+        .into_iter()
+        .collect();
         let followed = follow(&direct);
-        assert_eq!(followed[&[1; 16]], [2; 16]);
-        assert_eq!(followed[&[2; 16]], [1; 16]);
+        assert_eq!(followed[&Guid([1; 16])], Guid([2; 16]));
+        assert_eq!(followed[&Guid([2; 16])], Guid([1; 16]));
     }
 }

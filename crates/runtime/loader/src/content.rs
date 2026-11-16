@@ -1,5 +1,5 @@
 //! The content domain: served resources, content changes, rates, recipes, item
-//! kinds and textures.
+//! kinds, named content for pickers and textures.
 
 #[cfg(windows)]
 pub(crate) mod clones;
@@ -8,8 +8,21 @@ pub(crate) mod clones;
     expect(dead_code, reason = "only the running game takes mods' renames")
 )]
 pub(crate) mod content_renames;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(
+        dead_code,
+        reason = "only the running game reads the crafting prop mask"
+    )
+)]
+pub(crate) mod crafting_props;
 pub mod data_changes;
 pub mod item_kinds;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the client's interface lists named content")
+)]
+pub(crate) mod names;
 #[cfg(windows)]
 pub(crate) mod rate_links;
 #[cfg_attr(
@@ -22,6 +35,16 @@ pub mod recipes;
 pub(crate) mod served;
 #[cfg(windows)]
 pub(crate) mod standins;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the client's interface lists templates")
+)]
+pub(crate) mod template_names;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game serves terrain materials")
+)]
+pub(crate) mod terrain_materials;
 #[cfg(windows)]
 pub(crate) mod textures;
 
@@ -33,8 +56,11 @@ use crate::engine::parts::{Part, fused, part};
 #[cfg(windows)]
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
+        table_ids: recipes::TABLE_IDS,
         link: Some(recipes::init),
-        forget: Some(|_| recipes::forget()),
+        forget: Some(fused!("recipes forgetting a hosted game", |_| {
+            recipes::forget();
+        })),
         ..part!("recipes", recipes)
     },
     &Part {
@@ -56,6 +82,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: rate_links::TABLE_IDS,
+        seal: Some(|_| rate_links::seal()),
         link: Some(rate_links::link),
         world_event: Some(fused!("recipe rates at world events", |_, event| {
             rate_links::world_event(event);

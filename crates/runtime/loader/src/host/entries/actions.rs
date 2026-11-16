@@ -6,7 +6,7 @@ use enshwick_core::abi::{ChatFilterFn, Level, Status, Str};
 
 use crate::engine::conflicts::Mode;
 use crate::host::layer::guards::{in_init, on_client};
-use crate::host::layer::{Caller, Headed, Mod, Out, Text, entries};
+use crate::host::layer::{Callback, Caller, Headed, Mod, Out, Text, entries};
 use crate::host::memory::text;
 
 pub(crate) mod commands;
@@ -16,13 +16,17 @@ thread_local! {
     static CONSOLE_REPLY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
 }
 
-/// [`Status::MISSING`] when the server has no handler for the action.
+/// [`Status::UNAVAILABLE`] when the server has no handler for the action.
 fn sent(ran: bool) -> Result<(), Status> {
-    if ran { Ok(()) } else { Err(Status::MISSING) }
+    if ran {
+        Ok(())
+    } else {
+        Err(Status::UNAVAILABLE)
+    }
 }
 
 entries! {
-    fn chat_filter(me as Mod, callback: ChatFilterFn, user: *mut core::ffi::c_void) -> Status {
+    fn chat_filter(me as Mod, callback as Callback<ChatFilterFn>, user: *mut core::ffi::c_void) -> Status {
         me.claim(
             "chat filter",
             Mode::Chained,
@@ -32,7 +36,7 @@ entries! {
 
     fn interaction_filter(
         me as Mod,
-        callback: api_frame::InteractionFn,
+        callback as Callback<api_frame::InteractionFilterFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         me.claim(
@@ -42,7 +46,15 @@ entries! {
         )
     }
 
-    fn craft_filter(me as Mod, callback: api_frame::CraftCheckFn, user: *mut core::ffi::c_void) -> Status {
+    fn interaction_prompt(me as Mod, spec as Headed<api_frame::InteractionPrompt>) -> Status {
+        me.claim(
+            crate::actions::interaction_prompts::feature(spec.item),
+            Mode::Exclusive,
+            crate::actions::interaction_prompts::register(me.loader, me.index, &spec),
+        )
+    }
+
+    fn craft_filter(me as Mod, callback as Callback<api_frame::CraftFilterFn>, user: *mut core::ffi::c_void) -> Status {
         me.claim(
             "crafting veto",
             Mode::Chained,
@@ -50,7 +62,7 @@ entries! {
         )
     }
 
-    fn build_filter(me as Mod, callback: api_frame::BuildCheckFn, user: *mut core::ffi::c_void) -> Status {
+    fn build_filter(me as Mod, callback as Callback<api_frame::BuildFilterFn>, user: *mut core::ffi::c_void) -> Status {
         me.claim(
             "building veto",
             Mode::Chained,
@@ -58,7 +70,7 @@ entries! {
         )
     }
 
-    fn actions(me as Mod, callback: api_frame::ActionFn, user: *mut core::ffi::c_void) -> Status {
+    fn actions(me as Mod, callback as Callback<api_frame::ActionFn>, user: *mut core::ffi::c_void) -> Status {
         in_init(me.index)?;
         crate::actions::player_actions::register(me.index, callback, user)?;
         crate::engine::log::write(Level::DEBUG, &me.record.id, "player actions");
@@ -68,11 +80,10 @@ entries! {
     fn control(
         me as Mod,
         spec as Headed<api_frame::ControlSpec>,
-        callback: api_frame::ControlFn,
+        callback as Callback<api_frame::ControlFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         in_init(me.index)?;
-        // A mod before ABI 11.11 has no action, which the copy leaves zero: empty.
         let (Some(name), Some(label), Some(link), Some(action)) = (
             text(spec.name),
             text(spec.label),
@@ -95,20 +106,14 @@ entries! {
         Ok(())
     }
 
-    fn run_action(me as Mod, action as Text, args as Text) -> Status {
-        on_client(me.loader)?;
-        sent(crate::actions::player_actions::run_on_server(&me.record.id, action, args, None))?;
-        Ok(())
-    }
-
-    fn run_action_at(
+    fn run_action(
         me as Mod,
         action as Text,
         args as Text,
         target: *const enshwick_core::abi::ActionTarget,
     ) -> Status {
         on_client(me.loader)?;
-        // SAFETY: `HostApi::run_action_at` has the mod pass `target` null or
+        // SAFETY: `HostApi::run_action` has the mod pass `target` null or
         // a live `ActionTarget` readable for the size its header states, for
         // the call.
         let target = unsafe { enshwick_core::abi::ActionTarget::read(target) }?;

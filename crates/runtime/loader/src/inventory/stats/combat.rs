@@ -82,8 +82,9 @@ pub(super) fn expire(state: &mut World, now: Instant) {
     state.next_expiry = next;
 }
 
-/// Watches the players online and forgets the entities nothing keeps
-/// watched or that left the world; whether it forgot any.
+/// Watches the players online, drops the asks of mods turned off and
+/// forgets the entities nothing keeps watched or that left the world;
+/// whether it forgot any.
 pub(super) fn follow(loader: &Loader, state: &mut World, players: &[PlayerInfo]) -> bool {
     let online: FxHashSet<u32> = players.iter().map(|p| p.entity.0).collect();
     for p in players {
@@ -95,10 +96,11 @@ pub(super) fn follow(loader: &Loader, state: &mut World, players: &[PlayerInfo])
     }
     let before = state.watched.len();
     state.watched.retain(|entity, w| {
+        w.asked.retain(|&owner| !loader.passed(owner, false));
         // An entry with values still to work out, or maxima points still
         // added, stays until a step takes them back.
         let keep = online.contains(entity)
-            || w.asked
+            || !w.asked.is_empty()
             || w.dirty
             || w.applied.iter().any(|&points| points != 0)
             || w.modifiers.iter().any(|h| !h.saved);

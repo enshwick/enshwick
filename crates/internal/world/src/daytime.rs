@@ -76,12 +76,12 @@ impl TimeOfDay {
     fn from_info(info: &DaytimeInfo) -> Self {
         let length = |ns: i64| Duration::from_nanos(u64::try_from(ns).unwrap_or(0));
         Self {
-            hours: hours(info.time),
+            hours: hours(info.time_ns),
             is_day: info.flags & DaytimeInfo::DAY != 0,
-            day_starts: hours(info.day_start),
-            night_starts: hours(info.day_end),
-            day_time_duration: length(info.day_length),
-            night_time_duration: length(info.night_length),
+            day_starts: hours(info.day_start_ns),
+            night_starts: hours(info.day_end_ns),
+            day_time_duration: length(info.day_length_ns),
+            night_time_duration: length(info.night_length_ns),
             speed: info.speed,
         }
     }
@@ -120,11 +120,11 @@ impl Clock {
     pub fn now(&self) -> Option<TimeOfDay> {
         let mut info = DaytimeInfo {
             header: Header::of::<DaytimeInfo>(),
-            time: 0,
-            day_start: 0,
-            day_end: 0,
-            day_length: 0,
-            night_length: 0,
+            time_ns: 0,
+            day_start_ns: 0,
+            day_end_ns: 0,
+            day_length_ns: 0,
+            night_length_ns: 0,
             speed: 0.0,
             flags: 0,
         };
@@ -140,7 +140,7 @@ impl Clock {
     ///
     /// [`WorldError::Refused`] for an hour that is not a finite number,
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] on a build without the clock.
+    /// [`WorldError::Unavailable`] on a build without the clock.
     ///
     /// # Examples
     ///
@@ -206,7 +206,7 @@ impl ClockSpeed {
     ///
     /// [`WorldError::Refused`] for a factor outside 0 to [`ClockSpeed::MAX`],
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] on a build without the clock or once the
+    /// [`WorldError::Unavailable`] on a build without the clock or once the
     /// loader turned the clock's speed off.
     ///
     /// # Examples
@@ -253,7 +253,7 @@ impl LoadMethods for crate::BaseLoad {
 
     fn clock_speed(&mut self) -> Result<ClockSpeed, Off> {
         let host = self.host();
-        let status = (host.api().time_speed_control)(host.handle());
+        let status = (host.api().request_time_speed)(host.handle());
         crate::load::ok(status, ClockSpeed { host }, || "clock speed".to_owned())
     }
 }

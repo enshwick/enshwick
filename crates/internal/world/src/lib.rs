@@ -23,6 +23,8 @@ struct MergedExamples;
 extern crate self as enshwick;
 
 // The lower crates' modules at the paths the code here names them by.
+#[cfg(feature = "unstable")]
+pub(crate) use enshwick_base::locks;
 #[doc(hidden)]
 pub use enshwick_base::{
     code, command_names,
@@ -30,9 +32,7 @@ pub use enshwick_base::{
     ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule, script,
     services, state, status, time,
 };
-pub(crate) use enshwick_base::{engine_enum, engine_ids};
-#[cfg(feature = "unstable")]
-pub(crate) use enshwick_base::{fresh, locks};
+pub(crate) use enshwick_base::{engine_enum, engine_ids, fresh};
 #[doc(hidden)]
 pub use enshwick_content::{content, rates};
 // The macros the base exports, which the code here calls by `crate::`.
@@ -68,7 +68,6 @@ pub mod terrain;
 pub mod typed;
 pub mod voxels;
 pub mod weather;
-#[cfg(feature = "unstable")]
 pub mod world;
 mod world_error;
 

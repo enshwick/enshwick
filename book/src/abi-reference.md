@@ -37,11 +37,11 @@ one:
 
 - A mod exports `enshwick_mod_abi`, the major it was built for. A loader of
   a newer major does not load it and logs
-  `<file> skipped: built for ABI major 10, and Enshwick 1.0.0-alpha.15 runs ABI 11.28: rebuild it for Enshwick 1.0.0-alpha.15`.
+  `<file> skipped: built for ABI major 11, and Enshwick 1.0.0-alpha.17 runs ABI 12.1: rebuild it for Enshwick 1.0.0-alpha.17`.
   A loader of an older major logs that the mod is newer and asks to update
   Enshwick.
 - The manifest's header holds the minor. A loader older than that minor
-  logs `<file> skipped: built for ABI 11.29, newer than ABI 11.28 of Enshwick 1.0.0-alpha.15: update Enshwick`.
+  logs `<file> skipped: built for ABI 12.2, newer than ABI 12.1 of Enshwick 1.0.0-alpha.17: update Enshwick`.
 - Structs that cross the boundary on their own start with a
   [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs).
   It holds the struct's size as its writer knew it and the writer's major
@@ -59,7 +59,7 @@ rebuilds only for a new major. Alphas are not on crates.io, so a mod pins
 
 ```toml
 [dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.15" }
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.17" }
 ```
 
 A tag never moves, so `cargo update` keeps the mod on that alpha.
@@ -98,10 +98,10 @@ writes four exports:
 
 | Export                  | Signature                                 | When the loader calls it                               |
 | ----------------------- | ----------------------------------------- | ------------------------------------------------------ |
-| `enshwick_mod_abi`      | `fn() -> u32`                             | First: the ABI major the mod was built for.            |
+| `enshwick_mod_abi`      | `fn() -> u16`                             | First: the ABI major the mod was built for.            |
 | `enshwick_mod_query`    | `fn() -> *const Manifest`                 | Before any of the mod's code runs; static data.        |
 | `enshwick_mod_init`     | `fn(*const HostApi, ModHandle) -> Status` | Once, in load order; registers hooks and the rest.     |
-| `enshwick_mod_ready`    | `fn(*const HostApi, ModHandle)`           | After every chain is armed, if `init` returned OK.     |
+| `enshwick_mod_ready`    | `fn(*const HostApi, ModHandle) -> Status` | After every chain is armed, if `init` returned OK; any other answer turns the mod off. |
 
 A DLL in `mods/` without all four is logged as `<file> is not an Enshwick mod`
 and unloaded.

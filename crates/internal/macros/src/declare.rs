@@ -498,10 +498,8 @@ fn dependency(
             )));
         }
     };
-    if !is_old_or_new_id(&id) {
-        return Err(refuse(format!(
-            "{at}: {id:?} is not <author>.<name> or [a-z0-9-]+"
-        )));
+    if !is_id(&id) {
+        return Err(refuse(format!("{at}: {id:?} is not <author>.<name>")));
     }
     if relation == "AFTER" && !range.is_empty() {
         return Err(refuse(format!(
@@ -612,12 +610,6 @@ fn is_id(id: &str) -> bool {
             .is_some_and(|(a, n)| is_part(a) && is_part(n))
 }
 
-/// Whether `id` is a mod id or one of the old form without an author that
-/// a dependency still names; the API's `abi::is_valid_old_form_id`.
-fn is_old_or_new_id(id: &str) -> bool {
-    is_id(id) || (id.len() <= 64 && is_part(id))
-}
-
 /// Whether `alias` is a snake-case Rust name.
 fn is_alias(alias: &str) -> bool {
     let mut bytes = alias.bytes();
@@ -676,9 +668,9 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
                 side: #abi::Side::#side,
                 fingerprint: #abi::Fingerprint { guid: #abi::guid(#guid), age: #age },
                 symbols: #pinned.as_ptr(),
-                symbol_count: #pinned.len(),
+                symbol_count: ::enshwick::__private::count(#pinned.len()),
                 constants: #constants.as_ptr(),
-                constant_count: #constants.len(),
+                constant_count: ::enshwick::__private::count(#constants.len()),
             }
         }
     });
@@ -703,13 +695,13 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             side: #abi::Side::#side,
             flags: #flags,
             dependencies: DEPENDENCIES.as_ptr(),
-            dependency_count: DEPENDENCIES.len(),
+            dependency_count: ::enshwick::__private::count(DEPENDENCIES.len()),
             builds: BUILDS.as_ptr(),
-            build_count: BUILDS.len(),
+            build_count: ::enshwick::__private::count(BUILDS.len()),
             name: #abi::Str::new(#name),
             description: #abi::Str::new(::core::env!("CARGO_PKG_DESCRIPTION")),
             authors: AUTHORS.as_ptr(),
-            author_count: AUTHOR_COUNT,
+            author_count: ::enshwick::__private::count(AUTHOR_COUNT),
             license: #abi::Str::new(::core::env!("CARGO_PKG_LICENSE")),
             homepage: #abi::Str::new(::enshwick::__private::first_text(
                 &[::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
@@ -764,7 +756,7 @@ mod tests {
             lights = "you.lanterns"
 
             [breaks]
-            old = { id = "old-stalls", version = "<0.3" }
+            old = { id = "you.old-stalls", version = "<0.3" }
 
             [[builds]]
             side = "server"
@@ -790,7 +782,7 @@ mod tests {
             [
                 ("REQUIRES", "you.lockers", ">=0.1, <1.0"),
                 ("AFTER", "you.lanterns", ""),
-                ("BREAKS", "old-stalls", "<0.3"),
+                ("BREAKS", "you.old-stalls", "<0.3"),
             ]
         );
         assert_eq!(
@@ -818,6 +810,10 @@ mod tests {
             );
         }
         assert!(refused("id = \"lanterns\"\nside = \"both\"").contains("<author>.<name>"));
+        assert!(
+            refused("id = \"you.a\"\nside = \"both\"\n[breaks]\nold = \"old-market\"")
+                .contains("\"old-market\" is not <author>.<name>")
+        );
         assert!(refused("side = \"both\"").contains("`id`"));
         assert!(
             refused("id = \"you.a\"\nside = \"both\"\nexports = [\"sold\"]")

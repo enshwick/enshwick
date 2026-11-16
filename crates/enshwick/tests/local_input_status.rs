@@ -31,7 +31,8 @@ side = "both""#
         assert_eq!(status, Status::OK);
         let input = INPUT.lock().unwrap().unwrap();
         let never = input.local_status().unwrap();
-        assert!(!never.requested && !never.sample_present && !never.fresh);
+        assert!(never.requested, "opening Input started the reads");
+        assert!(!never.sample_present && !never.fresh);
         assert_eq!(never.age_ms, None);
         assert_eq!(input.local_status().unwrap(), never);
         loader.hold_locally(Some(0));
@@ -56,6 +57,11 @@ side = "both""#
                 && live.fresh
         );
         assert_eq!(live.age_ms, Some(15));
+        assert!(
+            input.local_held().is_none(),
+            "no interface step ran since opening Input started the reads"
+        );
+        let _step = loader.draw_frame();
         assert_eq!(input.local_held().unwrap().bits(), 0);
         loader.set_local_input_status(Info {
             header: Header::of::<Info>(),
@@ -83,7 +89,34 @@ side = "both""#
         assert_eq!(status, Status::OK);
         assert!(matches!(
             INPUT.lock().unwrap().unwrap().local_status(),
-            Err(WorldError::Missing)
+            Err(WorldError::Unavailable)
         ));
+    }
+
+    #[test]
+    fn cached_status_preserves_age_boundaries_and_ignores_unknown_flags() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .player_input()
+            .install();
+        // SAFETY: these are this file's generated exports.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let input = INPUT.lock().unwrap().unwrap();
+        for age_ms in [0, 1000, 1001, u64::MAX - 1, u64::MAX] {
+            loader.set_local_input_status(Info {
+                header: Header::of::<Info>(),
+                flags: Info::SAMPLE_PRESENT | (1 << 31),
+                reserved: 0,
+                age_ms,
+            });
+            let observed = input.local_status().unwrap();
+            assert_eq!(observed.age_ms, (age_ms != u64::MAX).then_some(age_ms));
+            assert!(observed.requested && observed.sample_present);
+            assert!(!observed.layout_available && !observed.link_available);
+            assert!(!observed.read_enabled && !observed.fresh);
+            assert_eq!(input.local_status().unwrap(), observed);
+        }
     }
 }

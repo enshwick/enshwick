@@ -32,7 +32,7 @@ pub use kinds::{KindZone, NewFlameAltar};
 use filters::{run_building_zone_check, run_limit, run_zone};
 
 use crate::Entity;
-use crate::abi::{AltarInfo, Bounds};
+use crate::abi::{AltarInfo, Bounds, Extent};
 use crate::content::Guid;
 use crate::{Host, Off};
 
@@ -524,10 +524,10 @@ pub struct AltarLimit {
     /// The Flame level.
     pub flame_level: u32,
     /// The altars the game itself allows at that level.
-    pub vanilla: u8,
+    pub vanilla: u32,
     /// The altars allowed so far, as the filters before have left it; the
     /// filter's answer.
-    pub allowed: u8,
+    pub allowed: u32,
 }
 
 /// The most altar zones and bases the game groups now; see [`base_limit`].
@@ -632,14 +632,14 @@ pub fn base_limit() -> Option<BaseLimit> {
 ///
 /// ```
 /// fn apply(bases: u32) -> Result<(), enshwick::Off> {
-///     enshwick::altars::set_base_cap(bases)
+///     enshwick::altars::set_base_limit(bases)
 /// }
 /// # let _ = apply;
 /// ```
 #[cfg(feature = "unstable")]
-pub fn set_base_cap(bases: u32) -> Result<(), Off> {
+pub fn set_base_limit(bases: u32) -> Result<(), Off> {
     let host = crate::host().ok_or_else(|| Off::new("the base cap: no loader"))?;
-    let status = (host.api().set_base_cap)(host.handle(), bases);
+    let status = (host.api().set_base_limit)(host.handle(), bases);
     if status.is_ok() {
         Ok(())
     } else {
@@ -648,8 +648,8 @@ pub fn set_base_cap(bases: u32) -> Result<(), Off> {
 }
 
 /// A placement the game refused because the object does not lie in a single
-/// building zone; see [`Load::on_building_zone_check`](../struct.Load.html#method.on_building_zone_check). Coordinates are 32.32
-/// fixed-point metres.
+/// building zone; see [`Load::on_building_zone_check`](../struct.Load.html#method.on_building_zone_check). Coordinates are
+/// metres.
 ///
 /// The name is enshwick's, after the game's building zone: the check the game makes has no name, and its refusal is the cursor
 /// flag `CursorOutsideBuildingZone`.
@@ -659,12 +659,12 @@ pub fn set_base_cap(bases: u32) -> Result<(), Off> {
 /// See [`Load::on_building_zone_check`](../struct.Load.html#method.on_building_zone_check).
 #[derive(Clone, Copy, Debug)]
 pub struct BuildingZoneCheck<'a> {
-    /// The building zones, half-open.
-    pub zones: &'a [Bounds],
-    /// The object's box, both corners included.
-    pub object: Bounds,
-    /// How far the game lets an object reach past a zone, on every side.
-    pub margin: i64,
+    /// The building zones.
+    pub zones: &'a [Extent],
+    /// The object's box.
+    pub object: Extent,
+    /// How far the game lets an object reach past a zone on every side, in metres.
+    pub margin: f64,
 }
 
 /// `Load`'s methods of this module on the base handle, which core's
@@ -714,7 +714,7 @@ impl crate::script::Bound for Altars {
 impl LoadMethods for crate::BaseLoad {
     fn altars(&mut self) -> Result<Altars, Off> {
         let host = self.host();
-        let status = (host.api().altars_open)(host.handle());
+        let status = (host.api().request_altars)(host.handle());
         crate::load::ok(status, Altars { host }, || "altars".to_owned())
     }
 
@@ -725,7 +725,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().altar_zone_filter)(host.handle(), run_zone::<F>, user),
+            |user| (host.api().altar_zone_filter)(host.handle(), Some(run_zone::<F>), user),
             "the altar zone filter",
         )?;
         Ok(ZoneSizes { host })
@@ -739,9 +739,9 @@ impl LoadMethods for crate::BaseLoad {
         crate::load::hand_over(
             filter,
             |user| {
-                (host.api().building_zone_check_filter)(
+                (host.api().building_zone_filter)(
                     host.handle(),
-                    run_building_zone_check::<F>,
+                    Some(run_building_zone_check::<F>),
                     user,
                 )
             },
@@ -763,7 +763,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().altar_limit_filter)(host.handle(), run_limit::<F>, user),
+            |user| (host.api().altar_limit_filter)(host.handle(), Some(run_limit::<F>), user),
             "the altar limit filter",
         )
     }
@@ -806,9 +806,9 @@ pub fn grouping() -> Option<Grouping> {
 /// `entity`'s template; `None` off the server's game thread or for an entity
 /// the loader cannot read.
 pub(crate) fn template_of(host: Host, entity: Entity) -> Option<Guid> {
-    let mut out = [0u8; 16];
+    let mut out = Guid::NIL;
     let status = (host.api().entity_template)(host.handle(), entity, &raw mut out);
-    status.is_ok().then_some(Guid(out))
+    status.is_ok().then_some(out)
 }
 
 #[cfg(test)]

@@ -164,7 +164,7 @@ fn answer(loader: &Loader, tool: Tool<'_>) -> String {
 /// `enshwick`: the loader's version and the mods running.
 fn mods(loader: &Loader) -> String {
     let mods: Vec<String> = loader.mods.iter().map(name).collect();
-    let version = env!("CARGO_PKG_VERSION");
+    let version = &crate::base::releases::running_with_abi();
     let mut sentences = vec![if mods.is_empty() {
         texts::fill("enshwick.mods.none", &[("version", version)])
     } else {
@@ -294,7 +294,8 @@ fn ui_demo(loader: &Loader, name: &str) -> String {
         .ok()
         .and_then(|players| {
             players.into_iter().find(|p| {
-                let named = &p.name[..usize::from(p.name_len).min(p.name.len())];
+                let len = usize::try_from(p.name_len).unwrap_or(usize::MAX);
+                let named = &p.name[..len.min(p.name.len())];
                 String::from_utf8_lossy(named).to_lowercase() == wanted
             })
         });

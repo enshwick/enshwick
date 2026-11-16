@@ -10,8 +10,10 @@ mod script;
 #[enshwick_macros::forward(base)]
 #[crate::script(survivors)]
 impl Load<'_> {
-    /// Makes `handler` the answer to the game's survivor lookups; one mod at
-    /// a time. It runs on the server's worker threads, in the dedicated
+    /// Makes `handler` answer the game's survivor lookups: every mod's
+    /// handler runs in load order, the first that answers deciding, and
+    /// [`Answer::Vanilla`](crate::survivors::Answer::Vanilla) passes on. It
+    /// runs on the server's worker threads, in the dedicated
     /// server or a hosting client, and for [`Purpose::Cursor`](crate::survivors::Purpose::Cursor) on a client
     /// alone too: keep it quick and never block.
     ///
@@ -22,8 +24,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, when another mod answers already, or on a build
-    /// that lacks a piece.
+    /// [`Off`] after init or on a build that lacks a piece.
     ///
     /// # Examples
     ///
@@ -39,7 +40,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// As for [`Load::on_survivor_lookup`], without the one-mod rule.
+    /// As for [`Load::on_survivor_lookup`].
     ///
     /// # Examples
     ///
@@ -133,8 +134,10 @@ impl Load<'_> {
 
     /// Makes `merge` decide what the client's survivor menu shows for a
     /// survivor with several entities: it gets the status byte of each and
-    /// returns the byte to show, or `None` for the game's. Client only; one
-    /// mod at a time. It runs every frame while the menu shows, once per such
+    /// returns the byte to show, or `None` to pass on. Every mod's merge
+    /// runs in load order, the first byte returned deciding, and the game's
+    /// shows when all pass on. Client only. It runs every frame while the
+    /// menu shows, once per such
     /// survivor: it must not allocate or lock.
     ///
     /// # Errors

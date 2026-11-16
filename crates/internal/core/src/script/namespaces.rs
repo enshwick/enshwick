@@ -28,6 +28,7 @@ pub struct Namespace {
     open: fn(&mut crate::Load<'_>) -> Result<Opened, crate::Off>,
     init: &'static [&'static [InitFunction]],
     request: Option<Request>,
+    when_named: bool,
 }
 
 /// The start-time call that opens a namespace a script asks for, as a Rust
@@ -90,7 +91,32 @@ impl Namespace {
             open: open::<T>,
             init: &[],
             request: None,
+            when_named: false,
         }
+    }
+
+    /// [`Namespace::of`] for a namespace whose opening starts work, such as
+    /// reads every frame: a runtime opens it only for a mod whose scripts
+    /// name it.
+    const fn when_named<T: Bound>() -> Self {
+        Self {
+            when_named: true,
+            ..Self::of::<T>()
+        }
+    }
+
+    /// Whether a runtime opens this namespace only for a mod whose scripts
+    /// name it, since opening it starts work.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let world = enshwick::script::NAMESPACES.iter().find(|n| n.name() == "world");
+    /// assert!(world.is_some_and(|n| !n.opens_when_named()));
+    /// ```
+    #[must_use]
+    pub const fn opens_when_named(&self) -> bool {
+        self.when_named
     }
 
     /// [`Namespace::of`] for a handle whose opening switches a loader
@@ -161,6 +187,7 @@ impl Namespace {
             open: |_| Ok(Opened(Arc::new(|_, _| Err(Error::new("no such function"))))),
             init,
             request: None,
+            when_named: false,
         }
     }
 
@@ -258,6 +285,8 @@ mod base;
 mod content;
 mod inventory;
 mod knowledge;
+#[cfg(test)]
+mod neutral;
 mod ui;
 mod world;
 

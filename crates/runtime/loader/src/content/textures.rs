@@ -32,6 +32,7 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use enshwick_base::Relock;
+use enshwick_core::content::Guid;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -707,7 +708,7 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
 fn with_served(keys: &mut Vec<[u8; KEY]>, served: &[enshwick_core::abi::ResourceKey]) {
     for key in served {
         let mut entry = [0u8; KEY];
-        entry[..16].copy_from_slice(&key.guid);
+        entry[..16].copy_from_slice(&key.guid.0);
         entry[16..20].copy_from_slice(&key.type_hash.to_le_bytes());
         entry[20..24].copy_from_slice(&key.part.to_le_bytes());
         if !keys.contains(&entry) {
@@ -719,16 +720,16 @@ fn with_served(keys: &mut Vec<[u8; KEY]>, served: &[enshwick_core::abi::Resource
 /// `keys`, the game's listing, with each clone of `aliases` listed as its
 /// vanilla template's entry with the clone's GUID, once each; a clone whose
 /// vanilla template the game does not list stays out.
-fn with_aliases(keys: &mut Vec<[u8; KEY]>, aliases: &[([u8; 16], [u8; 16])]) {
+fn with_aliases(keys: &mut Vec<[u8; KEY]>, aliases: &[(Guid, Guid)]) {
     for (clone, vanilla) in aliases {
         let Some(mut entry) = keys
             .iter()
-            .find(|key| key[..16] == vanilla[..] && key[16..20] == TEMPLATE.to_le_bytes())
+            .find(|key| key[..16] == vanilla.0[..] && key[16..20] == TEMPLATE.to_le_bytes())
             .copied()
         else {
             continue;
         };
-        entry[..16].copy_from_slice(clone);
+        entry[..16].copy_from_slice(&clone.0);
         if !keys.contains(&entry) {
             keys.push(entry);
         }
@@ -887,7 +888,7 @@ mod tests {
     #[test]
     fn served_keys_follow_the_game_s_listing_once_each_as_it_lays_keys_out() {
         let key = |guid: u8| enshwick_core::abi::ResourceKey {
-            guid: [guid; 16],
+            guid: Guid([guid; 16]),
             type_hash: TEMPLATE,
             part: 2,
         };
@@ -919,7 +920,11 @@ mod tests {
         let mut listed = vec![vanilla];
         with_aliases(
             &mut listed,
-            &[([8; 16], [4; 16]), ([8; 16], [4; 16]), ([9; 16], [5; 16])],
+            &[
+                (Guid([8; 16]), Guid([4; 16])),
+                (Guid([8; 16]), Guid([4; 16])),
+                (Guid([9; 16]), Guid([5; 16])),
+            ],
         );
         assert_eq!(
             listed.len(),

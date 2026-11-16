@@ -15,8 +15,11 @@ use crate::engine::parts::{Part, fused, part, step};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: interface::TABLE_IDS,
+        seal: Some(|_| interface::seal()),
         link: Some(interface::link),
-        forget: Some(interface::forget),
+        forget: Some(fused!("ui forgetting a hosted game", |loader| {
+            interface::forget(loader);
+        })),
         ..part!("ui", interface)
     },
     &Part {

@@ -96,7 +96,7 @@ pub struct Placed {
     /// Its template GUID, in file order.
     pub template: [u8; 16],
     /// Where, in metres.
-    pub position: [f32; 3],
+    pub position: [f64; 3],
 }
 
 /// What `enshwick placed` answers for `placed`, newest first, with each
@@ -114,7 +114,7 @@ pub fn placed(placed: &[Placed], item_words: impl Fn(u32) -> String) -> String {
                 p.entity,
                 item_words(p.item),
                 Guid(p.template),
-                place(Some(p.position.map(f64::from)))
+                place(Some(p.position))
             )
         })
         .collect::<Vec<_>>()
@@ -184,7 +184,7 @@ pub fn mods(loaded: &[Loaded<'_>], skipped: &[Skipped]) -> String {
         .chain(
             skipped
                 .iter()
-                .map(|s| format!("{} {}: skipped, {}: {}", s.id, s.version, s.file, s.reason)),
+                .map(|s| format!("{}: skipped, {}: {}", s.named(), s.file, s.reason)),
         )
         .collect::<Vec<_>>()
         .join("\n")
@@ -305,7 +305,7 @@ mod tests {
     fn a_mod_skipped_at_start_is_listed_with_its_file_and_reason() {
         let skipped = Skipped {
             id: "you.safes".into(),
-            version: "0.2.0".into(),
+            version: Some("0.2.0".into()),
             label: "Safes".into(),
             file: "you.safes/you.safes.dll".into(),
             reason: crate::base::resolve::Skip::Missing {
@@ -315,6 +315,24 @@ mod tests {
         assert_eq!(
             mods(&[], &[skipped]),
             "you.safes 0.2.0: skipped, you.safes/you.safes.dll: requires you.locks, which is not loaded"
+        );
+    }
+
+    #[test]
+    fn a_file_refused_before_its_manifest_read_is_listed_by_its_folder_without_a_version() {
+        let refused = Skipped {
+            id: "lanterns".into(),
+            version: None,
+            label: "lanterns".into(),
+            file: "mods/lanterns/lanterns.dll".into(),
+            reason: crate::base::resolve::Skip::Refused {
+                skip: crate::base::discovery::Skip::NotAMod,
+            },
+        };
+        let line = mods(&[], &[refused]);
+        assert!(
+            line.starts_with("lanterns: skipped, mods/lanterns/lanterns.dll: "),
+            "{line}"
         );
     }
 

@@ -274,6 +274,33 @@ impl FakeHost {
     reason = "the fake's state is process-wide; `self` proves it is installed"
 )]
 impl Installed {
+    /// Turns the loader's part or feature `name` off for `reason`, as the
+    /// loader does for what a build lacks, so
+    /// [`mods::loader_off`](enshwick_core::mods::loader_off) lists it; a name
+    /// keeps its first reason, as the loader's do.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.turn_loader_off("screen reads", "this build lacks ui.hud_screen");
+    /// ```
+    pub fn turn_loader_off(&self, name: &'static str, reason: &'static str) {
+        table::with((), |s| {
+            if !s.loader_off.iter().any(|off| {
+                // SAFETY: the fake keeps only the static names its tests gave.
+                (unsafe { off.name.as_str() }) == Some(name)
+            }) {
+                s.loader_off.push(enshwick_core::abi::LoaderOff {
+                    name: Str::new(name),
+                    reason: Str::new(reason),
+                    at: 1,
+                    ..enshwick_core::abi::LoaderOff::EMPTY
+                });
+            }
+        });
+    }
+
     /// The mod's features as it last reported them with
     /// [`Load::feature`](enshwick_core::Load::feature), in the order it first named
     /// them: the name and, for one that is off, the reason.

@@ -12,6 +12,9 @@ inputs:
   api-key:
     description: The VirusTotal API key.
     required: true
+  minutes:
+    description: How long to wait for a new analysis; one still running leaves its link as a warning.
+    default: "15"
 
 runs:
   using: composite
@@ -20,6 +23,7 @@ runs:
       shell: bash
       env:
         VT_API_KEY: ${{ inputs.api-key }}
+        MINUTES: ${{ inputs.minutes }}
       working-directory: ${{ inputs.dir }}
       run: |
         api=https://www.virustotal.com/api/v3
@@ -38,8 +42,8 @@ runs:
               continue
             fi
             status=queued
-            # Fifteen minutes at most; a failed poll counts as not done yet.
-            for _ in $(seq 45); do
+            # Three polls a minute; a failed poll counts as not done yet.
+            for _ in $(seq $((MINUTES * 3))); do
               sleep 20
               analysis=$(vt "$api/analyses/$id") || continue
               status=$(jq -r .data.attributes.status <<< "$analysis")

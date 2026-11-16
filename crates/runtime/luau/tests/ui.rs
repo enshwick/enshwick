@@ -21,6 +21,9 @@ mod tests {
             local same = kept == nil or rawequal(kept, frame)
             kept = frame
             frame:window("main", "Panel", function(w)
+                if w:back() then
+                    enshwick.log.info(`back {frame:back()}`)
+                end
                 w:label({ text = "Settings", style = "H2" })
                 fast = w:toggle({ label = "Fast" }, fast)
                 volume = w:slider({ label = "Volume", min = 0, max = 1, steps = 11 }, volume)
@@ -110,6 +113,16 @@ mod tests {
 
         assert!(second.contains(&Drawn::Progress { fraction: 0.8 }));
 
+        // The script's dialog shows over the window and would take Back.
+        assert!(loader.answer(None));
+        loader.input("main", Input::Back);
+        let _backed = loader.draw_frame();
+        assert!(
+            logged(&loader, "back false"),
+            "Back reaches the window's body, not the frame around it: {:?}",
+            loader.logs()
+        );
+
         loader.input("Close", Input::Click);
         let closing = loader.draw_frame();
         assert!(
@@ -190,7 +203,7 @@ mod tests {
             (markers[0].label.as_str(), markers[0].color),
             ("Locker", UiMarker::GREEN)
         );
-        assert_eq!(markers[0].position, [1 << 32, 2 << 32, 3 << 32]);
+        assert_eq!(markers[0].position, [1.0, 2.0, 3.0]);
         assert_eq!(markers[1].color, UiMarker::WHITE);
     }
 
@@ -289,6 +302,32 @@ mod tests {
     }
 
     #[test]
+    fn sampler_age_keeps_full_u64_precision_and_the_never_sampled_sentinel() {
+        use enshwick::abi::{Header, LocalInputInfo as Info};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local status = enshwick.input.local_status()
+                enshwick.log.info(`boundary age {status.age_ms}`)
+            end)
+            ",
+        );
+        for age_ms in [u64::MAX - 1, u64::MAX] {
+            loader.set_local_input_status(Info {
+                header: Header::of::<Info>(),
+                flags: Info::SAMPLE_PRESENT | (1 << 31),
+                reserved: 0,
+                age_ms,
+            });
+            let _drawn = loader.draw_frame();
+        }
+        for line in ["boundary age 18446744073709551614", "boundary age nil"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_cannot_read_client_sampler_status_on_a_server() {
         let loader = run(
             FakeHost::new().player_input(),
@@ -303,6 +342,89 @@ mod tests {
             "{:?}",
             loader.logs()
         );
+    }
+
+    #[test]
+    fn a_script_reads_the_client_snapshot_s_session_screen_and_tab() {
+        use enshwick::abi::{ClientSnapshot, Str};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local s = enshwick.input.client_snapshot()
+                enshwick.log.info(`{s.state} {s.session} {s.hud_screen} {s.menu_tab} {s.age_ms} {#s.reads}`)
+            end)
+            ",
+        );
+        let _drawn = loader.draw_frame();
+        loader.set_client_snapshot(ClientSnapshot {
+            state: ClientSnapshot::FRESH,
+            available: ClientSnapshot::SCREENS | ClientSnapshot::MENU_TAB,
+            session: 2,
+            age_ms: 16,
+            hud_screen: Str::new("InGameMenu"),
+            menu_tab: Str::new("Character"),
+            ..ClientSnapshot::EMPTY
+        });
+        let _drawn = loader.draw_frame();
+        for line in ["never 0 nil nil nil 0", "fresh 2 InGameMenu Character 16 2"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
+    fn a_script_reads_a_fresh_snapshot_in_its_first_drawn_frame() {
+        use enshwick::abi::{ClientSnapshot, Str};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local s = enshwick.input.client_snapshot()
+                enshwick.log.info(`first frame {s.state} {s.hud_screen}`)
+            end)
+            ",
+        );
+        loader.set_client_snapshot(ClientSnapshot {
+            state: ClientSnapshot::FRESH,
+            available: ClientSnapshot::SCREENS,
+            session: 1,
+            age_ms: 16,
+            hud_screen: Str::new("Backpack"),
+            ..ClientSnapshot::EMPTY
+        });
+        let _drawn = loader.draw_frame();
+        assert!(
+            logged(&loader, "first frame fresh Backpack"),
+            "the start opened the input: {:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_script_moves_looks_and_highlights_a_recipe_within_their_bounds() {
+        use enshwick::abi::ClientCommandStatus as Status;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local walk = enshwick.input.client_command({ kind = "move", session = "1", direction = { 0, 1 }, hold_ms = 250 })
+            local far = pcall(enshwick.input.client_command, { kind = "move", session = "1", direction = { 0, 1 }, hold_ms = 251 })
+            local spin = pcall(enshwick.input.client_command, { kind = "look", session = "1", look = { 4, 0 } })
+            local torch = enshwick.input.client_command({ kind = "highlight_recipe", session = "1", recipe = 0x7cd80a04 })
+            enshwick.log.info(`queued {walk} {torch} far {far} spin {spin}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.command_status(walk)
+                enshwick.log.info(`move {s.state} {s.reason}`)
+            end)
+            "#,
+        );
+        loader.set_command_status(1, Status::CANCELLED, Status::INPUT_BLOCKED);
+        let _drawn = loader.draw_frame();
+        for line in [
+            "queued 1 2 far false spin false",
+            "move cancelled input_blocked",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
     }
 
     #[test]
@@ -321,6 +443,7 @@ mod tests {
             end)
             ",
         );
+        let _nothing_held = loader.draw_frame();
         loader.show_prompt(Some(("Chest", 7)));
         loader.hold_locally(Some(1 << 30));
         let _drawn = loader.draw_frame();
@@ -328,6 +451,7 @@ mod tests {
         loader.host_screen(Some(enshwick::Entity(512)));
         let _drawn = loader.draw_frame();
         for line in [
+            "host nil held nil",
             "prompt Chest 7",
             "host nil held Block",
             "host 512 held Block",
@@ -335,6 +459,26 @@ mod tests {
         ] {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
+    }
+
+    #[test]
+    fn a_script_s_first_frame_reads_the_held_controls_as_its_input_opened_at_start() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function()
+                local held = enshwick.input.local_held()
+                enshwick.log.info(`first frame held {held and table.concat(held, ',')}`)
+            end)
+            ",
+        );
+        loader.hold_locally(Some(1 << 30));
+        let _first = loader.draw_frame();
+        assert!(
+            logged(&loader, "first frame held Block"),
+            "{:?}",
+            loader.logs()
+        );
     }
 
     #[test]
@@ -373,6 +517,46 @@ mod tests {
         for line in ["ours true x 12.5", "hint true"] {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
+    }
+
+    #[test]
+    fn a_script_draws_item_slots_reads_the_hovered_slot_and_adds_tooltip_lines() {
+        let torch = enshwick::ItemId(0x5e01);
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).item(torch, 20, 0),
+            r#"
+            enshwick.ui.extend_screen("Backpack", "Right", function(panel)
+                local input = panel:item_slot(0x5e01, 3)
+                local slot = panel:hovered_slot()
+                enshwick.log.info(`clicked {input.clicked} hovered {slot and slot.count}`)
+            end)
+            enshwick.ui.extend_item_tooltip(function(item, lines)
+                lines:push({ text = `Uses left: {item.item}`, style = "Positive" })
+            end)
+            "#,
+        );
+        loader.slot_input(torch, Input::Click);
+        loader.hover_slot(Some((0x3_0000_0041, torch, 2, enshwick::Entity(0))));
+        let drawn = loader.draw_screen(HudScreenType::Backpack);
+        assert_eq!(
+            drawn[0].1,
+            [Drawn::ItemSlot {
+                item: torch,
+                count: 3
+            }]
+        );
+        assert!(
+            logged(&loader, "clicked true hovered 2"),
+            "{:?}",
+            loader.logs()
+        );
+        assert_eq!(
+            loader.open_tooltip(torch, enshwick::Entity(900)),
+            [Drawn::Label {
+                text: format!("Uses left: {}", 0x5e01),
+                style: UiWidget::STYLE_POSITIVE
+            }]
+        );
     }
 
     #[test]

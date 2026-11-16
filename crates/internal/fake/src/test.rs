@@ -108,6 +108,7 @@ pub use knowledge::vanilla::{
     VANILLA_EXPERIENCE, VANILLA_PERK, VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST,
     VANILLA_QUEST_EXPERIENCE, VANILLA_UNNAMED_EXPERIENCE, VANILLA_WORLD_KNOWLEDGE,
 };
+pub(crate) use ui::slot_key;
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 #[cfg(feature = "typed")]
 pub use world::tags::TAG_CONTAINER;
@@ -159,7 +160,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use enshwick_core::FnPtr;
 use enshwick_core::abi::{
-    CallerFrame, EntityPlace, Fingerprint, HostApi, ItemData, Level, ModHandle, ModInfo,
+    CallerFrame, EntityPlace, Fingerprint, HostApi, ItemTypeInfo, Level, ModHandle, ModInfo,
     PlayerInfo, Side, Status,
 };
 
@@ -180,7 +181,7 @@ pub type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status
 /// # Examples
 ///
 /// See [`Installed::start`], which takes one.
-pub type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
+pub type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 
 /// A mod's `enshwick_mod_query` export, as [`declare_mod!`](enshwick_core::declare_mod)
 /// writes it: the manifest the fake reads before init, as the loader does.
@@ -262,7 +263,7 @@ pub struct FakeHost {
     side: Side,
     base: u64,
     fingerprint: Fingerprint,
-    table: enshwick_core::abi::BuildTable,
+    build_complete: bool,
     handle: ModHandle,
     symbols: FxHashMap<String, u64>,
     systems: FxHashMap<String, u64>,
@@ -282,11 +283,13 @@ pub struct FakeHost {
     pack_sides: Vec<(ModHandle, Side)>,
     caller_frame: CallerFrame,
     components: FxHashMap<(u32, u32), (usize, usize)>,
-    templates: FxHashMap<u32, [u8; 16]>,
+    templates: FxHashMap<u32, enshwick_core::content::Guid>,
     players: Vec<PlayerInfo>,
     mods: Vec<ModInfo>,
     hosting: bool,
     developer_tools: bool,
+    /// The periodic tick subscription, by the order asked, to refuse.
+    refused_tick: Option<usize>,
     host_key: Option<enshwick_core::PlayerKey>,
     server_world: u64,
     join_missing: Vec<ModInfo>,
@@ -297,9 +300,12 @@ pub struct FakeHost {
     refused_hooks: FxHashSet<u64>,
     code: (u64, u64),
     workshop_recipes: u32,
-    items: FxHashMap<u32, ItemData>,
+    items: FxHashMap<u32, ItemTypeInfo>,
     no_inventories: bool,
     no_item_filters: bool,
+    /// The first bit the vanilla crafting props leave free and the bits of
+    /// the crafting prop mask, once [`FakeHost::props`] reflects them.
+    crafting_mask: Option<(u8, u8)>,
     no_entity_commands: bool,
     base_code: BaseCode,
     console_answers: FxHashMap<String, String>,
@@ -320,7 +326,7 @@ pub struct FakeHost {
     player_languages: FxHashMap<u64, u32>,
     icons_ready: bool,
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
-    resources: FxHashMap<([u8; 16], u32, u32), Vec<u8>>,
+    resources: FxHashMap<(enshwick_core::content::Guid, u32, u32), Vec<u8>>,
     types: Option<std::sync::Arc<enshwick_core::resources::TypeTable>>,
     /// The types of every [`FakeHost::types`] call, which `types` is built from.
     type_list: Vec<enshwick_core::resources::Type<'static>>,
@@ -368,10 +374,10 @@ impl FakeHost {
             side: Side::SERVER,
             base: 0x1_4000_0000,
             fingerprint: Fingerprint {
-                guid: [0; 16],
+                guid: enshwick_core::content::Guid::NIL,
                 age: 0,
             },
-            table: enshwick_core::abi::BuildTable::EXACT,
+            build_complete: true,
             handle: ModHandle(1),
             symbols: FxHashMap::default(),
             systems: FxHashMap::default(),
@@ -393,6 +399,7 @@ impl FakeHost {
             mods: Vec::new(),
             hosting: false,
             developer_tools: false,
+            refused_tick: None,
             host_key: None,
             server_world: 0,
             join_missing: Vec::new(),
@@ -405,6 +412,7 @@ impl FakeHost {
             items: FxHashMap::default(),
             no_inventories: false,
             no_item_filters: false,
+            crafting_mask: None,
             no_entity_commands: false,
             base_code: BaseCode::Known,
             console_answers: FxHashMap::default(),
@@ -500,6 +508,25 @@ impl FakeHost {
         self
     }
 
+    /// Refuses the periodic tick subscription number `index`, from 0, in
+    /// the order the mod asks
+    /// ([`Status::REFUSED`](enshwick_core::abi::Status::REFUSED)), as the
+    /// loader refuses a tick it cannot list. The first world a mod opens
+    /// asks for one to wait on transactions: refusing it leaves
+    /// `World::when_settled` unavailable while a later
+    /// [`Scheduler`](enshwick_core::schedule::Scheduler) still gets its own.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let _loader = enshwick::test::FakeHost::new().refuse_tick(0).install();
+    /// ```
+    #[must_use]
+    pub const fn refuse_tick(mut self, index: usize) -> Self {
+        self.refused_tick = Some(index);
+        self
+    }
+
     /// Makes this the loader of the process until the returned fake drops.
     ///
     /// Waits while another test of the process holds an installed fake.
@@ -568,7 +595,9 @@ impl Installed {
         self.handle
     }
 
-    /// Initialises the mod as the loader does, and returns its answer.
+    /// Initialises the mod as the loader does, and returns its answer. An
+    /// answer other than [`Status::OK`] turns the mod off, as the loader
+    /// does: none of the callbacks it registered runs from then on.
     ///
     /// # Safety
     ///
@@ -585,10 +614,12 @@ impl Installed {
         // The loader arms once every mod is initialised; what only init may
         // ask for comes too late from here on.
         table::with((), |s| s.registration = table::Registration::Closed);
-        status
+        self.off_unless_ok(status)
     }
 
-    /// Tells the mod its hooks are armed.
+    /// Tells the mod its hooks are armed, and returns what its ready answers.
+    /// An answer other than [`Status::OK`] turns the mod off, as the loader
+    /// does: none of its callbacks runs from then on.
     ///
     /// # Safety
     ///
@@ -599,16 +630,39 @@ impl Installed {
     /// # Examples
     ///
     /// See the [module](crate::test).
-    pub unsafe fn ready(&self, ready: ReadyFn) {
+    pub unsafe fn ready(&self, ready: ReadyFn) -> Status {
         table::with((), |s| s.base_limit.armed = true);
         // SAFETY: the caller guarantees `ready` is the `enshwick_mod_ready` of
         // a `declare_mod!` whose init succeeded on this fake.
-        unsafe { ready(self.api(), self.handle) }
+        self.off_unless_ok(unsafe { ready(self.api(), self.handle) })
+    }
+
+    /// Turns the mod off when `status` is not [`Status::OK`]; `status`.
+    fn off_unless_ok(&self, status: Status) -> Status {
+        if !status.is_ok() {
+            table::base::registered::turn_off(self.handle);
+        }
+        status
+    }
+
+    /// Whether the mod is off: its init or ready failed or it faulted, as
+    /// the loader turns a mod off. Its callbacks no longer run.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(!loader.is_off());
+    /// ```
+    #[must_use]
+    pub fn is_off(&self) -> bool {
+        table::base::registered::is_off(self.handle)
     }
 
     /// Reads the mod's manifest, initialises the mod unless the loader would
     /// refuse it first, and, when init agrees, tells it its hooks are armed;
-    /// returns the answer of `init`, or [`Status::REFUSED`] for a refused mod.
+    /// returns the answer of `init` when it fails, else that of `ready`, or
+    /// [`Status::REFUSED`] for a refused mod.
     ///
     /// A mod with `developer: true` is refused before its init while
     /// [`FakeHost::developer_tools`] is off, and a mod whose side is not
@@ -636,12 +690,12 @@ impl Installed {
         // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of
         // the mod whose manifest `query` returned.
         let status = unsafe { self.init(init) };
-        if status.is_ok() {
-            // SAFETY: the caller guarantees `ready` is the matching
-            // `enshwick_mod_ready`, and `status` says its init returned `OK`.
-            unsafe { self.ready(ready) };
+        if !status.is_ok() {
+            return status;
         }
-        status
+        // SAFETY: the caller guarantees `ready` is the matching
+        // `enshwick_mod_ready`, and `status` says its init returned `OK`.
+        unsafe { self.ready(ready) }
     }
 
     /// The lines the mod logged, at the levels the loader kept.

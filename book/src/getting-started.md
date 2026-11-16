@@ -17,7 +17,7 @@ puts it in when it installs. For a data pack or a Luau script, take
 [releases page](https://github.com/enshwick/enshwick/releases). Extract it
 next to the game's executable.
 
-Starting a mod and building one in Rust also need Rust 1.99 or newer, from
+Starting a mod and building one in Rust also need Rust 1.100 or newer, from
 [rustup](https://rustup.rs). Install the Windows target and the
 [`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick)
 tool. With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
@@ -25,14 +25,14 @@ the tool of this alpha downloads in seconds:
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
-cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.15
+cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.17
 ```
 
 Without cargo-binstall, Cargo builds the tool from source in a few
 minutes:
 
 ```bash
-cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.15 cargo-enshwick
+cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.17 cargo-enshwick
 ```
 
 The tool says when a newer release of itself is out, at most once a day.

@@ -2,11 +2,12 @@
 //! over the copy the game holds, and a build for a mod that reads a key as
 //! served.
 //!
-//! A patch may build its output in a buffer the loader lends it
-//! (`HostApi::resource_buffer`). The build that runs the patch owns the
-//! buffer: the game's first build keeps the one its last output lies in for
-//! the process, and frees the rest; a rebuild and a mod's served read free
-//! all of them once they have written or copied the bytes.
+//! A patch builds its output in a buffer the loader lends it
+//! (`HostApi::resource_buffer`), the only place an output may lie. The
+//! build that runs the patch owns the buffer: the game's first build keeps
+//! the one its last output lies in for the process, and frees the rest; a
+//! rebuild and a mod's served read free all of them once they have written
+//! or copied the bytes.
 //!
 //! A build that reads another served key as served is built again whenever
 //! that key is: the loader keeps its base for it.
@@ -21,8 +22,8 @@ use enshwick_core::abi::{ResourceKey, Status};
 use super::ServedError;
 
 use super::{
-    OPEN_NEXT, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served, State, hex, key_name,
-    mod_on, route,
+    OPEN_NEXT, Patch, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served, State, hex,
+    key_name, mod_on, route,
 };
 use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
@@ -96,7 +97,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
             WARN,
             "served resource {:08x}:{} not rebuilt: {} bytes, the game holds {len}",
             entry.key.type_hash,
-            hex(&entry.key.guid),
+            hex(&entry.key.guid.0),
             built.len
         );
         return Err(ServedError::SizeChanged);
@@ -106,7 +107,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
         INFO,
         "served resource {:08x}:{} rebuilt, {changed} bytes changed",
         entry.key.type_hash,
-        hex(&entry.key.guid)
+        hex(&entry.key.guid.0)
     );
     Ok(Some(changed))
 }
@@ -135,7 +136,8 @@ fn rebuild_readers(list: &[Served], entry: &Served) {
 /// The game's first build of `entry` from its base, recorded in `state`:
 /// the bytes built, which stay for the process, and the mods that built
 /// them; the base is kept when a mod asked for it or a patch read another
-/// served key. `None`, recorded as failed, when no patch built.
+/// served key. Recorded as failed when no patch built: then a copy of the
+/// base for a changed vanilla key, and `None` for a new one.
 ///
 /// # Safety
 ///
@@ -148,7 +150,20 @@ pub(super) unsafe fn build_first(
 ) -> Option<(usize, usize)> {
     let Some(mut built) = run_patches(entry, data, len, None, Build::Game) else {
         state.failed = true;
-        return None;
+        if entry.key != entry.base {
+            return None;
+        }
+        // A changed vanilla key whose every patch failed reads as the
+        // archive has it: missing, it would take the game's own data away.
+        let mut base = vec![0; len];
+        // SAFETY: the caller guarantees `len` readable bytes at `data`,
+        // unchanged for the call.
+        unsafe { crate::engine::memory::read_bytes(data, 0, &mut base) };
+        let kept = Buffer::new(base.into_boxed_slice());
+        let result = (kept.at(), len);
+        kept.keep();
+        state.built = Some(result);
+        return Some(result);
     };
     if built.reads || entry.keeps_base.load(Ordering::Relaxed) {
         let mut base = vec![0; len];
@@ -262,22 +277,28 @@ pub(crate) fn lend(len: usize) -> Option<*mut u8> {
     let mut bytes = Vec::new();
     bytes.try_reserve_exact(len).ok()?;
     bytes.resize(len, 0);
-    Some(hand_over(bytes.into_boxed_slice()))
+    hand_over(bytes.into_boxed_slice())
 }
 
 /// Hands the loader's own patch output `built` to the build running on this
-/// thread and writes where it lies to `out` and `out_len`.
+/// thread and writes where it lies to `out` and `out_len`;
+/// [`Status::REFUSED`] outside a build or for an output over `u32::MAX`
+/// bytes.
 ///
 /// # Safety
 ///
 /// - `out` and `out_len` are writable for one value each, as `run_patches`
 ///   passes them.
-pub(crate) unsafe fn hand_out(built: Vec<u8>, out: *mut *const u8, out_len: *mut usize) -> Status {
-    let len = built.len();
-    let at = hand_over(built.into_boxed_slice());
+pub(crate) unsafe fn hand_out(built: Vec<u8>, out: *mut *mut u8, out_len: *mut u32) -> Status {
+    let Ok(len) = u32::try_from(built.len()) else {
+        return Status::REFUSED;
+    };
+    let Some(at) = hand_over(built.into_boxed_slice()) else {
+        return Status::REFUSED;
+    };
     // SAFETY: the caller guarantees `out` writable for one pointer.
-    unsafe { out.write(at.cast_const()) };
-    // SAFETY: the caller guarantees `out_len` writable for one `usize`.
+    unsafe { out.write(at) };
+    // SAFETY: the caller guarantees `out_len` writable for one `u32`.
     unsafe { out_len.write(len) };
     Status::OK
 }
@@ -285,8 +306,8 @@ pub(crate) unsafe fn hand_out(built: Vec<u8>, out: *mut *const u8, out_len: *mut
 /// What every resource patch of the loader's own does around its edit:
 /// `build` gets a copy of the `base_len` bytes at `base` and runs under
 /// `fuse` as `site`, and the bytes it makes are handed out.
-/// [`Status::REFUSED`] when it makes none, panics, which turns its feature
-/// off, or its feature is off.
+/// [`Status::REFUSED`] when it makes none; [`Status::FAULTED`] when it
+/// panics, which turns its feature off, or its feature is off.
 ///
 /// # Safety
 ///
@@ -296,15 +317,18 @@ pub(crate) unsafe fn hand_out(built: Vec<u8>, out: *mut *const u8, out_len: *mut
 pub(crate) unsafe fn patched(
     fuse: &Fuse,
     site: &str,
-    (base, base_len): (*const u8, usize),
-    (out, out_len): (*mut *const u8, *mut usize),
+    (base, base_len): (*const u8, u32),
+    (out, out_len): (*mut *mut u8, *mut u32),
     build: impl FnOnce(Vec<u8>) -> Option<Vec<u8>>,
 ) -> Status {
-    let mut bytes = vec![0; base_len];
+    let mut bytes = vec![0; base_len as usize];
     // SAFETY: the caller guarantees `base_len` readable bytes at `base`,
     // unchanged for the call.
     unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let Some(made) = fuse.run(site, || build(bytes)).flatten() else {
+    let Some(made) = fuse.run(site, || build(bytes)) else {
+        return Status::FAULTED;
+    };
+    let Some(made) = made else {
         return Status::REFUSED;
     };
     // SAFETY: the caller guarantees `out` and `out_len` writable for one
@@ -339,10 +363,10 @@ pub(crate) fn own_patch<P: OwnPatch>(
 /// [`patched`].
 unsafe extern "system" fn apply_own<P: OwnPatch>(
     base: *const u8,
-    base_len: usize,
+    base_len: u32,
     user: *mut core::ffi::c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
+    out: *mut *mut u8,
+    out_len: *mut u32,
 ) -> Status {
     // SAFETY: `user` is the `P` `own_patch` leaked with this function, which
     // lives for the process.
@@ -362,16 +386,22 @@ unsafe extern "system" fn apply_own<P: OwnPatch>(
 }
 
 /// Gives `bytes` to the build running on this thread, which frees them once
-/// nothing reads them; outside a build they stay for the process. Where
-/// they lie.
-fn hand_over(bytes: Box<[u8]>) -> *mut u8 {
+/// nothing reads them; where they lie, `None` outside a build.
+fn hand_over(bytes: Box<[u8]>) -> Option<*mut u8> {
     let buffer = Buffer::new(bytes);
     let at = buffer.0.cast::<u8>().as_ptr();
-    BUILDING.with_borrow_mut(|frames| match frames.last_mut() {
-        Some(frame) => frame.buffers.push(buffer),
-        None => buffer.keep(),
-    });
-    at
+    BUILDING.with_borrow_mut(|frames| frames.last_mut().map(|frame| frame.buffers.push(buffer)))?;
+    Some(at)
+}
+
+/// Whether the `len` bytes at `data` lie in a buffer the build running on
+/// this thread lent.
+fn lent_holds(data: usize, len: usize) -> bool {
+    BUILDING.with_borrow(|frames| {
+        frames
+            .last()
+            .is_some_and(|frame| frame.buffers.iter().any(|buffer| buffer.holds(data, len)))
+    })
 }
 
 /// Writes the bytes of the `len` bytes at `new` that differ over those at
@@ -385,16 +415,16 @@ pub(super) fn write_differences(held: usize, new: usize, len: usize) -> usize {
     let mut changed = 0;
     for (at, &byte) in new.iter().enumerate() {
         let slot = held.wrapping_add(at);
-        // SAFETY: `held` is the resource the game reads, `len` bytes the
-        // first build kept writable for the process (`ResourcePatchFn`),
-        // and `at` is below `len`. A volatile read, which `enshwick_core::raw`
+        // SAFETY: `held` is the resource the game reads, `len` bytes of the
+        // loader's buffer the first build kept writable for the process
+        // (`Built::keep`), and `at` is below `len`. A volatile read, which `enshwick_core::raw`
         // has not: the bytes are the build's own, read while the game reads
         // them.
         // ast-grep-ignore: game-memory-through-raw
         let old = unsafe { slot.read_volatile() };
         if old != byte {
             // SAFETY: `held` is the first build's `len` bytes, writable for
-            // the process (`ResourcePatchFn`), and `at` is below `len`; one
+            // the process (`Built::keep`), and `at` is below `len`; one
             // byte at a time, so a read meanwhile sees each byte old or new.
             unsafe { slot.write_volatile(byte) };
             changed += 1;
@@ -461,6 +491,12 @@ impl Buffer {
 
     fn at(&self) -> usize {
         self.0.cast::<u8>().as_ptr().expose_provenance()
+    }
+
+    fn bytes(&self) -> &[u8] {
+        // SAFETY: `self.0` came from `Box::leak` in `new` and lives until
+        // `self` goes; the patches that wrote it have returned.
+        unsafe { self.0.as_ref() }
     }
 
     /// Whether the `len` bytes at `data` lie in the buffer.
@@ -535,50 +571,38 @@ impl Drop for Building {
 }
 
 /// A served key's build: its bytes, who built them, and the loader's buffer
-/// they lie in when a patch built them in one, freed with the build unless
-/// kept.
+/// they lie in, freed with the build unless kept.
 pub(super) struct Built {
     pub(super) data: usize,
     pub(super) len: usize,
     pub(super) by: Vec<ModIndex>,
     /// Whether a patch read another served key as served.
     pub(super) reads: bool,
-    owned: Option<Buffer>,
+    owned: Buffer,
 }
 
 impl Built {
     /// Leaves the bytes for the process, as the game holds them; where they
     /// lie and their length.
     pub(super) fn keep(self) -> (usize, usize) {
-        if let Some(buffer) = self.owned {
-            buffer.keep();
-        }
+        self.owned.keep();
         (self.data, self.len)
     }
 
-    /// The bytes, taken over without a copy when they fill a buffer of the
-    /// loader's.
+    /// The bytes, taken over without a copy when they fill their buffer.
     fn into_bytes(self) -> Vec<u8> {
-        match self.owned {
-            Some(buffer) if buffer.at() == self.data && buffer.0.len() == self.len => {
-                buffer.into_box().into_vec()
-            }
-            _ => {
-                let mut bytes = vec![0; self.len];
-                // SAFETY: `data` is the last patch's `len` built bytes: in the
-                // loader's buffer this build still owns, or the patch's own,
-                // valid for the process (`ResourcePatchFn`).
-                unsafe { crate::engine::memory::read_bytes(self.data, 0, &mut bytes) };
-                bytes
-            }
+        let start = self.data - self.owned.at();
+        if start == 0 && self.owned.0.len() == self.len {
+            return self.owned.into_box().into_vec();
         }
+        self.owned.bytes()[start..start + self.len].to_vec()
     }
 }
 
-/// Runs the patches of the mods still on, or of the mods `only` names,
-/// over the `len` bytes at `data`, each on the result of the one before,
-/// for `kind`; a failed one is skipped, and in the game's build turns its
-/// mod off. `None` when no patch built.
+/// Runs the patches still on of the mods still on, or for a rebuild every
+/// patch of the mods `only` names, over the `len` bytes at `data`, each on
+/// the result of the one before, for `kind`; a failed one is skipped, and
+/// in the game's build turns its mod off. `None` when no patch built.
 pub(super) fn run_patches(
     entry: &Served,
     data: usize,
@@ -586,12 +610,25 @@ pub(super) fn run_patches(
     only: Option<&[ModIndex]>,
     kind: Build,
 ) -> Option<Built> {
+    let Ok(len) = u32::try_from(len) else {
+        crate::log!(
+            WARN,
+            "served {} not built: its base is over 4 GiB",
+            key_name(&entry.key)
+        );
+        return None;
+    };
     let building = Building::enter(entry.key, kind);
     let (mut current, mut current_len) = (data, len);
     let mut applied = Vec::new();
-    let runs = |owner: ModIndex| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
-    for patch in entry.patches.iter().filter(|p| runs(p.owner)) {
-        let (mut built, mut built_len) = (core::ptr::null::<u8>(), 0usize);
+    // A rebuild runs every patch the game's build applied, one whose
+    // builder panicked since included: the game holds what each added.
+    let runs = |p: &Patch| match only {
+        Some(only) => only.contains(&p.owner),
+        None => p.runs(mod_on),
+    };
+    for patch in entry.patches.iter().filter(|p| runs(p)) {
+        let (mut built, mut built_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: `patch.apply` is a live mod's or the loader's
         // `ResourcePatchFn`, given the `current_len` bytes so far at
         // `current`, valid for the call, the user pointer it registered and
@@ -614,7 +651,19 @@ pub(super) fn run_patches(
                 apply,
             )
         };
-        if status != Status::OK || built.is_null() {
+        // An output outside the buffers this build lent, null included, is
+        // a failure: the loader could neither free nor keep it.
+        let lent = lent_holds(built.expose_provenance(), built_len as usize);
+        let status = if status == Status::OK && !lent {
+            Status::BAD_ARGS
+        } else {
+            status
+        };
+        if status == Status::FAULTED {
+            fault(entry, patch);
+            continue;
+        }
+        if status != Status::OK {
             if kind == Build::Scratch {
                 continue;
             }
@@ -643,17 +692,36 @@ pub(super) fn run_patches(
     if applied.is_empty() {
         return None;
     }
-    let owned = buffers
+    let current_len = current_len as usize;
+    // The last applied output passed `lent_holds`, so a buffer holds it.
+    let at = buffers
         .iter()
-        .position(|buffer| buffer.holds(current, current_len))
-        .map(|at| buffers.swap_remove(at));
+        .position(|buffer| buffer.holds(current, current_len))?;
     Some(Built {
         data: current,
         len: current_len,
         by: applied,
         reads,
-        owned,
+        owned: buffers.swap_remove(at),
     })
+}
+
+/// Turns off `patch` of `entry`, whose builder panicked, for the process,
+/// and names the resource off for its mod: the loader's own patch is listed
+/// by its fuse, which the panic turned off.
+#[cold]
+fn fault(entry: &Served, patch: &Patch) {
+    if !patch.on.swap(false, Ordering::AcqRel) || patch.owner == ModIndex::LOADER {
+        return;
+    }
+    if let Some(record) =
+        crate::engine::loader::loader().and_then(|l| l.mods.get(patch.owner.get()))
+    {
+        record.report_feature(
+            &format!("served {}", key_name(&entry.key)),
+            Some(enshwick_core::resources::BUILDER_PANICKED),
+        );
+    }
 }
 
 #[cfg(test)]

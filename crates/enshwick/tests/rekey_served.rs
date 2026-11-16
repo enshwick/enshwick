@@ -65,14 +65,14 @@ mod tests {
         // A patch that always fails, which a served read skips.
         pack(6, |load| {
             let key = types::ITEM_INFO.key(LANTERN.guid())?;
-            load.serve(key, key, |_| None)
+            load.serve(key, key, |_, _| None)
         });
         pack(7, |load| {
             let key = types::ITEM_INFO.key(LANTERN.guid())?;
-            load.serve(key, key, |item| {
-                let mut item = item.to_vec();
-                *item.get_mut(CATEGORY_AT)? = CHANGED_CATEGORY;
-                Some(item)
+            load.serve(key, key, |item, out| {
+                out.copy_from(item)?;
+                *out.get_mut(CATEGORY_AT)? = CHANGED_CATEGORY;
+                Some(())
             })
         });
         pack(8, |load| load.rekey_item(OTHER_ITEM, LOOT_ITEM));

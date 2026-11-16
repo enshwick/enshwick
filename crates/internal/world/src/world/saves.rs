@@ -6,6 +6,7 @@ use core::time::Duration;
 
 use super::World;
 use crate::abi::{Header, SaveInfo as RawSaveInfo, Status};
+use crate::content::Guid;
 use crate::{Entity, WorldError};
 
 /// A world's GUID, which its save keeps across saves; a copied save keeps
@@ -55,7 +56,7 @@ impl World {
     pub fn save_info(self) -> Option<SaveInfo> {
         let mut out = RawSaveInfo {
             header: Header::of::<RawSaveInfo>(),
-            world: [0; 16],
+            world: Guid::NIL,
             saved_at: 0,
             size: 0,
             backups: 0,
@@ -63,7 +64,7 @@ impl World {
         };
         let status = (self.0.host.api().save_info)(self.0.host.handle(), &raw mut out);
         (status == Status::OK).then(|| SaveInfo {
-            world: WorldGuid(out.world),
+            world: WorldGuid(out.world.0),
             saved_at: Duration::from_secs(out.saved_at),
             size: out.size,
             backups: u8::try_from(out.backups).unwrap_or(u8::MAX),
@@ -88,7 +89,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Missing`] on a build without the save layout or on a
+    /// [`WorldError::Unavailable`] on a build without the save layout or on a
     /// client.
     ///
     /// # Examples
@@ -119,7 +120,7 @@ impl World {
     /// # Errors
     ///
     /// [`WorldError::Refused`] when a stop is under way already, asked by a
-    /// mod or by the game, or the game has not started yet; [`WorldError::Missing`] off a dedicated server,
+    /// mod or by the game, or the game has not started yet; [`WorldError::Unavailable`] off a dedicated server,
     /// as in single player or a hosted game, which have no restart, and on
     /// a build where the loader did not find the game's stop.
     ///
@@ -156,7 +157,7 @@ impl World {
     /// [`WorldError::Refused`] for an entity no mod spawned, such as a
     /// vanilla one or one spawned before the world last loaded,
     /// [`WorldError::Gone`] for an entity not in the world yet or any more,
-    /// [`WorldError::Missing`] where no server runs, as on a client in
+    /// [`WorldError::Unavailable`] where no server runs, as on a client in
     /// another's game, or on a build without the commands, and
     /// [`WorldError::WrongThread`] off the game thread.
     ///

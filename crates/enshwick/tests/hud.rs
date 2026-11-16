@@ -84,13 +84,13 @@ mod tests {
             loader.markers(),
             [
                 FakeMarker {
-                    position: [1 << 32, 2 << 32, -(3 << 32)],
+                    position: [1.0, 2.0, -3.0],
                     label: "Locker".into(),
                     color: UiMarker::GREEN,
                     marker_type: 0,
                 },
                 FakeMarker {
-                    position: [1 << 31, 0, 0],
+                    position: [0.5, 0.0, 0.0],
                     label: String::new(),
                     color: UiMarker::WHITE,
                     marker_type: 0,

@@ -84,6 +84,11 @@ everything, and `scale_type(ty, factor)` one type. `cancel()` takes it all
 away: the health stays, and a hit still lands with no damage, as against an
 immune target. A negative or not finite amount counts as none.
 
+A later game build may add a damage type that `DamageTypeNew` does not name
+yet. `type_count()` says how many types a hit carries on the running build.
+`amount_at(index)` and `set_at(index, amount)` read and set a type by its
+place in the game's order, from 0.
+
 Filters of several mods run in load order, each on what the one before left.
 
 ## Where it runs

@@ -183,13 +183,18 @@ fn tile(edge_shift: u32, tile_shift: u32) -> Option<(usize, u32)> {
         .then(|| (1 << tile_shift, 1 << edge_shift))
 }
 
+/// Seals the mods that opened the fog, before any link.
+pub(crate) fn seal() {
+    let _openers = STATE.openers.seal();
+}
+
 /// Links the reveal on every client, for the uncovers its server asks for,
 /// and copies the fog there when a mod opened it.
 pub(crate) fn link(loader: &'static Loader) {
     if loader.side != Side::CLIENT {
         return;
     }
-    if !STATE.openers.seal().is_empty() {
+    if !STATE.openers.sealed().is_empty() {
         find_layout(loader);
     }
     link_at(
@@ -323,29 +328,31 @@ fn copy_after(fog: *mut u8, at: Option<[f32; 2]>, range: f32) {
     }
 }
 
-/// Queues a circle the server asked this client to uncover, on the thread
-/// that reads the server's messages; the next reveal runs it.
-pub(crate) fn uncover_here(at: [f32; 2], radius: f32) {
+/// Queues a circle to uncover on this client, which its server asked for,
+/// or the server half of a client that hosts for its own player; the next
+/// reveal runs it. False when it was dropped, with a warning once.
+pub(crate) fn uncover_here(at: [f32; 2], radius: f32) -> bool {
     let dropped = |why: &str| {
         if !STATE.uncovers.warned.swap(true, Ordering::AcqRel) {
             crate::log!(
                 WARN,
-                "fog of war uncovers from the server dropped until the fog goes: {why}"
+                "fog of war uncovers dropped until the fog goes: {why}"
             );
         }
     };
     if !STATE.uncovers.linked.load(Ordering::Acquire) || FUSE.is_off() {
         dropped("the fog of war is off on this client");
-        return;
+        return false;
     }
     let mut circles = STATE.uncovers.circles.relock();
     if circles.len() >= MAX_UNCOVERS {
         drop(circles);
         dropped(&format!("{MAX_UNCOVERS} wait already"));
-        return;
+        return false;
     }
     circles.push((at, radius));
     STATE.uncovers.waiting.store(true, Ordering::Release);
+    true
 }
 
 /// Why a circle of a player's fog was not sent to uncover.
@@ -366,15 +373,29 @@ pub(crate) enum UncoverError {
 }
 
 /// Sends the client of the player with account key `key` a circle of its
-/// fog of war to uncover, for `HostApi::fog_uncover`.
+/// fog of war to uncover, for `HostApi::fog_uncover`; on a client that
+/// hosts, its own player's circle is queued here, as no message reaches
+/// the game the loader runs in.
 ///
 /// # Errors
 ///
 /// [`UncoverError`] off a server, for a circle out of range, a link not
-/// ready or a message not sent.
+/// ready, or a message not sent or circle not queued.
 pub(crate) fn uncover_for(
     loader: &Loader,
     key: u64,
+    at: [f32; 2],
+    radius: f32,
+) -> Result<(), UncoverError> {
+    uncover_as(loader, key, crate::base::carrier::is_host(key), at, radius)
+}
+
+/// [`uncover_for`] for the player `key`, who is the hosting client's own
+/// player when `own`.
+fn uncover_as(
+    loader: &Loader,
+    key: u64,
+    own: bool,
     at: [f32; 2],
     radius: f32,
 ) -> Result<(), UncoverError> {
@@ -383,6 +404,11 @@ pub(crate) fn uncover_for(
     }
     if !crate::base::remote::Message::uncover_fits(at, radius) {
         return Err(UncoverError::BadCircle);
+    }
+    if own {
+        return uncover_here(at, radius)
+            .then_some(())
+            .ok_or(UncoverError::NotSent);
     }
     if !crate::base::net::ready(key) {
         return Err(UncoverError::NotReady);
@@ -583,10 +609,24 @@ mod tests {
 
     /// The only test that queues uncovers, which are the process's own.
     #[test]
-    fn a_hosted_game_s_end_drops_its_skipped_tiles_and_waiting_uncovers() {
-        STATE.uncovers.circles.relock().push(([1.0, 2.0], 3.0));
+    fn a_host_s_own_circle_queues_here_and_a_hosted_game_s_end_drops_what_waits() {
+        let loader = crate::start::tests::pinning_loader(Side::SERVER, &[], &[]);
+        STATE.uncovers.linked.store(true, Ordering::Release);
+        assert_eq!(uncover_as(&loader, 7, true, [1.0, 2.0], 3.0), Ok(()));
+        assert_eq!(
+            uncover_as(&loader, 8, false, [1.0, 2.0], 3.0),
+            Err(UncoverError::NotReady),
+            "a remote player without Enshwick is not reached"
+        );
+        STATE.uncovers.linked.store(false, Ordering::Release);
+        assert_eq!(
+            uncover_as(&loader, 7, true, [1.0, 2.0], 3.0),
+            Err(UncoverError::NotSent),
+            "the host's own fog is off"
+        );
+        assert!(STATE.uncovers.warned.load(Ordering::Acquire));
+        assert_eq!(STATE.uncovers.circles.relock().len(), 1);
         STATE.uncovers.waiting.store(true, Ordering::Release);
-        STATE.uncovers.warned.store(true, Ordering::Release);
         STATE.skipped.store(7, Ordering::Release);
         forget_world();
         assert!(STATE.mirror.relock().is_none());

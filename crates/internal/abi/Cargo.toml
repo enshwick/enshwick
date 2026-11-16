@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-abi"
-version = "1.0.0-alpha.15"
+version = "1.0.0-alpha.17"
 description = "Internal part of enshwick; depend on enshwick: the binary interface between the loader and a mod"
 keywords = ["enshrouded", "modding", "game", "ffi"]
 categories = ["game-development"]
@@ -25,7 +25,7 @@ thiserror.workspace = true
 enshwick = { path = "../../enshwick", features = ["test"] }
 postcard.workspace = true
 proptest.workspace = true
-syn = { version = "=3.0.10", default-features = false, features = ["full", "parsing"] }
+syn = { version = "=3.0.10", default-features = false, features = ["full", "parsing", "extra-traits"] }
 
 [lints]
 workspace = true

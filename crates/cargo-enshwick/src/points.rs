@@ -626,9 +626,9 @@ const RUST_KEYWORDS: &[&str] = &[
     "typeof", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
 ];
 
-/// Whether `id` is a mod id, of the current or the old form.
+/// Whether `id` is a mod id.
 fn is_owner(id: &str) -> bool {
-    enshwick_core::abi::is_valid_old_form_id(id)
+    enshwick_core::abi::is_valid_id(id)
 }
 
 /// Whether `name` is `<mod id>:<what>`, the rule `declare_mod!` holds a point's
@@ -657,8 +657,7 @@ fn rust_type(name: &str) -> String {
         let unsafety = if function.unsafety { "unsafe " } else { "" };
         let output = function
             .output
-            .map(|output| format!(" -> {}", rust_type(output)))
-            .unwrap_or_default();
+            .map_or_default(|output| format!(" -> {}", rust_type(output)));
         return format!(
             "{unsafety}extern \"system\" fn({}){output}",
             args.join(", ")

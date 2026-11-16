@@ -7,7 +7,9 @@ pub use enshwick_gamedata::releases::Release;
 #[cfg(windows)]
 use enshwick_gamedata::releases::{LIMIT, LOADER_TAGS, newer, path};
 
-/// The running loader's version.
+/// The running loader's version: a development build's, built with
+/// `ENSHWICK_COMMIT` set, states its commit (see
+/// [`stated`](enshwick_gamedata::releases::stated)).
 ///
 /// # Panics
 ///
@@ -18,7 +20,67 @@ pub fn running() -> Version {
         clippy::expect_used,
         reason = "Cargo checks the crate's version is SemVer"
     )]
-    Version::parse(env!("CARGO_PKG_VERSION")).expect("the crate version is SemVer")
+    let release = Version::parse(env!("CARGO_PKG_VERSION")).expect("the crate version is SemVer");
+    enshwick_gamedata::releases::stated(&release, option_env!("ENSHWICK_COMMIT"))
+}
+
+/// The crate's release version.
+const RELEASE: &str = env!("CARGO_PKG_VERSION");
+/// The commit a development build states, as [`running`] states it.
+const TAG: Option<&str> = enshwick_gamedata::releases::commit_tag(option_env!("ENSHWICK_COMMIT"));
+/// The length of [`STATED`].
+const STATED_LEN: usize = match TAG {
+    Some(tag) => RELEASE.len() + 1 + enshwick_gamedata::releases::DEV.len() + tag.len(),
+    None => RELEASE.len(),
+};
+/// [`STATED`]'s bytes: the release, then `+dev.` and the tag on a
+/// development build.
+const STATED_BYTES: [u8; STATED_LEN] = {
+    let mut out = [0u8; STATED_LEN];
+    let mut at = 0;
+    let parts: [&[u8]; 4] = match TAG {
+        Some(tag) => [
+            RELEASE.as_bytes(),
+            b"+",
+            enshwick_gamedata::releases::DEV.as_bytes(),
+            tag.as_bytes(),
+        ],
+        None => [RELEASE.as_bytes(), b"", b"", b""],
+    };
+    let mut part = 0;
+    while part < parts.len() {
+        let mut byte = 0;
+        while byte < parts[part].len() {
+            out[at] = parts[part][byte];
+            at += 1;
+            byte += 1;
+        }
+        part += 1;
+    }
+    out
+};
+
+/// The running loader's version as static text, the same as [`running`]
+/// states it: what the host table's `host_version` and the Mods screen's
+/// own row give.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(
+        dead_code,
+        reason = "only the Windows build has a host table and a Mods screen"
+    )
+)]
+pub(crate) const STATED: &str = match core::str::from_utf8(&STATED_BYTES) {
+    Ok(stated) => stated,
+    Err(_) => RELEASE,
+};
+
+/// The running loader's version and the ABI it serves, as the log and the
+/// status name them.
+#[must_use]
+pub fn running_with_abi() -> String {
+    use enshwick_core::abi::{ABI_MAJOR, ABI_MINOR};
+    enshwick_gamedata::releases::version_line(&running(), ABI_MAJOR, ABI_MINOR)
 }
 
 /// Asks GitHub for the releases on a thread of its own and keeps a newer one
@@ -222,7 +284,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_static_version_states_what_running_states() {
+        assert_eq!(STATED, running().to_string());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_host_table_states_the_running_version() {
+        // SAFETY: the view points at the static text of `STATED`.
+        let table = unsafe { crate::host::API.host_version.as_str() };
+        assert_eq!(table, Some(STATED));
+    }
+
+    #[test]
     fn the_running_version_is_the_crate_version() {
-        assert_eq!(running().to_string(), env!("CARGO_PKG_VERSION"));
+        if option_env!("ENSHWICK_COMMIT").is_none() {
+            assert_eq!(running().to_string(), env!("CARGO_PKG_VERSION"));
+        }
     }
 }

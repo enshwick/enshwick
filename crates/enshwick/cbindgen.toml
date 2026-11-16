@@ -12,7 +12,28 @@ usize_is_size_t = true
 sys_includes = ["stdbool.h", "stddef.h", "stdint.h"]
 no_includes = true
 sort_by = "Name"
+# The loader's functions use the Windows x64 calling convention, which is the
+# C one only there, so any other target stops here.
+after_includes = """
+
+#if !defined(_WIN64) || !(defined(_M_X64) || defined(__x86_64__))
+#error "enshwick.h describes the ABI of 64-bit x86 Windows only"
+#endif
+
+#ifdef __cplusplus
+#define ENSHWICK_STATIC_ASSERT(condition, message) static_assert(condition, message)
+#define ENSHWICK_ALIGNOF(type) alignof(type)
+#else
+#define ENSHWICK_STATIC_ASSERT(condition, message) _Static_assert(condition, message)
+#define ENSHWICK_ALIGNOF(type) _Alignof(type)
+#endif
+
+// The ABI's layout holds whatever packing the including unit sets
+// (#pragma pack, /Zp); the asserts at the end of this file prove it.
+#pragma pack(push, 8)"""
 trailer = """
+#pragma pack(pop)
+
 #if defined(_WIN32)
 #define ENSHWICK_EXPORT __declspec(dllexport)
 #else
@@ -20,7 +41,13 @@ trailer = """
 #endif
 
 // An `EnshwickStr` initializer for a string literal, without its final zero.
+// In C++ the pointer is `const char *`, so a manifest built from it is a
+// constant expression (`constinit`) and needs no C++ runtime to start.
+#ifdef __cplusplus
+#define ENSHWICK_STR_INIT(literal) { (literal), sizeof(literal) - 1 }
+#else
 #define ENSHWICK_STR_INIT(literal) { (const uint8_t *)(literal), sizeof(literal) - 1 }
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,13 +55,13 @@ extern "C" {
 
 // The ENSHWICK_ABI_MAJOR the mod was built for; its manifest's header holds
 // the minor.
-ENSHWICK_EXPORT uint32_t enshwick_mod_abi(void);
+ENSHWICK_EXPORT uint16_t enshwick_mod_abi(void);
 // The mod's manifest; static, no side effects.
 ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);
 // Registers hooks, services and settings.
 ENSHWICK_EXPORT EnshwickStatus enshwick_mod_init(const EnshwickHostApi *host, EnshwickModHandle me);
-// Runs after every chain is armed.
-ENSHWICK_EXPORT void enshwick_mod_ready(const EnshwickHostApi *host, EnshwickModHandle me);
+// Runs after every chain is armed; any status but OK turns the mod off.
+ENSHWICK_EXPORT EnshwickStatus enshwick_mod_ready(const EnshwickHostApi *host, EnshwickModHandle me);
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,4 @@
-use crate::abi::ItemData;
+use crate::abi::ItemTypeInfo;
 use crate::{Entity, ItemId};
 
 /// A slot: a sub-inventory entity and a slot index in it, as the game packs
@@ -130,11 +130,17 @@ pub struct ItemInfo {
     pub id: ItemId,
     /// How many fit one stack.
     pub max_stack_size: u16,
-    /// `ItemInfo` flags, see [`ItemData`].
+    /// `ItemInfo` flags, see [`ItemTypeInfo`](crate::abi::ItemTypeInfo).
     pub flags: u32,
     /// The game's `ItemCategory`: 1 equipment (armour and rings), 2
     /// weapons, 3 tools, and so on.
     pub category: u8,
+    /// The template a player places from the item, its
+    /// `equipment.placedEntity`, the GUID's bytes in the game's file order;
+    /// `None` for an item that places nothing. It is not the template of
+    /// the item's own entity (see [`has_pide`](Self::has_pide)), and does
+    /// not say that a placement would succeed.
+    pub placed_entity_template: Option<crate::content::Guid>,
 }
 
 impl ItemInfo {
@@ -145,7 +151,7 @@ impl ItemInfo {
     /// See [`ItemInfo`].
     #[must_use]
     pub const fn has_pide(&self) -> bool {
-        self.flags & ItemData::HAS_PIDE != 0
+        self.flags & ItemTypeInfo::HAS_PIDE != 0
     }
 
     /// Whether the item is a container.
@@ -155,7 +161,7 @@ impl ItemInfo {
     /// See [`ItemInfo`].
     #[must_use]
     pub const fn is_container(&self) -> bool {
-        self.flags & ItemData::IS_CONTAINER != 0
+        self.flags & ItemTypeInfo::IS_CONTAINER != 0
     }
 
     /// Whether the item is a blueprint.
@@ -165,7 +171,7 @@ impl ItemInfo {
     /// See [`ItemInfo`].
     #[must_use]
     pub const fn is_blueprint(&self) -> bool {
-        self.flags & ItemData::IS_BLUEPRINT != 0
+        self.flags & ItemTypeInfo::IS_BLUEPRINT != 0
     }
 }
 

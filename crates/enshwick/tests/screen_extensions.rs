@@ -45,7 +45,7 @@ mod tests {
                     host_count: 0,
                     reserved_hosts: 0,
                 };
-                (host.api().ui_extension)(host.handle(), &raw const spec, nothing, null_mut())
+                (host.api().ui_extension)(host.handle(), &raw const spec, Some(nothing), null_mut())
             };
             *MALFORMED.lock().unwrap() = vec![
                 raw("Map", UiExtension::BOTTOM),

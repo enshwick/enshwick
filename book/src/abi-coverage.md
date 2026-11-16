@@ -59,90 +59,145 @@ names every entry of the golden layout once, in that order.
 | `type_hash` | game | every start | — |
 | `component` | game | probe: entity queries | — |
 | `entity_template` | game | probe: spawns | — |
-| `player` | game | — | with a player |
-| `players` | game | — | with a player |
-| `serve_resource` | game | — | client |
-| `add_text` | game | — | client |
 | `mods` | loader | — | — |
 | `code_range` | game | probe: code section | — |
-| `patch_code` | game | — | — |
+| `patch_code` | game | probe: code patch | — |
 | `workshop_recipes` | game | probe: host reads | — |
 | `hosting` | game | probe: host reads | — |
-| `server_world` | game | — | — |
+| `server_world` | game | probe: server world | — |
+| `join_missing` | loader | — | with a player |
+| `hook_at` | game | probe: hook at | — |
+| `status` | loader | — | — |
+| `subscribe_game_event` | game | probe: ping | — |
+| `net_channel` | loader | probe: channel refused | — |
+| `net_send` | game | — | client |
+| `net_ready` | game | — | client |
+| `config_schema` | loader | every start | — |
+| `config_check` | loader | — | — |
+| `texts` | loader | — | — |
+| `define_event` | loader | — | — |
+| `subscribe_mod_event` | loader | — | — |
+| `send_event` | loader | — | — |
+| `rename_content` | game | — | client |
+| `mod_dir` | loader | every start | — |
+| `language` | game | — | client |
+| `define_point` | loader | — | — |
+| `attach_point` | loader | — | — |
+| `run_point` | loader | — | — |
+| `event_types` | game | every start | — |
+| `feature` | loader | every start | — |
+| `loop_wait` | game | probe: loop waits | — |
+| `server_wait` | game | probe: loop waits | — |
+| `task_workers` | game | probe: task workers | — |
+| `serve_call` | loader | — | — |
+| `find_call` | loader | — | — |
+| `call` | loader | — | — |
+| `subscribe_tick` | game | probe: ticks | — |
+| `set_tick_every` | game | probe: ticks | — |
+| `set_config` | loader | — | — |
+| `subscribe_client_game_event` | game | — | on a client, hosting and joined |
+| `serve_resource` | game | — | client |
+| `add_text` | game | — | client |
+| `define_item_data` | loader | — | — |
+| `item_data_get` | game | probe: entity data | — |
+| `set_item_data` | game | probe: entity data | — |
+| `content_serve` | game | — | client |
+| `content_read` | game | probe: archive | — |
+| `icons_ready` | game | — | client |
+| `declare_content` | loader | — | — |
+| `define_entity_data` | loader | probe: entity data | — |
+| `resource_read` | game | probe: archive | — |
+| `game_text` | game | — | client |
+| `rebuild_resource` | game | — | client |
+| `recipe_rule` | game | — | client |
+| `recipe_disabled` | game | — | client |
+| `recipe_kind` | game | — | client |
+| `rate` | game | — | with a player |
+| `set_rate` | game | — | with a player |
+| `change_data` | game | — | client |
+| `set_change` | game | — | client |
+| `use_content` | loader | — | — |
+| `resource_keys` | game | probe: archive | — |
+| `content_hashes` | game | probe: archive | — |
+| `types` | game | probe: host reads | — |
+| `game_version` | game | probe: host reads | — |
+| `crafting_prop` | game | — | client |
+| `read_only` | loader | — | — |
+| `resource_served` | game | probe: archive | — |
+| `resource_buffer` | loader | — | — |
+| `content_name` | loader | — | — |
+| `player` | game | — | with a player |
+| `players` | game | — | with a player |
 | `chat` | game | — | with a player |
+| `chat_all` | game | — | with a player |
 | `set_label` | game | probe: label | — |
 | `rename_filter` | game | — | with a player |
-| `join_missing` | loader | — | with a player |
-| `hook_at` | game | — | — |
-| `inventory_open` | game | probe: affixes | — |
 | `item_info` | game | probe: affixes | — |
-| `inventory_submit` | game | — | — |
-| `status` | loader | — | — |
-| `run_console` | game | probe: console line | — |
-| `altars_open` | game | probe: altars | — |
+| `request_altars` | game | probe: altars | — |
 | `altars` | game | probe: altars | — |
-| `building_zone_check_filter` | game | — | with a player |
-| `survivor_lookup` | game | — | with a player |
-| `survivor_bed_check` | game | — | with a player |
-| `summon_filter` | game | — | with a player |
-| `summon_item` | game | — | with a player |
-| `survivor_status` | game | — | client |
-| `interaction_filter` | game | — | with a player |
-| `skill_override` | game | — | with a player |
-| `comfort_filter` | game | — | with a player |
-| `experience_filter` | game | — | with a player |
-| `raise_base_limit` | game | probe: base limits | — |
+| `building_zone_filter` | game | — | with a player |
 | `base_zones` | game | probe: altars | — |
-| `game_event` | game | probe: ping | — |
 | `entities` | game | probe: entity queries | — |
 | `destroy` | game | probe: destroy | — |
 | `save_world` | game | probe: saves | — |
 | `world_key` | game | probe: world key | — |
 | `component_write` | game | probe: writes | — |
-| `emit` | game | probe: ping | — |
-| `teleport` | game | probe: spawns | — |
-| `spawn` | game | probe: spawns | — |
-| `craft_filter` | game | every start | with a player |
-| `build_filter` | game | every start | with a player |
-| `net_channel` | loader | probe: channel refused | — |
-| `net_send` | game | — | client |
-| `net_ready` | game | — | client |
 | `notify` | game | — | client |
 | `time_of_day` | game | probe: clock | — |
 | `set_time_of_day` | game | probe: clock | — |
-| `time_speed_control` | game | probe: clock | — |
+| `request_time_speed` | game | probe: clock | — |
 | `set_time_speed` | game | probe: clock | — |
 | `game_settings` | game | probe: game settings | — |
 | `set_game_settings` | game | probe: game settings | — |
-| `damage_filter` | game | every start | with a player |
 | `buff_types` | game | probe: buffs | — |
 | `buffs` | game | — | with a player |
 | `apply_buff` | game | — | with a player |
 | `remove_buff` | game | — | with a player |
-| `knowledge` | game | probe: knowledge | — |
-| `grant_knowledge` | game | probe: knowledge | — |
-| `quests` | game | probe: knowledge | — |
 | `weather_at` | game | probe: weather | — |
 | `weather_fronts` | game | probe: weather | — |
 | `set_weather` | game | probe: weather | — |
 | `terrain_materials` | game | probe: terrain | — |
 | `terrain_edit` | game | probe: terrain | — |
-| `config_schema` | loader | every start | — |
+| `altar_zone_filter` | game | probe: altars | — |
+| `altar_zones_changed` | game | probe: altars | — |
+| `altar_limit_filter` | game | — | with a player |
+| `base_limit` | game | probe: base limits | — |
+| `voxel_read` | game | probe: world reads | — |
+| `build_rights` | game | — | with a player |
+| `transaction_commit` | game | probe: transaction | — |
+| `transaction_undo` | game | probe: transaction | — |
+| `transaction_status` | game | probe: transaction | — |
+| `world_quiet` | game | — | with a player |
+| `transaction_entities` | game | probe: transaction | — |
+| `world_persists` | game | probe: world reads | — |
+| `map_markers` | game | probe: map | — |
+| `account_action` | game | — | with a player |
+| `map_frame` | game | probe: map | — |
+| `request_base_limits` | game | probe: base limits | — |
+| `set_chat_mute` | game | — | with a player |
+| `chat_muted` | loader | — | — |
+| `set_base_limit` | game | probe: base limits | — |
+| `save_info` | game | probe: saves | — |
+| `hold_saves` | game | probe: saves | — |
+| `set_saved` | game | probe: spawns | — |
+| `progress_write` | game | — | with a player |
+| `server_stop` | game | — | with a player |
+| `fog_uncover` | game | — | with a player |
+| `language_of` | game | — | with a player |
+| `join_rule` | game | — | with a client joining |
+| `request_inventory` | game | probe: affixes | — |
+| `inventory_submit` | game | — | with a player |
+| `survivor_lookup` | game | — | with a player |
+| `survivor_bed_check` | game | — | with a player |
+| `summon_filter` | game | — | with a player |
+| `summon_item` | game | — | with a player |
+| `survivor_status` | game | — | client |
+| `emit` | game | probe: ping | — |
+| `teleport` | game | probe: spawns | — |
+| `spawn` | game | probe: spawns | — |
+| `damage_filter` | game | every start | with a player |
 | `summoned` | game | — | with a player |
-| `item_data_open` | loader | — | — |
-| `item_data_get` | game | probe: entity data | — |
-| `item_data_set` | game | probe: entity data | — |
-| `ui_frame` | game | — | client |
-| `ui_widget` | game | — | client |
-| `ui_dialog` | game | — | client |
-| `ui_hud` | game | — | client |
-| `ui_markers` | game | — | client |
-| `config_check` | loader | — | — |
-| `texts` | loader | — | — |
-| `content_serve` | game | — | client |
-| `content_read` | game | probe: archive | — |
-| `icons_ready` | game | — | client |
-| `stat_open` | loader | probe: stats | — |
+| `define_stat` | loader | probe: stats | — |
 | `stat_info` | loader | probe: stats | — |
 | `stat_value` | game | — | with a player |
 | `stat_modify` | game | — | with a player |
@@ -150,103 +205,48 @@ names every entry of the golden layout once, in that order.
 | `stats_changed` | game | every start | with a player |
 | `stat_sources` | game | — | with a player |
 | `stat_watch` | game | — | with a player |
-| `define_event` | loader | — | — |
-| `subscribe_event` | loader | — | — |
-| `send_event` | loader | — | — |
-| `affix_open` | loader | probe: affixes | — |
+| `define_affix` | loader | probe: affixes | — |
 | `affix_roll` | game | probe: affixes | — |
 | `item_lines` | game | probe: affixes | — |
 | `affix_info` | loader | probe: affixes | — |
-| `rename_content` | game | — | client |
-| `declare_content` | loader | — | — |
-| `entity_data_open` | loader | probe: entity data | — |
-| `mod_dir` | loader | every start | — |
+| `item_filter` | game | every start | with a player |
+| `drop_items` | game | — | with a player |
+| `skill_override` | game | — | with a player |
+| `comfort_filter` | game | — | with a player |
+| `experience_filter` | game | — | with a player |
+| `knowledge` | game | probe: knowledge | — |
+| `change_knowledge` | game | probe: knowledge | — |
+| `quests` | game | probe: knowledge | — |
 | `knowledge_input_filter` | game | every start | with a player |
-| `language` | game | — | client |
-| `keep_game_settings` | game | probe: game settings | — |
-| `forget_game_settings` | game | probe: game settings | — |
-| `revoke_knowledge` | game | probe: knowledge | — |
-| `account_knowledge` | game | probe: knowledge | — |
-| `resource_read` | game | probe: archive | — |
-| `game_text` | game | — | client |
-| `rebuild_resource` | game | — | client |
-| `recipe_rule` | game | — | client |
-| `recipe_disabled` | game | — | client |
-| `define_point` | loader | — | — |
-| `attach_point` | loader | — | — |
-| `run_point` | loader | — | — |
+| `game_query` | game | — | with a player |
+| `run_console` | game | probe: console line | — |
+| `interaction_filter` | game | — | with a player |
+| `craft_filter` | game | every start | with a player |
+| `build_filter` | game | every start | with a player |
 | `actions` | loader | every start | client |
-| `event_types` | game | every start | — |
-| `recipe_kind` | game | — | client |
-| `feature` | loader | every start | — |
-| `rate` | game | — | with a player |
-| `set_rate` | game | — | with a player |
-| `change_data` | game | — | client |
-| `loop_wait` | game | probe: loop waits | — |
-| `server_wait` | game | probe: loop waits | — |
-| `task_workers` | game | probe: task workers | — |
-| `altar_zone_filter` | game | probe: altars | — |
-| `altar_zones_changed` | game | probe: altars | — |
-| `altar_limit_filter` | game | — | with a player |
-| `base_limit` | game | probe: base limits | — |
-| `voxel_read` | game | probe: world reads | — |
-| `declare_change` | game | — | client |
-| `set_change` | game | — | client |
-| `build_rights` | game | — | with a player |
-| `transaction_commit` | game | — | — |
-| `transaction_undo` | game | — | — |
-| `transaction_status` | game | — | — |
-| `transaction_commit_for` | game | — | with a player |
-| `world_quiet` | game | — | with a player |
-| `fog_open` | game | — | client |
-| `fog_read` | game | — | client |
-| `serve_call` | loader | — | — |
-| `find_call` | loader | — | — |
-| `call` | loader | — | — |
-| `transaction_entities` | game | — | — |
-| `world_persists` | game | probe: world reads | — |
-| `map_markers` | game | probe: map | — |
-| `account_action` | game | — | with a player |
-| `subscribe_tick` | game | probe: ticks | — |
-| `set_tick_every` | game | probe: ticks | — |
-| `map_frame` | game | probe: map | — |
-| `request_base_limits` | game | probe: base limits | — |
-| `map_marker_types` | game | — | client |
-| `use_content` | loader | — | — |
-| `chat_mute_set` | game | — | with a player |
-| `chat_mute_has` | loader | — | — |
-| `set_base_cap` | game | probe: base limits | — |
-| `resource_keys` | game | probe: archive | — |
-| `content_hashes` | game | probe: archive | — |
-| `types` | game | probe: host reads | — |
-| `game_version` | game | probe: host reads | — |
 | `control` | loader | every start | client |
 | `run_action` | game | — | client |
-| `ui_extension` | game | — | client |
-| `item_filter` | game | every start | with a player |
 | `chat_filter` | game | every start | with a player |
-| `save_info` | game | probe: saves | — |
-| `hold_saves` | game | probe: saves | — |
-| `crafting_prop` | game | — | client |
-| `set_saved` | game | probe: spawns | — |
-| `run_action_at` | game | — | client |
-| `local_held` | game | — | client |
-| `read_only` | loader | — | — |
-| `resource_served` | game | probe: archive | — |
 | `commands` | loader | — | — |
 | `run_command` | loader | — | — |
 | `command_list` | loader | — | — |
 | `actions_changed` | loader | — | — |
-| `resource_buffer` | loader | — | — |
-| `game_query` | game | — | with a player |
 | `action_window` | game | — | client |
-| `progress_write` | game | — | with a player |
-| `drop_items` | game | — | with a player |
-| `config_set` | loader | — | — |
-| `server_stop` | game | — | — |
-| `fog_uncover` | game | — | with a player |
-| `content_name` | loader | — | — |
-| `language_of` | game | — | with a player |
-| `client_game_event` | game | — | on a client, hosting and joined |
-| `join_rule` | game | — | with a client joining |
+| `ui_frame` | game | — | client |
+| `ui_widget` | game | — | client |
+| `ui_dialog` | game | — | client |
+| `ui_hud` | game | — | client |
+| `ui_markers` | game | — | client |
+| `request_fog` | game | — | client |
+| `fog_read` | game | — | client |
+| `map_marker_types` | game | — | client |
+| `ui_extension` | game | — | client |
+| `local_held` | game | — | client |
 | `local_input_status` | loader | fake client/server and cached-state tests | not exercised |
+| `client_snapshot` | game | fake client/server, snapshot composition and session tests | client |
+| `loader_off` | loader | fake listing and kept-text tests | — |
+| `client_command` | game | fake client/server, bounds, command and handoff tests, Luau | client |
+| `client_command_status` | game | fake states and every cancel reason, Luau | client |
+| `terrain_material_add` | game | — | client |
+| `interaction_prompt` | game | — | with a player, client |
+| `ui_item_tooltip` | game | — | client |

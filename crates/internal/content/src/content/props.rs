@@ -30,7 +30,7 @@
 
 use crate::__load::*;
 use crate::engine_ids as ids;
-use crate::resources::{Registry, Value};
+use crate::resources::Value;
 use crate::{ItemId, Off};
 
 use super::items::NewItem;
@@ -38,6 +38,7 @@ use super::recipes::{NewRecipe, RECIPE_REGISTRY};
 use super::templates::{ComponentChange, NewTemplate, TemplateId};
 use super::workshops::WORKSHOP_REGISTRY;
 use super::{Blob, EngineFacts, Guid, Id, types};
+use crate::resources::Grow;
 
 /// The parts a prop's other ids take after its item's id.
 const TEMPLATE: &str = "template";
@@ -54,7 +55,6 @@ const RECIPE_GUID: &str = "recipeGuid";
 const REQUIRED: &str = "requiredProps";
 const REQUIRED_MASK: &str = "requiredPropsMask";
 const MARK: &str = "ecs::RequiredCraftingProp";
-const IN_RANGE: &str = "craftingPropsInRange";
 
 /// A crafting prop: placed in a base, it lets the base's workshops make the
 /// recipes that require it.
@@ -159,10 +159,9 @@ fn placed_by(load: &crate::BaseLoad, item: Guid) -> Result<Guid, Off> {
         .ok_or_else(|| Off::new(format!("prop: the vanilla item {item} places nothing")))
 }
 
-/// `info` placing `template`; `None` when it is too short.
-fn place(info: &[u8], at: usize, template: Guid) -> Option<Vec<u8>> {
-    let mut item = Blob::new(info);
-    item.write(at, &template.0).then(|| item.into_bytes())
+/// Builds in `out` `info` placing `template`; `None` when it is too short.
+fn place(info: &[u8], at: usize, template: Guid, out: &mut impl Grow) -> Option<()> {
+    Blob::over(out, info).write(at, &template.0).then_some(())
 }
 
 /// A game id as the codec reads one: a struct of its `value`.
@@ -179,21 +178,6 @@ fn crafting_mark(guid: Guid) -> ComponentChange {
             ("craftingPropId".into(), game_id(guid.fnv1a())),
         ]),
     )
-}
-
-/// The first bit of the crafting prop mask no vanilla prop of `props`
-/// takes: one past the highest index, which need not be the count.
-fn first_free(props: &[Value]) -> Result<u8, Off> {
-    let next = props
-        .iter()
-        .map(|prop| match prop.field("craftingPropIndex") {
-            Some(Value::Uint(index)) => index.saturating_add(1),
-            _ => 0,
-        })
-        .max()
-        .unwrap_or(0)
-        .max(u64::try_from(props.len()).unwrap_or(u64::MAX));
-    u8::try_from(next).map_err(|_| Off::new("crafting props: more than 255 in the game"))
 }
 
 /// The workshop registry `registry` with the crafting prop `entry` after
@@ -276,8 +260,8 @@ impl LoadMethods for crate::BaseLoad {
             .chain([item.guid()])
         {
             // A second link on the item, after `add_item`'s on the same base.
-            self.serve(types::ITEM_INFO.key(guid)?, base, move |info| {
-                place(info, at, placed)
+            self.serve(types::ITEM_INFO.key(guid)?, base, move |info, out| {
+                place(info, at, placed, out)
             })?;
         }
         if let Some(cost) = new.recipe_cost {
@@ -300,10 +284,6 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
-    /// The bits of the game's crafting prop mask and the count of the
-    /// game's own crafting props.
-    fn crafting_prop_bounds(&self) -> Result<(u8, u8), Off>;
-
     /// The index the loader gives the crafting prop `prop`.
     fn crafting_prop_index(&self, prop: Guid) -> Result<u8, Off>;
 
@@ -321,39 +301,10 @@ pub(crate) trait LoadHelpers {
 }
 
 impl LoadHelpers for crate::BaseLoad {
-    fn crafting_prop_bounds(&self) -> Result<(u8, u8), Off> {
-        let registry = Registry::game()?;
-        let menu = registry
-            .hashed(self.hash(ids::CLIENT_CRAFTING_INTERACTION)?)
-            .ok_or_else(|| Off::new("crafting props: the crafting menu is not reflected"))?;
-        let width = registry
-            .all_fields(menu)
-            .iter()
-            .find(|field| field.name() == IN_RANGE)
-            .and_then(|field| field.type_name())
-            .and_then(|name| registry.named(name))
-            .and_then(|mask| u8::try_from(mask.size() * 8).ok())
-            .ok_or_else(|| Off::new("crafting props: the mask is not reflected"))?;
-        let vanilla = self
-            .host()
-            .game_value(types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?)?;
-        let Some(Value::List(props)) = vanilla.field(PROPS) else {
-            return Err(Off::new("workshop registry: no list of crafting props"));
-        };
-        Ok((first_free(props)?, width))
-    }
-
     fn crafting_prop_index(&self, prop: Guid) -> Result<u8, Off> {
-        let (first, width) = self.crafting_prop_bounds()?;
         let host = self.host();
         let mut index = 0u8;
-        let status = (host.api().crafting_prop)(
-            host.handle(),
-            &raw const prop.0,
-            first,
-            width,
-            &raw mut index,
-        );
+        let status = (host.api().crafting_prop)(host.handle(), &raw const prop, &raw mut index);
         crate::load::ok(status, index, || format!("crafting prop {prop}"))
     }
 
@@ -421,20 +372,6 @@ mod tests {
     }
 
     #[test]
-    fn the_first_free_bit_is_past_the_highest_vanilla_index_not_the_count() {
-        let indexed = |indices: &[u64]| -> Vec<Value> {
-            indices
-                .iter()
-                .map(|&i| Value::Struct(vec![("craftingPropIndex".into(), Value::Uint(i))]))
-                .collect()
-        };
-        assert_eq!(first_free(&indexed(&[0, 1, 2])), Ok(3));
-        assert_eq!(first_free(&indexed(&[0, 1, 5])), Ok(6), "a gap");
-        assert_eq!(first_free(&[]), Ok(0));
-        assert!(first_free(&indexed(&[255])).is_err());
-    }
-
-    #[test]
     fn the_named_recipes_require_the_prop_by_id_and_mask_bit_and_the_rest_keep_theirs() {
         let (named, other) = (Guid([1; 16]), Guid([2; 16]));
         let mortar = game_id(2_371_410_940);
@@ -465,8 +402,8 @@ mod tests {
 
     #[test]
     fn placing_writes_the_template_where_the_item_names_it() {
-        let placed = place(&[0; 24], 8, Guid([5; 16])).unwrap();
+        let placed = crate::content::built(|out| place(&[0; 24], 8, Guid([5; 16]), out)).unwrap();
         assert_eq!(&placed[8..24], &[5; 16]);
-        assert!(place(&[0; 8], 8, Guid([5; 16])).is_none());
+        assert!(crate::content::built(|out| place(&[0; 8], 8, Guid([5; 16]), out)).is_none());
     }
 }

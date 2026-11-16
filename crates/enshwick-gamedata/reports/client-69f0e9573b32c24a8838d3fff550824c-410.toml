@@ -2,14 +2,14 @@
 # `sealed` ties it to the code that finds it, so a report edited by hand or
 # left behind by that code fails `cargo xtask check`.
 
-sealed = "f9a7dbb268b443e112261d1b6df705b9831879a0d64ee7de4730e450404babf3"
+sealed = "250fa6e1cfdcd9c58cd58789738feca46bc08de85cf291e56408a7add721884c"
 build = "client, game 1269579, executable 69f0e9573b32c24a8838d3fff550824c/410"
 side = "client"
 game_version = 1269579
 checked = "2026-11-14"
-entries = 834
-routed = 828
-missing = ["bases.base_ids", "bases.record_base_id", "net.message_release"]
+entries = 866
+routed = 860
+missing = ["bases.base_ids", "bases.record_base_id", "net.message_release", "ui.prompt_site"]
 unread = ["attribute.experience_needed_slot", "attribute.fuel_max_slot", "attribute.health_adder_slot", "attribute.health_max_slot", "attribute.mana_adder_slot", "attribute.mana_max_slot", "attribute.shroud_max_slot", "attribute.stamina_adder_slot", "attribute.stamina_max_slot"]
 
 [[feature]]
@@ -21,3 +21,8 @@ missing = ["bases.base_ids", "bases.record_base_id"]
 name = "carrier"
 state = "partly"
 missing = ["net.message_release"]
+
+[[feature]]
+name = "interaction_prompts"
+state = "partly"
+missing = ["ui.prompt_site"]

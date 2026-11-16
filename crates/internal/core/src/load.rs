@@ -232,7 +232,6 @@ mod ui;
 mod vetoes;
 mod voxels;
 mod weather;
-#[cfg(feature = "unstable")]
 mod world;
 
 impl enshwick_base::load::sealed::Sealed for Load<'_> {}

@@ -48,6 +48,14 @@ use crate::resources::Registry;
 use crate::{Entity, Host, Off, WorldError};
 use enshwick_world::__internal::world_status;
 
+mod commands;
+mod snapshot;
+
+pub use commands::{
+    CancelReason, ClientCommand, CommandAction, CommandId, CommandState, CommandStatus,
+};
+pub use snapshot::{ClientSnapshot, SnapshotPart, SnapshotState};
+
 /// The bits of the game's `PlayerDigitalInput`, a `Bitmask64`.
 const BITS: usize = 64;
 
@@ -63,8 +71,12 @@ pub struct Input(&'static Resolved);
 impl crate::script::Bound for Input {
     const NAME: &'static str = "input";
     const DOC: &'static str = "The game's controls each player holds, read in the server's world, and the local player's on a client.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_HELD, Self::SCRIPT_LOCAL_STATUS];
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
+        Self::SCRIPT_HELD,
+        Self::SCRIPT_LOCAL_STATUS,
+        Self::SCRIPT_CLIENT_SNAPSHOT,
+        Self::SCRIPT_CLIENT_COMMANDS,
+    ];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Input::open(load)
@@ -125,11 +137,18 @@ impl Resolved {
 #[crate::script(held)]
 impl Input {
     pub(crate) fn open(load: &impl crate::Loading) -> Result<Self, Off> {
-        if let Some(resolved) = RESOLVED.get() {
-            return Ok(Self(resolved));
-        }
-        let resolved = Resolved::resolve(load)?;
-        Ok(Self(RESOLVED.get_or_init(|| resolved)))
+        let input = if let Some(resolved) = RESOLVED.get() {
+            Self(resolved)
+        } else {
+            let resolved = Resolved::resolve(load)?;
+            Self(RESOLVED.get_or_init(|| resolved))
+        };
+        // The loader starts reading the held controls and the client snapshot
+        // at the first ask, which answers none: asking now has the first
+        // step after it answer.
+        let _started = input.local_held();
+        let _snapshot = input.client_snapshot();
+        Ok(input)
     }
 
     /// The game's controls `player` holds this step, as their client last
@@ -141,7 +160,7 @@ impl Input {
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] before a world runs.
+    /// step; [`WorldError::Unavailable`] before a world runs.
     ///
     /// # Examples
     ///
@@ -171,10 +190,14 @@ impl Input {
     }
 
     /// The game's controls the local player holds, as this client's
-    /// interface read them in its last step; `None` on a server, outside a
-    /// game and while no step ran for a second, as in the pause menu. Only
-    /// the gameplay controls: the client-only ones, such as the menu and
-    /// map keys, are not in it. Read on any thread.
+    /// interface read them in its last step. Only the gameplay controls:
+    /// the client-only ones, such as the menu and map keys, are not in it.
+    /// Read on any thread.
+    ///
+    /// The reads start when the mod opens its input, so the interface's
+    /// first step after that answers. `None` on a server, outside a game,
+    /// before that first step, while no step ran for a second, as in the
+    /// pause menu, and on a game build without the read.
     ///
     /// # Examples
     ///
@@ -230,10 +253,10 @@ pub struct LocalInputStatus {
 impl Input {
     /// Observes only cached loader metadata on any thread, without starting sampling.
     /// Fields are weakly consistent; no world, session, player or current UI state is inferred.
-    /// Requires a matching ABI 11.31 or newer loader; older loaders cannot load this SDK.
+    /// Requires a matching ABI 12.1 or newer loader; older loaders cannot load this SDK.
     ///
     /// # Errors
-    /// [`WorldError::Missing`] on a server, otherwise the loader's refusal.
+    /// [`WorldError::Unavailable`] on a server, otherwise the loader's refusal.
     #[script]
     pub fn local_status(self) -> Result<LocalInputStatus, WorldError> {
         use crate::abi::{Header, LocalInputInfo as Info};

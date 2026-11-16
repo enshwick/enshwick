@@ -50,7 +50,7 @@ mod tests {
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
-            name: [0; 64],
+            name: [0; PlayerInfo::NAME_MAX],
         }
     }
 
@@ -109,7 +109,7 @@ mod tests {
         let used = ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::CONSUME,
-            player: Entity(2),
+            character: Entity(2),
             item: TONIC,
             count: 1,
             inventory: Entity(40),

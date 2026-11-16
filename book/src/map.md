@@ -230,10 +230,12 @@ is uncovered, and the fog thins out from its edge to twice the radius.
 uncovers the whole map, the circle around the map's frame. The server holds
 no fog, so the loader sends the circle to the loader on the player's
 client. There the game's own reveal takes it within a frame, and the
-character's save keeps it, in every world the character enters.
+character's save keeps it, in every world the character enters. On a
+client that hosts the game, the hosting player's own fog uncovers on that
+client, with no message.
 
 A client without Enshwick is not reached, and the call fails with
-`WorldError::Missing`. It fails so for a player who is not online too, and
+`WorldError::Unavailable`. It fails so for a player who is not online too, and
 on a client in another's game. The mod decides what to tell whoever asked. A
 place that is not finite and a radius out of bounds fail with `Refused`.
 `uncover` returns once the circle is sent and works from any thread;

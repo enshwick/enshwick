@@ -5,7 +5,7 @@ use enshwick_core::abi::Status;
 
 use crate::host::entries::base::services::{exported, required_owner, spec_parts};
 use crate::host::layer::guards::open;
-use crate::host::layer::{Headed, Mod, Out, Rule, entries};
+use crate::host::layer::{Callback, Headed, Mod, Out, Rule, entries};
 
 /// The declaration of a call spec read through its header: a bad argument
 /// when its name or layouts do not read.
@@ -31,7 +31,7 @@ entries! {
     fn serve_call(
         me as Mod,
         spec as Headed<api_frame::CallSpec>,
-        callback: api_frame::CallFn,
+        callback as Callback<api_frame::CallFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         open(crate::base::calls::sealed())?;

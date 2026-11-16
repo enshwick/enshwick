@@ -225,10 +225,10 @@ impl Buffs {
             slot: 0,
             flags: 0,
             name: 0,
-            duration: 0,
+            duration_ns: 0,
         };
-        let fill = |out: *mut BuffTypeInfo, capacity: u32, count: *mut u32| {
-            (self.host.api().buff_types)(self.host.handle(), out, capacity, count)
+        let fill = |out: *mut BuffTypeInfo, entry_size: u32, capacity: u32, count: *mut u32| {
+            (self.host.api().buff_types)(self.host.handle(), out, entry_size, capacity, count)
         };
         list(blank, fill)
             .unwrap_or_default()
@@ -236,7 +236,7 @@ impl Buffs {
             .map(|info| BuffType {
                 buff_type_id: info.id,
                 slot: BuffSlotType::from_slot(info.slot),
-                default_life_time: nanos(info.duration),
+                default_life_time: nanos(info.duration_ns),
                 is_saved: info.flags & BuffTypeInfo::SAVED != 0,
                 hide_in_ui: info.flags & BuffTypeInfo::HIDDEN != 0,
                 name: info.name,
@@ -250,7 +250,7 @@ impl Buffs {
     ///
     /// [`WorldError::Lacks`] for an entity that holds no buffs or is not in
     /// the world, [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] on a build without buffs.
+    /// [`WorldError::Unavailable`] on a build without buffs.
     ///
     /// # Examples
     ///
@@ -263,11 +263,11 @@ impl Buffs {
             entity: Entity::NONE,
             slot: 0,
             level: 0,
-            duration: 0,
-            remaining: 0,
+            duration_ns: 0,
+            remaining_ns: 0,
         };
-        let fill = |out: *mut ActiveBuff, capacity: u32, count: *mut u32| {
-            (self.host.api().buffs)(self.host.handle(), entity, out, capacity, count)
+        let fill = |out: *mut ActiveBuff, entry_size: u32, capacity: u32, count: *mut u32| {
+            (self.host.api().buffs)(self.host.handle(), entity, out, entry_size, capacity, count)
         };
         Ok(list(blank, fill)?
             .iter()
@@ -276,8 +276,8 @@ impl Buffs {
                 buff_entity_id: buff.entity,
                 slot: BuffSlotType::from_slot(u16::try_from(buff.slot).unwrap_or(u16::MAX)),
                 level: (buff.level != 0).then_some(buff.level),
-                life_time: nanos(buff.duration),
-                remaining: nanos(buff.remaining),
+                life_time: nanos(buff.duration_ns),
+                remaining: nanos(buff.remaining_ns),
             })
             .collect())
     }
@@ -312,7 +312,7 @@ impl Buffs {
     /// removed from the entity in this step (the game frees its place in
     /// the next); [`WorldError::Lacks`] for an entity that holds no buffs or
     /// is not in the world; [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] on a build without buffs.
+    /// [`WorldError::Unavailable`] on a build without buffs.
     ///
     /// # Examples
     ///
@@ -330,7 +330,7 @@ impl Buffs {
             id,
             level: how.level.map_or(0, u32::from),
             reserved: 0,
-            duration,
+            duration_ns: duration,
         };
         WorldError::check(
             (self.host.api().apply_buff)(self.host.handle(), &raw const request),
@@ -370,14 +370,15 @@ impl Buffs {
 /// room for all when it was too small.
 fn list<T: Copy>(
     blank: T,
-    fill: impl Fn(*mut T, u32, *mut u32) -> Status,
+    fill: impl Fn(*mut T, u32, u32, *mut u32) -> Status,
 ) -> Result<Vec<T>, WorldError> {
+    let entry_size = u32::try_from(size_of::<T>()).unwrap_or(u32::MAX);
     let mut items = vec![blank; 64];
     loop {
         let mut count = 0u32;
         let capacity = u32::try_from(items.len()).unwrap_or(u32::MAX);
         WorldError::check(
-            fill(items.as_mut_ptr(), capacity, &raw mut count),
+            fill(items.as_mut_ptr(), entry_size, capacity, &raw mut count),
             WorldError::Lacks,
         )?;
         let count = count as usize;

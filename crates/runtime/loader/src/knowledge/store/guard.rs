@@ -21,7 +21,9 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_core::abi::{Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn};
+use enshwick_core::abi::{
+    Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFilterFn,
+};
 
 use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
@@ -33,7 +35,7 @@ use crate::engine::registry::JoinFeatureError;
 
 use super::{Layout, definition, layout, quest_set, read};
 
-static FILTERS: Filters<KnowledgeInputFn> = Filters::new(Feature::Vetoes);
+static FILTERS: Filters<KnowledgeInputFilterFn> = Filters::new(Feature::Vetoes);
 static SITE: OnceLock<Site> = OnceLock::new();
 const LOGGED: u32 = 64;
 
@@ -106,7 +108,7 @@ pub(crate) fn status() -> Option<String> {
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
-    callback: KnowledgeInputFn,
+    callback: KnowledgeInputFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
     let available = || site(loader).is_some() && loader.code_holds(pinned::knowledge::INPUT_CHECK);
@@ -239,8 +241,11 @@ fn decide(call: &mut KnowledgeInput) -> bool {
         // SAFETY: a filter's mod runs, so its DLL that holds the callback
         // stays loaded; the callback gets the user pointer its mod registered
         // and `call`, which lives for the call.
-        let verdict = unsafe { filter(&raw const *call, user) };
-        call.allowed = u32::from(verdict != 0);
+        match unsafe { filter(&raw const *call, user) } {
+            enshwick_core::abi::FILTER_YES => call.allowed = 1,
+            enshwick_core::abi::FILTER_REFUSE => call.allowed = 0,
+            _ => {}
+        }
     });
     call.allowed != 0
 }
@@ -258,7 +263,7 @@ fn note(call: &KnowledgeInput) {
             call.kind,
             call.value,
             call.scope,
-            call.player.0,
+            call.character.0,
             call.refusal
         );
     } else if line == LOGGED {
@@ -320,14 +325,15 @@ crate::engine::mid::mid_handler! {
         let refusal = refusal(definition, kind, value);
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player: enshwick_core::Entity(player),
+            character: enshwick_core::Entity(player),
             id: enshwick_core::abi::KnowledgeId::new(id),
             kind,
             scope: definition.map_or(KnowledgeInput::NO_SCOPE, |d| d.scope),
             reserved: 0,
             value,
             refusal,
-            allowed: u32::from(refusal == KnowledgeInput::ALLOWED),
+            allowed: u8::from(refusal == KnowledgeInput::ALLOWED),
+            reserved_tail: [0; 3],
         };
         if !decide(&mut call) {
             registers.rax &= !0xff;
@@ -459,7 +465,7 @@ mod tests {
     fn a_hosted_game_s_end_forgets_the_refusals_and_logged_lines() {
         let call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player: enshwick_core::Entity(1),
+            character: enshwick_core::Entity(1),
             id: enshwick_core::abi::KnowledgeId::new(2),
             kind: KnowledgeInfo::COUNTER,
             scope: KnowledgeInfo::PLAYER,
@@ -467,6 +473,7 @@ mod tests {
             value: 1,
             refusal: KnowledgeInput::COUNTER,
             allowed: 0,
+            reserved_tail: [0; 3],
         };
         note(&call);
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
@@ -483,7 +490,7 @@ mod tests {
     fn without_filters_the_guards_verdict_stands() {
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player: enshwick_core::Entity(1),
+            character: enshwick_core::Entity(1),
             id: enshwick_core::abi::KnowledgeId::new(2),
             kind: KnowledgeInfo::BOOL,
             scope: KnowledgeInfo::PLAYER,
@@ -491,6 +498,7 @@ mod tests {
             value: 0,
             refusal: KnowledgeInput::QUEST,
             allowed: 0,
+            reserved_tail: [0; 3],
         };
         assert!(!decide(&mut call));
         call.allowed = 1;

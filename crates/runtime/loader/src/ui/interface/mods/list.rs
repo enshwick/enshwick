@@ -33,6 +33,17 @@ const fn has_gear(settings: bool, here: bool, bindings: bool) -> bool {
     settings && here || bindings
 }
 
+/// The text a gear shows on a build whose icons do not read: settings where
+/// it opens them (`settings_here`), else only the player's key bindings,
+/// which belong to no world and so open in the main menu too.
+const fn gear_text(settings_here: bool) -> &'static str {
+    if settings_here {
+        "mods.settings"
+    } else {
+        "controls.title"
+    }
+}
+
 /// What a click on mod `index`'s Details button or gear opens: the Details
 /// button the mod's own page, the gear its settings.
 const fn clicked(details: bool, gear: bool, index: usize) -> Option<Listed> {
@@ -59,7 +70,7 @@ fn about(paint: &Painter<'_>, record: &crate::engine::loader::ModRecord) {
     heading(
         paint,
         &name,
-        &metadata(&record.version, &record.meta.authors),
+        &metadata(Some(&record.version), &record.meta.authors),
         state_text(off, waiting).map(|state| (state, record.version.as_str(), why)),
     );
     let description = record.description();
@@ -93,15 +104,35 @@ fn skipped_row(paint: &Painter<'_>, skipped: &crate::base::resolve::Skipped) {
     heading(
         paint,
         &skipped.label,
-        &metadata(&skipped.version, core::slice::from_ref(&skipped.file)),
-        state_text(true, false).map(|state| {
-            (
-                state,
-                skipped.version.as_str(),
-                Some(skipped.reason.shown()),
-            )
-        }),
+        &metadata(
+            skipped.version.as_deref(),
+            core::slice::from_ref(&skipped.file),
+        ),
+        Some((
+            skipped_state(skipped.refused_unread()),
+            skipped.version.as_deref().unwrap_or_default(),
+            Some(skipped.reason.shown()),
+        )),
     );
+}
+
+/// Whether a mod's settings page shows a setting of `schema`: in another's
+/// world, whose server sent its values (`sent`), only one that is not secret.
+fn shows_settings(schema: Option<&enshwick_core::config::Schema>, sent: bool) -> bool {
+    schema.is_some_and(|s| s.fields.iter().any(|f| !(sent && f.secret)))
+}
+
+/// A mod that is off, in words and its style.
+const OFF: (&str, u32) = ("mods.off", UiWidget::STYLE_NEGATIVE);
+
+/// The off state of a skipped mod in words: with its version, or, for a
+/// file refused before its manifest read (`unread`), without one.
+const fn skipped_state(unread: bool) -> (&'static str, u32) {
+    if unread {
+        ("mods.off.file", OFF.1)
+    } else {
+        OFF
+    }
 }
 
 /// The text that says in words that a mod is off or waiting, with its
@@ -109,7 +140,7 @@ fn skipped_row(paint: &Painter<'_>, skipped: &crate::base::resolve::Skipped) {
 /// that runs.
 const fn state_text(off: bool, waiting: bool) -> Option<(&'static str, u32)> {
     if off {
-        Some(("mods.off", UiWidget::STYLE_NEGATIVE))
+        Some(OFF)
     } else if waiting {
         Some(("mods.waiting", UiWidget::STYLE_WARNING))
     } else {
@@ -164,15 +195,17 @@ pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
     let Some(record) = loader.mods.get(index) else {
         return;
     };
-    let credits = metadata(&record.version, &record.meta.authors);
+    let credits = metadata(Some(&record.version), &record.meta.authors);
     for line in core::iter::once(credits).chain(detail_lines(loader, index, record)) {
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
 }
 
-/// A mod's dimmed line under its name: its version, then its authors.
-fn metadata(version: &str, authors: &[String]) -> String {
-    core::iter::once(version)
+/// A mod's dimmed line under its name: its version, when it has one, then
+/// its authors.
+fn metadata(version: Option<&str>, authors: &[String]) -> String {
+    version
+        .into_iter()
         .chain(authors.iter().map(String::as_str))
         .collect::<Vec<_>>()
         .join(texts::text("mods.metadata.gap"))
@@ -202,8 +235,8 @@ fn store_off(label: &str, feature: &str, reason: &str) -> Option<String> {
 
 /// What the loader itself has on, off or wrong, above the mods: developer
 /// tools on, with the interface demo's button where this game has them,
-/// features this build lacks, parts a panic turned off, a newer release, a
-/// broken settings file and discovery off.
+/// features this build lacks, parts a panic turned off, an unofficial build,
+/// a newer release, a broken settings file and discovery off.
 fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
     if loader.developer_tools {
         paint.label(
@@ -222,6 +255,14 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
         paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
     }
     parts_off(paint);
+    if loader.unofficial.load(Ordering::Acquire) {
+        paint.label(
+            texts::text("mods.unofficial").as_bytes(),
+            UiWidget::STYLE_NEGATIVE,
+            true,
+            false,
+        );
+    }
     if let Some(release) = loader.newer_release.get() {
         let line = texts::fill(
             "mods.newer",
@@ -279,11 +320,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, count);
     let shown = listing.shown(*first, count);
-    let button = |icon: Icon| {
-        let fallback = match icon {
-            Icon::Settings => "mods.settings",
-            Icon::Info => "mods.details",
-        };
+    let button = |icon: Icon, fallback: &'static str| {
         paint.icon_button(icon, texts::text(fallback).as_bytes(), true)
     };
     let controls = crate::actions::controls::rows();
@@ -291,22 +328,22 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         if index > shown.start {
             paint.separator();
         }
-        let settings = record
-            .settings_schema()
-            .is_some_and(|s| !s.fields.is_empty());
         let sent = record.server_values.relock().is_some();
+        let settings = shows_settings(record.settings_schema().as_ref(), sent);
+        let here = mods_screen::gear(world, sent);
         let opens = has_gear(
             settings,
-            mods_screen::gear(world, sent),
+            here,
             super::controls::any_in(&controls, &record.id),
         );
+        let gear = gear_text(settings && here);
         // The Details button on every mod, at the same place; the gear under
         // it where the mod has something to set here, else its place kept.
         let clicked = paint.row(
             || state(paint, record),
             || {
-                let details = button(Icon::Info);
-                let settings = opens && button(Icon::Settings);
+                let details = button(Icon::Info, "mods.details");
+                let settings = opens && button(Icon::Settings, gear);
                 if !opens {
                     paint.icon_slot();
                 }
@@ -337,7 +374,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
                     false,
                 );
             },
-            || button(Icon::Settings),
+            || button(Icon::Settings, gear_text(false)),
         );
         if opened {
             done = Listed::Bindings(id, name);
@@ -375,8 +412,29 @@ pub(super) fn pages(paint: &Painter<'_>, listing: Listing, first: &mut usize, co
 
 #[cfg(test)]
 mod tests {
-    use super::{Listed, clicked, has_gear, metadata, state_text, store_off};
+    use super::{
+        Listed, clicked, gear_text, has_gear, metadata, shows_settings, skipped_state, state_text,
+        store_off,
+    };
     use crate::engine::texts;
+    use enshwick_core::config::{Field, Schema};
+
+    #[test]
+    fn only_secret_settings_count_as_none_in_another_s_world() {
+        let secret = Schema::new(
+            "",
+            "config",
+            vec![Field::new("token", "").with_secret(true)],
+        );
+        assert!(shows_settings(Some(&secret), false), "the mod's own world");
+        assert!(
+            !shows_settings(Some(&secret), true),
+            "the server keeps its secrets"
+        );
+        let open = Schema::new("", "config", vec![Field::new("lamps", &true)]);
+        assert!(shows_settings(Some(&open), true));
+        assert!(!shows_settings(None, false));
+    }
 
     #[test]
     fn a_row_has_a_gear_for_settings_shown_here_or_for_key_bindings() {
@@ -384,6 +442,16 @@ mod tests {
         assert!(!has_gear(true, false, false), "settings not shown here");
         assert!(!has_gear(false, true, false), "nothing to set");
         assert!(has_gear(false, false, true), "key bindings anywhere");
+    }
+
+    #[test]
+    fn a_gear_without_icons_names_settings_only_where_it_opens_them() {
+        assert_eq!(texts::text(gear_text(true)), "Settings");
+        assert_eq!(
+            texts::text(gear_text(false)),
+            "Key bindings",
+            "in the main menu a gear opens only key bindings"
+        );
     }
 
     #[test]
@@ -403,6 +471,20 @@ mod tests {
         assert_eq!(line(true, true).as_deref(), Some("Safes 0.1.1 (off)"));
         assert_eq!(line(false, true).as_deref(), Some("Safes 0.1.1 (waiting)"));
         assert_eq!(line(false, false), None, "a mod that runs");
+        let skipped = |unread, version| {
+            let (key, _) = skipped_state(unread);
+            texts::fill(key, &[("name", "lanterns"), ("version", version)])
+        };
+        assert_eq!(skipped(false, "0.1.1"), "lanterns 0.1.1 (off)");
+        assert_eq!(
+            skipped(true, ""),
+            "lanterns (off)",
+            "a file refused before its version read"
+        );
+        assert_eq!(
+            metadata(None, &["lanterns/lanterns.dll".to_owned()]),
+            "lanterns/lanterns.dll"
+        );
     }
 
     #[test]
@@ -432,8 +514,11 @@ mod tests {
 
     #[test]
     fn a_mod_s_dimmed_line_holds_its_version_then_its_authors_and_nothing_else() {
-        assert_eq!(metadata("0.1.1", &[]), "0.1.1");
+        assert_eq!(metadata(Some("0.1.1"), &[]), "0.1.1");
         let authors = ["themaiby".to_owned(), "enshwick".to_owned()];
-        assert_eq!(metadata("0.2.0", &authors), "0.2.0 · themaiby · enshwick");
+        assert_eq!(
+            metadata(Some("0.2.0"), &authors),
+            "0.2.0 · themaiby · enshwick"
+        );
     }
 }

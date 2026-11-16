@@ -77,16 +77,23 @@ pub enum Skip {
     },
     /// The mod is in a cycle of requirements.
     Cycle,
+    /// Its file does not start as a mod: Windows did not load it, or the
+    /// loader refused it before its manifest read.
+    Refused {
+        /// Why, as the start decided.
+        skip: crate::base::discovery::Skip,
+    },
 }
 
 /// A mod that does not load, as the Mods screen and the chat line at world
 /// load name it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Skipped {
-    /// The mod id.
+    /// The mod id; for a file refused before its manifest read, its folder
+    /// in `mods/`.
     pub id: String,
-    /// Its version.
-    pub version: String,
+    /// Its version; none for a file refused before its manifest read.
+    pub version: Option<String>,
     /// The name players read, or the id when the manifest names none.
     pub label: String,
     /// Its file relative to the game's folder, so a player finds the copy
@@ -98,10 +105,29 @@ pub struct Skipped {
 
 impl Skipped {
     /// Whether it counts as a mod that is off: a second copy of a mod that
-    /// runs does not, since that mod runs; `loads` tells whether an id runs.
+    /// runs does not, nor a second mod file in the folder of one that runs,
+    /// since that mod runs; `loads` tells whether an id runs.
     #[must_use]
     pub fn counts_off(&self, loads: impl Fn(&str) -> bool) -> bool {
-        !matches!(&self.reason, Skip::Copy { id, .. } if loads(id))
+        match &self.reason {
+            Skip::Copy { id } => !loads(id),
+            Skip::Refused { skip } => !skip.beside_a_running_mod(),
+            _ => true,
+        }
+    }
+
+    /// Its id with its version after a space, or its id alone for a file
+    /// refused before its manifest read, as the console and the logs name it.
+    #[must_use]
+    pub fn named(&self) -> String {
+        crate::engine::diag::mod_named(&self.id, self.version.as_deref())
+    }
+
+    /// Whether its file was refused before its manifest read, so it has no
+    /// version and its id is its folder.
+    #[must_use]
+    pub const fn refused_unread(&self) -> bool {
+        matches!(self.reason, Skip::Refused { .. })
     }
 }
 
@@ -117,6 +143,7 @@ impl core::fmt::Display for Skip {
                 write!(f, "does not work beside {id} {version}; remove one of them")
             }
             Self::Cycle => f.write_str("in a dependency cycle"),
+            Self::Refused { skip } => write!(f, "{skip}"),
         }
     }
 }
@@ -144,6 +171,7 @@ impl Skip {
                 &[("id", id), ("version", &version.to_string())],
             ),
             Self::Cycle => crate::engine::texts::fill("mods.skipped.cycle", &[]),
+            Self::Refused { skip } => skip.shown(),
         }
     }
 }
@@ -362,7 +390,7 @@ mod tests {
     fn only_a_second_copy_of_a_mod_that_runs_does_not_count_as_off() {
         let skipped = |reason| Skipped {
             id: "you.safes".into(),
-            version: "1.0.0".into(),
+            version: Some("1.0.0".into()),
             label: "Safes".into(),
             file: "you.safes/you.safes.dll".into(),
             reason,

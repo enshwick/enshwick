@@ -17,7 +17,7 @@ use crate::engine::code::Watching;
 use crate::engine::code_watch::Stage;
 use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
-use crate::engine::parts::{Part, Parts, part};
+use crate::engine::parts::{Part, part};
 use crate::engine::patch::FrameSlot;
 use crate::host;
 
@@ -146,17 +146,16 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         delivery: OnceLock::new(),
         settings_problems,
         newer_release: OnceLock::new(),
+        unofficial: AtomicBool::new(false),
         retry: crate::engine::retry::Retry::default(),
-        skipped: skipped(&libraries, &candidates, &plan, found.copies),
-        parts: Parts::new(crate::parts::LAYERS),
+        skipped: skipped(&libraries, &candidates, &plan, found.refused),
+        parts: crate::parts::parts(),
     };
     let Some(loader) = crate::engine::loader::install(loader) else {
         crate::engine::shipped::release();
         return;
     };
-    if release_check {
-        crate::base::releases::start(loader);
-    }
+    check_release(loader, release_check);
     if crate::engine::diag::counting() {
         crate::engine::profile::start(loader.mods.len());
     }
@@ -189,6 +188,16 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
     }
     record::take(loader, folders);
     start_services(loader);
+}
+
+/// Starts the checks of the running release off the game thread: whether its
+/// files carry the release signature, and, unless the settings turn it off,
+/// whether a newer release is out.
+fn check_release(loader: &'static Loader, newer: bool) {
+    crate::base::official::start(loader);
+    if newer {
+        crate::base::releases::start(loader);
+    }
 }
 
 /// Starts what runs once every mod is ready: the file watch, the status
@@ -241,19 +250,19 @@ fn skip(libraries: &[Library], plan: &resolve::Plan) {
     }
 }
 
-/// The mods `plan` skips, then the other `copies` of a mod id, as the screens
+/// The mods `plan` skips, then the files `refused` at start, as the screens
 /// name them.
 fn skipped(
     libraries: &[Library],
     candidates: &[Candidate],
     plan: &resolve::Plan,
-    copies: Vec<resolve::Skipped>,
+    refused: Vec<resolve::Skipped>,
 ) -> Vec<resolve::Skipped> {
     plan.skipped
         .iter()
         .map(|(i, reason)| resolve::Skipped {
             id: candidates[*i].id.clone(),
-            version: candidates[*i].version.to_string(),
+            version: Some(candidates[*i].version.to_string()),
             // SAFETY: the manifest is the copy `manifest::read` made for the
             // process or a pack's manifest built for the process, its strings
             // and lists readable and never written; a skipped mod's DLL stays
@@ -263,7 +272,7 @@ fn skipped(
             file: libraries[*i].file.clone(),
             reason: reason.clone(),
         })
-        .chain(copies)
+        .chain(refused)
         .collect()
 }
 
@@ -394,7 +403,15 @@ fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching
             // SAFETY: `library.ready` is the mod's `READY` export, typed
             // `ReadyFn` as `enshwick_core::abi::exports` documents, called with the
             // static host table after the mod's init succeeded.
-            unsafe { (library.ready)(&raw const host::API, host::handle(ModIndex::new(index))) };
+            let status = unsafe {
+                (library.ready)(&raw const host::API, host::handle(ModIndex::new(index)))
+            };
+            if !status.is_ok() {
+                loader.turn_off(
+                    ModIndex::new(index),
+                    &format!("ready returned {}", status.0),
+                );
+            }
             if let Some(w) = watching.as_deref_mut() {
                 w.check(&loader.mods[index].id, library.range, Stage::Ready);
             }
@@ -422,6 +439,5 @@ fn read_frame() -> enshwick_core::abi::CallerFrame {
         .get()
         .copied()
         .flatten()
-        .map(FrameSlot::read)
-        .unwrap_or_default()
+        .map_or_default(FrameSlot::read)
 }

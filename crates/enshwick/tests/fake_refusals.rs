@@ -41,6 +41,7 @@ mod tests {
 
     fn hook_spec(target: u64, detour: usize, next: &'static AtomicUsize) -> HookSpec {
         HookSpec {
+            header: Header::of::<HookSpec>(),
             target,
             detour,
             next: &raw const *next,
@@ -74,7 +75,7 @@ mod tests {
     fn ask(api: &HostApi, me: ModHandle) -> Vec<(&'static str, Status)> {
         let detour = detour_address();
         let hook = |spec: HookSpec| (api.hook)(me, &raw const spec);
-        let patch = |address: u64, len: usize| {
+        let patch = |address: u64, len: u32| {
             let bytes = [0x90u8; 8];
             let with = [0xCCu8; 8];
             (api.patch_code)(me, address, bytes.as_ptr(), with.as_ptr(), len)
@@ -227,7 +228,7 @@ mod tests {
             code_at(8),
             bytes.as_ptr(),
             bytes.as_ptr(),
-            bytes.len(),
+            u32::try_from(bytes.len()).unwrap(),
         );
         assert_eq!(status, Status::TOO_LATE);
     }
@@ -263,7 +264,7 @@ mod tests {
         let attached = (api.attach_point)(
             loader.handle(),
             &raw const attach,
-            link,
+            Some(link),
             core::ptr::null_mut(),
         );
         assert_eq!(attached, Status::TOO_LATE);
@@ -279,13 +280,18 @@ mod tests {
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
         let event = enshwick::abi::Event::SETTINGS_CHANGED;
-        let subscribed = (api.subscribe)(loader.handle(), event, on_event, core::ptr::null_mut());
+        let subscribed = (api.subscribe)(
+            loader.handle(),
+            event,
+            Some(on_event),
+            core::ptr::null_mut(),
+        );
         assert_eq!(subscribed, Status::TOO_LATE);
         let mut tick = enshwick::abi::TickHandle(0);
         let ticked = (api.subscribe_tick)(
             loader.handle(),
             0,
-            on_event,
+            Some(on_event),
             core::ptr::null_mut(),
             &raw mut tick,
         );
@@ -295,10 +301,10 @@ mod tests {
             name: Str::new("you.refusals:later"),
             layout: EMPTY_LAYOUT,
         };
-        let mod_event = (api.subscribe_event)(
+        let mod_event = (api.subscribe_mod_event)(
             loader.handle(),
             &raw const spec,
-            on_mod_event,
+            Some(on_mod_event),
             core::ptr::null_mut(),
         );
         assert_eq!(mod_event, Status::TOO_LATE);
@@ -312,10 +318,10 @@ mod tests {
         let loader = started();
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
-        let subscribed = (api.subscribe_event)(
+        let subscribed = (api.subscribe_mod_event)(
             loader.handle(),
             core::ptr::null(),
-            on_mod_event,
+            Some(on_mod_event),
             core::ptr::null_mut(),
         );
         assert_eq!(subscribed, Status::TOO_LATE);

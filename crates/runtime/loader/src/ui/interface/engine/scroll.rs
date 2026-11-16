@@ -68,8 +68,6 @@ const CONFIG_FLAGS_SET: u8 = 0x18;
 /// The navigation config's highlight sound, which the window's navigation
 /// leaves empty.
 const SOUND_SIZE: usize = 16;
-/// The navigation kind of a scrolled column.
-const NAV_SCROLLED: u32 = 3;
 
 /// The scroll area's functions and the bundle's looks for its scrollbar.
 #[derive(Debug)]
@@ -303,6 +301,18 @@ pub(in crate::ui::interface) struct Scroll {
     column: Buf<FRAME_SIZE>,
     /// What the start opened, for the end to close.
     opened: Opened,
+    /// The id of the area's frame, 0 until its first start takes a new one.
+    id: usize,
+}
+
+/// A frame id no node of the game's has yet: the game keeps its nodes by
+/// id, and one it numbers itself follows its parent and its place there
+/// (client 26430625), so the rows of a page took the scroll offset and the
+/// focus of the rows of the page shown before them.
+fn new_id() -> usize {
+    let count = crate::ui::interface::next_scroll();
+    let id = STATE_KEY ^ count.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    usize::try_from(id).unwrap_or(1).max(1)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -313,13 +323,32 @@ enum Opened {
 }
 
 impl Scroll {
+    /// A scroll area of its own, at its top with nothing focused, whatever
+    /// another window drew in its place before.
     pub(in crate::ui::interface) const fn new() -> Self {
         Self {
             parent: Buf::zeroed(),
             area: Buf::zeroed(),
             column: Buf::zeroed(),
             opened: Opened::Nothing,
+            id: 0,
         }
+    }
+
+    /// Starts the area afresh on its next frame, at its top with nothing
+    /// focused, for new content in the same place, such as another page of a
+    /// screen.
+    pub(in crate::ui::interface) const fn start_over(&mut self) {
+        self.id = 0;
+    }
+
+    /// The id the area's frame takes, the same each frame until
+    /// [`Scroll::start_over`]; never 0.
+    pub(in crate::ui::interface) fn frame_id(&mut self) -> usize {
+        if self.id == 0 {
+            self.id = new_id();
+        }
+        self.id
     }
 }
 
@@ -350,11 +379,13 @@ impl Engine {
         let Some(fns) = &self.scroll else {
             return false;
         };
+        let id = scroll.frame_id();
         // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
         // gives; `scroll.parent` holds the table's `ui.frame_extent` bytes
-        // (`Layout::read`) and stays in place until `scroll_end`.
-        unsafe { (self.frame_open)(scroll.parent.ptr(), 0) };
+        // (`Layout::read`) and stays in place until `scroll_end`; the game
+        // keys the frame's node by the non-zero `id`.
+        unsafe { (self.frame_open)(scroll.parent.ptr(), id) };
         scroll.opened = Opened::Parent;
         let parent = self.frame_node(&scroll.parent);
         // SAFETY: `self.node_height` is the game's `ui.node_height`, checked
@@ -515,15 +546,7 @@ impl Engine {
     /// The scroll's navigation config: the window's, as a scrolled column
     /// with the highlight sound.
     fn scroll_nav(&self, fns: &Scrolling, bundle: usize) -> Buf<NAV_CONFIG> {
-        let mut nav = Buf::<NAV_CONFIG>::zeroed();
-        let [kind, wrap, axis, flags, input, layer, sound] = self.layout.nav;
-        nav.u32(kind, NAV_SCROLLED);
-        nav.u8(wrap, 1);
-        nav.u32(axis, 3);
-        nav.u16(flags, 0x101);
-        nav.u32(input, 2);
-        nav.u16(layer, 0x1b);
-        nav.u16(sound, 1);
+        let mut nav = self.nav_config(super::windows::NAV_COLUMN);
         // SAFETY: `bundle` is the frame's look bundle, read from the live
         // context, and `fns.highlight` the reflected offset of a 16-byte
         // sound reference inside it.

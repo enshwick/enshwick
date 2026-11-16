@@ -12,7 +12,7 @@ use enshwick_core::mods::LOADER_FILE;
 use crate::engine::loader::{ModRecord, loader};
 use crate::host::LOADER_HANDLE;
 use crate::host::layer::guards::{before_delivery, in_init};
-use crate::host::layer::{AnyMod, List, Mod, Out, SizedListOut, Text, entries};
+use crate::host::layer::{AnyMod, Callback, List, Mod, Out, SizedListOut, Text, entries};
 use crate::host::memory::text;
 
 /// The listing entry of the loader itself.
@@ -20,7 +20,7 @@ pub(crate) fn loader_info() -> ModInfo {
     ModInfo {
         header: Header::of::<ModInfo>(),
         id: Str::new(crate::engine::settings::LOADER_ID),
-        version: Str::new(env!("CARGO_PKG_VERSION")),
+        version: Str::new(crate::base::releases::STATED),
         side: Side::BOTH,
         flags: ManifestFlags::NONE,
         off: 0,
@@ -28,7 +28,7 @@ pub(crate) fn loader_info() -> ModInfo {
         name: Str::new("Enshwick"),
         description: Str::new("The mod loader and modding API for Enshrouded"),
         authors: LOADER_AUTHORS.as_ptr(),
-        author_count: LOADER_AUTHORS.len(),
+        author_count: u32::try_from(LOADER_AUTHORS.len()).unwrap_or(u32::MAX),
         license: Str::new(env!("CARGO_PKG_LICENSE")),
         homepage: Str::new(env!("CARGO_PKG_REPOSITORY")),
     }
@@ -36,6 +36,23 @@ pub(crate) fn loader_info() -> ModInfo {
 
 /// The loader's authors, as its listing names them.
 pub(crate) static LOADER_AUTHORS: [Str; 1] = [Str::new("themaiby")];
+
+/// The id lines from `me` go under: the loader's own for its copy of the
+/// API, else a loaded mod's, on or off.
+///
+/// # Errors
+///
+/// [`Status::BAD_ARGS`] for a handle the loader never gave out, or before
+/// the loader runs.
+pub(crate) fn writer(me: ModHandle) -> Result<&'static str, Status> {
+    if me == LOADER_HANDLE {
+        return Ok(crate::engine::settings::LOADER_ID);
+    }
+    loader()
+        .and_then(|loader| loader.record(me))
+        .map(|(_, record)| record.id.as_str())
+        .ok_or(Status::BAD_ARGS)
+}
 
 /// The listing entry of a loaded mod; its strings live as long as the loader.
 pub(crate) fn mod_info(record: &'static ModRecord) -> ModInfo {
@@ -57,23 +74,13 @@ pub(crate) fn mod_info(record: &'static ModRecord) -> ModInfo {
 }
 
 entries! {
-    fn fault(me as AnyMod, reason: Str) {
+    fn fault(me as AnyMod, reason: Str) -> Status {
         me.loader.turn_off(me.index, text(reason).unwrap_or("a fault"));
         Ok(())
     }
 
-    fn log(me: ModHandle, level: Level, message as Text) {
-        let Some(loader) = loader() else {
-            return Ok(());
-        };
-        let id = if me == LOADER_HANDLE {
-            Some(crate::engine::settings::LOADER_ID)
-        } else {
-            loader.record(me).map(|(_, record)| record.id.as_str())
-        };
-        if let Some(id) = id {
-            crate::engine::log::write(level, id, message);
-        }
+    fn log(me: ModHandle, level: Level, message as Text) -> Status {
+        crate::engine::log::write(level, writer(me)?, message);
         Ok(())
     }
 
@@ -101,6 +108,13 @@ entries! {
             .chain(me.loader.mods.iter().map(mod_info))
             .collect();
         out.put(&infos)
+    }
+
+    fn loader_off(
+        _me as AnyMod,
+        [out, entry_size, capacity, count] as SizedListOut<api_frame::LoaderOff>,
+    ) -> Status {
+        out.put(&crate::engine::diag::parts_off_listed())
     }
 
     fn join_missing(
@@ -148,7 +162,7 @@ entries! {
     fn config_check(
         me as Mod,
         file as Text,
-        callback: api_frame::ConfigCheckFn,
+        callback as Callback<api_frame::ConfigCheckFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         in_init(me.index)?;
@@ -160,7 +174,7 @@ entries! {
         Ok(())
     }
 
-    fn config_set(me as Mod, file as Text, key as Text, value as Text) -> Status {
+    fn set_config(me as Mod, file as Text, key as Text, value as Text) -> Status {
         crate::base::configure::apply_own(me.loader, me.index.get(), file, key, value)?;
         Ok(())
     }
@@ -171,12 +185,25 @@ entries! {
         Ok(())
     }
 
-    fn language(_me: ModHandle) -> u32 {
+    fn language(me: ModHandle, out as Out<u32>) -> Status {
+        writer(me)?;
         if let Some(reader) = crate::engine::texts::reader() {
-            return Ok(reader.0);
+            return out.put(reader.0);
         }
-        Ok(loader()
-            .filter(|loader| loader.side == Side::CLIENT)
-            .map_or(0, |_| crate::content::served::language().0))
+        out.put(
+            loader()
+                .filter(|loader| loader.side == Side::CLIENT)
+                .map_or(0, |_| crate::content::served::language().0),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_mods_screen_s_own_row_states_the_running_version() {
+        // SAFETY: the view points at the static text of `STATED`.
+        let version = unsafe { super::loader_info().version.as_str() };
+        assert_eq!(version, Some(crate::base::releases::STATED));
     }
 }

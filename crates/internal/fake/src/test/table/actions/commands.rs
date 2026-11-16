@@ -16,7 +16,7 @@ pub(crate) struct FakeCommands {
     /// The strings `command_list` last handed out: name, alias, mod id.
     pub(crate) listed: Vec<[Box<str>; 3]>,
     /// Shows, closes and updates of the mod's windows not carried yet:
-    /// account key, window id and the `close` value of the call.
+    /// account key, window id and the `change` value of the call.
     pub(crate) windows: Vec<(u64, String, u32)>,
     /// The windows each client holds: account key, window id and text.
     pub(crate) carried: Vec<(u64, String, String)>,
@@ -38,7 +38,7 @@ pub(crate) extern "system" fn action_window(
     id: Str,
     players: *const enshwick_core::PlayerKey,
     count: u32,
-    close: u32,
+    change: u32,
 ) -> Status {
     // SAFETY: the caller keeps the id's bytes alive for the call.
     let Some(id) = (unsafe { id.as_str() }).filter(|id| is_window_id(id)) else {
@@ -46,7 +46,7 @@ pub(crate) extern "system" fn action_window(
     };
     if count as usize > MAX_CALL_PLAYERS
         || (players.is_null() && count != 0)
-        || close > enshwick_core::abi::WINDOW_UPDATE
+        || change > enshwick_core::abi::WINDOW_UPDATE
     {
         return Status::BAD_ARGS;
     }
@@ -62,14 +62,14 @@ pub(crate) extern "system" fn action_window(
     };
     with(Status::MISSING, |s| {
         if s.host.side == enshwick_core::abi::Side::CLIENT && !s.host.hosting {
-            return Status::MISSING;
+            return Status::UNAVAILABLE;
         }
         if s.actions.is_none() || s.commands.windows.len() + keys.len() > MAX_WAITING {
             return Status::REFUSED;
         }
         s.commands
             .windows
-            .extend(keys.into_iter().map(|key| (key, id.to_owned(), close)));
+            .extend(keys.into_iter().map(|key| (key, id.to_owned(), change)));
         Status::OK
     })
 }
@@ -77,10 +77,10 @@ pub(crate) extern "system" fn action_window(
 use enshwick_core::command_names::{MAX_LINE, Named, Refusal, check};
 /// The game's permission bits a remote caller may hold.
 #[cfg(feature = "unstable")]
-const ALL_BITS: u8 = enshwick_core::world::PlayerPermissions::ALL_BITS;
+const ALL_BITS: u32 = enshwick_core::world::PlayerPermissions::ALL_BITS;
 /// Without the `world` module the fake keeps every bit a caller names.
 #[cfg(not(feature = "unstable"))]
-const ALL_BITS: u8 = u8::MAX;
+const ALL_BITS: u32 = u32::MAX;
 
 /// One mod's commands as the loader grants them.
 struct Granted {
@@ -134,10 +134,7 @@ fn granted(
 
 /// The id of the mod under test.
 fn own_id(s: &crate::test::table::State) -> String {
-    s.manifest
-        .as_ref()
-        .map(|m| m.id.clone())
-        .unwrap_or_default()
+    s.manifest.as_ref().map_or_default(|m| m.id.clone())
 }
 
 /// The command sets granted now, and the id of the mod under test.
@@ -147,7 +144,7 @@ fn sets_now(s: &crate::test::table::State) -> (Vec<Granted>, String) {
     (sets, id)
 }
 
-pub(crate) extern "system" fn commands(_me: ModHandle, _name: Str, alias: Str) -> Status {
+pub(crate) extern "system" fn commands(_me: ModHandle, alias: Str) -> Status {
     let alias = text(alias);
     with(Status::MISSING, |s| {
         if s.registration == Registration::Closed {
@@ -221,7 +218,7 @@ pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) 
 fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
     PlayerInfo::without_character(
         enshwick_core::PlayerKey::new(0),
-        u8::try_from(permissions & u32::from(ALL_BITS)).unwrap_or(0),
+        permissions & ALL_BITS,
         label,
     )
 }

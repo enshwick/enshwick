@@ -28,7 +28,7 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, name: &str) -> PlayerInfo {
-        let mut bytes = [0u8; 64];
+        let mut bytes = [0u8; PlayerInfo::NAME_MAX];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
@@ -36,7 +36,7 @@ mod tests {
             entity: enshwick::Entity(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: 0,
-            name_len: u8::try_from(name.len()).unwrap(),
+            name_len: u32::try_from(name.len()).unwrap(),
             name: bytes,
         }
     }
@@ -70,5 +70,41 @@ mod tests {
             [enshwick::PlayerKey::new(7), enshwick::PlayerKey::new(8)]
         );
         assert!(world.players_named("Bo").is_empty());
+    }
+
+    #[test]
+    fn a_long_name_of_multibyte_characters_reads_whole_and_a_longer_one_cuts_between_characters() {
+        let whole = "Ж".repeat(40);
+        let long = "🦀".repeat(33);
+        let loader = enshwick::test::FakeHost::new()
+            .world()
+            .player(PlayerInfo {
+                slot: 20,
+                ..PlayerInfo::with_name(
+                    enshwick::Entity(20),
+                    enshwick::PlayerKey::new(1),
+                    0,
+                    &whole,
+                )
+            })
+            .player(PlayerInfo {
+                slot: 21,
+                ..PlayerInfo::with_name(enshwick::Entity(21), enshwick::PlayerKey::new(2), 0, &long)
+            })
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Lookups)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = WORLD.get().unwrap();
+        let name = |key| {
+            world
+                .player_by_key(enshwick::PlayerKey::new(key))
+                .map(|p| p.name)
+        };
+
+        assert_eq!(whole.len(), 80, "over the old 64-byte cut");
+        assert_eq!(name(1).as_deref(), Some(whole.as_str()));
+        assert_eq!(name(2).as_deref(), Some("🦀".repeat(32).as_str()));
     }
 }

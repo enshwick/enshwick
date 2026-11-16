@@ -31,8 +31,8 @@ impl BaseLoad {
     #[doc(hidden)]
     pub fn code(&self) -> Result<&[u8], Off> {
         let api = self.api();
-        let (mut start, mut len) = (0u64, 0u64);
-        let status = (api.code_range)(&raw mut start, &raw mut len);
+        let (mut start, mut len) = (0u64, 0u32);
+        let status = (api.code_range)(self.host().handle(), &raw mut start, &raw mut len);
         ok(status, (), || "code section".to_owned())?;
         let (Ok(start), Ok(len)) = (usize::try_from(start), usize::try_from(len)) else {
             return Err(Off::new("code section: out of range"));
@@ -87,7 +87,7 @@ impl BaseLoad {
             address,
             expected.as_ptr(),
             replacement.as_ptr(),
-            expected.len(),
+            u32::try_from(expected.len()).unwrap_or(u32::MAX),
         );
         ok(status, (), || format!("code patch at {address:#x}"))
     }
@@ -110,8 +110,9 @@ impl BaseLoad {
         let api = self.api();
         let user = Box::into_raw(Box::new(MidHook { address, handler }));
         let spec = MidHookSpec {
+            header: crate::abi::Header::of::<MidHookSpec>(),
             address,
-            handler: run_mid_hook::<F>,
+            handler: Some(run_mid_hook::<F>),
             user: user.cast(),
             priority: 0,
             flags: HookFlags::NONE,

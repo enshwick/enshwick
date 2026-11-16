@@ -554,13 +554,15 @@ fn attach<P: Point, F: Fn(&P, &P::Output) -> Verdict<P::Output> + Send + Sync + 
     };
     hand_over(
         link,
-        |user| (host.api().attach_point)(host.handle(), &raw const raw, run_link::<P, F>, user),
+        |user| {
+            (host.api().attach_point)(host.handle(), &raw const raw, Some(run_link::<P, F>), user)
+        },
         &format!("point {}", P::NAME),
     )
 }
 
 /// Runs a link; `user` is the link boxed by [`attach`], alive for the
-/// process. A panic answers [`PointVerdict::PANICKED`] and leaves the mod on.
+/// process. A panic answers [`PointVerdict::FAILED`] and leaves the mod on.
 pub(crate) unsafe extern "system" fn run_link<
     P: Point,
     F: Fn(&P, &P::Output) -> Verdict<P::Output>,
@@ -588,7 +590,7 @@ pub(crate) unsafe extern "system" fn run_link<
         }
         Ok(Verdict::Refuse) if P::REFUSE && P::MODE.changes() => PointVerdict::REFUSE,
         Ok(_) => PointVerdict::PASS,
-        Err(_) => PointVerdict::PANICKED,
+        Err(_) => PointVerdict::FAILED,
     }
 }
 

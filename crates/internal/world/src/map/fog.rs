@@ -251,7 +251,7 @@ pub enum FogError {
 impl enshwick_base::load::StatusError for FogError {
     fn of(status: Status) -> Self {
         match status {
-            Status::MISSING => Self::Missing,
+            Status::UNAVAILABLE => Self::Missing,
             Status::OUTSIDE_WORLD => Self::Outside,
             _ => Self::Refused,
         }
@@ -262,7 +262,7 @@ impl enshwick_base::load::StatusError for FogError {
 impl FogOfWar {
     pub(crate) fn open(load: &BaseLoad) -> Result<Self, Off> {
         let host = load.host();
-        let status = (host.api().fog_open)(host.handle());
+        let status = (host.api().request_fog)(host.handle());
         crate::load::ok(status, Self { host }, || "the fog of war".to_owned())
     }
 

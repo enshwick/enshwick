@@ -3,13 +3,12 @@
 
 use super::{Damage, DamageCause, DamageTypeNew};
 use crate::Entity;
-use crate::abi::DamageCheck;
 
 /// The damage a script's filter sees and changes: a copy of the check,
 /// written back once the filter returns, with [`Damage`]'s methods; one
 /// per filter, filled again on every hit.
 #[derive(Clone, Debug)]
-pub struct ScriptDamage(pub(super) std::sync::Arc<std::sync::Mutex<DamageCheck>>);
+pub struct ScriptDamage(pub(super) std::sync::Arc<std::sync::Mutex<super::Hit>>);
 
 /// `Load`'s script-only method of this module on the base handle, which
 /// core's forwarder calls; a mod reaches it only through the script.
@@ -42,20 +41,20 @@ impl LoadMethods for crate::BaseLoad {
         let kept = std::sync::OnceLock::new();
         let busy = AtomicBool::new(false);
         self.on_damage(move |damage| {
-            let fresh = || Arc::new(ScriptDamage(Arc::new(std::sync::Mutex::new(*damage.check))));
+            let fresh = || Arc::new(ScriptDamage(Arc::new(std::sync::Mutex::new(*damage.hit))));
             // A hit while the kept copy is out, on another thread or inside
             // the filter, gets a copy of its own.
             if busy.swap(true, Ordering::Acquire) {
                 let copy = fresh();
                 filter(Arc::clone(&copy));
-                *damage.check = *copy.0.relock();
+                *damage.hit = *copy.0.relock();
                 return;
             }
             let _free = Free(&busy);
             let copy: &Arc<ScriptDamage> = kept.get_or_init(fresh);
-            *copy.0.relock() = *damage.check;
+            *copy.0.relock() = *damage.hit;
             filter(Arc::clone(copy));
-            *damage.check = *copy.0.relock();
+            *damage.hit = *copy.0.relock();
         })
     }
 }
@@ -65,7 +64,7 @@ impl ScriptDamage {
     fn with<R>(&self, with: impl FnOnce(&mut Damage<'_>) -> R) -> R {
         use crate::Relock as _;
         let mut check = self.0.relock();
-        with(&mut Damage { check: &mut check })
+        with(&mut Damage { hit: &mut check })
     }
 }
 
@@ -113,6 +112,26 @@ impl ScriptDamage {
     #[script(name = "set")]
     pub(crate) fn set_script(&self, ty: DamageTypeNew, amount: f32) {
         self.with(|d| d.set(ty, amount));
+    }
+
+    /// How many damage types a hit carries, as [`Damage::type_count`] says.
+    #[script(name = "type_count")]
+    pub(crate) fn type_count_script(&self) -> usize {
+        self.with(|d| d.type_count())
+    }
+
+    /// A hit's damage of the type at `index`, from 0 in the game's order, as
+    /// [`Damage::amount_at`] reads it.
+    #[script(name = "amount_at")]
+    pub(crate) fn amount_at_script(&self, index: usize) -> f32 {
+        self.with(|d| d.amount_at(index))
+    }
+
+    /// Sets a hit's damage of the type at `index`, as [`Damage::set_at`]
+    /// does.
+    #[script(name = "set_at")]
+    pub(crate) fn set_at_script(&self, index: usize, amount: f32) {
+        self.with(|d| d.set_at(index, amount));
     }
 
     /// The damage the health takes, as [`Damage::total`] sums it.

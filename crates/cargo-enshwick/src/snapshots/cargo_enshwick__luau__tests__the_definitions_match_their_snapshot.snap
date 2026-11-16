@@ -17,7 +17,7 @@ export type AcceptOfferedInteractionEvent = {
 }
 
 --- What the game does to an account, as its account actions name it.
-export type AccountAction = "Kick" | "Ban" | "UnBan"
+export type AccountAction = "Kick" | "Ban" | "Unban"
 
 --- What a player does that a reward follows.
 export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | "Quest" | { Consume: number } | { Pickup: number }
@@ -39,7 +39,7 @@ export type ActionTarget = {
 }
 
 --- A value the player picked for an argument, in the order of `Action.arg`; a list hands the player and the switch.
-export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean } | { Text: string } | { Item: string }
+export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean } | { Text: string } | { Item: string } | { Template: string }
 
 --- One of the server's players: the account key, and the name as the server knows it.
 export type ActionValuePlayer = {
@@ -306,14 +306,6 @@ export type Block = {
 	material: number,
 }
 
---- A box of cells, by its lowest and highest corner.
-export type Bounds = {
-	--- The lowest corner.
-	min: {number},
-	--- The highest corner.
-	max: {number},
-}
-
 --- A buff an entity has, from `Buffs.of`.
 export type Buff = {
 	--- Its type.
@@ -357,14 +349,14 @@ export type BuildingData = {
 	--- The placed entity; for a removal, the entity as it was.
 	entity: number,
 	--- The acting player's character entity.
-	player: number,
+	character: number,
 	--- The item placed, which the entity keeps as its `UsedItem`; 0 for a removal.
 	item: number,
 	--- What happened: 0 placed, 1 picked up, 2 torn down.
 	kind: number,
 	--- 1 when undo or redo replayed the action.
 	replay: number,
-	--- The template GUID of the placed entity, in file order; zero for a removal.
+	--- The template GUID of the placed entity; zero for a removal.
 	template: string,
 	--- Where it was placed, in metres; zero for a removal.
 	position: vector,
@@ -394,11 +386,11 @@ export type BuildingTearDownEvent = {
 
 --- An object a player places, checked against the building zones it may reach into.
 export type BuildingZoneCheck = {
-	--- The building zones, half-open.
-	zones: {Bounds},
-	--- The object's box, both corners included.
-	object: Bounds,
-	--- How far an object reaches past a zone.
+	--- The building zones.
+	zones: {Extent},
+	--- The object's box.
+	object: Extent,
+	--- How far an object reaches past a zone, in metres.
 	margin: number,
 }
 
@@ -502,14 +494,60 @@ export type ChatLine = {
 
 --- The data of the `ChunkLoaded` and `ChunkUnloaded` events: a chunk of the world's entities, never of its terrain's voxels.
 export type ChunkData = {
-	--- The chunk's index in the world's grid: `z * width + x`.
-	index: number,
 	--- Its column, west to east from 0.
 	x: number,
 	--- Its row, from 0 along the other axis.
 	z: number,
 	--- Its side in metres: it spans `x * size` to `(x + 1) * size` on one axis and `z * size` to `(z + 1) * size` on the other, at any height.
 	size: number,
+}
+
+--- `ClientCommand` as Luau gives it.
+export type ClientCommand = {
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"` or `"highlight_recipe"`.
+	kind: string,
+	--- The session, as `client_snapshot().session` gives it.
+	session: string,
+	--- The HUD screen the client must show.
+	expected_screen: string?,
+	--- The screen to open or the tab to choose.
+	target: string?,
+	--- A look's yaw and pitch in radians.
+	look: {number}?,
+	--- A move's direction.
+	direction: {number}?,
+	--- A move's hold in milliseconds.
+	hold_ms: number?,
+	--- The recipe to highlight.
+	recipe: number?,
+}
+
+--- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
+export type ClientSnapshot = {
+	--- `"never"`, `"off"`, `"stale"` or `"fresh"`.
+	state: string,
+	--- The session count, as a decimal string.
+	session: string,
+	--- Milliseconds since the last read, or nil before the first.
+	age_ms: string?,
+	--- The world's name.
+	scene: string?,
+	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"` and `"recipe"`.
+	reads: {string},
+	--- The open HUD screen.
+	hud_screen: string?,
+	--- The screen the open one returns to.
+	return_screen: string?,
+	--- The open screen's host.
+	host: number?,
+	--- The tab the in-game menu shows.
+	menu_tab: string?,
+	--- The held controls' names.
+	held: {string}?,
+	--- The local player's entity.
+	player: number?,
+	--- The highlighted recipe.
+	highlighted_recipe: number?,
 }
 
 --- The mod's factor on how fast the server's clock runs.
@@ -536,6 +574,16 @@ export type CommandSet = {
 	alias: string?,
 	--- The id of the mod that named them.
 	mod_id: string,
+}
+
+--- `CommandStatus` as Luau sees it.
+export type CommandStatus = {
+	--- `"pending"`, `"applied"`, `"observed"`, `"cancelled"` or `"unavailable"`.
+	state: string,
+	--- Why a cancelled command ended, such as `"timed_out"`; `"other"` for a reason a newer loader gives.
+	reason: string?,
+	--- Milliseconds since the command was queued.
+	age_ms: string,
 }
 
 --- A change of one component of a template: `set` it whole, `edit` the fields a table names, or neither to remove it.
@@ -643,6 +691,12 @@ export type Damage = {
 	amount: (self: Damage, ty: DamageTypeNew) -> number,
 	--- Sets a hit's damage of type `ty`, as `Damage.set` does.
 	set: (self: Damage, ty: DamageTypeNew, amount: number) -> (),
+	--- How many damage types a hit carries, as `Damage.type_count` says.
+	type_count: (self: Damage) -> number,
+	--- A hit's damage of the type at `index`, from 0 in the game's order, as `Damage.amount_at` reads it.
+	amount_at: (self: Damage, index: number) -> number,
+	--- Sets a hit's damage of the type at `index`, as `Damage.set_at` does.
+	set_at: (self: Damage, index: number, amount: number) -> (),
 	--- The damage the health takes, as `Damage.total` sums it.
 	total: (self: Damage) -> number,
 	--- Scales the damage by `factor`, as `Damage.scale` does.
@@ -777,6 +831,14 @@ export type ExperienceBalanceValue = {
 --- The groups of experience sources the game's settings give one factor each, and so one rate each.
 export type ExperienceGroup = "Combat" | "Mining" | "ExplorationQuests"
 
+--- A box in the world in metres, by its lowest and highest corner.
+export type Extent = {
+	--- The lowest corner.
+	min: vector,
+	--- The highest corner.
+	max: vector,
+}
+
 --- A field of a writable component type, read and written as its kind.
 export type Field = {
 }
@@ -866,6 +928,8 @@ export type Frame = {
 	screen: (self: Frame) -> Screen,
 	--- Draws a window titled `title` and its contents with `body`, which gets this frame, as `Frame.window` does; false when it could not be drawn, and `body` did not run.
 	window: (self: Frame, id: string, title: string, body: (arg1: Frame) -> ()) -> boolean,
+	--- Whether the player pressed Back over the window whose body is drawing, as `Frame.back` says.
+	back: (self: Frame) -> boolean,
 	--- Draws a line of text, as `Frame.label` does.
 	label: (self: Frame, label: Label) -> (),
 	--- Draws a button, as `Frame.button` does; true in the frame it is clicked.
@@ -892,6 +956,10 @@ export type Frame = {
 	screen_host_template: (self: Frame) -> string?,
 	--- Where the open screen's host stands, as `Frame.screen_host_position` says.
 	screen_host_position: (self: Frame) -> vector?,
+	--- Draws an item slot of `count` of `item` in the game's style, as `Frame.item_slot` does, and says whether it was clicked or is under the cursor.
+	item_slot: (self: Frame, item: number, count: number) -> SlotInput,
+	--- The slot of the game's own inventory screen under the cursor, as `Frame.hovered_slot` says.
+	hovered_slot: (self: Frame) -> Slot?,
 	--- Draws the key the player bound to `action` with `label` beside it, as `Frame.input_hint` does; true when the game drew a key.
 	input_hint: (self: Frame, action: typed_input_mapping_runtime_GameplayAction, label: string) -> boolean,
 }
@@ -1065,6 +1133,9 @@ export type InteractionOfferRuntime = {
 	is_disabled: boolean,
 }
 
+--- A verb the game shows on interaction prompts, named after its English text, for `ObjectPrompt.verb`. The game's own data gives each one; a vanilla client shows it in the player's language. Unstable: needs the `unstable` feature and may change in any release.
+export type InteractionVerb = "Open" | "Close" | "Use" | "Activate" | "Deactivate" | "Flip" | "Talk" | "Read" | "Inspect" | "Search" | "Loot" | "Collect" | "Harvest" | "Pick" | "Craft" | "Cook" | "Sit" | "Sleep" | "Enter" | "Edit" | "Recover" | "RepairEquipment" | "DepositItems" | "DrinkFrom" | "Upgrade" | "Disarm" | "Pet" | "Chop" | "Cleanse" | "Adopt" | "PickLock" | "Repot" | "TearOut" | "PlaceInto"
+
 --- One change in a `Batch`.
 export type InventoryOp = { Give: InventoryOpGive } | { Take: InventoryOpTake } | { DestroySlot: string } | { MoveSlot: InventoryOpMoveSlot } | { Renew: InventoryOpRenew } | { MoveAll: InventoryOpMoveAll }
 
@@ -1162,10 +1233,12 @@ export type ItemInfo = {
 	id: number,
 	--- How many fit one stack.
 	max_stack_size: number,
-	--- `ItemInfo` flags, see `ItemData`.
+	--- `ItemInfo` flags, see `ItemTypeInfo`.
 	flags: number,
 	--- The game's `ItemCategory`: 1 equipment (armour and rings), 2 weapons, 3 tools, and so on.
 	category: number,
+	--- The template a player places from the item, its `equipment.placedEntity`, the GUID's bytes in the game's file order; nil for an item that places nothing. It is not the template of the item's own entity (see `has_pide`), and does not say that a placement would succeed.
+	placed_entity_template: string?,
 }
 
 --- One item: its own entity and the item id it holds.
@@ -1342,6 +1415,16 @@ export type ListedPlayer = {
 	key: string,
 	--- The name the list shows.
 	name: string,
+}
+
+--- A part or feature of the loader that is off, from `loader_off`.
+export type LoaderOff = {
+	--- The part or feature, as the log and the Mods screen name it.
+	name: string,
+	--- Why it is off: the build entry it lacks and why, or the fault.
+	reason: string,
+	--- When it turned off, in seconds since the Unix epoch.
+	at: string,
 }
 
 --- Cached client sampler metadata. This is not world/session identity or proof of input execution.
@@ -1806,6 +1889,24 @@ export type NewTemplate = {
 	changes: {ComponentChange},
 }
 
+--- A terrain material of a mod's own: a copy of one of the game's, its look included, with rules changed, for `Load.add_terrain_material`. The loader gives mods' materials the terrain ids the game leaves free, 117 to 127, in load order, so the twelfth is refused. Its id holds for one run; saves name its ground by its content id, so a world keeps it from run to run. In a world loaded without the mod, its ground loads as `fallback` under Enshwick and as air under a server without it. Every client draws the ground from its own copy of the game's tables, so a mod that adds one runs on clients too.
+export type NewTerrainMaterial = {
+	--- Its content id, `mod:name`.
+	id: string,
+	--- The game's terrain material it copies, by voxel id: its look and every rule it does not change.
+	like: number,
+	--- The game's terrain material its ground loads as in a world loaded without the mod, by voxel id; nil for `like`.
+	fallback: number?,
+	--- The item digging it yields, by its GUID.
+	terrain_item: string?,
+	--- How hard it is to dig: the game's hardness category, from 0 (`Soft`) to 5 (`Unbreakable`).
+	hardness: number?,
+	--- The health a voxel of it has against tools, 1 or more.
+	health_points: number?,
+	--- Whether a player's tool can flatten it.
+	can_be_flattened: boolean?,
+}
+
 --- A new workshop for `Load.add_workshop`, named by one id. The station item is `id`; the station's other ids derive from it with `Id.part`: its template `<id>.template`, its workshop `<id>.workshop`, its recipe `<id>.recipe`, and the tags of its name and description, `<id>.name` and `<id>.description`. So `id` is a plain id, never one derived with `Id.part`, even when the same id written in full would fit. Every id is the mod's own and never changes: saves keep the template GUID of each placed station and the item id of each stack.
 export type NewWorkshop = {
 	--- The vanilla station cloned: what the new one looks like and does.
@@ -1827,6 +1928,16 @@ export type Notice = "OnScreen" | "Chat" | "Nobody"
 
 --- What a survivor does on `Effects.npc_command`.
 export type NpcCommandType = { GoToPosition: vector } | "Reset"
+
+--- What the prompt of every object placed from one item shows and does, for `Load.prompt`. The game verb and the replaced action are the server's, so every client sees them, with or without Enshwick; a client with Enshwick shows the mod's `text` in the verb's place instead. The prompt's title stays the object's label (`World.set_label`). Unstable: needs the `unstable` feature and may change in any release.
+export type ObjectPrompt = {
+	--- The verb every client shows; nil keeps the object's own.
+	verb: InteractionVerb?,
+	--- One of the mod's own texts, by its tag (`Load.declare`, `Load.add_texts`), shown in the verb's place on clients with Enshwick, in the player's language.
+	text: string?,
+	--- The press runs the game's empty interaction, a short reach, instead of the object's own action, such as opening a chest; the mod's action on the game event `AcceptOfferedInteractionEvent` runs alone.
+	replace_action: boolean?,
+}
 
 --- How a modifier acts on a stat. Modifiers apply in this order: every `Add` to the default, then every `Multiply`, then the greatest `Max` as a floor; an `Override` replaces the result, the last one in source order winning. The kind's range applies last.
 export type Op = "Add" | "Multiply" | "Max" | "Override"
@@ -1988,7 +2099,7 @@ export type PlayerData = {
 export type PlayerDeathData = {
 	--- The player's character; 0 when the account left in the same step. The name is enshwick's: the game's record holds the user instead.
 	entity: number,
-	--- What killed the player, the game's death cause: 0 a hit, 1 a fall, 2 the shroud, 3 suffocation.
+	--- What killed the player, numbered as the damage filter numbers its causes: `DamageCheck.IMPACT`, `DamageCheck.FALL_DAMAGE`, `DamageCheck.FOG`, `DamageCheck.DEADLY_FOG` or `DamageCheck.SUFFOCATED`, which is drowning; another number is a cause of a later game build.
 	cause: number,
 	--- The account, the same number in every session; the name is enshwick's for the game's account id hash.
 	key: string,
@@ -1996,10 +2107,6 @@ export type PlayerDeathData = {
 	position: vector,
 	--- For a hit, the template GUID of what dealt it, a creature's or an impact's; zero for other causes.
 	cause_guid: string,
-	--- 1 when the shroud was the deadly kind, which kills at once.
-	was_deadly_fog: number,
-	--- 1 when the player drowned.
-	drowned: number,
 	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `EntityDiedEvent` reads it; 0 for other causes, or when the history names none. The name is enshwick's.
 	killer_entity: number,
 }
@@ -2017,7 +2124,7 @@ export type Progress = {
 	experience_needed: number,
 }
 
---- What became of a level or experience write a mod asked for with `HostApi.progress_write`: the data of the `ProgressWritten` event. The name is enshwick's. ABI 11.25.
+--- What became of a level or experience write a mod asked for with `HostApi.progress_write`: the data of the `ProgressWritten` event. The name is enshwick's.
 export type ProgressWriteData = {
 	--- The player's character the write was for.
 	entity: number,
@@ -2265,7 +2372,7 @@ export type Refused = {
 }
 
 --- Why the platform refused a run of an action before its handler.
-export type RefusedReason = "UnknownAction" | "NoRight" | "Usage" | "UnknownPlayer" | "SeveralPlayers" | "PlayerGone" | "TooLong" | "UnknownItem" | "SeveralItems" | "CommandsOff" | "Rate" | "Bounds" | "Busy" | "OutOfReach"
+export type RefusedReason = "UnknownAction" | "NoRight" | "Usage" | "UnknownPlayer" | "SeveralPlayers" | "PlayerGone" | "TooLong" | "UnknownItem" | "SeveralItems" | "CommandsOff" | "Rate" | "Bounds" | "Busy" | "OutOfReach" | "UnknownTemplate" | "SeveralTemplates"
 
 --- A player's rename of an entity, for `Load.on_rename`.
 export type Rename = {
@@ -2491,6 +2598,14 @@ export type SettingsRead = {
 	preset: GameSettingsPreset,
 }
 
+--- What a committed `Transaction` came to once it stopped running, which `World.when_settled` hands its handler.
+export type Settled = {
+	--- `TransactionStatus.Applied` once it is written whole, or `TransactionStatus.Expired` when its undo data was dropped since; else how it ended; still `TransactionStatus.Pending` when the wait's bound passed first; nil once the loader no longer remembers it.
+	status: TransactionStatus?,
+	--- The props it placed and held, oldest first, as `World.transaction_entities` lists them; once it is written whole they stand in the world.
+	props: {number},
+}
+
 --- The shape of an edit. The name is enshwick's, not the game's.
 export type Shape = "Round" | "Square"
 
@@ -2549,6 +2664,14 @@ export type Slot = {
 	count: number,
 	--- The item's own entity, for items with durability or a level.
 	pide: number?,
+}
+
+--- What the player did to an item slot in one frame, from `Frame.item_slot`. The name is enshwick's.
+export type SlotInput = {
+	--- The player clicked the slot in this frame.
+	clicked: boolean,
+	--- The cursor is on the slot.
+	hovered: boolean,
 }
 
 --- One of the game's interface sounds.
@@ -2710,7 +2833,7 @@ export type Stats = {
 	sources: (self: Stats, entity: number, stat: Stat?) -> {Source},
 	--- The id and definition of `stat`; nil for a kind opened but never defined. Any thread.
 	info: (self: Stats, stat: Stat) -> StatInfo?,
-	--- Watches `entity` for the items it wears and the buffs it has, or stops watching it. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. Any thread, on the process that runs the world; elsewhere it does nothing.
+	--- Watches `entity` for the items it wears and the buffs it has, or stops this mod's watch. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. The watch is per mod: the entity stays watched while any mod watches it, so one mod's stop leaves another's watch, and a mod turned off loses its watches. Any thread, on the process that runs the world; elsewhere it does nothing.
 	watch: (self: Stats, entity: number, watch: boolean) -> (),
 	--- The key a stat id hashes to, as `key_of` gives it.
 	key_of: (self: Stats, id: string) -> number,
@@ -2836,7 +2959,7 @@ export type TerrainPageData = {
 	x: number,
 	--- Its row, from 0 along the voxels' z axis.
 	z: number,
-	--- Its side in metres, 128 on server 26430253: it spans `x * size` to `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size` along z, as `VoxelPos.to_metres` counts them, at every height.
+	--- Its side in metres, 128 on server 26430253: it spans `x * size` to `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size` along z, at every height.
 	size: number,
 }
 
@@ -2881,11 +3004,11 @@ export type TickData = {
 	--- Server steps since this handler's last call: 1 for an every-step handler and for a handler's first call.
 	elapsed_steps: string,
 	--- Wall time since this handler's last call in nanoseconds; for its first call, and for an every-step handler, the time since the step before. 0 on the loader's first step.
-	elapsed_nanos: string,
+	elapsed_ns: string,
 	--- The average time between server steps in nanoseconds, over about the last 16 steps; 0 until a step has been measured.
-	step_nanos: string,
+	step_ns: string,
 	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler, unless the loader's diagnostics time callbacks, and for about a second after they start, while the loader measures its clock.
-	cost_nanos: string,
+	cost_ns: string,
 	--- Which game the server steps, from 1: a dedicated server runs one, and a client counts one more for each game it hosts after the first.
 	game: string,
 }
@@ -2932,6 +3055,12 @@ export type Toggle = {
 
 --- What a dead character leaves behind. The loader reads the game's value of each variant by its constant's name.
 export type TombstoneMode = "AddBackpackMaterials" | "Everything" | "NoTombstone" | { Other: number }
+
+--- The lines of one item's tooltip: what it pushes shows under the game's rows, during its callback.
+export type TooltipLines = {
+	--- Adds a line under the game's rows, as `TooltipLines.push` does; false when the loader refused it.
+	push: (self: TooltipLines, label: Label) -> boolean,
+}
 
 --- A batch of world edits, written together and undone together once committed.
 export type Transaction = {
@@ -2993,6 +3122,14 @@ export type VanillaRecipe = {
 	name: string,
 	--- The item it makes, whose name the game shows for the recipe; nil for a recipe that names none.
 	output: string?,
+}
+
+--- A vanilla entity template with its name, from `templates`.
+export type VanillaTemplate = {
+	--- The template.
+	guid: string,
+	--- Its name, as `template` takes it, such as `Enemy_Wildbeast_Wolf`.
+	name: string,
 }
 
 --- Where a request came from.
@@ -3133,7 +3270,7 @@ export type WorkshopSurvivor = {
 }
 
 --- Why the server's world refused a request.
-export type WorldError = "WrongThread" | "Gone" | "Missing" | "Refused" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp"
+export type WorldError = "WrongThread" | "Gone" | "Unavailable" | "Busy" | "Failed" | "Refused" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp"
 
 --- The mod's data for the world running now, saved beside it.
 export type WorldStore = {
@@ -3365,6 +3502,8 @@ declare enshwick: {
 		all: () -> {ModEntry},
 		--- The server's mods that the last refused join found missing on this client or in another version, as `join_missing` lists them.
 		join_missing: () -> {ModEntry},
+		--- Every part and feature of the loader that is off, with why and when, as `loader_off` lists them.
+		loader_off: () -> {LoaderOff},
 		--- Whether this game runs the server now, so the mod's server logic acts: always on the dedicated server; on a client while it hosts a game, single player included, as mods run with server behaviour there.
 		hosting: () -> boolean,
 		--- The game executable the mod runs in: `server` for the dedicated server, `client` for the game, which may also host one (`hosting`).
@@ -3499,6 +3638,8 @@ declare enshwick: {
 		station: (name: string) -> Station,
 		--- The vanilla template named `name`.
 		template: (name: string) -> string,
+		--- Every vanilla template with its name, sorted by name.
+		templates: () -> {VanillaTemplate},
 		--- The vanilla enemy whose template is named `name`: its template, faction and arsenal.
 		enemy: (name: string) -> Enemy,
 		--- The vanilla experience values, each `{ value, source, gain }`, in the balancing table's order.
@@ -3657,7 +3798,7 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		resource_type: (id: string) -> ResourceType,
 	},
-	--- The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.
+	--- The server's world: players, accounts, entities, props, vitals and edits in transactions. Its props, build rights, captures and transactions are unstable: they may change in any release.
 	world: {
 		--- The connected player whose character is `entity`.
 		player: (entity: number) -> Player?,
@@ -3723,6 +3864,8 @@ declare enshwick: {
 		undo: (id: string) -> (),
 		--- The props transaction `id` of this mod placed and still holds, oldest first; empty for an id the loader no longer remembers, or not this mod's. A prop is in the world from the step after the one that placed it.
 		transaction_entities: (id: string) -> {number},
+		--- Runs `handler` once transaction `id` of this mod stopped running, so a mod acts on its placed props without polling. Once the transaction is written whole (`TransactionStatus.Applied`, or `TransactionStatus.Expired` when the loader dropped its undo data meanwhile), the handler runs one scheduler pass later, when the props it placed stand in the world; it gets the props the transaction held when it was written, even when it expired since. Any other end runs it at once; a large transaction spread over steps is waited for whole, and an undo of it that is still running counts as its end. Once `within` passed, the handler gets the transaction as it stands, still pending perhaps. `handler` runs on the server's game thread as a `Scheduler` task of this mod, so it belongs to the game it was asked in (`schedule`). The handler decides what an end other than written whole means, such as a `TransactionStatus.Failed` with `WorldError.NotLoaded`, which the same changes committed again may pass.
+		when_settled: (id: string, within: number, handler: (arg1: Settled) -> ()) -> (),
 		--- Where transaction `id` of this mod stands; nil for an id the loader no longer remembers (it keeps the newest few thousand) or not this mod's.
 		transaction_status: (id: string) -> TransactionStatus?,
 		--- `entity`'s health, stamina and mana; nil when it has no health, off the game thread, or on a build without stat reads.
@@ -3833,7 +3976,7 @@ declare enshwick: {
 		markers_in: (a: vector, b: vector) -> {MapMarker},
 		--- The frame of the map of the scene the server runs: where the map starts, how far it reaches and the size of its cells, in metres. The loader reads it from the game's data once per scene, apart from the game thread, as it reads the markers.
 		frame: () -> MapFrame,
-		--- Uncovers the fog of war of `player` in the circle of `radius` metres around world x and z `at`, as exploring there does: all of the circle, with the fog thinning out from its edge to twice the radius. The server holds no fog: the loader sends the circle to the loader on the player's client, which hands it to the game's own reveal within a frame, and the character's save keeps it, in every world the character enters. A client without Enshwick is not reached, and the mod decides what to tell whoever asked. Returns once the circle is sent; any thread, on a dedicated server or a client that hosts.
+		--- Uncovers the fog of war of `player` in the circle of `radius` metres around world x and z `at`, as exploring there does: all of the circle, with the fog thinning out from its edge to twice the radius. The server holds no fog: the loader sends the circle to the loader on the player's client, which hands it to the game's own reveal within a frame, and the character's save keeps it, in every world the character enters. On a client that hosts, the hosting player's own fog uncovers on that client, with no message. A client without Enshwick is not reached, and the mod decides what to tell whoever asked. Returns once the circle is sent; any thread, on a dedicated server or a client that hosts.
 		uncover: (player: string, at: {number}, radius: number) -> (),
 		--- Uncovers the whole map of `player`, as `uncover` does for one circle: the circle around the map's `frame` that holds all of it. On the server's game thread, as `frame` is.
 		uncover_all: (player: string) -> (),
@@ -3884,8 +4027,8 @@ declare enshwick: {
 		bases_of: (altars: {Altar}) -> {Base},
 		--- The limit of bases in force, as `base_limit` reads it.
 		base_limit: () -> BaseLimit?,
-		--- Sets the world's cap of bases, as `set_base_cap` does.
-		set_base_cap: (bases: number) -> (),
+		--- Sets the world's cap of bases, as `set_base_limit` does.
+		set_base_limit: (bases: number) -> (),
 		--- How the game groups altars into bases, as `grouping` reads it.
 		grouping: () -> Grouping?,
 		--- Flame Altars: their list, their bases, zones and limits.
@@ -3903,7 +4046,7 @@ declare enshwick: {
 		--- Lets the game group every listed altar zone into its bases, up to 32 altars a Flame level in 16 bases, refusing an altar that would start a 17th base; `false` when the platform does not recognise this build's code, and the game keeps its own. The loader's hooks go in together: when one cannot be armed, none does and the game keeps 16, which `base_limit` tells from `Mod.ready` on.
 		--- Only while the mod starts, at the top level of main.luau.
 		raise_base_limit: () -> boolean,
-		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_cap`. Unstable: needs the `unstable` feature and may change in any release.
+		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_limit`. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		request_base_limits: (zones: number, bases: number) -> boolean,
 		--- Adds a kind of Flame Altar, on the server and the client alike: a prop copied from the vanilla altar whose item is `item.like`, as `Load.add_prop` adds one, whose altars take the kind's zones through an altar zone filter of this mod, chained with other mods' filters in load order (see `Load.on_altar_zone`). `Altar.template` tells the kind's altars apart.
@@ -3935,6 +4078,9 @@ declare enshwick: {
 		flatten: (position: vector, radius: number, material: number, shape: Shape) -> boolean,
 		--- The same terrain for edits that only count: each returns what it would change and changes nothing.
 		dry: () -> Terrain,
+		--- Adds the terrain material `new` to the game and returns its voxel id for this run, to place with `Terrain.add`; the material's rules, effects and look are served on both sides, and `Terrain.materials` lists it once the world runs.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_terrain_material: (new: NewTerrainMaterial) -> number,
 	},
 	--- Inventories on the server: their slots and counts, and items given, taken and moved.
 	inventory: {
@@ -4091,7 +4237,7 @@ declare enshwick: {
 		sources: (entity: number, stat: Stat?) -> {Source},
 		--- The id and definition of `stat`; nil for a kind opened but never defined. Any thread.
 		info: (stat: Stat) -> StatInfo?,
-		--- Watches `entity` for the items it wears and the buffs it has, or stops watching it. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. Any thread, on the process that runs the world; elsewhere it does nothing.
+		--- Watches `entity` for the items it wears and the buffs it has, or stops this mod's watch. Players are always watched, and so is every entity a mod keeps a modifier on; watch other entities whose buffs should count, such as an enemy a mod curses. The watch is per mod: the entity stays watched while any mod watches it, so one mod's stop leaves another's watch, and a mod turned off loses its watches. Any thread, on the process that runs the world; elsewhere it does nothing.
 		watch: (entity: number, watch: boolean) -> (),
 		--- The key a stat id hashes to, as `key_of` gives it.
 		key_of: (id: string) -> number,
@@ -4196,6 +4342,8 @@ declare enshwick: {
 		text: (label: string, max_bytes: number) -> Arg,
 		--- One of the game's items, which the client lists by the names its game shows, as `Arg.item` makes it.
 		item: (label: string) -> Arg,
+		--- One of the game's entity templates, which the client lists by the names its game data gives them, as `Arg.template` makes it.
+		template: (label: string) -> Arg,
 		--- Whether `id` can name an action or a window, as `is_valid_id` says.
 		is_valid_id: (id: string) -> boolean,
 		--- What an action acts on, as `Subject.new` makes it.
@@ -4261,15 +4409,26 @@ declare enshwick: {
 		--- Runs `filter` before the game allows a player's interaction with an entity; returning `false` refuses it the game's own way. It runs in the server's world only, in the dedicated server or a hosting client, on the thread of the system that checks the interaction: keep it quick and never block. The game asks whether to offer an interaction for every entity in each player's reach on every frame, so `filter` runs many times a frame: it must not allocate, lock or log. Moves, sorts, stock draws, dismantling and upgrades ask once per action. An interaction without a player's character or without a target is allowed unasked.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_interaction: (filter: (arg1: Interaction) -> boolean?) -> (),
+		--- Gives the prompt of every object placed from `item` a game verb, the mod's own text on clients with Enshwick, or the game's empty action in place of the object's own, so the mod's action on `AcceptOfferedInteractionEvent` runs alone. Call it in the mods of both sides that know the item: the server writes the verb and the action, a client shows the text. One prompt per item across all mods. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		prompt: (item: number, prompt: ObjectPrompt) -> (),
 	},
 	--- The game's controls each player holds, read in the server's world, and the local player's on a client.
 	input: {
 		--- The game's controls `player` holds this step, as their client last sent them; nil for an entity that is no player. Read on the server's game thread between steps, in the server's world, so a vanilla client's player reads the same. A script gets the list of the held actions' game names, as a control's `link` names them.
 		held: (player: number) -> {string}?,
-		--- The game's controls the local player holds, as this client's interface read them in its last step; nil on a server, outside a game and while no step ran for a second, as in the pause menu. Only the gameplay controls: the client-only ones, such as the menu and map keys, are not in it. Read on any thread.
+		--- The game's controls the local player holds, as this client's interface read them in its last step. Only the gameplay controls: the client-only ones, such as the menu and map keys, are not in it. Read on any thread. The reads start when the mod opens its input, so the interface's first step after that answers. nil on a server, outside a game, before that first step, while no step ran for a second, as in the pause menu, and on a game build without the read.
 		local_held: () -> {string}?,
-		--- Observes only cached loader metadata on any thread, without starting sampling. Fields are weakly consistent; no world, session, player or current UI state is inferred. Requires a matching ABI 11.31 or newer loader; older loaders cannot load this SDK.
+		--- Observes only cached loader metadata on any thread, without starting sampling. Fields are weakly consistent; no world, session, player or current UI state is inferred. Requires a matching ABI 12.1 or newer loader; older loaders cannot load this SDK.
 		local_status: () -> LocalInputStatus,
+		--- The client's state in one copy, for any thread: its session and world, the open screens and menu tab, the local player and its held controls. The reads start when the mod opens its input, so the client's first interface step after that answers, in the mod's first frame in a game. It is `SnapshotState.Never` before that step, and while no frame drew a game since, as in the main menu before the first world. The reads cost one look at the interface's screen state and menu tab per frame, which client commands share, and a copy of four words; the held controls cost their own row, as `Input.local_held` says.
+		client_snapshot: () -> ClientSnapshot,
+		--- Queues `command` for the client's interface or input; its id. The call answers only that it is queued: `Input.command_status` tells what came of it. It runs later on the client's game thread, only while the client is still in the command's session on its screen. One command of each kind waits per mod.
+		client_command: (command: ClientCommand) -> string,
+		--- Cancels the mod's command `id` if it still waits.
+		cancel_command: (id: string) -> (),
+		--- Where the mod's command `id` stands.
+		command_status: (id: string) -> CommandStatus,
 	},
 	--- The client's interface, drawn with the game's own widgets.
 	ui: {
@@ -4296,6 +4455,9 @@ declare enshwick: {
 		--- Calls `handler` with each change of the game's screen the player has open, as `Load.on_screen_changed` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_screen_changed: (handler: (arg1: ScreenChanged) -> ()) -> (),
+		--- Adds lines to the tooltip of every item with an entity of its own, with the item and its tooltip's lines lent to `handler`, as `Load.extend_item_tooltip` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		extend_item_tooltip: (handler: (arg1: ItemInstance, arg2: TooltipLines) -> ()) -> (),
 	},
 	sound: {
 		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.

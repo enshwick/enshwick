@@ -48,11 +48,11 @@ mod tests {
         assert!(loader.craft(&craft(enshwick::Entity(0), 3)));
         assert!(!loader.craft(&craft(enshwick::Entity(0), 12)));
         assert!(loader.craft(&craft(enshwick::Entity(40), 12)));
-        let build = |item, y: i64| BuildCheck {
+        let build = |item, y: i32| BuildCheck {
             header: Header::of::<BuildCheck>(),
-            player: enshwick::Entity(2),
+            character: enshwick::Entity(2),
             item,
-            position: [0, y << 32, 0],
+            position: [0.0, f64::from(y), 0.0],
             reason: core::ptr::null_mut(),
         };
         assert_eq!(loader.build(&build(enshwick::ItemId::new(7), 5)), Ok(()));

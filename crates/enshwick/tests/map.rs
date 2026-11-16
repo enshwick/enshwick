@@ -53,8 +53,8 @@ mod tests {
     ) -> enshwick::test::FakeHost {
         fake.map_marker(MapMarkerInfo {
             position,
-            marker_type: marker_type.0,
-            label: label.0,
+            marker_type,
+            label,
             ..MapMarkerInfo::EMPTY
         })
     }
@@ -169,8 +169,8 @@ mod tests {
         let (loader, map) = start(fake);
         loader.stop_world();
 
-        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Missing));
-        assert_eq!(map.markers(), Err(WorldError::Missing));
+        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Unavailable));
+        assert_eq!(map.markers(), Err(WorldError::Unavailable));
     }
 
     #[test]
@@ -190,7 +190,7 @@ mod tests {
         let (_loader, map) = start(fake);
 
         assert_eq!(map.markers().unwrap().len(), 1);
-        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Missing));
+        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Unavailable));
     }
 
     #[test]
@@ -212,7 +212,7 @@ mod tests {
         let elsewhere = std::thread::spawn(move || map.markers()).join().unwrap();
         assert_eq!(elsewhere, Err(WorldError::WrongThread));
         loader.stop_world();
-        assert_eq!(map.markers(), Err(WorldError::Missing));
+        assert_eq!(map.markers(), Err(WorldError::Unavailable));
     }
 
     #[test]
@@ -230,7 +230,7 @@ mod tests {
         let (_loader, map) = start(fake);
 
         assert_eq!(map.markers().unwrap().len(), 1);
-        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Missing));
+        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Unavailable));
     }
 
     fn player(slot: u32, entity: u32, name: &str) -> PlayerInfo {
@@ -240,8 +240,8 @@ mod tests {
             entity: Entity(entity),
             key: enshwick::PlayerKey::new(u64::from(entity) * 100),
             permissions: 0,
-            name_len: u8::try_from(name.len()).unwrap(),
-            name: [0; 64],
+            name_len: u32::try_from(name.len()).unwrap(),
+            name: [0; PlayerInfo::NAME_MAX],
         };
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(map.uncover(with, [1250.0, -830.0], 200.0), Ok(()));
         assert_eq!(
             map.uncover(without, [1250.0, -830.0], 200.0),
-            Err(WorldError::Missing),
+            Err(WorldError::Unavailable),
             "a client without Enshwick is not reached"
         );
         for (at, radius) in [
@@ -379,6 +379,25 @@ mod tests {
     }
 
     #[test]
+    fn a_client_that_hosts_uncovers_its_own_player_s_fog_with_no_link() {
+        let (host, guest) = (enshwick::PlayerKey::new(7), enshwick::PlayerKey::new(8));
+        let (loader, map) = start(
+            fake()
+                .side(enshwick::abi::Side::CLIENT)
+                .hosting(true)
+                .host_key(host)
+                .map_frame(FRAME),
+        );
+        assert_eq!(map.uncover_all(host), Ok(()));
+        assert_eq!(
+            map.uncover(guest, [0.0, 0.0], 50.0),
+            Err(WorldError::Unavailable),
+            "a guest without Enshwick is not reached"
+        );
+        assert_eq!(loader.fog_uncovers().len(), 1);
+    }
+
+    #[test]
     fn a_client_in_another_s_game_uncovers_nothing() {
         let key = enshwick::PlayerKey::new(7);
         let (loader, map) = start(
@@ -386,7 +405,10 @@ mod tests {
                 .side(enshwick::abi::Side::CLIENT)
                 .net_peer(enshwick::net::Peer::Player(key)),
         );
-        assert_eq!(map.uncover(key, [0.0, 0.0], 50.0), Err(WorldError::Missing));
+        assert_eq!(
+            map.uncover(key, [0.0, 0.0], 50.0),
+            Err(WorldError::Unavailable)
+        );
         assert!(loader.fog_uncovers().is_empty());
     }
 
@@ -394,7 +416,7 @@ mod tests {
     fn a_scene_without_a_frame_answers_missing() {
         let (_loader, map) = start(fake());
 
-        assert_eq!(map.frame(), Err(WorldError::Missing));
+        assert_eq!(map.frame(), Err(WorldError::Unavailable));
     }
 
     #[test]
@@ -414,7 +436,7 @@ mod tests {
         let elsewhere = std::thread::spawn(move || map.frame()).join().unwrap();
         assert_eq!(elsewhere, Err(WorldError::WrongThread));
         loader.stop_world();
-        assert_eq!(map.frame(), Err(WorldError::Missing));
+        assert_eq!(map.frame(), Err(WorldError::Unavailable));
     }
 
     #[test]
@@ -438,7 +460,7 @@ mod tests {
             },
         ] {
             let (_loader, map) = start(fake().map_frame(frame));
-            assert_eq!(map.frame(), Err(WorldError::Missing), "{frame:?}");
+            assert_eq!(map.frame(), Err(WorldError::Unavailable), "{frame:?}");
         }
     }
 

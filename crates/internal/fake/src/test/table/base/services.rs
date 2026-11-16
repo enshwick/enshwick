@@ -26,6 +26,9 @@ pub(crate) extern "system" fn publish(_me: ModHandle, spec: *const ServiceSpec) 
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         let taken = s
             .published
             .iter()
@@ -133,12 +136,15 @@ pub(crate) extern "system" fn define_event(
     }
 }
 
-pub(crate) extern "system" fn subscribe_event(
+pub(crate) extern "system" fn subscribe_mod_event(
     me: ModHandle,
     spec: *const EventSpec,
-    callback: ModEventFn,
+    callback: Option<ModEventFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     if closed() {
         return Status::TOO_LATE;
     }
@@ -196,9 +202,12 @@ pub(crate) extern "system" fn send_event(
 pub(crate) extern "system" fn subscribe(
     me: ModHandle,
     event: Event,
-    callback: EventFn,
+    callback: Option<EventFn>,
     user: *mut c_void,
 ) -> Status {
+    let Some(callback) = callback else {
+        return Status::BAD_ARGS;
+    };
     // The loader refuses an event it never raises, as on an older loader.
     if !(Event::SETTINGS_CHANGED.0..=Event::PROGRESS_WRITTEN.0).contains(&event.0) {
         return Status::MISSING;

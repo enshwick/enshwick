@@ -6,6 +6,299 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] - 2026-11-15
+
+### Added
+
+- A development build of the loader states a version no release takes,
+  `<release>+dev.<commit>`, such as `1.0.0-alpha.16+dev.5f647f46`, on the
+  main menu line, in the start log, the console's `enshwick` line and the
+  status summary; the log, the console line and the status name the ABI
+  version beside it (#1114).
+- The loader finds the client's input builder, the HUD's own screen toggle,
+  the in-game menu's tab and the crafting menu's recipe browser on every
+  kept client build (#1114).
+- `Input::local_status()` reports the local input sampler's cached flags
+  and sample age without starting reads; Luau
+  `enshwick.input.local_status()` (#1118).
+- `Input::client_snapshot()` copies the client's state for any thread: the
+  session, the world, the open screen and the one it returns to, the
+  screen's host, the in-game menu's tab, the crafting menu's highlighted
+  recipe, the local player and its held controls; Luau
+  `enshwick.input.client_snapshot()` (#1118).
+- `Input::client_command()`, `cancel_command()` and `command_status()` open
+  or close the game's screens, choose the menu's tab, turn the camera once,
+  hold a direction for at most 250 ms and highlight a recipe in the open
+  crafting menu, each with an id and an outcome the client's own state
+  confirms; the player's own input cancels a look or move; Luau
+  `enshwick.input.client_command()` (#1118).
+- `mods::loader_off()` lists each loader part and feature that is off, with
+  its reason and time; Luau `enshwick.mods.loader_off()` (#1118).
+- `ItemInfo::placed_entity_template` names the template a player places
+  from an item (#1118).
+- ABI 12.1: `HostApi::local_input_status`, `client_snapshot`, `loader_off`,
+  `client_command` and `client_command_status`, with `LocalInputInfo`,
+  `ClientSnapshot`, `ClientCommand`, `ClientCommandStatus` and `LoaderOff`;
+  `ClientCommand::in_bounds` checks a command's own bounds (#1118).
+- Fake host: the client snapshot, the sampler status and client commands
+  answer as the loader does, with bounds refused and statuses the test sets
+  (#1118).
+- Loader: one detour on the client's input builder writes a look or a move
+  after the game's own pass, and one on the recipe directory column reads
+  and highlights the crafting menu's recipe; each costs one atomic load
+  until a mod hands it a command (#1118).
+
+### Changed
+
+- ABI 12.0, the shape the ABI freezes in; every mod rebuilds for it (#1106):
+  - A mod id is only `<author>.<name>` everywhere: manifests, points, packs,
+    the join check and item data kinds.
+  - `HostApi` is grouped by domain and renamed by one pattern
+    (`request_*`, `define_*`, `subscribe_*`, `set_*`); every entry takes the
+    mod handle and answers a `Status`, and the C header asserts each offset.
+  - New statuses: `Status::LOADER_FAULT` for a fault inside the loader,
+    `Status::BUSY` for a full queue or a spent rate and
+    `Status::TOO_SMALL` for a short buffer; `MISSING`, `REFUSED` and
+    `BAD_ARGS` keep only their own meaning. An unknown enum value or flag
+    has one rule, stated in the ABI module.
+  - One form each: `Guid` for every GUID, metres as `[f64; 3]` for every
+    position and extent (building zone checks included), `u8` 1 or 0 for
+    yes and no, `u32` for lengths and counts, and time fields named for
+    their unit (`_ns`).
+  - A field holding a player's character entity is `character`, a
+    `PlayerKey` of an account `account`; struct suffixes name their role
+    (`*Data`, `*Info`, `*Spec`, `*Request`).
+  - `PlayerInfo` is headed and can grow, keeps a whole name of up to 128
+    bytes and has room for further permission bits; `ActionCall` points to
+    its `PlayerInfo` and `ActionTarget`, so both can grow.
+  - Damage amounts are a pointer and a count sized to the running game's
+    damage types (13 on the current build) instead of a fixed array.
+  - Lists cross the ABI as a pointer and a `u32` count under one rule, and
+    the structs that must grow carry a header.
+  - A null callback from a C mod is refused with `Status::BAD_ARGS` instead
+    of being called.
+  - Every callback and `HostApi` entry states its calling thread, lifetime,
+    re-entrancy and panic rules.
+  - `ActionCall::SHEET` is gone: `ActionCall::ALLOWED` asks a mod only for
+    the ids of the actions a player may run, one per line, and the loader
+    chooses carried controls from it.
+  - `HostApi::chat` refuses key 0 with `Status::BAD_ARGS`; the new
+    `HostApi::chat_all` sends to everyone and `World::broadcast` uses it.
+  - Knowledge changes go through one `change_knowledge` with a headed
+    `KnowledgeChange`; `run_action` takes its target, `transaction_commit`
+    its actor, `set_game_settings` a mask and `change_data` an optional
+    change id.
+  - `crafting_prop` takes no engine facts from the mod.
+  - A resource patch's output lies in a buffer from `resource_buffer`, its
+    only form; the doc states which threads run a patch and how long its
+    output lives.
+  - Survivor lookups and survivor status menus chain across mods in load
+    order instead of belonging to the first mod; time speed shows as
+    chained.
+  - Dropped: `raise_base_limit` as an entry, `BuildTable`, definition texts,
+    `ChunkData.index`, the 11.x fallbacks and the commands' name field.
+- The world module leaves `unstable`: `World` with its entity and component
+  queries, component writes, players, accounts, chat, notices, saves,
+  vitals, kicks, bans, chat mutes and join rules, and `Load::world`,
+  `Load::on_rename` and `Load::on_join`, in Rust and Luau; props, build
+  rights, captures and transactions stay `unstable` (#1106).
+- `Arg::template` takes a template from a list the client's window builds
+  from its own game and searches as items are; `Value::Template` carries
+  it, and the server refuses a template its game does not know before the
+  handler runs. Luau `enshwick.actions.template` and
+  `enshwick.content.templates` (#1106).
+- Loader: an entity call on a build without the world layout fails with its
+  own error instead of naming no server (#1106).
+- Loader: release builds carry the release signature of the stub and the
+  loader; at start the loader checks both off the game thread, and a build
+  without a valid signature runs as before while the log (code E1011) and
+  the Mods screen name it an unofficial build (#1106).
+- `enshwick.h` ships with each release, its comments name C types, and it
+  asserts sizes and offsets, the packing and an x64 target; the C++
+  manifest has a constant initializer (#1106).
+
+### Fixed
+
+- A held-controls read that went stale stays apart from one never made,
+  and the loader logs once why a step found no mask: no row passed the
+  interface's local player check, or the row had no player input (#1114).
+- `host_version` and the Mods screen's own row state a development build's
+  version, as the log already did (#1118).
+
+## [1.0.0-alpha.16] - 2026-11-15
+
+### Added
+
+- `Load::on_join` asks a mod's rule for each account that joins the server,
+  before its player enters the world; a refused account gets the game's own
+  reply for an account on the ban list, so its player reads that the host
+  denies access and loads no world, and the ban list stays as it was. A
+  machine that already joined is never refused. On a build without the join
+  path `on_join` fails at init, so the mod can choose another way. Luau
+  `enshwick.world.on_join` (#1100).
+- ABI 11.30: `HostApi::join_rule`, `JoinCall` and `JoinRuleFn` (#1100).
+- Fake host: `Installed::join` asks the mod's join rules as the server does
+  (#1100).
+- Loader: the join check links the game's join message handler only when a
+  mod has a join rule, keys accounts as the game does, reads a join without
+  allocating and logs refusals at most every 10 seconds; the per-mod profile
+  times join rules (#1100).
+- `Actions::on_refused` hears each run of the mod's actions that the platform
+  refused before the handler: who ran it, from where, the action, the text or
+  values given and a typed `RefusedReason`, after the caller got the answer;
+  Luau `actions:on_refused` (#1094).
+- ABI 11.29: `ActionCall::REFUSED` tells a mod of a run the loader refused
+  before asking it, with the appended `ActionCall::via` and
+  `ActionCall::reason` and the `ActionCall::REFUSED_` reasons (#1094).
+- `PlayerInfo::is_admin`, `PlayerInfo::admin`, `PlayerInfo::without_character`,
+  `PlayerInfo::name_text` and `PlayerKey::from_hex` (#1094).
+- Fake host: `Installed::refuse_run` tells the mod of a run the loader
+  refused, as the loader does (#1094).
+
+### Changed
+
+- Draw a carried window's fields without building their values or option lists each frame (#1085).
+- The book's stability chapter names every call and type behind the `unstable` or `typed` feature, such as `Load::add_sound`, `Load::limit_altar_level` and the content calls that take typed items; `cargo xtask check` fails when a gated public item is missing from it.
+- The book explains why a game update needs no Enshwick update (`concepts/game-updates.md`), lists what a mod gets from Enshwick in its introduction, and says what a Luau call costs.
+- The page on how ids are namespaced covers mod commands: the name from the mod's id, the alias rules and what the loader refuses.
+- Loader: every feature asks the mods' callbacks through one helper, which
+  skips mods that are off and times each call; a refused registration, a
+  setting write and the other converted calls answer the same statuses as
+  before (#1104).
+- Loader: every domain returns errors of its own, and only the layer that
+  answers mods turns them into statuses; every call answers the same status
+  as before (#1108).
+- Loader: the survivor, altar, interface, stats and actions callbacks are
+  asked through the one helper that skips mods that are off and times each
+  call (#1108).
+- Server console: a line that was not run, or that read no world, names its
+  reason, such as `WrongThread` or `InStep`, instead of a status
+  number (#1108).
+- Loader: every entry of the host table checks its arguments before it acts,
+  so a call with a null out pointer is refused with `BAD_ARGS` before
+  anything happens, where some entries spawned, dropped or ran an extension
+  point first (#1083).
+- Loader: a mod that is off gets `FAULTED` from every entry it calls, also
+  when it passes a malformed argument (#1083).
+- Loader: a refusal the loader logs, such as a service published twice, is
+  logged as the calling mod's warning with the reason, the same way for
+  every entry (#1083).
+- Loader: a lookup of one player reads that player alone instead of
+  building the list of every player (#1083).
+- `Effects::drop_items` answers `WorldError::Missing` when the build lacks
+  the item lookup or no item registry or world is there yet, and
+  `WorldError::Refused` only for an item the game does not have (#1112).
+- A mod's texts need English and Ukrainian only; a language without a key
+  shows the English text. The loader's own texts follow the same rule
+  (#1103).
+- Loader: a client's hosted game's end forgets the players seen joining and
+  the queued building events with the other parts' state (#1103).
+- Loader: every way an action runs (a control, a panel, a window, chat, the
+  console, a remote caller) passes one admission and one reply path. A
+  player's runs from the interface and chat share one rate, 5 a second after
+  a burst of 10; administrators, the console and remote callers are not
+  rated; every refusal answers the caller with its reason, the first of a
+  flood alone (#1094).
+- Loader: a reply of several lines from a control or panel shows as one
+  notice with its lines joined by ` / `, as a command's reply outside chat
+  does (#1094).
+- Loader: a settings change and a query over the rate of an administrator's
+  client are refused by the same token bucket as every other rate (#1094).
+- Fake host: an interface run with arguments out of the loader's bounds is
+  refused before the mod and tells the mod's `on_refused` without the
+  arguments, as the loader does, from `ask_action_at` too (#1094).
+
+### Fixed
+
+- Keep a carried window a mod shows a player whose client has not said hello yet, and show it when the hello arrives, so a window shown at join is no longer lost; a client without Enshwick holds at most eight until its player leaves (#1085).
+- Show again the carried windows a client held when its link to the server starts over (#1085).
+- Answer an interface run whose text is longer than its argument takes with the argument's bound, as a typed line is answered (#1085).
+- Loader: a control is declared in one step, so two threads declaring the
+  same control can no longer both be granted it (#1104).
+- Loader: a panic in the loader's code of an entry turns that one entry off,
+  lists it for the status summary and the Mods screen, and later calls to it
+  answer what the panic answered (`REFUSED`) once the caller is checked;
+  before, the panic was only logged (#1083).
+- Loader: a panic inside a mod's callback that an entry ran turns that mod
+  off and blames it, instead of leaving the crash blame on the mod's marker
+  (#1083).
+- Fake host: an inventory request is refused as the loader refuses it, for
+  more operations than a request holds, an invalid operation, or a client
+  that hosts no game, so a mod's test fails where the game would (#1083).
+- `Input::local_held` returns the local player's held controls in a world
+  again: the loader read them before the game's interface system took its
+  player, so every read answered `None` (#1109).
+- A game build whose interface system lays out its player query
+  differently turns the held controls off with a log line instead of
+  reading the wrong memory (#1109).
+- The fake host's `local_held` answers `None` at a mod's first ask, as the
+  loader does, which starts its reads there (#1109).
+- Every loader feature that turns off is listed in the status summary and
+  on the Mods screen: the server's game events on a build without their
+  layout or step, and a loader code patch skipped or given up, which now
+  turns off its own feature and ends in a fault code when the game's
+  threads kept it out (#1112).
+- A panic in one part's start or end of a hosted game turns off that part
+  alone, not the world loads and session ends of every part (#1112).
+- The status summary and the console's `enshwick mods` answer name a mod
+  file refused before its manifest read without a version (#1112).
+- Loader: a data pack that turned off keeps its file hash in the join
+  refusal, so the player sees whether their files differ from the server's
+  (#1103).
+- Loader: a mod dialog that belongs to a world closes with it when a hosted
+  game ends or the client changes servers, and its mod hears the closed
+  answer; a server mod's dialog and one a client mod queued in a world belong
+  to it (#1103).
+- Loader: whether the host of the client's lobby runs Enshwick, and the
+  lobby entry's check, end at the client's next join, so a vanilla server
+  joined after a modded friend's game gets no hello, and entering the same
+  lobby again checks the host's mods again (#1103).
+- Loader: one move of a world's event streams reads at most 64 streams, the
+  engine's ceiling, on the server's world too (#1103).
+- Mods screen: the Details and settings buttons show the game's icons again;
+  the small button's look is found among the button's looks, not across its
+  other fields, and when the icons do not read the log names the check that
+  failed.
+- Mods screen: without icons, a gear that opens only key bindings, such as in
+  the main menu, reads "Key bindings" instead of "Settings".
+- Mods screen: a mod file refused at start (Windows does not load it, it was
+  made for another Enshwick, its manifest does not read, or its folder holds a
+  second mod) shows as off with its reason, and the main menu line, the chat
+  line at world load and the status count it. The reason says whether to
+  update the mod or Enshwick, and a manifest mistake asks for a fixed version
+  instead of a new download; a second mod file beside a mod that runs does not
+  count as off.
+- Loader: a DLL whose export table does not read, such as a mod's own helper,
+  no longer takes its folder's mod slot or shows as a mod.
+- Mods screen: without icons, the gear reads "Settings" only where its page
+  shows a setting; in another's world a mod with only secret settings shows
+  "Key bindings".
+- Loader: a mod DLL whose manifest does not parse is unloaded.
+- Arguments from the interface that do not decode answer with the action's
+  usage instead of "You may not do that." (#1094).
+- `Action::admins` holds beside an `Action::allow` set before or after it;
+  before, the later call replaced the earlier one (#1094).
+- Loader: a run from a control or panel dropped for its rate, its bounds or
+  an unknown mod id now answers the player instead of saying nothing (#1094).
+- Loader: a chat command of a mod that is off answers that the action is not
+  available, as a control does, instead of vanishing (#1094).
+- A one-line reply that ends in a line break shows as a notice without it
+  (#1094).
+- The example mod `you.trail` gives its quest torch once per player: it keeps a mark in its world data, so a repeated `QuestCompleted` gives no second torch, and a request that gave nothing tries again at the next completion.
+- The book's quest reward handler, in Rust and in Luau, keeps the same mark per player.
+- Refuse a `content::rebuild` that a served resource patch asks for its own key, on the thread that builds it, with an error; it waited on its own build and hung the game (#1089).
+- Forget a hosted world's item data, scene markers, map frame, fog of war copy and deaths not yet raised when the hosted game ends, so the next world a client hosts starts from its own (#1089).
+- Write the item data a mod sets in its `ShutdownStarted` handler of a hosted game; it was lost (#1089).
+- Forget the build refusals told to players and the console's waiting lines and placed pieces when a hosted game ends, so the next world a client hosts starts without them (#1099).
+- Drop the notices a server sent for the client's next step when the client changes servers or its hosted game ends, so they no longer show in the next game (#1097).
+- Forget the players' settings rates and the lobby a client's hosted game published into when that game ends (#1097).
+- Answer a game event handler registered after the loader sealed them with `TOO_LATE`; one that raced the seal was dropped with `OK` (#1097).
+- Log the problems of a world's recipe rules each time a world loads, also when the world before it had the same ones.
+- Forget the knowledge changes waiting for accounts, the revokes not yet raised, the last knowledge update seen and the knowledge guard's refusal count when a client's hosted game ends, so the next world a client hosts starts from its own (#1093).
+- Answer a skill check, comfort or experience filter registered after the loader sealed them with `TOO_LATE`; one that raced the seal was dropped with `OK` (#1093).
+- Forget a widget demo opening that no frame drew yet, with the place it was asked from, when a client changes servers or its hosted game ends; a new demo drops the last demo's dialog answer and map marker, and its HUD samples leave the HUD when the demo turns off (#1098).
+- Forget the mods' clock speed factors, their base caps and a pending altar zone resize when a hosted game ends, and a world's kept game settings even when their world events are off, so the next world a client hosts starts from its own mods (#1095).
+
 ## [1.0.0-alpha.15] - 2026-11-14
 
 ### Added

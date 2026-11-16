@@ -14,10 +14,13 @@ use enshwick_core::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
 use enshwick_core::content::{Blob, Guid};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use enshwick_core::abi::HookFlags;
+
 use crate::engine::catalogue::{Reflected, types};
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::Loader;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::pinned;
 use crate::engine::settings::LOADER_ID;
 use crate::engine::texts;
 use enshwick_base::Relock;
@@ -81,6 +84,9 @@ struct Recipes {
     layout: OnceLock<Option<RecipeLayout>>,
     /// Set when the rules or what they resolve against changed.
     dirty: AtomicBool,
+    /// Whether `disabled` holds any recipe: the crafting menus ask for each
+    /// recipe each frame, and most worlds disable none.
+    any: AtomicBool,
 }
 
 impl Recipes {
@@ -91,7 +97,21 @@ impl Recipes {
             live: Mutex::default(),
             layout: OnceLock::new(),
             dirty: AtomicBool::new(true),
+            any: AtomicBool::new(false),
         }
+    }
+
+    /// Puts `ids` in force as the next generation of disabled recipes.
+    fn set_disabled(&self, ids: FxHashSet<u32>) {
+        let generation = self.disabled.load().generation + 1;
+        self.any.store(!ids.is_empty(), Ordering::Release);
+        self.disabled.store(Arc::new(Disabled { ids, generation }));
+    }
+
+    /// Whether some recipe is disabled now: one atomic load, for the hot
+    /// callers to check first.
+    fn any_disabled(&self) -> bool {
+        self.any.load(Ordering::Acquire)
     }
 
     fn live<R>(&self, work: impl FnOnce(&mut Live) -> R) -> R {
@@ -185,11 +205,7 @@ impl Recipes {
             registry,
             "does not read with the recipe layout",
         );
-        let generation = self.disabled.load().generation + 1;
-        self.disabled.store(Arc::new(Disabled {
-            ids: FxHashSet::default(),
-            generation,
-        }));
+        self.set_disabled(FxHashSet::default());
     }
 }
 
@@ -199,7 +215,14 @@ static STATE: LazyLock<Recipes> = LazyLock::new(Recipes::new);
 /// nothing.
 static DISABLED_FUSE: Fuse = Fuse::new("disabled recipes");
 
-/// Sets disabled recipes up: the layout and the lookup hook. Before arming.
+/// The build table ids disabled recipes hook on the client: the question
+/// every crafting menu asks before it shows a recipe.
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::recipe::MENU_KNOWN.id()];
+
+/// The crafting menus' question, a loader feature of the client.
+static MENU_FUSE: Fuse = Fuse::new("disabled recipes in crafting menus");
+
+/// Sets disabled recipes up: the layout and the hooks. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
     if !STATE.keep_layout(
         loader,
@@ -207,11 +230,41 @@ pub(crate) fn init(loader: &'static Loader) {
     ) {
         return;
     }
-    // Without the lookup, which turns itself off where players and admins
-    // see it, disabled recipes stay in the crafting menus and the rest of
-    // them holds.
+    // Without the lookup or the menus' question, each of which turns itself
+    // off where players and admins see it, disabled recipes stay in the
+    // crafting menus and the rest of them holds.
     let _linked = crate::engine::code::link_recipe_lookup(loader);
+    if loader.side == Side::CLIENT {
+        let at = Target::Pinned(pinned::recipe::MENU_KNOWN);
+        let _linked = loader.link_fused(&MENU_FUSE, at, &KNOWN_NEXT, menu_known, HookFlags::NONE);
+    }
     STATE.changed();
+}
+
+crate::engine::chains::chain_detour! {
+    /// The table's `recipe.menu_known(recipe) -> bool`, which the crafting
+    /// menus (by hand, at stations and survivors) ask for each recipe of
+    /// their book before they list it, and the recipe tiles before they
+    /// draw (client 26430625): no for a disabled recipe. The book takes
+    /// the recipe ids of the UI bundle's crafting directories, so the
+    /// per-workshop lookup never reaches these menus.
+    fn menu_known(recipe: *const u8) -> u8;
+    next KNOWN_NEXT;
+    fuse &MENU_FUSE, "the crafting menus' recipe question";
+    |onward| {
+        let known = onward.call();
+        if known == 0 || recipe.is_null() || !STATE.any_disabled() {
+            return known;
+        }
+        let Some(layout) = STATE.layout() else {
+            return known;
+        };
+        // SAFETY: the game passes the question a recipe of its live
+        // registry, non-null by the check above, the one its by-id lookup
+        // just found; `layout.id` is the reflected offset of its `u32` id.
+        let id: u32 = unsafe { enshwick_core::raw::read_at(recipe, layout.id) };
+        if STATE.is_disabled(id) { 0 } else { known }
+    }
 }
 
 /// The world's own recipe file, while a world runs.
@@ -437,11 +490,10 @@ fn apply(loader: &Loader, index: &Index) {
     if old.ids == ids {
         return;
     }
-    let generation = old.generation + 1;
     let count = ids.len();
     let mut sorted: Vec<u32> = ids.iter().copied().collect();
     sorted.sort_unstable();
-    STATE.disabled.store(Arc::new(Disabled { ids, generation }));
+    STATE.set_disabled(ids);
     crate::log!(
         INFO,
         "disabled recipes: {count}{}",
@@ -561,10 +613,7 @@ pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
         stack_item: 0,
         stack_count: 0,
     }));
-    STATE.disabled.store(Arc::new(Disabled {
-        ids: disabled.iter().copied().collect(),
-        generation: STATE.disabled.load().generation + 1,
-    }));
+    STATE.set_disabled(disabled.iter().copied().collect());
     let recipes: Box<[u32]> = (1..=8).collect();
     let list: Box<[u64]> = recipes
         .iter()
@@ -585,10 +634,7 @@ pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
 /// Disables exactly `ids`, for tests.
 #[cfg(test)]
 pub(crate) fn disable_for_test(ids: &[u32]) {
-    STATE.disabled.store(Arc::new(Disabled {
-        ids: ids.iter().copied().collect(),
-        generation: STATE.disabled.load().generation + 1,
-    }));
+    STATE.set_disabled(ids.iter().copied().collect());
 }
 
 /// A world loaded or stopped: its file, written from the template when it

@@ -106,14 +106,12 @@ impl AddedExperience {
         Ok(Self {
             vanilla: vanilla.into(),
             sources: Values::resolve(&host, ExperienceSourceType::IDS),
-            reflected: source_type(host)
-                .map(|ty| {
-                    ty.constants()
-                        .iter()
-                        .map(crate::resources::Constant::value)
-                        .collect()
-                })
-                .unwrap_or_default(),
+            reflected: source_type(host).map_or_default(|ty| {
+                ty.constants()
+                    .iter()
+                    .map(crate::resources::Constant::value)
+                    .collect()
+            }),
             added,
         })
     }

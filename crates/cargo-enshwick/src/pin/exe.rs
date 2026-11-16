@@ -35,17 +35,11 @@ impl<'a> Exe<'a> {
             .read(range.start, range.end - range.start)
             .context(".text is unreadable")?;
         let text_rva = range.start - base;
-        let functions = image
-            .section(".pdata")
-            .map(|pdata| {
-                let range = image.range(pdata);
-                let len = (range.end - range.start).min(pdata.virtual_size());
-                image
-                    .read(range.start, len)
-                    .map(functions)
-                    .unwrap_or_default()
-            })
-            .unwrap_or_default();
+        let functions = image.section(".pdata").map_or_default(|pdata| {
+            let range = image.range(pdata);
+            let len = (range.end - range.start).min(pdata.virtual_size());
+            image.read(range.start, len).map_or_default(functions)
+        });
         let reflection = Reflection::scan(&image);
         Ok(Self {
             image,

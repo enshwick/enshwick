@@ -614,9 +614,8 @@ pub(crate) fn grant(
 pub(crate) fn quests(loader: &Loader) -> Result<Vec<u32>, KnowledgeError> {
     let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let (game, _) = store(layout)?;
-    let mut ids: Vec<u32> = quest_set(layout, game)
-        .map(|set| set.iter().copied().collect())
-        .unwrap_or_default();
+    let mut ids: Vec<u32> =
+        quest_set(layout, game).map_or_default(|set| set.iter().copied().collect());
     ids.sort_unstable();
     Ok(ids)
 }
@@ -775,7 +774,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_queued_change_keeps_waiting_exactly_when_the_call_was_refused() {
+    fn a_queued_change_keeps_waiting_exactly_when_the_call_was_refused_or_busy() {
         use crate::host::layer::Refusal;
         use enshwick_core::abi::Status;
         for error in [
@@ -793,7 +792,7 @@ mod tests {
         ] {
             assert_eq!(
                 error.may_pass(),
-                error.status() == Status::REFUSED,
+                matches!(error.status(), Status::REFUSED | Status::BUSY),
                 "{error:?}"
             );
         }

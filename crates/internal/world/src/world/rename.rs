@@ -43,17 +43,18 @@ where
     // all-zero call is valid. Every field is there since the minor that added
     // rename filters.
     let Some(call) = (unsafe { read_headed(call, size_of::<RenameCall>()) }) else {
-        return 1;
+        return crate::abi::FILTER_PASS;
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
     let rename = Rename {
         entity: call.entity,
-        player: (call.known != 0).then(|| Player::from_info(&call.player)),
+        // SAFETY: the loader passes null or the renaming player, valid for the call.
+        player: unsafe { call.player.as_ref() }.map(Player::from_info),
         // SAFETY: the loader's text, valid for the call.
         text: unsafe { text_of(call.text) }.to_owned(),
     };
-    u8::from(crate::host::guard(
+    crate::host::verdict(crate::host::guard(
         "panic in a rename filter",
         || true,
         || handler(&rename),
@@ -79,7 +80,7 @@ impl LoadMethods for crate::BaseLoad {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().rename_filter)(host.handle(), run_filter::<F>, user),
+            |user| (host.api().rename_filter)(host.handle(), Some(run_filter::<F>), user),
             "rename filter",
         )
     }
@@ -98,29 +99,22 @@ mod tests {
 
     #[test]
     fn a_filter_sees_the_rename_and_may_refuse_it() {
-        let mut name = [0u8; 64];
-        name[..3].copy_from_slice(b"Ann");
+        let player = PlayerInfo {
+            slot: 1,
+            ..PlayerInfo::with_name(Entity(7), crate::PlayerKey::new(42), 0, "Ann")
+        };
         let filter = |rename: &Rename| rename.player.is_some() && rename.text != "no";
         let mut call = RenameCall {
             header: Header::of::<RenameCall>(),
             entity: Entity(5),
-            known: 1,
-            player: PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
-                slot: 1,
-                entity: Entity(7),
-                key: crate::PlayerKey::new(42),
-                permissions: 0,
-                name_len: 3,
-                name,
-            },
+            player: &raw const player,
             text: Str::new("Tools"),
         };
-        assert_eq!(filter_call(&filter, &call), 1);
+        assert_eq!(filter_call(&filter, &call), crate::abi::FILTER_PASS);
         call.text = Str::new("no");
-        assert_eq!(filter_call(&filter, &call), 0);
-        call.known = 0;
+        assert_eq!(filter_call(&filter, &call), crate::abi::FILTER_REFUSE);
+        call.player = core::ptr::null();
         call.text = Str::new("Tools");
-        assert_eq!(filter_call(&filter, &call), 0);
+        assert_eq!(filter_call(&filter, &call), crate::abi::FILTER_REFUSE);
     }
 }
