@@ -133,6 +133,11 @@ these:
 Hooks, code patches, points and rates asked for after `init` returns come too
 late.
 
+No world runs while `init` runs, as in the game, where mods start before a
+world loads. The world's calls answer `Status::UNAVAILABLE` there: players,
+entities, components, events, teleports and spawns. Make them from a handler,
+such as `schedule::next_tick`, and step the fake with `tick`.
+
 A test of the path where the game build lacks what the mod needs:
 
 ```rust,standalone_crate

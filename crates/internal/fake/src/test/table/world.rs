@@ -60,7 +60,14 @@ impl WorldEdits {
 /// Whether the entity calls cannot run here, where the loader answers
 /// [`Status::UNAVAILABLE`]: no server runs, or the build lacks the commands.
 pub(crate) fn entity_calls_off(s: &crate::test::table::State) -> bool {
-    s.host.no_entity_commands || !(s.host.side == Side::SERVER || s.host.hosting)
+    s.host.no_entity_commands || !(s.host.side == Side::SERVER || s.host.hosting) || no_world(s)
+}
+
+/// Whether no world runs, where the loader answers the world's calls
+/// [`Status::UNAVAILABLE`]: while the mod's init runs, before the loader
+/// has a server world, or after [`Installed::stop_world`](crate::test::Installed::stop_world).
+pub(crate) fn no_world(s: &crate::test::table::State) -> bool {
+    s.initialising || s.edits.stopped
 }
 
 pub(crate) extern "system" fn player(
@@ -68,10 +75,16 @@ pub(crate) extern "system" fn player(
     entity: enshwick_core::Entity,
     out: *mut PlayerInfo,
 ) -> Status {
-    let player = with(None, |s| {
-        s.host.players.iter().find(|p| p.entity == entity).copied()
+    let player = with(Err(Status::MISSING), |s| {
+        if no_world(s) {
+            return Err(Status::UNAVAILABLE);
+        }
+        Ok(s.host.players.iter().find(|p| p.entity == entity).copied())
     });
-    super::found_headed(player, out)
+    match player {
+        Ok(player) => super::found_headed(player, out),
+        Err(status) => status,
+    }
 }
 
 pub(crate) extern "system" fn players(
@@ -81,8 +94,16 @@ pub(crate) extern "system" fn players(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let players = with(Vec::new(), |s| s.host.players.clone());
-    super::base::io::list(&players, out, entry_size, capacity, count)
+    let players = with(Err(Status::MISSING), |s| {
+        if no_world(s) {
+            return Err(Status::UNAVAILABLE);
+        }
+        Ok(s.host.players.clone())
+    });
+    match players {
+        Ok(players) => super::base::io::list(&players, out, entry_size, capacity, count),
+        Err(status) => status,
+    }
 }
 
 pub(crate) extern "system" fn chat(
@@ -164,7 +185,7 @@ pub(crate) extern "system" fn entities(
     if !crate::test::table::on_game_thread() {
         return Status::WRONG_THREAD;
     }
-    if with(true, |s| s.edits.stopped) {
+    if with(true, |s| no_world(s)) {
         return Status::UNAVAILABLE;
     }
     let found: Vec<EntityPlace> = with(Vec::new(), |s| {
@@ -187,7 +208,7 @@ pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
         return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
-        if s.edits.stopped {
+        if no_world(s) {
             Status::UNAVAILABLE
         } else {
             Status::OK
@@ -448,7 +469,7 @@ pub(crate) extern "system" fn map_markers(
     }
     let Some(markers) = with(None, |s| {
         let first = s.edits.first_ask(SceneRead::Markers);
-        (!s.edits.stopped)
+        (!no_world(s))
             .then(|| (!first && !s.edits.markers_pending).then(|| s.host.map_markers.clone()))
     }) else {
         return Status::UNAVAILABLE;
@@ -468,7 +489,7 @@ pub(crate) extern "system" fn map_frame(
     }
     let Some(frame) = with(None, |s| {
         let first = s.edits.first_ask(SceneRead::Frame);
-        (!s.edits.stopped).then(|| (!first && !s.edits.markers_pending).then_some(s.host.map_frame))
+        (!no_world(s)).then(|| (!first && !s.edits.markers_pending).then_some(s.host.map_frame))
     }) else {
         return Status::UNAVAILABLE;
     };
@@ -531,7 +552,7 @@ pub(crate) extern "system" fn account_action(
         return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
-        if s.edits.stopped {
+        if no_world(s) {
             return Status::UNAVAILABLE;
         }
         let online = s.host.players.iter().position(|p| p.key == account);
@@ -617,7 +638,7 @@ pub(crate) extern "system" fn prop_placement_info(
 ) -> Status {
     use enshwick_core::abi::{Header, PropPlacementInfo};
     with(Status::UNAVAILABLE, |s| {
-        if s.edits.stopped || !(s.host.side == Side::SERVER || s.host.hosting) {
+        if no_world(s) || !(s.host.side == Side::SERVER || s.host.hosting) {
             return Status::UNAVAILABLE;
         }
         let Some(info) = s.host.items.get(&item.get()) else {

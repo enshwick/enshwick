@@ -85,6 +85,8 @@ pub(crate) struct State {
     pub(crate) manifest: Option<ManifestFacts>,
     /// Whether the mod may still ask for what only init may.
     pub(crate) registration: Registration,
+    /// Set while the mod's init runs, before the loader has a world.
+    pub(crate) initialising: bool,
     /// Mid-function hooks: address, handler and the mod's pointer.
     pub(crate) mid_hooks: Vec<(u64, Registered<MidHookFn>)>,
     /// Loader event handlers, by event.
@@ -436,6 +438,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         hook_slots: Vec::new(),
         manifest: None,
         registration: Registration::Open,
+        initialising: false,
         mid_hooks: Vec::new(),
         subscriptions: Vec::new(),
         game_events: Vec::new(),

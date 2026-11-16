@@ -610,12 +610,16 @@ impl Installed {
     ///
     /// See the [module](crate::test).
     pub unsafe fn init(&self, init: InitFn) -> Status {
+        table::with((), |s| s.initialising = true);
         // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
         // `declare_mod!`, which takes the static fake table and a handle.
         let status = unsafe { init(self.api(), self.handle) };
         // The loader arms once every mod is initialised; what only init may
         // ask for comes too late from here on.
-        table::with((), |s| s.registration = table::Registration::Closed);
+        table::with((), |s| {
+            s.registration = table::Registration::Closed;
+            s.initialising = false;
+        });
         self.off_unless_ok(status)
     }
 

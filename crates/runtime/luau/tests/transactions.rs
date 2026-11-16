@@ -27,17 +27,20 @@ mod tests {
                 .placement_box(ItemId::new(32), [0.0; 3], [0.0; 3]),
             r"
             local world = enshwick.world
-            local info = world.prop_placement_info(30)
-            assert(info.item == 30)
-            assert(info.template == '3a3a3a3a-3a3a-3a3a-3a3a-3a3a3a3a3a3a')
-            assert(info.local_box.min == vector.create(-2, 0, -0.5))
-            assert(info.local_box.max == vector.create(3, 4, 0.5))
-            assert(world.prop_placement_info(31).local_box == nil)
-            assert(world.prop_placement_info(32).local_box == nil)
-            assert(not pcall(world.prop_placement_info, 99))
-            enshwick.log.info('placement metadata copied')
+            enshwick.schedule.next_tick(function()
+                local info = world.prop_placement_info(30)
+                assert(info.item == 30)
+                assert(info.template == '3a3a3a3a-3a3a-3a3a-3a3a-3a3a3a3a3a3a')
+                assert(info.local_box.min == vector.create(-2, 0, -0.5))
+                assert(info.local_box.max == vector.create(3, 4, 0.5))
+                assert(world.prop_placement_info(31).local_box == nil)
+                assert(world.prop_placement_info(32).local_box == nil)
+                assert(not pcall(world.prop_placement_info, 99))
+                enshwick.log.info('placement metadata copied')
+            end)
             ",
         );
+        let _ran = loader.tick(Duration::from_secs(1));
         assert!(
             logged(&loader, "placement metadata copied"),
             "{:?}",

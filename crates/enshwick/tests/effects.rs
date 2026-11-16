@@ -15,13 +15,39 @@ mod tests {
 
     static EFFECTS: OnceLock<Effects> = OnceLock::new();
 
+    /// What an NPC order answered in the mod's init.
+    static IN_INIT: OnceLock<Result<(), WorldError>> = OnceLock::new();
+
     struct Acting;
 
     impl Mod for Acting {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = EFFECTS.set(load.effects());
+            let effects = load.effects();
+            let _first = IN_INIT.set(effects.npc_command(42, NpcCommandType::Reset));
+            let _first = EFFECTS.set(effects);
             Ok(Self)
         }
+    }
+
+    #[test]
+    fn an_npc_order_in_init_finds_no_world_and_goes_once_init_is_done() {
+        let loader = FakeHost::new().world().effect_events().install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert_eq!(
+            IN_INIT.get(),
+            Some(&Err(WorldError::Unavailable)),
+            "the loader has no world while mods initialise"
+        );
+        assert!(loader.emits().is_empty());
+        EFFECTS
+            .get()
+            .unwrap()
+            .npc_command(42, NpcCommandType::Reset)
+            .unwrap();
+        assert_eq!(loader.emits().len(), 1);
     }
 
     enshwick::test::declare_mod!(

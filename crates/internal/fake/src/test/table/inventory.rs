@@ -90,7 +90,7 @@ pub(crate) extern "system" fn emit(
     // SAFETY: the safe layer passes `size` bytes at `data` for the call.
     let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
     with(Status::MISSING, |s| {
-        if s.edits.stopped {
+        if crate::test::table::world::no_world(s) {
             return Status::UNAVAILABLE;
         }
         let step = s.ticks.step;
@@ -139,16 +139,19 @@ pub(crate) extern "system" fn spawn(
     if request.template == enshwick_core::content::Guid::NIL {
         return Status::BAD_ARGS;
     }
-    let entity = with(None, |s| {
+    let entity = with(Err(Status::MISSING), |s| {
+        if crate::test::table::world::entity_calls_off(s) {
+            return Err(Status::UNAVAILABLE);
+        }
         let entity =
             crate::test::table::world::FIRST_SPAWNED + u32::try_from(s.spawns.len()).unwrap_or(0);
         s.spawns.push((entity, request));
         s.spawn_steps.push(s.ticks.step);
-        Some(entity)
+        Ok(entity)
     });
     match entity {
-        Some(entity) => crate::test::table::put(out, enshwick_core::Entity(entity)),
-        None => Status::MISSING,
+        Ok(entity) => crate::test::table::put(out, enshwick_core::Entity(entity)),
+        Err(status) => status,
     }
 }
 
