@@ -408,7 +408,11 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             entries.ending = false;
         }
         let editing = screen.page.editing();
-        match mods_screen::heard(STATE.back.swap(0, Ordering::Relaxed), editing) {
+        let heard_back = STATE.back.swap(0, Ordering::Relaxed);
+        if heard_back != 0 {
+            crate::log!(INFO, "DIAG mods heard back {heard_back} editing {editing}");
+        }
+        match mods_screen::heard(heard_back, editing) {
             Heard::EndTyping => screen.page.end_typing(),
             Heard::Back if back(screen) => {
                 *slot = None;

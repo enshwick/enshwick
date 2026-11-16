@@ -138,19 +138,26 @@ thread_local! {
 
 impl Engine {
     /// Takes Enter for the text field that had the caret in the last frame,
-    /// before a window's navigation reads its input: the window would take
-    /// it as Confirm on its focused button, as Enter pressed the Mods
-    /// screen's Back while a field typed (client 26430625, seen live).
+    /// before the navigation of `window`, the window it shows in, reads its
+    /// input: the window would take it as Confirm on its focused button, as
+    /// Enter pressed the Mods screen's Back while a field typed. The press
+    /// binds to the window's panel, as Back does: bound to the field, which
+    /// is not the navigation's focus, the game gives none (client 26430625,
+    /// seen live).
     ///
     /// # Safety
     ///
     /// - Called inside a frame of the game's interface update, on its
     ///   thread, before the window's navigation reads its input.
-    pub(super) unsafe fn take_enter(&self) {
+    pub(super) unsafe fn take_enter(&self, window: &super::Window) {
         let caret = CARET.get();
-        if caret.node != 0 && !caret.entered {
+        let panel = self.node_id(window);
+        if caret.node != 0 && !caret.entered && panel != 0 {
             // SAFETY: this function's `# Safety`.
-            let entered = unsafe { self.confirm_pressed(caret.node) };
+            let entered = unsafe { self.confirm_pressed(panel) };
+            if entered {
+                crate::log!(INFO, "DIAG take_enter panel {panel:#x} entered");
+            }
             CARET.set(Caret { entered, ..caret });
         }
     }
@@ -397,6 +404,14 @@ impl Engine {
         };
         let caret = CARET.get();
         let confirmed = editing && !ending && id != 0 && caret.node == id && caret.entered;
+        if editing != (caret.node == id && id != 0) || ending || answer != 0 {
+            crate::log!(
+                INFO,
+                "DIAG field {id:#x} editing {editing} caret {:#x} entered {} ending {ending} answer {answer:#x}",
+                caret.node,
+                caret.entered
+            );
+        }
         if editing && !confirmed {
             CARET.set(Caret {
                 node: id,
