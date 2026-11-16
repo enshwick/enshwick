@@ -169,11 +169,7 @@ fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, ServedError> {
 }
 
 fn by_loader(apply: enshwick_core::abi::ResourcePatchFn) -> Patch {
-    Patch {
-        owner: ModIndex::LOADER,
-        apply,
-        user: 0,
-    }
+    Patch::new(ModIndex::LOADER, apply, 0)
 }
 
 /// The game's first build of each of `entries` from a base of one zero byte.
@@ -191,16 +187,7 @@ fn build_each(entries: &[Served]) {
 #[test]
 fn a_key_counts_as_building_only_while_its_patches_run() {
     let owner = ModIndex::new(3);
-    let entry = Served::new(
-        KEY,
-        KEY,
-        vec![Patch {
-            owner,
-            apply: note_building,
-            user: 0,
-        }],
-        false,
-    );
+    let entry = Served::new(KEY, KEY, vec![Patch::new(owner, note_building, 0)], false);
     let base = [1u8; 4];
     let at = base.as_ptr().expose_provenance();
     let built = run_patches(&entry, at, base.len(), Some(&[owner]), Build::Game);
@@ -221,16 +208,8 @@ fn a_failed_patch_in_a_served_read_is_skipped_and_the_rest_builds() {
         KEY,
         KEY,
         vec![
-            Patch {
-                owner: failing,
-                apply: fail,
-                user: 0,
-            },
-            Patch {
-                owner: building,
-                apply: note_building,
-                user: 0,
-            },
+            Patch::new(failing, fail, 0),
+            Patch::new(building, note_building, 0),
         ],
         false,
     );
@@ -493,18 +472,7 @@ fn an_output_outside_the_buffers_its_build_lent_fails_the_patch() {
     let entry = Served::new(
         KEY,
         KEY,
-        vec![
-            Patch {
-                owner: own,
-                apply: own_bytes,
-                user: 0,
-            },
-            Patch {
-                owner: building,
-                apply: grow,
-                user: 0,
-            },
-        ],
+        vec![Patch::new(own, own_bytes, 0), Patch::new(building, grow, 0)],
         false,
     );
     let base = [1u8; 2];
@@ -515,6 +483,47 @@ fn an_output_outside_the_buffers_its_build_lent_fails_the_patch() {
     assert_eq!(LIVE.get(), 0);
     let alone = Served::new(KEY, KEY, vec![by_loader(own_bytes)], false);
     assert!(run_patches(&alone, at, 2, None, Build::Scratch).is_none());
+}
+
+std::thread_local! {
+    /// How often [`faulted`] ran on the test's thread.
+    static FAULTED_RUNS: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
+
+/// Answers as a patch whose builder panicked.
+unsafe extern "system" fn faulted(
+    _base: *const u8,
+    _base_len: u32,
+    _user: *mut c_void,
+    _out: *mut *mut u8,
+    _out_len: *mut u32,
+) -> Status {
+    FAULTED_RUNS.set(FAULTED_RUNS.get() + 1);
+    Status::FAULTED
+}
+
+#[test]
+fn a_mod_patch_whose_builder_panicked_never_runs_again_and_the_key_builds_without_it() {
+    let (broken, building) = (ModIndex::new(3), ModIndex::new(4));
+    let entry = Served::new(
+        KEY,
+        KEY,
+        vec![
+            Patch::new(broken, faulted, 0),
+            Patch::new(building, grow, 0),
+        ],
+        false,
+    );
+    let base = [1u8; 2];
+    let at = base.as_ptr().expose_provenance();
+    let only = [broken, building];
+    for kind in [Build::Scratch, Build::Game] {
+        let built = run_patches(&entry, at, 2, Some(&only), kind).unwrap();
+        assert_eq!(built.by, vec![building], "{kind:?}");
+    }
+    assert_eq!(FAULTED_RUNS.get(), 1, "a panicked builder runs once");
+    assert!(!entry.patches[0].on.load(Ordering::Acquire));
+    assert!(entry.patches[1].on.load(Ordering::Acquire));
 }
 
 #[test]
@@ -528,14 +537,14 @@ fn a_loader_patch_that_panics_turns_its_feature_off_and_refuses_from_then_on() {
     assert_eq!(patch_with(&STACKS, |_| None), (Status::REFUSED, None));
     assert!(!STACKS.is_off(), "a patch that builds nothing is no fault");
     let broken = patch_with(&STACKS, |_| panic!("broken stack"));
-    assert_eq!(broken, (Status::REFUSED, None));
+    assert_eq!(broken, (Status::FAULTED, None));
     assert!(STACKS.is_off());
     let mut ran = false;
     let after = patch_with(&STACKS, |bytes| {
         ran = true;
         Some(bytes)
     });
-    assert_eq!(after, (Status::REFUSED, None));
+    assert_eq!(after, (Status::FAULTED, None));
     assert!(!ran, "an off feature's patch never runs");
     let listed = crate::engine::diag::parts_off();
     assert!(

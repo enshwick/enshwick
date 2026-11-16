@@ -5,7 +5,7 @@ use crate::Off;
 use crate::engine_ids as ids;
 
 use super::super::workshops::WorkshopId;
-use super::super::{Blob, EngineFacts, Guid, Id};
+use super::super::{Blob, EngineFacts, Guid, Id, Room};
 use super::derive::{makes, scaled_inputs};
 use crate::resources::Grow;
 
@@ -196,7 +196,8 @@ pub fn add_recipe_to(
     limit: usize,
     out: &mut impl Grow,
 ) -> Option<()> {
-    let mut registry = Blob::over(out, registry);
+    let base = registry;
+    let registry = Blob::reading(base);
     let (start, count) = registry.array(layout.recipes)?;
     let Some(like) = (0..usize::try_from(count).ok()?)
         .map(|i| start + i * layout.recipe)
@@ -220,10 +221,16 @@ pub fn add_recipe_to(
         >= limit
     {
         crate::warn!("recipe skipped: workshop {workshop} holds {limit} recipes, the game's most");
+        Blob::over(out, base);
         return Some(());
     }
     let template = registry.bytes().get(like..like + layout.recipe)?.to_vec();
     let inputs = scaled_inputs(layout, &registry, like, recipe.cost)?;
+    let room = Room::new(base)
+        .grow_array(layout.recipes, layout.recipe, 8, 1)?
+        .append(inputs.len(), 8)?
+        .append(layout.stack_size, 8)?;
+    let mut registry = Blob::over_with_room(out, room);
     let index = registry.grow_array(
         layout.recipes,
         layout.recipe,

@@ -1,8 +1,7 @@
 //! Host functions for the running game: components, templates, hosting, the
 //! server's world, features, the status report and game events.
 
-use enshwick_base::Relock;
-use enshwick_core::abi::{EventTypeInfo, Header, Level, Side, Status, Str};
+use enshwick_core::abi::{EventTypeInfo, Header, Side, Status, Str};
 use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::world::Whose;
@@ -70,22 +69,8 @@ entries! {
         if name.is_empty() {
             return Err(Status::BAD_ARGS.into());
         }
-        let texts = me.record.texts.relock();
-        let changed = crate::engine::features::report(
-            &mut me.record.features.relock(),
-            name,
-            Some(off).filter(|off| !off.is_empty()),
-            texts.as_ref(),
-        );
-        drop(texts);
-        if let Some(line) = changed {
-            let level = if off.is_empty() {
-                Level::INFO
-            } else {
-                Level::WARN
-            };
-            crate::engine::log::write(level, &me.record.id, &line);
-        }
+        me.record
+            .report_feature(name, Some(off).filter(|off| !off.is_empty()));
         Ok(())
     }
 

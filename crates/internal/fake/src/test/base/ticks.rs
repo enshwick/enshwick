@@ -15,6 +15,9 @@ struct FakeTick {
     handler: Registered<EventFn>,
     /// The step and time of its last call; `None` before the first.
     last: Option<(u64, u64)>,
+    /// The game of its last call, 0 before the first: as the loader's, a
+    /// handler runs on its first step in a game whatever its period.
+    game: u64,
 }
 
 /// The fake's server steps and the mod's periodic tick handlers.
@@ -27,6 +30,8 @@ pub(crate) struct FakeTicks {
     /// The hosted games that ended: the steps run in game one more.
     games_ended: u64,
     ticks: Vec<FakeTick>,
+    /// The periodic tick subscriptions asked for, refused ones included.
+    asked: usize,
 }
 
 pub(crate) extern "system" fn subscribe_tick(
@@ -46,6 +51,11 @@ pub(crate) extern "system" fn subscribe_tick(
         if s.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
+        let asked = s.ticks.asked;
+        s.ticks.asked += 1;
+        if s.host.refused_tick == Some(asked) {
+            return Status::REFUSED;
+        }
         let Ok(handle) = u32::try_from(s.ticks.ticks.len()) else {
             return Status::REFUSED;
         };
@@ -53,6 +63,7 @@ pub(crate) extern "system" fn subscribe_tick(
             every: every_ns,
             handler: Registered::new(callback, user, me),
             last: None,
+            game: 0,
         });
         put(out, TickHandle(handle))
     })
@@ -89,8 +100,8 @@ impl Installed {
     /// Runs one server step `elapsed` after the one before, as the loader
     /// does: every handler of [`Load::on_every_step`](enshwick_core::Load::on_every_step)
     /// runs, and every periodic handler whose period has passed since its
-    /// last call, with the steps and time since then. Returns how many
-    /// handlers ran.
+    /// last call or that has not run in this game yet, with the steps and
+    /// time since then. Returns how many handlers ran.
     ///
     /// # Examples
     ///
@@ -122,8 +133,9 @@ impl Installed {
             let periodic = ticks
                 .ticks
                 .iter_mut()
-                .filter(|t| due(now, t.last, t.every))
+                .filter(|t| due(now, t.last, t.every) || t.game != tick.game)
                 .map(|t| {
+                    t.game = tick.game;
                     let (steps, nanos) = t
                         .last
                         .map_or((1, elapsed), |(at_step, at)| (step - at_step, now - at));

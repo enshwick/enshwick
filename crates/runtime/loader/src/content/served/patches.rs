@@ -22,8 +22,8 @@ use enshwick_core::abi::{ResourceKey, Status};
 use super::ServedError;
 
 use super::{
-    OPEN_NEXT, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served, State, hex, key_name,
-    mod_on, route,
+    OPEN_NEXT, Patch, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served, State, hex,
+    key_name, mod_on, route,
 };
 use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
@@ -306,8 +306,8 @@ pub(crate) unsafe fn hand_out(built: Vec<u8>, out: *mut *mut u8, out_len: *mut u
 /// What every resource patch of the loader's own does around its edit:
 /// `build` gets a copy of the `base_len` bytes at `base` and runs under
 /// `fuse` as `site`, and the bytes it makes are handed out.
-/// [`Status::REFUSED`] when it makes none, panics, which turns its feature
-/// off, or its feature is off.
+/// [`Status::REFUSED`] when it makes none; [`Status::FAULTED`] when it
+/// panics, which turns its feature off, or its feature is off.
 ///
 /// # Safety
 ///
@@ -325,7 +325,10 @@ pub(crate) unsafe fn patched(
     // SAFETY: the caller guarantees `base_len` readable bytes at `base`,
     // unchanged for the call.
     unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let Some(made) = fuse.run(site, || build(bytes)).flatten() else {
+    let Some(made) = fuse.run(site, || build(bytes)) else {
+        return Status::FAULTED;
+    };
+    let Some(made) = made else {
         return Status::REFUSED;
     };
     // SAFETY: the caller guarantees `out` and `out_len` writable for one
@@ -619,7 +622,11 @@ pub(super) fn run_patches(
     let (mut current, mut current_len) = (data, len);
     let mut applied = Vec::new();
     let runs = |owner: ModIndex| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
-    for patch in entry.patches.iter().filter(|p| runs(p.owner)) {
+    for patch in entry
+        .patches
+        .iter()
+        .filter(|p| p.on.load(Ordering::Acquire) && runs(p.owner))
+    {
         let (mut built, mut built_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: `patch.apply` is a live mod's or the loader's
         // `ResourcePatchFn`, given the `current_len` bytes so far at
@@ -651,6 +658,10 @@ pub(super) fn run_patches(
         } else {
             status
         };
+        if status == Status::FAULTED {
+            fault(entry, patch);
+            continue;
+        }
         if status != Status::OK {
             if kind == Build::Scratch {
                 continue;
@@ -692,6 +703,24 @@ pub(super) fn run_patches(
         reads,
         owned: buffers.swap_remove(at),
     })
+}
+
+/// Turns off `patch` of `entry`, whose builder panicked, for the process,
+/// and names the resource off for its mod: the loader's own patch is listed
+/// by its fuse, which the panic turned off.
+#[cold]
+fn fault(entry: &Served, patch: &Patch) {
+    if !patch.on.swap(false, Ordering::AcqRel) || patch.owner == ModIndex::LOADER {
+        return;
+    }
+    if let Some(record) =
+        crate::engine::loader::loader().and_then(|l| l.mods.get(patch.owner.get()))
+    {
+        record.report_feature(
+            &format!("served {}", key_name(&entry.key)),
+            Some(enshwick_core::resources::BUILDER_PANICKED),
+        );
+    }
 }
 
 #[cfg(test)]

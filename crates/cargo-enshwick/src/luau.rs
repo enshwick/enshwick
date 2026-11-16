@@ -262,16 +262,22 @@ fn function(signature: &Signature) -> String {
         .params()
         .iter()
         .enumerate()
-        .map(|(i, p)| {
-            let name = if p.name().is_empty() {
-                format!("arg{}", i + 1)
-            } else {
-                p.name().to_owned()
-            };
-            format!("{name}: {}", render(p.ty()))
-        })
+        .map(|(i, p)| format!("{}: {}", param_name(p.name(), i), render(p.ty())))
         .collect();
     format!("({}) -> {}", params.join(", "), returns(signature.ret()))
+}
+
+/// The name the `index`th parameter goes by in a function type: `argN` for
+/// none, and a keyword with `_` after it, since Luau parses no keyword as a
+/// parameter name.
+fn param_name(name: &str, index: usize) -> Cow<'_, str> {
+    if name.is_empty() {
+        Cow::Owned(format!("arg{}", index + 1))
+    } else if LUAU_KEYWORDS.contains(&name) {
+        Cow::Owned(format!("{name}_"))
+    } else {
+        Cow::Borrowed(name)
+    }
 }
 
 /// `doc` as Luau doc comment lines at `indent`, with rustdoc links reduced
@@ -604,6 +610,21 @@ mod tests {
         assert!(
             !typed_definitions().contains("\tfunction:"),
             "a keyword field reads as a field"
+        );
+    }
+
+    #[test]
+    fn a_parameter_named_after_a_luau_keyword_is_written_with_an_underscore() {
+        use enshwick_core::script::Param;
+        static PARAMS: [Param; 3] = [
+            Param::new("id", &Ty::String),
+            Param::new("then", &Ty::Bool),
+            Param::new("", &Ty::Number),
+        ];
+        static SIGNATURE: Signature = Signature::new(&PARAMS, &Ty::Nil);
+        assert_eq!(
+            function(&SIGNATURE),
+            "(id: string, then_: boolean, arg3: number) -> ()"
         );
     }
 

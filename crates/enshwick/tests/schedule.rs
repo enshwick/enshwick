@@ -84,4 +84,33 @@ mod tests {
             "a task of the running game runs"
         );
     }
+
+    #[test]
+    fn a_task_queued_when_the_next_game_s_world_loads_runs_in_that_game() {
+        let loader = FakeHost::new().install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Timers)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let scheduler = SCHEDULER.lock().unwrap().unwrap();
+        let _ran = loader.tick(STEP);
+        scheduler.after(Duration::from_secs(1), || {
+            FROM_GAME.fetch_add(100, Ordering::Relaxed);
+        });
+
+        // The next game's first step comes well inside the scheduler's
+        // period, and its world loads after it.
+        loader.end_game();
+        let _ran = loader.tick(Duration::from_millis(10));
+        scheduler.after(Duration::ZERO, || {
+            FROM_GAME.fetch_add(1, Ordering::Relaxed);
+        });
+        let _ran = loader.tick(STEP);
+        let _ran = loader.tick(Duration::from_secs(1));
+        assert_eq!(
+            FROM_GAME.load(Ordering::Relaxed),
+            1,
+            "the task queued at the world's load ran, the last game's did not"
+        );
+    }
 }

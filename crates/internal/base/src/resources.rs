@@ -40,7 +40,7 @@ pub use script::{Bytes, Resources};
 pub use serve::Grow;
 pub use serve::Output;
 #[doc(hidden)]
-pub use serve::serve;
+pub use serve::{BUILDER_PANICKED, serve};
 #[doc(hidden)]
 pub use table::{TypeTable, declare, decode, serve_new, serve_value};
 pub use types::{Attribute, Constant, Field, Type, crc32, crc64, fnv1a32};

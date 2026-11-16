@@ -72,7 +72,9 @@ names a [control's](controls.md) `link` uses, such as `"ContextualAction_Tap"`.
 On a client, `input.local_held()` returns the game actions its own player
 holds, as an `InputMask`. It is the mask the client read in its last step.
 The client reads the mask only once a mod opens its input with
-`load.input()`, and a Luau mod's `enshwick.input` opens as the mod starts.
+`load.input()`. A Luau mod's `enshwick.input` opens as the mod starts, and
+only when one of its scripts names `input`. A Luau mod that never names it
+starts no reads, and neither does a data pack without scripts.
 The client's first step after that reads it, so a mod's first frame in a
 game has the mask. The read costs one row of the interface's player query
 per client step, and only while a mod has its input open.

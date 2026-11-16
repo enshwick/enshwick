@@ -330,6 +330,17 @@ pub(crate) fn apply(
                     holds: 0,
                     settings_changed: false,
                 });
+                // As the game: the placed prop stands where it was placed.
+                if let Some(&transform) = host
+                    .type_hashes
+                    .get(crate::test::facts::CURRENT_TRANSFORM.id())
+                {
+                    let at: Vec<u8> = enshwick_core::ecs::fixed(place.position)
+                        .iter()
+                        .flat_map(|c| c.to_le_bytes())
+                        .collect();
+                    host.put_component(entity, transform, &at);
+                }
                 transaction.created.push(entity);
             }
             FakeChange::RemoveProp(remove) => {
@@ -382,6 +393,8 @@ pub(crate) fn undo(
     }
     host.props
         .retain(|prop| !transaction.created.contains(&prop.entity));
+    host.components
+        .retain(|(entity, _), _| !transaction.created.iter().any(|c| c.0 == *entity));
     transaction.created.clear();
     for prop in transaction.removed.drain(..) {
         let entity = next_entity(host);

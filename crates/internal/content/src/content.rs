@@ -187,6 +187,88 @@ impl<B: Grow> Blob<B> {
         out.put(base);
         Self(out)
     }
+
+    /// A blob that edits in `out`, which first becomes a copy of the base
+    /// of `room` with room for all `room` counted, so the edits grow `out`
+    /// in place: over an [`Output`](crate::resources::Output), its build
+    /// takes one loan and moves nothing.
+    pub(crate) fn over_with_room(mut out: B, room: Room<'_>) -> Self {
+        out.grow(0);
+        out.reserve(room.len);
+        out.put(room.base);
+        Self(out)
+    }
+}
+
+impl<'a> Blob<&'a [u8]> {
+    /// A blob that only reads `base`, for what a helper decides before it
+    /// copies the base.
+    pub(crate) const fn reading(base: &'a [u8]) -> Self {
+        Self(base)
+    }
+}
+
+/// The length a blob over a base reaches through the appends and array
+/// growths a helper makes, worked out on the base before the blob copies
+/// it, with the arithmetic [`Blob::append`] and [`Blob::grow_array`] use.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Room<'a> {
+    base: &'a [u8],
+    len: usize,
+}
+
+impl<'a> Room<'a> {
+    /// The room `base` takes as it is.
+    pub(crate) const fn new(base: &'a [u8]) -> Self {
+        Self {
+            base,
+            len: base.len(),
+        }
+    }
+
+    /// The room after [`Blob::append`] of `len` bytes at `align`.
+    pub(crate) fn append(self, len: usize, align: usize) -> Option<Self> {
+        Some(Self {
+            len: aligned(self.len, align).checked_add(len)?,
+            ..self
+        })
+    }
+
+    /// The room after [`Blob::grow_array`] of the base's array at `field`,
+    /// of `size`-byte elements, by `extra` elements; `None` when the base
+    /// has no array there.
+    pub(crate) fn grow_array(
+        self,
+        field: usize,
+        size: usize,
+        align: usize,
+        extra: usize,
+    ) -> Option<Self> {
+        let (_, count) = Blob::reading(self.base).array(field)?;
+        let elements = usize::try_from(count).ok()?.checked_add(extra)?;
+        self.append(elements.checked_mul(size)?, align)
+    }
+}
+
+/// Edits a copy of `base` with `edit` in a `Vec`, then hands the bytes to
+/// `out` in one reserve: one loan of the final length and one more copy,
+/// for a helper whose edits decide the room the next one needs.
+pub(crate) fn built_apart(
+    out: impl Grow,
+    base: &[u8],
+    edit: impl FnOnce(&mut Blob) -> Option<()>,
+) -> Option<()> {
+    let mut edited = Blob::new(base);
+    edit(&mut edited)?;
+    let edited = edited.into_bytes();
+    Blob::over_with_room(out, Room::new(&edited));
+    Some(())
+}
+
+/// `len` rounded up to the next multiple of `align`, where an append or a
+/// grown array starts.
+const fn aligned(len: usize, align: usize) -> usize {
+    len.next_multiple_of(if align == 0 { 1 } else { align })
 }
 
 impl Blob {
@@ -297,7 +379,7 @@ impl<B: Grow> Blob<B> {
     /// assert_eq!(blob.append(&[9], 4), 4);
     /// ```
     pub fn append(&mut self, data: &[u8], align: usize) -> usize {
-        let start = self.bytes().len().next_multiple_of(align.max(1));
+        let start = aligned(self.bytes().len(), align);
         self.0.grow(start);
         self.0.put(data);
         start
@@ -333,7 +415,7 @@ impl<B: Grow> Blob<B> {
         if old_end > self.bytes().len() || extra.iter().any(|(bytes, _)| bytes.len() != size) {
             return None;
         }
-        let new_start = self.bytes().len().next_multiple_of(align.max(1));
+        let new_start = aligned(self.bytes().len(), align);
         let end = new_start.checked_add(old.checked_add(extra.len())?.checked_mul(size)?)?;
         self.0.grow(end);
         let bytes = self.0.as_mut();
@@ -486,11 +568,19 @@ impl LoadMethods for crate::BaseLoad {
 }
 
 /// What `build` writes into new bytes, for a test of a helper that builds in
-/// an output.
+/// an output; asserts the helper reserved its final length, so over a
+/// builder's output it would take one loan and move nothing.
 #[cfg(test)]
 pub(crate) fn built(build: impl FnOnce(&mut Vec<u8>) -> Option<()>) -> Option<Vec<u8>> {
     let mut bytes = Vec::new();
-    build(&mut bytes).map(|()| bytes)
+    let answer = build(&mut bytes);
+    assert!(
+        answer.is_none() || bytes.capacity() == bytes.len(),
+        "{} bytes in {}: the build grew past what it reserved",
+        bytes.len(),
+        bytes.capacity()
+    );
+    answer.map(|()| bytes)
 }
 
 #[cfg(test)]

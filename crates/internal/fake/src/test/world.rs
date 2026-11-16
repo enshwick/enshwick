@@ -94,6 +94,18 @@ impl FakeHost {
         type_hash: u32,
         bytes: &[u8],
     ) -> Self {
+        self.put_component(entity, type_hash, bytes);
+        self
+    }
+
+    /// Gives `entity` a component of type `type_hash` holding `bytes`, kept
+    /// 16-byte aligned for the process, as [`FakeHost::component`] does.
+    pub(crate) fn put_component(
+        &mut self,
+        entity: enshwick_core::Entity,
+        type_hash: u32,
+        bytes: &[u8],
+    ) {
         let mut words = vec![0u128; bytes.len().div_ceil(16).max(1)].into_boxed_slice();
         for (word, chunk) in words.iter_mut().zip(bytes.chunks(16)) {
             let mut le = [0u8; 16];
@@ -105,7 +117,6 @@ impl FakeHost {
             (entity.0, type_hash),
             (data.expose_provenance(), bytes.len()),
         );
-        self
     }
 
     /// Refuses component writes of type `type_hash`, as the loader refuses

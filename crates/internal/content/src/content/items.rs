@@ -10,7 +10,7 @@ use crate::engine_ids as ids;
 use crate::locks::Relock;
 
 use super::templates::{ComponentChange, NewTemplate};
-use super::{Blob, EngineFacts, Guid, Id, types};
+use super::{Blob, EngineFacts, Guid, Id, Room, types};
 use crate::resources::Grow;
 
 /// What the mod added: the meter templates it serves, and its items.
@@ -450,7 +450,11 @@ pub fn clone_item(
     guid: Guid,
     out: &mut impl Grow,
 ) -> Option<()> {
-    let mut info = Blob::over(out, like);
+    let mut room = Room::new(like);
+    if !item.stats.is_empty() {
+        room = room.grow_array(layout.ui_values, layout.ui_value[0], 4, item.stats.len())?;
+    }
+    let mut info = Blob::over_with_room(out, room);
     let mut written =
         info.write(layout.id, &guid.fnv1a().to_le_bytes()) && info.write(layout.object, &guid.0);
     if let Some(name) = item.name {
@@ -520,7 +524,8 @@ pub fn list_item(
     debug_name: &str,
     out: &mut impl Grow,
 ) -> Option<()> {
-    let mut registry = Blob::over(out, registry);
+    let base = registry;
+    let registry = Blob::reading(base);
     let game_id = guid.fnv1a();
     let (first, refs) = registry.array(layout.refs)?;
     let (_, names) = registry.array(layout.names)?;
@@ -539,9 +544,17 @@ pub fn list_item(
         );
         return None;
     }
-    registry.grow_array(layout.refs, REFERENCE, 4, &[], &[(guid.0.to_vec(), None)])?;
     // The debug names run beside the references; keep them in step.
-    if names == refs {
+    let with_names = names == refs;
+    let mut room = Room::new(base).grow_array(layout.refs, REFERENCE, 4, 1)?;
+    if with_names {
+        room = room
+            .append(debug_name.len() + 1, 1)?
+            .grow_array(layout.names, BLOB_STRING, 4, 1)?;
+    }
+    let mut registry = Blob::over_with_room(out, room);
+    registry.grow_array(layout.refs, REFERENCE, 4, &[], &[(guid.0.to_vec(), None)])?;
+    if with_names {
         let mut text = debug_name.as_bytes().to_vec();
         text.push(0);
         let at = registry.append(&text, 1);

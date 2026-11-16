@@ -2,7 +2,7 @@
 
 use super::super::menu::MenuEntry;
 use super::super::workshops::WorkshopId;
-use super::super::{Blob, Guid, types};
+use super::super::{Blob, Guid, Room, types};
 use super::RecipeKind;
 use super::add::{
     NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, retarget, workshop_counts,
@@ -331,7 +331,8 @@ pub fn derive_recipes_in(
     } else {
         limit.saturating_sub(RESERVED_FOR_SINGLE)
     };
-    let mut blob = Blob::over(out, registry);
+    let base = registry;
+    let blob = Blob::reading(base);
     let (start, count) = blob.array(layout.recipes)?;
     let mut counts = workshop_counts(layout, &blob)?;
     let mut skipped = 0usize;
@@ -363,6 +364,7 @@ pub fn derive_recipes_in(
         );
     }
     if picked.is_empty() {
+        Blob::over(out, base);
         return Some(());
     }
     let extra: Vec<(Vec<u8>, Option<usize>)> = picked
@@ -382,6 +384,11 @@ pub fn derive_recipes_in(
         count_field.copy_from_slice(&made.saturating_mul(derived.output).to_le_bytes());
         changes.push((inputs, output));
     }
+    let mut room = Room::new(base).grow_array(layout.recipes, layout.recipe, 8, picked.len())?;
+    for (inputs, output) in &changes {
+        room = room.append(inputs.len(), 8)?.append(output.len(), 8)?;
+    }
+    let mut blob = Blob::over_with_room(out, room);
     let first = blob.grow_array(layout.recipes, layout.recipe, 8, &layout.relative, &extra)?;
     let (start, _) = blob.array(layout.recipes)?;
     for (index, ((_, derived, guid), (inputs, output))) in picked.iter().zip(changes).enumerate() {

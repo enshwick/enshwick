@@ -181,6 +181,7 @@ pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) -> Status {
         s.sent.push((me, Level::ERROR, line.clone()));
         s.logs.push((Level::ERROR, line));
     });
+    super::registered::turn_off(me);
     Status::OK
 }
 

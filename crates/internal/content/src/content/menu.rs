@@ -13,7 +13,7 @@ use crate::abi::Side;
 use crate::engine_ids as ids;
 
 use super::workshops::WorkshopId;
-use super::{Blob, EngineFacts, Guid, types};
+use super::{Blob, EngineFacts, Guid, Room, built_apart, types};
 use crate::resources::{Grow, Output};
 
 /// The client's UI bundle resource, which holds the crafting menu.
@@ -143,7 +143,10 @@ pub fn list_recipes(
     entries: &[MenuEntry],
     out: &mut impl Grow,
 ) -> Option<()> {
-    list_in(layout, &mut Blob::over(out, bundle), entries)
+    // shortcut: where one entry lands decides the room the next needs, so the
+    // bundle is listed apart and handed over whole, one copy more; an exact
+    // room first would run the placement twice.
+    built_apart(out, bundle, |blob| list_in(layout, blob, entries))
 }
 
 /// Lists each of `entries` in the bundle `blob` holds, as [`list_recipes`].
@@ -217,16 +220,21 @@ pub fn move_recipes(
     moves: &[(Guid, WorkshopId)],
     out: &mut impl Grow,
 ) -> Option<()> {
-    let mut blob = Blob::over(out, bundle);
+    // shortcut: as `list_recipes`, each move decides the room the next needs.
+    built_apart(out, bundle, |blob| move_in(layout, blob, moves))
+}
+
+/// Takes each of `moves` out of the menus in `blob`, as [`move_recipes`].
+fn move_in(layout: &MenuLayout, blob: &mut Blob, moves: &[(Guid, WorkshopId)]) -> Option<()> {
     let (workshops, _) = blob.array(layout.collection + layout.workshops)?;
     let mut entries = Vec::new();
     for &(recipe, workshop) in moves {
         let id = recipe.fnv1a();
         let mut listed = false;
-        for tree in 0..tree_count(layout, &blob)? {
+        for tree in 0..tree_count(layout, blob)? {
             let home = blob.read_u32(workshops + tree * 4)? == workshop.id();
-            for group in groups(layout, &blob, tree)? {
-                for set in elements(&blob, group + layout.sets, layout.set)? {
+            for group in groups(layout, blob, tree)? {
+                for set in elements(blob, group + layout.sets, layout.set)? {
                     let field = set + layout.entries;
                     let (start, count) = blob.array(field)?;
                     let ids: Vec<u32> = (0..usize::try_from(count).ok()?)
@@ -259,7 +267,7 @@ pub fn move_recipes(
             });
         }
     }
-    list_in(layout, &mut blob, &entries)
+    list_in(layout, blob, &entries)
 }
 
 /// Where a recipe goes in the crafting menu.
@@ -408,13 +416,20 @@ pub fn list_workshop(
     workshop: WorkshopId,
     out: &mut impl Grow,
 ) -> Option<()> {
-    let mut blob = Blob::over(out, bundle);
     let workshops = layout.collection + layout.workshops;
     let trees = layout.collection + layout.trees;
-    tree_count(layout, &blob)?;
-    if tree_of(layout, &blob, workshop).is_some() {
+    let read = Blob::reading(bundle);
+    tree_count(layout, &read)?;
+    if tree_of(layout, &read, workshop).is_some() {
+        Blob::over(out, bundle);
         return Some(());
     }
+    let room = Room::new(bundle)
+        .append(layout.set, 8)?
+        .append(layout.group, 8)?
+        .grow_array(workshops, 4, 4, 1)?
+        .grow_array(trees, layout.tree, 8, 1)?;
+    let mut blob = Blob::over_with_room(out, room);
     let set = blob.append(&vec![0; layout.set], 8);
     let mut group = vec![0u8; layout.group];
     group

@@ -535,7 +535,7 @@ unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
 /// `now`, each with its mod's recent cost when callbacks are timed.
 fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
     TICKS.run(
-        step,
+        (step, game),
         now,
         time,
         |tick| !crate::engine::loader::is_off(tick.owner()),

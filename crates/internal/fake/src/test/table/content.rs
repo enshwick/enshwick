@@ -740,7 +740,9 @@ pub(crate) extern "system" fn resource_buffer(
 /// Builds the served resource `key` from `base` with every mod's patches,
 /// in order, as the game's first read of it would: a failed patch is
 /// skipped, and [`Status::MISSING`] when none built. As the loader,
-/// [`Status::BUILDING`] for a key whose patches already run on this thread.
+/// [`Status::BUILDING`] for a key whose patches already run on this thread,
+/// and a patch whose builder panicked ([`Status::FAULTED`]) never runs
+/// again: its mod reports the resource as a feature off.
 pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
     if building(key) {
         return Err(Status::BUILDING);
@@ -748,8 +750,9 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
     let patches: Vec<_> = with(Vec::new(), |s| {
         s.served
             .iter()
-            .filter(|s| s.0.key == *key)
-            .map(|s| s.1)
+            .enumerate()
+            .filter(|(at, served)| served.0.key == *key && !s.served_off.contains(at))
+            .map(|(at, served)| (at, served.1))
             .collect()
     });
     let _building = Building::enter(*key);
@@ -759,7 +762,7 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
         return Err(Status::MISSING);
     };
     let mut len = base_len;
-    for patch in patches {
+    for (at, patch) in patches {
         let mut out = core::ptr::null_mut();
         let mut out_len = 0;
         // SAFETY: `bytes` is readable for the call, the outs are valid, and
@@ -767,6 +770,10 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
         let status = patch.run(|patch, user| unsafe {
             patch(bytes.as_ptr(), len, user, &raw mut out, &raw mut out_len)
         });
+        if status == Status::FAULTED {
+            panicked(key, at, patch.owner());
+            continue;
+        }
         // As the loader: an output outside the buffers this build lent, null
         // included, fails the patch.
         let output = BUILDING.with_borrow(|frames| {
@@ -790,6 +797,31 @@ pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, 
     } else {
         Err(Status::MISSING)
     }
+}
+
+/// Turns off the patch at `at` in `served` of `key`, whose builder panicked,
+/// and has its mod report the resource off, as the loader does.
+fn panicked(key: &ResourceKey, at: usize, owner: Option<ModHandle>) {
+    let name = format!("served resource {}", key.guid);
+    let line = format!(
+        "feature {name} off: {}",
+        enshwick_core::resources::BUILDER_PANICKED
+    );
+    with((), |s| {
+        s.served_off.push(at);
+        match s.features.iter_mut().find(|(have, _)| *have == name) {
+            Some(kept) => kept.1 = Some(enshwick_core::resources::BUILDER_PANICKED.to_owned()),
+            None => s.features.push((
+                name,
+                Some(enshwick_core::resources::BUILDER_PANICKED.to_owned()),
+            )),
+        }
+        if let Some(owner) = owner {
+            s.sent
+                .push((owner, enshwick_core::abi::Level::WARN, line.clone()));
+        }
+        s.logs.push((enshwick_core::abi::Level::WARN, line));
+    });
 }
 
 /// Marks a key's patches running on this thread until dropped, unwinding

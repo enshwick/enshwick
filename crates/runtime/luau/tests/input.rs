@@ -34,4 +34,28 @@ mod tests {
             loader.logs()
         );
     }
+
+    #[test]
+    fn a_mod_whose_scripts_never_name_input_starts_no_input_reads() {
+        use enshwick::abi::{Header, LocalInputInfo, Side};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            "enshwick.log.info('no controls read here')",
+        );
+        let _drawn = loader.draw_frame();
+        let mut info = LocalInputInfo {
+            header: Header::of::<LocalInputInfo>(),
+            flags: 0,
+            reserved: 0,
+            age_ms: 0,
+        };
+        // SAFETY: the fake's table lives for the process; `info` is writable.
+        let status = (unsafe { &*loader.api() }.local_input_status)(loader.handle(), &raw mut info);
+        assert!(status.is_ok());
+        assert_eq!(
+            info.flags & LocalInputInfo::REQUESTED,
+            0,
+            "nothing asked for the held controls"
+        );
+    }
 }
