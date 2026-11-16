@@ -214,6 +214,12 @@ fn stable_api_left_to_ci(scope: &Scope, parts: &[Part]) -> bool {
     wide(scope) && parts.contains(&Part::StableApi) && stable_api_due(scope)
 }
 
+/// Whether a check of `parts` names the stable surface but `scope` does not
+/// reach it, so the part passes without a step.
+fn stable_api_out_of_scope(scope: &Scope, parts: &[Part]) -> bool {
+    parts.contains(&Part::StableApi) && !stable_api_due(scope)
+}
+
 /// Whether `scope` checks, tests or only builds the code of `package`.
 fn reaches(scope: &Scope, package: &str) -> bool {
     match scope {
@@ -267,8 +273,7 @@ pub(crate) enum Part {
     Docs,
     /// The API crate's stable-surface checks ([`stable_api_steps`]): a
     /// build of its own without `unstable`, which shares nothing with the
-    /// other parts' builds, so CI runs it as a job of its own, on pull
-    /// requests too.
+    /// other parts' builds.
     StableApi,
     /// clippy for the Windows target through cargo-xwin, off Windows.
     WindowsLint,
@@ -728,6 +733,10 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         if stable_api_left_to_ci(scope, parts) {
             say(&format!(
                 "{FACADE}'s stable surface is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
+            ));
+        } else if stable_api_out_of_scope(scope, parts) {
+            say(&format!(
+                "{FACADE}'s stable surface is out of scope: the change does not reach {FACADE}"
             ));
         }
         if !built.is_empty() {
