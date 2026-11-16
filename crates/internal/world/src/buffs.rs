@@ -6,7 +6,8 @@
 //! and [`Buffs::types`] lists every type of the running game. A buff given
 //! by a mod starts at once and lasts the time asked; one the entity has
 //! already is renewed. Clients see the change as the game's own, and the
-//! game saves the buffs it saves with a character.
+//! game saves the buffs it saves with a character. A mod adds a buff type of
+//! its own with `Load::add_buff` and a `NewBuff`, under `unstable`.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
@@ -36,6 +37,11 @@ use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 
 #[doc(no_inline)]
 pub use crate::abi::BuffTypeId;
+#[cfg(feature = "unstable")]
+pub use new::{BUFF_COLLECTION, BUFF_COLLECTION_RESOURCE, BuffLayout, NewBuff};
+
+#[cfg(feature = "unstable")]
+pub(crate) mod new;
 
 /// Where an entity holds a buff.
 ///

@@ -1730,6 +1730,32 @@ export type NewArsenal = {
 	change: ArsenalChange?,
 }
 
+--- A buff type of a mod's own, for `Load.add_buff`: a copy of the vanilla type `like` with what the mod changes. Every nil keeps the vanilla type's value. Give it stat modifiers with `Load.add_buff_modifiers` and apply it with `Buffs.apply`.
+export type NewBuff = {
+	--- The new type's id; its game id is `BuffTypeId.from_guid` of its GUID.
+	id: string,
+	--- The vanilla type it copies, from `Buffs.types`.
+	like: number,
+	--- The tag of its name, given text with `Load.add_texts`.
+	name: string?,
+	--- The tag of its description.
+	description: string?,
+	--- An icon of its own for the HUD's buff row; it shows on a client whose loader knows the build's texture code.
+	icon: Icon?,
+	--- How long it lasts, in game time.
+	default_life_time: number?,
+	--- Where an entity holds it.
+	slot: BuffSlotType?,
+	--- Whether the game shows it nowhere.
+	hide_in_ui: boolean?,
+	--- Whether the HUD hides how long it has left.
+	hide_duration_in_ui: boolean?,
+	--- Whether the game saves it with a character; a world loaded without the mod drops a saved one.
+	is_saved: boolean?,
+	--- Drops what the vanilla type runs: its impact program and values, tooltip lines, helpers, follow-up and effects, so of what it does to stats only the mod's modifiers act. It keeps how the vanilla type looks and whom it reaches: its colour, food poison mark, apply type, faction mask and whether it ends at death. The name is enshwick's.
+	plain: boolean?,
+}
+
 --- A new container type for `Load.add_container`: a prop copied from a vanilla container, holding `slots` slots.
 export type NewContainer = {
 	--- The prop, whose item copies a vanilla container's.
@@ -4079,6 +4105,9 @@ declare enshwick: {
 		apply: (entity: number, id: number, how: Apply) -> (),
 		--- Removes every buff of type `id` from `entity`, as the game cleanses one: it goes in the next step, without what the type does when it runs out. Returns whether the entity had it.
 		remove: (entity: number, id: number) -> boolean,
+		--- Adds the buff type `new` to the game, on the server and the client alike, and returns its id: a copy of a vanilla type in the game's buff collection with the mod's name, description, icon and timing. Give it modifiers with `Load.add_buff_modifiers` and apply it with `Buffs.apply`. Call it during `init`. Unstable until its in-game check passes.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_buff: (new: NewBuff) -> number,
 	},
 	--- The server's game settings: read them, change them for now, or keep a change.
 	game_settings: {

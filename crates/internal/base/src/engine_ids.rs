@@ -200,6 +200,56 @@ ids! {
     ITEM_REGISTRY = "item_registry";
     ITEM_REGISTRY_REFS = "item_registry.refs";
     ITEM_REGISTRY_NAMES = "item_registry.names";
+    /// The id of the one resource that holds every buff type.
+    BUFF_COLLECTION = "buff_collection";
+    /// The id of the collection's buff types, a blob array of [`BUFF_TYPE`].
+    BUFF_COLLECTION_BUFFS = "buff_collection.buffs";
+    /// The id of the buckets of the collection's baked hash map, a blob
+    /// array of `(first, count)` pairs of `u32`, a power of two of them.
+    BUFF_COLLECTION_ENTRIES = "buff_collection.entries";
+    /// The id of the hash map's keys, a blob array of buff type ids grouped
+    /// by bucket.
+    BUFF_COLLECTION_KEYS = "buff_collection.keys";
+    /// The id of the hash map's values, a blob array of `u32` indices into
+    /// the buff types, beside the keys.
+    BUFF_COLLECTION_VALUES = "buff_collection.values";
+    BUFF_TYPE = "buff_type";
+    BUFF_TYPE_ID = "buff_type.id";
+    /// The id of a buff type's slot, a `u8` of the game's `BuffSlotType`.
+    BUFF_TYPE_SLOT = "buff_type.slot";
+    /// The id of how long a buff lasts, a `keen::Time` in nanoseconds.
+    BUFF_TYPE_LIFE_TIME = "buff_type.life_time";
+    BUFF_TYPE_NAME = "buff_type.name";
+    BUFF_TYPE_DESCRIPTION = "buff_type.description";
+    BUFF_TYPE_HIDE_IN_UI = "buff_type.hide_in_ui";
+    /// The id of a buff type's icon, the GUID of a UI image.
+    BUFF_TYPE_ICON = "buff_type.icon";
+    BUFF_TYPE_HIDE_DURATION_IN_UI = "buff_type.hide_duration_in_ui";
+    BUFF_TYPE_IS_SAVED = "buff_type.is_saved";
+    /// The id of the impact program a buff runs, a GUID reference.
+    BUFF_TYPE_IMPACT = "buff_type.impact";
+    BUFF_TYPE_IMPACT_SIMPLE = "buff_type.impact_simple";
+    BUFF_TYPE_IMPACT_SCALED = "buff_type.impact_scaled";
+    BUFF_TYPE_UI_VALUES = "buff_type.ui_values";
+    BUFF_TYPE_ON_CREATE = "buff_type.on_create";
+    BUFF_TYPE_WHILE_APPLIED = "buff_type.while_applied";
+    /// The id of the buff that follows when one runs out, a GUID reference.
+    BUFF_TYPE_ON_TIMEOUT = "buff_type.on_timeout";
+    BUFF_TYPE_ON_TIMEOUT_IS_SET = "buff_type.on_timeout_is_set";
+    BUFF_TYPE_VFX_MESHES = "buff_type.vfx_meshes";
+    BUFF_TYPE_VFX_MODELS = "buff_type.vfx_models";
+    BUFF_TYPE_VFX_JOINTS = "buff_type.vfx_joints";
+    /// The id of one bucket of the buff collection's hash map, its first key
+    /// and its count.
+    BUFF_MAP_ENTRY = "buff_map_entry";
+    /// The id of a bucket's first key, a `u32` index into the keys.
+    BUFF_MAP_ENTRY_START = "buff_map_entry.start";
+    /// The id of a bucket's key count, a `u32`.
+    BUFF_MAP_ENTRY_COUNT = "buff_map_entry.count";
+    /// The id of the impact program reference a buff type holds.
+    IMPACT_PROGRAM_REFERENCE = "impact_program_reference";
+    /// The id of a buff type's follow-up, which names the buff after it.
+    BUFF_ON_TIMEOUT = "buff_on_timeout";
     TEMPLATE = "template";
     /// The id of a template resource's components, a blob array of variants.
     TEMPLATE_COMPONENTS = "template.components";

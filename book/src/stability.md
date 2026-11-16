@@ -46,6 +46,7 @@ change in any release, a patch included.
 | The described calls, events and points a script runtime uses. `services::DescribedCall`, `services::DescribedCaller`, `services::DescribedEvent`, `services::DescribedEmitter`, `points::DescribedPoint`, `points::DescribedOwnedPoint`, `points::DescribedVerdict`, `points::DescribedField`. `Load::serve_described_call`, `Load::described_caller`, `Load::on_described_mod_event`, `Load::define_described_event`, `Load::define_described_point`, `Load::extend_described_point`. | young |
 | `Effects::ping` | whether a client shows a ping the server raised is not yet seen |
 | `Effects::notify`, `Notify`, `NotifyAt`, `MAX_NOTIFIES_PER_STEP` | whether a client plays a notifier the server raised is not yet seen |
+| Buff types of a mod's own. `Load::add_buff`, `buffs::NewBuff`, `buffs::BuffLayout`, `buffs::BUFF_COLLECTION`, `buffs::BUFF_COLLECTION_RESOURCE`. | how a client shows a served buff type is read from its code only, not yet seen in the game |
 | `Load::add_experience` | whether a player gets the gain of an experience value a mod added is not yet seen in the game |
 | `Load::add_journal_page` and `content::journal::lore_category` | which categories the client draws a page under is read from its code only, not yet seen in the game |
 | `Knowledge::revoke` and `Load::on_knowledge_input`. `Knowledge::revoke_world`, `Knowledge::revoke_account`, `knowledge::Revoke`, `knowledge::Refusal`, `knowledge::KnowledgeRequest`. | how a vanilla client takes a revoke, and what it asks for, is not yet seen |

@@ -635,6 +635,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-example-lucky"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+]
+
+[[package]]
 name = "enshwick-example-trading-post"
 version = "0.0.0-dev"
 dependencies = [
