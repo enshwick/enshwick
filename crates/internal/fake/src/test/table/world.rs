@@ -67,7 +67,7 @@ pub(crate) fn entity_calls_off(s: &crate::test::table::State) -> bool {
 /// [`Status::UNAVAILABLE`]: while the mod's init runs, before the loader
 /// has a server world, or after [`Installed::stop_world`](crate::test::Installed::stop_world).
 pub(crate) fn no_world(s: &crate::test::table::State) -> bool {
-    s.initialising || s.edits.stopped
+    s.registration == Registration::Init || s.edits.stopped
 }
 
 pub(crate) extern "system" fn player(

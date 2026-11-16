@@ -257,7 +257,7 @@ pub(crate) extern "system" fn rebuild_resource(_me: ModHandle, key: *const Resou
         };
         let base = served.0.base;
         s.rebuilds.push(key);
-        Ok((base, s.registration == Registration::Open))
+        Ok((base, s.registration != Registration::Closed))
     });
     match found {
         Ok((_, true)) => Status::OK,
@@ -629,7 +629,7 @@ pub(crate) extern "system" fn resource_served(
     unsafe {
         copy_resource(key, out, capacity, len, |key| {
             // As the loader: no read before every patch is in.
-            if with(true, |s| s.registration == Registration::Open) {
+            if with(true, |s| s.registration != Registration::Closed) {
                 return Err(Status::REFUSED);
             }
             let Some(base) = with(None, |s| {
@@ -749,7 +749,7 @@ pub(crate) enum Build {
 }
 
 /// Builds the served resource `key` from `base` with every running mod's
-/// patches, in order, for `build`: [`Status::MISSING`] when none built. As
+/// patches, in order, for `kind`: [`Status::MISSING`] when none built. As
 /// the loader, [`Status::BUILDING`] for a key whose patches already run on
 /// this thread; a patch that refuses or hands back bytes it was not lent
 /// turns its mod off in a game build and is skipped in a scratch one; and a
@@ -758,7 +758,7 @@ pub(crate) enum Build {
 pub(crate) fn build_resource(
     key: &ResourceKey,
     base: &[u8],
-    build: Build,
+    kind: Build,
 ) -> Result<Vec<u8>, Status> {
     if building(key) {
         return Err(Status::BUILDING);
@@ -811,8 +811,8 @@ pub(crate) fn build_resource(
                 built = true;
             }
             // As the loader: an output it did not lend is a bad one.
-            (true, None) => refused(key, build, patch.owner(), Status::BAD_ARGS),
-            (false, _) => refused(key, build, patch.owner(), status),
+            (true, None) => refused(key, kind, patch.owner(), Status::BAD_ARGS),
+            (false, _) => refused(key, kind, patch.owner(), status),
         }
     }
     if built {
@@ -833,8 +833,8 @@ fn served_name(key: &ResourceKey) -> String {
 /// A patch of mod `owner` failed to build `key` with `status`: in a game
 /// build the mod turns off with the loader's reason, once; a scratch
 /// build skips it.
-fn refused(key: &ResourceKey, build: Build, owner: Option<ModHandle>, status: Status) {
-    let Some(owner) = owner.filter(|_| build == Build::Game) else {
+fn refused(key: &ResourceKey, kind: Build, owner: Option<ModHandle>, status: Status) {
+    let Some(owner) = owner.filter(|_| kind == Build::Game) else {
         return;
     };
     if crate::test::table::base::registered::is_off(owner) {

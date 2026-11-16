@@ -85,8 +85,6 @@ pub(crate) struct State {
     pub(crate) manifest: Option<ManifestFacts>,
     /// Whether the mod may still ask for what only init may.
     pub(crate) registration: Registration,
-    /// Set while the mod's init runs, before the loader has a world.
-    pub(crate) initialising: bool,
     /// Mid-function hooks: address, handler and the mod's pointer.
     pub(crate) mid_hooks: Vec<(u64, Registered<MidHookFn>)>,
     /// Loader event handlers, by event.
@@ -416,8 +414,10 @@ fn take_turn() -> MutexGuard<'static, ()> {
 /// initialised.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Registration {
-    /// The mod's init runs, or has not run yet.
+    /// The mod's init has not run yet.
     Open,
+    /// The mod's init runs, before the loader has a world.
+    Init,
     /// The mod's init returned; such requests come too late.
     Closed,
 }
@@ -438,7 +438,6 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         hook_slots: Vec::new(),
         manifest: None,
         registration: Registration::Open,
-        initialising: false,
         mid_hooks: Vec::new(),
         subscriptions: Vec::new(),
         game_events: Vec::new(),
