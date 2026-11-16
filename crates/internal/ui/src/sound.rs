@@ -6,8 +6,7 @@
 //! plays it and from no place in the world. The server places sounds through
 //! notifiers: a mod hears each one the game raises in
 //! [`Load::on_notify`](../struct.Load.html#method.on_notify) and raises one
-//! of its own, which every client in range plays, with
-//! [`Effects::notify`](../effects/struct.Effects.html#method.notify).
+//! of its own, which every client in range plays, with `Effects::notify`.
 //!
 //! # Examples
 //!

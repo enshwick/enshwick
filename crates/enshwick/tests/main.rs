@@ -157,6 +157,7 @@ mod no_mod_points;
 mod no_ui;
 #[cfg(feature = "unstable")]
 mod notices;
+#[cfg(feature = "unstable")]
 mod notify;
 mod null_callbacks;
 #[cfg(feature = "unstable")]
