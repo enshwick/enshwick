@@ -177,10 +177,13 @@ fn holds_sound(s: &State, guid: enshwick_core::content::Guid) -> bool {
 }
 
 /// Draws window `w` with id `id`, answering 1 when the test pressed Back
-/// over it, as the loader does.
+/// over it, as the loader does: only Back is the window's, and a dialog
+/// showing takes the press instead.
 fn window(s: &mut State, w: &mut UiWidget, id: String) -> crate::test::Drawn {
-    if matches!(input(s, &id), Some(crate::test::Input::Back)) {
-        w.result = 1;
+    let back = |(t, i): &(String, crate::test::Input)| *t == id && *i == crate::test::Input::Back;
+    if let Some(at) = s.inputs.iter().position(back) {
+        s.inputs.remove(at);
+        w.result = u32::from(s.dialogs.is_empty());
     }
     crate::test::Drawn::Window {
         id,

@@ -287,6 +287,11 @@ crate::engine::chains::chain_detour! {
             // SAFETY: the builder's own non-null input record, right after
             // its pass on its thread, which nothing else touches meanwhile.
             unsafe { layout.hold(input, mode) };
+            if let Some(buttons) = GROUPS.buttons.get() {
+                // SAFETY: the builder's own non-null input record, right
+                // after its pass on its thread, which nothing else touches.
+                unsafe { buttons.hold(input) };
+            }
         }
         if let Some(handed) = DRIVE.handoff.current()
             && let Some(layout) = GROUPS.input.get()

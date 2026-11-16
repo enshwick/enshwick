@@ -5,14 +5,14 @@ use super::{
     Window,
 };
 
-/// The game's alignment word for a panel at `edge` of its parent, centred
-/// along it: the vertical part in the high byte, the horizontal in the low,
-/// 1 for the start, 2 the centre, 3 the end, as the HUD's columns take it.
 /// The navigation kind of a popup window.
 const NAV_WINDOW: u32 = 2;
 /// The navigation kind of a scrolled column.
 pub(super) const NAV_COLUMN: u32 = 3;
 
+/// The game's alignment word for a panel at `edge` of its parent, centred
+/// along it: the vertical part in the high byte, the horizontal in the low,
+/// 1 for the start, 2 the centre, 3 the end, as the HUD's columns take it.
 const fn edge_align(edge: u32) -> u16 {
     match edge {
         UiExtension::LEFT => 0x201,
