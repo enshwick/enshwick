@@ -58,6 +58,10 @@ struct Drive {
     /// The command's mod, as its load-order index.
     owner: AtomicUsize,
     linked: AtomicBool,
+    /// A loader or mod window or dialog showed over the world in the last
+    /// frame, as the interface notes it. The game reads it on its main
+    /// thread and from ECS systems on workers, so it is an atomic.
+    window: AtomicBool,
 }
 
 static DRIVE: Drive = Drive {
@@ -68,8 +72,21 @@ static DRIVE: Drive = Drive {
     until: AtomicU64::new(0),
     owner: AtomicUsize::new(0),
     linked: AtomicBool::new(false),
+    window: AtomicBool::new(false),
 };
 static FUSE: Fuse = Fuse::new(FEATURE);
+
+/// Notes, once a frame on the interface thread, whether a loader or mod
+/// window or dialog showed in the last frame.
+pub(crate) fn note_window(shown: bool) {
+    DRIVE.window.store(shown, Ordering::Relaxed);
+}
+
+/// Whether a loader or mod window or dialog showed in the last frame, which
+/// takes the cursor and holds the mouse look; from any thread.
+pub(crate) fn window_shows() -> bool {
+    DRIVE.window.load(Ordering::Relaxed)
+}
 
 /// Links the builder's detour on a client whose build has the input group.
 pub(crate) fn link(loader: &Loader) {
@@ -298,7 +315,7 @@ crate::engine::chains::chain_detour! {
     |onward| {
         onward.call();
         if mode == FRAME
-            && crate::ui::interface::cursor_wanted()
+            && window_shows()
             && !input.is_null()
             && let Some(layout) = GROUPS.input.get()
         {

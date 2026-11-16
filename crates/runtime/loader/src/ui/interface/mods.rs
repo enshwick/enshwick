@@ -233,7 +233,7 @@ impl Screen {
     /// Shows `page`, from its top.
     fn open(&mut self, page: Page) {
         self.page = page;
-        self.scroll.to_top();
+        self.scroll.start_over();
     }
 }
 

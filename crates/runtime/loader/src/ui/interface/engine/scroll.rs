@@ -11,7 +11,6 @@ use super::{
     game_fn, path, sound, stretch,
 };
 use crate::engine::pinned;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 type PersistFn = unsafe extern "system" fn(
     node: usize,
@@ -308,15 +307,12 @@ pub(in crate::ui::interface) struct Scroll {
     id: usize,
 }
 
-/// The ids the loader's scroll areas take, one per content they show.
-static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-
 /// A frame id no node of the game's has yet: the game keeps its nodes by
 /// id, and one it numbers itself follows its parent and its place there
 /// (client 26430625), so the rows of a page took the scroll offset and the
 /// focus of the rows of the page shown before them.
 fn new_id() -> usize {
-    let count = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let count = crate::ui::interface::next_scroll();
     let id = STATE_KEY ^ count.wrapping_mul(0x9e37_79b9_7f4a_7c15);
     usize::try_from(id).unwrap_or(1).max(1)
 }
@@ -344,7 +340,7 @@ impl Scroll {
     /// Starts the area afresh on its next frame, at its top with nothing
     /// focused, for new content in the same place, such as another page of a
     /// screen.
-    pub(in crate::ui::interface) const fn to_top(&mut self) {
+    pub(in crate::ui::interface) const fn start_over(&mut self) {
         self.id = 0;
     }
 }

@@ -265,16 +265,25 @@ struct State {
     /// The thread that draws the interface, once it drew: the game's main
     /// thread, the same for every world.
     ui_thread: AtomicU32,
+    /// The count of the next frame id a scroll area takes; never reset, so
+    /// no area takes the node of another.
+    next_scroll: AtomicU64,
 }
 
 static STATE: State = State {
     next_token: AtomicU64::new(1),
     ui_thread: AtomicU32::new(0),
+    next_scroll: AtomicU64::new(1),
 };
 
 /// A token for the frame callback about to draw, unique in the process.
 fn next_token() -> u64 {
     STATE.next_token.fetch_add(1, Ordering::Relaxed)
+}
+
+/// A count for the next scroll area's frame id, unique in the process.
+fn next_scroll() -> u64 {
+    STATE.next_scroll.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Forgets what the interface kept of a client's hosted game that ended.
@@ -336,12 +345,6 @@ thread_local! {
 fn window_drawn() {
     let [_, last] = WINDOWS.get();
     WINDOWS.set([true, last]);
-}
-
-/// Whether a loader or mod window or dialog over the world has the cursor,
-/// as of the last frame; from any thread.
-pub(crate) fn cursor_wanted() -> bool {
-    cursor::wanted()
 }
 
 /// Whether the loader or a mod showed a window or a dialog in the last
