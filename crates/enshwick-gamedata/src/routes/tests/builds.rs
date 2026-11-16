@@ -421,11 +421,10 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
     ("voxel.grid_slots", 0x58),
 ];
 
-/// The slider config's own value text, which `ui.slider` shows for format
-/// 2, and the text field's kept byte that starts its typing at its next
-/// input, as its navigation's confirm does; read in the decompiler on
-/// client 26430625 (2026-11-16), the same on every kept client.
-const WIDGET_READS: [(&str, u64); 2] = [("ui.slider_text", 0x58), ("ui.text_field_start", 0x198a)];
+/// The text field's kept byte that starts its typing at its next input, as
+/// its navigation's confirm does; read in the decompiler on client 26430625
+/// (2026-11-16), the same on every kept client.
+const WIDGET_READS: [(&str, u64); 1] = [("ui.text_field_start", 0x198a)];
 
 /// The interaction prompt's title, valid byte and verb in the interface's
 /// play data, and the open screen's host entity, the same on every kept

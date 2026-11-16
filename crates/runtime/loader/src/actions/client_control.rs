@@ -23,12 +23,23 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::input::CAMERA_ROTATION.id(),
     pinned::input::CLIENT_BUILD.id(),
     pinned::input::MOVEMENT_STICK.id(),
+    pinned::input::TARGET_SELECTION.id(),
+    pinned::input::DIGITAL_INPUT.id(),
     pinned::ui::MENU_TAB.id(),
     pinned::ui::RECIPE_DIRECTORY.id(),
     pinned::ui::RECIPE_HIGHLIGHTED.id(),
     pinned::ui::RECIPE_SELECT.id(),
     pinned::ui::TOGGLE_HUD_SCREEN.id(),
 ];
+
+/// The input builder's passes, by its mode argument (client 26430625,
+/// seen live).
+pub(crate) mod pass {
+    /// The pass that writes the stick, once per game step.
+    pub(crate) const STEP: u32 = 0;
+    /// The pass that writes only the look, once per frame.
+    pub(crate) const FRAME: u32 = 1;
+}
 
 /// Why a group's entry fails: the table lacks it.
 const ABSENT: &str = "this build lacks it";
@@ -134,6 +145,11 @@ pub(crate) struct InputLayout {
     movement_stick: usize,
     /// `ClientPlayerInput.data.cameraRotationInput`.
     camera_rotation: usize,
+    /// `ClientPlayerInput.data.targetSelectionInput`, a float pair.
+    target_selection: usize,
+    /// `ClientPlayerInput.data.digitalInput`, the 64-bit mask of the
+    /// buttons held: interact, attack, jump, dodge and the rest.
+    digital_input: usize,
     /// The input mapping's byte that is 1 while the game blocks the
     /// player's input, which the builder checks first.
     blocked: usize,
@@ -243,8 +259,37 @@ impl InputLayout {
         Ok(Self {
             movement_stick: inside(pinned::input::MOVEMENT_STICK, size_of::<[f32; 2]>())?,
             camera_rotation: inside(pinned::input::CAMERA_ROTATION, size_of::<Look>())?,
+            target_selection: inside(pinned::input::TARGET_SELECTION, size_of::<[f32; 2]>())?,
+            digital_input: inside(pinned::input::DIGITAL_INPUT, size_of::<u64>())?,
             blocked: offset(loader, pinned::input::BLOCKED)?,
         })
+    }
+
+    /// Holds the player's input the builder just wrote in pass `mode`, as
+    /// the builder leaves it while the game blocks the input: no buttons, no
+    /// target selection, and the stick in the step pass or the look in the
+    /// frame pass. Each of those two is cleared only in the pass that writes
+    /// it, so a mod's move or look command written after this pass stays.
+    ///
+    /// # Safety
+    ///
+    /// - `input` is valid for writes of the build's `ClientPlayerInput`,
+    ///   which nothing else touches during the call.
+    pub(crate) unsafe fn hold(&self, input: *mut u8, mode: u32) {
+        // SAFETY: the caller's record, which `resolve` checked holds a
+        // 64-bit mask at `digital_input` and a float pair at
+        // `target_selection`.
+        unsafe {
+            enshwick_core::raw::write_at(input, self.digital_input, 0u64);
+            enshwick_core::raw::write_at(input, self.target_selection, [0f32; 2]);
+        }
+        match mode {
+            // SAFETY: the caller's record, by this function's `# Safety`.
+            pass::STEP => unsafe { self.set_movement_stick(input, [0.0; 2]) },
+            // SAFETY: the caller's record, by this function's `# Safety`.
+            pass::FRAME => unsafe { self.set_camera_rotation(input, Look::default()) },
+            _ => {}
+        }
     }
 
     /// Whether the game blocks the player's input, as the builder's own
@@ -410,6 +455,8 @@ fn fits(at: usize, size: usize, record: usize) -> bool {
 pub(crate) const BENCH_INPUT: InputLayout = InputLayout {
     movement_stick: 0x2b8,
     camera_rotation: 0x2c4,
+    target_selection: 0x2ec,
+    digital_input: 0x3a8,
     blocked: 0xad5a,
 };
 
@@ -521,17 +568,50 @@ mod tests {
         let look: Look = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]];
         put(&mut input, 0x2b8, [0.5f32, -1.0]);
         put(&mut input, 0x2c4, look);
-        let layout = InputLayout {
-            movement_stick: 0x2b8,
-            camera_rotation: 0x2c4,
-            blocked: 0xad5a,
-        };
+        let layout = BENCH_INPUT;
         // SAFETY: the record above, of the build's size.
         let stick = unsafe { layout.movement_stick(input.as_ptr()) };
         // SAFETY: the same record.
         let read = unsafe { layout.camera_rotation(input.as_ptr()) };
         assert_eq!(stick, [0.5, -1.0]);
         assert_eq!(read, look);
+    }
+
+    #[test]
+    fn the_hold_clears_the_buttons_every_pass_and_the_stick_or_look_only_in_its_own() {
+        let look: Look = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]];
+        let written = || {
+            let mut input = vec![0u8; 0x600];
+            put(&mut input, 0x2b8, [0.5f32, -1.0]);
+            put(&mut input, 0x2c4, look);
+            put(&mut input, 0x2ec, [0.25f32, 0.75]);
+            put(&mut input, 0x3a8, u64::MAX);
+            input
+        };
+        let layout = BENCH_INPUT;
+        let read = |input: &[u8]| {
+            // SAFETY: each read lies inside the record, of the build's size.
+            unsafe {
+                (
+                    layout.movement_stick(input.as_ptr()),
+                    layout.camera_rotation(input.as_ptr()),
+                    enshwick_core::raw::read_at::<[f32; 2]>(input.as_ptr(), 0x2ec),
+                    enshwick_core::raw::read_at::<u64>(input.as_ptr(), 0x3a8),
+                )
+            }
+        };
+        let mut step = written();
+        // SAFETY: the record above, of the build's size, not shared.
+        unsafe { layout.hold(step.as_mut_ptr(), pass::STEP) };
+        assert_eq!(read(&step), ([0.0; 2], look, [0.0; 2], 0), "the step pass");
+        let mut frame = written();
+        // SAFETY: as above.
+        unsafe { layout.hold(frame.as_mut_ptr(), pass::FRAME) };
+        assert_eq!(
+            read(&frame),
+            ([0.5, -1.0], Look::default(), [0.0; 2], 0),
+            "the frame pass"
+        );
     }
 
     #[test]

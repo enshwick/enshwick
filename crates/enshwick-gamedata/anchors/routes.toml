@@ -6601,14 +6601,6 @@ take = "address"
 check = ["cmp cl,?", "ja ?", "movzx eax,cl"]
 
 [[route]]
-id = "ui.slider_text"
-sides = ["client"]
-in = "ui.slider"
-shape = ["movups xmm0,[r14+*]", "movsd xmm1,[r14+?]"]
-take = "value"
-range = [38, 152]
-
-[[route]]
 id = "ui.slider_init"
 sides = ["client"]
 in = "~c0:ui.dropdown"
@@ -9205,6 +9197,20 @@ id = "input.movement_stick"
 sides = ["client"]
 field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.movementStick"]
 type = "keen::float2"
+range = [0x15c, 0x570]
+
+[[route]]
+id = "input.target_selection"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.targetSelectionInput"]
+type = "keen::float2"
+range = [0x15c, 0x570]
+
+[[route]]
+id = "input.digital_input"
+sides = ["client"]
+field = ["keen::ecs::ClientPlayerInput.data", "keen::ecs::ClientPlayerInputData.digitalInput"]
+type = "keen::ecs::PlayerDigitalInput"
 range = [0x15c, 0x570]
 
 [[route]]

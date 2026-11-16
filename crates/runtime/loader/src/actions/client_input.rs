@@ -4,16 +4,14 @@
 //!
 //! The builder runs per game step (mode 0, the stick) and per frame (mode
 //! 1, the look), on the interface's thread (client 26430625, seen live).
-//! While a loader window shows over the world, the player's own look and
-//! stick are held ([`crate::engine::screens::window_shows`]).
-//! Until a mod hands one over and with no window, its detour adds two
-//! atomic loads.
+//! Until a mod hands one over, its detour adds one atomic load.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use enshwick_core::abi::{ClientCommandStatus as Status, HookFlags};
 
 use crate::actions::client_commands::{Handoff, Progress};
+use crate::actions::client_control::pass::{FRAME, STEP};
 use crate::actions::client_control::{GROUPS, InputLayout, Look};
 use crate::actions::local_held;
 use crate::engine::fuse::Fuse;
@@ -23,10 +21,6 @@ use crate::engine::pinned;
 
 /// The feature's name in the log and on the Mods screen.
 const FEATURE: &str = "the client's look and move commands";
-/// The builder's mode that writes the stick, once per game step.
-const STEP: u32 = 0;
-/// The builder's mode that writes only the look, once per frame.
-const FRAME: u32 = 1;
 /// `cameraRotationInput`'s mouse slot, which takes radians per frame with
 /// no time step (client 26430625).
 const MOUSE: usize = 2;
@@ -191,28 +185,6 @@ fn turned(mut game: Look, [yaw, pitch]: [f32; 2]) -> Look {
     game
 }
 
-/// Drops the player's look (frame pass) or stick (step pass) the builder just
-/// wrote, while a loader window or dialog over the world has the cursor: the
-/// camera and the character stay still as under a game screen, which the
-/// game holds by its screen byte, which a loader window does not set (client
-/// 26430625, seen live).
-///
-/// # Safety
-///
-/// - `input` is the local player's live `ClientPlayerInput` the builder
-///   just wrote, on the builder's thread right after the game's pass.
-#[cold]
-unsafe fn hold_player(layout: &InputLayout, input: *mut u8, mode: u32) {
-    match mode {
-        // SAFETY: the caller's record, on the builder's thread.
-        FRAME => unsafe { layout.set_camera_rotation(input, Look::default()) },
-        // SAFETY: the caller's record, by this function's `# Safety`, which
-        // nothing else touches on the builder's thread during the write.
-        STEP => unsafe { layout.set_movement_stick(input, [0.0; 2]) },
-        _ => {}
-    }
-}
-
 /// Runs the builder's pass in `mode` on handed command `id` at `stage`.
 ///
 /// # Safety
@@ -284,8 +256,9 @@ unsafe fn drive(
 crate::engine::chains::chain_detour! {
     /// The client's input builder `(input, consumer, consumer2, _, mapping,
     /// settings, camera, mode, ..)`, twelve arguments and no answer (client
-    /// 26430625). The game's pass runs first; a handed look or move is
-    /// written after it.
+    /// 26430625). The game's pass runs first, then the hold under a loader
+    /// window, whose link sits inside this one; a handed look or move is
+    /// written after both.
     fn client_build(
         input: *mut u8,
         consumer: usize,
@@ -304,14 +277,6 @@ crate::engine::chains::chain_detour! {
     fuse &FUSE, "the client's look and move";
     |onward| {
         onward.call();
-        if crate::engine::screens::window_shows()
-            && !input.is_null()
-            && let Some(layout) = GROUPS.input.get()
-        {
-            // SAFETY: the builder's own non-null input record, right after
-            // its pass on its thread.
-            unsafe { hold_player(layout, input, mode) };
-        }
         if let Some(handed) = DRIVE.handoff.current()
             && let Some(layout) = GROUPS.input.get()
             && !input.is_null()

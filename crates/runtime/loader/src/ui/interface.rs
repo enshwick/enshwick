@@ -18,11 +18,11 @@ use crate::engine::registry::{JoinFeatureError, Registry};
 
 mod arena;
 pub(crate) mod carried;
-mod cursor;
 pub(crate) mod demo;
 mod dialog;
 mod engine;
 mod extensions;
+mod hold;
 mod map;
 mod menu_line;
 mod mods;
@@ -494,7 +494,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
         menu_line::link(loader, engine);
-        cursor::link(loader);
+        hold::link(loader);
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
         link_hud(loader, &HUD_FUSE);
