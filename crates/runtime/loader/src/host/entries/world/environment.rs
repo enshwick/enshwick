@@ -2,8 +2,8 @@
 //! voxels.
 
 use enshwick_core::abi::{
-    DaytimeInfo, Header, Status, TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
-    WeatherSample,
+    DaytimeInfo, Header, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, Voxel,
+    WeatherFront, WeatherSample,
 };
 
 use crate::engine::conflicts::Mode;
@@ -86,6 +86,15 @@ entries! {
         [out, entry_size, capacity, count] as SizedListOut<TerrainMaterialInfo>,
     ) -> Status {
         out.put(&crate::world::terrain::materials(loader)?)
+    }
+
+    fn terrain_material_add(
+        me as Mod,
+        material as Headed<TerrainMaterialAdd>,
+        id as Out<u8>,
+    ) -> Status {
+        let owner = (me.index, me.record.joins_when_on());
+        id.put(crate::content::terrain_materials::add(me.loader, owner, &material)?)
     }
 
     fn terrain_edit(me as Asker, edit as Headed<TerrainEdit>, amount as Out<f32>) -> Status {

@@ -1,4 +1,4 @@
-abi 12.1
+abi 12.2
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -381,7 +381,7 @@ HookSpec size 40 align 8 born 40
     next at 24 size 8 type *const Atomic<usize>
     priority at 32 size 4 type i32
     flags at 36 size 4 type HookFlags
-HostApi size 1680 align 8
+HostApi size 1688 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(ModHandle, *mut BuildInfo) -> Status
@@ -591,6 +591,7 @@ HostApi size 1680 align 8
     loader_off at 1656 size 8 type extern "system" fn(ModHandle, *mut LoaderOff, u32, u32, *mut u32) -> Status
     client_command at 1664 size 8 type extern "system" fn(ModHandle, *const ClientCommand, *mut u64) -> Status
     client_command_status at 1672 size 8 type extern "system" fn(ModHandle, u64, *mut ClientCommandStatus) -> Status
+    terrain_material_add at 1680 size 8 type extern "system" fn(ModHandle, *const TerrainMaterialAdd, *mut u8) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -1014,6 +1015,17 @@ TerrainEdit size 72 align 8 born 72
     radius at 48 size 4 type f32
     height at 52 size 4 type f32
     protect at 56 size 16 type [u8; 16]
+TerrainMaterialAdd size 52 align 4 born 52
+    header at 0 size 8 type Header
+    guid at 8 size 16 type Guid
+    item at 24 size 16 type Guid
+    health at 40 size 4 type i32
+    like at 44 size 1 type u8
+    fallback at 45 size 1 type u8
+    changes at 46 size 1 type u8
+    hardness at 47 size 1 type u8
+    flags at 48 size 1 type u8
+    reserved at 49 size 3 type [u8; 3]
 TerrainMaterialInfo size 20 align 4 born 20
     header at 0 size 8 type Header
     id at 8 size 1 type u8
@@ -1505,6 +1517,11 @@ const TerrainEdit::DRY_RUN = 1
 const TerrainEdit::FLATTEN = 2
 const TerrainEdit::ROUND = 0
 const TerrainEdit::SQUARE = 1
+const TerrainMaterialAdd::ALL_CHANGES = 15
+const TerrainMaterialAdd::FLATTENS = 8
+const TerrainMaterialAdd::HARDNESS = 2
+const TerrainMaterialAdd::HEALTH = 4
+const TerrainMaterialAdd::ITEM = 1
 const TerrainMaterialInfo::FLATTENS = 1
 const TransactionInfo::APPLIED = 1
 const TransactionInfo::EXPIRED = 5

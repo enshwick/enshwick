@@ -61,6 +61,73 @@ the terrain materials of the running game. For each it gives:
 A mod that wants dirt or stone finds the material whose item is the dirt or
 stone item.
 
+## Add a terrain material of your own
+
+`load.add_terrain_material(new)` adds a terrain material during `init` and
+returns its voxel id for this run. The material is a copy of one of the
+game's, named by voxel id in `like`. It takes that material's look and every
+rule `new` does not change. `NewTerrainMaterial` can change these rules:
+
+- the item digging it yields (`terrain_item`, by the item's GUID)
+- the game's hardness category, from 0 (soft) to 5 (unbreakable)
+  (`hardness`)
+- a voxel's health against tools, 1 or more (`health_points`)
+- whether a player's tool can flatten it (`can_be_flattened`)
+
+```rust
+use enshwick::content::{Guid, Id};
+use enshwick::terrain::NewTerrainMaterial;
+
+fn tar_sand(load: &mut enshwick::Load<'_>, sand: u8, tar: Guid) -> Result<u8, enshwick::Off> {
+    let new = NewTerrainMaterial::new(Id::new("you.sands:tar-sand"), sand)
+        .terrain_item(tar)
+        .health_points(7);
+    load.add_terrain_material(new)
+}
+```
+
+In Luau, `enshwick.terrain.add_terrain_material` takes the same fields as
+a table, at the top level of `main.luau`:
+
+```luau
+local tar_sand = enshwick.terrain.add_terrain_material({
+    id = "you.sands:tar-sand",
+    like = 9,
+    health_points = 7,
+})
+```
+
+The game leaves 11 terrain ids free, 117 to 127. Mods' materials take them
+in load order, and the twelfth is refused with its reason in the log. The
+voxel id holds for one run only. Saves name each voxel's material by the
+GUID of its [content id](concepts/ids.md), so a world can give the material
+another id in the next run. Keep the id that `add_terrain_material` returns,
+and place the material with it. `materials()` lists the new material once a
+world runs.
+
+The loader serves the material's rules and effects on the server and on
+clients, and on clients the look of `like`. Only a mod of both sides
+(`side = "both"`) may add one, since every client names the ids in load
+order too. A server-only mod that asks is turned off. A mod turned off
+after it added a material leaves that material its id, as a copy of its
+fallback. A material of a mod's own has the game's default behaviour in water, and a
+texture of its own is not offered.
+
+### A world without the mod
+
+A world may hold a mod's material and load without the mod. The ground of
+that material then loads as its fallback: `like`, or the game's material
+set with `fallback`. The loader keeps every material a mod ever added, with
+its fallback, in `mods/enshwick/clones.toml`; keep that file. Once the mod
+is back, the ground is the mod's material again. The fallbacks take the
+free ids that mods' materials leave. Past 11 materials of mods and removed
+mods together, the last ones load as air. The record is one per game
+folder, not per world, and each side reads its own. A client whose record
+differs from the server's can draw that ground otherwise.
+
+A server without Enshwick loads that ground as air, and its next save keeps
+the loss.
+
 ## Edits
 
 Every edit changes the ground at once and clients see it; the save keeps

@@ -64,6 +64,23 @@ pub fn terrain_edit_valid(edit: &crate::abi::TerrainEdit) -> bool {
         }
 }
 
+/// Whether the loader takes the changes of the terrain material `material`.
+///
+/// The loader and the fake host share it: changes it knows, a health of 1
+/// or more and a hardness the game names when it sets them.
+#[must_use]
+pub fn terrain_material_changes_valid(material: &crate::abi::TerrainMaterialAdd) -> bool {
+    use crate::abi::TerrainMaterialAdd;
+    let sets = |change| material.changes & change != 0;
+    material.changes & !TerrainMaterialAdd::ALL_CHANGES == 0
+        && (!sets(TerrainMaterialAdd::HEALTH) || material.health >= 1)
+        && (!sets(TerrainMaterialAdd::HARDNESS) || material.hardness <= HARDEST)
+}
+
+/// The hardest of the game's hardness categories, `Unbreakable`
+/// (`HardnessCategory`, reflection 26430625).
+pub const HARDEST: u8 = 5;
+
 /// `status` of a world call as its outcome.
 ///
 /// # Errors

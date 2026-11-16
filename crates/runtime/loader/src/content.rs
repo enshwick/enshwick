@@ -40,6 +40,11 @@ pub(crate) mod standins;
     expect(dead_code, reason = "only the client's interface lists templates")
 )]
 pub(crate) mod template_names;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game serves terrain materials")
+)]
+pub(crate) mod terrain_materials;
 #[cfg(windows)]
 pub(crate) mod textures;
 

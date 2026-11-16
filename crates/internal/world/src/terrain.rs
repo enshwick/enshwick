@@ -35,8 +35,9 @@
 //! ```
 
 use crate::WorldError;
-use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
-use crate::{Host, ItemId};
+use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo};
+use crate::content::{Guid, Id};
+use crate::{Host, ItemId, Off};
 
 /// The largest radius and height of an edit, in metres.
 pub const MAX_RADIUS: f32 = 16.0;
@@ -63,6 +64,186 @@ pub struct TerrainTerraformingConfig {
     pub health_points: i32,
     /// Whether a player's tool can flatten it.
     pub can_be_flattened: bool,
+}
+
+/// A terrain material of a mod's own: a copy of one of the game's, its look
+/// included, with rules changed, for
+/// [`Load::add_terrain_material`](../struct.Load.html#method.add_terrain_material).
+///
+/// The loader gives mods' materials the terrain ids the game leaves free,
+/// 117 to 127, in load order, so the twelfth is refused. Its id holds for
+/// one run; saves name its ground by its content id, so a world keeps it
+/// from run to run. In a world loaded without the mod, its ground loads as
+/// `fallback` under Enshwick and as air under a server without it. Every
+/// client draws the ground from its own copy of the game's tables, so a mod
+/// that adds one runs on clients too.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::{Guid, Id};
+/// use enshwick::terrain::NewTerrainMaterial;
+///
+/// fn tar_sand(load: &mut enshwick::Load<'_>, sand: u8, tar: Guid) -> Result<u8, enshwick::Off> {
+///     let new = NewTerrainMaterial::new(Id::new("you.sands:tar-sand"), sand)
+///         .terrain_item(tar)
+///         .health_points(7);
+///     load.add_terrain_material(new)
+/// }
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct NewTerrainMaterial {
+    /// Its content id, `mod:name`.
+    pub id: Id,
+    /// The game's terrain material it copies, by voxel id: its look and
+    /// every rule it does not change.
+    pub like: u8,
+    /// The game's terrain material its ground loads as in a world loaded
+    /// without the mod, by voxel id; `None` for `like`.
+    #[script(default)]
+    pub fallback: Option<u8>,
+    /// The item digging it yields, by its GUID.
+    #[script(default)]
+    pub terrain_item: Option<Guid>,
+    /// How hard it is to dig: the game's hardness category, from 0 (`Soft`)
+    /// to 5 (`Unbreakable`).
+    #[script(default)]
+    pub hardness: Option<u8>,
+    /// The health a voxel of it has against tools, 1 or more.
+    #[script(default)]
+    pub health_points: Option<i32>,
+    /// Whether a player's tool can flatten it.
+    #[script(default)]
+    pub can_be_flattened: Option<bool>,
+}
+
+impl NewTerrainMaterial {
+    /// A copy of the game's terrain material `like` under the content id
+    /// `id`, falling back to `like`.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewTerrainMaterial`].
+    #[must_use]
+    pub const fn new(id: Id, like: u8) -> Self {
+        Self {
+            id,
+            like,
+            fallback: None,
+            terrain_item: None,
+            hardness: None,
+            health_points: None,
+            can_be_flattened: None,
+        }
+    }
+
+    /// Makes its ground load as the game's material `fallback` instead in a
+    /// world loaded without the mod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    /// use enshwick::terrain::NewTerrainMaterial;
+    ///
+    /// let ore = NewTerrainMaterial::new(Id::new("you.ores:glow-rock"), 24).fallback(9);
+    /// assert_eq!(ore.fallback, Some(9));
+    /// ```
+    #[must_use]
+    pub const fn fallback(mut self, fallback: u8) -> Self {
+        self.fallback = Some(fallback);
+        self
+    }
+
+    /// Sets the item digging it yields.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewTerrainMaterial`].
+    #[must_use]
+    pub const fn terrain_item(mut self, item: Guid) -> Self {
+        self.terrain_item = Some(item);
+        self
+    }
+
+    /// Sets how hard it is to dig.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    /// use enshwick::terrain::NewTerrainMaterial;
+    ///
+    /// let hard = NewTerrainMaterial::new(Id::new("you.ores:hard-sand"), 9).hardness(3);
+    /// assert_eq!(hard.hardness, Some(3));
+    /// ```
+    #[must_use]
+    pub const fn hardness(mut self, hardness: u8) -> Self {
+        self.hardness = Some(hardness);
+        self
+    }
+
+    /// Sets the health a voxel of it has against tools.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewTerrainMaterial`].
+    #[must_use]
+    pub const fn health_points(mut self, health: i32) -> Self {
+        self.health_points = Some(health);
+        self
+    }
+
+    /// Sets whether a player's tool can flatten it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    /// use enshwick::terrain::NewTerrainMaterial;
+    ///
+    /// let rough = NewTerrainMaterial::new(Id::new("you.ores:rough-sand"), 9).can_be_flattened(false);
+    /// assert_eq!(rough.can_be_flattened, Some(false));
+    /// ```
+    #[must_use]
+    pub const fn can_be_flattened(mut self, flattens: bool) -> Self {
+        self.can_be_flattened = Some(flattens);
+        self
+    }
+
+    /// The material as the loader takes it, under the GUID `guid`.
+    fn request(&self, guid: Guid) -> TerrainMaterialAdd {
+        let mut changes = 0;
+        let mut set = |value: bool, bit| {
+            if value {
+                changes |= bit;
+            }
+        };
+        set(self.terrain_item.is_some(), TerrainMaterialAdd::ITEM);
+        set(self.hardness.is_some(), TerrainMaterialAdd::HARDNESS);
+        set(self.health_points.is_some(), TerrainMaterialAdd::HEALTH);
+        set(
+            self.can_be_flattened.is_some(),
+            TerrainMaterialAdd::FLATTENS,
+        );
+        TerrainMaterialAdd {
+            header: Header::of::<TerrainMaterialAdd>(),
+            guid,
+            item: self.terrain_item.unwrap_or(Guid::NIL),
+            health: self.health_points.unwrap_or(0),
+            like: self.like,
+            fallback: self.fallback.unwrap_or(self.like),
+            changes,
+            hardness: self.hardness.unwrap_or(0),
+            flags: if self.can_be_flattened == Some(true) {
+                TerrainMaterialInfo::FLATTENS
+            } else {
+                0
+            },
+            reserved: [0; 3],
+        }
+    }
 }
 
 /// The shape of an edit.
@@ -358,6 +539,10 @@ pub trait LoadMethods {
     #[doc(hidden)]
     #[must_use]
     fn terrain(&mut self) -> Terrain;
+
+    /// As `Load::add_terrain_material`.
+    #[doc(hidden)]
+    fn add_terrain_material(&mut self, new: NewTerrainMaterial) -> Result<u8, Off>;
 }
 
 impl crate::script::Bound for Terrain {
@@ -368,7 +553,7 @@ impl crate::script::Bound for Terrain {
     const PARTS: &'static [&'static [crate::script::Function<Self>]] =
         <Self as crate::script::Object>::PARTS;
 
-    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(load.base_mut().terrain())
     }
 }
@@ -379,5 +564,15 @@ impl LoadMethods for crate::BaseLoad {
             host: self.host(),
             dry: false,
         }
+    }
+
+    fn add_terrain_material(&mut self, new: NewTerrainMaterial) -> Result<u8, Off> {
+        let host = self.host();
+        let guid = crate::resources::declare(host, &new.id.to_string())?;
+        let request = new.request(guid);
+        let mut id = 0u8;
+        let status =
+            (host.api().terrain_material_add)(host.handle(), &raw const request, &raw mut id);
+        crate::load::ok(status, id, || format!("terrain material {}", new.id))
     }
 }

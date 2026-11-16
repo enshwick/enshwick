@@ -222,6 +222,8 @@ pub(crate) struct State {
     pub(crate) forecasts: Vec<(u32, i64)>,
     /// The terrain materials, once a world runs.
     pub(crate) terrain: Option<Vec<TerrainMaterialInfo>>,
+    /// The terrain materials the mod added, in order.
+    pub(crate) terrain_added: Vec<enshwick_core::abi::TerrainMaterialAdd>,
     /// The terrain edits and transactions the mod asked for.
     pub(crate) edits: WorldEdits,
     /// Whether the mod opened the fog of war.
@@ -473,6 +475,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         weather: None,
         forecasts: Vec::new(),
         terrain: None,
+        terrain_added: Vec::new(),
         edits: WorldEdits::default(),
         fog_opened: false,
         config_schemas: std::collections::BTreeMap::new(),
@@ -786,4 +789,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     loader_off,
     client_command,
     client_command_status,
+    terrain_material_add,
 };

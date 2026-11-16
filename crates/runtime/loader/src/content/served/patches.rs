@@ -136,7 +136,8 @@ fn rebuild_readers(list: &[Served], entry: &Served) {
 /// The game's first build of `entry` from its base, recorded in `state`:
 /// the bytes built, which stay for the process, and the mods that built
 /// them; the base is kept when a mod asked for it or a patch read another
-/// served key. `None`, recorded as failed, when no patch built.
+/// served key. Recorded as failed when no patch built: then a copy of the
+/// base for a changed vanilla key, and `None` for a new one.
 ///
 /// # Safety
 ///
@@ -149,7 +150,20 @@ pub(super) unsafe fn build_first(
 ) -> Option<(usize, usize)> {
     let Some(mut built) = run_patches(entry, data, len, None, Build::Game) else {
         state.failed = true;
-        return None;
+        if entry.key != entry.base {
+            return None;
+        }
+        // A changed vanilla key whose every patch failed reads as the
+        // archive has it: missing, it would take the game's own data away.
+        let mut base = vec![0; len];
+        // SAFETY: the caller guarantees `len` readable bytes at `data`,
+        // unchanged for the call.
+        unsafe { crate::engine::memory::read_bytes(data, 0, &mut base) };
+        let kept = Buffer::new(base.into_boxed_slice());
+        let result = (kept.at(), len);
+        kept.keep();
+        state.built = Some(result);
+        return Some(result);
     };
     if built.reads || entry.keeps_base.load(Ordering::Relaxed) {
         let mut base = vec![0; len];

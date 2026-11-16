@@ -28,6 +28,9 @@ pub(crate) struct Clones {
     pub(crate) templates: BTreeMap<String, String>,
     /// Cloned items.
     pub(crate) items: BTreeMap<String, String>,
+    /// Terrain materials mods added: each GUID to the GUID of the vanilla
+    /// material its ground loads as without it.
+    pub(crate) terrain: BTreeMap<String, String>,
 }
 
 impl Clones {
@@ -54,6 +57,18 @@ impl Clones {
         changed
     }
 
+    /// Adds each terrain material of `added`, a GUID and its fallback's;
+    /// whether anything was new.
+    pub(crate) fn add_terrain(&mut self, added: impl IntoIterator<Item = (Guid, Guid)>) -> bool {
+        let mut changed = false;
+        for (material, fallback) in added {
+            let fallback = fallback.to_string();
+            let previous = self.terrain.insert(material.to_string(), fallback.clone());
+            changed |= previous.as_ref() != Some(&fallback);
+        }
+        changed
+    }
+
     /// The template clones: clone GUID to vanilla GUID.
     pub(crate) fn template_aliases(&self) -> FxHashMap<Guid, Guid> {
         self.templates
@@ -61,6 +76,24 @@ impl Clones {
             .filter_map(|(clone, vanilla)| Some((guid(clone)?, guid(vanilla)?)))
             .collect()
     }
+
+    /// The terrain materials: material GUID and its fallback's GUID, in the
+    /// record's order.
+    pub(crate) fn terrain(&self) -> Vec<(Guid, Guid)> {
+        self.terrain
+            .iter()
+            .filter_map(|(material, fallback)| Some((guid(material)?, guid(fallback)?)))
+            .collect()
+    }
+}
+
+/// What the record holds once [`update`] added this run's.
+#[derive(Debug, Default)]
+pub(crate) struct Recorded {
+    /// The template clones: clone GUID to vanilla GUID.
+    pub(crate) aliases: FxHashMap<Guid, Guid>,
+    /// The terrain materials: material GUID and its fallback's GUID.
+    pub(crate) terrain: Vec<(Guid, Guid)>,
 }
 
 /// `text` as a GUID; `None` unless it is one.
@@ -90,12 +123,13 @@ pub(crate) fn items(data_dir: &Path) -> Vec<(Guid, Guid)> {
         })
 }
 
-/// Reads the record in `data_dir`, adds `served` and writes it back when it
-/// changed; returns the template aliases.
+/// Reads the record in `data_dir`, adds `served` and the terrain materials
+/// `terrain` and writes it back when it changed; returns what it holds.
 pub(crate) fn update(
     data_dir: &Path,
     served: impl IntoIterator<Item = (ResourceKey, ResourceKey)>,
-) -> FxHashMap<Guid, Guid> {
+    terrain: impl IntoIterator<Item = (Guid, Guid)>,
+) -> Recorded {
     let path = data_dir.join(FILE);
     let read = enshwick_core::files::read_to_string_if_present(&path)
         .map_err(|error| error.to_string())
@@ -118,7 +152,8 @@ pub(crate) fn update(
             (Clones::default(), false)
         }
     };
-    if clones.add(served) && readable {
+    let new_clone = clones.add(served);
+    if (clones.add_terrain(terrain) || new_clone) && readable {
         let written = toml::to_string(&clones)
             .map_err(|error| error.to_string())
             .and_then(|text| write(&path, &text).map_err(|error| error.to_string()));
@@ -130,13 +165,17 @@ pub(crate) fn update(
             );
         }
     }
-    clones.template_aliases()
+    Recorded {
+        aliases: clones.template_aliases(),
+        terrain: clones.terrain(),
+    }
 }
 
 /// Writes `text` to `path` under the file's header.
 fn write(path: &Path, text: &str) -> std::io::Result<()> {
-    let header = "# Written by the Enshwick loader: every resource a mod cloned and the\n\
-                  # vanilla one it came from. Keep it: saved stations fall back to these.\n\n";
+    let header = "# Written by the Enshwick loader: every resource a mod cloned and every\n\
+                  # terrain material a mod added, with the vanilla one each falls back to.\n\
+                  # Keep it: saved stations and ground fall back to these.\n\n";
     enshwick_core::files::write_atomically(path, format!("{header}{text}"))
 }
 
@@ -196,9 +235,35 @@ mod tests {
             CLONE.key_by_hash(types::TEMPLATE),
             BENCH.key_by_hash(types::TEMPLATE),
         )];
-        assert_eq!(update(&dir, served).len(), 1);
-        let aliases = update(&dir, []);
+        assert_eq!(update(&dir, served, []).aliases.len(), 1);
+        let aliases = update(&dir, [], []).aliases;
         assert_eq!(aliases.get(&CLONE), Some(&BENCH));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_removed_mod_leaves_its_terrain_materials_with_their_fallbacks() {
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-clones-terrain-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        let (tar, sand, rock) = (Guid([1; 16]), Guid([9; 16]), Guid([24; 16]));
+        assert_eq!(update(&dir, [], [(tar, sand)]).terrain, [(tar, sand)]);
+        assert_eq!(
+            update(&dir, [], []).terrain,
+            [(tar, sand)],
+            "kept once the mod is gone"
+        );
+        assert_eq!(
+            update(&dir, [], [(tar, rock)]).terrain,
+            [(tar, rock)],
+            "a changed fallback is the one kept"
+        );
+        let mut clones = Clones::default();
+        assert!(clones.add_terrain([(tar, sand)]));
+        assert!(
+            !clones.add_terrain([(tar, sand)]),
+            "nothing new the second time"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -216,11 +281,11 @@ mod tests {
         };
         let damaged = "[items\nnot toml";
         std::fs::write(dir.join(FILE), damaged).unwrap();
-        let _aliases = update(&dir, served());
+        let _recorded = update(&dir, served(), []);
         assert_eq!(std::fs::read_to_string(dir.join(FILE)).unwrap(), damaged);
         std::fs::remove_file(dir.join(FILE)).unwrap();
         std::fs::create_dir(dir.join(FILE)).unwrap();
-        let _aliases = update(&dir, served());
+        let _recorded = update(&dir, served(), []);
         assert!(dir.join(FILE).is_dir(), "nothing written in its place");
         std::fs::remove_dir_all(&dir).unwrap();
     }

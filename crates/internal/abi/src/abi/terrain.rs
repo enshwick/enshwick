@@ -2,6 +2,7 @@
 
 use crate::abi::Metres;
 use crate::abi::{Header, ItemId, ModHandle};
+use crate::content::Guid;
 
 /// A terrain material of the running game, written by
 /// [`HostApi::terrain_materials`](super::HostApi::terrain_materials).
@@ -46,6 +47,79 @@ impl_headed!(TerrainMaterialInfo);
 impl TerrainMaterialInfo {
     /// A player's tool can flatten it.
     pub const FLATTENS: u8 = 1;
+}
+
+/// A terrain material of a mod's own, for
+/// [`HostApi::terrain_material_add`](super::HostApi::terrain_material_add):
+/// a copy of a vanilla material, its look included, with the rules
+/// `changes` names set from this struct.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, TerrainMaterialAdd, TerrainMaterialInfo};
+/// use enshwick::content::{Guid, Id};
+///
+/// let tar_sand = TerrainMaterialAdd {
+///     header: Header::of::<TerrainMaterialAdd>(),
+///     guid: Id::new("you.sands:tar-sand").guid(),
+///     item: Guid([7; 16]),
+///     health: 7,
+///     like: 9,
+///     fallback: 9,
+///     changes: TerrainMaterialAdd::ITEM | TerrainMaterialAdd::HEALTH,
+///     hardness: 0,
+///     flags: TerrainMaterialInfo::FLATTENS,
+///     reserved: [0; 3],
+/// };
+/// assert_eq!(tar_sand.changes & TerrainMaterialAdd::HARDNESS, 0, "the hardness of 9 stays");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct TerrainMaterialAdd {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The GUID saves name its voxels by: its content id's.
+    pub guid: Guid,
+    /// The item digging it yields, by its GUID, with
+    /// [`TerrainMaterialAdd::ITEM`].
+    pub item: Guid,
+    /// The health a voxel of it has against tools, with
+    /// [`TerrainMaterialAdd::HEALTH`].
+    pub health: i32,
+    /// The game's terrain material it copies, its look and every rule it
+    /// does not change, by voxel id.
+    pub like: u8,
+    /// The game's terrain material its voxels load as while no mod adds it,
+    /// by voxel id.
+    pub fallback: u8,
+    /// The rules it sets: [`TerrainMaterialAdd::ITEM`],
+    /// [`TerrainMaterialAdd::HARDNESS`], [`TerrainMaterialAdd::HEALTH`] and
+    /// [`TerrainMaterialAdd::FLATTENS`], or none.
+    pub changes: u8,
+    /// How hard it is to dig, the game's hardness category from 0 (`Soft`)
+    /// to 5 (`Unbreakable`), with [`TerrainMaterialAdd::HARDNESS`].
+    pub hardness: u8,
+    /// [`TerrainMaterialInfo::FLATTENS`] or none, with
+    /// [`TerrainMaterialAdd::FLATTENS`].
+    pub flags: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+}
+
+impl_headed!(TerrainMaterialAdd);
+
+impl TerrainMaterialAdd {
+    /// Sets the item digging it yields.
+    pub const ITEM: u8 = 1;
+    /// Sets its hardness.
+    pub const HARDNESS: u8 = 1 << 1;
+    /// Sets its health.
+    pub const HEALTH: u8 = 1 << 2;
+    /// Sets whether a player's tool can flatten it.
+    pub const FLATTENS: u8 = 1 << 3;
+    /// Every change it may set.
+    pub const ALL_CHANGES: u8 = Self::ITEM | Self::HARDNESS | Self::HEALTH | Self::FLATTENS;
 }
 
 /// A terrain edit, for [`HostApi::terrain_edit`](super::HostApi::terrain_edit).

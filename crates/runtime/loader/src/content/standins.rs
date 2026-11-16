@@ -11,6 +11,7 @@ use enshwick_core::abi::ResourceKey;
 use enshwick_core::content::items::{ItemLayout, NewItem, clone_item, list_item};
 use enshwick_core::content::{Guid, Id};
 
+use crate::content::served::Builder;
 use crate::engine::catalogue::{Reflected, types};
 use crate::engine::loader::Loader;
 
@@ -18,8 +19,6 @@ use crate::engine::loader::Loader;
 const NAME: Id = Id::new("enshwick:stand-in.name");
 /// The tag of a stand-in's description.
 const DESCRIPTION: Id = Id::new("enshwick:stand-in.description");
-/// Builds a served resource from its base's bytes.
-pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
 
 /// One stand-in: its key, the vanilla item's key and its builder.
 pub(crate) type StandIn = (ResourceKey, ResourceKey, Builder);

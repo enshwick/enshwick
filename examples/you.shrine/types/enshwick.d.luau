@@ -1878,6 +1878,24 @@ export type NewTemplate = {
 	changes: {ComponentChange},
 }
 
+--- A terrain material of a mod's own: a copy of one of the game's, its look included, with rules changed, for `Load.add_terrain_material`. The loader gives mods' materials the terrain ids the game leaves free, 117 to 127, in load order, so the twelfth is refused. Its id holds for one run; saves name its ground by its content id, so a world keeps it from run to run. In a world loaded without the mod, its ground loads as `fallback` under Enshwick and as air under a server without it. Every client draws the ground from its own copy of the game's tables, so a mod that adds one runs on clients too.
+export type NewTerrainMaterial = {
+	--- Its content id, `mod:name`.
+	id: string,
+	--- The game's terrain material it copies, by voxel id: its look and every rule it does not change.
+	like: number,
+	--- The game's terrain material its ground loads as in a world loaded without the mod, by voxel id; nil for `like`.
+	fallback: number?,
+	--- The item digging it yields, by its GUID.
+	terrain_item: string?,
+	--- How hard it is to dig: the game's hardness category, from 0 (`Soft`) to 5 (`Unbreakable`).
+	hardness: number?,
+	--- The health a voxel of it has against tools, 1 or more.
+	health_points: number?,
+	--- Whether a player's tool can flatten it.
+	can_be_flattened: boolean?,
+}
+
 --- A new workshop for `Load.add_workshop`, named by one id. The station item is `id`; the station's other ids derive from it with `Id.part`: its template `<id>.template`, its workshop `<id>.workshop`, its recipe `<id>.recipe`, and the tags of its name and description, `<id>.name` and `<id>.description`. So `id` is a plain id, never one derived with `Id.part`, even when the same id written in full would fit. Every id is the mod's own and never changes: saves keep the template GUID of each placed station and the item id of each stack.
 export type NewWorkshop = {
 	--- The vanilla station cloned: what the new one looks like and does.
@@ -4025,6 +4043,9 @@ declare enshwick: {
 		flatten: (position: vector, radius: number, material: number, shape: Shape) -> boolean,
 		--- The same terrain for edits that only count: each returns what it would change and changes nothing.
 		dry: () -> Terrain,
+		--- Adds the terrain material `new` to the game and returns its voxel id for this run, to place with `Terrain.add`; the material's rules, effects and look are served on both sides, and `Terrain.materials` lists it once the world runs.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_terrain_material: (new: NewTerrainMaterial) -> number,
 	},
 	--- Inventories on the server: their slots and counts, and items given, taken and moved.
 	inventory: {

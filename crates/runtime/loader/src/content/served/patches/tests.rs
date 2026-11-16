@@ -269,6 +269,29 @@ fn a_served_read_whose_every_patch_fails_reads_a_changed_key_as_archived_and_a_n
 }
 
 #[test]
+fn the_game_s_build_whose_every_patch_fails_serves_a_changed_key_as_archived_and_a_new_one_as_missing()
+ {
+    let base = [5u8; 3];
+    let at = base.as_ptr().expose_provenance();
+    let changed = Served::new(KEY, KEY, vec![by_loader(fail)], false);
+    let mut state = State::default();
+    // SAFETY: `base` holds three readable bytes, unchanged for the call.
+    let (data, len) = unsafe { build_first(&changed, &mut state, at, base.len()) }.unwrap();
+    assert_ne!(data, at, "a copy the loader keeps, not the game's bytes");
+    // SAFETY: `build_first` kept `len` bytes at `data` for the process.
+    let kept =
+        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(data), len) };
+    assert_eq!(kept, base);
+    assert!(state.failed, "no mod counts as serving it");
+    let new = ResourceKey { part: 1, ..KEY };
+    let added = Served::new(new, KEY, vec![by_loader(fail)], false);
+    let mut state = State::default();
+    // SAFETY: `base` holds three readable bytes, unchanged for the call.
+    assert!(unsafe { build_first(&added, &mut state, at, base.len()) }.is_none());
+    assert!(state.failed);
+}
+
+#[test]
 fn served_reads_free_every_buffer_their_patches_took() {
     let entry = Served::new(KEY, KEY, vec![by_loader(grow), by_loader(grow)], false);
     for _ in 0..100 {
