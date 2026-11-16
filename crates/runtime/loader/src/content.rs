@@ -51,6 +51,7 @@ use crate::engine::parts::{Part, fused, part};
 #[cfg(windows)]
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
+        table_ids: recipes::TABLE_IDS,
         link: Some(recipes::init),
         forget: Some(fused!("recipes forgetting a hosted game", |_| {
             recipes::forget();

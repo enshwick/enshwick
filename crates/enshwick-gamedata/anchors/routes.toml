@@ -4435,6 +4435,21 @@ called_by = ["npc_recipe_comfort_requirements"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi"]
 
 [[route]]
+id = "recipe.menu_known"
+sides = ["client"]
+callers = "item.info"
+shape = [
+  "mov ecx,[rcx+?]",
+  "call {item.info}",
+  "test rax,rax",
+  "je ?",
+  "cmp [rbx+?],?",
+  "jne ?",
+  "mov r15d,[rbx+?]",
+]
+check = ["mov [rsp+0x18],rbx", "mov [rsp+0x20],rbp", "push rsi", "push rdi"]
+
+[[route]]
 id = "resource.key_of"
 in = "~loader:resource.key_of"
 shape = [
@@ -6568,6 +6583,28 @@ id = "ui.slider_format"
 sides = ["client"]
 in = "ui.slider"
 shape = ["mov eax,[r14+*]", "test eax,eax"]
+take = "value"
+range = [38, 152]
+
+[[route]]
+id = "ui.screen_shows_cursor"
+sides = ["client"]
+system = "local_player_ui_render_setup"
+shape = [
+  "movzx ecx,[rcx+?]",
+  "call *",
+  "test al,al",
+  "je ?",
+  "xor edx,edx",
+]
+take = "address"
+check = ["cmp cl,?", "ja ?", "movzx eax,cl"]
+
+[[route]]
+id = "ui.slider_text"
+sides = ["client"]
+in = "ui.slider"
+shape = ["movups xmm0,[r14+*]", "movsd xmm1,[r14+?]"]
 take = "value"
 range = [38, 152]
 
@@ -8807,6 +8844,21 @@ loads = ["LegalLine"]
 id = "~fn:ui.main_menu_site"
 sides = ["client"]
 loads = ["mainMenuTextContentBoundingBox"]
+
+[[route]]
+id = "~text_field_step"
+sides = ["client"]
+in = "ui.text_field_input"
+shape = ["mov r8,r14", "lea rdx,[rsp+?]", "mov rcx,rbx", "call *"]
+take = "address"
+
+[[route]]
+id = "ui.text_field_start"
+sides = ["client"]
+in = "~text_field_step"
+shape = ["cmp [rsi+*],?", "je ?", "movups xmm0,[r15]"]
+take = "value"
+range = [0xcc4, 0x3310]
 
 [[route]]
 id = "~fn:ui.text_field_editing"

@@ -84,6 +84,32 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "text.format", 0xaf_f930),
     ("1.0 client (26082781)", "ui.dropdown_external", 0xc76),
     ("1.0 client (26320373)", "ui.dropdown_external", 0xc76),
+    // The crafting menus' question whether a recipe shows, which their book
+    // and the recipe tiles ask; read in the decompiler on 26430625, found by
+    // the route on the other kept clients.
+    ("1.0 client (26430625)", "recipe.menu_known", 0xd6_63b0),
+    ("1.0 client (26320373)", "recipe.menu_known", 0xd6_62f0),
+    ("1.0 client (1269579)", "recipe.menu_known", 0xd5_0c90),
+    ("1.0 client (26082781)", "recipe.menu_known", 0xd5_2710),
+    // The predicate the client tick shows the cursor by in the world, from
+    // the HUD screen byte; read in the decompiler on 26430625, found by the
+    // route on the other kept clients.
+    (
+        "1.0 client (26430625)",
+        "ui.screen_shows_cursor",
+        0x122_19f0,
+    ),
+    (
+        "1.0 client (26320373)",
+        "ui.screen_shows_cursor",
+        0x122_26c0,
+    ),
+    ("1.0 client (1269579)", "ui.screen_shows_cursor", 0x120_3360),
+    (
+        "1.0 client (26082781)",
+        "ui.screen_shows_cursor",
+        0x120_5610,
+    ),
     // The text field's look, which its constructor zeroes and the rename
     // dialog sets; read in both on 26082781 and 26430625.
     ("1.0 client (1269579)", "ui.text_field_look", 0x148),
@@ -395,6 +421,12 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
     ("voxel.grid_slots", 0x58),
 ];
 
+/// The slider config's own value text, which `ui.slider` shows for format
+/// 2, and the text field's kept byte that starts its typing at its next
+/// input, as its navigation's confirm does; read in the decompiler on
+/// client 26430625 (2026-11-16), the same on every kept client.
+const WIDGET_READS: [(&str, u64); 2] = [("ui.slider_text", 0x58), ("ui.text_field_start", 0x198a)];
+
 /// The interaction prompt's title, valid byte and verb in the interface's
 /// play data, and the open screen's host entity, the same on every kept
 /// client (static, research of 2026-11-06); the screen a stacked screen
@@ -416,8 +448,8 @@ const CLIENT_TABLES: [&str; 4] = [
     "1.0 client (26430625)",
 ];
 
-/// [`ROUTED_ONLY`], and the [`PLAY_DATA_READS`] and
-/// [`CLIENT_CONTROL_READS`] of each of [`CLIENT_TABLES`].
+/// [`ROUTED_ONLY`], and the [`PLAY_DATA_READS`], [`CLIENT_CONTROL_READS`]
+/// and [`WIDGET_READS`] of each of [`CLIENT_TABLES`].
 fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
     ROUTED_ONLY
         .iter()
@@ -426,6 +458,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
             PLAY_DATA_READS
                 .into_iter()
                 .chain(CLIENT_CONTROL_READS)
+                .chain(WIDGET_READS)
                 .map(move |(id, value)| (table, id, value))
         }))
 }

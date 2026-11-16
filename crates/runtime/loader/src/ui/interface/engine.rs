@@ -241,6 +241,10 @@ pub(super) struct Layout {
     slider_on_release: usize,
     slider_steps: usize,
     slider_format: usize,
+    /// The text a slider shows for its value when its format asks for the
+    /// caller's own text; `None` where its route misses, and the game
+    /// formats the value with one decimal.
+    slider_text: Option<usize>,
     slider_discrete: usize,
     slider_stop_count: usize,
     slider_stops: usize,
@@ -401,6 +405,7 @@ impl Layout {
             slider_on_release: f(pinned::ui::SLIDER_ON_RELEASE.id())?,
             slider_steps: f(pinned::ui::SLIDER_STEPS.id())?,
             slider_format: f(pinned::ui::SLIDER_FORMAT.id())?,
+            slider_text: f(pinned::ui::SLIDER_TEXT.id()).ok(),
             slider_discrete: f(pinned::ui::SLIDER_DISCRETE.id())?,
             slider_stop_count: f(pinned::ui::SLIDER_STOP_COUNT.id())?,
             slider_stops: f(pinned::ui::SLIDER_STOPS.id())?,

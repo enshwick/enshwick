@@ -466,6 +466,16 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         // which draws the frame, writes it.
         let answered = unsafe { crate::engine::memory::read::<u8>(host, layout.answered) };
         if answered == 0 {
+            // Back (Escape, B) closes the dialog without an answer, as its
+            // buttons need the mouse or Enter; a button pressed in the same
+            // frame wins, so its flag is cleared below.
+            // SAFETY: in a frame of the interface update on its thread, by
+            // this function's `# Safety`.
+            if unsafe { engine.back_pressed(0) }
+                && let Some(gone) = current.take()
+            {
+                gone.answerer.answer(UiDialog::CLOSED);
+            }
             return;
         }
         // SAFETY: `host` is non-zero, checked by the guard before it, and is

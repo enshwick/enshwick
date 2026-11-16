@@ -1,10 +1,13 @@
 //! The game's HUD screens by name: each member of the reflected
 //! `HudScreenType` by the screen byte it stands for, for every layer that
-//! names a screen.
+//! names a screen; and whether a loader or mod window covers the world as a
+//! screen would, for the cursor and the input builder.
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use enshwick_gamedata::catalogue;
+use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
@@ -15,6 +18,46 @@ static NAMES: OnceLock<Vec<&'static str>> = OnceLock::new();
 /// them and at their first panic; the frames then read as outside a game,
 /// and the client snapshot answers off.
 pub(crate) static READS_FUSE: Fuse = Fuse::new("screen reads");
+
+/// How long a window noted in one frame holds the cursor and the player's
+/// input without the next frame noting it again: several slow frames, short
+/// enough that a stopped interface hands the mouse back at once.
+const WINDOW_HOLD_MS: u64 = 250;
+
+/// A loader or mod window over the world, as the interface notes it.
+struct WindowShown {
+    /// Until when, in `GetTickCount64` milliseconds, a window or dialog holds
+    /// the cursor and the player's look and move; 0 for none. Each frame that
+    /// showed one moves it on, so it lapses once the interface stops drawing.
+    until: AtomicU64,
+}
+
+static WINDOW: WindowShown = WindowShown {
+    until: AtomicU64::new(0),
+};
+
+fn now_ms() -> u64 {
+    // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
+    unsafe { GetTickCount64() }
+}
+
+/// Notes, once a frame on the interface thread, whether a loader or mod
+/// window or dialog showed in the last frame.
+pub(crate) fn note_window(shown: bool) {
+    let until = if shown {
+        now_ms().saturating_add(WINDOW_HOLD_MS)
+    } else {
+        0
+    };
+    WINDOW.until.store(until, Ordering::Relaxed);
+}
+
+/// Whether a loader or mod window or dialog shows over the world, which takes
+/// the cursor and holds the player's look and move; from any thread.
+pub(crate) fn window_shows() -> bool {
+    let until = WINDOW.until.load(Ordering::Relaxed);
+    until != 0 && now_ms() < until
+}
 
 /// Each screen byte's name on `loader`'s build, or the type's name when the
 /// build does not reflect it.
@@ -75,5 +118,19 @@ mod tests {
         assert_eq!(name(1), "");
         assert_eq!(byte("InGame"), None);
         assert_eq!(byte(""), None);
+    }
+
+    #[test]
+    fn a_window_holds_the_mouse_only_while_frames_keep_noting_it() {
+        assert!(!window_shows(), "nothing noted");
+        note_window(true);
+        assert!(window_shows());
+        note_window(false);
+        assert!(!window_shows(), "a frame without a window hands it back");
+        WINDOW.until.store(now_ms(), Ordering::Relaxed);
+        assert!(
+            !window_shows(),
+            "an interface that stopped drawing hands it back"
+        );
     }
 }

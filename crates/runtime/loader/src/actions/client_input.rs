@@ -4,7 +4,10 @@
 //!
 //! The builder runs per game step (mode 0, the stick) and per frame (mode
 //! 1, the look), on the interface's thread (client 26430625, seen live).
-//! Until a mod hands one over, its detour adds one atomic load.
+//! While a loader window shows over the world, the player's own look and
+//! stick are held ([`crate::engine::screens::window_shows`]).
+//! Until a mod hands one over and with no window, its detour adds two
+//! atomic loads.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
@@ -188,6 +191,28 @@ fn turned(mut game: Look, [yaw, pitch]: [f32; 2]) -> Look {
     game
 }
 
+/// Drops the player's look (frame pass) or stick (step pass) the builder just
+/// wrote, while a loader window or dialog over the world has the cursor: the
+/// camera and the character stay still as under a game screen, which the
+/// game holds by its screen byte, which a loader window does not set (client
+/// 26430625, seen live).
+///
+/// # Safety
+///
+/// - `input` is the local player's live `ClientPlayerInput` the builder
+///   just wrote, on the builder's thread right after the game's pass.
+#[cold]
+unsafe fn hold_player(layout: &InputLayout, input: *mut u8, mode: u32) {
+    match mode {
+        // SAFETY: the caller's record, on the builder's thread.
+        FRAME => unsafe { layout.set_camera_rotation(input, Look::default()) },
+        // SAFETY: the caller's record, by this function's `# Safety`, which
+        // nothing else touches on the builder's thread during the write.
+        STEP => unsafe { layout.set_movement_stick(input, [0.0; 2]) },
+        _ => {}
+    }
+}
+
 /// Runs the builder's pass in `mode` on handed command `id` at `stage`.
 ///
 /// # Safety
@@ -279,6 +304,14 @@ crate::engine::chains::chain_detour! {
     fuse &FUSE, "the client's look and move";
     |onward| {
         onward.call();
+        if crate::engine::screens::window_shows()
+            && !input.is_null()
+            && let Some(layout) = GROUPS.input.get()
+        {
+            // SAFETY: the builder's own non-null input record, right after
+            // its pass on its thread.
+            unsafe { hold_player(layout, input, mode) };
+        }
         if let Some(handed) = DRIVE.handoff.current()
             && let Some(layout) = GROUPS.input.get()
             && !input.is_null()

@@ -18,6 +18,7 @@ use crate::engine::registry::{JoinFeatureError, Registry};
 
 mod arena;
 pub(crate) mod carried;
+mod cursor;
 pub(crate) mod demo;
 mod dialog;
 mod engine;
@@ -191,6 +192,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::SCROLL_NAV.id(),
     pinned::ui::SCROLL_SET_FOCUS.id(),
     pinned::ui::SCROLL_STATE_SIZE.id(),
+    pinned::ui::SCREEN_SHOWS_CURSOR.id(),
     pinned::ui::SLIDER.id(),
     pinned::ui::SLIDER_BOUNDED.id(),
     pinned::ui::SLIDER_DISCRETE.id(),
@@ -202,6 +204,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::SLIDER_READ_ONLY.id(),
     pinned::ui::SLIDER_EXTENT.id(),
     pinned::ui::SLIDER_STEPS.id(),
+    pinned::ui::SLIDER_TEXT.id(),
     pinned::ui::SLIDER_STOP_CAPACITY.id(),
     pinned::ui::SLIDER_STOP_COUNT.id(),
     pinned::ui::SLIDER_STOPS.id(),
@@ -220,6 +223,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::TEXT_FIELD_STATE.id(),
     pinned::ui::TEXT_FIELD_STATE_KEY.id(),
     pinned::ui::TEXT_FIELD_STATE_SIZE.id(),
+    pinned::ui::TEXT_FIELD_START.id(),
     pinned::ui::TEXT_FIELD_TEXT.id(),
     pinned::ui::TOGGLE.id(),
     pinned::ui::TOGGLE_COUNT.id(),
@@ -261,16 +265,25 @@ struct State {
     /// The thread that draws the interface, once it drew: the game's main
     /// thread, the same for every world.
     ui_thread: AtomicU32,
+    /// The count of the next frame id a scroll area takes; never reset, so
+    /// no area takes the node of another.
+    next_scroll: AtomicU64,
 }
 
 static STATE: State = State {
     next_token: AtomicU64::new(1),
     ui_thread: AtomicU32::new(0),
+    next_scroll: AtomicU64::new(1),
 };
 
 /// A token for the frame callback about to draw, unique in the process.
 fn next_token() -> u64 {
     STATE.next_token.fetch_add(1, Ordering::Relaxed)
+}
+
+/// A count for the next scroll area's frame id, unique in the process.
+fn next_scroll() -> u64 {
+    STATE.next_scroll.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Forgets what the interface kept of a client's hosted game that ended.
@@ -482,6 +495,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
         menu_line::link(loader, engine);
+        cursor::link(loader);
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
         link_hud(loader, &HUD_FUSE);
@@ -594,6 +608,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
         });
     }
     if context == 0 || state.is_null() {
+        crate::engine::screens::note_window(false);
         return;
     }
     let shown = READS_FUSE
@@ -602,6 +617,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     dialog::note_world(shown != UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
+    crate::engine::screens::note_window(window_shown());
     crate::actions::controls::frame(context);
     // SAFETY: inside the frame on the interface thread, `context` non-zero
     // by the guard before it.
