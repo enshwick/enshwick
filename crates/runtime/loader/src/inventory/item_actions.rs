@@ -665,25 +665,19 @@ mod tests {
         0
     }
 
+    /// The one test that registers a filter: the registry is the process's,
+    /// and a sealed one takes no more.
     #[test]
-    fn a_registered_filter_is_wanted_once_sealed_before_any_link() {
-        FILTERS
-            .register(ModIndex::new(0), filter, core::ptr::null_mut())
-            .unwrap();
-        assert!(!wanted(), "open filters answer nothing yet");
-        seal();
-        assert!(wanted(), "game events read it before this part links");
-    }
-
-    #[test]
-    fn a_build_without_the_event_streams_lists_only_the_item_events_off() {
+    fn a_registered_filter_is_wanted_once_sealed_and_its_events_go_off_without_the_streams() {
         let loader = crate::start::tests::bare_loader();
         unscreened(&loader, "ecs.event_streams", "absent");
         assert!(!EVENTS_FUSE.is_off(), "no mod filters items yet");
         FILTERS
             .register(ModIndex::new(0), filter, core::ptr::null_mut())
             .unwrap();
+        assert!(!wanted(), "open filters answer nothing yet");
         seal();
+        assert!(wanted(), "game events read it before this part links");
         unscreened(&loader, "ecs.event_streams", "absent");
         assert!(EVENTS_FUSE.is_off());
         assert!(!ITEMS_FUSE.is_off(), "the item uses still run");

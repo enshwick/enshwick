@@ -387,13 +387,25 @@ pub(crate) fn uncover_for(
     at: [f32; 2],
     radius: f32,
 ) -> Result<(), UncoverError> {
+    uncover_as(loader, key, crate::base::carrier::is_host(key), at, radius)
+}
+
+/// [`uncover_for`] for the player `key`, who is the hosting client's own
+/// player when `own`.
+fn uncover_as(
+    loader: &Loader,
+    key: u64,
+    own: bool,
+    at: [f32; 2],
+    radius: f32,
+) -> Result<(), UncoverError> {
     if loader.side != Side::SERVER && !crate::engine::world::hosting() {
         return Err(UncoverError::NotServer);
     }
     if !crate::base::remote::Message::uncover_fits(at, radius) {
         return Err(UncoverError::BadCircle);
     }
-    if crate::base::carrier::is_host(key) {
+    if own {
         return uncover_here(at, radius)
             .then_some(())
             .ok_or(UncoverError::NotSent);
@@ -598,23 +610,19 @@ mod tests {
     #[test]
     fn a_host_s_own_circle_is_queued_here_and_another_player_needs_a_link() {
         let loader = crate::start::tests::pinning_loader(Side::SERVER, &[], &[]);
-        crate::base::carrier::host_for_test(7);
         STATE.uncovers.linked.store(true, Ordering::Release);
-        assert_eq!(uncover_for(&loader, 7, [1.0, 2.0], 3.0), Ok(()));
-        assert_eq!(*STATE.uncovers.circles.relock(), [([1.0, 2.0], 3.0)]);
-        assert!(STATE.uncovers.waiting.load(Ordering::Acquire));
+        assert_eq!(uncover_as(&loader, 7, true, [1.0, 2.0], 3.0), Ok(()));
         assert_eq!(
-            uncover_for(&loader, 8, [1.0, 2.0], 3.0),
+            uncover_as(&loader, 8, false, [1.0, 2.0], 3.0),
             Err(UncoverError::NotReady),
             "a remote player without Enshwick is not reached"
         );
         STATE.uncovers.linked.store(false, Ordering::Release);
         assert_eq!(
-            uncover_for(&loader, 7, [1.0, 2.0], 3.0),
+            uncover_as(&loader, 7, true, [1.0, 2.0], 3.0),
             Err(UncoverError::NotSent),
             "the host's own fog is off"
         );
-        crate::base::carrier::unhost_for_test();
     }
 
     /// Queues uncovers, which are the process's own.

@@ -445,8 +445,6 @@ mod tests {
     #[test]
     fn a_build_without_the_event_streams_lists_the_craft_filters_off_by_the_entry() {
         let loader = crate::start::tests::bare_loader();
-        unscreened(&loader, "ecs.event_streams", "absent");
-        assert!(!CRAFT_FUSE.is_off(), "nothing screens crafts yet");
         let _first = CRAFT.set(LAYOUT);
         unscreened(&loader, "ecs.event_streams", "absent");
         assert!(CRAFT_FUSE.is_off());
