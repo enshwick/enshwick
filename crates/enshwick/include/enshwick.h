@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 2
+#define ENSHWICK_ABI_MINOR 3
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -3186,6 +3186,31 @@ typedef struct EnshwickTerrainMaterialAdd {
 #define EnshwickTerrainMaterialAdd_FLATTENS (1 << 3)
 // Every change it may set.
 #define EnshwickTerrainMaterialAdd_ALL_CHANGES (((EnshwickTerrainMaterialAdd_ITEM | EnshwickTerrainMaterialAdd_HARDNESS) | EnshwickTerrainMaterialAdd_HEALTH) | EnshwickTerrainMaterialAdd_FLATTENS)
+
+// How the prompt of every object placed from one item reads and what its
+// press does, as `EnshwickHostApi.interaction_prompt`
+// takes it. ABI 12.3.
+//
+// The server writes `verb` and the replaced action, so every
+// client sees them; a client with Enshwick also shows `text`
+// in the verb's place.
+typedef struct EnshwickInteractionPrompt {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The item the objects were placed from (`UsedItem`); never 0.
+  EnshwickItemId item;
+  // The game's `LocaTagId` of the verb every client shows; 0 keeps the
+  // object's own verb.
+  uint32_t verb;
+  // The `LocaTagId` of one of the mod's own texts, shown in the verb's
+  // place on clients with Enshwick; 0 for none.
+  uint32_t text;
+  // `REPLACE_ACTION` or 0.
+  uint32_t flags;
+} EnshwickInteractionPrompt;
+// The press runs the game's empty interaction instead of the object's
+// own action, such as opening a chest, so only the mod's action runs.
+#define EnshwickInteractionPrompt_REPLACE_ACTION 1
 
 
 // A player about to interact with an entity, as
@@ -6401,6 +6426,17 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*terrain_material_add)(EnshwickModHandle me,
                                          const struct EnshwickTerrainMaterialAdd *material,
                                          uint8_t *id);
+  // Gives every object placed from `spec`'s item, a headed
+  // `EnshwickInteractionPrompt`, its prompt: the game verb and the replaced
+  // action in the server's world, the mod's text on this client. One
+  // prompt per item across all mods. Allowed during `enshwick_mod_init`
+  // only; `EnshwickStatus_BAD_ARGS` for a null or short `spec`, item 0, an
+  // unknown flag or a prompt that changes nothing; `EnshwickStatus_REFUSED`
+  // for an item another prompt has; `EnshwickStatus_UNAVAILABLE` for a verb
+  // or an action on a build without the server's writes, while a build
+  // without the client's text site turns the text off alone. ABI 12.3.
+  EnshwickStatus (*interaction_prompt)(EnshwickModHandle me,
+                                       const struct EnshwickInteractionPrompt *spec);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -6838,7 +6874,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1688, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1696, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7050,6 +7086,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, loader_off) == 1656, "offset of
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command) == 1664, "offset of HostApi.client_command");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command_status) == 1672, "offset of HostApi.client_command_status");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 1680, "offset of HostApi.terrain_material_add");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_prompt) == 1688, "offset of HostApi.interaction_prompt");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 56, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -7060,6 +7097,13 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, item) == 20, "offset of Int
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, known) == 24, "offset of Interaction.known");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, reserved) == 25, "offset of Interaction.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, position) == 32, "offset of Interaction.position");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteractionPrompt) == 24, "size of InteractionPrompt");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteractionPrompt) == 4, "alignment of InteractionPrompt");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteractionPrompt, header) == 0, "offset of InteractionPrompt.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteractionPrompt, item) == 8, "offset of InteractionPrompt.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteractionPrompt, verb) == 12, "offset of InteractionPrompt.verb");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteractionPrompt, text) == 16, "offset of InteractionPrompt.text");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteractionPrompt, flags) == 20, "offset of InteractionPrompt.flags");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInventoryOp) == 32, "size of InventoryOp");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInventoryOp) == 4, "alignment of InventoryOp");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInventoryOp, kind) == 0, "offset of InventoryOp.kind");

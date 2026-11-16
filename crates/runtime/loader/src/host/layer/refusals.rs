@@ -118,6 +118,16 @@ impl Refusal for crate::engine::registry::JoinFeatureError {
     }
 }
 
+/// A malformed prompt is a bad argument; the rest as for registering.
+impl Refusal for crate::actions::interaction_prompts::PromptError {
+    fn status(&self) -> Status {
+        match self {
+            Self::Malformed => Status::BAD_ARGS,
+            Self::Register(error) => error.status(),
+        }
+    }
+}
+
 /// A malformed alias is a bad argument; a second ask or a taken name is
 /// refused, the taken name already reported as a part off.
 impl Refusal for crate::actions::commands::NameCommandsError {

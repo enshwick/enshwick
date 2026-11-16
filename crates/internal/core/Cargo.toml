@@ -48,6 +48,8 @@ fake = [
     "enshwick-ui/fake",
 ]
 schema = ["enshwick-packs/schema"]
+# Test-only tables, for the loader's tests against the game's data.
+test = ["enshwick-actions/test"]
 unstable = [
     "enshwick-base/unstable",
     "enshwick-content/unstable",

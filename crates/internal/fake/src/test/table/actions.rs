@@ -5,8 +5,8 @@ use core::ffi::c_void;
 
 use crate::test::table::{Registered, Registration, put, text, with};
 use enshwick_core::abi::{
-    ActionTarget, BuildFilterFn, ChatFilterFn, CraftFilterFn, InteractionFilterFn, ModHandle,
-    Status, Str,
+    ActionTarget, BuildFilterFn, ChatFilterFn, CraftFilterFn, InteractionFilterFn,
+    InteractionPrompt, ModHandle, Status, Str,
 };
 #[cfg(not(feature = "unstable"))]
 use enshwick_core::abi::{ControlFn, ControlSpec};
@@ -98,6 +98,35 @@ pub(crate) extern "system" fn interaction_filter(
         }
         s.interaction_filters
             .push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+/// As the loader: an unreadable spec is a bad argument, then a call after
+/// init is too late, then a malformed spec is a bad argument, and a second
+/// prompt on an item is refused whichever mod asks.
+pub(crate) extern "system" fn interaction_prompt(
+    _me: ModHandle,
+    spec: *const InteractionPrompt,
+) -> Status {
+    // SAFETY: the safe layer passes null or a live `InteractionPrompt` for
+    // the call, readable for the size its header states.
+    let Some(spec) =
+        (unsafe { enshwick_core::abi::read_headed(spec, size_of::<InteractionPrompt>()) })
+    else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if !spec.is_valid() {
+            return Status::BAD_ARGS;
+        }
+        if s.interaction_prompts.iter().any(|p| p.item == spec.item) {
+            return Status::REFUSED;
+        }
+        s.interaction_prompts.push(spec);
         Status::OK
     })
 }

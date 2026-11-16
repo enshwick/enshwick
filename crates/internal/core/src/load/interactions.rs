@@ -1,8 +1,10 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+#[cfg(feature = "unstable")]
+use crate::ItemId;
 use crate::interactions::Interaction;
 #[cfg(feature = "unstable")]
-use crate::interactions::Targets;
+use crate::interactions::{ObjectPrompt, Targets};
 use crate::{Load, Off};
 use enshwick_actions::__load::*;
 
@@ -22,6 +24,33 @@ impl Load<'_> {
     ///
     /// See [`Targets`].
     pub fn interaction_targets(&mut self) -> Result<Targets, Off>;
+}
+
+#[cfg(feature = "unstable")]
+#[enshwick_macros::forward(base)]
+#[crate::script(interaction_prompts)]
+impl Load<'_> {
+    /// Gives the prompt of every object placed from `item` a game verb, the
+    /// mod's own text on clients with Enshwick, or the game's empty action
+    /// in place of the object's own, so the mod's action on
+    /// `AcceptOfferedInteractionEvent` runs alone. Call it in the mods of
+    /// both sides that know the item: the server writes the verb and the
+    /// action, a client shows the text. One prompt per item across all mods.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after init, for item 0 or a prompt that changes nothing, for
+    /// an item another prompt has, or for a verb or an action on a build
+    /// without the server's writes; a build without the client's text site
+    /// turns the text off alone.
+    ///
+    /// # Examples
+    ///
+    /// See [`ObjectPrompt`](crate::interactions::ObjectPrompt).
+    #[script]
+    pub fn prompt(&mut self, item: ItemId, prompt: ObjectPrompt) -> Result<(), Off>;
 }
 
 #[enshwick_macros::forward(base)]

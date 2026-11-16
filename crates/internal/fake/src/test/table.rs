@@ -325,6 +325,8 @@ pub(crate) struct State {
     /// Each mod's survivor menu merge, in load order.
     pub(crate) survivor_status: Vec<Registered<SurvivorStatusFn>>,
     pub(crate) interaction_filters: Vec<Registered<InteractionFilterFn>>,
+    /// The prompts mods gave the objects placed from their items.
+    pub(crate) interaction_prompts: Vec<enshwick_core::abi::InteractionPrompt>,
     pub(crate) item_filters: Vec<Registered<enshwick_core::abi::ItemFilterFn>>,
     pub(crate) chat_filters: Vec<Registered<enshwick_core::abi::ChatFilterFn>>,
     /// Each account's chat rate: the start of its window in fake server
@@ -538,6 +540,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         controls: super::actions::controls::FakeControls::default(),
         survivor_status: Vec::new(),
         interaction_filters: Vec::new(),
+        interaction_prompts: Vec::new(),
         item_filters: Vec::new(),
         chat_filters: Vec::new(),
         chat_rate: Vec::new(),
@@ -790,4 +793,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     client_command,
     client_command_status,
     terrain_material_add,
+    interaction_prompt,
 };

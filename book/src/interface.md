@@ -409,10 +409,60 @@ prompt with parts that work on every client, with or without Enshwick:
 | The prompt's title                | the object's label, [`world.set_label`](world.md#labels)                  |
 | No prompt for a player            | refuse `Kind::Open` in [`load.on_interaction`](vetoes.md#interactions)    |
 | The mod's own action on the press | the game event `AcceptOfferedInteractionEvent` ([Game events](game-events.md)), its `host_entity_id` the object |
+| The verb, the action on the press and the mod's own text | `load.prompt`, below |
 
-The game's data shows the object's own action, such as opening the chest,
-running on the press as well. The mod's action runs beside it on the server.
-This is not yet checked in the running game.
+Unstable: `load.prompt` needs the `unstable` feature and may change in any
+release ([Stability](stability.md)).
+
+`load.prompt(item, prompt)` sets the prompt of every object placed from
+`item`:
+
+| Part of `ObjectPrompt` | What it does | Who sees it |
+| ---------------------- | ------------ | ----------- |
+| `verb(Verb::Use)` | one of the game's own verbs in place of the object's | every client |
+| `replace_action()` | the press plays the game's empty interaction, a short reach, so only the mod's action runs, not the object's own, such as opening a chest | every client |
+| `text(tag)` | one of the mod's own texts, by its tag, in the verb's place, in the player's language | clients with Enshwick |
+
+The server writes the verb and the action each step, so a vanilla client
+sees them too. A client with Enshwick shows the text instead of the verb.
+When the object is locked, the game's lock reason shows in the verb's
+place. Call `load.prompt` in the mod on both sides, with the same item, as
+the server and the client each do their part. One prompt per item counts
+across all mods; a second one is refused.
+
+```rust
+use enshwick::content::{Id, id};
+use enshwick::interactions::{ObjectPrompt, Verb};
+use enshwick::ItemId;
+
+const SHRINE: Id = id!("shrine");
+const PRAY: Id = SHRINE.part("pray");
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let texts = load.texts()?;
+    load.add_texts(&texts, &[("shrine.pray", PRAY)])?;
+    load.prompt(
+        ItemId::from_guid(SHRINE.guid()),
+        ObjectPrompt::new().verb(Verb::Use).text(PRAY.guid()).replace_action(),
+    )
+}
+```
+
+```luau
+local SHRINE = "you.shrine:shrine"
+
+enshwick.i18n.add_texts(enshwick.i18n.texts(), { { "shrine.pray", `{SHRINE}.pray` } })
+enshwick.interactions.prompt(enshwick.content.item_id(SHRINE), {
+    verb = "Use",
+    text = enshwick.content.guid(`{SHRINE}.pray`),
+    replace_action = true,
+})
+```
+
+The verbs and the empty interaction come from the game's data and are
+checked against the game's files. The running game has not yet shown the
+verb on a vanilla client, the empty action or the text. On clients older
+than game version 1283531 the text stays off.
 
 ## Map markers
 

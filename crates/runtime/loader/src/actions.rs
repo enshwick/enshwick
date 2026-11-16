@@ -23,6 +23,8 @@ pub mod console;
 #[cfg(windows)]
 pub(crate) mod controls;
 #[cfg(windows)]
+pub(crate) mod interaction_prompts;
+#[cfg(windows)]
 pub(crate) mod interactions;
 pub mod linked_controls;
 #[cfg(windows)]
@@ -95,6 +97,14 @@ pub(crate) static PARTS: &[&Part] = &[
             interactions::forget();
         })),
         ..part!("interactions", interactions)
+    },
+    &Part {
+        table_ids: interaction_prompts::TABLE_IDS,
+        seal: Some(|_| {
+            let _prompts = interaction_prompts::seal();
+        }),
+        link: Some(interaction_prompts::link),
+        ..part!("interaction_prompts", interaction_prompts)
     },
     &Part {
         table_ids: local_held::TABLE_IDS,

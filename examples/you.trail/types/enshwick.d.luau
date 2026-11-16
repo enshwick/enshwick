@@ -1125,6 +1125,9 @@ export type InteractionOfferRuntime = {
 	is_disabled: boolean,
 }
 
+--- A verb the game shows on interaction prompts, named after its English text, for `ObjectPrompt.verb`. The game's own data gives each one; a vanilla client shows it in the player's language. Unstable: needs the `unstable` feature and may change in any release.
+export type InteractionVerb = "Open" | "Close" | "Use" | "Activate" | "Deactivate" | "Flip" | "Talk" | "Read" | "Inspect" | "Search" | "Loot" | "Collect" | "Harvest" | "Pick" | "Craft" | "Cook" | "Sit" | "Sleep" | "Enter" | "Edit" | "Recover" | "RepairEquipment" | "DepositItems" | "DrinkFrom" | "Upgrade" | "Disarm" | "Pet" | "Chop" | "Cleanse" | "Adopt" | "PickLock" | "Repot" | "TearOut" | "PlaceInto"
+
 --- One change in a `Batch`.
 export type InventoryOp = { Give: InventoryOpGive } | { Take: InventoryOpTake } | { DestroySlot: string } | { MoveSlot: InventoryOpMoveSlot } | { Renew: InventoryOpRenew } | { MoveAll: InventoryOpMoveAll }
 
@@ -1917,6 +1920,16 @@ export type Notice = "OnScreen" | "Chat" | "Nobody"
 
 --- What a survivor does on `Effects.npc_command`.
 export type NpcCommandType = { GoToPosition: vector } | "Reset"
+
+--- What the prompt of every object placed from one item shows and does, for `Load.prompt`. The game verb and the replaced action are the server's, so every client sees them, with or without Enshwick; a client with Enshwick shows the mod's `text` in the verb's place instead. The prompt's title stays the object's label (`World.set_label`). Unstable: needs the `unstable` feature and may change in any release.
+export type ObjectPrompt = {
+	--- The verb every client shows; nil keeps the object's own.
+	verb: InteractionVerb?,
+	--- One of the mod's own texts, by its tag (`Load.declare`, `Load.add_texts`), shown in the verb's place on clients with Enshwick, in the player's language.
+	text: string?,
+	--- The press runs the game's empty interaction, a short reach, instead of the object's own action, such as opening a chest; the mod's action on the game event `AcceptOfferedInteractionEvent` runs alone.
+	replace_action: boolean?,
+}
 
 --- How a modifier acts on a stat. Modifiers apply in this order: every `Add` to the default, then every `Multiply`, then the greatest `Max` as a floor; an `Override` replaces the result, the last one in source order winning. The kind's range applies last.
 export type Op = "Add" | "Multiply" | "Max" | "Override"
@@ -4374,6 +4387,9 @@ declare enshwick: {
 		--- Runs `filter` before the game allows a player's interaction with an entity; returning `false` refuses it the game's own way. It runs in the server's world only, in the dedicated server or a hosting client, on the thread of the system that checks the interaction: keep it quick and never block. The game asks whether to offer an interaction for every entity in each player's reach on every frame, so `filter` runs many times a frame: it must not allocate, lock or log. Moves, sorts, stock draws, dismantling and upgrades ask once per action. An interaction without a player's character or without a target is allowed unasked.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_interaction: (filter: (arg1: Interaction) -> boolean?) -> (),
+		--- Gives the prompt of every object placed from `item` a game verb, the mod's own text on clients with Enshwick, or the game's empty action in place of the object's own, so the mod's action on `AcceptOfferedInteractionEvent` runs alone. Call it in the mods of both sides that know the item: the server writes the verb and the action, a client shows the text. One prompt per item across all mods. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		prompt: (item: number, prompt: ObjectPrompt) -> (),
 	},
 	--- The game's controls each player holds, read in the server's world, and the local player's on a client.
 	input: {

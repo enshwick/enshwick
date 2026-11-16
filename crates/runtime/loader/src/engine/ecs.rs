@@ -682,7 +682,46 @@ impl Components {
             return None;
         }
         // SAFETY: the caller's contract is `world`'s.
-        let world: *const u8 = core::ptr::with_exposed_provenance(unsafe { self.world(ctx) }?);
+        let world = unsafe { self.world(ctx) }?;
+        // SAFETY: `world` is the live entity world of the running system's
+        // context, read on its thread (the caller's contract).
+        unsafe { self.find_in(world, entity, hash) }
+    }
+
+    /// `entity`'s component of type `hash` in the entity world `world`,
+    /// read-only, or `None` when it has none: for a system whose context
+    /// does not name the world its rows belong to.
+    ///
+    /// # Safety
+    ///
+    /// - `world` is 0 or a live entity world, read on the thread of one of
+    ///   its running systems or the game thread, while no structural change
+    ///   of the world runs.
+    pub(crate) unsafe fn component_in(
+        &self,
+        world: usize,
+        entity: u32,
+        hash: u32,
+    ) -> Option<*const u8> {
+        if entity == 0 || world == 0 {
+            return None;
+        }
+        // SAFETY: the caller's contract is `find_in`'s.
+        match unsafe { self.find_in(world, entity, hash) }? {
+            Found::Static(data) => Some(data),
+            Found::Dynamic(data) => Some(data.cast_const()),
+        }
+    }
+
+    /// Where `entity`'s component of type `hash` is in the entity world
+    /// `world`, or `None` when it has none.
+    ///
+    /// # Safety
+    ///
+    /// - `world` is a non-zero live entity world, read on the thread of one
+    ///   of its running systems or the game thread.
+    unsafe fn find_in(&self, world: usize, entity: u32, hash: u32) -> Option<Found> {
+        let world: *const u8 = core::ptr::with_exposed_provenance(world);
         // SAFETY: `world` is non-null by the check before it, and the entity
         // world starts with its component registry pointer.
         let registry = unsafe { read_ptr_at::<u8>(world, 0) }.cast_const();

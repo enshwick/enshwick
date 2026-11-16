@@ -182,6 +182,223 @@ impl Targets {
     }
 }
 
+/// Declares [`Verb`] with one row per verb: its name, the text the game
+/// gives it in English and its `LocaTagId`, so the three never part.
+#[cfg(feature = "unstable")]
+macro_rules! verbs {
+    ($($name:ident = $text:literal, $id:literal;)*) => {
+        /// A verb the game shows on interaction prompts, named after its
+        /// English text, for [`ObjectPrompt::verb`].
+        ///
+        /// The game's own data gives each one; a vanilla client shows it in
+        /// the player's language.
+        ///
+        /// Unstable: needs the `unstable` feature and may change in any release.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use enshwick::interactions::Verb;
+        ///
+        /// assert_eq!(Verb::from_id(Verb::Use.id()), Some(Verb::Use));
+        /// ```
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+        #[script(name = "InteractionVerb")]
+        #[non_exhaustive]
+        pub enum Verb {
+            $(
+                #[doc = concat!("\"", $text, "\".")]
+                $name,
+            )*
+        }
+
+        impl Verb {
+            /// Every verb with the game's English text of it, for the
+            /// loader's check against the game's own texts.
+            #[cfg(feature = "test")]
+            #[doc(hidden)]
+            pub const ALL: &[(Self, &str)] = &[$((Self::$name, $text)),*];
+
+            /// The game's `LocaTagId` of the verb, as
+            /// `ui::Prompt`'s `verb` holds it.
+            ///
+            /// # Examples
+            ///
+            /// See [`Verb`].
+            #[must_use]
+            pub const fn id(self) -> u32 {
+                match self {
+                    $(Self::$name => $id,)*
+                }
+            }
+
+            /// The verb whose `LocaTagId` is `id`; `None` for an id no verb
+            /// here has.
+            ///
+            /// # Examples
+            ///
+            /// See [`Verb`].
+            #[must_use]
+            pub const fn from_id(id: u32) -> Option<Self> {
+                match id {
+                    $($id => Some(Self::$name),)*
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+// The ids are the same on every game version from 1269579 to 1287369, on
+// client and server: each is the hash of its LocaTag's GUID.
+#[cfg(feature = "unstable")]
+verbs! {
+    Open = "Open", 0x4e82_e309;
+    Close = "Close", 0x3959_a87f;
+    Use = "Use", 0xc22a_47e8;
+    Activate = "Activate", 0xc3d9_44f7;
+    Deactivate = "Deactivate", 0x4ac7_1b17;
+    Flip = "Flip", 0x65bb_af0f;
+    Talk = "Talk", 0xd986_1c4b;
+    Read = "Read", 0x6319_37dc;
+    Inspect = "Inspect", 0x2607_98eb;
+    Search = "Search", 0x9a59_9d0b;
+    Loot = "Loot", 0x0af6_b5cb;
+    Collect = "Collect", 0x9095_e8bd;
+    Harvest = "Harvest", 0x5e09_f8d2;
+    Pick = "Pick", 0x02e9_2eeb;
+    Craft = "Craft", 0xe0a9_e31d;
+    Cook = "Cook", 0x750a_1fe9;
+    Sit = "Sit", 0xdfb7_e778;
+    Sleep = "Sleep", 0xc4e0_f1cb;
+    Enter = "Enter", 0x785f_f179;
+    Edit = "Edit", 0xfc75_ab30;
+    Recover = "Recover", 0x2399_de44;
+    RepairEquipment = "Repair Equipment", 0xf9c7_6d99;
+    DepositItems = "Deposit Items", 0xe8ed_8099;
+    DrinkFrom = "Drink from", 0xc2f7_9d24;
+    Upgrade = "Upgrade", 0xa13e_994a;
+    Disarm = "Disarm", 0x3044_8d91;
+    Pet = "Pet", 0x6d5b_6297;
+    Chop = "Chop", 0x2d38_daea;
+    Cleanse = "Cleanse", 0xaf97_08ac;
+    Adopt = "Adopt", 0xe57a_9226;
+    PickLock = "Pick Lock", 0xdd3c_0694;
+    Repot = "Repot", 0x85f7_005e;
+    TearOut = "Tear out", 0x2cbe_e107;
+    PlaceInto = "Place Into", 0xf111_b8dd;
+}
+
+/// What the prompt of every object placed from one item shows and does, for
+/// [`Load::prompt`](../struct.Load.html#method.prompt).
+///
+/// The game verb and the replaced action are the server's, so every client
+/// sees them, with or without Enshwick; a client with Enshwick shows the
+/// mod's [`text`](Self::text) in the verb's place instead. The prompt's title
+/// stays the object's label ([`World::set_label`](crate::world::World::set_label)).
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::interactions::{ObjectPrompt, Verb};
+///
+/// let prompt = ObjectPrompt::new().verb(Verb::Use).replace_action();
+/// assert_eq!(prompt.verb, Some(Verb::Use));
+/// assert!(prompt.replace_action);
+/// ```
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct ObjectPrompt {
+    /// The verb every client shows; `None` keeps the object's own.
+    pub verb: Option<Verb>,
+    /// One of the mod's own texts, by its tag ([`Load::declare`](../struct.Load.html#method.declare),
+    /// [`Load::add_texts`](../struct.Load.html#method.add_texts)), shown in
+    /// the verb's place on clients with Enshwick, in the player's language.
+    pub text: Option<crate::content::Guid>,
+    /// The press runs the game's empty interaction, a short reach, instead
+    /// of the object's own action, such as opening a chest; the mod's action
+    /// on the game event `AcceptOfferedInteractionEvent` runs alone.
+    #[script(default)]
+    pub replace_action: bool,
+}
+
+#[cfg(feature = "unstable")]
+impl ObjectPrompt {
+    /// A prompt that changes nothing yet.
+    ///
+    /// # Examples
+    ///
+    /// See [`ObjectPrompt`].
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            verb: None,
+            text: None,
+            replace_action: false,
+        }
+    }
+
+    /// Shows `verb` on every client.
+    ///
+    /// # Examples
+    ///
+    /// See [`ObjectPrompt`].
+    #[must_use]
+    pub const fn verb(mut self, verb: Verb) -> Self {
+        self.verb = Some(verb);
+        self
+    }
+
+    /// Shows the mod's text `tag` in the verb's place on clients with
+    /// Enshwick.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::interactions::{ObjectPrompt, Verb};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let pray = load.declare(enshwick::content::id!("pray"))?;
+    ///     load.prompt(enshwick::ItemId::new(0x5e01), ObjectPrompt::new().verb(Verb::Use).text(pray))
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn text(mut self, tag: crate::content::Guid) -> Self {
+        self.text = Some(tag);
+        self
+    }
+
+    /// Runs the game's empty interaction on the press instead of the
+    /// object's own action.
+    ///
+    /// # Examples
+    ///
+    /// See [`ObjectPrompt`].
+    #[must_use]
+    pub const fn replace_action(mut self) -> Self {
+        self.replace_action = true;
+        self
+    }
+
+    /// The ABI form for objects placed from `item`.
+    fn raw(self, item: ItemId) -> crate::abi::InteractionPrompt {
+        crate::abi::InteractionPrompt {
+            header: crate::abi::Header::of::<crate::abi::InteractionPrompt>(),
+            item,
+            verb: self.verb.map_or(0, Verb::id),
+            text: self.text.map_or(0, crate::content::Guid::fnv1a),
+            flags: if self.replace_action {
+                crate::abi::InteractionPrompt::REPLACE_ACTION
+            } else {
+                0
+            },
+        }
+    }
+}
+
 /// `Load`'s methods of this module on the base handle, which core's
 /// forwarders call.
 #[doc(hidden)]
@@ -190,6 +407,11 @@ pub trait LoadMethods {
     #[doc(hidden)]
     #[cfg(feature = "unstable")]
     fn interaction_targets(&mut self) -> Result<Targets, Off>;
+
+    /// As `Load::prompt`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn prompt(&mut self, item: ItemId, prompt: ObjectPrompt) -> Result<(), Off>;
 
     /// As `Load::on_interaction`.
     #[doc(hidden)]
@@ -202,6 +424,14 @@ impl LoadMethods for crate::BaseLoad {
     #[cfg(feature = "unstable")]
     fn interaction_targets(&mut self) -> Result<Targets, Off> {
         Targets::open(self)
+    }
+
+    #[cfg(feature = "unstable")]
+    fn prompt(&mut self, item: ItemId, prompt: ObjectPrompt) -> Result<(), Off> {
+        let host = self.host();
+        let raw = prompt.raw(item);
+        let status = (host.api().interaction_prompt)(host.handle(), &raw const raw);
+        crate::load::ok(status, (), || format!("prompt on item {:#x}", item.get()))
     }
 
     fn on_interaction<F>(&mut self, filter: F) -> Result<(), Off>

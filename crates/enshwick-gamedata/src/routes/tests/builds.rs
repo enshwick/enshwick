@@ -393,6 +393,18 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "input.blocked", 0xad5a),
     ("1.0 client (26082781)", "input.blocked", 0xac42),
     ("1.0 client (1269579)", "input.blocked", 0xac42),
+    // The prompt's site in `player_ui`, after the title and the verb are
+    // stored and before a lock may put its reason in the verb's place, and
+    // the system's context in its home slot, which the site reads; read in
+    // the decompiler on 26430625 (2026-11-16), the same bytes on 26320373;
+    // the older clients' context by the same route, where the site compares
+    // with an immediate the route does not match.
+    ("1.0 client (26430625)", "ui.prompt_site", 0x2b_c3b6),
+    ("1.0 client (26430625)", "ui.prompt_context", 0x2_d5e0),
+    ("1.0 client (26320373)", "ui.prompt_site", 0x2b_c2d6),
+    ("1.0 client (26320373)", "ui.prompt_context", 0x2_d5e0),
+    ("1.0 client (26082781)", "ui.prompt_context", 0x2_d570),
+    ("1.0 client (1269579)", "ui.prompt_context", 0x2_d570),
 ];
 
 /// The client control reads: the input builder's stick, look, target

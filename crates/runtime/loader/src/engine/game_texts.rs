@@ -38,6 +38,29 @@ pub(crate) struct TextLayout {
     pub tag_text: usize,
 }
 
+#[cfg(windows)]
+impl TextLayout {
+    /// The layout `reflection` gives; `None` when it lacks a field.
+    fn read(reflection: &enshwick_gamedata::reflect::Reflection<'_>) -> Option<Self> {
+        let field = |ty: &str, name: &str| {
+            let offset = reflection.field_offset(ty, name).ok()?;
+            usize::try_from(offset).ok()
+        };
+        let size = |ty: &str| usize::try_from(reflection.type_info(ty).ok()?.size()).ok();
+        Some(Self {
+            keenglish: field("keen::LocaTagCollectionResource", "keenglishData")?,
+            languages: field("keen::LocaTagCollectionResource", "languages")?,
+            language_size: size("keen::LocaTagCollectionResourceLanguage")?,
+            language_id: field("keen::LocaTagCollectionResourceLanguage", "language")?,
+            language_data: field("keen::LocaTagCollectionResourceLanguage", "data")?,
+            tags: field("keen::LocaTagCollectionResourceData", "tags")?,
+            tag_size: size("keen::LocaTagResource")?,
+            tag_id: field("keen::LocaTagResource", "id")?,
+            tag_text: field("keen::LocaTagResource", "text")?,
+        })
+    }
+}
+
 /// The text collection: the content hash of each language's table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Collection {
@@ -194,25 +217,7 @@ fn texts() -> Option<&'static Texts> {
     TEXTS
         .get_or_init(|| {
             let loader = crate::engine::loader::loader()?;
-            let field = |ty: &str, name: &str| {
-                let offset = loader.reflection.field_offset(ty, name).ok()?;
-                usize::try_from(offset).ok()
-            };
-            let size = |ty: &str| {
-                let info = loader.reflection.type_info(ty).ok()?;
-                usize::try_from(info.size()).ok()
-            };
-            let layout = TextLayout {
-                keenglish: field("keen::LocaTagCollectionResource", "keenglishData")?,
-                languages: field("keen::LocaTagCollectionResource", "languages")?,
-                language_size: size("keen::LocaTagCollectionResourceLanguage")?,
-                language_id: field("keen::LocaTagCollectionResourceLanguage", "language")?,
-                language_data: field("keen::LocaTagCollectionResourceLanguage", "data")?,
-                tags: field("keen::LocaTagCollectionResourceData", "tags")?,
-                tag_size: size("keen::LocaTagResource")?,
-                tag_id: field("keen::LocaTagResource", "id")?,
-                tag_text: field("keen::LocaTagResource", "text")?,
-            };
+            let layout = TextLayout::read(&loader.reflection)?;
             let resource = crate::engine::archive::game()?.resource(&COLLECTION)?;
             let collection = Collection::parse(&layout, &resource)?;
             Some(Texts::new(layout, collection))
@@ -307,6 +312,48 @@ mod tests {
         assert_eq!(texts.text(3, 0, read), Some("dev three"));
         assert_eq!(texts.text(4, 34, read), None);
         assert_eq!(texts.text(1, 99, read), Some("Balthazar"));
+    }
+
+    /// On the client `ENSH_CLIENT_EXE` names, with its archive beside it
+    /// (skipped without them): every interaction verb's id has the text the
+    /// developers wrote that its row gives, and its name is that text in
+    /// Rust casing.
+    #[test]
+    #[cfg(windows)]
+    fn every_verb_is_the_game_s_text_of_its_id() {
+        use enshwick_core::interactions::Verb;
+        use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+
+        let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
+            return;
+        };
+        let path = std::path::PathBuf::from(path);
+        let Some(archive) = path
+            .parent()
+            .and_then(|dir| crate::engine::archive::Archive::open(dir, "enshrouded"))
+        else {
+            return;
+        };
+        let bytes = std::fs::read(&path).unwrap();
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        let layout = TextLayout::read(&Reflection::scan(&image)).unwrap();
+        let collection =
+            Collection::parse(&layout, &archive.resource(&COLLECTION).unwrap()).unwrap();
+        let table = archive.content(&collection.table_of(0).unwrap()).unwrap();
+        for &(verb, text) in Verb::ALL {
+            assert_eq!(find(&layout, &table, verb.id()), Some(text), "{verb:?}");
+            let cased: String = text
+                .split(' ')
+                .map(|word| {
+                    let mut chars = word.chars();
+                    chars.next().map_or_default(|first| {
+                        first.to_uppercase().chain(chars).collect::<String>()
+                    })
+                })
+                .collect();
+            assert_eq!(format!("{verb:?}"), cased);
+            assert_eq!(Verb::from_id(verb.id()), Some(verb));
+        }
     }
 
     /// The installed client's archive, when `ENSHWICK_CLIENT_DIR` names its
