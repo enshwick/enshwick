@@ -847,6 +847,7 @@ pub(crate) fn content_of(hash: &ContentHash) -> Result<Vec<u8>, TextureError> {
 /// Readies the content request for its benchmark with a stand-in for the
 /// game's: nothing served, so each request passes on, as on a game whose
 /// mods serve no pixels. The closure runs one request.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_texture_request() -> impl FnMut() {
     /// Stands in for the game's content request: answers nothing.

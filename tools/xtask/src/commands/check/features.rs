@@ -5,35 +5,39 @@
 //! the first build that turns on that feature by itself. Only
 //! the library and binaries: the dev-dependencies of the other targets turn
 //! the features back on and hide the gap, and the workspace's clippy lints
-//! those targets.
+//! those targets. Off Windows the Windows lint runs them again for the
+//! Windows target, where the `cfg(windows)` code builds, for the packages
+//! with such code ([`windows_code`]).
+
+use std::fs;
+use std::path::Path;
 
 use super::Step;
 use crate::affected::{Package, Scope};
+use crate::check::rust_files;
 
-/// The clippy runs of the packages `scope` checks in full that have features
-/// and build on this host (`host_ok`): one without any feature, then one
-/// for each feature alone.
+/// The runs of `clippy` (its cargo words, such as `["clippy"]` or the
+/// cross-compiling `["xwin", "clippy", "--target", ..]`) over the packages
+/// `scope` checks in full that have features and that `keep` keeps: one
+/// without any feature, then one for each feature alone.
 pub(super) fn steps(
     scope: &Scope,
     packages: &[Package],
-    host_ok: impl Fn(&String) -> bool,
+    keep: impl Fn(&Package) -> bool,
+    clippy: &[&str],
 ) -> Vec<Step> {
     packages
         .iter()
-        .filter(|package| !package.features.is_empty() && host_ok(&package.name))
         .filter(|package| match scope {
             Scope::All => true,
             Scope::Some { code, .. } => code.contains(&package.name),
         })
+        .filter(|package| !package.features.is_empty() && keep(package))
         .flat_map(|package| {
             let alone = package.features.iter().map(Some);
             std::iter::once(None).chain(alone).map(|feature| {
-                let mut step = Step::new(&[
-                    "clippy",
-                    "--package",
-                    &package.name,
-                    "--no-default-features",
-                ]);
+                let mut step =
+                    Step::new(clippy).then(&["--package", &package.name, "--no-default-features"]);
                 if let Some(feature) = feature {
                     step = step.then(&["--features", feature]);
                 }
@@ -41,4 +45,29 @@ pub(super) fn steps(
             })
         })
         .collect()
+}
+
+/// Whether `package` has code that builds only for Windows, so its lints
+/// for the Windows target can differ from those on the host: it is
+/// Windows-only, or a source file under `root` names `windows` (a
+/// `cfg(windows)`, a `target_os = "windows"`, a comment).
+pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
+    if package.windows_only {
+        return true;
+    }
+    let mut files = Vec::new();
+    // A false yes, or an unreadable tree, costs only a lint too many.
+    rust_files(&root.join(&package.dir).join("src"), &mut files).is_err()
+        || files
+            .iter()
+            .any(|file| fs::read_to_string(file).map_or(true, |text| names_windows(&text)))
+}
+
+/// Whether `text` holds `windows` as a word of its own, not inside an
+/// identifier such as `windows_sys`.
+pub(super) fn names_windows(text: &str) -> bool {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    text.match_indices("windows").any(|(at, word)| {
+        !text[..at].ends_with(ident) && !text[at + word.len()..].starts_with(ident)
+    })
 }

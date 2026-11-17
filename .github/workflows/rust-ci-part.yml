@@ -77,8 +77,8 @@ jobs:
           key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}${{ inputs.part == 'fuzz' && format('-fuzz-{0}', hashFiles('.github/actions/setup-rust/action.yml')) || '' }}
       # The Windows SDK and CRT cargo-xwin downloads, about 12 minutes from
       # Microsoft on a hosted runner. Only the cross-compiling parts here
-      # (`windows-lint`, `all`) use it; rust-ci.yml's job `windows` builds
-      # natively.
+      # (`windows-lint`, which also lints each feature alone for Windows,
+      # and `all`) use it; rust-ci.yml's job `windows` builds natively.
       - if: inputs.part == 'windows-lint' || inputs.part == 'all'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

@@ -624,7 +624,7 @@ pub(crate) use live::{
 #[cfg(all(windows, test))]
 pub(crate) use live::disable_for_test;
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 pub use live::bench_recipe_filter;
 

@@ -4,9 +4,10 @@ name: Rust CI
 # main, on GitHub-hosted runners, with the toolchain, the Windows SDK and the
 # build cached between runs; a push to main runs the full suite and fills the
 # caches pull requests start from. With `split` the host check, the lints of
-# each feature alone, the doctests and rustdoc, the Windows lint, the API's
-# trybuild test, its stable surface and cargo-semver-checks run as parallel
-# jobs, the workspace's doctests and rustdoc only in the merge queue, on main
+# each feature alone, the doctests and rustdoc, the Windows lint (the
+# workspace, then each feature alone for Windows), the API's trybuild test,
+# its stable surface and cargo-semver-checks run as parallel jobs, the
+# workspace's doctests and rustdoc only in the merge queue, on main
 # and with `full`, and the trybuild test and the stable surface of a pull
 # request only when its change needs them. The Windows tests run natively on
 # a Windows runner, only those the change reaches. Each part runs through

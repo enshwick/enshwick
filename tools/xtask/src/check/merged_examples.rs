@@ -137,7 +137,7 @@ fn is_error_code(token: &str) -> bool {
 }
 
 /// Adds the Rust files under `dir` to `out`.
-fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+pub(crate) fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for entry in entries {
         let path = entry.map_err(|e| format!("{}: {e}", dir.display()))?.path();

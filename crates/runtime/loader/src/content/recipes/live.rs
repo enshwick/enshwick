@@ -595,6 +595,7 @@ pub(crate) fn recipe_words(id: u32) -> String {
 /// Readies the recipe filter for its benchmark: a workshop's list of eight
 /// recipes with ids 1 to 8, of which `disabled` are disabled. The closure
 /// filters the list once and returns the length the game reads back.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
     let _first = STATE.layout.set(Some(RecipeLayout {

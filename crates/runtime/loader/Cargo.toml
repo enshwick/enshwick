@@ -116,6 +116,7 @@ harness = false
 [[bench]]
 name = "settle_waits"
 harness = false
+required-features = ["test"]
 
 [[bench]]
 name = "step_parts"
@@ -136,10 +137,12 @@ harness = false
 [[bench]]
 name = "event_copy"
 harness = false
+required-features = ["test"]
 
 [[bench]]
 name = "host_entry"
 harness = false
+required-features = ["test"]
 
 [[bench]]
 name = "pending"
@@ -153,11 +156,14 @@ required-features = ["test"]
 [[bench]]
 name = "client_build"
 harness = false
+required-features = ["test"]
 
 [[bench]]
 name = "item_ui"
 harness = false
+required-features = ["test"]
 
 [[bench]]
 name = "accounts"
 harness = false
+required-features = ["test"]

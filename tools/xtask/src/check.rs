@@ -8,7 +8,7 @@ mod domains;
 mod merged_examples;
 mod ranges;
 
-pub(crate) use merged_examples::SENTINEL_NAME;
+pub(crate) use merged_examples::{SENTINEL_NAME, rust_files};
 pub(crate) mod reports;
 pub(crate) mod rules;
 

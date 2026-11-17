@@ -43,22 +43,22 @@ mod parts;
 #[cfg(windows)]
 mod start;
 
-#[cfg(windows)]
+#[cfg(all(windows, any(test, feature = "test")))]
 #[doc(hidden)]
 pub use actions::client_input::bench_client_build;
-#[cfg(windows)]
+#[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 pub use base::carrier::bench_own_account;
 #[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 pub use content::served::{bench_served_build, bench_text_lookup};
-#[cfg(windows)]
+#[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 pub use content::textures::bench_texture_request;
 #[cfg(windows)]
 #[doc(hidden)]
 pub use engine::pages::{forget as forget_read_only, read_only};
-#[cfg(windows)]
+#[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 pub use engine::world::accounts::bench_accounts;
 #[cfg(windows)]
@@ -66,9 +66,10 @@ pub use parts::table_ids;
 #[cfg(windows)]
 #[doc(hidden)]
 pub use ui::interface::item_slots::bench_item_slot;
-#[cfg(windows)]
+#[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 pub use ui::interface::tooltips::bench_tooltip_lines;
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub use world::transactions::bench_settle_step;
 #[cfg(all(windows, feature = "test"))]
@@ -76,7 +77,7 @@ pub use world::transactions::bench_settle_step;
 pub use world::waypoints::bench_waypoint_idle_step;
 
 /// The loader's `HostApi` table, for the benchmark of one entry call.
-#[cfg(windows)]
+#[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 #[must_use]
 pub fn host_api() -> &'static enshwick_core::abi::HostApi {
