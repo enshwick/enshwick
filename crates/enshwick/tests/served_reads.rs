@@ -74,6 +74,8 @@ mod tests {
     fn a_rebuild_runs_the_patch_again_and_frees_the_output_it_built() {
         let loader = start();
         let other = types::ITEM_INFO.key(OTHER_ITEM).unwrap();
+        let archived = enshwick::host().unwrap().game_resource(other).unwrap();
+        assert!(loader.build_resource(&other, &archived).is_ok());
         let before = BUILDS.load(Ordering::Relaxed);
         for _ in 0..10 {
             enshwick::content::rebuild(other).unwrap();

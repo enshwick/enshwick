@@ -664,7 +664,8 @@ pub struct HostApi {
     /// During `enshwick_mod_init`, by a mod that serves `key`: keeps the
     /// base of `key` when it is first built, so it can be built again.
     /// Afterwards: builds `key` again from that base with the patches of
-    /// every mod still on, as values they read changed, and writes the
+    /// every mod that built the bytes the game holds, a mod turned off
+    /// since included, as values they read changed, and writes the
     /// bytes that differ over the resource the game holds; [`Status::OK`]
     /// with `key` itself left while it was not built yet, as its first
     /// build takes the values in force. Then every key whose build read

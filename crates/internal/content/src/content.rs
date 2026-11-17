@@ -456,7 +456,10 @@ impl<B: Grow> Blob<B> {
 }
 
 /// Builds the resource `key` again from its base with the patches of every mod
-/// still on, and writes the bytes that differ over the resource the game holds.
+/// that built it, and writes the bytes that differ over the resource the game holds.
+///
+/// A mod turned off since the first build keeps its patch in the rebuild, as
+/// the game holds what that patch added.
 ///
 /// The mod serves `key` and asked to rebuild it with [`Load::allow_rebuild`](../struct.Load.html#method.allow_rebuild);
 /// any thread may call this, for values a patch reads that changed after the
