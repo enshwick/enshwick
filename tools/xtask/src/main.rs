@@ -62,6 +62,8 @@ enum Task {
     Header,
     /// Checks the links rustdoc leaves unchecked in the API crate's pages.
     DocLinks,
+    /// Rewrites the API crate's list of public paths from rustdoc's JSON.
+    PublicPaths,
     /// Peels a module's `Load` methods into forwarders, `<from>=<into>` each.
     PeelLoad {
         /// The modules, each `<from>=<into>`.
@@ -102,6 +104,7 @@ fn run(task: Task) -> Result<ExitCode, String> {
         Task::TagLines => commands::tag_lines::run()?,
         Task::Header => commands::header::run(&root)?,
         Task::DocLinks => commands::doc_links::run(&root)?,
+        Task::PublicPaths => commands::public_paths::run(&root)?,
         Task::PeelLoad { pairs } => commands::peel::run(&root, &pairs)?,
         Task::HostArgs => {
             // One argument a line, for CI runs that test the host as the check does.
@@ -320,7 +323,7 @@ fn compat_task(args: &[String]) -> ExitCode {
     }
 }
 
-fn cargo() -> String {
+pub(crate) fn cargo() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
 }
 

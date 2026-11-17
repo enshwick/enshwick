@@ -72,6 +72,12 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   - `world`: `World::revive` stands a dead character up (#1036).
   ```
 
+- a change to the API's public paths, an item added, renamed, moved or
+  gated, rewrites `tools/public-paths.txt` with `cargo xtask public-paths`
+  in the same pull request: the list is written from rustdoc's view of the
+  crate, the
+  [API coverage page](https://enshwick.com/dev/api-coverage/) checks the
+  items it names against it, and `cargo xtask check` refuses a stale copy;
 - what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
   with the change; `cargo xtask check` checks its structure, and its Rust
   examples run as doctests;

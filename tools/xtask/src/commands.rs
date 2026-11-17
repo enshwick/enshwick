@@ -10,5 +10,6 @@ pub(crate) mod fuzz;
 pub(crate) mod header;
 pub(crate) mod notes;
 pub(crate) mod peel;
+pub(crate) mod public_paths;
 pub(crate) mod tag_lines;
 pub(crate) mod wine;

@@ -591,6 +591,31 @@ fn a_wide_change_documents_the_packages_it_changed_that_the_host_builds() {
 }
 
 #[test]
+fn a_wide_change_to_the_facade_documents_it_with_the_features_of_a_workspace_build() {
+    let scope = Scope::Some {
+        code: [FACADE, "enshwick-base", "enshwick-luau"]
+            .map(str::to_owned)
+            .into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: true,
+    };
+    let lines: Vec<String> = changed_rustdoc(&scope, &["--workspace".to_owned()])
+        .iter()
+        .map(Step::line)
+        .collect();
+    assert_eq!(
+        lines[0],
+        format!(
+            "cargo doc --no-deps -p {FACADE} -p enshwick-base -p enshwick-luau --features {FACADE_FEATURES}"
+        )
+    );
+    assert!(TEST_FEATURE.starts_with(FACADE_FEATURES));
+    assert_eq!(lines[1], doc_links_step().line());
+}
+
+#[test]
 fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
     let steps = stable_api_steps(false, &stable());
     let skipped = |name: &str| {

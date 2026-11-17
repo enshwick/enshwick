@@ -60,14 +60,14 @@ pub(crate) enum Scope {
         docs: BTreeSet<String>,
         /// Packages a local check runs the tests of but not the examples,
         /// leaving those, the facade's trybuild test and its stable surface
-        /// to CI: the dependents of a change that reaches more than
-        /// [`MAX_LOCAL_PACKAGES`].
+        /// to CI: the dependents of a change that reaches
+        /// [`WIDE_PACKAGES`] or more.
         tested: BTreeSet<String>,
         /// Packages a local check only builds and lints, leaving their tests
         /// to CI: those whose versions alone moved.
         built: BTreeSet<String>,
-        /// A local check of a change that reaches more than
-        /// [`MAX_LOCAL_PACKAGES`], changed ones included: it leaves the
+        /// A local check of a change that reaches [`WIDE_PACKAGES`] or
+        /// more, changed ones included: it leaves the
         /// facade's trybuild test and stable surface and the dependents'
         /// rustdoc to CI, and runs the dependents' tests one process per
         /// binary.
@@ -77,9 +77,9 @@ pub(crate) enum Scope {
 
 /// Where a check runs. CI and the merge queue check every package a change
 /// reaches in full; a local check, which must stay under ten minutes, runs
-/// only the tests of the dependents of a change that reaches more than
-/// [`MAX_LOCAL_PACKAGES`], and only builds a package whose versions alone
-/// moved.
+/// only the tests of the dependents of a change that reaches
+/// [`WIDE_PACKAGES`] or more, and only builds a package whose versions
+/// alone moved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Lane {
     Local,
@@ -103,14 +103,14 @@ impl Lane {
     }
 }
 
-/// The most packages, changed ones and their dependents together, a local
-/// check checks in full: one changed package and eight that depend on it.
-/// Past it the dependents' examples and rustdoc, the facade's trybuild test
-/// and its stable surface go to CI. A change to any API crate reaches 23 to
+/// The fewest packages, changed ones and their dependents together, that
+/// make a local check wide: one changed package and eight that depend on
+/// it. From it on the dependents' examples and rustdoc, the facade's
+/// trybuild test and its stable surface go to CI. A change to any API crate reaches 23 to
 /// 27 packages (2026-11-17), whose examples, trybuild test and stable
 /// surface checked in full went past the ten-minute local limit on the
 /// Windows PC (669 s, 2026-11-14).
-pub(crate) const MAX_LOCAL_PACKAGES: usize = 9;
+pub(crate) const WIDE_PACKAGES: usize = 9;
 
 /// A package's own changelog and change files, which no build reads.
 const CHANGELOG: &str = "CHANGELOG.md";
@@ -217,7 +217,7 @@ pub(crate) fn scope(
         code.insert(BOOK_LUAU.to_owned());
         changed.insert(BOOK_LUAU.to_owned());
     }
-    let wide = local && code.len() > MAX_LOCAL_PACKAGES;
+    let wide = local && code.len() >= WIDE_PACKAGES;
     // A wide change leaves the examples of what it reaches to CI.
     if !wide {
         docs.extend(examples_of(&code, packages));
