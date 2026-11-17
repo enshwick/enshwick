@@ -447,6 +447,92 @@ fn changes_read_only_the_rules_the_request_sets() {
 }
 
 #[test]
+fn a_buff_without_its_submerge_fraction_fails_the_rules_instead_of_changing_their_size() {
+    let Value::Struct(mut fields) = buffed(u64::from(SAND), 2) else {
+        unreachable!()
+    };
+    for (name, value) in &mut fields {
+        if name == CONDITIONAL_BUFFS {
+            let Value::List(buffs) = value else {
+                unreachable!()
+            };
+            for buff in buffs {
+                let Value::Struct(buff) = buff else {
+                    unreachable!()
+                };
+                buff.retain(|(field, _)| field != MIN_SUBMERGE);
+            }
+        }
+    }
+    let mut rules = Value::Struct(vec![(
+        TERRAIN_CONFIGS.into(),
+        Value::List(vec![buffed(1, 0), Value::Struct(fields)]),
+    )]);
+    assert_eq!(add_rules(&mut rules, &[117], &[]), None);
+}
+
+#[test]
+fn the_server_s_save_folder_stays_as_its_configuration_names_it() {
+    let json = "{\n\t\"saveDirectory\": \"./saves\"\n}";
+    assert_eq!(saves_folder(Some(json)), std::path::Path::new("./saves"));
+    assert_eq!(saves_folder(Some("{}")), std::path::Path::new("./savegame"));
+    assert_eq!(saves_folder(None), std::path::Path::new("./savegame"));
+}
+
+#[test]
+fn only_free_ids_no_served_material_takes_are_padding() {
+    let (added, _) = add_all(&[request(150)]);
+    let free = palette().free();
+    let taken = added[0].id;
+    assert!(!pads(&free, &added, taken));
+    assert!(pads(&free, &[], taken));
+    assert!(!pads(&free, &added, SAND));
+    assert_eq!(
+        free.iter().filter(|&&id| pads(&free, &added, id)).count(),
+        free.len() - 1
+    );
+}
+
+#[test]
+fn only_mods_off_for_the_game_placed_before_the_shifted_one_moved_its_id() {
+    let owner = ModIndex::new;
+    let base = add_all(&[request(150)]).0[0];
+    let at = |n, id| Material {
+        owner: owner(n),
+        id,
+        ..base
+    };
+    // Placed in load order: 2 and 3 before 4, then 5 after it.
+    let added = [at(2, 117), at(3, 118), at(3, 119), at(4, 120), at(5, 121)];
+    let off = |m: ModIndex| m != owner(4) && m != owner(3);
+    assert_eq!(moved_by(&added, owner(4), off), [owner(2)]);
+    assert_eq!(moved_by(&added, owner(4), |_| true), [owner(2), owner(3)]);
+    assert_eq!(moved_by(&added, owner(2), |_| true), []);
+}
+
+#[test]
+fn a_session_rebuilds_only_for_another_table_once_one_was_built() {
+    let (one, _) = add_all(&[request(150)]);
+    let (two, _) = add_all(&[request(150), request(151)]);
+    assert!(!Session::Unplaced.rebuilds_for(&one));
+    assert!(!Session::Own(one.clone()).rebuilds_for(&one));
+    assert!(!Session::Host(one.clone()).rebuilds_for(&one));
+    assert!(Session::Own(one.clone()).rebuilds_for(&two));
+    assert!(Session::Host(two).rebuilds_for(&one));
+}
+
+#[test]
+fn a_host_table_that_does_not_take_is_told_naming_who_hosts() {
+    assert!(untaken_text(Host::Server).contains("server's terrain ids"));
+    assert!(untaken_text(Host::Player).contains("host's terrain ids"));
+    let uk = Some(enshwick_core::i18n::Language::UK_UA);
+    assert!(
+        crate::engine::texts::for_reader(uk, || untaken_text(Host::Server))
+            .contains("ґрунту сервера")
+    );
+}
+
+#[test]
 fn a_moved_terrain_id_is_told_in_the_reader_s_language_naming_who_hosts() {
     use crate::engine::texts::for_reader;
     use enshwick_core::i18n::Language;

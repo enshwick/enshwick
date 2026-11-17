@@ -213,13 +213,13 @@ fix = "Встановіть моди й версії, які перелічує 
 [[error]]
 code = "E3002"
 title = "Your mods give terrain other ids than the server"
-cause = "Mods that the server does not run add terrain materials on your game. They take terrain ids at the start of the game, so a mod that the server runs has another id for its terrain on your game. You do not join, because the ground would show wrong."
-fix = "Turn off the mods that the dialog lists on the Mods screen, restart the game, then join again."
+cause = "Mods that the server does not run add terrain materials on your game. They take terrain ids at the start of the game, so a mod that the server runs has another id for its terrain on your game. Or your game could not take the terrain ids the server lists, for example because the server runs another game version or another Enshwick version. You do not join, because the ground would show wrong."
+fix = "If the dialog lists mods, turn them off on the Mods screen. Otherwise run the server's game version and Enshwick version. Restart the game, then join again."
 
 [error.translations.uk]
 title = "Ваші моди дають ґрунту інші номери, ніж сервер"
-cause = "Моди, яких сервер не запускає, додають у вашій грі матеріали ґрунту. Вони беруть номери ґрунту на старті гри, тож мод, який запускає сервер, має у вашій грі інший номер для свого ґрунту. Ви не приєднуєтеся, бо ґрунт показувався б неправильно."
-fix = "Вимкніть моди, які перелічує діалог, на екрані модів, перезапустіть гру, а тоді приєднайтеся знову."
+cause = "Моди, яких сервер не запускає, додають у вашій грі матеріали ґрунту. Вони беруть номери ґрунту на старті гри, тож мод, який запускає сервер, має у вашій грі інший номер для свого ґрунту. Або ваша гра не змогла взяти номери ґрунту, які перелічує сервер, наприклад тому, що сервер запускає іншу версію гри чи Enshwick. Ви не приєднуєтеся, бо ґрунт показувався б неправильно."
+fix = "Якщо діалог перелічує моди, вимкніть їх на екрані модів. Інакше запустіть ту саму версію гри й Enshwick, що й на сервері. Перезапустіть гру, а тоді приєднайтеся знову."
 
 [[step]]
 id = "start"

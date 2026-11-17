@@ -82,6 +82,14 @@ fn own_terrain_again() {
     }
 }
 
+/// Before a game this client hosts reads its resources: the mods the last
+/// joined world turned off come back on first, since the client's own
+/// terrain ids serve only the mods that are on.
+pub(crate) fn hosting_starts() {
+    crate::base::join::client::back_on();
+    own_terrain_again();
+}
+
 /// The count of joins the check refused so far.
 pub(crate) fn refusals() -> u64 {
     STATE.refusals.load(Ordering::Acquire)
@@ -167,10 +175,10 @@ crate::engine::chains::chain_detour! {
 /// Joins a game whose mods the check cannot read: the client's mods stay
 /// on, as the world it joins may run them.
 fn unchecked() -> bool {
-    own_terrain_again();
     crate::base::net::joining(false);
     crate::base::join::client::forget_server_values();
     crate::base::join::client::back_on();
+    own_terrain_again();
     true
 }
 
@@ -242,10 +250,12 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         crate::base::join::client::turn_off_for_world(id);
     }
     if plan.joins() {
-        // A server with Enshwick and no terrain rules serves no terrain id.
+        // A server that names no terrain ids serves none of the client's
+        // terrain mods, which the plan turned off, or runs an Enshwick from
+        // before the rule: the client keeps its own ids.
         let terrain = server
-            .is_some()
-            .then(|| super::terrain_rules_value(&reply).unwrap_or_default());
+            .as_ref()
+            .and_then(|_| super::terrain_rules_value(&reply));
         let moved = terrain_ids().and_then(|ids| {
             (ids.adopt)(
                 terrain.as_deref(),

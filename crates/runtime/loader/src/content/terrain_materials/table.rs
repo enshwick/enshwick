@@ -11,8 +11,6 @@ use enshwick_core::content::Guid;
 use super::{Changes, Material, Palette};
 use crate::engine::mod_index::ModIndex;
 
-/// The most entries a table holds: the game's free terrain ids.
-const MOST: usize = 11;
 /// Splits the entries of the text.
 const ENTRIES: char = ',';
 /// Splits the fields of one entry.
@@ -47,9 +45,6 @@ pub(crate) fn parse(text: &str, palette: &Palette) -> Option<Vec<Entry>> {
     let free = palette.free();
     let mut entries: Vec<Entry> = Vec::new();
     for entry in text.split(ENTRIES) {
-        if entries.len() == MOST {
-            return None;
-        }
         let mut fields = entry.split(FIELDS);
         let (Some(id), Some(guid), Some(fallback), None) =
             (fields.next(), fields.next(), fields.next(), fields.next())

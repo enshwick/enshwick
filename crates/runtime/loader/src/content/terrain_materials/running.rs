@@ -13,10 +13,12 @@ use enshwick_gamedata::reflect::fnv1a32;
 
 use super::table::{self, Adopted};
 use super::{
-    Host, Material, Palette, TerrainMaterialError, add_rules, copy_effects, copy_looks, held_of,
-    held_text, moved_text, name_in, orphans, place, prefer, serving,
+    Host, Material, Palette, Session, TerrainMaterialError, add_rules, copy_effects, copy_looks,
+    held_of, held_text, moved_by, moved_text, name_in, orphans, pads, place, prefer, saves_folder,
+    serving, untaken_text,
 };
 use crate::content::served::{Builder, mod_on};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
@@ -31,17 +33,19 @@ struct Terrain {
     /// What this side serves of its own, set at the seal when it serves
     /// terrain at all.
     own: OnceLock<Own>,
-    /// The table the served terrain resources build from: a host's while
-    /// this client joins one, else `None` until a build asks, which then
-    /// places this side's own, so the loaded world's orphans can go first.
-    session: Mutex<Option<Vec<Material>>>,
+    /// The table the served terrain resources build from.
+    session: Mutex<Session>,
 }
+
+/// Taking a host's terrain ids at a join and this side's own back: a panic
+/// there turns off only that, so the join check and the lobby go on.
+static HOST_IDS_FUSE: Fuse = Fuse::new("terrain ids from the host");
 
 static TERRAIN: Terrain = Terrain {
     materials: Registry::new(),
     palette: OnceLock::new(),
     own: OnceLock::new(),
-    session: Mutex::new(None),
+    session: Mutex::new(Session::Unplaced),
 };
 
 /// What this side serves of its own.
@@ -228,10 +232,17 @@ pub(crate) fn serve(
     });
     crate::base::join::set_terrain_ids(crate::base::join::TerrainIds {
         served: || served_text().unwrap_or_default(),
-        adopt: |table, host| adopt_host(table).map(|moved| moved.text(host)),
-        own_again,
+        adopt: |table, host| match HOST_IDS_FUSE.run("the host's terrain ids", || adopt_host(table))
+        {
+            Some(mismatch) => mismatch.map(|m| m.text(host)),
+            // Off or panicked: whatever it served, it did not take the host's.
+            None => Some(untaken_text(host)),
+        },
+        own_again: || {
+            let _ran = HOST_IDS_FUSE.run("the client's own terrain ids", own_again);
+        },
     });
-    crate::engine::world::on_hosted_start(own_again);
+    crate::engine::world::on_hosted_start(crate::base::join::hosting_starts);
     patches
 }
 
@@ -250,27 +261,44 @@ fn own_table(own: &Own) -> Option<(Vec<Material>, Vec<Material>, Vec<Guid>)> {
 }
 
 /// The table the served terrain resources build from now, placing this
-/// side's own when no session holds one yet.
+/// side's own when none is placed yet.
 fn session() -> Vec<Material> {
     let mut session = TERRAIN.session.relock();
-    if let Some(table) = &*session {
-        return table.clone();
+    if let Some(table) = session.table() {
+        return table.to_vec();
     }
-    let Some((added, kept, lost)) = TERRAIN.own.get().and_then(own_table) else {
+    let Some(table) = TERRAIN.own.get().and_then(placed) else {
         return Vec::new();
     };
-    log(&added, &kept, &lost);
-    let table: Vec<Material> = added.into_iter().chain(kept).collect();
-    *session = Some(table.clone());
+    *session = Session::Own(table.clone());
     table
 }
 
-/// Serves `table`, or this side's own placed again when `None`: every
-/// terrain key the game built is built again in place.
-fn switch(own: &Own, table: Option<Vec<Material>>) {
-    *TERRAIN.session.relock() = table;
+/// This side's own table, placed now and logged.
+fn placed(own: &Own) -> Option<Vec<Material>> {
+    let (added, kept, lost) = own_table(own)?;
+    log(&added, &kept, &lost);
+    Some(added.into_iter().chain(kept).collect())
+}
+
+/// Serves `next`: every terrain key the game built is built again in place
+/// when it was built from another table. Whether every key took it.
+fn switch(own: &Own, next: Session) -> bool {
+    let rebuilds = {
+        let mut session = TERRAIN.session.relock();
+        let rebuilds = next
+            .table()
+            .is_some_and(|table| session.rebuilds_for(table));
+        *session = next;
+        rebuilds
+    };
+    if !rebuilds {
+        return true;
+    }
+    let mut took = true;
     for key in &own.keys {
         if let Err(why) = crate::content::served::rebuild(ModIndex::LOADER, *key) {
+            took = false;
             crate::log!(
                 WARN,
                 "terrain resource {:08x}:{} keeps the last session's ids: {why}",
@@ -279,30 +307,44 @@ fn switch(own: &Own, table: Option<Vec<Material>>) {
             );
         }
     }
+    took
 }
 
 /// Serves this side's own table again, before a game this client hosts
 /// starts or a join that brings no table: a host's table of a game it left
-/// goes.
+/// goes. Before any build the first one places it.
 fn own_again() {
-    if let Some(own) = TERRAIN.own.get() {
-        switch(own, None);
+    let Some(own) = TERRAIN.own.get() else {
+        return;
+    };
+    if *TERRAIN.session.relock() == Session::Unplaced {
+        return;
+    }
+    if let Some(table) = placed(own) {
+        switch(own, Session::Own(table));
     }
 }
 
-/// A mod still on whose material a host serves at another id than the mod
-/// was told at init.
+/// Why this client's terrain ids do not match its host's this game.
 #[derive(Debug)]
-struct Moved {
-    shifted: ModIndex,
-    /// The mods turned off for this game that add terrain: placed before
-    /// the shifted one, they moved its id.
-    extra: Vec<ModIndex>,
+enum Mismatch {
+    /// The host's table does not read here, or a served resource did not
+    /// take it.
+    Untaken,
+    /// `shifted`, a mod still on, reads another id than the host serves;
+    /// the mods turned off for this game in `extra` moved it.
+    Moved {
+        shifted: ModIndex,
+        extra: Vec<ModIndex>,
+    },
 }
 
-impl Moved {
+impl Mismatch {
     /// What the player reads of it in a game `host` hosts.
     fn text(&self, host: Host) -> String {
+        let Self::Moved { shifted, extra } = self else {
+            return untaken_text(host);
+        };
         let names = crate::base::join::names();
         let label = |index: ModIndex| {
             crate::engine::loader::loader()
@@ -311,60 +353,56 @@ impl Moved {
                     enshwick_core::mods::label(names.get(&m.id).map_or("", String::as_str), &m.id)
                 })
         };
-        let extra: Vec<String> = self.extra.iter().map(|&m| label(m)).collect();
-        moved_text(host, &label(self.shifted), &extra)
+        let extra: Vec<String> = extra.iter().map(|&m| label(m)).collect();
+        moved_text(host, &label(*shifted), &extra)
     }
 }
 
 /// Takes the terrain table `host` of the game this client joins, as the
-/// host's rules or lobby give it, before the game connects: `None` when the
-/// host serves none it can read, which keeps this side's own. What moved,
-/// when a mod still on reads a wrong id this session.
-fn adopt_host(host: Option<&str>) -> Option<Moved> {
+/// host's rules or lobby give it, before the game connects; `None` keeps
+/// this side's own. The mismatch, when the table does not read or take, or
+/// a mod still on reads a wrong id this session.
+fn adopt_host(host: Option<&str>) -> Option<Mismatch> {
     let own = TERRAIN.own.get()?;
-    let (palette, _) = palette(own.loader)?;
-    let Some(entries) = host.and_then(|text| table::parse(text, palette)) else {
-        if host.is_some() {
-            crate::log!(
-                WARN,
-                "the host's terrain table does not read; this client serves its own terrain ids"
-            );
-        }
-        switch(own, None);
+    let Some(text) = host else {
+        own_again();
         return None;
     };
+    let (palette, _) = palette(own.loader)?;
+    let Some(entries) = table::parse(text, palette) else {
+        crate::log!(WARN, "the host's terrain table does not read: {text}");
+        own_again();
+        return Some(Mismatch::Untaken);
+    };
     let Adopted { table, moved } = table::adopt(own.added, &entries, mod_on);
-    crate::log!(
-        INFO,
-        "terrain ids from the host: {}",
-        host.unwrap_or_default()
-    );
-    switch(own, Some(table));
+    crate::log!(INFO, "terrain ids from the host: {text}");
+    if !switch(own, Session::Host(table)) {
+        return Some(Mismatch::Untaken);
+    }
     let shifted = moved?;
-    let mut extra: Vec<ModIndex> = own
-        .added
-        .iter()
-        .map(|m| m.owner)
-        .filter(|&owner| !mod_on(owner))
-        .collect();
-    extra.dedup();
-    Some(Moved { shifted, extra })
+    let extra = moved_by(own.added, shifted, crate::base::join::client::off_for_world);
+    Some(Mismatch::Moved { shifted, extra })
 }
 
-/// The text of the table this side serves now, for the clients that join
-/// it; `None` when it serves no terrain.
+/// Whether terrain id `id` holds only a padding rule the loader serves this
+/// session, which reads of the live rules leave out.
+pub(crate) fn padding(id: u8) -> bool {
+    let Some(own) = TERRAIN.own.get() else {
+        return false;
+    };
+    palette(own.loader).is_some_and(|(palette, _)| pads(&palette.free(), &session(), id))
+}
+
+/// The text of this side's own table, for the clients that join it; `None`
+/// when it serves no terrain. A host's table is never passed on: a client
+/// that hosts serves its own from the start.
 fn served_text() -> Option<String> {
     let own = TERRAIN.own.get()?;
-    if let Some(table) = &*TERRAIN.session.relock() {
+    if let Session::Own(table) = &*TERRAIN.session.relock() {
         return Some(table::text(table));
     }
     let (added, kept, _) = own_table(own)?;
     Some(table::text(&[added, kept].concat()))
-}
-
-/// Whether the loader serves terrain, so it follows the world's events.
-pub(crate) fn follows(_: &Loader) -> bool {
-    TERRAIN.own.get().is_some()
 }
 
 /// At a world's load, records beside its save the materials it was served,
@@ -402,11 +440,8 @@ fn world_held(loader: &Loader) -> Vec<Guid> {
     let Some(game_dir) = loader.mods_dir.parent() else {
         return Vec::new();
     };
-    let folder = std::fs::read_to_string(game_dir.join(crate::base::advertise::SERVER_CONFIG))
-        .ok()
-        .and_then(|json| crate::base::advertise::configured(&json, SAVE_DIRECTORY))
-        .unwrap_or_else(|| DEFAULT_SAVES.to_owned());
-    let Ok(entries) = std::fs::read_dir(game_dir.join(folder)) else {
+    let config = std::fs::read_to_string(game_dir.join(crate::base::advertise::SERVER_CONFIG)).ok();
+    let Ok(entries) = std::fs::read_dir(saves_folder(config.as_deref())) else {
         return Vec::new();
     };
     let mut held: Vec<Guid> = Vec::new();
@@ -434,10 +469,6 @@ fn world_held(loader: &Loader) -> Vec<Guid> {
 /// The file in a world's loader data folder that names the terrain materials
 /// it was served when it last loaded.
 const HELD_FILE: &str = "terrain.toml";
-/// The field of the server's configuration that names its save folder.
-const SAVE_DIRECTORY: &str = "saveDirectory";
-/// The save folder a configuration without [`SAVE_DIRECTORY`] gets.
-const DEFAULT_SAVES: &str = "./savegame";
 
 /// Logs what a session's own materials are.
 fn log(added: &[Material], kept: &[Material], lost: &[Guid]) {

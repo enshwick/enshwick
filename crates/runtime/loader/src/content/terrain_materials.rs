@@ -366,7 +366,7 @@ fn add_rules(rules: &mut Value, free: &[u8], materials: &[Material]) -> Option<(
     let Value::List(configs) = rules.field_mut(TERRAIN_CONFIGS)? else {
         return None;
     };
-    let pad = Padding::of(configs);
+    let pad = Padding::of(configs)?;
     let mut added = Vec::with_capacity(free.len());
     for &id in free {
         let material = materials.iter().find(|m| m.id == id);
@@ -399,7 +399,10 @@ struct Padding {
 }
 
 impl Padding {
-    fn of(configs: &[Value]) -> Self {
+    /// The padding of the game's rules `configs`; `None` when they hold a
+    /// conditional buff without the submerge fraction, so no buff can be
+    /// made that never applies.
+    fn of(configs: &[Value]) -> Option<Self> {
         let lists = || {
             configs
                 .iter()
@@ -408,14 +411,18 @@ impl Padding {
                     _ => None,
                 })
         };
-        let never = lists().flatten().next().cloned().and_then(|mut entry| {
-            *entry.field_mut(MIN_SUBMERGE)? = Value::Float(f64::INFINITY);
-            Some(entry)
-        });
-        Self {
+        let never = match lists().flatten().next() {
+            None => None,
+            Some(entry) => {
+                let mut entry = entry.clone();
+                *entry.field_mut(MIN_SUBMERGE)? = Value::Float(f64::INFINITY);
+                Some(entry)
+            }
+        };
+        Some(Self {
             most: lists().map(Vec::len).max().unwrap_or(0),
             never,
-        }
+        })
     }
 
     /// Pads the conditional buffs of `config` to the count; `None` when it
@@ -509,12 +516,117 @@ fn moved_text(host: Host, shifted: &str, extra: &[String]) -> String {
     format!("{head}\n\n{}\n\n{tail}", extra.join("\n"))
 }
 
+/// What the player reads when the terrain ids `host` serves do not read on
+/// this client, or its served resources did not all take them.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+fn untaken_text(host: Host) -> String {
+    match host {
+        Host::Server => crate::engine::texts::fill("join.terrain.server.untaken", &[]),
+        Host::Player => crate::engine::texts::fill("join.terrain.host.untaken", &[]),
+    }
+}
+
+/// The mods whose terrain moved `shifted`'s id: of `added`, in placement
+/// order, the owners before `shifted`'s first material that are `off` for
+/// this game.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+fn moved_by(
+    added: &[Material],
+    shifted: ModIndex,
+    off: impl Fn(ModIndex) -> bool,
+) -> Vec<ModIndex> {
+    let before = added
+        .iter()
+        .position(|m| m.owner == shifted)
+        .unwrap_or(added.len());
+    let mut owners: Vec<ModIndex> = added[..before]
+        .iter()
+        .map(|m| m.owner)
+        .filter(|&owner| off(owner))
+        .collect();
+    owners.dedup();
+    owners
+}
+
+/// Whether terrain id `id` holds only a padding rule of [`add_rules`]: one
+/// of the `free` ids no material of the served `table` takes, which no voxel
+/// holds.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+fn pads(free: &[u8], table: &[Material], id: u8) -> bool {
+    free.contains(&id) && !table.iter().any(|m| m.id == id)
+}
+
+/// The field of the server's configuration that names its save folder.
+const SAVE_DIRECTORY: &str = "saveDirectory";
+/// The save folder a configuration without [`SAVE_DIRECTORY`] gets.
+const DEFAULT_SAVES: &str = "./savegame";
+
+/// The save folder the server's configuration `config` names, as the game
+/// resolves it: a relative one from the working directory, as the world
+/// keys the records are written under.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running server reads its configuration")
+)]
+fn saves_folder(config: Option<&str>) -> std::path::PathBuf {
+    config
+        .and_then(|json| crate::base::advertise::configured(json, SAVE_DIRECTORY))
+        .unwrap_or_else(|| DEFAULT_SAVES.to_owned())
+        .into()
+}
+
+/// The table the served terrain resources build from.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+enum Session {
+    /// None yet: the first build places this side's own, so the loaded
+    /// world's orphans can go first.
+    #[default]
+    Unplaced,
+    /// This side's own.
+    Own(Vec<Material>),
+    /// A host's, while this client joins its game.
+    Host(Vec<Material>),
+}
+
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+impl Session {
+    /// The table the served resources were built from, `None` before one.
+    fn table(&self) -> Option<&[Material]> {
+        match self {
+            Self::Unplaced => None,
+            Self::Own(table) | Self::Host(table) => Some(table),
+        }
+    }
+
+    /// Whether serving `next` means building the served resources again:
+    /// they were built from another table.
+    fn rebuilds_for(&self, next: &[Material]) -> bool {
+        self.table().is_some_and(|now| now != next)
+    }
+}
+
 /// The feature every terrain material patch's switch names.
 #[cfg(windows)]
 pub(crate) const FEATURE: &str = "terrain materials";
 
 #[cfg(windows)]
-pub(crate) use running::{add, follows, in_time, record, sealed, serve, world_event};
+pub(crate) use running::{add, in_time, padding, record, sealed, serve, world_event};
 
 /// The materials in the running game: mods' registrations, the archive's
 /// palette, the loader's patches and the table a session serves.

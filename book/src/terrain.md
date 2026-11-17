@@ -126,9 +126,13 @@ A client mod that the server does not run is turned off at the join, but
 it took its ids when the game started. A mod of the server's loaded after
 it then has another id on the client than on the server. A dedicated
 server's join is refused with a dialog that names the extra mods (error
-E3002). Turn them off and restart the game. A hosted game cannot refuse a
-client before it connects. The client joins with the host's ids, and the
-player reads a note. That mod reads a wrong id until the game restarts. A material of a mod's own has the game's default behaviour in water, and a
+E3002). Turn them off and restart the game. A client that cannot take the
+server's ids, such as a list its game build does not read, is refused with
+the same error. A hosted game cannot refuse a client before it connects.
+The client joins with the host's ids, and the player reads a note. That
+mod reads a wrong id until the game restarts.
+
+A material of a mod's own has the game's default behaviour in water, and a
 texture of its own is not offered.
 
 ### A world without the mod
@@ -143,8 +147,8 @@ mods together, the last ones load as air. Each world records the materials
 it was served in `<stem>-mod-data/enshwick/terrain.toml` beside its save.
 A dedicated server places the materials that the worlds of its save folder
 held first. A client that hosts a game learns its world only after the
-game reads its terrain, so it places them in the record's order. A joining client takes the server's
-ids, so its own record does not matter there.
+game reads its terrain, so it places them in the record's order. A joining
+client takes the server's ids, so its own record does not matter there.
 
 A server without Enshwick loads that ground as air, and its next save keeps
 the loss.

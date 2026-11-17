@@ -45,7 +45,8 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
     expect(dead_code, reason = "only the running game's join check reads it")
 )]
 pub(crate) fn terrain_rules_value(reply: &[u8]) -> Option<String> {
-    let parts: Vec<String> = (0..crate::base::advertise::TERRAIN_RULES)
+    // The parts end at the first one the reply lacks, within its bounded size.
+    let parts: Vec<String> = (0..)
         .map_while(|i| {
             rule(
                 reply,

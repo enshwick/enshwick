@@ -82,6 +82,12 @@ pub(crate) fn join_mods_off() -> Vec<(String, String)> {
         .collect()
 }
 
+/// Whether mod `index` is off for the world the client plays in, as its
+/// server or host does not run it.
+pub(crate) fn off_for_world(index: ModIndex) -> bool {
+    STATE.off_for_world.relock().contains(&index)
+}
+
 /// Turns off the client's mod `id` for the world it joins, which does not
 /// run it: until it plays in a world that does. A pack stays off until the
 /// game restarts, since its data went when it turned off.

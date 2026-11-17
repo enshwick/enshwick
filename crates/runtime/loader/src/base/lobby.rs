@@ -459,11 +459,13 @@ mod runtime {
         }
         // A hosted game cannot be refused before it connects: the client
         // joins with the host's ids, and a mod whose id moved reads it
-        // wrong for this game.
+        // wrong for this game. A host that names no terrain ids serves none
+        // of the client's terrain mods, or runs an Enshwick from before the
+        // key: the client keeps its own ids.
         let terrain = api.get(lobby, super::KEY_TERRAIN);
         let moved = crate::base::join::terrain_ids().and_then(|ids| {
             (ids.adopt)(
-                Some(&terrain),
+                Some(terrain.as_str()).filter(|table| !table.is_empty()),
                 crate::content::terrain_materials::Host::Player,
             )
         });

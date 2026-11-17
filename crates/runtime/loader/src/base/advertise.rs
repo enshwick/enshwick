@@ -31,9 +31,6 @@ pub const RULE_MOD_COUNT: &str = "enshwick.mods.count";
 /// The rule that names the terrain ids the server serves; further parts are
 /// `enshwick.terrain.1` and on.
 pub const RULE_TERRAIN: &str = "enshwick.terrain";
-/// The most rules the terrain table spreads over: one per free terrain id
-/// always holds it.
-pub const TERRAIN_RULES: usize = 11;
 
 /// The fingerprint of a mod set: FNV-1a over the loader version and every
 /// `id@version`, sorted, as eight hex digits.
@@ -126,7 +123,8 @@ pub fn mod_rules(mods: &[(String, String)]) -> (Vec<(String, String)>, usize) {
 /// Steam's limit; its at most 11 entries always fit.
 #[must_use]
 pub fn terrain_rules(table: &str) -> Vec<(String, String)> {
-    split_rules(RULE_TERRAIN, table, TERRAIN_RULES).0
+    // A rule per entry always holds the table, whatever ids the game frees.
+    split_rules(RULE_TERRAIN, table, table.split(',').count()).0
 }
 
 /// The comma-separated `entries` as rules named `base`, then `base.1` and on,
@@ -557,7 +555,7 @@ mod tests {
             .collect();
         let table = table.join(",");
         let rules = terrain_rules(&table);
-        assert!(rules.len() <= TERRAIN_RULES);
+        assert!(rules.len() <= table.split(',').count());
         assert!(rules.iter().all(|(_, value)| value.len() <= RULE_LIMIT));
         assert_eq!(rules[1].0, "enshwick.terrain.1");
         let joined: Vec<&str> = rules.iter().map(|(_, v)| v.as_str()).collect();

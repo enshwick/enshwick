@@ -85,7 +85,6 @@ pub(crate) static PARTS: &[&Part] = &[
                 terrain_materials::world_event(loader, event);
             }
         )),
-        follows: Some(terrain_materials::follows),
         ..part!("terrain_materials", terrain_materials)
     },
     &Part {
