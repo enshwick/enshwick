@@ -461,8 +461,12 @@ mod runtime {
         // joins with the host's ids, and a mod whose id moved reads it
         // wrong for this game.
         let terrain = api.get(lobby, super::KEY_TERRAIN);
-        let moved =
-            crate::base::join::terrain_ids().and_then(|ids| (ids.adopt)(Some(&terrain), "host"));
+        let moved = crate::base::join::terrain_ids().and_then(|ids| {
+            (ids.adopt)(
+                Some(&terrain),
+                crate::content::terrain_materials::Host::Player,
+            )
+        });
         if let Some(text) = moved {
             crate::log!(WARN, "hosted game: {}", text.replace('\n', " "));
             note = Some(note.map_or_else(|| text.clone(), |n| format!("{n}\n\n{text}")));

@@ -445,3 +445,27 @@ fn changes_read_only_the_rules_the_request_sets() {
     );
     assert_eq!(Changes::of(&request(1)), Some(Changes::default()));
 }
+
+#[test]
+fn a_moved_terrain_id_is_told_in_the_reader_s_language_naming_who_hosts() {
+    use crate::engine::texts::for_reader;
+    use enshwick_core::i18n::Language;
+    let extra = ["Caves".to_owned(), "Dunes".to_owned()];
+    assert_eq!(
+        moved_text(Host::Server, "Ores", &[]),
+        "Ores gives its terrain another id here than the server does. Run the server's mods in its versions."
+    );
+    assert_eq!(
+        moved_text(Host::Player, "Ores", &extra),
+        "These Enshwick mods add terrain, and the host does not run them:\n\nCaves\nDunes\n\nSo Ores gives its terrain another id here than the host does. Turn them off on the Mods screen and restart the game."
+    );
+    let uk = Some(Language::UK_UA);
+    assert_eq!(
+        for_reader(uk, || moved_text(Host::Server, "Ores", &extra)),
+        "Ці моди Enshwick додають ґрунт, а сервер їх не запускає:\n\nCaves\nDunes\n\nТож Ores дає своєму ґрунту тут інший номер, ніж сервер. Вимкніть їх на екрані модів і перезапустіть гру."
+    );
+    assert_eq!(
+        for_reader(uk, || moved_text(Host::Player, "Ores", &[])),
+        "Ores дає своєму ґрунту тут інший номер, ніж хост. Запустіть моди хоста в його версіях."
+    );
+}

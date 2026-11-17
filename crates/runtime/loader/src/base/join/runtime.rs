@@ -58,9 +58,9 @@ pub(crate) struct TerrainIds {
     /// The table served now, as the host's rules and lobby carry it.
     pub(crate) served: fn() -> String,
     /// Takes a host's table before the game connects, `None` for a host
-    /// that serves none it can read; the player's text, naming the host by
-    /// the word given, when a mod of this side now reads a wrong id.
-    pub(crate) adopt: fn(Option<&str>, &str) -> Option<String>,
+    /// that serves none it can read; the player's text, naming who hosts,
+    /// when a mod of this side now reads a wrong id.
+    pub(crate) adopt: fn(Option<&str>, crate::content::terrain_materials::Host) -> Option<String>,
     /// Serves this side's own table again.
     pub(crate) own_again: fn(),
 }
@@ -246,7 +246,12 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         let terrain = server
             .is_some()
             .then(|| super::terrain_rules_value(&reply).unwrap_or_default());
-        let moved = terrain_ids().and_then(|ids| (ids.adopt)(terrain.as_deref(), "server"));
+        let moved = terrain_ids().and_then(|ids| {
+            (ids.adopt)(
+                terrain.as_deref(),
+                crate::content::terrain_materials::Host::Server,
+            )
+        });
         if let Some(text) = moved {
             own_terrain_again();
             terrain_refused(&text);

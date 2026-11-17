@@ -467,6 +467,48 @@ fn copy_looks(blending: &mut Value, materials: &[Material]) -> Option<()> {
     Some(())
 }
 
+/// Who hosts the game a client joins, which its terrain text names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+pub(crate) enum Host {
+    /// A dedicated server, which refuses the join.
+    Server,
+    /// A player hosting the game, which the client joins all the same.
+    Player,
+}
+
+/// What the player reads when `shifted`, a mod still on, reads another
+/// terrain id than `host` serves, in the reader's language: `extra` are the
+/// mods turned off for this game whose terrain moved it.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+fn moved_text(host: Host, shifted: &str, extra: &[String]) -> String {
+    use crate::engine::texts;
+    let shifted = [("mod", shifted)];
+    if extra.is_empty() {
+        return match host {
+            Host::Server => texts::fill("join.terrain.server.moved", &shifted),
+            Host::Player => texts::fill("join.terrain.host.moved", &shifted),
+        };
+    }
+    let (head, tail) = match host {
+        Host::Server => (
+            texts::fill("join.terrain.server.extra", &[]),
+            texts::fill("join.terrain.server.shifted", &shifted),
+        ),
+        Host::Player => (
+            texts::fill("join.terrain.host.extra", &[]),
+            texts::fill("join.terrain.host.shifted", &shifted),
+        ),
+    };
+    format!("{head}\n\n{}\n\n{tail}", extra.join("\n"))
+}
+
 /// The feature every terrain material patch's switch names.
 #[cfg(windows)]
 pub(crate) const FEATURE: &str = "terrain materials";

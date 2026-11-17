@@ -13,8 +13,8 @@ use enshwick_gamedata::reflect::fnv1a32;
 
 use super::table::{self, Adopted};
 use super::{
-    Material, Palette, TerrainMaterialError, add_rules, copy_effects, copy_looks, held_of,
-    held_text, name_in, orphans, place, prefer, serving,
+    Host, Material, Palette, TerrainMaterialError, add_rules, copy_effects, copy_looks, held_of,
+    held_text, moved_text, name_in, orphans, place, prefer, serving,
 };
 use crate::content::served::{Builder, mod_on};
 use crate::engine::loader::Loader;
@@ -228,7 +228,7 @@ pub(crate) fn serve(
     });
     crate::base::join::set_terrain_ids(crate::base::join::TerrainIds {
         served: || served_text().unwrap_or_default(),
-        adopt: |host, word| adopt_host(host).map(|moved| moved.text(word)),
+        adopt: |table, host| adopt_host(table).map(|moved| moved.text(host)),
         own_again,
     });
     crate::engine::world::on_hosted_start(own_again);
@@ -301,8 +301,8 @@ struct Moved {
 }
 
 impl Moved {
-    /// What the player reads of it, the game's host called `host`.
-    fn text(&self, host: &str) -> String {
+    /// What the player reads of it in a game `host` hosts.
+    fn text(&self, host: Host) -> String {
         let names = crate::base::join::names();
         let label = |index: ModIndex| {
             crate::engine::loader::loader()
@@ -311,17 +311,8 @@ impl Moved {
                     enshwick_core::mods::label(names.get(&m.id).map_or("", String::as_str), &m.id)
                 })
         };
-        let shifted = label(self.shifted);
-        if self.extra.is_empty() {
-            return format!(
-                "{shifted} gives its terrain another id here than the {host} does. Run the {host}'s mods in its versions."
-            );
-        }
         let extra: Vec<String> = self.extra.iter().map(|&m| label(m)).collect();
-        format!(
-            "These Enshwick mods add terrain, and the {host} does not run them:\n\n{}\n\nSo {shifted} gives its terrain another id here than the {host} does. Turn them off on the Mods screen and restart the game.",
-            extra.join("\n")
-        )
+        moved_text(host, &label(self.shifted), &extra)
     }
 }
 
