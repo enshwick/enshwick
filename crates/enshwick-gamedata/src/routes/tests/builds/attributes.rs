@@ -236,3 +236,31 @@ fn every_builder_route_reads_its_own_group_s_text_and_the_nine_texts_differ() {
     let texts: FxHashSet<u64> = ATTRIBUTE_TEXT_READS.iter().map(|&(_, t)| t).collect();
     assert_eq!(texts.len(), ATTRIBUTE_TEXT_READS.len());
 }
+
+/// The push is found among the callees of every group's builder alike, so
+/// no group's rows hang on another group's builder route; the Primary
+/// builder pushes inline and gives nothing, on every kept client.
+#[test]
+fn the_push_route_looks_through_every_group_s_builder() {
+    let routes = Routes::embedded().unwrap();
+    let push = routes
+        .routes
+        .iter()
+        .find(|r| r.id == "ui.attribute_row_push")
+        .unwrap();
+    let How::Among {
+        kin: Kin::Callees(callers),
+        ..
+    } = &push.how
+    else {
+        panic!("the push is no `callees` route");
+    };
+    let mut builders: Vec<String> = ATTRIBUTE_TEXT_READS
+        .iter()
+        .map(|&(text, _)| text.replace("ui.attribute_text_", "ui.attribute_rows_"))
+        .collect();
+    let mut callers = callers.clone();
+    builders.sort_unstable();
+    callers.sort_unstable();
+    assert_eq!(callers, builders);
+}

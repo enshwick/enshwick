@@ -1,5 +1,21 @@
 use super::*;
 
+/// Tests of one binary share a process under `cargo test`, so a second
+/// folder of the same purpose must not remove the first, as the C and C++
+/// compiles once did to each other.
+#[test]
+fn a_scratch_folder_is_its_own_even_within_one_process() {
+    let first = scratch_dir("test-apart").unwrap();
+    let kept = first.join("kept");
+    std::fs::write(&kept, "").unwrap();
+    let second = scratch_dir("test-apart").unwrap();
+    let still = kept.exists();
+    let _removed = std::fs::remove_dir_all(&first);
+    let _removed = std::fs::remove_dir_all(&second);
+    assert_ne!(first, second);
+    assert!(still, "the second folder removed the first");
+}
+
 #[test]
 fn only_annotation_lines_have_their_brackets_unescaped() {
     let source = "/// cbindgen:field-names=\\[bytes\\]\n/// Not \\[here\\].\nlet a = [1];\n";

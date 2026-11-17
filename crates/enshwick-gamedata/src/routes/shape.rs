@@ -8,7 +8,9 @@
 //! its scale and a displacement (`[rcx]`, `[rbp-*]`, `[rbp+?]`, `[rdx+0x78]`,
 //! `[rcx+r10*4+?]`) or RIP-relative (`[rip+*]`); an exact immediate
 //! (`0x1`); `?` for the base of memory through any register but RIP
-//! (`[?+*]`); memory with its size first where the registers do not give it
+//! (`[?+*]`), and `?o` for one off the stack, any but RSP, RBP and RIP
+//! (`[?o+*]`), which a local at the same displacement cannot match; memory
+//! with its size first where the registers do not give it
 //! (`dword [rcx+0xb8]`); `?` for any operand; `?r`, `?i`, `?b` and `?m` for
 //! any register, immediate, branch target and memory operand; `?1` to `?9`
 //! for a register bound across the shape, any register at its first use and
@@ -47,6 +49,8 @@ enum Disp {
 enum Base {
     /// Any register but RIP.
     Any,
+    /// Any register but RSP, RBP and RIP: an object, never a local.
+    Object,
     /// This register.
     Exact(Register),
     /// The register bound to this hole, from 0, any but RIP.
@@ -327,6 +331,12 @@ impl Step {
                         && size.is_none_or(|bytes| ins.memory_size().size() == bytes)
                         && match *base {
                             Base::Any => any,
+                            Base::Object => {
+                                any && !matches!(
+                                    have.full_register(),
+                                    Register::RSP | Register::RBP
+                                )
+                            }
                             Base::Exact(want) => have == want,
                             Base::Bound(hole) => any && run.binds(hole, have),
                         }
@@ -464,6 +474,7 @@ fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Resul
     let at = cut(inner);
     let base = match &inner[..at] {
         "?" => Base::Any,
+        "?o" => Base::Object,
         name => match hole(name) {
             Some(hole) => Base::Bound(hole?),
             None => Base::Exact(names.register(name)?),

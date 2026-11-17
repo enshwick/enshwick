@@ -10,6 +10,7 @@ use std::ffi::OsStr;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// The package the header describes.
 pub(crate) const PACKAGE: &str = "enshwick";
@@ -527,10 +528,16 @@ fn plain_links(line: &str) -> String {
     out
 }
 
-/// A fresh, empty directory for one run of this task.
+/// A fresh, empty directory of its own for one use, named by the process
+/// and a count, since tests run as threads of one process under `cargo
+/// test` and the process alone would give two of them one folder.
 fn scratch_dir(purpose: &str) -> Result<PathBuf, String> {
-    let dir =
-        std::env::temp_dir().join(format!("enshwick-header-{purpose}-{}", std::process::id()));
+    static MADE: AtomicU32 = AtomicU32::new(0);
+    let made = MADE.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!(
+        "enshwick-header-{purpose}-{}-{made}",
+        std::process::id()
+    ));
     let _stale = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
     Ok(dir)

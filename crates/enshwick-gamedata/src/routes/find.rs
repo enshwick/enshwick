@@ -308,13 +308,39 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         pinned.or_else(|| Some(self.code.base() + u64::from(self.address(name)?)))
     }
 
-    /// Among the functions that call `callee` directly, or that `caller`
-    /// calls directly, the one whose code the shape matches, as
-    /// [`Self::shaped`] takes it; `start` is that function.
+    /// What [`Self::among_one`] gives for each function `kin` names, when
+    /// every one that gives something gives the same.
     fn among(&mut self, kin: &Kin, steps: &'f [Step], route: &Route) -> Option<Routed> {
-        let mut functions: Vec<u32> = match kin {
-            Kin::Callers(callee) => self.code.callers(self.address(callee)?),
-            Kin::Callees(caller) => self.code.callees(self.address(caller)?),
+        let (names, callers) = match kin {
+            Kin::Callers(callees) => (callees, true),
+            Kin::Callees(callers) => (callers, false),
+        };
+        let mut agreed = None;
+        for name in names {
+            if let Some(found) = self.among_one(name, callers, steps, route)
+                && agreed.replace(found).is_some_and(|was| was != found)
+            {
+                return None;
+            }
+        }
+        agreed
+    }
+
+    /// Among the functions that call `name` directly (`callers`), or that
+    /// `name` calls directly, the one whose code the shape matches, as
+    /// [`Self::shaped`] takes it; `start` is that function.
+    fn among_one(
+        &mut self,
+        name: &str,
+        callers: bool,
+        steps: &'f [Step],
+        route: &Route,
+    ) -> Option<Routed> {
+        let named = self.address(name)?;
+        let mut functions: Vec<u32> = if callers {
+            self.code.callers(named)
+        } else {
+            self.code.callees(named)
         }
         .into_iter()
         .collect();
