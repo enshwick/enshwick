@@ -11,7 +11,7 @@ use enshwick_core::controls::{
     GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases,
 };
 
-use crate::test::table::{Registered, Registration, text, with};
+use crate::test::table::{Registered, text, with, with_open};
 use crate::test::{FakeHost, Installed};
 
 /// A control the mod declared.
@@ -77,20 +77,23 @@ pub(crate) extern "system" fn control(
     {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        if s.controls.controls.iter().any(|c| c.name == name) {
+    with_open(|s| {
+        if s.actions.controls.controls.iter().any(|c| c.name == name) {
             return Status::REFUSED;
         }
         let mut keys = keys.map(Option::flatten);
-        for (_, slot, key) in s.host.bindings.iter().filter(|(n, _, _)| *n == name) {
+        for (_, slot, key) in s
+            .host
+            .actions
+            .bindings
+            .iter()
+            .filter(|(n, _, _)| *n == name)
+        {
             if let Some(kept) = keys.get_mut(*slot) {
                 *kept = *key;
             }
         }
-        s.controls.controls.push(FakeControl {
+        s.actions.controls.controls.push(FakeControl {
             keys,
             label: text(spec.label),
             name,
@@ -122,11 +125,11 @@ pub(crate) extern "system" fn run_action(
         .and_then(enshwick_core::__fake::action_target);
     let (action, args) = (text(action), text(args));
     with(Status::MISSING, |s| {
-        if s.host.side != enshwick_core::abi::Side::CLIENT {
+        if s.host.base.side != enshwick_core::abi::Side::CLIENT {
             return Status::UNAVAILABLE;
         }
-        s.controls.runs.push((action, args));
-        s.controls.targets.push(named);
+        s.actions.controls.runs.push((action, args));
+        s.actions.controls.targets.push(named);
         Status::OK
     })
 }
@@ -148,7 +151,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn bind(mut self, name: &str, slot: usize, key: Option<Key>) -> Self {
-        self.bindings.push((name.to_owned(), slot, key));
+        self.actions.bindings.push((name.to_owned(), slot, key));
         self
     }
 }
@@ -224,18 +227,20 @@ impl Installed {
         let calls = with(Vec::new(), |s| {
             // In another's world a mod of side server fires on its server,
             // which carries the control to the client.
-            let server_mod = s.manifest.as_ref().is_some_and(|m| !m.joins);
-            if s.host.side != enshwick_core::abi::Side::CLIENT || (server_mod && !s.host.hosting) {
+            let server_mod = s.base.manifest.as_ref().is_some_and(|m| !m.joins);
+            if s.host.base.side != enshwick_core::abi::Side::CLIENT
+                || (server_mod && !s.host.base.hosting)
+            {
                 return Vec::new();
             }
-            let now = advance(&mut s.controls, after);
+            let now = advance(&mut s.actions.controls, after);
             let FakeControls {
                 controls,
                 slots,
                 runs,
                 targets,
                 ..
-            } = &mut s.controls;
+            } = &mut s.actions.controls;
             let bound: Vec<[u32; 2]> = controls
                 .iter()
                 .map(|c| c.keys.map(|key| key.map_or(0, Key::bits)))
@@ -294,12 +299,12 @@ impl Installed {
     pub fn game_actions(&self, player: &PlayerInfo, held: &[GameAction], after: Duration) -> usize {
         let entity = player.entity.0;
         let calls = with(Vec::new(), |s| {
-            if s.host.side == enshwick_core::abi::Side::CLIENT {
+            if s.host.base.side == enshwick_core::abi::Side::CLIENT {
                 return Vec::new();
             }
-            let now = advance(&mut s.controls, after);
+            let now = advance(&mut s.actions.controls, after);
             let mut calls = Vec::new();
-            for control in &mut s.controls.controls {
+            for control in &mut s.actions.controls.controls {
                 let Some(action) = control.link else {
                     continue;
                 };
@@ -333,11 +338,13 @@ impl Installed {
     pub fn controls(&self) -> Vec<(String, String, [Option<Key>; 2])> {
         with(Vec::new(), |s| {
             let texts = s
+                .base
                 .published_texts
                 .as_deref()
                 .and_then(|toml| enshwick_core::i18n::Texts::parse(toml).ok());
-            let language = enshwick_core::i18n::Language(s.host.language);
-            s.controls
+            let language = enshwick_core::i18n::Language(s.host.base.language);
+            s.actions
+                .controls
                 .controls
                 .iter()
                 .map(|c| {
@@ -365,7 +372,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn action_runs(&self) -> Vec<(String, String)> {
-        with(Vec::new(), |s| s.controls.runs.clone())
+        with(Vec::new(), |s| s.actions.controls.runs.clone())
     }
 
     /// The object each of [`action_runs`](Self::action_runs) named with
@@ -380,7 +387,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn action_targets(&self) -> Vec<Option<enshwick_core::actions::ActionTarget>> {
-        with(Vec::new(), |s| s.controls.targets.clone())
+        with(Vec::new(), |s| s.actions.controls.targets.clone())
     }
 }
 

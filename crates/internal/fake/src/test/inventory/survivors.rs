@@ -51,7 +51,7 @@ impl Installed {
                 .map_or(Entity::NONE, |(_, bed)| *bed)
         }
         use enshwick_core::survivors::Answer;
-        let lookups = table::with(Vec::new(), |s| s.survivor_lookup.clone());
+        let lookups = table::with(Vec::new(), |s| s.inventory.survivor_lookup.clone());
         let mut beds = beds;
         let lookup = SurvivorLookup {
             header: Header::of::<SurvivorLookup>(),
@@ -94,7 +94,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn survivor_bed_check(&self, check: &BedCheck) -> bool {
-        let filters = table::with(Vec::new(), |s| s.bed_checks.clone());
+        let filters = table::with(Vec::new(), |s| s.inventory.bed_checks.clone());
         filters.iter().all(|filter| {
             // SAFETY: a valid check; `user` is the mod's pointer.
             filter.run(|callback, user| unsafe {
@@ -129,7 +129,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn summon(&self, summon: &Summon) -> u8 {
-        let filters = table::with(Vec::new(), |s| s.summons.clone());
+        let filters = table::with(Vec::new(), |s| s.inventory.summons.clone());
         let mut verdict = 0;
         for filter in &filters {
             // SAFETY: a valid summon; `user` is the mod's pointer.
@@ -167,7 +167,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn summoned(&self, summon: &Summon) -> usize {
-        let handlers = table::with(Vec::new(), |s| s.summoned.clone());
+        let handlers = table::with(Vec::new(), |s| s.inventory.summoned.clone());
         for handler in &handlers {
             // SAFETY: a valid summon; `user` is the mod's pointer.
             handler.run(|callback, user| unsafe { callback(summon, user) });
@@ -185,7 +185,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn summon_items(&self) -> Vec<(enshwick_core::ItemId, enshwick_core::survivors::NpcId)> {
-        table::with(Vec::new(), |s| s.summon_items.clone())
+        table::with(Vec::new(), |s| s.inventory.summon_items.clone())
     }
 
     /// Asks the mods' survivor menu merges about `statuses` in load order,
@@ -204,7 +204,7 @@ impl Installed {
         survivor: enshwick_core::survivors::NpcId,
         statuses: &[u8],
     ) -> Option<u8> {
-        let merges = table::with(Vec::new(), |s| s.survivor_status.clone());
+        let merges = table::with(Vec::new(), |s| s.inventory.survivor_status.clone());
         merges.iter().find_map(|registered| {
             // SAFETY: valid statuses for the call; `user` is the mod's pointer.
             let answer = registered.run(|callback, user| unsafe {

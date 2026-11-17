@@ -23,7 +23,8 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn console_answer(mut self, word: &str, answer: &str) -> Self {
-        self.console_answers
+        self.actions
+            .console_answers
             .insert(word.to_owned(), answer.to_owned());
         self
     }
@@ -46,7 +47,8 @@ impl FakeHost {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn other_mod_commands(mut self, mod_id: &str, alias: &str) -> Self {
-        self.other_commands
+        self.actions
+            .other_commands
             .push((mod_id.to_owned(), alias.to_owned(), false));
         self
     }
@@ -66,7 +68,8 @@ impl FakeHost {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn later_mod_commands(mut self, mod_id: &str, alias: &str) -> Self {
-        self.other_commands
+        self.actions
+            .other_commands
             .push((mod_id.to_owned(), alias.to_owned(), true));
         self
     }
@@ -113,7 +116,7 @@ impl Installed {
         action: &str,
         args: &str,
     ) -> Option<String> {
-        let actions = table::with(None, |s| s.actions)?;
+        let actions = table::with(None, |s| s.actions.callback)?;
         // Mods declare actions only with `unstable`, so without it no run gets here.
         #[cfg(feature = "unstable")]
         if kind == enshwick_core::abi::ActionCall::RUN && !enshwick_core::peer::args_in_bounds(args)
@@ -132,11 +135,16 @@ impl Installed {
         if kind == enshwick_core::abi::ActionCall::RUN {
             let key = player.key.get();
             table::with((), |s| {
-                let held = s.commands.carried.iter().filter(|(k, _, _)| *k == key);
+                let held = s
+                    .actions
+                    .commands
+                    .carried
+                    .iter()
+                    .filter(|(k, _, _)| *k == key);
                 let again: Vec<_> = held
                     .map(|(k, id, _)| (*k, id.clone(), enshwick_core::abi::WINDOW_UPDATE))
                     .collect();
-                s.commands.windows.extend(again);
+                s.actions.commands.windows.extend(again);
             });
         }
         Some(reply)
@@ -197,7 +205,7 @@ impl Installed {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn rules_changed(&self) -> u32 {
-        table::with(0, |s| s.commands.rules_changed)
+        table::with(0, |s| s.actions.commands.rules_changed)
     }
 
     /// The windows `player`'s client holds after the shows and closes the
@@ -231,17 +239,23 @@ impl Installed {
     pub fn carried_windows(&self, player: &PlayerInfo, language: u32) -> Vec<(String, String)> {
         let key = player.key.get();
         let (actions, waiting, ready) = table::with((None, Vec::new(), true), |s| {
-            let (mine, others): (Vec<_>, Vec<_>) = core::mem::take(&mut s.commands.windows)
+            let (mine, others): (Vec<_>, Vec<_>) = core::mem::take(&mut s.actions.commands.windows)
                 .into_iter()
                 .partition(|(k, _, _)| *k == key);
-            s.commands.windows = others;
-            let online = s.host.players.iter().any(|p| p.key == player.key);
-            let ready = !s.host.without_hello.contains(&key);
-            (s.actions, if online { mine } else { Vec::new() }, ready)
+            s.actions.commands.windows = others;
+            let online = s.host.base.players.iter().any(|p| p.key == player.key);
+            let ready = !s.host.base.without_hello.contains(&key);
+            (
+                s.actions.callback,
+                if online { mine } else { Vec::new() },
+                ready,
+            )
         });
         if !ready {
             for (_, id, change) in waiting {
-                if let Some(closed) = table::with(None, |s| s.commands.pend(key, id, change)) {
+                if let Some(closed) =
+                    table::with(None, |s| s.actions.commands.pend(key, id, change))
+                {
                     self.tell_window_closed(player.key, &closed);
                 }
             }
@@ -249,7 +263,7 @@ impl Installed {
         }
         for (_, id, change) in waiting {
             let holds = table::with(false, |s| {
-                let mut carried = s.commands.carried.iter();
+                let mut carried = s.actions.commands.carried.iter();
                 carried.any(|(k, i, _)| *k == key && *i == id)
             });
             if change == enshwick_core::abi::WINDOW_UPDATE && !holds {
@@ -273,7 +287,7 @@ impl Installed {
                 text
             };
             let closed = table::with(None, |s| {
-                let carried = &mut s.commands.carried;
+                let carried = &mut s.actions.commands.carried;
                 let at = carried.iter().position(|(k, i, _)| *k == key && *i == id);
                 match (at, text.is_empty()) {
                     (Some(at), true) => {
@@ -300,7 +314,8 @@ impl Installed {
             }
         }
         table::with(Vec::new(), |s| {
-            s.commands
+            s.actions
+                .commands
                 .carried
                 .iter()
                 .filter(|(k, _, _)| *k == key)
@@ -336,11 +351,12 @@ impl Installed {
     pub fn close_window(&self, player: &PlayerInfo, id: &str) {
         let key = player.key.get();
         let held = table::with(false, |s| {
-            let before = s.commands.carried.len();
-            s.commands
+            let before = s.actions.commands.carried.len();
+            s.actions
+                .commands
                 .carried
                 .retain(|(k, i, _)| !(*k == key && i == id));
-            s.commands.carried.len() != before
+            s.actions.commands.carried.len() != before
         });
         if held {
             self.tell_window_closed(player.key, id);
@@ -383,7 +399,12 @@ impl Installed {
 
         let key = player.key.get();
         let texts: Vec<String> = table::with(Vec::new(), |s| {
-            let carried = s.commands.carried.iter().filter(|(k, _, _)| *k == key);
+            let carried = s
+                .actions
+                .commands
+                .carried
+                .iter()
+                .filter(|(k, _, _)| *k == key);
             carried.map(|(_, _, text)| text.clone()).collect()
         });
         let map = texts.iter().rev().find_map(|text| {
@@ -393,7 +414,7 @@ impl Installed {
             })
         });
         let moved = table::with(false, |s| {
-            let waypoints = &mut s.commands.waypoints;
+            let waypoints = &mut s.actions.commands.waypoints;
             let last = waypoints.iter().position(|(k, _)| *k == key);
             match (&map, last) {
                 (None, Some(last)) => {
@@ -445,9 +466,9 @@ impl Installed {
     pub fn say_hello(&self, player: enshwick_core::PlayerKey) {
         let key = player.get();
         let no_room = table::with(Vec::new(), |s| {
-            s.host.without_hello.remove(&key);
-            s.host.net_peers.insert(key);
-            s.commands.greeted(key)
+            s.host.base.without_hello.remove(&key);
+            s.host.base.net_peers.insert(key);
+            s.actions.commands.greeted(key)
         });
         for id in no_room {
             self.tell_window_closed(player, &id);
@@ -470,11 +491,11 @@ impl Installed {
     pub fn player_left(&self, player: enshwick_core::PlayerKey) {
         let key = player.get();
         table::with((), |s| {
-            s.commands.carried.retain(|(k, _, _)| *k != key);
-            s.commands.pending.retain(|(k, _)| *k != key);
-            s.commands.windows.retain(|(k, _, _)| *k != key);
-            s.commands.waypoints.retain(|(k, _)| *k != key);
-            s.permission_changes.left(player);
+            s.actions.commands.carried.retain(|(k, _, _)| *k != key);
+            s.actions.commands.pending.retain(|(k, _)| *k != key);
+            s.actions.commands.windows.retain(|(k, _, _)| *k != key);
+            s.actions.commands.waypoints.retain(|(k, _)| *k != key);
+            s.world.permission_changes.left(player);
         });
         self.tell_window_closed(player, "");
     }
@@ -488,7 +509,7 @@ impl Installed {
         reason = "only an installed fake has a mod to tell"
     )]
     fn tell_window_closed(&self, player: enshwick_core::PlayerKey, id: &str) {
-        let Some(actions) = table::with(None, |s| s.actions) else {
+        let Some(actions) = table::with(None, |s| s.actions.callback) else {
             return;
         };
         let who = PlayerInfo {
@@ -546,7 +567,7 @@ impl Installed {
         args: &str,
         target: enshwick_core::actions::ActionTarget,
     ) -> Option<String> {
-        let actions = table::with(None, |s| s.actions)?;
+        let actions = table::with(None, |s| s.actions.callback)?;
         let run = enshwick_core::abi::ActionCall::RUN;
         if !enshwick_core::peer::args_in_bounds(args) {
             return Some(out_of_bounds(actions, player, action));
@@ -573,7 +594,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn console(&self) -> Vec<String> {
-        table::with(Vec::new(), |s| s.console.clone())
+        table::with(Vec::new(), |s| s.actions.console.clone())
     }
 }
 
@@ -610,7 +631,7 @@ impl Installed {
         action: &str,
         args: &str,
     ) -> bool {
-        let Some(actions) = table::with(None, |s| s.actions) else {
+        let Some(actions) = table::with(None, |s| s.actions.callback) else {
             return false;
         };
         tell_refused(actions, player, (via, reason), action, args);

@@ -182,15 +182,15 @@ impl<F: Copy> Registered<F> {
 
 /// Whether the fake turned the mod or data pack `handle` off.
 pub(crate) fn is_off(handle: ModHandle) -> bool {
-    with(false, |s| s.off.contains(&handle))
+    with(false, |s| s.base.off.contains(&handle))
 }
 
 /// Turns the mod or data pack `handle` off, as the loader does after a
 /// failed init or ready or a fault: none of its callbacks runs again.
 pub(crate) fn turn_off(handle: ModHandle) {
     with((), |s| {
-        if !s.off.contains(&handle) {
-            s.off.push(handle);
+        if !s.base.off.contains(&handle) {
+            s.base.off.push(handle);
         }
     });
 }

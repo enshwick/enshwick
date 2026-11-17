@@ -22,7 +22,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn world_key(mut self, key: &str) -> Self {
-        self.world_key = Some(key.to_owned());
+        self.base.world_key = Some(key.to_owned());
         self
     }
 
@@ -47,7 +47,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn player(mut self, player: PlayerInfo) -> Self {
-        self.players.push(player);
+        self.base.players.push(player);
         self
     }
 }
@@ -68,7 +68,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn chat(&self) -> Vec<(enshwick_core::PlayerKey, String)> {
-        table::with(Vec::new(), |s| s.chat.clone())
+        table::with(Vec::new(), |s| s.world.chat.clone())
     }
 
     /// The notices the mod showed on screen, `(account key, text)`, in
@@ -83,7 +83,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn notices(&self) -> Vec<(enshwick_core::PlayerKey, String)> {
-        table::with(Vec::new(), |s| s.notices.clone())
+        table::with(Vec::new(), |s| s.world.notices.clone())
     }
 
     /// Asks the mod's rename filters about `player` renaming `entity` to
@@ -102,7 +102,7 @@ impl Installed {
         player: Option<&PlayerInfo>,
         text: &str,
     ) -> bool {
-        let filters = table::with(Vec::new(), |s| s.rename_filters.clone());
+        let filters = table::with(Vec::new(), |s| s.world.rename_filters.clone());
         let call = RenameCall {
             header: Header::of::<RenameCall>(),
             entity: enshwick_core::Entity(entity.0),
@@ -128,7 +128,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn join(&self, player: Option<enshwick_core::PlayerKey>) -> bool {
-        let rules = table::with(Vec::new(), |s| s.join_rules.clone());
+        let rules = table::with(Vec::new(), |s| s.world.join_rules.clone());
         let call = JoinCall {
             header: Header::of::<JoinCall>(),
             account: player.unwrap_or(enshwick_core::PlayerKey::new(0)),

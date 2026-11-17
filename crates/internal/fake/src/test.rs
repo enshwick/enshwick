@@ -157,13 +157,8 @@ pub use enshwick_macros::declare_test_mod as declare_mod;
 
 use std::sync::MutexGuard;
 
-use rustc_hash::{FxHashMap, FxHashSet};
-
 use enshwick_core::FnPtr;
-use enshwick_core::abi::{
-    CallerFrame, EntityPlace, Fingerprint, HostApi, ItemTypeInfo, Level, ModHandle, ModInfo,
-    PlayerInfo, Side, Status,
-};
+use enshwick_core::abi::{HostApi, Level, ModHandle, Status};
 
 use actions::commands::{ask, console};
 use base::host::FakeService;
@@ -222,24 +217,13 @@ pub fn address<F: FnPtr>(function: F) -> u64 {
     address as u64
 }
 
-/// Whether the fake's game build has the base code the loader hooks to
-/// raise the base limits.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BaseCode {
-    /// The platform knows it.
-    Known,
-    /// The platform raises the zones but cannot hold bases past 16.
-    ZonesOnly,
-    /// An unknown build: the game keeps its own limits.
-    Unknown,
-}
-
 /// What the fake loader answers: a builder, installed with
 /// [`FakeHost::install`].
 ///
 /// Lookups the test did not configure answer [`Status::MISSING`], as a game
 /// build without them would. A world's settings files are empty, so the mod
-/// reads its own defaults; the side is [`Side::SERVER`] and the log level
+/// reads its own defaults; the side is
+/// [`Side::SERVER`](enshwick_core::abi::Side::SERVER) and the log level
 /// [`Level::INFO`].
 ///
 /// # Examples
@@ -256,112 +240,13 @@ pub(crate) enum BaseCode {
 /// assert!(loader.hooks().is_empty());
 /// ```
 #[derive(Clone, Debug)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag is a switch of its own that a test sets through its builder"
-)]
 pub struct FakeHost {
-    side: Side,
-    base: u64,
-    fingerprint: Fingerprint,
-    build_complete: bool,
-    handle: ModHandle,
-    symbols: FxHashMap<String, u64>,
-    systems: FxHashMap<String, u64>,
-    constants: FxHashMap<String, u64>,
-    field_offsets: FxHashMap<(String, String), u64>,
-    type_sizes: FxHashMap<String, u32>,
-    type_hashes: FxHashMap<String, u32>,
-    event_types: Vec<(&'static str, u32, u32)>,
-    /// The running world's settings files of the mod, by name.
-    settings: std::collections::BTreeMap<String, String>,
-    data_dir: String,
-    mod_dir: String,
-    log_level: Level,
-    /// The levels of data packs that differ from `log_level`.
-    pack_log_levels: Vec<(ModHandle, Level)>,
-    /// The sides of data packs, by handle.
-    pack_sides: Vec<(ModHandle, Side)>,
-    caller_frame: CallerFrame,
-    components: FxHashMap<(u32, u32), (usize, usize)>,
-    templates: FxHashMap<u32, enshwick_core::content::Guid>,
-    players: Vec<PlayerInfo>,
-    mods: Vec<ModInfo>,
-    hosting: bool,
-    developer_tools: bool,
-    /// The periodic tick subscription, by the order asked, to refuse.
-    refused_tick: Option<usize>,
-    host_key: Option<enshwick_core::PlayerKey>,
-    server_world: u64,
-    join_missing: Vec<ModInfo>,
-    /// What other mods export, by id; a mod left out exports every name.
-    exports: FxHashMap<String, Vec<String>>,
-    language: u32,
-    services: Vec<FakeService>,
-    refused_hooks: FxHashSet<u64>,
-    code: (u64, u64),
-    workshop_recipes: u32,
-    items: FxHashMap<u32, ItemTypeInfo>,
-    no_inventories: bool,
-    no_item_filters: bool,
-    /// The first bit the vanilla crafting props leave free and the bits of
-    /// the crafting prop mask, once [`FakeHost::props`] reflects them.
-    crafting_mask: Option<(u8, u8)>,
-    no_entity_commands: bool,
-    base_code: BaseCode,
-    console_answers: FxHashMap<String, String>,
-    /// Other mods' commands: mod id, the alias each asks, and whether it
-    /// loads after the mod under test.
-    other_commands: Vec<(String, String, bool)>,
-    placed: Vec<(u32, EntityPlace)>,
-    world_key: Option<String>,
-    fog: Option<(enshwick_core::abi::FogInfo, Vec<u8>)>,
-    map_markers: Vec<enshwick_core::abi::MapMarkerInfo>,
-    map_frame: Option<enshwick_core::abi::MapFrameInfo>,
-    map_marker_types: Option<Vec<enshwick_core::abi::MapMarkerTypeInfo>>,
-    refused_writes: FxHashSet<u32>,
-    static_halves: FxHashSet<u32>,
-    net_peers: FxHashSet<u64>,
-    /// Players whose client has not said hello, so their windows wait.
-    #[cfg(feature = "unstable")]
-    without_hello: FxHashSet<u64>,
-    /// Content ids other loaded mods declared.
-    declared_content: Vec<String>,
-    player_languages: FxHashMap<u64, u32>,
-    icons_ready: bool,
-    archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
-    resources: FxHashMap<(enshwick_core::content::Guid, u32, u32), Vec<u8>>,
-    types: Option<std::sync::Arc<enshwick_core::resources::TypeTable>>,
-    /// The types of every [`FakeHost::types`] call, which `types` is built from.
-    type_list: Vec<enshwick_core::resources::Type<'static>>,
-    /// The player's keys by control name, in place of the mod's defaults.
-    #[cfg(feature = "unstable")]
-    bindings: Vec<(String, usize, Option<enshwick_core::controls::Key>)>,
-    game_version: Option<&'static str>,
-    game_texts: FxHashMap<(u32, u32), &'static str>,
-    disabled_recipes: FxHashSet<u32>,
-    recipe_kinds: FxHashMap<u32, enshwick_core::abi::RecipeKind>,
-    missing_rates: FxHashSet<enshwick_core::abi::RateId>,
-    voxels: Vec<world::VoxelGrid>,
-    zones: world::FakeZones,
-    extent: Option<[u32; 3]>,
-    blueprints: FxHashMap<u32, [u32; 3]>,
-    props: Vec<world::props::FakeProp>,
-    /// The items whose props are logic triggers.
-    trigger_items: Vec<u32>,
-    /// The items whose props are plants.
-    growing_items: Vec<u32>,
-    /// The items that place something that is no prop: a creature, a
-    /// flame altar.
-    no_prop_items: Vec<u32>,
-    /// Each item's placement box, lowest and highest corner before it
-    /// turns.
-    placement_boxes: Vec<(u32, [f32; 3], [f32; 3])>,
-    /// The spawn points in the world.
-    spawn_points: Vec<world::respawn::FakeSpawnPoint>,
-    /// Each character's respawn point, by the character's entity.
-    respawn_points: FxHashMap<u32, enshwick_core::Entity>,
-    building_materials: FxHashMap<u32, u8>,
+    base: base::BasePresets,
+    content: content::ContentPresets,
+    world: world::WorldPresets,
+    inventory: inventory::InventoryPresets,
+    actions: actions::ActionsPresets,
+    ui: ui::UiPresets,
 }
 
 impl Default for FakeHost {
@@ -379,89 +264,12 @@ impl FakeHost {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            side: Side::SERVER,
-            base: 0x1_4000_0000,
-            fingerprint: Fingerprint {
-                guid: enshwick_core::content::Guid::NIL,
-                age: 0,
-            },
-            build_complete: true,
-            handle: ModHandle(1),
-            symbols: FxHashMap::default(),
-            systems: FxHashMap::default(),
-            constants: FxHashMap::default(),
-            field_offsets: FxHashMap::default(),
-            type_sizes: FxHashMap::default(),
-            type_hashes: FxHashMap::default(),
-            event_types: Vec::new(),
-            settings: std::collections::BTreeMap::new(),
-            data_dir: "world0-mod-data/test".to_owned(),
-            mod_dir: "mods/test".to_owned(),
-            log_level: Level::INFO,
-            pack_log_levels: Vec::new(),
-            pack_sides: Vec::new(),
-            caller_frame: CallerFrame::default(),
-            components: FxHashMap::default(),
-            templates: FxHashMap::default(),
-            players: Vec::new(),
-            mods: Vec::new(),
-            hosting: false,
-            developer_tools: false,
-            refused_tick: None,
-            host_key: None,
-            server_world: 0,
-            join_missing: Vec::new(),
-            exports: FxHashMap::default(),
-            language: 0,
-            services: Vec::new(),
-            refused_hooks: FxHashSet::default(),
-            code: (0, 0),
-            workshop_recipes: 512,
-            items: FxHashMap::default(),
-            no_inventories: false,
-            no_item_filters: false,
-            crafting_mask: None,
-            no_entity_commands: false,
-            base_code: BaseCode::Known,
-            console_answers: FxHashMap::default(),
-            other_commands: Vec::new(),
-            placed: Vec::new(),
-            world_key: None,
-            fog: None,
-            map_markers: Vec::new(),
-            map_frame: None,
-            map_marker_types: None,
-            refused_writes: FxHashSet::default(),
-            static_halves: FxHashSet::default(),
-            net_peers: FxHashSet::default(),
-            #[cfg(feature = "unstable")]
-            without_hello: FxHashSet::default(),
-            declared_content: Vec::new(),
-            player_languages: FxHashMap::default(),
-            icons_ready: false,
-            archive: std::collections::BTreeMap::new(),
-            resources: FxHashMap::default(),
-            types: None,
-            type_list: Vec::new(),
-            #[cfg(feature = "unstable")]
-            bindings: Vec::new(),
-            game_version: None,
-            game_texts: FxHashMap::default(),
-            disabled_recipes: FxHashSet::default(),
-            recipe_kinds: FxHashMap::default(),
-            missing_rates: FxHashSet::default(),
-            voxels: Vec::new(),
-            zones: world::FakeZones::default(),
-            extent: None,
-            blueprints: FxHashMap::default(),
-            props: Vec::new(),
-            trigger_items: Vec::new(),
-            growing_items: Vec::new(),
-            no_prop_items: Vec::new(),
-            placement_boxes: Vec::new(),
-            spawn_points: Vec::new(),
-            respawn_points: FxHashMap::default(),
-            building_materials: FxHashMap::default(),
+            base: base::BasePresets::default(),
+            content: content::ContentPresets::default(),
+            world: world::WorldPresets::default(),
+            inventory: inventory::InventoryPresets::default(),
+            actions: actions::ActionsPresets::default(),
+            ui: ui::UiPresets::default(),
         }
     }
 
@@ -477,7 +285,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn handle(mut self, handle: ModHandle) -> Self {
-        self.handle = handle;
+        self.base.handle = handle;
         self
     }
 
@@ -496,7 +304,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub const fn language(mut self, language: enshwick_core::i18n::Language) -> Self {
-        self.language = language.0;
+        self.base.language = language.0;
         self
     }
 
@@ -516,7 +324,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub const fn developer_tools(mut self, on: bool) -> Self {
-        self.developer_tools = on;
+        self.base.developer_tools = on;
         self
     }
 
@@ -534,7 +342,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub const fn refuse_tick(mut self, index: usize) -> Self {
-        self.refused_tick = Some(index);
+        self.base.refused_tick = Some(index);
         self
     }
 
@@ -547,7 +355,7 @@ impl FakeHost {
     /// See [`FakeHost`].
     #[must_use]
     pub fn install(self) -> Installed {
-        let handle = self.handle;
+        let handle = self.base.handle;
         let turn = table::install(self);
         enshwick_core::__fake::check_manifests(table::base::mods::note_manifest);
         enshwick_core::__fake::renew();
@@ -619,13 +427,13 @@ impl Installed {
     ///
     /// See the [module](crate::test).
     pub unsafe fn init(&self, init: InitFn) -> Status {
-        table::with((), |s| s.registration = table::Registration::Init);
+        table::with((), |s| s.base.registration = table::Registration::Init);
         // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
         // `declare_mod!`, which takes the static fake table and a handle.
         let status = unsafe { init(self.api(), self.handle) };
         // The loader arms once every mod is initialised; what only init may
         // ask for comes too late from here on.
-        table::with((), |s| s.registration = table::Registration::Closed);
+        table::with((), |s| s.base.registration = table::Registration::Closed);
         self.off_unless_ok(status)
     }
 
@@ -644,13 +452,13 @@ impl Installed {
     /// See the [module](crate::test).
     pub unsafe fn ready(&self, ready: ReadyFn) -> Status {
         table::with((), |s| {
-            s.base_limit.armed = true;
-            s.edits.readying = true;
+            s.world.base_limit.armed = true;
+            s.world.edits.readying = true;
         });
         // SAFETY: the caller guarantees `ready` is the `enshwick_mod_ready` of
         // a `declare_mod!` whose init succeeded on this fake.
         let status = unsafe { ready(self.api(), self.handle) };
-        table::with((), |s| s.edits.readying = false);
+        table::with((), |s| s.world.edits.readying = false);
         self.off_unless_ok(status)
     }
 
@@ -722,7 +530,7 @@ impl Installed {
     /// See the [module](crate::test).
     #[must_use]
     pub fn logs(&self) -> Vec<(Level, String)> {
-        table::with(Vec::new(), |s| s.logs.clone())
+        table::with(Vec::new(), |s| s.base.logs.clone())
     }
 
     /// The faults the mod reported, such as a panic in a hook.
@@ -735,7 +543,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn faults(&self) -> Vec<String> {
-        table::with(Vec::new(), |s| s.faults.clone())
+        table::with(Vec::new(), |s| s.base.faults.clone())
     }
 
     /// Every log line and fault line with the handle it came under, so a
@@ -749,6 +557,6 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn sent(&self) -> Vec<(ModHandle, Level, String)> {
-        table::with(Vec::new(), |s| s.sent.clone())
+        table::with(Vec::new(), |s| s.base.sent.clone())
     }
 }

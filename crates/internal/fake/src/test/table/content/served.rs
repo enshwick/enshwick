@@ -4,7 +4,7 @@
 use core::ffi::c_void;
 
 use crate::test::ServedResource;
-use crate::test::table::{Registered, Registration, put, with};
+use crate::test::table::{Registered, put, with, with_open};
 use enshwick_core::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status};
 
 pub(crate) extern "system" fn serve_resource(
@@ -26,20 +26,26 @@ pub(crate) extern "system" fn serve_resource(
     let Some(base) = (unsafe { base.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let entry = (
             ServedResource { key, base },
             Registered::new(patch, user, me),
         );
         // As the loader: a change chains onto the key's maker, which goes
         // first whenever it comes.
-        match s.served.iter().position(|served| served.0.key == key) {
-            Some(at) if s.served[at].0.base == key && base != key => s.served.insert(at, entry),
-            Some(at) if base != key && s.served[at].0.base != base => return Status::REFUSED,
-            _ => s.served.push(entry),
+        match s
+            .content
+            .served
+            .iter()
+            .position(|served| served.0.key == key)
+        {
+            Some(at) if s.content.served[at].0.base == key && base != key => {
+                s.content.served.insert(at, entry);
+            }
+            Some(at) if base != key && s.content.served[at].0.base != base => {
+                return Status::REFUSED;
+            }
+            _ => s.content.served.push(entry),
         }
         Status::OK
     })
@@ -57,28 +63,29 @@ pub(crate) extern "system" fn rebuild_resource(me: ModHandle, key: *const Resour
     let closed = with(Err(Status::MISSING), |s| {
         // As the loader: only a mod serving the key rebuilds it.
         if !s
+            .content
             .served
             .iter()
             .any(|served| served.0.key == key && served.1.owner() == Some(me))
         {
             return Err(Status::BAD_ARGS);
         }
-        Ok(s.registration == Registration::Closed)
+        Ok(s.base.closed())
     });
     match closed {
         Err(status) => status,
         // As the loader during init: the key's first build keeps its base.
         Ok(false) => with(Status::MISSING, |s| {
-            s.rebuilds.push(key);
-            if !s.served_builds.keep_base.contains(&key) {
-                s.served_builds.keep_base.push(key);
+            s.content.rebuilds.push(key);
+            if !s.content.served_builds.keep_base.contains(&key) {
+                s.content.served_builds.keep_base.push(key);
             }
             Status::OK
         }),
         // As the loader: a patch rebuilding its own key would wait on its build.
         Ok(true) if building(&key) => Status::BUILDING,
         Ok(true) => {
-            with((), |s| s.rebuilds.push(key));
+            with((), |s| s.content.rebuilds.push(key));
             match rebuild_one(&key) {
                 Ok(changed) => {
                     if changed != Some(0) {
@@ -100,7 +107,8 @@ pub(crate) extern "system" fn rebuild_resource(me: ModHandle, key: *const Resour
 /// length than the game holds.
 fn rebuild_one(key: &ResourceKey) -> Result<Option<usize>, Status> {
     let found = with(None, |s| {
-        s.served_builds
+        s.content
+            .served_builds
             .game
             .iter()
             .find(|built| built.key == *key)
@@ -123,6 +131,7 @@ fn rebuild_one(key: &ResourceKey) -> Result<Option<usize>, Status> {
         .count();
     with((), |s| {
         if let Some((_, held)) = s
+            .content
             .served_builds
             .game
             .iter_mut()
@@ -139,7 +148,7 @@ fn rebuild_one(key: &ResourceKey) -> Result<Option<usize>, Status> {
 /// turn those that read a key that changed, each once, as the loader does;
 /// a key whose build runs on this thread is left.
 fn rebuild_readers(key: ResourceKey) {
-    let readers = |key: &ResourceKey| with(Vec::new(), |s| s.served_builds.readers(key));
+    let readers = |key: &ResourceKey| with(Vec::new(), |s| s.content.served_builds.readers(key));
     let mut done = vec![key];
     let mut next = readers(&key);
     while let Some(reader) = next.pop() {
@@ -175,11 +184,12 @@ pub(crate) extern "system" fn resource_served(
     unsafe {
         copy_resource(key, out, capacity, len, |key| {
             // As the loader: no read before every patch is in.
-            if with(true, |s| s.registration != Registration::Closed) {
+            if !crate::test::table::late() {
                 return Err(Status::REFUSED);
             }
             let Some(base) = with(None, |s| {
-                s.served
+                s.content
+                    .served
                     .iter()
                     .find(|served| served.0.key == key)
                     .map(|served| served.0.base)
@@ -203,6 +213,7 @@ pub(crate) extern "system" fn resource_served(
 fn archived(key: &ResourceKey) -> Result<Vec<u8>, Status> {
     with(None, |s| {
         s.host
+            .content
             .resources
             .get(&(key.guid, key.type_hash, key.part))
             .cloned()
@@ -278,8 +289,8 @@ fn note_read(key: ResourceKey) {
     });
     with((), |s| {
         for reader in readers {
-            if !s.served_builds.read_by.contains(&(key, reader)) {
-                s.served_builds.read_by.push((key, reader));
+            if !s.content.served_builds.read_by.contains(&(key, reader)) {
+                s.content.served_builds.read_by.push((key, reader));
             }
         }
     });
@@ -307,7 +318,7 @@ pub(crate) extern "system" fn resource_buffer(
     });
     match lent {
         Some(at) => {
-            with((), |s| s.lent_buffers += 1);
+            with((), |s| s.content.lent_buffers += 1);
             put(out, at)
         }
         None => Status::REFUSED,
@@ -389,7 +400,8 @@ pub(crate) fn build_resource(
         return Err(Status::BUILDING);
     }
     let patches: Vec<_> = with(Vec::new(), |s| {
-        s.served
+        s.content
+            .served
             .iter()
             .enumerate()
             .filter(|(at, served)| {
@@ -397,7 +409,7 @@ pub(crate) fn build_resource(
                     && match kind {
                         Build::Rebuild(by) => by.contains(&served.1.owner()),
                         Build::Game | Build::Scratch => {
-                            !s.served_off.contains(at) && !served.1.owner_off(&s.off)
+                            !s.content.served_off.contains(at) && !served.1.owner_off(&s.base.off)
                         }
                     }
             })
@@ -456,15 +468,21 @@ pub(crate) fn build_resource(
         with((), |s| {
             // As the loader: the game builds a key once and holds it for the
             // process.
-            if s.served_builds.game.iter().any(|held| held.key == *key) {
+            if s.content
+                .served_builds
+                .game
+                .iter()
+                .any(|held| held.key == *key)
+            {
                 return;
             }
             let vanilla = s
+                .content
                 .served
                 .iter()
                 .any(|served| served.0.key == *key && served.0.base == *key);
-            let keeps = reads || s.served_builds.keep_base.contains(key);
-            s.served_builds.game.push(GameBuild {
+            let keeps = reads || s.content.served_builds.keep_base.contains(key);
+            s.content.served_builds.game.push(GameBuild {
                 key: *key,
                 holds: built.is_some() || vanilla,
                 kept: built
@@ -482,7 +500,7 @@ pub(crate) fn build_resource(
 /// hashes.
 fn served_name(key: &ResourceKey) -> String {
     with(format!("resource {}", key.guid), |s| {
-        enshwick_core::resources::served_name(key, |id| s.host.type_hashes.get(id).copied())
+        enshwick_core::resources::served_name(key, |id| s.host.base.type_hashes.get(id).copied())
     })
 }
 
@@ -510,22 +528,23 @@ fn panicked(key: &ResourceKey, at: usize, owner: Option<ModHandle>) {
         enshwick_core::resources::BUILDER_PANICKED
     );
     with((), |s| {
-        if s.served_off.contains(&at) {
+        if s.content.served_off.contains(&at) {
             return;
         }
-        s.served_off.push(at);
-        match s.features.iter_mut().find(|(have, _)| *have == name) {
+        s.content.served_off.push(at);
+        match s.base.features.iter_mut().find(|(have, _)| *have == name) {
             Some(kept) => kept.1 = Some(enshwick_core::resources::BUILDER_PANICKED.to_owned()),
-            None => s.features.push((
+            None => s.base.features.push((
                 name,
                 Some(enshwick_core::resources::BUILDER_PANICKED.to_owned()),
             )),
         }
         if let Some(owner) = owner {
-            s.sent
+            s.base
+                .sent
                 .push((owner, enshwick_core::abi::Level::WARN, line.clone()));
         }
-        s.logs.push((enshwick_core::abi::Level::WARN, line));
+        s.base.logs.push((enshwick_core::abi::Level::WARN, line));
     });
 }
 
@@ -563,7 +582,7 @@ impl Drop for Building {
             .with_borrow_mut(Vec::pop)
             .map_or(0, |frame| frame.buffers.len());
         with((), |s| {
-            s.lent_buffers = s.lent_buffers.saturating_sub(freed);
+            s.content.lent_buffers = s.content.lent_buffers.saturating_sub(freed);
         });
     }
 }

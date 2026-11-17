@@ -3,10 +3,10 @@
 
 use core::ffi::c_void;
 
-use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, ModHandle, Side, Status};
+use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, ModHandle, Status};
 use enshwick_core::{Entity, ItemId};
 
-use crate::test::table::{Registered, Registration, with};
+use crate::test::table::{Registered, with, with_open};
 
 /// The most items one pickup message shows: the game's op record keeps a
 /// `u16`.
@@ -35,11 +35,9 @@ pub(crate) extern "system" fn container_rule(
     if item.get() == 0 {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.containers
+    with_open(|s| {
+        s.inventory
+            .containers
             .rules
             .push((item, Registered::new(callback, user, me)));
         Status::OK
@@ -60,16 +58,17 @@ pub(crate) extern "system" fn show_pickup(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.host.side != Side::SERVER && !s.host.hosting {
+        if !s.host.base.serving() {
             return Status::UNAVAILABLE;
         }
         if !crate::test::table::on_game_thread() {
             return Status::WRONG_THREAD;
         }
-        if !s.host.players.iter().any(|p| p.entity == character) {
+        if !s.host.base.players.iter().any(|p| p.entity == character) {
             return Status::BAD_ARGS;
         }
-        s.containers
+        s.inventory
+            .containers
             .shown
             .push((character, item, count.min(MOST_SHOWN)));
         Status::OK
@@ -104,7 +103,8 @@ impl crate::test::Installed {
     #[must_use]
     pub fn container_put(&self, put: &ContainerPut) -> bool {
         let rules = with(Vec::new(), |s| {
-            s.containers
+            s.inventory
+                .containers
                 .rules
                 .iter()
                 .filter(|(item, _)| *item == put.container_item)
@@ -129,6 +129,6 @@ impl crate::test::Installed {
     /// ```
     #[must_use]
     pub fn pickups_shown(&self) -> Vec<(Entity, ItemId, u32)> {
-        with(Vec::new(), |s| s.containers.shown.clone())
+        with(Vec::new(), |s| s.inventory.containers.shown.clone())
     }
 }

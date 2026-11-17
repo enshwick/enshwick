@@ -44,7 +44,7 @@ mod served {
     use enshwick_core::content::Guid;
 
     use crate::test::table::base::registered::Registered;
-    use crate::test::table::{Registration, State, with};
+    use crate::test::table::{State, with};
     use crate::test::{FakeHost, ServedResource};
 
     /// The layout and key of the fake's buff collection.
@@ -60,7 +60,7 @@ mod served {
     pub(super) fn add(me: ModHandle, buff: &BuffTypeAdd) -> Result<BuffTypeId, Status> {
         with(Err(Status::MISSING), |s| {
             // In the loader's order: the seal, the mod's side, the request.
-            if s.registration == Registration::Closed {
+            if s.base.closed() {
                 return Err(Status::TOO_LATE);
             }
             if !crate::test::table::base::mods::joins(s, me) {
@@ -70,15 +70,16 @@ mod served {
             let edit = Edit::of(buff).ok_or(Status::BAD_ARGS)?;
             let vanilla = s
                 .host
+                .content
                 .resources
                 .get(&(key.guid, key.type_hash, key.part))
                 .ok_or(Status::UNAVAILABLE)?;
-            let added: Vec<Edit> = s.buff_types_added.iter().map(|(_, e)| *e).collect();
+            let added: Vec<Edit> = s.world.buff_types_added.iter().map(|(_, e)| *e).collect();
             check(&layout, vanilla, &edit, &added).map_err(Refusal::status)?;
-            if s.buff_types_added.is_empty() {
+            if s.world.buff_types_added.is_empty() {
                 serve(s, key);
             }
-            s.buff_types_added.push((me, edit));
+            s.world.buff_types_added.push((me, edit));
             Ok(edit.id())
         })
     }
@@ -90,11 +91,13 @@ mod served {
             core::ptr::null_mut(),
         );
         let at = s
+            .content
             .served
             .iter()
             .position(|served| served.0.key == key)
-            .unwrap_or(s.served.len());
-        s.served
+            .unwrap_or(s.content.served.len());
+        s.content
+            .served
             .insert(at, (ServedResource { key, base: key }, patch));
     }
 
@@ -102,11 +105,16 @@ mod served {
     /// only while the fake shows served UI images and serves that image.
     fn serving(s: &State) -> Vec<Edit> {
         let shows = |icon: Guid| {
-            s.host.icons_ready && s.served.iter().any(|(served, _)| served.key.guid == icon)
+            s.host.content.icons_ready
+                && s.content
+                    .served
+                    .iter()
+                    .any(|(served, _)| served.key.guid == icon)
         };
-        s.buff_types_added
+        s.world
+            .buff_types_added
             .iter()
-            .filter(|(owner, _)| !s.off.contains(owner))
+            .filter(|(owner, _)| !s.base.off.contains(owner))
             .map(|(_, edit)| match edit.icon() {
                 Some(icon) if !shows(icon) => edit.without_icon(),
                 _ => *edit,
@@ -176,7 +184,7 @@ pub(crate) extern "system" fn buff_types(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let types = with(Vec::new(), |s| s.buff_types.clone());
+    let types = with(Vec::new(), |s| s.world.buff_types.clone());
     list(&types, out, entry_size, capacity, count)
 }
 
@@ -188,7 +196,9 @@ pub(crate) extern "system" fn buffs(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    match with(None::<Vec<ActiveBuff>>, |s| s.buffs.get(&entity.0).cloned()) {
+    match with(None::<Vec<ActiveBuff>>, |s| {
+        s.world.buffs.get(&entity.0).cloned()
+    }) {
         Some(on) => list(&on, out, entry_size, capacity, count),
         None => Status::MISSING,
     }
@@ -199,10 +209,16 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        let Some(ty) = s.buff_types.iter().find(|ty| ty.id == request.id).copied() else {
+        let Some(ty) = s
+            .world
+            .buff_types
+            .iter()
+            .find(|ty| ty.id == request.id)
+            .copied()
+        else {
             return Status::BAD_ARGS;
         };
-        let Some(on) = s.buffs.get_mut(&request.entity.0) else {
+        let Some(on) = s.world.buffs.get_mut(&request.entity.0) else {
             return Status::MISSING;
         };
         let duration = if request.duration_ns == 0 {
@@ -238,7 +254,7 @@ pub(crate) extern "system" fn remove_buff(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        let Some(on) = s.buffs.get_mut(&entity.0) else {
+        let Some(on) = s.world.buffs.get_mut(&entity.0) else {
             return Status::MISSING;
         };
         let before = on.len();

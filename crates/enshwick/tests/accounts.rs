@@ -100,6 +100,24 @@ mod tests {
     }
 
     #[test]
+    fn the_host_is_refused_a_mute_before_a_missing_world_is_unavailable() {
+        let loader = enshwick::test::FakeHost::new()
+            .world()
+            .host_key(enshwick::PlayerKey::new(9))
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+        let key = enshwick::PlayerKey::new;
+
+        assert_eq!(world.set_muted(key(9), true), Err(WorldError::Refused));
+        assert_eq!(world.set_muted(key(7), true), Err(WorldError::Unavailable));
+        assert!(loader.muted().is_empty());
+    }
+
+    #[test]
     fn players_are_muted_and_heard_again_but_never_administrators_or_the_host() {
         let loader = enshwick::test::FakeHost::new()
             .world()

@@ -34,7 +34,10 @@ impl Installed {
     #[must_use]
     pub fn say(&self, player: PlayerKey, text: &str) -> Option<String> {
         let (muted, filters) = table::with((false, Vec::new()), |s| {
-            (s.muted.contains(&player), s.chat_filters.clone())
+            (
+                s.world.muted.contains(&player),
+                s.actions.chat_filters.clone(),
+            )
         });
         if muted {
             return None;
@@ -66,7 +69,9 @@ impl Installed {
                 _ => {}
             }
         }
-        if table::with(true, |s| admit(&mut s.chat_rate, player, s.ticks.nanos())) {
+        if table::with(true, |s| {
+            admit(&mut s.actions.chat_rate, player, s.base.ticks.nanos())
+        }) {
             let said = line(player, ChatLine::PLAYER, &text);
             // SAFETY: `said` is a `ChatLine`, the data of `CHAT_SAID`, and
             // lives for the call.

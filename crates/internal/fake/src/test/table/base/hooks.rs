@@ -3,7 +3,7 @@
 use core::sync::atomic::Ordering;
 
 use crate::test::LinkedHook;
-use crate::test::table::{Registered, Registration, get_headed, put, with};
+use crate::test::table::{Registered, get_headed, put, with, with_open};
 use enshwick_core::__fake::rules;
 use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
@@ -11,31 +11,28 @@ pub(crate) extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Sta
     let Some(spec) = get_headed(spec).filter(|spec| !spec.next.is_null()) else {
         return Status::BAD_ARGS;
     };
-    let linked = with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    let linked = with_open(|s| {
         if !rules::is_complete_hook(spec.target, spec.detour) {
             return Status::BAD_ARGS;
         }
-        if s.host.refused_hooks.contains(&spec.target) {
+        if s.host.base.refused_hooks.contains(&spec.target) {
             return Status::REFUSED;
         }
         let slot = spec.next.addr();
         // One mod holds the fake, so every hook a target holds is its own.
-        let clash = s.hooks.iter().any(|held| {
+        let clash = s.base.hooks.iter().any(|held| {
             held.target == spec.target && rules::hooks_clash(true, held.flags, spec.flags)
         });
-        if clash || s.hook_slots.contains(&slot) {
+        if clash || s.base.hook_slots.contains(&slot) {
             return Status::REFUSED;
         }
-        s.hooks.push(LinkedHook {
+        s.base.hooks.push(LinkedHook {
             target: spec.target,
             detour: spec.detour as u64,
             priority: spec.priority,
             flags: spec.flags,
         });
-        s.hook_slots.push(slot);
+        s.base.hook_slots.push(slot);
         Status::OK
     });
     if linked.is_ok() {
@@ -52,10 +49,7 @@ pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -
     let Some(spec) = get_headed(spec) else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let Some(handler) = spec.handler else {
             return Status::BAD_ARGS;
         };
@@ -64,20 +58,22 @@ pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -
         }
         // One mod holds the fake, so a second hook at one address is its own.
         let taken = s
+            .base
             .mid_hooks
             .iter()
             .any(|&(address, ..)| address == spec.address);
-        if taken || s.host.refused_hooks.contains(&spec.address) {
+        if taken || s.host.base.refused_hooks.contains(&spec.address) {
             return Status::REFUSED;
         }
-        s.mid_hooks
+        s.base
+            .mid_hooks
             .push((spec.address, Registered::new(handler, spec.user, me)));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn code_range(_me: ModHandle, start: *mut u64, len: *mut u32) -> Status {
-    let (address, size) = with((0, 0), |s| s.host.code);
+    let (address, size) = with((0, 0), |s| s.host.base.code);
     if address == 0 {
         return Status::UNAVAILABLE;
     }
@@ -99,17 +95,14 @@ pub(crate) extern "system" fn patch_code(
     if expected.is_null() || replacement.is_null() {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let span = |address: u64, len: usize| (usize::try_from(address).unwrap_or(usize::MAX), len);
-        let (start, size) = s.host.code;
+        let (start, size) = s.host.base.code;
         let text = span(start, usize::try_from(size).unwrap_or(0));
         if !rules::patch_fits(span(address, len), text) {
             return Status::BAD_ARGS;
         }
-        let over = s.code_patches.iter().any(|(held, bytes, _)| {
+        let over = s.base.code_patches.iter().any(|(held, bytes, _)| {
             rules::spans_overlap(span(*held, bytes.len()), span(address, len))
         });
         if over {
@@ -121,11 +114,11 @@ pub(crate) extern "system" fn patch_code(
         // SAFETY: `replacement` is non-null, checked at the top; the safe layer
         // passes `len` readable bytes there for the call.
         let replacement = unsafe { core::slice::from_raw_parts(replacement, len) }.to_vec();
-        s.code_patches.push((address, expected, replacement));
+        s.base.code_patches.push((address, expected, replacement));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn workshop_recipes(_me: ModHandle, out: *mut u32) -> Status {
-    put(out, with(512, |s| s.host.workshop_recipes))
+    put(out, with(512, |s| s.host.base.workshop_recipes))
 }

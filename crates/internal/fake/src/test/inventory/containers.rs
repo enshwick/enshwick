@@ -47,13 +47,15 @@ impl FakeHost {
                 Field::new("availableSlotCount", AVAILABLE, "demo::uint8"),
             ]);
         let host = self.props().types([setup]);
-        let registry = Registry::new(host.type_list.clone());
+        let registry = Registry::new(host.content.type_list.clone());
         let template_hash = fnv1a32(TEMPLATE.as_bytes());
         let placed_at = host
+            .base
             .constants
             .get(ids::ITEM_INFO_PLACED_ENTITY)
             .and_then(|at| usize::try_from(*at).ok());
         let prop_info = host
+            .content
             .resources
             .iter()
             .find(|((guid, _, _), _)| *guid == PROP_ITEM)
@@ -69,6 +71,7 @@ impl FakeHost {
             return host;
         };
         let chest = host
+            .content
             .resources
             .get(&(prop_template, template_hash, 0))
             .and_then(|bytes| registry.decode(TEMPLATE, bytes).ok())

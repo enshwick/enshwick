@@ -24,7 +24,7 @@ impl FakeHost {
     pub fn game_event_type(self, name: &str, hash: u32, size: u32) -> Self {
         let mut host = self.type_hash(name, hash).type_size(name, size);
         let name: &'static str = Box::leak(name.into());
-        host.event_types.push((name, hash, size));
+        host.base.event_types.push((name, hash, size));
         host
     }
 }
@@ -45,7 +45,7 @@ impl Installed {
     #[must_use]
     pub fn subscriptions(&self) -> Vec<Event> {
         table::with(Vec::new(), |s| {
-            s.subscriptions.iter().map(|s| s.0).collect()
+            s.base.subscriptions.iter().map(|s| s.0).collect()
         })
     }
 
@@ -112,7 +112,9 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn game_event_types(&self) -> Vec<u32> {
-        table::with(Vec::new(), |s| s.game_events.iter().map(|g| g.0).collect())
+        table::with(Vec::new(), |s| {
+            s.base.game_events.iter().map(|g| g.0).collect()
+        })
     }
 
     /// Hands the game event of `type_hash` with `bytes` to every handler of
@@ -145,7 +147,7 @@ impl Installed {
     #[cfg(feature = "unstable")]
     #[must_use = "the count says whether the mod handles the event"]
     pub fn raise_client_game_event(&self, type_hash: u32, bytes: &[u8]) -> usize {
-        raise_in(|s| &s.client_game_events, type_hash, bytes)
+        raise_in(|s| &s.base.client_game_events, type_hash, bytes)
     }
 
     /// The mod events the mod defined, by name, in order.
@@ -159,7 +161,7 @@ impl Installed {
     #[must_use]
     pub fn defined_events(&self) -> Vec<String> {
         table::with(Vec::new(), |s| {
-            s.defined_events.iter().map(|d| d.0.clone()).collect()
+            s.base.defined_events.iter().map(|d| d.0.clone()).collect()
         })
     }
 
@@ -174,7 +176,11 @@ impl Installed {
     #[must_use]
     pub fn sent_events(&self) -> Vec<String> {
         table::with(Vec::new(), |s| {
-            s.sent_events.iter().map(|(name, _)| name.clone()).collect()
+            s.base
+                .sent_events
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect()
         })
     }
 
@@ -190,7 +196,11 @@ impl Installed {
     #[must_use]
     pub fn sent_event_data(&self) -> Vec<Vec<u8>> {
         table::with(Vec::new(), |s| {
-            s.sent_events.iter().map(|(_, data)| data.clone()).collect()
+            s.base
+                .sent_events
+                .iter()
+                .map(|(_, data)| data.clone())
+                .collect()
         })
     }
 
@@ -217,7 +227,8 @@ impl Installed {
             .filter_map(|f| unsafe { f.name.as_str() }.map(|n| (n, f.hash)))
             .collect();
         let handlers: Vec<_> = table::with(Vec::new(), |s| {
-            s.mod_event_subscriptions
+            s.base
+                .mod_event_subscriptions
                 .iter()
                 .filter(|sub| {
                     sub.0 == E::NAME
@@ -246,7 +257,7 @@ type GameEventHandlers = Vec<(u32, table::Registered<enshwick_core::abi::GameEve
 /// Hands a server game event to the mod's handlers, as the loader raises
 /// one the game or a mod pushed; returns how many ran.
 pub(crate) fn raise_server(type_hash: u32, bytes: &[u8]) -> usize {
-    raise_in(|s| &s.game_events, type_hash, bytes)
+    raise_in(|s| &s.base.game_events, type_hash, bytes)
 }
 
 fn raise_in(kept: fn(&table::State) -> &GameEventHandlers, type_hash: u32, bytes: &[u8]) -> usize {
@@ -284,13 +295,14 @@ pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> u
         enshwick_core::__fake::refresh_levels();
     }
     let handlers: Vec<_> = table::with(Vec::new(), |s| {
-        let periodic = (event == Event::TICKED).then(|| s.ticks.handlers());
-        s.subscriptions
+        let periodic = (event == Event::TICKED).then(|| s.base.ticks.handlers());
+        s.base
+            .subscriptions
             .iter()
             .filter(|sub| sub.0 == event)
             .map(|sub| sub.1)
             .chain(periodic.into_iter().flatten())
-            .filter(|handler| !handler.owner_off(&s.off))
+            .filter(|handler| !handler.owner_off(&s.base.off))
             .collect()
     });
     // As the loader, a building event reads in its player's language.

@@ -134,8 +134,8 @@ impl Installed {
     /// ```
     pub fn set_buffs(&self, types: &[enshwick_core::abi::BuffTypeInfo], holders: &[Entity]) {
         table::with((), |s| {
-            s.buff_types = types.to_vec();
-            s.buffs = holders.iter().map(|&e| (e.0, Vec::new())).collect();
+            s.world.buff_types = types.to_vec();
+            s.world.buffs = holders.iter().map(|&e| (e.0, Vec::new())).collect();
         });
     }
 
@@ -147,7 +147,7 @@ impl Installed {
     /// See [`Installed::set_buffs`].
     #[must_use]
     pub fn buffs_of(&self, entity: Entity) -> Option<Vec<enshwick_core::abi::ActiveBuff>> {
-        table::with(None, |s| s.buffs.get(&entity.0).cloned())
+        table::with(None, |s| s.world.buffs.get(&entity.0).cloned())
     }
 
     /// Plays the client's UI registry knowing the served UI images from
@@ -161,6 +161,6 @@ impl Installed {
     /// loader.show_icons();
     /// ```
     pub fn show_icons(&self) {
-        table::with((), |s| s.host.icons_ready = true);
+        table::with((), |s| s.host.content.icons_ready = true);
     }
 }

@@ -3,7 +3,7 @@
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, Registration, put, text, with};
+use crate::test::table::{Registered, put, text, with, with_open};
 use enshwick_core::abi::{
     ActionTarget, BuildFilterFn, ChatFilterFn, CraftFilterFn, InteractionFilterFn,
     InteractionPrompt, ModHandle, Status, Str,
@@ -12,6 +12,32 @@ use enshwick_core::abi::{
 use enshwick_core::abi::{ControlFn, ControlSpec};
 
 pub(crate) mod commands;
+
+/// What the installed fake's actions answer and have recorded.
+#[derive(Default)]
+pub(crate) struct ActionsState {
+    /// The mod's player actions callback, once registered.
+    pub(crate) callback: Option<Registered<enshwick_core::abi::ActionFn>>,
+    /// The lines the mod ran on the console, in order.
+    pub(crate) console: Vec<String>,
+    pub(crate) craft_filters: Vec<Registered<CraftFilterFn>>,
+    pub(crate) build_filters: Vec<Registered<BuildFilterFn>>,
+    /// The mod's controls and the action runs it sent.
+    #[cfg(feature = "unstable")]
+    pub(crate) controls: crate::test::actions::controls::FakeControls,
+    pub(crate) interaction_filters: Vec<Registered<InteractionFilterFn>>,
+    /// The prompts mods gave the objects placed from their items.
+    pub(crate) interaction_prompts: Vec<InteractionPrompt>,
+    pub(crate) chat_filters: Vec<Registered<ChatFilterFn>>,
+    /// Each account's chat rate: the start of its window in fake server
+    /// time and the lines heard in it.
+    pub(crate) chat_rate: Vec<(enshwick_core::PlayerKey, u64, u32)>,
+    /// The command name and alias the mod took, and how often it said
+    /// its rules changed.
+    pub(crate) commands: commands::FakeCommands,
+    /// The answer `run_console` last handed out, alive until the next call.
+    run_out: Option<Box<str>>,
+}
 
 #[cfg(feature = "unstable")]
 pub(crate) use crate::test::actions::controls::{control, run_action};
@@ -24,14 +50,11 @@ pub(crate) extern "system" fn actions(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        if s.actions.is_some() {
+    with_open(|s| {
+        if s.actions.callback.is_some() {
             return Status::REFUSED;
         }
-        s.actions = Some(Registered::new(callback, user, me));
+        s.actions.callback = Some(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -40,12 +63,12 @@ pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut S
     let line = text(line);
     let (word, rest) = line.split_once(' ').unwrap_or((&line, ""));
     let (word, rest) = (word.to_owned(), rest.trim().to_owned());
-    with((), |s| s.console.push(line.clone()));
-    let answer = match with(None, |s| s.host.console_answers.get(&word).cloned()) {
+    with((), |s| s.actions.console.push(line.clone()));
+    let answer = match with(None, |s| s.host.actions.console_answers.get(&word).cloned()) {
         Some(answer) => answer,
         // The mod's own actions, asked with the table unlocked: they may call
         // back.
-        None => match with(None, |s| s.actions) {
+        None => match with(None, |s| s.actions.callback) {
             Some(actions) => {
                 let reply = crate::test::ask(
                     actions,
@@ -62,7 +85,7 @@ pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut S
         },
     };
     with(Status::MISSING, |s| {
-        let kept = s.run_out.insert(answer.into_boxed_str());
+        let kept = s.actions.run_out.insert(answer.into_boxed_str());
         put(out, Str::new(kept))
     })
 }
@@ -75,11 +98,10 @@ pub(crate) extern "system" fn chat_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.chat_filters.push(Registered::new(callback, user, me));
+    with_open(|s| {
+        s.actions
+            .chat_filters
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -92,11 +114,9 @@ pub(crate) extern "system" fn interaction_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.interaction_filters
+    with_open(|s| {
+        s.actions
+            .interaction_filters
             .push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -116,17 +136,18 @@ pub(crate) extern "system" fn interaction_prompt(
     else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if !spec.is_valid() {
             return Status::BAD_ARGS;
         }
-        if s.interaction_prompts.iter().any(|p| p.item == spec.item) {
+        if s.actions
+            .interaction_prompts
+            .iter()
+            .any(|p| p.item == spec.item)
+        {
             return Status::REFUSED;
         }
-        s.interaction_prompts.push(spec);
+        s.actions.interaction_prompts.push(spec);
         Status::OK
     })
 }
@@ -139,11 +160,10 @@ pub(crate) extern "system" fn craft_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.craft_filters.push(Registered::new(callback, user, me));
+    with_open(|s| {
+        s.actions
+            .craft_filters
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -156,11 +176,10 @@ pub(crate) extern "system" fn build_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.build_filters.push(Registered::new(callback, user, me));
+    with_open(|s| {
+        s.actions
+            .build_filters
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }

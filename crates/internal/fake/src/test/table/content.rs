@@ -3,9 +3,48 @@
 
 mod served;
 
-use crate::test::table::{Registration, found, put, put_list, text, with};
+use crate::test::table::{found, put, put_list, text, with, with_open};
 use enshwick_core::abi::{ModHandle, RateId, ResourceKey, Status, Str};
 pub(crate) use served::*;
+
+/// What the installed fake's content answers and has recorded.
+#[derive(Default)]
+pub(crate) struct ContentState {
+    pub(crate) served: Vec<(
+        crate::test::content::ServedResource,
+        crate::test::table::Registered<enshwick_core::abi::ResourcePatchFn>,
+    )>,
+    /// Every rebuild of a served resource the mod asked for, at init and
+    /// after.
+    pub(crate) rebuilds: Vec<ResourceKey>,
+    /// How many buffers the host lent patch outputs and has not freed yet.
+    pub(crate) lent_buffers: usize,
+    /// The changes of vanilla values the mod declared, with their sources.
+    pub(crate) changes: DataChanges,
+    /// The mod's recipe rules in force: kind and name.
+    pub(crate) recipe_rules: Vec<(enshwick_core::abi::RecipeRuleKind, String)>,
+    pub(crate) texts: Vec<(u32, u32, String)>,
+    /// The content renames the mod declared, old GUID to new.
+    pub(crate) content_renames:
+        Option<Vec<(enshwick_core::content::Guid, enshwick_core::content::Guid)>>,
+    /// Content ids the mod declared, in order.
+    pub(crate) content_ids: Vec<String>,
+    /// The crafting props the mod was given an index for, in order.
+    pub(crate) crafting_props: Vec<enshwick_core::content::Guid>,
+    /// Item data kinds by full id, and values by kind and entity: the item
+    /// and the bytes.
+    pub(crate) item_kinds: Vec<String>,
+    /// The content the mod served into the fake archive, by hash.
+    pub(crate) served_archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
+    pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
+    /// The rates the mod declared, with the factor it set for each.
+    pub(crate) rates: Vec<(RateId, f32)>,
+    /// The patches in `served` whose builder panicked, by place: each build
+    /// but a rebuild runs without them, as the loader's.
+    pub(crate) served_off: Vec<usize>,
+    /// What the game's builds of served keys left for a rebuild.
+    pub(crate) served_builds: ServedBuilds,
+}
 
 /// The changes of vanilla values a mod declared, each with its source.
 #[derive(Debug, Default)]
@@ -35,6 +74,7 @@ pub(crate) extern "system" fn read_only(
     };
     let len = with(0, |s| {
         s.host
+            .base
             .components
             .values()
             .find(|&&(start, len)| (start..start + len).contains(&address))
@@ -52,14 +92,12 @@ pub(crate) extern "system" fn declare_content(
     let Some(guid) = enshwick_core::content::Guid::try_named(&id) else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let clash = s
+            .content
             .content_ids
             .iter()
-            .chain(&s.host.declared_content)
+            .chain(&s.host.base.declared_content)
             .any(|known| {
                 *known != id
                     && enshwick_core::content::Guid::try_named(known)
@@ -68,8 +106,8 @@ pub(crate) extern "system" fn declare_content(
         if clash {
             return Status::REFUSED;
         }
-        if !s.content_ids.contains(&id) {
-            s.content_ids.push(id);
+        if !s.content.content_ids.contains(&id) {
+            s.content.content_ids.push(id);
         }
         put(out, guid)
     })
@@ -91,9 +129,10 @@ pub(crate) extern "system" fn content_name(
     with(Status::MISSING, |s| {
         // The id's heap text stays where it is while the state keeps it.
         let named = s
+            .content
             .content_ids
             .iter()
-            .chain(&s.host.declared_content)
+            .chain(&s.host.base.declared_content)
             .find(|id| enshwick_core::content::Guid::try_named(id) == Some(guid))
             .map(|id| Str::new(id));
         found(named, out)
@@ -112,18 +151,15 @@ pub(crate) extern "system" fn crafting_prop(
     if out.is_null() {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if !super::base::mods::joins(s, me) {
             return Status::REFUSED;
         }
         // As the loader: without the game's mask and props nothing reads.
-        let Some((first, width)) = s.host.crafting_mask else {
+        let Some((first, width)) = s.host.content.crafting_mask else {
             return Status::REFUSED;
         };
-        let added = &mut s.crafting_props;
+        let added = &mut s.content.crafting_props;
         let at = added
             .iter()
             .position(|known| *known == prop)
@@ -148,11 +184,11 @@ pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        let refused = s.manifest.as_ref().is_some_and(|manifest| {
+        let refused = s.base.manifest.as_ref().is_some_and(|manifest| {
             manifest.unexported(
                 enshwick_core::schema_section::Kind::Content,
                 &id,
-                &s.host.exports,
+                &s.host.base.exports,
             )
         });
         if !refused {
@@ -176,14 +212,19 @@ pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
         if !enshwick_core::__fake::rules::may_declare_rate(rate, joins) {
             return Status::REFUSED;
         }
-        if s.host.missing_rates.contains(&rate) {
+        if s.host.content.missing_rates.contains(&rate) {
             return Status::UNAVAILABLE;
         }
-        if s.registration == Registration::Closed {
+        if s.base.closed() {
             return Status::TOO_LATE;
         }
-        if !s.rates.iter().any(|&(declared, _)| declared == rate) {
-            s.rates.push((rate, 1.0));
+        if !s
+            .content
+            .rates
+            .iter()
+            .any(|&(declared, _)| declared == rate)
+        {
+            s.content.rates.push((rate, 1.0));
         }
         Status::OK
     })
@@ -194,7 +235,12 @@ pub(crate) extern "system" fn set_rate(_me: ModHandle, rate: RateId, factor: f32
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        match s.rates.iter_mut().find(|(declared, _)| *declared == rate) {
+        match s
+            .content
+            .rates
+            .iter_mut()
+            .find(|(declared, _)| *declared == rate)
+        {
             Some((_, set)) => {
                 *set = factor;
                 Status::OK
@@ -215,9 +261,11 @@ pub(crate) extern "system" fn recipe_rule(
     }
     let name = text(name);
     with(Status::MISSING, |s| {
-        s.recipe_rules.retain(|(k, n)| !(*k == kind && *n == name));
+        s.content
+            .recipe_rules
+            .retain(|(k, n)| !(*k == kind && *n == name));
         if disable != 0 {
-            s.recipe_rules.push((kind, name));
+            s.content.recipe_rules.push((kind, name));
         }
         Status::OK
     })
@@ -228,7 +276,9 @@ pub(crate) extern "system" fn recipe_disabled(
     recipe: enshwick_core::RecipeId,
     out: *mut u8,
 ) -> Status {
-    let disabled = with(false, |s| s.host.disabled_recipes.contains(&recipe.get()));
+    let disabled = with(false, |s| {
+        s.host.content.disabled_recipes.contains(&recipe.get())
+    });
     if !out.is_null() {
         // SAFETY: the safe layer passes its out value for the call.
         unsafe { out.write(u8::from(disabled)) };
@@ -242,7 +292,9 @@ pub(crate) extern "system" fn recipe_kind(
     out: *mut enshwick_core::abi::RecipeKind,
 ) -> Status {
     found(
-        with(None, |s| s.host.recipe_kinds.get(&item.get()).copied()),
+        with(None, |s| {
+            s.host.content.recipe_kinds.get(&item.get()).copied()
+        }),
         out,
     )
 }
@@ -278,7 +330,7 @@ pub(crate) extern "system" fn change_data(
     if raw.select != enshwick_core::abi::DataSelect::ENTRY {
         if let Ok(Some(change)) = enshwick_core::content::changes::RecipesChange::from_abi(&raw) {
             return with(Status::MISSING, |s| {
-                s.changes.recipes.push((change, source));
+                s.content.changes.recipes.push((change, source));
                 Status::OK
             });
         }
@@ -286,7 +338,7 @@ pub(crate) extern "system" fn change_data(
             return Status::BAD_ARGS;
         };
         return with(Status::MISSING, |s| {
-            s.changes.items.push((change, source));
+            s.content.changes.items.push((change, source));
             Status::OK
         });
     }
@@ -294,7 +346,7 @@ pub(crate) extern "system" fn change_data(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        s.changes.one.push((change, source));
+        s.content.changes.one.push((change, source));
         Status::OK
     })
 }
@@ -338,14 +390,18 @@ fn live(
         if field.seen_by_clients() && !super::base::mods::joins(s, me) {
             return Status::REFUSED;
         }
-        s.changes.live.push(crate::test::content::LiveChange {
-            target,
-            field,
-            source,
-            value: None,
-        });
-        let id =
-            enshwick_core::abi::ChangeId(u32::try_from(s.changes.live.len()).unwrap_or(u32::MAX));
+        s.content
+            .changes
+            .live
+            .push(crate::test::content::LiveChange {
+                target,
+                field,
+                source,
+                value: None,
+            });
+        let id = enshwick_core::abi::ChangeId(
+            u32::try_from(s.content.changes.live.len()).unwrap_or(u32::MAX),
+        );
         // SAFETY: `out` is non-null by the check above and the safe layer
         // points it at a writable `ChangeId` for the call.
         unsafe { out.write(id) };
@@ -368,7 +424,7 @@ pub(crate) extern "system" fn set_change(
     };
     with(Status::MISSING, |s| {
         let at = usize::try_from(id.0).ok().and_then(|n| n.checked_sub(1));
-        let Some(live) = at.and_then(|at| s.changes.live.get_mut(at)) else {
+        let Some(live) = at.and_then(|at| s.content.changes.live.get_mut(at)) else {
             return Status::BAD_ARGS;
         };
         if value.is_some_and(|value| live.field.check(value).is_err()) {
@@ -386,11 +442,8 @@ pub(crate) extern "system" fn add_text(
     value: Str,
 ) -> Status {
     let value = text(value);
-    with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.texts.push((id, language, value));
+    with_open(|s| {
+        s.content.texts.push((id, language, value));
         Status::OK
     })
 }
@@ -407,12 +460,13 @@ pub(crate) extern "system" fn define_item_data(_me: ModHandle, id: Str, out: *mu
     }
     let kind = with(None, |s| {
         let index = s
+            .content
             .item_kinds
             .iter()
             .position(|k| *k == full)
             .unwrap_or_else(|| {
-                s.item_kinds.push(full.clone());
-                s.item_kinds.len() - 1
+                s.content.item_kinds.push(full.clone());
+                s.content.item_kinds.len() - 1
             });
         u32::try_from(index).ok()
     });
@@ -438,7 +492,8 @@ pub(crate) extern "system" fn item_data_get(
     len: *mut u32,
 ) -> Status {
     let value = with(None, |s| {
-        s.item_values
+        s.content
+            .item_values
             .get(&(kind, pide.0))
             .filter(|(held, _)| *held == item.get())
             .map(|(_, bytes)| bytes.clone())
@@ -470,13 +525,15 @@ pub(crate) extern "system" fn set_item_data(
     };
     with(Status::MISSING, |s| {
         // The world's save keeps no player's character in place.
-        if !value.is_empty() && s.host.players.iter().any(|p| p.entity == pide) {
+        if !value.is_empty() && s.host.base.players.iter().any(|p| p.entity == pide) {
             return Status::NOT_KEPT;
         }
         if value.is_empty() {
-            s.item_values.remove(&(kind, pide.0));
+            s.content.item_values.remove(&(kind, pide.0));
         } else {
-            s.item_values.insert((kind, pide.0), (item.get(), value));
+            s.content
+                .item_values
+                .insert((kind, pide.0), (item.get(), value));
         }
         Status::OK
     })
@@ -500,7 +557,7 @@ pub(crate) extern "system" fn content_serve(
         1,
     ];
     with(Status::MISSING, |s| {
-        s.content.insert(hash, bytes);
+        s.content.served_archive.insert(hash, bytes);
         Status::OK
     });
     found(Some(hash), out)
@@ -519,8 +576,9 @@ pub(crate) extern "system" fn content_read(
     };
     let Some(data) = with(None, |s| {
         s.content
+            .served_archive
             .get(&hash)
-            .or_else(|| s.host.archive.get(&hash))
+            .or_else(|| s.host.content.archive.get(&hash))
             .cloned()
     }) else {
         return Status::MISSING;
@@ -531,7 +589,7 @@ pub(crate) extern "system" fn content_read(
 }
 
 pub(crate) extern "system" fn icons_ready(_me: ModHandle) -> Status {
-    if with(false, |s| s.host.icons_ready) {
+    if with(false, |s| s.host.content.icons_ready) {
         Status::OK
     } else {
         Status::UNAVAILABLE
@@ -546,7 +604,7 @@ pub(crate) extern "system" fn game_text(
 ) -> Status {
     let english = enshwick_core::i18n::Language::EN_US.0;
     let found = with(None, |s| {
-        let texts = &s.host.game_texts;
+        let texts = &s.host.content.game_texts;
         let language = if language == 0 { english } else { language };
         texts
             .get(&(id, language))
@@ -568,6 +626,7 @@ pub(crate) extern "system" fn resource_keys(
 ) -> Status {
     let mut keys: Vec<ResourceKey> = with(Vec::new(), |s| {
         s.host
+            .content
             .resources
             .keys()
             .filter(|(_, ty, _)| type_hash == 0 || *ty == type_hash)
@@ -588,7 +647,9 @@ pub(crate) extern "system" fn content_hashes(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let hashes: Vec<[u32; 4]> = with(Vec::new(), |s| s.host.archive.keys().copied().collect());
+    let hashes: Vec<[u32; 4]> = with(Vec::new(), |s| {
+        s.host.content.archive.keys().copied().collect()
+    });
     put_list(&hashes, out, capacity, count)
 }
 
@@ -599,14 +660,14 @@ pub(crate) extern "system" fn types(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some(table) = with(None, |s| s.host.types.clone()) else {
+    let Some(table) = with(None, |s| s.host.content.types.clone()) else {
         return Status::UNAVAILABLE;
     };
     crate::test::table::base::io::list(table.entries(), out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn game_version(_me: ModHandle, out: *mut Str) -> Status {
-    match with(None, |s| s.host.game_version) {
+    match with(None, |s| s.host.content.game_version) {
         Some(version) => put(out, Str::new(version)),
         None => Status::UNAVAILABLE,
     }

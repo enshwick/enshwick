@@ -2,7 +2,7 @@
 //! holds, as the loader reads and sets them.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, ModHandle, RespawnPointInfo, Side, Status};
+use enshwick_core::abi::{Header, ModHandle, RespawnPointInfo, Status};
 use enshwick_core::content::Guid;
 #[cfg(feature = "unstable")]
 use enshwick_core::game_events::UniqueSceneId;
@@ -48,7 +48,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn spawn_point(mut self, entity: Entity, kind: u32, position: [f64; 3]) -> Self {
-        self.spawn_points.push(FakeSpawnPoint {
+        self.world.spawn_points.push(FakeSpawnPoint {
             entity,
             kind,
             position,
@@ -88,6 +88,7 @@ impl FakeHost {
         scene: Option<UniqueSceneId>,
     ) -> Self {
         for point in self
+            .world
             .spawn_points
             .iter_mut()
             .filter(|p| p.entity == spawn_point)
@@ -113,7 +114,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn respawns_at(mut self, character: Entity, spawn_point: Entity) -> Self {
-        self.respawn_points.insert(character.0, spawn_point);
+        self.world.respawn_points.insert(character.0, spawn_point);
         self
     }
 }
@@ -156,10 +157,19 @@ fn raise(character: Guid, base: Option<Guid>, scene: Option<u32>) -> usize {
 
     let layout = with(None, |s| {
         let host = &s.host;
-        let at = |id: &str| usize::try_from(*host.constants.get(id)?).ok();
+        let at = |id: &str| usize::try_from(*host.base.constants.get(id)?).ok();
         Some((
-            *host.type_hashes.get(ids::PLAYER_SPAWN_INFO_CHANGE_EVENT)?,
-            usize::try_from(*host.type_sizes.get(ids::PLAYER_SPAWN_INFO_CHANGE_EVENT)?).ok()?,
+            *host
+                .base
+                .type_hashes
+                .get(ids::PLAYER_SPAWN_INFO_CHANGE_EVENT)?,
+            usize::try_from(
+                *host
+                    .base
+                    .type_sizes
+                    .get(ids::PLAYER_SPAWN_INFO_CHANGE_EVENT)?,
+            )
+            .ok()?,
             at(ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_CHARACTER)?,
             at(ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_BASE)?,
             at(ids::PLAYER_SPAWN_INFO_CHANGE_EVENT_SCENE)?,
@@ -181,7 +191,7 @@ fn raise(character: Guid, base: Option<Guid>, scene: Option<u32>) -> usize {
 /// Whether the fake reads no respawn point: a client that does not host,
 /// or no world running. A read needs no entity commands, as in the loader.
 fn unread(s: &table::State) -> bool {
-    !(s.host.side == Side::SERVER || s.host.hosting) || table::world::no_world(s)
+    !(s.host.base.serving()) || table::world::no_world(s)
 }
 
 /// Whether the fake sets no respawn point: as [`unread`], or without the
@@ -202,14 +212,15 @@ pub(crate) extern "system" fn respawn_point(
         if unread(s) {
             return Status::UNAVAILABLE;
         }
-        if !s.host.players.iter().any(|p| p.entity == character) {
+        if !s.host.base.players.iter().any(|p| p.entity == character) {
             return Status::MISSING;
         }
         let point = s
             .host
+            .world
             .respawn_points
             .get(&character.0)
-            .and_then(|at| s.host.spawn_points.iter().find(|p| p.entity == *at));
+            .and_then(|at| s.host.world.spawn_points.iter().find(|p| p.entity == *at));
         let Some(point) = point else {
             return Status::MISSING;
         };
@@ -240,15 +251,16 @@ pub(crate) extern "system" fn set_respawn_point(
         }
         let point = s
             .host
+            .world
             .spawn_points
             .iter()
             .find(|p| p.entity == spawn_point && p.kind != RespawnPointInfo::NO_RESPAWN)
             .copied()
             .ok_or(Status::BAD_ARGS)?;
-        if !s.host.players.iter().any(|p| p.entity == character) {
+        if !s.host.base.players.iter().any(|p| p.entity == character) {
             return Err(Status::MISSING);
         }
-        s.host.respawn_points.insert(character.0, spawn_point);
+        s.host.world.respawn_points.insert(character.0, spawn_point);
         Ok(point)
     });
     match set {

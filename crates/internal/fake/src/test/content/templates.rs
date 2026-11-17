@@ -375,7 +375,7 @@ impl FakeHost {
         let collection = enshwick_core::content::templates::TEMPLATE_COLLECTION
             .key_by_hash(fnv1a32(COLLECTION.as_bytes()));
         let given = (collection.guid, collection.type_hash, collection.part);
-        if host.resources.contains_key(&given) {
+        if host.content.resources.contains_key(&given) {
             return host;
         }
         let Some(list) = listed(&guids) else {
@@ -558,7 +558,7 @@ impl FakeHost {
         ];
         let mut host = self.items().recipes().workshops().types(types);
         // The fake's mask is the uint64 of `craftingPropsInRange` it reflects.
-        host.crafting_mask = u8::try_from(VANILLA_CRAFTING_PROPS)
+        host.content.crafting_mask = u8::try_from(VANILLA_CRAFTING_PROPS)
             .ok()
             .map(|first| (first, 64));
         for (guid, value) in templates {

@@ -81,7 +81,7 @@ impl Installed {
 /// refusable action stops at the first refusal, one after the fact reaches
 /// every filter. Whether it is allowed.
 fn ask(call: &ItemAction) -> bool {
-    let filters = table::with(Vec::new(), |s| s.item_filters.clone());
+    let filters = table::with(Vec::new(), |s| s.inventory.item_filters.clone());
     let refusable = !matches!(
         call.kind,
         ItemAction::PICKUP | ItemAction::PLACE | ItemAction::CONSUMED

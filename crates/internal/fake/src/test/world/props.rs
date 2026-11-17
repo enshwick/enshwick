@@ -47,7 +47,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn prop(mut self, entity: Entity, item: ItemId, at: [f64; 3]) -> Self {
-        self.props.push(FakeProp {
+        self.world.props.push(FakeProp {
             entity,
             item,
             at,
@@ -73,7 +73,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn item_triggers(mut self, item: ItemId) -> Self {
-        self.trigger_items.push(item.get());
+        self.world.trigger_items.push(item.get());
         self
     }
 
@@ -88,7 +88,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn item_grows(mut self, item: ItemId) -> Self {
-        self.growing_items.push(item.get());
+        self.world.growing_items.push(item.get());
         self
     }
 
@@ -104,7 +104,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn item_not_a_prop(mut self, item: ItemId) -> Self {
-        self.no_prop_items.push(item.get());
+        self.world.no_prop_items.push(item.get());
         self
     }
 
@@ -119,7 +119,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn placement_box(mut self, item: ItemId, min: [f32; 3], max: [f32; 3]) -> Self {
-        self.placement_boxes.push((item.get(), min, max));
+        self.world.placement_boxes.push((item.get(), min, max));
         self
     }
 }
@@ -139,6 +139,7 @@ impl Installed {
     pub fn props(&self) -> Vec<(Entity, ItemId, [f64; 3])> {
         table::with(Vec::new(), |s| {
             s.host
+                .world
                 .props
                 .iter()
                 .map(|prop| (prop.entity, prop.item, prop.at))
@@ -197,7 +198,13 @@ impl Installed {
             bits | enshwick_core::__fake::held_bit(*kind)
         });
         table::with((), |s| {
-            if let Some(prop) = s.host.props.iter_mut().find(|prop| prop.entity == entity) {
+            if let Some(prop) = s
+                .host
+                .world
+                .props
+                .iter_mut()
+                .find(|prop| prop.entity == entity)
+            {
                 prop.holds = holds;
             }
         });
@@ -207,7 +214,13 @@ impl Installed {
 /// Marks the start state of the prop `entity` changed.
 fn change_start(entity: Entity) {
     table::with((), |s| {
-        if let Some(prop) = s.host.props.iter_mut().find(|prop| prop.entity == entity) {
+        if let Some(prop) = s
+            .host
+            .world
+            .props
+            .iter_mut()
+            .find(|prop| prop.entity == entity)
+        {
             prop.settings_changed = true;
         }
     });
@@ -238,7 +251,12 @@ pub(crate) fn reach(
     at: [f64; 3],
     orientation: [f32; 4],
 ) -> ([f64; 3], [f64; 3]) {
-    let (low, high) = match host.placement_boxes.iter().find(|(of, ..)| *of == item) {
+    let (low, high) = match host
+        .world
+        .placement_boxes
+        .iter()
+        .find(|(of, ..)| *of == item)
+    {
         Some(&(_, min, max)) => {
             let mut low = [f64::INFINITY; 3];
             let mut high = [f64::NEG_INFINITY; 3];
@@ -274,10 +292,10 @@ fn start_bits(host: &FakeHost, prop: &FakeProp, unknown: bool) -> u32 {
         return 0;
     }
     let mut bits = 0;
-    if host.trigger_items.contains(&prop.item.get()) {
+    if host.world.trigger_items.contains(&prop.item.get()) {
         bits |= TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER;
     }
-    if host.growing_items.contains(&prop.item.get()) {
+    if host.world.growing_items.contains(&prop.item.get()) {
         bits |= TransactionInfo::HOLDS_GROWTH;
     }
     bits
@@ -286,7 +304,8 @@ fn start_bits(host: &FakeHost, prop: &FakeProp, unknown: bool) -> u32 {
 /// The next entity id the fake hands out.
 fn next_entity(host: &FakeHost) -> Entity {
     Entity(
-        host.props
+        host.world
+            .props
             .iter()
             .map(|prop| prop.entity.0 + 1)
             .max()
@@ -305,11 +324,12 @@ pub(crate) fn apply(
     for change in &transaction.changes {
         if let FakeChange::RemoveProp(remove) = change {
             let prop = host
+                .world
                 .props
                 .iter()
                 .find(|prop| prop.entity == remove.entity)
                 .ok_or((Status::NOT_A_PROP, 0))?;
-            if host.no_prop_items.contains(&prop.item.get()) {
+            if host.world.no_prop_items.contains(&prop.item.get()) {
                 return Err((Status::NOT_A_PROP, 0));
             }
             let holds = prop.holds | start_bits(host, prop, true);
@@ -322,7 +342,7 @@ pub(crate) fn apply(
         match change {
             FakeChange::PlaceProp(place) => {
                 let entity = next_entity(host);
-                host.props.push(FakeProp {
+                host.world.props.push(FakeProp {
                     entity,
                     item: place.item,
                     at: place.position,
@@ -332,6 +352,7 @@ pub(crate) fn apply(
                 });
                 // As the game: the placed prop stands where it was placed.
                 if let Some(&transform) = host
+                    .base
                     .type_hashes
                     .get(crate::test::facts::CURRENT_TRANSFORM.id())
                 {
@@ -345,11 +366,12 @@ pub(crate) fn apply(
             }
             FakeChange::RemoveProp(remove) => {
                 if let Some(index) = host
+                    .world
                     .props
                     .iter()
                     .position(|prop| prop.entity == remove.entity)
                 {
-                    let mut prop = host.props.remove(index);
+                    let mut prop = host.world.props.remove(index);
                     prop.holds |= start_bits(host, &prop, true);
                     transaction.removed.push(prop);
                 }
@@ -370,6 +392,7 @@ pub(crate) fn undo(
 ) -> Result<(), (Status, u32)> {
     for entity in &transaction.created {
         let prop = host
+            .world
             .props
             .iter()
             .find(|prop| prop.entity == *entity)
@@ -383,7 +406,7 @@ pub(crate) fn undo(
         if removed.holds != 0 {
             return Err((Status::REFUSED, removed.holds));
         }
-        let taken = host.props.iter().any(|prop| {
+        let taken = host.world.props.iter().any(|prop| {
             prop.item == removed.item
                 && enshwick_core::ecs::fixed(prop.at) == enshwick_core::ecs::fixed(removed.at)
         });
@@ -391,14 +414,16 @@ pub(crate) fn undo(
             return Err((Status::REFUSED, 0));
         }
     }
-    host.props
+    host.world
+        .props
         .retain(|prop| !transaction.created.contains(&prop.entity));
-    host.components
+    host.base
+        .components
         .retain(|(entity, _), _| !transaction.created.iter().any(|c| c.0 == *entity));
     transaction.created.clear();
     for prop in transaction.removed.drain(..) {
         let entity = next_entity(host);
-        host.props.push(FakeProp { entity, ..prop });
+        host.world.props.push(FakeProp { entity, ..prop });
     }
     Ok(())
 }

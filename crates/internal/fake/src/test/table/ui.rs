@@ -9,6 +9,124 @@ use enshwick_core::abi::{
     UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
 
+/// An extension of a game screen: screen name, edge, callback and the host
+/// templates it shows for (empty for every host).
+pub(crate) type Extension = (
+    String,
+    u32,
+    Registered<UiFrameFn>,
+    Vec<enshwick_core::content::Guid>,
+);
+
+/// The local player's held controls as the test set them, `None` as outside
+/// a game; whether a mod asked yet, as the loader starts reading them at the
+/// first ask; and whether an interface step ran since, the first that reads
+/// them.
+#[derive(Default)]
+pub(crate) struct Held {
+    pub(crate) bits: Option<u64>,
+    pub(crate) asked: bool,
+    pub(crate) stepped: bool,
+}
+
+/// What the installed fake's interface answers and has recorded.
+pub(crate) struct UiState {
+    /// Whether the mod opened the fog of war.
+    pub(crate) fog_opened: bool,
+    /// Frame callbacks.
+    pub(crate) frames: Vec<Registered<UiFrameFn>>,
+    /// HUD callbacks.
+    pub(crate) huds: Vec<Registered<UiFrameFn>>,
+    /// Extensions of game screens: screen name, edge, callback and the host
+    /// templates it shows for (empty for every host).
+    pub(crate) extensions: Vec<Extension>,
+    /// The handle whose callback draws now: the loader refuses a widget
+    /// from any other.
+    pub(crate) drawing: Option<ModHandle>,
+    /// The frame token of the extension drawing now, whose window the
+    /// loader opened.
+    pub(crate) extending: Option<u64>,
+    /// The game screen the player has open, as frames and HUDs hear it;
+    /// empty for none.
+    pub(crate) open_screen: &'static str,
+    /// The interaction prompt the frames hear: its title and verb.
+    pub(crate) prompt: Option<(String, u32)>,
+    /// The entity the open screen belongs to, 0 for none.
+    pub(crate) screen_host: u32,
+    /// The host's template and fixed-point position as the client's last
+    /// step read them, `None` before one did.
+    pub(crate) screen_host_read: Option<(enshwick_core::content::Guid, [i64; 3])>,
+    /// The game actions the fake build names, each with whether a key is
+    /// bound to it.
+    pub(crate) game_actions: Vec<(String, bool)>,
+    /// The local player's held controls.
+    pub(crate) local_held: Held,
+    pub(crate) local_input_info: enshwick_core::abi::LocalInputInfo,
+    /// The client snapshot the loader would write, as the test set it.
+    pub(crate) client_snapshot: enshwick_core::abi::ClientSnapshot,
+    /// Whether a snapshot ask started the frame's reads, and whether an
+    /// interface step read them since.
+    pub(crate) snapshot_reads: (bool, bool),
+    /// The client commands mods queued, each with its kind, target and
+    /// status, as the test drives them.
+    pub(crate) client_commands: Vec<(u64, u32, String, enshwick_core::abi::ClientCommandStatus)>,
+    /// The slot of an inventory screen under the cursor, as the frames
+    /// hear it: the packed slot, item, count and item entity.
+    pub(crate) hovered: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
+    /// Item tooltip callbacks.
+    pub(crate) tooltips: Vec<Registered<UiTooltipFn>>,
+    /// The lines the tooltip callback running now added, with its token.
+    pub(crate) tooltip: Option<(u64, Vec<crate::test::Drawn>)>,
+    /// What the HUD drawing now drew, with each item's anchor, while one
+    /// draws.
+    pub(crate) hud: Option<(u64, Vec<(u32, crate::test::Drawn)>)>,
+    /// The mod's markers on the map.
+    pub(crate) markers: Vec<crate::test::FakeMarker>,
+    /// The frame drawing now: its token, whether a window is open and what
+    /// was drawn.
+    pub(crate) frame: Option<(u64, bool, Vec<crate::test::Drawn>)>,
+    /// Inputs waiting for the widget with their text.
+    pub(crate) inputs: Vec<(String, crate::test::Input)>,
+    /// Dialogs waiting for an answer, with where it goes.
+    pub(crate) dialogs: Vec<(crate::test::ShownDialog, Registered<UiAnswerFn>)>,
+}
+
+impl Default for UiState {
+    fn default() -> Self {
+        Self {
+            fog_opened: false,
+            frames: Vec::new(),
+            huds: Vec::new(),
+            extensions: Vec::new(),
+            drawing: None,
+            extending: None,
+            open_screen: "",
+            prompt: None,
+            screen_host: 0,
+            screen_host_read: None,
+            game_actions: Vec::new(),
+            local_held: Held::default(),
+            local_input_info: enshwick_core::abi::LocalInputInfo {
+                header: enshwick_core::abi::Header::of::<enshwick_core::abi::LocalInputInfo>(),
+                flags: 0,
+                reserved: 0,
+                age_ms: u64::MAX,
+            },
+            client_snapshot: enshwick_core::abi::ClientSnapshot::EMPTY,
+            snapshot_reads: (false, false),
+            client_commands: Vec::new(),
+            hovered: None,
+            tooltips: Vec::new(),
+            tooltip: None,
+            hud: None,
+            markers: Vec::new(),
+            frame: None,
+            inputs: Vec::new(),
+            dialogs: Vec::new(),
+        }
+    }
+}
+
 /// The screens on which the player is in the world with no window open,
 /// as the loader's controls gate counts them; a panel there is refused.
 const OPEN: [&str; 7] = [
@@ -30,14 +148,11 @@ pub(crate) extern "system" fn ui_frame(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        if s.host.side == Side::SERVER {
+    crate::test::table::with_open(|s| {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        s.frames.push(Registered::new(callback, user, me));
+        s.ui.frames.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -51,11 +166,12 @@ pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Statu
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        s.local_held.asked = true;
+        s.ui.local_held.asked = true;
         match s
+            .ui
             .local_held
             .bits
-            .filter(|_| s.local_held.stepped && s.host.side != Side::SERVER)
+            .filter(|_| s.ui.local_held.stepped && s.host.base.side != Side::SERVER)
         {
             Some(bits) => {
                 // SAFETY: the safe layer passes a writable `u64` for the call,
@@ -70,8 +186,8 @@ pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Statu
 
 /// The input waiting for the widget labelled `text`, taken.
 pub(crate) fn input(s: &mut State, text: &str) -> Option<crate::test::Input> {
-    let at = s.inputs.iter().position(|(t, _)| t == text)?;
-    Some(s.inputs.remove(at).1)
+    let at = s.ui.inputs.iter().position(|(t, _)| t == text)?;
+    Some(s.ui.inputs.remove(at).1)
 }
 
 /// A progress bar's filled part, as the loader draws it; `None` for a bar
@@ -112,7 +228,7 @@ pub(crate) fn slider(
 /// Draws the key hint of the game action `action` as the loader does;
 /// `None` for an action the fake build does not name.
 fn input_hint(s: &State, w: &mut UiWidget, action: String) -> Option<crate::test::Drawn> {
-    let &(_, bound) = s.game_actions.iter().find(|(name, _)| *name == action)?;
+    let &(_, bound) = s.ui.game_actions.iter().find(|(name, _)| *name == action)?;
     w.result = u32::from(bound);
     Some(crate::test::Drawn::InputHint {
         action,
@@ -123,7 +239,7 @@ fn input_hint(s: &State, w: &mut UiWidget, action: String) -> Option<crate::test
 
 /// Records a HUD callback's widget; `None` outside a HUD callback.
 pub(crate) fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -> Option<Status> {
-    let (token, list) = s.hud.as_mut()?;
+    let (token, list) = s.ui.hud.as_mut()?;
     if *token != frame {
         return None;
     }
@@ -145,7 +261,7 @@ pub(crate) fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -
 /// Records a tooltip callback's line, as the loader keeps it: labels only,
 /// at most [`UiTooltipItem::MAX_LINES`]; `None` outside a tooltip callback.
 fn tooltip_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -> Option<Status> {
-    let (token, lines) = s.tooltip.as_mut()?;
+    let (token, lines) = s.ui.tooltip.as_mut()?;
     if *token != frame {
         return None;
     }
@@ -169,7 +285,7 @@ fn item_slot(s: &mut State, w: &mut UiWidget) -> Result<crate::test::Drawn, Stat
     if w.count == 0 {
         return Err(Status::BAD_ARGS);
     }
-    if !s.host.items.contains_key(&w.item.get()) {
+    if !s.host.content.items.contains_key(&w.item.get()) {
         return Err(Status::MISSING);
     }
     match input(s, &crate::test::slot_key(w.item)) {
@@ -194,14 +310,11 @@ pub(crate) extern "system" fn ui_item_tooltip(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        if s.host.side == Side::SERVER {
+    crate::test::table::with_open(|s| {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        s.tooltips.push(Registered::new(callback, user, me));
+        s.ui.tooltips.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -216,7 +329,7 @@ pub(crate) extern "system" fn ui_widget(
     };
     // The loader refuses a widget outside a callback or from a handle not
     // the drawing callback's.
-    if with(false, |s| s.drawing != Some(me)) {
+    if with(false, |s| s.ui.drawing != Some(me)) {
         return Status::WRONG_THREAD;
     }
     let status = draw(frame, &mut copy);
@@ -230,11 +343,13 @@ pub(crate) extern "system" fn ui_widget(
 /// as the loader checks before it plays one.
 fn holds_sound(s: &State, guid: enshwick_core::content::Guid) -> bool {
     s.host
+        .base
         .type_hashes
         .get(enshwick_core::__fake::ids::SOUND_CONTAINER)
         .is_some_and(|&hash| {
-            s.host.resources.contains_key(&(guid, hash, 0))
-                || s.served
+            s.host.content.resources.contains_key(&(guid, hash, 0))
+                || s.content
+                    .served
                     .iter()
                     .any(|served| served.0.key.guid == guid && served.0.key.type_hash == hash)
         })
@@ -245,9 +360,9 @@ fn holds_sound(s: &State, guid: enshwick_core::content::Guid) -> bool {
 /// dialog shows the press is dropped.
 fn window(s: &mut State, w: &mut UiWidget, id: String) -> crate::test::Drawn {
     let back = |(t, i): &(String, crate::test::Input)| *t == id && *i == crate::test::Input::Back;
-    if let Some(at) = s.inputs.iter().position(back) {
-        s.inputs.remove(at);
-        w.result = u32::from(s.dialogs.is_empty());
+    if let Some(at) = s.ui.inputs.iter().position(back) {
+        s.ui.inputs.remove(at);
+        w.result = u32::from(s.ui.dialogs.is_empty());
     }
     crate::test::Drawn::Window {
         id,
@@ -277,7 +392,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
         if let Some(status) = gathered.or_else(|| tooltip_widget(s, frame, w, &label)) {
             return status;
         }
-        let open = match s.frame.as_ref() {
+        let open = match s.ui.frame.as_ref() {
             Some((token, open, _)) if *token == frame => *open,
             _ => return Status::WRONG_THREAD,
         };
@@ -285,7 +400,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
         w.result = 0;
         let drawn = match w.kind {
             UiWidget::WINDOW if !open => window(s, w, label),
-            UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
+            UiWidget::END if open && s.ui.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND if w.sound == enshwick_core::content::Guid::NIL => {
                 Drawn::Sound(w.style)
             }
@@ -353,7 +468,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
             },
             _ => return Status::MISSING,
         };
-        if let Some((_, open, list)) = s.frame.as_mut() {
+        if let Some((_, open, list)) = s.ui.frame.as_mut() {
             match drawn {
                 Drawn::Window { .. } => *open = true,
                 Drawn::End => *open = false,
@@ -373,14 +488,11 @@ pub(crate) extern "system" fn ui_hud(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        if s.host.side == Side::SERVER {
+    crate::test::table::with_open(|s| {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        s.huds.push(Registered::new(callback, user, me));
+        s.ui.huds.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -407,11 +519,8 @@ pub(crate) extern "system" fn ui_extension(
     else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        if s.host.side == Side::SERVER {
+    crate::test::table::with_open(|s| {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
         if spec.edge > UiExtension::BOTTOM || OPEN.contains(&screen.as_str()) {
@@ -420,7 +529,7 @@ pub(crate) extern "system" fn ui_extension(
         if !SCREENS.contains(&screen.as_str()) {
             return Status::MISSING;
         }
-        s.extensions.push((
+        s.ui.extensions.push((
             screen,
             spec.edge,
             Registered::new(callback, user, me),
@@ -435,7 +544,7 @@ pub(crate) extern "system" fn ui_markers(
     markers: *const UiMarker,
     count: u32,
 ) -> Status {
-    if with(true, |s| s.host.side == Side::SERVER) {
+    if with(true, |s| s.host.base.side == Side::SERVER) {
         return Status::UNAVAILABLE;
     }
     if count as usize > enshwick_core::__fake::MARKER_LIMIT {
@@ -454,18 +563,18 @@ pub(crate) extern "system" fn ui_markers(
         })
         .collect();
     with(Status::MISSING, |s| {
-        if s.host.side == Side::SERVER {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
         for marker in markers.iter().filter(|m| m.marker_type != 0) {
-            let Some(types) = &s.host.map_marker_types else {
+            let Some(types) = &s.host.ui.map_marker_types else {
                 return Status::UNAVAILABLE;
             };
             if !types.iter().any(|t| t.marker_id == marker.marker_type) {
                 return Status::BAD_ARGS;
             }
         }
-        s.markers = markers;
+        s.ui.markers = markers;
         Status::OK
     })
 }
@@ -478,8 +587,8 @@ pub(crate) extern "system" fn map_marker_types(
     count: *mut u32,
 ) -> Status {
     let Some(types) = with(None, |s| {
-        (s.host.side != Side::SERVER)
-            .then(|| s.host.map_marker_types.clone())
+        (s.host.base.side != Side::SERVER)
+            .then(|| s.host.ui.map_marker_types.clone())
             .flatten()
     }) else {
         return Status::UNAVAILABLE;
@@ -506,26 +615,24 @@ pub(crate) extern "system" fn ui_dialog(
         buttons: d.buttons,
     };
     with(Status::MISSING, |s| {
-        if s.host.side == Side::SERVER {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        if s.dialogs.len() >= 16 {
+        if s.ui.dialogs.len() >= 16 {
             return Status::REFUSED;
         }
-        s.dialogs.push((shown, Registered::new(callback, user, me)));
+        s.ui.dialogs
+            .push((shown, Registered::new(callback, user, me)));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn request_fog(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        if s.host.side == Side::SERVER {
+    crate::test::table::with_open(|s| {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        s.fog_opened = true;
+        s.ui.fog_opened = true;
         Status::OK
     })
 }
@@ -545,10 +652,10 @@ pub(crate) extern "system" fn fog_read(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if !s.fog_opened {
+        if !s.ui.fog_opened {
             return Status::REFUSED;
         }
-        let Some((found, pixels)) = s.host.fog.as_ref() else {
+        let Some((found, pixels)) = s.host.ui.fog.as_ref() else {
             return Status::UNAVAILABLE;
         };
         let written = super::put_headed(info, *found);
@@ -590,12 +697,12 @@ pub(crate) extern "system" fn local_input_status(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.host.side == Side::SERVER {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
         // As the loader: the first `local_held` ask started the reads.
-        let mut info = s.local_input_info;
-        if s.local_held.asked {
+        let mut info = s.ui.local_input_info;
+        if s.ui.local_held.asked {
             info.flags |= enshwick_core::abi::LocalInputInfo::REQUESTED;
         }
         super::put_headed(out, info)
@@ -618,15 +725,15 @@ pub(crate) extern "system" fn client_command(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.host.side == Side::SERVER {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
         let open = |status: &Raw| status.state == Raw::PENDING || status.state == Raw::APPLIED;
         if spec.kind == Spec::CANCEL {
-            if let Some((.., status)) = s
-                .client_commands
-                .iter_mut()
-                .find(|(queued, .., status)| *queued == spec.cancels && open(status))
+            if let Some((.., status)) =
+                s.ui.client_commands
+                    .iter_mut()
+                    .find(|(queued, .., status)| *queued == spec.cancels && open(status))
             {
                 status.state = Raw::CANCELLED;
                 status.reason = Raw::BY_MOD;
@@ -641,7 +748,8 @@ pub(crate) extern "system" fn client_command(
         {
             return Status::BAD_ARGS;
         }
-        if s.client_commands
+        if s.ui
+            .client_commands
             .iter()
             .any(|(_, kind, _, status)| *kind == spec.kind && open(status))
         {
@@ -651,22 +759,22 @@ pub(crate) extern "system" fn client_command(
         // world, which the snapshot's session names, and a leave inside one.
         let plays = |kind: u32| kind == Spec::JOIN || kind == Spec::LEAVE;
         if plays(spec.kind) {
-            let in_world = s.client_snapshot.session != 0;
-            let running = s
-                .client_commands
-                .iter()
-                .any(|(_, kind, _, status)| plays(*kind) && open(status));
+            let in_world = s.ui.client_snapshot.session != 0;
+            let running =
+                s.ui.client_commands
+                    .iter()
+                    .any(|(_, kind, _, status)| plays(*kind) && open(status));
             if running || in_world == (spec.kind == Spec::JOIN) {
                 return Status::REFUSED;
             }
         }
-        let next = s.client_commands.len() as u64 + 1;
+        let next = s.ui.client_commands.len() as u64 + 1;
         // SAFETY: the mod's spec, its target borrowed for the call; the
         // password is never read, kept or returned.
         let target = unsafe { spec.target.as_str() }
             .unwrap_or_default()
             .to_owned();
-        s.client_commands.push((
+        s.ui.client_commands.push((
             next,
             spec.kind,
             target,
@@ -711,7 +819,12 @@ pub(crate) extern "system" fn client_command_status(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        match s.client_commands.iter().find(|(queued, ..)| *queued == id) {
+        match s
+            .ui
+            .client_commands
+            .iter()
+            .find(|(queued, ..)| *queued == id)
+        {
             Some((.., status)) => super::put_headed(out, *status),
             None => Status::UNAVAILABLE,
         }
@@ -729,12 +842,12 @@ pub(crate) extern "system" fn client_snapshot(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.host.side == Side::SERVER {
+        if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        s.snapshot_reads.0 = true;
-        let snapshot = if s.snapshot_reads.1 {
-            s.client_snapshot
+        s.ui.snapshot_reads.0 = true;
+        let snapshot = if s.ui.snapshot_reads.1 {
+            s.ui.client_snapshot
         } else {
             enshwick_core::abi::ClientSnapshot::EMPTY
         };

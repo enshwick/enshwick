@@ -20,7 +20,7 @@ impl Installed {
     /// loader.loop_wait(0, 400_000);
     /// ```
     pub fn loop_wait(&self, ms: u32, left_ns: i64) {
-        let handlers = table::with(Vec::new(), |s| s.pacing.loop_waits.clone());
+        let handlers = table::with(Vec::new(), |s| s.base.pacing.loop_waits.clone());
         let wait = LoopWaitData {
             header: Header::of::<LoopWaitData>(),
             ms,
@@ -44,7 +44,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn server_wait(&self, mut wait_ns: u64) -> u64 {
-        let handlers = table::with(Vec::new(), |s| s.pacing.server_waits.clone());
+        let handlers = table::with(Vec::new(), |s| s.base.pacing.server_waits.clone());
         for handler in handlers {
             // SAFETY: a valid registration; `user` is the mod's pointer.
             handler.run(|callback, user| unsafe { callback(&raw mut wait_ns, user) });
@@ -63,6 +63,6 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn task_workers(&self) -> Option<(u32, u32)> {
-        table::with(None, |s| s.pacing.task_workers)
+        table::with(None, |s| s.base.pacing.task_workers)
     }
 }

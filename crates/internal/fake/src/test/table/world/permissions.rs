@@ -6,8 +6,6 @@
 use enshwick_core::abi::{ModHandle, PlayerInfo, Status};
 use enshwick_core::{Entity, PlayerKey};
 
-use super::serving;
-
 use crate::test::table::{on_game_thread, with};
 
 /// The mods' changes, and the group bits of each changed player.
@@ -68,7 +66,7 @@ impl crate::test::Installed {
     /// ```
     #[must_use]
     pub fn permission_change(&self, key: PlayerKey) -> (u32, u32) {
-        with((0, 0), |s| s.permission_changes.of(key))
+        with((0, 0), |s| s.world.permission_changes.of(key))
     }
 
     /// Gives the player in game with account `key` the character `entity`,
@@ -90,6 +88,7 @@ impl crate::test::Installed {
     pub fn respawn(&self, key: PlayerKey, entity: Entity) -> bool {
         with(false, |s| {
             s.host
+                .base
                 .players
                 .iter_mut()
                 .find(|p| p.key == key)
@@ -113,18 +112,18 @@ pub(crate) extern "system" fn change_permissions(
         return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
-        if !ends && (!serving(s) || s.host.world_key.is_none()) {
+        if !ends && (!s.host.base.serving() || s.host.base.world_key.is_none()) {
             return Status::UNAVAILABLE;
         }
-        let Some(player) = s.host.players.iter_mut().find(|p| p.key == account) else {
+        let Some(player) = s.host.base.players.iter_mut().find(|p| p.key == account) else {
             // As the loader: ending a change needs no player in game.
             if ends {
-                s.permission_changes.left_by(me, account);
+                s.world.permission_changes.left_by(me, account);
                 return Status::OK;
             }
             return Status::REFUSED;
         };
-        let changes = &mut s.permission_changes;
+        let changes = &mut s.world.permission_changes;
         if !changes.groups.iter().any(|g| g.0 == account) {
             changes.groups.push((account, player.permissions));
         }

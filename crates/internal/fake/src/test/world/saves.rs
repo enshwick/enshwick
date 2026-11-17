@@ -29,7 +29,7 @@ impl Installed {
     /// }));
     /// ```
     pub fn set_save_info(&self, info: Option<SaveInfo>) {
-        table::with((), |s| s.save.info = info);
+        table::with((), |s| s.world.save.info = info);
     }
 
     /// Shuts the hosted game down as the loader does: the mod's hold on saves
@@ -47,8 +47,8 @@ impl Installed {
     #[must_use = "the answer says whether the final save ran"]
     pub fn shut_down(&self) -> bool {
         table::with((), |s| {
-            s.save.held = false;
-            s.save.shut = false;
+            s.world.save.held = false;
+            s.world.save.shut = false;
         });
         // SAFETY: the event carries no data.
         let _heard = unsafe {
@@ -58,8 +58,8 @@ impl Installed {
             )
         };
         table::with(false, |s| {
-            s.save.shut = true;
-            !s.save.held
+            s.world.save.shut = true;
+            !s.world.save.held
         })
     }
 
@@ -73,7 +73,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn saves_held(&self) -> bool {
-        table::with(false, |s| s.save.held)
+        table::with(false, |s| s.world.save.held)
     }
 
     /// The entities the mod keeps out of the world's saves, in the order it
@@ -88,7 +88,8 @@ impl Installed {
     #[must_use]
     pub fn unsaved(&self) -> Vec<enshwick_core::Entity> {
         table::with(Vec::new(), |s| {
-            s.save
+            s.world
+                .save
                 .unsaved
                 .iter()
                 .map(|&e| enshwick_core::Entity(e))

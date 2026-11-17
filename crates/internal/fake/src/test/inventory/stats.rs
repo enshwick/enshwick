@@ -78,6 +78,7 @@ fn text_of(id: &str) -> Box<str> {
 /// its manifest's id once its init ran, else [`MOD_ID`](crate::test::MOD_ID).
 fn is_own(s: &crate::test::table::State, id: &str) -> bool {
     let own = s
+        .base
         .manifest
         .as_ref()
         .map_or(crate::test::MOD_ID, |manifest| manifest.id.as_str());
@@ -101,10 +102,10 @@ fn index_of(stats: &mut FakeStats, id: &str) -> u32 {
 }
 
 fn state_stats(s: &mut crate::test::table::State) -> &mut FakeStats {
-    if s.stats.kinds.is_empty() {
-        s.stats = FakeStats::with_builtins();
+    if s.inventory.stats.kinds.is_empty() {
+        s.inventory.stats = FakeStats::with_builtins();
     }
-    &mut s.stats
+    &mut s.inventory.stats
 }
 
 pub(crate) extern "system" fn define_stat(
@@ -140,11 +141,11 @@ pub(crate) extern "system" fn define_stat(
     }
     let opened = with(Err(Status::MISSING), |s| {
         let unexported = parsed.is_none()
-            && s.manifest.as_ref().is_some_and(|manifest| {
+            && s.base.manifest.as_ref().is_some_and(|manifest| {
                 manifest.unexported(
                     enshwick_core::schema_section::Kind::Stat,
                     &id,
-                    &s.host.exports,
+                    &s.host.base.exports,
                 )
             });
         if unexported {
@@ -233,12 +234,13 @@ fn sources(s: &mut crate::test::table::State, entity: u32, stat: u32) -> Vec<Sta
         }
     }
     let mut buffs: Vec<u32> = s
+        .world
         .buffs
         .get(&entity)
         .map_or_default(|on| on.iter().map(|b| b.id.get()).collect());
     buffs.sort_unstable();
     for buff in buffs {
-        for (_, m) in s.stats.buffs.iter().filter(|(id, _)| *id == buff) {
+        for (_, m) in s.inventory.stats.buffs.iter().filter(|(id, _)| *id == buff) {
             out.push(StatSource {
                 kind: StatSource::BUFF,
                 op: m.op,
@@ -251,6 +253,7 @@ fn sources(s: &mut crate::test::table::State, entity: u32, stat: u32) -> Vec<Sta
         }
     }
     for (&(_, key, at), &(op, value, _, _)) in s
+        .inventory
         .stats
         .modifiers
         .range((entity, 0, 0)..=(entity, u32::MAX, u32::MAX))
@@ -311,7 +314,14 @@ pub(crate) extern "system" fn stat_modify(_me: ModHandle, request: *const StatMo
     };
     with(Status::MISSING, |s| {
         let saved = request.flags & StatModify::SAVED != 0;
-        if saved && !s.host.players.iter().any(|p| p.entity == request.entity) {
+        if saved
+            && !s
+                .host
+                .base
+                .players
+                .iter()
+                .any(|p| p.entity == request.entity)
+        {
             return Status::REFUSED;
         }
         let stats = state_stats(s);
@@ -345,10 +355,7 @@ pub(crate) extern "system" fn stat_buff(
         // safe layer passes `count` aligned modifiers alive for the call.
         unsafe { core::slice::from_raw_parts(modifiers, count as usize) }.to_vec()
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         state_stats(s)
             .buffs
             .extend(list.into_iter().map(|m| (buff, m)));
@@ -364,10 +371,7 @@ pub(crate) extern "system" fn stats_changed(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         state_stats(s)
             .handlers
             .push(Registered::new(callback, user, me));
@@ -413,27 +417,28 @@ pub(crate) fn settle() -> usize {
         let mut entities: BTreeSet<u32> = stats.watched.clone();
         entities.extend(stats.asked.iter().map(|&(entity, _)| entity));
         entities.extend(stats.worn.keys());
-        entities.extend(s.host.players.iter().map(|p| p.entity.0));
-        let kinds = u32::try_from(s.stats.kinds.len()).unwrap_or(0);
+        entities.extend(s.host.base.players.iter().map(|p| p.entity.0));
+        let kinds = u32::try_from(s.inventory.stats.kinds.len()).unwrap_or(0);
         let mut changes = Vec::new();
         for entity in entities {
             for stat in 0..kinds {
                 let Some(new) = value(s, entity, stat) else {
                     continue;
                 };
-                let default = s.stats.kinds[stat as usize]
+                let default = s.inventory.stats.kinds[stat as usize]
                     .def
                     .as_ref()
                     .map_or(0.0, |(d, _)| d.default);
                 let old = s
+                    .inventory
                     .stats
                     .settled
                     .get(&(entity, stat))
                     .copied()
                     .unwrap_or(default);
                 if old.to_bits() != new.to_bits() {
-                    s.stats.settled.insert((entity, stat), new);
-                    let key = key_of(&s.stats.kinds[stat as usize].id).0;
+                    s.inventory.stats.settled.insert((entity, stat), new);
+                    let key = key_of(&s.inventory.stats.kinds[stat as usize].id).0;
                     changes.push(StatChange {
                         header: Header::of::<StatChange>(),
                         entity: enshwick_core::Entity(entity),
@@ -445,7 +450,7 @@ pub(crate) fn settle() -> usize {
                 }
             }
         }
-        (changes, s.stats.handlers.clone())
+        (changes, s.inventory.stats.handlers.clone())
     });
     for change in &changes {
         for handler in &handlers {
@@ -463,7 +468,8 @@ pub(crate) fn settle() -> usize {
 /// flags, duration in ms)`.
 pub(crate) fn modifiers() -> Vec<(u32, u32, u32, u8, f32, u32, u64)> {
     with(Vec::new(), |s| {
-        s.stats
+        s.inventory
+            .stats
             .modifiers
             .iter()
             .map(|(&(e, k, st), &(op, v, f, d))| (e, k, st, op, v, f, d))
@@ -473,10 +479,15 @@ pub(crate) fn modifiers() -> Vec<(u32, u32, u32, u8, f32, u32, u64)> {
 
 /// The item stats `item` keeps.
 fn record(s: &crate::test::table::State, item: ItemInstance) -> ItemStats {
-    s.item_kinds
+    s.content
+        .item_kinds
         .iter()
         .position(|k| k == enshwick_core::stats::ITEM_KIND)
-        .and_then(|kind| s.item_values.get(&(u32::try_from(kind).ok()?, item.pide.0)))
+        .and_then(|kind| {
+            s.content
+                .item_values
+                .get(&(u32::try_from(kind).ok()?, item.pide.0))
+        })
         .filter(|(held, _)| *held == item.item.get())
         .and_then(|(_, bytes)| postcard::from_bytes::<ItemStats>(bytes).ok())
         .unwrap_or_default()
@@ -494,14 +505,14 @@ fn pool(stats: &FakeStats) -> Vec<Candidate<'_>> {
 }
 
 fn item_lines_of(s: &crate::test::table::State, record: &ItemStats) -> Vec<ItemLine> {
-    let kinds = &s.stats.kinds;
+    let kinds = &s.inventory.stats.kinds;
     let stat = |key: StatKey| {
         kinds
             .iter()
             .position(|k| key_of(&k.id) == key)
             .and_then(|i| u32::try_from(i).ok())
     };
-    lines_of(record, &pool(&s.stats), stat)
+    lines_of(record, &pool(&s.inventory.stats), stat)
 }
 
 pub(crate) extern "system" fn define_affix(
@@ -570,7 +581,12 @@ pub(crate) extern "system" fn affix_roll(
         item: roll.item,
     };
     let next = with(Err(Status::MISSING), |s| {
-        let category = s.host.items.get(&roll.item.get()).map_or(0, |i| i.category);
+        let category = s
+            .host
+            .content
+            .items
+            .get(&roll.item.get())
+            .map_or(0, |i| i.category);
         let rules = RollRules::new(roll.min, roll.max)
             .max_rarity(ItemRarity::from_raw(roll.max_rarity).unwrap_or(ItemRarity::Legendary));
         let current = record(s, item);
@@ -595,15 +611,17 @@ pub(crate) extern "system" fn affix_roll(
     };
     let stored = with(None, |s| {
         let at = s
+            .content
             .item_kinds
             .iter()
             .position(|k| k == enshwick_core::stats::ITEM_KIND)
             .unwrap_or_else(|| {
-                s.item_kinds
+                s.content
+                    .item_kinds
                     .push(enshwick_core::stats::ITEM_KIND.to_owned());
-                s.item_kinds.len() - 1
+                s.content.item_kinds.len() - 1
             });
-        s.item_values.insert(
+        s.content.item_values.insert(
             (u32::try_from(at).ok()?, roll.pide.0),
             (roll.item.get(), bytes),
         );
@@ -638,7 +656,7 @@ pub(crate) extern "system" fn affix_info(
     rarity: *mut u8,
 ) -> Status {
     let found = with(None, |s| {
-        let (_, def, text) = s.stats.affixes.get(affix as usize)?;
+        let (_, def, text) = s.inventory.stats.affixes.get(affix as usize)?;
         // The fake keeps its affixes while installed.
         Some((Str::new(text), def.rarity.to_raw()))
     });

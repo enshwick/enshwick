@@ -9,6 +9,7 @@ use crate::test::{FakeHost, Installed, table};
 pub(crate) mod altars;
 pub(crate) mod buffs;
 pub(crate) mod players;
+mod presets;
 pub(crate) mod props;
 pub(crate) mod respawn;
 pub(crate) mod saves;
@@ -16,6 +17,8 @@ pub(crate) mod saves;
 pub(crate) mod tags;
 pub(crate) mod transactions;
 pub(crate) mod voxel_edits;
+
+pub(crate) use presets::{BaseCode, WorldPresets};
 
 impl FakeHost {
     /// The world's own component types and where a placed thing keeps its
@@ -114,7 +117,7 @@ impl FakeHost {
             *word = u128::from_le_bytes(le);
         }
         let data = Box::leak(words).as_mut_ptr();
-        self.components.insert(
+        self.base.components.insert(
             (entity.0, type_hash),
             (data.expose_provenance(), bytes.len()),
         );
@@ -131,7 +134,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn refuse_write(mut self, type_hash: u32) -> Self {
-        self.refused_writes.insert(type_hash);
+        self.world.refused_writes.insert(type_hash);
         self
     }
 
@@ -148,7 +151,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_entity_commands(mut self) -> Self {
-        self.no_entity_commands = true;
+        self.world.no_entity_commands = true;
         self
     }
 
@@ -166,7 +169,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn static_half(mut self, type_hash: u32) -> Self {
-        self.static_halves.insert(type_hash);
+        self.world.static_halves.insert(type_hash);
         self
     }
 
@@ -189,7 +192,7 @@ impl FakeHost {
         entity: enshwick_core::Entity,
         position: [f64; 3],
     ) -> Self {
-        self.placed.push((
+        self.world.placed.push((
             type_hash,
             EntityPlace {
                 entity: enshwick_core::Entity(entity.0),
@@ -214,7 +217,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn map_marker(mut self, marker: enshwick_core::abi::MapMarkerInfo) -> Self {
-        self.map_markers.push(marker);
+        self.world.map_markers.push(marker);
         self
     }
 
@@ -233,29 +236,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn map_frame(mut self, frame: enshwick_core::abi::MapFrameInfo) -> Self {
-        self.map_frame = Some(frame);
-        self
-    }
-
-    /// The client's marker type registry, as the loader reads it from the
-    /// game's archive for `Ui::map_marker_types`; without one the registry
-    /// does not read, as on a dedicated server.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::abi::{MapMarkerTypeInfo, Side};
-    ///
-    /// let altar = MapMarkerTypeInfo { marker_id: 0x0a0b_0c0d, ..MapMarkerTypeInfo::EMPTY };
-    /// let loader = enshwick::test::FakeHost::new()
-    ///     .side(Side::CLIENT)
-    ///     .map_marker_types(vec![altar])
-    ///     .install();
-    /// # let _ = loader;
-    /// ```
-    #[must_use]
-    pub fn map_marker_types(mut self, types: Vec<enshwick_core::abi::MapMarkerTypeInfo>) -> Self {
-        self.map_marker_types = Some(types);
+        self.world.map_frame = Some(frame);
         self
     }
 
@@ -270,7 +251,7 @@ impl FakeHost {
         entity: enshwick_core::Entity,
         guid: enshwick_core::content::Guid,
     ) -> Self {
-        self.templates.insert(entity.0, guid);
+        self.content.templates.insert(entity.0, guid);
         self
     }
 }
@@ -290,7 +271,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn banned(&self) -> Vec<enshwick_core::PlayerKey> {
-        table::with(Vec::new(), |s| s.banned.clone())
+        table::with(Vec::new(), |s| s.world.banned.clone())
     }
 
     /// The accounts whose players the mod removed from the game, by a kick
@@ -304,7 +285,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn removed(&self) -> Vec<u64> {
-        table::with(Vec::new(), |s| s.removed.clone())
+        table::with(Vec::new(), |s| s.world.removed.clone())
     }
 
     /// The accounts muted in the fake server's chat, in the order muted.
@@ -317,7 +298,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn muted(&self) -> Vec<enshwick_core::PlayerKey> {
-        table::with(Vec::new(), |s| s.muted.clone())
+        table::with(Vec::new(), |s| s.world.muted.clone())
     }
 
     /// Stops the world, as between two worlds: the world's reads answer
@@ -330,7 +311,7 @@ impl Installed {
     /// loader.stop_world();
     /// ```
     pub fn stop_world(&self) {
-        table::with((), |s| s.edits.stopped = true);
+        table::with((), |s| s.world.edits.stopped = true);
     }
 
     /// Has the scene's map markers and map frame still being read while
@@ -344,7 +325,7 @@ impl Installed {
     /// loader.read_map_markers(true);
     /// ```
     pub fn read_map_markers(&self, pending: bool) {
-        table::with((), |s| s.edits.markers_pending = pending);
+        table::with((), |s| s.world.edits.markers_pending = pending);
     }
 
     /// Sets the clock the fake's `time_of_day` reports; until then the
@@ -369,7 +350,7 @@ impl Installed {
     /// assert_eq!(loader.daytime().map(|info| info.time_ns), Some(0));
     /// ```
     pub fn set_daytime(&self, info: enshwick_core::abi::DaytimeInfo) {
-        table::with((), |s| s.daytime = Some(info));
+        table::with((), |s| s.world.daytime = Some(info));
     }
 
     /// The clock as the mod left it; a time it set moves the clock and its
@@ -380,7 +361,7 @@ impl Installed {
     /// See [`Installed::set_daytime`].
     #[must_use]
     pub fn daytime(&self) -> Option<enshwick_core::abi::DaytimeInfo> {
-        table::with(None, |s| s.daytime)
+        table::with(None, |s| s.world.daytime)
     }
 
     /// The factor on the clock's speed, every mod's factor multiplied as the
@@ -395,8 +376,13 @@ impl Installed {
     #[must_use]
     pub fn clock_speed(&self) -> Option<f32> {
         table::with(None, |s| {
-            (!s.clock_speeds.is_empty())
-                .then(|| s.clock_speeds.iter().map(|(_, factor)| factor).product())
+            (!s.world.clock_speeds.is_empty()).then(|| {
+                s.world
+                    .clock_speeds
+                    .iter()
+                    .map(|(_, factor)| factor)
+                    .product()
+            })
         })
     }
 
@@ -413,7 +399,7 @@ impl Installed {
     /// assert_eq!(loader.game_settings().map(|(bytes, _)| bytes.len()), Some(144));
     /// ```
     pub fn set_game_settings(&self, bytes: Vec<u8>, preset: u32) {
-        table::with((), |s| s.game_settings = Some((bytes, preset)));
+        table::with((), |s| s.world.game_settings = Some((bytes, preset)));
     }
 
     /// The game settings' bytes and preset as the mod left them.
@@ -423,7 +409,7 @@ impl Installed {
     /// See [`Installed::set_game_settings`].
     #[must_use]
     pub fn game_settings(&self) -> Option<(Vec<u8>, u32)> {
-        table::with(None, |s| s.game_settings.clone())
+        table::with(None, |s| s.world.game_settings.clone())
     }
 
     /// The game settings' bytes the mod kept with the world, by offset:
@@ -438,7 +424,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn kept_game_settings(&self) -> Vec<Option<u8>> {
-        table::with(Vec::new(), |s| s.kept_settings.clone())
+        table::with(Vec::new(), |s| s.world.kept_settings.clone())
     }
 
     /// Sets the weather the fake reports: the weights everywhere (clear,
@@ -452,7 +438,7 @@ impl Installed {
     /// assert!(loader.forecasts().is_empty());
     /// ```
     pub fn set_weather(&self, weights: [f32; 4], fronts: &[enshwick_core::abi::WeatherFront]) {
-        table::with((), |s| s.weather = Some((weights, fronts.to_vec())));
+        table::with((), |s| s.world.weather = Some((weights, fronts.to_vec())));
     }
 
     /// The weather the mod started: effect (`u32::MAX` for the game's
@@ -463,7 +449,7 @@ impl Installed {
     /// See [`Installed::set_weather`].
     #[must_use]
     pub fn forecasts(&self) -> Vec<(u32, i64)> {
-        table::with(Vec::new(), |s| s.forecasts.clone())
+        table::with(Vec::new(), |s| s.world.forecasts.clone())
     }
 
     /// Sets the terrain materials the fake lists; until then no world runs.
@@ -477,7 +463,7 @@ impl Installed {
     /// assert!(loader.terrain_edits().is_empty());
     /// ```
     pub fn set_terrain(&self, materials: &[enshwick_core::abi::TerrainMaterialInfo]) {
-        table::with((), |s| s.terrain = Some(materials.to_vec()));
+        table::with((), |s| s.world.terrain = Some(materials.to_vec()));
     }
 
     /// The terrain edits the mod asked for, in order.
@@ -487,7 +473,7 @@ impl Installed {
     /// See [`Installed::set_terrain`].
     #[must_use]
     pub fn terrain_edits(&self) -> Vec<enshwick_core::abi::TerrainEdit> {
-        table::with(Vec::new(), |s| s.edits.terrain.clone())
+        table::with(Vec::new(), |s| s.world.edits.terrain.clone())
     }
 
     /// The labels the mod set, as `(entity, text)`, in order.
@@ -500,7 +486,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn labels(&self) -> Vec<(u32, String)> {
-        table::with(Vec::new(), |s| s.labels.clone())
+        table::with(Vec::new(), |s| s.world.labels.clone())
     }
 
     /// The entities the mod asked the world to destroy, in order.
@@ -513,7 +499,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn destroyed(&self) -> Vec<u32> {
-        table::with(Vec::new(), |s| s.destroyed.clone())
+        table::with(Vec::new(), |s| s.world.destroyed.clone())
     }
 
     /// The components the mod asked to write, `(entity, type hash)`, in
@@ -527,7 +513,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn writes(&self) -> Vec<(u32, u32)> {
-        table::with(Vec::new(), |s| s.writes.clone())
+        table::with(Vec::new(), |s| s.world.writes.clone())
     }
 
     /// The bytes of the component [`FakeHost::component`] gave `entity`, as
@@ -547,7 +533,7 @@ impl Installed {
         type_hash: u32,
     ) -> Option<Vec<u8>> {
         let (address, len) = table::with(None, |s| {
-            s.host.components.get(&(entity.0, type_hash)).copied()
+            s.host.base.components.get(&(entity.0, type_hash)).copied()
         })?;
         let data: *const u8 = core::ptr::with_exposed_provenance(address);
         // SAFETY: `component` leaked `len` initialised bytes at `address`,
@@ -574,7 +560,7 @@ impl Installed {
         bytes: &[u8],
     ) -> bool {
         let Some((address, len)) = table::with(None, |s| {
-            s.host.components.get(&(entity.0, type_hash)).copied()
+            s.host.base.components.get(&(entity.0, type_hash)).copied()
         }) else {
             return false;
         };
@@ -596,7 +582,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn emits(&self) -> Vec<(u32, Vec<u8>)> {
-        table::with(Vec::new(), |s| s.emits.clone())
+        table::with(Vec::new(), |s| s.world.emits.clone())
     }
 
     /// The teleports the mod asked for, in order; an entity the fake does
@@ -610,7 +596,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn teleports(&self) -> Vec<enshwick_core::abi::TeleportRequest> {
-        table::with(Vec::new(), |s| s.teleports.clone())
+        table::with(Vec::new(), |s| s.world.teleports.clone())
     }
 
     /// The spawns the mod asked for, with the entity ids the fake handed
@@ -624,7 +610,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn spawns(&self) -> Vec<(u32, enshwick_core::abi::SpawnRequest)> {
-        table::with(Vec::new(), |s| s.spawns.clone())
+        table::with(Vec::new(), |s| s.world.spawns.clone())
     }
 
     /// The level and experience writes the mod asked for, in order: the
@@ -641,7 +627,7 @@ impl Installed {
     #[must_use]
     pub fn progress_writes(&self) -> Vec<(enshwick_core::Entity, u32, u32)> {
         table::with(Vec::new(), |s| {
-            s.progress_writes.clone().unwrap_or_default()
+            s.world.progress_writes.clone().unwrap_or_default()
         })
     }
 
@@ -658,7 +644,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn stop_asked(&self) -> bool {
-        table::with(false, |s| s.stops > 0)
+        table::with(false, |s| s.world.stops > 0)
     }
 
     /// The fog uncovers the mod sent, in order: the player, the circle's
@@ -672,7 +658,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn fog_uncovers(&self) -> Vec<(enshwick_core::PlayerKey, [f32; 2], f32)> {
-        table::with(Vec::new(), |s| s.uncovers.clone())
+        table::with(Vec::new(), |s| s.world.uncovers.clone())
     }
 
     /// The drops the mod asked for, with the entity ids the fake handed
@@ -686,7 +672,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn drops(&self) -> Vec<(enshwick_core::Entity, enshwick_core::abi::DropRequest)> {
-        table::with(Vec::new(), |s| s.drops.clone())
+        table::with(Vec::new(), |s| s.world.drops.clone())
     }
 
     /// How many saves the mod asked for.
@@ -699,7 +685,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn saves(&self) -> usize {
-        table::with(0, |s| s.saves)
+        table::with(0, |s| s.world.saves)
     }
 
     /// The voxel boxes the mod read on the game thread, `(min, size)`, in
@@ -713,7 +699,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn voxel_reads(&self) -> Vec<([u32; 3], [u32; 3])> {
-        table::with(Vec::new(), |s| s.edits.voxel_reads.clone())
+        table::with(Vec::new(), |s| s.world.edits.voxel_reads.clone())
     }
 }
 
@@ -756,7 +742,7 @@ impl FakeHost {
             count,
             "a fake voxel box of {size:?} takes {count} voxels"
         );
-        self.voxels.push(VoxelGrid {
+        self.world.voxels.push(VoxelGrid {
             min: min.to_array(),
             size,
             voxels: voxels
@@ -784,7 +770,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub const fn world_extent(mut self, end: [u32; 3]) -> Self {
-        self.extent = Some(end);
+        self.world.extent = Some(end);
         self
     }
 }
@@ -881,7 +867,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn building_zone(mut self, min: [f64; 3], max: [f64; 3]) -> Self {
-        self.zones.building.push(FakeBox { min, max });
+        self.world.zones.building.push(FakeBox { min, max });
         self
     }
 
@@ -898,7 +884,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn building_area(mut self, min: [f64; 3], max: [f64; 3]) -> Self {
-        self.zones.area.push(FakeBox { min, max });
+        self.world.zones.area.push(FakeBox { min, max });
         self
     }
 
@@ -915,7 +901,10 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn no_build_zone(mut self, min: [f64; 3], max: [f64; 3], strict: bool) -> Self {
-        self.zones.no_build.push((FakeBox { min, max }, strict));
+        self.world
+            .zones
+            .no_build
+            .push((FakeBox { min, max }, strict));
         self
     }
 }

@@ -21,7 +21,7 @@ impl FakeHost {
     #[must_use]
     #[cfg(feature = "unstable")]
     pub fn without_rate(mut self, rate: Rate) -> Self {
-        self.missing_rates.insert(rate.id());
+        self.content.missing_rates.insert(rate.id());
         self
     }
 }
@@ -52,7 +52,8 @@ impl Installed {
     /// The factor in force for the rate `id`, combined as the loader combines it.
     pub(crate) fn rate_of(&self, id: RateId) -> Option<f32> {
         table::with(None, |s| {
-            s.rates
+            s.content
+                .rates
                 .iter()
                 .find(|&&(declared, _)| declared == id)
                 .map(|&(_, factor)| combine([factor]))

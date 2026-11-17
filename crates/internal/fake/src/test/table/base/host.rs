@@ -15,7 +15,11 @@ pub(crate) extern "system" fn component(
     out: *mut *const c_void,
 ) -> Status {
     let address = with(None, |s| {
-        s.host.components.get(&(entity.0, type_hash)).map(|c| c.0)
+        s.host
+            .base
+            .components
+            .get(&(entity.0, type_hash))
+            .map(|c| c.0)
     });
     found(address.map(core::ptr::with_exposed_provenance), out)
 }
@@ -26,20 +30,18 @@ pub(crate) extern "system" fn entity_template(
     out: *mut enshwick_core::abi::Guid,
 ) -> Status {
     found(
-        with(None, |s| s.host.templates.get(&entity.0).copied()),
+        with(None, |s| s.host.content.templates.get(&entity.0).copied()),
         out,
     )
 }
 
 pub(crate) extern "system" fn hosting(_me: ModHandle, out: *mut u8) -> Status {
-    let hosting = with(0, |s| {
-        u8::from(s.host.side == Side::SERVER || s.host.hosting)
-    });
+    let hosting = with(0, |s| u8::from(s.host.base.serving()));
     crate::test::table::put(out, hosting)
 }
 
 pub(crate) extern "system" fn server_world(_me: ModHandle, out: *mut u64) -> Status {
-    crate::test::table::put(out, with(0, |s| s.host.server_world))
+    crate::test::table::put(out, with(0, |s| s.host.base.server_world))
 }
 
 pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> Status {
@@ -49,9 +51,9 @@ pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> St
     }
     let off = Some(text(off)).filter(|off| !off.is_empty());
     with(Status::MISSING, |s| {
-        match s.features.iter_mut().find(|(have, _)| *have == name) {
+        match s.base.features.iter_mut().find(|(have, _)| *have == name) {
             Some(kept) => kept.1 = off,
-            None => s.features.push((name, off)),
+            None => s.base.features.push((name, off)),
         }
         Status::OK
     })
@@ -65,11 +67,10 @@ pub(crate) extern "system" fn status(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.status_sources.push(Registered::new(callback, user, me));
+    crate::test::table::with_open(|s| {
+        s.base
+            .status_sources
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -108,14 +109,11 @@ fn keep_game_event(
     user: *mut c_void,
     client: bool,
 ) -> Status {
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         let kept = if !client {
-            &mut s.game_events
-        } else if s.host.side == Side::CLIENT {
-            &mut s.client_game_events
+            &mut s.base.game_events
+        } else if s.host.base.side == Side::CLIENT {
+            &mut s.base.client_game_events
         } else {
             return Status::OK;
         };
@@ -133,6 +131,7 @@ pub(crate) extern "system" fn event_types(
 ) -> Status {
     let found: Vec<EventTypeInfo> = with(Vec::new(), |s| {
         s.host
+            .base
             .event_types
             .iter()
             .map(|&(name, hash, size)| EventTypeInfo {

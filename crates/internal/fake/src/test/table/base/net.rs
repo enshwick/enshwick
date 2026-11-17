@@ -21,11 +21,12 @@ pub(crate) extern "system" fn net_channel(
     }
     let id = with(None, |s| {
         // The loader opens channels to clients for mods of side both alone.
-        if !super::mods::joins(s, me) || s.channels.iter().any(|c| c.0 == name) {
+        if !super::mods::joins(s, me) || s.base.channels.iter().any(|c| c.0 == name) {
             return None;
         }
-        let id = u32::try_from(s.channels.len() + 1).unwrap_or(u32::MAX);
-        s.channels
+        let id = u32::try_from(s.base.channels.len() + 1).unwrap_or(u32::MAX);
+        s.base
+            .channels
             .push((name, id, Registered::new(callback, user, me)));
         Some(id)
     });
@@ -52,17 +53,17 @@ pub(crate) extern "system" fn net_send(
         unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec()
     };
     with(Status::MISSING, |s| {
-        if peer.get() != 0 && !s.host.net_peers.contains(&peer.get()) {
+        if peer.get() != 0 && !s.host.base.net_peers.contains(&peer.get()) {
             return Status::MISSING;
         }
-        s.net_sent.push((channel, peer, bytes));
+        s.base.net_sent.push((channel, peer, bytes));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn net_ready(_me: ModHandle, peer: enshwick_core::PlayerKey) -> Status {
     with(Status::MISSING, |s| {
-        if s.host.net_peers.contains(&peer.get()) {
+        if s.host.base.net_peers.contains(&peer.get()) {
             Status::OK
         } else {
             Status::MISSING

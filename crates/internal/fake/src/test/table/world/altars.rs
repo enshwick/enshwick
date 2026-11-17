@@ -3,9 +3,9 @@
 
 use core::ffi::c_void;
 
-use crate::test::BaseCode;
 use crate::test::table::base::io::list;
 use crate::test::table::{Registered, put, with};
+use crate::test::world::BaseCode;
 use enshwick_core::abi::{
     AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BuildingZoneFilterFn, Header,
     ModHandle, Status,
@@ -32,11 +32,8 @@ pub(crate) struct ZoneSizing {
 }
 
 pub(crate) extern "system" fn request_altars(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.altars_opened = true;
+    crate::test::table::with_open(|s| {
+        s.world.altars_opened = true;
         Status::OK
     })
 }
@@ -48,7 +45,9 @@ pub(crate) extern "system" fn altars(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some(altars) = with(None, |s| s.altars_opened.then(|| s.altars.clone())) else {
+    let Some(altars) = with(None, |s| {
+        s.world.altars_opened.then(|| s.world.altars.clone())
+    }) else {
         return Status::REFUSED;
     };
     list(&altars, out, entry_size, capacity, count)
@@ -62,13 +61,11 @@ pub(crate) extern "system" fn altar_zone_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.altars_opened = true;
-        s.zone_control = true;
-        s.zone_sizing
+    crate::test::table::with_open(|s| {
+        s.world.altars_opened = true;
+        s.world.zone_control = true;
+        s.world
+            .zone_sizing
             .filters
             .push(Registered::new(callback, user, me));
         Status::OK
@@ -77,10 +74,10 @@ pub(crate) extern "system" fn altar_zone_filter(
 
 pub(crate) extern "system" fn altar_zones_changed(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
-        if !s.zone_control {
+        if !s.world.zone_control {
             return Status::REFUSED;
         }
-        s.zone_sizing.resizes += 1;
+        s.world.zone_sizing.resizes += 1;
         Status::OK
     })
 }
@@ -93,11 +90,10 @@ pub(crate) extern "system" fn building_zone_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
-        s.zone_filters.push(Registered::new(callback, user, me));
+    crate::test::table::with_open(|s| {
+        s.world
+            .zone_filters
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -111,7 +107,9 @@ pub(crate) extern "system" fn altar_limit_filter(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        s.altar_limits.push(Registered::new(callback, user, me));
+        s.world
+            .altar_limits
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -127,10 +125,13 @@ const MOST: (u32, u32) = (255, 179);
 pub(crate) fn zones_and_bases() -> (u32, u32) {
     let most = most();
     with(None, |s| {
-        s.base_limit.requested.filter(|_| s.base_limit.armed)
+        s.world
+            .base_limit
+            .requested
+            .filter(|_| s.world.base_limit.armed)
     })
     .map_or(VANILLA, |(zones, bases)| {
-        let cap = with(None, |s| s.base_limit.cap).unwrap_or(u32::MAX);
+        let cap = with(None, |s| s.world.base_limit.cap).unwrap_or(u32::MAX);
         (zones, bases.min(most.1).min(cap))
     })
 }
@@ -139,7 +140,7 @@ pub(crate) fn zones_and_bases() -> (u32, u32) {
 /// once arming finds a build that keeps them.
 fn most() -> (u32, u32) {
     let kept = with(false, |s| {
-        s.base_limit.armed && s.host.base_code == BaseCode::ZonesOnly
+        s.world.base_limit.armed && s.host.world.base_code == BaseCode::ZonesOnly
     });
     if kept { (MOST.0, VANILLA.1) } else { MOST }
 }
@@ -151,14 +152,14 @@ fn request(zones: u32, bases: u32) -> Status {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.base_limit.armed {
+        if s.world.base_limit.armed {
             return Status::TOO_LATE;
         }
-        if s.host.base_code == BaseCode::Unknown {
+        if s.host.world.base_code == BaseCode::Unknown {
             return Status::UNAVAILABLE;
         }
-        let (old_zones, old_bases) = s.base_limit.requested.unwrap_or(VANILLA);
-        s.base_limit.requested = Some((
+        let (old_zones, old_bases) = s.world.base_limit.requested.unwrap_or(VANILLA);
+        s.world.base_limit.requested = Some((
             zones.max(old_zones).max(VANILLA.0),
             bases.max(old_bases).max(VANILLA.1),
         ));
@@ -201,7 +202,7 @@ pub(crate) extern "system" fn set_base_limit(_me: ModHandle, bases: u32) -> Stat
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        s.base_limit.cap = Some(bases);
+        s.world.base_limit.cap = Some(bases);
         Status::OK
     })
 }
@@ -211,7 +212,7 @@ pub(crate) extern "system" fn base_zones(
     zones: *mut u32,
     bases: *mut u32,
 ) -> Status {
-    let Some((zone_count, base_count)) = with(None, |s| s.grouping) else {
+    let Some((zone_count, base_count)) = with(None, |s| s.world.grouping) else {
         return Status::UNAVAILABLE;
     };
     let status = put(zones, zone_count);
