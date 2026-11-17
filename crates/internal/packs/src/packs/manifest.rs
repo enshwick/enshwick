@@ -493,7 +493,7 @@ impl PackManifest {
     /// let files = PackFiles::new().with("items.toml", r#"
     /// [[change]]
     /// items = ["6943053a-32c1-4718-ae22-e61427ddf54d"]
-    /// max_stack = 50
+    /// burn_time = 50
     /// "#);
     /// let pack = Pack::parse("you.stacks", &files).map_err(|e| e.list()[0].clone())?;
     /// let problem = manifest.check(text, &pack).unwrap_err();

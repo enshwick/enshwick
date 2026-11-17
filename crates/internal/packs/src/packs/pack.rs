@@ -386,11 +386,11 @@ impl Pack {
     /// let files = PackFiles::new().with("items.toml", r#"
     /// [[change]]
     /// items = ["6943053a-32c1-4718-ae22-e61427ddf54d"]
-    /// max_stack = { times = 4 }
+    /// burn_time = { times = 4 }
     /// "#);
     /// let pack = Pack::parse("you.stacks", &files)?;
     /// let (change, source) = &pack.changes()[0];
-    /// assert_eq!((change.field, change.value), (Field::MaxStackSize, Value::Times(4.0)));
+    /// assert_eq!((change.field, change.value), (Field::BurnTime, Value::Times(4.0)));
     /// assert_eq!(source, "items.toml:2");
     /// # Ok::<(), enshwick::packs::ParsePackError>(())
     /// ```
@@ -405,6 +405,7 @@ impl Pack {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "unstable")] {
     /// use enshwick::content::changes::Items;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
@@ -413,6 +414,7 @@ impl Pack {
     /// let (change, source) = &pack.selections()[0];
     /// assert_eq!(change.items, Items::Stackable);
     /// assert_eq!(source, "items.toml:1 (stackable)");
+    /// # }
     /// # Ok::<(), enshwick::packs::ParsePackError>(())
     /// ```
     #[must_use]

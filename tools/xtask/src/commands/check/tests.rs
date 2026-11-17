@@ -616,7 +616,7 @@ fn a_wide_change_to_the_facade_documents_it_with_the_features_of_a_workspace_bui
 }
 
 #[test]
-fn the_public_paths_list_is_checked_when_its_writer_or_the_list_alone_changes() {
+fn the_public_paths_list_is_checked_when_its_writer_the_list_or_the_chapter_alone_changes() {
     let scope = |code: &[&str]| Scope::Some {
         code: code.iter().map(|name| (*name).to_owned()).collect(),
         docs: BTreeSet::new(),
@@ -632,6 +632,8 @@ fn the_public_paths_list_is_checked_when_its_writer_or_the_list_alone_changes() 
         Some(&other)
     ));
     assert!(lists_public_paths(&scope(&[]), Some(&list)));
+    let chapter = [public_paths::chapter::FILE.to_owned()];
+    assert!(lists_public_paths(&scope(&[]), Some(&chapter)));
     assert!(!lists_public_paths(
         &scope(&["enshwick-loader"]),
         Some(&other)

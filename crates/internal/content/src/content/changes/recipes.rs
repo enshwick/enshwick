@@ -132,10 +132,10 @@ impl RecipesChange {
     /// use enshwick::content::changes::{Field, Recipes, RecipesChange, Value};
     /// use enshwick::content::recipes::RecipeKind;
     ///
-    /// let stacks = RecipesChange::new(Recipes::Kind(RecipeKind::Roof), Field::MaxStackSize, Value::Set(2.0));
+    /// let burn = RecipesChange::new(Recipes::Kind(RecipeKind::Roof), Field::BurnTime, Value::Set(2.0));
     /// assert_eq!(
-    ///     stacks.check().unwrap_err().to_string(),
-    ///     "max_stack is no field a selection of recipes changes"
+    ///     burn.check().unwrap_err().to_string(),
+    ///     "burn_time is no field a selection of recipes changes"
     /// );
     /// ```
     pub fn check(&self) -> Result<(), ValueError> {
@@ -235,7 +235,6 @@ pub trait LoadMethods {
 
 impl LoadMethods for crate::BaseLoad {
     fn change_recipes(&mut self, change: &RecipesChange, source: &str) -> Result<(), Off> {
-        change.field.unstable_gate()?;
         change
             .check()
             .map_err(|why| Off::new(format!("change of {:?}: {why}", change.recipes)))?;

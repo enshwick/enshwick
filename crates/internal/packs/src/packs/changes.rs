@@ -46,6 +46,7 @@ fn source(file: &str, line: usize, name: &str) -> String {
 /// Whether the item `name` names, `item`, takes `slots`: an item that
 /// places a container, never made smaller, where the game's data is at
 /// hand; anything without it.
+#[cfg(feature = "unstable")]
 fn container(
     reader: &Reader<'_>,
     item: Guid,
@@ -72,6 +73,7 @@ fn container(
 }
 
 /// Why a change of slots does not fit the item it names.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 enum ResizeContainerError {
     /// The item places no container.
@@ -93,7 +95,9 @@ fn value(entry: ValueEntry) -> Value {
 /// The fields an item change gives, with their values.
 fn item_fields(e: &ItemChangeEntry) -> Vec<(Field, Option<ValueEntry>)> {
     vec![
+        #[cfg(feature = "unstable")]
         (Field::MaxStackSize, e.max_stack),
+        #[cfg(feature = "unstable")]
         (Field::Slots, e.slots),
         (Field::DamageMod, e.damage_mod),
         (Field::SpeedMod, e.speed_mod),
@@ -433,6 +437,7 @@ fn changes_of(
                 continue;
             };
             for &(field, value) in &valid {
+                #[cfg(feature = "unstable")]
                 if field == Field::Slots
                     && let Err(why) = container(reader, item, name, value)
                 {

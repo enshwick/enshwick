@@ -2,7 +2,9 @@
 //! loader turns into one change per item from the game's data.
 
 use crate::Off;
-use crate::abi::{ChangeOp, DataChange, DataSelect, Header, ItemTypeInfo, Str};
+#[cfg(feature = "unstable")]
+use crate::abi::ItemTypeInfo;
+use crate::abi::{ChangeOp, DataChange, DataSelect, Header, Str};
 use crate::content::Guid;
 use crate::content::categories::ItemCategoryMask;
 
@@ -18,11 +20,13 @@ use super::{Change, Field, Value, ValueError, field_and_value};
 /// # Examples
 ///
 /// ```
+/// # #[cfg(feature = "unstable")] {
 /// use enshwick::content::changes::{Field, ItemTraits, Items};
 ///
 /// let wood = ItemTraits { max_stack: 20, category: 9, flags: 0, slots: None, backpack_slots: None };
 /// assert!(Items::Stackable.picks(Field::MaxStackSize, &wood));
 /// assert!(!Items::Containers.picks(Field::Slots, &wood));
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
@@ -75,9 +79,11 @@ impl Items {
         };
         selected
             && match field {
+                #[cfg(feature = "unstable")]
                 Field::MaxStackSize => {
                     item.max_stack > 1 && item.flags & ItemTypeInfo::HAS_PIDE == 0
                 }
+                #[cfg(feature = "unstable")]
                 Field::Slots => match self {
                     Self::Containers => item.slots.is_some(),
                     Self::Backpacks => item.backpack_slots.is_some(),
@@ -119,12 +125,15 @@ impl Field {
     /// ```
     /// use enshwick::content::changes::Field;
     ///
-    /// assert!(Field::MaxStackSize.selectable());
     /// assert!(!Field::Output.selectable());
     /// ```
     #[must_use]
     pub const fn selectable(self) -> bool {
-        matches!(self, Self::MaxStackSize | Self::Slots)
+        match self {
+            #[cfg(feature = "unstable")]
+            Self::MaxStackSize | Self::Slots => true,
+            _ => false,
+        }
     }
 }
 
@@ -133,12 +142,14 @@ impl Field {
 /// # Examples
 ///
 /// ```
+/// # #[cfg(feature = "unstable")] {
 /// use enshwick::content::changes::{Field, Items, ItemsChange, Value};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let stacks = ItemsChange::new(Items::Stackable, Field::MaxStackSize, Value::Times(4.0));
 ///     load.change_items(&stacks, "my-mod")
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct ItemsChange {
@@ -195,11 +206,13 @@ impl ItemsChange {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "unstable")] {
     /// use enshwick::content::Guid;
     /// use enshwick::content::changes::{Field, Items, ItemsChange, Value};
     ///
     /// let stacks = ItemsChange::new(Items::Stackable, Field::MaxStackSize, Value::Times(2.0));
     /// assert_eq!(stacks.of(Guid([7; 16])).entry, Guid([7; 16]));
+    /// # }
     /// ```
     #[must_use]
     pub const fn of(&self, item: Guid) -> Change {
@@ -217,6 +230,7 @@ impl ItemsChange {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "unstable")] {
     /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Guid, Header, Str};
     /// use enshwick::content::changes::{Items, ItemsChange, Value};
     ///
@@ -233,6 +247,7 @@ impl ItemsChange {
     /// };
     /// let change = ItemsChange::from_abi(&raw)?.ok_or("unknown")?;
     /// assert_eq!((change.items, change.value), (Items::Stackable, Value::Times(4.0)));
+    /// # }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, ValueError> {
@@ -279,7 +294,6 @@ pub trait LoadMethods {
 
 impl LoadMethods for crate::BaseLoad {
     fn change_items(&mut self, change: &ItemsChange, source: &str) -> Result<(), Off> {
-        change.field.unstable_gate()?;
         change
             .check()
             .map_err(|why| Off::new(format!("change of {:?}: {why}", change.items)))?;
@@ -293,6 +307,7 @@ impl LoadMethods for crate::BaseLoad {
 }
 
 #[cfg(test)]
+#[cfg(feature = "unstable")]
 mod tests {
     use super::*;
 

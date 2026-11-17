@@ -214,9 +214,11 @@ pub(super) struct ItemChangeEntry {
     /// `Materials`.
     pub(super) category: Option<Vec<String>>,
     /// How many of the item one inventory slot holds, 1 to 65535.
+    #[cfg(feature = "unstable")]
     pub(super) max_stack: Option<ValueEntry>,
     /// How many slots the container the item places holds, 8 to 128 in
     /// steps of 8.
+    #[cfg(feature = "unstable")]
     pub(super) slots: Option<ValueEntry>,
     /// A weapon's damage factor, from 0 to 100.
     pub(super) damage_mod: Option<ValueEntry>,

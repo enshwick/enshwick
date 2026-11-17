@@ -3,11 +3,15 @@
 //! rustdoc's JSON of the crate and of the workspace crates its build
 //! compiles, built once with its default features and once with `typed`,
 //! which builds on `unstable`; `test` and `schema`, which serve tools and
-//! tests, are left out. The docs
+//! tests, are left out. Both builds document the game's target, whatever
+//! the host, so an item under a platform `cfg` lists the same on the PC and
+//! on Linux CI; nothing the facade builds compiles C, so no cross compiler
+//! is needed. The docs
 //! site reads the file at the ref it pins, so the paths its coverage table
 //! names are checked against what the compiler sees, and a rename shows in
 //! the pull request that makes it.
 
+pub(crate) mod chapter;
 mod walk;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,7 +22,7 @@ use std::process::Command;
 use rustdoc_types::{Crate, FORMAT_VERSION};
 
 use crate::affected::Package;
-use crate::commands::check::Step;
+use crate::commands::check::{Step, WINDOWS_TARGET};
 use crate::{FACADE, cargo};
 
 /// The committed list, relative to the workspace root.
@@ -53,7 +57,8 @@ pub(crate) fn run(root: &Path) -> Result<bool, String> {
 }
 
 /// The problems with the committed list under `root`: the paths it lacks
-/// or names that the crate no longer has, a few of each.
+/// or names that the crate no longer has, a few of each; then the items the
+/// book's stability chapter names that the list does not mark unstable.
 pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
     let fresh = match generate(root, packages) {
         Ok(list) => list,
@@ -65,7 +70,13 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
         Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
         Err(error) => return vec![format!("{}: {error}", path.display())],
     };
-    stale(&committed, &fresh)
+    let mut problems = stale(&committed, &fresh);
+    let book = root.join(chapter::FILE);
+    match std::fs::read_to_string(&book) {
+        Ok(text) => problems.extend(chapter::problems(&text, &fresh)),
+        Err(error) => problems.push(format!("{}: {error}", book.display())),
+    }
+    problems
 }
 
 /// What sets `committed` apart from `fresh`, a few lines of each side.
@@ -132,6 +143,8 @@ fn paths(
     let mut step = Step::new(&[
         "doc",
         "--no-deps",
+        "--target",
+        WINDOWS_TARGET,
         "--target-dir",
         &target.display().to_string(),
     ])
@@ -146,10 +159,18 @@ fn paths(
     if !step.run(false) {
         return Err("cargo doc for the public paths failed".to_owned());
     }
-    let doc = target.join("doc");
+    let doc = target.join(WINDOWS_TARGET).join("doc");
+    // A proc-macro crate builds for the host, so its rustdoc lands outside
+    // the target's folder.
+    let host_doc = target.join("doc");
     let mut crates = BTreeMap::new();
     for (_, lib) in documented {
-        let file = doc.join(format!("{lib}.json"));
+        let name = format!("{lib}.json");
+        let file = if doc.join(&name).is_file() {
+            doc.join(&name)
+        } else {
+            host_doc.join(&name)
+        };
         let text = std::fs::read_to_string(&file)
             .map_err(|error| format!("{}: {error}", file.display()))?;
         let krate: Crate = serde_json::from_str(&text).map_err(|error| {
@@ -183,6 +204,8 @@ fn documented(
         "tree",
         "--package",
         FACADE,
+        "--target",
+        WINDOWS_TARGET,
         "--edges",
         "normal",
         "--prefix",

@@ -3244,9 +3244,9 @@ content::changes::Field::CraftingDuration
 content::changes::Field::DamageMod
 content::changes::Field::EnergyOutput
 content::changes::Field::Ingredient
-content::changes::Field::MaxStackSize
+content::changes::Field::MaxStackSize unstable
 content::changes::Field::Output
-content::changes::Field::Slots
+content::changes::Field::Slots unstable
 content::changes::Field::SpawnProbability
 content::changes::Field::SpeedMod
 content::changes::Field::StackSize

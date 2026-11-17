@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
+    #[cfg(feature = "unstable")]
     use enshwick::content::changes::{Change, Field, Value};
     use enshwick::content::{EngineFacts, Guid, ResourceType, types};
     use enshwick::packs::{Pack, PackFiles};
@@ -88,6 +89,7 @@ mod tests {
         assert!(served.iter().any(|(key, _)| key.type_hash == recipes));
     }
 
+    #[cfg(feature = "unstable")]
     #[test]
     fn the_pack_s_changes_reach_the_loader_with_their_sources() {
         let loader = start();

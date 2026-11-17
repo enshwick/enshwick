@@ -225,13 +225,18 @@ fn public_paths_hold(
     problems.is_empty()
 }
 
-/// Whether a change can move [`public_paths::FILE`]: it reaches the facade,
-/// changes this task, which writes the list, or edits the list, which no
+/// Whether a change can move [`public_paths::FILE`] or the book's stability
+/// chapter checked against it: it reaches the facade, changes this task,
+/// which writes the list, or edits the list or the chapter, which no
 /// package owns.
 fn lists_public_paths(scope: &Scope, changed: Option<&[String]>) -> bool {
     reaches(scope, FACADE)
         || touches(scope, env!("CARGO_PKG_NAME"))
-        || changed.is_some_and(|files| files.iter().any(|file| file == public_paths::FILE))
+        || changed.is_some_and(|files| {
+            files
+                .iter()
+                .any(|file| file == public_paths::FILE || file == public_paths::chapter::FILE)
+        })
 }
 
 /// Whether `scope` checks the code of `package`.

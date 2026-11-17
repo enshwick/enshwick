@@ -194,6 +194,7 @@ fn vanilla_wood() -> (Vanilla, Guid) {
     )
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
     let (vanilla, wood) = vanilla_wood();
@@ -448,6 +449,7 @@ fn a_recipe_a_mod_or_the_pack_adds_is_changed_where_it_is_defined() {
     );
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn a_chest_s_slots_change_in_pages_of_eight() {
     let items = format!(
@@ -532,6 +534,7 @@ fn a_loot_change_stays_on_the_server() {
     );
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn a_category_change_selects_its_items_where_the_loader_reads_them() {
     use crate::content::categories::ItemCategoryMask;
@@ -553,6 +556,7 @@ fn a_category_change_selects_its_items_where_the_loader_reads_them() {
     assert!(pack.reaches_players());
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn stackable_items_and_containers_are_selected_by_a_word() {
     use crate::content::changes::{Items, ItemsChange};

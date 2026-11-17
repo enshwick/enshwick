@@ -116,6 +116,7 @@ mod internals;
 mod inventory;
 #[cfg(feature = "unstable")]
 mod item_arguments;
+#[cfg(feature = "unstable")]
 mod item_changes;
 #[cfg(feature = "unstable")]
 mod item_data;
@@ -142,7 +143,9 @@ mod language;
 #[cfg(feature = "unstable")]
 mod language_of;
 mod lifecycle;
+#[cfg(feature = "unstable")]
 mod live_changes;
+#[cfg(feature = "unstable")]
 mod live_changes_join;
 mod loader_off;
 #[cfg(feature = "unstable")]
