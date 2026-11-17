@@ -126,21 +126,26 @@ jobs:
           echo "deny=$deny" >> "$GITHUB_OUTPUT"
 
       # Only the toolchain and xtask's own build: the rustup cache is the
-      # parts' own, so only they store it.
+      # parts' own, so only they store it. A failed setup fails only the
+      # listing, which then leaves every part to run.
       - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
+        continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/rustup
           key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
       - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
+        continue-on-error: true
         uses: ./.github/actions/setup-rust
         with:
           cross: false
       - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
+        continue-on-error: true
         uses: ./.github/actions/sccache
         with:
           store: ${{ env.STORE_CACHES }}
       - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
+        continue-on-error: true
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: v1-rust
@@ -148,11 +153,13 @@ jobs:
           save-if: ${{ env.STORE_CACHES }}
 
       # A listing that fails leaves every part to run, so a broken xtask
-      # fails in the parts that name the fault.
+      # fails in the parts that name the fault. `shell: bash` adds pipefail,
+      # without which xargs would hide a failed listing as an empty one.
       - name: The API parts the change needs
         id: api
         if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
         continue-on-error: true
+        shell: bash
         run: |
           args=()
           if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi

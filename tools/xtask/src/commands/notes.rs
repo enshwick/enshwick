@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn only_the_newest_report_of_each_side_counts() -> Result<(), String> {
-        let dir = crate::scratch::Scratch::new("notes-builds").unwrap();
+        let dir = crate::scratch::Scratch::new("notes-builds")?;
         for (file, text) in [
             (
                 "server-a.toml",

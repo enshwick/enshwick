@@ -888,11 +888,11 @@ mod tests {
                 let version = number(&stated, "game_version").and_then(|n| u64::try_from(n).ok());
                 assert_eq!(first.game_version, version, "{}", exe.display());
             }
-            let shown = std::env::temp_dir().join(format!("enshwick-compat-{file}.md"));
+            let shown_in = scratch::Scratch::new("compat-report").unwrap();
+            let shown = shown_in.join(format!("{file}.md"));
             args.report = Some(shown.clone());
             let works = run(&args).unwrap();
             let text = std::fs::read_to_string(&shown).unwrap();
-            let _gone = std::fs::remove_file(&shown);
             let entries = number(&stated, "entries").unwrap();
             assert!(
                 text.contains(&format!("The loader finds {entries} entries")),

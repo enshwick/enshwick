@@ -85,7 +85,10 @@ enum Listing {
     /// The packages whose Windows tests the change reaches, which CI tests
     /// on a Windows runner.
     WindowsTests,
-    /// The parts named with `--part` that have a step for the change.
+    /// The parts named with `--part` that may have a step for the change:
+    /// the trybuild test and the stable surface only where the change
+    /// reaches them; every other part is listed, since it finds its own work
+    /// only when it runs.
     Parts,
 }
 

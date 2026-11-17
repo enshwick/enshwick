@@ -17,7 +17,7 @@ inputs:
     description: Install the nightly compiler and cargo-fuzz, for the short fuzz runs of `cargo xtask check --part fuzz`.
     default: "false"
   cross:
-    description: Install clang, the toolchain's lld and cargo-xwin with `tools`, for C code and the Windows target; `false` installs only the toolchain.
+    description: Install clang, the toolchain's lld and cargo-xwin, for C code and the Windows target; `false` installs only the toolchain, `tools`, and clang when `sanitizers` asks for it.
     default: "true"
 
 runs:
@@ -53,7 +53,7 @@ runs:
     # in the tool cache. With `sanitizers`, also its sanitizer runtime and
     # headers.
     - name: clang of the toolchain's LLVM
-      if: inputs.cross == 'true'
+      if: inputs.cross == 'true' || inputs.sanitizers == 'true'
       shell: bash
       env:
         SANITIZERS: ${{ inputs.sanitizers }}
@@ -126,6 +126,10 @@ runs:
       uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
       with:
         tool: cargo-xwin@0.23.1${{ inputs.tools != '' && format(',{0}', inputs.tools) || '' }}
+    - if: inputs.cross != 'true' && inputs.tools != ''
+      uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+      with:
+        tool: ${{ inputs.tools }}
 
     # install-action has no manifest for ast-grep, and building it from
     # crates.io takes minutes: the release binary, checked against its digest.
