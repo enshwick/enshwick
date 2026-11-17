@@ -60,6 +60,7 @@ pub enum Edge {
 }
 
 impl Edge {
+    #[cfg(any(test, feature = "fake"))]
     const ALL: [Self; 4] = [Self::Left, Self::Right, Self::Top, Self::Bottom];
 
     const fn to_raw(self) -> u32 {
@@ -72,6 +73,7 @@ impl Edge {
     }
 
     /// The edge whose raw value is `raw`; `None` for one the ABI lacks.
+    #[cfg(any(test, feature = "fake"))]
     fn from_raw(raw: u32) -> Option<Self> {
         Self::ALL.into_iter().find(|edge| edge.to_raw() == raw)
     }
@@ -97,6 +99,7 @@ pub enum Align {
 }
 
 impl Align {
+    #[cfg(any(test, feature = "fake"))]
     const ALL: [Self; 3] = [Self::Start, Self::Center, Self::End];
 
     const fn to_raw(self) -> u32 {
@@ -108,6 +111,7 @@ impl Align {
     }
 
     /// The alignment whose raw value is `raw`; `None` for one the ABI lacks.
+    #[cfg(any(test, feature = "fake"))]
     fn from_raw(raw: u32) -> Option<Self> {
         Self::ALL.into_iter().find(|align| align.to_raw() == raw)
     }
@@ -198,6 +202,7 @@ impl PanelPlacement {
 
     /// The placement of the raw `edge`, `align`, `shift` and `inset` a spec
     /// carries; `None` for an edge or alignment the ABI lacks.
+    #[cfg(any(test, feature = "fake"))]
     pub(crate) fn from_raw(edge: u32, align: u32, shift: f32, inset: f32) -> Option<Self> {
         Some(
             Self::new(Edge::from_raw(edge)?)
