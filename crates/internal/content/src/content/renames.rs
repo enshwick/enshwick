@@ -19,7 +19,8 @@ use crate::{ItemId, Off};
 /// const LOCKER: Id = id!("locker");
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.rename_content(Renames::new().rename(OLD_LOCKER, LOCKER.guid()))
+///     let locker = load.declare(LOCKER)?;
+///     load.rename_content(Renames::new().rename(OLD_LOCKER, locker))
 /// }
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -41,7 +42,8 @@ impl Renames {
     /// Reads content saved under `from`, such as a placed object of an item
     /// whose GUID changed, as the content now under `to`. An item the mod
     /// adds under `to` is also served under `from`, so stacks saved with the
-    /// old item stay.
+    /// old item stay. `to` is a content id the mod declares, the game's
+    /// content, or the `from` of a later rename.
     ///
     /// # Examples
     ///
@@ -99,6 +101,7 @@ fn renamed_to(list: &[(Guid, Guid)], guid: Guid) -> Vec<Guid> {
 /// const LOCKER: Id = id!("locker");
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     load.declare(LOCKER)?;
 ///     load.rename_content(Renames::new().rename(OLD_LOCKER, LOCKER.guid()))?;
 ///     let locker = ItemId::from_guid(LOCKER.guid());
 ///     assert_eq!(current_id(ItemId::from_guid(OLD_LOCKER)), locker);
@@ -153,15 +156,18 @@ impl LoadMethods for crate::BaseLoad {
                 to: *to,
             })
             .collect();
-        if KEPT.set(renames).is_err() {
-            return Err(Off::new("content renames: declared twice"));
+        let twice = || Off::new("content renames: declared twice");
+        if KEPT.get().is_some() {
+            return Err(twice());
         }
         let host = self.host();
         let count = u32::try_from(list.len()).unwrap_or(u32::MAX);
         let status = (host.api().rename_content)(host.handle(), list.as_ptr(), count);
         crate::load::ok(status, (), || {
             "content renames: refused; the log says why".to_owned()
-        })
+        })?;
+        // Kept only once the loader took them: ids move by renames it applies.
+        KEPT.set(renames).map_err(|_| twice())
     }
 }
 

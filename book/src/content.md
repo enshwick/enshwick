@@ -96,8 +96,8 @@ with similar names in the log.
 
 Content whose GUID changed keeps what saves hold under the old one through
 [`Load::rename_content`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/renames.rs).
-Declare every rename the mod ever made, oldest first, once in `init` and
-before adding the content:
+Declare the new id first, then every rename the mod ever made, oldest first,
+once in `init` and before adding the content:
 
 ```rust
 use enshwick::content::renames::Renames;
@@ -107,9 +107,13 @@ const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 const LOCKER: Id = id!("locker");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.declare(LOCKER)?;
     load.rename_content(Renames::new().rename(OLD_LOCKER, LOCKER.guid()))
 }
 ```
+
+A rename ends on an id the mod declared or on the game's own content. The
+loader refuses renames in a cycle and a rename from another mod's id.
 
 The game then reads a placed object saved under the old GUID as the content
 under the new one. An item the mod adds under the new GUID is served under

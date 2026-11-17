@@ -1,10 +1,13 @@
 //! The checks many entries make before their call into the domain, each
 //! written once.
 
-use enshwick_core::abi::{Side, Status};
+use enshwick_core::abi::{ResourceKey, Side, Status};
+use enshwick_core::content::Guid;
 
-use crate::engine::loader::Loader;
+use crate::base::ids::UndeclaredContentError;
+use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
+use crate::host::layer::Mod;
 
 /// [`Status::TOO_LATE`] once a registry is `sealed`, as declarations end.
 ///
@@ -39,19 +42,75 @@ pub(crate) fn before_delivery(loader: &Loader) -> Result<(), Status> {
 
 /// Refuses a call that names new content by `guid` unless mod `caller`
 /// declared the content id it comes from, so no mod adds content under
-/// another's id. An entry that takes a new content GUID asks it once its
-/// own checks of when and who passed, before it adds anything; today
-/// `buff_type_add` does.
+/// another's id. Every entry that takes a new content GUID asks it, or
+/// [`declared_resource`] or [`declared_or_game`], once its own checks of
+/// when and who passed, before it adds anything.
 ///
 /// # Errors
 ///
-/// [`UndeclaredContentError`](crate::base::ids::UndeclaredContentError) for
-/// a GUID another mod or no mod declared.
+/// [`UndeclaredContentError`] for a GUID another mod or no mod declared.
 pub(crate) fn declared_content(
-    caller: &crate::engine::loader::ModRecord,
-    guid: enshwick_core::content::Guid,
-) -> Result<(), crate::base::ids::UndeclaredContentError> {
+    caller: &ModRecord,
+    guid: Guid,
+) -> Result<(), UndeclaredContentError> {
     crate::base::ids::declared_by(&caller.id, guid)
+}
+
+/// As [`declared_content`] for a GUID that may name the game's own content
+/// too, as the new side of a rename may: a GUID the game's archive holds
+/// passes.
+///
+/// # Errors
+///
+/// [`UndeclaredContentError`] for a GUID the game lacks and another mod or
+/// no mod declared.
+pub(crate) fn declared_or_game(
+    caller: &ModRecord,
+    guid: Guid,
+) -> Result<(), UndeclaredContentError> {
+    if crate::engine::archive::game().is_some_and(|archive| archive.holds_guid(guid)) {
+        return Ok(());
+    }
+    declared_content(caller, guid)
+}
+
+/// Refuses a GUID a mod other than `caller` declared, as the old side of a
+/// rename names: no mod renames another's content away.
+///
+/// # Errors
+///
+/// [`UndeclaredContentError::Other`] for a GUID another mod declared.
+pub(crate) fn not_another_mods(
+    caller: &ModRecord,
+    guid: Guid,
+) -> Result<(), UndeclaredContentError> {
+    match declared_content(caller, guid) {
+        Err(other @ UndeclaredContentError::Other { .. }) => Err(other),
+        _ => Ok(()),
+    }
+}
+
+/// As [`declared_content`] for the resource `key` mod `caller` serves from
+/// `base`, when the key names new content: a key served from its own GUID
+/// changes content, a key the game's archive holds is the game's, and an
+/// old GUID of the caller's own renames serves its renamed content.
+///
+/// # Errors
+///
+/// [`UndeclaredContentError`] for a new key whose GUID another mod or no
+/// mod declared.
+pub(crate) fn declared_resource(
+    caller: &Mod,
+    key: &ResourceKey,
+    base: &ResourceKey,
+) -> Result<(), UndeclaredContentError> {
+    if key.guid == base.guid
+        || crate::engine::archive::game().is_some_and(|archive| archive.contains(key))
+        || crate::content::content_renames::renames_from(caller.index, key.guid)
+    {
+        return Ok(());
+    }
+    declared_content(caller.record, key.guid)
 }
 
 /// [`Status::UNAVAILABLE`] off the client, which alone has what the entry

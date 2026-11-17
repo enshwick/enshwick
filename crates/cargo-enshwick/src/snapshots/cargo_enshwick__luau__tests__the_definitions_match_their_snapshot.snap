@@ -3957,7 +3957,7 @@ declare enshwick: {
 		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_icon: (icon: Icon) -> (),
-		--- Hands the loader every content rename the mod ever made, oldest first; call it before adding the renamed content, so an item is served under its old GUIDs too.
+		--- Hands the loader every content rename the mod ever made, oldest first; call it after `Load.declare` of each content id renamed to and before adding the renamed content, so an item is served under its old GUIDs too.
 		--- Only while the mod starts, at the top level of main.luau.
 		rename_content: (renames: {ContentRename}) -> (),
 		--- Declares `change` during `init`, from `source`, such as `items.toml:12`, which the conflict reports name. The loader merges it with every mod's changes as the module says, and applies it on this side; a value players' games read needs the same change on every side, so such a mod is a join mod. The loader keeps every stack size above the game's that a world was saved with and never serves less, and holds the game on a build it would leave vanilla.

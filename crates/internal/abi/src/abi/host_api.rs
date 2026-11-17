@@ -346,9 +346,14 @@ pub struct HostApi {
     pub send_event: extern "system" fn(me: ModHandle, event: u32, data: *const c_void) -> Status,
     /// Declares the mod's content renames, the `count` entries at `renames`,
     /// copied: content saved under a rename's `from` reads as the content
-    /// now under its `to`. [`Status::REFUSED`] for a second call or a
-    /// rename to itself; [`Status::BAD_ARGS`] for a null `renames` with a
-    /// nonzero `count`. Allowed during `enshwick_mod_init` only.
+    /// now under its `to`. Each `to` is the GUID of a content id the mod
+    /// declared with [`declare_content`](Self::declare_content) before, of
+    /// the game's own content, or the `from` of another of its renames, as
+    /// in a chain. No `from` is a GUID another mod declared. [`Status::REFUSED`]
+    /// for a second call, a rename to itself, renames in a cycle, a `from`
+    /// another mod declared, or any other `to`, with a warning naming the mod
+    /// that declared it; [`Status::BAD_ARGS`] for a null `renames` with a nonzero
+    /// `count`. Allowed during `enshwick_mod_init` only.
     pub rename_content:
         extern "system" fn(me: ModHandle, renames: *const ContentRename, count: u32) -> Status,
     /// The mod's folder in `mods/`, which holds its installation; the path
@@ -554,6 +559,12 @@ pub struct HostApi {
     /// the keys differ, a changed vanilla one when they are equal. Allowed
     /// during `enshwick_mod_init` only. Several mods may serve one key:
     /// their patches run in load order, each on the one before's result.
+    /// A `key` whose GUID differs from `base`'s names new content: its GUID
+    /// is that of a content id the mod declared with
+    /// [`declare_content`](Self::declare_content), unless the game's archive
+    /// holds `key` or the GUID is the `from` of one of the mod's
+    /// [`rename_content`](Self::rename_content) renames; [`Status::REFUSED`]
+    /// for any other GUID, with a warning naming the mod that declared it.
     pub serve_resource: extern "system" fn(
         me: ModHandle,
         key: *const ResourceKey,
@@ -812,8 +823,11 @@ pub struct HostApi {
     /// running game, so a game patch that adds a prop needs no new mod.
     /// [`Status::REFUSED`] when the mask is full, when the game's mask or
     /// props do not read, or for a mod not of side both, whose bit clients
-    /// would lack, each of which turns the mod off naming the prop;
-    /// [`Status::BAD_ARGS`] for a null `prop` or `out`. Allowed during
+    /// would lack, each of which turns the mod off naming the prop, and for
+    /// a `prop` whose content id the mod did not declare with
+    /// [`declare_content`](Self::declare_content), with a warning naming the
+    /// mod that declared it; [`Status::BAD_ARGS`] for a null `prop` or
+    /// `out`. Allowed during
     /// `enshwick_mod_init` only ([`Status::TOO_LATE`] after); `prop` and
     /// `out` are borrowed for the call.
     pub crafting_prop: extern "system" fn(me: ModHandle, prop: *const Guid, out: *mut u8) -> Status,
@@ -2172,8 +2186,10 @@ pub struct HostApi {
     /// entry, rules and look on both sides; saves name its voxels by its
     /// GUID. [`Status::BAD_ARGS`] for a `like` or `fallback` that is no
     /// terrain material of the game or a change it does not know;
-    /// [`Status::REFUSED`] for a GUID added before and once every free id is
-    /// taken; [`Status::UNAVAILABLE`] on a build whose archive lacks the
+    /// [`Status::REFUSED`] for a GUID whose content id the calling mod did
+    /// not declare with [`declare_content`](Self::declare_content), for a
+    /// mod not of side both, for a GUID added before and once every free id
+    /// is taken; [`Status::UNAVAILABLE`] on a build whose archive lacks the
     /// palette or the rules. Allowed during `enshwick_mod_init` only.
     /// ABI 12.2.
     pub terrain_material_add: extern "system" fn(

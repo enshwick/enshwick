@@ -7,12 +7,13 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use enshwick::abi::Status;
-    use enshwick::content::{Guid, types};
+    use enshwick::content::{Guid, Id, types};
     use enshwick::test::{FakeHost, Installed, OTHER_ITEM, SPARE_ITEM};
     use enshwick::{Load, Mod, Off};
 
     /// An item the mod adds from `SPARE_ITEM`, whose build always fails.
-    const NEW_ITEM: Guid = Guid::parse("5e7ead00-0000-4000-8000-000000000001");
+    const NEW_ID: Id = Id::new("you.failing:new");
+    const NEW_ITEM: Guid = NEW_ID.guid();
 
     /// How many times the patch of `OTHER_ITEM` ran.
     static BUILDS: AtomicUsize = AtomicUsize::new(0);
@@ -23,6 +24,7 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let spare = types::ITEM_INFO.key(SPARE_ITEM)?;
             load.serve(spare, spare, |_, _| None)?;
+            load.declare(NEW_ID)?;
             load.serve(types::ITEM_INFO.key(NEW_ITEM)?, spare, |_, _| None)?;
             let other = types::ITEM_INFO.key(OTHER_ITEM)?;
             load.serve(other, other, |item, out| {

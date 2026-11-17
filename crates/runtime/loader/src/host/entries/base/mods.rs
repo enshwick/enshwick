@@ -11,7 +11,7 @@ use enshwick_core::mods::LOADER_FILE;
 
 use crate::engine::loader::{ModRecord, loader};
 use crate::host::LOADER_HANDLE;
-use crate::host::layer::guards::{before_delivery, in_init};
+use crate::host::layer::guards::{before_delivery, declared_or_game, in_init, not_another_mods};
 use crate::host::layer::{AnyMod, Callback, List, Mod, Out, SizedListOut, Text, entries};
 use crate::host::memory::text;
 
@@ -100,6 +100,13 @@ entries! {
 
     fn rename_content(me as Mod, [renames, count] as List<ContentRename>) -> Status {
         before_delivery(me.loader)?;
+        for rename in renames {
+            not_another_mods(me.record, rename.from)?;
+        }
+        // Only the end of each chain is new; `declare` refuses a cycle, which has none.
+        for rename in renames.iter().filter(|r| !renames.iter().any(|on| on.from == r.to)) {
+            declared_or_game(me.record, rename.to)?;
+        }
         Ok(crate::content::content_renames::declare(me.index, renames)?)
     }
 

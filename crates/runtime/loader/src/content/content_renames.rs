@@ -28,6 +28,9 @@ pub(crate) enum RenameError {
     /// A rename of an id to itself.
     #[error("a rename to itself")]
     ToItself,
+    /// Renames that lead back to where they start.
+    #[error("renames in a cycle")]
+    Cycle,
     /// The mod's second declaration.
     #[error("the mod declared its renames already")]
     Twice,
@@ -37,7 +40,8 @@ pub(crate) enum RenameError {
 }
 
 /// Keeps the renames of the mod `owner`; [`RenameError`] for a rename to
-/// itself, a mod's second declaration, or one after content is sealed.
+/// itself, renames in a cycle, a mod's second declaration, or one after
+/// content is sealed.
 pub(crate) fn declare(owner: ModIndex, renames: &[ContentRename]) -> Result<(), RenameError> {
     add(&DECLARED, owner, renames)
 }
@@ -50,6 +54,11 @@ fn add(
     if renames.iter().any(|r| r.from == r.to) {
         return Err(RenameError::ToItself);
     }
+    let direct: FxHashMap<Guid, Guid> = renames.iter().map(|r| (r.from, r.to)).collect();
+    // A chain's end is no rename's old GUID; a cycle has no end.
+    if follow(&direct).values().any(|end| direct.contains_key(end)) {
+        return Err(RenameError::Cycle);
+    }
     let renames = renames.iter().map(|r| (r.from, r.to)).collect();
     declared
         .edit(|list| {
@@ -60,6 +69,12 @@ fn add(
             Ok(())
         })
         .unwrap_or(Err(RenameError::Sealed))
+}
+
+/// Whether mod `owner` renamed content from `guid`: it serves its renamed
+/// content under the old GUID too.
+pub(crate) fn renames_from(owner: ModIndex, guid: Guid) -> bool {
+    DECLARED.any(|d| d.owner == owner && d.renames.iter().any(|&(from, _)| from == guid))
 }
 
 /// The renames of every mod `on` keeps, old GUID to the end of its chain:
@@ -147,6 +162,27 @@ mod tests {
         assert_eq!(
             add(&declared, ModIndex::new(1), &[rename(5, 6)]),
             Err(RenameError::Sealed)
+        );
+    }
+
+    #[test]
+    fn one_mods_renames_in_a_cycle_are_refused_and_a_chain_is_kept() {
+        let declared = Registry::new();
+        assert_eq!(
+            add(&declared, ModIndex::new(0), &[rename(1, 2), rename(2, 1)]),
+            Err(RenameError::Cycle)
+        );
+        assert_eq!(
+            add(
+                &declared,
+                ModIndex::new(1),
+                &[rename(3, 4), rename(4, 5), rename(5, 4)]
+            ),
+            Err(RenameError::Cycle)
+        );
+        assert_eq!(
+            add(&declared, ModIndex::new(2), &[rename(7, 8), rename(6, 7)]),
+            Ok(())
         );
     }
 

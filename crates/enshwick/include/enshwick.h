@@ -1334,7 +1334,9 @@ typedef struct EnshwickContainerPut {
 typedef struct EnshwickContentRename {
   // The GUID the content had.
   struct EnshwickGuid from;
-  // The GUID the content has now.
+  // The GUID the content has now: of a content id the calling mod
+  // declared with `declare_content`, of the game's own content, or the
+  // `from` of another of its renames.
   struct EnshwickGuid to;
 } EnshwickContentRename;
 
@@ -3360,7 +3362,8 @@ typedef struct EnshwickLoaderOff {
 typedef struct EnshwickTerrainMaterialAdd {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // The GUID saves name its voxels by: its content id's.
+  // The GUID saves name its voxels by: its content id's, which the
+  // calling mod declared with `declare_content`.
   struct EnshwickGuid guid;
   // The item digging it yields, by its GUID, with
   // `EnshwickTerrainMaterialAdd_ITEM`.
@@ -5080,9 +5083,14 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*send_event)(EnshwickModHandle me, uint32_t event, const void *data);
   // Declares the mod's content renames, the `count` entries at `renames`,
   // copied: content saved under a rename's `from` reads as the content
-  // now under its `to`. `EnshwickStatus_REFUSED` for a second call or a
-  // rename to itself; `EnshwickStatus_BAD_ARGS` for a null `renames` with a
-  // nonzero `count`. Allowed during `enshwick_mod_init` only.
+  // now under its `to`. Each `to` is the GUID of a content id the mod
+  // declared with `declare_content` before, of
+  // the game's own content, or the `from` of another of its renames, as
+  // in a chain. No `from` is a GUID another mod declared. `EnshwickStatus_REFUSED`
+  // for a second call, a rename to itself, renames in a cycle, a `from`
+  // another mod declared, or any other `to`, with a warning naming the mod
+  // that declared it; `EnshwickStatus_BAD_ARGS` for a null `renames` with a nonzero
+  // `count`. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*rename_content)(EnshwickModHandle me,
                                    const struct EnshwickContentRename *renames,
                                    uint32_t count);
@@ -5272,6 +5280,12 @@ typedef struct EnshwickHostApi {
   // the keys differ, a changed vanilla one when they are equal. Allowed
   // during `enshwick_mod_init` only. Several mods may serve one key:
   // their patches run in load order, each on the one before's result.
+  // A `key` whose GUID differs from `base`'s names new content: its GUID
+  // is that of a content id the mod declared with
+  // `declare_content`, unless the game's archive
+  // holds `key` or the GUID is the `from` of one of the mod's
+  // `rename_content` renames; `EnshwickStatus_REFUSED`
+  // for any other GUID, with a warning naming the mod that declared it.
   EnshwickStatus (*serve_resource)(EnshwickModHandle me,
                                    const struct EnshwickResourceKey *key,
                                    const struct EnshwickResourceKey *base,
@@ -5528,8 +5542,11 @@ typedef struct EnshwickHostApi {
   // running game, so a game patch that adds a prop needs no new mod.
   // `EnshwickStatus_REFUSED` when the mask is full, when the game's mask or
   // props do not read, or for a mod not of side both, whose bit clients
-  // would lack, each of which turns the mod off naming the prop;
-  // `EnshwickStatus_BAD_ARGS` for a null `prop` or `out`. Allowed during
+  // would lack, each of which turns the mod off naming the prop, and for
+  // a `prop` whose content id the mod did not declare with
+  // `declare_content`, with a warning naming the
+  // mod that declared it; `EnshwickStatus_BAD_ARGS` for a null `prop` or
+  // `out`. Allowed during
   // `enshwick_mod_init` only (`EnshwickStatus_TOO_LATE` after); `prop` and
   // `out` are borrowed for the call.
   EnshwickStatus (*crafting_prop)(EnshwickModHandle me,
@@ -6812,8 +6829,10 @@ typedef struct EnshwickHostApi {
   // entry, rules and look on both sides; saves name its voxels by its
   // GUID. `EnshwickStatus_BAD_ARGS` for a `like` or `fallback` that is no
   // terrain material of the game or a change it does not know;
-  // `EnshwickStatus_REFUSED` for a GUID added before and once every free id is
-  // taken; `EnshwickStatus_UNAVAILABLE` on a build whose archive lacks the
+  // `EnshwickStatus_REFUSED` for a GUID whose content id the calling mod did
+  // not declare with `declare_content`, for a
+  // mod not of side both, for a GUID added before and once every free id
+  // is taken; `EnshwickStatus_UNAVAILABLE` on a build whose archive lacks the
   // palette or the rules. Allowed during `enshwick_mod_init` only.
   // ABI 12.2.
   EnshwickStatus (*terrain_material_add)(EnshwickModHandle me,

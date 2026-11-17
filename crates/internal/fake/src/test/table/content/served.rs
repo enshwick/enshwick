@@ -27,6 +27,9 @@ pub(crate) extern "system" fn serve_resource(
         return Status::BAD_ARGS;
     };
     with_open(|s| {
+        if !super::declared_resource(s, me, &key, &base) {
+            return Status::REFUSED;
+        }
         let entry = (
             ServedResource { key, base },
             Registered::new(patch, user, me),

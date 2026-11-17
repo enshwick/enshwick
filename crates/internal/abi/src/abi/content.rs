@@ -26,7 +26,9 @@ pub use enshwick_values::abi::ResourceKey;
 pub struct ContentRename {
     /// The GUID the content had.
     pub from: Guid,
-    /// The GUID the content has now.
+    /// The GUID the content has now: of a content id the calling mod
+    /// declared with `declare_content`, of the game's own content, or the
+    /// `from` of another of its renames.
     pub to: Guid,
 }
 

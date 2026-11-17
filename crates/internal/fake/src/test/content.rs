@@ -897,10 +897,13 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn content_renames(&self) -> Vec<(Guid, Guid)> {
-        table::with(None, |s| s.content.content_renames.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .collect()
+        table::with(Vec::new(), |s| {
+            s.content
+                .content_renames
+                .iter()
+                .find(|(owner, _)| *owner == s.host.base.handle)
+                .map_or_else(Vec::new, |(_, renames)| renames.clone())
+        })
     }
 }
 

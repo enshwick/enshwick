@@ -267,6 +267,13 @@ impl Archive {
             .contains_key(&(key.guid.0, key.type_hash, key.part))
     }
 
+    /// Whether the archive holds any resource of content `guid`, so the
+    /// content is the game's own; one pass over the keys, nothing copied.
+    #[must_use]
+    pub fn holds_guid(&self, guid: Guid) -> bool {
+        self.resources.keys().any(|&(held, _, _)| held == guid.0)
+    }
+
     /// The bytes of resource `key`, as the game reads them before it
     /// resolves their references; `None` for a key the archive lacks.
     #[must_use]

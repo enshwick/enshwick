@@ -6,7 +6,7 @@ use enshwick_core::abi::{ModHandle, RateId, Status, Str};
 use enshwick_core::content::changes::{Change, Field, ItemsChange, RecipesChange, Value};
 
 use crate::host::entries::base::services::exported;
-use crate::host::layer::guards::before_delivery;
+use crate::host::layer::guards::{before_delivery, declared_content};
 use crate::host::layer::{
     BytesOut, Caller, HeadedSince, In, List, MaybeOut, Mod, Out, Refused, RuleOff, Slot, Text,
     YesNo, entries,
@@ -216,6 +216,7 @@ entries! {
             ))
             .into());
         }
+        declared_content(me.record, prop)?;
         let (first, width) = crate::content::crafting_props::bounds().ok_or_else(|| {
             RuleOff(format!(
                 "crafting prop {prop}: the game's crafting prop mask or its workshop registry does not read"
