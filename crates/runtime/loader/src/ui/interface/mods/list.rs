@@ -342,10 +342,12 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         let clicked = paint.row(
             || state(paint, record),
             || {
-                let details = button(Icon::Info, "mods.details");
+                // The slot takes the Details button's drawn height, an icon's
+                // or the text fallback's, at the interface's scale.
+                let (details, height) = paint.measured(|| button(Icon::Info, "mods.details"));
                 let settings = opens && button(Icon::Settings, gear);
                 if !opens {
-                    paint.icon_slot();
+                    paint.button_slot(height);
                 }
                 clicked(details, settings, index)
             },

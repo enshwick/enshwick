@@ -1,6 +1,5 @@
 use super::{
-    Buf, Engine, FRAME_SIZE, HUD_GAP, HUD_MARGIN, HUD_MASK, HUD_WIDTH, HudWindow, LABEL_SIZE,
-    UiText, stretch,
+    Buf, Engine, HUD_GAP, HUD_MARGIN, HUD_MASK, HUD_WIDTH, HudWindow, LABEL_SIZE, UiText, stretch,
 };
 
 impl Engine {
@@ -99,30 +98,25 @@ impl Engine {
     /// - Called inside the HUD window, on the frame's thread.
     /// - `draw` closes every frame it opens.
     pub(in crate::ui::interface) unsafe fn hud_column(&self, align: u16, draw: impl FnOnce()) {
-        let mut column = Buf::<FRAME_SIZE>::zeroed();
-        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
-        // `Engine::resolve`, inside the HUD window this function's `# Safety`
-        // gives; `column` holds the table's `ui.frame_extent` bytes
-        // (`Layout::read`), name 0 for none.
-        unsafe { (self.frame_open)(column.ptr(), 0) };
-        let node = self.frame_node(&column);
-        // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
-        // `Engine::resolve`, on the node the game just wrote into `column`,
-        // with a live alignment word.
-        unsafe { (self.node_align)(node, &raw const align) };
-        // SAFETY: `self.node_width` is the game's `ui.node_width`, checked in
-        // `Engine::resolve`, on the node the game just wrote into `column`.
-        unsafe { (self.node_width)(node, HUD_WIDTH) };
-        let gap = [0.0f32, HUD_GAP];
-        // SAFETY: `self.node_spacing` is the game's `ui.node_spacing`, checked
-        // in `Engine::resolve`, on the node the game just wrote into `column`,
-        // with two live floats.
-        unsafe { (self.node_spacing)(node, &raw const gap, 0) };
-        draw();
-        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
-        // in `Engine::resolve`, on the frame opened above; `draw` closed every
-        // frame it opened, by this function's `# Safety`.
-        unsafe { (self.frame_close)(column.ptr()) };
+        let column = |node| {
+            // SAFETY: `self.node_align` is the game's `ui.node_align`, checked
+            // in `Engine::resolve`, on the node of the frame `framed` just
+            // opened, with a live alignment word.
+            unsafe { (self.node_align)(node, &raw const align) };
+            // SAFETY: `self.node_width` is the game's `ui.node_width`, checked
+            // in `Engine::resolve`, on the node of the frame `framed` just
+            // opened.
+            unsafe { (self.node_width)(node, HUD_WIDTH) };
+            let gap = [0.0f32, HUD_GAP];
+            // SAFETY: `self.node_spacing` is the game's `ui.node_spacing`,
+            // checked in `Engine::resolve`, on the node of the frame `framed`
+            // just opened, with two live floats.
+            unsafe { (self.node_spacing)(node, &raw const gap, 0) };
+            draw();
+        };
+        // SAFETY: inside the HUD window, on the frame's thread, by this
+        // function's `# Safety`; `draw` closes every frame it opens.
+        unsafe { self.framed(column) };
     }
 
     /// Draws a HUD label: body text with the HUD's outline.

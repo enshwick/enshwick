@@ -209,6 +209,11 @@ pub(super) struct Layout {
     frame_node: usize,
     window_node: usize,
     node_id: usize,
+    /// The height a node was laid out at in the last frame, a float in the
+    /// units `ui.node_height` takes (a slot of it matched the Details button
+    /// at 1280x720, 1920x1080 and 3840x2160, client 26430625); `None` where
+    /// its route misses, and an empty slot keeps a fixed height.
+    node_laid_height: Option<usize>,
     panel_kind: usize,
     panel_alpha: usize,
     /// The navigation config's fields from its start, in the order of
@@ -368,6 +373,7 @@ impl Layout {
             frame_node: f(pinned::ui::FRAME_NODE.id())?,
             window_node: f(pinned::ui::WINDOW_NODE.id())?,
             node_id: f(pinned::ui::NODE_ID.id())?,
+            node_laid_height: f(pinned::ui::NODE_LAID_HEIGHT.id()).ok(),
             panel_kind: f(pinned::ui::PANEL_KIND.id())?,
             panel_alpha: f(pinned::ui::PANEL_ALPHA.id())?,
             nav,

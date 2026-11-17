@@ -93,11 +93,20 @@ impl<'a> Painter<'a> {
             .unwrap_or_else(|| self.button_compact(fallback, enabled))
     }
 
-    /// The free place of an icon button that is not there.
-    pub(super) fn icon_slot(&self) {
+    /// Draws what `draw` draws in a frame at the right of the column; with
+    /// what it gives, the height the game laid it out at in the last frame,
+    /// for a [`Painter::button_slot`] of the same height.
+    pub(super) fn measured<R>(&self, draw: impl FnOnce() -> R) -> (R, f32) {
         // SAFETY: a window is open on this thread, by the contract of
         // `Painter::new`.
-        unsafe { self.engine.icon_slot() };
+        unsafe { self.engine.measured(draw) }
+    }
+
+    /// The free place, `height` high, of a button that is not there.
+    pub(super) fn button_slot(&self, height: f32) {
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`.
+        unsafe { self.engine.button_slot(height) };
     }
 
     /// A settings slider that takes its value when the player lets go; one

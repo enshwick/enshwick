@@ -619,6 +619,7 @@ fn result(answer: &Answer, navigating: Option<impl FnOnce() -> bool>) -> u32 {
 /// the game's widget, which answers the cursor on the slot: the closure runs one
 /// slot of a screen (`screen`) or of a mod (none), as the game calls it per
 /// slot and frame.
+#[cfg(any(test, feature = "test"))]
 #[doc(hidden)]
 pub fn bench_item_slot(screen: bool) -> impl FnMut() -> u64 {
     unsafe extern "system" fn game(

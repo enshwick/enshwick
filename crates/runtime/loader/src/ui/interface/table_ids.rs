@@ -154,6 +154,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::NODE_HEIGHT.id(),
     pinned::ui::NODE_ID.id(),
     pinned::ui::NODE_ID_GET.id(),
+    pinned::ui::NODE_LAID_HEIGHT.id(),
     pinned::ui::NODE_MIN_HEIGHT.id(),
     pinned::ui::NODE_PADDING.id(),
     pinned::ui::NODE_SPACING.id(),

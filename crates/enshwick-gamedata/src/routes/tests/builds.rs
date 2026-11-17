@@ -142,6 +142,13 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26430625)", "ui.separator_margin", 0xc),
     ("1.0 client (26430625)", "ui.separator_height", 0x1c),
     ("1.0 client (26430625)", "ui.separator_offset", 0x20),
+    // The height in the box a node was laid out at (left, top, width,
+    // height from 0x114), which `ui.frame_close` and `ui.button` read; read
+    // on 26430625.
+    ("1.0 client (1269579)", "ui.node_laid_height", 0x120),
+    ("1.0 client (26082781)", "ui.node_laid_height", 0x120),
+    ("1.0 client (26320373)", "ui.node_laid_height", 0x120),
+    ("1.0 client (26430625)", "ui.node_laid_height", 0x120),
     // The button's icon flag and texture, read in `ui.button` and in the
     // vanilla gear buttons that set them on 26430625.
     ("1.0 client (1269579)", "ui.button_icon_shown", 0x48),

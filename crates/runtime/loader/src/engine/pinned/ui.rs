@@ -162,6 +162,7 @@ pub(crate) const NODE_FIND: Symbol = Symbol::new("ui.node_find");
 pub(crate) const NODE_HEIGHT: Symbol = Symbol::new("ui.node_height");
 pub(crate) const NODE_ID: Constant = Constant::new("ui.node_id");
 pub(crate) const NODE_ID_GET: Symbol = Symbol::new("ui.node_id_get");
+pub(crate) const NODE_LAID_HEIGHT: Constant = Constant::new("ui.node_laid_height");
 pub(crate) const NODE_MIN_HEIGHT: Symbol = Symbol::new("ui.node_min_height");
 pub(crate) const NODE_PADDING: Symbol = Symbol::new("ui.node_padding");
 pub(crate) const NODE_SPACING: Symbol = Symbol::new("ui.node_spacing");
