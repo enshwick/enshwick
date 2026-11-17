@@ -3,7 +3,7 @@
 //! the same rules as the loader's.
 
 use crate::abi::DataField;
-#[cfg(any(feature = "unstable", feature = "fake"))]
+#[cfg(any(feature = "fake", all(test, feature = "unstable")))]
 use crate::abi::DataSelect;
 #[cfg(feature = "fake")]
 use crate::abi::{ChangeOp, DataChange};
@@ -152,7 +152,7 @@ impl Rules {
 
 /// Whether `select` picks items, as an [`ItemsChange`](super::ItemsChange)
 /// does.
-#[cfg(any(feature = "unstable", feature = "fake"))]
+#[cfg(any(feature = "fake", all(test, feature = "unstable")))]
 pub(crate) const fn selects_items(select: DataSelect) -> bool {
     matches!(
         select,
