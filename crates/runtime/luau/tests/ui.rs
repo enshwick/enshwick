@@ -113,8 +113,7 @@ mod tests {
 
         assert!(second.contains(&Drawn::Progress { fraction: 0.8 }));
 
-        // The script's dialog shows over the window, and Back under it would
-        // be dropped.
+        // The script's dialog shows over the window and would take Back.
         assert!(loader.answer(None));
         loader.input("main", Input::Back);
         let _backed = loader.draw_frame();

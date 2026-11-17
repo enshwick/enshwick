@@ -93,7 +93,7 @@ Back (Escape, or B on a gamepad) over a window goes to the mod. `back` is
 true in the window's body in the frame the player pressed it. The game's
 pause menu does not open. The mod decides what Back does. The examples
 close the window: they stop drawing it. While a dialog shows over the
-window, the press is dropped.
+window, the dialog takes the press and closes.
 
 The widgets:
 
@@ -682,7 +682,8 @@ end)
 `Ui::ask` shows a dialog and waits for the answer, for a thread of the mod's
 own. On the thread that draws the interface it returns
 `UiError::WrongThread`, since that thread would never draw the dialog. The
-answer is `None` when the dialog closed without one.
+answer is `None` when the dialog closed without one, as when the player
+pressed Back (Escape, or B on a gamepad) over it.
 
 The buttons are the game's, shown in the game's own order:
 

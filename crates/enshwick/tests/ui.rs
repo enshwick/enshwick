@@ -85,11 +85,7 @@ mod tests {
             .unwrap();
         loader.input("main", Input::Back);
         let _under = loader.draw_frame();
-        assert_eq!(
-            BACKS.load(Ordering::Relaxed),
-            0,
-            "Back under a dialog is dropped"
-        );
+        assert_eq!(BACKS.load(Ordering::Relaxed), 0, "the dialog takes Back");
         assert!(loader.answer(None));
         let _after = loader.draw_frame();
         assert_eq!(BACKS.load(Ordering::Relaxed), 0, "and the press is spent");
