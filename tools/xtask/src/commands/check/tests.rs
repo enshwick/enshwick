@@ -580,7 +580,7 @@ fn each_checked_package_is_linted_without_features_and_with_each_alone() {
         wide: false,
     };
     let host_ok = |name: &String| name != "enshwick-loader-stub";
-    let lines: Vec<String> = features::steps(&scope, &packages, host_ok)
+    let lines: Vec<String> = features::steps(&scope, &packages, host_ok, &["clippy"])
         .iter()
         .map(Step::line)
         .collect();
@@ -594,8 +594,40 @@ fn each_checked_package_is_linted_without_features_and_with_each_alone() {
         ]
     );
     assert_eq!(
-        features::steps(&Scope::All, &packages, |_| true).len(),
+        features::steps(&Scope::All, &packages, |_| true, &["clippy"]).len(),
         3 + 2 + 2
+    );
+}
+
+#[test]
+fn the_windows_lint_also_lints_each_feature_alone_windows_only_packages_included() {
+    let mut stub = package("enshwick-loader-stub", "crates/runtime/stub", true);
+    stub.features = vec!["trace".to_owned()];
+    let mut untouched = package("enshwick-world", "crates/api/world", false);
+    untouched.features = vec!["fake".to_owned()];
+    let packages = [stub, untouched];
+    let scope = Scope::Some {
+        code: ["enshwick-loader-stub".to_owned()].into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: false,
+    };
+    let lines: Vec<String> = windows_lint_steps(&scope, &packages)
+        .iter()
+        .map(Step::line)
+        .collect();
+    let xwin = format!("cargo xwin clippy --target {WINDOWS_TARGET}");
+    let stub = format!("{xwin} --package enshwick-loader-stub --no-default-features");
+    assert_eq!(
+        lines,
+        [
+            format!(
+                "{xwin} --workspace --features {WINDOWS_TEST_FEATURE} --all-targets -- -D warnings"
+            ),
+            format!("{stub} -- -D warnings"),
+            format!("{stub} --features trace -- -D warnings"),
+        ]
     );
 }
 

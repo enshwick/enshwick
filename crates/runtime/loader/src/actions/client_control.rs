@@ -680,6 +680,7 @@ pub(crate) fn bench_input() {
     let _first = GROUPS.input.layout.set(BENCH_INPUT);
 }
 
+#[cfg(feature = "test")]
 impl InputLayout {
     /// The offset of the movement stick, for a stand-in of the game's pass.
     pub(crate) const fn stick_offset(&self) -> usize {

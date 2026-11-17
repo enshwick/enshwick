@@ -387,6 +387,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "test")]
     #[test]
     fn the_benchmark_s_move_holds_its_stick_through_every_pass_it_times() {
         let mut moving = bench_client_build(true);
