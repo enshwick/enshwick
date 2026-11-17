@@ -100,7 +100,9 @@ impl Table {
     }
 }
 
-impl Patches for Table {
+// SAFETY: `apply` answers only outputs `lend` put in the running frame,
+// whose buffers live until `leave` pops it.
+unsafe impl Patches for Table {
     type Key = At;
     type Owner = u8;
     type Patch = Patch;
@@ -123,13 +125,13 @@ impl Patches for Table {
         patch.on
     }
 
-    fn enter(&self, key: At, scratch: bool) {
+    fn enter(&self, key: At, build: Build) {
         self.frames
             .borrow_mut()
-            .push((key, scratch, false, Vec::new()));
+            .push((key, build == Build::Scratch, false, Vec::new()));
     }
 
-    fn apply(&self, patch: &Patch, input: View, _rebuild: bool) -> (Status, Option<View>) {
+    unsafe fn apply(&self, patch: &Patch, input: View, _rebuild: bool) -> (Status, Option<View>) {
         match patch.does {
             Does::Add => {
                 let added = Self::bytes(input).iter().map(|b| b + 1).collect();
@@ -160,7 +162,9 @@ impl Patches for Table {
     }
 }
 
-impl ServedTable for Table {
+// SAFETY: `base` answers the bytes of the kept `Vec`, which nothing changes
+// while it lives.
+unsafe impl ServedTable for Table {
     type Kept = Vec<u8>;
 
     fn sealed(&self) -> bool {
@@ -271,6 +275,26 @@ fn view(bytes: &[u8]) -> (usize, usize) {
     (bytes.as_ptr().expose_provenance(), bytes.len())
 }
 
+/// [`super::build`] over a base the test holds.
+fn build(
+    table: &Table,
+    key: At,
+    base: (usize, usize),
+    kind: Build,
+    only: Option<&[u8]>,
+) -> Result<Built<Vec<u8>, u8>, BuildResourceError> {
+    // SAFETY: every base the tests pass is a `view` of bytes they hold for
+    // the call, or over 4 GiB, which `build` refuses before reading.
+    unsafe { super::build(table, key, base, kind, only) }
+}
+
+/// [`super::build_first`] over a base the test holds.
+fn build_first(table: &Table, key: At, base: (usize, usize)) -> FirstBuild<Vec<u8>, u8> {
+    // SAFETY: every base the tests pass is a `view` of bytes they hold for
+    // the call.
+    unsafe { super::build_first(table, key, base) }
+}
+
 #[test]
 fn a_rebuild_runs_the_patches_of_the_mods_that_built_the_bytes_on_or_off() {
     assert!(patch_runs(Some(&[1, 2][..]), &2, || false));
@@ -322,6 +346,16 @@ fn each_outcome_answers_its_status() {
 }
 
 #[test]
+fn the_games_first_build_runs_while_a_served_read_of_its_key_runs_on_this_thread() {
+    let table = table(vec![entry(1, &[(1, Does::Add)])]);
+    table.enter(0, Build::Scratch);
+    let first = build_first(&table, 0, view(&[5]));
+    drop(table.leave((), None));
+    assert_eq!(first.built.expect("built").bytes, [6]);
+    assert!(first.holds);
+}
+
+#[test]
 fn patches_build_in_order_on_the_output_before_and_record_who_built() {
     let table = table(vec![entry(1, &[(1, Does::Add), (2, Does::Add)])]);
     let built = build(&table, 0, view(&[5, 6]), Build::Game, None).expect("built");
@@ -370,18 +404,12 @@ fn a_build_runs_the_patches_still_on_and_a_rebuild_those_of_its_builders() {
 }
 
 #[test]
-fn nothing_built_a_build_on_this_thread_and_a_huge_base_are_outcomes() {
+fn nothing_built_and_a_huge_base_are_outcomes() {
     let table = table(vec![entry(1, &[(1, Does::Answer(Status::REFUSED))])]);
     assert_eq!(
         build(&table, 0, view(&[0]), Build::Scratch, None).err(),
         Some(BuildResourceError::NotBuilt)
     );
-    table.enter(0, false);
-    assert_eq!(
-        build(&table, 0, view(&[0]), Build::Game, None).err(),
-        Some(BuildResourceError::Building)
-    );
-    drop(table.leave((), None));
     let huge = usize::try_from(u64::from(u32::MAX) + 1).expect("64-bit");
     assert_eq!(
         build(&table, 0, (0, huge), Build::Game, None).err(),
@@ -500,7 +528,7 @@ fn a_served_read_builds_falls_back_to_the_archive_and_refuses_before_the_seal() 
         read_served(&table, &key(9)),
         Err(BuildResourceError::NotInArchive)
     );
-    table.enter(0, false);
+    table.enter(0, Build::Game);
     assert_eq!(
         read_served(&table, &key(1)),
         Err(BuildResourceError::Building)

@@ -7,7 +7,7 @@ use core::ffi::c_void;
 use crate::test::ServedResource;
 use crate::test::table::{Registered, put, with, with_open};
 use enshwick_base::__internal::{
-    BuildResourceError, Built, Held, KeepBase, PatchFailure, Patches, ServedTable, View,
+    Build, BuildResourceError, Built, Held, KeepBase, PatchFailure, Patches, ServedTable, View,
 };
 use enshwick_core::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status};
 
@@ -70,15 +70,16 @@ pub(crate) extern "system" fn rebuild_resource(me: ModHandle, key: *const Resour
     let Some(table) = with(None, |s| Some(Table::new(s.base.closed()))) else {
         return Status::MISSING;
     };
-    let rebuilt = enshwick_base::__internal::rebuild(&table, Some(me), &key);
-    // A rebuild the mod asked for once init ended, which got as far as a build.
-    let asked = !matches!(
-        rebuilt,
-        Err(BuildResourceError::NotServed | BuildResourceError::Building)
-    );
-    if table.sealed && asked {
+    // A rebuild the mod asked for once init ended that will build, noted
+    // before it does, so a rebuild its patches ask for comes after it.
+    let builds = table.sealed
+        && table
+            .served_by(Some(me), &key)
+            .is_some_and(|served| !building(&served));
+    if builds {
         with((), |s| s.content.rebuilds.push(key));
     }
+    let rebuilt = enshwick_base::__internal::rebuild(&table, Some(me), &key);
     rebuilt.map_or_else(BuildResourceError::status, |()| Status::OK)
 }
 
@@ -228,18 +229,15 @@ fn building(key: &ResourceKey) -> bool {
     BUILDING.with_borrow(|frames| frames.iter().any(|frame| frame.key == *key))
 }
 
-/// The bytes at `view` when a buffer the build running on this thread lent
-/// holds them all.
-fn lent(view: View) -> Option<Vec<u8>> {
+/// `read` of the bytes at `view` when a buffer the build running on this
+/// thread lent holds them all.
+fn lent<R>(view: View, read: impl FnOnce(&[u8]) -> R) -> Option<R> {
     BUILDING.with_borrow(|frames| {
-        frames.last().and_then(|frame| {
-            frame.buffers.iter().find_map(|buffer| {
-                let start = view.at.checked_sub(buffer.as_ptr().addr())?;
-                buffer
-                    .get(start..start.checked_add(view.len as usize)?)
-                    .map(<[u8]>::to_vec)
-            })
-        })
+        let bytes = frames.last()?.buffers.iter().find_map(|buffer| {
+            let start = view.at.checked_sub(buffer.as_ptr().addr())?;
+            buffer.get(start..start.checked_add(view.len as usize)?)
+        })?;
+        Some(read(bytes))
     })
 }
 
@@ -346,8 +344,18 @@ struct GameBuild {
 ///
 /// As [`enshwick_base::__internal::build`].
 pub(crate) fn build_first(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, BuildResourceError> {
+    // A test's game build inside a build of the key answers so and leaves no
+    // record, so the test's real first build still records.
+    if building(key) {
+        return Err(BuildResourceError::Building);
+    }
+    let table = Table::new(true);
     let at = (base.as_ptr().expose_provenance(), base.len());
-    let first = enshwick_base::__internal::build_first(&Table::new(true), *key, at);
+    // SAFETY: `base` is a slice borrowed for the call.
+    let first = unsafe { enshwick_base::__internal::build_first(&table, *key, at) };
+    // As the loader, which builds only served keys: the game holds nothing
+    // of a key no mod serves.
+    let holds = first.holds && table.find(key).is_ok();
     with((), |s| {
         // As the loader: the game builds a key once and holds it for the
         // process.
@@ -362,7 +370,7 @@ pub(crate) fn build_first(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Bui
         let built = first.built.as_ref().ok();
         s.content.served_builds.game.push(GameBuild {
             key: *key,
-            holds: first.holds,
+            holds,
             kept: built
                 .filter(|_| first.keep_base)
                 .map(|built| (base.to_vec(), built.bytes.clone())),
@@ -466,16 +474,16 @@ impl Table {
     }
 }
 
-/// One patch of a served key: where it sits in the fake's list, and whether
-/// it and its mod were on when its build began.
+/// One patch of a served key: where it sits in the fake's list.
 #[derive(Clone, Copy)]
 struct Patch {
     at: usize,
     registered: Registered<ResourcePatchFn>,
-    on: bool,
 }
 
-impl Patches for Table {
+// SAFETY: `apply` answers an output only when `lent` finds it in a buffer of
+// the running frame, which `Building` frees only when `leave` drops it.
+unsafe impl Patches for Table {
     type Key = ResourceKey;
     type Owner = Option<ModHandle>;
     type Patch = Patch;
@@ -496,7 +504,6 @@ impl Patches for Table {
                 .map(|(at, served)| Patch {
                     at,
                     registered: served.1,
-                    on: !s.content.served_off.contains(&at) && !served.1.owner_off(&s.base.off),
                 })
                 .collect()
         });
@@ -508,20 +515,23 @@ impl Patches for Table {
     }
 
     fn on(&self, patch: &Patch) -> bool {
-        patch.on
+        // As the loader: read when the patch's turn comes, so an earlier
+        // patch that turned its mod off skips the mod's later ones.
+        with(false, |s| {
+            !s.content.served_off.contains(&patch.at) && !patch.registered.owner_off(&s.base.off)
+        })
     }
 
-    fn enter(&self, key: ResourceKey, scratch: bool) -> Building {
-        Building::enter(key, !scratch)
+    fn enter(&self, key: ResourceKey, build: Build) -> Building {
+        Building::enter(key, build == Build::Game)
     }
 
-    fn apply(&self, patch: &Patch, input: View, rebuild: bool) -> (Status, Option<View>) {
+    unsafe fn apply(&self, patch: &Patch, input: View, rebuild: bool) -> (Status, Option<View>) {
         let mut out = core::ptr::null_mut::<u8>();
         let mut out_len = 0;
         let base = core::ptr::with_exposed_provenance::<u8>(input.at);
-        // SAFETY: `input` is the base the build began from or an output a
-        // buffer of this build holds, both readable for the call; the outs
-        // are locals and `user` is the pointer the mod served with.
+        // SAFETY: the caller guarantees `input` readable for the call; the
+        // outs are locals and `user` is the pointer the mod served with.
         let call = |apply: ResourcePatchFn, user| unsafe {
             apply(base, input.len, user, &raw mut out, &raw mut out_len)
         };
@@ -534,7 +544,7 @@ impl Patches for Table {
             at: out.expose_provenance(),
             len: out_len,
         };
-        (status, lent(output).map(|_| output))
+        (status, lent(output, |_| ()).map(|()| output))
     }
 
     fn failed(&self, key: ResourceKey, patch: &Patch, why: PatchFailure) {
@@ -546,14 +556,16 @@ impl Patches for Table {
     }
 
     fn leave(&self, frame: Building, last: Option<View>) -> (bool, Option<Vec<u8>>) {
-        let bytes = last.and_then(lent);
+        let bytes = last.and_then(|last| lent(last, <[u8]>::to_vec));
         let reads = BUILDING.with_borrow(|frames| frames.last().is_some_and(|frame| frame.reads));
         drop(frame);
         (reads, bytes)
     }
 }
 
-impl ServedTable for Table {
+// SAFETY: `base` answers the bytes of the kept `Vec`, which nothing changes
+// while it lives.
+unsafe impl ServedTable for Table {
     type Kept = Vec<u8>;
 
     fn sealed(&self) -> bool {
@@ -667,5 +679,31 @@ impl ServedTable for Table {
 
     fn to_vec(&self, built: Built<Vec<u8>, Option<ModHandle>>) -> Vec<u8> {
         built.bytes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick_core::abi::{Guid, ResourceKey};
+
+    use super::{BuildResourceError, Building, build_first};
+    use crate::test::FakeHost;
+    use crate::test::table::with;
+
+    const KEY: ResourceKey = ResourceKey {
+        guid: Guid([0x1f; 16]),
+        type_hash: 1,
+        part: 0,
+    };
+
+    #[test]
+    fn a_game_build_inside_a_build_of_its_key_is_refused_and_leaves_no_record() {
+        let _loader = FakeHost::new().install();
+        let frame = Building::enter(KEY, false);
+        assert_eq!(build_first(&KEY, &[1]), Err(BuildResourceError::Building));
+        drop(frame);
+        assert!(with(false, |s| s.content.served_builds.game.is_empty()));
+        assert_eq!(build_first(&KEY, &[1]), Err(BuildResourceError::NotBuilt));
+        assert!(with(false, |s| s.content.served_builds.game.len() == 1));
     }
 }

@@ -137,7 +137,13 @@ pub struct FirstBuild<B, O> {
 }
 
 /// The patches of a served key and one build of them, as a side runs them.
-pub trait Patches {
+///
+/// # Safety
+///
+/// An output [`apply`](Self::apply) answers lies in a buffer of the build
+/// running on this thread, readable for its length and unchanged until
+/// [`leave`](Self::leave) ends that build.
+pub unsafe trait Patches {
     /// A served key as the side finds it.
     type Key: Copy;
     /// A mod as the side names it.
@@ -161,13 +167,22 @@ pub trait Patches {
     /// Whether `patch` is still on and its mod too.
     fn on(&self, patch: &Self::Patch) -> bool;
 
-    /// Begins a build of `key` on this thread; a served read inside a build
-    /// that is not `scratch` makes `key` a reader of the key read.
-    fn enter(&self, key: Self::Key, scratch: bool) -> Self::Frame;
+    /// Begins a `build` of `key` on this thread; a served read inside a
+    /// [`Build::Game`] build makes `key` a reader of the key read.
+    fn enter(&self, key: Self::Key, build: Build) -> Self::Frame;
 
     /// Runs `patch` over `input`, as a `rebuild` runs a patch that is off; its
     /// status, and its output while a buffer of this build holds it.
-    fn apply(&self, patch: &Self::Patch, input: View, rebuild: bool) -> (Status, Option<View>);
+    ///
+    /// # Safety
+    ///
+    /// `input` is readable for `input.len` bytes, unchanged for the call.
+    unsafe fn apply(
+        &self,
+        patch: &Self::Patch,
+        input: View,
+        rebuild: bool,
+    ) -> (Status, Option<View>);
 
     /// Records that `patch` of `key` failed, as `why` says.
     fn failed(&self, key: Self::Key, patch: &Self::Patch, why: PatchFailure);
@@ -184,7 +199,12 @@ pub trait Patches {
 
 /// The served keys of a side: what mods serve, what the game holds and who
 /// reads whom.
-pub trait ServedTable: Patches {
+///
+/// # Safety
+///
+/// The bytes [`base`](Self::base) answers for a kept base are readable and
+/// unchanged while that kept base lives.
+pub unsafe trait ServedTable: Patches {
     /// What a rebuild holds while it builds: the kept base, and whatever
     /// keeps two rebuilds of a key apart.
     type Kept;
@@ -284,29 +304,32 @@ impl KeepBase {
 /// those mods runs, on or off, since the game holds what each added. A
 /// panicked patch is reported in every build; one that refuses or hands back
 /// bytes it was not lent fails in a build the game holds and is skipped in a
-/// scratch one.
+/// scratch one. The game's first build runs even while `key`'s patches run
+/// on this thread, as the game asked for it; the callers that would wait on
+/// that build refuse it themselves.
 ///
 /// # Errors
 ///
-/// [`BuildResourceError::Building`] while `key`'s patches run on this
-/// thread; [`BuildResourceError::NotBuilt`] when no patch built or the base
-/// is over 4 GiB.
-pub fn build<T: Patches>(
+/// [`BuildResourceError::NotBuilt`] when no patch built or the base is over
+/// 4 GiB.
+///
+/// # Safety
+///
+/// - The `len` bytes at `at` are readable and unchanged for the call, unless
+///   `len` is over 4 GiB, which is refused before any read.
+pub unsafe fn build<T: Patches>(
     table: &T,
     key: T::Key,
     (at, len): (usize, usize),
     kind: Build,
     only: Option<&[T::Owner]>,
 ) -> Result<Built<T::Bytes, T::Owner>, BuildResourceError> {
-    if table.building(key) {
-        return Err(BuildResourceError::Building);
-    }
     let Ok(len) = u32::try_from(len) else {
         table.unbuilt(key, Unbuilt::TooLarge);
         return Err(BuildResourceError::NotBuilt);
     };
     let rebuild = only.is_some();
-    let frame = table.enter(key, kind == Build::Scratch);
+    let frame = table.enter(key, kind);
     let mut current = View { at, len };
     let mut by = Vec::new();
     for patch in table.patches(key) {
@@ -314,7 +337,10 @@ pub fn build<T: Patches>(
         if !patch_runs(only, &owner, || table.on(&patch)) {
             continue;
         }
-        let (status, output) = table.apply(&patch, current, rebuild);
+        // SAFETY: `current` is the base, readable for the call as the caller
+        // guarantees, or an output `apply` answered in this build, readable
+        // until `leave` as `Patches` guarantees.
+        let (status, output) = unsafe { table.apply(&patch, current, rebuild) };
         if status == Status::FAULTED {
             table.failed(key, &patch, PatchFailure::Panicked);
         } else if let (true, Some(output)) = (status == Status::OK, output) {
@@ -341,12 +367,17 @@ pub fn build<T: Patches>(
 
 /// The game's first build of `key` from its `base` bytes: whether it keeps
 /// its base, decided once the build ran, and whether the game holds bytes.
-pub fn build_first<T: ServedTable>(
+///
+/// # Safety
+///
+/// - `base` meets [`build`]'s guarantees.
+pub unsafe fn build_first<T: ServedTable>(
     table: &T,
     key: T::Key,
     base: (usize, usize),
 ) -> FirstBuild<T::Bytes, T::Owner> {
-    let built = build(table, key, base, Build::Game, None);
+    // SAFETY: the caller guarantees `base` as `build` needs it.
+    let built = unsafe { build(table, key, base, Build::Game, None) };
     let keep_base = built.as_ref().is_ok_and(|built| {
         KeepBase {
             read_served: built.reads,
@@ -417,6 +448,12 @@ pub fn rebuild_in<T: ServedTable>(
 /// Builds `key` again from its kept base, with the patches of every mod that
 /// built the bytes the game holds, and writes it over them: how many bytes
 /// changed, `None` before its first build.
+///
+/// # Errors
+///
+/// [`BuildResourceError::NoBase`] when its first build kept no base;
+/// [`BuildResourceError::NotBuilt`] when no patch built it again;
+/// [`BuildResourceError::SizeChanged`] when the rebuild made another size.
 pub fn rebuild_one<T: ServedTable>(
     table: &T,
     key: T::Key,
@@ -425,7 +462,9 @@ pub fn rebuild_one<T: ServedTable>(
         return Ok(None);
     };
     let kept = held.base.ok_or(BuildResourceError::NoBase)?;
-    let built = build(table, key, table.base(&kept), Build::Game, Some(&held.by))?;
+    // SAFETY: `kept` lives past the build, so its base stays readable and
+    // unchanged as `ServedTable` guarantees.
+    let built = unsafe { build(table, key, table.base(&kept), Build::Game, Some(&held.by)) }?;
     if built.len != held.len {
         table.unbuilt(
             key,
@@ -506,7 +545,8 @@ pub fn read_built<T: ServedTable>(
 ) -> Result<Vec<u8>, BuildResourceError> {
     table.note_read(key);
     let view = (base.as_ptr().expose_provenance(), base.len());
-    match build(table, key, view, Build::Scratch, None) {
+    // SAFETY: `base` is owned here and unchanged until the build ends.
+    match unsafe { build(table, key, view, Build::Scratch, None) } {
         Ok(built) => Ok(table.to_vec(built)),
         Err(BuildResourceError::NotBuilt) => {
             let (served, from) = table.keys(key);

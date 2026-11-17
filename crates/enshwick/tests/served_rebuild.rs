@@ -35,6 +35,8 @@ mod tests {
     const GROWING: ResourceKey = key(0x6e);
     /// The mod's, whose builder panics once `PANIC` is set.
     const PANICKY: ResourceKey = key(0x9a);
+    /// The mod's, whose patch rebuilds `BUILT` once `NEST` is set.
+    const NESTING: ResourceKey = key(0x4e);
 
     /// The byte the mod's patch of `BUILT` writes.
     static VALUE: AtomicU8 = AtomicU8::new(0);
@@ -45,6 +47,7 @@ mod tests {
     /// How many times the patch of `GROWING` ran.
     static GROWTH: AtomicU8 = AtomicU8::new(0);
     static PANIC: AtomicBool = AtomicBool::new(false);
+    static NEST: AtomicBool = AtomicBool::new(false);
 
     struct Builder;
 
@@ -70,6 +73,13 @@ mod tests {
                 out.copy_from(base)
             })?;
             load.allow_rebuild(PANICKY)?;
+            load.serve(NESTING, NESTING, |base, out| {
+                if NEST.load(Ordering::Relaxed) {
+                    assert_eq!(rebuild(BUILT), Status::OK);
+                }
+                out.copy_from(base)
+            })?;
+            load.allow_rebuild(NESTING)?;
             Ok(Self)
         }
     }
@@ -195,6 +205,20 @@ mod tests {
     }
 
     #[test]
+    fn a_rebuild_a_patch_asks_for_is_noted_after_the_rebuild_running_it() {
+        let loader = start();
+        assert!(loader.build_resource(&BUILT, &[5]).is_ok());
+        assert!(loader.build_resource(&NESTING, &[1]).is_ok());
+        NEST.store(true, Ordering::Relaxed);
+        assert_eq!(rebuild(NESTING), Status::OK);
+        assert!(
+            loader.rebuilds().ends_with(&[NESTING, BUILT]),
+            "{:?}",
+            loader.rebuilds()
+        );
+    }
+
+    #[test]
     fn a_rebuild_of_a_key_the_game_never_built_runs_no_patch() {
         let loader = start();
         let before = PACK_RUNS.load(Ordering::Relaxed);
@@ -202,7 +226,7 @@ mod tests {
         assert_eq!(PACK_RUNS.load(Ordering::Relaxed), before);
         assert_eq!(
             loader.rebuilds(),
-            [BUILT, GROWING, PANICKY, BUILT],
+            [BUILT, GROWING, PANICKY, NESTING, BUILT],
             "allowed at init, asked now"
         );
     }

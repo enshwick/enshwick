@@ -86,11 +86,15 @@ pub(super) unsafe fn build_first(
     data: usize,
     len: usize,
 ) -> Option<(usize, usize)> {
-    let first = builds::build_first(
-        &Table::game(core::slice::from_ref(entry)),
-        entry,
-        (data, len),
-    );
+    // SAFETY: the caller guarantees `len` readable bytes at `data`,
+    // unchanged for the call.
+    let first = unsafe {
+        builds::build_first(
+            &Table::game(core::slice::from_ref(entry)),
+            entry,
+            (data, len),
+        )
+    };
     let copy_base = || {
         let mut base = vec![0; len];
         // SAFETY: the caller guarantees `len` readable bytes at `data`,
@@ -597,7 +601,9 @@ pub(super) fn run_patches(
     kind: Build,
 ) -> Option<Built> {
     let table = Table::game(core::slice::from_ref(entry));
-    let built = builds::build(&table, entry, (data, len), kind, only).ok()?;
+    // SAFETY: the tests pass `len` bytes at `data` that they hold for the
+    // call, or over 4 GiB, which `build` refuses before reading.
+    let built = unsafe { builds::build(&table, entry, (data, len), kind, only) }.ok()?;
     Some(Built {
         len: built.len,
         by: built.by,
@@ -633,7 +639,10 @@ struct Rebuilding<'a> {
     held: usize,
 }
 
-impl<'a, A> builds::Patches for Table<'a, A> {
+// SAFETY: `apply` answers an output only when `lent_holds` finds it in a
+// buffer of the running frame, which `Building` frees only once `leave` takes
+// it.
+unsafe impl<'a, A> builds::Patches for Table<'a, A> {
     type Key = &'a Served;
     type Owner = ModIndex;
     type Patch = &'a Patch;
@@ -656,17 +665,21 @@ impl<'a, A> builds::Patches for Table<'a, A> {
         patch.runs(mod_on)
     }
 
-    fn enter(&self, key: &'a Served, scratch: bool) -> Building {
-        Building::enter(key.key, if scratch { Build::Scratch } else { Build::Game })
+    fn enter(&self, key: &'a Served, build: Build) -> Building {
+        Building::enter(key.key, build)
     }
 
-    fn apply(&self, patch: &&'a Patch, input: View, _rebuild: bool) -> (Status, Option<View>) {
+    unsafe fn apply(
+        &self,
+        patch: &&'a Patch,
+        input: View,
+        _rebuild: bool,
+    ) -> (Status, Option<View>) {
         let (mut built, mut built_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: `patch.apply` is a live mod's or the loader's
-        // `ResourcePatchFn`, given the `input.len` bytes so far at
-        // `input.at`, the base or an output a buffer of this build holds,
-        // valid for the call, the user pointer it registered and out
-        // pointers to locals on this stack.
+        // `ResourcePatchFn`, given the `input.len` bytes at `input.at`,
+        // readable for the call as the caller guarantees, the user pointer it
+        // registered and out pointers to locals on this stack.
         let mut apply = || unsafe {
             (patch.apply)(
                 core::ptr::with_exposed_provenance(input.at),
@@ -730,7 +743,9 @@ impl<'a, A> builds::Patches for Table<'a, A> {
     }
 }
 
-impl<'a, A: Fn(&ResourceKey) -> Option<Vec<u8>>> builds::ServedTable for Table<'a, A> {
+// SAFETY: `base` answers the bytes of the kept `Rebuilding`'s boxed copy,
+// which nothing changes while it lives.
+unsafe impl<'a, A: Fn(&ResourceKey) -> Option<Vec<u8>>> builds::ServedTable for Table<'a, A> {
     type Kept = Rebuilding<'a>;
 
     fn sealed(&self) -> bool {
@@ -902,6 +917,9 @@ pub fn bench_served_build() -> impl FnMut() -> usize {
         type_hash: 1,
         part: 0,
     };
+    // shortcut: loader-owned patches skip `profile::call`, since without a
+    // running loader every other mod reads as off and its patch never runs;
+    // add a mod case once a bench can load a mod.
     let patches = (0..3)
         .map(|_| Patch::new(ModIndex::LOADER, copy, 0))
         .collect();
@@ -910,7 +928,8 @@ pub fn bench_served_build() -> impl FnMut() -> usize {
     let at = base.as_ptr().expose_provenance();
     let table = Table::game(core::slice::from_ref(entry));
     move || {
-        builds::build(&table, entry, (at, base.len()), Build::Game, None)
+        // SAFETY: `base` is leaked, so its bytes stay readable and unchanged.
+        unsafe { builds::build(&table, entry, (at, base.len()), Build::Game, None) }
             .map_or(0, |built| built.len)
     }
 }
