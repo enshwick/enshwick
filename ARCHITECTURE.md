@@ -33,7 +33,7 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | `enshwick-luau` | `crates/runtime/luau` | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the script descriptions of `enshwick` and its internal parts | no, in `enshwick.zip` |
 | `enshwick-gamedata` | `crates/enshwick-gamedata` | game data the loader and the tools share: the engine routes and anchors, the compatibility reports, the engine's reflection reader (`reflect`) and the game archive reader (`archive`) | yes |
 | `cargo-enshwick` | `crates/cargo-enshwick` | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a mod's own build rows to a new build; its library reads point schemas for tests and fuzzing and holds the porting xtask shares | yes |
-| `xtask` | `tools/xtask` | repository checks, the release archive and alpha notes, and `cargo xtask compat`, the maintainers' report of what works on a game build, with `compat pin` and `compat patterns`, which port the loader's entries to a new build | no |
+| `xtask` | `tools/xtask` | repository checks, the release archive and alpha notes, the list of the API's public paths (`tools/public-paths.txt`), and `cargo xtask compat`, the maintainers' report of what works on a game build, with `compat pin` and `compat patterns`, which port the loader's entries to a new build | no |
 | `enshwick-fuzz` | `fuzz` | the fuzz targets for untrusted input, a workspace of their own | no |
 | examples | `examples/*` | the whole mods and packs the book follows | no |
 

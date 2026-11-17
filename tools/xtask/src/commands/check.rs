@@ -24,16 +24,24 @@ use std::process::Command;
 use std::thread;
 use std::time::Instant;
 
-use crate::affected::{self, Lane, MAX_LOCAL_PACKAGES, Package, Scope};
-use crate::commands::{fuzz, header, wine};
+use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
+use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 
 pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
+macro_rules! facade_features {
+    () => {
+        "enshwick/test,enshwick/unstable,enshwick/typed"
+    };
+}
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
 /// API's unstable calls, its generated typed API and the compat task are
 /// linted and tested with the rest.
-const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
+const TEST_FEATURE: &str = concat!(facade_features!(), ",xtask/compat");
+/// The API crate's part of [`TEST_FEATURE`], which a build that selects the
+/// facade without `xtask` takes so its features unify as in a workspace build.
+const FACADE_FEATURES: &str = facade_features!();
 
 /// The nextest filter of the trybuild test, which builds the API crate again
 /// under `target/tests/trybuild`: only [`Part::Trybuild`] runs it.
@@ -162,10 +170,15 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             return Ok(false);
         }
     }
+    if parts.contains(&Part::Host)
+        && !public_paths_hold(&scope, changed.as_deref(), &root, &packages)
+    {
+        return Ok(false);
+    }
     if parts.contains(&Part::Trybuild) && (!touches(&scope, FACADE) || wide(&scope)) {
         say(&if touches(&scope, FACADE) {
             format!(
-                "the trybuild test is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
+                "the trybuild test is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
             )
         } else if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
             format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
@@ -187,6 +200,40 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     Ok(wine::run(&windows_tests, args.windows))
 }
 
+/// Whether the committed public paths list is current, or left to CI: a
+/// wide local change leaves it there with the dependents' rustdoc, since it
+/// documents the facade twice.
+fn public_paths_hold(
+    scope: &Scope,
+    changed: Option<&[String]>,
+    root: &Path,
+    packages: &[Package],
+) -> bool {
+    if !lists_public_paths(scope, changed) {
+        return true;
+    }
+    if wide(scope) {
+        say(&format!(
+            "the public paths list is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
+        ));
+        return true;
+    }
+    let problems = public_paths::check(root, packages);
+    for problem in &problems {
+        say(&format!("public paths: {problem}"));
+    }
+    problems.is_empty()
+}
+
+/// Whether a change can move [`public_paths::FILE`]: it reaches the facade,
+/// changes this task, which writes the list, or edits the list, which no
+/// package owns.
+fn lists_public_paths(scope: &Scope, changed: Option<&[String]>) -> bool {
+    reaches(scope, FACADE)
+        || touches(scope, env!("CARGO_PKG_NAME"))
+        || changed.is_some_and(|files| files.iter().any(|file| file == public_paths::FILE))
+}
+
 /// Whether `scope` checks the code of `package`.
 fn touches(scope: &Scope, package: &str) -> bool {
     match scope {
@@ -195,8 +242,8 @@ fn touches(scope: &Scope, package: &str) -> bool {
     }
 }
 
-/// Whether a local check of `scope` reaches more packages than
-/// [`MAX_LOCAL_PACKAGES`]: it leaves the trybuild test and the stable
+/// Whether a local check of `scope` reaches [`WIDE_PACKAGES`] or more
+/// packages: it leaves the trybuild test and the stable
 /// surface's build to CI, which alone kept a check of a facade change over
 /// ten minutes (669 s, 2026-11-14), and the dependents' rustdoc
 /// ([`changed_rustdoc`]), and runs the dependents' tests one process per
@@ -411,7 +458,7 @@ impl Step {
         self
     }
 
-    fn env(mut self, name: &'static str, value: impl Into<String>) -> Self {
+    pub(crate) fn env(mut self, name: &'static str, value: impl Into<String>) -> Self {
         self.env.push((name, value.into()));
         self
     }
@@ -600,7 +647,10 @@ const fn workspace_rustdoc(code: bool, wide: bool, full: bool) -> bool {
 /// The rustdoc of the packages a [`wide`] `scope` changed, those the host
 /// build `workspace` leaves out skipped, with the link check of the
 /// facade's pages when it is one: 11 s the first time, then under a second
-/// (2026-11-17). It selects them alone, so its features unify on their own.
+/// (2026-11-17). It selects them alone; with the facade among them it turns
+/// on the facade's features as a workspace build does, since a selected
+/// runtime such as `enshwick-luau` would otherwise turn on an internal
+/// crate's `unstable` without the facade's and break its links.
 fn changed_rustdoc(scope: &Scope, workspace: &[String]) -> Vec<Step> {
     let Scope::Some { code, .. } = scope else {
         return Vec::new();
@@ -616,11 +666,15 @@ fn changed_rustdoc(scope: &Scope, workspace: &[String]) -> Vec<Step> {
         step = step.then(&["-p", name.as_str()]);
         any = true;
     }
+    let facade = touches(scope, FACADE);
+    if facade {
+        step = step.then(&["--features", FACADE_FEATURES]);
+    }
     let mut steps = Vec::new();
     if any {
         steps.push(step);
     }
-    if touches(scope, FACADE) {
+    if facade {
         steps.push(doc_links_step());
     }
     steps
@@ -772,12 +826,12 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         }
         if wide(scope) && parts.contains(&Part::Docs) {
             say(&format!(
-                "the dependents' rustdoc is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
+                "the dependents' rustdoc is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
             ));
         }
         if stable_api_left_to_ci(scope, parts) {
             say(&format!(
-                "{FACADE}'s stable surface is left to CI: the change reaches more than {MAX_LOCAL_PACKAGES} packages"
+                "{FACADE}'s stable surface is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
             ));
         } else if stable_api_out_of_scope(scope, parts) {
             say(&format!(

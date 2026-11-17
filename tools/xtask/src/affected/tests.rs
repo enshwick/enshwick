@@ -629,7 +629,7 @@ fn locally_a_change_with_many_dependents_runs_only_their_tests() {
     let files = files(&["crates/internal/world/src/daytime.rs"]);
     let mut others: BTreeSet<String> = packages.iter().map(|p| p.name.clone()).collect();
     others.remove("world");
-    assert!(others.len() >= MAX_LOCAL_PACKAGES);
+    assert!(others.len() >= WIDE_PACKAGES);
     assert_eq!(
         super::scope(&files, &packages, &Tree::default(), Lane::Local),
         Scope::Some {
@@ -722,7 +722,7 @@ fn a_change_to_an_api_crate_runs_the_luau_definitions_tests_in_every_lane() {
 }
 
 #[test]
-fn locally_a_change_reaching_up_to_the_limit_is_checked_in_full() {
+fn locally_a_change_reaching_the_limit_is_wide_and_one_below_it_is_checked_in_full() {
     let (mut packages, leaves) = base_and_leaves();
     let files = files(&["crates/base/src/lib.rs"]);
     let mut everyone: BTreeSet<String> = leaves.iter().cloned().collect();
@@ -755,13 +755,11 @@ fn locally_a_change_reaching_up_to_the_limit_is_checked_in_full() {
     );
 }
 
-/// A `base` package and one more leaf depending on it than a change to
-/// `base` may reach locally and still be checked in full.
+/// A `base` package and as many leaves depending on it as make a change to
+/// `base` reach [`WIDE_PACKAGES`].
 fn base_and_leaves() -> (Vec<Package>, Vec<String>) {
     let mut packages = vec![package("base", "crates/base", &[])];
-    let leaves: Vec<String> = (0..MAX_LOCAL_PACKAGES)
-        .map(|n| format!("mod-{n}"))
-        .collect();
+    let leaves: Vec<String> = (1..WIDE_PACKAGES).map(|n| format!("mod-{n}")).collect();
     for leaf in &leaves {
         packages.push(package(leaf, &format!("mods/{leaf}"), &["base"]));
     }
@@ -795,7 +793,7 @@ fn locally_a_change_to_many_packages_with_few_dependents_is_wide() {
     else {
         panic!("the whole workspace");
     };
-    assert_eq!(code.len(), MAX_LOCAL_PACKAGES);
+    assert_eq!(code.len(), WIDE_PACKAGES - 1);
     assert!(!wide, "{code:?}");
     assert!(matches!(
         super::scope(&changed, &packages, &Tree::default(), Lane::Ci),
@@ -825,7 +823,7 @@ fn a_version_bump_of_a_tested_dependent_is_tested_not_only_built() {
     let (mut files, tree) = release();
     files.push("crates/internal/macros/src/lib.rs".to_owned());
     let mut packages = workspace();
-    for n in 0..MAX_LOCAL_PACKAGES {
+    for n in 0..WIDE_PACKAGES {
         packages.push(package(
             &format!("mod-{n}"),
             &format!("mods/m{n}"),
