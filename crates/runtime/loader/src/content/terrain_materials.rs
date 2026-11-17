@@ -20,6 +20,7 @@ use enshwick_base::resources::Value;
 use enshwick_core::abi::TerrainMaterialAdd;
 use enshwick_core::content::Guid;
 
+use crate::base::join::Host;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Sealed;
 
@@ -472,19 +473,6 @@ fn copy_looks(blending: &mut Value, materials: &[Material]) -> Option<()> {
         bytes.get_mut(to..to + LOOK_ENTRY)?.clone_from_slice(&entry);
     }
     Some(())
-}
-
-/// Who hosts the game a client joins, which its terrain text names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "a client joins only in the game")
-)]
-pub(crate) enum Host {
-    /// A dedicated server, which refuses the join.
-    Server,
-    /// A player hosting the game, which the client joins all the same.
-    Player,
 }
 
 /// What the player reads when `shifted`, a mod still on, reads another

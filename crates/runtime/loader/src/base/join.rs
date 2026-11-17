@@ -62,6 +62,19 @@ pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 /// ```
 pub type Names = BTreeMap<String, String>;
 
+/// Who hosts the game a client joins, which its terrain text names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+pub(crate) enum Host {
+    /// A dedicated server, which refuses the join.
+    Server,
+    /// A player hosting the game, which the client joins all the same.
+    Player,
+}
+
 #[cfg(windows)]
 pub(crate) mod client;
 #[cfg(windows)]

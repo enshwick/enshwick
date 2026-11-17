@@ -466,7 +466,7 @@ mod runtime {
         let moved = crate::base::join::terrain_ids().and_then(|ids| {
             (ids.adopt)(
                 Some(terrain.as_str()).filter(|table| !table.is_empty()),
-                crate::content::terrain_materials::Host::Player,
+                crate::base::join::Host::Player,
             )
         });
         if let Some(text) = moved {

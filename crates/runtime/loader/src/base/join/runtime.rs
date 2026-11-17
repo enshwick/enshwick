@@ -60,7 +60,7 @@ pub(crate) struct TerrainIds {
     /// Takes a host's table before the game connects, `None` for a host
     /// that serves none it can read; the player's text, naming who hosts,
     /// when a mod of this side now reads a wrong id.
-    pub(crate) adopt: fn(Option<&str>, crate::content::terrain_materials::Host) -> Option<String>,
+    pub(crate) adopt: fn(Option<&str>, crate::base::join::Host) -> Option<String>,
     /// Serves this side's own table again.
     pub(crate) own_again: fn(),
 }
@@ -256,12 +256,8 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         let terrain = server
             .as_ref()
             .and_then(|_| super::terrain_rules_value(&reply));
-        let moved = terrain_ids().and_then(|ids| {
-            (ids.adopt)(
-                terrain.as_deref(),
-                crate::content::terrain_materials::Host::Server,
-            )
-        });
+        let moved = terrain_ids()
+            .and_then(|ids| (ids.adopt)(terrain.as_deref(), crate::base::join::Host::Server));
         if let Some(text) = moved {
             own_terrain_again();
             terrain_refused(&text);
