@@ -8,13 +8,12 @@ use std::time::{Duration, Instant};
 use rustc_hash::FxHashMap;
 
 use crate::__load::*;
+use crate::abi::{Event, WaypointData, read_headed};
 use crate::engine_ids as ids;
 use crate::locks::Relock;
 use crate::{Entity, Off, PlayerKey};
+use enshwick_base::__internal::waypoints;
 
-/// How often the waypoints are compared: a person sets one far more
-/// slowly, so every change is seen.
-const WAYPOINT_EVERY: Duration = Duration::from_millis(100);
 /// The least time between two pings of one sender a mod hears; the
 /// game's own pings come from player input, which a client controls.
 const PING_GAP: Duration = Duration::from_millis(100);
@@ -100,27 +99,9 @@ fn uncovering(
     })
 }
 
-/// What [`Load::on_waypoint`](../struct.Load.html#method.on_waypoint) keeps between its looks.
-#[derive(Default)]
-struct Watched {
-    /// Each player's waypoint at the last look.
-    seen: FxHashMap<PlayerKey, Option<[f64; 3]>>,
-    /// The map's frame, once a world runs.
-    frame: Option<super::MapFrame>,
-    /// Whether the log told of a waypoint outside the map.
-    warned: bool,
-}
-
 /// Whether `position` lies inside the map's frame, when the frame is known.
 fn inside(frame: Option<&super::MapFrame>, position: [f64; 3]) -> bool {
-    frame.is_none_or(|frame| {
-        let [x, _, z] = position;
-        let [left, top] = frame.origin;
-        let [width, height] = frame.size;
-        position.iter().all(|c| c.is_finite())
-            && (left..=left + width).contains(&x)
-            && (top..=top + height).contains(&z)
-    })
+    frame.is_none_or(|frame| waypoints::inside(frame.origin, frame.size, position))
 }
 
 /// Whether a mod hears `sender`'s ping at `now`, given when each sender was
@@ -181,44 +162,21 @@ impl LoadMethods for crate::BaseLoad {
     where
         F: Fn(&WaypointChanged) + Send + Sync + 'static,
     {
-        let map = self.map()?;
-        let world = self.world()?;
-        if map.0.waypoint.is_none() {
-            return Err(Off::new("waypoints: this game build has none"));
-        }
-        let state: Mutex<Watched> = Mutex::default();
-        let _period = self.on_tick(WAYPOINT_EVERY, move |_| {
-            let mut state = state.relock();
-            if state.frame.is_none() {
-                state.frame = map.frame().ok();
+        self.map()?;
+        self.on_raw_event(Event::WAYPOINT_CHANGED, move |raw| {
+            // SAFETY: the loader raises the event with a headed
+            // `WaypointData`, readable for the call; one written by an
+            // older minor reads with the size the event was born at.
+            let data =
+                unsafe { read_headed(raw.cast::<WaypointData>(), size_of::<WaypointData>()) };
+            if let Some(data) = data {
+                handler(&WaypointChanged {
+                    player: data.key,
+                    entity: data.entity,
+                    position: (data.set != 0).then_some(data.position),
+                });
             }
-            let players = world.players();
-            state
-                .seen
-                .retain(|key, _| players.iter().any(|p| p.key == *key));
-            for player in &players {
-                let Ok(now) = map.waypoint(player.entity) else {
-                    continue;
-                };
-                // Kept even outside the map, so a move back counts as a change.
-                let before = state.seen.insert(player.key, now);
-                if now.is_some_and(|at| !inside(state.frame.as_ref(), at)) {
-                    if !state.warned {
-                        state.warned = true;
-                        crate::warn!("a waypoint outside the map is not handed on: {now:?}");
-                    }
-                    continue;
-                }
-                if before.is_some_and(|before| before != now) {
-                    handler(&WaypointChanged {
-                        player: player.key,
-                        entity: player.entity,
-                        position: now,
-                    });
-                }
-            }
-        })?;
-        Ok(())
+        })
     }
 
     fn on_ping<F>(&mut self, handler: F) -> Result<(), Off>
@@ -307,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn a_position_counts_as_on_the_map_inside_its_frame_or_without_one() {
+    fn a_ping_counts_as_on_the_map_inside_its_frame_or_without_one() {
         let frame = super::super::MapFrame {
             origin: [-100.0, -50.0],
             size: [200.0, 100.0],
@@ -315,7 +273,6 @@ mod tests {
         };
         assert!(inside(Some(&frame), [0.0, 900.0, 0.0]));
         assert!(!inside(Some(&frame), [150.0, 0.0, 0.0]));
-        assert!(!inside(Some(&frame), [0.0, 0.0, f64::NAN]));
         assert!(inside(None, [1e9, 0.0, 0.0]));
     }
 

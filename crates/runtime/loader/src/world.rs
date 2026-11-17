@@ -67,6 +67,8 @@ pub(crate) mod transactions;
 )]
 pub(crate) mod voxels;
 #[cfg(windows)]
+pub(crate) mod waypoints;
+#[cfg(windows)]
 pub(crate) mod weather;
 #[cfg(windows)]
 pub(crate) mod writes;
@@ -101,6 +103,13 @@ pub(crate) static PARTS: &[&Part] = &[
             daytime::forget();
         }),
         ..part!("daytime", daytime)
+    },
+    &Part {
+        steps: &[step!(Follow, "waypoint steps", |s| waypoints::after_step(
+            s.loader
+        ))],
+        forget: Some(|_| waypoints::forget()),
+        ..part!("waypoints", waypoints)
     },
     &Part {
         table_ids: game_settings::TABLE_IDS,

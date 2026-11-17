@@ -10,7 +10,7 @@ use crate::engine_ids as ids;
 use crate::locks::Relock;
 
 use super::templates::{ComponentChange, NewTemplate};
-use super::{Blob, EngineFacts, Guid, Id, Room, types};
+use super::{Blob, EngineFacts, Guid, Id, sized, types};
 use crate::resources::Grow;
 
 /// What the mod added: the meter templates it serves, and its items.
@@ -450,50 +450,47 @@ pub fn clone_item(
     guid: Guid,
     out: &mut impl Grow,
 ) -> Option<()> {
-    let mut room = Room::new(like);
-    if !item.stats.is_empty() {
-        room = room.grow_array(layout.ui_values, layout.ui_value[0], 4, item.stats.len())?;
+    let [size, label, format, value, signed] = layout.ui_value;
+    let mut rows = Vec::with_capacity(item.stats.len());
+    for stat in &item.stats {
+        let mut row = vec![0u8; size];
+        let (number_format, is_signed) = stat.value_format.game();
+        let mut put = |at: usize, bytes: &[u8]| {
+            row.get_mut(at..at + bytes.len())
+                .map(|target| target.copy_from_slice(bytes))
+        };
+        put(label, &stat.loca_id.fnv1a().to_le_bytes())?;
+        put(format, &[number_format])?;
+        put(value, &stat.value.to_le_bytes())?;
+        put(signed, &[u8::from(is_signed)])?;
+        rows.push((row, None));
     }
-    let mut info = Blob::over_with_room(out, room);
-    let mut written =
-        info.write(layout.id, &guid.fnv1a().to_le_bytes()) && info.write(layout.object, &guid.0);
-    if let Some(name) = item.name {
-        written &= info.write(layout.name, &name.0);
-    }
-    if let Some(description) = item.description {
-        written &= info.write(layout.description, &description.0);
-    }
-    if let Some(meter) = item.meter {
-        let flags = info.read_u32(layout.flags)?;
-        if flags & ItemTypeInfo::HAS_PIDE != 0 || meter.max_fuel_charges == 0 {
-            return None;
+    sized(out, like, |info| {
+        let mut written = info.write(layout.id, &guid.fnv1a().to_le_bytes())
+            && info.write(layout.object, &guid.0);
+        if let Some(name) = item.name {
+            written &= info.write(layout.name, &name.0);
         }
-        let flags = flags | ItemTypeInfo::HAS_PIDE | ItemTypeInfo::USES_FUEL;
-        written &= info.write(layout.flags, &flags.to_le_bytes())
-            && info.write(layout.pid_entity, &meter.template.guid().0);
-    }
-    if let Some(icon) = item.icon {
-        written &= info.write(layout.icon_image, &icon.id.guid().0);
-    }
-    if !item.stats.is_empty() {
-        let [size, label, format, value, signed] = layout.ui_value;
-        let mut rows = Vec::with_capacity(item.stats.len());
-        for stat in &item.stats {
-            let mut row = vec![0u8; size];
-            let (number_format, is_signed) = stat.value_format.game();
-            let mut put = |at: usize, bytes: &[u8]| {
-                row.get_mut(at..at + bytes.len())
-                    .map(|target| target.copy_from_slice(bytes))
-            };
-            put(label, &stat.loca_id.fnv1a().to_le_bytes())?;
-            put(format, &[number_format])?;
-            put(value, &stat.value.to_le_bytes())?;
-            put(signed, &[u8::from(is_signed)])?;
-            rows.push((row, None));
+        if let Some(description) = item.description {
+            written &= info.write(layout.description, &description.0);
         }
-        info.grow_array(layout.ui_values, size, 4, &[], &rows)?;
-    }
-    written.then_some(())
+        if let Some(meter) = item.meter {
+            let flags = info.read_u32(layout.flags)?;
+            if flags & ItemTypeInfo::HAS_PIDE != 0 || meter.max_fuel_charges == 0 {
+                return None;
+            }
+            let flags = flags | ItemTypeInfo::HAS_PIDE | ItemTypeInfo::USES_FUEL;
+            written &= info.write(layout.flags, &flags.to_le_bytes())
+                && info.write(layout.pid_entity, &meter.template.guid().0);
+        }
+        if let Some(icon) = item.icon {
+            written &= info.write(layout.icon_image, &icon.id.guid().0);
+        }
+        if !rows.is_empty() {
+            info.grow_array(layout.ui_values, size, 4, &[], &rows)?;
+        }
+        written.then_some(())
+    })
 }
 
 /// Builds in `out` the item registry with `guid` listed after the others, and
@@ -546,32 +543,24 @@ pub fn list_item(
     }
     // The debug names run beside the references; keep them in step.
     let with_names = names == refs;
-    let mut room = Room::new(base).grow_array(layout.refs, REFERENCE, 4, 1)?;
-    if with_names {
-        room = room
-            .append(debug_name.len() + 1, 1)?
-            .grow_array(layout.names, BLOB_STRING, 4, 1)?;
-    }
-    let mut registry = Blob::over_with_room(out, room);
-    registry.grow_array(layout.refs, REFERENCE, 4, &[], &[(guid.0.to_vec(), None)])?;
-    if with_names {
-        let mut text = debug_name.as_bytes().to_vec();
-        text.push(0);
-        let at = registry.append(&text, 1);
-        let first = registry.grow_array(
-            layout.names,
-            BLOB_STRING,
-            4,
-            &[0],
-            &[(vec![0; BLOB_STRING], None)],
-        )?;
-        let (start, _) = registry.array(layout.names)?;
-        let element = start + usize::try_from(first).ok()? * BLOB_STRING;
-        if !registry.set_array(element, at, u32::try_from(debug_name.len()).ok()?) {
-            return None;
+    let reference = [(guid.0.to_vec(), None)];
+    let name = [(vec![0; BLOB_STRING], None)];
+    let mut text = debug_name.as_bytes().to_vec();
+    text.push(0);
+    let text_len = u32::try_from(debug_name.len()).ok()?;
+    sized(out, base, |registry| {
+        registry.grow_array(layout.refs, REFERENCE, 4, &[], &reference)?;
+        if with_names {
+            let at = registry.append(&text, 1);
+            let first = registry.grow_array(layout.names, BLOB_STRING, 4, &[0], &name)?;
+            let (start, _) = registry.array(layout.names)?;
+            let element = start + usize::try_from(first).ok()? * BLOB_STRING;
+            if !registry.set_array(element, at, text_len) {
+                return None;
+            }
         }
-    }
-    Some(())
+        Some(())
+    })
 }
 
 /// `Load`'s methods of this module on the base handle, which core's

@@ -6,7 +6,7 @@ use core::time::Duration;
 use crate::Off;
 use crate::abi::{BuffTypeAdd, BuffTypeInfo, Header, Status};
 use crate::content::icons::Icon;
-use crate::content::{Blob, EngineFacts, Guid, Id, ResourceType, Room};
+use crate::content::{Blob, Draft, EngineFacts, Guid, Id, ResourceType, sized};
 use crate::engine_ids as ids;
 use crate::resources::Grow;
 use enshwick_content::content::LoadMethods as _;
@@ -578,20 +578,18 @@ pub fn build(
         return Some(left);
     }
     let added = copies.len();
-    let room = Room::new(base)
-        .grow_array(layout.buffs, layout.size, BUFF_ALIGN, added)?
-        .grow_array(layout.keys, KEY, KEY, added)?
-        .grow_array(layout.values, KEY, KEY, added)?;
-    let mut blob = Blob::over_with_room(out, room);
-    let first = blob.grow_array(
-        layout.buffs,
-        layout.size,
-        BUFF_ALIGN,
-        &layout.relative,
-        &copies,
-    )?;
+    let (_, first) = reading.array(layout.buffs)?;
     pairs.extend(keys.into_iter().zip(first..));
-    write_map(layout, &mut blob, &mut pairs, added)?;
+    sized(out, base, |blob| {
+        blob.grow_array(
+            layout.buffs,
+            layout.size,
+            BUFF_ALIGN,
+            &layout.relative,
+            &copies,
+        )?;
+        write_map(layout, blob, &mut pairs, added)
+    })?;
     Some(left)
 }
 
@@ -627,9 +625,9 @@ fn map_pairs(layout: &BuffLayout, blob: &Blob<&[u8]>) -> Option<Vec<(u32, u32)>>
 /// Writes `pairs` as the collection's hash map, grouped by the bucket the
 /// game looks a key up in, `key & (buckets - 1)`, with `added` more keys and
 /// values than the map held.
-fn write_map<B: Grow>(
+fn write_map(
     layout: &BuffLayout,
-    blob: &mut Blob<B>,
+    blob: &mut dyn Draft,
     pairs: &mut [(u32, u32)],
     added: usize,
 ) -> Option<()> {

@@ -34,7 +34,10 @@ mod run;
 #[cfg(all(test, windows))]
 pub(crate) use run::tests as harness;
 #[cfg(windows)]
-pub(crate) use run::{ShowWindowError, after_step, closed, forget, hello, left, ran, show};
+pub(crate) use run::{
+    ShowWindowError, after_step, closed, forget, hello, holds_map, left, ran, show,
+    waypoint_changed,
+};
 
 pub use enshwick_core::actions::window::MAX_CALL_PLAYERS as MAX_PLAYERS;
 use enshwick_core::actions::window::MAX_WAITING;

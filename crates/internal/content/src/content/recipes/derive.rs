@@ -2,7 +2,7 @@
 
 use super::super::menu::MenuEntry;
 use super::super::workshops::WorkshopId;
-use super::super::{Blob, Guid, Room, types};
+use super::super::{Blob, Guid, sized, types};
 use super::RecipeKind;
 use super::add::{
     NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, retarget, workshop_counts,
@@ -384,33 +384,31 @@ pub fn derive_recipes_in(
         count_field.copy_from_slice(&made.saturating_mul(derived.output).to_le_bytes());
         changes.push((inputs, output));
     }
-    let mut room = Room::new(base).grow_array(layout.recipes, layout.recipe, 8, picked.len())?;
-    for (inputs, output) in &changes {
-        room = room.append(inputs.len(), 8)?.append(output.len(), 8)?;
-    }
-    let mut blob = Blob::over_with_room(out, room);
-    let first = blob.grow_array(layout.recipes, layout.recipe, 8, &layout.relative, &extra)?;
-    let (start, _) = blob.array(layout.recipes)?;
-    for (index, ((_, derived, guid), (inputs, output))) in picked.iter().zip(changes).enumerate() {
-        let derived = *derived;
-        let at = start + (usize::try_from(first).ok()? + index) * layout.recipe;
-        let id = guid.fnv1a().to_le_bytes();
-        let input_count = u32::try_from(inputs.len() / layout.input_size.max(1)).ok()?;
-        let inputs_at = blob.append(&inputs, 8);
-        let output_at = blob.append(&output, 8);
-        let written = blob.write(at + layout.guid, &guid.0)
-            && blob.write(at + layout.id, &id)
-            && blob.write(at + layout.completion, &id)
-            && blob.set_array(at + layout.input, inputs_at, input_count)
-            && blob.set_array(at + layout.output, output_at, 1)
-            && derived
-                .workshop
-                .is_none_or(|target| retarget(layout, &mut blob, at, target));
-        if !written {
-            return None;
+    sized(out, base, |blob| {
+        let first = blob.grow_array(layout.recipes, layout.recipe, 8, &layout.relative, &extra)?;
+        let (start, _) = blob.array(layout.recipes)?;
+        for (index, ((_, derived, guid), (inputs, output))) in
+            picked.iter().zip(&changes).enumerate()
+        {
+            let at = start + (usize::try_from(first).ok()? + index) * layout.recipe;
+            let id = guid.fnv1a().to_le_bytes();
+            let input_count = u32::try_from(inputs.len() / layout.input_size.max(1)).ok()?;
+            let inputs_at = blob.append(inputs, 8);
+            let output_at = blob.append(output, 8);
+            let written = blob.write(at + layout.guid, &guid.0)
+                && blob.write(at + layout.id, &id)
+                && blob.write(at + layout.completion, &id)
+                && blob.set_array(at + layout.input, inputs_at, input_count)
+                && blob.set_array(at + layout.output, output_at, 1)
+                && derived
+                    .workshop
+                    .is_none_or(|target| retarget(layout, blob, at, target));
+            if !written {
+                return None;
+            }
         }
-    }
-    Some(())
+        Some(())
+    })
 }
 
 /// A recipe in the registry as [`modify_recipes_in`] shows it, with its

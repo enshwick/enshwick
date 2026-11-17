@@ -93,9 +93,11 @@ it only while the player plays, never in the save. It fails like
 `load.on_waypoint(handler)` calls the handler on the server's game thread
 when a player sets, moves or clears their waypoint. The handler gets a
 `WaypointChanged`: the player's account, their character and the new
-`position`. The `position` is `None` once cleared. The waypoints are compared
-on a tick every tenth of a second, so a change shows within that. The waypoint
-a player has when they join counts as no change.
+`position`. The `position` is `None` once cleared. The loader compares the
+waypoints every tenth of a second, after the server's step, so a change shows
+within that. The waypoint a player has when they join counts as no change. On
+a game build without waypoints, the loader turns them off with the reason on
+the Mods screen, and the handler is never called.
 
 `load.on_ping(handler)` calls the handler for each ping, the game's
 `UiPingEvent`. The handler gets a `MapPinged`: the pinging player's account,
@@ -105,7 +107,7 @@ second.
 
 Both come from what a client sends, so neither hands on a place outside
 the [map's frame](#the-maps-frame). A waypoint there is named once in the
-log. Both are unstable (see [Stability](stability.md)). A server copy showed a
+loader's log. Both are unstable (see [Stability](stability.md)). A server copy showed a
 ping a mod raises reaching `on_ping`. A player's own ping and waypoint are not
 yet seen in the game.
 

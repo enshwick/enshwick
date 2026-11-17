@@ -45,11 +45,9 @@ use crate::__load::*;
 use crate::Host;
 use crate::Off;
 use crate::WorldError;
-use crate::abi::{MapFrameInfo, MapMarkerInfo, Status};
+use crate::abi::{MapFrameInfo, MapMarkerInfo, WaypointData};
 use crate::altars::Altars;
-use crate::content::{EngineFacts, Guid};
-use crate::ecs::ComponentType;
-use crate::engine_ids as ids;
+use crate::content::Guid;
 use crate::world::World;
 use crate::{BaseLoad, Entity};
 
@@ -334,48 +332,9 @@ impl LoadMethods for BaseLoad {
 struct Resolved {
     host: Host,
     world: World,
-    waypoint: Option<Waypoint>,
-}
-
-/// Where a `PlayerWaypoint` keeps its fields.
-#[derive(Debug)]
-struct Waypoint {
-    ty: ComponentType,
-    enabled_at: usize,
-    position_at: usize,
 }
 
 static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
-
-/// The offset of field `id` of type `ty`, refused unless `width` bytes
-/// from there lie inside the type, so every read of the field stays in
-/// the component.
-fn field(load: &BaseLoad, ty: &str, id: &str, width: usize) -> Result<usize, Off> {
-    let at = load.offset(id)?;
-    let size = load.size(ty)?;
-    if at.checked_add(width).is_some_and(|end| end <= size) {
-        Ok(at)
-    } else {
-        Err(Off::new(format!(
-            "{id} at {at} does not hold {width} bytes in {ty} of {size}"
-        )))
-    }
-}
-
-impl Waypoint {
-    fn resolve(load: &BaseLoad) -> Result<Self, Off> {
-        Ok(Self {
-            ty: ComponentType::resolve(load, ids::PLAYER_WAYPOINT)?,
-            enabled_at: field(load, ids::PLAYER_WAYPOINT, ids::PLAYER_WAYPOINT_ENABLED, 1)?,
-            position_at: field(
-                load,
-                ids::PLAYER_WAYPOINT,
-                ids::PLAYER_WAYPOINT_POSITION,
-                24,
-            )?,
-        })
-    }
-}
 
 #[crate::script(markers)]
 impl Map {
@@ -387,23 +346,8 @@ impl Map {
         let resolved = Resolved {
             host: load.host(),
             world,
-            waypoint: Waypoint::resolve(load)
-                .inspect_err(|off| crate::debug!("waypoint reads off: {off}"))
-                .ok(),
         };
         Ok(Self(RESOLVED.get_or_init(|| resolved)))
-    }
-
-    /// `entity`'s component of type `ty`, `None` when it has none.
-    fn live(self, entity: Entity, ty: ComponentType) -> Result<Option<*const u8>, WorldError> {
-        let host = self.0.host;
-        let mut out: *const core::ffi::c_void = core::ptr::null();
-        let status = (host.api().component)(host.handle(), entity, ty.hash(), &raw mut out);
-        match status {
-            Status::MISSING => Ok(None),
-            status => WorldError::from_status(status)
-                .map(|()| Some(out.cast::<u8>()).filter(|data| !data.is_null())),
-        }
     }
 
     /// Every marker of the scene the server runs, in the scene's order.
@@ -615,28 +559,10 @@ impl Map {
     /// See the [module](self).
     #[script]
     pub fn waypoint(self, player: Entity) -> Result<Option<[f64; 3]>, WorldError> {
-        let waypoint = self.0.waypoint.as_ref().ok_or(WorldError::Unavailable)?;
         let host = self.0.host;
-        WorldError::from_status((host.api().world_quiet)(host.handle()))?;
-        let Some(data) = self.live(player, waypoint.ty)? else {
-            return Ok(None);
-        };
-        // SAFETY: `data` is the player's live PlayerWaypoint, read right
-        // after `world_quiet` answered that this is the game thread at a
-        // quiet moment, so no system writes it now; `resolve` checked that
-        // the byte at `enabled_at` lies inside the type's size. It is read as
-        // a byte, never as a bool.
-        let enabled = unsafe { crate::raw::read_at::<u8>(data, waypoint.enabled_at) };
-        if enabled == 0 {
-            return Ok(None);
-        }
-        // SAFETY: `data` is the player's live PlayerWaypoint, read right
-        // after `world_quiet` answered that this is the game thread at a
-        // quiet moment, so no system writes it now; `resolve` checked that
-        // 24 bytes from `position_at`, the three i64 of `waypointPosition`
-        // in 32.32 fixed point, lie inside the type.
-        let fixed = unsafe { crate::raw::read_at::<[i64; 3]>(data, waypoint.position_at) };
-        Ok(Some(crate::ecs::metres(fixed)))
+        let mut data = WaypointData::EMPTY;
+        WorldError::from_status((host.api().waypoint)(host.handle(), player, &raw mut data))?;
+        Ok((data.set != 0).then_some(data.position))
     }
 }
 

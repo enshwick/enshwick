@@ -5,7 +5,7 @@ use crate::Off;
 use crate::engine_ids as ids;
 
 use super::super::workshops::WorkshopId;
-use super::super::{Blob, EngineFacts, Guid, Id, Room};
+use super::super::{Blob, Draft, EngineFacts, Guid, Id, sized};
 use super::derive::{makes, scaled_inputs};
 use crate::resources::Grow;
 
@@ -226,20 +226,7 @@ pub fn add_recipe_to(
     }
     let template = registry.bytes().get(like..like + layout.recipe)?.to_vec();
     let inputs = scaled_inputs(layout, &registry, like, recipe.cost)?;
-    let room = Room::new(base)
-        .grow_array(layout.recipes, layout.recipe, 8, 1)?
-        .append(inputs.len(), 8)?
-        .append(layout.stack_size, 8)?;
-    let mut registry = Blob::over_with_room(out, room);
-    let index = registry.grow_array(
-        layout.recipes,
-        layout.recipe,
-        8,
-        &layout.relative,
-        &[(template, Some(like))],
-    )?;
-    let (start, _) = registry.array(layout.recipes)?;
-    let at = start + usize::try_from(index).ok()? * layout.recipe;
+    let copy = [(template, Some(like))];
     let id = crate::RecipeId::from_guid(recipe.id.guid())
         .get()
         .to_le_bytes();
@@ -252,24 +239,30 @@ pub fn add_recipe_to(
         .get_mut(layout.stack_count..layout.stack_count + 4)?
         .copy_from_slice(&recipe.output_count.to_le_bytes());
     let input_count = u32::try_from(inputs.len() / layout.input_size.max(1)).ok()?;
-    let inputs_at = registry.append(&inputs, 8);
-    let output_at = registry.append(&output, 8);
-    let written = registry.write(at + layout.guid, &recipe.id.guid().0)
-        && registry.write(at + layout.id, &id)
-        // The recipe's completion flag is its own id.
-        && registry.write(at + layout.completion, &id)
-        && registry.set_array(at + layout.input, inputs_at, input_count)
-        && registry.set_array(at + layout.output, output_at, 1)
-        && recipe
-            .workshop
-            .is_none_or(|target| retarget(layout, &mut registry, at, target));
-    written.then_some(())
+    sized(out, base, |registry| {
+        let index =
+            registry.grow_array(layout.recipes, layout.recipe, 8, &layout.relative, &copy)?;
+        let (start, _) = registry.array(layout.recipes)?;
+        let at = start + usize::try_from(index).ok()? * layout.recipe;
+        let inputs_at = registry.append(&inputs, 8);
+        let output_at = registry.append(&output, 8);
+        let written = registry.write(at + layout.guid, &recipe.id.guid().0)
+            && registry.write(at + layout.id, &id)
+            // The recipe's completion flag is its own id.
+            && registry.write(at + layout.completion, &id)
+            && registry.set_array(at + layout.input, inputs_at, input_count)
+            && registry.set_array(at + layout.output, output_at, 1)
+            && recipe
+                .workshop
+                .is_none_or(|target| retarget(layout, registry, at, target));
+        written.then_some(())
+    })
 }
 
 /// Moves the recipe at `at` to `workshop`.
 pub(super) fn retarget(
     layout: &RecipeLayout,
-    blob: &mut Blob<impl Grow>,
+    blob: &mut (impl Draft + ?Sized),
     at: usize,
     workshop: WorkshopId,
 ) -> bool {

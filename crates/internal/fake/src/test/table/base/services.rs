@@ -204,7 +204,7 @@ pub(crate) extern "system" fn subscribe(
         return Status::BAD_ARGS;
     };
     // The loader refuses an event it never raises, as on an older loader.
-    if !(Event::SETTINGS_CHANGED.0..=Event::PROGRESS_WRITTEN.0).contains(&event.0) {
+    if !(Event::SETTINGS_CHANGED.0..=Event::WAYPOINT_CHANGED.0).contains(&event.0) {
         return Status::MISSING;
     }
     crate::test::table::with_open(|s| {

@@ -8,16 +8,18 @@ use enshwick_world::__load::*;
 #[crate::script(map_events)]
 impl Load<'_> {
     /// Calls `handler` on the server's game thread when a player sets,
-    /// moves or clears the waypoint all players see. The waypoints are
-    /// compared on a tick every tenth of a second, so a change shows within
-    /// that; a
-    /// player's waypoint when they join counts as no change. A waypoint
-    /// outside the map is not handed on, and the log says so once. On a
-    /// client it hears only a game that client hosts.
+    /// moves or clears the waypoint all players see. The loader compares
+    /// the waypoints every tenth of a second, after the step, so a change
+    /// shows within that; a player's waypoint when they join counts as no
+    /// change. A waypoint outside the map is not handed on, and the
+    /// loader's log says so once. On a client it hears only a game that
+    /// client hosts. On a game build without waypoints the loader turns
+    /// them off, with the reason on the Mods screen, and none is heard.
     ///
     /// # Errors
     ///
-    /// [`Off`] after `init` or on a game build without waypoints.
+    /// [`Off`] after `init` or before the map is reachable, as
+    /// [`Load::map`](Self::map).
     ///
     /// # Examples
     ///

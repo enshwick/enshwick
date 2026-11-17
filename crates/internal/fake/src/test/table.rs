@@ -387,11 +387,13 @@ pub(crate) static TABLE: HostApi = HostApi {
     set_respawn_point: crate::test::world::respawn::set_respawn_point,
     buff_type_add,
     damage_causes_off,
+    waypoint: waypoints::waypoint,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.
 pub(crate) fn after_step() {
     run_settled();
+    waypoints::after_step();
 }
 
 /// What the loader does as a client's hosted game ends: counts the ended
