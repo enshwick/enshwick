@@ -6977,6 +6977,53 @@ take = "value"
 range = [8, 32]
 
 [[route]]
+id = "ui.windows"
+sides = ["client"]
+in = "ui.window_begin"
+shape = ["sub rsp,?i", "mov rax,[rip+*]"]
+take = "address"
+
+[[route]]
+id = "ui.windows_view"
+sides = ["client"]
+in = "ui.window_begin"
+shape = ["mov r10,[rax+*]", "lea rax,[rsp+?]"]
+take = "value"
+range = [8, 32]
+
+[[route]]
+id = "~fn:ui.window_name"
+sides = ["client"]
+in = "ui.window_begin"
+shape = ["call *", "mov rax,{ui.windows}"]
+take = "address"
+
+[[route]]
+id = "ui.view_slot"
+sides = ["client"]
+in = "~fn:ui.window_name"
+shape = ["mov ecx,[rax+*]", "test ecx,ecx"]
+nth = 1
+of = 2
+take = "value"
+range = [0x22, 0x88]
+
+[[route]]
+id = "ui.popup_window"
+sides = ["client"]
+in = "ui.popup"
+shape = ["lea rax,[rip+*]", "mov dword [rsp+0x28],0x1", "mov [rsp+?],rax"]
+take = "address"
+
+[[route]]
+id = "ui.popup_window_len"
+sides = ["client"]
+in = "ui.popup"
+shape = ["mov qword [rsp+?],*", "mov dword [rsp+0x20],?i", "call {ui.window_begin}"]
+take = "value"
+range = [9, 36]
+
+[[route]]
 id = "ui_clear_custom_names"
 sides = ["client"]
 system = "ui_clear_custom_names"

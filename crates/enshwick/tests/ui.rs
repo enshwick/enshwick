@@ -16,6 +16,7 @@ mod tests {
     static CLOSED: AtomicU32 = AtomicU32::new(0);
     static BACKS: AtomicU32 = AtomicU32::new(0);
     static SAME_LABEL: AtomicU32 = AtomicU32::new(0);
+    static BACKED: Mutex<Vec<Option<Response>>> = Mutex::new(Vec::new());
 
     struct Panel;
 
@@ -81,16 +82,19 @@ mod tests {
 
         UI.get()
             .unwrap()
-            .dialog(&Dialog::new("Sure?", "Leave?"), |_| {})
+            .dialog(&Dialog::new("Sure?", "Leave?"), |answer| {
+                BACKED.lock().unwrap().push(answer);
+            })
             .unwrap();
         loader.input("main", Input::Back);
         let _under = loader.draw_frame();
+        assert_eq!(BACKS.load(Ordering::Relaxed), 0, "the dialog takes Back");
         assert_eq!(
-            BACKS.load(Ordering::Relaxed),
-            0,
-            "Back under a dialog is dropped"
+            *BACKED.lock().unwrap(),
+            [None],
+            "and closes without an answer"
         );
-        assert!(loader.answer(None));
+        assert!(loader.dialogs().is_empty());
         let _after = loader.draw_frame();
         assert_eq!(BACKS.load(Ordering::Relaxed), 0, "and the press is spent");
 

@@ -16,8 +16,6 @@ const ID_SIZE: usize = 8;
 pub(crate) const STEAM: u8 = 3;
 /// The game's start value for the FNV-1a 64 hash of an account id.
 const KEY_SEED: u64 = 0x3f63_b56d_b289_0a16;
-/// The FNV-1a 64 prime.
-const FNV_PRIME: u64 = 0x0100_0000_01b3;
 /// The reply kind the ban branch sends.
 pub(crate) const REFUSED_KIND: u32 = 8;
 /// The peer id bits that index the session's peer slots.
@@ -224,9 +222,7 @@ impl JoinLayout {
 /// The key the game gives the account `id`, the one its player and the ban
 /// list carry.
 fn key(id: [u8; ID_SIZE]) -> PlayerKey {
-    PlayerKey::new(id.iter().fold(KEY_SEED, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(FNV_PRIME)
-    }))
+    PlayerKey::new(crate::base::fnv::fnv1a64(KEY_SEED, &id))
 }
 
 fn u32_at(bytes: &[u8], at: usize) -> u32 {

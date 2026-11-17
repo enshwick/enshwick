@@ -3190,8 +3190,8 @@ typedef struct EnshwickUiDialog {
 #define EnshwickUiDialog_IGNORE 8
 // The buttons a dialog may carry.
 #define EnshwickUiDialog_BUTTONS 495
-// The answer when the dialog closed without one, as when the game
-// quits.
+// The answer when the dialog closed without one, as when the player
+// pressed Back over it in game or the game quits.
 #define EnshwickUiDialog_CLOSED UINT32_MAX
 // The caller blocks until the answer: refused on the thread that
 // draws the interface, which would never draw it.

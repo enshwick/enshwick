@@ -254,6 +254,8 @@ static STATE: State = State {
 
 thread_local! {
     static CURRENT: core::cell::RefCell<Option<Current>> = const { core::cell::RefCell::new(None) };
+    /// The interface update in which a dialog last bound Back.
+    static BACK_BOUND: core::cell::Cell<Option<u64>> = const { core::cell::Cell::new(None) };
 }
 
 /// Whether a dialog shows, on the interface thread.
@@ -261,16 +263,29 @@ pub(super) fn showing() -> bool {
     CURRENT.with_borrow(Option::is_some)
 }
 
+/// Whether a dialog shows and bound Back in this interface update or the
+/// last, so a window or the Mods screen under it leaves the press to the
+/// dialog. Windows draw before the dialog in a frame, so a dialog that
+/// stops binding (an answer of the game's pending, a draw that ended the
+/// frame's windows) leaves them the press one frame later.
+pub(super) fn hears_back() -> bool {
+    showing() && engine::lately(BACK_BOUND.get(), super::tick())
+}
+
 /// Whether the player pressed Back (Escape, B) over `window` in this frame:
 /// the press binds to the window's panel, so it does not also open the
-/// pause menu; while a dialog shows over the window, the press is taken
-/// and dropped, so it neither closes the window under the dialog nor
-/// reaches the game.
+/// pause menu. While a dialog shows over the window, the dialog hears the
+/// press; where the build gives the dialog no Back, the window takes the
+/// press and drops it, so it neither closes the window under the dialog
+/// nor reaches the game.
 ///
 /// # Safety
 ///
 /// - Called in a frame of the interface update, on its thread.
 pub(super) unsafe fn back_over(engine: &Engine, window: &engine::Window) -> bool {
+    if hears_back() {
+        return false;
+    }
     engine.node_id(window).is_some_and(|node| {
         // SAFETY: in a frame of the interface update on its thread, by this
         // function's `# Safety`, with the node `node_id` gives only for a
@@ -484,9 +499,22 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         // which draws the frame, writes it.
         let answered = unsafe { crate::engine::memory::read::<u8>(host, layout.answered) };
         if answered == 0 {
-            // The dialog hears no Back: the game's popup gives it no panel
-            // node to bind the press to, and on client 26430625 a press bound
-            // to a node the game does not know faults.
+            // Back (Escape, B) closes the dialog without an answer, bound to
+            // the root node of the popup window `next` drew in this frame,
+            // as the game's own text popup binds it; a button pressed in the
+            // same frame wins.
+            let Some(node) = engine.popup_node() else {
+                return;
+            };
+            BACK_BOUND.set(Some(super::tick()));
+            // SAFETY: in a frame of the interface update on its thread, by
+            // this function's `# Safety`, right after `next` drew the popup
+            // window whose root node `popup_node` names.
+            if unsafe { engine.back_pressed(node) }
+                && let Some(gone) = current.take()
+            {
+                gone.answerer.answer(UiDialog::CLOSED);
+            }
             return;
         }
         // SAFETY: `host` is non-zero, checked by the guard before it, and is

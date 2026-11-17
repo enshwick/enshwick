@@ -289,9 +289,11 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
         Some(screen) if screen.from == from => (true, engine.node_id(&screen.window)),
         _ => (false, None),
     });
-    // While a dialog shows over the screen the press is taken and dropped,
-    // so it neither closes the screen under the dialog nor reaches the menu.
-    if let Some(node) = node
+    // While a dialog shows over the screen, the dialog hears the press; where
+    // the build gives it no Back, the press is taken and dropped, so it
+    // neither closes the screen under the dialog nor reaches the menu.
+    if !super::dialog::hears_back()
+        && let Some(node) = node
         // SAFETY: `entry` runs only from the main and pause menu hooks,
         // which the game reaches while drawing its menu inside a frame on
         // the interface thread; `node_id` gives a node only for a screen

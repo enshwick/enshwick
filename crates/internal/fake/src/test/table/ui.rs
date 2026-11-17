@@ -89,6 +89,9 @@ pub(crate) struct UiState {
     pub(crate) inputs: Vec<(String, crate::test::Input)>,
     /// Dialogs waiting for an answer, with where it goes.
     pub(crate) dialogs: Vec<(crate::test::ShownDialog, Registered<UiAnswerFn>)>,
+    /// Whether the player pressed Back over a window under the dialog this
+    /// frame, which closes the dialog once the frame's windows drew.
+    pub(crate) dialog_backed: bool,
 }
 
 impl Default for UiState {
@@ -123,6 +126,7 @@ impl Default for UiState {
             frame: None,
             inputs: Vec::new(),
             dialogs: Vec::new(),
+            dialog_backed: false,
         }
     }
 }
@@ -357,12 +361,13 @@ fn holds_sound(s: &State, guid: enshwick_core::content::Guid) -> bool {
 
 /// Draws window `w` with id `id`, answering 1 when the test pressed Back
 /// over it, as the loader does: only Back is the window's, and while a
-/// dialog shows the press is dropped.
+/// dialog shows the dialog takes the press and closes after the frame.
 fn window(s: &mut State, w: &mut UiWidget, id: String) -> crate::test::Drawn {
     let back = |(t, i): &(String, crate::test::Input)| *t == id && *i == crate::test::Input::Back;
     if let Some(at) = s.ui.inputs.iter().position(back) {
         s.ui.inputs.remove(at);
         w.result = u32::from(s.ui.dialogs.is_empty());
+        s.ui.dialog_backed |= !s.ui.dialogs.is_empty();
     }
     crate::test::Drawn::Window {
         id,

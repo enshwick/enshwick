@@ -661,8 +661,8 @@ impl UiDialog {
     pub const IGNORE: u32 = 8;
     /// The buttons a dialog may carry.
     pub const BUTTONS: u32 = 0x1ef;
-    /// The answer when the dialog closed without one, as when the game
-    /// quits.
+    /// The answer when the dialog closed without one, as when the player
+    /// pressed Back over it in game or the game quits.
     pub const CLOSED: u32 = u32::MAX;
     /// The caller blocks until the answer: refused on the thread that
     /// draws the interface, which would never draw it.

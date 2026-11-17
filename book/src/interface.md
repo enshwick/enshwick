@@ -93,7 +93,7 @@ Back (Escape, or B on a gamepad) over a window goes to the mod. `back` is
 true in the window's body in the frame the player pressed it. The game's
 pause menu does not open. The mod decides what Back does. The examples
 close the window: they stop drawing it. While a dialog shows over the
-window, the press is dropped.
+window, the dialog takes the press and closes.
 
 The widgets:
 
@@ -679,10 +679,13 @@ enshwick.ui.dialog({
 end)
 ```
 
+The answer is `None`, or `nil` in Luau, when the dialog closed without one.
+That happens when the player presses Back (Escape, or B on a gamepad) over
+it, or when the game quits.
+
 `Ui::ask` shows a dialog and waits for the answer, for a thread of the mod's
 own. On the thread that draws the interface it returns
-`UiError::WrongThread`, since that thread would never draw the dialog. The
-answer is `None` when the dialog closed without one.
+`UiError::WrongThread`, since that thread would never draw the dialog.
 
 The buttons are the game's, shown in the game's own order:
 
@@ -696,7 +699,8 @@ The buttons are the game's, shown in the game's own order:
 - `Overwrite`
 
 When the loader cannot link the interface on a game build, frame callbacks
-never run and dialogs show as system message boxes instead.
+never run and dialogs show as system message boxes instead. Escape there
+answers with a button, as Windows decides for the box.
 
 ## The title screen's line
 

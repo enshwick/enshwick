@@ -430,6 +430,19 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "inventory.put_slot", 0x41_7090),
     ("1.0 client (26082781)", "inventory.put_slot", 0x41_0200),
     ("1.0 client (1269579)", "inventory.put_slot", 0x40_fe80),
+    // The global `ui.window_begin` reads its view from, the view's slot
+    // that suffixes window names, and the name `ui.popup` opens its window
+    // under; read in the decompiler on 26430625, the slot seen live there.
+    ("1.0 client (26430625)", "ui.windows", 0x283_f408),
+    ("1.0 client (26430625)", "ui.windows_view", 0x10),
+    ("1.0 client (26430625)", "ui.view_slot", 0x44),
+    ("1.0 client (26430625)", "ui.popup_window", 0x1d8_cf58),
+    ("1.0 client (26430625)", "ui.popup_window_len", 0x12),
+    ("1.0 client (26320373)", "ui.windows", 0x284_0408),
+    ("1.0 client (26320373)", "ui.windows_view", 0x10),
+    ("1.0 client (26320373)", "ui.view_slot", 0x44),
+    ("1.0 client (26320373)", "ui.popup_window", 0x1d8_df58),
+    ("1.0 client (26320373)", "ui.popup_window_len", 0x12),
 ];
 
 /// The client control reads: the input builder's stick, look, target
