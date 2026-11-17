@@ -1,6 +1,7 @@
 //! What the content detours pay per call: the text lookup of a game tag and
-//! of a mod's tag, the content request with nothing served, and the recipe
-//! filter with nothing disabled and with a cached list.
+//! of a mod's tag, the content request with nothing served, the game's build
+//! of a served key, and the recipe filter with nothing disabled and with a
+//! cached list.
 
 #[cfg(windows)]
 use std::hint::black_box;
@@ -21,6 +22,10 @@ fn content_detours(c: &mut Criterion) {
     let mut request = enshwick_loader::bench_texture_request();
     group.bench_function("texture_request_nothing_served", |b| {
         b.iter(&mut request);
+    });
+    let mut build = enshwick_loader::bench_served_build();
+    group.bench_function("served_game_build_three_patches", |b| {
+        b.iter(&mut build);
     });
     let mut idle = enshwick_loader::content::recipes::bench_recipe_filter(&[]);
     group.bench_function("recipe_filter_nothing_disabled", |b| {

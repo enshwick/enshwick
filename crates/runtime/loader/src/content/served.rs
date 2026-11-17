@@ -954,5 +954,6 @@ mod patches;
 mod tests;
 mod texts;
 
+pub use patches::bench_served_build;
 pub use texts::bench_text_lookup;
 pub(crate) use texts::{add_text, language, mod_text, mod_texts_sealed};

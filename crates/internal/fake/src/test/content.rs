@@ -796,7 +796,7 @@ impl Installed {
     /// assert_eq!(loader.build_resource(&key, &[]), Err(Status::MISSING));
     /// ```
     pub fn build_resource(&self, key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
-        table::content::build_resource(key, base, table::content::Build::Game)
+        table::content::build_first(key, base)
             .map_err(enshwick_base::__internal::BuildResourceError::status)
     }
 

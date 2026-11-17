@@ -14,7 +14,11 @@ use crate::{Entity, Host, RecipeId};
 mod builds;
 
 pub use crate::game_events::notify::NotifyLayout;
-pub use builds::{BuildResourceError, KeepBase, patch_runs};
+pub use builds::{
+    Build, BuildResourceError, Built, FirstBuild, Held, KeepBase, PatchFailure, Patches,
+    ServedTable, Unbuilt, View, build, build_first, patch_runs, read_built, read_served, rebuild,
+    rebuild_in, rebuild_one, rebuild_readers,
+};
 
 /// Makes `host` the answer of [`crate::host`]; the first call wins.
 #[must_use]
