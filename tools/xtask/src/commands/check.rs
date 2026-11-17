@@ -4,7 +4,8 @@
 //! Nothing runs when no package changed since the branch left `origin/main`.
 //! Otherwise the tree's own rules run ([`crate::check`]), then clippy and
 //! rustdoc over the workspace, where unchanged packages are already fresh,
-//! and nextest and the doctests run for the changed packages and every
+//! clippy of each checked package with none and each one of its features
+//! ([`features`]), and nextest and the doctests run for the changed packages and every
 //! package that depends on them; a local check leaves the widest part of
 //! that to CI ([`affected::Lane`]) and runs the tests a wide change only
 //! reaches one process per binary ([`in_process`]). Off Windows the workspace is also
@@ -913,7 +914,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     });
     let workspace = host_args(packages, on_windows);
     let stable = stable_api(packages);
-    let host_steps = host_steps(
+    let mut host_steps = host_steps(
         scope,
         (&workspace, &stable),
         flags,
@@ -922,6 +923,9 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         full,
         parts,
     );
+    if parts.contains(&Part::Host) {
+        host_steps.extend(features::steps(scope, packages, host_ok));
+    }
     // Off Windows the whole workspace is also linted for Windows, where the
     // `cfg(windows)` code builds.
     let windows = (!on_windows && flags.0 && parts.contains(&Part::WindowsLint)).then(|| {
@@ -953,6 +957,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     })
 }
 
+mod features;
 mod in_process;
 #[cfg(test)]
 mod tests;

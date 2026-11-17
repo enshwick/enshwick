@@ -8,8 +8,10 @@ name: Rust CI
 # and cargo-semver-checks run as parallel jobs, the workspace's doctests and
 # rustdoc only in the merge queue, on main and with `full`, and the trybuild
 # test and the stable surface of a pull request only when its change needs
-# them. The Windows tests run natively on a Windows runner. The job `check`
-# sums them up and is the required check.
+# them. The Windows tests run natively on a Windows runner. Each part runs
+# through rust-ci-part.yml. Only the job `list` builds xtask, and only the
+# jobs whose work it lists wait for it. The job `check` sums them up and is
+# the required check.
 
 on:
   workflow_call:
@@ -42,8 +44,7 @@ env:
 jobs:
   scope:
     runs-on: ubuntu-26.04
-    # A cold xtask build, after a toolchain bump.
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: read
     env:
@@ -51,12 +52,6 @@ jobs:
       # group's parent): only its own pull request's changes are new.
       BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || github.event.repository.default_branch) }}
       FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
-      # The parts a pull request runs only when its change needs them, as
-      # the repository's xtask lists them. A push to main lists them too, so
-      # the build cache pull requests restore holds xtask; the merge queue
-      # runs them all.
-      API_PARTS: trybuild stable-api
-      LIST_PARTS: ${{ inputs.split && (github.event_name == 'pull_request' || github.event_name == 'push') }}
     outputs:
       skip: ${{ steps.scope.outputs.skip }}
       proven: ${{ steps.scope.outputs.proven }}
@@ -103,7 +98,7 @@ jobs:
           if [ -z "$reason" ] && [ "$FULL" != true ]; then
             never='^(\.github/|[^/]+\.md$|LICENSE$|\.gitignore$|\.gitattributes$|renovate\.json$|_typos\.toml$|\.markdownlint-cli2\.yaml$|lefthook\.yml$|committed\.toml$|release-plz\.toml$|package\.json$|bun\.lock$|codecov\.yml$)'
             # The check's own workflow and actions prove themselves by running.
-            check='^\.github/(actions/|workflows/(ci|rust-ci)\.yml$)'
+            check='^\.github/(actions/|workflows/(ci|rust-ci|rust-ci-part)\.yml$)'
             if ! git diff --name-only "$BASE...HEAD" | grep -qE "$check" &&
               ! git diff --name-only "$BASE...HEAD" | grep -qvE "$never"; then
               reason="no file that builds changed"
@@ -125,107 +120,61 @@ jobs:
           fi
           echo "deny=$deny" >> "$GITHUB_OUTPUT"
 
-      # Only the toolchain and xtask's own build: the rustup cache is the
-      # parts' own, so only they store it. A failed setup fails only the
-      # listing, which then leaves every part to run.
-      - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
-        continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.tool_cache }}/rustup
-          key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
-      - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
-        continue-on-error: true
-        uses: ./.github/actions/setup-rust
-        with:
-          cross: false
-      - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
-        continue-on-error: true
-        uses: ./.github/actions/sccache
-        with:
-          store: ${{ env.STORE_CACHES }}
-      - if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
-        continue-on-error: true
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          prefix-key: v1-rust
-          key: scope
-          save-if: ${{ env.STORE_CACHES }}
-
-      # A listing that fails leaves every part to run, so a broken xtask
-      # fails in the parts that name the fault. `shell: bash` adds pipefail,
-      # without which xargs would hide a failed listing as an empty one.
-      - name: The API parts the change needs
-        id: api
-        if: env.LIST_PARTS == 'true' && steps.scope.outputs.skip == ''
-        continue-on-error: true
-        shell: bash
-        run: |
-          args=()
-          if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi
-          for part in $API_PARTS; do args+=(--part "$part"); done
-          parts=$(cargo xtask check "${args[@]}" --list parts | xargs)
-          echo "API parts: ${parts:-none}" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "parts=$parts" >> "$GITHUB_OUTPUT"
-
-      # One runner per part: a part with `xtask` runs `cargo xtask check
-      # --part <part>`; the others run their own steps in the job `part`.
+      # One runner per part through rust-ci-part.yml; the trybuild test and
+      # the stable surface wait for the job `list` in the job `api`.
       - name: Parts
         id: parts
         env:
           EVENT: ${{ github.event_name }}
           FULL: ${{ inputs.full }}
-          LISTED: ${{ steps.api.outcome }}
-          NEEDED: ${{ steps.api.outputs.parts }}
           PROVEN: ${{ steps.scope.outputs.proven }}
           SEMVER: ${{ inputs.semver }}
           SPLIT: ${{ inputs.split }}
         run: |
           if [ "$SPLIT" != true ]; then
-            parts='{"part":"all","xtask":true}'
+            parts=(all)
           elif [ -n "$PROVEN" ]; then
-            parts='{"part":"docs","xtask":true}'
+            parts=(docs)
           else
-            parts='{"part":"host","xtask":true},{"part":"windows-lint","xtask":true}'
-            # The stable surface runs on pull requests too: it is the one
-            # build without `unstable`, so an item moved behind it, or code
-            # only unstable items use, breaks there alone.
-            api=$API_PARTS
-            if [ "$LISTED" = success ]; then api=$NEEDED; fi
-            for part in $api; do parts+=",{\"part\":\"$part\",\"xtask\":true}"; done
+            parts=(host windows-lint)
             # The workspace's doctests and rustdoc run in the merge queue, on
             # main and in the full suite, which keeps the pull request lane
             # short.
-            if [ "$EVENT" != pull_request ] || [ "$FULL" = true ]; then
-              parts+=',{"part":"docs","xtask":true}'
-            fi
+            if [ "$EVENT" != pull_request ] || [ "$FULL" = true ]; then parts+=(docs); fi
             # A pull request also fuzzes, briefly, the targets its change
             # reaches; a push to main fuzzes every target and fills the fuzz
             # build cache pull requests restore.
-            if [ "$EVENT" = pull_request ] || [ "$EVENT" = push ]; then
-              parts+=',{"part":"fuzz","xtask":true}'
-            fi
-            if [ -n "$SEMVER" ]; then parts+=',{"part":"semver","xtask":true}'; fi
+            if [ "$EVENT" = pull_request ] || [ "$EVENT" = push ]; then parts+=(fuzz); fi
+            if [ -n "$SEMVER" ]; then parts+=(semver); fi
           fi
-          echo "parts={\"include\":[$parts]}" | tee -a "$GITHUB_OUTPUT"
+          echo "parts=$(jq -cn '$ARGS.positional' --args "${parts[@]}")" | tee -a "$GITHUB_OUTPUT"
 
-  part:
-    name: part (${{ matrix.part }})
+  # What only the repository's xtask knows, built once and off the parts'
+  # critical path: the API parts a pull request's change needs and the
+  # packages whose Windows tests the change reaches. A push to main lists
+  # too, so the build cache pull requests restore holds xtask; the merge
+  # queue runs every API part. A listing that fails leaves every API part
+  # and every Windows test to run, so a broken xtask fails in the jobs that
+  # name the fault.
+  list:
     needs: scope
-    if: needs.scope.outputs.skip == ''
+    if: inputs.split && needs.scope.outputs.skip == '' && needs.scope.outputs.proven == ''
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    # A cold xtask build, after a toolchain bump.
+    timeout-minutes: 15
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.scope.outputs.parts) }}
     env:
-      # A merge queue entry is checked against the entry before it (its
-      # group's parent): only its own pull request's changes are new.
       BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || github.event.repository.default_branch) }}
       FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
-      PART: ${{ matrix.part }}
+      # The stable surface runs on pull requests too: it is the one build
+      # without `unstable`, so an item moved behind it, or code only
+      # unstable items use, breaks there alone.
+      API_PARTS: trybuild stable-api
+    outputs:
+      api: ${{ steps.listing.outputs.api }}
+      windows: ${{ steps.listing.outputs.windows }}
+      windows-listed: ${{ steps.listing.outputs.windows-listed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -235,97 +184,122 @@ jobs:
       - name: Fetch the base
         run: git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
 
-      # The mods the book links files of, for the book link check; ignored
-      # by git, so no workspace member, tool or scan of this tree takes it.
-      # Only the host part runs that check.
-      - if: matrix.part == 'host' || matrix.part == 'all'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: enshwick/mods
-          path: .mods
-          fetch-depth: 1
-          persist-credentials: false
-
-      # Nothing persists between jobs: the toolchain, the Windows SDK and the
-      # apt packages come from the cache.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Only the toolchain and xtask's own build: the rustup cache is the
+      # parts' own, so only they store it.
+      - continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/rustup
-          # The fuzz part's also holds the nightly that setup-rust pins.
-          key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}${{ matrix.part == 'fuzz' && format('-fuzz-{0}', hashFiles('.github/actions/setup-rust/action.yml')) || '' }}
-      # The Windows SDK and CRT cargo-xwin downloads, about 12 minutes from
-      # Microsoft on a hosted runner. Only the cross-compiling parts here
-      # (`windows-lint`, `all`) use it; the job `windows` builds natively.
-      - if: matrix.part == 'windows-lint' || matrix.part == 'all'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+      - continue-on-error: true
+        uses: ./.github/actions/setup-rust
         with:
-          path: ${{ runner.tool_cache }}/xwin
-          key: xwin-${{ runner.os }}-0.23.1-v1
-      # clang of the toolchain's LLVM; the docs, stable-api, trybuild and
-      # semver parts install the host part's packages.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.tool_cache }}/apt-archives
-          key: apt-${{ runner.os }}-${{ (matrix.part == 'docs' || matrix.part == 'stable-api' || matrix.part == 'trybuild' || matrix.part == 'semver') && 'host' || matrix.part }}-v2
-
-      - uses: ./.github/actions/setup-rust
-        with:
-          tools: cargo-nextest@0.9.152,cargo-deny@0.20.2,cargo-machete@0.9.2${{ inputs.semver != '' && (matrix.part == 'semver' || matrix.part == 'all') && ',cargo-semver-checks@0.51.0' || '' }}
-          ast-grep: ${{ matrix.part == 'host' || matrix.part == 'all' }}
-          sanitizers: ${{ matrix.part == 'fuzz' }}
-          fuzz: ${{ matrix.part == 'fuzz' }}
-
-      - uses: ./.github/actions/sccache
+          cross: false
+      - continue-on-error: true
+        uses: ./.github/actions/sccache
         with:
           store: ${{ env.STORE_CACHES }}
-
-      # The build itself, per part: each job builds a different target.
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - continue-on-error: true
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # A cache saved by a failed run would be restored as it is and
-          # never replaced, so only a finished run saves one.
           prefix-key: v1-rust
-          key: ${{ matrix.part }}
+          key: list
           save-if: ${{ env.STORE_CACHES }}
 
-      # The luau-lsp the tests download, kept per pin instead of fetched by
-      # each test process.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: matrix.part == 'host' || matrix.part == 'all'
-        with:
-          path: ~/.cache/enshwick
-          key: luau-lsp-${{ runner.os }}-${{ hashFiles('crates/cargo-enshwick/luau-lsp.toml') }}
-
-      # A change to a manifest, the lock file or the policy can bring in a
-      # dependency the policy refuses; it needs no build, so it goes first.
-      # Advisories change without any commit: the full suite checks them.
-      - name: cargo deny
-        if: needs.scope.outputs.deny == 'true' && (matrix.part == 'host' || matrix.part == 'all')
-        run: cargo deny check bans licenses sources
-
-      - name: cargo xtask check
-        if: matrix.xtask
-        env:
-          ENSH_MODS_DIR: ${{ github.workspace }}/.mods
-          SEMVER: ${{ inputs.semver }}
+      # `shell: bash` adds pipefail, without which xargs would hide a failed
+      # listing as an empty one.
+      - name: The API parts the change needs
+        id: api
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        continue-on-error: true
+        shell: bash
         run: |
           args=()
           if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi
-          if [ "$PART" != all ]; then args+=(--part "$PART"); fi
-          for package in $SEMVER; do args+=(--semver "$package"); done
-          if [ "$PART" = all ] || [ "$PART" = host ]; then cargo fmt --all --check; fi
-          cargo xtask check "${args[@]}"
+          for part in $API_PARTS; do args+=(--part "$part"); done
+          parts=$(cargo xtask check "${args[@]}" --list parts | xargs)
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
 
-      - name: sccache statistics
-        if: ${{ !cancelled() && env.RUSTC_WRAPPER == 'sccache' }}
-        run: sccache --show-stats
+      # `cargo metadata --no-deps`, which the listing reads, does not depend
+      # on the host, so the Windows runner starts only when a test is due.
+      - name: The Windows tests the change needs
+        id: windows
+        if: inputs.windows-tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          args=()
+          if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi
+          tests=$(cargo xtask check "${args[@]}" --list windows-tests | xargs)
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
+
+      - name: Listing
+        id: listing
+        env:
+          API_OUTCOME: ${{ steps.api.outcome }}
+          API: ${{ steps.api.outputs.parts }}
+          WINDOWS_OUTCOME: ${{ steps.windows.outcome }}
+          WINDOWS: ${{ steps.windows.outputs.tests }}
+        run: |
+          api=$API_PARTS
+          if [ "$API_OUTCOME" = success ]; then api=$API; fi
+          read -ra parts <<< "$api"
+          listed=false
+          if [ "$WINDOWS_OUTCOME" = success ]; then listed=true; fi
+          {
+            echo "API parts: ${api:-none}"
+            if [ "$listed" = true ]; then echo "Windows tests: ${WINDOWS:-none}"; else echo "Windows tests: every crate that has them"; fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "api=$(jq -cn '$ARGS.positional' --args "${parts[@]}")"
+            echo "windows=$WINDOWS"
+            echo "windows-listed=$listed"
+          } >> "$GITHUB_OUTPUT"
+
+  part:
+    name: part (${{ matrix.part }})
+    needs: scope
+    if: needs.scope.outputs.skip == ''
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.scope.outputs.parts) }}
+    uses: ./.github/workflows/rust-ci-part.yml
+    with:
+      part: ${{ matrix.part }}
+      full: ${{ inputs.full }}
+      semver: ${{ inputs.semver }}
+      deny: ${{ needs.scope.outputs.deny == 'true' }}
+
+  # The parts the job `list` names.
+  api:
+    name: part (${{ matrix.part }})
+    needs: list
+    if: needs.list.outputs.api != '[]'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.list.outputs.api) }}
+    uses: ./.github/workflows/rust-ci-part.yml
+    with:
+      part: ${{ matrix.part }}
+      full: ${{ inputs.full }}
+      semver: ${{ inputs.semver }}
 
   # The tests of the crates marked `windows-tests` or `windows-only`, natively
-  # on Windows. With `split` the repository's `cargo xtask check` lists the
-  # ones a change touches; without, every such crate of the workspace runs.
+  # on Windows. With `split` the job `list` names the ones a change touches,
+  # and the job starts only when it names one; without, or when the listing
+  # failed, every such crate of the workspace runs.
   windows:
-    needs: scope
-    if: inputs.windows-tests && needs.scope.outputs.skip == '' && needs.scope.outputs.proven == ''
+    needs: [scope, list]
+    if: >-
+      !cancelled() && inputs.windows-tests && needs.scope.result == 'success' &&
+      needs.scope.outputs.skip == '' && needs.scope.outputs.proven == '' &&
+      (needs.list.outputs.windows-listed != 'true' || needs.list.outputs.windows != '')
     runs-on: windows-2025
     timeout-minutes: 45
     permissions:
@@ -334,19 +308,12 @@ jobs:
       run:
         shell: bash
     env:
-      BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || github.event.repository.default_branch) }}
-      FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
-      SPLIT: ${{ inputs.split }}
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
-
-      - name: Fetch the base
-        run: git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
 
       - name: Install the toolchain
         run: |
@@ -365,14 +332,15 @@ jobs:
 
       - name: Windows tests to run
         id: list
+        env:
+          LISTED: ${{ needs.list.outputs.windows-listed }}
+          LISTED_TESTS: ${{ needs.list.outputs.windows }}
         run: |
-          if [ "$SPLIT" = true ]; then
-            args=()
-            if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi
-            tests=$(cargo xtask check "${args[@]}" --list windows-tests | xargs)
+          if [ "$LISTED" = true ]; then
+            tests=$LISTED_TESTS
           else
             tests=$(cargo metadata --no-deps --format-version 1 | jq -r \
-              '.packages[] | select(.metadata.enshwick["windows-tests"] == true or .metadata.enshwick["windows-only"] == true) | .name' |
+              '.packages[] | select(.metadata.xtask["windows-tests"] == true or .metadata.xtask["windows-only"] == true) | .name' |
               xargs)
           fi
           echo "Windows tests: ${tests:-none}"
@@ -411,7 +379,7 @@ jobs:
   # In the merge queue main must be green too, judged when the entry is
   # done: only a fix or a revert merges onto a red main, so it goes first.
   check:
-    needs: [scope, part, windows]
+    needs: [scope, list, part, api, windows]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -425,7 +393,9 @@ jobs:
         shell: bash
         env:
           SCOPE: ${{ needs.scope.result }}
+          LIST: ${{ needs.list.result }}
           PART: ${{ needs.part.result }}
+          API: ${{ needs.api.result }}
           WINDOWS: ${{ needs.windows.result }}
           EVENT: ${{ github.event_name }}
           BRANCH: ${{ needs.scope.outputs.branch }}
@@ -433,9 +403,9 @@ jobs:
           MAIN: ${{ github.event.repository.default_branch }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
-          echo "scope: $SCOPE, parts: $PART, Windows tests: $WINDOWS"
+          echo "scope: $SCOPE, listing: $LIST, parts: $PART, API parts: $API, Windows tests: $WINDOWS"
           ok() { [ "$1" = success ] || [ "$1" = skipped ]; }
-          if ! { [ "$SCOPE" = success ] && ok "$PART" && ok "$WINDOWS"; }; then exit 1; fi
+          if ! { [ "$SCOPE" = success ] && ok "$LIST" && ok "$PART" && ok "$API" && ok "$WINDOWS"; }; then exit 1; fi
           [ "$EVENT" = merge_group ] || exit 0
           # The caller's workflow file: a called workflow's context is its caller's.
           workflow=${WORKFLOW_REF%%@*}

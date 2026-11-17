@@ -39,6 +39,9 @@ pub(crate) struct Package {
     /// `unstable` feature of its own, or examples that name the facade as a
     /// stable mod does (a dev-dependency on it with no feature beyond `test`).
     pub(crate) stable_build: bool,
+    /// Its own features, `default` left out, which the host check lints one
+    /// at a time.
+    pub(crate) features: Vec<String>,
 }
 
 /// What a change needs checked.

@@ -180,6 +180,13 @@ fn packages() -> Result<Vec<Package>, String> {
                     .any(|key| package["metadata"]["xtask"][key].as_bool() == Some(true)),
                 stable_build: package["features"].get("unstable").is_some()
                     || stable_examples(package),
+                features: package["features"]
+                    .as_object()
+                    .into_iter()
+                    .flat_map(|features| features.keys())
+                    .filter(|feature| *feature != "default")
+                    .cloned()
+                    .collect(),
             }
         })
         .collect())
