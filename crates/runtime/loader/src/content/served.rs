@@ -212,16 +212,6 @@ pub(crate) enum ServeResourceError {
 
 sealed_is_too_late!(ServeResourceError);
 
-/// Every resource key of the game's archive, in archive order, read once;
-/// `None` when the archive does not read.
-pub(crate) fn game_keys() -> Option<&'static [ResourceKey]> {
-    GAME_KEYS
-        .get_or_init(|| crate::engine::archive::game().map(crate::engine::archive::Archive::keys))
-        .as_deref()
-}
-
-static GAME_KEYS: OnceLock<Option<Vec<ResourceKey>>> = OnceLock::new();
-
 /// Whether every mod's init ended, so no mod serves a resource any more.
 pub(crate) fn is_sealed() -> bool {
     RESOURCES.is_sealed()
@@ -981,6 +971,8 @@ crate::engine::chains::chain_detour! {
     }
 }
 
+mod game;
+pub(crate) use game::{game_holds, game_keys};
 mod patches;
 #[cfg(test)]
 mod tests;

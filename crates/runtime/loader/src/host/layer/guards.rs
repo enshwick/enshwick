@@ -68,7 +68,7 @@ pub(crate) fn declared_or_game(
     caller: &ModRecord,
     guid: Guid,
 ) -> Result<(), UndeclaredContentError> {
-    if crate::engine::archive::game().is_some_and(|archive| archive.holds_guid(guid)) {
+    if crate::content::served::game_holds(guid) {
         return Ok(());
     }
     declared_content(caller, guid)
