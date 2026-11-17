@@ -119,7 +119,7 @@ impl Rules {
     pub(crate) fn takes(self, raw: &DataChange) -> bool {
         let target = match raw.select {
             DataSelect::ENTRY => raw.item == Guid::NIL,
-            select => selects_items(select),
+            select => select.selects_items(),
         };
         let value = match raw.op {
             ChangeOp::SET => Value::Set(raw.value),
@@ -148,19 +148,6 @@ impl Rules {
             _ => Ok(()),
         }
     }
-}
-
-/// Whether `select` picks items, as an [`ItemsChange`](super::ItemsChange)
-/// does.
-#[cfg(any(feature = "fake", all(test, feature = "unstable")))]
-pub(crate) const fn selects_items(select: DataSelect) -> bool {
-    matches!(
-        select,
-        DataSelect::CATEGORY
-            | DataSelect::STACKABLE
-            | DataSelect::CONTAINERS
-            | DataSelect::BACKPACKS
-    )
 }
 
 /// Why [`Rules::check`] refuses a value, before it names the field.

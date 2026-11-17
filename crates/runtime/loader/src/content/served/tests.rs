@@ -70,6 +70,32 @@ fn a_change_of_a_new_resource_chains_onto_its_maker_in_either_order() {
     }
 }
 
+#[test]
+fn a_renamer_taken_off_a_guid_leaves_its_changes_waiting_for_the_owner_s_maker() {
+    let key = |guid: u8| ResourceKey {
+        guid: Guid([guid; 16]),
+        type_hash: 1,
+        part: 0,
+    };
+    let patch = |owner: usize| Patch::new(ModIndex::new(owner), no_patch, 0);
+    let owners = |served: &Served| served.patches.iter().map(|p| p.owner).collect::<Vec<_>>();
+    let (claimed, game, other) = (key(2), key(1), key(3));
+    let mut pending = Vec::new();
+    assert_eq!(add(&mut pending, claimed, game, patch(1)), Ok(()));
+    assert_eq!(add(&mut pending, claimed, claimed, patch(2)), Ok(()));
+    assert_eq!(add(&mut pending, other, game, patch(1)), Ok(()));
+    take_off(&mut pending, &[ModIndex::new(1)], claimed.guid);
+    assert_eq!(pending[0].base, claimed, "the changes wait for a maker");
+    assert_eq!(owners(&pending[0]), [ModIndex::new(2)]);
+    assert_eq!(owners(&pending[1]), [ModIndex::new(1)], "another key stays");
+    assert_eq!(add(&mut pending, claimed, other, patch(3)), Ok(()));
+    assert_eq!(pending[0].base, other, "the owner's maker comes first");
+    let mut alone = Vec::new();
+    assert_eq!(add(&mut alone, claimed, game, patch(1)), Ok(()));
+    take_off(&mut alone, &[ModIndex::new(1)], claimed.guid);
+    assert!(alone.is_empty(), "a resource with no patch goes");
+}
+
 unsafe extern "system" fn no_patch(
     _: *const u8,
     _: u32,

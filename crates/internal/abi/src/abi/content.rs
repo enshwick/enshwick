@@ -310,6 +310,25 @@ impl DataSelect {
     pub const WORKSHOP: Self = Self(5);
     /// Every backpack.
     pub const BACKPACKS: Self = Self(6);
+
+    /// Whether the selection picks items rather than one entry or recipes,
+    /// so a change of an item field may name it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::DataSelect;
+    ///
+    /// assert!(DataSelect::STACKABLE.selects_items());
+    /// assert!(!DataSelect::RECIPE_KIND.selects_items());
+    /// ```
+    #[must_use]
+    pub const fn selects_items(self) -> bool {
+        matches!(
+            self,
+            Self::CATEGORY | Self::STACKABLE | Self::CONTAINERS | Self::BACKPACKS
+        )
+    }
 }
 
 /// Flags of [`HostApi::define_entity_data`](super::HostApi::define_entity_data).

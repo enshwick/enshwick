@@ -234,6 +234,33 @@ fn add(
     Ok(())
 }
 
+/// Takes the patches of `owners` off the resources they serve under `guid`
+/// from another GUID's base, once the mod that declared `guid` took it out
+/// of their renames.
+pub(crate) fn unserve(owners: &[ModIndex], guid: Guid) {
+    let _sealed = RESOURCES.edit(|pending| take_off(pending, owners, guid));
+}
+
+/// As [`unserve`] on `pending`: a resource whose maker went keeps only the
+/// changes, served from its own key, which wait for a new maker as in
+/// [`add`].
+fn take_off(pending: &mut Vec<Served>, owners: &[ModIndex], guid: Guid) {
+    for served in pending
+        .iter_mut()
+        .filter(|s| s.key.guid == guid && s.base.guid != guid)
+    {
+        if served
+            .patches
+            .first()
+            .is_some_and(|p| owners.contains(&p.owner))
+        {
+            served.base = served.key;
+        }
+        served.patches.retain(|p| !owners.contains(&p.owner));
+    }
+    pending.retain(|s| !s.patches.is_empty());
+}
+
 /// Ends registration and links the database when anything is served.
 pub(crate) fn seal_and_link(loader: &'static Loader) {
     crate::content::item_kinds::seal(&loader.reflection);

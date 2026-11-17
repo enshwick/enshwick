@@ -191,7 +191,9 @@ entries! {
 
     fn declare_content(me as Mod, id as Text, out as Out<enshwick_core::content::Guid>) -> Status {
         before_delivery(me.loader)?;
-        out.put(crate::base::ids::declare_content(&me.record.id, id)?)
+        let guid = crate::base::ids::declare_content(&me.record.id, id)?;
+        crate::content::content_renames::claim(me.loader, me.index, guid);
+        out.put(guid)
     }
 
     fn content_name(_me as Mod, guid as In<enshwick_core::content::Guid>, out as Out<Str>) -> Status {
