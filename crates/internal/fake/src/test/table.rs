@@ -226,6 +226,10 @@ pub(crate) struct State {
     pub(crate) terrain: Option<Vec<TerrainMaterialInfo>>,
     /// The terrain materials the mod added, in order.
     pub(crate) terrain_added: Vec<enshwick_core::abi::TerrainMaterialAdd>,
+    /// The buff types mods added, in order, each with the handle that
+    /// added it.
+    #[cfg(feature = "unstable")]
+    pub(crate) buff_types_added: Vec<(ModHandle, enshwick_core::__fake::rules::buff_types::Edit)>,
     /// The terrain edits and transactions the mod asked for.
     pub(crate) edits: WorldEdits,
     /// Whether the mod opened the fog of war.
@@ -520,6 +524,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         forecasts: Vec::new(),
         terrain: None,
         terrain_added: Vec::new(),
+        #[cfg(feature = "unstable")]
+        buff_types_added: Vec::new(),
         edits: WorldEdits::default(),
         fog_opened: false,
         config_schemas: std::collections::BTreeMap::new(),
@@ -853,6 +859,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     show_pickup: containers::show_pickup,
     respawn_point: crate::test::world::respawn::respawn_point,
     set_respawn_point: crate::test::world::respawn::set_respawn_point,
+    buff_type_add,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

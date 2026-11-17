@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 12
+#define ENSHWICK_ABI_MINOR 13
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -591,6 +591,75 @@ typedef struct EnshwickBuffRequest {
   int64_t duration_ns;
 } EnshwickBuffRequest;
 
+// A GUID in the one byte order every ABI field uses, the game's memory
+// order: the `bytes_le` of its textual form, as the game's files store it.
+typedef struct EnshwickGuid {
+  uint8_t bytes[16];
+} EnshwickGuid;
+
+// A buff type of a mod's own, for
+// `EnshwickHostApi.buff_type_add`: a copy of the
+// vanilla type `like` with the values `changes` names set from this struct.
+typedef struct EnshwickBuffTypeAdd {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Its content id's GUID; its game id is the FNV-1a 32 of these bytes.
+  struct EnshwickGuid guid;
+  // The tag of its name, with `EnshwickBuffTypeAdd_NAME`.
+  struct EnshwickGuid name;
+  // The tag of its description, with `EnshwickBuffTypeAdd_DESCRIPTION`.
+  struct EnshwickGuid description;
+  // The UI image of its icon, with `EnshwickBuffTypeAdd_ICON`. A client names
+  // it only once its UI knows that image, a game one or a served one, and
+  // shows the copied type's icon until then.
+  struct EnshwickGuid icon;
+  // How long it lasts, in game nanoseconds, 0 or more, with
+  // `EnshwickBuffTypeAdd_LIFE_TIME`.
+  int64_t life_time_ns;
+  // The game's buff type it copies.
+  EnshwickBuffTypeId like;
+  // The values it sets: the change bits of this struct, or none.
+  uint16_t changes;
+  // Where an entity holds it, as `EnshwickBuffTypeInfo.slot`, with
+  // `EnshwickBuffTypeAdd_SLOT`.
+  uint8_t slot;
+  // `EnshwickBuffTypeAdd_HIDE_IN_UI`, `EnshwickBuffTypeAdd_HIDE_DURATION_IN_UI` and
+  // `EnshwickBuffTypeAdd_SAVED` for the values `changes` sets, and
+  // `EnshwickBuffTypeAdd_PLAIN`, or none.
+  uint8_t flags;
+} EnshwickBuffTypeAdd;
+// Sets its name.
+#define EnshwickBuffTypeAdd_NAME 1
+// Sets its description.
+#define EnshwickBuffTypeAdd_DESCRIPTION (1 << 1)
+// Sets its icon.
+#define EnshwickBuffTypeAdd_ICON (1 << 2)
+// Sets how long it lasts.
+#define EnshwickBuffTypeAdd_LIFE_TIME (1 << 3)
+// Sets its slot.
+#define EnshwickBuffTypeAdd_SLOT (1 << 4)
+// Sets whether the game shows it nowhere, from
+// `EnshwickBuffTypeAdd_HIDE_IN_UI`.
+#define EnshwickBuffTypeAdd_SET_HIDE_IN_UI (1 << 5)
+// Sets whether the HUD hides how long it has left, from
+// `EnshwickBuffTypeAdd_HIDE_DURATION_IN_UI`.
+#define EnshwickBuffTypeAdd_SET_HIDE_DURATION_IN_UI (1 << 6)
+// Sets whether the game saves it, from `EnshwickBuffTypeAdd_SAVED`.
+#define EnshwickBuffTypeAdd_SET_SAVED (1 << 7)
+// Every change it may set.
+#define EnshwickBuffTypeAdd_ALL_CHANGES ((1 << 8) - 1)
+// The game shows it nowhere.
+#define EnshwickBuffTypeAdd_HIDE_IN_UI 1
+// The HUD hides how long it has left.
+#define EnshwickBuffTypeAdd_HIDE_DURATION_IN_UI (1 << 1)
+// The game saves it with a character.
+#define EnshwickBuffTypeAdd_SAVED (1 << 2)
+// It drops what the vanilla type runs: its impact program and values,
+// tooltip lines, helpers, follow-up and effects.
+#define EnshwickBuffTypeAdd_PLAIN (1 << 3)
+// Every flag it may hold.
+#define EnshwickBuffTypeAdd_ALL_FLAGS ((1 << 4) - 1)
+
 // A buff or debuff type of the running game, written by
 // `EnshwickHostApi.buff_types`.
 typedef struct EnshwickBuffTypeInfo {
@@ -660,12 +729,6 @@ typedef uint8_t EnshwickSide;
 // As a mod's side, a mod that runs where the world runs and on every
 // client playing in it, which must have it in the world's version.
 #define EnshwickSide_BOTH 3
-
-// A GUID in the one byte order every ABI field uses, the game's memory
-// order: the `bytes_le` of its textual form, as the game's files store it.
-typedef struct EnshwickGuid {
-  uint8_t bytes[16];
-} EnshwickGuid;
 
 // A game build's identity: the CodeView GUID and age.
 typedef struct EnshwickFingerprint {
@@ -6877,6 +6940,20 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*set_respawn_point)(EnshwickModHandle me,
                                       EnshwickEntity character,
                                       EnshwickEntity spawn_point);
+  // Adds `buff`, a headed `EnshwickBuffTypeAdd`, as a buff type of the game,
+  // and writes its game id to `id`. The loader serves one patch of the
+  // game's buff collection on both sides with every mod's types after the
+  // vanilla ones, each a copy of its `like` with its changes, and names
+  // a type's icon on a client only once that client shows served UI
+  // images. `EnshwickStatus_BAD_ARGS` for a change or flag it does not know, a
+  // negative life time, or a `like` that is no buff type of the game;
+  // `EnshwickStatus_REFUSED` for a mod not of side both and for an id the game
+  // or a mod loaded before has; `EnshwickStatus_UNAVAILABLE` on a build whose
+  // archive or layout lacks the collection. Allowed during
+  // `enshwick_mod_init` only. ABI 12.13.
+  EnshwickStatus (*buff_type_add)(EnshwickModHandle me,
+                                  const struct EnshwickBuffTypeAdd *buff,
+                                  EnshwickBuffTypeId *id);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7006,6 +7083,18 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffRequest, id) == 12, "offset of BuffR
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffRequest, level) == 16, "offset of BuffRequest.level");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffRequest, reserved) == 20, "offset of BuffRequest.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffRequest, duration_ns) == 24, "offset of BuffRequest.duration_ns");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickBuffTypeAdd) == 88, "size of BuffTypeAdd");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickBuffTypeAdd) == 8, "alignment of BuffTypeAdd");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, header) == 0, "offset of BuffTypeAdd.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, guid) == 8, "offset of BuffTypeAdd.guid");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, name) == 24, "offset of BuffTypeAdd.name");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, description) == 40, "offset of BuffTypeAdd.description");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, icon) == 56, "offset of BuffTypeAdd.icon");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, life_time_ns) == 72, "offset of BuffTypeAdd.life_time_ns");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, like) == 80, "offset of BuffTypeAdd.like");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, changes) == 84, "offset of BuffTypeAdd.changes");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, slot) == 86, "offset of BuffTypeAdd.slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickBuffTypeAdd, flags) == 87, "offset of BuffTypeAdd.flags");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickBuffTypeId) == 4, "size of BuffTypeId");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickBuffTypeId) == 4, "alignment of BuffTypeId");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickBuffTypeInfo) == 32, "size of BuffTypeInfo");
@@ -7327,7 +7416,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1760, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1768, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7548,6 +7637,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, container_rule) == 1728, "offse
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, show_pickup) == 1736, "offset of HostApi.show_pickup");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, respawn_point) == 1744, "offset of HostApi.respawn_point");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_respawn_point) == 1752, "offset of HostApi.set_respawn_point");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buff_type_add) == 1760, "offset of HostApi.buff_type_add");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

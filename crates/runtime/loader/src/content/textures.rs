@@ -80,15 +80,11 @@ struct Textures {
     listed: AtomicBool,
     /// Whether the registry listed again after arming.
     relisted: AtomicBool,
+    /// Whether the parts that wait for served UI images to show were told.
+    shown: AtomicBool,
 }
 
-static TEXTURES: Textures = Textures {
-    content: ArcSwapOption::const_empty(),
-    serving: Mutex::new(()),
-    linked: AtomicBool::new(false),
-    listed: AtomicBool::new(false),
-    relisted: AtomicBool::new(false),
-};
+static TEXTURES: Textures = Textures::new();
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The listing handed back for the game's own array (its address and
 /// count): built once, as the game lists its UI images once or twice.
@@ -305,12 +301,54 @@ fn served(
     content.get(hash).copied()
 }
 
+impl Textures {
+    const fn new() -> Self {
+        Self {
+            content: ArcSwapOption::const_empty(),
+            serving: Mutex::new(()),
+            linked: AtomicBool::new(false),
+            listed: AtomicBool::new(false),
+            relisted: AtomicBool::new(false),
+            shown: AtomicBool::new(false),
+        }
+    }
+
+    fn ready(&self) -> bool {
+        self.linked.load(Ordering::Acquire)
+            && self.listed.load(Ordering::Acquire)
+            && self.relisted.load(Ordering::Acquire)
+    }
+
+    /// Whether the parts that wait for served UI images are to be told now:
+    /// true once, at the first ask after the images show.
+    fn announces(&self) -> bool {
+        self.ready() && !self.shown.swap(true, Ordering::AcqRel)
+    }
+}
+
 /// Whether served UI images show on this client: the links ran and the
 /// registry knows them.
 pub(crate) fn ready() -> bool {
-    TEXTURES.linked.load(Ordering::Acquire)
-        && TEXTURES.listed.load(Ordering::Acquire)
-        && TEXTURES.relisted.load(Ordering::Acquire)
+    TEXTURES.ready()
+}
+
+/// Whether this client's UI registry knows the UI image `guid`, the game's
+/// or a served one, once served images show: naming any other ends the game.
+pub(crate) fn knows(guid: Guid) -> bool {
+    ready()
+        && COMBINED
+            .get()
+            .is_some_and(|(_, keys)| keys.iter().any(|key| key[..16] == guid.0[..]))
+}
+
+/// Tells the parts that wait for served UI images to show, once they show.
+/// Only the UI registry's fill calls it: the UI thread draws every icon, so
+/// what it rewrites is never read halfway.
+#[cold]
+fn announce_ready() {
+    if TEXTURES.announces() {
+        crate::content::buff_types::icons_shown();
+    }
 }
 
 /// Links the key listing on any side that serves templates or UI images of
@@ -737,14 +775,23 @@ fn with_aliases(keys: &mut Vec<[u8; KEY]>, aliases: &[(Guid, Guid)]) {
 }
 
 crate::engine::chains::chain_detour! {
-    /// The table's `textures.registry_fill(registry)`, the UI registry's
-    /// fill: once after arming, it lists again, so the served UI images
-    /// join. Every other call goes to the game at the cost of one load.
+    /// The table's `textures.registry_fill(registry)`, the UI registry's fill, called again and
+    /// again on the UI thread: once after arming it lists again, so the served UI images join,
+    /// and once they show it tells the parts that wait. Every other call costs one load.
     fn fill(registry: *mut u8) -> ();
     next FILL_NEXT;
     |onward| {
-        if TEXTURES.relisted.load(Ordering::Acquire) || registry.is_null() {
+        if TEXTURES.shown.load(Ordering::Acquire) || registry.is_null() {
             return onward.call();
+        }
+        if TEXTURES.relisted.load(Ordering::Acquire) {
+            if !TEXTURES.ready() {
+                return onward.call();
+            }
+            return onward.run(&TEXTURES_FUSE, "the UI registry fill", |onward| {
+                announce_ready();
+                onward.call();
+            });
         }
         onward.run(&TEXTURES_FUSE, "the UI registry fill", |onward| {
             let Some(layout) = LAYOUT.get().copied().flatten() else {
@@ -770,6 +817,7 @@ crate::engine::chains::chain_detour! {
                     "mod textures: the UI registry knows the served images: {}",
                     TEXTURES.listed.load(Ordering::Acquire)
                 );
+                announce_ready();
             }
         });
     }
@@ -809,141 +857,4 @@ pub fn bench_texture_request() -> impl FnMut() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use enshwick_base::Relock;
-
-    /// The reason the status summary lists `feature` off for.
-    fn off_reason(feature: &str) -> Option<String> {
-        crate::engine::diag::parts_off()
-            .into_iter()
-            .find(|p| p.part == feature)
-            .map(|p| p.reason)
-    }
-
-    #[test]
-    fn a_ring_record_fits_only_inside_the_loaders_room_with_its_context_after_the_code() {
-        assert!(record_fits(RECORD_ROOM, RECORD_ROOM - 16));
-        assert!(record_fits(0x20, 1));
-        assert!(!record_fits(RECORD_ROOM + 1, 1), "past the loader's room");
-        assert!(!record_fits(0x20, 0), "the code byte comes first");
-        assert!(!record_fits(0x20, 0x11), "the context runs past the record");
-        assert!(!record_fits(0x20, usize::MAX), "an offset that overflows");
-    }
-
-    /// One test for both fuses, which a failed link turns off for the
-    /// process: the templates first, while the textures are still on.
-    #[test]
-    fn textures_and_templates_whose_code_does_not_hold_are_off_by_their_own_fuses() {
-        let loader = crate::start::tests::bare_loader();
-        assert!(!link_keys(&loader));
-        assert!(TEMPLATES_FUSE.is_off());
-        assert!(
-            !TEXTURES_FUSE.is_off(),
-            "the textures keep their own switch"
-        );
-        assert!(
-            off_reason("mod templates").is_some_and(|r| r.starts_with(pinned::textures::KEYS.id())),
-            "{:?}",
-            off_reason("mod templates")
-        );
-        assert!(!link_textures(&loader));
-        assert!(TEXTURES_FUSE.is_off());
-        assert!(
-            off_reason("mod textures").is_some_and(|r| r.starts_with(CHECKED[0].id())),
-            "{:?}",
-            off_reason("mod textures")
-        );
-        let mut chains = loader.chains.relock();
-        chains.seal();
-        assert!(chains.is_empty());
-    }
-
-    #[test]
-    fn the_key_listing_lists_templates_whether_or_not_the_textures_are_on() {
-        assert!(lists(TEMPLATE, false), "templates list without the images");
-        assert!(lists(TEMPLATE, true));
-        assert!(!lists(UI_IMAGE, false), "images list only while on");
-        assert!(lists(UI_IMAGE, true));
-    }
-
-    #[test]
-    fn every_client_table_offers_a_check_for_the_code_the_hooks_rely_on() {
-        let clients = crate::engine::builds::load()
-            .into_iter()
-            .filter(|table| table.side() == enshwick_gamedata::Side::Client);
-        for table in clients {
-            let resolved = table.resolve();
-            for symbol in CHECKED {
-                let bytes = format!("{symbol}.bytes");
-                assert!(
-                    resolved.head(symbol.id()).is_some() || resolved.constant(&bytes).is_some(),
-                    "{}: {symbol}",
-                    table.name()
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn served_keys_follow_the_game_s_listing_once_each_as_it_lays_keys_out() {
-        let key = |guid: u8| enshwick_core::abi::ResourceKey {
-            guid: Guid([guid; 16]),
-            type_hash: TEMPLATE,
-            part: 2,
-        };
-        let mut listed = vec![[7u8; KEY]];
-        with_served(&mut listed, &[key(1), key(1), key(3)]);
-        assert_eq!(listed.len(), 3, "the game's key, then each served one once");
-        assert_eq!(listed[0], [7u8; KEY]);
-        assert_eq!(listed[1][..16], [1; 16]);
-        assert_eq!(listed[1][16..20], TEMPLATE.to_le_bytes());
-        assert_eq!(listed[1][20..24], 2u32.to_le_bytes());
-        assert_eq!(listed[2][..16], [3; 16]);
-    }
-
-    #[test]
-    fn templates_are_listed_even_when_the_ui_image_hooks_are_not_armed() {
-        assert!(lists(TEMPLATE, false));
-        assert!(lists(TEMPLATE, true));
-        assert!(!lists(UI_IMAGE, false), "an image the request cannot load");
-        assert!(lists(UI_IMAGE, true));
-        assert!(!lists(0x1234, true));
-    }
-
-    #[test]
-    fn a_removed_mod_s_clone_is_listed_as_its_vanilla_template_s_entry() {
-        let mut vanilla = [0u8; KEY];
-        vanilla[..16].copy_from_slice(&[4; 16]);
-        vanilla[16..20].copy_from_slice(&TEMPLATE.to_le_bytes());
-        vanilla[20..24].copy_from_slice(&3u32.to_le_bytes());
-        let mut listed = vec![vanilla];
-        with_aliases(
-            &mut listed,
-            &[
-                (Guid([8; 16]), Guid([4; 16])),
-                (Guid([8; 16]), Guid([4; 16])),
-                (Guid([9; 16]), Guid([5; 16])),
-            ],
-        );
-        assert_eq!(
-            listed.len(),
-            2,
-            "once, and never for an unlisted vanilla template"
-        );
-        assert_eq!(listed[1][..16], [8; 16]);
-        assert_eq!(
-            listed[1][16..],
-            vanilla[16..],
-            "the vanilla entry's type and part"
-        );
-    }
-
-    #[test]
-    fn a_served_hash_carries_its_size_and_the_mark() {
-        let hash = hash_of(b"pixels");
-        assert_eq!((hash[0], hash[3]), (6, MARK));
-        assert_eq!(hash, hash_of(b"pixels"));
-        assert_ne!(hash, hash_of(b"pixelz"));
-    }
-}
+mod tests;

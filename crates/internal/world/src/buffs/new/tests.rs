@@ -106,10 +106,14 @@ fn edit(id: u32) -> Edit {
     }
 }
 
+/// `base` with `types`, as the loader serves it: the base as it is when it
+/// does not read.
 fn add(base: &[u8], types: &[Edit]) -> Vec<u8> {
     let mut out = Vec::new();
-    add_buff_types(&LAYOUT, base, types, &mut out);
-    out
+    match build(&LAYOUT, base, types, &mut out) {
+        Some(_) => out,
+        None => base.to_vec(),
+    }
 }
 
 #[test]
@@ -279,26 +283,124 @@ fn a_map_whose_buckets_overrun_its_keys_serves_the_base_as_it_is() {
 #[test]
 fn the_check_at_init_refuses_what_the_build_could_not_add() {
     let base = collection();
-    let refused = |edit: Edit, added: &[Edit]| refusal(&LAYOUT, &base, &edit, added);
-    assert_eq!(refused(edit(0x47), &[]), None);
-    assert!(
+    let refused = |edit: Edit, added: &[Edit]| check(&LAYOUT, &base, &edit, added);
+    assert_eq!(refused(edit(0x47), &[]), Ok(()));
+    assert_eq!(
         refused(
             Edit {
                 like: BuffTypeId(0x99),
                 ..edit(0x47)
             },
             &[]
-        )
-        .is_some_and(|why| why.contains("no buff type"))
+        ),
+        Err(Refusal::NotVanilla(BuffTypeId(0x99)))
     );
-    assert!(refused(edit(0x23), &[]).is_some_and(|why| why.contains("another id")));
-    assert!(refused(edit(0x47), &[edit(0x47)]).is_some_and(|why| why.contains("already")));
+    assert_eq!(
+        refused(edit(0x23), &[]),
+        Err(Refusal::Taken),
+        "a vanilla id"
+    );
+    assert_eq!(
+        refused(edit(0x47), &[edit(0x53), edit(0x47)]),
+        Err(Refusal::Taken),
+        "an id a mod before took"
+    );
     let mut broken = Blob::new(&base);
     let (entries, _) = broken.array(LAYOUT.entries).unwrap();
     assert!(broken.write(entries + LAYOUT.bucket_count, &9u32.to_le_bytes()));
-    assert!(
-        refusal(&LAYOUT, broken.bytes(), &edit(0x47), &[])
-            .is_some_and(|why| why.contains("layout"))
+    assert_eq!(
+        check(&LAYOUT, broken.bytes(), &edit(0x47), &[]),
+        Err(Refusal::Unread)
+    );
+}
+
+#[test]
+fn two_types_of_one_id_in_one_build_serve_the_first() {
+    let types = [
+        edit(0x47),
+        Edit {
+            like: BuffTypeId(0x23),
+            ..edit(0x47)
+        },
+    ];
+    let mut out = Vec::new();
+    let left = build(&LAYOUT, &collection(), &types, &mut out);
+    assert_eq!(left, Some(vec![BuffTypeId(0x47)]));
+    assert_eq!(
+        Blob::reading(&out).array(LAYOUT.buffs).map(|(_, n)| n),
+        Some(4)
+    );
+}
+
+#[test]
+fn a_request_reads_as_the_edit_it_names() {
+    let name = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
+    let mut request = BuffTypeAdd {
+        header: Header::of::<BuffTypeAdd>(),
+        guid: Guid([3; 16]),
+        name,
+        description: Guid([9; 16]),
+        icon: ICON,
+        life_time_ns: 5,
+        like: FOOD,
+        changes: BuffTypeAdd::NAME
+            | BuffTypeAdd::ICON
+            | BuffTypeAdd::LIFE_TIME
+            | BuffTypeAdd::SET_SAVED
+            | BuffTypeAdd::SET_HIDE_IN_UI,
+        slot: 4,
+        flags: BuffTypeAdd::HIDE_IN_UI | BuffTypeAdd::PLAIN,
+    };
+    let read = Edit::of(&request).expect("a request it takes");
+    assert_eq!(
+        read,
+        Edit {
+            id: BuffTypeId::from_guid(Guid([3; 16])),
+            name: Some(name),
+            icon: Some(ICON),
+            life_time: Some(5),
+            hide_in_ui: Some(true),
+            is_saved: Some(false),
+            plain: true,
+            ..edit(0)
+        }
+    );
+    assert!(read.icon().is_some());
+    assert_eq!(read.without_icon().icon(), None);
+    request.changes |= 1 << 8;
+    assert_eq!(Edit::of(&request), None, "a change it does not know");
+    request.changes = 0;
+    request.flags = 1 << 4;
+    assert_eq!(Edit::of(&request), None, "a flag it does not know");
+    request.flags = 0;
+    request.life_time_ns = -1;
+    assert_eq!(Edit::of(&request), None, "a negative life time");
+}
+
+#[test]
+fn a_new_buff_asks_for_what_it_sets_and_nothing_else() {
+    let lucky = NewBuff::new(Id::new("you.lucky:lucky"), FOOD)
+        .name(NAME)
+        .default_life_time(Duration::from_secs(2))
+        .slot(BuffSlotType::Buff)
+        .saved(false)
+        .plain();
+    let request = lucky.request().unwrap();
+    assert_eq!(
+        request.changes,
+        BuffTypeAdd::NAME | BuffTypeAdd::LIFE_TIME | BuffTypeAdd::SLOT | BuffTypeAdd::SET_SAVED
+    );
+    assert_eq!(request.flags, BuffTypeAdd::PLAIN, "saved is false");
+    assert_eq!(request.life_time_ns, 2_000_000_000);
+    assert_eq!(request.guid, Id::new("you.lucky:lucky").guid());
+    let read = Edit::of(&request).unwrap();
+    assert_eq!(read.id, BuffTypeId::from_guid(request.guid));
+    assert_eq!(read.is_saved, Some(false));
+    assert_eq!(
+        NewBuff::new(Id::new("you.lucky:odd"), FOOD)
+            .slot(BuffSlotType::Other(300))
+            .request(),
+        Err("the slot is past a byte")
     );
 }
 

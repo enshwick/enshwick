@@ -182,11 +182,18 @@ Only `saved` differs: its field is `is_saved`.
 The [lucky example](https://github.com/enshwick/enshwick/tree/main/examples/lucky)
 gives the buff with a control.
 
-The type is served on both sides, so a mod with buff types runs on both
-sides; a server-only mod is refused. `add_buff` also refuses a `like` the game
-lacks. It refuses an id the game already has, or one the mod added before. The
-mod learns this at `init` and decides whether to go on without the type. A
-player without
+The loader serves the game's buff collection once, with the types of every
+mod after the vanilla ones, on both sides. So a mod with buff types runs on
+both sides; a server-only mod is refused. `add_buff` also refuses a `like`
+the game lacks. It refuses an id the game already has, or one that this mod
+or a mod loaded before added. The mod learns this at `init` and decides
+whether to go on without the type.
+
+A client may read the buff collection before it shows mods' icons. The type
+then has the vanilla type's icon at first. The loader writes the mod's icon
+into the collection as soon as the client shows mods' icons.
+
+A player without
 the mod sees the buff as an empty bubble until the join check removes the player. A world loaded without the mod drops
 the saved buffs of its types.
 

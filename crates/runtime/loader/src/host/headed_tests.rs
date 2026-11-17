@@ -35,6 +35,7 @@ macro_rules! headed {
             BedCheck,
             BlockPlace,
             BuffRequest,
+            BuffTypeAdd,
             BuffTypeInfo,
             BuildCheck,
             BuildInfo,

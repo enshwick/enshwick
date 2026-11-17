@@ -36,6 +36,27 @@ impl Refusal for crate::content::terrain_materials::TerrainMaterialError {
     }
 }
 
+/// A request the loader does not know or a vanilla type the game lacks is a
+/// bad argument, a mod clients do not run or an id taken refused, each
+/// logged as the mod's warning with its reason; the mod stays on.
+impl Refusal for crate::content::buff_types::BuffTypeError {
+    fn status(&self) -> Status {
+        match self {
+            Self::TooLate => Status::TOO_LATE,
+            Self::BadRequest => Status::BAD_ARGS,
+            Self::NotBoth => Status::REFUSED,
+            Self::Refused(refusal) => refusal.status(),
+        }
+    }
+
+    fn policy(&self) -> Policy {
+        match self {
+            Self::TooLate => Policy::Quiet,
+            _ => Policy::Warn,
+        }
+    }
+}
+
 /// Every refused rename is refused.
 impl Refusal for crate::content::content_renames::RenameError {
     fn status(&self) -> Status {

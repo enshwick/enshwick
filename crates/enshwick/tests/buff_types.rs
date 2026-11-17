@@ -1,14 +1,14 @@
-//! A buff type of a mod's own: served as a patch of the game's buff
-//! collection, found by its id, and naming its icon only on a client that
-//! shows served icons; what the game could not take is refused at init and
-//! the mod stays on.
+//! A buff type of a mod's own: served with every mod's types in one patch of
+//! the game's buff collection, found by its id, and naming its icon only on
+//! a client that shows served icons; what the game could not take, an id a
+//! mod before took included, is refused at init and the mod stays on.
 
 #[cfg(test)]
 mod tests {
     use core::time::Duration;
     use std::sync::Mutex;
 
-    use enshwick::abi::Status;
+    use enshwick::abi::{BuffTypeAdd, Header, ModHandle, Side, Status};
     use enshwick::buffs::{
         BUFF_COLLECTION, BUFF_COLLECTION_RESOURCE, BuffLayout, BuffSlotType, BuffTypeId, NewBuff,
     };
@@ -25,6 +25,8 @@ mod tests {
     /// A vanilla food type of client 26430625.
     const FOOD: BuffTypeId = BuffTypeId(0xf9b3_64f6);
     const FOOD_ICON: Guid = Guid::parse("02778393-2031-44cd-b7cd-3bc215acd7af");
+    /// A mod loaded before Lucky.
+    const EARLIER: ModHandle = ModHandle(77);
 
     /// What each `add_buff` answered, in order: Lucky, Lucky again, a copy
     /// of a type the game lacks, and an id the game has.
@@ -130,10 +132,70 @@ mod tests {
         let loader = start(host());
         let added = ADDED.lock().unwrap().clone();
         let why = |i: usize| added[i].clone().expect_err("refused");
-        assert!(why(1).contains("already"), "{added:?}");
+        assert!(why(1).contains("another id"), "{added:?}");
         assert!(why(2).contains("no buff type"), "{added:?}");
         assert!(why(3).contains("another id"), "{added:?}");
         assert_eq!(loader.resources().len(), 1, "one patch of the collection");
+    }
+
+    /// A type an earlier mod adds through the table, as the loader takes it.
+    fn earlier_type(id: Id, like: BuffTypeId) -> BuffTypeAdd {
+        BuffTypeAdd {
+            header: Header::of::<BuffTypeAdd>(),
+            guid: id.guid(),
+            name: Guid::NIL,
+            description: Guid::NIL,
+            icon: Guid::NIL,
+            life_time_ns: 0,
+            like,
+            changes: 0,
+            slot: 0,
+            flags: 0,
+        }
+    }
+
+    #[test]
+    fn two_mods_types_are_served_in_one_patch_and_a_taken_id_is_refused_to_the_second() {
+        let host = host().pack(EARLIER, Side::BOTH);
+        let layout = BuffLayout::resolve(&host).unwrap();
+        let hash = host.hash(BUFF_COLLECTION_RESOURCE.id()).unwrap();
+        let loader = host.install();
+        // SAFETY: the installed fake's table, alive while `loader` is.
+        let api = unsafe { &*loader.api() };
+        let mut id = BuffTypeId(0);
+        let gloomy = earlier_type(Id::new("you.gloomy:gloomy"), FOOD);
+        assert_eq!(
+            (api.buff_type_add)(EARLIER, &raw const gloomy, &raw mut id),
+            Status::OK
+        );
+        let taken = earlier_type(LUCKY, FOOD);
+        assert_eq!(
+            (api.buff_type_add)(EARLIER, &raw const taken, &raw mut id),
+            Status::OK
+        );
+        // SAFETY: the exports of this file's `declare_mod!(Lucky)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let added = ADDED.lock().unwrap().clone();
+        assert!(
+            added[0]
+                .as_ref()
+                .is_err_and(|why| why.contains("another id")),
+            "the earlier mod took Lucky's id: {added:?}"
+        );
+        assert_eq!(loader.resources().len(), 1, "one patch for both mods");
+        let key = BUFF_COLLECTION.key_by_hash(hash);
+        let base = game_resource(key).expect("the vanilla collection");
+        let built = Blob::new(&loader.build_resource(&key, &base).unwrap());
+        let (keys, count) = built.array(layout.keys).unwrap();
+        let listed: Vec<u32> = (0..count as usize)
+            .filter_map(|i| built.read_u32(keys + i * 4))
+            .collect();
+        for id in [Id::new("you.gloomy:gloomy").guid(), LUCKY.guid()] {
+            assert!(listed.contains(&BuffTypeId::from_guid(id).0), "{listed:x?}");
+        }
+        assert_eq!(count, 4, "the two vanilla types and the earlier mod's two");
     }
 
     #[test]
@@ -142,6 +204,28 @@ mod tests {
         let layout = BuffLayout::resolve(&host).unwrap();
         let hash = host.hash(BUFF_COLLECTION_RESOURCE.id()).unwrap();
         let loader = start(host);
+        let lucky = built_lucky(&loader, &layout, hash);
+        assert_eq!(&lucky[layout.icon..layout.icon + 16], &ICON.guid().0);
+    }
+
+    #[test]
+    fn a_rebuild_once_icons_show_names_the_icon_and_keeps_the_length() {
+        let host = host().ui_images();
+        let layout = BuffLayout::resolve(&host).unwrap();
+        let hash = host.hash(BUFF_COLLECTION_RESOURCE.id()).unwrap();
+        let loader = start(host);
+        let key = BUFF_COLLECTION.key_by_hash(hash);
+        let base = game_resource(key).expect("the vanilla collection");
+        let before = loader.build_resource(&key, &base).unwrap();
+        let lucky = built_lucky(&loader, &layout, hash);
+        assert_eq!(
+            &lucky[layout.icon..layout.icon + 16],
+            &[0; 16],
+            "the vanilla icon"
+        );
+        loader.show_icons();
+        let after = loader.build_resource(&key, &base).unwrap();
+        assert_eq!(after.len(), before.len(), "written over the game's copy");
         let lucky = built_lucky(&loader, &layout, hash);
         assert_eq!(&lucky[layout.icon..layout.icon + 16], &ICON.guid().0);
     }
