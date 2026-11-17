@@ -39,7 +39,8 @@ impl HudScreenType {
     }
 }
 
-/// The edge of the screen an extension's panel sits at, centred along it.
+/// The edge of the screen an extension's panel sits at; alone, it places the
+/// panel centered along that edge, with no offset.
 ///
 /// # Examples
 ///
@@ -59,6 +60,9 @@ pub enum Edge {
 }
 
 impl Edge {
+    #[cfg(any(test, feature = "fake"))]
+    const ALL: [Self; 4] = [Self::Left, Self::Right, Self::Top, Self::Bottom];
+
     const fn to_raw(self) -> u32 {
         match self {
             Self::Left => UiExtension::LEFT,
@@ -66,6 +70,152 @@ impl Edge {
             Self::Top => UiExtension::TOP,
             Self::Bottom => UiExtension::BOTTOM,
         }
+    }
+
+    /// The edge whose raw value is `raw`; `None` for one the ABI lacks.
+    #[cfg(any(test, feature = "fake"))]
+    fn from_raw(raw: u32) -> Option<Self> {
+        Self::ALL.into_iter().find(|edge| edge.to_raw() == raw)
+    }
+}
+
+/// Where along its edge an extension's panel sits.
+///
+/// # Examples
+///
+/// See [`PanelPlacement`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub enum Align {
+    /// The start of the edge: the top of the left or right edge, the left
+    /// end of the top or bottom edge.
+    Start,
+    /// The middle of the edge.
+    #[default]
+    Center,
+    /// The end of the edge: the bottom of the left or right edge, the right
+    /// end of the top or bottom edge.
+    End,
+}
+
+impl Align {
+    #[cfg(any(test, feature = "fake"))]
+    const ALL: [Self; 3] = [Self::Start, Self::Center, Self::End];
+
+    const fn to_raw(self) -> u32 {
+        match self {
+            Self::Start => UiExtension::START,
+            Self::Center => UiExtension::CENTER,
+            Self::End => UiExtension::END,
+        }
+    }
+
+    /// The alignment whose raw value is `raw`; `None` for one the ABI lacks.
+    #[cfg(any(test, feature = "fake"))]
+    fn from_raw(raw: u32) -> Option<Self> {
+        Self::ALL.into_iter().find(|align| align.to_raw() == raw)
+    }
+}
+
+/// Where an extension's panel sits beside the game's screen, so it can clear
+/// that screen's own controls.
+///
+/// A placement is an edge, where along it, and an offset in layout units.
+/// The layout is 1920 units wide and 1080 high, scaled to the window; a
+/// panel is 480 units wide. An [`Edge`] alone is a placement centered along
+/// that edge.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::ui::{Align, Edge, PanelPlacement};
+///
+/// // At the left edge from 38% of the height down, 9% of the width in:
+/// // under the Backpack's grid at 16:9.
+/// let under_grid = PanelPlacement::new(Edge::Left)
+///     .align(Align::Start)
+///     .shift(362.0)
+///     .inset(125.0);
+/// assert_ne!(under_grid, PanelPlacement::from(Edge::Left));
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PanelPlacement {
+    edge: Edge,
+    align: Align,
+    shift: f32,
+    inset: f32,
+}
+
+impl PanelPlacement {
+    /// A placement at `edge`, centered along it, with no offset.
+    ///
+    /// # Examples
+    ///
+    /// See [`PanelPlacement`].
+    #[must_use]
+    pub const fn new(edge: Edge) -> Self {
+        Self {
+            edge,
+            align: Align::Center,
+            shift: 0.0,
+            inset: 0.0,
+        }
+    }
+
+    /// Puts the panel at `align` along its edge.
+    ///
+    /// # Examples
+    ///
+    /// See [`PanelPlacement`].
+    #[must_use]
+    pub const fn align(mut self, align: Align) -> Self {
+        self.align = align;
+        self
+    }
+
+    /// Moves the panel `units` along its edge from where [`PanelPlacement::align`]
+    /// puts it: right or down when positive, left or up when negative. A
+    /// panel stops at the screen's border; a shift past
+    /// [`UiExtension::MAX_OFFSET`] either way is refused at registration.
+    ///
+    /// # Examples
+    ///
+    /// See [`PanelPlacement`].
+    #[must_use]
+    pub const fn shift(mut self, units: f32) -> Self {
+        self.shift = units;
+        self
+    }
+
+    /// Moves the panel `units` away from its edge into the screen, from 0 to
+    /// [`UiExtension::MAX_OFFSET`]; another value is refused at
+    /// registration.
+    ///
+    /// # Examples
+    ///
+    /// See [`PanelPlacement`].
+    #[must_use]
+    pub const fn inset(mut self, units: f32) -> Self {
+        self.inset = units;
+        self
+    }
+
+    /// The placement of the raw `edge`, `align`, `shift` and `inset` a spec
+    /// carries; `None` for an edge or alignment the ABI lacks.
+    #[cfg(any(test, feature = "fake"))]
+    pub(crate) fn from_raw(edge: u32, align: u32, shift: f32, inset: f32) -> Option<Self> {
+        Some(
+            Self::new(Edge::from_raw(edge)?)
+                .align(Align::from_raw(align)?)
+                .shift(shift)
+                .inset(inset),
+        )
+    }
+}
+
+impl From<Edge> for PanelPlacement {
+    fn from(edge: Edge) -> Self {
+        Self::new(edge)
     }
 }
 
@@ -75,7 +225,12 @@ impl Edge {
 pub trait LoadMethods {
     /// As `Load::extend_screen`.
     #[doc(hidden)]
-    fn extend_screen<F>(&mut self, screen: HudScreenType, edge: Edge, draw: F) -> Result<(), Off>
+    fn extend_screen<F>(
+        &mut self,
+        screen: HudScreenType,
+        place: impl Into<PanelPlacement>,
+        draw: F,
+    ) -> Result<(), Off>
     where
         F: FnMut(&mut super::Frame<'_>) + Send + 'static;
 
@@ -84,7 +239,7 @@ pub trait LoadMethods {
     fn extend_screen_for<F>(
         &mut self,
         screen: HudScreenType,
-        edge: Edge,
+        place: impl Into<PanelPlacement>,
         hosts: &[crate::content::Guid],
         draw: F,
     ) -> Result<(), Off>
@@ -99,23 +254,29 @@ pub trait LoadMethods {
 }
 
 impl LoadMethods for crate::BaseLoad {
-    fn extend_screen<F>(&mut self, screen: HudScreenType, edge: Edge, draw: F) -> Result<(), Off>
+    fn extend_screen<F>(
+        &mut self,
+        screen: HudScreenType,
+        place: impl Into<PanelPlacement>,
+        draw: F,
+    ) -> Result<(), Off>
     where
         F: FnMut(&mut super::Frame<'_>) + Send + 'static,
     {
-        self.extend_screen_for(screen, edge, &[], draw)
+        self.extend_screen_for(screen, place, &[], draw)
     }
 
     fn extend_screen_for<F>(
         &mut self,
         screen: HudScreenType,
-        edge: Edge,
+        place: impl Into<PanelPlacement>,
         hosts: &[crate::content::Guid],
         draw: F,
     ) -> Result<(), Off>
     where
         F: FnMut(&mut super::Frame<'_>) + Send + 'static,
     {
+        let place = place.into();
         let host = self.host();
         client_only(host, "screen extensions")?;
         let host_count = u32::try_from(hosts.len())
@@ -131,11 +292,15 @@ impl LoadMethods for crate::BaseLoad {
         let spec = UiExtension {
             header: Header::of::<UiExtension>(),
             screen: Str::new(screen.name()),
-            edge: edge.to_raw(),
+            edge: place.edge.to_raw(),
             reserved: 0,
             hosts: hosts.as_ptr(),
             host_count,
             reserved_hosts: 0,
+            align: place.align.to_raw(),
+            shift: place.shift,
+            inset: place.inset,
+            reserved_place: 0,
         };
         crate::load::hand_over(
             Drawer {
@@ -222,6 +387,30 @@ mod tests {
             assert_eq!(screen as usize, index);
             assert_eq!(HudScreenType::from_name(screen.name()), Some(screen));
         }
+    }
+
+    #[test]
+    fn every_placement_reads_back_from_its_raw_values_and_an_unknown_one_does_not() {
+        for edge in Edge::ALL {
+            for align in Align::ALL {
+                let place = PanelPlacement::new(edge)
+                    .align(align)
+                    .shift(-7.0)
+                    .inset(9.0);
+                assert_eq!(
+                    PanelPlacement::from_raw(edge.to_raw(), align.to_raw(), -7.0, 9.0),
+                    Some(place)
+                );
+            }
+        }
+        assert_eq!(
+            PanelPlacement::from_raw(UiExtension::BOTTOM + 1, 0, 0.0, 0.0),
+            None
+        );
+        assert_eq!(
+            PanelPlacement::from_raw(0, UiExtension::END + 1, 0.0, 0.0),
+            None
+        );
     }
 
     #[test]

@@ -50,6 +50,10 @@ mod tests {
                 hosts: core::ptr::null(),
                 host_count: 1,
                 reserved_hosts: 0,
+                align: UiExtension::CENTER,
+                shift: 0.0,
+                inset: 0.0,
+                reserved_place: 0,
             };
             let status = (host.api().ui_extension)(
                 host.handle(),
@@ -72,6 +76,10 @@ mod tests {
                 hosts: core::ptr::null(),
                 host_count: 0,
                 reserved_hosts: 0,
+                align: UiExtension::CENTER,
+                shift: 0.0,
+                inset: 0.0,
+                reserved_place: 0,
             };
             let status =
                 (host.api().ui_extension)(host.handle(), &raw const old, Some(counted), null_mut());
@@ -195,6 +203,10 @@ mod tests {
             hosts: core::ptr::null(),
             host_count: 0,
             reserved_hosts: 0,
+            align: UiExtension::CENTER,
+            shift: 0.0,
+            inset: 0.0,
+            reserved_place: 0,
         };
         // SAFETY: a null list with no count reads as no host.
         assert_eq!(unsafe { spec.host_list() }, Some(&[][..]));

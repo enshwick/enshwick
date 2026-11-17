@@ -124,6 +124,9 @@ export type AffixLoot = {
 --- How many enemies attack at once. The loader reads the game's value of each variant by its constant's name.
 export type AggroPoolAmount = "Few" | "Normal" | "Many" | "Extreme" | { Other: number }
 
+--- Where along its edge an extension's panel sits.
+export type Align = "Start" | "Center" | "End"
+
 --- One Flame Altar.
 export type Altar = {
 	--- The altar's entity.
@@ -780,7 +783,7 @@ export type Dropdown = {
 	read_only: boolean?,
 }
 
---- The edge of the screen an extension's panel sits at, centred along it.
+--- The edge of the screen an extension's panel sits at; alone, it places the panel centered along that edge, with no offset.
 export type Edge = "Left" | "Right" | "Top" | "Bottom"
 
 --- Who made a `VoxelEdit`.
@@ -2104,6 +2107,18 @@ export type PageInfo = {
 	entries: {StepInfo},
 }
 
+--- Where a script's screen panel sits: its edge, where along it, and how far it moves along and away from it, the edge required.
+export type PanelPlacement = {
+	--- The screen's edge the panel sits at.
+	edge: Edge,
+	--- Where along the edge; the center when left out.
+	align: Align?,
+	--- Layout units the panel moves along the edge, toward its right or bottom end when positive; 0 when left out.
+	shift: number?,
+	--- Layout units the panel moves away from the edge into the screen, 0 to the largest offset; 0 when left out.
+	inset: number?,
+}
+
 --- Who a message comes from or goes to.
 export type Peer = "Server" | { Player: string }
 
@@ -2819,7 +2834,7 @@ export type Slot = {
 export type SlotInput = {
 	--- The player clicked the slot in this frame.
 	clicked: boolean,
-	--- The cursor is on the slot.
+	--- The cursor is on the slot, or, while a gamepad drives the interface, the slot holds the focus.
 	hovered: boolean,
 }
 
@@ -4655,12 +4670,12 @@ declare enshwick: {
 		--- Runs `draw` once per frame while the game draws its HUD, with the HUD lent to it, as `Load.on_hud` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_hud: (draw: (arg1: Hud) -> ()) -> (),
-		--- Adds a panel at `edge` of the game's screen `screen` and runs `draw` once per frame while it is open, with the frame lent to it, as `Load.extend_screen` does.
+		--- Adds a panel at `place` beside the game's screen `screen` and runs `draw` once per frame while it is open, with the frame lent to it, as `Load.extend_screen` does.
 		--- Only while the mod starts, at the top level of main.luau.
-		extend_screen: (screen: HudScreenType, edge: Edge, draw: (arg1: Frame) -> ()) -> (),
+		extend_screen: (screen: HudScreenType, place: PanelPlacement, draw: (arg1: Frame) -> ()) -> (),
 		--- Adds a panel that shows only for the screen hosts made from `hosts`, as `Load.extend_screen_for` does.
 		--- Only while the mod starts, at the top level of main.luau.
-		extend_screen_for: (screen: HudScreenType, edge: Edge, hosts: {string}, draw: (arg1: Frame) -> ()) -> (),
+		extend_screen_for: (screen: HudScreenType, place: PanelPlacement, hosts: {string}, draw: (arg1: Frame) -> ()) -> (),
 		--- Calls `handler` with each change of the game's screen the player has open, as `Load.on_screen_changed` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_screen_changed: (handler: (arg1: ScreenChanged) -> ()) -> (),

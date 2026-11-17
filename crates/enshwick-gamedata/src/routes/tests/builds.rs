@@ -454,6 +454,17 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (1269579)", "ui.view_slot", 0x44),
     ("1.0 client (1269579)", "ui.popup_window", 0x1d6_aeb8),
     ("1.0 client (1269579)", "ui.popup_window_len", 0x12),
+    // The node map `ui.action_query` looks a bound node id up in, and the
+    // context's field it reaches the map through; read in the decompiler
+    // on 26430625, the same code on the other kept clients (2026-11-17).
+    ("1.0 client (26430625)", "ui.node_find", 0x11a_f900),
+    ("1.0 client (26430625)", "ui.context_nodes", 0x18),
+    ("1.0 client (26320373)", "ui.node_find", 0x11b_05d0),
+    ("1.0 client (26320373)", "ui.context_nodes", 0x18),
+    ("1.0 client (26082781)", "ui.node_find", 0x119_4450),
+    ("1.0 client (26082781)", "ui.context_nodes", 0x18),
+    ("1.0 client (1269579)", "ui.node_find", 0x119_21c0),
+    ("1.0 client (1269579)", "ui.context_nodes", 0x18),
 ];
 
 /// The client control reads: the input builder's stick, look, target
@@ -542,15 +553,20 @@ const ITEM_UI_SYMBOLS: &[(&str, &str, u64)] = &[
 /// same on every kept client (client 26430625 in the decompiler,
 /// 2026-11-16). The slot widget's answer, its stack record and its data's
 /// init extent: the state block a local at 0x60 holds, copied to the answer
-/// at 0x10, its hover, press and hit bytes at 0x60, 0x65 and 0x69, the
+/// at 0x10, its focus, pointer, press and hit bytes at 0x60, 0x62, 0x65 and
+/// 0x69, the context's input record at 0x10 and its navigation byte at 1
+/// (`ui.item_slot` reads the pointer only while that byte is 0), the
 /// record's count at 0x10 and its 0x48 bytes, and the 0x91 bytes the init
 /// writes (`doItemSlot` and its init in the decompiler on client 26430625,
 /// 2026-11-16; the same on every kept client).
-const ITEM_UI_READS: [(&str, u64); 17] = [
+const ITEM_UI_READS: [(&str, u64); 20] = [
     ("ui.item_slot_clickable", 0x62),
     ("ui.item_slot_state", 0x10),
     ("ui.item_slot_state_local", 0x60),
-    ("ui.item_slot_hovered", 0x60),
+    ("ui.item_slot_focused", 0x60),
+    ("ui.item_slot_pointer", 0x62),
+    ("ui.context_input", 0x10),
+    ("ui.input_navigating", 0x1),
     ("ui.item_slot_pressed", 0x65),
     ("ui.item_slot_hit", 0x69),
     ("ui.item_slot_count", 0x10),

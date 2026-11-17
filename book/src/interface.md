@@ -222,11 +222,12 @@ refuses it. Its test draws the HUD through the fake host with `draw_hud`.
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
-[`load.extend_screen(screen, edge, draw)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/ui/extension.rs)
+[`load.extend_screen(screen, place, draw)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/ui/extension.rs)
 adds a panel to one of the game's own screens, such as a storage chest's.
-`screen` is a `HudScreenType`, the game's own list of screens. `edge` is one
-edge of the screen, and the panel sits there, centred along it. The edges
-are:
+`screen` is a `HudScreenType`, the game's own list of screens. `place` is an
+`Edge` of the screen, and the panel sits there, centered along it. A
+`PanelPlacement` instead moves the panel along the edge and away from it, as
+[Where a panel sits](#where-a-panel-sits) shows. The edges are:
 
 - `Left`
 - `Right`
@@ -251,7 +252,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 ```luau
-enshwick.ui.extend_screen("StorageChest", "Right", function(panel)
+enshwick.ui.extend_screen("StorageChest", { edge = "Right" }, function(panel)
     panel:label({ text = "Shared with your guild", style = "Secondary" })
     if panel:button({ text = "Sort by name" }) then
         -- Send the server one of the mod's player actions.
@@ -260,7 +261,7 @@ end)
 ```
 
 The game's screens have no place to add to. So the loader draws the panels at
-each edge in one window of its own. That window sits on a layer just over
+each placement in one window of its own. That window sits on a layer just over
 the game's screen. It stays under the screen's popups, such as the split
 stack menu, and under the tooltips and the item being dragged. It
 shows only once a panel draws a widget in it, so a panel that draws nothing
@@ -271,9 +272,56 @@ The game's screen keeps its input while a panel shows. Its keys, its tabs and
 its slots work as without the mod. Only a click on the panel's own widgets
 goes to the panel.
 
-A panel covers whatever of the screen lies under it, so choose the edge where
-the screen has free space. On the Backpack this is the left edge, below the
-backpack's slots. The game's item details fill the right half.
+### Where a panel sits
+
+A panel covers whatever of the screen lies under it, so place it where the
+screen has free space. On the Backpack at 16:9, the free space is under the
+backpack's slots. It spans 9% to 50% of the width and 38% to 72% of the
+height. The game's item details fill the right half.
+
+A `PanelPlacement` starts at an edge and takes three more settings:
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| `align` | where along the edge: the start, the center or the end | `Center` |
+| `shift` | moves the panel along the edge, right or down when positive, left or up when negative | 0 |
+| `inset` | moves the panel away from the edge into the screen | 0 |
+
+The start of the left or right edge is its top, and the start of the top or
+bottom edge is its left end.
+
+The offsets are layout units. The layout is 1920 units wide and 1080 high,
+scaled to the window, and a panel is 480 units wide. `extend_screen` returns
+`Off` for an offset past 1920 either way, for a negative inset and for a
+value that is not a number. A panel stops at the screen's border.
+Panels with the same placement share one window and stack in the order their
+mods registered them.
+
+This panel sits under the Backpack's slots:
+
+```rust
+use enshwick::ui::{Align, Edge, HudScreenType, PanelPlacement};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let under_slots = PanelPlacement::new(Edge::Left)
+        .align(Align::Start)
+        .shift(362.0)
+        .inset(125.0);
+    load.extend_screen(HudScreenType::Backpack, under_slots, |panel| {
+        panel.label("Under the slots");
+    })
+}
+```
+
+In Luau, `place` is always a table: `edge` is required and the other settings
+may be left out.
+
+```luau
+local under_slots = { edge = "Left", align = "Start", shift = 362, inset = 125 }
+enshwick.ui.extend_screen("Backpack", under_slots, function(panel)
+    panel:label({ text = "Under the slots" })
+end)
+```
 
 A panel cannot go on the screens of play with no window open, where it would
 cover the world. For these screens, `extend_screen` returns `Off`:
@@ -368,7 +416,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ```luau
 local guards = { enshwick.content.guid("you.guards:guard") }
-enshwick.ui.extend_screen_for("NpcDialog", "Right", guards, function(panel)
+enshwick.ui.extend_screen_for("NpcDialog", { edge = "Right" }, guards, function(panel)
     if panel:button("Stand watch") then
         -- Send the server one of the mod's player actions.
     end
@@ -430,6 +478,11 @@ Its inventory is an entity of the client's world. Its category reads
 `INVALID`, since the screen does not say. A slot the mod draws itself is
 never this slot.
 
+With a mouse, `hovered` and `hovered_slot()` follow the cursor. A slot the
+player selected with a click does not count while the cursor is elsewhere.
+While a gamepad drives the interface, they name the slot that holds the
+screen's focus.
+
 ```rust
 use enshwick::ItemId;
 use enshwick::ui::{Edge, HudScreenType, Label, Style};
@@ -449,7 +502,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 ```luau
-enshwick.ui.extend_screen("Backpack", "Left", function(panel)
+enshwick.ui.extend_screen("Backpack", { edge = "Left" }, function(panel)
     if panel:item_slot(0x5e01, 3).clicked then
         -- Send the server a player action of the mod's own.
     end

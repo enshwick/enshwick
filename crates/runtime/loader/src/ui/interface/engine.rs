@@ -15,6 +15,7 @@ pub(crate) use crate::engine::interface_parts::Missing;
 use crate::engine::interface_parts::{Part, check_functions};
 use crate::engine::loader::Loader;
 use crate::engine::pinned::{self, Symbol};
+use crate::ui::place::Place;
 
 /// A buffer the game fills or reads, aligned as the game keeps its own on
 /// the stack.
@@ -505,9 +506,9 @@ pub(super) struct Window {
     saved_nav: usize,
     layer: u32,
     gap: f32,
-    /// The screen's edge a screen extension's panel sits at, undimmed;
+    /// Where a screen extension's panel sits beside the screen, undimmed;
     /// `None` for a window centred over a dimmed screen.
-    edge: Option<u32>,
+    place: Option<Place>,
     /// The interface update ([`super::tick`]) the window last began in.
     began: Option<u64>,
 }
@@ -530,7 +531,7 @@ impl Window {
             saved_nav: 0,
             layer: 0x1f,
             gap: 30.0,
-            edge: None,
+            place: None,
             began: None,
         }
     }
@@ -541,15 +542,20 @@ impl Window {
         lately(self.began, now)
     }
 
-    /// A screen extension's window: its panel at `edge`
-    /// (`UiExtension::LEFT` and on) of the screen, on `layer` until
-    /// [`Window::set_layer`] moves it to the open screen's.
-    pub(super) const fn extension(edge: u32, layer: u32) -> Self {
+    /// A screen extension's window: its panel at `place` beside the screen,
+    /// on `layer` until [`Window::set_layer`] moves it to the open screen's.
+    pub(super) const fn extension(place: Place, layer: u32) -> Self {
         let mut window = Self::new();
         window.layer = layer;
         window.gap = HUD_GAP;
-        window.edge = Some(edge);
+        window.place = Some(place);
         window
+    }
+
+    /// Where the window's panel sits beside a screen; `None` for a window
+    /// over a dimmed screen.
+    pub(super) const fn place(&self) -> Option<Place> {
+        self.place
     }
 
     /// Moves the window to `layer` from its next start.
@@ -593,6 +599,9 @@ pub(crate) struct Engine {
     pub(super) menu: Option<MenuLayout>,
     /// The dialogs' fields; `None` keeps dialogs in system windows.
     pub(super) dialog: Option<DialogLayout>,
+    /// The game's node map Back is bound against; `None` leaves the loader's
+    /// windows to their buttons.
+    nodes: Option<NodeMap>,
     /// The game's popup window's root node; `None` leaves dialogs to their
     /// buttons.
     popup_root: Option<PopupRoot>,
@@ -739,6 +748,7 @@ impl Engine {
         let Optional {
             menu,
             dialog,
+            nodes,
             popup_root,
             scroll,
             text_fields,
@@ -772,6 +782,7 @@ impl Engine {
             layout,
             menu,
             dialog,
+            nodes,
             popup_root,
             scroll,
             text_fields,
@@ -932,8 +943,10 @@ mod windows;
 
 pub(in crate::ui::interface) use looks::Icon;
 use looks::{BUNDLE, Legal, Looks, looks, path, sound};
+pub(super) use optional::DIALOG_BACK_FUSE;
 use optional::Optional;
-use popup::PopupRoot;
+pub(super) use popup::note_root;
+use popup::{NodeMap, PopupRoot};
 pub(super) use rows::{Row, SlotRow};
 pub(super) use scroll::Scroll;
 pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame};

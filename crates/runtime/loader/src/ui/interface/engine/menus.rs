@@ -52,25 +52,28 @@ impl Engine {
 
     /// Whether the player pressed Back (Escape, B) this frame, taking the
     /// press so nothing else acts on it; `node` binds the action to a window.
+    /// `None` when the game's node map does not hold `node`, so Back was not
+    /// asked; `Some(false)` also where the build gave no actions.
     ///
     /// On client 26430625 `ui.action_query` looks the bound node up and,
     /// while Back's input is active, reads through the result without a null
     /// check, so a node the game does not know faults (seen live on the join
-    /// dialog with node 0, reading 0x50).
+    /// dialog with node 0, reading 0x50); the node map is asked first.
     ///
     /// # Safety
     ///
     /// - Called inside a frame of the game's interface update, on its
     ///   thread.
-    /// - `node` is the id of a panel the game drew in this frame or the last
-    ///   one, as [`Engine::node_id`] gives it, or of the popup window drawn
-    ///   in this frame, as [`Engine::popup_node`] gives it.
-    pub(in crate::ui::interface) unsafe fn back_pressed(&self, node: NonZeroU64) -> bool {
+    pub(in crate::ui::interface) unsafe fn back_pressed(&self, node: NonZeroU64) -> Option<bool> {
         let (Some(layout), Some(new), Some(query)) =
             (self.menu, self.action_new, self.action_query)
         else {
-            return false;
+            return Some(false);
         };
+        // SAFETY: in a frame on its thread, by this function's `# Safety`.
+        if !unsafe { self.holds_node(node) } {
+            return None;
+        }
         let mut spec = Buf::<ACTION_SPEC>::zeroed();
         // SAFETY: `new` is the game's `ui.action_new`, checked in
         // `Engine::resolve`, in a frame on its thread by this function's
@@ -80,9 +83,10 @@ impl Engine {
         spec.u64(layout.action_node, node.get());
         spec.u8(layout.action_bound, 1);
         // SAFETY: `query` is the game's `ui.action_query`, checked in
-        // `Engine::resolve`, on the spec `new` filled; the details out may be
-        // null, 0x10 is the menus' modality.
-        unsafe { query(spec.ptr(), core::ptr::null_mut(), 0x10) != 0 }
+        // `Engine::resolve`, on the spec `new` filled, bound to a node the
+        // game's node map holds, checked above; the details out may be null,
+        // 0x10 is the menus' modality.
+        Some(unsafe { query(spec.ptr(), core::ptr::null_mut(), 0x10) != 0 })
     }
 
     /// Plays interface sound `sound`.

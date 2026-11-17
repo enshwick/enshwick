@@ -44,6 +44,37 @@ impl ScriptLabel {
     }
 }
 
+/// Where a script's screen panel sits: its edge, where along it, and how far
+/// it moves along and away from it, the edge required.
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug, crate::Script)]
+#[script(name = "PanelPlacement")]
+pub struct ScriptPlacement {
+    /// The screen's edge the panel sits at.
+    pub edge: crate::ui::Edge,
+    /// Where along the edge; the center when left out.
+    #[script(default)]
+    pub align: crate::ui::Align,
+    /// Layout units the panel moves along the edge, toward its right or
+    /// bottom end when positive; 0 when left out.
+    #[script(default)]
+    pub shift: f32,
+    /// Layout units the panel moves away from the edge into the screen, 0 to
+    /// the largest offset; 0 when left out.
+    #[script(default)]
+    pub inset: f32,
+}
+
+#[cfg(feature = "unstable")]
+impl From<&ScriptPlacement> for crate::ui::PanelPlacement {
+    fn from(place: &ScriptPlacement) -> Self {
+        Self::new(place.edge)
+            .align(place.align)
+            .shift(place.shift)
+            .inset(place.inset)
+    }
+}
+
 /// A button as a script draws it: the fields of [`Button`]'s builder.
 #[derive(Clone, Debug, crate::Script)]
 #[script(name = "Button")]
@@ -502,7 +533,7 @@ pub trait LoadMethods {
     fn extend_screen_script(
         &mut self,
         screen: crate::ui::HudScreenType,
-        edge: crate::ui::Edge,
+        place: &ScriptPlacement,
         draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
     ) -> Result<(), Off>;
 
@@ -512,7 +543,7 @@ pub trait LoadMethods {
     fn extend_screen_for_script(
         &mut self,
         screen: crate::ui::HudScreenType,
-        edge: crate::ui::Edge,
+        place: &ScriptPlacement,
         hosts: Vec<crate::content::Guid>,
         draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
     ) -> Result<(), Off>;
@@ -558,21 +589,21 @@ impl LoadMethods for crate::BaseLoad {
     fn extend_screen_script(
         &mut self,
         screen: crate::ui::HudScreenType,
-        edge: crate::ui::Edge,
+        place: &ScriptPlacement,
         draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        self.extend_screen(screen, edge, move |frame| draw(ScriptFrame::of(frame)))
+        self.extend_screen(screen, place, move |frame| draw(ScriptFrame::of(frame)))
     }
 
     #[cfg(feature = "unstable")]
     fn extend_screen_for_script(
         &mut self,
         screen: crate::ui::HudScreenType,
-        edge: crate::ui::Edge,
+        place: &ScriptPlacement,
         hosts: Vec<crate::content::Guid>,
         draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        self.extend_screen_for(screen, edge, &hosts, move |frame| {
+        self.extend_screen_for(screen, place, &hosts, move |frame| {
             draw(ScriptFrame::of(frame));
         })
     }

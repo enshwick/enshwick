@@ -7024,6 +7024,29 @@ take = "value"
 range = [9, 36]
 
 [[route]]
+id = "ui.node_find"
+sides = ["client"]
+in = "ui.action_query"
+shape = ["mov rcx,{ui.context}", "call ?", "mov rdx,?r", "mov rcx,rax", "call *"]
+take = "address"
+check = ["mov r8,[rcx]", "mov eax,[r8+?]", "test eax,eax"]
+
+[[route]]
+id = "~fn:ui.context_nodes"
+sides = ["client"]
+in = "ui.action_query"
+shape = ["mov rcx,{ui.context}", "call *", "mov rdx,?r", "mov rcx,rax", "call {ui.node_find}"]
+take = "address"
+
+[[route]]
+id = "ui.context_nodes"
+sides = ["client"]
+in = "~fn:ui.context_nodes"
+shape = ["mov rax,[rcx+*]", "ret"]
+take = "value"
+range = [8, 0x80]
+
+[[route]]
 id = "ui_clear_custom_names"
 sides = ["client"]
 system = "ui_clear_custom_names"
@@ -9592,12 +9615,43 @@ take = "value"
 range = [0x30, 0xc0]
 
 [[route]]
-id = "ui.item_slot_hovered"
+id = "ui.item_slot_focused"
 sides = ["client"]
 in = "ui.item_slot"
 shape = ["call ?b", "mov [rsp+*],al", "movzx edi,al", "test al,al"]
 take = "value"
 range = [0x30, 0xc0]
+
+[[route]]
+id = "ui.item_slot_pointer"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["mov dl,0x1", "mov [rsp+*],?r", "lea rcx,[rbp-?]", "call ?b"]
+take = "value"
+range = [0x30, 0xc0]
+
+[[route]]
+id = "~fn:ui.input_navigating"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["call *", "test al,al", "jne ?b", "call ?b", "mov rcx,rax", "call ?b", "test al,al"]
+take = "address"
+
+[[route]]
+id = "ui.context_input"
+sides = ["client"]
+in = "~fn:ui.input_navigating"
+shape = ["mov rax,[rcx+*]", "movzx eax,byte [rax+?]", "ret"]
+take = "value"
+range = [8, 0x40]
+
+[[route]]
+id = "ui.input_navigating"
+sides = ["client"]
+in = "~fn:ui.input_navigating"
+shape = ["mov rax,[rcx+?]", "movzx eax,byte [rax+*]", "ret"]
+take = "value"
+range = [1, 0x20]
 
 [[route]]
 id = "ui.item_slot_pressed"

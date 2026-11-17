@@ -2232,18 +2232,27 @@ abi::UiDialog::title
 abi::UiExtension
 abi::UiExtension::BORN
 abi::UiExtension::BOTTOM
+abi::UiExtension::CENTER
+abi::UiExtension::END
 abi::UiExtension::LEFT
 abi::UiExtension::MAX_HOSTS
+abi::UiExtension::MAX_OFFSET
 abi::UiExtension::RIGHT
+abi::UiExtension::START
 abi::UiExtension::TOP
+abi::UiExtension::align
 abi::UiExtension::edge
 abi::UiExtension::header
 abi::UiExtension::host_count
 abi::UiExtension::host_list
 abi::UiExtension::hosts
+abi::UiExtension::inset
+abi::UiExtension::placement_holds
 abi::UiExtension::reserved
 abi::UiExtension::reserved_hosts
+abi::UiExtension::reserved_place
 abi::UiExtension::screen
+abi::UiExtension::shift
 abi::UiFrame
 abi::UiFrame::BORN
 abi::UiFrame::IN_GAME
@@ -34062,6 +34071,13 @@ typed::wildlife::TamingSetup::necessary_taming_steps unstable
 typed::wildlife::TamingSetup::taming_approach_finished_flee_radius unstable
 typed::wildlife::TamingSetup::to_value unstable
 ui
+ui::Align unstable
+ui::Align::Center unstable
+ui::Align::End unstable
+ui::Align::Start unstable
+ui::Align::TY unstable
+ui::Align::from_value unstable
+ui::Align::into_value unstable
 ui::Anchor
 ui::Anchor::BottomCenter
 ui::Anchor::BottomLeft
@@ -34200,6 +34216,12 @@ ui::MarkerColor::White unstable
 ui::MarkerColor::Yellow unstable
 ui::MarkerColor::from_value unstable
 ui::MarkerColor::into_value unstable
+ui::PanelPlacement unstable
+ui::PanelPlacement::align unstable
+ui::PanelPlacement::from unstable
+ui::PanelPlacement::inset unstable
+ui::PanelPlacement::new unstable
+ui::PanelPlacement::shift unstable
 ui::Prompt unstable
 ui::Prompt::TY unstable
 ui::Prompt::from_value unstable

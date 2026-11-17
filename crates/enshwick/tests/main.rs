@@ -245,6 +245,8 @@ mod schedule;
 mod screen_extensions;
 #[cfg(feature = "unstable")]
 mod screen_hosts;
+#[cfg(feature = "unstable")]
+mod screen_placements;
 mod served_panic;
 #[cfg(feature = "typed")]
 mod served_reads;

@@ -188,7 +188,7 @@ impl Refusal for crate::ui::interface::ExtendScreenError {
             Self::Register(error) => error.status(),
             Self::NotClient => Status::UNAVAILABLE,
             Self::UnknownScreen => Status::MISSING,
-            Self::BadEdge | Self::ScreenOfPlay => Status::BAD_ARGS,
+            Self::BadPlace | Self::ScreenOfPlay => Status::BAD_ARGS,
         }
     }
 }

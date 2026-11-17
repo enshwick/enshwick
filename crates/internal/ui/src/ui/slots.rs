@@ -18,7 +18,8 @@ use super::Frame;
 pub struct SlotInput {
     /// The player clicked the slot in this frame.
     pub clicked: bool,
-    /// The cursor is on the slot.
+    /// The cursor is on the slot, or, while a gamepad drives the interface,
+    /// the slot holds the focus.
     pub hovered: bool,
 }
 
@@ -79,6 +80,9 @@ impl Frame<'_> {
     /// frame, such as one of the backpack's or an open chest's, with what
     /// it holds; `None` while the cursor is on none, outside those screens
     /// and on a game build where the loader does not find the game's slot.
+    /// While a gamepad drives the interface, it is the slot that holds the
+    /// screen's focus. The slot the player selected with a click does not
+    /// count while the cursor is elsewhere.
     /// Its inventory is an entity of the client's world, and its category
     /// reads [`InventoryCategory::INVALID`], since the screen does not say.
     /// An item slot the mod draws itself is never this slot.

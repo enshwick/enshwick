@@ -5,6 +5,10 @@
 /// them.
 pub use crate::ui::script::{ScriptFrame, ScriptHud};
 
+/// Where a script's screen panel sits, which core's `Load` reads.
+#[cfg(feature = "unstable")]
+pub use crate::ui::script::ScriptPlacement;
+
 /// What a script's item tooltip handler gets, which core's `Load` hands it.
 #[cfg(feature = "unstable")]
 pub use crate::ui::script::ScriptTooltipLines;

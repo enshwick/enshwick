@@ -60,6 +60,8 @@ pub(crate) const COLUMN: Symbol = Symbol::new("ui.column");
 pub(crate) const CONTEXT: Symbol = Symbol::new("ui.context");
 pub(crate) const CONTEXT_BUNDLE: Constant = Constant::new("ui.context_bundle");
 pub(crate) const CONTEXT_HOST: Constant = Constant::new("ui.context_host");
+pub(crate) const CONTEXT_INPUT: Constant = Constant::new("ui.context_input");
+pub(crate) const CONTEXT_NODES: Constant = Constant::new("ui.context_nodes");
 pub(crate) const CONTEXT_NAV: Constant = Constant::new("ui.context_nav");
 pub(crate) const CONTEXT_PLAYER: Constant = Constant::new("ui.context_player");
 pub(crate) const CONTEXT_STATE: Constant = Constant::new("ui.context_state");
@@ -96,6 +98,7 @@ pub(crate) const PROMPT_VERB: Constant = Constant::new("ui.prompt_verb");
 pub(crate) const SCREEN_HOST: Constant = Constant::new("ui.screen_host");
 pub(crate) const HUD_VISIBLE: Symbol = Symbol::new("ui.hud_visible");
 pub(crate) const INPUT_HINT: Symbol = Symbol::new("ui.input_hint");
+pub(crate) const INPUT_NAVIGATING: Constant = Constant::new("ui.input_navigating");
 /// The interface's posters of menu commands: each reserves its command in
 /// the UI queue, writes its kind byte and returns it, or null when the
 /// queue is full (client 26430625).
@@ -114,7 +117,8 @@ pub(crate) const ITEM_SLOT: Symbol = Symbol::new("ui.item_slot");
 pub(crate) const ITEM_SLOT_CLICKABLE: Constant = Constant::new("ui.item_slot_clickable");
 pub(crate) const ITEM_SLOT_COUNT: Constant = Constant::new("ui.item_slot_count");
 pub(crate) const ITEM_SLOT_HIT: Constant = Constant::new("ui.item_slot_hit");
-pub(crate) const ITEM_SLOT_HOVERED: Constant = Constant::new("ui.item_slot_hovered");
+pub(crate) const ITEM_SLOT_FOCUSED: Constant = Constant::new("ui.item_slot_focused");
+pub(crate) const ITEM_SLOT_POINTER: Constant = Constant::new("ui.item_slot_pointer");
 pub(crate) const ITEM_SLOT_INIT: Symbol = Symbol::new("ui.item_slot_init");
 pub(crate) const ITEM_SLOT_INIT_END: Constant = Constant::new("ui.item_slot_init_end");
 pub(crate) const ITEM_SLOT_PRESSED: Constant = Constant::new("ui.item_slot_pressed");
@@ -154,6 +158,7 @@ pub(crate) const NAV_SET: Symbol = Symbol::new("ui.nav_set");
 pub(crate) const NAV_SOUND: Constant = Constant::new("ui.nav_sound");
 pub(crate) const NAV_WRAP: Constant = Constant::new("ui.nav_wrap");
 pub(crate) const NODE_ALIGN: Symbol = Symbol::new("ui.node_align");
+pub(crate) const NODE_FIND: Symbol = Symbol::new("ui.node_find");
 pub(crate) const NODE_HEIGHT: Symbol = Symbol::new("ui.node_height");
 pub(crate) const NODE_ID: Constant = Constant::new("ui.node_id");
 pub(crate) const NODE_ID_GET: Symbol = Symbol::new("ui.node_id_get");

@@ -745,7 +745,7 @@ const _: () = {
     assert!(size_of::<SaveInfo>() == 8 + 16 + 8 + 8 + 4 + 4);
     assert!(size_of::<ChatLine>() == 8 + 8 + 4 + 4 + 8 + 16);
     assert!(size_of::<ChatRewrite>() == 8 + 8 + 4 + 4);
-    assert!(size_of::<UiExtension>() == 8 + 16 + 8 + 8 + 8);
+    assert!(size_of::<UiExtension>() == 8 + 16 + 8 + 8 + 8 + 16);
     assert!(size_of::<ItemAction>() == 8 + 24);
     assert!(size_of::<ControlSpec>() == 8 + 2 * 16 + 8 + 16 + 8 + 16);
     assert!(core::mem::offset_of!(ControlEvent, player) == 8 + 16 + 8);

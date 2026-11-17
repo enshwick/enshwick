@@ -298,7 +298,7 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
         // which the game reaches while drawing its menu inside a frame on
         // the interface thread; `node_id` gives a node only for a screen
         // drawn in this interface update or the last one.
-        && unsafe { engine.back_pressed(node) }
+        && unsafe { engine.back_pressed(node) } == Some(true)
         && !super::dialog::showing()
     {
         STATE.back.store(BACK_PRESSED, Ordering::Relaxed);

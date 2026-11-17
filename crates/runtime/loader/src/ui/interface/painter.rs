@@ -348,7 +348,7 @@ pub(super) fn draw(
         return Err(WidgetError::Malformed);
     };
     let read_only = raw.flags & UiWidget::READ_ONLY != 0;
-    if let Some(edge) = drawing.extension {
+    if let Some(window) = drawing.extension {
         if matches!(raw.kind, UiWidget::WINDOW | UiWidget::END) {
             return Err(WidgetError::OutOfOrder);
         }
@@ -357,8 +357,7 @@ pub(super) fn draw(
             // `extensions::run` sets only while it runs an extension's
             // callback inside the frame on the interface thread, with its
             // non-zero `context` and no window but the extensions' own open.
-            unsafe { super::extensions::open(engine, context, edge) };
-            drawing.window_open = true;
+            drawing.window_open = unsafe { super::extensions::open(engine, context, window) };
         }
     }
     widget_checks::order(raw.kind, drawing.window_open)?;

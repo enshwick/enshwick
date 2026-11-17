@@ -1,4 +1,4 @@
-use super::popup::PopupRoot;
+use super::popup::{NodeMap, PopupRoot};
 use super::{DialogLayout, MenuLayout, Missing, hint, rows, scroll, text_field};
 use crate::engine::fuse::Fuse;
 use crate::engine::interface_parts::Part;
@@ -11,14 +11,19 @@ static TEXT_FIELDS_FUSE: Fuse = Fuse::new("text settings on the Mods screen (rea
 static HINTS_FUSE: Fuse = Fuse::new("input hints");
 /// The Mods screen lays settings out in rows; off, they stack.
 static ROWS_FUSE: Fuse = Fuse::new("rows on the Mods screen (stacked)");
+/// Back closes the loader's windows, screens and dialogs; off, their buttons
+/// do.
+static BACK_FUSE: Fuse = Fuse::new("Back on the loader's windows (their buttons close them)");
 /// Back closes a loader dialog; off, its buttons do.
-static DIALOG_BACK_FUSE: Fuse = Fuse::new("Back on dialogs (their buttons close them)");
+pub(in crate::ui::interface) static DIALOG_BACK_FUSE: Fuse =
+    Fuse::new("Back on dialogs (their buttons close them)");
 
 /// The interface's optional parts read from the build's table and
 /// reflection, each `None` when it turned off alone.
 pub(super) struct Optional {
     pub(super) menu: Option<MenuLayout>,
     pub(super) dialog: Option<DialogLayout>,
+    pub(super) nodes: Option<NodeMap>,
     pub(super) popup_root: Option<PopupRoot>,
     pub(super) scroll: Option<scroll::Scrolling>,
     pub(super) text_fields: Option<text_field::TextFields>,
@@ -64,11 +69,15 @@ impl Optional {
             [Some(why), Some(_)] => Err(why),
             _ => Ok(()),
         };
+        let nodes = actions
+            .and_then(|()| NodeMap::resolve(loader))
+            .inspect_err(off(&BACK_FUSE))
+            .ok();
         Self {
             menu: menu.ok(),
-            popup_root: dialog.and_then(|_| {
-                actions
-                    .and_then(|()| PopupRoot::resolve(loader))
+            nodes,
+            popup_root: dialog.zip(nodes).and_then(|_| {
+                PopupRoot::resolve(loader)
                     .inspect_err(off(&DIALOG_BACK_FUSE))
                     .ok()
             }),

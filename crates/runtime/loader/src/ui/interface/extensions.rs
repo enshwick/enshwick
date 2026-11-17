@@ -1,14 +1,15 @@
 //! Panels mods add to the game's own screens. The game's interface keeps no
-//! window to append to and a game window has no position, so each edge of
-//! the screen gets one full-screen window of its own on a layer above the
-//! game's screens, shared by every panel at that edge, drawn while the
-//! player has its screen open and only once a panel draws a widget there.
+//! window to append to and a game window has no position, so each place a
+//! panel asks for (an edge, where along it and an offset) gets one
+//! full-screen window of its own on a layer above the game's screens,
+//! shared by every panel at that place, drawn while the player has its
+//! screen open and only once a panel draws a widget there.
 
 use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{Header, Side, Str, UiExtension, UiFrame, UiFrameFn};
+use enshwick_core::abi::{Header, Side, Str, UiFrame, UiFrameFn};
 use enshwick_core::ui::HudScreenType;
 use enshwick_gamedata::catalogue;
 
@@ -19,6 +20,7 @@ use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::{JoinFeatureError, Registry};
+use crate::ui::place::Place;
 
 use super::engine::{Engine, UiText, Window};
 use super::{DRAWING, Drawing, copy, next_token};
@@ -30,14 +32,9 @@ static PROMPT_FUSE: Fuse = Fuse::new("interaction prompt reads");
 /// Why a reflected type the frames read fails on a build without it.
 const NOT_REFLECTED: &str = "is not reflected on this build";
 
-/// Each edge's window name, by edge, outside the `enshwick/<mod id>/` names
-/// of mods' own windows.
-const NAMES: [&[u8]; 4] = [
-    b"enshwick:screen/left",
-    b"enshwick:screen/right",
-    b"enshwick:screen/top",
-    b"enshwick:screen/bottom",
-];
+/// The start of each place's window name, which its index ends, outside the
+/// `enshwick/<mod id>/` names of mods' own windows.
+const NAME_PREFIX: &str = "enshwick:screen/";
 
 /// A panel's layer beside a screen that draws on a window of its own, as the
 /// chest screens on 6 (client 520): above it, under the button hints (0xa)
@@ -68,8 +65,7 @@ struct Extension {
     registered: Registered<UiFrameFn>,
     /// The screen's value among the game's `HudScreenType`.
     screen: u8,
-    /// [`UiExtension::LEFT`] to [`UiExtension::BOTTOM`].
-    edge: u32,
+    place: Place,
     /// The host templates the panel shows for; empty for every host.
     hosts: Box<[[u8; 16]]>,
 }
@@ -174,18 +170,25 @@ impl FrameReads {
 static EXTENSIONS: Registry<Extension> = Registry::new();
 static LINKED: OnceLock<Linked> = OnceLock::new();
 
+/// A place's window, its name, which the game hashes into the window's node
+/// ids, and the extensions drawn there, as indices of the sealed list in
+/// registration order.
+struct Placed {
+    window: Window,
+    name: Box<[u8]>,
+    panels: Box<[usize]>,
+}
+
+/// One place's window among the extensions' windows, in drawing order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PanelWindow(usize);
+
 thread_local! {
-    /// One window per edge, built once and kept in place across frames.
-    static WINDOWS: RefCell<[Window; 4]> = const {
-        RefCell::new([
-            Window::extension(UiExtension::LEFT, SCREEN_LAYER),
-            Window::extension(UiExtension::RIGHT, SCREEN_LAYER),
-            Window::extension(UiExtension::TOP, SCREEN_LAYER),
-            Window::extension(UiExtension::BOTTOM, SCREEN_LAYER),
-        ])
-    };
-    /// The edge whose window is open in this frame.
-    static OPEN: Cell<Option<u32>> = const { Cell::new(None) };
+    /// One window per place, built at the first draw after the extensions
+    /// seal and kept in place across frames: the list never grows after.
+    static WINDOWS: RefCell<Vec<Placed>> = const { RefCell::new(Vec::new()) };
+    /// The place whose window is open in this frame.
+    static OPEN: Cell<Option<PanelWindow>> = const { Cell::new(None) };
     /// The frame's copy of the prompt's title, which the frame's
     /// [`FrameReads::prompt_title`] views until the next frame reads it.
     static TITLE: RefCell<[u8; TITLE_MAX]> = const { RefCell::new([0; TITLE_MAX]) };
@@ -203,28 +206,29 @@ pub(crate) enum ExtendScreenError {
     /// No screen of the game has the name on this build.
     #[error("no screen has the name")]
     UnknownScreen,
-    /// The edge is none of the four.
-    #[error("no such edge")]
-    BadEdge,
+    /// The edge, the alignment or an offset is none the loader takes.
+    #[error("no such edge, alignment or offset")]
+    BadPlace,
     /// On the screen the player is in the world with no window open.
     #[error("a screen of play")]
     ScreenOfPlay,
 }
 
-/// Registers mod `owner`'s panel at `edge` of the game's screen named
-/// `screen`; client only, during init. A screen on which the player is in
-/// the world with no window open is refused: a full-screen window there
-/// would cover play while the mods' keys still fire.
+/// Registers mod `owner`'s panel at `place` beside the game's screen named
+/// `screen`, `None` for a place [`Place::of`] refused; client only, during
+/// init. A screen on which the player is in the world with no window open
+/// is refused: a full-screen window there would cover play while the mods'
+/// keys still fire.
 ///
 /// # Errors
 ///
 /// [`ExtendScreenError`] off a client, after init, for an unknown screen,
-/// a bad edge or a screen of play.
+/// a refused place or a screen of play.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     screen: &str,
-    edge: u32,
+    place: Option<Place>,
     hosts: &[[u8; 16]],
     callback: UiFrameFn,
     user: *mut c_void,
@@ -232,9 +236,7 @@ pub(crate) fn register(
     if loader.side != Side::CLIENT {
         return Err(ExtendScreenError::NotClient);
     }
-    if edge > UiExtension::BOTTOM {
-        return Err(ExtendScreenError::BadEdge);
-    }
+    let place = place.ok_or(ExtendScreenError::BadPlace)?;
     if crate::actions::controls::OPEN_SCREENS.contains(&screen) {
         return Err(ExtendScreenError::ScreenOfPlay);
     }
@@ -254,7 +256,7 @@ pub(crate) fn register(
         .add(Extension {
             registered: Registered::new(owner, callback, user),
             screen,
-            edge,
+            place,
             hosts: hosts.into(),
         })
         .map_err(|sealed| ExtendScreenError::Register(sealed.into()))
@@ -586,23 +588,49 @@ unsafe fn seen(view: &ScreenView) -> [Option<u8>; 2] {
         })
 }
 
-/// The panels of `screens`, edge by edge and in registration order within
-/// an edge, so each edge's window opens at most once a frame.
-fn by_edge<T>(
-    panels: &[T],
-    screens: [Option<u8>; 2],
-    place: impl Fn(&T) -> (u8, u32) + Copy,
-) -> impl Iterator<Item = &T> {
-    (UiExtension::LEFT..=UiExtension::BOTTOM).flat_map(move |edge| {
-        panels.iter().filter(move |p| {
-            let (screen, at) = place(p);
-            at == edge && screens.contains(&Some(screen))
-        })
-    })
+/// The places of `panels`, each once, in the order their windows draw: by
+/// [`Place::rank`], then by the first panel registered there.
+fn places<T>(panels: &[T], place: impl Fn(&T) -> Place) -> Vec<Place> {
+    let mut places: Vec<Place> = Vec::new();
+    for panel in panels {
+        let at = place(panel);
+        if !places.contains(&at) {
+            places.push(at);
+        }
+    }
+    places.sort_by_key(|at| at.rank());
+    places
 }
 
-/// Draws the panels of the screen the player has open, each edge's in one
-/// window.
+/// The indices of the panels at `place`, in registration order.
+fn at_place<T>(panels: &[T], place: Place, of: impl Fn(&T) -> Place) -> Box<[usize]> {
+    (0..panels.len())
+        .filter(|&index| of(&panels[index]) == place)
+        .collect()
+}
+
+/// A window for each place of `extensions`, in drawing order, on `layer`,
+/// with the extensions drawn there.
+fn placed(extensions: &[Extension], layer: u32) -> Vec<Placed> {
+    places(extensions, |e| e.place)
+        .into_iter()
+        .enumerate()
+        .map(|(index, place)| Placed {
+            window: Window::extension(place, layer),
+            name: format!("{NAME_PREFIX}{index}").into_bytes().into(),
+            panels: at_place(extensions, place, |e| e.place),
+        })
+        .collect()
+}
+
+/// The extension at `panel` of the place's window `window`; `None` past its
+/// last.
+fn panel_at(window: PanelWindow, panel: usize) -> Option<usize> {
+    WINDOWS.with_borrow(|windows| windows.get(window.0)?.panels.get(panel).copied())
+}
+
+/// Draws the panels of the screen the player has open, each place's in one
+/// window, so each window opens at most once a frame.
 ///
 /// # Safety
 ///
@@ -621,13 +649,30 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, reads: FrameReads) {
         return;
     };
     let on = layer(screen_named(shown));
-    WINDOWS.with_borrow_mut(|windows| windows.iter_mut().for_each(|w| w.set_layer(on)));
-    for extension in by_edge(extensions, reads.seen, |e| (e.screen, e.edge)) {
-        if extension.registered.live() && extension.shows_for(reads.screen_host_template) {
-            // SAFETY: this function's `# Safety` gives the frame, its thread
-            // and its `context`; the only window open is the extensions' own,
-            // which `open` and `close` keep one at a time.
-            unsafe { run(extension.registered, context, extension.edge, reads) };
+    let count = WINDOWS.with_borrow_mut(|windows| {
+        if windows.is_empty() {
+            *windows = placed(extensions, on);
+        }
+        for placed in windows.iter_mut() {
+            placed.window.set_layer(on);
+        }
+        windows.len()
+    });
+    for window in (0..count).map(PanelWindow) {
+        // A panel's callback opens its window through `WINDOWS`, so each
+        // panel is read apart from the panels' runs.
+        let panels = (0..).map_while(|panel| panel_at(window, panel));
+        for extension in panels.filter_map(|at| extensions.get(at)) {
+            if reads.seen.contains(&Some(extension.screen))
+                && extension.registered.live()
+                && extension.shows_for(reads.screen_host_template)
+            {
+                // SAFETY: this function's `# Safety` gives the frame, its
+                // thread and its `context`; the only window open is the
+                // extensions' own, which `open` and `close` keep one at a
+                // time.
+                unsafe { run(extension.registered, context, window, reads) };
+            }
         }
     }
     // SAFETY: this function's `# Safety` gives the frame, its thread and its
@@ -635,63 +680,71 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, reads: FrameReads) {
     unsafe { close(engine, context) };
 }
 
-/// Opens `edge`'s window for a panel's first widget that needs one, ending
-/// another edge's window first; an already open one stays.
+/// Opens the place's window `window` for a panel's first widget that needs
+/// one, ending another place's window first; an already open one stays.
+/// False when the extensions have no such window, so none is open.
 ///
 /// # Safety
 ///
 /// - Called inside a frame of the game's interface update, on its thread,
 ///   with that frame's non-zero `context`, from a panel's callback that
 ///   [`draw`] runs, so no window but the extensions' own is open.
-pub(super) unsafe fn open(engine: &Engine, context: usize, edge: u32) {
-    if OPEN.get() == Some(edge) {
-        return;
+pub(super) unsafe fn open(engine: &Engine, context: usize, window: PanelWindow) -> bool {
+    if OPEN.get() == Some(window) {
+        return true;
     }
     // SAFETY: the caller's frame, thread and `context`.
     unsafe { close(engine, context) };
-    let Some(index) = usize::try_from(edge).ok().filter(|&i| i < NAMES.len()) else {
-        return;
-    };
-    let name = copy(&[NAMES[index]]);
-    WINDOWS.with_borrow_mut(|windows| {
+    let opened = WINDOWS.with_borrow_mut(|windows| {
+        let placed = windows.get_mut(window.0)?;
+        let name = copy(&[&placed.name]);
         // SAFETY: the caller's frame, thread and `context`; no other window
         // is open (`close` ended the last one), the window stays in the
-        // thread-local `WINDOWS` until `close` ends it, and `name` lives in
-        // the frame's text arena.
-        unsafe { engine.window_begin(context, &mut windows[index], &name, &UiText::EMPTY) };
+        // thread-local `WINDOWS`, which never grows after `draw` built it,
+        // until `close` ends it, and `name` lives in the frame's text arena.
+        unsafe { engine.window_begin(context, &mut placed.window, &name, &UiText::EMPTY) };
+        Some(())
     });
-    OPEN.set(Some(edge));
+    if opened.is_some() {
+        OPEN.set(Some(window));
+    }
+    opened.is_some()
 }
 
-/// Ends the open edge's window, if any.
+/// Ends the open place's window, if any.
 ///
 /// # Safety
 ///
 /// - Called inside the frame of the game's interface update in which
 ///   [`open`] began the window, on its thread, with that frame's `context`.
 unsafe fn close(engine: &Engine, context: usize) {
-    let Some(index) = OPEN.take().and_then(|edge| usize::try_from(edge).ok()) else {
+    let Some(window) = OPEN.take() else {
         return;
     };
     WINDOWS.with_borrow_mut(|windows| {
-        if let Some(window) = windows.get_mut(index) {
-            // SAFETY: `open` began `window` in this frame, on this thread,
+        if let Some(placed) = windows.get_mut(window.0) {
+            // SAFETY: `open` began the window in this frame, on this thread,
             // with this `context`; it did not move, and the painter's widgets
             // close every frame they open.
-            unsafe { engine.window_end(context, window) };
+            unsafe { engine.window_end(context, &mut placed.window) };
         }
     });
 }
 
 /// Runs an extension's callback; its first widget that needs a window
-/// opens `edge`'s through [`open`].
+/// opens the place's window `window` through [`open`].
 ///
 /// # Safety
 ///
 /// - Called inside a frame of the game's interface update, on its thread,
 ///   with that frame's non-zero `context`, while no window but the
 ///   extensions' own is open.
-unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, reads: FrameReads) {
+unsafe fn run(
+    registered: Registered<UiFrameFn>,
+    context: usize,
+    window: PanelWindow,
+    reads: FrameReads,
+) {
     let token = next_token();
     DRAWING.set(Some(Drawing {
         token,
@@ -699,7 +752,7 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, read
         context,
         window_open: false,
         hud: false,
-        extension: Some(edge),
+        extension: Some(window),
     }));
     let frame = reads.frame(token);
     // SAFETY: the callback lives in a mod DLL that stays loaded, and it gets
@@ -722,6 +775,7 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, read
 #[cfg(test)]
 mod tests {
     use super::*;
+    use enshwick_core::abi::UiExtension;
 
     /// What `off` was asked to turn off: the feature, entry and reason.
     type Asked = RefCell<Vec<(&'static str, String, String)>>;
@@ -831,7 +885,7 @@ mod tests {
         let panel = |hosts: &[[u8; 16]]| Extension {
             registered: Registered::new(ModIndex::new(0), nothing, core::ptr::null_mut()),
             screen: 0,
-            edge: UiExtension::RIGHT,
+            place: Place::edge(UiExtension::RIGHT),
             hosts: hosts.into(),
         };
         assert!(panel(&[[7; 16]]).shows_for([7; 16]));
@@ -843,29 +897,55 @@ mod tests {
         assert!(panel(&[]).shows_for([0; 16]));
     }
 
+    /// The panels of `seen` in the order [`draw`] runs them: place by place
+    /// as [`places`] orders them, each place's by [`at_place`].
+    fn drawn(panels: &[(u8, Place)], seen: [Option<u8>; 2]) -> Vec<usize> {
+        places(panels, |p| p.1)
+            .into_iter()
+            .flat_map(|place| at_place(panels, place, |p| p.1))
+            .filter(|&panel| seen.contains(&Some(panels[panel].0)))
+            .collect()
+    }
+
     #[test]
     fn panels_of_the_open_screen_draw_edge_by_edge_in_registration_order() {
-        let (left, right, top) = (UiExtension::LEFT, UiExtension::RIGHT, UiExtension::TOP);
+        let [left, right, top] =
+            [UiExtension::LEFT, UiExtension::RIGHT, UiExtension::TOP].map(Place::edge);
         let panels = [(5, right), (5, left), (7, left), (5, right), (5, top)];
-        let order: Vec<_> = by_edge(&panels, [Some(5), None], |p| *p)
-            .map(core::ptr::from_ref)
-            .collect();
-        let expected = [1, 0, 3, 4].map(|i| core::ptr::from_ref(&panels[i]));
-        assert_eq!(order, expected);
+        assert_eq!(drawn(&panels, [Some(5), None]), [1, 0, 3, 4]);
+    }
+
+    #[test]
+    fn each_place_on_an_edge_draws_in_a_window_of_its_own_after_the_edges_before_it() {
+        let place = |edge, align, shift| {
+            Place::of(&UiExtension {
+                edge,
+                align,
+                shift,
+                ..bytemuck::Zeroable::zeroed()
+            })
+            .unwrap()
+        };
+        let low = place(UiExtension::LEFT, UiExtension::START, 360.0);
+        let left = Place::edge(UiExtension::LEFT);
+        let right = Place::edge(UiExtension::RIGHT);
+        let panels = [(5, right), (5, low), (5, left), (5, low)];
+        assert_eq!(
+            places(&panels, |p| p.1),
+            [low, left, right],
+            "edge by edge, then as first registered"
+        );
+        assert_eq!(drawn(&panels, [Some(5), None]), [1, 3, 2, 0]);
     }
 
     #[test]
     fn the_in_game_menu_s_panels_draw_beside_the_tab_it_shows_and_a_hidden_tab_s_do_not() {
-        let (left, right) = (UiExtension::LEFT, UiExtension::RIGHT);
+        let [left, right] = [UiExtension::LEFT, UiExtension::RIGHT].map(Place::edge);
         let (menu, character, backpack) = (4, 7, 9);
         let panels = [(backpack, left), (menu, right), (character, left)];
-        let drawn = |seen| -> Vec<_> { by_edge(&panels, seen, |p| *p).copied().collect() };
-        assert_eq!(
-            drawn([Some(character), Some(menu)]),
-            [(character, left), (menu, right)]
-        );
-        assert_eq!(drawn([Some(character), None]), [(character, left)]);
-        assert_eq!(drawn([None, Some(menu)]), [(menu, right)]);
-        assert!(drawn([None, None]).is_empty());
+        assert_eq!(drawn(&panels, [Some(character), Some(menu)]), [2, 1]);
+        assert_eq!(drawn(&panels, [Some(character), None]), [2]);
+        assert_eq!(drawn(&panels, [None, Some(menu)]), [1]);
+        assert!(drawn(&panels, [None, None]).is_empty());
     }
 }

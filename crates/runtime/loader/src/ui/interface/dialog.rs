@@ -256,6 +256,8 @@ thread_local! {
     static CURRENT: core::cell::RefCell<Option<Current>> = const { core::cell::RefCell::new(None) };
     /// The interface update in which a dialog last bound Back.
     static BACK_BOUND: core::cell::Cell<Option<u64>> = const { core::cell::Cell::new(None) };
+    /// Frames in a row a shown dialog's popup root was not in the game's node map.
+    static ROOT_MISSES: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
 }
 
 /// Whether a dialog shows, on the interface thread.
@@ -290,7 +292,8 @@ pub(super) unsafe fn back_over(engine: &Engine, window: &engine::Window) -> bool
         // SAFETY: in a frame of the interface update on its thread, by this
         // function's `# Safety`, with the node `node_id` gives only for a
         // window drawn in this update or the last one.
-        unsafe { engine.back_pressed(node) }
+        let pressed = unsafe { engine.back_pressed(node) };
+        pressed == Some(true)
     }) && !showing()
 }
 
@@ -506,11 +509,17 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
             let Some(node) = engine.popup_node() else {
                 return;
             };
-            BACK_BOUND.set(Some(super::tick()));
             // SAFETY: in a frame of the interface update on its thread, by
             // this function's `# Safety`, right after `next` drew the popup
             // window whose root node `popup_node` names.
-            if unsafe { engine.back_pressed(node) }
+            let pressed = unsafe { engine.back_pressed(node) };
+            ROOT_MISSES.with(|misses| {
+                engine::note_root(pressed.is_some(), misses, &engine::DIALOG_BACK_FUSE);
+            });
+            if pressed.is_some() {
+                BACK_BOUND.set(Some(super::tick()));
+            }
+            if pressed == Some(true)
                 && let Some(gone) = current.take()
             {
                 gone.answerer.answer(UiDialog::CLOSED);
