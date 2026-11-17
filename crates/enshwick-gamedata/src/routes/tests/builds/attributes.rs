@@ -237,6 +237,42 @@ fn every_builder_route_reads_its_own_group_s_text_and_the_nine_texts_differ() {
     assert_eq!(texts.len(), ATTRIBUTE_TEXT_READS.len());
 }
 
+/// Each builder route matches its group's text read through an object
+/// register, never a 16-byte stack or frame read at the same displacement,
+/// which another callee of the submenu may make.
+#[test]
+fn a_builder_route_matches_its_text_read_but_no_stack_read() {
+    use iced_x86::{Decoder, DecoderOptions, Instruction};
+
+    use crate::routes::shape;
+
+    let routes = Routes::embedded().unwrap();
+    // movups xmm0,[<base>+disp32], by the ModRM (and SIB) bytes of each base.
+    let read = |base: &[u8], disp: u64| -> Vec<Instruction> {
+        let mut bytes = vec![0x0f, 0x10];
+        bytes.extend_from_slice(base);
+        bytes.extend_from_slice(&u32::try_from(disp).unwrap().to_le_bytes());
+        let mut decoder = Decoder::with_ip(64, &bytes, 0x1000, DecoderOptions::NONE);
+        core::iter::from_fn(|| decoder.can_decode().then(|| decoder.decode())).collect()
+    };
+    for &(text, disp) in &ATTRIBUTE_TEXT_READS {
+        let builder = text.replace("ui.attribute_text_", "ui.attribute_rows_");
+        let route = routes.routes.iter().find(|r| r.id == builder).unwrap();
+        let How::Among { steps, .. } = &route.how else {
+            panic!("{builder} is no `callees` route");
+        };
+        let entry = |id: &str| (id == text).then_some(disp);
+        let matches = |code: &[Instruction]| shape::matches(steps, code, &entry).count();
+        assert_eq!(matches(&read(&[0x87], disp)), 1, "{builder} through rdi");
+        assert_eq!(
+            matches(&read(&[0x84, 0x24], disp)),
+            0,
+            "{builder} through rsp"
+        );
+        assert_eq!(matches(&read(&[0x85], disp)), 0, "{builder} through rbp");
+    }
+}
+
 /// The push is found among the callees of every group's builder alike, so
 /// no group's rows hang on another group's builder route; the Primary
 /// builder pushes inline and gives nothing, on every kept client.
