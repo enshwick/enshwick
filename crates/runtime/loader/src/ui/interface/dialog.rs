@@ -263,19 +263,20 @@ pub(super) fn showing() -> bool {
 
 /// Whether the player pressed Back (Escape, B) over `window` in this frame:
 /// the press binds to the window's panel, so it does not also open the
-/// pause menu; a dialog over the window takes its own Back instead.
+/// pause menu; while a dialog shows over the window, the press is taken
+/// and dropped, so it neither closes the window under the dialog nor
+/// reaches the game.
 ///
 /// # Safety
 ///
-/// - Called in a frame of the interface update, on its thread, after
-///   `window` began in this frame or the last one.
+/// - Called in a frame of the interface update, on its thread.
 pub(super) unsafe fn back_over(engine: &Engine, window: &engine::Window) -> bool {
-    let node = engine.node_id(window);
-    node != 0
-        && !showing()
+    engine.node_id(window).is_some_and(|node| {
         // SAFETY: in a frame of the interface update on its thread, by this
-        // function's `# Safety`.
-        && unsafe { engine.back_pressed(node) }
+        // function's `# Safety`, with the node `node_id` gives only for a
+        // window drawn in this update or the last one.
+        unsafe { engine.back_pressed(node) }
+    }) && !showing()
 }
 
 /// The GUIDs of the loader's dialog text tags: title and message per slot.
@@ -483,16 +484,9 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         // which draws the frame, writes it.
         let answered = unsafe { crate::engine::memory::read::<u8>(host, layout.answered) };
         if answered == 0 {
-            // Back (Escape, B) closes the dialog without an answer, as its
-            // buttons need the mouse or Enter; a button pressed in the same
-            // frame wins, so its flag is cleared below.
-            // SAFETY: in a frame of the interface update on its thread, by
-            // this function's `# Safety`.
-            if unsafe { engine.back_pressed(0) }
-                && let Some(gone) = current.take()
-            {
-                gone.answerer.answer(UiDialog::CLOSED);
-            }
+            // The dialog hears no Back: the game's popup gives it no panel
+            // node to bind the press to, and on client 26430625 a press bound
+            // to a node the game does not know faults.
             return;
         }
         // SAFETY: `host` is non-zero, checked by the guard before it, and is

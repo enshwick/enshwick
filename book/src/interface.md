@@ -92,7 +92,8 @@ turn, and the character does not move, attack or interact.
 Back (Escape, or B on a gamepad) over a window goes to the mod. `back` is
 true in the window's body in the frame the player pressed it. The game's
 pause menu does not open. The mod decides what Back does. The examples
-close the window: they stop drawing it.
+close the window: they stop drawing it. While a dialog shows over the
+window, the press is dropped.
 
 The widgets:
 

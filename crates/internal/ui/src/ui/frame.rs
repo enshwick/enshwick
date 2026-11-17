@@ -251,7 +251,8 @@ impl Frame<'_> {
     /// window whose body is drawing, in this frame; false outside a
     /// [`Frame::window`] body. The press goes to the window and does not open
     /// the game's pause menu, so the mod decides what Back does, such as
-    /// closing the window by no longer drawing it.
+    /// closing the window by no longer drawing it. While a dialog shows over
+    /// the window, the press is dropped and this stays false.
     ///
     /// # Examples
     ///

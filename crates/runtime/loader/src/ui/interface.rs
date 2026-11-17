@@ -88,13 +88,22 @@ struct State {
     /// The count of the next frame id a scroll area takes; never reset, so
     /// no area takes the node of another.
     next_scroll: AtomicU64,
+    /// The count of the game's interface updates, every one, also those the
+    /// loader draws nothing in (a game popup, no context).
+    tick: AtomicU64,
 }
 
 static STATE: State = State {
     next_token: AtomicU64::new(1),
     ui_thread: AtomicU32::new(0),
     next_scroll: AtomicU64::new(1),
+    tick: AtomicU64::new(0),
 };
+
+/// The game's interface update now being run, as [`frame`] counts them.
+pub(in crate::ui::interface) fn tick() -> u64 {
+    STATE.tick.load(Ordering::Relaxed)
+}
 
 /// A token for the frame callback about to draw, unique in the process.
 fn next_token() -> u64 {
@@ -413,6 +422,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
 /// - `next` is the rest of `ui.popup`'s chain, and `onward` calls it with
 ///   `state`.
 unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
+    STATE.tick.fetch_add(1, Ordering::Relaxed);
     let Some(engine) = ENGINE.get() else {
         return onward.call();
     };

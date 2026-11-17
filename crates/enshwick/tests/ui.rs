@@ -68,7 +68,7 @@ mod tests {
     );
 
     /// Back reaches the window for its frame only, never as a click on a
-    /// widget of the same label, and not while a dialog takes it.
+    /// widget of the same label, and not while a dialog shows over it.
     fn back_reaches_only_the_window(loader: &enshwick::test::Installed) {
         loader.input("main", Input::Click);
         let _clicked = loader.draw_frame();
@@ -85,7 +85,11 @@ mod tests {
             .unwrap();
         loader.input("main", Input::Back);
         let _under = loader.draw_frame();
-        assert_eq!(BACKS.load(Ordering::Relaxed), 0, "the dialog takes Back");
+        assert_eq!(
+            BACKS.load(Ordering::Relaxed),
+            0,
+            "Back under a dialog is dropped"
+        );
         assert!(loader.answer(None));
         let _after = loader.draw_frame();
         assert_eq!(BACKS.load(Ordering::Relaxed), 0, "and the press is spent");

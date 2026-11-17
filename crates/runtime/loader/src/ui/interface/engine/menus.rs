@@ -1,3 +1,5 @@
+use core::num::NonZeroU64;
+
 use super::{ACTION_SPEC, Buf, Engine, MENU_ENTRY, UiText};
 
 impl Engine {
@@ -51,11 +53,18 @@ impl Engine {
     /// Whether the player pressed Back (Escape, B) this frame, taking the
     /// press so nothing else acts on it; `node` binds the action to a window.
     ///
+    /// On client 26430625 `ui.action_query` looks the bound node up and,
+    /// while Back's input is active, reads through the result without a null
+    /// check, so a node the game does not know faults (seen live on the join
+    /// dialog with node 0, reading 0x50).
+    ///
     /// # Safety
     ///
     /// - Called inside a frame of the game's interface update, on its
     ///   thread.
-    pub(in crate::ui::interface) unsafe fn back_pressed(&self, node: u64) -> bool {
+    /// - `node` is the id of a panel the game drew in this frame or the last
+    ///   one, as [`Engine::node_id`] gives it.
+    pub(in crate::ui::interface) unsafe fn back_pressed(&self, node: NonZeroU64) -> bool {
         let (Some(layout), Some(new), Some(query)) =
             (self.menu, self.action_new, self.action_query)
         else {
@@ -67,7 +76,7 @@ impl Engine {
         // `# Safety`; `spec` holds the table's `ui.action_extent` bytes
         // (`MenuLayout::read`). Action 1 is Back, as the pause menu builds it.
         unsafe { new(spec.ptr(), 1, 1) };
-        spec.u64(layout.action_node, node);
+        spec.u64(layout.action_node, node.get());
         spec.u8(layout.action_bound, 1);
         // SAFETY: `query` is the game's `ui.action_query`, checked in
         // `Engine::resolve`, on the spec `new` filled; the details out may be

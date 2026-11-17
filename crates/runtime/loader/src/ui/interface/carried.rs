@@ -294,10 +294,9 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
 /// As [`draw`]; `drawn` stays in place until it returns.
 unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn) -> Click {
     // Back (Escape, B), bound to the window's panel from the last frame so
-    // the press does not also open the pause menu, steps back; a dialog over
-    // the window draws after it and takes its own Back.
+    // the press does not also open the pause menu, steps back.
     // SAFETY: in a frame of the interface update on its thread, by this
-    // function's `# Safety`, with the window drawn in the last frame.
+    // function's `# Safety`.
     let back = unsafe { super::dialog::back_over(engine, &drawn.window) };
     let stepped = if back { drawn.back() } else { Click::Nothing };
     let (mod_id, id) = &drawn.key;

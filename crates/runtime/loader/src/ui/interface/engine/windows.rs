@@ -1,3 +1,5 @@
+use core::num::NonZeroU64;
+
 use enshwick_core::abi::UiExtension;
 
 use super::{
@@ -28,16 +30,21 @@ impl Engine {
         frame.read_usize(self.layout.frame_node)
     }
 
-    /// The id of `window`'s panel node, for actions bound to the window.
-    pub(in crate::ui::interface) fn node_id(&self, window: &Window) -> u64 {
+    /// The id of `window`'s panel node, for actions bound to the window;
+    /// `None` unless the window began in this interface update or the last
+    /// one, since the game may no longer know an older node.
+    pub(in crate::ui::interface) fn node_id(&self, window: &Window) -> Option<NonZeroU64> {
+        if !window.drawn_lately(crate::ui::interface::tick()) {
+            return None;
+        }
         let node = self.frame_node(&window.panel);
         if node == 0 {
-            return 0;
+            return None;
         }
         // SAFETY: `node` is non-zero, checked by the guard before it: the game
         // wrote it into the panel frame when the window was drawn, and its id
         // sits at the table's `ui.node_id`.
-        unsafe { crate::engine::memory::read::<u64>(node, self.layout.node_id) }
+        NonZeroU64::new(unsafe { crate::engine::memory::read::<u64>(node, self.layout.node_id) })
     }
 
     /// Starts a window: the game's popup panel over a dimmed screen, `width`
@@ -63,6 +70,7 @@ impl Engine {
         if window.edge.is_none() {
             crate::ui::interface::window_drawn();
         }
+        window.began = Some(crate::ui::interface::tick());
         window.saved_nav = self.nav(context);
         super::widgets::twins_window(name.hash);
         let name = [name.ptr.expose_provenance() as u64, name.len];
