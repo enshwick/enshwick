@@ -41,7 +41,7 @@ pub(crate) use plan::entries;
 use plan::label;
 pub use plan::{Plan, differences, plan, wanted};
 #[cfg_attr(
-    all(not(windows), not(test)),
+    not(windows),
     expect(unused_imports, reason = "only the running game's join check reads it")
 )]
 pub(crate) use rules::terrain_rules_value;

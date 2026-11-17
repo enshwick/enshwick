@@ -296,18 +296,15 @@ fn prefer(recorded: &[(Guid, Guid)], held: &[Guid]) -> Vec<(Guid, Guid)> {
     first.into_iter().chain(rest).collect()
 }
 
-/// The file in a world's loader data folder that names the terrain
-/// materials it was served when it last loaded.
-const HELD_FILE: &str = "terrain.toml";
-
-/// What a world's [`HELD_FILE`] holds.
+/// What a world's record of its terrain materials holds, in its loader data
+/// folder.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
 struct Held {
     /// The GUIDs of the terrain materials served, mods' and orphans'.
     held: Vec<String>,
 }
 
-/// The text of [`HELD_FILE`] for a world served `materials`.
+/// The text of a world's record for a world served `materials`.
 fn held_text(materials: &[Material]) -> String {
     let held = Held {
         held: materials.iter().map(|m| m.guid.to_string()).collect(),
@@ -315,7 +312,7 @@ fn held_text(materials: &[Material]) -> String {
     toml::to_string(&held).unwrap_or_default()
 }
 
-/// The GUIDs a [`HELD_FILE`] names; none for a file that does not read, and
+/// The GUIDs a world's record names; none for a file that does not read, and
 /// an entry that is no GUID is skipped.
 fn held_of(text: &str) -> Vec<Guid> {
     toml::from_str::<Held>(text).map_or_else(

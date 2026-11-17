@@ -13,8 +13,8 @@ use enshwick_gamedata::reflect::fnv1a32;
 
 use super::table::{self, Adopted};
 use super::{
-    HELD_FILE, Material, Palette, TerrainMaterialError, add_rules, copy_effects, copy_looks,
-    held_of, held_text, name_in, orphans, place, prefer, serving,
+    Material, Palette, TerrainMaterialError, add_rules, copy_effects, copy_looks, held_of,
+    held_text, name_in, orphans, place, prefer, serving,
 };
 use crate::content::served::{Builder, mod_on};
 use crate::engine::loader::Loader;
@@ -440,6 +440,9 @@ fn world_held(loader: &Loader) -> Vec<Guid> {
     held
 }
 
+/// The file in a world's loader data folder that names the terrain materials
+/// it was served when it last loaded.
+const HELD_FILE: &str = "terrain.toml";
 /// The field of the server's configuration that names its save folder.
 const SAVE_DIRECTORY: &str = "saveDirectory";
 /// The save folder a configuration without [`SAVE_DIRECTORY`] gets.
