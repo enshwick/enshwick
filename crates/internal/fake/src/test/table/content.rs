@@ -1,5 +1,5 @@
-//! The fake's recipes, data changes, game rates, texts and item data;
-//! served resources in its `served` module.
+//! The fake's recipes, data changes, game rates, texts, item data, content
+//! renames and entity templates; served resources in its `served` module.
 
 mod served;
 
@@ -291,6 +291,17 @@ pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
         );
         Status::REFUSED
     })
+}
+
+pub(crate) extern "system" fn entity_template(
+    _me: ModHandle,
+    entity: enshwick_core::Entity,
+    out: *mut enshwick_core::abi::Guid,
+) -> Status {
+    found(
+        with(None, |s| s.host.content.templates.get(&entity.0).copied()),
+        out,
+    )
 }
 
 pub(crate) extern "system" fn rename_content(

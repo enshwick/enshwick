@@ -5,6 +5,7 @@ use core::ffi::c_void;
 
 use crate::test::ServedResource;
 use crate::test::table::{Registered, put, with, with_open};
+use enshwick_base::__internal::{BuildResourceError, KeepBase, patch_runs};
 use enshwick_core::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status};
 
 pub(crate) extern "system" fn serve_resource(
@@ -63,52 +64,54 @@ pub(crate) extern "system" fn rebuild_resource(me: ModHandle, key: *const Resour
     if crate::test::table::base::registered::is_off(me) {
         return Status::FAULTED;
     }
-    let closed = with(Err(Status::MISSING), |s| {
+    let closed = with(None, |s| {
         // As the loader: only a mod serving the key rebuilds it.
-        if !s
+        let serves = s
             .content
             .served
             .iter()
-            .any(|served| served.0.key == key && served.1.owner() == Some(me))
-        {
-            return Err(Status::BAD_ARGS);
-        }
-        Ok(s.base.closed())
+            .any(|served| served.0.key == key && served.1.owner() == Some(me));
+        Some(if serves {
+            Ok(s.base.closed())
+        } else {
+            Err(BuildResourceError::NotServed)
+        })
     });
     match closed {
-        Err(status) => status,
+        None => Status::MISSING,
+        Some(Err(why)) => why.status(),
         // As the loader during init: the key's first build keeps its base.
-        Ok(false) => with(Status::MISSING, |s| {
+        Some(Ok(false)) => with(Status::MISSING, |s| {
             s.content.rebuilds.push(key);
             if !s.content.served_builds.keep_base.contains(&key) {
                 s.content.served_builds.keep_base.push(key);
             }
             Status::OK
         }),
-        // As the loader: a patch rebuilding its own key would wait on its build.
-        Ok(true) if building(&key) => Status::BUILDING,
-        Ok(true) => {
-            with((), |s| s.content.rebuilds.push(key));
-            match rebuild_one(&key) {
-                Ok(changed) => {
-                    if changed != Some(0) {
-                        rebuild_readers(key, &mut vec![key]);
-                    }
-                    Status::OK
-                }
-                Err(status) => status,
-            }
-        }
+        Some(Ok(true)) => rebuild(key).map_or_else(BuildResourceError::status, |()| Status::OK),
     }
+}
+
+/// Builds `key` again, then the keys whose builds read it when it changed,
+/// as the loader's rebuild once init ended: [`BuildResourceError::Building`] while
+/// its patches run on this thread, as a patch rebuilding its own key would
+/// wait on its build.
+fn rebuild(key: ResourceKey) -> Result<(), BuildResourceError> {
+    if building(&key) {
+        return Err(BuildResourceError::Building);
+    }
+    with((), |s| s.content.rebuilds.push(key));
+    if rebuild_one(&key)? != Some(0) {
+        rebuild_readers(key, &mut vec![key]);
+    }
+    Ok(())
 }
 
 /// Builds `key` again from the base its game build kept, with the patches
 /// of every mod that built the bytes the game holds, on or off, and takes
 /// the result as the bytes the game holds, as the loader's rebuild: how many
-/// bytes changed, `None` when the game holds none. [`Status::MISSING`] when
-/// no base was kept or no patch built, [`Status::REFUSED`] for another
-/// length than the game holds.
-fn rebuild_one(key: &ResourceKey) -> Result<Option<usize>, Status> {
+/// bytes changed, `None` when the game holds none.
+fn rebuild_one(key: &ResourceKey) -> Result<Option<usize>, BuildResourceError> {
     let found = with(None, |s| {
         s.content
             .served_builds
@@ -121,11 +124,11 @@ fn rebuild_one(key: &ResourceKey) -> Result<Option<usize>, Status> {
         return Ok(None);
     };
     let Some((base, held)) = kept else {
-        return Err(Status::MISSING);
+        return Err(BuildResourceError::NoBase);
     };
     let rebuilt = build_resource(key, &base, Build::Rebuild(&by))?;
     if rebuilt.len() != held.len() {
-        return Err(Status::REFUSED);
+        return Err(BuildResourceError::SizeChanged);
     }
     let changed = rebuilt
         .iter()
@@ -238,7 +241,7 @@ pub(crate) extern "system" fn resource_served(
         copy_resource(key, out, capacity, len, |key| {
             // As the loader: no read before every patch is in.
             if !crate::test::table::late() {
-                return Err(Status::REFUSED);
+                return Err(BuildResourceError::Unsealed);
             }
             let Some(base) = with(None, |s| {
                 s.content
@@ -254,8 +257,8 @@ pub(crate) extern "system" fn resource_served(
             match build_resource(&key, &archived, Build::Scratch) {
                 // As the loader: a key whose every patch failed reads as
                 // the archive has it.
-                Err(Status::MISSING) if key == base => Ok(archived),
-                Err(Status::MISSING) => self::archived(&key),
+                Err(BuildResourceError::NotBuilt) if key == base => Ok(archived),
+                Err(BuildResourceError::NotBuilt) => self::archived(&key),
                 built => built,
             }
         })
@@ -263,7 +266,7 @@ pub(crate) extern "system" fn resource_served(
 }
 
 /// The fake archive's resource `key`.
-fn archived(key: &ResourceKey) -> Result<Vec<u8>, Status> {
+fn archived(key: &ResourceKey) -> Result<Vec<u8>, BuildResourceError> {
     with(None, |s| {
         s.host
             .content
@@ -271,11 +274,12 @@ fn archived(key: &ResourceKey) -> Result<Vec<u8>, Status> {
             .get(&(key.guid, key.type_hash, key.part))
             .cloned()
     })
-    .ok_or(Status::MISSING)
+    .ok_or(BuildResourceError::NotInArchive)
 }
 
 /// Copies the bytes `read` gives for the key at `key` to `out`, writing
-/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short.
+/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short, and
+/// the status of `read`'s error.
 ///
 /// # Safety
 ///
@@ -287,7 +291,7 @@ unsafe fn copy_resource(
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
-    read: impl FnOnce(ResourceKey) -> Result<Vec<u8>, Status>,
+    read: impl FnOnce(ResourceKey) -> Result<Vec<u8>, BuildResourceError>,
 ) -> Status {
     // SAFETY: the caller guarantees `key` null or readable; `as_ref` turns
     // away null.
@@ -296,7 +300,7 @@ unsafe fn copy_resource(
     };
     let data = match read(key) {
         Ok(data) => data,
-        Err(status) => return status,
+        Err(why) => return why.status(),
     };
     // SAFETY: the caller guarantees `len` null or writable and aligned, and
     // `out` null or `capacity` writable bytes apart from `data`, which this
@@ -438,9 +442,19 @@ pub(crate) enum Build<'a> {
     Scratch,
 }
 
+impl<'a> Build<'a> {
+    /// The mods whose patches a rebuild runs; `None` for another build.
+    const fn rebuilt_by(self) -> Option<&'a [Option<ModHandle>]> {
+        match self {
+            Self::Rebuild(by) => Some(by),
+            Self::Game | Self::Scratch => None,
+        }
+    }
+}
+
 /// Builds the served resource `key` from `base` with the patches `kind`
-/// runs, in order: [`Status::MISSING`] when none built. As the loader,
-/// [`Status::BUILDING`] for a key whose patches already run on this thread;
+/// runs, in order: [`BuildResourceError::NotBuilt`] when none built. As the loader,
+/// [`BuildResourceError::Building`] for a key whose patches already run on this thread;
 /// a patch that refuses or hands back bytes it was not lent turns its mod
 /// off in the game's build or a rebuild and is skipped in a scratch one; a
 /// patch whose builder panicked ([`Status::FAULTED`]) runs again only in a
@@ -451,9 +465,9 @@ pub(crate) fn build_resource(
     key: &ResourceKey,
     base: &[u8],
     kind: Build<'_>,
-) -> Result<Vec<u8>, Status> {
+) -> Result<Vec<u8>, BuildResourceError> {
     if building(key) {
-        return Err(Status::BUILDING);
+        return Err(BuildResourceError::Building);
     }
     let patches: Vec<_> = with(Vec::new(), |s| {
         s.content
@@ -462,12 +476,9 @@ pub(crate) fn build_resource(
             .enumerate()
             .filter(|(at, served)| {
                 served.0.key == *key
-                    && match kind {
-                        Build::Rebuild(by) => by.contains(&served.1.owner()),
-                        Build::Game | Build::Scratch => {
-                            !s.content.served_off.contains(at) && !served.1.owner_off(&s.base.off)
-                        }
-                    }
+                    && patch_runs(kind.rebuilt_by(), &served.1.owner(), || {
+                        !s.content.served_off.contains(at) && !served.1.owner_off(&s.base.off)
+                    })
             })
             .map(|(at, served)| (at, served.1))
             .collect()
@@ -475,7 +486,7 @@ pub(crate) fn build_resource(
     let building = Building::enter(*key, kind != Build::Scratch);
     let mut bytes = base.to_vec();
     let Ok(base_len) = u32::try_from(bytes.len()) else {
-        return Err(Status::MISSING);
+        return Err(BuildResourceError::NotBuilt);
     };
     let mut len = base_len;
     let mut by = Vec::new();
@@ -538,7 +549,12 @@ pub(crate) fn build_resource(
                 .iter()
                 .any(|served| served.0.key == *key && served.0.base == *key);
             let builds = &s.content.served_builds;
-            let keeps = reads || builds.keep_base.contains(key) || builds.reads_icons.contains(key);
+            let keeps = KeepBase {
+                asked: builds.keep_base.contains(key),
+                read_served: reads,
+                asked_icons: builds.reads_icons.contains(key),
+            }
+            .keeps();
             s.content.served_builds.game.push(GameBuild {
                 key: *key,
                 holds: built.is_some() || vanilla,
@@ -550,7 +566,7 @@ pub(crate) fn build_resource(
             });
         });
     }
-    built.ok_or(Status::MISSING)
+    built.ok_or(BuildResourceError::NotBuilt)
 }
 
 /// The name the loader gives served resource `key`, from the fake's type

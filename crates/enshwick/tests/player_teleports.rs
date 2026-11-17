@@ -102,4 +102,26 @@ mod tests {
         );
         assert_eq!(teleports[1].position, [40.0, 12.0, -3.0]);
     }
+
+    #[test]
+    fn a_teleport_beside_a_player_is_unavailable_on_a_build_without_current_transform() {
+        let loader = FakeHost::new()
+            .world()
+            .without_fact(facts::CURRENT_TRANSFORM)
+            .player(player(5, 7))
+            .player(player(6, 8))
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let effects = EFFECTS.get().unwrap();
+
+        assert_eq!(
+            effects.teleport_player_to(PlayerKey::new(7), PlayerKey::new(8), Teleport::new()),
+            Err(WorldError::Unavailable),
+            "both players are connected; the build cannot say where the target stands"
+        );
+        assert!(loader.teleports().is_empty());
+    }
 }

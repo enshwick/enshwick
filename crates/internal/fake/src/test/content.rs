@@ -743,6 +743,7 @@ impl Installed {
     /// ```
     pub fn build_resource(&self, key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
         table::content::build_resource(key, base, table::content::Build::Game)
+            .map_err(enshwick_base::__internal::BuildResourceError::status)
     }
 
     /// Plays the client's UI registry knowing the served UI images from

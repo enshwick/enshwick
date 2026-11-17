@@ -46,10 +46,7 @@ impl Installed {
     /// ```
     #[must_use = "the answer says whether the final save ran"]
     pub fn shut_down(&self) -> bool {
-        table::with((), |s| {
-            s.world.save.held = false;
-            s.world.save.shut = false;
-        });
+        table::with((), table::world::saves::end_saves);
         // SAFETY: the event carries no data.
         let _heard = unsafe {
             self.raise_raw(

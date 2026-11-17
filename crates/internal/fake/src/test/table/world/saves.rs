@@ -75,6 +75,13 @@ pub(crate) extern "system" fn save_info(_me: ModHandle, out: *mut SaveInfo) -> S
     crate::test::table::put_headed(out, info)
 }
 
+/// Lets go of the world's save hold, as the loader does when a hosted game
+/// ends or shuts down: no mod holds saves, and the shutdown is still to come.
+pub(crate) const fn end_saves(s: &mut crate::test::table::State) {
+    s.world.save.held = false;
+    s.world.save.shut = false;
+}
+
 pub(crate) extern "system" fn hold_saves(_me: ModHandle, held: u8) -> Status {
     if held > 1 {
         return Status::BAD_ARGS;

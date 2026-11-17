@@ -24,17 +24,6 @@ pub(crate) extern "system" fn component(
     found(address.map(core::ptr::with_exposed_provenance), out)
 }
 
-pub(crate) extern "system" fn entity_template(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    out: *mut enshwick_core::abi::Guid,
-) -> Status {
-    found(
-        with(None, |s| s.host.content.templates.get(&entity.0).copied()),
-        out,
-    )
-}
-
 pub(crate) extern "system" fn hosting(_me: ModHandle, out: *mut u8) -> Status {
     let hosting = with(0, |s| u8::from(s.host.base.serving()));
     crate::test::table::put(out, hosting)

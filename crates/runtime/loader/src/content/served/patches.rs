@@ -21,7 +21,7 @@ use std::sync::atomic::{Ordering, fence};
 
 use enshwick_core::abi::{ResourceKey, Status};
 
-use super::ServedError;
+use super::BuildResourceError;
 
 use super::{
     ICONS_FUSE, OPEN_NEXT, Patch, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served,
@@ -35,7 +35,7 @@ use enshwick_base::Relock;
 /// is first built; afterwards, builds it again from that base and writes the
 /// bytes that differ over the resource the game holds, then does the same
 /// for every served key whose build read it.
-pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Result<(), ServedError> {
+pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Result<(), BuildResourceError> {
     let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
     let Some(list) = RESOURCES.sealed() else {
         let pending = RESOURCES.edit(|pending| match pending.iter().find(|s| serves(s)) {
@@ -43,23 +43,23 @@ pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Result<(), ServedErr
                 entry.keeps_base.store(true, Ordering::Relaxed);
                 Ok(())
             }
-            None => Err(ServedError::NotServed),
+            None => Err(BuildResourceError::NotServed),
         });
         // Sealed since the look before: rebuild from the sealed list.
         return pending.unwrap_or_else(|_| rebuild(owner, key));
     };
     match list.iter().find(|s| serves(s)) {
         Some(entry) => rebuild_entry(list, entry),
-        None => Err(ServedError::NotServed),
+        None => Err(BuildResourceError::NotServed),
     }
 }
 
 /// Builds `entry` of `list` again, then the keys whose builds read it when
 /// its served value may have changed: it changed, or the game never built
-/// it, so only served reads saw it. [`ServedError::Building`] while `entry`'s
+/// it, so only served reads saw it. [`BuildResourceError::Building`] while `entry`'s
 /// patches run on this thread: a patch asking to rebuild its own key would
 /// wait on its own build.
-fn rebuild_entry(list: &[Served], entry: &Served) -> Result<(), ServedError> {
+fn rebuild_entry(list: &[Served], entry: &Served) -> Result<(), BuildResourceError> {
     rebuild_entry_in(list, entry, &mut Vec::new())
 }
 
@@ -69,9 +69,9 @@ fn rebuild_entry_in(
     list: &[Served],
     entry: &Served,
     done: &mut Vec<ResourceKey>,
-) -> Result<(), ServedError> {
+) -> Result<(), BuildResourceError> {
     if building(&entry.key) {
-        return Err(ServedError::Building);
+        return Err(BuildResourceError::Building);
     }
     done.push(entry.key);
     if rebuild_one(entry)? != Some(0) {
@@ -83,7 +83,7 @@ fn rebuild_entry_in(
 /// Builds `entry` again from its kept base and writes the bytes that differ
 /// over those the game holds; how many differed, `None` before its first
 /// build, which takes the values in force.
-fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
+fn rebuild_one(entry: &Served) -> Result<Option<usize>, BuildResourceError> {
     let _one_at_a_time = entry.rebuilding.relock();
     // The game resolves the resource meanwhile: the patches run outside the
     // state's lock, on a copy of the base.
@@ -93,7 +93,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
             return Ok(None);
         };
         let Some(base) = state.base.clone() else {
-            return Err(ServedError::NoBase);
+            return Err(BuildResourceError::NoBase);
         };
         (data, len, base, state.built_by.clone())
     };
@@ -104,7 +104,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
         Some(&built_by),
         Build::Game,
     )
-    .ok_or(ServedError::NotBuilt)?;
+    .ok_or(BuildResourceError::NotBuilt)?;
     if built.len != len {
         crate::log!(
             WARN,
@@ -113,7 +113,7 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
             hex(&entry.key.guid.0),
             built.len
         );
-        return Err(ServedError::SizeChanged);
+        return Err(BuildResourceError::SizeChanged);
     }
     let changed = write_differences(data, built.data, len);
     crate::log!(
@@ -178,10 +178,12 @@ pub(super) unsafe fn build_first(
         state.built = Some(result);
         return Some(result);
     };
-    if built.reads
-        || entry.keeps_base.load(Ordering::Relaxed)
-        || entry.reads_icons.load(Ordering::SeqCst)
-    {
+    let keep = enshwick_base::__internal::KeepBase {
+        asked: entry.keeps_base.load(Ordering::Relaxed),
+        read_served: built.reads,
+        asked_icons: entry.reads_icons.load(Ordering::SeqCst),
+    };
+    if keep.keeps() {
         let mut base = vec![0; len];
         // SAFETY: the caller guarantees `len` readable bytes at `data`,
         // unchanged for the call.
@@ -201,16 +203,16 @@ pub(super) unsafe fn build_first(
 /// archive. A patch that fails is skipped, its mod left on; when every
 /// patch fails, a changed vanilla key reads as the archive has it and a new
 /// key as missing. Refused before the registrations seal;
-/// [`ServedError::Building`] for a key whose patches run on this thread, which a
+/// [`BuildResourceError::Building`] for a key whose patches run on this thread, which a
 /// patch reading it would build again without end.
-pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, ServedError> {
+pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, BuildResourceError> {
     if RESOURCES.sealed().is_none() {
-        return Err(ServedError::Unsealed);
+        return Err(BuildResourceError::Unsealed);
     }
     let archive = |key: &ResourceKey| {
         crate::engine::archive::game()
             .and_then(|archive| archive.resource(key))
-            .ok_or(ServedError::NotInArchive)
+            .ok_or(BuildResourceError::NotInArchive)
     };
     if !linked() {
         return archive(&key);
@@ -220,7 +222,7 @@ pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, ServedError> {
         return archive(&new.or(aliased).unwrap_or(key));
     };
     if building(&entry.key) {
-        return Err(ServedError::Building);
+        return Err(BuildResourceError::Building);
     }
     read_served(entry, archive(&entry.base)?, archive)
 }
@@ -228,13 +230,13 @@ pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, ServedError> {
 /// `entry` built for a mod's served read from `base`, its base's bytes:
 /// each patch of a mod on, a failed one skipped. When none built, the key
 /// as `archive` has it: `base` itself for a key patched in place, and
-/// [`ServedError::NotInArchive`] for a new one. The game's builds running on this
+/// [`BuildResourceError::NotInArchive`] for a new one. The game's builds running on this
 /// thread are noted as reading `entry`.
 fn read_served(
     entry: &Served,
     base: Vec<u8>,
-    archive: impl FnOnce(&ResourceKey) -> Result<Vec<u8>, ServedError>,
-) -> Result<Vec<u8>, ServedError> {
+    archive: impl FnOnce(&ResourceKey) -> Result<Vec<u8>, BuildResourceError>,
+) -> Result<Vec<u8>, BuildResourceError> {
     note_read(entry);
     match run_patches(
         entry,
@@ -699,12 +701,7 @@ pub(super) fn run_patches(
     let building = Building::enter(entry.key, kind);
     let (mut current, mut current_len) = (data, len);
     let mut applied = Vec::new();
-    // A rebuild runs every patch the game's build applied, one whose
-    // builder panicked since included: the game holds what each added.
-    let runs = |p: &Patch| match only {
-        Some(only) => only.contains(&p.owner),
-        None => p.runs(mod_on),
-    };
+    let runs = |p: &Patch| enshwick_base::__internal::patch_runs(only, &p.owner, || p.runs(mod_on));
     for patch in entry.patches.iter().filter(|p| runs(p)) {
         let (mut built, mut built_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: `patch.apply` is a live mod's or the loader's

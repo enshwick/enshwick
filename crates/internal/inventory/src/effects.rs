@@ -39,11 +39,10 @@ use crate::Entity;
 use crate::PlayerKey;
 use crate::WorldError;
 use crate::abi::{Header, SpawnRequest, TeleportRequest};
-use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{BaseLoad, Host, Off};
-use enshwick_world::__internal::{world_check, world_status};
+use enshwick_world::__internal::{Transform, characters, position, world_check, world_status};
 
 #[cfg(feature = "unstable")]
 mod notify;
@@ -360,7 +359,7 @@ const _: () = assert!(size_of::<Effects>() == size_of::<usize>());
 struct Resolved {
     host: Host,
     /// The `CurrentTransform` component, read for where a player stands.
-    transform: Option<ComponentType>,
+    transform: Option<Transform>,
     npc: Option<NpcCommand>,
     toggle: Option<SetToggle>,
     threat: Option<AddThreat>,
@@ -433,7 +432,7 @@ impl Effects {
         })();
         Self(RESOLVED.get_or_init(|| Resolved {
             host,
-            transform: ComponentType::named(host, ids::CURRENT_TRANSFORM).ok(),
+            transform: Transform::named(host).ok(),
             npc: keep("survivor orders", npc),
             toggle: keep("toggles", toggle),
             threat: keep("threat", threat),
@@ -672,7 +671,7 @@ impl Effects {
         position: [f64; 3],
         how: Teleport,
     ) -> Result<(), WorldError> {
-        let [character] = self.characters([player])?;
+        let [character] = characters(self.0.host, [player])?;
         self.teleport(character, position, how)
     }
 
@@ -684,7 +683,8 @@ impl Effects {
     /// # Errors
     ///
     /// [`WorldError::Gone`] when either player is not connected or has no
-    /// character with a place in the world; otherwise as
+    /// character with a place in the world; [`WorldError::Unavailable`] when
+    /// the build cannot say where a character stands; otherwise as
     /// [`teleport`](Self::teleport).
     ///
     /// # Examples
@@ -704,33 +704,10 @@ impl Effects {
         to: PlayerKey,
         how: Teleport,
     ) -> Result<(), WorldError> {
-        let [character, target] = self.characters([player, to])?;
-        let position = self.position(target).ok_or(WorldError::Gone)?;
+        let [character, target] = characters(self.0.host, [player, to])?;
+        let transform = self.0.transform.ok_or(WorldError::Unavailable)?;
+        let position = position(transform, self.0.host, target).ok_or(WorldError::Gone)?;
         self.teleport(character, position, how.search_best_spawn_position())
-    }
-
-    /// The characters of the connected players `keys`, from one list of the
-    /// players.
-    fn characters<const N: usize>(self, keys: [PlayerKey; N]) -> Result<[Entity; N], WorldError> {
-        let players = enshwick_world::__internal::listed(self.0.host)
-            .or_else(|status| world_check(status, WorldError::Unavailable).map(|()| Vec::new()))?;
-        let mut characters = [Entity::NONE; N];
-        for (character, key) in characters.iter_mut().zip(keys) {
-            *character = players
-                .iter()
-                .find(|player| player.key == key && player.entity != Entity::NONE)
-                .map(|player| player.entity)
-                .ok_or(WorldError::Gone)?;
-        }
-        Ok(characters)
-    }
-
-    /// Where `entity` stands, in metres, from its transform.
-    fn position(self, entity: Entity) -> Option<[f64; 3]> {
-        let data = enshwick_base::__internal::component(self.0.transform?, self.0.host, entity)?;
-        // SAFETY: `component` returned the entity's live CurrentTransform, valid
-        // until the game thread moves on, and it is read at once.
-        Some(unsafe { crate::ecs::transform_position(data.cast()) })
     }
 }
 

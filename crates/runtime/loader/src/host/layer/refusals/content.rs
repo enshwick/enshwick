@@ -110,16 +110,10 @@ impl Refusal for crate::content::data_changes::DataChangeError {
     }
 }
 
-/// A key the mod does not serve is a bad argument; one building on this
-/// thread says so; no base, build or archive entry missing; a size changed
-/// or a read before the seal refused.
-impl Refusal for crate::content::served::ServedError {
+/// The status [`BuildResourceError::status`](crate::content::served::BuildResourceError::status)
+/// gives, which the fake host answers as well.
+impl Refusal for crate::content::served::BuildResourceError {
     fn status(&self) -> Status {
-        match self {
-            Self::NotServed => Status::BAD_ARGS,
-            Self::Building => Status::BUILDING,
-            Self::NoBase | Self::NotBuilt | Self::NotInArchive => Status::MISSING,
-            Self::SizeChanged | Self::Unsealed => Status::REFUSED,
-        }
+        Self::status(*self)
     }
 }

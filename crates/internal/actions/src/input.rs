@@ -260,13 +260,8 @@ impl Input {
     /// [`WorldError::Unavailable`] on a server, otherwise the loader's refusal.
     #[script]
     pub fn local_status(self) -> Result<LocalInputStatus, WorldError> {
-        use crate::abi::{Header, LocalInputInfo as Info};
-        let mut info = Info {
-            header: Header::of::<Info>(),
-            flags: 0,
-            reserved: 0,
-            age_ms: u64::MAX,
-        };
+        use crate::abi::LocalInputInfo as Info;
+        let mut info = Info::EMPTY;
         let host = self.0.host;
         world_status((host.api().local_input_status)(
             host.handle(),

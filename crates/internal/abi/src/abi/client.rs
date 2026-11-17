@@ -32,6 +32,24 @@ impl LocalInputInfo {
     pub const SAMPLE_PRESENT: u32 = 16;
     /// Requested, available, enabled and sampled within the existing 1000 ms window.
     pub const FRESH: u32 = 32;
+    /// Its header set, no flag and never sampled: the value a read starts
+    /// from. A read before any sample keeps `age_ms` at `u64::MAX` but sets
+    /// the flags of what the loader found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::LocalInputInfo;
+    ///
+    /// let never = LocalInputInfo::EMPTY;
+    /// assert_eq!((never.flags, never.age_ms), (0, u64::MAX));
+    /// ```
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        flags: 0,
+        reserved: 0,
+        age_ms: u64::MAX,
+    };
 }
 
 /// The client's state in one copy, which
