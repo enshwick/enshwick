@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 14
+#define ENSHWICK_ABI_MINOR 15
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -3111,7 +3111,8 @@ typedef struct EnshwickUiWidget {
 // An `EnshwickUiWidget_ITEM_SLOT`'s `result` bit: the player clicked the
 // slot this frame.
 #define EnshwickUiWidget_SLOT_CLICKED 1
-// An `EnshwickUiWidget_ITEM_SLOT`'s `result` bit: the cursor is on the slot.
+// An `EnshwickUiWidget_ITEM_SLOT`'s `result` bit: the cursor is on the slot,
+// or, while a gamepad drives the interface, the slot holds the focus.
 #define EnshwickUiWidget_SLOT_HOVERED 2
 // The row shows its value and does not take changes; a button does not
 // take clicks.
@@ -3298,17 +3299,42 @@ typedef struct EnshwickUiExtension {
   uint32_t host_count;
   // Zero.
   uint32_t reserved_hosts;
+  // Where along its edge the panel sits: `EnshwickUiExtension_CENTER`,
+  // `EnshwickUiExtension_START` or `EnshwickUiExtension_END`. A spec of an older
+  // minor reads zero, the centre.
+  uint32_t align;
+  // Layout units the panel moves along its edge from where `align` puts
+  // it, toward the edge's end (right or down) when positive; at most
+  // `EnshwickUiExtension_MAX_OFFSET` either way. The layout is 1920 units
+  // wide and 1080 high, scaled to the window.
+  float shift;
+  // Layout units the panel moves away from its edge into the screen,
+  // from 0 to `EnshwickUiExtension_MAX_OFFSET`.
+  float inset;
+  // Zero.
+  uint32_t reserved_place;
 } EnshwickUiExtension;
-// The left edge, centred from top to bottom.
+// The left edge.
 #define EnshwickUiExtension_LEFT 0
-// The right edge, centred from top to bottom.
+// The right edge.
 #define EnshwickUiExtension_RIGHT 1
-// The top edge, centred from left to right.
+// The top edge.
 #define EnshwickUiExtension_TOP 2
-// The bottom edge, centred from left to right.
+// The bottom edge.
 #define EnshwickUiExtension_BOTTOM 3
 // The most host templates one panel names.
 #define EnshwickUiExtension_MAX_HOSTS 64
+// The panel centred along its edge.
+#define EnshwickUiExtension_CENTER 0
+// The panel at the start of its edge: the top of a side edge, the left
+// of the top or bottom edge.
+#define EnshwickUiExtension_START 1
+// The panel at the end of its edge: the bottom of a side edge, the
+// right of the top or bottom edge.
+#define EnshwickUiExtension_END 2
+// The largest `shift` either way and the largest `inset`, in layout
+// units: the layout's width, past which a panel leaves every screen.
+#define EnshwickUiExtension_MAX_OFFSET 1920.0
 
 // Cached diagnostics of the client's local gameplay-input sampler.
 // Flags and age are weakly consistent observations, not world or session identity.
@@ -4235,7 +4261,8 @@ typedef struct EnshwickUiFrame {
   // frame, as the game packs it, `inventory | index << 32`, the
   // inventory an entity of the client's world; 0 while the cursor is on
   // none, outside an inventory screen and on a build where the loader
-  // does not find the game's slot widget.
+  // does not find the game's slot widget. While a gamepad drives the
+  // interface, the slot that holds the screen's focus.
   uint64_t hovered_slot;
   // The item id in `hovered_slot`; 0 for an empty slot.
   EnshwickItemId hovered_item;
@@ -6742,11 +6769,13 @@ typedef struct EnshwickHostApi {
   // the thread that draws the interface; the callback draws into the
   // panel with `EnshwickHostApi.ui_widget`, without a window of its own
   // (`EnshwickStatus_REFUSED` for `EnshwickUiWidget_WINDOW` and `EnshwickUiWidget_END`).
-  // Panels at one edge share one window, which opens only once a panel
-  // draws a widget that needs it. The panel never changes the game
+  // Panels at one placement share one window, which opens only once a
+  // panel draws a widget that needs it. The panel never changes the game
   // screen's own layout. Client only (`EnshwickStatus_UNAVAILABLE` on a server,
   // `EnshwickStatus_MISSING` for a screen this game build lacks); `EnshwickStatus_BAD_ARGS` for a null
-  // or short `spec`, an unknown edge, an unreadable screen name, or a
+  // or short `spec`, an unknown edge or alignment, a `shift` or `inset`
+  // past its bounds or not a number, a non-zero `reserved_place`, an
+  // unreadable screen name, or a
   // screen on which the player is in the world with no window open
   // (`InGame`, `NoUi`, `TakeScreenshot`, the multitools' building
   // screens); allowed during `enshwick_mod_init` only, on the thread that
@@ -8288,7 +8317,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiDialog, message) == 24, "offset of UiD
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiDialog, detail) == 40, "offset of UiDialog.detail");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiDialog, buttons) == 56, "offset of UiDialog.buttons");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiDialog, flags) == 60, "offset of UiDialog.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiExtension) == 48, "size of UiExtension");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiExtension) == 64, "size of UiExtension");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickUiExtension) == 8, "alignment of UiExtension");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, header) == 0, "offset of UiExtension.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, screen) == 8, "offset of UiExtension.screen");
@@ -8297,6 +8326,10 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, reserved) == 28, "offset of
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, hosts) == 32, "offset of UiExtension.hosts");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, host_count) == 40, "offset of UiExtension.host_count");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, reserved_hosts) == 44, "offset of UiExtension.reserved_hosts");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, align) == 48, "offset of UiExtension.align");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, shift) == 52, "offset of UiExtension.shift");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, inset) == 56, "offset of UiExtension.inset");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiExtension, reserved_place) == 60, "offset of UiExtension.reserved_place");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickUiFrame) == 128, "size of UiFrame");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickUiFrame) == 8, "alignment of UiFrame");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickUiFrame, header) == 0, "offset of UiFrame.header");

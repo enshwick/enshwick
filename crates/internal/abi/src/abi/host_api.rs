@@ -2097,11 +2097,13 @@ pub struct HostApi {
     /// the thread that draws the interface; the callback draws into the
     /// panel with [`HostApi::ui_widget`], without a window of its own
     /// ([`Status::REFUSED`] for [`UiWidget::WINDOW`] and [`UiWidget::END`]).
-    /// Panels at one edge share one window, which opens only once a panel
-    /// draws a widget that needs it. The panel never changes the game
+    /// Panels at one placement share one window, which opens only once a
+    /// panel draws a widget that needs it. The panel never changes the game
     /// screen's own layout. Client only ([`Status::UNAVAILABLE`] on a server,
     /// [`Status::MISSING`] for a screen this game build lacks); [`Status::BAD_ARGS`] for a null
-    /// or short `spec`, an unknown edge, an unreadable screen name, or a
+    /// or short `spec`, an unknown edge or alignment, a `shift` or `inset`
+    /// past its bounds or not a number, a non-zero `reserved_place`, an
+    /// unreadable screen name, or a
     /// screen on which the player is in the world with no window open
     /// (`InGame`, `NoUi`, `TakeScreenshot`, the multitools' building
     /// screens); allowed during `enshwick_mod_init` only, on the thread that

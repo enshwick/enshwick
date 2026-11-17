@@ -41,13 +41,13 @@ mod tests {
             hud:text("TopRight", { text = "Raid soon", style = "Warning" })
             hud:progress("BottomLeft", 0.25)
         end)
-        enshwick.ui.extend_screen("StorageChest", "Right", function(panel)
+        enshwick.ui.extend_screen("StorageChest", { edge = "Right" }, function(panel)
             panel:label({ text = "Shared with your guild", style = "Secondary" })
             if panel:button({ text = "Sort", enabled = false }) then
                 enshwick.log.info("sorted")
             end
         end)
-        local ok, why = pcall(enshwick.ui.extend_screen, "InGame", "Left", function() end)
+        local ok, why = pcall(enshwick.ui.extend_screen, "InGame", { edge = "Left" }, function() end)
         enshwick.log.info(`in game {ok}`)
         enshwick.ui.dialog({
             title = "Updates",
@@ -525,7 +525,7 @@ mod tests {
             FakeHost::new().side(Side::CLIENT),
             r#"
             local guard = enshwick.content.guid("you.guards:guard")
-            enshwick.ui.extend_screen_for("StorageChest", "Right", { guard }, function(panel)
+            enshwick.ui.extend_screen_for("StorageChest", { edge = "Right" }, { guard }, function(panel)
                 panel:label({ text = "Ours" })
             end)
             enshwick.ui.on_frame(function(frame)
@@ -563,7 +563,7 @@ mod tests {
         let loader = run(
             FakeHost::new().side(Side::CLIENT).item(torch, 20, 0),
             r#"
-            enshwick.ui.extend_screen("Backpack", "Right", function(panel)
+            enshwick.ui.extend_screen("Backpack", { edge = "Left", align = "Start", shift = 362, inset = 125 }, function(panel)
                 local input = panel:item_slot(0x5e01, 3)
                 local slot = panel:hovered_slot()
                 enshwick.log.info(`clicked {input.clicked} hovered {slot and slot.count}`)
@@ -575,6 +575,15 @@ mod tests {
         );
         loader.slot_input(torch, Input::Click);
         loader.hover_slot(Some((0x3_0000_0041, torch, 2, enshwick::Entity(0))));
+        let under_slots = enshwick::ui::PanelPlacement::new(enshwick::ui::Edge::Left)
+            .align(enshwick::ui::Align::Start)
+            .shift(362.0)
+            .inset(125.0);
+        assert_eq!(
+            loader.screen_placements(HudScreenType::Backpack),
+            [under_slots],
+            "the script's placement table"
+        );
         let drawn = loader.draw_screen(HudScreenType::Backpack);
         assert_eq!(
             drawn[0].1,

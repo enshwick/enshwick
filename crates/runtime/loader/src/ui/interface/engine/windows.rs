@@ -1,7 +1,9 @@
 use core::num::NonZeroU64;
 
+#[cfg(test)]
 use enshwick_core::abi::UiExtension;
 
+use crate::ui::place::Place;
 use crate::ui::window_node::{NAME_FITS, SHORT_LEN, short_name};
 
 use super::{
@@ -22,7 +24,7 @@ impl Window {
     /// The flags the window starts with: a panel beside a game screen is an
     /// overlay, so that screen keeps its keys, tabs and hover.
     const fn flags(&self) -> u32 {
-        if self.edge.is_some() { 0 } else { MODAL }
+        if self.place().is_some() { 0 } else { MODAL }
     }
 }
 
@@ -55,18 +57,6 @@ pub(super) const fn inner_width(extension: bool) -> u16 {
 const NAV_WINDOW: u32 = 2;
 /// The navigation kind of a scrolled column.
 pub(super) const NAV_COLUMN: u32 = 3;
-
-/// The game's alignment word for a panel at `edge` of its parent, centred
-/// along it: the vertical part in the high byte, the horizontal in the low,
-/// 1 for the start, 2 the centre, 3 the end, as the HUD's columns take it.
-const fn edge_align(edge: u32) -> u16 {
-    match edge {
-        UiExtension::LEFT => 0x201,
-        UiExtension::TOP => 0x102,
-        UiExtension::BOTTOM => 0x302,
-        _ => 0x203,
-    }
-}
 
 impl Engine {
     /// The node of a frame the game opened in `frame`.
@@ -111,7 +101,7 @@ impl Engine {
         title: &UiText,
     ) {
         // A panel beside a game screen leaves the keys to that screen's own gate.
-        if window.edge.is_none() {
+        if window.place().is_none() {
             crate::ui::interface::window_drawn();
         }
         window.began = Some(crate::ui::interface::tick());
@@ -157,8 +147,8 @@ impl Engine {
         // entry bytes checked in `Engine::resolve`, on the backdrop frame the
         // game filled one call earlier.
         unsafe { (self.frame_stretch)(window.backdrop.ptr()) };
-        if window.edge.is_some() {
-            let margin = [HUD_MARGIN; 4];
+        if let Some(place) = window.place() {
+            let margin = place.padding(HUD_MARGIN, f32::from(EXTENSION_WIDTH));
             // SAFETY: `self.node_padding` is the game's `ui.node_padding`, its
             // entry bytes checked in `Engine::resolve`, on the backdrop frame's
             // node the game filled above, with four live floats.
@@ -176,7 +166,7 @@ impl Engine {
         // table's `ui.frame_extent` bytes (`Layout::read`), name 0 for none.
         unsafe { (self.frame_open)(window.panel.ptr(), 0) };
         let panel = self.frame_node(&window.panel);
-        let extension = window.edge.is_some();
+        let extension = window.place().is_some();
         let padding = padding(extension).map(f32::from);
         // SAFETY: `self.node_padding` is the game's `ui.node_padding`, its
         // entry bytes checked in `Engine::resolve`, on the node the game just
@@ -187,7 +177,7 @@ impl Engine {
         // entry bytes checked in `Engine::resolve`, on the panel's node, with
         // two live floats.
         unsafe { (self.node_spacing)(panel, &raw const gap, 0) };
-        let align = window.edge.map_or(0x202, edge_align);
+        let align = window.place().map_or(0x202, Place::align_word);
         // SAFETY: `self.node_align` is the game's `ui.node_align`, its entry
         // bytes checked in `Engine::resolve`, on the panel's node, with a
         // live alignment word.
@@ -299,21 +289,9 @@ mod tests {
 
     #[test]
     fn a_panel_beside_a_screen_leaves_that_screen_its_keys_and_clicks_and_a_window_holds_them() {
-        let panel = Window::extension(UiExtension::RIGHT, 0xa);
+        let panel = Window::extension(Place::edge(UiExtension::RIGHT), 0xa);
         assert_eq!(panel.flags(), 0, "an overlay, as the game's button hints");
         assert_eq!(Window::new().flags(), MODAL, "a popup, as the game's");
         assert_eq!(Window::screen(0x1b, 30.0).flags(), MODAL);
-    }
-
-    #[test]
-    fn each_edge_puts_the_panel_at_its_side_centred_along_it() {
-        let words = [
-            UiExtension::LEFT,
-            UiExtension::RIGHT,
-            UiExtension::TOP,
-            UiExtension::BOTTOM,
-        ]
-        .map(edge_align);
-        assert_eq!(words, [0x201, 0x203, 0x102, 0x302]);
     }
 }

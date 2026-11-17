@@ -44,6 +44,10 @@ mod tests {
                     hosts: core::ptr::null(),
                     host_count: 0,
                     reserved_hosts: 0,
+                    align: UiExtension::CENTER,
+                    shift: 0.0,
+                    inset: 0.0,
+                    reserved_place: 0,
                 };
                 (host.api().ui_extension)(host.handle(), &raw const spec, Some(nothing), null_mut())
             };

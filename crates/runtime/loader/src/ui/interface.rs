@@ -143,10 +143,10 @@ struct Drawing {
     window_open: bool,
     /// Drawing the HUD: items gather for their anchors.
     hud: bool,
-    /// The edge of the game screen whose extension draws now: its widgets
-    /// go into that edge's window, which the loader opens and the callback
-    /// may not end or nest.
-    extension: Option<u32>,
+    /// The window of the place beside the game screen whose extension draws
+    /// now: its widgets go into that place's window, which the loader opens
+    /// and the callback may not end or nest.
+    extension: Option<extensions::PanelWindow>,
 }
 
 /// A HUD item a callback drew: anchor, then a label or a bar.
@@ -430,7 +430,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     let nav = if context == 0 { 0 } else { engine.nav(context) };
     onward.call();
     ARENA.with_borrow_mut(Arena::next_frame);
-    item_slots::end_frame();
+    item_slots::end_frame(context);
     tooltips::end_frame();
     painter::next_frame();
     // A client that never hosts never steps, so its waiting patches are also

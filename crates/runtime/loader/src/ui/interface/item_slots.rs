@@ -43,9 +43,14 @@ const STATE_BYTES: usize = 16;
 #[derive(Clone, Copy, Debug, Default, bytemuck::Zeroable, bytemuck::Pod)]
 pub(crate) struct Answer {
     rect: [f32; 4],
-    /// Non-zero while the cursor is on the slot.
-    hovered: u8,
-    entered: [u8; 4],
+    /// Non-zero while the slot holds the screen's focus, which follows the
+    /// selection with a mouse and the stick with a gamepad.
+    focused: u8,
+    cleared: u8,
+    /// Non-zero while the mouse cursor is on the slot; the widget tests the
+    /// cursor only while the gamepad does not drive the interface.
+    pointer: u8,
+    entered: [u8; 2],
     /// The press test's answer, [`CLICKED`] for a click.
     pressed: u8,
     press_rest: [u8; 3],
@@ -75,6 +80,62 @@ struct Record {
 
 const _: () = assert!(size_of::<Answer>() == 32 && size_of::<Record>() == 72);
 
+/// What the player points at: what the mouse cursor is on, else, while the
+/// gamepad drives the interface, what holds the focus; `navigating` is read
+/// only then. The one rule for a slot's answer and for a frame's notes.
+fn pointed<T>(
+    pointer: Option<T>,
+    focused: Option<T>,
+    navigating: impl FnOnce() -> bool,
+) -> Option<T> {
+    pointer.or_else(|| focused.filter(|_| navigating()))
+}
+
+impl Answer {
+    /// Whether the player points at the slot, by [`pointed`].
+    fn pointed(&self, navigating: impl FnOnce() -> bool) -> bool {
+        let set = |byte: u8| (byte != 0).then_some(());
+        pointed(set(self.pointer), set(self.focused), navigating).is_some()
+    }
+}
+
+/// Where the interface says whether the gamepad drives it: the context's
+/// input record, and the byte in it that is non-zero while it does
+/// (`ui.item_slot` tests the cursor only while that byte is 0, client
+/// 26430625).
+#[derive(Clone, Copy)]
+struct Input {
+    record: usize,
+    navigating: usize,
+}
+
+impl Input {
+    fn read(loader: &Loader) -> Result<Self, Failed> {
+        Ok(Self {
+            record: offset(loader, pinned::ui::CONTEXT_INPUT)?,
+            navigating: offset(loader, pinned::ui::INPUT_NAVIGATING)?,
+        })
+    }
+
+    /// Whether the gamepad drives the interface of `context`; false for 0.
+    ///
+    /// # Safety
+    ///
+    /// - Called on the interface thread.
+    /// - `context` is 0 or the context `Engine::context` read in this frame.
+    unsafe fn navigating(self, context: usize) -> bool {
+        use crate::engine::memory::read;
+        // SAFETY: a non-zero context is the frame's, live on this thread by
+        // this function's `# Safety`; its input record pointer sits at the
+        // table's `ui.context_input`, as `ui.item_slot`'s test reads it.
+        let record = unsafe { follow(context, self.record) };
+        // SAFETY: a non-zero input record, the context's own, keeps its
+        // navigation byte at the table's `ui.input_navigating`, read as a
+        // byte, never as a bool.
+        record != 0 && unsafe { read::<u8>(record, self.navigating) } != 0
+    }
+}
+
 /// The game's `ui.item_slot(answer, slot, drop, screen)`.
 type SlotFn = unsafe extern "system" fn(*mut Answer, *mut u8, *mut u8, *mut u8) -> *mut Answer;
 /// The game's `ui.item_slot_init(slot)`, which writes a slot's defaults.
@@ -95,7 +156,18 @@ struct Linked {
     player_items: usize,
 }
 
-static LINKED: OnceLock<Linked> = OnceLock::new();
+/// What the slots and the hovered slot found of this build, each set once
+/// when it links: mods' slots also read `input` for their hover, so a build
+/// lacking only what the hover reads still draws them.
+struct State {
+    linked: OnceLock<Linked>,
+    input: OnceLock<Input>,
+}
+
+static STATE: State = State {
+    linked: OnceLock::new(),
+    input: OnceLock::new(),
+};
 
 /// A slot of the game's screen under the cursor: its packed slot, item,
 /// count and the item's own entity.
@@ -117,16 +189,34 @@ impl Hovered {
 }
 
 thread_local! {
-    /// What the game's screens noted under the cursor in this frame so far.
+    /// What the game's screens noted under the mouse cursor in this frame
+    /// so far.
     static NOW: Cell<Hovered> = const { Cell::new(Hovered::NONE) };
-    /// What they noted in the last whole frame, which mods' frames read.
+    /// What they noted holding the focus in this frame so far.
+    static FOCUSED: Cell<Hovered> = const { Cell::new(Hovered::NONE) };
+    /// What the player pointed at in the last whole frame, which mods'
+    /// frames read.
     static SHOWN: Cell<Hovered> = const { Cell::new(Hovered::NONE) };
 }
 
-/// Ends the frame's notes: what the screens noted is what the frames read
-/// from now on, and the next frame notes afresh. On the interface thread.
-pub(super) fn end_frame() {
-    SHOWN.set(NOW.replace(Hovered::NONE));
+/// Ends the frame's notes: the slot the player pointed at is what the
+/// frames read from now on, and the next frame notes afresh. On the
+/// interface thread, with the frame's `context`, 0 for none.
+pub(super) fn end_frame(context: usize) {
+    let (pointer, focused) = (NOW.replace(Hovered::NONE), FOCUSED.replace(Hovered::NONE));
+    // SAFETY: on the interface thread with the frame's context, by this
+    // function's contract.
+    SHOWN.set(pointed_slot(pointer, focused, || unsafe {
+        gamepad_drives(context)
+    }));
+}
+
+/// The slot the player pointed at in a frame whose screens noted `pointer`
+/// under the mouse cursor and `focused` holding the focus, by [`pointed`].
+/// Deciding once a frame keeps the mode off each slot's detour.
+fn pointed_slot(pointer: Hovered, focused: Hovered, navigating: impl FnOnce() -> bool) -> Hovered {
+    let noted = |slot: Hovered| (slot != Hovered::NONE).then_some(slot);
+    pointed(noted(pointer), noted(focused), navigating).unwrap_or(Hovered::NONE)
 }
 
 /// The slot of the game's screen under the cursor in the last whole frame.
@@ -153,12 +243,13 @@ pub(super) fn link(loader: &Loader, asked: bool) {
     };
     match linked(loader) {
         Ok(linked) => {
-            let _first = LINKED.set(linked);
+            let _first = STATE.linked.set(linked);
         }
         Err(failed) => off(&SLOTS_FUSE, failed),
     }
     match hover_holds(loader) {
-        Ok(_) if asked => {
+        Ok(input) if asked => {
+            let _first = STATE.input.set(input);
             let _linked = loader.link_feature(
                 &HOVER_FUSE,
                 Target::Pinned(pinned::ui::ITEM_SLOT),
@@ -184,12 +275,31 @@ fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, Failed> {
         .ok_or((id.id(), crate::engine::builds::ABSENT))
 }
 
-/// The slot widget, once the record's fields and the answer's hover byte,
-/// all the hovered slot reads, lie where the loader keeps them, or the first
-/// table entry it lacks or that does not fit, with why.
-fn hover_holds(loader: &Loader) -> Result<usize, Failed> {
+/// Where the interface says whether the gamepad drives it, once the slot
+/// widget is there, the record's fields and the answer's focus and pointer
+/// bytes, all the hovered slot reads, lie where the loader keeps them, or
+/// the first table entry it lacks or that does not fit, with why.
+fn hover_holds(loader: &Loader) -> Result<Input, Failed> {
     use core::mem::offset_of;
-    let draw = function(loader, pinned::ui::ITEM_SLOT)?;
+    function(loader, pinned::ui::ITEM_SLOT)?;
+    record_holds(loader)?;
+    answer_holds_byte(
+        loader,
+        pinned::ui::ITEM_SLOT_FOCUSED,
+        offset_of!(Answer, focused),
+    )?;
+    answer_holds_byte(
+        loader,
+        pinned::ui::ITEM_SLOT_POINTER,
+        offset_of!(Answer, pointer),
+    )?;
+    Input::read(loader)
+}
+
+/// `Ok` when the stack's record keeps its item, entity and count, and has
+/// its size, where the loader's [`Record`] does.
+fn record_holds(loader: &Loader) -> Result<(), Failed> {
+    use core::mem::offset_of;
     let offset = |id| offset(loader, id);
     for (id, field) in [
         (pinned::ui::VIEWER_ITEM, offset_of!(Record, item)),
@@ -204,12 +314,7 @@ fn hover_holds(loader: &Loader) -> Result<usize, Failed> {
     if offset(size)? != size_of::<Record>() {
         return Err((size.id(), "is not the size of the slot's record"));
     }
-    answer_holds_byte(
-        loader,
-        pinned::ui::ITEM_SLOT_HOVERED,
-        offset_of!(Answer, hovered),
-    )?;
-    Ok(draw)
+    Ok(())
 }
 
 /// The build's constant `id`.
@@ -237,10 +342,12 @@ fn answer_holds_byte(loader: &Loader, id: pinned::Constant, field: usize) -> Res
 }
 
 /// What mods' slots need of this build, or the first table entry it lacks or
-/// that does not fit, with why.
+/// that does not fit, with why; what only their hover reads is
+/// [`hover_holds`]'s.
 fn linked(loader: &Loader) -> Result<Linked, Failed> {
     use core::mem::offset_of;
-    let draw = hover_holds(loader)?;
+    let draw = function(loader, pinned::ui::ITEM_SLOT)?;
+    record_holds(loader)?;
     let (init, info) = (
         function(loader, pinned::ui::ITEM_SLOT_INIT)?,
         function(loader, pinned::item::INFO)?,
@@ -303,8 +410,8 @@ fn answer_offset(state: usize, local: usize, byte: usize) -> Option<usize> {
 
 crate::engine::chains::chain_detour! {
     /// The loader's link on the game's slot widget, `ui.item_slot`: the
-    /// game's slot, then a note of the record of a screen's slot the cursor
-    /// is on. A slot with no screen, as a mod's, is never noted.
+    /// game's slot, then a note of the record of a screen's slot the player
+    /// points at. A slot with no screen, as a mod's, is never noted.
     fn slot_detour(answer: *mut Answer, slot: *mut u8, drop: *mut u8, screen: *mut u8) -> *mut Answer;
     next NEXT;
     fuse &HOVER_FUSE, "the hovered slot";
@@ -313,30 +420,85 @@ crate::engine::chains::chain_detour! {
         if screen.is_null() || answered.is_null() || slot.is_null() {
             return answered;
         }
-        // SAFETY: the game's slot widget returned its non-null answer and
-        // was handed its non-null slot data, whose first field is the
-        // stack's record (client 26430625).
-        if let Some(hovered) = unsafe { noted(answered.expose_provenance(), slot.expose_provenance()) } {
-            NOW.set(hovered);
+        // SAFETY: the game's slot widget returned its non-null answer.
+        if let Some(under_cursor) = unsafe { pointed_by(answered.expose_provenance()) } {
+            // SAFETY: the widget was handed its non-null slot data, whose
+            // first field is the stack's record (client 26430625).
+            unsafe { note(slot.expose_provenance(), under_cursor) };
         }
         answered
     }
 }
 
-/// The slot whose data is at `slot`, when `answer` says the cursor is on it
-/// and its record names one.
+/// Whether `answer` says the mouse cursor is on its slot (true) or the slot
+/// holds the focus (false); `None` for neither, the cheap test each of a
+/// screen's slots takes before [`note`].
 ///
 /// # Safety
 ///
-/// - `answer` is the game slot widget's [`Answer`], `slot` its slot data,
-///   both live for the call on the interface thread.
-#[cold]
-unsafe fn noted(answer: usize, slot: usize) -> Option<Hovered> {
-    use crate::engine::memory::read;
+/// - `answer` is the game slot widget's [`Answer`], live for the call.
+#[inline(always)]
+unsafe fn pointed_by(answer: usize) -> Option<bool> {
+    use core::mem::offset_of;
     // SAFETY: the caller's contract: an `Answer` lives at `answer`.
-    if unsafe { read::<Answer>(answer, 0) }.hovered == 0 {
-        return None;
+    let byte = |field| unsafe { crate::engine::memory::read::<u8>(answer, field) };
+    if byte(offset_of!(Answer, pointer)) != 0 {
+        Some(true)
+    } else {
+        (byte(offset_of!(Answer, focused)) != 0).then_some(false)
     }
+}
+
+/// Notes the slot whose data is at `slot` under the cursor when
+/// `under_cursor`, else holding the focus, as [`noted`] reads it.
+///
+/// # Safety
+///
+/// As [`noted`].
+#[cold]
+unsafe fn note(slot: usize, under_cursor: bool) {
+    // SAFETY: the caller's contract, which is `noted`'s.
+    if let Some(hovered) = unsafe { noted(slot) } {
+        // A branch each, not a chosen `&LocalKey`: through a reference the
+        // thread-local's accessor stays an indirect call.
+        if under_cursor {
+            NOW.set(hovered);
+        } else {
+            FOCUSED.set(hovered);
+        }
+    }
+}
+
+/// Whether the gamepad drives the interface of `context`, by the input the
+/// hovered slot linked; false before it links or while its feature is off.
+///
+/// # Safety
+///
+/// - Called on the interface thread.
+/// - `context` is 0 or the context `Engine::context` read in this frame.
+unsafe fn gamepad_drives(context: usize) -> bool {
+    // SAFETY: on the interface thread with the frame's context, by this
+    // function's `# Safety`.
+    hover_input().is_some_and(|input| unsafe { input.navigating(context) })
+}
+
+/// The input the hovered slot linked, while its feature is on: a slot's
+/// hover reads the answer bytes only its link checked.
+fn hover_input() -> Option<Input> {
+    STATE.input.get().copied().filter(|_| !HOVER_FUSE.is_off())
+}
+
+/// The slot whose data is at `slot`, when its record names one.
+///
+/// # Safety
+///
+/// - `slot` is the game slot widget's slot data, live for the call on the
+///   interface thread.
+// Inlined into `note`: returned through memory, its answer cost a noted slot
+// 3 ns more (`item_ui` bench, 5.5 ns against 2.2).
+#[inline(always)]
+unsafe fn noted(slot: usize) -> Option<Hovered> {
+    use crate::engine::memory::read;
     // SAFETY: the caller's contract: the slot data's first field is the
     // record's address.
     let at = unsafe { follow(slot, 0) };
@@ -375,7 +537,7 @@ unsafe fn follow(base: usize, offset: usize) -> usize {
 ///   frame on the interface thread.
 /// - `context` is the non-zero context the frame read.
 pub(super) unsafe fn draw(context: usize, raw: &mut UiWidget) -> Result<(), WidgetError> {
-    let Some(linked) = LINKED.get().filter(|_| !SLOTS_FUSE.is_off()) else {
+    let Some(linked) = STATE.linked.get().filter(|_| !SLOTS_FUSE.is_off()) else {
         return Err(WidgetError::Unavailable);
     };
     if raw.count == 0 {
@@ -422,7 +584,7 @@ pub(super) unsafe fn draw(context: usize, raw: &mut UiWidget) -> Result<(), Widg
             1,
         );
     }
-    let mut answer = Answer::default();
+    let mut answer: Answer = bytemuck::Zeroable::zeroed();
     // SAFETY: `draw` is the game's `ui.item_slot`, checked at link, inside
     // the window the caller's contract gives, with slot data its init wrote
     // pointing at a live record, no drop target and no screen, and a live
@@ -435,20 +597,26 @@ pub(super) unsafe fn draw(context: usize, raw: &mut UiWidget) -> Result<(), Widg
             core::ptr::null_mut(),
         )
     };
-    raw.result = result(&answer);
+    let navigating = hover_input().map(|input| {
+        // SAFETY: on the interface thread with the frame's context, by this
+        // function's `# Safety`.
+        move || unsafe { input.navigating(context) }
+    });
+    raw.result = result(&answer, navigating);
     Ok(())
 }
 
-/// The widget's result bits for the slot widget's answer.
-fn result(answer: &Answer) -> u32 {
+/// The widget's result bits for the slot widget's answer; `navigating`
+/// says whether the gamepad drives the interface, `None` where the hovered
+/// slot did not link, so only a click counts as a hover.
+fn result(answer: &Answer, navigating: Option<impl FnOnce() -> bool>) -> u32 {
     let clicked = answer.pressed == CLICKED || answer.hit == CLICKED;
-    let hovered = answer.hovered != 0;
-    (u32::from(clicked) * UiWidget::SLOT_CLICKED)
-        | (u32::from(hovered || clicked) * UiWidget::SLOT_HOVERED)
+    let hovered = clicked || navigating.is_some_and(|navigating| answer.pointed(navigating));
+    (u32::from(clicked) * UiWidget::SLOT_CLICKED) | (u32::from(hovered) * UiWidget::SLOT_HOVERED)
 }
 
 /// Readies the slot widget's detour for its benchmark with a stand-in for
-/// the game's widget, which answers the slot hovered: the closure runs one
+/// the game's widget, which answers the cursor on the slot: the closure runs one
 /// slot of a screen (`screen`) or of a mod (none), as the game calls it per
 /// slot and frame.
 #[doc(hidden)]
@@ -460,7 +628,7 @@ pub fn bench_item_slot(screen: bool) -> impl FnMut() -> u64 {
         _: *mut u8,
     ) -> *mut Answer {
         // SAFETY: the benchmark's own live answer.
-        unsafe { (*answer).hovered = 1 };
+        unsafe { (*answer).pointer = 1 };
         answer
     }
     let next: SlotFn = game;
@@ -476,15 +644,18 @@ pub fn bench_item_slot(screen: bool) -> impl FnMut() -> u64 {
         ..bytemuck::Zeroable::zeroed()
     };
     let mut slot = [0u64; SLOT_DATA];
-    slot[0] = (&raw mut record).expose_provenance() as u64;
     let mut state = [0u8; 16];
-    let screen = if screen {
-        state.as_mut_ptr()
-    } else {
-        core::ptr::null_mut()
-    };
     move || {
-        let mut answer = Answer::default();
+        // The closure owns the record and the screen's state, so their
+        // addresses are taken here, where they live, as the game fills a
+        // slot's data before each call.
+        slot[0] = (&raw mut record).expose_provenance() as u64;
+        let screen = if screen {
+            state.as_mut_ptr()
+        } else {
+            core::ptr::null_mut()
+        };
+        let mut answer: Answer = bytemuck::Zeroable::zeroed();
         // SAFETY: the detour with the stand-in as its next function, on live
         // slot data that points at a live record.
         unsafe {
@@ -508,11 +679,12 @@ mod tests {
         use core::mem::offset_of;
         assert_eq!(
             [
-                offset_of!(Answer, hovered),
+                offset_of!(Answer, focused),
+                offset_of!(Answer, pointer),
                 offset_of!(Answer, pressed),
                 offset_of!(Answer, hit)
             ],
-            [0x10, 0x15, 0x19]
+            [0x10, 0x12, 0x15, 0x19]
         );
         assert_eq!(
             [
@@ -543,8 +715,8 @@ mod tests {
     fn a_state_byte_maps_into_the_answer_only_from_inside_its_block() {
         let (state, local) = (0x10, 0x60);
         assert_eq!(
-            [0x60, 0x65, 0x69].map(|byte| answer_offset(state, local, byte)),
-            [Some(0x10), Some(0x15), Some(0x19)],
+            [0x60, 0x62, 0x65, 0x69].map(|byte| answer_offset(state, local, byte)),
+            [Some(0x10), Some(0x12), Some(0x15), Some(0x19)],
             "client 26430625"
         );
         assert_eq!(answer_offset(state, local, local - 1), None);
@@ -563,13 +735,14 @@ mod tests {
 
     #[test]
     fn a_slot_reads_a_click_from_either_test_and_is_hovered_when_clicked() {
+        let mouse = Some(|| false);
         let mut answer = Answer::default();
-        assert_eq!(result(&answer), 0);
-        answer.hovered = 1;
-        assert_eq!(result(&answer), UiWidget::SLOT_HOVERED);
+        assert_eq!(result(&answer, mouse), 0);
+        answer.pointer = 1;
+        assert_eq!(result(&answer, mouse), UiWidget::SLOT_HOVERED);
         answer.hit = CLICKED;
         assert_eq!(
-            result(&answer),
+            result(&answer, mouse),
             UiWidget::SLOT_HOVERED | UiWidget::SLOT_CLICKED
         );
         let pressed = Answer {
@@ -577,28 +750,72 @@ mod tests {
             ..Answer::default()
         };
         assert_eq!(
-            result(&pressed),
+            result(&pressed, mouse),
             UiWidget::SLOT_HOVERED | UiWidget::SLOT_CLICKED
         );
         let other = Answer {
             pressed: CLICKED - 1,
             ..Answer::default()
         };
-        assert_eq!(result(&other), 0);
+        assert_eq!(result(&other, mouse), 0);
     }
 
-    /// What [`noted`] reads of `record` under an answer with `hovered`.
-    fn noted_of(record: &Record, hovered: u8) -> Option<Hovered> {
+    #[test]
+    fn without_the_hovered_slot_s_link_a_mod_s_slot_is_hovered_only_when_clicked() {
+        let unlinked: Option<fn() -> bool> = None;
+        let pointed = Answer {
+            pointer: 1,
+            focused: 1,
+            ..Answer::default()
+        };
+        assert_eq!(result(&pointed, unlinked), 0);
+        let clicked = Answer {
+            hit: CLICKED,
+            ..pointed
+        };
+        assert_eq!(
+            result(&clicked, unlinked),
+            UiWidget::SLOT_HOVERED | UiWidget::SLOT_CLICKED
+        );
+    }
+
+    #[test]
+    fn the_focused_slot_counts_as_pointed_at_only_while_the_gamepad_drives() {
+        let focused = Answer {
+            focused: 1,
+            ..Answer::default()
+        };
+        assert!(!focused.pointed(|| false), "the mouse's selection");
+        assert!(focused.pointed(|| true), "the gamepad's focus");
+        let under_cursor = Answer {
+            pointer: 1,
+            ..Answer::default()
+        };
+        assert!(under_cursor.pointed(|| unreachable!("no mode read")));
+        assert!(!Answer::default().pointed(|| true));
+        assert_eq!(result(&focused, Some(|| false)), 0);
+        assert_eq!(result(&focused, Some(|| true)), UiWidget::SLOT_HOVERED);
+    }
+
+    /// What [`noted`] reads of `record` under an answer with `focused` and
+    /// `pointer`.
+    fn noted_of(record: &Record, focused: u8, pointer: u8) -> Option<(Hovered, bool)> {
         let mut slot = [0u64; SLOT_DATA];
         slot[0] = core::ptr::from_ref(record).expose_provenance() as u64;
         let answer = Answer {
-            hovered,
+            focused,
+            pointer,
             ..Answer::default()
         };
         let answer_at = core::ptr::from_ref(&answer).expose_provenance();
         // SAFETY: `answer`, `slot` and the `record` it points at live on this
         // stack for the call.
-        unsafe { noted(answer_at, slot.as_ptr().expose_provenance()) }
+        let under_cursor = unsafe { pointed_by(answer_at) }?;
+        // SAFETY: `slot` and the `record` it points at live on this stack.
+        Some((
+            unsafe { noted(slot.as_ptr().expose_provenance()) }?,
+            under_cursor,
+        ))
     }
 
     #[test]
@@ -610,18 +827,45 @@ mod tests {
             count: 2,
             ..bytemuck::Zeroable::zeroed()
         };
-        assert_eq!(noted_of(&record, 0), None, "not hovered");
-        assert_eq!(
-            noted_of(&record, 1),
-            Some(Hovered {
-                slot: 0x3_0000_0041,
-                item: 7,
-                count: 2,
-                pide: 900
-            })
-        );
+        let hovered = Hovered {
+            slot: 0x3_0000_0041,
+            item: 7,
+            count: 2,
+            pide: 900,
+        };
+        assert_eq!(noted_of(&record, 0, 0), None, "neither");
+        assert_eq!(noted_of(&record, 1, 0), Some((hovered, false)), "focused");
+        assert_eq!(noted_of(&record, 0, 1), Some((hovered, true)), "cursor");
+        assert_eq!(noted_of(&record, 1, 1), Some((hovered, true)), "both");
         let none = Record { slot: 0, ..record };
-        assert_eq!(noted_of(&none, 1), None, "no slot");
+        assert_eq!(noted_of(&none, 0, 1), None, "no slot");
+    }
+
+    #[test]
+    fn a_frame_reads_the_slot_under_the_cursor_and_the_focused_one_only_with_a_gamepad() {
+        let at = |slot| Hovered {
+            slot,
+            ..Hovered::NONE
+        };
+        let (cursor, selected) = (at(0x3_0000_0002), at(0x3_0000_0001));
+        let none = Hovered::NONE;
+        assert_eq!(
+            pointed_slot(none, selected, || false),
+            none,
+            "the mouse's selection, the cursor on no slot"
+        );
+        assert_eq!(pointed_slot(cursor, selected, || false), cursor);
+        assert_eq!(
+            pointed_slot(cursor, selected, || unreachable!("no mode read")),
+            cursor
+        );
+        assert_eq!(pointed_slot(none, selected, || true), selected, "gamepad");
+        assert_eq!(pointed_slot(none, none, || true), none);
+    }
+
+    #[test]
+    fn the_benchmark_of_a_screen_s_slot_notes_the_slot_it_draws() {
+        assert_eq!(bench_item_slot(true)(), 0x3_0000_0041);
     }
 
     #[test]
@@ -634,9 +878,9 @@ mod tests {
         };
         NOW.set(noted);
         assert_eq!(hovered(), Hovered::NONE);
-        end_frame();
+        end_frame(0);
         assert_eq!(hovered(), noted);
-        end_frame();
+        end_frame(0);
         assert_eq!(hovered(), Hovered::NONE);
     }
 }

@@ -4,6 +4,8 @@
 pub(crate) mod interface;
 pub mod listing;
 pub mod mods_screen;
+#[cfg(any(windows, test))]
+pub(crate) mod place;
 pub mod widget_checks;
 #[cfg(any(windows, test))]
 pub(crate) mod window_node;

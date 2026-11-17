@@ -9,11 +9,20 @@ use enshwick_core::abi::{
     UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
 
-/// An extension of a game screen: screen name, edge, callback and the host
+/// Where an extension's panel sits, as its spec asks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Place {
+    pub(crate) edge: u32,
+    pub(crate) align: u32,
+    pub(crate) shift: f32,
+    pub(crate) inset: f32,
+}
+
+/// An extension of a game screen: screen name, place, callback and the host
 /// templates it shows for (empty for every host).
 pub(crate) type Extension = (
     String,
-    u32,
+    Place,
     Registered<UiFrameFn>,
     Vec<enshwick_core::content::Guid>,
 );
@@ -37,7 +46,7 @@ pub(crate) struct UiState {
     pub(crate) frames: Vec<Registered<UiFrameFn>>,
     /// HUD callbacks.
     pub(crate) huds: Vec<Registered<UiFrameFn>>,
-    /// Extensions of game screens: screen name, edge, callback and the host
+    /// Extensions of game screens: screen name, place, callback and the host
     /// templates it shows for (empty for every host).
     pub(crate) extensions: Vec<Extension>,
     /// The handle whose callback draws now: the loader refuses a widget
@@ -498,7 +507,7 @@ pub(crate) extern "system" fn ui_hud(
 }
 
 /// Records an extension of a game screen, refusing what the loader
-/// refuses, in its order: a server, an unknown edge or a screen where the
+/// refuses, in its order: a server, a place it does not take or a screen where the
 /// player is in the world with no window open, a screen the game lacks.
 pub(crate) extern "system" fn ui_extension(
     me: ModHandle,
@@ -523,18 +532,20 @@ pub(crate) extern "system" fn ui_extension(
         if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
-        if spec.edge > UiExtension::BOTTOM || OPEN.contains(&screen.as_str()) {
+        if !spec.placement_holds() || OPEN.contains(&screen.as_str()) {
             return Status::BAD_ARGS;
         }
         if !SCREENS.contains(&screen.as_str()) {
             return Status::MISSING;
         }
-        s.ui.extensions.push((
-            screen,
-            spec.edge,
-            Registered::new(callback, user, me),
-            hosts,
-        ));
+        let place = Place {
+            edge: spec.edge,
+            align: spec.align,
+            shift: spec.shift,
+            inset: spec.inset,
+        };
+        s.ui.extensions
+            .push((screen, place, Registered::new(callback, user, me), hosts));
         Status::OK
     })
 }

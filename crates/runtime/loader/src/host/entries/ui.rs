@@ -81,8 +81,9 @@ entries! {
         // readable for `host_count` GUIDs for the call, which
         // `register_extension` copies before it returns.
         let hosts = unsafe { spec.host_list() }.ok_or(Status::BAD_ARGS)?;
+        let place = crate::ui::place::Place::of(&spec);
         Ok(crate::ui::interface::register_extension(
-            me.loader, me.index, screen, spec.edge, bytemuck::cast_slice(hosts), callback, user,
+            me.loader, me.index, screen, place, bytemuck::cast_slice(hosts), callback, user,
         )?)
     }
 

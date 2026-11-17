@@ -276,7 +276,7 @@ shapes! {
         SaveInfo { header, world, saved_at, size, backups, reserved },
         ChatLine { header, account, entity, kind, loca, text },
         ChatRewrite { header, buffer, capacity, len },
-        UiExtension { header, screen, edge, reserved, hosts, host_count, reserved_hosts },
+        UiExtension { header, screen, edge, reserved, hosts, host_count, reserved_hosts, align, shift, inset, reserved_place },
         ItemAction { header, kind, character, item, count, inventory, slot },
         ControlSpec { header, name, label, key, second, link, fires, hold_ms, action },
         ControlEvent { header, name, kind, server, reserved, player },

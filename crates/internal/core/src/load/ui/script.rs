@@ -1,6 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::{Load, Off};
+#[cfg(feature = "unstable")]
+use enshwick_ui::__internal::ScriptPlacement;
 use enshwick_ui::__internal::{ScriptFrame, ScriptHud};
 use enshwick_ui::__load::*;
 
@@ -36,7 +38,7 @@ impl Load<'_> {
 #[enshwick_macros::forward(base)]
 #[crate::script(ui_extension)]
 impl Load<'_> {
-    /// Adds a panel at `edge` of the game's screen `screen` and runs
+    /// Adds a panel at `place` beside the game's screen `screen` and runs
     /// `draw` once per frame while it is open, with the frame lent to
     /// it, as [`Load::extend_screen`] does.
     ///
@@ -47,7 +49,7 @@ impl Load<'_> {
     pub(crate) fn extend_screen_script(
         &mut self,
         screen: crate::ui::HudScreenType,
-        edge: crate::ui::Edge,
+        place: &ScriptPlacement,
         draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
     ) -> Result<(), Off>;
 
@@ -61,7 +63,7 @@ impl Load<'_> {
     pub(crate) fn extend_screen_for_script(
         &mut self,
         screen: crate::ui::HudScreenType,
-        edge: crate::ui::Edge,
+        place: &ScriptPlacement,
         hosts: Vec<crate::content::Guid>,
         draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
     ) -> Result<(), Off>;

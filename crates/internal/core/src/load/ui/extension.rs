@@ -1,6 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::ui::{Edge, HudScreenType, ScreenChanged};
+use crate::ui::{HudScreenType, PanelPlacement, ScreenChanged};
 use crate::{Load, Off};
 use enshwick_ui::__load::*;
 
@@ -8,22 +8,26 @@ use enshwick_ui::__load::*;
 impl Load<'_> {
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
-    /// Adds a panel at `edge` of the game's screen `screen` and runs `draw`
-    /// once per frame while the player has that screen open, on the thread
-    /// that draws the interface; `draw` fills the panel with the widgets of
-    /// the [`Frame`](crate::ui::Frame) it is handed, and
+    /// Adds a panel at `place` beside the game's screen `screen`, an
+    /// [`Edge`](crate::ui::Edge) or a [`PanelPlacement`] along it, and runs `draw` once per frame
+    /// while the player has that screen open, on the thread that draws the
+    /// interface; `draw` fills the panel with the widgets of the
+    /// [`Frame`](crate::ui::Frame) it is handed, and
     /// [`Frame::window`](crate::ui::Frame::window) is refused there. The panel
     /// shows above the game's screen, never changes its layout, and goes
-    /// away with it; its buttons are the mod's own, so a press that changes
-    /// the world goes to the server as a player action, which the server
-    /// checks again. Panels at one edge share one window, which shows only
-    /// once a panel draws in it. Client only. A panic in `draw` turns the
-    /// mod off.
+    /// away with it; a [`PanelPlacement`] moves it clear of the screen's own
+    /// controls. Its buttons are the mod's own, so a press that changes the
+    /// world goes to the server as a player action, which the server checks
+    /// again. Panels at one placement share one window, which shows only
+    /// once a panel draws in it. Client only. A panic in `draw` turns the mod
+    /// off.
     ///
     /// # Errors
     ///
     /// [`Off`] on a server, after `init`, on a game build without the
-    /// screen, or for a screen on which the player is in the world with no
+    /// screen, for a [`PanelPlacement`] shift or inset past
+    /// [`UiExtension::MAX_OFFSET`](crate::abi::UiExtension::MAX_OFFSET) or not
+    /// a number, or a negative inset, or for a screen on which the player is in the world with no
     /// window open ([`HudScreenType::InGame`], [`HudScreenType::NoUi`],
     /// [`HudScreenType::TakeScreenshot`] and the multitools' building
     /// screens), where a panel would cover play.
@@ -31,7 +35,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ui::{Edge, HudScreenType, Label, Style};
+    /// use enshwick::ui::{Align, Edge, HudScreenType, Label, PanelPlacement, Style};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.extend_screen(HudScreenType::StorageChest, Edge::Right, |panel| {
@@ -39,13 +43,20 @@ impl Load<'_> {
     ///         if panel.button("Sort by name") {
     ///             // Send the server a player action of the mod's own.
     ///         }
+    ///     })?;
+    ///     let under_grid = PanelPlacement::new(Edge::Left)
+    ///         .align(Align::Start)
+    ///         .shift(362.0)
+    ///         .inset(125.0);
+    ///     load.extend_screen(HudScreenType::Backpack, under_grid, |panel| {
+    ///         panel.label("Under the grid");
     ///     })
     /// }
     /// ```
     pub fn extend_screen<F>(
         &mut self,
         screen: HudScreenType,
-        edge: Edge,
+        place: impl Into<PanelPlacement>,
         draw: F,
     ) -> Result<(), Off>
     where
@@ -82,7 +93,7 @@ impl Load<'_> {
     pub fn extend_screen_for<F>(
         &mut self,
         screen: HudScreenType,
-        edge: Edge,
+        place: impl Into<PanelPlacement>,
         hosts: &[crate::content::Guid],
         draw: F,
     ) -> Result<(), Off>

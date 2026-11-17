@@ -168,10 +168,13 @@ impl Installed {
 
     /// Runs the callbacks of the mod's extensions of the game screen
     /// `screen` once, as when the player has that screen open, and returns
-    /// what each drew, with its edge (`UiExtension::LEFT` and on), edge by
-    /// edge and in registration order within an edge. The loader opens each
-    /// edge's window for its panels, so a window widget is refused there,
-    /// and a panel that drew nothing is left out, as it shows no window.
+    /// what each drew, with its edge (`UiExtension::LEFT` and on), in the
+    /// loader's order: edge by edge, within an edge place by place as each
+    /// place was first registered, and within a place in registration
+    /// order. The loader opens each place's window for its panels, so a
+    /// window widget is refused there, and a panel that drew nothing is left
+    /// out, as it shows no window. [`Self::screen_placements`] says
+    /// where each panel sits.
     ///
     /// # Examples
     ///
@@ -187,11 +190,17 @@ impl Installed {
     pub fn draw_screen(&self, screen: enshwick_core::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         step();
         let mut extensions = table::with(Vec::new(), |s| s.ui.extensions.clone());
-        extensions.sort_by_key(|&(_, edge, ..)| edge);
+        let first: Vec<_> = extensions
+            .iter()
+            .map(|(_, place, ..)| extensions.iter().position(|e| e.1 == *place))
+            .collect();
+        let mut ranked: Vec<_> = first.into_iter().zip(extensions.drain(..)).collect();
+        ranked.sort_by_key(|(first, (_, place, ..))| (place.edge, *first));
         let open = screen.name();
         let template = reads().host_read.map(|(t, _)| t);
         let mut drawn = Vec::new();
-        for (token, (name, edge, handler, hosts)) in (1u64..).zip(extensions) {
+        for (token, (_, (name, place, handler, hosts))) in (1u64..).zip(ranked) {
+            let edge = place.edge;
             let for_host = hosts.is_empty() || template.is_some_and(|t| hosts.contains(&t));
             if name != screen.name() || !for_host {
                 continue;
@@ -215,6 +224,40 @@ impl Installed {
             }
         }
         drawn
+    }
+
+    /// Where the mod's panels of the game screen `screen` sit, in
+    /// registration order, as the loader places them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    /// use enshwick::ui::HudScreenType;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// assert!(loader.screen_placements(HudScreenType::Backpack).is_empty());
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn screen_placements(
+        &self,
+        screen: enshwick_core::ui::HudScreenType,
+    ) -> Vec<enshwick_core::ui::PanelPlacement> {
+        table::with(Vec::new(), |s| {
+            s.ui.extensions
+                .iter()
+                .filter(|(name, ..)| name == screen.name())
+                .filter_map(|&(_, place, ..)| {
+                    enshwick_core::__fake::placement(
+                        place.edge,
+                        place.align,
+                        place.shift,
+                        place.inset,
+                    )
+                })
+                .collect()
+        })
     }
 
     /// Opens the game screen `screen` for the frames and HUDs drawn from

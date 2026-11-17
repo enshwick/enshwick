@@ -77,7 +77,8 @@ pub struct UiFrame {
     /// frame, as the game packs it, `inventory | index << 32`, the
     /// inventory an entity of the client's world; 0 while the cursor is on
     /// none, outside an inventory screen and on a build where the loader
-    /// does not find the game's slot widget.
+    /// does not find the game's slot widget. While a gamepad drives the
+    /// interface, the slot that holds the screen's focus.
     pub hovered_slot: u64,
     /// The item id in `hovered_slot`; 0 for an empty slot.
     pub hovered_item: ItemId,
@@ -131,6 +132,10 @@ pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut
 ///     hosts: core::ptr::null(),
 ///     host_count: 0,
 ///     reserved_hosts: 0,
+///     align: UiExtension::START,
+///     shift: 200.0,
+///     inset: 0.0,
+///     reserved_place: 0,
 /// };
 /// assert_eq!(spec.edge, UiExtension::RIGHT);
 /// ```
@@ -156,21 +161,87 @@ pub struct UiExtension {
     pub host_count: u32,
     /// Zero.
     pub reserved_hosts: u32,
+    /// Where along its edge the panel sits: [`UiExtension::CENTER`],
+    /// [`UiExtension::START`] or [`UiExtension::END`]. A spec of an older
+    /// minor reads zero, the centre.
+    pub align: u32,
+    /// Layout units the panel moves along its edge from where `align` puts
+    /// it, toward the edge's end (right or down) when positive; at most
+    /// [`UiExtension::MAX_OFFSET`] either way. The layout is 1920 units
+    /// wide and 1080 high, scaled to the window.
+    pub shift: f32,
+    /// Layout units the panel moves away from its edge into the screen,
+    /// from 0 to [`UiExtension::MAX_OFFSET`].
+    pub inset: f32,
+    /// Zero.
+    pub reserved_place: u32,
 }
 
-impl_headed!(UiExtension);
+impl_headed!(UiExtension, born = 48);
 
 impl UiExtension {
-    /// The left edge, centred from top to bottom.
+    /// The left edge.
     pub const LEFT: u32 = 0;
-    /// The right edge, centred from top to bottom.
+    /// The right edge.
     pub const RIGHT: u32 = 1;
-    /// The top edge, centred from left to right.
+    /// The top edge.
     pub const TOP: u32 = 2;
-    /// The bottom edge, centred from left to right.
+    /// The bottom edge.
     pub const BOTTOM: u32 = 3;
     /// The most host templates one panel names.
     pub const MAX_HOSTS: u32 = 64;
+    /// The panel centred along its edge.
+    pub const CENTER: u32 = 0;
+    /// The panel at the start of its edge: the top of a side edge, the left
+    /// of the top or bottom edge.
+    pub const START: u32 = 1;
+    /// The panel at the end of its edge: the bottom of a side edge, the
+    /// right of the top or bottom edge.
+    pub const END: u32 = 2;
+    /// The largest `shift` either way and the largest `inset`, in layout
+    /// units: the layout's width, past which a panel leaves every screen.
+    pub const MAX_OFFSET: f32 = 1920.0;
+
+    /// Whether the panel's place holds what the loader takes: an edge and an
+    /// alignment it knows, a `shift` within [`UiExtension::MAX_OFFSET`]
+    /// either way and an `inset` from 0 to it, each a number, and a zero
+    /// `reserved_place`, kept for a later minor. A spec of an older minor
+    /// reads zero in the place's fields, which holds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, Str, UiExtension};
+    ///
+    /// let mut spec = UiExtension {
+    ///     header: Header::of::<UiExtension>(),
+    ///     screen: Str::new("Backpack"),
+    ///     edge: UiExtension::LEFT,
+    ///     reserved: 0,
+    ///     hosts: core::ptr::null(),
+    ///     host_count: 0,
+    ///     reserved_hosts: 0,
+    ///     align: UiExtension::START,
+    ///     shift: 362.0,
+    ///     inset: 125.0,
+    ///     reserved_place: 0,
+    /// };
+    /// assert!(spec.placement_holds());
+    /// spec.inset = -1.0;
+    /// assert!(!spec.placement_holds());
+    /// spec.inset = 0.0;
+    /// spec.reserved_place = 1;
+    /// assert!(!spec.placement_holds());
+    /// ```
+    #[must_use]
+    pub fn placement_holds(&self) -> bool {
+        let max = Self::MAX_OFFSET;
+        self.edge <= Self::BOTTOM
+            && self.align <= Self::END
+            && (-max..=max).contains(&self.shift)
+            && (0.0..=max).contains(&self.inset)
+            && self.reserved_place == 0
+    }
 
     /// The host templates the panel names, empty for every host, as the
     /// loader reads them; `None` for a null list with a count or more than
@@ -197,6 +268,10 @@ impl UiExtension {
     ///     hosts: ours.as_ptr(),
     ///     host_count: 1,
     ///     reserved_hosts: 0,
+    ///     align: UiExtension::CENTER,
+    ///     shift: 0.0,
+    ///     inset: 0.0,
+    ///     reserved_place: 0,
     /// };
     /// // SAFETY: `hosts` points at `ours`, one GUID, alive below.
     /// assert_eq!(unsafe { spec.host_list() }, Some(&ours[..]));
@@ -336,7 +411,8 @@ impl UiWidget {
     /// An [`UiWidget::ITEM_SLOT`]'s `result` bit: the player clicked the
     /// slot this frame.
     pub const SLOT_CLICKED: u32 = 1;
-    /// An [`UiWidget::ITEM_SLOT`]'s `result` bit: the cursor is on the slot.
+    /// An [`UiWidget::ITEM_SLOT`]'s `result` bit: the cursor is on the slot,
+    /// or, while a gamepad drives the interface, the slot holds the focus.
     pub const SLOT_HOVERED: u32 = 2;
 
     /// The row shows its value and does not take changes; a button does not

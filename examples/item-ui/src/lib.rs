@@ -1,6 +1,6 @@
 //! An example mod for the game's own item widgets: three item slots in a
-//! panel beside the backpack, the backpack slot under the cursor, and lines
-//! in the game's item tooltips, one from the mod's item data and one on a
+//! panel under the backpack's slots, the backpack slot under the cursor,
+//! and lines in the game's item tooltips, one from the mod's item data and one on a
 //! vanilla sword. Its stat kind Luck shows as a row of the Character
 //! screen's Basics tab, 10% for every player who joins, and on every weapon
 //! a player crafts, which rolls the affix Lucky. Its kind Calm, 20% for
@@ -17,7 +17,7 @@ use enshwick::content::vanilla;
 use enshwick::events::PlayerJoined;
 use enshwick::item_data::ItemData;
 use enshwick::stats::{Lasting, Modifier, Op, Stat, StatDef, StatGroup};
-use enshwick::ui::{Edge, HudScreenType, Label, Style};
+use enshwick::ui::{Align, Edge, HudScreenType, Label, PanelPlacement, Style};
 use enshwick::{Load, Mod, Off};
 
 /// The vanilla items the panel shows, by debug name, with a count each.
@@ -63,7 +63,12 @@ impl Mod for ItemUi {
             .iter()
             .filter_map(|&(name, count)| item(name).ok().map(|id| (id, count)))
             .collect();
-        load.extend_screen(HudScreenType::Backpack, Edge::Left, move |panel| {
+        // Under the backpack's slots at 16:9, clear of the screen's own controls.
+        let under_slots = PanelPlacement::new(Edge::Left)
+            .align(Align::Start)
+            .shift(362.0)
+            .inset(125.0);
+        load.extend_screen(HudScreenType::Backpack, under_slots, move |panel| {
             for &(item, count) in &shown {
                 if panel.item_slot(item, count).clicked {
                     enshwick::info!("slot of item {} clicked", item.get());
