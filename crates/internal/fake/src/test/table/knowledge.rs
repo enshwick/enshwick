@@ -9,6 +9,45 @@ use enshwick_core::abi::{
     SkillCheckFn, Status,
 };
 
+/// What the installed fake's knowledge answers and has recorded: values,
+/// quests, game queries, the mod's changes and its filters.
+#[derive(Default)]
+pub(crate) struct KnowledgeState {
+    pub(crate) knowledge_input_filters: Vec<Registered<KnowledgeInputFilterFn>>,
+    /// Knowledge values by `(character or 0, id)`.
+    pub(crate) values: Vec<(Option<enshwick_core::Entity>, KnowledgeInfo)>,
+    /// Whether each game query holds, by `(character or 0, query)`.
+    pub(crate) game_queries: Vec<(Option<enshwick_core::Entity>, u32, bool)>,
+    /// The grants the mod asked for: character, id, kind, value.
+    pub(crate) grants: Vec<(
+        Option<enshwick_core::Entity>,
+        enshwick_core::abi::KnowledgeId,
+        u32,
+        u32,
+    )>,
+    /// The revokes the mod asked for: character, id, kind, value.
+    pub(crate) revokes: Vec<(
+        Option<enshwick_core::Entity>,
+        enshwick_core::abi::KnowledgeId,
+        u32,
+        u32,
+    )>,
+    /// The changes the mod asked for accounts: key, id, kind, value,
+    /// whether a revoke.
+    pub(crate) account_changes: Vec<(
+        enshwick_core::PlayerKey,
+        enshwick_core::abi::KnowledgeId,
+        u32,
+        u32,
+        bool,
+    )>,
+    /// The quest ids the fake knows.
+    pub(crate) quests: Vec<enshwick_core::abi::KnowledgeId>,
+    pub(crate) skills: Vec<(enshwick_core::abi::SkillNode, Registered<SkillCheckFn>)>,
+    pub(crate) comfort_filters: Vec<Registered<ComfortFilterFn>>,
+    pub(crate) experience_filters: Vec<Registered<ExperienceFilterFn>>,
+}
+
 pub(crate) extern "system" fn skill_override(
     me: ModHandle,
     node: enshwick_core::abi::SkillNode,
@@ -19,10 +58,12 @@ pub(crate) extern "system" fn skill_override(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.skills.push((node, Registered::new(callback, user, me)));
+        s.knowledge
+            .skills
+            .push((node, Registered::new(callback, user, me)));
         Status::OK
     })
 }
@@ -36,10 +77,12 @@ pub(crate) extern "system" fn comfort_filter(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.comfort_filters.push(Registered::new(callback, user, me));
+        s.knowledge
+            .comfort_filters
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -53,10 +96,11 @@ pub(crate) extern "system" fn experience_filter(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.experience_filters
+        s.knowledge
+            .experience_filters
             .push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -71,6 +115,7 @@ fn definition(
     kind: u32,
 ) -> Result<(u8, u32), Status> {
     s.knowledge
+        .values
         .iter()
         .find(|(_, k)| k.id == id)
         .filter(|(_, k)| u32::from(k.kind) == kind)
@@ -110,7 +155,8 @@ fn revoke(
         if flag_outside(kind, value, 0) {
             return Status::BAD_ARGS;
         }
-        s.revokes
+        s.knowledge
+            .revokes
             .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
         Status::OK
     })
@@ -128,7 +174,9 @@ fn for_account(
         if definition(s, id, kind).map(|(scope, _)| scope) != Ok(KnowledgeInfo::PLAYER) {
             return Status::BAD_ARGS;
         }
-        s.account_changes.push((key, id, kind, value, revoke));
+        s.knowledge
+            .account_changes
+            .push((key, id, kind, value, revoke));
         Status::OK
     })
 }
@@ -142,10 +190,11 @@ pub(crate) extern "system" fn knowledge_input_filter(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.knowledge_input_filters
+        s.knowledge
+            .knowledge_input_filters
             .push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -158,7 +207,7 @@ pub(crate) extern "system" fn knowledge(
     out: *mut KnowledgeInfo,
 ) -> Status {
     let (known, found) = with((false, None), |s| {
-        let mut values = s.knowledge.iter().filter(|(_, k)| k.id == id);
+        let mut values = s.knowledge.values.iter().filter(|(_, k)| k.id == id);
         let known = values.clone().next().is_some();
         let found = values
             .find(|(e, k)| k.scope == KnowledgeInfo::WORLD || *e == Some(entity))
@@ -192,10 +241,18 @@ pub(crate) extern "system" fn game_query(
     let holder = (entity != enshwick_core::Entity(0)).then_some(entity);
     let answer = with(Err(Status::MISSING), |s| {
         // As the loader, which refuses a character with no player record.
-        if holder.is_some() && !s.host.players.iter().any(|player| player.entity == entity) {
+        if holder.is_some()
+            && !s
+                .host
+                .base
+                .players
+                .iter()
+                .any(|player| player.entity == entity)
+        {
             return Err(Status::REFUSED);
         }
-        s.game_queries
+        s.knowledge
+            .game_queries
             .iter()
             .find(|(e, q, _)| *q == query && *e == holder)
             .map(|(_, _, held)| *held)
@@ -251,7 +308,8 @@ fn grant(
         if names_the_world(scope, entity) {
             return Status::REFUSED;
         }
-        s.grants
+        s.knowledge
+            .grants
             .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
         Status::OK
     })
@@ -263,7 +321,7 @@ pub(crate) extern "system" fn quests(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let ids = with(Vec::new(), |s| s.quests.clone());
+    let ids = with(Vec::new(), |s| s.knowledge.quests.clone());
     if count.is_null() {
         return Status::BAD_ARGS;
     }

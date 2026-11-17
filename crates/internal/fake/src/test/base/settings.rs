@@ -35,7 +35,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn settings_file(mut self, file: &str, text: &str) -> Self {
-        self.settings.insert(file.to_owned(), text.to_owned());
+        self.base.settings.insert(file.to_owned(), text.to_owned());
         self
     }
 
@@ -54,7 +54,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn data_dir(mut self, path: &str) -> Self {
-        path.clone_into(&mut self.data_dir);
+        path.clone_into(&mut self.base.data_dir);
         self
     }
 
@@ -71,7 +71,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn mod_dir(mut self, path: &str) -> Self {
-        path.clone_into(&mut self.mod_dir);
+        path.clone_into(&mut self.base.mod_dir);
         self
     }
 
@@ -82,7 +82,7 @@ impl FakeHost {
     /// See [`FakeHost`].
     #[must_use]
     pub fn log_level(mut self, level: Level) -> Self {
-        self.log_level = level;
+        self.base.log_level = level;
         self
     }
 
@@ -102,8 +102,10 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn pack_log_level(mut self, pack: ModHandle, level: Level) -> Self {
-        self.pack_log_levels.retain(|(other, _)| *other != pack);
-        self.pack_log_levels.push((pack, level));
+        self.base
+            .pack_log_levels
+            .retain(|(other, _)| *other != pack);
+        self.base.pack_log_levels.push((pack, level));
         self
     }
 
@@ -126,8 +128,8 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn pack(mut self, pack: ModHandle, side: enshwick_core::abi::Side) -> Self {
-        self.pack_sides.retain(|(other, _)| *other != pack);
-        self.pack_sides.push((pack, side));
+        self.base.pack_sides.retain(|(other, _)| *other != pack);
+        self.base.pack_sides.push((pack, side));
         self
     }
 }
@@ -155,7 +157,10 @@ impl Installed {
     /// ```
     pub fn set_settings(&self, file: &str, text: &str) {
         table::with((), |s| {
-            s.host.settings.insert(file.to_owned(), text.to_owned());
+            s.host
+                .base
+                .settings
+                .insert(file.to_owned(), text.to_owned());
         });
     }
 
@@ -171,7 +176,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn settings_text(&self, file: &str) -> Option<String> {
-        table::with(None, |s| s.host.settings.get(file).cloned())
+        table::with(None, |s| s.host.base.settings.get(file).cloned())
     }
 
     /// Makes `level` the data pack `pack`'s most detailed log level, as an
@@ -191,8 +196,11 @@ impl Installed {
     /// ```
     pub fn set_pack_log_level(&self, pack: ModHandle, level: Level) {
         table::with((), |s| {
-            s.host.pack_log_levels.retain(|(other, _)| *other != pack);
-            s.host.pack_log_levels.push((pack, level));
+            s.host
+                .base
+                .pack_log_levels
+                .retain(|(other, _)| *other != pack);
+            s.host.base.pack_log_levels.push((pack, level));
         });
     }
 
@@ -212,7 +220,7 @@ impl Installed {
     /// assert_eq!(loader.raise::<events::LoaderSettingsChanged>(&()), 0);
     /// ```
     pub fn set_log_level(&self, level: Level) {
-        table::with((), |s| s.host.log_level = level);
+        table::with((), |s| s.host.base.log_level = level);
     }
 
     /// The schema of the mod's settings file `file` as the mod handed it
@@ -227,7 +235,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn config_schema(&self, file: &str) -> Option<enshwick_core::config::Schema> {
-        table::with(None, |s| s.config_schemas.get(file).cloned())
+        table::with(None, |s| s.base.config_schemas.get(file).cloned())
             .and_then(|text| enshwick_core::config::Schema::parse(&text).ok())
     }
 
@@ -246,7 +254,7 @@ impl Installed {
     /// assert_eq!(loader.check_settings("settings", "x = 1"), Ok(()));
     /// ```
     pub fn check_settings(&self, file: &str, text: &str) -> Result<(), SettingsRefused> {
-        let Some(check) = table::with(None, |s| s.config_checks.get(file).copied()) else {
+        let Some(check) = table::with(None, |s| s.base.config_checks.get(file).copied()) else {
             return Ok(());
         };
         let mut why = Str::EMPTY;

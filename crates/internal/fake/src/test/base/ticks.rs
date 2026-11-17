@@ -45,18 +45,18 @@ pub(crate) extern "system" fn subscribe_tick(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        let asked = s.ticks.asked;
-        s.ticks.asked += 1;
-        if s.host.refused_tick == Some(asked) {
+        let asked = s.base.ticks.asked;
+        s.base.ticks.asked += 1;
+        if s.host.base.refused_tick == Some(asked) {
             return Status::REFUSED;
         }
-        let Ok(handle) = u32::try_from(s.ticks.ticks.len()) else {
+        let Ok(handle) = u32::try_from(s.base.ticks.ticks.len()) else {
             return Status::REFUSED;
         };
-        s.ticks.ticks.push(FakeTick {
+        s.base.ticks.ticks.push(FakeTick {
             every: every_ns,
             handler: Registered::new(callback, user, me),
             last: None,
@@ -71,7 +71,7 @@ pub(crate) extern "system" fn set_tick_every(
     every_ns: u64,
 ) -> Status {
     with(Status::MISSING, |s| {
-        let Some(tick) = s.ticks.ticks.get_mut(handle.0 as usize) else {
+        let Some(tick) = s.base.ticks.ticks.get_mut(handle.0 as usize) else {
             return Status::MISSING;
         };
         if tick.handler.owner() != Some(me) {
@@ -165,7 +165,7 @@ impl Installed {
     /// periodic handlers of a world's start; returns how many ran.
     fn run_ticks(elapsed: u64, entering: bool) -> usize {
         let calls: Vec<(Registered<EventFn>, TickData)> = with(Vec::new(), |s| {
-            let ticks = &mut s.ticks;
+            let ticks = &mut s.base.ticks;
             if !entering {
                 ticks.step += 1;
                 ticks.nanos = ticks.nanos.saturating_add(elapsed);
@@ -180,8 +180,9 @@ impl Installed {
                 game: ticks.games_ended + 1,
                 ..TickData::new(step)
             };
-            let off = &s.off;
+            let off = &s.base.off;
             let every_step = s
+                .base
                 .subscriptions
                 .iter()
                 .filter(|sub| !entering && sub.0 == Event::TICKED && !sub.1.owner_off(off))
@@ -238,9 +239,9 @@ impl Installed {
     /// ```
     pub fn end_game(&self) {
         with((), |s| {
-            s.ticks.games_ended += 1;
-            s.save.held = false;
-            s.save.shut = false;
+            s.base.ticks.games_ended += 1;
+            s.world.save.held = false;
+            s.world.save.shut = false;
         });
         crate::test::table::end_game();
     }

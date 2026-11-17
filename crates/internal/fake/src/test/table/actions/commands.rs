@@ -118,13 +118,16 @@ pub(crate) extern "system" fn action_window(
             .collect()
     };
     with(Status::MISSING, |s| {
-        if s.host.side == enshwick_core::abi::Side::CLIENT && !s.host.hosting {
+        if s.host.base.side == enshwick_core::abi::Side::CLIENT && !s.host.base.hosting {
             return Status::UNAVAILABLE;
         }
-        if s.actions.is_none() || s.commands.windows.len() + keys.len() > MAX_WAITING {
+        if s.actions.callback.is_none()
+            || s.actions.commands.windows.len() + keys.len() > MAX_WAITING
+        {
             return Status::REFUSED;
         }
-        s.commands
+        s.actions
+            .commands
             .windows
             .extend(keys.into_iter().map(|key| (key, id.to_owned(), change)));
         Status::OK
@@ -191,28 +194,31 @@ fn granted(
 
 /// The id of the mod under test.
 fn own_id(s: &crate::test::table::State) -> String {
-    s.manifest.as_ref().map_or_default(|m| m.id.clone())
+    s.base.manifest.as_ref().map_or_default(|m| m.id.clone())
 }
 
 /// The command sets granted now, and the id of the mod under test.
 fn sets_now(s: &crate::test::table::State) -> (Vec<Granted>, String) {
     let id = own_id(s);
-    let (sets, _) = granted((&id, s.commands.asked.as_deref()), &s.host.other_commands);
+    let (sets, _) = granted(
+        (&id, s.actions.commands.asked.as_deref()),
+        &s.host.actions.other_commands,
+    );
     (sets, id)
 }
 
 pub(crate) extern "system" fn commands(_me: ModHandle, alias: Str) -> Status {
     let alias = text(alias);
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
         let id = own_id(s);
-        let (_, answered) = granted((&id, Some(&alias)), &s.host.other_commands);
+        let (_, answered) = granted((&id, Some(&alias)), &s.host.actions.other_commands);
         match answered {
             Some(Err(Refusal::Malformed)) | None => Status::BAD_ARGS,
-            Some(Ok(())) if s.commands.asked.is_none() => {
-                s.commands.asked = Some(alias);
+            Some(Ok(())) if s.actions.commands.asked.is_none() => {
+                s.actions.commands.asked = Some(alias);
                 Status::OK
             }
             Some(_) => Status::REFUSED,
@@ -240,17 +246,18 @@ pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) 
     let (own, other, actions) = with((false, None, None), |s| {
         let (sets, id) = sets_now(s);
         let Some(set) = sets.iter().find(|set| set.is_called(&word)) else {
-            return (false, None, s.actions);
+            return (false, None, s.actions.callback);
         };
         let own = set.id == id;
         let other = (!own).then(|| {
             s.host
+                .actions
                 .console_answers
                 .get(&word)
                 .cloned()
                 .unwrap_or_default()
         });
-        (own, other, s.actions)
+        (own, other, s.actions.callback)
     });
     if let Some(answer) = other {
         return Some(format!("1{answer}"));
@@ -297,7 +304,7 @@ pub(crate) extern "system" fn run_command(
     };
     let (done, text) = reply.split_at_checked(1).unwrap_or(("0", ""));
     with(Status::MISSING, |s| {
-        let kept = s.run_out.insert(text.into());
+        let kept = s.actions.run_out.insert(text.into());
         let reply = ActionReply {
             header: enshwick_core::abi::Header::of::<ActionReply>(),
             done: u8::from(done == "1"),
@@ -315,7 +322,7 @@ pub(crate) extern "system" fn command_list(
     count: *mut u32,
 ) -> Status {
     let infos = with(Vec::new(), |s| {
-        s.commands.listed = sets_now(s)
+        s.actions.commands.listed = sets_now(s)
             .0
             .into_iter()
             .map(|set| {
@@ -323,7 +330,8 @@ pub(crate) extern "system" fn command_list(
                     .map(String::into_boxed_str)
             })
             .collect();
-        s.commands
+        s.actions
+            .commands
             .listed
             .iter()
             .map(|[name, alias, id]| CommandInfo {
@@ -339,10 +347,10 @@ pub(crate) extern "system" fn command_list(
 
 pub(crate) extern "system" fn actions_changed(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
-        if s.actions.is_none() {
+        if s.actions.callback.is_none() {
             return Status::MISSING;
         }
-        s.commands.rules_changed += 1;
+        s.actions.commands.rules_changed += 1;
         Status::OK
     })
 }

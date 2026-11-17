@@ -5,7 +5,8 @@ use enshwick_core::abi::{
     AltarInfo, AltarLimit, AltarZone, BuildingZoneCheck, Extent, FILTER_YES, Header,
 };
 
-use crate::test::{BaseCode, FakeHost, Installed, table};
+use super::BaseCode;
+use crate::test::{FakeHost, Installed, table};
 
 impl FakeHost {
     /// Plays a game build whose base code the platform does not know:
@@ -21,7 +22,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_base_limit(mut self) -> Self {
-        self.base_code = BaseCode::Unknown;
+        self.world.base_code = BaseCode::Unknown;
         self
     }
 
@@ -38,7 +39,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_bases_past_16(mut self) -> Self {
-        self.base_code = BaseCode::ZonesOnly;
+        self.world.base_code = BaseCode::ZonesOnly;
         self
     }
 }
@@ -63,7 +64,7 @@ impl Installed {
     /// loader.set_altars(&[altar]);
     /// ```
     pub fn set_altars(&self, altars: &[AltarInfo]) {
-        table::with((), |s| s.altars = altars.to_vec());
+        table::with((), |s| s.world.altars = altars.to_vec());
         let _handled = self.raise::<enshwick_core::events::AltarsChanged>(&());
     }
 
@@ -77,7 +78,9 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn altars_opened(&self) -> (bool, bool) {
-        table::with((false, false), |s| (s.altars_opened, s.zone_control))
+        table::with((false, false), |s| {
+            (s.world.altars_opened, s.world.zone_control)
+        })
     }
 
     /// Runs the mod's altar zone filters on one altar's vanilla zone of
@@ -93,7 +96,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn altar_zone(&self, altar: Entity, level: u8, height: i64) -> (i64, i64) {
-        let filters = table::with(Vec::new(), |s| s.zone_sizing.filters.clone());
+        let filters = table::with(Vec::new(), |s| s.world.zone_sizing.filters.clone());
         let mut zone = AltarZone {
             header: Header::of::<AltarZone>(),
             altar: Entity(altar.0),
@@ -124,7 +127,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn zone_resizes(&self) -> usize {
-        table::with(0, |s| s.zone_sizing.resizes)
+        table::with(0, |s| s.world.zone_sizing.resizes)
     }
 
     /// Asks the mod's zone check filters about a placement the game refused,
@@ -140,7 +143,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn building_zone_check(&self, zones: &[Extent], object: Extent, margin: f64) -> bool {
-        let filters = table::with(Vec::new(), |s| s.zone_filters.clone());
+        let filters = table::with(Vec::new(), |s| s.world.zone_filters.clone());
         let call = BuildingZoneCheck {
             header: Header::of::<BuildingZoneCheck>(),
             zones: zones.as_ptr(),
@@ -166,7 +169,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn altar_limit(&self, flame_level: u32, vanilla: u32) -> u32 {
-        let filters = table::with(Vec::new(), |s| s.altar_limits.clone());
+        let filters = table::with(Vec::new(), |s| s.world.altar_limits.clone());
         let mut limit = AltarLimit {
             header: Header::of::<AltarLimit>(),
             flame_level,
@@ -195,7 +198,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn requested_base_limits(&self) -> Option<(u32, u32)> {
-        table::with(None, |s| s.base_limit.requested)
+        table::with(None, |s| s.world.base_limit.requested)
     }
 
     /// Makes the last grouping find `zones` altar zones in `bases` bases.
@@ -207,6 +210,6 @@ impl Installed {
     /// loader.set_grouping(17, 16);
     /// ```
     pub fn set_grouping(&self, zones: u32, bases: u32) {
-        table::with((), |s| s.grouping = Some((zones, bases)));
+        table::with((), |s| s.world.grouping = Some((zones, bases)));
     }
 }

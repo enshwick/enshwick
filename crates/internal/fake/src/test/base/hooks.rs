@@ -22,7 +22,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn base(mut self, base: u64) -> Self {
-        self.base = base;
+        self.base.module_base = base;
         self
     }
 
@@ -39,7 +39,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn fingerprint(mut self, fingerprint: Fingerprint) -> Self {
-        self.fingerprint = fingerprint;
+        self.base.fingerprint = fingerprint;
         self
     }
 
@@ -57,7 +57,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn build_complete(mut self, complete: bool) -> Self {
-        self.build_complete = complete;
+        self.base.build_complete = complete;
         self
     }
 
@@ -68,7 +68,7 @@ impl FakeHost {
     /// See the [module](crate::test).
     #[must_use]
     pub fn symbol(mut self, name: &str, address: u64) -> Self {
-        self.symbols.insert(name.to_owned(), address);
+        self.base.symbols.insert(name.to_owned(), address);
         self
     }
 
@@ -79,7 +79,7 @@ impl FakeHost {
     /// See [`FakeHost`].
     #[must_use]
     pub fn system(mut self, name: &str, address: u64) -> Self {
-        self.systems.insert(name.to_owned(), address);
+        self.base.systems.insert(name.to_owned(), address);
         self
     }
 
@@ -91,7 +91,7 @@ impl FakeHost {
     /// See [`FakeHost`].
     #[must_use]
     pub fn constant(mut self, name: &str, value: u64) -> Self {
-        self.constants.insert(name.to_owned(), value);
+        self.base.constants.insert(name.to_owned(), value);
         self
     }
 
@@ -109,7 +109,8 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn field_offset(mut self, type_name: &str, field: &str, offset: u64) -> Self {
-        self.field_offsets
+        self.base
+            .field_offsets
             .insert((type_name.to_owned(), field.to_owned()), offset);
         self
     }
@@ -122,7 +123,7 @@ impl FakeHost {
     /// See [`FakeHost::field_offset`].
     #[must_use]
     pub fn type_size(mut self, type_name: &str, size: u32) -> Self {
-        self.type_sizes.insert(type_name.to_owned(), size);
+        self.base.type_sizes.insert(type_name.to_owned(), size);
         self
     }
 
@@ -134,7 +135,7 @@ impl FakeHost {
     /// See [`FakeHost::field_offset`].
     #[must_use]
     pub fn type_hash(mut self, type_name: &str, hash: u32) -> Self {
-        self.type_hashes.insert(type_name.to_owned(), hash);
+        self.base.type_hashes.insert(type_name.to_owned(), hash);
         self
     }
 
@@ -152,7 +153,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn caller_frame(mut self, frame: CallerFrame) -> Self {
-        self.caller_frame = frame;
+        self.base.caller_frame = frame;
         self
     }
 
@@ -166,7 +167,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn refuse_hook(mut self, target: u64) -> Self {
-        self.refused_hooks.insert(target);
+        self.base.refused_hooks.insert(target);
         self
     }
 
@@ -181,7 +182,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn code(mut self, code: &'static [u8]) -> Self {
-        self.code = (code.as_ptr().addr() as u64, code.len() as u64);
+        self.base.code = (code.as_ptr().addr() as u64, code.len() as u64);
         self
     }
 
@@ -196,7 +197,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn workshop_recipes(mut self, limit: u32) -> Self {
-        self.workshop_recipes = limit;
+        self.base.workshop_recipes = limit;
         self
     }
 }
@@ -216,7 +217,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn hooks(&self) -> Vec<LinkedHook> {
-        table::with(Vec::new(), |s| s.hooks.clone())
+        table::with(Vec::new(), |s| s.base.hooks.clone())
     }
 
     /// The addresses the mod placed mid-function hooks at, in order.
@@ -229,7 +230,9 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn mid_hooks(&self) -> Vec<u64> {
-        table::with(Vec::new(), |s| s.mid_hooks.iter().map(|h| h.0).collect())
+        table::with(Vec::new(), |s| {
+            s.base.mid_hooks.iter().map(|h| h.0).collect()
+        })
     }
 
     /// Runs the mod's mid-function hooks at `address` on `registers`, as the
@@ -245,7 +248,8 @@ impl Installed {
     #[must_use = "the count says whether the mod hooks the address"]
     pub fn run_at(&self, address: u64, registers: &mut enshwick_core::abi::Registers) -> usize {
         let handlers: Vec<_> = table::with(Vec::new(), |s| {
-            s.mid_hooks
+            s.base
+                .mid_hooks
                 .iter()
                 .filter(|h| h.0 == address)
                 .map(|h| h.1)
@@ -285,7 +289,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn code_patches(&self) -> Vec<(u64, Vec<u8>, Vec<u8>)> {
-        table::with(Vec::new(), |s| s.code_patches.clone())
+        table::with(Vec::new(), |s| s.base.code_patches.clone())
     }
 }
 

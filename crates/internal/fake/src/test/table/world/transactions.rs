@@ -46,16 +46,17 @@ pub(crate) extern "system" fn transaction_commit(
         changes.push(change);
     }
     with(Status::MISSING, |s| {
-        if s.terrain.is_none() {
+        if s.world.terrain.is_none() {
             return Status::UNAVAILABLE;
         }
         let host = &s.host;
         for change in &changes {
             if let FakeChange::PlaceProp(prop) = change {
-                if host.no_prop_items.contains(&prop.item.get()) {
+                if host.world.no_prop_items.contains(&prop.item.get()) {
                     return Status::NOT_A_PROP;
                 }
                 let places = host
+                    .content
                     .items
                     .get(&prop.item.get())
                     .is_some_and(|item| item.placed_entity != enshwick_core::content::Guid::NIL);
@@ -64,8 +65,9 @@ pub(crate) extern "system" fn transaction_commit(
                 }
             }
             if let FakeChange::Block(block) = change {
-                let known = host.blueprints.contains_key(&block.shape.get())
+                let known = host.world.blueprints.contains_key(&block.shape.get())
                     && host
+                        .world
                         .building_materials
                         .get(&block.material.get())
                         .is_some_and(|&id| id >= 0x80);
@@ -75,15 +77,15 @@ pub(crate) extern "system" fn transaction_commit(
             }
         }
         let outside = changes.iter().any(|change| match change {
-            FakeChange::Terrain(edit) => crate::test::world::edit_outside(host.extent, edit),
+            FakeChange::Terrain(edit) => crate::test::world::edit_outside(host.world.extent, edit),
             FakeChange::Voxels { min, size, .. } | FakeChange::Erase { min, size } => {
-                crate::test::world::outside(host.extent, *min, *size)
+                crate::test::world::outside(host.world.extent, *min, *size)
             }
-            FakeChange::PlaceProp(prop) => host.extent.is_some_and(|end| {
+            FakeChange::PlaceProp(prop) => host.world.extent.is_some_and(|end| {
                 (0..3).any(|axis| prop.position[axis] * 2.0 >= f64::from(end[axis]))
             }),
             FakeChange::RemoveProp(_) => false,
-            FakeChange::Block(block) => host.extent.is_some_and(|end| {
+            FakeChange::Block(block) => host.world.extent.is_some_and(|end| {
                 (0..3).any(|axis| block.position[axis] * 2.0 >= f64::from(end[axis]))
             }),
         });
@@ -94,17 +96,18 @@ pub(crate) extern "system" fn transaction_commit(
         if bound > BRICKS_MAX {
             return Status::BAD_ARGS;
         }
-        if claimed(&s.edits.transactions, host) + bound > BRICKS_MAX {
+        if claimed(&s.world.edits.transactions, host) + bound > BRICKS_MAX {
             return Status::REFUSED;
         }
         let next = s
+            .world
             .edits
             .transactions
             .last()
-            .map_or(s.edits.forgotten, |last| last.id)
+            .map_or(s.world.edits.forgotten, |last| last.id)
             + 1;
         let ops = u32::try_from(changes.len()).unwrap_or(u32::MAX);
-        s.edits.transactions.push(FakeTransaction {
+        s.world.edits.transactions.push(FakeTransaction {
             id: next,
             owner: me,
             actor: actor.0,
@@ -272,8 +275,9 @@ fn claimed(transactions: &[FakeTransaction], host: &crate::test::FakeHost) -> u6
 
 pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status {
     with(Status::REFUSED, |s| {
-        let claimed = claimed(&s.edits.transactions, &s.host);
+        let claimed = claimed(&s.world.edits.transactions, &s.host);
         let Some(transaction) = s
+            .world
             .edits
             .transactions
             .iter_mut()
@@ -311,7 +315,8 @@ pub(crate) extern "system" fn transaction_entities(
     count: *mut u32,
 ) -> Status {
     let found = with(None, |s| {
-        s.edits
+        s.world
+            .edits
             .transactions
             .iter()
             .find(|t| t.id == id && t.owner == me)
@@ -329,7 +334,8 @@ pub(crate) extern "system" fn transaction_status(
     out: *mut TransactionInfo,
 ) -> Status {
     let found = with(None, |s| {
-        s.edits
+        s.world
+            .edits
             .transactions
             .iter()
             .find(|t| t.id == id && t.owner == me)
@@ -369,6 +375,7 @@ pub(crate) extern "system" fn transaction_settled(
     };
     with(Status::UNAVAILABLE, |s| {
         if !s
+            .world
             .edits
             .transactions
             .iter()
@@ -376,8 +383,8 @@ pub(crate) extern "system" fn transaction_settled(
         {
             return Status::MISSING;
         }
-        let until = s.ticks.nanos().saturating_add(within_ns);
-        s.settle_waits.push(SettleWait {
+        let until = s.base.ticks.nanos().saturating_add(within_ns);
+        s.world.settle_waits.push(SettleWait {
             id,
             until,
             callback: Registered::new(callback, user, me),
@@ -398,7 +405,7 @@ pub(crate) fn run_settled() {
 /// undo data go with the world; then every wait runs.
 pub(crate) fn end_world() {
     with((), |s| {
-        for transaction in &mut s.edits.transactions {
+        for transaction in &mut s.world.edits.transactions {
             let info = &mut transaction.info;
             match info.state {
                 TransactionInfo::PENDING | TransactionInfo::UNDOING => {
@@ -423,15 +430,16 @@ pub(crate) fn end_world() {
 /// them outside the table, so a callback may ask again.
 fn run_waits(all: bool) {
     let due: Vec<(SettleWait, Option<TransactionInfo>)> = with(Vec::new(), |s| {
-        let now = s.ticks.nanos();
-        let (transactions, off) = (&s.edits.transactions, &s.off);
+        let now = s.base.ticks.nanos();
+        let (transactions, off) = (&s.world.edits.transactions, &s.base.off);
         let info = |wait: &SettleWait| {
             transactions
                 .iter()
                 .find(|t| t.id == wait.id && Some(t.owner) == wait.callback.owner())
                 .map(|t| t.info)
         };
-        s.settle_waits
+        s.world
+            .settle_waits
             .extract_if(.., |wait| {
                 all || wait.callback.owner_off(off)
                     || now >= wait.until

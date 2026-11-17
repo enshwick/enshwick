@@ -15,6 +15,13 @@ pub(crate) mod items;
 pub(crate) mod stats;
 pub(crate) mod survivors;
 
+/// What the fake's inventories answer, as the test set it.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct InventoryPresets {
+    pub(crate) no_inventories: bool,
+    pub(crate) no_item_filters: bool,
+}
+
 impl FakeHost {
     /// Inventories on the server: the component types, stack size and
     /// offsets [`Inventories`](enshwick_core::inventory::Inventories) reads slots,
@@ -239,7 +246,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_inventories(mut self) -> Self {
-        self.no_inventories = true;
+        self.inventory.no_inventories = true;
         self
     }
 
@@ -255,7 +262,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_item_filters(mut self) -> Self {
-        self.no_item_filters = true;
+        self.inventory.no_item_filters = true;
         self
     }
 }
@@ -277,7 +284,8 @@ impl Installed {
     #[must_use]
     pub fn inventory_requests(&self) -> Vec<SubmittedRequest> {
         table::with(Vec::new(), |s| {
-            s.inventory_requests
+            s.inventory
+                .inventory_requests
                 .iter()
                 .map(|r| r.request.clone())
                 .collect()
@@ -300,7 +308,8 @@ impl Installed {
     #[must_use = "false means no request was open"]
     pub fn finish_inventory(&self, outcome: u32, ops: &[InventoryOpResult]) -> bool {
         let open = table::with(None, |s| {
-            (!s.inventory_requests.is_empty()).then(|| s.inventory_requests.remove(0))
+            (!s.inventory.inventory_requests.is_empty())
+                .then(|| s.inventory.inventory_requests.remove(0))
         });
         let Some(open) = open else {
             return false;
@@ -354,7 +363,8 @@ impl Installed {
         // One filter at a time, outside the lock, without copying the list:
         // a bench of a filter counts its own allocations alone.
         let mut at = 0;
-        while let Some(filter) = table::with(None, |s| s.damage_filters.get(at).copied()) {
+        while let Some(filter) = table::with(None, |s| s.inventory.damage_filters.get(at).copied())
+        {
             // SAFETY: the filter the mod registered, with its pointer; the
             // amounts `check` points at are `amounts`, borrowed for the call.
             filter.run(|callback, user| unsafe { callback(&raw mut check, user) });
@@ -379,7 +389,14 @@ impl Installed {
     /// loader.wear(Entity(2), ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) });
     /// ```
     pub fn wear(&self, entity: Entity, item: enshwick_core::inventory::ItemInstance) {
-        table::with((), |s| s.stats.worn.entry(entity.0).or_default().push(item));
+        table::with((), |s| {
+            s.inventory
+                .stats
+                .worn
+                .entry(entity.0)
+                .or_default()
+                .push(item);
+        });
     }
 
     /// Works out the stat values of every watched entity and runs the mod's

@@ -98,10 +98,10 @@ pub(crate) extern "system" fn serve_call(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        let calls = &mut s.calls;
+        let calls = &mut s.base.calls;
         if calls
             .served
             .iter()
@@ -130,20 +130,21 @@ pub(crate) extern "system" fn find_call(
     }
     let id = with(None, |s| {
         let required = s
+            .base
             .manifest
             .as_ref()
             .is_some_and(|manifest| manifest.requires_owner_of(&declared.name));
-        let unexported = s.manifest.as_ref().is_some_and(|manifest| {
+        let unexported = s.base.manifest.as_ref().is_some_and(|manifest| {
             manifest.unexported(
                 enshwick_core::schema_section::Kind::Call,
                 &declared.name,
-                &s.host.exports,
+                &s.host.base.exports,
             )
         });
-        if unexported || (required && !s.calls.others.iter().any(|o| o.declared == declared)) {
+        if unexported || (required && !s.base.calls.others.iter().any(|o| o.declared == declared)) {
             return None;
         }
-        let wanted = &mut s.calls.wanted;
+        let wanted = &mut s.base.calls.wanted;
         let index = match wanted
             .iter()
             .position(|w| w.name == declared.name && w.major == declared.major)
@@ -173,8 +174,14 @@ pub(crate) extern "system" fn call(
         return Status::BAD_ARGS;
     }
     let server = with(Err(Status::MISSING), |s| {
-        let wanted = s.calls.wanted.get(id as usize).ok_or(Status::BAD_ARGS)?;
-        s.calls
+        let wanted = s
+            .base
+            .calls
+            .wanted
+            .get(id as usize)
+            .ok_or(Status::BAD_ARGS)?;
+        s.base
+            .calls
             .others
             .iter()
             .find(|o| o.declared == *wanted)
@@ -225,7 +232,7 @@ impl Installed {
     {
         let (run, user) = enshwick_core::__fake::served_call(handler);
         with((), |s| {
-            s.calls.others.push(Served {
+            s.base.calls.others.push(Served {
                 declared: Declared::of::<C>(),
                 handler: Registered::unowned(run, user),
             });
@@ -257,7 +264,8 @@ impl Installed {
     pub fn call<C: Call>(&self, input: &C) -> Result<C::Output, CallError> {
         let wanted = Declared::of::<C>();
         let server = with(None, |s| {
-            s.calls
+            s.base
+                .calls
                 .served
                 .iter()
                 .find(|c| c.declared == wanted)
@@ -293,7 +301,8 @@ impl Installed {
     #[must_use]
     pub fn served_calls(&self) -> Vec<String> {
         with(Vec::new(), |s| {
-            s.calls
+            s.base
+                .calls
                 .served
                 .iter()
                 .map(|c| format!("{} v{}", c.declared.name, c.declared.major))

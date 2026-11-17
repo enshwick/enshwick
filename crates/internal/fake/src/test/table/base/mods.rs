@@ -27,10 +27,13 @@ pub(crate) struct ManifestFacts {
 /// under test by its manifest (both when it declared none), any other
 /// handle as a pack of side server.
 pub(crate) fn joins(s: &State, me: ModHandle) -> bool {
-    if let Some(&(_, side)) = s.host.pack_sides.iter().find(|(pack, _)| *pack == me) {
+    if let Some(&(_, side)) = s.host.base.pack_sides.iter().find(|(pack, _)| *pack == me) {
         side == Side::BOTH
-    } else if me == s.host.handle {
-        s.manifest.as_ref().is_none_or(|manifest| manifest.joins)
+    } else if me == s.host.base.handle {
+        s.base
+            .manifest
+            .as_ref()
+            .is_none_or(|manifest| manifest.joins)
     } else {
         false
     }
@@ -91,8 +94,8 @@ impl ManifestFacts {
 /// `<owner>:<what>`, whose owner does not export it.
 pub(crate) fn warn_unexported(s: &mut State, kind: enshwick_core::schema_section::Kind, id: &str) {
     let owner = id.split_once(':').map_or(id, |(owner, _)| owner);
-    let offered = s.host.exports.get(owner).cloned().unwrap_or_default();
-    s.logs.push((
+    let offered = s.host.base.exports.get(owner).cloned().unwrap_or_default();
+    s.base.logs.push((
         Level::WARN,
         enshwick_core::__fake::rules::unexported_reason(kind, id, &offered),
     ));
@@ -124,7 +127,7 @@ pub(crate) fn note_manifest(
             "the export {bad:?} lacks its kind or its local name: write <kind>:<name>"
         ));
     }
-    with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
+    with((), |s| s.base.manifest = Some(ManifestFacts::of(manifest)));
     None
 }
 
@@ -140,8 +143,10 @@ pub(crate) fn refuses_side(api: *const HostApi, manifest: &enshwick_core::abi::M
                 "side {} is not a mod's side: a mod runs on the server or on both",
                 manifest.side.0
             );
-            s.logs.push((Level::WARN, format!("skipped: {reason}")));
-            s.faults.push(reason);
+            s.base
+                .logs
+                .push((Level::WARN, format!("skipped: {reason}")));
+            s.base.faults.push(reason);
             true
         })
 }
@@ -159,12 +164,12 @@ pub(crate) fn refuses_developer(
             .flags
             .contains(enshwick_core::abi::ManifestFlags::DEVELOPER)
         && with(false, |s| {
-            if s.host.developer_tools {
+            if s.host.base.developer_tools {
                 return false;
             }
             let reason = enshwick_core::mods::DEVELOPER_TOOL_OFF;
-            s.faults.push(reason.to_owned());
-            s.logs.push((Level::ERROR, off_line(reason)));
+            s.base.faults.push(reason.to_owned());
+            s.base.logs.push((Level::ERROR, off_line(reason)));
             true
         })
 }
@@ -179,9 +184,9 @@ fn off_line(reason: &str) -> String {
 pub(crate) fn loader_turns_off(owner: ModHandle, reason: String) {
     let line = off_line(&reason);
     with((), |s| {
-        s.faults.push(reason);
-        s.sent.push((owner, Level::ERROR, line.clone()));
-        s.logs.push((Level::ERROR, line));
+        s.base.faults.push(reason);
+        s.base.sent.push((owner, Level::ERROR, line.clone()));
+        s.base.logs.push((Level::ERROR, line));
     });
     super::registered::turn_off(owner);
 }
@@ -191,9 +196,9 @@ pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) -> Status {
     // The loader logs every turn-off with its reason.
     let line = format!("off: {}", reason.replace('\t', " "));
     with((), |s| {
-        s.faults.push(reason);
-        s.sent.push((me, Level::ERROR, line.clone()));
-        s.logs.push((Level::ERROR, line));
+        s.base.faults.push(reason);
+        s.base.sent.push((me, Level::ERROR, line.clone()));
+        s.base.logs.push((Level::ERROR, line));
     });
     super::registered::turn_off(me);
     Status::OK
@@ -202,8 +207,8 @@ pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) -> Status {
 pub(crate) extern "system" fn log(me: ModHandle, level: Level, message: Str) -> Status {
     let message = text(message);
     with((), |s| {
-        s.sent.push((me, level, message.clone()));
-        s.logs.push((level, message));
+        s.base.sent.push((me, level, message.clone()));
+        s.base.logs.push((level, message));
     });
     Status::OK
 }
@@ -211,11 +216,12 @@ pub(crate) extern "system" fn log(me: ModHandle, level: Level, message: Str) -> 
 pub(crate) extern "system" fn settings(_me: ModHandle, file: Str, out: *mut Str) -> Status {
     let file = text(file);
     let served = with(None, |s| {
-        if !s.config_schemas.contains_key(&file) {
+        if !s.base.config_schemas.contains_key(&file) {
             return None;
         }
         let served: Box<str> = s
             .host
+            .base
             .settings
             .get(&file)
             .cloned()
@@ -223,7 +229,7 @@ pub(crate) extern "system" fn settings(_me: ModHandle, file: Str, out: *mut Str)
             .into();
         // The heap text stays where it is while the box lives in the state.
         let view = Str::new(&served);
-        s.settings.push(served);
+        s.base.settings.push(served);
         Some(view)
     });
     found(served, out)
@@ -248,10 +254,10 @@ pub(crate) extern "system" fn rename_content(
         return Status::REFUSED;
     }
     with(Status::MISSING, |s| {
-        if s.content_renames.is_some() {
+        if s.content.content_renames.is_some() {
             return Status::REFUSED;
         }
-        s.content_renames = Some(renames);
+        s.content.content_renames = Some(renames);
         Status::OK
     })
 }
@@ -263,7 +269,7 @@ pub(crate) extern "system" fn mods(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let mods = with(Vec::new(), |s| s.host.mods.clone());
+    let mods = with(Vec::new(), |s| s.host.base.mods.clone());
     list(&mods, out, entry_size, capacity, count)
 }
 
@@ -274,7 +280,7 @@ pub(crate) extern "system" fn loader_off(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let off = with(Vec::new(), |s| s.loader_off.clone());
+    let off = with(Vec::new(), |s| s.base.loader_off.clone());
     list(&off, out, entry_size, capacity, count)
 }
 
@@ -285,7 +291,7 @@ pub(crate) extern "system" fn join_missing(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let mods = with(Vec::new(), |s| s.host.join_missing.clone());
+    let mods = with(Vec::new(), |s| s.host.base.join_missing.clone());
     list(&mods, out, entry_size, capacity, count)
 }
 
@@ -302,13 +308,14 @@ pub(crate) extern "system" fn config_schema(
         return Status::BAD_ARGS;
     }
     with(Status::REFUSED, |s| {
-        if s.config_schemas
+        if s.base
+            .config_schemas
             .get(&file)
             .is_some_and(|known| *known != text)
         {
             return Status::REFUSED;
         }
-        s.config_schemas.insert(file, text);
+        s.base.config_schemas.insert(file, text);
         Status::OK
     })
 }
@@ -324,13 +331,14 @@ pub(crate) extern "system" fn config_check(
     };
     let file = text(file);
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        if s.config_checks.contains_key(&file) {
+        if s.base.config_checks.contains_key(&file) {
             return Status::REFUSED;
         }
-        s.config_checks
+        s.base
+            .config_checks
             .insert(file, Registered::new(callback, user, me));
         Status::OK
     })
@@ -343,10 +351,10 @@ pub(crate) extern "system" fn set_config(
     value: Str,
 ) -> Status {
     let entered = with(false, |s| {
-        let refused = s.config_writes.iter().any(|&checking| checking)
-            || s.config_writes.len() >= enshwick_core::config::MAX_NESTED_WRITES;
+        let refused = s.base.config_writes.iter().any(|&checking| checking)
+            || s.base.config_writes.len() >= enshwick_core::config::MAX_NESTED_WRITES;
         if !refused {
-            s.config_writes.push(false);
+            s.base.config_writes.push(false);
         }
         !refused
     });
@@ -355,7 +363,7 @@ pub(crate) extern "system" fn set_config(
     }
     let status = write_setting(text(file), &text(key), &text(value));
     with((), |s| {
-        s.config_writes.pop();
+        s.base.config_writes.pop();
     });
     status
 }
@@ -363,7 +371,7 @@ pub(crate) extern "system" fn set_config(
 /// Marks whether the innermost settings write runs the mod's check.
 fn checking(on: bool) {
     with((), |s| {
-        if let Some(last) = s.config_writes.last_mut() {
+        if let Some(last) = s.base.config_writes.last_mut() {
             *last = on;
         }
     });
@@ -372,13 +380,14 @@ fn checking(on: bool) {
 /// Writes `value` as `key` of the settings file `file`, as the loader does.
 fn write_setting(file: String, key: &str, value: &str) -> Status {
     let prepared = with(Err(Status::MISSING), |s| {
-        let serving = s.host.side == Side::SERVER || s.host.hosting;
-        if !serving || s.host.world_key.is_none() {
+        let serving = s.host.base.side == Side::SERVER || s.host.base.hosting;
+        if !serving || s.host.base.world_key.is_none() {
             return Err(Status::UNAVAILABLE);
         }
         // shortcut: no list element keys (`per_level[2]`), which the loader
         // takes; add them when a test needs one.
         let schema = s
+            .base
             .config_schemas
             .get(&file)
             .and_then(|text| enshwick_core::config::Schema::parse(text).ok())
@@ -402,6 +411,7 @@ fn write_setting(file: String, key: &str, value: &str) -> Status {
         field.check(&parsed).map_err(|_| Status::BAD_ARGS)?;
         let mut table = s
             .host
+            .base
             .settings
             .get(&file)
             .map_or_else(
@@ -418,7 +428,7 @@ fn write_setting(file: String, key: &str, value: &str) -> Status {
         Ok(new) => new,
         Err(status) => return status,
     };
-    let check = with(None, |s| s.config_checks.get(&file).copied());
+    let check = with(None, |s| s.base.config_checks.get(&file).copied());
     if let Some(check) = check {
         let mut why = Str::EMPTY;
         checking(true);
@@ -432,7 +442,7 @@ fn write_setting(file: String, key: &str, value: &str) -> Status {
         }
     }
     with((), |s| {
-        s.host.settings.insert(file, new);
+        s.host.base.settings.insert(file, new);
     });
     // SAFETY: the settings change carries no data.
     let _ran = unsafe {
@@ -468,7 +478,7 @@ fn set_dotted(table: &mut toml::Table, key: &str, value: toml::Value) -> bool {
 pub(crate) extern "system" fn texts(_me: ModHandle, toml: Str) -> Status {
     let toml = text(toml);
     with(Status::MISSING, |s| {
-        s.published_texts = Some(toml);
+        s.base.published_texts = Some(toml);
         Status::OK
     })
 }
@@ -499,9 +509,10 @@ pub(crate) fn for_reader<R>(language: Option<u32>, f: impl FnOnce() -> R) -> R {
 /// player whose game named none; `None` for no player's character.
 pub(crate) fn language_of_character(entity: enshwick_core::Entity) -> Option<u32> {
     with(None, |s| {
-        let key = s.host.players.iter().find(|p| p.entity == entity)?.key;
+        let key = s.host.base.players.iter().find(|p| p.entity == entity)?.key;
         Some(
             s.host
+                .base
                 .player_languages
                 .get(&key.get())
                 .copied()
@@ -513,6 +524,8 @@ pub(crate) fn language_of_character(entity: enshwick_core::Entity) -> Option<u32
 pub(crate) extern "system" fn language(_me: ModHandle, out: *mut u32) -> Status {
     crate::test::table::put(
         out,
-        READER.get().unwrap_or_else(|| with(0, |s| s.host.language)),
+        READER
+            .get()
+            .unwrap_or_else(|| with(0, |s| s.host.base.language)),
     )
 }

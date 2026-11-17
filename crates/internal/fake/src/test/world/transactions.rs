@@ -19,7 +19,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn blueprint(mut self, shape: ItemId, size: [u32; 3]) -> Self {
-        self.blueprints.insert(shape.get(), size);
+        self.world.blueprints.insert(shape.get(), size);
         self
     }
 
@@ -38,7 +38,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn building_material(mut self, item: ItemId, material: u8) -> Self {
-        self.building_materials.insert(item.get(), material);
+        self.world.building_materials.insert(item.get(), material);
         self
     }
 }
@@ -60,7 +60,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn transactions(&self) -> Vec<FakeTransaction> {
-        table::with(Vec::new(), |s| s.edits.transactions.clone())
+        table::with(Vec::new(), |s| s.world.edits.transactions.clone())
     }
 
     /// Runs the loader's next steps until every queued transaction and undo
@@ -86,7 +86,7 @@ impl Installed {
         let written = table::with(Vec::new(), |s| {
             let host = &mut s.host;
             let mut written = Vec::new();
-            for transaction in &mut s.edits.transactions {
+            for transaction in &mut s.world.edits.transactions {
                 let refusal = transaction.refusal(host);
                 let bricks = transaction.bricks(host);
                 match transaction.info.state {
@@ -165,7 +165,7 @@ impl Installed {
     /// ```
     pub fn expire_transactions(&self) {
         table::with((), |s| {
-            for transaction in &mut s.edits.transactions {
+            for transaction in &mut s.world.edits.transactions {
                 if transaction.info.state == TransactionInfo::APPLIED {
                     transaction.info.state = TransactionInfo::EXPIRED;
                     transaction.info.bricks = 0;
@@ -187,10 +187,10 @@ impl Installed {
     /// ```
     pub fn forget_transactions(&self) {
         table::with((), |s| {
-            if let Some(last) = s.edits.transactions.last() {
-                s.edits.forgotten = last.id;
+            if let Some(last) = s.world.edits.transactions.last() {
+                s.world.edits.forgotten = last.id;
             }
-            s.edits.transactions.clear();
+            s.world.edits.transactions.clear();
         });
     }
 
@@ -209,7 +209,8 @@ impl Installed {
     /// ```
     pub fn fail_transaction(&self, id: u64, reason: Status) {
         table::with((), |s| {
-            let Some(transaction) = s.edits.transactions.iter_mut().find(|t| t.id == id) else {
+            let Some(transaction) = s.world.edits.transactions.iter_mut().find(|t| t.id == id)
+            else {
                 return;
             };
             let info = &mut transaction.info;
@@ -289,6 +290,7 @@ impl FakeChange {
                 super::props::reach(host, prop.item.get(), prop.position, prop.orientation)
             }
             Self::RemoveProp(remove) => host
+                .world
                 .props
                 .iter()
                 .find(|prop| prop.entity == remove.entity)
@@ -297,6 +299,7 @@ impl FakeChange {
                 }),
             Self::Block(block) => {
                 let size = host
+                    .world
                     .blueprints
                     .get(&block.shape.get())
                     .copied()
@@ -376,6 +379,7 @@ impl FakeTransaction {
             return 0;
         }
         let permissions = host
+            .base
             .players
             .iter()
             .find(|player| player.entity == enshwick_core::Entity(self.actor))
@@ -384,7 +388,7 @@ impl FakeTransaction {
             .iter()
             .map(|change| {
                 let (min, max) = change.metres(host);
-                host.zones.refusal(permissions, min, max)
+                host.world.zones.refusal(permissions, min, max)
             })
             .find(|&refusal| refusal != 0)
             .unwrap_or(0)
@@ -403,7 +407,7 @@ fn voxels_written(
         .iter()
         .filter_map(|change| match change {
             FakeChange::Voxels { min, size, voxels } => Some(super::voxel_edits::written(
-                &host.voxels,
+                &host.world.voxels,
                 *min,
                 *size,
                 voxels,

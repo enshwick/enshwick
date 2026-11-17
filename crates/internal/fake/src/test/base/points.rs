@@ -133,17 +133,17 @@ pub(crate) extern "system" fn define_point(
     spec: *const PointSpec,
     out: *mut PointHandle,
 ) -> Status {
-    if with(false, |s| s.registration == Registration::Closed) {
+    if with(false, |s| s.base.registration == Registration::Closed) {
         return Status::TOO_LATE;
     }
     let Some(declared) = declared(spec) else {
         return Status::BAD_ARGS;
     };
     let defined = with(Err(Status::MISSING), |s| {
-        let named_after_the_mod = s.manifest.as_ref().is_none_or(|manifest| {
+        let named_after_the_mod = s.base.manifest.as_ref().is_none_or(|manifest| {
             enshwick_core::__fake::rules::is_named_after(&declared.name, &manifest.id)
         });
-        let points = &mut s.points;
+        let points = &mut s.base.points;
         let defined_twice = points
             .defined
             .iter()
@@ -182,7 +182,7 @@ pub(crate) extern "system" fn attach_point(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    if with(false, |s| s.registration == Registration::Closed) {
+    if with(false, |s| s.base.registration == Registration::Closed) {
         return Status::TOO_LATE;
     }
     let Some(link) = crate::test::table::get_headed(link) else {
@@ -204,19 +204,21 @@ pub(crate) extern "system" fn attach_point(
     };
     with(Status::MISSING, |s| {
         let required = s
+            .base
             .manifest
             .as_ref()
             .is_some_and(|manifest| manifest.requires_owner_of(&attached.declared.name));
-        let unexported = s.manifest.as_ref().is_some_and(|manifest| {
+        let unexported = s.base.manifest.as_ref().is_some_and(|manifest| {
             manifest.unexported(
                 enshwick_core::schema_section::Kind::Point,
                 &attached.declared.name,
-                &s.host.exports,
+                &s.host.base.exports,
             )
         });
         if unexported
             || (required
                 && !s
+                    .base
                     .points
                     .others
                     .iter()
@@ -225,6 +227,7 @@ pub(crate) extern "system" fn attach_point(
             return Status::REFUSED;
         }
         let attached_already = s
+            .base
             .points
             .attached
             .iter()
@@ -232,7 +235,7 @@ pub(crate) extern "system" fn attach_point(
         if attached_already {
             return Status::REFUSED;
         }
-        s.points.attached.push(attached);
+        s.base.points.attached.push(attached);
         Status::OK
     })
 }
@@ -272,7 +275,7 @@ pub(crate) extern "system" fn run_point(
     verdict: *mut PointVerdict,
 ) -> Status {
     let Some((links, changes, refuse)) = with(None, |s| {
-        s.points.defined.get(point as usize).map(|d| {
+        s.base.points.defined.get(point as usize).map(|d| {
             (
                 d.links.clone(),
                 d.declared.mode != enshwick_core::abi::PointMode::OBSERVE,
@@ -285,7 +288,7 @@ pub(crate) extern "system" fn run_point(
     let (answer, panicked) = run(&links, changes, refuse, input, value);
     if !panicked.is_empty() {
         with((), |s| {
-            if let Some(defined) = s.points.defined.get_mut(point as usize) {
+            if let Some(defined) = s.base.points.defined.get_mut(point as usize) {
                 for &i in &panicked {
                     if let Some(link) = defined.links.get_mut(i) {
                         link.on = false;
@@ -331,6 +334,7 @@ impl Installed {
         let user = Box::into_raw(Box::new(link));
         let attached = with(false, |s| {
             let Some(defined) = s
+                .base
                 .points
                 .defined
                 .iter_mut()
@@ -377,7 +381,7 @@ impl Installed {
     /// loader.define_point::<Price>();
     /// ```
     pub fn define_point<P: Point>(&self) {
-        with((), |s| s.points.others.push(Declared::of::<P>()));
+        with((), |s| s.base.points.others.push(Declared::of::<P>()));
     }
 
     /// The points the mod defined, by name, in order.
@@ -391,7 +395,8 @@ impl Installed {
     #[must_use]
     pub fn defined_points(&self) -> Vec<String> {
         with(Vec::new(), |s| {
-            s.points
+            s.base
+                .points
                 .defined
                 .iter()
                 .map(|d| d.declared.name.clone())
@@ -410,7 +415,8 @@ impl Installed {
     #[must_use]
     pub fn attached_points(&self) -> Vec<String> {
         with(Vec::new(), |s| {
-            s.points
+            s.base
+                .points
                 .attached
                 .iter()
                 .map(|a| a.declared.name.clone())
@@ -441,6 +447,7 @@ impl Installed {
         let owner = Declared::of::<P>();
         let (links, positions) = with((Vec::new(), Vec::new()), |s| {
             let serving: Vec<(usize, &Attached)> = s
+                .base
                 .points
                 .attached
                 .iter()
@@ -480,7 +487,9 @@ impl Installed {
         );
         with((), |s| {
             for i in panicked {
-                if let Some(attached) = positions.get(i).and_then(|&p| s.points.attached.get_mut(p))
+                if let Some(attached) = positions
+                    .get(i)
+                    .and_then(|&p| s.base.points.attached.get_mut(p))
                 {
                     attached.link.on = false;
                 }

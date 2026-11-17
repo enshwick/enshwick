@@ -11,6 +11,19 @@ pub(crate) mod commands;
 #[cfg(feature = "unstable")]
 pub(crate) mod controls;
 
+/// What the fake's actions answer, as the test set it: the console's
+/// answers, other mods' commands and the player's keys.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ActionsPresets {
+    pub(crate) console_answers: rustc_hash::FxHashMap<String, String>,
+    /// Other mods' commands: mod id, the alias each asks, and whether it
+    /// loads after the mod under test.
+    pub(crate) other_commands: Vec<(String, String, bool)>,
+    /// The player's keys by control name, in place of the mod's defaults.
+    #[cfg(feature = "unstable")]
+    pub(crate) bindings: Vec<(String, usize, Option<enshwick_core::controls::Key>)>,
+}
+
 impl FakeHost {
     /// Each player's `PlayerInput` with the game controls held, and the
     /// reflected enum of controls as the type registry holds it, with
@@ -106,7 +119,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn interaction(&self, call: &Interaction) -> bool {
-        let filters = table::with(Vec::new(), |s| s.interaction_filters.clone());
+        let filters = table::with(Vec::new(), |s| s.actions.interaction_filters.clone());
         filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the mod's pointer.
             filter.run(|callback, user| unsafe {
@@ -130,7 +143,8 @@ impl Installed {
         item: enshwick_core::ItemId,
     ) -> Option<enshwick_core::abi::InteractionPrompt> {
         table::with(None, |s| {
-            s.interaction_prompts
+            s.actions
+                .interaction_prompts
                 .iter()
                 .find(|p| p.item == item)
                 .copied()
@@ -151,7 +165,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn craft(&self, call: &enshwick_core::abi::CraftCheck) -> bool {
-        let filters = table::with(Vec::new(), |s| s.craft_filters.clone());
+        let filters = table::with(Vec::new(), |s| s.actions.craft_filters.clone());
         filters.iter().all(|filter| {
             // SAFETY: a filter the mod registered with its own pointer.
             filter.run(|callback, user| unsafe {
@@ -192,10 +206,16 @@ impl Installed {
     pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {
         // shortcut: the loader finds a character made in the current server step only from the next step, and the fake has no steps, so a respawned character's account comes at once; model it if a mod test ever needs that gap.
         let (filters, account) = table::with((Vec::new(), None), |s| {
-            let server = s.host.side == enshwick_core::abi::Side::SERVER || s.host.hosting;
-            let account = s.host.players.iter().find(|p| p.entity == call.character);
+            let server =
+                s.host.base.side == enshwick_core::abi::Side::SERVER || s.host.base.hosting;
+            let account = s
+                .host
+                .base
+                .players
+                .iter()
+                .find(|p| p.entity == call.character);
             (
-                s.build_filters.clone(),
+                s.actions.build_filters.clone(),
                 account.filter(|_| server).map(|p| p.key),
             )
         });

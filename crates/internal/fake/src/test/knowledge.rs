@@ -41,7 +41,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn knowledge_input(&self, mut request: enshwick_core::abi::KnowledgeInput) -> bool {
-        let filters = table::with(Vec::new(), |s| s.knowledge_input_filters.clone());
+        let filters = table::with(Vec::new(), |s| s.knowledge.knowledge_input_filters.clone());
         for filter in filters {
             // SAFETY: the filter the mod registered, with its pointer.
             match filter.run(|callback, user| unsafe { callback(&raw const request, user) }) {
@@ -72,8 +72,8 @@ impl Installed {
         quests: &[KnowledgeId],
     ) {
         table::with((), |s| {
-            s.knowledge = values.to_vec();
-            s.quests = quests.to_vec();
+            s.knowledge.values = values.to_vec();
+            s.knowledge.quests = quests.to_vec();
         });
     }
 
@@ -103,7 +103,7 @@ impl Installed {
             .iter()
             .map(|&(holder, query, holds)| (holder, query.get(), holds))
             .collect();
-        table::with((), |s| s.game_queries = answers);
+        table::with((), |s| s.knowledge.game_queries = answers);
     }
 
     /// The knowledge grants the mod asked for: character, id, kind, value.
@@ -113,7 +113,7 @@ impl Installed {
     /// See [`Installed::set_knowledge`].
     #[must_use]
     pub fn grants(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u32)> {
-        table::with(Vec::new(), |s| s.grants.clone())
+        table::with(Vec::new(), |s| s.knowledge.grants.clone())
     }
 
     /// The knowledge revokes the mod asked for: character, id, kind, value.
@@ -126,7 +126,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn revokes(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u32)> {
-        table::with(Vec::new(), |s| s.revokes.clone())
+        table::with(Vec::new(), |s| s.knowledge.revokes.clone())
     }
 
     /// The knowledge changes the mod asked for accounts: the account's key,
@@ -140,7 +140,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn account_changes(&self) -> Vec<(enshwick_core::PlayerKey, KnowledgeId, u32, u32, bool)> {
-        table::with(Vec::new(), |s| s.account_changes.clone())
+        table::with(Vec::new(), |s| s.knowledge.account_changes.clone())
     }
 
     /// Asks the mod's skill overrides about `check` as the loader would: the
@@ -158,7 +158,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn skill(&self, check: &SkillCheck) -> u8 {
-        let skills = table::with(Vec::new(), |s| s.skills.clone());
+        let skills = table::with(Vec::new(), |s| s.knowledge.skills.clone());
         skills
             .iter()
             .filter(|(node, _)| *node == check.node)
@@ -185,7 +185,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn comfort(&self, comfort: &Comfort) -> i32 {
-        let filters = table::with(Vec::new(), |s| s.comfort_filters.clone());
+        let filters = table::with(Vec::new(), |s| s.knowledge.comfort_filters.clone());
         let filtered = filters.iter().fold(comfort.value, |value, filter| {
             let call = Comfort { value, ..*comfort };
             // SAFETY: a valid registration; `user` is the mod's pointer.
@@ -228,7 +228,7 @@ impl Installed {
             let need = unsafe { *token.cast::<fn(u32) -> u32>() };
             need(level)
         }
-        let filters = table::with(Vec::new(), |s| s.experience_filters.clone());
+        let filters = table::with(Vec::new(), |s| s.knowledge.experience_filters.clone());
         let mut need = need;
         for filter in &filters {
             let mut pass = ExperiencePass {

@@ -31,13 +31,14 @@ pub(crate) extern "system" fn loop_wait(
         return Status::TOO_LATE;
     }
     let (side, first) = with((Side::SERVER, false), |s| {
-        let first = s.pacing.loop_waits.is_empty();
+        let first = s.base.pacing.loop_waits.is_empty();
         if first {
-            s.pacing
+            s.base
+                .pacing
                 .loop_waits
                 .push(Registered::new(callback, user, me));
         }
-        (s.host.side, first)
+        (s.host.base.side, first)
     });
     let sites = if !first {
         LoopWaitSites::NONE
@@ -62,9 +63,10 @@ pub(crate) extern "system" fn server_wait(
         return Status::TOO_LATE;
     }
     let first = with(false, |s| {
-        let first = s.pacing.server_waits.is_empty();
+        let first = s.base.pacing.server_waits.is_empty();
         if first {
-            s.pacing
+            s.base
+                .pacing
                 .server_waits
                 .push(Registered::new(callback, user, me));
         }
@@ -83,7 +85,7 @@ pub(crate) extern "system" fn task_workers(
         return Status::TOO_LATE;
     }
     let server = with(false, |s| {
-        if s.host.side != Side::SERVER || (default, background) == (0, 0) {
+        if s.host.base.side != Side::SERVER || (default, background) == (0, 0) {
             return false;
         }
         let lowest = |old: u32, new: u32| match (old, new) {
@@ -91,8 +93,8 @@ pub(crate) extern "system" fn task_workers(
             (old, 0) => old,
             (old, new) => old.min(new),
         };
-        let (d, b) = s.pacing.task_workers.unwrap_or((0, 0));
-        s.pacing.task_workers = Some((lowest(d, default), lowest(b, background)));
+        let (d, b) = s.base.pacing.task_workers.unwrap_or((0, 0));
+        s.base.pacing.task_workers = Some((lowest(d, default), lowest(b, background)));
         true
     });
     put(found, u8::from(server))

@@ -17,7 +17,7 @@ impl FakeHost {
     /// See [`FakeHost`].
     #[must_use]
     pub fn side(mut self, side: Side) -> Self {
-        self.side = side;
+        self.base.side = side;
         self
     }
 
@@ -34,7 +34,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn hosting(mut self, hosting: bool) -> Self {
-        self.hosting = hosting;
+        self.base.hosting = hosting;
         self
     }
 
@@ -55,7 +55,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn host_key(mut self, key: enshwick_core::PlayerKey) -> Self {
-        self.host_key = Some(key);
+        self.base.host_key = Some(key);
         self
     }
 
@@ -70,7 +70,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn server_world(mut self, world: u64) -> Self {
-        self.server_world = world;
+        self.base.server_world = world;
         self
     }
 
@@ -91,9 +91,9 @@ impl FakeHost {
             enshwick_core::net::Peer::Server => enshwick_core::abi::NetMessage::SERVER,
             enshwick_core::net::Peer::Player(key) => key,
         };
-        self.net_peers.insert(raw.get());
+        self.base.net_peers.insert(raw.get());
         #[cfg(feature = "unstable")]
-        self.without_hello.remove(&raw.get());
+        self.base.without_hello.remove(&raw.get());
         self
     }
 
@@ -114,8 +114,8 @@ impl FakeHost {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn without_hello(mut self, key: enshwick_core::PlayerKey) -> Self {
-        self.without_hello.insert(key.get());
-        self.net_peers.remove(&key.get());
+        self.base.without_hello.insert(key.get());
+        self.base.net_peers.remove(&key.get());
         self
     }
 
@@ -130,7 +130,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn declared_content(mut self, id: &str) -> Self {
-        self.declared_content.push(id.to_owned());
+        self.base.declared_content.push(id.to_owned());
         self
     }
 
@@ -155,7 +155,7 @@ impl FakeHost {
         key: enshwick_core::PlayerKey,
         language: enshwick_core::i18n::Language,
     ) -> Self {
-        self.player_languages.insert(key.get(), language.0);
+        self.base.player_languages.insert(key.get(), language.0);
         self.net_peer(enshwick_core::net::Peer::Player(key))
     }
 
@@ -183,7 +183,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn loaded(mut self, info: ModInfo) -> Self {
-        self.mods.push(info);
+        self.base.mods.push(info);
         self
     }
 
@@ -218,7 +218,7 @@ impl FakeHost {
         if let Some(bare) = enshwick_core::__fake::rules::bad_export(names) {
             panic!("the export {bare:?} lacks its kind or its local name: write <kind>:<name>");
         }
-        self.exports.insert(
+        self.base.exports.insert(
             id.to_owned(),
             names.iter().map(|&name| name.to_owned()).collect(),
         );
@@ -254,7 +254,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn join_missing(mut self, info: ModInfo) -> Self {
-        self.join_missing.push(info);
+        self.base.join_missing.push(info);
         self
     }
 
@@ -279,7 +279,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn service<T: enshwick_core::services::Service>(mut self, table: &'static T) -> Self {
-        self.services.push(FakeService {
+        self.base.services.push(FakeService {
             name: T::NAME.to_owned(),
             major: T::MAJOR,
             fields: T::LAYOUT
@@ -311,11 +311,11 @@ impl Installed {
     /// ```
     pub fn turn_loader_off(&self, name: &'static str, reason: &'static str) {
         table::with((), |s| {
-            if !s.loader_off.iter().any(|off| {
+            if !s.base.loader_off.iter().any(|off| {
                 // SAFETY: the fake keeps only the static names its tests gave.
                 (unsafe { off.name.as_str() }) == Some(name)
             }) {
-                s.loader_off.push(enshwick_core::abi::LoaderOff {
+                s.base.loader_off.push(enshwick_core::abi::LoaderOff {
                     name: Str::new(name),
                     reason: Str::new(reason),
                     at: 1,
@@ -337,7 +337,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn features(&self) -> Vec<(String, Option<String>)> {
-        table::with(Vec::new(), |s| s.features.clone())
+        table::with(Vec::new(), |s| s.base.features.clone())
     }
 
     /// The lines the mod's status sources give now, each source's text in
@@ -351,7 +351,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn status(&self) -> Vec<String> {
-        let sources = table::with(Vec::new(), |s| s.status_sources.clone());
+        let sources = table::with(Vec::new(), |s| s.base.status_sources.clone());
         sources
             .into_iter()
             .map(|source| {
@@ -378,10 +378,12 @@ impl Installed {
     #[must_use]
     pub fn net_sent(&self) -> Vec<(String, enshwick_core::PlayerKey, Vec<u8>)> {
         table::with(Vec::new(), |s| {
-            s.net_sent
+            s.base
+                .net_sent
                 .iter()
                 .map(|(id, peer, bytes)| {
                     let name = s
+                        .base
                         .channels
                         .iter()
                         .find(|c| c.1 == *id)
@@ -415,7 +417,11 @@ impl Installed {
             return false;
         };
         let channel = table::with(None, |s| {
-            s.channels.iter().find(|c| c.0 == name).map(|c| (c.1, c.2))
+            s.base
+                .channels
+                .iter()
+                .find(|c| c.0 == name)
+                .map(|c| (c.1, c.2))
         });
         let Some((id, handler)) = channel else {
             return false;

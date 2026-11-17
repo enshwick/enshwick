@@ -20,6 +20,47 @@ use enshwick_core::abi::{
     SpawnRequest, Status, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
 };
 
+/// What the installed fake's inventories answer and have recorded:
+/// requests, filters, survivors, stats and containers.
+pub(crate) struct InventoryState {
+    pub(crate) inventory_requests: Vec<OpenRequest>,
+    /// The notifiers each mod raised in the step it last raised one.
+    pub(crate) notified: enshwick_core::peer::PerStep,
+    pub(crate) damage_filters: Vec<Registered<DamageFilterFn>>,
+    /// Each mod's survivor lookup, in load order.
+    pub(crate) survivor_lookup: Vec<Registered<SurvivorLookupFn>>,
+    pub(crate) bed_checks: Vec<Registered<BedCheckFn>>,
+    pub(crate) summons: Vec<Registered<SummonFilterFn>>,
+    pub(crate) summoned: Vec<Registered<SummonFilterFn>>,
+    pub(crate) summon_items: Vec<(enshwick_core::ItemId, enshwick_core::survivors::NpcId)>,
+    /// Stat kinds, modifiers and worn items.
+    pub(crate) stats: crate::test::inventory::stats::FakeStats,
+    /// Each mod's survivor menu merge, in load order.
+    pub(crate) survivor_status: Vec<Registered<SurvivorStatusFn>>,
+    pub(crate) item_filters: Vec<Registered<ItemFilterFn>>,
+    /// The mods' container rules and the pickup messages they showed.
+    pub(crate) containers: containers::Containers,
+}
+
+impl Default for InventoryState {
+    fn default() -> Self {
+        Self {
+            inventory_requests: Vec::new(),
+            notified: enshwick_core::peer::PerStep::new(enshwick_core::peer::MAX_NOTIFIES_PER_STEP),
+            damage_filters: Vec::new(),
+            survivor_lookup: Vec::new(),
+            bed_checks: Vec::new(),
+            summons: Vec::new(),
+            summoned: Vec::new(),
+            summon_items: Vec::new(),
+            stats: crate::test::inventory::stats::FakeStats::default(),
+            survivor_status: Vec::new(),
+            item_filters: Vec::new(),
+            containers: containers::Containers::default(),
+        }
+    }
+}
+
 pub(crate) extern "system" fn item_filter(
     me: ModHandle,
     callback: Option<ItemFilterFn>,
@@ -29,13 +70,15 @@ pub(crate) extern "system" fn item_filter(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        if s.host.no_item_filters {
+        if s.host.inventory.no_item_filters {
             return Status::UNAVAILABLE;
         }
-        s.item_filters.push(Registered::new(callback, user, me));
+        s.inventory
+            .item_filters
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -60,14 +103,14 @@ pub(crate) extern "system" fn drop_items(
         return Status::BAD_ARGS;
     }
     let entity = with(None, |s| {
-        if !s.host.items.contains_key(&request.item.get()) {
+        if !s.host.content.items.contains_key(&request.item.get()) {
             return Some(Err(Status::MISSING));
         }
         // Above every spawn's id, so the two never share one.
         let entity = crate::test::table::world::FIRST_SPAWNED
             + 0x1_0000
-            + u32::try_from(s.drops.len()).unwrap_or(0);
-        s.drops.push((enshwick_core::Entity(entity), request));
+            + u32::try_from(s.world.drops.len()).unwrap_or(0);
+        s.world.drops.push((enshwick_core::Entity(entity), request));
         Some(Ok(entity))
     });
     match entity {
@@ -95,15 +138,15 @@ pub(crate) extern "system" fn emit(
         if crate::test::table::world::no_world(s) {
             return Status::UNAVAILABLE;
         }
-        let step = s.ticks.step;
-        let notify = s.host.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
-        if notify && !s.notified.has_room(me, step) {
+        let step = s.base.ticks.step;
+        let notify = s.host.base.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
+        if notify && !s.inventory.notified.has_room(me, step) {
             return Status::REFUSED;
         }
         if notify {
-            s.notified.count(me, step);
+            s.inventory.notified.count(me, step);
         }
-        s.emits.push((type_hash, bytes));
+        s.world.emits.push((type_hash, bytes));
         Status::OK
     })
 }
@@ -116,16 +159,17 @@ pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportR
         if crate::test::table::world::entity_calls_off(s) {
             return Status::UNAVAILABLE;
         }
-        if !s.host.templates.contains_key(&request.entity.0)
+        if !s.host.content.templates.contains_key(&request.entity.0)
             && !s
                 .host
+                .world
                 .placed
                 .iter()
                 .any(|(_, p)| p.entity == request.entity)
         {
             return Status::MISSING;
         }
-        s.teleports.push(request);
+        s.world.teleports.push(request);
         Status::OK
     })
 }
@@ -145,10 +189,10 @@ pub(crate) extern "system" fn spawn(
         if crate::test::table::world::entity_calls_off(s) {
             return Err(Status::UNAVAILABLE);
         }
-        let entity =
-            crate::test::table::world::FIRST_SPAWNED + u32::try_from(s.spawns.len()).unwrap_or(0);
-        s.spawns.push((entity, request));
-        s.spawn_steps.push(s.ticks.step);
+        let entity = crate::test::table::world::FIRST_SPAWNED
+            + u32::try_from(s.world.spawns.len()).unwrap_or(0);
+        s.world.spawns.push((entity, request));
+        s.world.spawn_steps.push(s.base.ticks.step);
         Ok(entity)
     });
     match entity {
@@ -166,10 +210,12 @@ pub(crate) extern "system" fn damage_filter(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.damage_filters.push(Registered::new(callback, user, me));
+        s.inventory
+            .damage_filters
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -183,10 +229,13 @@ pub(crate) extern "system" fn survivor_lookup(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        hold_each(&mut s.survivor_lookup, Registered::new(callback, user, me));
+        hold_each(
+            &mut s.inventory.survivor_lookup,
+            Registered::new(callback, user, me),
+        );
         Status::OK
     })
 }
@@ -209,10 +258,12 @@ pub(crate) extern "system" fn survivor_bed_check(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.bed_checks.push(Registered::new(callback, user, me));
+        s.inventory
+            .bed_checks
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -226,10 +277,12 @@ pub(crate) extern "system" fn summon_filter(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.summons.push(Registered::new(callback, user, me));
+        s.inventory
+            .summons
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -243,10 +296,12 @@ pub(crate) extern "system" fn summoned(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.summoned.push(Registered::new(callback, user, me));
+        s.inventory
+            .summoned
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -257,10 +312,10 @@ pub(crate) extern "system" fn summon_item(
     survivor: enshwick_core::survivors::NpcId,
 ) -> Status {
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.summon_items.push((item, survivor));
+        s.inventory.summon_items.push((item, survivor));
         Status::OK
     })
 }
@@ -274,23 +329,26 @@ pub(crate) extern "system" fn survivor_status(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        if s.host.side != Side::CLIENT {
+        if s.host.base.side != Side::CLIENT {
             return Status::UNAVAILABLE;
         }
-        hold_each(&mut s.survivor_status, Registered::new(callback, user, me));
+        hold_each(
+            &mut s.inventory.survivor_status,
+            Registered::new(callback, user, me),
+        );
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn request_inventory(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
-        if s.registration == Registration::Closed {
+        if s.base.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        if s.host.no_inventories {
+        if s.host.inventory.no_inventories {
             Status::UNAVAILABLE
         } else {
             Status::OK
@@ -315,7 +373,9 @@ pub(crate) extern "system" fn inventory_submit(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.host.no_inventories || (s.host.side != Side::SERVER && !s.host.hosting) {
+        if s.host.inventory.no_inventories
+            || (s.host.base.side != Side::SERVER && !s.host.base.hosting)
+        {
             return Status::UNAVAILABLE;
         }
         // SAFETY: the request holds `op_count` operations, read during the
@@ -328,7 +388,7 @@ pub(crate) extern "system" fn inventory_submit(
         if enshwick_core::__fake::rules::inventory_checks::refused(ops) {
             return Status::BAD_ARGS;
         }
-        s.inventory_requests.push(OpenRequest {
+        s.inventory.inventory_requests.push(OpenRequest {
             request: SubmittedRequest {
                 ops: ops.to_vec(),
                 flags: request.flags,

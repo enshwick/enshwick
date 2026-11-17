@@ -5,6 +5,12 @@ use enshwick_core::abi::Header;
 use super::table;
 use super::{FakeHost, Installed};
 
+/// What the fake's interface answers, as the test set it.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct UiPresets {
+    pub(crate) fog: Option<(enshwick_core::abi::FogInfo, Vec<u8>)>,
+}
+
 /// The prompt and the screen's host the fake's frames hear, as a test set
 /// them.
 #[derive(Clone, Debug, Default)]
@@ -21,21 +27,22 @@ struct Reads {
 /// now on.
 fn step() {
     table::with((), |s| {
-        s.local_held.stepped |= s.local_held.asked;
-        s.snapshot_reads.1 |= s.snapshot_reads.0;
+        s.ui.local_held.stepped |= s.ui.local_held.asked;
+        s.ui.snapshot_reads.1 |= s.ui.snapshot_reads.0;
     });
 }
 
 fn reads() -> Reads {
     table::with(Reads::default(), |s| Reads {
         title: s
+            .ui
             .prompt
             .as_ref()
             .map_or_else(String::new, |(t, _)| t.clone()),
-        verb: s.prompt.as_ref().map_or(0, |&(_, v)| v),
-        host: s.screen_host,
-        host_read: s.screen_host_read.filter(|_| s.screen_host != 0),
-        hovered: s.hovered,
+        verb: s.ui.prompt.as_ref().map_or(0, |&(_, v)| v),
+        host: s.ui.screen_host,
+        host_read: s.ui.screen_host_read.filter(|_| s.ui.screen_host != 0),
+        hovered: s.ui.hovered,
     })
 }
 
@@ -93,20 +100,22 @@ impl Installed {
     #[must_use]
     pub fn draw_frame(&self) -> Vec<Drawn> {
         step();
-        let (frames, open) = table::with((Vec::new(), ""), |s| (s.frames.clone(), s.open_screen));
+        let (frames, open) = table::with((Vec::new(), ""), |s| {
+            (s.ui.frames.clone(), s.ui.open_screen)
+        });
         let mut drawn = Vec::new();
         for (token, handler) in (1u64..).zip(frames) {
             table::with((), |s| {
-                s.frame = Some((token, false, Vec::new()));
-                s.drawing = handler.owner();
+                s.ui.frame = Some((token, false, Vec::new()));
+                s.ui.drawing = handler.owner();
             });
             let reads = reads();
             let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
             handler.run(|callback, user| unsafe { callback(&raw const frame, user) });
             let list = table::with(None, |s| {
-                s.drawing = None;
-                s.frame.take()
+                s.ui.drawing = None;
+                s.ui.frame.take()
             });
             if let Some((_, _, list)) = list {
                 drawn.extend(list);
@@ -129,20 +138,20 @@ impl Installed {
     #[must_use]
     pub fn draw_hud(&self) -> Vec<(u32, Drawn)> {
         step();
-        let (huds, open) = table::with((Vec::new(), ""), |s| (s.huds.clone(), s.open_screen));
+        let (huds, open) = table::with((Vec::new(), ""), |s| (s.ui.huds.clone(), s.ui.open_screen));
         let mut drawn = Vec::new();
         for (token, handler) in (1u64..).zip(huds) {
             table::with((), |s| {
-                s.hud = Some((token, Vec::new()));
-                s.drawing = handler.owner();
+                s.ui.hud = Some((token, Vec::new()));
+                s.ui.drawing = handler.owner();
             });
             let reads = reads();
             let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
             handler.run(|callback, user| unsafe { callback(&raw const frame, user) });
             let list = table::with(None, |s| {
-                s.drawing = None;
-                s.hud.take()
+                s.ui.drawing = None;
+                s.ui.hud.take()
             });
             if let Some((_, list)) = list {
                 drawn.extend(list);
@@ -171,7 +180,7 @@ impl Installed {
     #[must_use]
     pub fn draw_screen(&self, screen: enshwick_core::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         step();
-        let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
+        let mut extensions = table::with(Vec::new(), |s| s.ui.extensions.clone());
         extensions.sort_by_key(|&(_, edge, ..)| edge);
         let open = screen.name();
         let template = reads().host_read.map(|(t, _)| t);
@@ -182,18 +191,18 @@ impl Installed {
                 continue;
             }
             table::with((), |s| {
-                s.frame = Some((token, true, Vec::new()));
-                s.extending = Some(token);
-                s.drawing = handler.owner();
+                s.ui.frame = Some((token, true, Vec::new()));
+                s.ui.extending = Some(token);
+                s.ui.drawing = handler.owner();
             });
             let reads = reads();
             let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
             handler.run(|callback, user| unsafe { callback(&raw const frame, user) });
             let list = table::with(None, |s| {
-                s.extending = None;
-                s.drawing = None;
-                s.frame.take()
+                s.ui.extending = None;
+                s.ui.drawing = None;
+                s.ui.frame.take()
             });
             if let Some((_, _, list)) = list.filter(|(_, _, list)| !list.is_empty()) {
                 drawn.push((edge, list));
@@ -218,7 +227,7 @@ impl Installed {
     #[cfg(feature = "unstable")]
     pub fn open_screen(&self, screen: Option<enshwick_core::ui::HudScreenType>) {
         table::with((), |s| {
-            s.open_screen = screen.map_or("", enshwick_core::ui::HudScreenType::name);
+            s.ui.open_screen = screen.map_or("", enshwick_core::ui::HudScreenType::name);
         });
     }
 
@@ -237,7 +246,7 @@ impl Installed {
     /// ```
     pub fn show_prompt(&self, prompt: Option<(&str, u32)>) {
         table::with((), |s| {
-            s.prompt = prompt.map(|(title, verb)| (title.to_owned(), verb));
+            s.ui.prompt = prompt.map(|(title, verb)| (title.to_owned(), verb));
         });
     }
 
@@ -258,10 +267,10 @@ impl Installed {
         table::with((), |s| {
             let host = host.map_or(0, |e| e.0);
             // As in game, a new host has no template until a step reads it.
-            if s.screen_host != host {
-                s.screen_host_read = None;
+            if s.ui.screen_host != host {
+                s.ui.screen_host_read = None;
             }
-            s.screen_host = host;
+            s.ui.screen_host = host;
         });
     }
 
@@ -284,7 +293,7 @@ impl Installed {
     /// ```
     pub fn read_screen_host(&self, template: enshwick_core::content::Guid, position: [f64; 3]) {
         let fixed = enshwick_core::ecs::fixed(position);
-        table::with((), |s| s.screen_host_read = Some((template, fixed)));
+        table::with((), |s| s.ui.screen_host_read = Some((template, fixed)));
     }
 
     /// Names the game action `action` on the fake build, its reflected
@@ -303,8 +312,8 @@ impl Installed {
     /// ```
     pub fn game_action(&self, action: &str, bound: bool) {
         table::with((), |s| {
-            s.game_actions.retain(|(name, _)| name != action);
-            s.game_actions.push((action.to_owned(), bound));
+            s.ui.game_actions.retain(|(name, _)| name != action);
+            s.ui.game_actions.push((action.to_owned(), bound));
         });
     }
 
@@ -323,12 +332,12 @@ impl Installed {
     /// loader.hold_locally(Some(1 << 30));
     /// ```
     pub fn hold_locally(&self, held: Option<u64>) {
-        table::with((), |s| s.local_held.bits = held);
+        table::with((), |s| s.ui.local_held.bits = held);
     }
 
     /// Sets cached local sampler diagnostics without changing held input.
     pub fn set_local_input_status(&self, info: enshwick_core::abi::LocalInputInfo) {
-        table::with((), |s| s.local_input_info = info);
+        table::with((), |s| s.ui.local_input_info = info);
     }
 
     /// Sets the client snapshot the loader would write, as one
@@ -354,7 +363,7 @@ impl Installed {
     /// });
     /// ```
     pub fn set_client_snapshot(&self, snapshot: enshwick_core::abi::ClientSnapshot) {
-        table::with((), |s| s.client_snapshot = snapshot);
+        table::with((), |s| s.ui.client_snapshot = snapshot);
     }
 
     /// The client commands mods queued, in order: each id, raw kind (such
@@ -370,7 +379,7 @@ impl Installed {
     #[must_use]
     pub fn client_commands(&self) -> Vec<(u64, u32, String)> {
         table::with(Vec::new(), |s| {
-            s.client_commands
+            s.ui.client_commands
                 .iter()
                 .map(|(id, kind, target, _)| (*id, *kind, target.clone()))
                 .collect()
@@ -391,10 +400,10 @@ impl Installed {
     /// ```
     pub fn set_command_status(&self, id: u64, state: u32, reason: u32) {
         table::with((), |s| {
-            if let Some((.., status)) = s
-                .client_commands
-                .iter_mut()
-                .find(|(queued, ..)| *queued == id)
+            if let Some((.., status)) =
+                s.ui.client_commands
+                    .iter_mut()
+                    .find(|(queued, ..)| *queued == id)
             {
                 status.state = state;
                 status.reason = reason;
@@ -416,10 +425,10 @@ impl Installed {
     /// ```
     pub fn set_command_phase(&self, id: u64, phase: u32, failure: u32) {
         table::with((), |s| {
-            if let Some((.., status)) = s
-                .client_commands
-                .iter_mut()
-                .find(|(queued, ..)| *queued == id)
+            if let Some((.., status)) =
+                s.ui.client_commands
+                    .iter_mut()
+                    .find(|(queued, ..)| *queued == id)
             {
                 status.phase = phase;
                 status.failure = failure;
@@ -437,7 +446,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn markers(&self) -> Vec<FakeMarker> {
-        table::with(Vec::new(), |s| s.markers.clone())
+        table::with(Vec::new(), |s| s.ui.markers.clone())
     }
 
     /// Gives the widget whose text or label is `text` an input from the
@@ -452,7 +461,7 @@ impl Installed {
     /// loader.input("Close", Input::Click);
     /// ```
     pub fn input(&self, text: &str, input: Input) {
-        table::with((), |s| s.inputs.push((text.to_owned(), input)));
+        table::with((), |s| s.ui.inputs.push((text.to_owned(), input)));
     }
 
     /// Gives the item slot showing `item` an input from the player in the
@@ -468,7 +477,7 @@ impl Installed {
     /// loader.slot_input(enshwick::ItemId::new(0x5e01), Input::Hover);
     /// ```
     pub fn slot_input(&self, item: enshwick_core::ItemId, input: Input) {
-        table::with((), |s| s.inputs.push((slot_key(item), input)));
+        table::with((), |s| s.ui.inputs.push((slot_key(item), input)));
     }
 
     /// Points the cursor at a slot of the game's open inventory screen in
@@ -491,7 +500,7 @@ impl Installed {
         &self,
         slot: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
     ) {
-        table::with((), |s| s.hovered = slot);
+        table::with((), |s| s.ui.hovered = slot);
     }
 
     /// Opens the tooltip of the item `item` with its own entity `pide`, as
@@ -519,12 +528,12 @@ impl Installed {
         if pide == enshwick_core::Entity(0) {
             return Vec::new();
         }
-        let tooltips = table::with(Vec::new(), |s| s.tooltips.clone());
+        let tooltips = table::with(Vec::new(), |s| s.ui.tooltips.clone());
         let mut lines = Vec::new();
         for (token, handler) in (1u64..).zip(tooltips) {
             table::with((), |s| {
-                s.tooltip = Some((token, Vec::new()));
-                s.drawing = handler.owner();
+                s.ui.tooltip = Some((token, Vec::new()));
+                s.ui.drawing = handler.owner();
             });
             let opened = enshwick_core::abi::UiTooltipItem {
                 header: Header::of::<enshwick_core::abi::UiTooltipItem>(),
@@ -535,8 +544,8 @@ impl Installed {
             // SAFETY: a callback the mod registered with its own pointer.
             handler.run(|callback, user| unsafe { callback(&raw const opened, user) });
             let added = table::with(None, |s| {
-                s.drawing = None;
-                s.tooltip.take()
+                s.ui.drawing = None;
+                s.ui.tooltip.take()
             });
             if let Some((_, added)) = added {
                 lines.extend(added);
@@ -556,7 +565,7 @@ impl Installed {
     #[must_use]
     pub fn dialogs(&self) -> Vec<ShownDialog> {
         table::with(Vec::new(), |s| {
-            s.dialogs.iter().map(|(d, _)| d.clone()).collect()
+            s.ui.dialogs.iter().map(|(d, _)| d.clone()).collect()
         })
     }
 
@@ -573,7 +582,7 @@ impl Installed {
     /// ```
     pub fn answer(&self, answer: Option<enshwick_core::ui::Response>) -> bool {
         let first = table::with(None, |s| {
-            (!s.dialogs.is_empty()).then(|| s.dialogs.remove(0))
+            (!s.ui.dialogs.is_empty()).then(|| s.ui.dialogs.remove(0))
         });
         let Some((_, answered)) = first else {
             return false;
@@ -771,7 +780,7 @@ impl FakeHost {
             info.width as usize * info.height as usize,
             "the pixels of the image the info describes"
         );
-        self.fog = Some((info, pixels));
+        self.ui.fog = Some((info, pixels));
         self
     }
 }
@@ -798,6 +807,6 @@ impl Installed {
     /// ```
     pub fn set_fog(&self, info: enshwick_core::abi::FogInfo, pixels: Vec<u8>) {
         assert_eq!(pixels.len(), info.width as usize * info.height as usize);
-        table::with((), |s| s.host.fog = Some((info, pixels)));
+        table::with((), |s| s.host.ui.fog = Some((info, pixels)));
     }
 }

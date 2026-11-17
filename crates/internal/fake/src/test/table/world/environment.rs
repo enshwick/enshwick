@@ -9,7 +9,7 @@ use enshwick_core::abi::{
 };
 
 pub(crate) extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo) -> Status {
-    let Some(info) = with(None, |s| s.daytime) else {
+    let Some(info) = with(None, |s| s.world.daytime) else {
         return Status::UNAVAILABLE;
     };
     // SAFETY: the safe layer passes a headed struct for the call.
@@ -22,7 +22,7 @@ pub(crate) extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo)
 
 pub(crate) extern "system" fn set_time_of_day(_me: ModHandle, time: i64) -> Status {
     const DAY: i64 = 24 * 3_600_000_000_000;
-    with(Status::MISSING, |s| match s.daytime.as_mut() {
+    with(Status::MISSING, |s| match s.world.daytime.as_mut() {
         Some(info) => {
             info.time_ns = time.rem_euclid(DAY);
             let day = (info.day_start_ns..info.day_end_ns).contains(&info.time_ns);
@@ -35,11 +35,11 @@ pub(crate) extern "system" fn set_time_of_day(_me: ModHandle, time: i64) -> Stat
 
 pub(crate) extern "system" fn request_time_speed(me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
-        if !s.clock_speeds.iter().any(|(owner, _)| *owner == me) {
-            s.clock_speeds.push((me, 1.0));
+        if !s.world.clock_speeds.iter().any(|(owner, _)| *owner == me) {
+            s.world.clock_speeds.push((me, 1.0));
         }
         Status::OK
     })
@@ -50,7 +50,12 @@ pub(crate) extern "system" fn set_time_speed(me: ModHandle, factor: f32) -> Stat
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        match s.clock_speeds.iter_mut().find(|(owner, _)| *owner == me) {
+        match s
+            .world
+            .clock_speeds
+            .iter_mut()
+            .find(|(owner, _)| *owner == me)
+        {
             Some((_, speed)) => {
                 *speed = factor;
                 Status::OK
@@ -66,7 +71,7 @@ pub(crate) extern "system" fn game_settings(
     size: u32,
     preset: *mut u32,
 ) -> Status {
-    let Some((bytes, value)) = with(None, |s| s.game_settings.clone()) else {
+    let Some((bytes, value)) = with(None, |s| s.world.game_settings.clone()) else {
         return Status::UNAVAILABLE;
     };
     if out.is_null() || preset.is_null() || size as usize != bytes.len() {
@@ -109,7 +114,7 @@ fn set(data: *const u8, size: u32) -> Status {
     // SAFETY: `data` is non-null, checked just before; the safe layer passes
     // `size` readable bytes there for the call.
     let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
-    with(Status::MISSING, |s| match s.game_settings.as_mut() {
+    with(Status::MISSING, |s| match s.world.game_settings.as_mut() {
         Some(current) if current.0.len() == bytes.len() => {
             *current = (bytes, 4);
             Status::OK
@@ -127,8 +132,8 @@ fn keep(data: *const u8, mask: *const u8, size: u32) -> Status {
     // `size` readable bytes there for the call.
     let mask = unsafe { core::slice::from_raw_parts(mask, size as usize) };
     with(Status::MISSING, |s| {
-        s.kept_settings.resize(data.len(), None);
-        for ((kept, &byte), &set) in s.kept_settings.iter_mut().zip(data).zip(mask) {
+        s.world.kept_settings.resize(data.len(), None);
+        for ((kept, &byte), &set) in s.world.kept_settings.iter_mut().zip(data).zip(mask) {
             if set != 0 {
                 *kept = Some(byte);
             }
@@ -139,7 +144,7 @@ fn keep(data: *const u8, mask: *const u8, size: u32) -> Status {
 
 fn forget() -> Status {
     with(Status::MISSING, |s| {
-        s.kept_settings.clear();
+        s.world.kept_settings.clear();
         Status::OK
     })
 }
@@ -152,16 +157,15 @@ pub(crate) extern "system" fn weather_at(
     if position.is_null() {
         return Status::BAD_ARGS;
     }
-    let sample =
-        with(None, |s| s.weather.as_ref().map(|w| w.0)).map(|[clear, rain, snow, blizzard]| {
-            WeatherSample {
-                header: Header::of::<WeatherSample>(),
-                clear,
-                rain,
-                snow,
-                blizzard,
-            }
-        });
+    let sample = with(None, |s| s.world.weather.as_ref().map(|w| w.0)).map(
+        |[clear, rain, snow, blizzard]| WeatherSample {
+            header: Header::of::<WeatherSample>(),
+            clear,
+            rain,
+            snow,
+            blizzard,
+        },
+    );
     found_headed(sample, out)
 }
 
@@ -172,7 +176,7 @@ pub(crate) extern "system" fn weather_fronts(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some(fronts) = with(None, |s| s.weather.as_ref().map(|w| w.1.clone())) else {
+    let Some(fronts) = with(None, |s| s.world.weather.as_ref().map(|w| w.1.clone())) else {
         return Status::UNAVAILABLE;
     };
     list(&fronts, out, entry_size, capacity, count)
@@ -180,10 +184,10 @@ pub(crate) extern "system" fn weather_fronts(
 
 pub(crate) extern "system" fn set_weather(_me: ModHandle, effect: u32, duration: i64) -> Status {
     with(Status::MISSING, |s| {
-        if s.weather.is_none() {
+        if s.world.weather.is_none() {
             return Status::UNAVAILABLE;
         }
-        s.forecasts.push((effect, duration));
+        s.world.forecasts.push((effect, duration));
         Status::OK
     })
 }
@@ -195,10 +199,10 @@ pub(crate) extern "system" fn terrain_materials(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some(mut materials) = with(None, |s| s.terrain.clone()) else {
+    let Some(mut materials) = with(None, |s| s.world.terrain.clone()) else {
         return Status::UNAVAILABLE;
     };
-    let added = with(Vec::new(), |s| s.terrain_added.clone());
+    let added = with(Vec::new(), |s| s.world.terrain_added.clone());
     for (material, id) in added.iter().zip(GAME_FREE_TERRAIN) {
         if let Some(like) = materials.iter().find(|m| m.id == material.like).copied() {
             materials.push(added_info(like, material, id));
@@ -252,7 +256,7 @@ pub(crate) extern "system" fn terrain_material_add(
     let vanilla = |id| GAME_TERRAIN.contains(&id);
     with(Status::MISSING, |s| {
         // In the loader's order: the seal, the mod's side, the request.
-        if s.registration == crate::test::table::Registration::Closed {
+        if s.base.registration == crate::test::table::Registration::Closed {
             return Status::TOO_LATE;
         }
         if !crate::test::table::base::mods::joins(s, me) {
@@ -267,14 +271,17 @@ pub(crate) extern "system" fn terrain_material_add(
         // The fake game names its terrain ids by no GUID, so it cannot
         // refuse one of the game's as the loader does.
         if material.guid == enshwick_core::content::Guid::NIL
-            || s.terrain_added.iter().any(|m| m.guid == material.guid)
+            || s.world
+                .terrain_added
+                .iter()
+                .any(|m| m.guid == material.guid)
         {
             return Status::REFUSED;
         }
-        let Some(placed) = GAME_FREE_TERRAIN.clone().nth(s.terrain_added.len()) else {
+        let Some(placed) = GAME_FREE_TERRAIN.clone().nth(s.world.terrain_added.len()) else {
             return Status::REFUSED;
         };
-        s.terrain_added.push(material);
+        s.world.terrain_added.push(material);
         // SAFETY: `id` is non-null (checked above) and the safe layer passes
         // a byte for the call.
         unsafe { id.write(placed) };
@@ -297,16 +304,16 @@ pub(crate) extern "system" fn terrain_edit(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.terrain.is_none() {
+        if s.world.terrain.is_none() {
             return Status::UNAVAILABLE;
         }
-        if edit_outside(s.host.extent, &edit) {
+        if edit_outside(s.host.world.extent, &edit) {
             return Status::OUTSIDE_WORLD;
         }
-        if !edit_loaded(&s.host.voxels, &edit) {
+        if !edit_loaded(&s.host.world.voxels, &edit) {
             return Status::NOT_LOADED;
         }
-        s.edits.terrain.push(edit);
+        s.world.edits.terrain.push(edit);
         // SAFETY: `amount` is non-null, checked after the edit is read; the
         // safe layer passes it pointing at a writable, aligned `f32`.
         unsafe { amount.write(1.0) };
@@ -341,11 +348,11 @@ pub(crate) extern "system" fn voxel_read(
         return Status::WRONG_THREAD;
     }
     let read = with(Err(Status::MISSING), |s| {
-        s.edits.voxel_reads.push((min, size));
-        if outside(s.host.extent, min, size) {
+        s.world.edits.voxel_reads.push((min, size));
+        if outside(s.host.world.extent, min, size) {
             return Err(Status::OUTSIDE_WORLD);
         }
-        VoxelGrid::read(&s.host.voxels, min, size).ok_or(Status::NOT_LOADED)
+        VoxelGrid::read(&s.host.world.voxels, min, size).ok_or(Status::NOT_LOADED)
     });
     let voxels = match read {
         Ok(voxels) => voxels,

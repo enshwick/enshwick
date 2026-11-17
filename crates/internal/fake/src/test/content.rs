@@ -17,6 +17,28 @@ pub(crate) mod removal;
 pub(crate) mod template_names;
 pub(crate) mod templates;
 
+/// What the fake's content answers, as the test set it: item types,
+/// templates, the archive, resources, reflected types, texts and recipes.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ContentPresets {
+    pub(crate) templates: rustc_hash::FxHashMap<u32, Guid>,
+    pub(crate) items: rustc_hash::FxHashMap<u32, ItemTypeInfo>,
+    /// The first bit the vanilla crafting props leave free and the bits of
+    /// the crafting prop mask, once [`FakeHost::props`] reflects them.
+    pub(crate) crafting_mask: Option<(u8, u8)>,
+    pub(crate) icons_ready: bool,
+    pub(crate) archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
+    pub(crate) resources: rustc_hash::FxHashMap<(Guid, u32, u32), Vec<u8>>,
+    pub(crate) types: Option<std::sync::Arc<enshwick_core::resources::TypeTable>>,
+    /// The types of every [`FakeHost::types`] call, which `types` is built from.
+    pub(crate) type_list: Vec<enshwick_core::resources::Type<'static>>,
+    pub(crate) game_version: Option<&'static str>,
+    pub(crate) game_texts: rustc_hash::FxHashMap<(u32, u32), &'static str>,
+    pub(crate) disabled_recipes: rustc_hash::FxHashSet<u32>,
+    pub(crate) recipe_kinds: rustc_hash::FxHashMap<u32, enshwick_core::abi::RecipeKind>,
+    pub(crate) missing_rates: rustc_hash::FxHashSet<enshwick_core::abi::RateId>,
+}
+
 /// The facts the builder holds, so a test lays out its blobs by the same
 /// layouts the mod resolves.
 ///
@@ -25,21 +47,24 @@ pub(crate) mod templates;
 /// rather than from offsets of its own.
 impl enshwick_core::content::EngineFacts for FakeHost {
     fn offset(&self, id: &str) -> Result<usize, enshwick_core::Off> {
-        self.constants
+        self.base
+            .constants
             .get(id)
             .and_then(|&offset| usize::try_from(offset).ok())
             .ok_or_else(|| enshwick_core::Off::new(format!("offset {id}: not set on the fake")))
     }
 
     fn size(&self, id: &str) -> Result<usize, enshwick_core::Off> {
-        self.type_sizes
+        self.base
+            .type_sizes
             .get(id)
             .and_then(|&size| usize::try_from(size).ok())
             .ok_or_else(|| enshwick_core::Off::new(format!("type {id}: no size set on the fake")))
     }
 
     fn hash(&self, id: &str) -> Result<u32, enshwick_core::Off> {
-        self.type_hashes
+        self.base
+            .type_hashes
             .get(id)
             .copied()
             .ok_or_else(|| enshwick_core::Off::new(format!("type {id}: no hash set on the fake")))
@@ -259,7 +284,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn item(mut self, item: enshwick_core::ItemId, max_stack: u16, flags: u32) -> Self {
-        self.items.insert(
+        self.content.items.insert(
             item.get(),
             ItemTypeInfo {
                 header: Header::of::<ItemTypeInfo>(),
@@ -285,7 +310,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn item_category(mut self, item: enshwick_core::ItemId, category: u8) -> Self {
-        if let Some(data) = self.items.get_mut(&item.get()) {
+        if let Some(data) = self.content.items.get_mut(&item.get()) {
             data.category = category;
         }
         self
@@ -302,7 +327,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn item_places(mut self, item: enshwick_core::ItemId, template: Guid) -> Self {
-        if let Some(data) = self.items.get_mut(&item.get()) {
+        if let Some(data) = self.content.items.get_mut(&item.get()) {
             data.placed_entity = template;
         }
         self
@@ -319,7 +344,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn icons_ready(mut self) -> Self {
-        self.icons_ready = true;
+        self.content.icons_ready = true;
         self
     }
 
@@ -334,7 +359,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn archive(mut self, hash: [u32; 4], bytes: Vec<u8>) -> Self {
-        self.archive.insert(hash, bytes);
+        self.content.archive.insert(hash, bytes);
         self
     }
 
@@ -352,7 +377,8 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn resource(mut self, key: ResourceKey, bytes: Vec<u8>) -> Self {
-        self.resources
+        self.content
+            .resources
             .insert((key.guid, key.type_hash, key.part), bytes);
         self
     }
@@ -368,7 +394,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn game_version(mut self, version: &'static str) -> Self {
-        self.game_version = Some(version);
+        self.content.game_version = Some(version);
         self
     }
 
@@ -392,12 +418,13 @@ impl FakeHost {
         types: impl IntoIterator<Item = enshwick_core::resources::Type<'static>>,
     ) -> Self {
         for ty in types {
-            self.type_list
+            self.content
+                .type_list
                 .retain(|held| held.qualified_name() != ty.qualified_name());
-            self.type_list.push(ty);
+            self.content.type_list.push(ty);
         }
-        self.types = Some(std::sync::Arc::new(
-            enshwick_core::resources::TypeTable::new(&self.type_list),
+        self.content.types = Some(std::sync::Arc::new(
+            enshwick_core::resources::TypeTable::new(&self.content.type_list),
         ));
         self
     }
@@ -511,7 +538,7 @@ impl FakeHost {
         language: enshwick_core::i18n::Language,
         text: &'static str,
     ) -> Self {
-        self.game_texts.insert((id, language.0), text);
+        self.content.game_texts.insert((id, language.0), text);
         self
     }
 
@@ -529,7 +556,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn disabled_recipe(mut self, recipe: Guid) -> Self {
-        self.disabled_recipes.insert(recipe.fnv1a());
+        self.content.disabled_recipes.insert(recipe.fnv1a());
         self
     }
 
@@ -555,7 +582,7 @@ impl FakeHost {
         item: Guid,
         kind: enshwick_core::content::recipes::RecipeKind,
     ) -> Self {
-        self.recipe_kinds.insert(item.fnv1a(), kind.into());
+        self.content.recipe_kinds.insert(item.fnv1a(), kind.into());
         self
     }
 }
@@ -577,7 +604,7 @@ impl Installed {
     pub fn resources(&self) -> Vec<ServedResource> {
         table::with(Vec::new(), |s| {
             let mut keys: Vec<ServedResource> = Vec::new();
-            for served in &s.served {
+            for served in &s.content.served {
                 if !keys.iter().any(|k| k.key == served.0.key) {
                     keys.push(served.0);
                 }
@@ -597,7 +624,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn changes(&self) -> Vec<(enshwick_core::content::changes::Change, String)> {
-        table::with(Vec::new(), |s| s.changes.one.clone())
+        table::with(Vec::new(), |s| s.content.changes.one.clone())
     }
 
     /// The changes of every item a selection picks the mod declared, in
@@ -611,7 +638,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn item_changes(&self) -> Vec<(enshwick_core::content::changes::ItemsChange, String)> {
-        table::with(Vec::new(), |s| s.changes.items.clone())
+        table::with(Vec::new(), |s| s.content.changes.items.clone())
     }
 
     /// The changes of every recipe a selection picks the mod declared, in
@@ -625,7 +652,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn recipe_changes(&self) -> Vec<(enshwick_core::content::changes::RecipesChange, String)> {
-        table::with(Vec::new(), |s| s.changes.recipes.clone())
+        table::with(Vec::new(), |s| s.content.changes.recipes.clone())
     }
 
     /// The changes the mod declared to set later, in order, each with its
@@ -639,7 +666,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn live_changes(&self) -> Vec<LiveChange> {
-        table::with(Vec::new(), |s| s.changes.live.clone())
+        table::with(Vec::new(), |s| s.content.changes.live.clone())
     }
 
     /// The mod's recipe rules in force, from
@@ -655,7 +682,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn recipe_rules(&self) -> Vec<(enshwick_core::abi::RecipeRuleKind, String)> {
-        table::with(Vec::new(), |s| s.recipe_rules.clone())
+        table::with(Vec::new(), |s| s.content.recipe_rules.clone())
     }
 
     /// The served resources the mod asked to rebuild, in order: each
@@ -670,7 +697,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn rebuilds(&self) -> Vec<ResourceKey> {
-        table::with(Vec::new(), |s| s.rebuilds.clone())
+        table::with(Vec::new(), |s| s.content.rebuilds.clone())
     }
 
     /// How many buffers the fake lent patch outputs
@@ -686,7 +713,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn lent_buffers(&self) -> usize {
-        table::with(0, |s| s.lent_buffers)
+        table::with(0, |s| s.content.lent_buffers)
     }
 
     /// Builds the served resource `key` from `base` with the mod's patches, in order, as
@@ -729,7 +756,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn texts(&self) -> Vec<(u32, u32, String)> {
-        table::with(Vec::new(), |s| s.texts.clone())
+        table::with(Vec::new(), |s| s.content.texts.clone())
     }
 
     /// The item data kinds the mod opened, by full id, and every value set:
@@ -744,10 +771,16 @@ impl Installed {
     #[must_use]
     pub fn item_data(&self) -> Vec<(String, u32, u32, Vec<u8>)> {
         table::with(Vec::new(), |s| {
-            s.item_values
+            s.content
+                .item_values
                 .iter()
                 .map(|(&(kind, pide), (item, bytes))| {
-                    let id = s.item_kinds.get(kind as usize).cloned().unwrap_or_default();
+                    let id = s
+                        .content
+                        .item_kinds
+                        .get(kind as usize)
+                        .cloned()
+                        .unwrap_or_default();
                     (id, pide, *item, bytes.clone())
                 })
                 .collect()
@@ -765,7 +798,11 @@ impl Installed {
     #[must_use]
     pub fn served_content(&self) -> Vec<([u32; 4], Vec<u8>)> {
         table::with(Vec::new(), |s| {
-            s.content.iter().map(|(h, b)| (*h, b.clone())).collect()
+            s.content
+                .archive
+                .iter()
+                .map(|(h, b)| (*h, b.clone()))
+                .collect()
         })
     }
 
@@ -780,7 +817,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn published_texts(&self) -> Option<String> {
-        table::with(None, |s| s.published_texts.clone())
+        table::with(None, |s| s.base.published_texts.clone())
     }
 
     /// The services the mod published, as `(name, major)`, in order.
@@ -794,7 +831,8 @@ impl Installed {
     #[must_use]
     pub fn published(&self) -> Vec<(String, u32)> {
         table::with(Vec::new(), |s| {
-            s.published
+            s.base
+                .published
                 .iter()
                 .map(|p| (p.name.clone(), p.major))
                 .collect()
@@ -811,7 +849,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn content_ids(&self) -> Vec<String> {
-        table::with(Vec::new(), |s| s.content_ids.clone())
+        table::with(Vec::new(), |s| s.content.content_ids.clone())
     }
 
     /// The content renames the mod declared, old GUID to new, in order.
@@ -824,7 +862,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn content_renames(&self) -> Vec<(Guid, Guid)> {
-        table::with(None, |s| s.content_renames.clone())
+        table::with(None, |s| s.content.content_renames.clone())
             .unwrap_or_default()
             .into_iter()
             .collect()

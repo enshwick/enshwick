@@ -4,7 +4,7 @@ use crate::test::table::with;
 use enshwick_core::abi::{ModHandle, SaveInfo, Status};
 
 /// The fake world's save.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Saves {
     /// What `save_info` reports, `None` before the world's first save.
     pub(crate) info: Option<SaveInfo>,
@@ -33,24 +33,26 @@ pub(crate) extern "system" fn set_saved(
     }
     with(Status::MISSING, |s| {
         let spawned_at = s
+            .world
             .spawns
             .iter()
-            .zip(&s.spawn_steps)
+            .zip(&s.world.spawn_steps)
             .find(|((id, _), _)| *id == entity.0)
             .map(|(_, &at)| at);
         let placed = s
+            .world
             .edits
             .transactions
             .iter()
             .any(|t| t.created.contains(&entity));
         match spawned_at {
-            Some(at) if at >= s.ticks.step => return Status::MISSING,
+            Some(at) if at >= s.base.ticks.step => return Status::MISSING,
             Some(_) => {}
             None if placed => {}
             None => {
-                let vanilla = s.host.templates.contains_key(&entity.0)
-                    || s.host.placed.iter().any(|(_, p)| p.entity == entity)
-                    || s.host.props.iter().any(|p| p.entity == entity);
+                let vanilla = s.host.content.templates.contains_key(&entity.0)
+                    || s.host.world.placed.iter().any(|(_, p)| p.entity == entity)
+                    || s.host.world.props.iter().any(|p| p.entity == entity);
                 return if vanilla {
                     Status::REFUSED
                 } else {
@@ -58,16 +60,16 @@ pub(crate) extern "system" fn set_saved(
                 };
             }
         }
-        s.save.unsaved.retain(|&e| e != entity.0);
+        s.world.save.unsaved.retain(|&e| e != entity.0);
         if saved == 0 {
-            s.save.unsaved.push(entity.0);
+            s.world.save.unsaved.push(entity.0);
         }
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn save_info(_me: ModHandle, out: *mut SaveInfo) -> Status {
-    let Some(info) = with(None, |s| s.save.info) else {
+    let Some(info) = with(None, |s| s.world.save.info) else {
         return Status::MISSING;
     };
     crate::test::table::put_headed(out, info)
@@ -78,8 +80,8 @@ pub(crate) extern "system" fn hold_saves(_me: ModHandle, held: u8) -> Status {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if !(s.save.shut && held == 1) {
-            s.save.held = held == 1;
+        if !(s.world.save.shut && held == 1) {
+            s.world.save.held = held == 1;
         }
         Status::OK
     })
