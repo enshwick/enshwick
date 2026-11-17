@@ -9,6 +9,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick_core::abi::{Header, Side, Str, UiExtension, UiFrame, UiFrameFn};
+use enshwick_core::ui::HudScreenType;
 use enshwick_gamedata::catalogue;
 
 use crate::engine::builds::ABSENT;
@@ -36,6 +37,39 @@ const NAMES: [&[u8]; 4] = [
     b"enshwick:screen/top",
     b"enshwick:screen/bottom",
 ];
+
+/// A panel's layer beside a screen that draws on a window of its own, as the
+/// chest screens on 6 (client 520): above it, under the button hints (0xa)
+/// and the split stack menu (0xb).
+const SCREEN_LAYER: u32 = 8;
+/// A panel's layer beside a screen the in-game menu draws on its layer 9
+/// (`window_begin` at `0x140be8960`, client 26430625): above the menu, under
+/// the split stack menu (0xb). It shares 0xa with the button hints.
+const MENU_LAYER: u32 = 0xa;
+/// A panel's layer beside the Skill Tree, whose window draws on 0xb (client
+/// 520): above it, under the tooltips (0xe) and the dragged item (0xf).
+const SKILL_TREE_LAYER: u32 = 0xc;
+/// The screens the in-game menu draws besides the Skill Tree (screen bytes 4
+/// to 9 on client 26430625).
+const MENU_SCREENS: [HudScreenType; 6] = [
+    HudScreenType::InGameMenu,
+    HudScreenType::Map,
+    HudScreenType::Journal,
+    HudScreenType::Character,
+    HudScreenType::PlayerCrafting,
+    HudScreenType::Backpack,
+];
+
+/// The layer a panel draws on beside the screen the game names `screen`.
+fn layer(screen: &str) -> u32 {
+    if screen == HudScreenType::SkillTree.name() {
+        SKILL_TREE_LAYER
+    } else if MENU_SCREENS.iter().any(|menu| menu.name() == screen) {
+        MENU_LAYER
+    } else {
+        SCREEN_LAYER
+    }
+}
 
 /// A mod's panel on one of the game's screens.
 #[derive(Clone, Debug)]
@@ -149,10 +183,10 @@ thread_local! {
     /// One window per edge, built once and kept in place across frames.
     static WINDOWS: RefCell<[Window; 4]> = const {
         RefCell::new([
-            Window::extension(UiExtension::LEFT),
-            Window::extension(UiExtension::RIGHT),
-            Window::extension(UiExtension::TOP),
-            Window::extension(UiExtension::BOTTOM),
+            Window::extension(UiExtension::LEFT, SCREEN_LAYER),
+            Window::extension(UiExtension::RIGHT, SCREEN_LAYER),
+            Window::extension(UiExtension::TOP, SCREEN_LAYER),
+            Window::extension(UiExtension::BOTTOM, SCREEN_LAYER),
         ])
     };
     /// The edge whose window is open in this frame.
@@ -544,6 +578,8 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, reads: FrameReads) {
     let Some(screen) = reads.screen.filter(|_| !extensions.is_empty()) else {
         return;
     };
+    let on = layer(screen_named(screen));
+    WINDOWS.with_borrow_mut(|windows| windows.iter_mut().for_each(|w| w.set_layer(on)));
     for extension in by_edge(extensions, screen, |e| (e.screen, e.edge)) {
         if extension.registered.live() && extension.shows_for(reads.screen_host_template) {
             // SAFETY: this function's `# Safety` gives the frame, its thread
@@ -648,6 +684,19 @@ mod tests {
                 .borrow_mut()
                 .push((fuse.feature(), id.to_owned(), reason.to_owned()));
         }
+    }
+
+    #[test]
+    fn a_panel_draws_just_above_its_screen_and_under_that_screen_s_popups() {
+        let on = |screen: HudScreenType| layer(screen.name());
+        // The in-game menu draws on 9 and the split stack menu on 0xb.
+        assert!((10..0xb).contains(&on(HudScreenType::Backpack)));
+        assert_eq!(on(HudScreenType::Map), on(HudScreenType::Backpack));
+        // The Skill Tree's own window draws on 0xb, the tooltips on 0xe.
+        assert!((0xc..0xe).contains(&on(HudScreenType::SkillTree)));
+        // A chest screen draws on 6, its button hints on 0xa.
+        assert!((7..0xa).contains(&on(HudScreenType::StorageChest)));
+        assert_eq!(layer(""), on(HudScreenType::StorageChest));
     }
 
     #[test]

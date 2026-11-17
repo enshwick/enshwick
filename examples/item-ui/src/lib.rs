@@ -45,15 +45,17 @@ impl Mod for ItemUi {
                 .format(StatFormat::Percent)
                 .in_group(StatGroup::FogSurvival),
         )?;
+        // Server behaviour, on every side: a client that hosts a game, solo
+        // play included, runs the server and raises its joins and crafts.
+        let stats = load.stats()?;
+        load.on::<PlayerJoined>(move |joined| {
+            let welcome = Modifier::new(luck, Op::Add, 0.1);
+            let _blessed = stats.set(joined.entity, "welcome", welcome, Lasting::UntilRemoved);
+            let calmed = Modifier::new(calm, Op::Add, 0.2);
+            let _calmed = stats.set(joined.entity, "calm", calmed, Lasting::UntilRemoved);
+        })?;
+        load.add_craft_affixes(AffixCraft::new(1.0, RollRules::new(1, 1)))?;
         if load.host().build().side != Side::CLIENT {
-            let stats = load.stats()?;
-            load.on::<PlayerJoined>(move |joined| {
-                let welcome = Modifier::new(luck, Op::Add, 0.1);
-                let _blessed = stats.set(joined.entity, "welcome", welcome, Lasting::UntilRemoved);
-                let calmed = Modifier::new(calm, Op::Add, 0.2);
-                let _calmed = stats.set(joined.entity, "calm", calmed, Lasting::UntilRemoved);
-            })?;
-            load.add_craft_affixes(AffixCraft::new(1.0, RollRules::new(1, 1)))?;
             return Ok(Self);
         }
         let item = |name: &str| vanilla::item(name).map(ItemId::from_guid);
@@ -118,10 +120,13 @@ mod tests {
     const LOGS: Guid = Guid([2; 16]);
     const BOX: Guid = Guid([3; 16]);
     const OLD_SWORD: Guid = Guid([4; 16]);
+    /// The fake's type hash of `CraftRecipeEvent`.
+    const CRAFT_RECIPE_HASH: u32 = 0x52;
 
-    fn start(side: Side) -> enshwick::test::Installed {
+    fn start(side: Side, hosting: bool) -> enshwick::test::Installed {
         let mut host = enshwick::test::FakeHost::new()
             .side(side)
+            .hosting(hosting)
             .items()
             .workshops()
             .inventory_requests()
@@ -137,7 +142,7 @@ mod tests {
         }
         // The craft events the craft affixes follow.
         for (ty, hash) in [
-            (ids::CRAFT_RECIPE_EVENT, 0x52),
+            (ids::CRAFT_RECIPE_EVENT, CRAFT_RECIPE_HASH),
             (ids::CRAFT_RECIPE_SUCCESS_EVENT, 0x53),
         ] {
             host = host.type_hash(ty, hash).type_size(ty, 24);
@@ -162,7 +167,7 @@ mod tests {
 
     #[test]
     fn the_panel_beside_the_backpack_shows_three_slots_and_the_slot_under_the_cursor() {
-        let loader = start(Side::CLIENT);
+        let loader = start(Side::CLIENT, false);
         let at = SlotRef::new(Entity(41), 3);
         loader.hover_slot(Some((at.0, ItemId::from_guid(LOGS), 7, Entity(0))));
         let drawn = loader.draw_screen(HudScreenType::Backpack);
@@ -182,7 +187,7 @@ mod tests {
 
     #[test]
     fn the_vanilla_sword_s_tooltip_gets_a_line_and_another_item_none() {
-        let loader = start(Side::CLIENT);
+        let loader = start(Side::CLIENT, false);
         let sword = loader.open_tooltip(ItemId::from_guid(OLD_SWORD), Entity(900));
         assert!(
             matches!(&sword[..], [Drawn::Label { text, .. }] if text == "Kept sharp by item-ui")
@@ -194,9 +199,55 @@ mod tests {
         );
     }
 
+    /// The values of the modifiers mod `item-ui` keeps on `entity`, smallest
+    /// first.
+    fn kept_on(loader: &enshwick::test::Installed, entity: u32) -> Vec<f32> {
+        let mut kept: Vec<_> = loader
+            .stat_modifiers()
+            .into_iter()
+            .filter(|m| m.0 == entity)
+            .map(|m| m.4)
+            .collect();
+        kept.sort_by(f32::total_cmp);
+        kept
+    }
+
+    fn join(loader: &enshwick::test::Installed, entity: u32) {
+        let joined = enshwick::abi::PlayerData {
+            header: enshwick::abi::Header::of::<enshwick::abi::PlayerData>(),
+            slot: 0,
+            entity: Entity(entity),
+            key: enshwick::PlayerKey::new(7),
+        };
+        assert_eq!(loader.raise::<PlayerJoined>(&joined), 1);
+    }
+
+    #[test]
+    fn a_client_that_hosts_gives_each_joining_player_luck_and_calm() {
+        let loader = start(Side::CLIENT, true);
+        join(&loader, 12);
+        assert_eq!(kept_on(&loader, 12), [0.1, 0.2]);
+        assert_eq!(loader.draw_screen(HudScreenType::Backpack).len(), 1);
+    }
+
+    #[test]
+    fn a_client_that_hosts_follows_each_craft_for_the_lucky_affix() {
+        let loader = start(Side::CLIENT, true);
+        let mut craft = [0_u8; 24];
+        craft[8..12].copy_from_slice(&12_u32.to_le_bytes());
+        assert_eq!(loader.raise_game_event(CRAFT_RECIPE_HASH, &craft), 1);
+    }
+
+    #[test]
+    fn a_dedicated_server_gives_each_joining_player_luck_and_calm() {
+        let loader = start(Side::SERVER, false);
+        join(&loader, 12);
+        assert_eq!(kept_on(&loader, 12), [0.1, 0.2]);
+    }
+
     #[test]
     fn a_server_keeps_the_uses_and_draws_nothing() {
-        let loader = start(Side::SERVER);
+        let loader = start(Side::SERVER, false);
         assert!(loader.draw_screen(HudScreenType::Backpack).is_empty());
     }
 }
