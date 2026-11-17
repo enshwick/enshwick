@@ -35,6 +35,8 @@ pub(crate) struct BasePresets {
     pub(crate) settings: std::collections::BTreeMap<String, String>,
     pub(crate) data_dir: String,
     pub(crate) mod_dir: String,
+    /// The files of the mod's own folder, by name, written at install.
+    pub(crate) mod_files: std::collections::BTreeMap<String, Vec<u8>>,
     pub(crate) log_level: enshwick_core::abi::Level,
     /// The levels of data packs that differ from `log_level`.
     pub(crate) pack_log_levels: Vec<(enshwick_core::abi::ModHandle, enshwick_core::abi::Level)>,
@@ -89,6 +91,7 @@ impl Default for BasePresets {
             settings: std::collections::BTreeMap::new(),
             data_dir: "world0-mod-data/test".to_owned(),
             mod_dir: "mods/test".to_owned(),
+            mod_files: std::collections::BTreeMap::new(),
             log_level: enshwick_core::abi::Level::INFO,
             pack_log_levels: Vec::new(),
             pack_sides: Vec::new(),
