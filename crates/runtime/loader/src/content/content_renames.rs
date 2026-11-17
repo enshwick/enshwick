@@ -6,6 +6,8 @@ use std::sync::OnceLock;
 use enshwick_core::abi::ContentRename;
 use rustc_hash::FxHashMap;
 
+#[cfg(windows)]
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
 use enshwick_core::content::Guid;
@@ -69,6 +71,45 @@ fn add(
             Ok(())
         })
         .unwrap_or(Err(RenameError::Sealed))
+}
+
+/// Gives `guid`, which mod `owner` of `loader` has just declared, back to
+/// it whatever the load order: every other mod's renames from or to it are
+/// dropped, with the resources those mods serve under it through them, and
+/// a warning names both mods.
+#[cfg(windows)]
+pub(crate) fn claim(loader: &Loader, owner: ModIndex, guid: Guid) {
+    let losers = take(&DECLARED, owner, guid);
+    if losers.is_empty() {
+        return;
+    }
+    crate::content::served::unserve(&losers, guid);
+    let id = |index: ModIndex| loader.mods.get(index.get()).map_or("", |m| &*m.id);
+    for &loser in &losers {
+        crate::log!(
+            WARN,
+            "{} declared content {guid}, so the renames of {} from or to it and what it serves under it are dropped",
+            id(owner),
+            id(loser)
+        );
+    }
+}
+
+/// Takes every rename from or to `guid` out of the renames of mods other
+/// than `owner`; the mods that lost one.
+fn take(declared: &Registry<Declared>, owner: ModIndex, guid: Guid) -> Vec<ModIndex> {
+    declared
+        .edit(|list| {
+            list.iter_mut()
+                .filter(|d| d.owner != owner)
+                .filter_map(|d| {
+                    let before = d.renames.len();
+                    d.renames.retain(|&(from, to)| from != guid && to != guid);
+                    (d.renames.len() < before).then_some(d.owner)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Whether mod `owner` renamed content from `guid`: it serves its renamed
@@ -184,6 +225,28 @@ mod tests {
             add(&declared, ModIndex::new(2), &[rename(7, 8), rename(6, 7)]),
             Ok(())
         );
+    }
+
+    #[test]
+    fn a_mod_declaring_a_guid_takes_it_out_of_other_mods_renames_but_its_own() {
+        let declared = Registry::new();
+        let (earlier, owner) = (ModIndex::new(0), ModIndex::new(1));
+        assert_eq!(
+            add(
+                &declared,
+                earlier,
+                &[rename(1, 9), rename(2, 1), rename(3, 4)]
+            ),
+            Ok(())
+        );
+        assert_eq!(add(&declared, owner, &[rename(5, 1)]), Ok(()));
+        assert_eq!(take(&declared, owner, Guid([1; 16])), [earlier]);
+        assert_eq!(take(&declared, owner, Guid([1; 16])), []);
+        let renames = sealed(&declared, |_| true);
+        assert_eq!(renames.len(), 2);
+        assert_eq!(renames[&Guid([3; 16])], Guid([4; 16]));
+        assert_eq!(renames[&Guid([5; 16])], Guid([1; 16]));
+        assert_eq!(take(&declared, owner, Guid([3; 16])), [], "sealed");
     }
 
     #[test]

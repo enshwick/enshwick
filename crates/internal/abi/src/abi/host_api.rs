@@ -353,7 +353,10 @@ pub struct HostApi {
     /// for a second call, a rename to itself, renames in a cycle, a `from`
     /// another mod declared, or any other `to`, with a warning naming the mod
     /// that declared it; [`Status::BAD_ARGS`] for a null `renames` with a nonzero
-    /// `count`. Allowed during `enshwick_mod_init` only.
+    /// `count`. Allowed during `enshwick_mod_init` only. A mod that declares
+    /// a GUID later keeps it: the renames from or to it are dropped, with
+    /// what the mod serves under it through them, and a warning names both
+    /// mods.
     pub rename_content:
         extern "system" fn(me: ModHandle, renames: *const ContentRename, count: u32) -> Status,
     /// The mod's folder in `mods/`, which holds its installation; the path

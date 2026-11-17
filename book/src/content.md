@@ -113,7 +113,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 A rename ends on an id the mod declared or on the game's own content. The
-loader refuses renames in a cycle and a rename from another mod's id.
+loader refuses renames in a cycle and a rename from another mod's id. A mod
+loaded later keeps an id it declares that another mod renamed from. The loader
+drops that rename and logs a warning naming both mods.
 
 The game then reads a placed object saved under the old GUID as the content
 under the new one. An item the mod adds under the new GUID is served under

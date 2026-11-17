@@ -1,7 +1,9 @@
 //! Every raw call that adds content by GUID refuses a GUID the calling mod
 //! did not declare: a mod passing another mod's GUID is refused, while that
 //! mod's own call with it succeeds; a changed key, the game's content and
-//! the old GUIDs of a mod's own renames need no declaration.
+//! the old GUIDs of a mod's own renames need no declaration. A mod that
+//! declares a GUID another renamed from earlier keeps it, and that rename
+//! goes.
 
 #[cfg(test)]
 mod tests {
@@ -57,6 +59,9 @@ mod tests {
     /// What the earlier mod's renames from Bells' GUID and in a cycle
     /// answered.
     static REFUSED_RENAMES: Mutex<Vec<Status>> = Mutex::new(Vec::new());
+    /// What the earlier mod's rename from Bells' GUID and its serve under it
+    /// answered before Bells declared it, then that serve again after.
+    static CLAIMED: Mutex<Vec<Status>> = Mutex::new(Vec::new());
     /// What the earlier mod's calls that need no declaration answered: a
     /// changed game key, a new key from a game key, a rename onto a game
     /// GUID, and a key under the old GUID of that rename.
@@ -183,6 +188,34 @@ mod tests {
         unsafe { enshwick_mod_init(api, me) }
     }
 
+    /// Bells' key, as the earlier mod serves it from another base.
+    const BELL_KEY: ResourceKey = ResourceKey {
+        guid: BELL.guid(),
+        ..GAME
+    };
+
+    /// The earlier mod renames from Bells' GUID onto the game's and serves
+    /// Bells' key from another base, both before Bells declares its id; then
+    /// Bells' init, then that serve again.
+    unsafe extern "system" fn renamer_before(api: *const HostApi, me: ModHandle) -> Status {
+        // SAFETY: the fake passes its table, alive for the call.
+        let table = unsafe { &*api };
+        let other_base = ResourceKey {
+            guid: Guid([4; 16]),
+            ..GAME
+        };
+        let mut answers = vec![
+            rename(table, EARLIER, &[(BELL.guid(), GAME.guid)]),
+            serve(table, EARLIER, BELL_KEY, other_base),
+        ];
+        // SAFETY: the init export of this file's `declare_mod!(Bells)`, with
+        // the arguments the fake passed.
+        let status = unsafe { enshwick_mod_init(api, me) };
+        answers.push(serve(table, EARLIER, BELL_KEY, other_base));
+        *CLAIMED.lock().unwrap() = answers;
+        status
+    }
+
     fn earlier_calls(api: &HostApi) {
         *EARLIER_ANSWERS.lock().unwrap() =
             CALLS.iter().map(|&call| make(api, EARLIER, call)).collect();
@@ -241,8 +274,31 @@ mod tests {
 
     #[test]
     fn a_rename_from_another_mod_s_guid_or_in_a_cycle_is_refused() {
-        let _loader = start(earlier_after);
+        let loader = start(earlier_after);
         assert_eq!(*REFUSED_RENAMES.lock().unwrap(), [Status::REFUSED; 2]);
+        assert_eq!(*OWN.lock().unwrap(), [Status::OK; 4]);
+        assert_eq!(
+            loader.content_renames(),
+            [(OLD_BELL, BELL.guid())],
+            "Bells keeps its own rename"
+        );
+    }
+
+    #[test]
+    fn a_mod_declaring_its_id_after_another_renamed_from_it_keeps_it_and_the_rename_goes() {
+        let loader = start(renamer_before);
+        assert_eq!(
+            *CLAIMED.lock().unwrap(),
+            [Status::OK, Status::OK, Status::REFUSED]
+        );
+        assert_eq!(*OWN.lock().unwrap(), [Status::OK; 4]);
+        let bases: Vec<ResourceKey> = loader
+            .resources()
+            .iter()
+            .filter(|served| served.key == BELL_KEY)
+            .map(|served| served.base)
+            .collect();
+        assert_eq!(bases, [GAME], "only Bells serves its key");
     }
 
     #[test]

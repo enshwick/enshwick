@@ -5144,7 +5144,10 @@ typedef struct EnshwickHostApi {
   // for a second call, a rename to itself, renames in a cycle, a `from`
   // another mod declared, or any other `to`, with a warning naming the mod
   // that declared it; `EnshwickStatus_BAD_ARGS` for a null `renames` with a nonzero
-  // `count`. Allowed during `enshwick_mod_init` only.
+  // `count`. Allowed during `enshwick_mod_init` only. A mod that declares
+  // a GUID later keeps it: the renames from or to it are dropped, with
+  // what the mod serves under it through them, and a warning names both
+  // mods.
   EnshwickStatus (*rename_content)(EnshwickModHandle me,
                                    const struct EnshwickContentRename *renames,
                                    uint32_t count);

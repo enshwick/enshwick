@@ -304,11 +304,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_selections_the_fake_host_takes_raw_are_the_ones_a_change_names() {
+    fn a_change_names_exactly_the_selections_that_pick_items() {
         for select in (0..16).map(DataSelect) {
             assert_eq!(
                 Items::from_abi(select, 0).is_some(),
-                super::super::rules::selects_items(select),
+                select.selects_items(),
                 "{select:?}"
             );
         }

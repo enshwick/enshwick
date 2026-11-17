@@ -145,8 +145,28 @@ pub(crate) extern "system" fn declare_content(
         if !s.content.declared_by.contains(&(me, guid)) {
             s.content.declared_by.push((me, guid));
         }
+        claim(s, me, guid);
         put(out, guid)
     })
+}
+
+/// As the loader: `guid`, which mod `me` has just declared, leaves every
+/// other mod's renames from or to it, with what those mods serve under it
+/// from another GUID's base.
+fn claim(s: &mut crate::test::table::State, me: ModHandle, guid: enshwick_core::content::Guid) {
+    let mut losers = Vec::new();
+    for (owner, renames) in &mut s.content.content_renames {
+        let before = renames.len();
+        renames.retain(|&(from, to)| *owner == me || (from != guid && to != guid));
+        if renames.len() < before {
+            losers.push(*owner);
+        }
+    }
+    s.content.served.retain(|(served, patch)| {
+        served.key.guid != guid
+            || served.base.guid == guid
+            || !patch.owner().is_some_and(|owner| losers.contains(&owner))
+    });
 }
 
 /// Whether content id `id` lies outside the namespace of mod `me`, which the
