@@ -649,7 +649,7 @@ fn cached_status(
     read: u64,
     now: u64,
 ) -> enshwick_core::abi::LocalInputInfo {
-    use enshwick_core::abi::{Header, LocalInputInfo as Info};
+    use enshwick_core::abi::LocalInputInfo as Info;
     let mut flags = 0;
     for (present, flag) in [
         (requested, Info::REQUESTED),
@@ -667,14 +667,13 @@ fn cached_status(
         }
     }
     Info {
-        header: Header::of::<Info>(),
         flags,
-        reserved: 0,
         age_ms: if read == 0 {
-            u64::MAX
+            Info::EMPTY.age_ms
         } else {
             now.saturating_sub(read)
         },
+        ..Info::EMPTY
     }
 }
 

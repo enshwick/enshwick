@@ -389,8 +389,13 @@ pub(crate) fn after_step() {
     run_settled();
 }
 
-/// What the loader forgets as a client's hosted game ends: the world's
-/// transactions, after each wait on them ran.
+/// What the loader does as a client's hosted game ends: counts the ended
+/// game and lets go of the world's save hold in one step, then forgets the
+/// world's transactions, after each wait on them ran.
 pub(crate) fn end_game() {
+    with((), |s| {
+        s.base.ticks.games_ended += 1;
+        end_saves(s);
+    });
     end_world();
 }

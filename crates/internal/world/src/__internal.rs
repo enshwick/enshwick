@@ -4,13 +4,11 @@
 //! such as a world call's status as its outcome and a player as the loader
 //! hands them over.
 
-use crate::Host;
 #[cfg(feature = "unstable")]
 use crate::abi::RecipeId;
 #[cfg(feature = "unstable")]
 use crate::content::Guid;
-#[cfg(feature = "unstable")]
-use crate::{Entity, Off};
+use crate::{Entity, Host, Off};
 
 /// The handles of the typed API a script holds, which the scripts' start
 /// functions on `Load` return.
@@ -131,6 +129,45 @@ pub fn online(host: Host) -> Vec<crate::world::Player> {
 /// The loader's status of its players list.
 pub fn listed(host: Host) -> Result<Vec<crate::world::Player>, crate::abi::Status> {
     crate::world::listed(host)
+}
+
+/// The characters of the connected players `keys`, from one list of the
+/// players, as the world finds them.
+///
+/// # Errors
+///
+/// [`WorldError::Gone`](crate::WorldError::Gone) for a key not connected or
+/// without a character; another [`WorldError`](crate::WorldError) when the
+/// loader cannot list the players.
+pub fn characters<const N: usize>(
+    host: Host,
+    keys: [crate::PlayerKey; N],
+) -> Result<[Entity; N], crate::WorldError> {
+    crate::world::characters(host, keys)
+}
+
+/// The `CurrentTransform` component type on the host's build, which
+/// [`position`] reads; only this crate makes one, so a position read always
+/// reads that component.
+#[derive(Clone, Copy, Debug)]
+pub struct Transform(pub(crate) crate::ecs::ComponentType);
+
+impl Transform {
+    /// Resolves `CurrentTransform` on the host's build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the build does not reflect it.
+    pub fn named(host: Host) -> Result<Self, Off> {
+        crate::ecs::ComponentType::named(host, crate::engine_ids::CURRENT_TRANSFORM).map(Self)
+    }
+}
+
+/// Where `entity` stands, in metres, from its `CurrentTransform`, as
+/// [`World::position`](crate::world::World::position) reads it.
+#[must_use]
+pub fn position(transform: Transform, host: Host, entity: Entity) -> Option<[f64; 3]> {
+    crate::world::position(transform, host, entity)
 }
 
 /// The map marker type `info` describes, as the loader lists them.

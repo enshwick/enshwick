@@ -109,12 +109,7 @@ impl Default for UiState {
             screen_host_read: None,
             game_actions: Vec::new(),
             local_held: Held::default(),
-            local_input_info: enshwick_core::abi::LocalInputInfo {
-                header: enshwick_core::abi::Header::of::<enshwick_core::abi::LocalInputInfo>(),
-                flags: 0,
-                reserved: 0,
-                age_ms: u64::MAX,
-            },
+            local_input_info: enshwick_core::abi::LocalInputInfo::EMPTY,
             client_snapshot: enshwick_core::abi::ClientSnapshot::EMPTY,
             snapshot_reads: (false, false),
             client_commands: Vec::new(),

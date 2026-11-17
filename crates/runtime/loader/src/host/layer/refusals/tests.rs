@@ -18,7 +18,7 @@ use crate::content::content_renames::RenameError;
 use crate::content::data_changes::DataChangeError;
 use crate::content::rates::RateError;
 use crate::content::recipes::RecipeRuleError;
-use crate::content::served::ServedError;
+use crate::content::served::BuildResourceError;
 use crate::content::textures::TextureError;
 use crate::engine::chains::LinkError;
 use crate::engine::fuse::FuseError;
@@ -274,13 +274,13 @@ fn every_domain_error_answers_mods_the_status_it_answered_before() {
         RunCommandError::Unknown,
         TextureError::BadData,
         TextureError::NotInArchive,
-        ServedError::NotServed,
-        ServedError::Building,
-        ServedError::NoBase,
-        ServedError::NotBuilt,
-        ServedError::SizeChanged,
-        ServedError::Unsealed,
-        ServedError::NotInArchive,
+        BuildResourceError::NotServed,
+        BuildResourceError::Building,
+        BuildResourceError::NoBase,
+        BuildResourceError::NotBuilt,
+        BuildResourceError::SizeChanged,
+        BuildResourceError::Unsealed,
+        BuildResourceError::NotInArchive,
         BasesError::TooLate,
         BasesError::BadLimits,
         BasesError::BelowGame,

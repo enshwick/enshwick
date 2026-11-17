@@ -1489,6 +1489,7 @@ abi::LoaderOff::name
 abi::LoaderOff::reason
 abi::LocalInputInfo
 abi::LocalInputInfo::BORN
+abi::LocalInputInfo::EMPTY
 abi::LocalInputInfo::FRESH
 abi::LocalInputInfo::LAYOUT_AVAILABLE
 abi::LocalInputInfo::LINK_AVAILABLE

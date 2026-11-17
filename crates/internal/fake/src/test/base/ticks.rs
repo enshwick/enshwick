@@ -25,7 +25,7 @@ pub(crate) struct FakeTicks {
     /// The time of that step, in nanoseconds from the first.
     nanos: u64,
     /// The hosted games that ended: the steps run in game one more.
-    games_ended: u64,
+    pub(crate) games_ended: u64,
     ticks: Vec<FakeTick>,
     /// The periodic tick subscriptions asked for, refused ones included.
     asked: usize,
@@ -235,11 +235,6 @@ impl Installed {
     /// assert_eq!(loader.tick(Duration::from_millis(50)), 0);
     /// ```
     pub fn end_game(&self) {
-        with((), |s| {
-            s.base.ticks.games_ended += 1;
-            s.world.save.held = false;
-            s.world.save.shut = false;
-        });
         crate::test::table::end_game();
     }
 }

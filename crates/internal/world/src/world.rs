@@ -30,6 +30,7 @@ mod vitals;
 
 use core::ffi::c_void;
 
+use crate::__internal::Transform;
 use crate::BaseLoad;
 use crate::abi::{EntityPlace, PlayerInfo};
 use crate::content::Guid;
@@ -469,7 +470,7 @@ impl World {
             (host.api().progress_write)(host.handle(), Entity::NONE, crate::abi::PROGRESS_OPEN, 0);
         let resolved = Resolved {
             host,
-            transform: ComponentType::named(host, ids::CURRENT_TRANSFORM)?,
+            transform: Transform::named(host)?.0,
             used_item: ComponentType::named(host, ids::USED_ITEM)?,
             #[cfg(feature = "unstable")]
             orientation: orientation_offset(load),
@@ -670,11 +671,12 @@ impl World {
     /// See [`World`].
     #[must_use]
     #[script]
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "the public method takes `&self`, as mods and the Luau layer call it"
+    )]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
-        let data = self.component(entity, self.0.transform)?;
-        // SAFETY: `component` returned the entity's live CurrentTransform,
-        // valid until the game thread moves on, and read at once.
-        Some(unsafe { crate::ecs::transform_position(data.cast()) })
+        position(Transform(self.0.transform), self.host(), entity)
     }
 
     /// The item `entity` was placed from, which it keeps across saves.
@@ -821,4 +823,33 @@ pub(crate) fn listed(host: Host) -> Result<Vec<Player>, crate::abi::Status> {
         .take(usize::try_from(count).unwrap_or(0).min(MAX))
         .map(Player::from_info)
         .collect())
+}
+
+/// The characters of the connected players `keys`, from one list of the
+/// players; a player counts only with a character in the world.
+pub(crate) fn characters<const N: usize>(
+    host: Host,
+    keys: [PlayerKey; N],
+) -> Result<[Entity; N], WorldError> {
+    let players = listed(host).or_else(|status| {
+        WorldError::check(status, WorldError::Unavailable).map(|()| Vec::new())
+    })?;
+    let mut characters = [Entity::NONE; N];
+    for (character, key) in characters.iter_mut().zip(keys) {
+        *character = players
+            .iter()
+            .find(|player| player.key == key && player.entity != Entity::NONE)
+            .map(|player| player.entity)
+            .ok_or(WorldError::Gone)?;
+    }
+    Ok(characters)
+}
+
+/// Where `entity` stands, in metres, from its `CurrentTransform`.
+pub(crate) fn position(transform: Transform, host: Host, entity: Entity) -> Option<[f64; 3]> {
+    let data = enshwick_base::__internal::component(transform.0, host, entity)?;
+    // SAFETY: `component` returned the entity's live component of type
+    // `transform`, a `CurrentTransform` (a `Transform` holds only that type),
+    // valid until the game thread moves on, and it is read at once.
+    Some(unsafe { crate::ecs::transform_position(data.cast()) })
 }

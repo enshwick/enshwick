@@ -164,8 +164,8 @@ unsafe extern "system" fn read_other(
 }
 
 /// An archive without the key: no game runs the tests.
-fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, ServedError> {
-    Err(ServedError::NotInArchive)
+fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, BuildResourceError> {
+    Err(BuildResourceError::NotInArchive)
 }
 
 fn by_loader(apply: enshwick_core::abi::ResourcePatchFn) -> Patch {
@@ -228,7 +228,7 @@ fn a_failed_patch_in_a_served_read_is_skipped_and_the_rest_builds() {
 
 #[test]
 fn a_served_read_is_refused_before_the_registrations_seal() {
-    assert_eq!(served_now(KEY), Err(ServedError::Unsealed));
+    assert_eq!(served_now(KEY), Err(BuildResourceError::Unsealed));
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn a_served_read_whose_every_patch_fails_reads_a_changed_key_as_archived_and_a_n
     let added = Served::new(new, KEY, vec![by_loader(fail)], false);
     assert_eq!(
         read_served(&added, vec![5; 3], unarchived),
-        Err(ServedError::NotInArchive)
+        Err(BuildResourceError::NotInArchive)
     );
 }
 
@@ -410,7 +410,7 @@ fn a_rebuild_a_patch_asks_for_of_its_own_key_is_refused_instead_of_waited_on() {
         finished
             .recv_timeout(std::time::Duration::from_secs(5))
             .ok(),
-        Some(Err(ServedError::Building)),
+        Some(Err(BuildResourceError::Building)),
         "the patch's thread holds the key's build"
     );
 }
