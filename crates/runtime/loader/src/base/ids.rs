@@ -188,7 +188,7 @@ pub(crate) fn declare_content(owner: &str, name: &str) -> Result<Guid, DeclareId
 /// game id, as a text that lives for the process: ids are never forgotten,
 /// and a boxed name's heap text never moves.
 pub(crate) fn content_named(guid: Guid) -> Option<enshwick_core::abi::Str> {
-    with(|ids| declared(ids, guid).map(enshwick_core::abi::Str::new))
+    with(|ids| declared(ids, guid).map(|(name, _)| enshwick_core::abi::Str::new(name)))
 }
 
 /// Why the loader refuses a content GUID a mod passes: it did not declare
@@ -216,38 +216,33 @@ pub(crate) enum UndeclaredContentError {
 ///
 /// [`UndeclaredContentError`] for a GUID another mod or no mod declared.
 pub(crate) fn declared_by(caller: &str, guid: Guid) -> Result<(), UndeclaredContentError> {
-    with(|ids| {
-        let found = ids
-            .known
-            .get(&(Space::Content, guid.fnv1a()))
-            .filter(|(name, _)| Guid::try_named(name) == Some(guid));
-        match found {
-            Some((_, by)) if **by == *caller => Ok(()),
-            Some((name, by)) => Err(UndeclaredContentError::Other {
-                guid,
-                name: name.to_string(),
-                by: by.to_string(),
-                caller: caller.to_owned(),
-            }),
-            None => Err(UndeclaredContentError::Undeclared {
-                guid,
-                caller: caller.to_owned(),
-            }),
-        }
+    with(|ids| match declared(ids, guid) {
+        Some((_, by)) if by == caller => Ok(()),
+        Some((name, by)) => Err(UndeclaredContentError::Other {
+            guid,
+            name: name.to_owned(),
+            by: by.to_owned(),
+            caller: caller.to_owned(),
+        }),
+        None => Err(UndeclaredContentError::Undeclared {
+            guid,
+            caller: caller.to_owned(),
+        }),
     })
 }
 
 /// The content id a mod declared for exactly `guid`, copied.
 pub(crate) fn content_id(guid: Guid) -> Option<String> {
-    with(|ids| declared(ids, guid).map(str::to_owned))
+    with(|ids| declared(ids, guid).map(|(name, _)| name.to_owned()))
 }
 
-/// The name in `ids` declared for exactly `guid`, not only for its key.
-fn declared(ids: &Ids, guid: Guid) -> Option<&str> {
+/// The name in `ids` declared for exactly `guid`, not only for its key, and
+/// the mod that declared it.
+fn declared(ids: &Ids, guid: Guid) -> Option<(&str, &str)> {
     ids.known
         .get(&(Space::Content, guid.fnv1a()))
-        .map(|(name, _)| &**name)
-        .filter(|name| Guid::try_named(name) == Some(guid))
+        .map(|(name, by)| (&**name, &**by))
+        .filter(|(name, _)| Guid::try_named(name) == Some(guid))
 }
 
 #[cfg(test)]

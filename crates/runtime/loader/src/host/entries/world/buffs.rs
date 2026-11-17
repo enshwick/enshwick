@@ -29,8 +29,9 @@ entries! {
     }
 
     fn buff_type_add(me as Mod, buff as Headed<BuffTypeAdd>, id as Out<BuffTypeId>) -> Status {
-        declared_content(me.record, buff.guid)?;
         let owner = (me.index, me.record.joins_when_on());
+        crate::content::buff_types::admits(owner.1)?;
+        declared_content(me.record, buff.guid)?;
         id.put(crate::content::buff_types::add(me.loader, owner, &buff)?)
     }
 }

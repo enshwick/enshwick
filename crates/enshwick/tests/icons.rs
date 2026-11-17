@@ -128,9 +128,10 @@ mod tests {
         let icon = items.icon_image;
         let early = loader.build_resource(&key, &base).unwrap();
         assert_eq!(&early[icon..icon + 16], &[0; 16], "the vanilla icon");
+        assert_eq!(loader.held_resource(&key), Some(early.clone()));
         loader.show_icons();
-        let shown = loader.build_resource(&key, &base).unwrap();
-        assert_eq!(shown.len(), early.len(), "written over the game's copy");
-        assert_eq!(&shown[icon..icon + 16], &ICON.0);
+        let held = loader.held_resource(&key).expect("kept for the rebuild");
+        assert_eq!(held.len(), early.len(), "written over the game's copy");
+        assert_eq!(&held[icon..icon + 16], &ICON.0);
     }
 }

@@ -1,3 +1,10 @@
+### Added
+
+- `Installed::held_resource` in the test API reads the bytes the game
+  holds for a served resource kept for a rebuild. `Installed::show_icons`
+  builds again every served resource that asked for icons before they
+  showed, as the loader does.
+
 ### Changed
 
 - `HostApi::buff_type_add` refuses a GUID whose content id the calling mod

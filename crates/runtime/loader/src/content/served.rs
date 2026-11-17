@@ -146,6 +146,9 @@ static RESOURCES_FUSE: Fuse = Fuse::new("served resources");
 /// loader's the game already holds must never reach the game's resolve or
 /// key lookup, which would read past the game's table.
 static SERVING_FUSE: Fuse = Fuse::new("served resource builds");
+/// The switch of the rebuild once a client shows served UI images: a panic
+/// there leaves every other served resource and the images themselves on.
+static ICONS_FUSE: Fuse = Fuse::new("served icon rebuild");
 
 /// The served resources: mods' registrations while they initialise, and with
 /// the loader's own patches once sealed, read without a lock. The game keeps

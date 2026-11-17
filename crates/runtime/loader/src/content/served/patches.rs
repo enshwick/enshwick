@@ -17,15 +17,15 @@
 use core::cell::RefCell;
 use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{Ordering, fence};
 
 use enshwick_core::abi::{ResourceKey, Status};
 
 use super::ServedError;
 
 use super::{
-    OPEN_NEXT, Patch, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served, State, hex,
-    key_name, mod_on, route,
+    ICONS_FUSE, OPEN_NEXT, Patch, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served,
+    State, hex, key_name, mod_on, route,
 };
 use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
@@ -60,11 +60,22 @@ pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Result<(), ServedErr
 /// patches run on this thread: a patch asking to rebuild its own key would
 /// wait on its own build.
 fn rebuild_entry(list: &[Served], entry: &Served) -> Result<(), ServedError> {
+    rebuild_entry_in(list, entry, &mut Vec::new())
+}
+
+/// [`rebuild_entry`] as one step of a pass that builds each key once: the
+/// keys built again go into `done`, and a reader already in it is left.
+fn rebuild_entry_in(
+    list: &[Served],
+    entry: &Served,
+    done: &mut Vec<ResourceKey>,
+) -> Result<(), ServedError> {
     if building(&entry.key) {
         return Err(ServedError::Building);
     }
+    done.push(entry.key);
     if rebuild_one(entry)? != Some(0) {
-        rebuild_readers(list, entry);
+        rebuild_readers(list, entry, done);
     }
     Ok(())
 }
@@ -116,10 +127,10 @@ fn rebuild_one(entry: &Served) -> Result<Option<usize>, ServedError> {
 
 /// Rebuilds the keys of `list` whose builds read `entry`, which changed, and
 /// in turn those that read a key that changed; each once, so keys that read
-/// each other end. A key whose build runs on this thread is left: its build
-/// holds its state, and it reads `entry` as it is when it does.
-fn rebuild_readers(list: &[Served], entry: &Served) {
-    let mut done = vec![entry.key];
+/// each other end, and none of `done`. A key whose build runs on this
+/// thread is left: its build holds its state, and it reads `entry` as it is
+/// when it does.
+fn rebuild_readers(list: &[Served], entry: &Served, done: &mut Vec<ResourceKey>) {
     let mut next = entry.read_by.relock().clone();
     while let Some(key) = next.pop() {
         if done.contains(&key) || building(&key) {
@@ -259,6 +270,9 @@ fn note_read(entry: &Served) {
 pub(crate) fn note_icons_read() {
     if let Some(list) = RESOURCES.sealed() {
         note_icons_in(list);
+        // With the fence of `icons_shown`: either this thread then reads the
+        // images as shown, or the announcement sees this note.
+        fence(Ordering::SeqCst);
     }
 }
 
@@ -277,22 +291,36 @@ fn note_icons_in(list: &[Served]) {
 /// client shows served UI images before they showed, and the keys that
 /// read those, now that they show; a rebuild writes only the bytes that
 /// differ, so the length stays. Runs on the UI thread, which draws every
-/// icon, so no icon GUID is read while its bytes change one at a time.
+/// icon, so no icon GUID is read while its bytes change one at a time. A
+/// panic turns off only this rebuild.
 pub(crate) fn icons_shown() {
     if let Some(list) = RESOURCES.sealed() {
-        rebuild_icon_readers(list);
+        // Pairs with the fence of `note_icons_read`.
+        fence(Ordering::SeqCst);
+        ICONS_FUSE.run("the rebuild once icons show", || {
+            rebuild_icon_readers(list);
+        });
     }
 }
 
-/// [`icons_shown`] for the served keys of `list`.
+/// [`icons_shown`] for the served keys of `list`: each key once, also when
+/// it reads another key built again, and then without the base it kept
+/// only for this rebuild.
 fn rebuild_icon_readers(list: &[Served]) {
+    let mut done = Vec::new();
     for entry in list.iter().filter(|s| s.reads_icons.load(Ordering::SeqCst)) {
-        if let Err(why) = rebuild_entry(list, entry) {
+        if !done.contains(&entry.key)
+            && let Err(why) = rebuild_entry_in(list, entry, &mut done)
+        {
             crate::log!(
                 WARN,
                 "served {} does not show its icons: {why}",
                 key_name(&entry.key)
             );
+        }
+        let reads = list.iter().any(|s| s.read_by.relock().contains(&entry.key));
+        if !reads && !entry.keeps_base.load(Ordering::Relaxed) {
+            entry.state.relock().base = None;
         }
     }
 }

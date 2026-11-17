@@ -39,7 +39,9 @@ pub(crate) fn before_delivery(loader: &Loader) -> Result<(), Status> {
 
 /// Refuses a call that names new content by `guid` unless mod `caller`
 /// declared the content id it comes from, so no mod adds content under
-/// another's id; every entry that takes a new content GUID asks it first.
+/// another's id. An entry that takes a new content GUID asks it once its
+/// own checks of when and who passed, before it adds anything; today
+/// `buff_type_add` does.
 ///
 /// # Errors
 ///

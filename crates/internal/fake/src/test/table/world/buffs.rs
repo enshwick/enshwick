@@ -6,9 +6,9 @@ use enshwick_core::abi::{
 };
 use enshwick_core::buffs::BuffTypeId;
 
-/// Adds a mod's buff type, as the loader: refused for a GUID the mod did not
-/// declare the content id of, after init, for a mod
-/// clients do not run, for a request it does not know, a `like` the
+/// Adds a mod's buff type, as the loader: refused after init, for a mod
+/// clients do not run, for a GUID the mod did not declare the content id
+/// of, for a request it does not know, a `like` the
 /// vanilla collection lacks and an id the game or a mod before has; the
 /// first type serves the fake's one patch of the collection, before every
 /// mod's patch of it.
@@ -22,11 +22,6 @@ pub(crate) extern "system" fn buff_type_add(
     };
     if id.is_null() {
         return Status::BAD_ARGS;
-    }
-    if !with(false, |s| {
-        crate::test::table::content::declared(s, me, buff.guid)
-    }) {
-        return Status::REFUSED;
     }
     match served::add(me, &buff) {
         Ok(added) => {
@@ -65,11 +60,14 @@ mod served {
     /// Checks and adds the type `buff` of `me` asks for: its game id.
     pub(super) fn add(me: ModHandle, buff: &BuffTypeAdd) -> Result<BuffTypeId, Status> {
         with(Err(Status::MISSING), |s| {
-            // In the loader's order: the seal, the mod's side, the request.
+            // In the loader's order: the seal, the mod's side, the declared
+            // id, the request.
             if s.base.closed() {
                 return Err(Status::TOO_LATE);
             }
-            if !crate::test::table::base::mods::joins(s, me) {
+            if !crate::test::table::base::mods::joins(s, me)
+                || !crate::test::table::content::declared(s, me, buff.guid)
+            {
                 return Err(Status::REFUSED);
             }
             let (layout, key) = collection(&s.host).ok_or(Status::UNAVAILABLE)?;
@@ -143,6 +141,11 @@ mod served {
         // SAFETY: the fake's build passes `base_len` readable bytes at
         // `base`, unchanged for the call.
         let base = unsafe { core::slice::from_raw_parts(base, base_len as usize) };
+        // As the loader: a build that asks before icons show is built again
+        // once they show.
+        if !with(false, |s| s.host.content.icons_ready) {
+            crate::test::table::content::note_icons_read();
+        }
         let Some((layout, types)) = with(None, |s| Some((collection(&s.host)?.0, serving(s))))
         else {
             return Status::MISSING;

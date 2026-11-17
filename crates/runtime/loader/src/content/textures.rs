@@ -331,16 +331,18 @@ impl Textures {
 /// registry knows them. A game build of a served key that asks before they
 /// show is built again once they show.
 pub(crate) fn ready() -> bool {
-    if !TEXTURES.shown.load(Ordering::Acquire) && on_client() {
+    if !TEXTURES.shown.load(Ordering::Acquire) && may_show() {
         crate::content::served::note_icons_read();
     }
     TEXTURES.ready()
 }
 
-/// Whether the loader runs on a client, the only side whose served UI
-/// images ever show.
-fn on_client() -> bool {
-    crate::engine::loader::loader().is_some_and(|loader| loader.side == Side::CLIENT)
+/// Whether served UI images may still show: on a client, the only side
+/// whose images ever show, while the mod textures are on. Otherwise no
+/// rebuild comes, so no build is noted and keeps its base for one.
+fn may_show() -> bool {
+    !TEXTURES_FUSE.is_off()
+        && crate::engine::loader::loader().is_some_and(|loader| loader.side == Side::CLIENT)
 }
 
 /// Whether this client's UI registry knows the UI image `guid`, the game's

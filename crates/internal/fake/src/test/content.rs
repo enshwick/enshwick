@@ -745,6 +745,42 @@ impl Installed {
         table::content::build_resource(key, base, table::content::Build::Game)
     }
 
+    /// Plays the client's UI registry knowing the served UI images from
+    /// now on, as [`FakeHost::icons_ready`] does from the start: the loader
+    /// then builds again every served resource whose first build asked
+    /// before, so it names its icons in the bytes the game holds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.show_icons();
+    /// ```
+    pub fn show_icons(&self) {
+        table::with((), |s| s.host.content.icons_ready = true);
+        table::content::icons_shown();
+    }
+
+    /// The bytes the game holds for the served resource `key`, as its first
+    /// build and every rebuild since left them; `None` unless the loader
+    /// keeps them for a rebuild: the mod asked for one in init, a patch read
+    /// another served key, or the build asked whether icons show before
+    /// they did.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Guid, ResourceKey};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let key = ResourceKey { guid: Guid([0x3a; 16]), type_hash: 0xb5ce_8765, part: 0 };
+    /// assert_eq!(loader.held_resource(&key), None);
+    /// ```
+    #[must_use]
+    pub fn held_resource(&self, key: &ResourceKey) -> Option<Vec<u8>> {
+        table::content::held(key)
+    }
+
     /// The texts the mod added, as `(tag, language, text)`, in order.
     ///
     /// # Examples

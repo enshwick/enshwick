@@ -93,7 +93,7 @@ fn named(types: &[Edit], shows: impl Fn(Guid) -> bool) -> Vec<Edit> {
 pub(crate) const FEATURE: &str = "buff types";
 
 #[cfg(windows)]
-pub(crate) use running::{add, sealed, serve};
+pub(crate) use running::{add, admits, sealed, serve};
 
 /// The buff types in the running game: mods' registrations, the archive's
 /// collection and the loader's patch.
@@ -155,12 +155,7 @@ mod running {
         (owner, joins): (ModIndex, bool),
         request: &BuffTypeAdd,
     ) -> Result<BuffTypeId, BuffTypeError> {
-        if BUFFS.types.is_sealed() {
-            return Err(BuffTypeError::TooLate);
-        }
-        if !joins {
-            return Err(BuffTypeError::NotBoth);
-        }
+        admits(joins)?;
         let unread = BuffTypeError::Refused(Refusal::Unread);
         let (layout, _, vanilla) = collection(loader).ok_or(unread)?;
         BUFFS.types.edit(|added| {
@@ -168,6 +163,24 @@ mod running {
             added.push(Added { owner, edit });
             Ok(edit.id())
         })?
+    }
+
+    /// Whether a mod may add a buff type now: during init, and only a mod
+    /// that `joins` clients, which look its id up too. The host entry asks
+    /// it before the other refusals, so a late call reads as late.
+    ///
+    /// # Errors
+    ///
+    /// [`BuffTypeError::TooLate`] after init, [`BuffTypeError::NotBoth`] for a
+    /// mod clients do not run.
+    pub(crate) fn admits(joins: bool) -> Result<(), BuffTypeError> {
+        if BUFFS.types.is_sealed() {
+            return Err(BuffTypeError::TooLate);
+        }
+        if !joins {
+            return Err(BuffTypeError::NotBoth);
+        }
+        Ok(())
     }
 
     /// Seals the mods' types: none is added after.
