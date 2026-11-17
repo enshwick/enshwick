@@ -15,7 +15,9 @@
 //! `debug_kill_faction` for whole factions and players, and a refused kill
 //! takes the path of an entity the kill does not reach. Every site runs on
 //! the game's worker threads, in parallel, so the filters run there too: no
-//! allocation, no lock.
+//! allocation, no lock. The sites arm in groups by cause, each under a
+//! switch of its own ([`GROUPS`]), so a site a build lacks turns off only the
+//! causes it serves.
 
 use core::ffi::c_void;
 use std::sync::OnceLock;
@@ -82,36 +84,98 @@ struct Layout {
     source: usize,
 }
 
-/// Each site's mid-hook target and handler, the hit site first.
-const SITES: [(Symbol, MidHookFn); 10] = [
-    (pinned::damage::HIT, hit),
-    (pinned::damage::FALL, fall),
-    (pinned::damage::FALL_DEATH, fall_death),
-    (pinned::damage::SHROUD, shroud),
-    (pinned::damage::SHROUD_DEATH, shroud_death),
-    (pinned::damage::DROWNING, drowning),
-    (pinned::damage::DROWNING_DEATH, drowning_death),
-    (pinned::damage::FREEZING, freezing),
-    (pinned::damage::ADMIN_KILL, admin_kill),
-    (pinned::damage::FACTION_KILL, faction_kill),
+/// The entry a build lacks and why, for an off line.
+type Lacking = (&'static str, &'static str);
+
+/// A check of what a group needs beyond its sites: `Err` names the entry
+/// this build lacks and why.
+type Needs = fn(&Loader) -> Result<(), Lacking>;
+
+/// The sites of one or more causes, which arm all or none under a switch of
+/// their own: a site a build lacks turns off only its group, and the
+/// switch's name lists the `DamageCause`s the filters then no longer get.
+struct Group {
+    fuse: &'static Fuse,
+    /// What the group needs beyond its sites, if anything.
+    needs: Option<Needs>,
+    /// Each site's mid-hook target and handler.
+    sites: &'static [(Symbol, MidHookFn)],
+}
+
+/// The hits, which stats read too.
+const HITS: Group = Group {
+    fuse: &HIT_FUSE,
+    needs: Some(hit_layout),
+    sites: &[(pinned::damage::HIT, hit)],
+};
+
+/// The groups. A fall's death site arms with its damage site, as a
+/// filtered fall without the game's death decision following it would be
+/// wrong both ways.
+const GROUPS: [Group; 6] = [
+    HITS,
+    Group {
+        fuse: &FALL_FUSE,
+        needs: None,
+        sites: &[
+            (pinned::damage::FALL, fall),
+            (pinned::damage::FALL_DEATH, fall_death),
+        ],
+    },
+    Group {
+        fuse: &SHROUD_FUSE,
+        needs: None,
+        sites: &[
+            (pinned::damage::SHROUD, shroud),
+            (pinned::damage::SHROUD_DEATH, shroud_death),
+        ],
+    },
+    Group {
+        fuse: &DROWNING_FUSE,
+        needs: None,
+        sites: &[
+            (pinned::damage::DROWNING, drowning),
+            (pinned::damage::DROWNING_DEATH, drowning_death),
+        ],
+    },
+    Group {
+        fuse: &FREEZING_FUSE,
+        needs: None,
+        sites: &[(pinned::damage::FREEZING, freezing)],
+    },
+    Group {
+        fuse: &KILL_FUSE,
+        needs: None,
+        sites: &[
+            (pinned::damage::ADMIN_KILL, admin_kill),
+            (pinned::damage::FACTION_KILL, faction_kill),
+        ],
+    },
 ];
+
+/// The switch of the hit site, for the filters and the stats that change
+/// hits.
+static HIT_FUSE: Fuse = Fuse::new("damage filters and stats of hits (Impact)");
+static FALL_FUSE: Fuse = Fuse::new("damage filters of falls (FallDamage)");
+static SHROUD_FUSE: Fuse = Fuse::new("damage filters of the shroud (Fog, DeadlyFog)");
+static DROWNING_FUSE: Fuse = Fuse::new("damage filters of drowning (Suffocated, DrowningDeath)");
+static FREEZING_FUSE: Fuse = Fuse::new("damage filters of freezing (Freezing)");
+static KILL_FUSE: Fuse = Fuse::new("damage filters of admin kills (AdminKill)");
 
 /// Registers mod `owner`'s damage filter.
 ///
 /// # Errors
 ///
-/// [`JoinFeatureError`] after init or on a build without the hit's layout.
+/// [`JoinFeatureError`] after init or on a build without the entity reads
+/// every site makes; a build that lacks a group's sites turns off only that
+/// group when it links.
 pub(crate) fn register(
     loader: &Loader,
     owner: ModIndex,
     callback: DamageFilterFn,
     user: *mut c_void,
 ) -> Result<(), JoinFeatureError> {
-    let available = || {
-        layout(loader).is_ok()
-            && types_match(loader)
-            && crate::engine::ecs::engine(loader).is_some()
-    };
+    let available = || crate::engine::ecs::engine(loader).is_some();
     FILTERS.register_when(available, owner, callback, user)
 }
 
@@ -141,47 +205,59 @@ pub(crate) fn seal() {
     let _filters = FILTERS.seal();
 }
 
-/// Links every site when a mod filters damage or uses stats: the filters
-/// arm at all the sites or none.
+/// Links the sites when a mod filters damage or uses stats, each group all
+/// or none.
 pub(crate) fn link(loader: &Loader) {
     let filters = FILTERS.sealed().unwrap_or_default();
     link_in(loader, filters, crate::inventory::stats::wanted());
 }
 
-/// Links the sites `filters` and the stats, when `stats` are wanted, need.
+/// Links the groups `filters` and the stats, when `stats` are wanted, need.
 fn link_in(loader: &Loader, filters: &[Registered<DamageFilterFn>], stats: bool) {
     if filters.is_empty() && !stats {
         return;
     }
-    let layout = match layout(loader) {
-        Ok(layout) => layout,
-        Err(lacking) => {
-            let _off = loader.fuse_off(&DAMAGE_FUSE, lacking.id(), crate::engine::builds::ABSENT);
-            return;
+    let mut on = Vec::new();
+    for group in groups(!filters.is_empty()) {
+        if link_group(loader, group) {
+            on.push(group.fuse.feature());
         }
-    };
-    if !types_match(loader) {
-        let _off = loader.fuse_off(
-            &DAMAGE_FUSE,
-            catalogue::type_name(catalogue::ids::DAMAGE_TYPE),
-            OTHER_TYPES,
-        );
-        return;
     }
-    let _first = LAYOUT.set(layout);
-    let sites = sites(!filters.is_empty());
-    let linked = sites.iter().all(|&(site, handler)| {
-        loader.link_mid(&DAMAGE_FUSE, Target::Pinned(site), handler, HookFlags::NONE)
-    });
-    if linked {
-        crate::log!(INFO, "damage filters on: {} sites", sites.len());
+    if !on.is_empty() {
+        crate::log!(INFO, "damage sites on: {}", on.join("; "));
     }
 }
 
-/// The sites to link: all of them for a mod's filters, else only the hit
-/// site stats read, so a site stats never use cannot turn their hits off.
-fn sites(filtering: bool) -> &'static [(Symbol, MidHookFn)] {
-    if filtering { &SITES } else { &SITES[..1] }
+/// Links every site of `group`, after what it needs beyond them; true when
+/// all linked. The first that fails turns the group's switch off, and its
+/// sites linked before are wired past.
+fn link_group(loader: &Loader, group: &Group) -> bool {
+    if let Some(Err((id, reason))) = group.needs.map(|needs| needs(loader)) {
+        return loader.fuse_off(group.fuse, id, reason);
+    }
+    group.sites.iter().all(|&(site, handler)| {
+        loader.link_mid(group.fuse, Target::Pinned(site), handler, HookFlags::NONE)
+    })
+}
+
+/// The groups to link: all of them for a mod's filters, else only the hit
+/// group stats read, so a site stats never use cannot turn their hits off.
+fn groups(filtering: bool) -> &'static [Group] {
+    if filtering { &GROUPS } else { &[HITS] }
+}
+
+/// What the hit site reads beyond its code: the hit's frame layout, and a
+/// build whose damage types fill the vector the loader reads.
+fn hit_layout(loader: &Loader) -> Result<(), Lacking> {
+    let layout = layout(loader).map_err(|lacking| (lacking.id(), crate::engine::builds::ABSENT))?;
+    if !types_match(loader) {
+        return Err((
+            catalogue::type_name(catalogue::ids::DAMAGE_TYPE),
+            OTHER_TYPES,
+        ));
+    }
+    let _first = LAYOUT.set(layout);
+    Ok(())
 }
 
 /// Whether a mod filters damage; one load, before a site reads anything.
@@ -272,13 +348,10 @@ fn filtered(cause: u32, target: u32, damage: i32) -> i32 {
     kept(check.total).round().min(i32::MAX as f32) as i32
 }
 
-/// The damage filters' switch.
-static DAMAGE_FUSE: Fuse = Fuse::new("damage filters");
-
 mid_handler! {
     fn hit;
     gate hits_watched();
-    fuse DAMAGE_FUSE, "the hit site";
+    fuse HIT_FUSE, "the hit site";
     |registers| {
         let Some(layout) = LAYOUT.get() else {
             return;
@@ -333,7 +406,7 @@ mid_handler! {
 mid_handler! {
     fn fall;
     gate filtering();
-    fuse DAMAGE_FUSE, "the fall site";
+    fuse FALL_FUSE, "the fall site";
     |registers| {
         // SAFETY: at the site `[r8 + rcx * 4]` is the entity's current `i32`
         // health, about to be overwritten with `r9d` by this thread, whose
@@ -376,7 +449,7 @@ fn fall_kept(target: Entity, current: i32, new: i32, filter: impl FnOnce(i32) ->
 mid_handler! {
     fn fall_death;
     gate filtering();
-    fuse DAMAGE_FUSE, "the fall death site";
+    fuse FALL_FUSE, "the fall death site";
     |registers| {
         // `fall_damage_infliction` decides on a death from the health it
         // worked out in `xmm7`, not from the health it wrote: `comiss
@@ -419,7 +492,7 @@ fn kept_health(current: i32, new: i32, filter: impl FnOnce(i32) -> i32) -> i32 {
 mid_handler! {
     fn shroud;
     gate filtering();
-    fuse DAMAGE_FUSE, "the shroud site";
+    fuse SHROUD_FUSE, "the shroud site";
     |registers| {
         let damage = low(registers.rax);
         if damage <= 0 {
@@ -439,7 +512,7 @@ mid_handler! {
 mid_handler! {
     fn shroud_death;
     gate filtering();
-    fuse DAMAGE_FUSE, "the shroud death site";
+    fuse SHROUD_FUSE, "the shroud death site";
     |registers| {
         // SAFETY: at the site `[r8 + rcx * 4]` is the entity's current `i32`
         // health, about to be overwritten with `edx` by this thread, whose
@@ -462,7 +535,7 @@ mid_handler! {
 mid_handler! {
     fn drowning;
     gate filtering();
-    fuse DAMAGE_FUSE, "the drowning site";
+    fuse DROWNING_FUSE, "the drowning site";
     |registers| {
         // At the site `eax` is what `oxygen_update` takes from the health
         // at `[r8 + rcx * 4]`; r15 is its context; 1.0 build 1269579.
@@ -481,7 +554,7 @@ mid_handler! {
 mid_handler! {
     fn drowning_death;
     gate filtering();
-    fuse DAMAGE_FUSE, "the drowning death site";
+    fuse DROWNING_FUSE, "the drowning death site";
     |registers| {
         // SAFETY: at the site `[r8 + rcx * 4]` is a creature's current `i32`
         // health, about to be overwritten with `r14d` (0) by this thread,
@@ -505,7 +578,7 @@ mid_handler! {
 mid_handler! {
     fn freezing;
     gate filtering();
-    fuse DAMAGE_FUSE, "the freezing site";
+    fuse FREEZING_FUSE, "the freezing site";
     |registers| {
         // At the site `eax` is what `bodyheat_depletion` takes from the
         // health; its context is r14 there; 1.0 build 1269579.
@@ -532,7 +605,7 @@ fn kill_allowed(target: u32) -> bool {
 mid_handler! {
     fn admin_kill;
     gate filtering();
-    fuse DAMAGE_FUSE, "the admin kill site";
+    fuse KILL_FUSE, "the admin kill site";
     |registers| {
         let at = address(registers.rax);
         if at == 0 {
@@ -555,7 +628,7 @@ mid_handler! {
 mid_handler! {
     fn faction_kill;
     gate filtering();
-    fuse DAMAGE_FUSE, "the faction kill site";
+    fuse KILL_FUSE, "the faction kill site";
     |registers| {
         // At the site a set carry makes `debug_kill_faction` kill the row's
         // entity, a clear one skips it; r14 is its context; 1.0 build
@@ -618,7 +691,7 @@ mod tests {
             let pdata = image.range(image.section(".pdata").unwrap());
             let rows = image.read(pdata.start, pdata.end - pdata.start).unwrap();
             let base = image.base();
-            for (symbol, _) in SITES {
+            for &(symbol, _) in GROUPS.iter().flat_map(|group| group.sites) {
                 let Some(rva) = resolved.symbol(symbol.id()) else {
                     continue;
                 };
@@ -660,7 +733,7 @@ mod tests {
         };
         // SAFETY: the registers are borrowed for the call, as a stub's are.
         unsafe { hit(&raw mut registers, core::ptr::null_mut()) };
-        assert!(!DAMAGE_FUSE.is_off());
+        assert!(!HIT_FUSE.is_off());
     }
 
     unsafe extern "system" fn keep(_check: *mut DamageCheck, _user: *mut c_void) {}
@@ -674,33 +747,137 @@ mod tests {
         filters
     }
 
+    /// A server's loader whose build pins every site but `lacking` and,
+    /// with `layout`, the hit's frame layout.
+    fn loader_without(lacking: Option<Symbol>, layout: bool) -> Loader {
+        let sites: Vec<Symbol> = GROUPS
+            .iter()
+            .flat_map(|group| group.sites)
+            .map(|&(site, _)| site)
+            .filter(|&site| Some(site) != lacking)
+            .collect();
+        let constants = [
+            pinned::damage::HIT_VECTOR,
+            pinned::damage::HIT_TARGET,
+            pinned::damage::HIT_SOURCE,
+        ]
+        .map(|constant| (constant, 0x10));
+        crate::start::tests::pinning_loader(
+            enshwick_core::abi::Side::SERVER,
+            &sites,
+            if layout { &constants } else { &[] },
+        )
+    }
+
+    /// The groups' switches that are off, by name.
+    fn off() -> Vec<&'static str> {
+        GROUPS
+            .iter()
+            .filter(|group| group.fuse.is_off())
+            .map(|group| group.fuse.feature())
+            .collect()
+    }
+
     #[test]
-    fn a_build_without_the_hit_layout_turns_the_filters_off_when_a_mod_filters() {
+    fn a_build_whose_fall_death_site_does_not_route_turns_off_only_the_falls() {
+        let filters = one_filter();
+        let loader = loader_without(Some(pinned::damage::FALL_DEATH), true);
+        link_in(&loader, filters.sealed().unwrap_or_default(), false);
+        let fall = crate::base::off_reason(&FALL_FUSE);
+        assert!(
+            fall.as_deref()
+                .is_some_and(|r| r.starts_with(pinned::damage::FALL_DEATH.id())),
+            "{fall:?}"
+        );
+        assert!(
+            FALL_FUSE.feature().contains("(FallDamage)"),
+            "the off line names the cause"
+        );
+        // The bare reflection lacks the damage types, so the hits go for
+        // their own reason.
+        let hit = crate::base::off_reason(&HIT_FUSE);
+        assert!(
+            hit.as_deref()
+                .is_some_and(|r| r.starts_with(catalogue::type_name(catalogue::ids::DAMAGE_TYPE))),
+            "{hit:?}"
+        );
+        assert_eq!(off(), [HIT_FUSE.feature(), FALL_FUSE.feature()]);
+        let shroud = loader.address(pinned::damage::SHROUD).unwrap_or_default();
+        let linked = enshwick_base::Relock::relock(&loader.mids).features_at(shroud);
+        assert!(
+            SHROUD_FUSE.among(&linked),
+            "the shroud site links after the falls went off"
+        );
+    }
+
+    #[test]
+    fn a_build_without_the_hit_layout_turns_off_only_the_hits() {
+        let filters = one_filter();
+        link_in(
+            &loader_without(None, false),
+            filters.sealed().unwrap_or_default(),
+            false,
+        );
+        let hit = crate::base::off_reason(&HIT_FUSE);
+        assert!(
+            hit.as_deref()
+                .is_some_and(|r| r.starts_with(pinned::damage::HIT_VECTOR.id())),
+            "{hit:?}"
+        );
+        assert_eq!(off(), [HIT_FUSE.feature()]);
+    }
+
+    #[test]
+    fn a_build_without_any_site_turns_every_group_off_by_its_own_switch() {
         let filters = one_filter();
         link_in(
             &crate::start::tests::bare_loader(),
             filters.sealed().unwrap_or_default(),
             false,
         );
-        assert!(DAMAGE_FUSE.is_off(), "off by its fuse, not only in the log");
+        assert_eq!(off().len(), GROUPS.len());
     }
 
     #[test]
     fn nothing_filtering_damage_links_no_site_and_leaves_the_filters_on() {
         link_in(&crate::start::tests::bare_loader(), &[], false);
-        assert!(!DAMAGE_FUSE.is_off());
+        assert!(off().is_empty());
     }
 
     #[test]
     fn stats_alone_link_only_the_hit_site_and_filters_link_all_ten() {
         let ids = |filtering| {
-            sites(filtering)
+            groups(filtering)
                 .iter()
+                .flat_map(|group| group.sites)
                 .map(|(s, _)| s.id())
                 .collect::<Vec<_>>()
         };
         assert_eq!(ids(false), [pinned::damage::HIT.id()]);
         assert_eq!(ids(true).len(), 10);
+    }
+
+    #[test]
+    fn every_damage_cause_is_named_by_exactly_one_group() {
+        use enshwick_core::damage::DamageCause;
+        let named = |group: &Group| {
+            let name = group.fuse.feature();
+            let causes = name
+                .rsplit_once('(')
+                .and_then(|(_, rest)| rest.strip_suffix(')'))
+                .unwrap_or_default();
+            causes.split(", ").map(str::to_owned).collect::<Vec<_>>()
+        };
+        for cause in DamageCause::NAMED {
+            let cause = format!("{cause:?}");
+            let groups = GROUPS
+                .iter()
+                .filter(|group| named(group).contains(&cause))
+                .count();
+            assert_eq!(groups, 1, "{cause}");
+        }
+        let all: usize = GROUPS.iter().map(|group| named(group).len()).sum();
+        assert_eq!(all, DamageCause::NAMED.len(), "no name but a cause's");
     }
 
     /// `rflags` after `comiss` of a survivable fall (above) and a lethal

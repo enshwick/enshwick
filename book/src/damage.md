@@ -91,6 +91,10 @@ place in the game's order, from 0.
 
 Filters of several mods run in load order, each on what the one before left.
 
+A game build may lack what the loader needs for some causes. Then the filter
+no longer gets those causes, and it still gets the others. The log, the
+status summary and the Mods screen name the causes that are off.
+
 ## Where it runs
 
 The filter runs on the game's worker threads, in parallel, inside the

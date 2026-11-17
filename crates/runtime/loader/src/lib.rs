@@ -48,6 +48,9 @@ mod start;
 pub use actions::client_input::bench_client_build;
 #[cfg(windows)]
 #[doc(hidden)]
+pub use base::carrier::bench_own_account;
+#[cfg(windows)]
+#[doc(hidden)]
 pub use content::{served::bench_text_lookup, textures::bench_texture_request};
 #[cfg(windows)]
 #[doc(hidden)]

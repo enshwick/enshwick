@@ -124,6 +124,12 @@ impl BasePresets {
     pub(crate) fn serving(&self) -> bool {
         self.side == enshwick_core::abi::Side::SERVER || self.hosting
     }
+
+    /// The account of the hosting client's own player, as the loader's
+    /// carrier knows it; `None` unless the fake hosts.
+    pub(crate) fn own_key(&self) -> Option<enshwick_core::PlayerKey> {
+        self.host_key.filter(|_| self.hosting)
+    }
 }
 
 impl FakeHost {

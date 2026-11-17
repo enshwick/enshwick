@@ -17,7 +17,10 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init or on a build without the damage sites.
+    /// [`Off`] after init or on a build without the engine's entity reads.
+    /// A build that lacks the sites of some causes keeps the filter, and
+    /// only those causes stop reaching it; the log and the Mods screen name
+    /// them.
     ///
     /// # Examples
     ///
