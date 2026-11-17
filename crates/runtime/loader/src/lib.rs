@@ -51,7 +51,10 @@ pub use actions::client_input::bench_client_build;
 pub use base::carrier::bench_own_account;
 #[cfg(windows)]
 #[doc(hidden)]
-pub use content::{served::bench_text_lookup, textures::bench_texture_request};
+pub use content::{
+    served::{bench_served_build, bench_text_lookup},
+    textures::bench_texture_request,
+};
 #[cfg(windows)]
 #[doc(hidden)]
 pub use engine::pages::{forget as forget_read_only, read_only};

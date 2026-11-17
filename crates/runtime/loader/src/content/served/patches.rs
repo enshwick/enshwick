@@ -19,9 +19,9 @@ use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 use std::sync::atomic::{Ordering, fence};
 
+pub(super) use enshwick_base::__internal::Build;
+use enshwick_base::__internal::{self as builds, BuildResourceError, PatchFailure, Unbuilt, View};
 use enshwick_core::abi::{ResourceKey, Status};
-
-use super::BuildResourceError;
 
 use super::{
     ICONS_FUSE, OPEN_NEXT, Patch, RESOLVE_NEXT, RESOURCES, RESOURCES_FUSE, SERVING_FUSE, Served,
@@ -36,114 +36,39 @@ use enshwick_base::Relock;
 /// bytes that differ over the resource the game holds, then does the same
 /// for every served key whose build read it.
 pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Result<(), BuildResourceError> {
-    let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
-    let Some(list) = RESOURCES.sealed() else {
-        let pending = RESOURCES.edit(|pending| match pending.iter().find(|s| serves(s)) {
-            Some(entry) => {
-                entry.keeps_base.store(true, Ordering::Relaxed);
-                Ok(())
-            }
-            None => Err(BuildResourceError::NotServed),
-        });
-        // Sealed since the look before: rebuild from the sealed list.
-        return pending.unwrap_or_else(|_| rebuild(owner, key));
-    };
-    match list.iter().find(|s| serves(s)) {
-        Some(entry) => rebuild_entry(list, entry),
-        None => Err(BuildResourceError::NotServed),
+    if let Some(list) = RESOURCES.sealed() {
+        return builds::rebuild(&Table::game(list), owner, &key);
     }
+    let pending = RESOURCES.edit(|pending| {
+        let table = Table {
+            sealed: false,
+            ..Table::game(pending)
+        };
+        builds::rebuild(&table, owner, &key)
+    });
+    // Sealed since the look before: rebuild from the sealed list.
+    pending.unwrap_or_else(|_| rebuild(owner, key))
 }
 
-/// Builds `entry` of `list` again, then the keys whose builds read it when
-/// its served value may have changed: it changed, or the game never built
-/// it, so only served reads saw it. [`BuildResourceError::Building`] while `entry`'s
-/// patches run on this thread: a patch asking to rebuild its own key would
-/// wait on its own build.
+/// Builds `entry` of `list` again, then the keys whose builds read it, as
+/// [`builds::rebuild_in`] does.
+#[cfg(test)]
 fn rebuild_entry(list: &[Served], entry: &Served) -> Result<(), BuildResourceError> {
-    rebuild_entry_in(list, entry, &mut Vec::new())
+    builds::rebuild_in(&Table::game(list), entry, &mut Vec::new())
 }
 
-/// [`rebuild_entry`] as one step of a pass that builds each key once: the
-/// keys built again go into `done`, and a reader already in it is left.
-fn rebuild_entry_in(
-    list: &[Served],
-    entry: &Served,
-    done: &mut Vec<ResourceKey>,
-) -> Result<(), BuildResourceError> {
-    if building(&entry.key) {
-        return Err(BuildResourceError::Building);
-    }
-    done.push(entry.key);
-    if rebuild_one(entry)? != Some(0) {
-        rebuild_readers(list, entry, done);
-    }
-    Ok(())
-}
-
-/// Builds `entry` again from its kept base and writes the bytes that differ
-/// over those the game holds; how many differed, `None` before its first
-/// build, which takes the values in force.
+/// Builds `entry` again over the bytes the game holds, as
+/// [`builds::rebuild_one`] does.
+#[cfg(test)]
 fn rebuild_one(entry: &Served) -> Result<Option<usize>, BuildResourceError> {
-    let _one_at_a_time = entry.rebuilding.relock();
-    // The game resolves the resource meanwhile: the patches run outside the
-    // state's lock, on a copy of the base.
-    let (data, len, base, built_by) = {
-        let state = entry.state.relock();
-        let Some((data, len)) = state.built else {
-            return Ok(None);
-        };
-        let Some(base) = state.base.clone() else {
-            return Err(BuildResourceError::NoBase);
-        };
-        (data, len, base, state.built_by.clone())
-    };
-    let built = run_patches(
-        entry,
-        base.as_ptr().expose_provenance(),
-        base.len(),
-        Some(&built_by),
-        Build::Game,
-    )
-    .ok_or(BuildResourceError::NotBuilt)?;
-    if built.len != len {
-        crate::log!(
-            WARN,
-            "served resource {:08x}:{} not rebuilt: {} bytes, the game holds {len}",
-            entry.key.type_hash,
-            hex(&entry.key.guid.0),
-            built.len
-        );
-        return Err(BuildResourceError::SizeChanged);
-    }
-    let changed = write_differences(data, built.data, len);
-    crate::log!(
-        INFO,
-        "served resource {:08x}:{} rebuilt, {changed} bytes changed",
-        entry.key.type_hash,
-        hex(&entry.key.guid.0)
-    );
-    Ok(Some(changed))
+    builds::rebuild_one(&Table::game(core::slice::from_ref(entry)), entry)
 }
 
-/// Rebuilds the keys of `list` whose builds read `entry`, which changed, and
-/// in turn those that read a key that changed; each once, so keys that read
-/// each other end, and none of `done`. A key whose build runs on this
-/// thread is left: its build holds its state, and it reads `entry` as it is
-/// when it does.
+/// Rebuilds the keys of `list` that read `entry`, as
+/// [`builds::rebuild_readers`] does.
+#[cfg(test)]
 fn rebuild_readers(list: &[Served], entry: &Served, done: &mut Vec<ResourceKey>) {
-    let mut next = entry.read_by.relock().clone();
-    while let Some(key) = next.pop() {
-        if done.contains(&key) || building(&key) {
-            continue;
-        }
-        done.push(key);
-        let Some(reader) = list.iter().find(|s| s.key == key) else {
-            continue;
-        };
-        if rebuild_one(reader).is_ok_and(|changed| changed != Some(0)) {
-            next.extend(reader.read_by.relock().iter().copied());
-        }
-    }
+    builds::rebuild_readers(&Table::game(list), entry, done);
 }
 
 /// The game's first build of `entry` from its base, recorded in `state`:
@@ -161,37 +86,37 @@ pub(super) unsafe fn build_first(
     data: usize,
     len: usize,
 ) -> Option<(usize, usize)> {
-    let Some(mut built) = run_patches(entry, data, len, None, Build::Game) else {
-        state.failed = true;
-        if entry.key != entry.base {
-            return None;
-        }
-        // A changed vanilla key whose every patch failed reads as the
-        // archive has it: missing, it would take the game's own data away.
+    let first = builds::build_first(
+        &Table::game(core::slice::from_ref(entry)),
+        entry,
+        (data, len),
+    );
+    let copy_base = || {
         let mut base = vec![0; len];
         // SAFETY: the caller guarantees `len` readable bytes at `data`,
         // unchanged for the call.
         unsafe { crate::engine::memory::read_bytes(data, 0, &mut base) };
-        let kept = Buffer::new(base.into_boxed_slice());
+        base.into_boxed_slice()
+    };
+    let Ok(built) = first.built else {
+        state.failed = true;
+        if !first.holds {
+            return None;
+        }
+        // A changed vanilla key whose every patch failed reads as the
+        // archive has it: missing, it would take the game's own data away.
+        let kept = Buffer::new(copy_base());
         let result = (kept.at(), len);
         kept.keep();
         state.built = Some(result);
         return Some(result);
     };
-    let keep = enshwick_base::__internal::KeepBase {
-        asked: entry.keeps_base.load(Ordering::Relaxed),
-        read_served: built.reads,
-        asked_icons: entry.reads_icons.load(Ordering::SeqCst),
-    };
-    if keep.keeps() {
-        let mut base = vec![0; len];
-        // SAFETY: the caller guarantees `len` readable bytes at `data`,
-        // unchanged for the call.
-        unsafe { crate::engine::memory::read_bytes(data, 0, &mut base) };
-        state.base = Some(base.into_boxed_slice());
+    if first.keep_base {
+        state.base = Some(copy_base());
     }
-    state.built_by = core::mem::take(&mut built.by);
-    let result = built.keep();
+    state.built_by = built.by;
+    let result = (built.bytes.data, built.len);
+    built.bytes.owned.keep();
     state.built = Some(result);
     Some(result)
 }
@@ -206,49 +131,35 @@ pub(super) unsafe fn build_first(
 /// [`BuildResourceError::Building`] for a key whose patches run on this thread, which a
 /// patch reading it would build again without end.
 pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, BuildResourceError> {
-    if RESOURCES.sealed().is_none() {
-        return Err(BuildResourceError::Unsealed);
-    }
-    let archive = |key: &ResourceKey| {
-        crate::engine::archive::game()
-            .and_then(|archive| archive.resource(key))
-            .ok_or(BuildResourceError::NotInArchive)
-    };
-    if !linked() {
-        return archive(&key);
-    }
-    let (found, new, aliased) = route(&key);
-    let Some((_, entry)) = found else {
-        return archive(&new.or(aliased).unwrap_or(key));
-    };
-    if building(&entry.key) {
-        return Err(BuildResourceError::Building);
-    }
-    read_served(entry, archive(&entry.base)?, archive)
+    let table = RESOURCES.sealed().map_or(
+        Table {
+            sealed: false,
+            ..Table::game(&[])
+        },
+        Table::game,
+    );
+    builds::read_served(&table, &key)
 }
 
-/// `entry` built for a mod's served read from `base`, its base's bytes:
-/// each patch of a mod on, a failed one skipped. When none built, the key
-/// as `archive` has it: `base` itself for a key patched in place, and
-/// [`BuildResourceError::NotInArchive`] for a new one. The game's builds running on this
-/// thread are noted as reading `entry`.
+/// `entry` built for a mod's served read from `base`, its base's bytes, as
+/// [`builds::read_built`] does, with `archive` for the archive's bytes.
+#[cfg(test)]
 fn read_served(
     entry: &Served,
     base: Vec<u8>,
-    archive: impl FnOnce(&ResourceKey) -> Result<Vec<u8>, BuildResourceError>,
+    archive: impl Fn(&ResourceKey) -> Result<Vec<u8>, BuildResourceError>,
 ) -> Result<Vec<u8>, BuildResourceError> {
-    note_read(entry);
-    match run_patches(
-        entry,
-        base.as_ptr().expose_provenance(),
-        base.len(),
-        None,
-        Build::Scratch,
-    ) {
-        Some(built) => Ok(built.into_bytes()),
-        None if entry.key == entry.base => Ok(base),
-        None => archive(&entry.key),
-    }
+    let table = Table {
+        list: core::slice::from_ref(entry),
+        sealed: true,
+        archive: move |key: &ResourceKey| archive(key).ok(),
+    };
+    builds::read_built(&table, entry, base)
+}
+
+/// The game archive's resource `key`.
+fn game_archive(key: &ResourceKey) -> Option<Vec<u8>> {
+    crate::engine::archive::game().and_then(|archive| archive.resource(key))
 }
 
 /// Notes that the game's builds running on this thread read `entry`, so a
@@ -312,7 +223,7 @@ fn rebuild_icon_readers(list: &[Served]) {
     let mut done = Vec::new();
     for entry in list.iter().filter(|s| s.reads_icons.load(Ordering::SeqCst)) {
         if !done.contains(&entry.key)
-            && let Err(why) = rebuild_entry_in(list, entry, &mut done)
+            && let Err(why) = builds::rebuild_in(&Table::game(list), entry, &mut done)
         {
             crate::log!(
                 WARN,
@@ -513,17 +424,6 @@ pub(super) fn write_differences(held: usize, new: usize, len: usize) -> usize {
     changed
 }
 
-/// Who a build of a served resource is for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Build {
-    /// The game's first build or a rebuild, whose bytes the game holds: a
-    /// failed patch turns its mod off.
-    Game,
-    /// A mod's served read, kept nowhere: a failed patch is skipped and its
-    /// mod stays on, since the game never read that build.
-    Scratch,
-}
-
 /// One build of a served key running on this thread.
 struct Frame {
     key: ResourceKey,
@@ -650,39 +550,45 @@ impl Drop for Building {
     }
 }
 
-/// A served key's build: its bytes, who built them, and the loader's buffer
-/// they lie in, freed with the build unless kept.
-pub(super) struct Built {
-    pub(super) data: usize,
-    pub(super) len: usize,
-    pub(super) by: Vec<ModIndex>,
-    /// Whether a patch read another served key as served.
-    pub(super) reads: bool,
+/// The bytes of a finished build and the loader's buffer they lie in, freed
+/// with them unless kept.
+pub(super) struct Lent {
+    data: usize,
     owned: Buffer,
 }
 
-impl Built {
-    /// Leaves the bytes for the process, as the game holds them; where they
-    /// lie and their length.
-    pub(super) fn keep(self) -> (usize, usize) {
-        self.owned.keep();
-        (self.data, self.len)
-    }
-
-    /// The bytes, taken over without a copy when they fill their buffer.
-    fn into_bytes(self) -> Vec<u8> {
+impl Lent {
+    /// The `len` bytes, taken over without a copy when they fill their
+    /// buffer.
+    fn into_bytes(self, len: usize) -> Vec<u8> {
         let start = self.data - self.owned.at();
-        if start == 0 && self.owned.0.len() == self.len {
+        if start == 0 && self.owned.0.len() == len {
             return self.owned.into_box().into_vec();
         }
-        self.owned.bytes()[start..start + self.len].to_vec()
+        self.owned.bytes()[start..start + len].to_vec()
     }
 }
 
-/// Runs the patches still on of the mods still on, or for a rebuild every
-/// patch of the mods `only` names, over the `len` bytes at `data`, each on
-/// the result of the one before, for `kind`; a failed one is skipped, and
-/// in the game's build turns its mod off. `None` when no patch built.
+/// A served key's build as the tests read it: its bytes, who built them,
+/// and the loader's buffer they lie in.
+#[cfg(test)]
+pub(super) struct Built {
+    pub(super) len: usize,
+    pub(super) by: Vec<ModIndex>,
+    bytes: Lent,
+}
+
+#[cfg(test)]
+impl Built {
+    /// The bytes, taken over without a copy when they fill their buffer.
+    fn into_bytes(self) -> Vec<u8> {
+        self.bytes.into_bytes(self.len)
+    }
+}
+
+/// Runs the patches of `entry` over the `len` bytes at `data` for `kind`, as
+/// [`builds::build`] picks them. `None` when no patch built.
+#[cfg(test)]
 pub(super) fn run_patches(
     entry: &Served,
     data: usize,
@@ -690,28 +596,81 @@ pub(super) fn run_patches(
     only: Option<&[ModIndex]>,
     kind: Build,
 ) -> Option<Built> {
-    let Ok(len) = u32::try_from(len) else {
-        crate::log!(
-            WARN,
-            "served {} not built: its base is over 4 GiB",
-            key_name(&entry.key)
-        );
-        return None;
-    };
-    let building = Building::enter(entry.key, kind);
-    let (mut current, mut current_len) = (data, len);
-    let mut applied = Vec::new();
-    let runs = |p: &Patch| enshwick_base::__internal::patch_runs(only, &p.owner, || p.runs(mod_on));
-    for patch in entry.patches.iter().filter(|p| runs(p)) {
+    let table = Table::game(core::slice::from_ref(entry));
+    let built = builds::build(&table, entry, (data, len), kind, only).ok()?;
+    Some(Built {
+        len: built.len,
+        by: built.by,
+        bytes: built.bytes,
+    })
+}
+
+/// The served keys of `list` as the shared build routine reads them, with
+/// `archive` for the archive's bytes; `sealed` once the registrations are.
+struct Table<'a, A> {
+    list: &'a [Served],
+    sealed: bool,
+    archive: A,
+}
+
+impl<'a> Table<'a, fn(&ResourceKey) -> Option<Vec<u8>>> {
+    /// The sealed `list`, read from the game's archive.
+    fn game(list: &'a [Served]) -> Self {
+        Self {
+            list,
+            sealed: true,
+            archive: game_archive,
+        }
+    }
+}
+
+/// What a rebuild of a key holds while it builds: the key's rebuild lock, so
+/// two never write over each other, the base its first build kept and where
+/// the bytes the game holds lie.
+struct Rebuilding<'a> {
+    _one_at_a_time: std::sync::MutexGuard<'a, ()>,
+    base: Box<[u8]>,
+    held: usize,
+}
+
+impl<'a, A> builds::Patches for Table<'a, A> {
+    type Key = &'a Served;
+    type Owner = ModIndex;
+    type Patch = &'a Patch;
+    type Frame = Building;
+    type Bytes = Lent;
+
+    fn building(&self, key: &'a Served) -> bool {
+        building(&key.key)
+    }
+
+    fn patches(&self, key: &'a Served) -> impl Iterator<Item = &'a Patch> {
+        key.patches.iter()
+    }
+
+    fn owner(&self, patch: &&'a Patch) -> ModIndex {
+        patch.owner
+    }
+
+    fn on(&self, patch: &&'a Patch) -> bool {
+        patch.runs(mod_on)
+    }
+
+    fn enter(&self, key: &'a Served, scratch: bool) -> Building {
+        Building::enter(key.key, if scratch { Build::Scratch } else { Build::Game })
+    }
+
+    fn apply(&self, patch: &&'a Patch, input: View, _rebuild: bool) -> (Status, Option<View>) {
         let (mut built, mut built_len) = (core::ptr::null_mut::<u8>(), 0u32);
         // SAFETY: `patch.apply` is a live mod's or the loader's
-        // `ResourcePatchFn`, given the `current_len` bytes so far at
-        // `current`, valid for the call, the user pointer it registered and
-        // out pointers to locals on this stack.
+        // `ResourcePatchFn`, given the `input.len` bytes so far at
+        // `input.at`, the base or an output a buffer of this build holds,
+        // valid for the call, the user pointer it registered and out
+        // pointers to locals on this stack.
         let mut apply = || unsafe {
             (patch.apply)(
-                core::ptr::with_exposed_provenance(current),
-                current_len,
+                core::ptr::with_exposed_provenance(input.at),
+                input.len,
                 core::ptr::with_exposed_provenance_mut(patch.user),
                 &raw mut built,
                 &raw mut built_len,
@@ -726,59 +685,148 @@ pub(super) fn run_patches(
                 apply,
             )
         };
-        // An output outside the buffers this build lent, null included, is
-        // a failure: the loader could neither free nor keep it.
-        let lent = lent_holds(built.expose_provenance(), built_len as usize);
-        let status = if status == Status::OK && !lent {
-            Status::BAD_ARGS
-        } else {
-            status
-        };
-        if status == Status::FAULTED {
-            fault(entry, patch);
-            continue;
-        }
-        if status != Status::OK {
-            if kind == Build::Scratch {
-                continue;
-            }
-            if patch.owner == ModIndex::LOADER {
-                crate::log!(
-                    WARN,
-                    "the loader's own patch of {} failed to build",
-                    key_name(&entry.key)
-                );
-            } else if let Some(loader) = crate::engine::loader::loader() {
-                loader.turn_off(
-                    patch.owner,
-                    &format!(
-                        "served {} failed to build ({})",
-                        key_name(&entry.key),
-                        status.0
-                    ),
-                );
-            }
-            continue;
-        }
-        (current, current_len) = (built.expose_provenance(), built_len);
-        applied.push(patch.owner);
+        // An output outside the buffers this build lent, null included,
+        // could be neither freed nor kept.
+        let at = built.expose_provenance();
+        let lent = lent_holds(at, built_len as usize);
+        (status, lent.then_some(View { at, len: built_len }))
     }
-    let (mut buffers, reads) = building.leave();
-    if applied.is_empty() {
-        return None;
+
+    fn failed(&self, key: &'a Served, patch: &&'a Patch, why: PatchFailure) {
+        match why {
+            PatchFailure::Panicked => fault(key, patch),
+            PatchFailure::Refused(status) => refused(key, patch, status),
+        }
     }
-    let current_len = current_len as usize;
-    // The last applied output passed `lent_holds`, so a buffer holds it.
-    let at = buffers
-        .iter()
-        .position(|buffer| buffer.holds(current, current_len))?;
-    Some(Built {
-        data: current,
-        len: current_len,
-        by: applied,
-        reads,
-        owned: buffers.swap_remove(at),
-    })
+
+    fn leave(&self, frame: Building, last: Option<View>) -> (bool, Option<Lent>) {
+        let (mut buffers, reads) = frame.leave();
+        let owned = last.and_then(|last| {
+            let at = buffers
+                .iter()
+                .position(|buffer| buffer.holds(last.at, last.len as usize))?;
+            Some(Lent {
+                data: last.at,
+                owned: buffers.swap_remove(at),
+            })
+        });
+        (reads, owned)
+    }
+
+    fn unbuilt(&self, key: &'a Served, why: Unbuilt) {
+        match why {
+            Unbuilt::TooLarge => crate::log!(
+                WARN,
+                "served {} not built: its base is over 4 GiB",
+                key_name(&key.key)
+            ),
+            Unbuilt::SizeChanged { built, held } => crate::log!(
+                WARN,
+                "served resource {:08x}:{} not rebuilt: {built} bytes, the game holds {held}",
+                key.key.type_hash,
+                hex(&key.key.guid.0)
+            ),
+        }
+    }
+}
+
+impl<'a, A: Fn(&ResourceKey) -> Option<Vec<u8>>> builds::ServedTable for Table<'a, A> {
+    type Kept = Rebuilding<'a>;
+
+    fn sealed(&self) -> bool {
+        self.sealed
+    }
+
+    fn find(&self, key: &ResourceKey) -> Result<&'a Served, ResourceKey> {
+        if !linked() {
+            return Err(*key);
+        }
+        let (found, new, aliased) = route(key);
+        match found {
+            Some((_, entry)) => Ok(entry),
+            None => Err(new.or(aliased).unwrap_or(*key)),
+        }
+    }
+
+    fn served_by(&self, owner: ModIndex, key: &ResourceKey) -> Option<&'a Served> {
+        self.list
+            .iter()
+            .find(|s| s.key == *key && s.patches.iter().any(|p| p.owner == owner))
+    }
+
+    fn keys(&self, key: &'a Served) -> (ResourceKey, ResourceKey) {
+        (key.key, key.base)
+    }
+
+    fn archived(&self, key: &ResourceKey) -> Option<Vec<u8>> {
+        (self.archive)(key)
+    }
+
+    fn keep_base(&self, key: &'a Served) {
+        key.keeps_base.store(true, Ordering::Relaxed);
+    }
+
+    fn keeps_base(&self, key: &'a Served) -> builds::KeepBase {
+        builds::KeepBase {
+            asked: key.keeps_base.load(Ordering::Relaxed),
+            asked_icons: key.reads_icons.load(Ordering::SeqCst),
+            ..builds::KeepBase::default()
+        }
+    }
+
+    fn note_read(&self, key: &'a Served) {
+        note_read(key);
+    }
+
+    fn held(&self, key: &'a Served) -> Option<builds::Held<Rebuilding<'a>, ModIndex>> {
+        let one_at_a_time = key.rebuilding.relock();
+        // The game resolves the resource meanwhile: the patches run outside
+        // the state's lock, on a copy of the base.
+        let state = key.state.relock();
+        let (held, len) = state.built?;
+        let base = state.base.clone().map(|base| Rebuilding {
+            _one_at_a_time: one_at_a_time,
+            base,
+            held,
+        });
+        Some(builds::Held {
+            base,
+            len,
+            by: state.built_by.clone(),
+        })
+    }
+
+    fn base(&self, kept: &Rebuilding<'a>) -> (usize, usize) {
+        (kept.base.as_ptr().expose_provenance(), kept.base.len())
+    }
+
+    fn write(
+        &self,
+        key: &'a Served,
+        kept: Rebuilding<'a>,
+        built: builds::Built<Lent, ModIndex>,
+    ) -> usize {
+        let changed = write_differences(kept.held, built.bytes.data, built.len);
+        crate::log!(
+            INFO,
+            "served resource {:08x}:{} rebuilt, {changed} bytes changed",
+            key.key.type_hash,
+            hex(&key.key.guid.0)
+        );
+        changed
+    }
+
+    fn readers(&self, key: &'a Served) -> Vec<&'a Served> {
+        key.read_by
+            .relock()
+            .iter()
+            .filter_map(|read| self.list.iter().find(|s| s.key == *read))
+            .collect()
+    }
+
+    fn to_vec(&self, built: builds::Built<Lent, ModIndex>) -> Vec<u8> {
+        built.bytes.into_bytes(built.len)
+    }
 }
 
 /// Turns off `patch` of `entry`, whose builder panicked, for the process,
@@ -796,6 +844,74 @@ fn fault(entry: &Served, patch: &Patch) {
             &format!("served {}", key_name(&entry.key)),
             Some(enshwick_core::resources::BUILDER_PANICKED),
         );
+    }
+}
+
+/// `patch` of `entry` failed to build with `status` in a build the game
+/// holds: its mod turns off, and the loader's own patch says so in the log.
+#[cold]
+fn refused(entry: &Served, patch: &Patch, status: Status) {
+    if patch.owner == ModIndex::LOADER {
+        crate::log!(
+            WARN,
+            "the loader's own patch of {} failed to build",
+            key_name(&entry.key)
+        );
+    } else if let Some(loader) = crate::engine::loader::loader() {
+        loader.turn_off(
+            patch.owner,
+            &format!(
+                "served {} failed to build ({})",
+                key_name(&entry.key),
+                status.0
+            ),
+        );
+    }
+}
+
+/// Readies a game build of one served key for its benchmark: three of the
+/// loader's own patches over a 64-byte base, each copying the bytes into a
+/// buffer the build lends, as a mod's patch does. The closure runs one build,
+/// frees its bytes and returns their length.
+#[doc(hidden)]
+pub fn bench_served_build() -> impl FnMut() -> usize {
+    /// Copies its base into a buffer the build lends.
+    unsafe extern "system" fn copy(
+        base: *const u8,
+        base_len: u32,
+        _user: *mut core::ffi::c_void,
+        out: *mut *mut u8,
+        out_len: *mut u32,
+    ) -> Status {
+        let len = base_len as usize;
+        let Some(at) = lend(len) else {
+            return Status::REFUSED;
+        };
+        // SAFETY: the build passes `len` readable bytes at `base`, and `lend`
+        // gave `len` writable bytes at `at` apart from them.
+        unsafe { core::ptr::copy_nonoverlapping(base, at, len) };
+        // SAFETY: the build passes `out` pointing at a local, writable for
+        // the call.
+        unsafe { out.write(at) };
+        // SAFETY: as `out`, for `out_len`.
+        unsafe { out_len.write(base_len) };
+        Status::OK
+    }
+    let key = ResourceKey {
+        guid: enshwick_core::content::Guid([3; 16]),
+        type_hash: 1,
+        part: 0,
+    };
+    let patches = (0..3)
+        .map(|_| Patch::new(ModIndex::LOADER, copy, 0))
+        .collect();
+    let entry: &'static Served = Box::leak(Box::new(Served::new(key, key, patches, false)));
+    let base: &'static [u8] = Box::leak(vec![7u8; 64].into_boxed_slice());
+    let at = base.as_ptr().expose_provenance();
+    let table = Table::game(core::slice::from_ref(entry));
+    move || {
+        builds::build(&table, entry, (at, base.len()), Build::Game, None)
+            .map_or(0, |built| built.len)
     }
 }
 
