@@ -196,7 +196,7 @@ mod live {
         let text = crate::engine::texts::for_player(key, || {
             crate::engine::texts::text(refusal.text_key())
         });
-        crate::actions::reply::answer(loader, path, key, false, text);
+        crate::actions::reply::answer(loader, path, key, text);
     }
 
     /// Forgets every player's rate, when a hosted game ends.

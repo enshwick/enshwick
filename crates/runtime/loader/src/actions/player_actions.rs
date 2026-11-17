@@ -423,7 +423,7 @@ fn admitted_run(
         player.name_text(),
         if reply.done { "done" } else { "refused" }
     );
-    crate::actions::reply::answer(loader, Path::Interface, key, reply.done, &reply.text);
+    crate::actions::reply::answer(loader, Path::Interface, key, &reply.text);
     Ok(())
 }
 

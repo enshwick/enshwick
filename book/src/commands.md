@@ -99,7 +99,7 @@ callers type commands:
 
 | Caller | Runs as | The reply goes |
 | --- | --- | --- |
-| A player, in chat | that player, with their permissions | to that player alone: one line of a done action as a notice, several lines and every refusal in chat |
+| A player, in chat | that player, with their permissions | to that player alone, in chat; as a notice while chat lines to one player are off |
 | The server's console window | the console, with every permission and no character | to the console |
 | A remote tool, through another mod | a caller that mod names, with the permissions it gives | back to that mod |
 
