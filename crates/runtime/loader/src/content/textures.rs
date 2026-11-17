@@ -80,15 +80,11 @@ struct Textures {
     listed: AtomicBool,
     /// Whether the registry listed again after arming.
     relisted: AtomicBool,
+    /// Whether the parts that wait for served UI images to show were told.
+    shown: AtomicBool,
 }
 
-static TEXTURES: Textures = Textures {
-    content: ArcSwapOption::const_empty(),
-    serving: Mutex::new(()),
-    linked: AtomicBool::new(false),
-    listed: AtomicBool::new(false),
-    relisted: AtomicBool::new(false),
-};
+static TEXTURES: Textures = Textures::new();
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The listing handed back for the game's own array (its address and
 /// count): built once, as the game lists its UI images once or twice.
@@ -305,12 +301,45 @@ fn served(
     content.get(hash).copied()
 }
 
+impl Textures {
+    const fn new() -> Self {
+        Self {
+            content: ArcSwapOption::const_empty(),
+            serving: Mutex::new(()),
+            linked: AtomicBool::new(false),
+            listed: AtomicBool::new(false),
+            relisted: AtomicBool::new(false),
+            shown: AtomicBool::new(false),
+        }
+    }
+
+    fn ready(&self) -> bool {
+        self.linked.load(Ordering::Acquire)
+            && self.listed.load(Ordering::Acquire)
+            && self.relisted.load(Ordering::Acquire)
+    }
+
+    /// Whether the parts that wait for served UI images are to be told now:
+    /// true once, at the first ask after the images show.
+    fn announces(&self) -> bool {
+        self.ready() && !self.shown.swap(true, Ordering::AcqRel)
+    }
+}
+
 /// Whether served UI images show on this client: the links ran and the
 /// registry knows them.
 pub(crate) fn ready() -> bool {
-    TEXTURES.linked.load(Ordering::Acquire)
-        && TEXTURES.listed.load(Ordering::Acquire)
-        && TEXTURES.relisted.load(Ordering::Acquire)
+    TEXTURES.ready()
+}
+
+/// Tells the parts that wait for served UI images to show, once they show.
+/// Only the UI registry's fill calls it: the UI thread draws every icon, so
+/// what it rewrites is never read halfway.
+#[cold]
+fn announce_ready() {
+    if TEXTURES.announces() {
+        crate::content::buff_types::icons_shown();
+    }
 }
 
 /// Links the key listing on any side that serves templates or UI images of
@@ -737,14 +766,23 @@ fn with_aliases(keys: &mut Vec<[u8; KEY]>, aliases: &[(Guid, Guid)]) {
 }
 
 crate::engine::chains::chain_detour! {
-    /// The table's `textures.registry_fill(registry)`, the UI registry's
-    /// fill: once after arming, it lists again, so the served UI images
-    /// join. Every other call goes to the game at the cost of one load.
+    /// The table's `textures.registry_fill(registry)`, the UI registry's fill, called again and
+    /// again on the UI thread: once after arming it lists again, so the served UI images join,
+    /// and once they show it tells the parts that wait. Every other call costs one load.
     fn fill(registry: *mut u8) -> ();
     next FILL_NEXT;
     |onward| {
-        if TEXTURES.relisted.load(Ordering::Acquire) || registry.is_null() {
+        if TEXTURES.shown.load(Ordering::Acquire) || registry.is_null() {
             return onward.call();
+        }
+        if TEXTURES.relisted.load(Ordering::Acquire) {
+            if !TEXTURES.ready() {
+                return onward.call();
+            }
+            return onward.run(&TEXTURES_FUSE, "the UI registry fill", |onward| {
+                announce_ready();
+                onward.call();
+            });
         }
         onward.run(&TEXTURES_FUSE, "the UI registry fill", |onward| {
             let Some(layout) = LAYOUT.get().copied().flatten() else {
@@ -770,6 +808,7 @@ crate::engine::chains::chain_detour! {
                     "mod textures: the UI registry knows the served images: {}",
                     TEXTURES.listed.load(Ordering::Acquire)
                 );
+                announce_ready();
             }
         });
     }
@@ -945,5 +984,16 @@ mod tests {
         assert_eq!((hash[0], hash[3]), (6, MARK));
         assert_eq!(hash, hash_of(b"pixels"));
         assert_ne!(hash, hash_of(b"pixelz"));
+    }
+
+    #[test]
+    fn the_images_showing_is_announced_once_and_only_after_every_link_ran() {
+        let textures = Textures::new();
+        textures.relisted.store(true, Ordering::Release);
+        textures.listed.store(true, Ordering::Release);
+        assert!(!textures.announces(), "the content request has not run");
+        textures.linked.store(true, Ordering::Release);
+        assert!(textures.announces());
+        assert!(!textures.announces(), "a later fill announces nothing");
     }
 }

@@ -241,4 +241,5 @@ pub(crate) static API: HostApi = HostApi {
     show_pickup,
     respawn_point,
     set_respawn_point,
+    buff_type_add,
 };

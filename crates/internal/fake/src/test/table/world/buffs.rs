@@ -1,7 +1,176 @@
 //! The fake's buff entries: the buff types and what each holder holds.
 
 use crate::test::table::{get_headed, list, with};
-use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, ModHandle, Status};
+use enshwick_core::abi::{
+    ActiveBuff, BuffRequest, BuffTypeAdd, BuffTypeInfo, Header, ModHandle, Status,
+};
+use enshwick_core::buffs::BuffTypeId;
+
+/// Adds a mod's buff type, as the loader: refused after init, for a mod
+/// clients do not run, for a request it does not know, a `like` the
+/// vanilla collection lacks and an id the game or a mod before has; the
+/// first type serves the fake's one patch of the collection, before every
+/// mod's patch of it.
+pub(crate) extern "system" fn buff_type_add(
+    me: ModHandle,
+    buff: *const BuffTypeAdd,
+    id: *mut BuffTypeId,
+) -> Status {
+    let Some(buff) = get_headed(buff) else {
+        return Status::BAD_ARGS;
+    };
+    if id.is_null() {
+        return Status::BAD_ARGS;
+    }
+    match served::add(me, &buff) {
+        Ok(added) => {
+            // SAFETY: `id` is non-null (checked above) and the safe layer
+            // passes a writable id for the call.
+            unsafe { id.write(added) };
+            Status::OK
+        }
+        Err(status) => status,
+    }
+}
+
+/// The fake's buff patch of the collection, built as the loader builds its
+/// own.
+#[cfg(feature = "unstable")]
+mod served {
+    use enshwick_core::__fake::rules::buff_types::{Edit, Refusal, build, check};
+    use enshwick_core::abi::{BuffTypeAdd, ModHandle, ResourceKey, Status};
+    use enshwick_core::buffs::{BUFF_COLLECTION, BuffLayout, BuffTypeId};
+    use enshwick_core::content::EngineFacts as _;
+
+    use crate::test::table::base::registered::Registered;
+    use crate::test::table::{Registration, State, with};
+    use crate::test::{FakeHost, ServedResource};
+
+    /// The layout and key of the fake's buff collection.
+    fn collection(host: &FakeHost) -> Option<(BuffLayout, ResourceKey)> {
+        let layout = BuffLayout::resolve(host).ok()?;
+        let hash = host
+            .hash(enshwick_core::__fake::ids::BUFF_COLLECTION)
+            .ok()?;
+        Some((layout, BUFF_COLLECTION.key_by_hash(hash)))
+    }
+
+    /// Checks and adds the type `buff` of `me` asks for: its game id.
+    pub(super) fn add(me: ModHandle, buff: &BuffTypeAdd) -> Result<BuffTypeId, Status> {
+        with(Err(Status::MISSING), |s| {
+            // In the loader's order: the seal, the mod's side, the request.
+            if s.registration == Registration::Closed {
+                return Err(Status::TOO_LATE);
+            }
+            if !crate::test::table::base::mods::joins(s, me) {
+                return Err(Status::REFUSED);
+            }
+            let (layout, key) = collection(&s.host).ok_or(Status::UNAVAILABLE)?;
+            let edit = Edit::of(buff).ok_or(Status::BAD_ARGS)?;
+            let vanilla = s
+                .host
+                .resources
+                .get(&(key.guid, key.type_hash, key.part))
+                .ok_or(Status::UNAVAILABLE)?;
+            let added: Vec<Edit> = s.buff_types_added.iter().map(|(_, e)| *e).collect();
+            check(&layout, vanilla, &edit, &added).map_err(|refusal| match refusal {
+                Refusal::Unread => Status::UNAVAILABLE,
+                Refusal::NotVanilla(_) => Status::BAD_ARGS,
+                Refusal::Taken => Status::REFUSED,
+            })?;
+            if s.buff_types_added.is_empty() {
+                serve(s, key);
+            }
+            s.buff_types_added.push((me, edit));
+            Ok(edit.id())
+        })
+    }
+
+    /// Serves the fake's patch of the collection `key`, before every mod's.
+    fn serve(s: &mut State, key: ResourceKey) {
+        let patch = Registered::unowned(
+            patch as enshwick_core::abi::ResourcePatchFn,
+            core::ptr::null_mut(),
+        );
+        let at = s
+            .served
+            .iter()
+            .position(|served| served.0.key == key)
+            .unwrap_or(s.served.len());
+        s.served
+            .insert(at, (ServedResource { key, base: key }, patch));
+    }
+
+    /// The types served now: those of mods still on, each naming its icon
+    /// only while the fake shows served UI images.
+    fn serving(s: &State) -> Vec<Edit> {
+        s.buff_types_added
+            .iter()
+            .filter(|(owner, _)| !s.off.contains(owner))
+            .map(|(_, edit)| {
+                if s.host.icons_ready {
+                    *edit
+                } else {
+                    edit.without_icon()
+                }
+            })
+            .collect()
+    }
+
+    /// The patch: the collection with every mod's types, in a buffer the
+    /// build lends; [`Status::MISSING`] when it does not read.
+    unsafe extern "system" fn patch(
+        base: *const u8,
+        base_len: u32,
+        _user: *mut core::ffi::c_void,
+        out: *mut *mut u8,
+        out_len: *mut u32,
+    ) -> Status {
+        if base.is_null() || out.is_null() || out_len.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the fake's build passes `base_len` readable bytes at
+        // `base`, unchanged for the call.
+        let base = unsafe { core::slice::from_raw_parts(base, base_len as usize) };
+        let Some((layout, types)) = with(None, |s| Some((collection(&s.host)?.0, serving(s))))
+        else {
+            return Status::MISSING;
+        };
+        let mut built = Vec::new();
+        if build(&layout, base, &types, &mut built).is_none() {
+            return Status::MISSING;
+        }
+        let Ok(len) = u32::try_from(built.len()) else {
+            return Status::BAD_ARGS;
+        };
+        let mut lent = core::ptr::null_mut();
+        let status = crate::test::table::resource_buffer(ModHandle(0), len, &raw mut lent);
+        if !status.is_ok() {
+            return status;
+        }
+        // SAFETY: the build lent `len` writable bytes at `lent`, apart from
+        // `built`, which holds `len` bytes.
+        unsafe { core::ptr::copy_nonoverlapping(built.as_ptr(), lent, built.len()) };
+        // SAFETY: `out` is the build's out pointer, non-null by the check at
+        // the top and writable for the call.
+        unsafe { out.write(lent) };
+        // SAFETY: `out_len` is the build's out length, non-null by the check
+        // at the top and writable for the call.
+        unsafe { out_len.write(len) };
+        Status::OK
+    }
+}
+
+/// Without the `unstable` feature the fake has no buff collection.
+#[cfg(not(feature = "unstable"))]
+mod served {
+    use enshwick_core::abi::{BuffTypeAdd, ModHandle, Status};
+    use enshwick_core::buffs::BuffTypeId;
+
+    pub(super) const fn add(_me: ModHandle, _buff: &BuffTypeAdd) -> Result<BuffTypeId, Status> {
+        Err(Status::UNAVAILABLE)
+    }
+}
 
 pub(crate) extern "system" fn buff_types(
     _me: ModHandle,
@@ -65,7 +234,7 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
 pub(crate) extern "system" fn remove_buff(
     _me: ModHandle,
     entity: enshwick_core::Entity,
-    id: enshwick_core::buffs::BuffTypeId,
+    id: BuffTypeId,
     removed: *mut u8,
 ) -> Status {
     if removed.is_null() {

@@ -13,6 +13,8 @@ pub mod rules {
     pub use enshwick_base::rules::*;
 
     pub use enshwick_inventory::__internal::inventory_checks;
+    #[cfg(feature = "unstable")]
+    pub use enshwick_world::__internal::buff_types;
     pub use enshwick_world::__internal::{terrain_edit_valid, terrain_material_changes_valid};
 
     pub use crate::rates::may_declare_rate;

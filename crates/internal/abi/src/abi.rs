@@ -801,6 +801,7 @@ const _: () = {
     assert!(size_of::<BuffTypeInfo>() == 8 + 12 + 4 + 8);
     assert!(size_of::<ActiveBuff>() == 8 + 16 + 16);
     assert!(size_of::<BuffRequest>() == 8 + 16 + 8);
+    assert!(size_of::<BuffTypeAdd>() == 8 + 4 * 16 + 8 + 8);
     assert!(size_of::<KnowledgeInfo>() == 8 + 16);
     assert!(size_of::<KnowledgeData>() == 8 + 12);
     assert!(size_of::<PlayerDeathData>() == 8 + 4 + 4 + 8 + 24 + 16 + 4 + 4);

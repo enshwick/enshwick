@@ -288,23 +288,11 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         let standing = stand_ins.map_or(0, |(items, registry)| {
             serve_stand_ins(&mut served, items, registry)
         });
-        let grounded = serve_terrain(
-            &mut served,
-            crate::content::terrain_materials::serve(loader, materials, &recorded.terrain),
-        );
-        let changed = serve_changes(
-            &mut served,
-            crate::content::data_changes::serve(loader),
-            crate::content::data_changes::has_live(),
-        );
-        let rated = serve_rates(
-            &mut served,
-            crate::content::rate_links::recipe_patch(loader),
-        );
-        made = Some((count, aliases, standing, grounded, changed, rated));
+        let own = serve_own(&mut served, loader, materials, &recorded.terrain);
+        made = Some((count, aliases, standing, own));
         served
     });
-    let Some((count, aliases, standing, grounded, changed, rated)) = made else {
+    let Some((count, aliases, standing, own)) = made else {
         return;
     };
     let served = RESOURCES.sealed().unwrap_or_default();
@@ -313,9 +301,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
         .count();
     let recorded = aliases.len();
-    if ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing + grounded + changed + rated == 0
-    {
+    if ALIASES.set(aliases).is_err() || count + recorded + renames.len() + standing + own == 0 {
         return;
     }
     if mods_serve_recipes() {
@@ -382,6 +368,28 @@ fn serve_stand_ins(
     count
 }
 
+/// Adds the loader's own patches to `served` in the order they chain:
+/// terrain materials, buff types, changes of vanilla values, then recipe
+/// rates; `materials` are the mods' terrain materials and `orphans` the
+/// recorded ones no mod adds now. How many keys.
+fn serve_own(
+    served: &mut Vec<Served>,
+    loader: &'static Loader,
+    materials: &[crate::content::terrain_materials::Material],
+    orphans: &[(Guid, Guid)],
+) -> usize {
+    use crate::content::{buff_types, data_changes, rate_links, terrain_materials};
+
+    serve_terrain(served, terrain_materials::serve(loader, materials, orphans))
+        + serve_buffs(served, buff_types::serve(loader, buff_types::sealed()))
+        + serve_changes(
+            served,
+            data_changes::serve(loader),
+            data_changes::has_live(),
+        )
+        + serve_rates(served, rate_links::recipe_patch(loader))
+}
+
 /// Adds the loader's patches for terrain materials to `served`, before
 /// every mod's patch on each key, so a mod's patch of the rules sees the
 /// new ones; the loader's changes of vanilla values, served after, go
@@ -396,6 +404,27 @@ fn serve_terrain(served: &mut Vec<Served>, patches: Vec<(ResourceKey, Builder)>)
         }
     }
     count
+}
+
+/// Adds the loader's patch of the buff collection with every mod's buff
+/// types to `served`, before every mod's patch of it, so a mod's patch sees
+/// the new types; the loader's changes of vanilla values, served after, go
+/// first again, so a type copies the values as changed. The base is kept
+/// when a type names an icon, which a rebuild writes once the client shows
+/// served images. How many keys.
+fn serve_buffs(served: &mut Vec<Served>, patch: Option<(ResourceKey, Builder, bool)>) -> usize {
+    let Some((key, builder, keeps_base)) = patch else {
+        return 0;
+    };
+    let patch = BuilderPatch::new(builder, crate::content::buff_types::FEATURE).patch();
+    match served.iter_mut().find(|s| s.key == key) {
+        Some(entry) => {
+            entry.patches.insert(0, patch);
+            entry.keeps_base.fetch_or(keeps_base, Ordering::Relaxed);
+        }
+        None => served.push(Served::new(key, key, vec![patch], keeps_base)),
+    }
+    1
 }
 
 /// Adds the loader's patch for the recipe output rates to `served`, last on

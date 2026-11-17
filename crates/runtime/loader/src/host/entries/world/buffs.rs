@@ -1,9 +1,9 @@
 //! Host functions for buffs.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeId, BuffTypeInfo, Status};
+use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeAdd, BuffTypeId, BuffTypeInfo, Status};
 
-use crate::host::layer::{Caller, Headed, Out, SizedListOut, entries};
+use crate::host::layer::{Caller, Headed, Mod, Out, SizedListOut, entries};
 
 entries! {
     fn buff_types(loader as Caller, [out, entry_size, capacity, count] as SizedListOut<BuffTypeInfo>) -> Status {
@@ -25,5 +25,10 @@ entries! {
 
     fn remove_buff(loader as Caller, entity: Entity, id: BuffTypeId, removed as Out<u8>) -> Status {
         removed.put(u8::from(crate::world::buffs::remove(loader, entity, id.get())?))
+    }
+
+    fn buff_type_add(me as Mod, buff as Headed<BuffTypeAdd>, id as Out<BuffTypeId>) -> Status {
+        let owner = (me.index, me.record.joins_when_on());
+        id.put(crate::content::buff_types::add(me.loader, owner, &buff)?)
     }
 }

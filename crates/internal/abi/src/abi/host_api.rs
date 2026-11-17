@@ -6,8 +6,8 @@ use core::ffi::c_void;
 use crate::abi::{
     AccountActionType, ActionFn, ActionReply, ActionTarget, ActiveBuff, AffixRoll, AffixSpec,
     AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BedCheckFn, BuffRequest,
-    BuffTypeInfo, BuildFilterFn, BuildInfo, BuildRights, BuildingZoneFilterFn, CallFn, CallSpec,
-    CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ClientCommand, ClientCommandStatus,
+    BuffTypeAdd, BuffTypeInfo, BuildFilterFn, BuildInfo, BuildRights, BuildingZoneFilterFn, CallFn,
+    CallSpec, CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ClientCommand, ClientCommandStatus,
     ClientSnapshot, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContainerRuleFn, ContentRename,
     ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo, DropRequest,
     EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperienceFilterFn,
@@ -2304,6 +2304,19 @@ pub struct HostApi {
     /// the layout. ABI 12.12.
     pub set_respawn_point:
         extern "system" fn(me: ModHandle, character: Entity, spawn_point: Entity) -> Status,
+    /// Adds `buff`, a headed [`BuffTypeAdd`], as a buff type of the game,
+    /// and writes its game id to `id`. The loader serves one patch of the
+    /// game's buff collection on both sides with every mod's types after the
+    /// vanilla ones, each a copy of its `like` with its changes, and names
+    /// a type's icon on a client only once that client shows served UI
+    /// images. [`Status::BAD_ARGS`] for a change or flag it does not know, a
+    /// negative life time, or a `like` that is no buff type of the game;
+    /// [`Status::REFUSED`] for a mod not of side both and for an id the game
+    /// or a mod loaded before has; [`Status::UNAVAILABLE`] on a build whose
+    /// archive or layout lacks the collection. Allowed during
+    /// `enshwick_mod_init` only. ABI 12.13.
+    pub buff_type_add:
+        extern "system" fn(me: ModHandle, buff: *const BuffTypeAdd, id: *mut BuffTypeId) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2531,5 +2544,6 @@ const _: () = {
     assert!(offset_of!(HostApi, show_pickup) == 24 + 214 * 8);
     assert!(offset_of!(HostApi, respawn_point) == 24 + 215 * 8);
     assert!(offset_of!(HostApi, set_respawn_point) == 24 + 216 * 8);
-    assert!(size_of::<HostApi>() == 24 + 217 * 8);
+    assert!(offset_of!(HostApi, buff_type_add) == 24 + 217 * 8);
+    assert!(size_of::<HostApi>() == 24 + 218 * 8);
 };

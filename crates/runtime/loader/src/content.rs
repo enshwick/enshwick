@@ -1,6 +1,11 @@
 //! The content domain: served resources, content changes, rates, recipes, item
 //! kinds, named content for pickers and textures.
 
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game serves buff types")
+)]
+pub(crate) mod buff_types;
 #[cfg(windows)]
 pub(crate) mod clones;
 #[cfg_attr(

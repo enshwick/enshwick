@@ -1,6 +1,7 @@
 //! Buffs: their types, the active ones and requests to apply them.
 
 use crate::abi::{BuffTypeId, Entity, Header};
+use crate::content::Guid;
 
 /// A buff or debuff type of the running game, written by
 /// [`HostApi::buff_types`](super::HostApi::buff_types).
@@ -132,3 +133,92 @@ pub struct BuffRequest {
 }
 
 impl_headed!(BuffRequest);
+
+/// A buff type of a mod's own, for
+/// [`HostApi::buff_type_add`](super::HostApi::buff_type_add): a copy of the
+/// vanilla type `like` with the values `changes` names set from this struct.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{BuffTypeAdd, Header};
+/// use enshwick::content::{Guid, Id};
+///
+/// let lucky = BuffTypeAdd {
+///     header: Header::of::<BuffTypeAdd>(),
+///     guid: Id::new("you.lucky:lucky").guid(),
+///     name: Guid::NIL,
+///     description: Guid::NIL,
+///     icon: Guid::NIL,
+///     life_time_ns: 300_000_000_000,
+///     like: enshwick::buffs::BuffTypeId::new(0xf9b3_64f6),
+///     changes: BuffTypeAdd::LIFE_TIME,
+///     slot: 0,
+///     flags: BuffTypeAdd::PLAIN,
+/// };
+/// assert_eq!(lucky.changes & BuffTypeAdd::NAME, 0, "the vanilla name stays");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct BuffTypeAdd {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Its content id's GUID; its game id is the FNV-1a 32 of these bytes.
+    pub guid: Guid,
+    /// The tag of its name, with [`BuffTypeAdd::NAME`].
+    pub name: Guid,
+    /// The tag of its description, with [`BuffTypeAdd::DESCRIPTION`].
+    pub description: Guid,
+    /// The UI image of its icon, with [`BuffTypeAdd::ICON`].
+    pub icon: Guid,
+    /// How long it lasts, in game nanoseconds, 0 or more, with
+    /// [`BuffTypeAdd::LIFE_TIME`].
+    pub life_time_ns: i64,
+    /// The game's buff type it copies.
+    pub like: BuffTypeId,
+    /// The values it sets: the change bits of this struct, or none.
+    pub changes: u16,
+    /// Where an entity holds it, as [`BuffTypeInfo::slot`], with
+    /// [`BuffTypeAdd::SLOT`].
+    pub slot: u8,
+    /// [`BuffTypeAdd::HIDE_IN_UI`], [`BuffTypeAdd::HIDE_DURATION_IN_UI`] and
+    /// [`BuffTypeAdd::SAVED`] for the values `changes` sets, and
+    /// [`BuffTypeAdd::PLAIN`], or none.
+    pub flags: u8,
+}
+
+impl_headed!(BuffTypeAdd);
+
+impl BuffTypeAdd {
+    /// Sets its name.
+    pub const NAME: u16 = 1;
+    /// Sets its description.
+    pub const DESCRIPTION: u16 = 1 << 1;
+    /// Sets its icon.
+    pub const ICON: u16 = 1 << 2;
+    /// Sets how long it lasts.
+    pub const LIFE_TIME: u16 = 1 << 3;
+    /// Sets its slot.
+    pub const SLOT: u16 = 1 << 4;
+    /// Sets whether the game shows it nowhere, from
+    /// [`BuffTypeAdd::HIDE_IN_UI`].
+    pub const SET_HIDE_IN_UI: u16 = 1 << 5;
+    /// Sets whether the HUD hides how long it has left, from
+    /// [`BuffTypeAdd::HIDE_DURATION_IN_UI`].
+    pub const SET_HIDE_DURATION_IN_UI: u16 = 1 << 6;
+    /// Sets whether the game saves it, from [`BuffTypeAdd::SAVED`].
+    pub const SET_SAVED: u16 = 1 << 7;
+    /// Every change it may set.
+    pub const ALL_CHANGES: u16 = (1 << 8) - 1;
+    /// The game shows it nowhere.
+    pub const HIDE_IN_UI: u8 = 1;
+    /// The HUD hides how long it has left.
+    pub const HIDE_DURATION_IN_UI: u8 = 1 << 1;
+    /// The game saves it with a character.
+    pub const SAVED: u8 = 1 << 2;
+    /// It drops what the vanilla type runs: its impact program and values,
+    /// tooltip lines, helpers, follow-up and effects.
+    pub const PLAIN: u8 = 1 << 3;
+    /// Every flag it may hold.
+    pub const ALL_FLAGS: u8 = (1 << 4) - 1;
+}

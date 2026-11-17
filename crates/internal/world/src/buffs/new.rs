@@ -2,16 +2,13 @@
 //! collection, under the mod's id, with its own texts, icon and timing.
 
 use core::time::Duration;
-use std::sync::Mutex;
 
 use crate::Off;
-use crate::abi::BuffTypeInfo;
+use crate::abi::{BuffTypeAdd, BuffTypeInfo, Header, Status};
 use crate::content::icons::Icon;
 use crate::content::{Blob, EngineFacts, Guid, Id, ResourceType, Room};
 use crate::engine_ids as ids;
-use crate::locks::Relock as _;
 use crate::resources::Grow;
-use crate::state::ModLocal;
 use enshwick_content::content::LoadMethods as _;
 use enshwick_content::content::icons::LoadMethods as _;
 
@@ -30,14 +27,6 @@ const BUFF_ALIGN: usize = 8;
 /// The size of a hash map key, a [`BuffTypeId`], and of a value, a `u32`
 /// index into the buff types.
 const KEY: usize = size_of::<u32>();
-
-/// The buff types this mod added, in order, which its one patch of the
-/// collection builds.
-#[derive(Debug, Default)]
-struct Added(Vec<Edit>);
-
-/// This mod's [`Added`].
-static TYPES: ModLocal<Mutex<Added>> = ModLocal::new();
 
 /// A buff type of a mod's own, for [`Load::add_buff`](../struct.Load.html#method.add_buff):
 /// a copy of the vanilla type `like` with what the mod changes.
@@ -379,9 +368,11 @@ impl BuffLayout {
     }
 }
 
-/// What a new type writes into its copy, checked when the mod adds it.
-#[derive(Clone, Copy, Debug)]
-struct Edit {
+/// What a new type writes into its copy: a [`BuffTypeAdd`] as the loader
+/// and the fake host take it.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Edit {
     id: BuffTypeId,
     like: BuffTypeId,
     name: Option<Guid>,
@@ -395,96 +386,55 @@ struct Edit {
     plain: bool,
 }
 
-/// Where the collection read through `blob` holds the buff type `id`.
-fn find(layout: &BuffLayout, blob: &Blob<&[u8]>, id: BuffTypeId) -> Option<usize> {
-    let (buffs, count) = blob.array(layout.buffs)?;
-    (0..usize::try_from(count).ok()?)
-        .map(|i| buffs + i * layout.size)
-        .find(|&at| blob.read_u32(at + layout.id) == Some(id.0))
-}
-
-/// Why the vanilla collection `vanilla` cannot take `edit` after the types
-/// in `added`; `None` when it can.
-fn refusal(layout: &BuffLayout, vanilla: &[u8], edit: &Edit, added: &[Edit]) -> Option<String> {
-    let blob = Blob::reading(vanilla);
-    let Some(pairs) = map_pairs(layout, &blob) else {
-        return Some("the game's buff collection does not read with this build's layout".into());
-    };
-    if find(layout, &blob, edit.like).is_none() {
-        return Some(format!("the game has no buff type {:?} to copy", edit.like));
-    }
-    if pairs.iter().any(|&(key, _)| key == edit.id.0) {
-        return Some("the game has a buff type with this id; it needs another id".into());
-    }
-    added
-        .iter()
-        .any(|other| other.id == edit.id)
-        .then(|| "the mod added it already".into())
-}
-
-/// Builds in `out` the buff collection `base` with `types` after the others,
-/// each a copy of its `like` with its edits, and their keys in the hash map.
-///
-/// The types were checked against the vanilla collection; one whose `like`
-/// a mod's patch before this one removed or whose id it took is left out
-/// with a warning. When `base` does not read with `layout`, it is served as
-/// it is, so the types are missing and the mod stays on.
-fn add_buff_types(layout: &BuffLayout, base: &[u8], types: &[Edit], out: &mut impl Grow) {
-    if build(layout, base, types, &mut *out).is_none() {
-        crate::warn_once!(
-            "buff types: the game's buff collection does not read with this build's layout; \
-             the mod's buff types are left out"
-        );
-        Blob::over(out, base);
-    }
-}
-
-/// [`add_buff_types`] but for the fallback; `None` when `base` does not read
-/// with `layout`.
-fn build(layout: &BuffLayout, base: &[u8], types: &[Edit], out: &mut impl Grow) -> Option<()> {
-    let reading = Blob::reading(base);
-    let mut pairs = map_pairs(layout, &reading)?;
-    let mut copies = Vec::with_capacity(types.len());
-    let mut keys = Vec::with_capacity(types.len());
-    let mut left = Vec::new();
-    for edit in types {
-        let taken = pairs.iter().any(|&(key, _)| key == edit.id.0);
-        let Some(like) = find(layout, &reading, edit.like).filter(|_| !taken) else {
-            left.push(edit.id);
-            continue;
-        };
-        let mut copy = base.get(like..like.checked_add(layout.size)?)?.to_vec();
-        edit.apply(layout, &mut copy)?;
-        copies.push((copy, Some(like)));
-        keys.push(edit.id.0);
-    }
-    if !left.is_empty() {
-        crate::warn_once!(
-            "buff types {left:?} left out: a mod before this one took their ids or vanilla types"
-        );
-    }
-    if copies.is_empty() {
-        Blob::over(out, base);
-        return Some(());
-    }
-    let added = copies.len();
-    let room = Room::new(base)
-        .grow_array(layout.buffs, layout.size, BUFF_ALIGN, added)?
-        .grow_array(layout.keys, KEY, KEY, added)?
-        .grow_array(layout.values, KEY, KEY, added)?;
-    let mut blob = Blob::over_with_room(out, room);
-    let first = blob.grow_array(
-        layout.buffs,
-        layout.size,
-        BUFF_ALIGN,
-        &layout.relative,
-        &copies,
-    )?;
-    pairs.extend(keys.into_iter().zip(first..));
-    write_map(layout, &mut blob, &mut pairs, added)
-}
-
+#[doc(hidden)]
 impl Edit {
+    /// The edit `request` asks for; `None` for a change or flag the ABI
+    /// does not name, or a negative life time.
+    #[must_use]
+    pub fn of(request: &BuffTypeAdd) -> Option<Self> {
+        if request.changes & !BuffTypeAdd::ALL_CHANGES != 0
+            || request.flags & !BuffTypeAdd::ALL_FLAGS != 0
+            || request.life_time_ns < 0
+        {
+            return None;
+        }
+        let set = |change| request.changes & change != 0;
+        let flag = |bit| request.flags & bit != 0;
+        Some(Self {
+            id: BuffTypeId::from_guid(request.guid),
+            like: request.like,
+            name: set(BuffTypeAdd::NAME).then_some(request.name),
+            description: set(BuffTypeAdd::DESCRIPTION).then_some(request.description),
+            icon: set(BuffTypeAdd::ICON).then_some(request.icon),
+            life_time: set(BuffTypeAdd::LIFE_TIME).then_some(request.life_time_ns),
+            slot: set(BuffTypeAdd::SLOT).then_some(request.slot),
+            hide_in_ui: set(BuffTypeAdd::SET_HIDE_IN_UI).then(|| flag(BuffTypeAdd::HIDE_IN_UI)),
+            hide_duration_in_ui: set(BuffTypeAdd::SET_HIDE_DURATION_IN_UI)
+                .then(|| flag(BuffTypeAdd::HIDE_DURATION_IN_UI)),
+            is_saved: set(BuffTypeAdd::SET_SAVED).then(|| flag(BuffTypeAdd::SAVED)),
+            plain: flag(BuffTypeAdd::PLAIN),
+        })
+    }
+
+    /// The new type's game id.
+    #[must_use]
+    pub const fn id(&self) -> BuffTypeId {
+        self.id
+    }
+
+    /// Whether it names an icon of its own.
+    #[must_use]
+    pub const fn has_icon(&self) -> bool {
+        self.icon.is_some()
+    }
+
+    /// The edit with the vanilla type's icon: an icon a client's UI does
+    /// not know ends the game.
+    #[must_use]
+    pub const fn without_icon(self) -> Self {
+        Self { icon: None, ..self }
+    }
+
     /// Writes the edit into `copy`, one buff type.
     fn apply(&self, layout: &BuffLayout, copy: &mut [u8]) -> Option<()> {
         let mut blob = Blob::new(copy);
@@ -527,6 +477,107 @@ impl Edit {
         copy.copy_from_slice(blob.bytes());
         Some(())
     }
+}
+
+/// Why the game's buff collection cannot take a new type.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum Refusal {
+    /// The collection does not read with the build's layout.
+    #[error("the game's buff collection does not read with this build's layout")]
+    Unread,
+    /// The type it copies is none of the game's.
+    #[error("the game has no buff type {0:?} to copy")]
+    NotVanilla(BuffTypeId),
+    /// The game or a type added before has its id.
+    #[error("the game or a mod loaded before has a buff type with this id; it needs another id")]
+    Taken,
+}
+
+/// Where the collection read through `blob` holds the buff type `id`.
+fn find(layout: &BuffLayout, blob: &Blob<&[u8]>, id: BuffTypeId) -> Option<usize> {
+    let (buffs, count) = blob.array(layout.buffs)?;
+    (0..usize::try_from(count).ok()?)
+        .map(|i| buffs + i * layout.size)
+        .find(|&at| blob.read_u32(at + layout.id) == Some(id.0))
+}
+
+/// Whether the vanilla collection `vanilla` takes `edit` after the types
+/// in `added`, every mod's before it.
+///
+/// # Errors
+///
+/// The [`Refusal`] that keeps it out.
+#[doc(hidden)]
+pub fn check(
+    layout: &BuffLayout,
+    vanilla: &[u8],
+    edit: &Edit,
+    added: &[Edit],
+) -> Result<(), Refusal> {
+    let blob = Blob::reading(vanilla);
+    let pairs = map_pairs(layout, &blob).ok_or(Refusal::Unread)?;
+    if find(layout, &blob, edit.like).is_none() {
+        return Err(Refusal::NotVanilla(edit.like));
+    }
+    let taken = pairs.iter().any(|&(key, _)| key == edit.id.0)
+        || added.iter().any(|other| other.id == edit.id);
+    if taken {
+        return Err(Refusal::Taken);
+    }
+    Ok(())
+}
+
+/// Builds in `out` the buff collection `base` with `types` after the others,
+/// each a copy of its `like` with its edits, and their keys in the hash map;
+/// the ids of the types it left out.
+///
+/// The types were checked against the vanilla collection; one whose `like`
+/// a patch before this one removed or whose id it took is left out. `None`
+/// when `base` does not read with `layout`; `out` then holds nothing of use.
+#[doc(hidden)]
+pub fn build(
+    layout: &BuffLayout,
+    base: &[u8],
+    types: &[Edit],
+    out: &mut impl Grow,
+) -> Option<Vec<BuffTypeId>> {
+    let reading = Blob::reading(base);
+    let mut pairs = map_pairs(layout, &reading)?;
+    let mut copies = Vec::with_capacity(types.len());
+    let mut keys = Vec::with_capacity(types.len());
+    let mut left = Vec::new();
+    for edit in types {
+        let taken = pairs.iter().any(|&(key, _)| key == edit.id.0) || keys.contains(&edit.id.0);
+        let Some(like) = find(layout, &reading, edit.like).filter(|_| !taken) else {
+            left.push(edit.id);
+            continue;
+        };
+        let mut copy = base.get(like..like.checked_add(layout.size)?)?.to_vec();
+        edit.apply(layout, &mut copy)?;
+        copies.push((copy, Some(like)));
+        keys.push(edit.id.0);
+    }
+    if copies.is_empty() {
+        Blob::over(out, base);
+        return Some(left);
+    }
+    let added = copies.len();
+    let room = Room::new(base)
+        .grow_array(layout.buffs, layout.size, BUFF_ALIGN, added)?
+        .grow_array(layout.keys, KEY, KEY, added)?
+        .grow_array(layout.values, KEY, KEY, added)?;
+    let mut blob = Blob::over_with_room(out, room);
+    let first = blob.grow_array(
+        layout.buffs,
+        layout.size,
+        BUFF_ALIGN,
+        &layout.relative,
+        &copies,
+    )?;
+    pairs.extend(keys.into_iter().zip(first..));
+    write_map(layout, &mut blob, &mut pairs, added)?;
+    Some(left)
 }
 
 /// Every key of the collection's hash map with its index into the buff
@@ -602,6 +653,81 @@ fn write_map<B: Grow>(
     Some(())
 }
 
+impl NewBuff {
+    /// The request the loader takes, once the life time and slot convert;
+    /// the reason they do not otherwise.
+    fn request(&self) -> Result<BuffTypeAdd, &'static str> {
+        let life_time = self
+            .default_life_time
+            .map(|life_time| i64::try_from(life_time.as_nanos()))
+            .transpose()
+            .map_err(|_| "the life time is too long")?;
+        let slot = self
+            .slot
+            .map(|slot| slot.to_slot().ok_or("the slot is past a byte"))
+            .transpose()?;
+        let flag = |value: Option<bool>, change, bit| {
+            (
+                value.map_or(0, |_| change),
+                if value == Some(true) { bit } else { 0 },
+            )
+        };
+        let flags = [
+            flag(
+                self.hide_in_ui,
+                BuffTypeAdd::SET_HIDE_IN_UI,
+                BuffTypeAdd::HIDE_IN_UI,
+            ),
+            flag(
+                self.hide_duration_in_ui,
+                BuffTypeAdd::SET_HIDE_DURATION_IN_UI,
+                BuffTypeAdd::HIDE_DURATION_IN_UI,
+            ),
+            flag(self.is_saved, BuffTypeAdd::SET_SAVED, BuffTypeAdd::SAVED),
+        ];
+        let tags = [
+            (self.name, BuffTypeAdd::NAME),
+            (self.description, BuffTypeAdd::DESCRIPTION),
+            (
+                self.icon.as_ref().map(|icon| icon.id.guid()),
+                BuffTypeAdd::ICON,
+            ),
+        ];
+        let mut changes = flags.iter().fold(0, |all, (change, _)| all | change);
+        for (tag, change) in tags {
+            changes |= tag.map_or(0, |_| change);
+        }
+        changes |= life_time.map_or(0, |_| BuffTypeAdd::LIFE_TIME);
+        changes |= slot.map_or(0, |_| BuffTypeAdd::SLOT);
+        let plain = if self.plain { BuffTypeAdd::PLAIN } else { 0 };
+        Ok(BuffTypeAdd {
+            header: Header::of::<BuffTypeAdd>(),
+            guid: self.id.guid(),
+            name: self.name.unwrap_or(Guid::NIL),
+            description: self.description.unwrap_or(Guid::NIL),
+            icon: self.icon.as_ref().map_or(Guid::NIL, |icon| icon.id.guid()),
+            life_time_ns: life_time.unwrap_or(0),
+            like: self.like,
+            changes,
+            slot: slot.unwrap_or(0),
+            flags: flags.iter().fold(plain, |all, (_, bit)| all | bit),
+        })
+    }
+}
+
+/// Why the loader refused a buff type, from its answer.
+fn refused(status: Status, like: BuffTypeId) -> String {
+    match status {
+        Status::BAD_ARGS => format!("the game has no buff type {like:?} to copy"),
+        Status::REFUSED => Refusal::Taken.to_string(),
+        Status::UNAVAILABLE => {
+            "the game's buff collection does not read on this build; buff types are off".into()
+        }
+        Status::TOO_LATE => "a buff type is added during init only".into(),
+        other => format!("the loader answered {other:?}"),
+    }
+}
+
 /// `Load`'s methods of this module on the base handle, which core's
 /// forwarders call.
 #[doc(hidden)]
@@ -617,69 +743,20 @@ impl LoadMethods for crate::BaseLoad {
         if !self.joins() {
             return Err(fail("a mod with buff types runs on both sides"));
         }
-        let life_time = new
-            .default_life_time
-            .map(|life_time| i64::try_from(life_time.as_nanos()))
-            .transpose()
-            .map_err(|_| fail("the life time is too long"))?;
-        let slot = new
-            .slot
-            .map(|slot| {
-                slot.to_slot()
-                    .ok_or_else(|| fail("the slot is past a byte"))
-            })
-            .transpose()?;
-        let layout = BuffLayout::resolve(self)?;
-        let key = BUFF_COLLECTION_RESOURCE.key(BUFF_COLLECTION)?;
-        let vanilla = self.host().game_resource(key).ok_or_else(|| {
-            fail(&format!(
-                "the game has no buff collection under {BUFF_COLLECTION}; this build keeps it elsewhere"
-            ))
-        })?;
-        let edit = Edit {
-            id: BuffTypeId::from_guid(new.id.guid()),
-            like: new.like,
-            name: new.name,
-            description: new.description,
-            icon: new.icon.as_ref().map(|icon| icon.id.guid()),
-            life_time,
-            slot,
-            hide_in_ui: new.hide_in_ui,
-            hide_duration_in_ui: new.hide_duration_in_ui,
-            is_saved: new.is_saved,
-            plain: new.plain,
-        };
-        let types = TYPES.get_or_init(Mutex::default);
-        let first = {
-            let added = types.relock();
-            if let Some(why) = refusal(&layout, &vanilla, &edit, &added.0) {
-                return Err(fail(&why));
-            }
-            added.0.is_empty()
-        };
+        let request = new.request().map_err(fail)?;
         self.declare(new.id)?;
+        // The icon is served before the loader may name it: an icon the
+        // client's UI does not know ends the game.
         if let Some(icon) = new.icon {
             self.add_icon(icon)?;
         }
-        if first {
-            self.serve(key, key, move |base, out| {
-                // An icon the client's UI does not know yet ends the game.
-                let ready = crate::content::icons::ready();
-                let types: Vec<Edit> = TYPES
-                    .get()
-                    .map_or_default(|types| types.relock().0.clone())
-                    .into_iter()
-                    .map(|edit| Edit {
-                        icon: edit.icon.filter(|_| ready),
-                        ..edit
-                    })
-                    .collect();
-                add_buff_types(&layout, base, &types, out);
-                Some(())
-            })?;
+        let host = self.host();
+        let mut id = BuffTypeId(0);
+        let status = (host.api().buff_type_add)(host.handle(), &raw const request, &raw mut id);
+        if !status.is_ok() {
+            return Err(fail(&refused(status, new.like)));
         }
-        types.relock().0.push(edit);
-        Ok(edit.id)
+        Ok(id)
     }
 }
 

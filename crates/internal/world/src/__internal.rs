@@ -77,6 +77,14 @@ pub fn terrain_material_changes_valid(material: &crate::abi::TerrainMaterialAdd)
         && (!sets(TerrainMaterialAdd::HARDNESS) || material.hardness <= HARDEST)
 }
 
+/// The buff collection patch the loader and the fake host build: each mod
+/// buff type's edit, its check against the vanilla collection, and the
+/// build of the collection with every mod's types.
+#[cfg(feature = "unstable")]
+pub mod buff_types {
+    pub use crate::buffs::new::{Edit, Refusal, build, check};
+}
+
 /// The hardest of the game's hardness categories, `Unbreakable`
 /// (`HardnessCategory`, reflection 26430625).
 pub const HARDEST: u8 = 5;
