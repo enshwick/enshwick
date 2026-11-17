@@ -30,7 +30,8 @@ use enshwick_core::raw::{read_at, write_at};
 #[cfg(test)]
 pub(crate) use patches::enter_build;
 pub(crate) use patches::{
-    OwnPatch, builds_begun, hand_out, lend, own_patch, rebuild, scratch, served_now,
+    OwnPatch, builds_begun, hand_out, icons_shown, lend, note_icons_read, own_patch, rebuild,
+    scratch, served_now,
 };
 use texts::seal_texts;
 
@@ -100,6 +101,9 @@ struct Served {
     /// The served keys whose game builds read this one as served, which a
     /// rebuild of it rebuilds; apart from `state`, which a build holds.
     read_by: Mutex<Vec<ResourceKey>>,
+    /// Whether a game build asked if this client shows served UI images
+    /// before they showed: the key is built again once they show.
+    reads_icons: AtomicBool,
 }
 
 impl Served {
@@ -112,6 +116,7 @@ impl Served {
             state: Mutex::new(State::default()),
             rebuilding: Mutex::new(()),
             read_by: Mutex::new(Vec::new()),
+            reads_icons: AtomicBool::new(false),
         }
     }
 }
@@ -409,20 +414,15 @@ fn serve_terrain(served: &mut Vec<Served>, patches: Vec<(ResourceKey, Builder)>)
 /// Adds the loader's patch of the buff collection with every mod's buff
 /// types to `served`, before every mod's patch of it, so a mod's patch sees
 /// the new types; the loader's changes of vanilla values, served after, go
-/// first again, so a type copies the values as changed. The base is kept
-/// when a type names an icon, which a rebuild writes once the client shows
-/// served images. How many keys.
-fn serve_buffs(served: &mut Vec<Served>, patch: Option<(ResourceKey, Builder, bool)>) -> usize {
-    let Some((key, builder, keeps_base)) = patch else {
+/// first again, so a type copies the values as changed. How many keys.
+fn serve_buffs(served: &mut Vec<Served>, patch: Option<(ResourceKey, Builder)>) -> usize {
+    let Some((key, builder)) = patch else {
         return 0;
     };
     let patch = BuilderPatch::new(builder, crate::content::buff_types::FEATURE).patch();
     match served.iter_mut().find(|s| s.key == key) {
-        Some(entry) => {
-            entry.patches.insert(0, patch);
-            entry.keeps_base.fetch_or(keeps_base, Ordering::Relaxed);
-        }
-        None => served.push(Served::new(key, key, vec![patch], keeps_base)),
+        Some(entry) => entry.patches.insert(0, patch),
+        None => served.push(Served::new(key, key, vec![patch], false)),
     }
     1
 }

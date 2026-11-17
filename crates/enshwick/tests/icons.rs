@@ -111,4 +111,26 @@ mod tests {
         let icon = items.icon_image;
         assert_eq!(&item[icon..icon + 16], &ICON.0);
     }
+
+    #[test]
+    fn an_item_built_before_icons_show_names_its_icon_once_they_show() {
+        let host = FakeHost::new().items().ui_images();
+        let items = ItemLayout::resolve(&host).unwrap();
+        let item_hash = host.hash(types::ITEM_INFO.id()).unwrap();
+        let item_size = host.size(types::ITEM_INFO.id()).unwrap();
+        let loader = host.archive(WHITE_HASH, WHITE.to_vec()).install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Staffs)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let key = STAFF.key_by_hash(item_hash);
+        let base = vec![0u8; item_size];
+        let icon = items.icon_image;
+        let early = loader.build_resource(&key, &base).unwrap();
+        assert_eq!(&early[icon..icon + 16], &[0; 16], "the vanilla icon");
+        loader.show_icons();
+        let shown = loader.build_resource(&key, &base).unwrap();
+        assert_eq!(shown.len(), early.len(), "written over the game's copy");
+        assert_eq!(&shown[icon..icon + 16], &ICON.0);
+    }
 }

@@ -5,9 +5,9 @@
 //! (client 26430625, server 26430253). A type's icon is a served UI image,
 //! which a client's UI knows only once its registry listed the served images
 //! again after arming: the patch names the icon only from then, and the
-//! loader builds the collection again at that moment, writing the icon over
-//! the copy the game holds, so the type shows its icon however early the
-//! game built the collection.
+//! served path builds the collection again at that moment, as it does every
+//! key whose build asked before, so the type shows its icon however early
+//! the game built the collection.
 
 use enshwick_core::__private::rules::buff_types::{Edit, Refusal, check};
 use enshwick_core::abi::BuffTypeAdd;
@@ -93,23 +93,21 @@ fn named(types: &[Edit], shows: impl Fn(Guid) -> bool) -> Vec<Edit> {
 pub(crate) const FEATURE: &str = "buff types";
 
 #[cfg(windows)]
-pub(crate) use running::{add, icons_shown, sealed, serve};
+pub(crate) use running::{add, sealed, serve};
 
 /// The buff types in the running game: mods' registrations, the archive's
 /// collection and the loader's patch.
 #[cfg(windows)]
 mod running {
     use std::sync::OnceLock;
-    use std::sync::atomic::{AtomicBool, Ordering};
 
     use enshwick_core::__private::rules::buff_types::{Refusal, build};
-    use enshwick_core::abi::{BuffTypeAdd, BuffTypeId, ResourceKey, Side};
+    use enshwick_core::abi::{BuffTypeAdd, BuffTypeId, ResourceKey};
     use enshwick_core::buffs::{BUFF_COLLECTION, BUFF_COLLECTION_RESOURCE, BuffLayout};
 
-    use super::{Added, BuffTypeError, FEATURE, named, place, serving};
+    use super::{Added, BuffTypeError, named, place, serving};
     use crate::content::served::{Builder, mod_on};
     use crate::engine::catalogue::Reflected;
-    use crate::engine::fuse::Fuse;
     use crate::engine::loader::Loader;
     use crate::engine::mod_index::ModIndex;
     use crate::engine::registry::Registry;
@@ -122,15 +120,11 @@ mod running {
         /// read once from the archive; `None` when the archive or
         /// reflection lacks them.
         collection: OnceLock<Option<(BuffLayout, ResourceKey, Vec<u8>)>>,
-        /// Whether the served patch names icons, which a client writes once
-        /// it shows served UI images.
-        icons: AtomicBool,
     }
 
     static BUFFS: Buffs = Buffs {
         types: Registry::new(),
         collection: OnceLock::new(),
-        icons: AtomicBool::new(false),
     };
 
     /// The build's layout, the collection's key and its vanilla bytes.
@@ -182,12 +176,11 @@ mod running {
     }
 
     /// The loader's patch of the collection with the types `added` of the
-    /// mods on at each build, with whether it keeps the base to name icons
-    /// later, which only a client does; `None` when there are none to serve.
+    /// mods on at each build; `None` when there are none to serve.
     pub(crate) fn serve(
         loader: &'static Loader,
         added: &'static [Added],
-    ) -> Option<(ResourceKey, Builder, bool)> {
+    ) -> Option<(ResourceKey, Builder)> {
         let types = serving(added, mod_on);
         if types.is_empty() {
             return None;
@@ -197,8 +190,6 @@ mod running {
         for edit in &types {
             crate::log!(INFO, "buff type {:?} served", edit.id());
         }
-        let icons = loader.side == Side::CLIENT && types.iter().any(|edit| edit.icon().is_some());
-        BUFFS.icons.store(icons, Ordering::Release);
         let builder: Builder = Box::new(move |base: &[u8]| {
             let types = named(&serving(added, mod_on), crate::content::textures::knows);
             let mut out = Vec::new();
@@ -217,26 +208,7 @@ mod running {
             }
             Some(out)
         });
-        Some((key, builder, icons))
-    }
-
-    /// Builds the collection again now that this client shows served UI
-    /// images, so the types name their icons over the copy the game holds.
-    /// Runs on the UI thread, which draws every buff icon, so no icon GUID
-    /// is read while its bytes change one at a time.
-    pub(crate) fn icons_shown() {
-        if !BUFFS.icons.load(Ordering::Acquire) {
-            return;
-        }
-        let Some(Some((_, key, _))) = BUFFS.collection.get() else {
-            return;
-        };
-        let rebuilt = Fuse::named(FEATURE).run("the buff icon rebuild", || {
-            crate::content::served::rebuild(ModIndex::LOADER, *key)
-        });
-        if let Some(Err(why)) = rebuilt {
-            crate::log!(WARN, "buff type icons not shown: {why}");
-        }
+        Some((key, builder))
     }
 }
 

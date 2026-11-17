@@ -94,6 +94,7 @@ macro_rules! warned {
 }
 
 warned!(
+    crate::base::ids::UndeclaredContentError,
     crate::base::calls::DeclareCallError,
     crate::base::points::DeclarePointError,
     crate::base::services::DeclareServiceError,

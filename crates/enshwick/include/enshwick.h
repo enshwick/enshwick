@@ -603,7 +603,8 @@ typedef struct EnshwickGuid {
 typedef struct EnshwickBuffTypeAdd {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // Its content id's GUID; its game id is the FNV-1a 32 of these bytes.
+  // Its content id's GUID, which the calling mod declared with
+  // `declare_content`; its game id is the FNV-1a 32 of these bytes.
   struct EnshwickGuid guid;
   // The tag of its name, with `EnshwickBuffTypeAdd_NAME`.
   struct EnshwickGuid name;
@@ -6949,8 +6950,10 @@ typedef struct EnshwickHostApi {
   // a type's icon on a client only once that client shows served UI
   // images. `EnshwickStatus_BAD_ARGS` for a change or flag it does not know, a
   // negative life time, or a `like` that is no buff type of the game;
-  // `EnshwickStatus_REFUSED` for a mod not of side both and for an id the game
-  // or a mod loaded before has; `EnshwickStatus_UNAVAILABLE` on a build whose
+  // `EnshwickStatus_REFUSED` for a GUID whose content id the calling mod did
+  // not declare with `declare_content`, for a mod not of side both and
+  // for an id the game or a mod loaded before has;
+  // `EnshwickStatus_UNAVAILABLE` on a build whose
   // archive or layout lacks the collection. Allowed during
   // `enshwick_mod_init` only. ABI 12.13.
   EnshwickStatus (*buff_type_add)(EnshwickModHandle me,

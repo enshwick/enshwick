@@ -415,6 +415,51 @@ fn a_rebuild_a_patch_asks_for_of_its_own_key_is_refused_instead_of_waited_on() {
     );
 }
 
+/// Asks, as a build that names an icon does, whether icons show among the
+/// served keys at `user`, then serves [`VALUE`] as the icon it names.
+unsafe extern "system" fn ask_icons(
+    _base: *const u8,
+    _base_len: u32,
+    user: *mut c_void,
+    out: *mut *mut u8,
+    out_len: *mut u32,
+) -> Status {
+    // SAFETY: `user` is a list of two served entries the test leaked for the
+    // process.
+    let list = unsafe { &*user.cast::<[Served; 2]>() };
+    note_icons_in(list);
+    // SAFETY: `run_patches` passes `out` and `out_len` writable for the call.
+    unsafe { hand_out(vec![VALUE.load(Ordering::Relaxed)], out, out_len) }
+}
+
+#[test]
+fn a_key_whose_build_asked_for_icons_before_they_show_is_built_again_once_they_show() {
+    let list: &mut [Served; 2] = Box::leak(Box::new([
+        Served::new(KEY, KEY, vec![by_loader(ask_icons)], false),
+        Served::new(
+            ResourceKey { part: 1, ..KEY },
+            KEY,
+            vec![by_loader(grow)],
+            false,
+        ),
+    ]));
+    list[0].patches[0].user = (&raw const *list).expose_provenance();
+    let list: &[Served; 2] = list;
+    VALUE.store(1, Ordering::Relaxed);
+    build_each(list);
+    assert!(list[0].reads_icons.load(Ordering::SeqCst));
+    assert!(
+        list[0].state.relock().base.is_some(),
+        "its base is kept for the rebuild"
+    );
+    assert!(!list[1].reads_icons.load(Ordering::SeqCst));
+    assert!(list[1].state.relock().base.is_none(), "nothing kept for it");
+    VALUE.store(2, Ordering::Relaxed);
+    rebuild_icon_readers(list);
+    assert_eq!(held(&list[0]), 2, "the icon written over the game's copy");
+    assert_eq!(list[0].state.relock().built.map(|(_, len)| len), Some(1));
+}
+
 #[test]
 fn a_served_read_whose_every_patch_fails_reads_a_vanilla_key_from_another_base_as_archived() {
     let other = ResourceKey { part: 1, ..KEY };

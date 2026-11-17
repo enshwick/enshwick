@@ -191,6 +191,52 @@ pub(crate) fn content_named(guid: Guid) -> Option<enshwick_core::abi::Str> {
     with(|ids| declared(ids, guid).map(enshwick_core::abi::Str::new))
 }
 
+/// Why the loader refuses a content GUID a mod passes: it did not declare
+/// the content id the GUID comes from.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum UndeclaredContentError {
+    /// Another mod declared it.
+    #[error("content {guid} is {name} of {by}, which {caller} did not declare")]
+    Other {
+        guid: Guid,
+        name: String,
+        by: String,
+        caller: String,
+    },
+    /// No mod declared it.
+    #[error("content {guid} comes from no content id {caller} declared")]
+    Undeclared { guid: Guid, caller: String },
+}
+
+/// Whether mod `caller` declared the content id `guid` comes from, as every
+/// call that names new content by GUID must: one mod never adds content
+/// under another's id.
+///
+/// # Errors
+///
+/// [`UndeclaredContentError`] for a GUID another mod or no mod declared.
+pub(crate) fn declared_by(caller: &str, guid: Guid) -> Result<(), UndeclaredContentError> {
+    with(|ids| {
+        let found = ids
+            .known
+            .get(&(Space::Content, guid.fnv1a()))
+            .filter(|(name, _)| Guid::try_named(name) == Some(guid));
+        match found {
+            Some((_, by)) if **by == *caller => Ok(()),
+            Some((name, by)) => Err(UndeclaredContentError::Other {
+                guid,
+                name: name.to_string(),
+                by: by.to_string(),
+                caller: caller.to_owned(),
+            }),
+            None => Err(UndeclaredContentError::Undeclared {
+                guid,
+                caller: caller.to_owned(),
+            }),
+        }
+    })
+}
+
 /// The content id a mod declared for exactly `guid`, copied.
 pub(crate) fn content_id(guid: Guid) -> Option<String> {
     with(|ids| declared(ids, guid).map(str::to_owned))
@@ -256,6 +302,21 @@ mod tests {
         );
         assert!(declare_content("ids-test", "other:lamp").is_err());
         assert!(declare_content("ids-test", "lamp").is_err());
+    }
+
+    #[test]
+    fn a_content_guid_counts_only_for_the_mod_that_declared_it() {
+        let poison = declare_content("ids-b", "ids-b:poison").unwrap();
+        assert_eq!(declared_by("ids-b", poison), Ok(()));
+        let why = declared_by("ids-a", poison).unwrap_err().to_string();
+        assert!(
+            why.contains("ids-b:poison of ids-b") && why.contains("ids-a did not declare"),
+            "{why}"
+        );
+        assert!(matches!(
+            declared_by("ids-a", Guid::named("ids-a:never")),
+            Err(UndeclaredContentError::Undeclared { .. })
+        ));
     }
 
     #[test]

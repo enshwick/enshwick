@@ -29,6 +29,9 @@ pub(crate) struct ContentState {
         Option<Vec<(enshwick_core::content::Guid, enshwick_core::content::Guid)>>,
     /// Content ids the mod declared, in order.
     pub(crate) content_ids: Vec<String>,
+    /// The GUID of each content id declared, with the mod or data pack that
+    /// declared it: only it may add content under that GUID.
+    pub(crate) declared_by: Vec<(ModHandle, enshwick_core::content::Guid)>,
     /// The crafting props the mod was given an index for, in order.
     pub(crate) crafting_props: Vec<enshwick_core::content::Guid>,
     /// Item data kinds by full id, and values by kind and entity: the item
@@ -84,7 +87,7 @@ pub(crate) extern "system" fn read_only(
 }
 
 pub(crate) extern "system" fn declare_content(
-    _me: ModHandle,
+    me: ModHandle,
     id: Str,
     out: *mut enshwick_core::content::Guid,
 ) -> Status {
@@ -109,8 +112,21 @@ pub(crate) extern "system" fn declare_content(
         if !s.content.content_ids.contains(&id) {
             s.content.content_ids.push(id);
         }
+        if !s.content.declared_by.contains(&(me, guid)) {
+            s.content.declared_by.push((me, guid));
+        }
         put(out, guid)
     })
+}
+
+/// Whether mod `me` declared the content id `guid` comes from, as the
+/// loader asks of every call that adds content by GUID.
+pub(crate) fn declared(
+    s: &crate::test::table::State,
+    me: ModHandle,
+    guid: enshwick_core::content::Guid,
+) -> bool {
+    s.content.declared_by.contains(&(me, guid))
 }
 
 pub(crate) extern "system" fn content_name(

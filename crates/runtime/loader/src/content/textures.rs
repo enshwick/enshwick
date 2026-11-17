@@ -14,7 +14,8 @@
 //! ends the game. The links add the served UI images to that listing and
 //! make the registry list once more after arming, so a served icon is known
 //! before any item names it. Until both have happened [`ready`] stays false
-//! and items keep their vanilla icons.
+//! and items keep their vanilla icons; once they have, every served key
+//! whose build asked before is built again with its icons.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -327,9 +328,19 @@ impl Textures {
 }
 
 /// Whether served UI images show on this client: the links ran and the
-/// registry knows them.
+/// registry knows them. A game build of a served key that asks before they
+/// show is built again once they show.
 pub(crate) fn ready() -> bool {
+    if !TEXTURES.shown.load(Ordering::Acquire) && on_client() {
+        crate::content::served::note_icons_read();
+    }
     TEXTURES.ready()
+}
+
+/// Whether the loader runs on a client, the only side whose served UI
+/// images ever show.
+fn on_client() -> bool {
+    crate::engine::loader::loader().is_some_and(|loader| loader.side == Side::CLIENT)
 }
 
 /// Whether this client's UI registry knows the UI image `guid`, the game's
@@ -347,7 +358,7 @@ pub(crate) fn knows(guid: Guid) -> bool {
 #[cold]
 fn announce_ready() {
     if TEXTURES.announces() {
-        crate::content::buff_types::icons_shown();
+        crate::content::served::icons_shown();
     }
 }
 

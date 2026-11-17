@@ -6,7 +6,8 @@ use enshwick_core::abi::{
 };
 use enshwick_core::buffs::BuffTypeId;
 
-/// Adds a mod's buff type, as the loader: refused after init, for a mod
+/// Adds a mod's buff type, as the loader: refused for a GUID the mod did not
+/// declare the content id of, after init, for a mod
 /// clients do not run, for a request it does not know, a `like` the
 /// vanilla collection lacks and an id the game or a mod before has; the
 /// first type serves the fake's one patch of the collection, before every
@@ -21,6 +22,11 @@ pub(crate) extern "system" fn buff_type_add(
     };
     if id.is_null() {
         return Status::BAD_ARGS;
+    }
+    if !with(false, |s| {
+        crate::test::table::content::declared(s, me, buff.guid)
+    }) {
+        return Status::REFUSED;
     }
     match served::add(me, &buff) {
         Ok(added) => {

@@ -1,14 +1,14 @@
 //! A buff type of a mod's own: served with every mod's types in one patch of
 //! the game's buff collection, found by its id, and naming its icon only on
-//! a client that shows served icons; what the game could not take, an id a
-//! mod before took included, is refused at init and the mod stays on.
+//! a client that shows served icons; what the game could not take is refused
+//! at init and the mod stays on, and no mod adds a type under another's id.
 
 #[cfg(test)]
 mod tests {
     use core::time::Duration;
     use std::sync::Mutex;
 
-    use enshwick::abi::{BuffTypeAdd, Header, ModHandle, Side, Status};
+    use enshwick::abi::{BuffTypeAdd, Header, ModHandle, Side, Status, Str};
     use enshwick::buffs::{
         BUFF_COLLECTION, BUFF_COLLECTION_RESOURCE, BuffLayout, BuffSlotType, BuffTypeId, NewBuff,
     };
@@ -27,6 +27,8 @@ mod tests {
     const FOOD_ICON: Guid = Guid::parse("02778393-2031-44cd-b7cd-3bc215acd7af");
     /// A mod loaded before Lucky.
     const EARLIER: ModHandle = ModHandle(77);
+    /// The earlier mod's buff type.
+    const GLOOMY: Id = Id::new("you.gloomy:gloomy");
 
     /// What each `add_buff` answered, in order: Lucky, Lucky again, a copy
     /// of a type the game lacks, and an id the game has.
@@ -155,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn two_mods_types_are_served_in_one_patch_and_a_taken_id_is_refused_to_the_second() {
+    fn two_mods_types_are_served_in_one_patch_and_another_mod_s_id_is_refused() {
         let host = host().pack(EARLIER, Side::BOTH);
         let layout = BuffLayout::resolve(&host).unwrap();
         let hash = host.hash(BUFF_COLLECTION_RESOURCE.id()).unwrap();
@@ -163,26 +165,36 @@ mod tests {
         // SAFETY: the installed fake's table, alive while `loader` is.
         let api = unsafe { &*loader.api() };
         let mut id = BuffTypeId(0);
-        let gloomy = earlier_type(Id::new("you.gloomy:gloomy"), FOOD);
+        let gloomy = earlier_type(GLOOMY, FOOD);
         assert_eq!(
             (api.buff_type_add)(EARLIER, &raw const gloomy, &raw mut id),
+            Status::REFUSED,
+            "a GUID the mod did not declare"
+        );
+        let (mut guid, gloomy_id) = (Guid::NIL, GLOOMY.to_string());
+        assert_eq!(
+            (api.declare_content)(EARLIER, Str::new(&gloomy_id), &raw mut guid),
             Status::OK
         );
-        let taken = earlier_type(LUCKY, FOOD);
         assert_eq!(
-            (api.buff_type_add)(EARLIER, &raw const taken, &raw mut id),
+            (api.buff_type_add)(EARLIER, &raw const gloomy, &raw mut id),
             Status::OK
         );
         // SAFETY: the exports of this file's `declare_mod!(Lucky)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let taken = earlier_type(LUCKY, FOOD);
+        assert_eq!(
+            (api.buff_type_add)(EARLIER, &raw const taken, &raw mut id),
+            Status::REFUSED,
+            "Lucky's id, which only Lucky declared"
+        );
         let added = ADDED.lock().unwrap().clone();
-        assert!(
-            added[0]
-                .as_ref()
-                .is_err_and(|why| why.contains("another id")),
-            "the earlier mod took Lucky's id: {added:?}"
+        assert_eq!(
+            added[0],
+            Ok(BuffTypeId::from_guid(LUCKY.guid())),
+            "Lucky's own type"
         );
         assert_eq!(loader.resources().len(), 1, "one patch for both mods");
         let key = BUFF_COLLECTION.key_by_hash(hash);
@@ -192,10 +204,13 @@ mod tests {
         let listed: Vec<u32> = (0..count as usize)
             .filter_map(|i| built.read_u32(keys + i * 4))
             .collect();
-        for id in [Id::new("you.gloomy:gloomy").guid(), LUCKY.guid()] {
+        for id in [GLOOMY.guid(), LUCKY.guid()] {
             assert!(listed.contains(&BuffTypeId::from_guid(id).0), "{listed:x?}");
         }
-        assert_eq!(count, 4, "the two vanilla types and the earlier mod's two");
+        assert_eq!(
+            count, 4,
+            "the two vanilla types, the earlier mod's and Lucky's"
+        );
     }
 
     #[test]

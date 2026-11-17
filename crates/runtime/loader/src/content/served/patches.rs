@@ -10,7 +10,9 @@
 //! or copied the bytes.
 //!
 //! A build that reads another served key as served is built again whenever
-//! that key is: the loader keeps its base for it.
+//! that key is, and one that asks whether the client shows served UI images
+//! before they show is built again once they show: the loader keeps its
+//! base for it.
 
 use core::cell::RefCell;
 use core::mem::ManuallyDrop;
@@ -165,7 +167,10 @@ pub(super) unsafe fn build_first(
         state.built = Some(result);
         return Some(result);
     };
-    if built.reads || entry.keeps_base.load(Ordering::Relaxed) {
+    if built.reads
+        || entry.keeps_base.load(Ordering::Relaxed)
+        || entry.reads_icons.load(Ordering::SeqCst)
+    {
         let mut base = vec![0; len];
         // SAFETY: the caller guarantees `len` readable bytes at `data`,
         // unchanged for the call.
@@ -245,6 +250,51 @@ fn note_read(entry: &Served) {
             }
         }
     });
+}
+
+/// Notes that the game's builds running on this thread ask whether this
+/// client shows served UI images, which it does not yet, so [`icons_shown`]
+/// builds them again. Called before the answer is read, so a build that
+/// read "not yet" is noted before the announcement looks.
+pub(crate) fn note_icons_read() {
+    if let Some(list) = RESOURCES.sealed() {
+        note_icons_in(list);
+    }
+}
+
+/// [`note_icons_read`] for the served keys of `list`.
+fn note_icons_in(list: &[Served]) {
+    BUILDING.with_borrow(|frames| {
+        for frame in frames.iter().filter(|f| f.build == Build::Game) {
+            if let Some(entry) = list.iter().find(|s| s.key == frame.key) {
+                entry.reads_icons.store(true, Ordering::SeqCst);
+            }
+        }
+    });
+}
+
+/// Builds again every served key whose game build asked whether this
+/// client shows served UI images before they showed, and the keys that
+/// read those, now that they show; a rebuild writes only the bytes that
+/// differ, so the length stays. Runs on the UI thread, which draws every
+/// icon, so no icon GUID is read while its bytes change one at a time.
+pub(crate) fn icons_shown() {
+    if let Some(list) = RESOURCES.sealed() {
+        rebuild_icon_readers(list);
+    }
+}
+
+/// [`icons_shown`] for the served keys of `list`.
+fn rebuild_icon_readers(list: &[Served]) {
+    for entry in list.iter().filter(|s| s.reads_icons.load(Ordering::SeqCst)) {
+        if let Err(why) = rebuild_entry(list, entry) {
+            crate::log!(
+                WARN,
+                "served {} does not show its icons: {why}",
+                key_name(&entry.key)
+            );
+        }
+    }
 }
 
 /// Whether the game reads served resources: their links made, and neither
