@@ -579,8 +579,8 @@ fn each_checked_package_is_linted_without_features_and_with_each_alone() {
         built: BTreeSet::new(),
         wide: false,
     };
-    let host_ok = |name: &String| name != "enshwick-loader-stub";
-    let lines: Vec<String> = features::steps(&scope, &packages, host_ok)
+    let host_ok = |p: &Package| p.name != "enshwick-loader-stub";
+    let lines: Vec<String> = features::steps(&scope, &packages, host_ok, &["clippy"])
         .iter()
         .map(Step::line)
         .collect();
@@ -594,9 +594,71 @@ fn each_checked_package_is_linted_without_features_and_with_each_alone() {
         ]
     );
     assert_eq!(
-        features::steps(&Scope::All, &packages, |_| true).len(),
+        features::steps(&Scope::All, &packages, |_| true, &["clippy"]).len(),
         3 + 2 + 2
     );
+}
+
+#[test]
+fn the_windows_lint_lints_each_feature_alone_of_the_checked_packages_with_windows_code() {
+    let mut stub = package("enshwick-loader-stub", "crates/runtime/stub", true);
+    stub.features = vec!["trace".to_owned()];
+    let mut portable = package("enshwick-values", "crates/internal/values", false);
+    portable.features = vec!["serde".to_owned()];
+    let mut untouched = package("enshwick-world", "crates/api/world", false);
+    untouched.features = vec!["fake".to_owned()];
+    let packages = [stub, portable, untouched];
+    let scope = Scope::Some {
+        code: ["enshwick-loader-stub", "enshwick-values"]
+            .map(str::to_owned)
+            .into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: false,
+    };
+    let windows_code = |p: &Package| p.name != "enshwick-values";
+    let lines: Vec<String> = windows_lint_steps(&scope, &packages, windows_code)
+        .iter()
+        .map(Step::line)
+        .collect();
+    let xwin = format!("cargo xwin clippy --target {WINDOWS_TARGET}");
+    let stub = format!("{xwin} --package enshwick-loader-stub --no-default-features");
+    assert_eq!(
+        lines,
+        [
+            format!("{xwin} --workspace --features {TEST_FEATURE} --all-targets -- -D warnings"),
+            format!("{stub} -- -D warnings"),
+            format!("{stub} --features trace -- -D warnings"),
+        ]
+    );
+}
+
+#[test]
+fn a_package_has_windows_code_when_it_is_windows_only_or_its_source_names_windows() {
+    let root = workspace_root();
+    assert!(features::windows_code(
+        &root,
+        &package("stub", "no/such/dir", true)
+    ));
+    assert!(features::windows_code(
+        &root,
+        &package("loader", "crates/runtime/loader", false)
+    ));
+    assert!(!features::windows_code(
+        &root,
+        &package("values", "crates/internal/values", false)
+    ));
+    for text in [
+        "#[cfg(windows)]",
+        "#[cfg(target_os = \"windows\")]",
+        "cfg!(windows)",
+    ] {
+        assert!(features::names_windows(text), "{text}");
+    }
+    for text in ["use windows_sys::Win32;", "Windows", "my_windows", ""] {
+        assert!(!features::names_windows(text), "{text}");
+    }
 }
 
 #[test]
@@ -616,7 +678,7 @@ fn host_args_leave_out_windows_only_crates_only_off_windows() {
     ];
     assert_eq!(
         host_args(&packages, true),
-        ["--workspace", "--features", WINDOWS_TEST_FEATURE]
+        ["--workspace", "--features", TEST_FEATURE]
     );
     assert_eq!(
         host_args(&packages, false),
@@ -631,9 +693,8 @@ fn host_args_leave_out_windows_only_crates_only_off_windows() {
 }
 
 #[test]
-fn the_windows_builds_lint_the_loader_s_benchmark_hooks_too() {
-    assert!(WINDOWS_TEST_FEATURE.starts_with(TEST_FEATURE));
-    assert!(WINDOWS_TEST_FEATURE.ends_with(",enshwick-loader/test"));
+fn every_host_build_lints_the_loader_s_benchmark_hooks_and_benchmarks() {
+    assert!(TEST_FEATURE.ends_with(",enshwick-loader/test"));
 }
 
 #[test]

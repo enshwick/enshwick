@@ -38,6 +38,7 @@ use enshwick_base::Relock;
 pub(crate) use error::TransactionError;
 #[cfg(windows)]
 pub(crate) use game::{prop_placement_info, resolve, resolve_prop, saving};
+#[cfg(any(windows, test, feature = "test"))]
 pub(crate) use ledger::Change;
 pub(crate) use ledger::Standing;
 use ledger::{Ledger, Limits};
@@ -269,6 +270,7 @@ pub(crate) fn when_settled(
 
 /// For the benchmark of what a step pays for its waits: a step's look at
 /// `pending` waits, each on a transaction still pending, none due.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_settle_step(pending: usize) -> impl Fn() {
     let state: &'static Transactions = Box::leak(Box::new(Transactions::new()));

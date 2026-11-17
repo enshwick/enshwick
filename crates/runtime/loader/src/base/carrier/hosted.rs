@@ -75,6 +75,7 @@ pub(crate) fn own_account() -> Option<enshwick_core::PlayerKey> {
 /// it has no account, for its benchmark: the host key's load and the
 /// hosting check, which finds no server in the bench. A hosting client
 /// reads on to the loader's side, one more load and a compare.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_own_account() -> impl FnMut() -> Option<enshwick_core::PlayerKey> {
     set_host(7);

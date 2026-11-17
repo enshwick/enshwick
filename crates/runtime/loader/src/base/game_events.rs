@@ -744,6 +744,7 @@ fn deliver<S: Scope>(loader: &Loader) {
 ///
 /// `entity_world` holds a stream array laid out as `offsets` says, readable
 /// and written by nothing else during the call.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub unsafe fn bench_server_copy(entity_world: *mut u8, offsets: [usize; 7], wanted: u32) {
     let [

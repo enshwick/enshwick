@@ -386,6 +386,7 @@ pub(super) fn gather(
 
 /// Readies the kept lines for their benchmark: the closure is the per-frame
 /// lookup a site makes for an item whose lines are kept.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_tooltip_lines() -> impl FnMut() -> usize {
     let mut kept: [Kept; KEPT] = Default::default();

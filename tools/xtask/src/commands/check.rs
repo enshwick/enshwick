@@ -9,7 +9,9 @@
 //! none and each one of its features ([`features`], a part of its own in CI); a local check leaves the widest part of
 //! that to CI ([`affected::Lane`]) and runs the tests a wide change only
 //! reaches one process per binary ([`in_process`]). Off Windows the workspace is also
-//! linted for Windows through `cargo xwin`, beside the host checks.
+//! linted for Windows through `cargo xwin`, beside the host checks, and
+//! then each checked package with Windows code with none and each one of
+//! its features alone.
 //! `--windows` also runs the Windows tests of the crates marked
 //! `windows-tests` or `windows-only`, under Wine on an amd64 Linux host.
 //! `--all` runs the full suite, the Windows tests included where they can
@@ -39,13 +41,10 @@ macro_rules! facade_features {
 }
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
-/// API's unstable calls, its generated typed API and the compat task are
-/// linted and tested with the rest.
-const TEST_FEATURE: &str = concat!(facade_features!(), ",xtask/compat");
-/// [`TEST_FEATURE`] where the Windows-only loader builds: its `test`
-/// feature holds the benchmarks' hooks, which nothing else lints.
-const WINDOWS_TEST_FEATURE: &str =
-    concat!(facade_features!(), ",xtask/compat,enshwick-loader/test");
+/// API's unstable calls, its generated typed API, the compat task and the
+/// loader's benchmark hooks with their benchmarks are linted and tested with
+/// the rest.
+const TEST_FEATURE: &str = concat!(facade_features!(), ",xtask/compat,enshwick-loader/test");
 /// The API crate's part of [`TEST_FEATURE`], which a build that selects the
 /// facade without `xtask` takes so its features unify as in a workspace build.
 const FACADE_FEATURES: &str = facade_features!();
@@ -367,7 +366,9 @@ pub(crate) enum Part {
     /// build of its own without `unstable`, which shares nothing with the
     /// other parts' builds.
     StableApi,
-    /// clippy for the Windows target through cargo-xwin, off Windows.
+    /// clippy for the Windows target through cargo-xwin, off Windows: the
+    /// workspace, then each checked package with none and each one of its
+    /// features alone ([`windows_lint_steps`]).
     WindowsLint,
     /// The tests of the changed packages that run only on Windows, under
     /// Wine on an amd64 Linux host.
@@ -763,15 +764,10 @@ const EXCLUDE: &str = "--exclude";
 
 /// The cargo arguments every host build and test of the workspace takes.
 pub(crate) fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
-    let features = if on_windows {
-        WINDOWS_TEST_FEATURE
-    } else {
-        TEST_FEATURE
-    };
     let mut args = vec![
         "--workspace".to_owned(),
         "--features".to_owned(),
-        features.to_owned(),
+        TEST_FEATURE.to_owned(),
     ];
     // Off Windows the crates that build only for Windows stay out of host builds.
     if !on_windows {
@@ -932,7 +928,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     // The feature lints go first: they are cheap, and the first failing
     // step ends the host checks.
     let mut host_run = if parts.contains(&Part::Features) {
-        features::steps(scope, packages, host_ok)
+        features::steps(scope, packages, |p| host_ok(&p.name), &["clippy"])
     } else {
         Vec::new()
     };
@@ -945,35 +941,44 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         full,
         parts,
     ));
-    // Off Windows the whole workspace is also linted for Windows, where the
-    // `cfg(windows)` code builds.
-    let windows = (!on_windows && flags.0 && parts.contains(&Part::WindowsLint)).then(|| {
-        Step::new(&[
-            "xwin",
-            "clippy",
-            "--target",
-            WINDOWS_TARGET,
-            "--workspace",
-            "--features",
-            WINDOWS_TEST_FEATURE,
-            "--all-targets",
-            "--",
-            "-D",
-            "warnings",
-        ])
-    });
+    let windows = if !on_windows && flags.0 && parts.contains(&Part::WindowsLint) {
+        let root = workspace_root();
+        windows_lint_steps(scope, packages, |p| features::windows_code(&root, p))
+    } else {
+        Vec::new()
+    };
 
-    if let Some(step) = &windows {
+    for step in &windows {
         say(&format!("> {} (beside the host checks)", step.line()));
     }
     thread::scope(|scope| {
-        let windows = windows.as_ref().map(|step| scope.spawn(|| step.run(true)));
-        // The first failing host step ends the host checks.
+        // The first failing step of either side ends that side's checks.
+        let windows = (!windows.is_empty())
+            .then(|| scope.spawn(|| windows.iter().all(|step| step.run(true))));
         let host_passed = host_run.iter().all(|step| step.run(false))
             && (separate.is_empty() || in_process::run(&separate, &workspace));
         let windows_passed = windows.is_none_or(|handle| handle.join().unwrap_or(false));
         host_passed && windows_passed
     })
+}
+
+/// The Windows lint off Windows, where the `cfg(windows)` code builds only
+/// through cargo-xwin: the whole workspace with its test features, then each
+/// package `scope` checks that has Windows code (`windows_code`, Windows-only
+/// packages included) with none and each one of its features alone
+/// ([`features`]); the host's feature lints already cover the rest.
+fn windows_lint_steps(
+    scope: &Scope,
+    packages: &[Package],
+    windows_code: impl Fn(&Package) -> bool,
+) -> Vec<Step> {
+    let xwin = ["xwin", "clippy", "--target", WINDOWS_TARGET];
+    let workspace = Step::new(&xwin)
+        .then(&["--workspace", "--features", TEST_FEATURE, "--all-targets"])
+        .then(&["--", "-D", "warnings"]);
+    let mut steps = vec![workspace];
+    steps.extend(features::steps(scope, packages, windows_code, &xwin));
+    steps
 }
 
 mod features;
