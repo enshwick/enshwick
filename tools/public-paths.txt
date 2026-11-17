@@ -853,6 +853,7 @@ abi::DataSelect::ENTRY
 abi::DataSelect::RECIPE_KIND
 abi::DataSelect::STACKABLE
 abi::DataSelect::WORKSHOP
+abi::DataSelect::selects_items
 abi::DaytimeInfo
 abi::DaytimeInfo::BORN
 abi::DaytimeInfo::DAY
