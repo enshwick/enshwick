@@ -21,15 +21,9 @@ unsafe fn view(engine: &Engine, context: usize) -> Option<(extensions::ScreenVie
             unsafe { extensions::screen_view(engine, context) }
         })
         .flatten()?;
-    let tab = crate::actions::client_control::GROUPS
-        .tab
-        .get()
-        .map_or(TabRead::Unread, |tab| {
-            // SAFETY: `view.state` is this frame's interface state, the one the
-            // in-game menu draws from, read on the interface thread; its tab
-            // index sits at the routed `ui.menu_tab`.
-            unsafe { tab.shown(core::ptr::with_exposed_provenance(view.state), view.screen) }
-        });
+    // SAFETY: `view` is this frame's, read on the interface thread by the
+    // caller's contract.
+    let tab = unsafe { extensions::tab(&view) };
     Some((view, tab))
 }
 

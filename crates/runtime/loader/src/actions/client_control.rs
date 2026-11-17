@@ -61,7 +61,7 @@ const LOOK_DEVICES: usize = 5;
 /// The screens of the in-game menu, whose tab index names the tab it shows
 /// while one is open (`0x140d65cb0`, client 26430625): the index stays set
 /// after the menu closes.
-const MENU_SCREENS: [&str; 8] = [
+pub(crate) const MENU_SCREENS: [&str; 8] = [
     "InGameMenu",
     "Map",
     "Journal",
@@ -276,9 +276,11 @@ impl MenuPosts {
 #[derive(Debug)]
 pub(crate) struct Tab {
     /// The tab index in the interface state.
-    menu_tab: usize,
+    index: usize,
     /// A bit per screen byte of [`MENU_SCREENS`].
     menu_screens: [u64; 4],
+    /// Each tab's screen byte, in [`MenuTab::ALL`] order.
+    screens: [u8; MenuTab::ALL.len()],
 }
 
 /// The HUD's screen toggle.
@@ -353,24 +355,28 @@ fn in_input(loader: &Loader, id: pinned::Constant, size: usize) -> Result<usize,
 
 impl Tab {
     fn resolve(loader: &Loader) -> Result<Self, &'static str> {
-        let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
+        let hud_screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
         let value = |name: &str| {
             loader
                 .reflection
-                .enum_value(screens, name)
+                .enum_value(hud_screens, name)
                 .ok()
                 .and_then(|value| u8::try_from(value).ok())
                 .ok_or(catalogue::ids::HUD_SCREEN_TYPE)
         };
-        // Every tab names a menu screen, so this finds each tab's too.
         let mut menu_screens = [0; 4];
         for name in MENU_SCREENS {
             let screen = value(name)?;
             menu_screens[usize::from(screen / 64)] |= 1 << (screen % 64);
         }
+        let mut screens = [0; MenuTab::ALL.len()];
+        for (screen, tab) in screens.iter_mut().zip(MenuTab::ALL) {
+            *screen = value(tab.name())?;
+        }
         Ok(Self {
-            menu_tab: offset(loader, pinned::ui::MENU_TAB)?,
+            index: offset(loader, pinned::ui::MENU_TAB)?,
             menu_screens,
+            screens,
         })
     }
 
@@ -390,7 +396,7 @@ impl Tab {
     ///   interface frame on its thread.
     pub(crate) unsafe fn choose(&self, state: *mut u8, tab: MenuTab) {
         // SAFETY: the caller's contract.
-        unsafe { enshwick_core::raw::write_at(state, self.menu_tab, tab.index()) };
+        unsafe { enshwick_core::raw::write_at(state, self.index, tab.index()) };
     }
 
     /// Whether screen byte `screen` is one of the in-game menu's.
@@ -412,8 +418,27 @@ impl Tab {
             return TabRead::NoMenu;
         }
         // SAFETY: the caller's contract.
-        let index: u8 = unsafe { enshwick_core::raw::read_at(state, self.menu_tab) };
+        let index: u8 = unsafe { enshwick_core::raw::read_at(state, self.index) };
         MenuTab::from_index(u64::from(index)).map_or(TabRead::Other, TabRead::Shown)
+    }
+
+    /// The screens the player sees on screen byte `screen`: first the tab
+    /// the in-game menu shows, since a tab change leaves the byte as the menu
+    /// opened (client 26430625, seen live), `None` for a tab the build adds;
+    /// then `screen` itself where it is the menu's but no tab's, the menu
+    /// opened as a whole. Off the menu, `screen` alone.
+    ///
+    /// # Safety
+    ///
+    /// - As for [`Tab::shown`].
+    pub(crate) unsafe fn seen(&self, state: *const u8, screen: u8) -> [Option<u8>; 2] {
+        // SAFETY: the caller's contract, the same as `shown`'s.
+        let shown = match unsafe { self.shown(state, screen) } {
+            TabRead::Shown(tab) => Some(self.screens[tab as usize]),
+            TabRead::Other => None,
+            TabRead::NoMenu | TabRead::Unread => return [Some(screen), None],
+        };
+        [shown, (!self.screens.contains(&screen)).then_some(screen)]
     }
 }
 
@@ -733,8 +758,9 @@ mod tests {
             menu_screens[usize::from(screen / 64)] |= 1 << (screen % 64);
         }
         Tab {
-            menu_tab: 0x3_1e88,
+            index: 0x3_1e88,
             menu_screens,
+            screens: [0x2c, 5, 6, 8, 9, 7, 10],
         }
     }
 
@@ -873,6 +899,32 @@ mod tests {
             TabRead::Shown(MenuTab::Backpack),
             "the social screen"
         );
+    }
+
+    #[test]
+    fn the_player_sees_the_shown_tab_and_the_menu_opened_as_a_whole_not_the_tab_it_opened_on() {
+        let mut state = vec![0u8; 0x3_1e90];
+        let tab = tab_26430625();
+        let (menu, character, backpack, chest) = (4, 7, 9, 0x15);
+        let seen = |state: &[u8], screen| {
+            // SAFETY: the state holds a u64 at the tab index.
+            unsafe { tab.seen(state.as_ptr(), screen) }
+        };
+        put(&mut state, 0x3_1e88, MenuTab::Character.index());
+        assert_eq!(
+            seen(&state, backpack),
+            [Some(character), None],
+            "B, then the tab"
+        );
+        assert_eq!(seen(&state, menu), [Some(character), Some(menu)]);
+        assert_eq!(seen(&state, chest), [Some(chest), None], "no menu open");
+        put(&mut state, 0x3_1e88, 7u64);
+        assert_eq!(
+            seen(&state, menu),
+            [None, Some(menu)],
+            "a tab the build adds"
+        );
+        assert_eq!(seen(&state, backpack), [None, None]);
     }
 
     #[test]

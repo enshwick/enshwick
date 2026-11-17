@@ -136,6 +136,63 @@ impl Row {
     }
 }
 
+/// The game's item slot's width in layout units, rounded up from the about
+/// 108 measured (80 of the 310 pixels a 420-unit panel took beside the
+/// Backpack, client 26430625, 3840x2160), so a row never runs past its panel.
+const SLOT_WIDTH: u16 = 112;
+/// The gap between the item slots of a row.
+const SLOT_GAP: u16 = 10;
+
+/// How many item slots side by side fit in `inner` layout units, at least
+/// one.
+const fn slots_per_row(inner: u16) -> u16 {
+    let fit = (inner + SLOT_GAP) / (SLOT_WIDTH + SLOT_GAP);
+    if fit == 0 { 1 } else { fit }
+}
+
+/// A row of item slots, as the game's inventory grids lay them out: the
+/// slots a frame callback draws one after another, until the row is full.
+pub(in crate::ui::interface) struct SlotRow {
+    frame: Buf<FRAME_SIZE>,
+    /// The slots in the open row; 0 while none is open.
+    slots: u16,
+}
+
+impl SlotRow {
+    pub(in crate::ui::interface) const fn new() -> Self {
+        Self {
+            frame: Buf::zeroed(),
+            slots: 0,
+        }
+    }
+
+    /// Counts the next slot in a row of `per_row`: whether the open row ends
+    /// first, being full, and whether the slot starts a new one.
+    const fn admit(&mut self, per_row: u16) -> (bool, bool) {
+        let full = self.slots >= per_row && self.slots > 0;
+        if full {
+            self.slots = 0;
+        }
+        let starts = self.slots == 0;
+        self.slots += 1;
+        (full, starts)
+    }
+
+    /// Takes back the last slot counted, which drew nothing: whether the row
+    /// it opened is now empty, to close.
+    const fn retract(&mut self) -> bool {
+        let alone = self.slots == 1;
+        self.slots = self.slots.saturating_sub(1);
+        alone
+    }
+
+    /// Forgets an open row without closing it, for a new frame, whose layout
+    /// starts with no frame of the last one open.
+    pub(in crate::ui::interface) const fn forget(&mut self) {
+        self.slots = 0;
+    }
+}
+
 /// The gap between the buttons stacked in a row's right cell, a third of
 /// an icon button's height, so they read as two.
 const SIDE_GAP: f32 = 16.0;
@@ -228,6 +285,78 @@ impl Engine {
         unsafe { (self.frame_close)(row.frame.ptr()) };
     }
 
+    /// Makes room for the next item slot of a screen extension's panel
+    /// (`extension`) or of a window: opens a row for it, ending a full one
+    /// first. On a build without rows the slots stack.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread, with every frame
+    ///   opened since the row's last slot closed.
+    /// - `row` stays in place until [`Engine::slot_row_end`] in this frame.
+    pub(in crate::ui::interface) unsafe fn slot_row_next(
+        &self,
+        row: &mut SlotRow,
+        extension: bool,
+    ) {
+        let Some(fns) = &self.rows else {
+            return;
+        };
+        let (full, starts) = row.admit(slots_per_row(super::windows::inner_width(extension)));
+        if full {
+            // SAFETY: `self.frame_close` is the game's `ui.frame_close`,
+            // checked in `Engine::resolve`, on the full row this function
+            // opened earlier in the frame, in place and with nothing open
+            // inside it by this function's `# Safety`.
+            unsafe { (self.frame_close)(row.frame.ptr()) };
+        }
+        if starts {
+            // SAFETY: `fns.row` is the game's `ui.row`, checked in
+            // `Rows::resolve`, inside the window this function's `# Safety`
+            // gives; `row.frame` holds `FRAME_SIZE` bytes, the room of a frame
+            // as for `ui.column`, its twin, and stays in place.
+            unsafe { (fns.row)(row.frame.ptr(), f32::from(SLOT_GAP)) };
+        }
+    }
+
+    /// Takes back the item slot [`Engine::slot_row_next`] counted last, which
+    /// drew nothing, closing the row it opened alone, so a slot that fails
+    /// leaves no gap in the row.
+    ///
+    /// # Safety
+    ///
+    /// - As for [`Engine::slot_row_end`], right after the slot's
+    ///   [`Engine::slot_row_next`].
+    pub(in crate::ui::interface) unsafe fn slot_row_retract(&self, row: &mut SlotRow) {
+        if !row.retract() {
+            return;
+        }
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the row `slot_row_next` opened for this
+        // slot one call earlier (a count of 1 is only ever its opening, on a
+        // build with rows), in place and with nothing open inside it.
+        unsafe { (self.frame_close)(row.frame.ptr()) };
+    }
+
+    /// Ends the open row of item slots, if any.
+    ///
+    /// # Safety
+    ///
+    /// - Called on the frame's thread in the frame whose
+    ///   [`Engine::slot_row_next`] opened the row, inside the same window,
+    ///   with every frame opened since its last slot closed; `row` did not
+    ///   move.
+    pub(in crate::ui::interface) unsafe fn slot_row_end(&self, row: &mut SlotRow) {
+        if core::mem::take(&mut row.slots) == 0 {
+            return;
+        }
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the row `slot_row_next` opened in this
+        // frame (`slots` counts only from its opening), in place and with
+        // nothing open inside it by this function's `# Safety`.
+        unsafe { (self.frame_close)(row.frame.ptr()) };
+    }
+
     /// Draws the thin line the game puts between the entries of a list;
     /// nothing on a build without rows.
     ///
@@ -275,6 +404,44 @@ mod tests {
         assert!(apart(row, column).is_ok());
         let id = pinned::ui::ROW.id();
         assert!(matches!(apart(column, column), Err(Missing::Bytes(at)) if at == id));
+    }
+
+    #[test]
+    fn a_panel_beside_a_screen_holds_three_slots_a_row_and_a_window_five() {
+        use super::super::windows::inner_width;
+        assert_eq!(slots_per_row(inner_width(true)), 3);
+        assert_eq!(slots_per_row(inner_width(false)), 5);
+        assert_eq!(slots_per_row(0), 1, "a slot too wide still draws");
+    }
+
+    #[test]
+    fn a_slot_starts_a_row_when_none_is_open_or_the_open_one_is_full() {
+        let mut row = SlotRow::new();
+        let steps: Vec<_> = (0..7).map(|_| row.admit(3)).collect();
+        let (new, ends) = ((false, true), (true, true));
+        let same = (false, false);
+        assert_eq!(steps, [new, same, same, ends, same, same, ends]);
+        assert_eq!(row.slots, 1, "the last row holds one slot to end");
+    }
+
+    #[test]
+    fn a_slot_that_drew_nothing_gives_its_place_back_and_closes_a_row_it_opened_alone() {
+        let mut row = SlotRow::new();
+        assert!(!row.retract(), "no row open");
+        row.admit(3);
+        assert!(row.retract(), "it opened the row alone");
+        assert_eq!(row.admit(3), (false, true), "the next slot opens a row");
+        row.admit(3);
+        assert!(!row.retract(), "the row keeps its first slot");
+        assert_eq!(
+            row.admit(3),
+            (false, false),
+            "and takes the next in its place"
+        );
+        assert_eq!(row.admit(3), (false, false));
+        assert_eq!(row.admit(3), (true, true), "three drawn: the row was full");
+        row.forget();
+        assert_eq!(row.admit(3), (false, true), "a new frame opens its own row");
     }
 
     #[test]

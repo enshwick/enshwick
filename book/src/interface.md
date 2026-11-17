@@ -267,6 +267,14 @@ shows only once a panel draws a widget in it, so a panel that draws nothing
 shows nothing. The panel never moves or changes the game's screen.
 `frame.window` is refused inside a panel, which is already one.
 
+The game's screen keeps its input while a panel shows. Its keys, its tabs and
+its slots work as without the mod. Only a click on the panel's own widgets
+goes to the panel.
+
+A panel covers whatever of the screen lies under it, so choose the edge where
+the screen has free space. On the Backpack this is the left edge, below the
+backpack's slots. The game's item details fill the right half.
+
 A panel cannot go on the screens of play with no window open, where it would
 cover the world. For these screens, `extend_screen` returns `Off`:
 
@@ -299,8 +307,8 @@ frame. It returns `InGame` in the world with no screen open. It returns
 each time the open screen changes. It hands the handler a `ScreenChanged`.
 Its fields `before` and `now` name the screen before the change and the one
 now. A chest, the map or a survivor's dialog that opens or closes changes
-the open screen. The loader reads the screen once a
-frame, from the same byte as the panels.
+the open screen. So does a change of the in-game menu's tab. The loader
+reads the screen once a frame, the same screen the panels follow.
 
 ```rust
 use enshwick::ui::HudScreenType;
@@ -411,6 +419,10 @@ returns a `SlotInput`. Its `clicked` is true in the frame the player clicks
 the slot, and `hovered` while the cursor is on it. A count of 0, an item the client does not know,
 and a frame outside a game draw nothing.
 
+Slots drawn one after another sit side by side in a row, as in the game's
+inventory grids. A panel holds three slots in a row and a window five; the
+next slot starts a new row. Any other widget starts below the row.
+
 `hovered_slot()` returns the slot of the game's own inventory screen under the
 cursor, such as one of the backpack's or an open chest's. It is a `Slot` with
 the slot's inventory and index, the item, the count and the item's own entity.
@@ -424,7 +436,7 @@ use enshwick::ui::{Edge, HudScreenType, Label, Style};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let torch = ItemId::new(0x5e01);
-    load.extend_screen(HudScreenType::Backpack, Edge::Right, move |panel| {
+    load.extend_screen(HudScreenType::Backpack, Edge::Left, move |panel| {
         if panel.item_slot(torch, 3).clicked {
             // Send the server a player action of the mod's own.
         }
@@ -437,7 +449,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 ```luau
-enshwick.ui.extend_screen("Backpack", "Right", function(panel)
+enshwick.ui.extend_screen("Backpack", "Left", function(panel)
     if panel:item_slot(0x5e01, 3).clicked then
         -- Send the server a player action of the mod's own.
     end

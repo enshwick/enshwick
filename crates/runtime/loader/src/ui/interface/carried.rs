@@ -227,7 +227,8 @@ enum Click {
     Cancel,
 }
 
-/// Draws the newest window the server's mods showed this client.
+/// Draws the newest window the server's mods showed this client, stepping
+/// aside while `screen`, the screen the player sees, is the Map.
 ///
 /// # Safety
 ///

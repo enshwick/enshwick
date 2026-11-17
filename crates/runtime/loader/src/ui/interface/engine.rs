@@ -901,9 +901,9 @@ impl Engine {
     }
 }
 
-const WINDOW_WIDTH: f32 = 900.0;
-/// A screen extension's panel width.
-const EXTENSION_WIDTH: f32 = 420.0;
+const WINDOW_WIDTH: u16 = 900;
+/// A screen extension's panel width, which holds a row of three item slots.
+const EXTENSION_WIDTH: u16 = 480;
 /// HUD elements the HUD hides from: full-screen menus, screenshot mode
 /// (0x400) and character dialogs (0x200), as the game's status bar.
 const HUD_MASK: u32 = 0x600;
@@ -934,7 +934,7 @@ pub(in crate::ui::interface) use looks::Icon;
 use looks::{BUNDLE, Legal, Looks, looks, path, sound};
 use optional::Optional;
 use popup::PopupRoot;
-pub(super) use rows::Row;
+pub(super) use rows::{Row, SlotRow};
 pub(super) use scroll::Scroll;
 pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame};
 pub(super) use widgets::Takes;

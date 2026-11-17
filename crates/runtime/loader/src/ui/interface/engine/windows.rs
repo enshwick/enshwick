@@ -9,6 +9,48 @@ use super::{
     Window, text_field,
 };
 
+/// The window flag that holds every action and click from the windows on
+/// lower layers taking the same input: the gates of `ui.action_query`
+/// (`0x1411a6ba0`) and of a click (`0x1411a6da0`) refuse a node while a
+/// higher window with this bit is open (client 26430625, decompiler). The
+/// game's popups and the in-game menu set it; its overlays (button hints,
+/// tooltips, the dragged item) do not, and hold only the clicks on their own
+/// widgets.
+const MODAL: u32 = 1;
+
+impl Window {
+    /// The flags the window starts with: a panel beside a game screen is an
+    /// overlay, so that screen keeps its keys, tabs and hover.
+    const fn flags(&self) -> u32 {
+        if self.edge.is_some() { 0 } else { MODAL }
+    }
+}
+
+/// A window's panel width in layout units: a screen extension's or a
+/// window's.
+const fn width(extension: bool) -> u16 {
+    if extension {
+        EXTENSION_WIDTH
+    } else {
+        WINDOW_WIDTH
+    }
+}
+
+/// A window's panel padding (left, top, right, bottom) in layout units.
+const fn padding(extension: bool) -> [u16; 4] {
+    if extension {
+        [40, 30, 40, 30]
+    } else {
+        [90, 60, 90, 60]
+    }
+}
+
+/// The width a window's widgets lay out in, inside its panel's padding.
+pub(super) const fn inner_width(extension: bool) -> u16 {
+    let [left, _, right, _] = padding(extension);
+    width(extension) - left - right
+}
+
 /// The navigation kind of a popup window.
 const NAV_WINDOW: u32 = 2;
 /// The navigation kind of a scrolled column.
@@ -94,7 +136,7 @@ impl Engine {
         // `NAME_FITS` of them: on client 26430625 the game copies the name
         // into its own 64-byte slice with its suffix and keeps no pointer
         // (`0x140a3c460`), and stops on a longer one. The arguments are the
-        // game popup's: full screen, its layer, all input, flags 1.
+        // game's own: full screen, its layer, all input, `Window::flags`.
         unsafe {
             (self.window_begin)(
                 window.object.ptr(),
@@ -102,7 +144,7 @@ impl Engine {
                 1,
                 window.layer,
                 u32::MAX,
-                1,
+                window.flags(),
             );
         }
         let node = window.object.read_usize(self.layout.window_node);
@@ -134,11 +176,8 @@ impl Engine {
         // table's `ui.frame_extent` bytes (`Layout::read`), name 0 for none.
         unsafe { (self.frame_open)(window.panel.ptr(), 0) };
         let panel = self.frame_node(&window.panel);
-        let padding = if window.edge.is_some() {
-            [40.0f32, 30.0, 40.0, 30.0]
-        } else {
-            [90.0f32, 60.0, 90.0, 60.0]
-        };
+        let extension = window.edge.is_some();
+        let padding = padding(extension).map(f32::from);
         // SAFETY: `self.node_padding` is the game's `ui.node_padding`, its
         // entry bytes checked in `Engine::resolve`, on the node the game just
         // wrote into the panel frame, with four live floats.
@@ -153,14 +192,9 @@ impl Engine {
         // bytes checked in `Engine::resolve`, on the panel's node, with a
         // live alignment word.
         unsafe { (self.node_align)(panel, &raw const align) };
-        let width = if window.edge.is_some() {
-            EXTENSION_WIDTH
-        } else {
-            WINDOW_WIDTH
-        };
         // SAFETY: `self.node_width` is the game's `ui.node_width`, its entry
         // bytes checked in `Engine::resolve`, on the panel's node.
-        unsafe { (self.node_width)(panel, width) };
+        unsafe { (self.node_width)(panel, f32::from(width(extension))) };
         // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`, its
         // entry bytes checked in `Engine::resolve`, on the panel's node.
         unsafe { (self.node_stretch)(panel, 0) };
@@ -262,6 +296,14 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_panel_beside_a_screen_leaves_that_screen_its_keys_and_clicks_and_a_window_holds_them() {
+        let panel = Window::extension(UiExtension::RIGHT, 0xa);
+        assert_eq!(panel.flags(), 0, "an overlay, as the game's button hints");
+        assert_eq!(Window::new().flags(), MODAL, "a popup, as the game's");
+        assert_eq!(Window::screen(0x1b, 30.0).flags(), MODAL);
+    }
 
     #[test]
     fn each_edge_puts_the_panel_at_its_side_centred_along_it() {

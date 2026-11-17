@@ -1,4 +1,4 @@
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 
 use enshwick_core::abi::{Str, UiWidget};
 
@@ -9,7 +9,7 @@ use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::ui::widget_checks;
 
-use super::engine::{Engine, Icon, Row, Takes, TextBuffer, Typed, UiText};
+use super::engine::{Engine, Icon, Row, SlotRow, Takes, TextBuffer, Typed, UiText};
 use super::{ARENA, DRAWING, WINDOW};
 use super::{Drawing, ENGINE, gather};
 
@@ -311,6 +311,32 @@ pub(super) fn copy(parts: &[&[u8]]) -> UiText {
     ARENA.with_borrow_mut(|arena| arena.text(parts))
 }
 
+thread_local! {
+    /// The row of item slots the frame callback drawing now has open.
+    static SLOTS: RefCell<SlotRow> = const { RefCell::new(SlotRow::new()) };
+}
+
+/// Ends the open row of a frame callback's item slots, if any: before its
+/// next widget that is not a slot, and before its window or the callback
+/// ends.
+///
+/// # Safety
+///
+/// - Called on the interface thread, in the frame and inside the window the
+///   row's slots drew in, with every frame opened since its last slot
+///   closed.
+pub(super) unsafe fn end_slots(engine: &Engine) {
+    // SAFETY: this function's `# Safety`; the row stayed in place in the
+    // thread-local `SLOTS`.
+    SLOTS.with_borrow_mut(|row| unsafe { engine.slot_row_end(row) });
+}
+
+/// Forgets a row of item slots a path left open in the last frame, so the
+/// next frame never closes a frame it did not open.
+pub(super) fn next_frame() {
+    SLOTS.with_borrow_mut(SlotRow::forget);
+}
+
 pub(super) fn draw(
     loader: &Loader,
     engine: &Engine,
@@ -336,6 +362,13 @@ pub(super) fn draw(
         }
     }
     widget_checks::order(raw.kind, drawing.window_open)?;
+    if !matches!(raw.kind, UiWidget::ITEM_SLOT | UiWidget::SOUND) {
+        // SAFETY: `widget` found this thread's `DRAWING`, set only while a
+        // frame callback runs inside the frame on the interface thread; a
+        // row is open only in the window its slots drew in, and widgets close
+        // every frame they open.
+        unsafe { end_slots(engine) };
+    }
     match raw.kind {
         UiWidget::WINDOW => {
             let (Some(record), Some(title)) =
@@ -415,10 +448,27 @@ pub(super) fn draw(
             row(engine, context, copy(&[text]), raw, read_only)
         }
         UiWidget::INPUT_HINT => input_hint(engine, text, raw),
-        // SAFETY: `window_open`, checked by `widget_checks::order`, means
-        // this callback's window, or its screen extension's, is open in this
-        // frame on the interface thread, with its non-zero `context`.
-        UiWidget::ITEM_SLOT => unsafe { super::item_slots::draw(context, raw) },
+        UiWidget::ITEM_SLOT => {
+            let extension = drawing.extension.is_some();
+            // SAFETY: `window_open`, checked by `widget_checks::order`, means
+            // this callback's window, or its screen extension's, is open in
+            // this frame on the interface thread; the row's slots drew only
+            // in it, and widgets close every frame they open; the row stays in
+            // the thread-local `SLOTS` until `end_slots` ends it in this frame,
+            // before the window or the callback ends.
+            SLOTS.with_borrow_mut(|row| unsafe { engine.slot_row_next(row, extension) });
+            // SAFETY: `window_open`, checked by `widget_checks::order`, means
+            // this callback's window, or its screen extension's, is open in
+            // this frame on the interface thread, with its non-zero `context`.
+            let drawn = unsafe { super::item_slots::draw(context, raw) };
+            if drawn.is_err() {
+                // SAFETY: in the same window and frame, right after the
+                // slot's `slot_row_next`, with nothing opened since; `SLOTS`
+                // kept the row in place.
+                SLOTS.with_borrow_mut(|row| unsafe { engine.slot_row_retract(row) });
+            }
+            drawn
+        }
         UiWidget::PROGRESS => {
             let Some(value) = widget_checks::progress(raw.value, raw.min, raw.max) else {
                 return Err(WidgetError::Malformed);
