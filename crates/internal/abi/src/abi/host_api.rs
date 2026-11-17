@@ -2349,11 +2349,13 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
     /// Writes to `out` the waypoint all players see that the character
     /// `entity` has set now, read as [`Event::WAYPOINT_CHANGED`](super::Event::WAYPOINT_CHANGED)
-    /// reads it: `set` 0 while it is off or for an entity without one. On
-    /// the server's game thread at a quiet moment only
-    /// ([`Status::WRONG_THREAD`] elsewhere); [`Status::UNAVAILABLE`] before
-    /// a world runs or on a build whose reflection lacks the waypoint.
-    /// ABI 12.16.
+    /// reads it: `set` 0 while it is off or for an entity without one, and
+    /// `key` 0 when no player online plays `entity`. `out` is the caller's,
+    /// at least a [`Header`] and writable for the size its header states;
+    /// [`Status::BAD_ARGS`] for a null or smaller one. On the server's game
+    /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
+    /// inside a step); [`Status::UNAVAILABLE`] before a world runs or on a
+    /// build whose reflection lacks the waypoint. ABI 12.16.
     pub waypoint:
         extern "system" fn(me: ModHandle, entity: Entity, out: *mut WaypointData) -> Status,
 }

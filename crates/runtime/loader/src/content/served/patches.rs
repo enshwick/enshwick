@@ -157,6 +157,7 @@ fn read_served(
         list: core::slice::from_ref(entry),
         sealed: true,
         archive: move |key: &ResourceKey| archive(key).ok(),
+        on: mod_on,
     };
     builds::read_built(&table, entry, base)
 }
@@ -617,6 +618,8 @@ struct Table<'a, A> {
     list: &'a [Served],
     sealed: bool,
     archive: A,
+    /// Whether a patch's owner is on: [`mod_on`], but in a benchmark.
+    on: fn(ModIndex) -> bool,
 }
 
 impl<'a> Table<'a, fn(&ResourceKey) -> Option<Vec<u8>>> {
@@ -626,6 +629,7 @@ impl<'a> Table<'a, fn(&ResourceKey) -> Option<Vec<u8>>> {
             list,
             sealed: true,
             archive: game_archive,
+            on: mod_on,
         }
     }
 }
@@ -662,7 +666,7 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
     }
 
     fn on(&self, patch: &&'a Patch) -> bool {
-        patch.runs(mod_on)
+        patch.runs(self.on)
     }
 
     fn enter(&self, key: &'a Served, build: Build) -> Building {
@@ -925,9 +929,7 @@ pub fn bench_served_build(of_a_mod: bool) -> impl FnMut() -> usize {
         part: 0,
     };
     let owner = if of_a_mod {
-        let owner = ModIndex::new(0);
-        super::BENCH_ON.get_or_init(|| owner);
-        owner
+        ModIndex::new(0)
     } else {
         ModIndex::LOADER
     };
@@ -935,7 +937,10 @@ pub fn bench_served_build(of_a_mod: bool) -> impl FnMut() -> usize {
     let entry: &'static Served = Box::leak(Box::new(Served::new(key, key, patches, false)));
     let base: &'static [u8] = Box::leak(vec![7u8; 64].into_boxed_slice());
     let at = base.as_ptr().expose_provenance();
-    let table = Table::game(core::slice::from_ref(entry));
+    let table = Table {
+        on: |_| true,
+        ..Table::game(core::slice::from_ref(entry))
+    };
     move || {
         // SAFETY: `base` is leaked, so its bytes stay readable and unchanged.
         unsafe { builds::build(&table, entry, (at, base.len()), Build::Game, None) }

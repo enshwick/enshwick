@@ -12,6 +12,7 @@ use super::{
     Change, Held, MAX_PLAYERS, Route, Told, Waiting, close_told, greeted, heard, holds, leaving,
     merged, message, note, pend, queue, route,
 };
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
@@ -63,6 +64,9 @@ pub(crate) fn holds_map() -> bool {
     WINDOWS.any_map.load(Ordering::Acquire)
 }
 
+/// The maps' runs of waypoint changes: a panic in one turns off only these.
+pub(crate) static MAP_RUNS: Fuse = Fuse::new("map runs");
+
 /// Runs what the waypoint `change` asks of the newest map its player
 /// holds: an interface run from that player, admitted and checked as a
 /// press of a window's button is. A cleared waypoint runs nothing.
@@ -70,7 +74,7 @@ pub(crate) fn waypoint_changed(loader: &Loader, change: &WaypointData) {
     if change.set == 0 {
         return;
     }
-    let Some(run) = run_at(&WINDOWS.maps.relock(), change.key.get(), change.position) else {
+    let Some(run) = run_at(&WINDOWS.maps.relock(), change.key, change.position) else {
         return;
     };
     let Some(record) = loader.mods.get(run.owner.get()) else {

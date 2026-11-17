@@ -31,6 +31,7 @@ pub(crate) static PARTS: &[&Part] = &[
             crate::world::waypoints::watch_for(crate::world::waypoints::Maps {
                 held: windows::holds_map,
                 changed: windows::waypoint_changed,
+                fuse: &windows::MAP_RUNS,
             });
         }),
         steps: &[step!(Follow, "carried windows", |s| windows::after_step(

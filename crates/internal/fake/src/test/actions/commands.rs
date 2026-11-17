@@ -369,8 +369,9 @@ impl Installed {
     /// a marker within `actions::window::NEAR` or the action of a point,
     /// as a run through [`ask_actions`](Self::ask_actions); the mod's reply,
     /// `None` when they hold no map or it runs nothing there. As in the
-    /// game, only a move runs anything: a waypoint set where it already was
-    /// runs nothing, and one set while the player held no map is forgotten.
+    /// game, only a move inside the map's frame runs anything: a waypoint
+    /// set where it already was, even while the player held no map, runs
+    /// nothing, and neither does one outside the frame.
     /// Call
     /// [`carried_windows`](Self::carried_windows) first, so the client holds
     /// what the mod showed.
@@ -414,28 +415,13 @@ impl Installed {
             })
         });
         let moved = table::with(false, |s| {
+            let mut moved = false;
+            let frame = s.host.world.map_frame;
             let waypoints = &mut s.actions.commands.waypoints;
-            let last = waypoints.iter().position(|(k, _)| *k == key);
-            match (&map, last) {
-                (None, Some(last)) => {
-                    waypoints.remove(last);
-                    false
-                }
-                (None, None) => false,
-                (Some(_), Some(last)) => {
-                    let before = core::mem::replace(&mut waypoints[last].1, at);
-                    before.map(f64::to_bits) != at.map(f64::to_bits)
-                }
-                (Some(_), None) => {
-                    waypoints.push((key, at));
-                    true
-                }
-            }
+            let _outside = waypoints.set(player, Some(at), frame.as_ref(), |_| moved = true);
+            moved
         });
-        if !moved {
-            return None;
-        }
-        let map = map?;
+        let map = map.filter(|_| moved)?;
         let (action, args) = map.run_at(at)?;
         let args = enshwick_core::actions::sheet::encode_args(&args);
         self.ask_actions(
@@ -494,7 +480,7 @@ impl Installed {
             s.actions.commands.carried.retain(|(k, _, _)| *k != key);
             s.actions.commands.pending.retain(|(k, _)| *k != key);
             s.actions.commands.windows.retain(|(k, _, _)| *k != key);
-            s.actions.commands.waypoints.retain(|(k, _)| *k != key);
+            s.actions.commands.waypoints.left(player);
             s.world.permission_changes.left(player);
         });
         self.tell_window_closed(player, "");

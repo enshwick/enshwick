@@ -35,7 +35,7 @@ mod run;
 pub(crate) use run::tests as harness;
 #[cfg(windows)]
 pub(crate) use run::{
-    ShowWindowError, after_step, closed, forget, hello, holds_map, left, ran, show,
+    MAP_RUNS, ShowWindowError, after_step, closed, forget, hello, holds_map, left, ran, show,
     waypoint_changed,
 };
 

@@ -7048,11 +7048,13 @@ typedef struct EnshwickHostApi {
                                       uint32_t *count);
   // Writes to `out` the waypoint all players see that the character
   // `entity` has set now, read as `EnshwickEvent_WAYPOINT_CHANGED`
-  // reads it: `set` 0 while it is off or for an entity without one. On
-  // the server's game thread at a quiet moment only
-  // (`EnshwickStatus_WRONG_THREAD` elsewhere); `EnshwickStatus_UNAVAILABLE` before
-  // a world runs or on a build whose reflection lacks the waypoint.
-  // ABI 12.16.
+  // reads it: `set` 0 while it is off or for an entity without one, and
+  // `key` 0 when no player online plays `entity`. `out` is the caller's,
+  // at least a `EnshwickHeader` and writable for the size its header states;
+  // `EnshwickStatus_BAD_ARGS` for a null or smaller one. On the server's game
+  // thread at a quiet moment (`EnshwickStatus_WRONG_THREAD` elsewhere or
+  // inside a step); `EnshwickStatus_UNAVAILABLE` before a world runs or on a
+  // build whose reflection lacks the waypoint. ABI 12.16.
   EnshwickStatus (*waypoint)(EnshwickModHandle me,
                              EnshwickEntity entity,
                              struct EnshwickWaypointData *out);

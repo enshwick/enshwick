@@ -580,6 +580,7 @@ pub fn build(
     let added = copies.len();
     let (_, first) = reading.array(layout.buffs)?;
     pairs.extend(keys.into_iter().zip(first..));
+    by_bucket(&mut pairs, reading.array(layout.entries)?.1)?;
     sized(out, base, |blob| {
         blob.grow_array(
             layout.buffs,
@@ -588,7 +589,7 @@ pub fn build(
             &layout.relative,
             &copies,
         )?;
-        write_map(layout, blob, &mut pairs, added)
+        write_map(layout, blob, &pairs, added)
     })?;
     Some(left)
 }
@@ -622,18 +623,26 @@ fn map_pairs(layout: &BuffLayout, blob: &Blob<&[u8]>) -> Option<Vec<(u32, u32)>>
     (pairs.len() == usize::try_from(count).ok()?).then_some(pairs)
 }
 
-/// Writes `pairs` as the collection's hash map, grouped by the bucket the
-/// game looks a key up in, `key & (buckets - 1)`, with `added` more keys and
-/// values than the map held.
+/// Orders `pairs` by the bucket the game looks a key up in among
+/// `buckets`, `key & (buckets - 1)`, as [`write_map`] takes them; `None`
+/// for no buckets.
+fn by_bucket(pairs: &mut [(u32, u32)], buckets: u32) -> Option<()> {
+    let mask = buckets.checked_sub(1)?;
+    pairs.sort_by_key(|&(key, _)| key & mask);
+    Some(())
+}
+
+/// Writes `pairs`, in [`by_bucket`] order, as the collection's hash map,
+/// with `added` more keys and values than the map held. It edits only
+/// `blob`, so a measure and the build of [`sized`] write the same.
 fn write_map(
     layout: &BuffLayout,
     blob: &mut dyn Draft,
-    pairs: &mut [(u32, u32)],
+    pairs: &[(u32, u32)],
     added: usize,
 ) -> Option<()> {
     let (entries, buckets) = blob.array(layout.entries)?;
     let mask = buckets.checked_sub(1)?;
-    pairs.sort_by_key(|&(key, _)| key & mask);
     let zeros = vec![(vec![0; KEY], None); added];
     blob.grow_array(layout.keys, KEY, KEY, &[], &zeros)?;
     blob.grow_array(layout.values, KEY, KEY, &[], &zeros)?;

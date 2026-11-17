@@ -167,8 +167,12 @@ impl LoadMethods for crate::BaseLoad {
             // SAFETY: the loader raises the event with a headed
             // `WaypointData`, readable for the call; one written by an
             // older minor reads with the size the event was born at.
-            let data =
-                unsafe { read_headed(raw.cast::<WaypointData>(), size_of::<WaypointData>()) };
+            let data = unsafe {
+                read_headed(
+                    raw.cast::<WaypointData>(),
+                    <WaypointData as crate::abi::Headed>::BORN,
+                )
+            };
             if let Some(data) = data {
                 handler(&WaypointChanged {
                     player: data.key,

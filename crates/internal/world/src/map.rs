@@ -327,7 +327,7 @@ impl LoadMethods for BaseLoad {
     }
 }
 
-/// The map's component types and field offsets, resolved once per mod life.
+/// What the map reads through, the host and the world, taken once per mod life.
 #[derive(Debug)]
 struct Resolved {
     host: Host,

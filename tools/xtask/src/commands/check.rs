@@ -42,6 +42,10 @@ macro_rules! facade_features {
 /// API's unstable calls, its generated typed API and the compat task are
 /// linted and tested with the rest.
 const TEST_FEATURE: &str = concat!(facade_features!(), ",xtask/compat");
+/// [`TEST_FEATURE`] where the Windows-only loader builds: its `test`
+/// feature holds the benchmarks' hooks, which nothing else lints.
+const WINDOWS_TEST_FEATURE: &str =
+    concat!(facade_features!(), ",xtask/compat,enshwick-loader/test");
 /// The API crate's part of [`TEST_FEATURE`], which a build that selects the
 /// facade without `xtask` takes so its features unify as in a workspace build.
 const FACADE_FEATURES: &str = facade_features!();
@@ -759,10 +763,15 @@ const EXCLUDE: &str = "--exclude";
 
 /// The cargo arguments every host build and test of the workspace takes.
 pub(crate) fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
+    let features = if on_windows {
+        WINDOWS_TEST_FEATURE
+    } else {
+        TEST_FEATURE
+    };
     let mut args = vec![
         "--workspace".to_owned(),
         "--features".to_owned(),
-        TEST_FEATURE.to_owned(),
+        features.to_owned(),
     ];
     // Off Windows the crates that build only for Windows stay out of host builds.
     if !on_windows {
@@ -946,7 +955,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
             WINDOWS_TARGET,
             "--workspace",
             "--features",
-            TEST_FEATURE,
+            WINDOWS_TEST_FEATURE,
             "--all-targets",
             "--",
             "-D",

@@ -11,6 +11,27 @@ use crate::{Entity, PlayerKey};
 /// one far more slowly, so every change is seen.
 pub const WAYPOINT_EVERY_MS: u64 = 100;
 
+/// The bytes of a waypoint's place: three `i64` in 32.32 fixed point.
+const POSITION_BYTES: usize = 24;
+
+/// Whether a `PlayerWaypoint` of `size` bytes holds the byte that shows it
+/// at `enabled` and its place at `position`; a reader trusts no layout
+/// that fails this.
+#[must_use]
+pub fn fields_inside(size: usize, enabled: usize, position: usize) -> bool {
+    enabled < size
+        && position
+            .checked_add(POSITION_BYTES)
+            .is_some_and(|end| end <= size)
+}
+
+/// Whether a look is due at `now`, after the last at `looked`, both in
+/// milliseconds; `looked` is 0 before the first.
+#[must_use]
+pub const fn due(looked: u64, now: u64) -> bool {
+    looked == 0 || now.saturating_sub(looked) >= WAYPOINT_EVERY_MS
+}
+
 /// Whether `at` lies inside the map's frame of `origin` and `size`, world x
 /// and z in metres; the one rule for waypoints and pings.
 #[must_use]
@@ -82,30 +103,68 @@ impl Waypoints {
             let Some(now) = read(player.entity) else {
                 continue;
             };
-            let Some((_, before)) = self.seen.iter_mut().find(|(key, _)| *key == player.key) else {
+            if !self.knows(player.key) {
                 self.seen.push((player.key, now));
                 continue;
-            };
-            if core::mem::replace(before, now) == now {
-                continue;
             }
-            if let Some(at) = now
-                && frame.is_some_and(|frame| !inside(frame.origin, frame.size, at))
-            {
-                if !core::mem::replace(&mut self.warned, true) {
-                    outside = Some(at);
-                }
-                continue;
-            }
-            changed(&data(player.key, player.entity, now));
+            outside = outside.or(self.moved(player, now, frame, &mut changed));
         }
         outside
+    }
+
+    /// `player` sets their waypoint to `now` between two looks, as the
+    /// next look sees it: a player not seen yet had none, and the rest is
+    /// as in [`look`](Self::look).
+    pub fn set(
+        &mut self,
+        player: &PlayerInfo,
+        now: Option<Metres>,
+        frame: Option<&MapFrameInfo>,
+        mut changed: impl FnMut(&WaypointData),
+    ) -> Option<Metres> {
+        if !self.knows(player.key) {
+            self.seen.push((player.key, None));
+        }
+        self.moved(player, now, frame, &mut changed)
+    }
+
+    /// Whether a look saw player `key`.
+    fn knows(&self, key: PlayerKey) -> bool {
+        self.seen.iter().any(|(seen, _)| *seen == key)
+    }
+
+    /// Moves the waypoint seen of `player`, already seen, to `now` and
+    /// hands `changed` a change inside `frame`; one outside, the first time,
+    /// comes back for the log.
+    fn moved(
+        &mut self,
+        player: &PlayerInfo,
+        now: Option<Metres>,
+        frame: Option<&MapFrameInfo>,
+        changed: &mut impl FnMut(&WaypointData),
+    ) -> Option<Metres> {
+        let (_, before) = self.seen.iter_mut().find(|(key, _)| *key == player.key)?;
+        if core::mem::replace(before, now) == now {
+            return None;
+        }
+        if let Some(at) = now
+            && frame.is_some_and(|frame| !inside(frame.origin, frame.size, at))
+        {
+            return (!core::mem::replace(&mut self.warned, true)).then_some(at);
+        }
+        changed(&data(player.key, player.entity, now));
+        None
     }
 
     /// Forgets every waypoint seen, so the next look only notes them: for a
     /// watcher that stops looking for a while.
     pub fn forget(&mut self) {
         self.seen.clear();
+    }
+
+    /// Forgets player `key`'s waypoint, as they leave.
+    pub fn left(&mut self, key: PlayerKey) {
+        self.seen.retain(|(seen, _)| *seen != key);
     }
 }
 
@@ -219,6 +278,38 @@ mod tests {
         assert!(inside([x, z], size, [0.0, 900.0, 0.0]));
         assert!(!inside([x, z], size, [150.0, 0.0, 0.0]));
         assert!(!inside([x, z], size, [0.0, 0.0, f64::NAN]));
+    }
+
+    #[test]
+    fn a_set_between_looks_runs_from_no_waypoint_and_keeps_the_frame_rule() {
+        let mut waypoints = Waypoints::new();
+        let mut set = |at: Metres| {
+            let mut handed = 0;
+            waypoints.set(&ann(), Some(at), Some(&frame()), |_| handed += 1);
+            handed
+        };
+        assert_eq!(set([5.0, 0.0, 5.0]), 1, "a player not seen had none");
+        assert_eq!(set([5.0, 0.0, 5.0]), 0, "set where it already was");
+        assert_eq!(set([5000.0, 0.0, 5.0]), 0, "outside the frame");
+        assert_eq!(set([6.0, 0.0, 5.0]), 1, "a move back in");
+        waypoints.left(PlayerKey::new(7));
+        assert!(look(&mut waypoints, Some(Some([6.0, 0.0, 5.0]))).is_empty());
+    }
+
+    #[test]
+    fn a_layout_counts_only_when_both_fields_lie_inside_the_type() {
+        assert!(fields_inside(32, 0, 8));
+        assert!(!fields_inside(32, 32, 0), "the byte past the end");
+        assert!(!fields_inside(32, 0, 9), "the place runs past the end");
+        assert!(!fields_inside(32, 0, usize::MAX), "no overflow");
+    }
+
+    #[test]
+    fn a_look_is_due_first_and_then_once_every_period() {
+        assert!(due(0, 1), "before the first look, even at boot");
+        assert!(!due(1_000, 1_000 + WAYPOINT_EVERY_MS - 1));
+        assert!(due(1_000, 1_000 + WAYPOINT_EVERY_MS));
+        assert!(!due(1_000, 999), "a clock that goes back waits");
     }
 
     #[test]

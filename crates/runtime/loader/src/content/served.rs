@@ -678,22 +678,6 @@ pub(crate) fn mod_on(owner: ModIndex) -> bool {
         || crate::engine::loader::loader()
             .and_then(|loader| loader.mods.get(owner.get()))
             .is_some_and(|m| !m.off.load(Ordering::Acquire))
-        || bench_on(owner)
-}
-
-/// The mod a benchmark's served build runs as on with no loader running.
-#[cfg(feature = "test")]
-pub(crate) static BENCH_ON: OnceLock<ModIndex> = OnceLock::new();
-
-/// Whether `owner` is the mod a benchmark runs as on.
-#[cfg(feature = "test")]
-fn bench_on(owner: ModIndex) -> bool {
-    BENCH_ON.get() == Some(&owner)
-}
-
-#[cfg(not(feature = "test"))]
-const fn bench_on(_owner: ModIndex) -> bool {
-    false
 }
 
 fn owner_on(served: &Served) -> bool {

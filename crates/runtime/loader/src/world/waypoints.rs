@@ -1,14 +1,14 @@
 //! The waypoints all players see: the one reader of the game's
 //! `PlayerWaypoint`, behind [`HostApi::waypoint`](enshwick_core::abi::HostApi::waypoint),
 //! and the one watcher that raises `Event::WAYPOINT_CHANGED` and runs the
-//! maps of carried windows. It looks every [`WAYPOINT_EVERY_MS`] after the
+//! maps of carried windows. It looks every [`WAYPOINT_EVERY_MS`](waypoints::WAYPOINT_EVERY_MS) after the
 //! step, and only while a mod hears the event or a client holds a map;
 //! once neither does, it forgets what it saw, so its next look only notes.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_base::__internal::waypoints::{self, WAYPOINT_EVERY_MS, Waypoints};
+use enshwick_base::__internal::waypoints::{self, Waypoints};
 use enshwick_base::Relock;
 use enshwick_core::abi::{Event, Metres, WaypointData};
 use enshwick_core::{Entity, PlayerKey};
@@ -35,9 +35,8 @@ impl WaypointAt {
         let size = catalogue::size(loader, ids::PLAYER_WAYPOINT)?;
         let enabled = catalogue::offset(loader, ids::PLAYER_WAYPOINT_ENABLED)?;
         let position = catalogue::offset(loader, ids::PLAYER_WAYPOINT_POSITION)?;
-        let inside = enabled < size && position.checked_add(24).is_some_and(|end| end <= size);
         let hash = catalogue::component_hash(loader, ids::PLAYER_WAYPOINT)?;
-        inside.then_some(Self {
+        waypoints::fields_inside(size, enabled, position).then_some(Self {
             hash,
             enabled,
             position,
@@ -76,6 +75,16 @@ pub(crate) struct Maps {
     pub(crate) held: fn() -> bool,
     /// Runs what a waypoint change asks of its player's newest map.
     pub(crate) changed: fn(&Loader, &WaypointData),
+    /// The maps' own feature: a panic in `changed` turns off only the
+    /// maps, never the event the mods hear.
+    pub(crate) fuse: &'static Fuse,
+}
+
+impl Maps {
+    /// Whether the maps still want changes: on, and held by a client.
+    fn wanted(&self) -> bool {
+        !self.fuse.is_off() && (self.held)()
+    }
 }
 
 /// The watcher's state.
@@ -132,28 +141,22 @@ pub(crate) fn read_now(loader: &Loader, entity: Entity) -> Result<WaypointData, 
     crate::engine::world::quiet_world(loader)?;
     let at = layout(loader, &WAYPOINTS_FUSE).ok_or(WorldError::Unread)?;
     let now = at.read(loader, entity)?;
-    let key = crate::engine::world::players(loader)?
-        .iter()
-        .find(|p| p.entity == entity)
-        .map_or(PlayerKey::new(0), |p| p.key);
+    let key = crate::engine::world::player(loader, entity).map_or(PlayerKey::new(0), |p| p.key);
     Ok(waypoints::data(key, entity, now))
 }
 
-/// Looks at the waypoints at most every [`WAYPOINT_EVERY_MS`] while a mod
-/// hears [`Event::WAYPOINT_CHANGED`] or a client holds a map, raises the
-/// event and runs the maps for each change.
+/// Looks at the waypoints at most every [`WAYPOINT_EVERY_MS`](waypoints::WAYPOINT_EVERY_MS) while a mod
+/// still on hears [`Event::WAYPOINT_CHANGED`] or a client holds a map,
+/// raises the event and runs the maps for each change.
 pub(crate) fn after_step(loader: &Loader) {
-    let heard = crate::engine::loader::handles(Event::WAYPOINT_CHANGED);
-    let maps = WATCHER.maps.get().filter(|maps| (maps.held)());
-    if !heard && maps.is_none() {
-        if WATCHER.looked.swap(0, Ordering::Relaxed) != 0 {
-            WATCHER.waypoints.relock().forget();
-        }
+    let heard = loader.hears(Event::WAYPOINT_CHANGED);
+    let maps = wanted_maps();
+    if idle(heard, maps) {
         return;
     }
     // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
     let now = unsafe { GetTickCount64() }.max(1);
-    if now.saturating_sub(WATCHER.looked.load(Ordering::Relaxed)) < WAYPOINT_EVERY_MS {
+    if !waypoints::due(WATCHER.looked.load(Ordering::Relaxed), now) {
         return;
     }
     WATCHER.looked.store(now, Ordering::Relaxed);
@@ -178,12 +181,51 @@ pub(crate) fn after_step(loader: &Loader) {
             "a waypoint outside the map is not handed on: {outside:?}"
         );
     }
-    for change in &changes {
+    hand_on(loader, &changes, heard, maps);
+}
+
+/// The maps of carried windows while they want changes.
+fn wanted_maps() -> Option<&'static Maps> {
+    WATCHER.maps.get().filter(|maps| maps.wanted())
+}
+
+/// Whether the watcher idles this step: no mod `heard` the event and no
+/// `maps` want changes. As it starts to, it forgets what it saw, so its
+/// next look only notes.
+fn idle(heard: bool, maps: Option<&Maps>) -> bool {
+    if heard || maps.is_some() {
+        return false;
+    }
+    if WATCHER.looked.swap(0, Ordering::Relaxed) != 0 {
+        WATCHER.waypoints.relock().forget();
+    }
+    true
+}
+
+/// For the benchmark of what every step pays while nothing watches the
+/// waypoints: the watcher's idle path, as `after_step` takes it with no
+/// mod hearing the event and no map held.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_waypoint_idle_step() -> impl FnMut() -> bool {
+    || {
+        idle(
+            crate::engine::loader::handles(Event::WAYPOINT_CHANGED),
+            wanted_maps(),
+        )
+    }
+}
+
+/// Raises the event for each of `changes` when `heard`, and runs `maps`
+/// for it under their own fuse.
+fn hand_on(loader: &Loader, changes: &[WaypointData], heard: bool, maps: Option<&Maps>) {
+    for change in changes {
         if heard {
             loader.emit(Event::WAYPOINT_CHANGED, None, (&raw const *change).cast());
         }
         if let Some(maps) = maps {
-            (maps.changed)(loader, change);
+            maps.fuse
+                .run("waypoint run", || (maps.changed)(loader, change));
         }
     }
 }
@@ -218,5 +260,20 @@ mod tests {
                     && p.reason.starts_with(ids::PLAYER_WAYPOINT)),
             "the reason names what the build lacks: {listed:?}"
         );
+    }
+
+    #[test]
+    fn a_panic_in_a_map_run_turns_off_only_the_maps() {
+        static MAP_RUNS: Fuse = Fuse::new("test map runs");
+        let loader = crate::start::tests::bare_loader();
+        let maps = Maps {
+            held: || true,
+            changed: |_, _| panic!("a map run that fails"),
+            fuse: &MAP_RUNS,
+        };
+        let change = waypoints::data(PlayerKey::new(7), Entity(40), Some([1.0, 0.0, 1.0]));
+        hand_on(&loader, &[change, change], false, Some(&maps));
+        assert!(MAP_RUNS.is_off(), "the maps' own fuse took the panic");
+        assert!(!maps.wanted(), "the watcher stops running the maps");
     }
 }

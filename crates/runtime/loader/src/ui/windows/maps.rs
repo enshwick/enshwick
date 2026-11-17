@@ -6,6 +6,7 @@
 //! waypoint watcher hands on each change, so a waypoint set before the
 //! window showed, or moved while it was closed, runs nothing.
 
+use enshwick_core::PlayerKey;
 use enshwick_core::abi::Metres;
 use enshwick_core::actions::Value;
 use enshwick_core::actions::window::{ItemView, MapView, decode};
@@ -100,11 +101,11 @@ pub fn kept(maps: &mut Vec<HeldMap>, held: &Held) {
 /// newest of `maps` that player holds; `None` when they hold none or it
 /// runs nothing there.
 #[must_use]
-pub fn run_at(maps: &[HeldMap], key: u64, at: Metres) -> Option<WaypointRun> {
-    let held = maps.iter().rev().find(|m| m.key == key)?;
+pub fn run_at(maps: &[HeldMap], key: PlayerKey, at: Metres) -> Option<WaypointRun> {
+    let held = maps.iter().rev().find(|m| m.key == key.get())?;
     let (action, args) = held.map.run_at(at)?;
     Some(WaypointRun {
-        key,
+        key: held.key,
         owner: held.owner,
         action: action.to_owned(),
         args,
@@ -192,7 +193,7 @@ mod tests {
             name: String::new(),
         };
         assert_eq!(
-            run_at(&maps, 7, [101.0, 0.0, 100.0]),
+            run_at(&maps, PlayerKey::new(7), [101.0, 0.0, 100.0]),
             Some(WaypointRun {
                 key: 7,
                 owner: ModIndex::new(0),
@@ -201,14 +202,18 @@ mod tests {
             })
         );
         assert_eq!(
-            run_at(&maps, 7, [400.0, 2.0, 100.0]).map(|run| run.args),
+            run_at(&maps, PlayerKey::new(7), [400.0, 2.0, 100.0]).map(|run| run.args),
             Some(vec![
                 Value::Number(400.0),
                 Value::Number(2.0),
                 Value::Number(100.0)
             ])
         );
-        assert_eq!(run_at(&maps, 8, [101.0, 0.0, 100.0]), None, "no map held");
+        assert_eq!(
+            run_at(&maps, PlayerKey::new(8), [101.0, 0.0, 100.0]),
+            None,
+            "no map held"
+        );
     }
 
     #[test]
@@ -216,7 +221,7 @@ mod tests {
         let other = MAP.replace("M\tgoto\tplace", "M\t\tmark");
         let mut maps = vec![held_map(7, "players")];
         note_map(&mut maps, 7, ModIndex::new(1), &shown("marks", &other));
-        let run = run_at(&maps, 7, [100.0, 0.0, 100.0]).unwrap();
+        let run = run_at(&maps, PlayerKey::new(7), [100.0, 0.0, 100.0]).unwrap();
         assert_eq!((run.owner, run.action.as_str()), (ModIndex::new(1), "mark"));
     }
 }

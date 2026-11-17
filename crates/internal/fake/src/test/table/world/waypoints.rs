@@ -2,7 +2,7 @@
 //! [`HostApi::waypoint`](enshwick_core::abi::HostApi::waypoint) and
 //! `Event::WAYPOINT_CHANGED`, through the base's one watcher.
 
-use enshwick_base::__internal::waypoints::{self, WAYPOINT_EVERY_MS, Waypoints};
+use enshwick_base::__internal::waypoints::{self, Waypoints};
 use enshwick_core::__fake::ids;
 use enshwick_core::abi::{Event, Metres, ModHandle, Status, WaypointData};
 use enshwick_core::{Entity, PlayerKey};
@@ -14,8 +14,9 @@ use crate::test::table::{State, with};
 #[derive(Debug, Default)]
 pub(crate) struct Watched {
     waypoints: Waypoints,
-    /// When it last looked, on the fake's clock.
-    looked: Option<u64>,
+    /// When it last looked, in milliseconds on the fake's clock; 0 before
+    /// the first look.
+    looked: u64,
 }
 
 /// `entity`'s waypoint as the loader reads it, through the layout the
@@ -38,7 +39,7 @@ fn read(s: &State, entity: Entity) -> Result<Option<Metres>, Status> {
     let (Ok(enabled), Ok(position)) = (usize::try_from(enabled), usize::try_from(position)) else {
         return Err(Status::UNAVAILABLE);
     };
-    if enabled >= size || position.checked_add(24).is_none_or(|end| end > size) {
+    if !waypoints::fields_inside(size, enabled, position) {
         return Err(Status::UNAVAILABLE);
     }
     let Some(&(address, len)) = base.components.get(&(entity.0, hash)) else {
@@ -105,7 +106,7 @@ pub(crate) extern "system" fn waypoint(
 }
 
 /// What the loader runs after a step: a look at the waypoints every
-/// [`WAYPOINT_EVERY_MS`] while the mod hears `Event::WAYPOINT_CHANGED`,
+/// [`WAYPOINT_EVERY_MS`](waypoints::WAYPOINT_EVERY_MS) while the mod hears `Event::WAYPOINT_CHANGED`,
 /// and the event for each change.
 pub(crate) fn after_step() {
     let changes = with(Vec::new(), |s| {
@@ -118,20 +119,15 @@ pub(crate) fn after_step() {
             s.world.waypoints = Watched::default();
             return Vec::new();
         }
-        let now = s.base.ticks.nanos();
-        let every = WAYPOINT_EVERY_MS * 1_000_000;
-        if s.world
-            .waypoints
-            .looked
-            .is_some_and(|at| now.saturating_sub(at) < every)
-        {
+        let now = (s.base.ticks.nanos() / 1_000_000).max(1);
+        if !waypoints::due(s.world.waypoints.looked, now) {
             return Vec::new();
         }
         let mut changes = Vec::new();
         let players = s.host.base.players.clone();
         let frame = s.host.world.map_frame;
         let mut watched = core::mem::take(&mut s.world.waypoints);
-        watched.looked = Some(now);
+        watched.looked = now;
         watched.waypoints.look(
             &players,
             frame.as_ref(),

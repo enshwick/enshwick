@@ -13,3 +13,9 @@
   its reason, in place of "map waypoints" (#1187).
 - Fake host: raises `Event::WAYPOINT_CHANGED` after a step and answers
   `HostApi::waypoint` from its components, as the loader does (#1187).
+- Fake host: `set_waypoint` runs a map only for a waypoint inside the
+  map's frame that moved, remembered while no map is held, as the loader
+  does (#1187).
+- Loader: the watcher stops once every mod that hears the event is off,
+  and a panic in a map's run turns off only the maps, listed as "map
+  runs" (#1187).
