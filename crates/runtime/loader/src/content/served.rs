@@ -212,6 +212,11 @@ pub(crate) enum ServeResourceError {
 
 sealed_is_too_late!(ServeResourceError);
 
+/// Whether every mod's init ended, so no mod serves a resource any more.
+pub(crate) fn is_sealed() -> bool {
+    RESOURCES.is_sealed()
+}
+
 /// Adds mod `owner`'s patch of `key`.
 ///
 /// # Errors
@@ -966,6 +971,8 @@ crate::engine::chains::chain_detour! {
     }
 }
 
+mod game;
+pub(crate) use game::{game_holds, game_keys};
 mod patches;
 #[cfg(test)]
 mod tests;

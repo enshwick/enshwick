@@ -6,12 +6,14 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::abi::{Header, ResourceKey, Status, TypeEntry};
-    use enshwick::content::Guid;
+    use enshwick::content::{Guid, Id};
     use enshwick::resources::{Attribute, Constant, Field, Kind, Registry, Type, Value};
     use enshwick::{Load, Mod, Off};
 
     const TABLE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    const OTHER: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
+    /// The new table the mod serves, under its own content id.
+    const OTHER_ID: Id = Id::new("you.doubler:other");
+    const OTHER: Guid = OTHER_ID.guid();
 
     static SERVED: OnceLock<Result<(), String>> = OnceLock::new();
 
@@ -65,6 +67,7 @@ mod tests {
                             .ok()
                     })?;
                 }
+                load.declare(OTHER_ID)?;
                 let new = OTHER.key_by_hash(enshwick::resources::fnv1a32(b"keen::balance::Table"));
                 load.serve_new(
                     new,

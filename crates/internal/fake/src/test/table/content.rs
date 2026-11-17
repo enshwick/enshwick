@@ -24,9 +24,11 @@ pub(crate) struct ContentState {
     /// The mod's recipe rules in force: kind and name.
     pub(crate) recipe_rules: Vec<(enshwick_core::abi::RecipeRuleKind, String)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
-    /// The content renames the mod declared, old GUID to new.
-    pub(crate) content_renames:
-        Option<Vec<(enshwick_core::content::Guid, enshwick_core::content::Guid)>>,
+    /// The content renames each mod or pack declared, old GUID to new.
+    pub(crate) content_renames: Vec<(
+        ModHandle,
+        Vec<(enshwick_core::content::Guid, enshwick_core::content::Guid)>,
+    )>,
     /// Content ids the mod declared, in order.
     pub(crate) content_ids: Vec<String>,
     /// The GUID of each content id declared, with the mod or data pack that
@@ -143,13 +145,62 @@ fn outside(me: ModHandle, id: &str) -> bool {
 
 /// Whether mod `me` declared the content id `guid` comes from, as the
 /// loader asks of every call that adds content by GUID.
-#[cfg(feature = "unstable")]
 pub(crate) fn declared(
     s: &crate::test::table::State,
     me: ModHandle,
     guid: enshwick_core::content::Guid,
 ) -> bool {
     s.content.declared_by.contains(&(me, guid))
+}
+
+/// Whether a mod other than `me` declared the content id `guid` comes
+/// from, as the loader refuses for the old side of a rename.
+fn another_mods(
+    s: &crate::test::table::State,
+    me: ModHandle,
+    guid: enshwick_core::content::Guid,
+) -> bool {
+    s.content
+        .declared_by
+        .iter()
+        .any(|&(by, held)| held == guid && by != me)
+}
+
+/// As [`declared`] for a GUID that may name the game's content too, as the
+/// new side of a rename may: a GUID of the fake archive passes.
+pub(crate) fn declared_or_game(
+    s: &crate::test::table::State,
+    me: ModHandle,
+    guid: enshwick_core::content::Guid,
+) -> bool {
+    s.host
+        .content
+        .resources
+        .keys()
+        .any(|&(held, _, _)| held == guid)
+        || declared(s, me, guid)
+}
+
+/// As [`declared`] for the resource `key` mod `me` serves from `base`, as
+/// the loader asks: a key served from its own GUID, one the fake archive
+/// holds and an old GUID of the mod's own renames pass.
+pub(crate) fn declared_resource(
+    s: &crate::test::table::State,
+    me: ModHandle,
+    key: &ResourceKey,
+    base: &ResourceKey,
+) -> bool {
+    let renamed_from =
+        s.content.content_renames.iter().any(|(owner, renames)| {
+            *owner == me && renames.iter().any(|&(from, _)| from == key.guid)
+        });
+    key.guid == base.guid
+        || s.host
+            .content
+            .resources
+            .contains_key(&(key.guid, key.type_hash, key.part))
+        || renamed_from
+        || declared(s, me, key.guid)
 }
 
 pub(crate) extern "system" fn content_name(
@@ -191,7 +242,7 @@ pub(crate) extern "system" fn crafting_prop(
         return Status::BAD_ARGS;
     }
     with_open(|s| {
-        if !super::base::mods::joins(s, me) {
+        if !super::base::mods::joins(s, me) || !declared(s, me, prop) {
             return Status::REFUSED;
         }
         // As the loader: without the game's mask and props nothing reads.
@@ -239,6 +290,56 @@ pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
             &id,
         );
         Status::REFUSED
+    })
+}
+
+pub(crate) extern "system" fn rename_content(
+    me: ModHandle,
+    renames: *const enshwick_core::abi::ContentRename,
+    count: u32,
+) -> Status {
+    let renames: Vec<(enshwick_core::content::Guid, enshwick_core::content::Guid)> = match count {
+        0 => Vec::new(),
+        _ if renames.is_null() => return Status::BAD_ARGS,
+        // SAFETY: `renames` is non-null, checked just before, and the ABI has
+        // the mod keep `count` aligned entries there for the call.
+        _ => unsafe { core::slice::from_raw_parts(renames, count as usize) }
+            .iter()
+            .map(|r| (r.from, r.to))
+            .collect(),
+    };
+    with(Status::MISSING, |s| {
+        // In the loader's order: the seal, the declared ids, the renames.
+        if s.base.closed() {
+            return Status::TOO_LATE;
+        }
+        // As the loader: only the end of each chain is new, and a cycle has none.
+        let others = renames.iter().any(|&(from, _)| another_mods(s, me, from));
+        let undeclared = renames.iter().any(|&(_, to)| {
+            !renames.iter().any(|&(from, _)| from == to) && !declared_or_game(s, me, to)
+        });
+        let onto_itself = renames.iter().any(|(from, to)| from == to);
+        let next = |at| {
+            renames
+                .iter()
+                .find(|&&(from, _)| from == at)
+                .map(|&(_, to)| to)
+        };
+        let cycle = renames.iter().any(|&(start, _)| {
+            (0..renames.len())
+                .try_fold(start, |at, _| next(at))
+                .is_some_and(|at| next(at).is_some())
+        });
+        let twice = s
+            .content
+            .content_renames
+            .iter()
+            .any(|(owner, _)| *owner == me);
+        if others || undeclared || onto_itself || cycle || twice {
+            return Status::REFUSED;
+        }
+        s.content.content_renames.push((me, renames));
+        Status::OK
     })
 }
 

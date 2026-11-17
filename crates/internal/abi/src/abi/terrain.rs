@@ -79,7 +79,8 @@ impl TerrainMaterialInfo {
 pub struct TerrainMaterialAdd {
     /// Size and version of this struct.
     pub header: Header,
-    /// The GUID saves name its voxels by: its content id's.
+    /// The GUID saves name its voxels by: its content id's, which the
+    /// calling mod declared with `declare_content`.
     pub guid: Guid,
     /// The item digging it yields, by its GUID, with
     /// [`TerrainMaterialAdd::ITEM`].

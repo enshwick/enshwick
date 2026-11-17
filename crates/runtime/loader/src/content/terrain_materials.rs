@@ -381,7 +381,7 @@ fn copy_looks(blending: &mut Value, materials: &[Material]) -> Option<()> {
 pub(crate) const FEATURE: &str = "terrain materials";
 
 #[cfg(windows)]
-pub(crate) use running::{add, record, sealed, serve};
+pub(crate) use running::{add, in_time, record, sealed, serve};
 
 /// The materials in the running game: mods' registrations, the archive's
 /// palette, and the loader's patches.
@@ -486,9 +486,6 @@ mod running {
         (owner, joins): (ModIndex, bool),
         request: &TerrainMaterialAdd,
     ) -> Result<u8, TerrainMaterialError> {
-        if TERRAIN.materials.is_sealed() {
-            return Err(TerrainMaterialError::TooLate);
-        }
         let (palette, _) = palette(loader).ok_or(TerrainMaterialError::Unread)?;
         // Clients name terrain ids in load order too, so a material they
         // lack would shift every id after it.
@@ -500,6 +497,19 @@ mod running {
             added.push(material);
             Ok(material.id)
         })?
+    }
+
+    /// Whether mods may still add terrain materials: the host entry asks it
+    /// before the other refusals, so a late call reads as late.
+    ///
+    /// # Errors
+    ///
+    /// [`TerrainMaterialError::TooLate`] after init.
+    pub(crate) fn in_time() -> Result<(), TerrainMaterialError> {
+        if TERRAIN.materials.is_sealed() {
+            return Err(TerrainMaterialError::TooLate);
+        }
+        Ok(())
     }
 
     /// Seals the mods' materials: none is added after.

@@ -7,6 +7,7 @@ use enshwick_core::abi::{
 };
 
 use crate::engine::conflicts::Mode;
+use crate::host::layer::guards::declared_content;
 use crate::host::layer::{
     Asker, Buffer, Caller, Headed, HeadedOut, In, Mod, Out, SizedListOut, entries,
 };
@@ -94,6 +95,8 @@ entries! {
         id as Out<u8>,
     ) -> Status {
         let owner = (me.index, me.record.joins_when_on());
+        crate::content::terrain_materials::in_time()?;
+        declared_content(me.record, material.guid)?;
         id.put(crate::content::terrain_materials::add(me.loader, owner, &material)?)
     }
 

@@ -4,14 +4,15 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{Side, Status};
-    use enshwick::content::{Guid, types};
+    use enshwick::content::{Guid, Id, types};
     use enshwick::resources::{Field, Kind, Type, fnv1a32};
     use enshwick::sound::{SoundChange, SoundContainerId};
     use enshwick::test::{Drawn, FakeHost};
     use enshwick::{Load, Mod, Off};
 
     const CHEST: Guid = Guid::named("you.bells:chest");
-    const BELL: Guid = Guid::named("you.bells:bell");
+    const BELL_ID: Id = Id::new("you.bells:bell");
+    const BELL: Guid = BELL_ID.guid();
     const CONTAINER: &str = "demo::SoundContainerResource";
 
     struct Bells;
@@ -26,6 +27,7 @@ mod tests {
                     ..SoundChange::default()
                 },
             )?;
+            load.declare(BELL_ID)?;
             load.serve(
                 types::SOUND_CONTAINER_RESOURCE.key(BELL)?,
                 types::SOUND_CONTAINER_RESOURCE.key(CHEST)?,

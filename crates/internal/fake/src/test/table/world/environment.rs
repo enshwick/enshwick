@@ -252,11 +252,14 @@ pub(crate) extern "system" fn terrain_material_add(
     }
     let vanilla = |id| GAME_TERRAIN.contains(&id);
     with(Status::MISSING, |s| {
-        // In the loader's order: the seal, the mod's side, the request.
+        // In the loader's order: the seal, the declared id, the mod's side,
+        // the request; the fake's palette always reads.
         if s.base.closed() {
             return Status::TOO_LATE;
         }
-        if !crate::test::table::base::mods::joins(s, me) {
+        if !crate::test::table::content::declared(s, me, material.guid)
+            || !crate::test::table::base::mods::joins(s, me)
+        {
             return Status::REFUSED;
         }
         if !vanilla(material.like)

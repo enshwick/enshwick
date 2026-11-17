@@ -4,6 +4,7 @@
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{ModHandle, ResourceKey, Status};
 
+use crate::host::layer::guards::{declared_resource, open};
 use crate::host::layer::{
     BytesOut, BytesSlot, Callback, Caller, In, List, ListOut, Mod, Out, Refused, SizedListOut,
     entries,
@@ -17,6 +18,8 @@ entries! {
         patch as Callback<api_frame::ResourcePatchFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
+        open(crate::content::served::is_sealed())?;
+        declared_resource(&me, &key, &base)?;
         Ok(crate::content::served::register(me.index, key, base, patch, user)?)
     }
 
@@ -70,10 +73,7 @@ entries! {
         type_hash: u32,
         [out, capacity, count] as ListOut<ResourceKey>,
     ) -> Status {
-        let keys = RESOURCE_KEYS
-            .get_or_init(|| crate::engine::archive::game().map(crate::engine::archive::Archive::keys))
-            .as_ref()
-            .ok_or(Status::UNAVAILABLE)?;
+        let keys = crate::content::served::game_keys().ok_or(Status::UNAVAILABLE)?;
         if type_hash == 0 {
             return out.put(keys);
         }
@@ -177,9 +177,6 @@ fn short_or(
         _ => read(key),
     }
 }
-
-/// Every resource key of the game's archive, in archive order, read once.
-static RESOURCE_KEYS: std::sync::OnceLock<Option<Vec<ResourceKey>>> = std::sync::OnceLock::new();
 
 /// Every content hash of the game's archive, read once.
 static CONTENT_HASHES: std::sync::OnceLock<Option<Vec<[u32; 4]>>> = std::sync::OnceLock::new();

@@ -320,6 +320,7 @@ fn every_domain_error_answers_mods_the_status_it_answered_before() {
         NetError::NotCarried,
         NetError::Carrier(CarrierError::Full),
         RenameError::ToItself,
+        RenameError::Cycle,
         RenameError::Twice,
         RenameError::Sealed,
         StopError::NotServer,

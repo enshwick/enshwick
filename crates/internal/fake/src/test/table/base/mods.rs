@@ -5,9 +5,7 @@ use core::ffi::c_void;
 
 use super::io::list;
 use crate::test::table::{Registered, State, TABLE, found, text, with};
-use enshwick_core::abi::{
-    ConfigCheckFn, ContentRename, HostApi, Level, ModHandle, ModInfo, Side, Status, Str,
-};
+use enshwick_core::abi::{ConfigCheckFn, HostApi, Level, ModHandle, ModInfo, Side, Status, Str};
 
 /// What the fake reads from the mod's manifest, as the loader does.
 #[derive(Debug)]
@@ -233,33 +231,6 @@ pub(crate) extern "system" fn settings(_me: ModHandle, file: Str, out: *mut Str)
         Some(view)
     });
     found(served, out)
-}
-
-pub(crate) extern "system" fn rename_content(
-    _me: ModHandle,
-    renames: *const ContentRename,
-    count: u32,
-) -> Status {
-    let renames: Vec<(enshwick_core::abi::Guid, enshwick_core::abi::Guid)> = match count {
-        0 => Vec::new(),
-        _ if renames.is_null() => return Status::BAD_ARGS,
-        // SAFETY: `renames` is non-null, checked just before, and the ABI has
-        // the mod keep `count` aligned entries there for the call.
-        _ => unsafe { core::slice::from_raw_parts(renames, count as usize) }
-            .iter()
-            .map(|r| (r.from, r.to))
-            .collect(),
-    };
-    if renames.iter().any(|(from, to)| from == to) {
-        return Status::REFUSED;
-    }
-    with(Status::MISSING, |s| {
-        if s.content.content_renames.is_some() {
-            return Status::REFUSED;
-        }
-        s.content.content_renames = Some(renames);
-        Status::OK
-    })
 }
 
 pub(crate) extern "system" fn mods(

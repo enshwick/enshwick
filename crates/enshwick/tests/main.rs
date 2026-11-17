@@ -59,6 +59,7 @@ mod controls;
 #[cfg(feature = "unstable")]
 mod damage;
 mod daytime;
+mod declared_content;
 pub mod deps;
 mod developer_tools;
 #[cfg(feature = "unstable")]

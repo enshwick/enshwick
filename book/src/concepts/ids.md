@@ -139,6 +139,8 @@ off when the `Id` lies outside the mod's namespace.
 | A content id whose game id another content id has | the mod turns off; the log names both ids and mods |
 | A stat kind or affix whose key another of its kind has | the mod turns off; the log names both |
 | A stat kind or affix defined under another mod's id | the call returns `Off` |
+| A served resource, terrain material, crafting prop, buff or rename target under a GUID the mod did not declare | the call returns `Off`; the log names the declaring mod |
+| A rename from another mod's id, or renames in a cycle | the call returns `Off` |
 | A service, event, point or call outside the mod's namespace | the declaration fails with the rule in the log |
 | A control whose name the mod declared already | the second control is refused |
 | A malformed command alias, or one not shorter than the name | the call returns `Off` |
