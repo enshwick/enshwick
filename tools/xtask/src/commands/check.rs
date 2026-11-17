@@ -200,7 +200,8 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     Ok(wine::run(&windows_tests, args.windows))
 }
 
-/// Whether the committed public paths list is current, or left to CI: a
+/// Whether the committed public paths list is current and the book's
+/// stability chapter agrees with it, or the list is left to CI: a
 /// wide local change leaves it there with the dependents' rustdoc, since it
 /// documents the facade twice.
 fn public_paths_hold(
@@ -210,7 +211,15 @@ fn public_paths_hold(
     packages: &[Package],
 ) -> bool {
     if !lists_public_paths(scope, changed) {
-        return true;
+        let problems = if names_file(changed, public_paths::chapter::FILE) {
+            public_paths::check_chapter(root)
+        } else {
+            Vec::new()
+        };
+        for problem in &problems {
+            say(&format!("public paths: {problem}"));
+        }
+        return problems.is_empty();
     }
     if wide(scope) {
         say(&format!(
@@ -225,13 +234,20 @@ fn public_paths_hold(
     problems.is_empty()
 }
 
-/// Whether a change can move [`public_paths::FILE`]: it reaches the facade,
-/// changes this task, which writes the list, or edits the list, which no
-/// package owns.
+/// Whether a change can move [`public_paths::FILE`], so the facade is
+/// documented again to check it: it reaches the facade, changes this task,
+/// which writes the list, or edits the list, which no package owns. An edit
+/// of the book's stability chapter alone is checked against the committed
+/// list.
 fn lists_public_paths(scope: &Scope, changed: Option<&[String]>) -> bool {
     reaches(scope, FACADE)
         || touches(scope, env!("CARGO_PKG_NAME"))
-        || changed.is_some_and(|files| files.iter().any(|file| file == public_paths::FILE))
+        || names_file(changed, public_paths::FILE)
+}
+
+/// Whether the changed files `changed` hold `file`.
+fn names_file(changed: Option<&[String]>, file: &str) -> bool {
+    changed.is_some_and(|files| files.iter().any(|changed| changed == file))
 }
 
 /// Whether `scope` checks the code of `package`.

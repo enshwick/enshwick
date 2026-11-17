@@ -31,11 +31,8 @@ mod tests {
                 ),
                 "kiln",
             )?;
-            let refused = RecipesChange::new(
-                Recipes::Workshop(KILN),
-                Field::MaxStackSize,
-                Value::Set(2.0),
-            );
+            let refused =
+                RecipesChange::new(Recipes::Workshop(KILN), Field::BurnTime, Value::Set(2.0));
             if load.change_recipes(&refused, "stacks").is_ok() {
                 return Err(enshwick::Off::new(
                     "a recipe selection changed an item field",

@@ -186,6 +186,7 @@ fn groups_differ_by_pack_and_are_never_a_mod_s() {
     assert_ne!(group("a"), 0);
 }
 
+#[cfg(feature = "unstable")]
 fn vanilla_wood() -> (Vanilla, Guid) {
     let wood = Guid([1; 16]);
     (
@@ -194,6 +195,7 @@ fn vanilla_wood() -> (Vanilla, Guid) {
     )
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
     let (vanilla, wood) = vanilla_wood();
@@ -218,6 +220,7 @@ fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn a_table_with_times_scales_the_value() {
     let pack = Pack::parse(
         "you.stacks",
@@ -231,6 +234,7 @@ fn a_table_with_times_scales_the_value() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn a_value_out_of_range_is_a_problem_at_its_change() {
     let items = format!(
         "[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = 20\n\n[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = 70000\n"
@@ -243,6 +247,7 @@ fn a_value_out_of_range_is_a_problem_at_its_change() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn one_field_of_one_item_changed_twice_names_both_lines() {
     let items = format!(
         "[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = 20\n\n[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = {{ times = 2 }}\n"
@@ -255,6 +260,7 @@ fn one_field_of_one_item_changed_twice_names_both_lines() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn a_change_that_picks_or_changes_nothing_is_a_problem() {
     let errors = Pack::parse(
         "you.stacks",
@@ -277,6 +283,7 @@ fn a_change_that_picks_or_changes_nothing_is_a_problem() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn a_misspelt_item_in_a_change_suggests_the_near_name() {
     let (vanilla, _) = vanilla_wood();
     let items = "[[change]]\nitems = [\"Material_T1_Wood_Logss\"]\nmax_stack = 50\n";
@@ -448,6 +455,7 @@ fn a_recipe_a_mod_or_the_pack_adds_is_changed_where_it_is_defined() {
     );
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn a_chest_s_slots_change_in_pages_of_eight() {
     let items = format!(
@@ -469,6 +477,7 @@ fn a_chest_s_slots_change_in_pages_of_eight() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn slots_go_only_to_a_container_and_never_shrink_it() {
     let chest = Guid([1; 16]);
     let vanilla = enshwick_content::__fake::game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
@@ -532,6 +541,7 @@ fn a_loot_change_stays_on_the_server() {
     );
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn a_category_change_selects_its_items_where_the_loader_reads_them() {
     use crate::content::categories::ItemCategoryMask;
@@ -553,6 +563,7 @@ fn a_category_change_selects_its_items_where_the_loader_reads_them() {
     assert!(pack.reaches_players());
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn stackable_items_and_containers_are_selected_by_a_word() {
     use crate::content::changes::{Items, ItemsChange};
@@ -578,6 +589,7 @@ fn stackable_items_and_containers_are_selected_by_a_word() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn a_selection_that_cannot_hold_is_a_problem_at_its_change() {
     let cases = [
         (
@@ -931,6 +943,7 @@ fn a_recipe_change_moves_recipes_to_a_station() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn an_item_the_game_dropped_skips_its_change_and_keeps_the_pack() {
     let (vanilla, wood) = vanilla_wood();
     let items = "[[change]]\nitems = [\"Material_T1_Wood_Logs\", \"Weapon_Gone_Forever\"]\n\
@@ -967,6 +980,7 @@ fn a_recipe_the_game_dropped_skips_its_change_and_keeps_the_pack() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn a_name_near_one_the_game_has_stays_a_problem_and_is_not_skipped() {
     let (vanilla, _) = vanilla_wood();
     let items = "[[change]]\nitems = [\"Material_T1_Wood_Logss\"]\nmax_stack = 50\n";

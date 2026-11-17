@@ -64,8 +64,8 @@ impl Target {
 /// ```
 /// use enshwick::content::changes::{Field, SetChangeError, Value};
 ///
-/// let why = Field::MaxStackSize.check(Value::Set(0.0)).unwrap_err();
-/// assert_eq!(SetChangeError::Value(why).to_string(), "max_stack 0 is not from 1 to 65535");
+/// let why = Field::Output.check(Value::Set(0.0)).unwrap_err();
+/// assert_eq!(SetChangeError::Value(why).to_string(), "output_count 0 is not from 1 to 65535");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
 #[non_exhaustive]
@@ -95,12 +95,15 @@ pub enum SetChangeError {
 /// # Examples
 ///
 /// ```
-/// use enshwick::content::changes::{ChangeHandle, Field, Items, Target, Value};
+/// use enshwick::content::Guid;
+/// use enshwick::content::changes::{ChangeHandle, Field, Target, Value};
+///
+/// const WOOD: Guid = Guid::parse("3f4093ae-75ed-4e5d-bd0b-784ba83b88f5");
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<ChangeHandle, enshwick::Off> {
-///     let stacks = load.declare_change(Target::Items(Items::Stackable), Field::MaxStackSize, "stacks")?;
-///     stacks.set(Value::Times(4.0)).map_err(|why| enshwick::Off::new(why.to_string()))?;
-///     Ok(stacks)
+///     let burn = load.declare_change(Target::Entry(WOOD), Field::BurnTime, "burn")?;
+///     burn.set(Value::Times(4.0)).map_err(|why| enshwick::Off::new(why.to_string()))?;
+///     Ok(burn)
 /// }
 /// ```
 #[derive(Clone, Copy, Debug)]
@@ -119,8 +122,8 @@ impl ChangeHandle {
     /// ```
     /// use enshwick::content::changes::{ChangeHandle, Field};
     ///
-    /// fn stacks(handle: &ChangeHandle) -> bool {
-    ///     handle.field() == Field::MaxStackSize
+    /// fn burns(handle: &ChangeHandle) -> bool {
+    ///     handle.field() == Field::BurnTime
     /// }
     /// ```
     #[must_use]
@@ -202,7 +205,6 @@ impl LoadMethods for crate::BaseLoad {
         field: Field,
         source: &str,
     ) -> Result<ChangeHandle, Off> {
-        field.unstable_gate()?;
         let what = || format!("the change of {field} of {target:?}");
         target
             .check(field)
@@ -243,9 +245,15 @@ mod tests {
     }
 
     #[test]
-    fn a_target_names_its_entry_or_its_selection_in_the_abi() {
-        let one = Target::Entry(Guid([3; 16])).to_abi(Field::MaxStackSize, "x");
+    fn a_target_names_its_entry_in_the_abi() {
+        let one = Target::Entry(Guid([3; 16])).to_abi(Field::BurnTime, "x");
         assert_eq!((one.entry, one.select), (Guid([3; 16]), DataSelect::ENTRY));
+    }
+
+    #[test]
+    #[cfg(feature = "unstable")]
+    fn a_target_names_its_selection_in_the_abi() {
+        assert!(Target::Items(Items::Containers).check(Field::Slots).is_ok());
         let many = Target::Items(Items::Containers).to_abi(Field::Slots, "x");
         assert_eq!(
             (many.entry, many.select),

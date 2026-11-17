@@ -1,4 +1,4 @@
-//! Changes of vanilla values, such as how many of an item one slot holds,
+//! Changes of vanilla values, such as how long an item burns as fuel,
 //! which the loader merges across every mod and data pack.
 //!
 //! A mod declares a [`Change`] at init with [`Load::change`](../../struct.Load.html#method.change). The loader
@@ -13,7 +13,7 @@
 //! const WOOD: Guid = Guid::parse("3f4093ae-75ed-4e5d-bd0b-784ba83b88f5");
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     load.change(&Change::new(WOOD, Field::MaxStackSize, Value::Set(999.0)), "my-mod")
+//!     load.change(&Change::new(WOOD, Field::BurnTime, Value::Set(120.0)), "my-mod")
 //! }
 //! ```
 
@@ -39,8 +39,8 @@ pub const MAX_FACTOR: f64 = 100.0;
 /// ```
 /// use enshwick::content::changes::{Field, Value};
 ///
-/// assert!(Field::MaxStackSize.check(Value::Set(999.0)).is_ok());
-/// assert!(Field::MaxStackSize.check(Value::Set(0.0)).is_err());
+/// assert!(Field::Output.check(Value::Set(999.0)).is_ok());
+/// assert!(Field::Output.check(Value::Set(0.0)).is_err());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 #[script(name = "ChangeField")]
@@ -48,8 +48,9 @@ pub const MAX_FACTOR: f64 = 100.0;
 pub enum Field {
     /// How many of an item one inventory slot holds, 1 to 65535; the entry
     /// is an item. The game cuts a saved stack above it, so a world saved
-    /// while it was raised depends on the change. Unstable: changing it
-    /// needs the `unstable` feature and may change in any release.
+    /// while it was raised depends on the change. Unstable: it needs the
+    /// `unstable` feature and may change in any release.
+    #[cfg(feature = "unstable")]
     MaxStackSize,
     /// How many of each item a recipe makes, 1 to 65535; the entry is a
     /// recipe.
@@ -69,9 +70,9 @@ pub enum Field {
     /// change reaches every item that places the same container. Every placed
     /// container of the kind takes the size at each world load, those placed
     /// before the change too; one saved with more slots than its kind now
-    /// gives comes back at 128 slots with every item kept. Unstable:
-    /// changing it needs the `unstable` feature and may change in any
-    /// release.
+    /// gives comes back at 128 slots with every item kept. Unstable: it needs
+    /// the `unstable` feature and may change in any release.
+    #[cfg(feature = "unstable")]
     Slots,
     /// A weapon's damage factor, `dmgMod`, from 0 to 100; the entry is an
     /// item that deals damage. Weapons the game sets up after the change
@@ -117,11 +118,13 @@ pub enum Field {
 impl Field {
     /// Every field, for tools that list them.
     pub const ALL: &[Self] = &[
+        #[cfg(feature = "unstable")]
         Self::MaxStackSize,
         Self::Output,
         Self::Cost,
         Self::Ingredient,
         Self::CraftingDuration,
+        #[cfg(feature = "unstable")]
         Self::Slots,
         Self::DamageMod,
         Self::SpeedMod,
@@ -143,16 +146,18 @@ impl Field {
     /// ```
     /// use enshwick::content::changes::Field;
     ///
-    /// assert_eq!(Field::MaxStackSize.name(), "max_stack");
+    /// assert_eq!(Field::CraftingDuration.name(), "time");
     /// ```
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            #[cfg(feature = "unstable")]
             Self::MaxStackSize => "max_stack",
             Self::Output => "output_count",
             Self::Cost => "cost",
             Self::Ingredient => "ingredient",
             Self::CraftingDuration => "time",
+            #[cfg(feature = "unstable")]
             Self::Slots => "slots",
             Self::DamageMod => "damage_mod",
             Self::SpeedMod => "speed_mod",
@@ -175,15 +180,15 @@ impl Field {
     /// ```
     /// use enshwick::content::changes::{Entry, Field};
     ///
-    /// assert_eq!(Field::MaxStackSize.entry(), Entry::Item);
+    /// assert_eq!(Field::DamageMod.entry(), Entry::Item);
     /// assert_eq!(Field::CraftingDuration.entry(), Entry::Recipe);
     /// ```
     #[must_use]
     pub const fn entry(self) -> Entry {
         match self {
-            Self::MaxStackSize
-            | Self::Slots
-            | Self::DamageMod
+            #[cfg(feature = "unstable")]
+            Self::MaxStackSize | Self::Slots => Entry::Item,
+            Self::DamageMod
             | Self::SpeedMod
             | Self::Armor
             | Self::BurnTime
@@ -201,9 +206,12 @@ impl Field {
     /// The smallest and the largest value the field holds.
     const fn range(self) -> (f64, f64) {
         match self {
-            Self::MaxStackSize | Self::Output | Self::Cost | Self::StackSize => (1.0, 65535.0),
+            #[cfg(feature = "unstable")]
+            Self::MaxStackSize => (1.0, 65535.0),
+            Self::Output | Self::Cost | Self::StackSize => (1.0, 65535.0),
             Self::Ingredient | Self::Count => (0.0, 65535.0),
             Self::CraftingDuration | Self::BurnTime => (0.0, 86400.0),
+            #[cfg(feature = "unstable")]
             Self::Slots => (8.0, 128.0),
             Self::DamageMod => (0.0, 100.0),
             Self::SpeedMod => (0.0, 10.0),
@@ -218,6 +226,7 @@ impl Field {
     /// pages of 8, else 1.
     const fn step(self) -> f64 {
         match self {
+            #[cfg(feature = "unstable")]
             Self::Slots => 8.0,
             _ => 1.0,
         }
@@ -226,11 +235,11 @@ impl Field {
     /// Whether the field holds whole numbers only.
     const fn whole(self) -> bool {
         match self {
-            Self::MaxStackSize
-            | Self::Output
+            #[cfg(feature = "unstable")]
+            Self::MaxStackSize | Self::Slots => true,
+            Self::Output
             | Self::Cost
             | Self::Ingredient
-            | Self::Slots
             | Self::EnergyOutput
             | Self::ComfortAmount
             | Self::StackSize
@@ -282,6 +291,7 @@ impl Field {
             Value::Times(_) if matches!(self, Self::Station) => {
                 Err(ValueError::SetOnly { field: self })
             }
+            #[cfg(feature = "unstable")]
             Value::Times(f) if matches!(self, Self::Slots) && f < 1.0 => {
                 Err(ValueError::Shrinks { field: self })
             }
@@ -303,8 +313,8 @@ impl Field {
     /// use enshwick::content::changes::{Field, Value};
     ///
     /// let values = [Value::Times(2.0), Value::Set(100.0), Value::Times(1.5)];
-    /// assert_eq!(Field::MaxStackSize.resolve(20.0, values), 300.0);
-    /// assert_eq!(Field::MaxStackSize.resolve(20.0, [Value::Times(0.0)]), 1.0);
+    /// assert_eq!(Field::Output.resolve(20.0, values), 300.0);
+    /// assert_eq!(Field::Output.resolve(20.0, [Value::Times(0.0)]), 1.0);
     /// ```
     #[must_use]
     pub fn resolve(self, base: f64, values: impl IntoIterator<Item = Value>) -> f64 {
@@ -339,7 +349,7 @@ impl Field {
     /// ```
     /// use enshwick::content::changes::Field;
     ///
-    /// assert!(Field::MaxStackSize.seen_by_clients());
+    /// assert!(Field::Output.seen_by_clients());
     /// assert!(!Field::SpawnProbability.seen_by_clients());
     /// ```
     #[must_use]
@@ -351,11 +361,13 @@ impl Field {
     #[must_use]
     pub const fn to_abi(self) -> DataField {
         match self {
+            #[cfg(feature = "unstable")]
             Self::MaxStackSize => DataField::MAX_STACK,
             Self::Output => DataField::RECIPE_OUTPUT,
             Self::Cost => DataField::RECIPE_COST,
             Self::Ingredient => DataField::RECIPE_INGREDIENT,
             Self::CraftingDuration => DataField::RECIPE_TIME,
+            #[cfg(feature = "unstable")]
             Self::Slots => DataField::CONTAINER_SLOTS,
             Self::DamageMod => DataField::DAMAGE_MOD,
             Self::SpeedMod => DataField::SPEED_MOD,
@@ -380,7 +392,7 @@ impl Field {
     /// use enshwick::abi::DataField;
     /// use enshwick::content::changes::Field;
     ///
-    /// assert_eq!(Field::from_abi(DataField::MAX_STACK), Some(Field::MaxStackSize));
+    /// assert_eq!(Field::from_abi(DataField::RECIPE_TIME), Some(Field::CraftingDuration));
     /// assert_eq!(Field::from_abi(DataField(0)), None);
     /// ```
     #[must_use]
@@ -446,8 +458,8 @@ impl core::fmt::Display for Value {
 /// ```
 /// use enshwick::content::changes::{Field, Value};
 ///
-/// let error = Field::MaxStackSize.check(Value::Set(70000.0)).unwrap_err();
-/// assert_eq!(error.to_string(), "max_stack 70000 is not from 1 to 65535");
+/// let error = Field::Output.check(Value::Set(70000.0)).unwrap_err();
+/// assert_eq!(error.to_string(), "output_count 70000 is not from 1 to 65535");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
 #[non_exhaustive]
@@ -694,7 +706,7 @@ impl Change {
     /// let raw = DataChange {
     ///     header: Header::of::<DataChange>(),
     ///     entry: Guid([1; 16]),
-    ///     field: DataField::MAX_STACK,
+    ///     field: DataField::RECIPE_TIME,
     ///     op: ChangeOp::TIMES,
     ///     value: 4.0,
     ///     source: Str::EMPTY,
@@ -755,21 +767,6 @@ fn field_and_value(raw: &DataChange) -> Option<(Field, Value)> {
     Some((Field::from_abi(raw.field)?, value))
 }
 
-impl Field {
-    /// Refuses a change of an inventory limit, [`Field::MaxStackSize`] or
-    /// [`Field::Slots`], from a mod built without the `unstable` feature: how
-    /// a player's game shows a raised limit is not yet seen in the game.
-    pub(crate) fn unstable_gate(self) -> Result<(), Off> {
-        if cfg!(feature = "unstable") || !matches!(self, Self::MaxStackSize | Self::Slots) {
-            Ok(())
-        } else {
-            Err(Off::new(format!(
-                "a change of {self} needs the `unstable` feature"
-            )))
-        }
-    }
-}
-
 /// `Load`'s methods of this module on the base handle, which core's
 /// forwarders call.
 #[doc(hidden)]
@@ -781,7 +778,6 @@ pub trait LoadMethods {
 
 impl LoadMethods for crate::BaseLoad {
     fn change(&mut self, change: &Change, source: &str) -> Result<(), Off> {
-        change.field.unstable_gate()?;
         change
             .check()
             .map_err(|why| Off::new(format!("change of {}: {why}", change.entry)))?;
@@ -799,6 +795,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn the_last_set_wins_and_factors_multiply_whatever_their_order() {
         let a = [
             Value::Times(2.0),
@@ -817,6 +814,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn a_whole_field_rounds_half_away_from_zero_and_stays_in_range() {
         assert_eq!(Field::MaxStackSize.resolve(5.0, [Value::Times(0.5)]), 3.0);
         assert_eq!(
@@ -828,10 +826,11 @@ mod tests {
 
     #[test]
     fn no_value_keeps_the_base() {
-        assert_eq!(Field::MaxStackSize.resolve(20.0, []), 20.0);
+        assert_eq!(Field::BurnTime.resolve(20.0, []), 20.0);
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn fractions_and_bad_factors_are_refused() {
         assert!(Field::MaxStackSize.check(Value::Set(2.5)).is_err());
         assert!(Field::MaxStackSize.check(Value::Times(f64::NAN)).is_err());
@@ -875,6 +874,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn slots_come_in_pages_of_eight() {
         assert!(Field::Slots.check(Value::Set(48.0)).is_ok());
         assert_eq!(
@@ -905,7 +905,7 @@ mod tests {
 
     #[test]
     fn a_change_goes_through_the_abi_and_back() {
-        let change = Change::new(Guid([7; 16]), Field::MaxStackSize, Value::Set(50.0));
+        let change = Change::new(Guid([7; 16]), Field::BurnTime, Value::Set(50.0));
         let raw = change.to_abi("items.toml:3");
         assert_eq!(Change::from_abi(&raw), Ok(Some(change)));
     }

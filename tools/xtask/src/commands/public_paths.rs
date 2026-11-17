@@ -3,11 +3,15 @@
 //! rustdoc's JSON of the crate and of the workspace crates its build
 //! compiles, built once with its default features and once with `typed`,
 //! which builds on `unstable`; `test` and `schema`, which serve tools and
-//! tests, are left out. The docs
+//! tests, are left out. Both builds document the game's target, whatever
+//! the host, so an item under a platform `cfg` lists the same on the PC and
+//! on Linux CI; nothing the facade builds compiles C, so no cross compiler
+//! is needed. The docs
 //! site reads the file at the ref it pins, so the paths its coverage table
 //! names are checked against what the compiler sees, and a rename shows in
 //! the pull request that makes it.
 
+pub(crate) mod chapter;
 mod walk;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,7 +22,7 @@ use std::process::Command;
 use rustdoc_types::{Crate, FORMAT_VERSION};
 
 use crate::affected::Package;
-use crate::commands::check::Step;
+use crate::commands::check::{Step, WINDOWS_TARGET};
 use crate::{FACADE, cargo};
 
 /// The committed list, relative to the workspace root.
@@ -53,19 +57,48 @@ pub(crate) fn run(root: &Path) -> Result<bool, String> {
 }
 
 /// The problems with the committed list under `root`: the paths it lacks
-/// or names that the crate no longer has, a few of each.
+/// or names that the crate no longer has, a few of each; then the items the
+/// book's stability chapter names that the list does not mark unstable.
 pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
     let fresh = match generate(root, packages) {
         Ok(list) => list,
         Err(error) => return vec![error],
     };
-    let path = root.join(FILE);
-    let committed = match std::fs::read_to_string(&path) {
+    let committed = match committed(root) {
         Ok(text) => text,
-        Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
-        Err(error) => return vec![format!("{}: {error}", path.display())],
+        Err(error) => return vec![error],
     };
-    stale(&committed, &fresh)
+    let mut problems = stale(&committed, &fresh);
+    problems.extend(chapter_problems(root, &committed));
+    problems
+}
+
+/// The items the book's stability chapter under `root` names that the
+/// committed list does not mark unstable, without documenting the crate: a
+/// stale list is the full [`check`]'s to find.
+pub(crate) fn check_chapter(root: &Path) -> Vec<String> {
+    match committed(root) {
+        Ok(list) => chapter_problems(root, &list),
+        Err(error) => vec![error],
+    }
+}
+
+/// The committed list under `root`, empty when there is none yet.
+fn committed(root: &Path) -> Result<String, String> {
+    let path = root.join(FILE);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(text),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(format!("{}: {error}", path.display())),
+    }
+}
+
+fn chapter_problems(root: &Path, list: &str) -> Vec<String> {
+    let book = root.join(chapter::FILE);
+    match std::fs::read_to_string(&book) {
+        Ok(text) => chapter::problems(&text, list),
+        Err(error) => vec![format!("{}: {error}", book.display())],
+    }
 }
 
 /// What sets `committed` apart from `fresh`, a few lines of each side.
@@ -129,27 +162,28 @@ fn paths(
 ) -> Result<BTreeSet<String>, String> {
     let documented = documented(root, packages, features)?;
     let target = root.join(TARGET_DIR);
-    let mut step = Step::new(&[
-        "doc",
-        "--no-deps",
-        "--target-dir",
-        &target.display().to_string(),
-    ])
-    .env("RUSTC_BOOTSTRAP", "1")
-    .env("RUSTDOCFLAGS", RUSTDOC_FLAGS);
-    for (name, _) in &documented {
-        step = step.then(&["--package", name]);
+    let names: Vec<&str> = documented.iter().map(|(name, _)| name.as_str()).collect();
+    document(&target, &names, Some(WINDOWS_TARGET), features)?;
+    let doc = target.join(WINDOWS_TARGET).join("doc");
+    // A proc-macro crate builds for the host, and cargo writes no JSON of
+    // it for another target: it is documented for the host, where its
+    // macros' names are the same.
+    let host: Vec<&str> = documented
+        .iter()
+        .filter(|(_, lib)| !doc.join(format!("{lib}.json")).is_file())
+        .map(|(name, _)| name.as_str())
+        .collect();
+    if !host.is_empty() {
+        document(&target, &host, None, None)?;
     }
-    if let Some(features) = features {
-        step = step.then(&["--features", features]);
-    }
-    if !step.run(false) {
-        return Err("cargo doc for the public paths failed".to_owned());
-    }
-    let doc = target.join("doc");
     let mut crates = BTreeMap::new();
-    for (_, lib) in documented {
-        let file = doc.join(format!("{lib}.json"));
+    for (name, lib) in &documented {
+        let folder = if host.contains(&name.as_str()) {
+            target.join("doc")
+        } else {
+            doc.clone()
+        };
+        let file = folder.join(format!("{lib}.json"));
         let text = std::fs::read_to_string(&file)
             .map_err(|error| format!("{}: {error}", file.display()))?;
         let krate: Crate = serde_json::from_str(&text).map_err(|error| {
@@ -165,9 +199,41 @@ fn paths(
                 krate.format_version
             ));
         }
-        crates.insert(lib, krate);
+        crates.insert(lib.clone(), krate);
     }
     walk::Surface::new(&crates).paths(FACADE)
+}
+
+/// Writes the rustdoc JSON of `packages` into `target`, for `triple` or the
+/// host, with `features`.
+fn document(
+    target: &Path,
+    packages: &[&str],
+    triple: Option<&str>,
+    features: Option<&str>,
+) -> Result<(), String> {
+    let mut step = Step::new(&[
+        "doc",
+        "--no-deps",
+        "--target-dir",
+        &target.display().to_string(),
+    ])
+    .env("RUSTC_BOOTSTRAP", "1")
+    .env("RUSTDOCFLAGS", RUSTDOC_FLAGS);
+    if let Some(triple) = triple {
+        step = step.then(&["--target", triple]);
+    }
+    for name in packages {
+        step = step.then(&["--package", name]);
+    }
+    if let Some(features) = features {
+        step = step.then(&["--features", features]);
+    }
+    if step.run(false) {
+        Ok(())
+    } else {
+        Err("cargo doc for the public paths failed".to_owned())
+    }
 }
 
 /// The workspace packages, name and library, a build of the facade with
@@ -183,6 +249,8 @@ fn documented(
         "tree",
         "--package",
         FACADE,
+        "--target",
+        WINDOWS_TARGET,
         "--edges",
         "normal",
         "--prefix",

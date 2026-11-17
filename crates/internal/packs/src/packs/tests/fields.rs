@@ -1,5 +1,6 @@
 //! A misspelt or unknown field in any pack file is named, with the fields
-//! its table takes and the one it is near, at its file, line and column.
+//! its table takes and the one it is near, at its file, line and column; a
+//! change that gives no field names those this build takes.
 
 use super::*;
 
@@ -99,6 +100,7 @@ fn a_misspelt_field_of_an_item_is_named() {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn a_misspelt_scale_of_a_change_is_named() {
     let line = problem(&files(
         "[[change]]\nitems = [\"Tool_Torch01\"]\nmax_stack = { tims = 4 }\n",
@@ -170,4 +172,15 @@ fn a_field_near_none_is_named_without_a_guess() {
     )));
     assert!(line.contains("unknown field `glow`"), "{line}");
     assert!(!line.contains("near:"), "{line}");
+}
+
+#[test]
+fn a_selection_that_changes_nothing_names_the_fields_it_takes_in_this_build() {
+    assert_eq!(
+        problem(&files("[[change]]\nitems = \"stackable\"\n")),
+        format!(
+            "items.toml:1:1: change 1: changes nothing; {}",
+            changes::NOTHING_HINT
+        )
+    );
 }
