@@ -11,7 +11,7 @@ use enshwick_core::controls::{
     GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases,
 };
 
-use crate::test::table::{Registered, Registration, text, with};
+use crate::test::table::{Registered, text, with, with_open};
 use crate::test::{FakeHost, Installed};
 
 /// A control the mod declared.
@@ -77,10 +77,7 @@ pub(crate) extern "system" fn control(
     {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if s.actions.controls.controls.iter().any(|c| c.name == name) {
             return Status::REFUSED;
         }

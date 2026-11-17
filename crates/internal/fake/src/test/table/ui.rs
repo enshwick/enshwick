@@ -149,10 +149,7 @@ pub(crate) extern "system" fn ui_frame(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
@@ -314,10 +311,7 @@ pub(crate) extern "system" fn ui_item_tooltip(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
@@ -495,10 +489,7 @@ pub(crate) extern "system" fn ui_hud(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
@@ -529,10 +520,7 @@ pub(crate) extern "system" fn ui_extension(
     else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }
@@ -641,10 +629,7 @@ pub(crate) extern "system" fn ui_dialog(
 }
 
 pub(crate) extern "system" fn request_fog(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         if s.host.base.side == Side::SERVER {
             return Status::UNAVAILABLE;
         }

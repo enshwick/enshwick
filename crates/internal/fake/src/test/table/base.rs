@@ -94,3 +94,11 @@ pub(crate) struct BaseState {
     /// ready failed, or it faulted. None of their callbacks runs again.
     pub(crate) off: Vec<ModHandle>,
 }
+
+impl BaseState {
+    /// Whether the mod's init has returned, so what only init may ask for
+    /// comes too late, as the loader answers.
+    pub(crate) fn closed(&self) -> bool {
+        self.registration == Registration::Closed
+    }
+}

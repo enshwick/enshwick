@@ -3,10 +3,10 @@
 
 use core::ffi::c_void;
 
-use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, ModHandle, Side, Status};
+use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, ModHandle, Status};
 use enshwick_core::{Entity, ItemId};
 
-use crate::test::table::{Registered, Registration, with};
+use crate::test::table::{Registered, with, with_open};
 
 /// The most items one pickup message shows: the game's op record keeps a
 /// `u16`.
@@ -35,10 +35,7 @@ pub(crate) extern "system" fn container_rule(
     if item.get() == 0 {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.inventory
             .containers
             .rules
@@ -61,7 +58,7 @@ pub(crate) extern "system" fn show_pickup(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.host.base.side != Side::SERVER && !s.host.base.hosting {
+        if !s.host.base.serving() {
             return Status::UNAVAILABLE;
         }
         if !crate::test::table::on_game_thread() {

@@ -12,7 +12,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 use enshwick_core::Relock;
-use enshwick_core::abi::{Header, HostApi, Str};
+use enshwick_core::abi::{Header, HostApi, Status, Str};
 
 use super::FakeHost;
 
@@ -145,7 +145,20 @@ pub(crate) fn with<R>(default: R, f: impl FnOnce(&mut State) -> R) -> R {
 /// Whether the mod's init has returned, so what only init may ask for
 /// comes too late, as the loader answers.
 pub(crate) fn late() -> bool {
-    with(false, |s| s.base.registration == Registration::Closed)
+    with(false, |s| s.base.closed())
+}
+
+/// `f` on the installed fake's state while only init may ask, as the
+/// loader answers: [`Status::TOO_LATE`] once init returned,
+/// [`Status::MISSING`] when no fake is installed.
+pub(crate) fn with_open(f: impl FnOnce(&mut State) -> Status) -> Status {
+    with(Status::MISSING, |s| {
+        if s.base.closed() {
+            Status::TOO_LATE
+        } else {
+            f(s)
+        }
+    })
 }
 
 /// The table every installed fake answers through.

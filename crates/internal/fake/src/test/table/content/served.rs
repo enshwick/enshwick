@@ -4,7 +4,7 @@
 use core::ffi::c_void;
 
 use crate::test::ServedResource;
-use crate::test::table::{Registered, Registration, put, with};
+use crate::test::table::{Registered, put, with, with_open};
 use enshwick_core::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status};
 
 pub(crate) extern "system" fn serve_resource(
@@ -26,10 +26,7 @@ pub(crate) extern "system" fn serve_resource(
     let Some(base) = (unsafe { base.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let entry = (
             ServedResource { key, base },
             Registered::new(patch, user, me),
@@ -73,7 +70,7 @@ pub(crate) extern "system" fn rebuild_resource(me: ModHandle, key: *const Resour
         {
             return Err(Status::BAD_ARGS);
         }
-        Ok(s.base.registration == Registration::Closed)
+        Ok(s.base.closed())
     });
     match closed {
         Err(status) => status,
@@ -187,7 +184,7 @@ pub(crate) extern "system" fn resource_served(
     unsafe {
         copy_resource(key, out, capacity, len, |key| {
             // As the loader: no read before every patch is in.
-            if with(true, |s| s.base.registration != Registration::Closed) {
+            if !crate::test::table::late() {
                 return Err(Status::REFUSED);
             }
             let Some(base) = with(None, |s| {

@@ -3,7 +3,7 @@
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, Registration, put, text, with};
+use crate::test::table::{Registered, put, text, with, with_open};
 use enshwick_core::abi::{
     ActionTarget, BuildFilterFn, ChatFilterFn, CraftFilterFn, InteractionFilterFn,
     InteractionPrompt, ModHandle, Status, Str,
@@ -51,10 +51,7 @@ pub(crate) extern "system" fn actions(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if s.actions.callback.is_some() {
             return Status::REFUSED;
         }
@@ -102,10 +99,7 @@ pub(crate) extern "system" fn chat_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.actions
             .chat_filters
             .push(Registered::new(callback, user, me));
@@ -121,10 +115,7 @@ pub(crate) extern "system" fn interaction_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.actions
             .interaction_filters
             .push(Registered::new(callback, user, me));
@@ -146,10 +137,7 @@ pub(crate) extern "system" fn interaction_prompt(
     else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if !spec.is_valid() {
             return Status::BAD_ARGS;
         }
@@ -173,10 +161,7 @@ pub(crate) extern "system" fn craft_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.actions
             .craft_filters
             .push(Registered::new(callback, user, me));
@@ -192,10 +177,7 @@ pub(crate) extern "system" fn build_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.actions
             .build_filters
             .push(Registered::new(callback, user, me));

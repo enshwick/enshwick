@@ -1,7 +1,7 @@
 //! The fake's mod commands: the names the mod takes, lines run for remote
 //! callers and the list of names, as the loader answers them.
 
-use crate::test::table::{Registration, put_headed, text, with};
+use crate::test::table::{put_headed, text, with, with_open};
 use enshwick_core::abi::{
     ActionCall, ActionReply, ActionTarget, CommandInfo, ModHandle, PlayerInfo, Status, Str,
 };
@@ -209,10 +209,7 @@ fn sets_now(s: &crate::test::table::State) -> (Vec<Granted>, String) {
 
 pub(crate) extern "system" fn commands(_me: ModHandle, alias: Str) -> Status {
     let alias = text(alias);
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let id = own_id(s);
         let (_, answered) = granted((&id, Some(&alias)), &s.host.actions.other_commands);
         match answered {

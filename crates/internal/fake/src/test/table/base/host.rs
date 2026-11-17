@@ -36,9 +36,7 @@ pub(crate) extern "system" fn entity_template(
 }
 
 pub(crate) extern "system" fn hosting(_me: ModHandle, out: *mut u8) -> Status {
-    let hosting = with(0, |s| {
-        u8::from(s.host.base.side == Side::SERVER || s.host.base.hosting)
-    });
+    let hosting = with(0, |s| u8::from(s.host.base.serving()));
     crate::test::table::put(out, hosting)
 }
 
@@ -69,10 +67,7 @@ pub(crate) extern "system" fn status(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.base
             .status_sources
             .push(Registered::new(callback, user, me));
@@ -114,10 +109,7 @@ fn keep_game_event(
     user: *mut c_void,
     client: bool,
 ) -> Status {
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         let kept = if !client {
             &mut s.base.game_events
         } else if s.host.base.side == Side::CLIENT {

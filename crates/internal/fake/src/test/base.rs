@@ -119,6 +119,14 @@ impl Default for BasePresets {
     }
 }
 
+impl BasePresets {
+    /// Whether the fake runs the server side of a game: a dedicated server or
+    /// a client that hosts.
+    pub(crate) fn serving(&self) -> bool {
+        self.side == enshwick_core::abi::Side::SERVER || self.hosting
+    }
+}
+
 impl FakeHost {
     /// The hit, death, equipment change and respawn point change game
     /// events, with the hit history and experience credit a death reads its

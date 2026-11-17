@@ -34,10 +34,7 @@ pub(crate) extern "system" fn set_time_of_day(_me: ModHandle, time: i64) -> Stat
 }
 
 pub(crate) extern "system" fn request_time_speed(me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         if !s.world.clock_speeds.iter().any(|(owner, _)| *owner == me) {
             s.world.clock_speeds.push((me, 1.0));
         }
@@ -256,7 +253,7 @@ pub(crate) extern "system" fn terrain_material_add(
     let vanilla = |id| GAME_TERRAIN.contains(&id);
     with(Status::MISSING, |s| {
         // In the loader's order: the seal, the mod's side, the request.
-        if s.base.registration == crate::test::table::Registration::Closed {
+        if s.base.closed() {
             return Status::TOO_LATE;
         }
         if !crate::test::table::base::mods::joins(s, me) {

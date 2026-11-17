@@ -11,7 +11,7 @@ use enshwick_core::abi::{
 use enshwick_core::points::{Decision, LinkPlace, Point, Verdict, order};
 
 use crate::test::Installed;
-use crate::test::table::{Registered, Registration, put, view, with};
+use crate::test::table::{Registered, put, view, with};
 
 /// A point as declared: name, input and answer layouts, whether links
 /// change the answer and whether they may refuse.
@@ -133,7 +133,7 @@ pub(crate) extern "system" fn define_point(
     spec: *const PointSpec,
     out: *mut PointHandle,
 ) -> Status {
-    if with(false, |s| s.base.registration == Registration::Closed) {
+    if crate::test::table::late() {
         return Status::TOO_LATE;
     }
     let Some(declared) = declared(spec) else {
@@ -182,7 +182,7 @@ pub(crate) extern "system" fn attach_point(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    if with(false, |s| s.base.registration == Registration::Closed) {
+    if crate::test::table::late() {
         return Status::TOO_LATE;
     }
     let Some(link) = crate::test::table::get_headed(link) else {

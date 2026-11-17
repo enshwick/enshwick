@@ -57,10 +57,7 @@ pub(crate) extern "system" fn skill_override(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.knowledge
             .skills
             .push((node, Registered::new(callback, user, me)));
@@ -76,10 +73,7 @@ pub(crate) extern "system" fn comfort_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.knowledge
             .comfort_filters
             .push(Registered::new(callback, user, me));
@@ -95,10 +89,7 @@ pub(crate) extern "system" fn experience_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.knowledge
             .experience_filters
             .push(Registered::new(callback, user, me));
@@ -189,10 +180,7 @@ pub(crate) extern "system" fn knowledge_input_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.knowledge
             .knowledge_input_filters
             .push(Registered::new(callback, user, me));

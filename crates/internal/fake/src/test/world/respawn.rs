@@ -2,7 +2,7 @@
 //! holds, as the loader reads and sets them.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, ModHandle, RespawnPointInfo, Side, Status};
+use enshwick_core::abi::{Header, ModHandle, RespawnPointInfo, Status};
 use enshwick_core::content::Guid;
 #[cfg(feature = "unstable")]
 use enshwick_core::game_events::UniqueSceneId;
@@ -191,7 +191,7 @@ fn raise(character: Guid, base: Option<Guid>, scene: Option<u32>) -> usize {
 /// Whether the fake reads no respawn point: a client that does not host,
 /// or no world running. A read needs no entity commands, as in the loader.
 fn unread(s: &table::State) -> bool {
-    !(s.host.base.side == Side::SERVER || s.host.base.hosting) || table::world::no_world(s)
+    !(s.host.base.serving()) || table::world::no_world(s)
 }
 
 /// Whether the fake sets no respawn point: as [`unread`], or without the

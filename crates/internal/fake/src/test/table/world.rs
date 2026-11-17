@@ -3,7 +3,7 @@
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, Registration, put, text, with};
+use crate::test::table::{Registered, Registration, put, text, with, with_open};
 use enshwick_core::abi::{
     AccountActionType, EntityPlace, JoinRuleFn, ModHandle, PlayerInfo, RenameFilterFn, Side,
     Status, Str, TerrainEdit,
@@ -155,9 +155,7 @@ impl WorldEdits {
 /// Whether the entity calls cannot run here, where the loader answers
 /// [`Status::UNAVAILABLE`]: no server runs, or the build lacks the commands.
 pub(crate) fn entity_calls_off(s: &crate::test::table::State) -> bool {
-    s.host.world.no_entity_commands
-        || !(s.host.base.side == Side::SERVER || s.host.base.hosting)
-        || no_world(s)
+    s.host.world.no_entity_commands || !(s.host.base.serving()) || no_world(s)
 }
 
 /// Whether no world runs, where the loader answers the world's calls
@@ -257,10 +255,7 @@ pub(crate) extern "system" fn rename_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.world
             .rename_filters
             .push(Registered::new(callback, user, me));
@@ -276,10 +271,7 @@ pub(crate) extern "system" fn join_rule(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.world.join_rules.push(Registered::new(callback, user, me));
         Status::OK
     })
@@ -456,7 +448,7 @@ pub(crate) extern "system" fn progress_write(
             if entity.0 != 0 {
                 return Status::BAD_ARGS;
             }
-            if s.base.registration == Registration::Closed {
+            if s.base.closed() {
                 return Status::TOO_LATE;
             }
             s.world.progress_writes.get_or_insert_with(Vec::new);
@@ -472,7 +464,7 @@ pub(crate) extern "system" fn progress_write(
             return Status::BAD_ARGS;
         }
         // The loader's level step links after `init`.
-        if s.base.registration != Registration::Closed {
+        if !s.base.closed() {
             return Status::UNAVAILABLE;
         }
         let in_game = s.host.base.players.iter().any(|p| p.entity == entity);
@@ -516,7 +508,7 @@ pub(crate) extern "system" fn fog_uncover(
     radius: f32,
 ) -> Status {
     with(Status::UNAVAILABLE, |s| {
-        if !serving(s) {
+        if !s.host.base.serving() {
             return Status::UNAVAILABLE;
         }
         if !(x.is_finite()
@@ -714,11 +706,6 @@ pub(crate) extern "system" fn account_action(
     })
 }
 
-/// Whether the fake runs a server, the dedicated one or one a client hosts.
-fn serving(s: &super::State) -> bool {
-    s.host.base.side == Side::SERVER || s.host.base.hosting
-}
-
 pub(crate) extern "system" fn set_chat_mute(
     _me: ModHandle,
     account: enshwick_core::PlayerKey,
@@ -728,18 +715,24 @@ pub(crate) extern "system" fn set_chat_mute(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if !serving(s) || s.host.base.world_key.is_none() {
+        if !s.host.base.serving() {
             return Status::UNAVAILABLE;
         }
+        // In the loader's order: the protected player, then the world.
         let admin = s
             .host
             .base
             .players
             .iter()
             .any(|p| p.key == account && p.is_admin());
+        if muted == 1 && (admin || s.host.base.host_key == Some(account)) {
+            return Status::REFUSED;
+        }
+        if s.host.base.world_key.is_none() {
+            return Status::UNAVAILABLE;
+        }
         let at = s.world.muted.iter().position(|&k| k == account);
         match (muted == 1, at) {
-            (true, _) if admin || s.host.base.host_key == Some(account) => return Status::REFUSED,
             (true, None) => s.world.muted.push(account),
             (false, Some(at)) => {
                 s.world.muted.remove(at);
@@ -759,7 +752,10 @@ pub(crate) extern "system" fn chat_muted(
         return Status::BAD_ARGS;
     }
     let has = with(None, |s| {
-        serving(s).then(|| s.world.muted.contains(&account))
+        s.host
+            .base
+            .serving()
+            .then(|| s.world.muted.contains(&account))
     });
     match has {
         Some(has) => put(muted, u8::from(has)),
@@ -775,7 +771,7 @@ pub(crate) extern "system" fn prop_placement_info(
 ) -> Status {
     use enshwick_core::abi::{Header, PropPlacementInfo};
     with(Status::UNAVAILABLE, |s| {
-        if no_world(s) || !(s.host.base.side == Side::SERVER || s.host.base.hosting) {
+        if no_world(s) || !(s.host.base.serving()) {
             return Status::UNAVAILABLE;
         }
         let Some(info) = s.host.content.items.get(&item.get()) else {

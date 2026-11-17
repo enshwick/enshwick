@@ -32,10 +32,7 @@ pub(crate) struct ZoneSizing {
 }
 
 pub(crate) extern "system" fn request_altars(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.world.altars_opened = true;
         Status::OK
     })
@@ -64,10 +61,7 @@ pub(crate) extern "system" fn altar_zone_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.world.altars_opened = true;
         s.world.zone_control = true;
         s.world
@@ -96,10 +90,7 @@ pub(crate) extern "system" fn building_zone_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.world
             .zone_filters
             .push(Registered::new(callback, user, me));

@@ -97,10 +97,7 @@ pub(crate) extern "system" fn serve_call(
     let Some(declared) = declared(spec) else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         let calls = &mut s.base.calls;
         if calls
             .served

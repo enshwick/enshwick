@@ -25,10 +25,7 @@ pub(crate) extern "system" fn publish(_me: ModHandle, spec: *const ServiceSpec) 
     let (name, Some(fields)) = (text(spec.name), layout_of(&spec.layout)) else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         let taken = s
             .base
             .published
@@ -104,20 +101,13 @@ pub(crate) extern "system" fn service(
     }
 }
 
-/// Whether init has ended, so registrations come too late; the loader asks
-/// this before it reads the call's arguments.
-fn closed() -> bool {
-    with(false, |s| {
-        s.base.registration == crate::test::table::Registration::Closed
-    })
-}
-
 pub(crate) extern "system" fn define_event(
     _me: ModHandle,
     spec: *const EventSpec,
     out: *mut u32,
 ) -> Status {
-    if closed() {
+    // The loader asks this before it reads the call's arguments.
+    if crate::test::table::late() {
         return Status::TOO_LATE;
     }
     let Some(spec) = crate::test::table::get_headed(spec) else {
@@ -148,7 +138,8 @@ pub(crate) extern "system" fn subscribe_mod_event(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    if closed() {
+    // The loader asks this before it reads the call's arguments.
+    if crate::test::table::late() {
         return Status::TOO_LATE;
     }
     let Some(spec) = crate::test::table::get_headed(spec) else {
@@ -216,10 +207,7 @@ pub(crate) extern "system" fn subscribe(
     if !(Event::SETTINGS_CHANGED.0..=Event::PROGRESS_WRITTEN.0).contains(&event.0) {
         return Status::MISSING;
     }
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         s.base
             .subscriptions
             .push((event, Registered::new(callback, user, me)));

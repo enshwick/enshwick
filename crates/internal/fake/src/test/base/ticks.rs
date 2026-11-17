@@ -44,10 +44,7 @@ pub(crate) extern "system" fn subscribe_tick(
     if out.is_null() {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         let asked = s.base.ticks.asked;
         s.base.ticks.asked += 1;
         if s.host.base.refused_tick == Some(asked) {

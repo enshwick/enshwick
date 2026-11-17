@@ -44,7 +44,7 @@ mod served {
     use enshwick_core::content::Guid;
 
     use crate::test::table::base::registered::Registered;
-    use crate::test::table::{Registration, State, with};
+    use crate::test::table::{State, with};
     use crate::test::{FakeHost, ServedResource};
 
     /// The layout and key of the fake's buff collection.
@@ -60,7 +60,7 @@ mod served {
     pub(super) fn add(me: ModHandle, buff: &BuffTypeAdd) -> Result<BuffTypeId, Status> {
         with(Err(Status::MISSING), |s| {
             // In the loader's order: the seal, the mod's side, the request.
-            if s.base.registration == Registration::Closed {
+            if s.base.closed() {
                 return Err(Status::TOO_LATE);
             }
             if !crate::test::table::base::mods::joins(s, me) {

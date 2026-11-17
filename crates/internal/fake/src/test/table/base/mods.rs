@@ -330,10 +330,7 @@ pub(crate) extern "system" fn config_check(
         return Status::BAD_ARGS;
     };
     let file = text(file);
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         if s.base.config_checks.contains_key(&file) {
             return Status::REFUSED;
         }
@@ -380,7 +377,7 @@ fn checking(on: bool) {
 /// Writes `value` as `key` of the settings file `file`, as the loader does.
 fn write_setting(file: String, key: &str, value: &str) -> Status {
     let prepared = with(Err(Status::MISSING), |s| {
-        let serving = s.host.base.side == Side::SERVER || s.host.base.hosting;
+        let serving = s.host.base.serving();
         if !serving || s.host.base.world_key.is_none() {
             return Err(Status::UNAVAILABLE);
         }

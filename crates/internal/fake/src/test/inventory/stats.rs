@@ -355,10 +355,7 @@ pub(crate) extern "system" fn stat_buff(
         // safe layer passes `count` aligned modifiers alive for the call.
         unsafe { core::slice::from_raw_parts(modifiers, count as usize) }.to_vec()
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         state_stats(s)
             .buffs
             .extend(list.into_iter().map(|m| (buff, m)));
@@ -374,10 +371,7 @@ pub(crate) extern "system" fn stats_changed(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == crate::test::table::Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    crate::test::table::with_open(|s| {
         state_stats(s)
             .handlers
             .push(Registered::new(callback, user, me));

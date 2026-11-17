@@ -6,8 +6,6 @@
 use enshwick_core::abi::{ModHandle, PlayerInfo, Status};
 use enshwick_core::{Entity, PlayerKey};
 
-use super::serving;
-
 use crate::test::table::{on_game_thread, with};
 
 /// The mods' changes, and the group bits of each changed player.
@@ -114,7 +112,7 @@ pub(crate) extern "system" fn change_permissions(
         return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| {
-        if !ends && (!serving(s) || s.host.base.world_key.is_none()) {
+        if !ends && (!s.host.base.serving() || s.host.base.world_key.is_none()) {
             return Status::UNAVAILABLE;
         }
         let Some(player) = s.host.base.players.iter_mut().find(|p| p.key == account) else {

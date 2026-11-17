@@ -6,7 +6,7 @@ use core::ffi::c_void;
 use enshwick_core::__fake::ids;
 
 use crate::test::SubmittedRequest;
-use crate::test::table::{Registered, Registration, with};
+use crate::test::table::{Registered, with, with_open};
 
 pub(crate) mod containers;
 
@@ -69,10 +69,7 @@ pub(crate) extern "system" fn item_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if s.host.inventory.no_item_filters {
             return Status::UNAVAILABLE;
         }
@@ -209,10 +206,7 @@ pub(crate) extern "system" fn damage_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.inventory
             .damage_filters
             .push(Registered::new(callback, user, me));
@@ -228,10 +222,7 @@ pub(crate) extern "system" fn survivor_lookup(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         hold_each(
             &mut s.inventory.survivor_lookup,
             Registered::new(callback, user, me),
@@ -257,10 +248,7 @@ pub(crate) extern "system" fn survivor_bed_check(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.inventory
             .bed_checks
             .push(Registered::new(callback, user, me));
@@ -276,10 +264,7 @@ pub(crate) extern "system" fn summon_filter(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.inventory
             .summons
             .push(Registered::new(callback, user, me));
@@ -295,10 +280,7 @@ pub(crate) extern "system" fn summoned(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.inventory
             .summoned
             .push(Registered::new(callback, user, me));
@@ -311,10 +293,7 @@ pub(crate) extern "system" fn summon_item(
     item: enshwick_core::ItemId,
     survivor: enshwick_core::survivors::NpcId,
 ) -> Status {
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.inventory.summon_items.push((item, survivor));
         Status::OK
     })
@@ -328,10 +307,7 @@ pub(crate) extern "system" fn survivor_status(
     let Some(callback) = callback else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if s.host.base.side != Side::CLIENT {
             return Status::UNAVAILABLE;
         }
@@ -344,10 +320,7 @@ pub(crate) extern "system" fn survivor_status(
 }
 
 pub(crate) extern "system" fn request_inventory(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if s.host.inventory.no_inventories {
             Status::UNAVAILABLE
         } else {
@@ -373,9 +346,7 @@ pub(crate) extern "system" fn inventory_submit(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.host.inventory.no_inventories
-            || (s.host.base.side != Side::SERVER && !s.host.base.hosting)
-        {
+        if s.host.inventory.no_inventories || !s.host.base.serving() {
             return Status::UNAVAILABLE;
         }
         // SAFETY: the request holds `op_count` operations, read during the

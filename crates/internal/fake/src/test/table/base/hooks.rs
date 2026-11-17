@@ -3,7 +3,7 @@
 use core::sync::atomic::Ordering;
 
 use crate::test::LinkedHook;
-use crate::test::table::{Registered, Registration, get_headed, put, with};
+use crate::test::table::{Registered, get_headed, put, with, with_open};
 use enshwick_core::__fake::rules;
 use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
@@ -11,10 +11,7 @@ pub(crate) extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Sta
     let Some(spec) = get_headed(spec).filter(|spec| !spec.next.is_null()) else {
         return Status::BAD_ARGS;
     };
-    let linked = with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    let linked = with_open(|s| {
         if !rules::is_complete_hook(spec.target, spec.detour) {
             return Status::BAD_ARGS;
         }
@@ -52,10 +49,7 @@ pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -
     let Some(spec) = get_headed(spec) else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let Some(handler) = spec.handler else {
             return Status::BAD_ARGS;
         };
@@ -101,10 +95,7 @@ pub(crate) extern "system" fn patch_code(
     if expected.is_null() || replacement.is_null() {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let span = |address: u64, len: usize| (usize::try_from(address).unwrap_or(usize::MAX), len);
         let (start, size) = s.host.base.code;
         let text = span(start, usize::try_from(size).unwrap_or(0));

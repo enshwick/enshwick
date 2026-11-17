@@ -206,8 +206,7 @@ impl Installed {
     pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {
         // shortcut: the loader finds a character made in the current server step only from the next step, and the fake has no steps, so a respawned character's account comes at once; model it if a mod test ever needs that gap.
         let (filters, account) = table::with((Vec::new(), None), |s| {
-            let server =
-                s.host.base.side == enshwick_core::abi::Side::SERVER || s.host.base.hosting;
+            let server = s.host.base.serving();
             let account = s
                 .host
                 .base

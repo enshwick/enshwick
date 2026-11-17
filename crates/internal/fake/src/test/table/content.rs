@@ -3,7 +3,7 @@
 
 mod served;
 
-use crate::test::table::{Registration, found, put, put_list, text, with};
+use crate::test::table::{found, put, put_list, text, with, with_open};
 use enshwick_core::abi::{ModHandle, RateId, ResourceKey, Status, Str};
 pub(crate) use served::*;
 
@@ -93,10 +93,7 @@ pub(crate) extern "system" fn declare_content(
     let Some(guid) = enshwick_core::content::Guid::try_named(&id) else {
         return Status::BAD_ARGS;
     };
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         let clash = s
             .content
             .content_ids
@@ -155,10 +152,7 @@ pub(crate) extern "system" fn crafting_prop(
     if out.is_null() {
         return Status::BAD_ARGS;
     }
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         if !super::base::mods::joins(s, me) {
             return Status::REFUSED;
         }
@@ -222,7 +216,7 @@ pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
         if s.host.content.missing_rates.contains(&rate) {
             return Status::UNAVAILABLE;
         }
-        if s.base.registration == Registration::Closed {
+        if s.base.closed() {
             return Status::TOO_LATE;
         }
         if !s
@@ -449,10 +443,7 @@ pub(crate) extern "system" fn add_text(
     value: Str,
 ) -> Status {
     let value = text(value);
-    with(Status::MISSING, |s| {
-        if s.base.registration == Registration::Closed {
-            return Status::TOO_LATE;
-        }
+    with_open(|s| {
         s.content.texts.push((id, language, value));
         Status::OK
     })
