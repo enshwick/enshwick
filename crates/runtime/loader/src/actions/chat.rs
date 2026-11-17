@@ -319,15 +319,16 @@ pub(crate) fn send_for_mod(to: u64, text: &str) -> Result<(), ChatOffError> {
 /// Queues every line of `text` for the player with account key `to` alone:
 /// the reply to a command they typed, which may be longer than the one
 /// message a mod sends, so a long help arrives whole, while fewer than
-/// [`MAX_REPLY_WAITING`] lines wait.
-pub(crate) fn reply(to: u64, text: &str) {
+/// [`MAX_REPLY_WAITING`] lines wait; whether every line was queued.
+pub(crate) fn reply(to: u64, text: &str) -> bool {
     if LINKED.get().is_none() {
-        return;
+        return false;
     }
     let left_out = STATE.queue(To::Key(to), shown(text), MAX_REPLY_WAITING);
     if left_out > 0 {
         STATE.dropped(left_out);
     }
+    left_out == 0
 }
 
 /// `text` cut to at most `max` bytes at a character boundary.
