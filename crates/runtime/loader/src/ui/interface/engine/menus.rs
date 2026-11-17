@@ -53,17 +53,17 @@ impl Engine {
     /// Whether the player pressed Back (Escape, B) this frame, taking the
     /// press so nothing else acts on it; `node` binds the action to a window.
     ///
-    /// `node` is never 0: on client 26430625 `ui.action_query` looks a bound
-    /// node up and, while Back's input is active, reads through the result without
-    /// a null check, so a node the game does not know faults (seen live on
-    /// the join dialog, reading 0x50).
+    /// On client 26430625 `ui.action_query` looks the bound node up and,
+    /// while Back's input is active, reads through the result without a null
+    /// check, so a node the game does not know faults (seen live on the join
+    /// dialog with node 0, reading 0x50).
     ///
     /// # Safety
     ///
     /// - Called inside a frame of the game's interface update, on its
     ///   thread.
     /// - `node` is the id of a panel the game drew in this frame or the last
-    ///   one.
+    ///   one, as [`Engine::node_id`] gives it.
     pub(in crate::ui::interface) unsafe fn back_pressed(&self, node: NonZeroU64) -> bool {
         let (Some(layout), Some(new), Some(query)) =
             (self.menu, self.action_new, self.action_query)

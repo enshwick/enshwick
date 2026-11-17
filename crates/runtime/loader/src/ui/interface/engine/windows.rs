@@ -31,8 +31,12 @@ impl Engine {
     }
 
     /// The id of `window`'s panel node, for actions bound to the window;
-    /// `None` before the window was drawn.
+    /// `None` unless the window began in this interface update or the last
+    /// one, since the game may no longer know an older node.
     pub(in crate::ui::interface) fn node_id(&self, window: &Window) -> Option<NonZeroU64> {
+        if !window.drawn_lately(crate::ui::interface::tick()) {
+            return None;
+        }
         let node = self.frame_node(&window.panel);
         if node == 0 {
             return None;
@@ -66,6 +70,7 @@ impl Engine {
         if window.edge.is_none() {
             crate::ui::interface::window_drawn();
         }
+        window.began = Some(crate::ui::interface::tick());
         window.saved_nav = self.nav(context);
         super::widgets::twins_window(name.hash);
         let name = [name.ptr.expose_provenance() as u64, name.len];

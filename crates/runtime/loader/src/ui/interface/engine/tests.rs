@@ -542,3 +542,16 @@ fn the_scroll_area_s_reflected_fields_fit_its_buffers() {
     };
     assert_eq!(refused(far), "rangeRectColor");
 }
+
+#[test]
+fn a_window_gives_its_node_only_in_the_update_it_began_in_and_the_next() {
+    let mut window = Window::new();
+    assert!(!window.drawn_lately(1), "a window never drawn has no node");
+    window.began = Some(7);
+    assert!(window.drawn_lately(7), "the update it began in");
+    assert!(window.drawn_lately(8), "the update after it");
+    assert!(
+        !window.drawn_lately(9),
+        "a skipped update, such as one under the game's popup, leaves it stale"
+    );
+}

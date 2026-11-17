@@ -510,6 +510,8 @@ pub(super) struct Window {
     /// The screen's edge a screen extension's panel sits at, undimmed;
     /// `None` for a window centred over a dimmed screen.
     edge: Option<u32>,
+    /// The interface update ([`super::tick`]) the window last began in.
+    began: Option<u64>,
 }
 
 impl Window {
@@ -523,6 +525,16 @@ impl Window {
             layer: 0x1f,
             gap: 30.0,
             edge: None,
+            began: None,
+        }
+    }
+
+    /// Whether the window began in interface update `now` or the one
+    /// before, so the game still knows its panel node.
+    const fn drawn_lately(&self, now: u64) -> bool {
+        match self.began {
+            Some(began) => now.saturating_sub(began) <= 1,
+            None => false,
         }
     }
 

@@ -33,7 +33,6 @@
 //! Ok closes it.
 
 use core::cell::RefCell;
-use core::num::NonZeroU64;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use enshwick_core::abi::UiWidget;
@@ -87,8 +86,6 @@ struct State {
     pause_seen: AtomicU64,
     /// The frame being drawn, counted by the interface hook.
     frame: AtomicU64,
-    /// The screen's panel node, from its last frame, for the Back action.
-    node: AtomicU64,
     /// Set by a hook that saw Back while the screen showed.
     back: AtomicU8,
 }
@@ -109,7 +106,6 @@ static STATE: State = State {
     main_seen: AtomicU64::new(0),
     pause_seen: AtomicU64::new(0),
     frame: AtomicU64::new(0),
-    node: AtomicU64::new(0),
     back: AtomicU8::new(0),
 };
 
@@ -289,17 +285,19 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     };
     let frame = STATE.frame.load(Ordering::Relaxed);
     STATE.seen(from).store(frame, Ordering::Relaxed);
-    let showing = SCREEN.with_borrow(|s| s.as_ref().map(|s| s.from)) == Some(from);
-    // Back waits while a dialog shows over the screen, so it never closes
-    // the screen under the dialog.
-    if showing
-        && !super::dialog::showing()
-        && let Some(node) = NonZeroU64::new(STATE.node.load(Ordering::Relaxed))
+    let (showing, node) = SCREEN.with_borrow(|s| match s {
+        Some(screen) if screen.from == from => (true, engine.node_id(&screen.window)),
+        _ => (false, None),
+    });
+    // While a dialog shows over the screen the press is taken and dropped,
+    // so it neither closes the screen under the dialog nor reaches the menu.
+    if let Some(node) = node
         // SAFETY: `entry` runs only from the main and pause menu hooks,
         // which the game reaches while drawing its menu inside a frame on
-        // the interface thread; `node` is the screen panel's, stored when
-        // the screen drew in the last frame.
+        // the interface thread; `node_id` gives a node only for a screen
+        // drawn in this interface update or the last one.
         && unsafe { engine.back_pressed(node) }
+        && !super::dialog::showing()
     {
         STATE.back.store(BACK_PRESSED, Ordering::Relaxed);
     }
@@ -423,10 +421,6 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window, which `show` asks for.
         let close = unsafe { show(loader, engine, context, screen) };
-        STATE.node.store(
-            engine.node_id(&screen.window).map_or(0, NonZeroU64::get),
-            Ordering::Relaxed,
-        );
         if close {
             *slot = None;
         }
