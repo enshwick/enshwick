@@ -107,14 +107,10 @@ mod tests {
 
     #[test]
     fn a_script_s_texts_are_the_texts_toml_of_its_folder() {
-        let dir = std::env::temp_dir().join(format!("enshwick-luau-texts-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("texts.toml"), "[en]\nhello = \"Hello\"\n").unwrap();
         let loader = run(
-            FakeHost::new().mod_dir(dir.to_str().unwrap()),
+            FakeHost::new().mod_file("texts.toml", "[en]\nhello = \"Hello\"\n"),
             r#"enshwick.log.info(`text {enshwick.i18n.texts():get("hello", "uk")}`)"#,
         );
-        let _cleaned = std::fs::remove_dir_all(&dir);
         assert!(logged(&loader, "text Hello"), "{:?}", loader.logs());
     }
 }

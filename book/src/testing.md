@@ -116,7 +116,10 @@ that function plays the original.
 
 Lookups you did not configure answer `Status::MISSING`, as a game build without
 them would. A world's settings files are empty unless `settings` or
-`settings_file` gives their text. So the mod reads its own defaults. The side
+`settings_file` gives their text. So the mod reads its own defaults. A file in
+the mod's own folder, such as a developer tool's `settings.toml`, comes from
+`mod_file`. Each install writes it into a new folder and removes it on drop,
+so parallel tests never share one. The side
 defaults to `Side::SERVER`, and the log level to `Level::INFO`. Raise
 `SettingsReplaced` for a world that loads, `SettingsChanged` for an edit while
 it runs.

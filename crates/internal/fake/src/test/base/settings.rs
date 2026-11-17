@@ -1,10 +1,13 @@
 //! Settings: the running world's settings files and the mod's checks.
 
+use std::path::{Path, PathBuf};
+
 use enshwick_core::abi::Str;
 use enshwick_core::abi::{Level, ModHandle};
 
 use crate::test::FakeHost;
 use crate::test::Installed;
+use crate::test::base::BasePresets;
 use crate::test::table;
 
 impl FakeHost {
@@ -59,7 +62,9 @@ impl FakeHost {
     }
 
     /// The path `Load::mod_dir` returns; `mods/test` by default. The fake
-    /// creates nothing there. Where the loader lists every mod, the calling
+    /// creates nothing there; with [`mod_file`](Self::mod_file) the mod gets
+    /// a folder of the same last name under a `mods/` folder the install
+    /// makes in the temp folder. Where the loader lists every mod, the calling
     /// one included, the fake lists only what [`FakeHost::loaded`] adds, so a
     /// test of `Load::export_dir` adds the mod with its file in this folder.
     ///
@@ -72,6 +77,39 @@ impl FakeHost {
     #[must_use]
     pub fn mod_dir(mut self, path: &str) -> Self {
         path.clone_into(&mut self.base.mod_dir);
+        self
+    }
+
+    /// A file `name` holding `contents` in the mod's own folder, as a
+    /// developer tool keeps its `settings.toml` beside it; `name` may name a
+    /// subfolder. With any such file each install makes a new folder,
+    /// `mods/<last name of mod_dir>` under the temp folder, which
+    /// [`mod_dir`](Self::mod_dir) no longer names; it is removed when the
+    /// [`Installed`] drops, so tests on threads of one process never read
+    /// each other's files.
+    ///
+    /// # Panics
+    ///
+    /// When `name` is empty or leaves the folder, as `..` or an absolute
+    /// path does.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .mod_file("settings.toml", "enabled = true\n")
+    ///     .install();
+    /// let text = std::fs::read_to_string(loader.mod_dir().join("settings.toml"))?;
+    /// assert_eq!(text, "enabled = true\n");
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    #[must_use]
+    pub fn mod_file(mut self, name: &str, contents: impl Into<Vec<u8>>) -> Self {
+        assert!(
+            !name.is_empty() && enshwick_base::mods::stays_inside(name),
+            "a mod file's name stays inside the mod's folder: {name:?}"
+        );
+        self.base.mod_files.insert(name.to_owned(), contents.into());
         self
     }
 
@@ -179,6 +217,17 @@ impl Installed {
         table::with(None, |s| s.host.base.settings.get(file).cloned())
     }
 
+    /// The folder `Load::mod_dir` names to the mod: the install's own with
+    /// [`FakeHost::mod_file`], else the one [`FakeHost::mod_dir`] set.
+    ///
+    /// # Examples
+    ///
+    /// See [`FakeHost::mod_file`].
+    #[must_use]
+    pub fn mod_dir(&self) -> PathBuf {
+        table::with(PathBuf::new(), |s| PathBuf::from(&s.host.base.mod_dir))
+    }
+
     /// Makes `level` the data pack `pack`'s most detailed log level, as an
     /// edit of the loader's settings would; raise
     /// [`events::LoaderSettingsChanged`](enshwick_core::events::LoaderSettingsChanged)
@@ -271,6 +320,71 @@ impl Installed {
     }
 }
 
+/// Writes the mod files of `base` into a new folder of the install's own,
+/// `mods/<last name of mod_dir>` under the temp folder, and names it the
+/// mod's folder; the folder to drop with the install, `None` without files.
+///
+/// # Panics
+///
+/// When the folder or a file cannot be written.
+#[expect(
+    clippy::panic,
+    reason = "a test whose mod files cannot be written fails before the mod reads them"
+)]
+pub(crate) fn place_mod_files(base: &mut BasePresets) -> Option<OwnFolder> {
+    if base.mod_files.is_empty() {
+        return None;
+    }
+    let folder = Path::new(&base.mod_dir)
+        .file_name()
+        .map_or_default(ToOwned::to_owned);
+    // Taken, so a copy of the host for each side check carries no contents.
+    let files = core::mem::take(&mut base.mod_files);
+    let written = OwnFolder::new().and_then(|root| {
+        let dir = root.0.join("mods").join(folder);
+        for (name, contents) in files {
+            let path = dir.join(name);
+            std::fs::create_dir_all(path.parent().unwrap_or(&dir))?;
+            std::fs::write(path, contents)?;
+        }
+        Ok((root, dir))
+    });
+    match written {
+        Ok((root, dir)) => {
+            base.mod_dir = dir.to_string_lossy().into_owned();
+            Some(root)
+        }
+        Err(why) => panic!("the fake cannot write the mod's files: {why}"),
+    }
+}
+
+/// A new folder of one install in the temp folder, removed when it drops.
+#[derive(Debug)]
+pub(crate) struct OwnFolder(PathBuf);
+
+impl OwnFolder {
+    /// Claims the first free `enshwick-fake-<process>-<n>`: making a folder
+    /// fails on one that exists, so no two installs share one.
+    fn new() -> std::io::Result<Self> {
+        let process = std::process::id();
+        for n in 0u32.. {
+            let path = std::env::temp_dir().join(format!("enshwick-fake-{process}-{n}"));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Ok(Self(path)),
+                Err(why) if why.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(why) => return Err(why),
+            }
+        }
+        Err(std::io::ErrorKind::StorageFull.into())
+    }
+}
+
+impl Drop for OwnFolder {
+    fn drop(&mut self) {
+        let _removed = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// A mod's check refused a settings text, as [`Installed::check_settings`]
 /// reports it.
 ///
@@ -282,4 +396,58 @@ impl Installed {
 pub struct SettingsRefused {
     /// The mod's reason.
     pub reason: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick_core::abi::{ModHandle, Status, Str};
+
+    use crate::test::FakeHost;
+    use crate::test::table::base::build::mod_dir;
+
+    /// The `settings.toml` the mod reads in the folder the loader names it.
+    fn read_by_the_mod() -> String {
+        let mut dir = Str::EMPTY;
+        assert_eq!(mod_dir(ModHandle(1), &raw mut dir), Status::OK);
+        // SAFETY: the fake leaks the path it answers for the process.
+        let dir = unsafe { dir.as_str() }.unwrap().to_owned();
+        std::fs::read_to_string(std::path::Path::new(&dir).join("settings.toml")).unwrap()
+    }
+
+    #[test]
+    fn installs_on_two_threads_of_one_process_each_read_their_own_mod_files() {
+        let texts = ["enabled = true\n", "enabled = false\n"];
+        let threads = texts.map(|text| {
+            std::thread::spawn(move || {
+                let loader = FakeHost::new().mod_file("settings.toml", text).install();
+                let read = read_by_the_mod();
+                let dir = loader.mod_dir();
+                drop(loader);
+                (read, dir.exists())
+            })
+        });
+        for (thread, text) in threads.into_iter().zip(texts) {
+            assert_eq!(thread.join().unwrap(), (text.to_owned(), false));
+        }
+    }
+
+    #[test]
+    fn a_mod_file_may_sit_in_a_subfolder_of_a_folder_named_as_mod_dir_inside_mods() {
+        let loader = FakeHost::new()
+            .mod_dir("game/mods/Bonus")
+            .mod_file("data/names.txt", "a")
+            .install();
+        let dir = loader.mod_dir();
+        assert!(dir.ends_with("mods/Bonus"), "{}", dir.display());
+        assert_eq!(
+            std::fs::read_to_string(dir.join("data/names.txt")).unwrap(),
+            "a"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "stays inside the mod's folder")]
+    fn a_mod_file_that_would_leave_the_folder_is_refused() {
+        let _host = FakeHost::new().mod_file("../settings.toml", "");
+    }
 }

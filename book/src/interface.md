@@ -837,7 +837,8 @@ screen, and at the end of the main menu's line.
 
 The [fake loader](testing.md) has developer tools off, as a game players
 join does. So it refuses a developer mod's `init` with the loader's reason. A
-developer mod's tests build it with `FakeHost::developer_tools(true)`.
+developer mod's tests build it with `FakeHost::developer_tools(true)`. They
+hand it the `settings.toml` of its folder with `FakeHost::mod_file`.
 
 ## Testing
 

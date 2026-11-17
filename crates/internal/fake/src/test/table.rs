@@ -116,11 +116,15 @@ pub(crate) enum Registration {
 }
 
 /// Waits for the table to be free, then answers from `host`.
-pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
+pub(crate) fn install(mut host: FakeHost) -> MutexGuard<'static, ()> {
+    // Before the turn: the folder is the install's own, and a failed write holds no turn.
+    let mod_files = super::base::settings::place_mod_files(&mut host.base);
     let turn = take_turn();
+    let mut base = BaseState::default();
+    base.mod_files = mod_files;
     *state() = Some(State {
         host,
-        base: BaseState::default(),
+        base,
         content: ContentState::default(),
         world: WorldState::default(),
         inventory: InventoryState::default(),
