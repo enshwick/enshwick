@@ -149,18 +149,4 @@ impl Installed {
     pub fn buffs_of(&self, entity: Entity) -> Option<Vec<enshwick_core::abi::ActiveBuff>> {
         table::with(None, |s| s.world.buffs.get(&entity.0).cloned())
     }
-
-    /// Plays the client's UI registry knowing the served UI images from
-    /// now on, as [`FakeHost::icons_ready`] does from the start: the loader
-    /// then builds the buff collection again with each mod type's icon.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.show_icons();
-    /// ```
-    pub fn show_icons(&self) {
-        table::with((), |s| s.host.content.icons_ready = true);
-    }
 }

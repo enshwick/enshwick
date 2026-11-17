@@ -1,14 +1,14 @@
 //! A buff type of a mod's own: served with every mod's types in one patch of
 //! the game's buff collection, found by its id, and naming its icon only on
-//! a client that shows served icons; what the game could not take, an id a
-//! mod before took included, is refused at init and the mod stays on.
+//! a client that shows served icons; what the game could not take is refused
+//! at init and the mod stays on, and no mod adds a type under another's id.
 
 #[cfg(test)]
 mod tests {
     use core::time::Duration;
     use std::sync::Mutex;
 
-    use enshwick::abi::{BuffTypeAdd, Header, ModHandle, Side, Status};
+    use enshwick::abi::{BuffTypeAdd, Header, HostApi, ModHandle, Side, Status, Str};
     use enshwick::buffs::{
         BUFF_COLLECTION, BUFF_COLLECTION_RESOURCE, BuffLayout, BuffSlotType, BuffTypeId, NewBuff,
     };
@@ -27,6 +27,8 @@ mod tests {
     const FOOD_ICON: Guid = Guid::parse("02778393-2031-44cd-b7cd-3bc215acd7af");
     /// A mod loaded before Lucky.
     const EARLIER: ModHandle = ModHandle(77);
+    /// The earlier mod's buff type.
+    const GLOOMY: Id = Id::new("you.gloomy:gloomy");
 
     /// What each `add_buff` answered, in order: Lucky, Lucky again, a copy
     /// of a type the game lacks, and an id the game has.
@@ -90,7 +92,13 @@ mod tests {
     fn built_lucky(loader: &Installed, layout: &BuffLayout, hash: u32) -> Vec<u8> {
         let key = BUFF_COLLECTION.key_by_hash(hash);
         let base = game_resource(key).expect("the vanilla collection");
-        let built = Blob::new(&loader.build_resource(&key, &base).unwrap());
+        lucky_in(&loader.build_resource(&key, &base).unwrap(), layout)
+    }
+
+    /// The new type as the collection `bytes` hold it, found through the key
+    /// list the way the game finds it.
+    fn lucky_in(bytes: &[u8], layout: &BuffLayout) -> Vec<u8> {
+        let built = Blob::new(bytes);
         let id = BuffTypeId::from_guid(LUCKY.guid());
         let (keys, count) = built.array(layout.keys).unwrap();
         let (values, _) = built.array(layout.values).unwrap();
@@ -155,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    fn two_mods_types_are_served_in_one_patch_and_a_taken_id_is_refused_to_the_second() {
+    fn two_mods_types_are_served_in_one_patch_and_another_mod_s_id_is_refused() {
         let host = host().pack(EARLIER, Side::BOTH);
         let layout = BuffLayout::resolve(&host).unwrap();
         let hash = host.hash(BUFF_COLLECTION_RESOURCE.id()).unwrap();
@@ -163,7 +171,17 @@ mod tests {
         // SAFETY: the installed fake's table, alive while `loader` is.
         let api = unsafe { &*loader.api() };
         let mut id = BuffTypeId(0);
-        let gloomy = earlier_type(Id::new("you.gloomy:gloomy"), FOOD);
+        let gloomy = earlier_type(GLOOMY, FOOD);
+        assert_eq!(
+            (api.buff_type_add)(EARLIER, &raw const gloomy, &raw mut id),
+            Status::REFUSED,
+            "a GUID the mod did not declare"
+        );
+        let (mut guid, gloomy_id) = (Guid::NIL, GLOOMY.to_string());
+        assert_eq!(
+            (api.declare_content)(EARLIER, Str::new(&gloomy_id), &raw mut guid),
+            Status::OK
+        );
         assert_eq!(
             (api.buff_type_add)(EARLIER, &raw const gloomy, &raw mut id),
             Status::OK
@@ -171,18 +189,23 @@ mod tests {
         let taken = earlier_type(LUCKY, FOOD);
         assert_eq!(
             (api.buff_type_add)(EARLIER, &raw const taken, &raw mut id),
-            Status::OK
+            Status::REFUSED,
+            "Lucky's id, which only Lucky declares"
         );
         // SAFETY: the exports of this file's `declare_mod!(Lucky)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(
+            (api.buff_type_add)(EARLIER, &raw const taken, &raw mut id),
+            Status::TOO_LATE,
+            "after init a call is late before its id is looked at"
+        );
         let added = ADDED.lock().unwrap().clone();
-        assert!(
-            added[0]
-                .as_ref()
-                .is_err_and(|why| why.contains("another id")),
-            "the earlier mod took Lucky's id: {added:?}"
+        assert_eq!(
+            added[0],
+            Ok(BuffTypeId::from_guid(LUCKY.guid())),
+            "Lucky's own type"
         );
         assert_eq!(loader.resources().len(), 1, "one patch for both mods");
         let key = BUFF_COLLECTION.key_by_hash(hash);
@@ -192,10 +215,58 @@ mod tests {
         let listed: Vec<u32> = (0..count as usize)
             .filter_map(|i| built.read_u32(keys + i * 4))
             .collect();
-        for id in [Id::new("you.gloomy:gloomy").guid(), LUCKY.guid()] {
+        for id in [GLOOMY.guid(), LUCKY.guid()] {
             assert!(listed.contains(&BuffTypeId::from_guid(id).0), "{listed:x?}");
         }
-        assert_eq!(count, 4, "the two vanilla types and the earlier mod's two");
+        assert_eq!(
+            count, 4,
+            "the two vanilla types, the earlier mod's and Lucky's"
+        );
+    }
+
+    #[test]
+    fn another_mod_declaring_the_mod_s_content_id_is_refused_and_turned_off() {
+        /// What the earlier mod's calls answered, in order.
+        static ANSWERS: Mutex<Vec<Status>> = Mutex::new(Vec::new());
+        /// Lucky's own init, then calls as the earlier mod, as a C mod would
+        /// before the mods' registrations close.
+        unsafe extern "system" fn earlier_after(api: *const HostApi, me: ModHandle) -> Status {
+            // SAFETY: the init export of this file's `declare_mod!(Lucky)`,
+            // with the arguments the fake passed.
+            let status = unsafe { enshwick_mod_init(api, me) };
+            // SAFETY: the fake passes its table, alive for the call.
+            let host = unsafe { &*api };
+            let (mut guid, mut id, lucky) = (Guid::NIL, BuffTypeId(0), LUCKY.to_string());
+            let taken = earlier_type(LUCKY, FOOD);
+            let answers = [
+                (host.declare_content)(EARLIER, Str::new(&lucky), &raw mut guid),
+                (host.buff_type_add)(EARLIER, &raw const taken, &raw mut id),
+                (host.declare_content)(EARLIER, Str::new(&lucky), core::ptr::null_mut()),
+            ];
+            if let Ok(mut kept) = ANSWERS.lock() {
+                kept.extend(answers);
+            }
+            status
+        }
+        let loader = host().pack(EARLIER, Side::BOTH).install();
+        // SAFETY: the query and ready exports of this file's
+        // `declare_mod!(Lucky)`, with an init that runs Lucky's first.
+        let status = unsafe { loader.start(enshwick_mod_query, earlier_after, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(
+            *ANSWERS.lock().unwrap(),
+            [Status::REFUSED, Status::REFUSED, Status::BAD_ARGS],
+            "Lucky's id lies outside the earlier mod's namespace, so its \
+             declare counts for nothing"
+        );
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("outside the mod's namespace")),
+            "{:?}",
+            loader.logs()
+        );
     }
 
     #[test]
@@ -224,9 +295,9 @@ mod tests {
             "the vanilla icon"
         );
         loader.show_icons();
-        let after = loader.build_resource(&key, &base).unwrap();
-        assert_eq!(after.len(), before.len(), "written over the game's copy");
-        let lucky = built_lucky(&loader, &layout, hash);
+        let held = loader.held_resource(&key).expect("kept for the rebuild");
+        assert_eq!(held.len(), before.len(), "written over the game's copy");
+        let lucky = lucky_in(&held, &layout);
         assert_eq!(&lucky[layout.icon..layout.icon + 16], &ICON.guid().0);
     }
 }

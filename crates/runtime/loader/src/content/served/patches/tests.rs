@@ -1,5 +1,5 @@
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use super::super::{Patch, State};
 use super::*;
@@ -337,7 +337,7 @@ fn a_rebuild_reaches_the_keys_whose_builds_read_the_rebuilt_one_and_theirs() {
     list[1].read_by.relock().push(read);
     VALUE.store(2, Ordering::Relaxed);
     assert_eq!(rebuild_one(&list[0]), Ok(Some(1)));
-    rebuild_readers(list, &list[0]);
+    rebuild_readers(list, &list[0], &mut vec![list[0].key]);
     for entry in &list[1..] {
         let (data, _) = entry.state.relock().built.unwrap();
         let mut held = [0u8];
@@ -392,7 +392,7 @@ fn a_rebuild_leaves_a_reader_whose_build_runs_on_this_thread() {
     let _game = list[1].state.relock();
     let _building = Building::enter(list[1].key, Build::Game);
     VALUE.store(2, Ordering::Relaxed);
-    rebuild_readers(list, &list[0]);
+    rebuild_readers(list, &list[0], &mut vec![list[0].key]);
 }
 
 #[test]
@@ -412,6 +412,136 @@ fn a_rebuild_a_patch_asks_for_of_its_own_key_is_refused_instead_of_waited_on() {
             .ok(),
         Some(Err(ServedError::Building)),
         "the patch's thread holds the key's build"
+    );
+}
+
+/// Two served keys of one test whose patches ask whether icons show, with
+/// what they serve: each test leaks its own, so tests running at once share
+/// nothing.
+struct Icons {
+    /// The byte [`ask_icons`] serves as its icon.
+    icon: AtomicU8,
+    /// How often [`ask_icons_reading_first`] ran.
+    reader_runs: AtomicUsize,
+    list: [Served; 2],
+}
+
+/// `list` leaked for the process as [`Icons`] serving icon 1, with the
+/// `user` of every patch pointing at it.
+fn icons(list: [Served; 2]) -> &'static Icons {
+    let icons = Box::into_raw(Box::new(Icons {
+        icon: AtomicU8::new(1),
+        reader_runs: AtomicUsize::new(0),
+        list,
+    }));
+    let user = icons.expose_provenance();
+    // SAFETY: `icons` is a fresh leak no reference points into yet; the
+    // writes go through it, so the address the patches read stays valid.
+    let list = unsafe { &mut (*icons).list };
+    for entry in list {
+        for patch in &mut entry.patches {
+            patch.user = user;
+        }
+    }
+    // SAFETY: `icons` is the leak made here, valid for the process, and the
+    // loop's mutable borrow of it ended.
+    unsafe { &*icons }
+}
+
+/// Asks, as a build that names an icon does, whether icons show among the
+/// [`Icons`] at `user`, then serves its icon.
+unsafe extern "system" fn ask_icons(
+    _base: *const u8,
+    _base_len: u32,
+    user: *mut c_void,
+    out: *mut *mut u8,
+    out_len: *mut u32,
+) -> Status {
+    // SAFETY: `user` is the `Icons` the test leaked for the process.
+    let icons = unsafe { &*user.cast::<Icons>() };
+    note_icons_in(&icons.list);
+    // SAFETY: `run_patches` passes `out` and `out_len` writable for the call.
+    unsafe { hand_out(vec![icons.icon.load(Ordering::Relaxed)], out, out_len) }
+}
+
+/// As [`ask_icons`], but serves the first key of the [`Icons`] at `user` as
+/// a served read finds it, counting its runs.
+unsafe extern "system" fn ask_icons_reading_first(
+    _base: *const u8,
+    _base_len: u32,
+    user: *mut c_void,
+    out: *mut *mut u8,
+    out_len: *mut u32,
+) -> Status {
+    // SAFETY: `user` is the `Icons` the test leaked for the process.
+    let icons = unsafe { &*user.cast::<Icons>() };
+    note_icons_in(&icons.list);
+    icons.reader_runs.fetch_add(1, Ordering::Relaxed);
+    match read_served(&icons.list[0], vec![0], unarchived) {
+        // SAFETY: `run_patches` passes `out` and `out_len` writable for the
+        // call.
+        Ok(bytes) => unsafe { hand_out(bytes, out, out_len) },
+        Err(error) => crate::host::layer::Refusal::status(&error),
+    }
+}
+
+#[test]
+fn a_key_whose_build_asked_for_icons_before_they_show_is_built_again_once_they_show() {
+    let icons = icons([
+        Served::new(KEY, KEY, vec![by_loader(ask_icons)], false),
+        Served::new(
+            ResourceKey { part: 1, ..KEY },
+            KEY,
+            vec![by_loader(grow)],
+            false,
+        ),
+    ]);
+    let list = &icons.list;
+    build_each(list);
+    assert!(list[0].reads_icons.load(Ordering::SeqCst));
+    assert!(
+        list[0].state.relock().base.is_some(),
+        "its base is kept for the rebuild"
+    );
+    assert!(!list[1].reads_icons.load(Ordering::SeqCst));
+    assert!(list[1].state.relock().base.is_none(), "nothing kept for it");
+    icons.icon.store(2, Ordering::Relaxed);
+    rebuild_icon_readers(list);
+    assert_eq!(held(&list[0]), 2, "the icon written over the game's copy");
+    assert_eq!(list[0].state.relock().built.map(|(_, len)| len), Some(1));
+    assert!(
+        list[0].state.relock().base.is_none(),
+        "the base kept only for this rebuild is let go"
+    );
+}
+
+#[test]
+fn keys_that_asked_for_icons_and_read_each_other_are_each_built_again_once() {
+    let icons = icons([
+        Served::new(KEY, KEY, vec![by_loader(ask_icons)], false),
+        Served::new(
+            ResourceKey { part: 1, ..KEY },
+            ResourceKey { part: 1, ..KEY },
+            vec![by_loader(ask_icons_reading_first)],
+            false,
+        ),
+    ]);
+    let list = &icons.list;
+    build_each(list);
+    assert!(list.iter().all(|s| s.reads_icons.load(Ordering::SeqCst)));
+    icons.icon.store(2, Ordering::Relaxed);
+    let runs = icons.reader_runs.load(Ordering::Relaxed);
+    rebuild_icon_readers(list);
+    assert_eq!(
+        icons.reader_runs.load(Ordering::Relaxed),
+        runs + 1,
+        "the reader built again once, as a reader, not again for its own ask"
+    );
+    assert_eq!(held(&list[1]), 2, "the reader takes the new icon");
+    assert!(list[0].state.relock().base.is_none(), "read by none");
+    assert!(
+        list[1].state.relock().base.is_some(),
+        "it reads the first key, so a rebuild of that still needs its base"
     );
 }
 

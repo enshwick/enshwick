@@ -2311,8 +2311,10 @@ pub struct HostApi {
     /// a type's icon on a client only once that client shows served UI
     /// images. [`Status::BAD_ARGS`] for a change or flag it does not know, a
     /// negative life time, or a `like` that is no buff type of the game;
-    /// [`Status::REFUSED`] for a mod not of side both and for an id the game
-    /// or a mod loaded before has; [`Status::UNAVAILABLE`] on a build whose
+    /// [`Status::REFUSED`] for a GUID whose content id the calling mod did
+    /// not declare with `declare_content`, for a mod not of side both and
+    /// for an id the game or a mod loaded before has;
+    /// [`Status::UNAVAILABLE`] on a build whose
     /// archive or layout lacks the collection. Allowed during
     /// `enshwick_mod_init` only. ABI 12.13.
     pub buff_type_add:

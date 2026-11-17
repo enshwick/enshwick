@@ -37,6 +37,23 @@ pub(crate) fn before_delivery(loader: &Loader) -> Result<(), Status> {
     open(loader.before_delivery().is_err())
 }
 
+/// Refuses a call that names new content by `guid` unless mod `caller`
+/// declared the content id it comes from, so no mod adds content under
+/// another's id. An entry that takes a new content GUID asks it once its
+/// own checks of when and who passed, before it adds anything; today
+/// `buff_type_add` does.
+///
+/// # Errors
+///
+/// [`UndeclaredContentError`](crate::base::ids::UndeclaredContentError) for
+/// a GUID another mod or no mod declared.
+pub(crate) fn declared_content(
+    caller: &crate::engine::loader::ModRecord,
+    guid: enshwick_core::content::Guid,
+) -> Result<(), crate::base::ids::UndeclaredContentError> {
+    crate::base::ids::declared_by(&caller.id, guid)
+}
+
 /// [`Status::UNAVAILABLE`] off the client, which alone has what the entry
 /// serves.
 ///

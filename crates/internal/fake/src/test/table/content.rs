@@ -29,6 +29,9 @@ pub(crate) struct ContentState {
         Option<Vec<(enshwick_core::content::Guid, enshwick_core::content::Guid)>>,
     /// Content ids the mod declared, in order.
     pub(crate) content_ids: Vec<String>,
+    /// The GUID of each content id declared, with the mod or data pack that
+    /// declared it: only it may add content under that GUID.
+    pub(crate) declared_by: Vec<(ModHandle, enshwick_core::content::Guid)>,
     /// The crafting props the mod was given an index for, in order.
     pub(crate) crafting_props: Vec<enshwick_core::content::Guid>,
     /// Item data kinds by full id, and values by kind and entity: the item
@@ -84,14 +87,22 @@ pub(crate) extern "system" fn read_only(
 }
 
 pub(crate) extern "system" fn declare_content(
-    _me: ModHandle,
+    me: ModHandle,
     id: Str,
     out: *mut enshwick_core::content::Guid,
 ) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
     let id = text(id);
     let Some(guid) = enshwick_core::content::Guid::try_named(&id) else {
         return Status::BAD_ARGS;
     };
+    if outside(me, &id) {
+        let reason = format!("content id {id} lies outside the mod's namespace");
+        crate::test::table::base::mods::loader_turns_off(me, reason);
+        return Status::REFUSED;
+    }
     with_open(|s| {
         let clash = s
             .content
@@ -109,8 +120,36 @@ pub(crate) extern "system" fn declare_content(
         if !s.content.content_ids.contains(&id) {
             s.content.content_ids.push(id);
         }
+        if !s.content.declared_by.contains(&(me, guid)) {
+            s.content.declared_by.push((me, guid));
+        }
         put(out, guid)
     })
+}
+
+/// Whether content id `id` lies outside the namespace of mod `me`, which the
+/// loader refuses and turns the mod off for. The fake knows no pack's id, and
+/// its tests' `id!` names the test crate, not the mod under test, so it
+/// refuses only a pack declaring in the namespace of the mod under test.
+fn outside(me: ModHandle, id: &str) -> bool {
+    with(false, |s| {
+        me != s.host.base.handle
+            && s.base.manifest.as_ref().is_some_and(|manifest| {
+                id.split_once(':')
+                    .is_some_and(|(namespace, _)| namespace == manifest.id)
+            })
+    })
+}
+
+/// Whether mod `me` declared the content id `guid` comes from, as the
+/// loader asks of every call that adds content by GUID.
+#[cfg(feature = "unstable")]
+pub(crate) fn declared(
+    s: &crate::test::table::State,
+    me: ModHandle,
+    guid: enshwick_core::content::Guid,
+) -> bool {
+    s.content.declared_by.contains(&(me, guid))
 }
 
 pub(crate) extern "system" fn content_name(
@@ -592,6 +631,7 @@ pub(crate) extern "system" fn icons_ready(_me: ModHandle) -> Status {
     if with(false, |s| s.host.content.icons_ready) {
         Status::OK
     } else {
+        note_icons_read();
         Status::UNAVAILABLE
     }
 }

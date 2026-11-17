@@ -89,7 +89,7 @@ pub(crate) extern "system" fn rebuild_resource(me: ModHandle, key: *const Resour
             match rebuild_one(&key) {
                 Ok(changed) => {
                     if changed != Some(0) {
-                        rebuild_readers(key);
+                        rebuild_readers(key, &mut vec![key]);
                     }
                     Status::OK
                 }
@@ -145,11 +145,10 @@ fn rebuild_one(key: &ResourceKey) -> Result<Option<usize>, Status> {
 }
 
 /// Rebuilds the keys whose game builds read `key`, which changed, and in
-/// turn those that read a key that changed, each once, as the loader does;
-/// a key whose build runs on this thread is left.
-fn rebuild_readers(key: ResourceKey) {
+/// turn those that read a key that changed, each once and none of `done`,
+/// as the loader does; a key whose build runs on this thread is left.
+fn rebuild_readers(key: ResourceKey, done: &mut Vec<ResourceKey>) {
     let readers = |key: &ResourceKey| with(Vec::new(), |s| s.content.served_builds.readers(key));
-    let mut done = vec![key];
     let mut next = readers(&key);
     while let Some(reader) = next.pop() {
         if done.contains(&reader) || building(&reader) {
@@ -160,6 +159,57 @@ fn rebuild_readers(key: ResourceKey) {
             next.extend(readers(&reader));
         }
     }
+}
+
+/// Notes that the game's builds running on this thread asked whether the
+/// client shows served UI images before it did, as the loader does: they
+/// keep their base and [`icons_shown`] builds them again.
+pub(crate) fn note_icons_read() {
+    let asking: Vec<_> = BUILDING.with_borrow(|frames| {
+        frames
+            .iter()
+            .filter(|frame| frame.notes)
+            .map(|frame| frame.key)
+            .collect()
+    });
+    with((), |s| {
+        for key in asking {
+            if !s.content.served_builds.reads_icons.contains(&key) {
+                s.content.served_builds.reads_icons.push(key);
+            }
+        }
+    });
+}
+
+/// Builds again every key whose game build asked whether icons show before
+/// they did, and the keys that read those, each once, as the loader does
+/// once the client shows served UI images.
+pub(crate) fn icons_shown() {
+    let asked = with(Vec::new(), |s| s.content.served_builds.reads_icons.clone());
+    let mut done = Vec::new();
+    for key in asked {
+        if done.contains(&key) || building(&key) {
+            continue;
+        }
+        done.push(key);
+        if rebuild_one(&key).is_ok_and(|changed| changed != Some(0)) {
+            rebuild_readers(key, &mut done);
+        }
+    }
+}
+
+/// The bytes the game holds for served `key`, when its first build kept
+/// them for a rebuild, as each rebuild since left them.
+pub(crate) fn held(key: &ResourceKey) -> Option<Vec<u8>> {
+    with(None, |s| {
+        s.content
+            .served_builds
+            .game
+            .iter()
+            .find(|built| built.key == *key)
+            .and_then(|built| built.kept.as_ref())
+            .map(|(_, held)| held.clone())
+    })
 }
 
 pub(crate) extern "system" fn resource_read(
@@ -337,6 +387,9 @@ pub(crate) struct ServedBuilds {
     /// Served reads inside the game's builds: the key read, then the key
     /// whose build read it.
     read_by: Vec<(ResourceKey, ResourceKey)>,
+    /// The keys whose game builds asked whether icons show before they
+    /// did, whose first build keeps its base.
+    reads_icons: Vec<ResourceKey>,
 }
 
 impl ServedBuilds {
@@ -358,8 +411,8 @@ struct GameBuild {
     /// every patch failed, which reads as the archive has it.
     holds: bool,
     /// The base it was built from and the bytes the game holds, kept when a
-    /// mod asked during init to rebuild the key or a patch read another
-    /// served key.
+    /// mod asked during init to rebuild the key, a patch read another
+    /// served key or asked whether icons show before they did.
     kept: Option<(Vec<u8>, Vec<u8>)>,
     /// The mods whose patches built the bytes the game holds; `None` for a
     /// test's stand-in for another mod.
@@ -481,7 +534,8 @@ pub(crate) fn build_resource(
                 .served
                 .iter()
                 .any(|served| served.0.key == *key && served.0.base == *key);
-            let keeps = reads || s.content.served_builds.keep_base.contains(key);
+            let builds = &s.content.served_builds;
+            let keeps = reads || builds.keep_base.contains(key) || builds.reads_icons.contains(key);
             s.content.served_builds.game.push(GameBuild {
                 key: *key,
                 holds: built.is_some() || vanilla,

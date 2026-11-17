@@ -163,7 +163,8 @@ impl_headed!(BuffRequest);
 pub struct BuffTypeAdd {
     /// Size and version of this struct.
     pub header: Header,
-    /// Its content id's GUID; its game id is the FNV-1a 32 of these bytes.
+    /// Its content id's GUID, which the calling mod declared with
+    /// `declare_content`; its game id is the FNV-1a 32 of these bytes.
     pub guid: Guid,
     /// The tag of its name, with [`BuffTypeAdd::NAME`].
     pub name: Guid,
