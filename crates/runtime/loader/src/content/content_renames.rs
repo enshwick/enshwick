@@ -3,6 +3,7 @@
 
 use std::sync::OnceLock;
 
+use enshwick_base::__internal::renames::release;
 use enshwick_core::abi::ContentRename;
 use rustc_hash::FxHashMap;
 
@@ -74,9 +75,9 @@ fn add(
 }
 
 /// Gives `guid`, which mod `owner` of `loader` has just declared, back to
-/// it whatever the load order: every other mod's renames from or to it are
-/// dropped, with the resources those mods serve under it through them, and
-/// a warning names both mods.
+/// it: every other mod's rename from it goes and a chain of its renames
+/// through it skips it ([`release`]), the patches those mods serve under it
+/// from another GUID's base go, and a warning names both mods.
 #[cfg(windows)]
 pub(crate) fn claim(loader: &Loader, owner: ModIndex, guid: Guid) {
     let losers = take(&DECLARED, owner, guid);
@@ -88,25 +89,21 @@ pub(crate) fn claim(loader: &Loader, owner: ModIndex, guid: Guid) {
     for &loser in &losers {
         crate::log!(
             WARN,
-            "{} declared content {guid}, so the renames of {} from or to it and what it serves under it are dropped",
+            "{} declared content {guid}, so {} no longer renames from it or through it, and what it serves under it from another base is dropped",
             id(owner),
             id(loser)
         );
     }
 }
 
-/// Takes every rename from or to `guid` out of the renames of mods other
-/// than `owner`; the mods that lost one.
+/// Takes `guid` out of the renames of mods other than `owner`, as
+/// [`release`] does for each; the mods whose renames changed.
 fn take(declared: &Registry<Declared>, owner: ModIndex, guid: Guid) -> Vec<ModIndex> {
     declared
         .edit(|list| {
             list.iter_mut()
                 .filter(|d| d.owner != owner)
-                .filter_map(|d| {
-                    let before = d.renames.len();
-                    d.renames.retain(|&(from, to)| from != guid && to != guid);
-                    (d.renames.len() < before).then_some(d.owner)
-                })
+                .filter_map(|d| release(&mut d.renames, guid).then_some(d.owner))
                 .collect()
         })
         .unwrap_or_default()
@@ -243,7 +240,8 @@ mod tests {
         assert_eq!(take(&declared, owner, Guid([1; 16])), [earlier]);
         assert_eq!(take(&declared, owner, Guid([1; 16])), []);
         let renames = sealed(&declared, |_| true);
-        assert_eq!(renames.len(), 2);
+        assert_eq!(renames.len(), 3);
+        assert_eq!(renames[&Guid([2; 16])], Guid([9; 16]), "the chain skips 1");
         assert_eq!(renames[&Guid([3; 16])], Guid([4; 16]));
         assert_eq!(renames[&Guid([5; 16])], Guid([1; 16]));
         assert_eq!(take(&declared, owner, Guid([3; 16])), [], "sealed");

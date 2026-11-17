@@ -59,8 +59,9 @@ mod tests {
     /// What the earlier mod's renames from Bells' GUID and in a cycle
     /// answered.
     static REFUSED_RENAMES: Mutex<Vec<Status>> = Mutex::new(Vec::new());
-    /// What the earlier mod's rename from Bells' GUID and its serve under it
-    /// answered before Bells declared it, then that serve again after.
+    /// What the earlier mod's chain of renames through Bells' GUID and its
+    /// serve under it answered before Bells declared it, then that serve
+    /// again and a serve under the chain's start after.
     static CLAIMED: Mutex<Vec<Status>> = Mutex::new(Vec::new());
     /// What the earlier mod's calls that need no declaration answered: a
     /// changed game key, a new key from a game key, a rename onto a game
@@ -194,9 +195,10 @@ mod tests {
         ..GAME
     };
 
-    /// The earlier mod renames from Bells' GUID onto the game's and serves
-    /// Bells' key from another base, both before Bells declares its id; then
-    /// Bells' init, then that serve again.
+    /// The earlier mod renames its old GUID through Bells' onto the game's
+    /// and serves Bells' key from another base, both before Bells declares
+    /// its id; then Bells' init, then that serve again and one under the
+    /// earlier mod's old GUID, which its chain still renames.
     unsafe extern "system" fn renamer_before(api: *const HostApi, me: ModHandle) -> Status {
         // SAFETY: the fake passes its table, alive for the call.
         let table = unsafe { &*api };
@@ -204,14 +206,20 @@ mod tests {
             guid: Guid([4; 16]),
             ..GAME
         };
+        let chain = [(OLD_GONG, BELL.guid()), (BELL.guid(), GAME.guid)];
         let mut answers = vec![
-            rename(table, EARLIER, &[(BELL.guid(), GAME.guid)]),
+            rename(table, EARLIER, &chain),
             serve(table, EARLIER, BELL_KEY, other_base),
         ];
         // SAFETY: the init export of this file's `declare_mod!(Bells)`, with
         // the arguments the fake passed.
         let status = unsafe { enshwick_mod_init(api, me) };
         answers.push(serve(table, EARLIER, BELL_KEY, other_base));
+        let old_gong = ResourceKey {
+            guid: OLD_GONG,
+            ..GAME
+        };
+        answers.push(serve(table, EARLIER, old_gong, other_base));
         *CLAIMED.lock().unwrap() = answers;
         status
     }
@@ -289,7 +297,7 @@ mod tests {
         let loader = start(renamer_before);
         assert_eq!(
             *CLAIMED.lock().unwrap(),
-            [Status::OK, Status::OK, Status::REFUSED]
+            [Status::OK, Status::OK, Status::REFUSED, Status::OK]
         );
         assert_eq!(*OWN.lock().unwrap(), [Status::OK; 4]);
         let bases: Vec<ResourceKey> = loader

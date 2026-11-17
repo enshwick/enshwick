@@ -4,6 +4,7 @@
 mod served;
 
 use crate::test::table::{found, put, put_list, text, with, with_open};
+use enshwick_base::__internal::renames::release;
 use enshwick_core::__fake::UnnamedField;
 use enshwick_core::abi::{DataChange, ModHandle, RateId, ResourceKey, Status, Str};
 pub(crate) use served::*;
@@ -151,21 +152,24 @@ pub(crate) extern "system" fn declare_content(
 }
 
 /// As the loader: `guid`, which mod `me` has just declared, leaves every
-/// other mod's renames from or to it, with what those mods serve under it
-/// from another GUID's base.
+/// other mod's renames as [`release`] takes it out, and those mods' patches
+/// of a key under it made from another GUID's base.
 fn claim(s: &mut crate::test::table::State, me: ModHandle, guid: enshwick_core::content::Guid) {
     let mut losers = Vec::new();
     for (owner, renames) in &mut s.content.content_renames {
-        let before = renames.len();
-        renames.retain(|&(from, to)| *owner == me || (from != guid && to != guid));
-        if renames.len() < before {
+        if *owner != me && release(renames, guid) {
             losers.push(*owner);
         }
     }
+    let made: Vec<ResourceKey> = s
+        .content
+        .served
+        .iter()
+        .filter(|(served, _)| served.key.guid == guid && served.base.guid != guid)
+        .map(|(served, _)| served.key)
+        .collect();
     s.content.served.retain(|(served, patch)| {
-        served.key.guid != guid
-            || served.base.guid == guid
-            || !patch.owner().is_some_and(|owner| losers.contains(&owner))
+        !made.contains(&served.key) || !patch.owner().is_some_and(|owner| losers.contains(&owner))
     });
 }
 
