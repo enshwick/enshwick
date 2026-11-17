@@ -331,7 +331,7 @@ impl Installed {
     clippy::panic,
     reason = "a test whose mod files cannot be written fails before the mod reads them"
 )]
-pub(crate) fn place_mod_files(base: &mut BasePresets) -> Option<tempfile::TempDir> {
+pub(crate) fn place_mod_files(base: &mut BasePresets) -> Option<OwnFolder> {
     if base.mod_files.is_empty() {
         return None;
     }
@@ -340,24 +340,48 @@ pub(crate) fn place_mod_files(base: &mut BasePresets) -> Option<tempfile::TempDi
         .map_or_default(ToOwned::to_owned);
     // Taken, so a copy of the host for each side check carries no contents.
     let files = core::mem::take(&mut base.mod_files);
-    let written = tempfile::Builder::new()
-        .prefix("enshwick-fake-")
-        .tempdir()
-        .and_then(|root| {
-            let dir = root.path().join("mods").join(folder);
-            for (name, contents) in files {
-                let path = dir.join(name);
-                std::fs::create_dir_all(path.parent().unwrap_or(&dir))?;
-                std::fs::write(path, contents)?;
-            }
-            Ok((root, dir))
-        });
+    let written = OwnFolder::new().and_then(|root| {
+        let dir = root.0.join("mods").join(folder);
+        for (name, contents) in files {
+            let path = dir.join(name);
+            std::fs::create_dir_all(path.parent().unwrap_or(&dir))?;
+            std::fs::write(path, contents)?;
+        }
+        Ok((root, dir))
+    });
     match written {
         Ok((root, dir)) => {
             base.mod_dir = dir.to_string_lossy().into_owned();
             Some(root)
         }
         Err(why) => panic!("the fake cannot write the mod's files: {why}"),
+    }
+}
+
+/// A new folder of one install in the temp folder, removed when it drops.
+#[derive(Debug)]
+pub(crate) struct OwnFolder(PathBuf);
+
+impl OwnFolder {
+    /// Claims the first free `enshwick-fake-<process>-<n>`: making a folder
+    /// fails on one that exists, so no two installs share one.
+    fn new() -> std::io::Result<Self> {
+        let process = std::process::id();
+        for n in 0u32.. {
+            let path = std::env::temp_dir().join(format!("enshwick-fake-{process}-{n}"));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Ok(Self(path)),
+                Err(why) if why.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(why) => return Err(why),
+            }
+        }
+        Err(std::io::ErrorKind::StorageFull.into())
+    }
+}
+
+impl Drop for OwnFolder {
+    fn drop(&mut self) {
+        let _removed = std::fs::remove_dir_all(&self.0);
     }
 }
 

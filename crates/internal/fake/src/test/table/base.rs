@@ -34,7 +34,7 @@ pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, Registe
 pub(crate) struct BaseState {
     /// The install's own folder of [`FakeHost::mod_file`](crate::test::FakeHost::mod_file)
     /// files, removed when the install drops.
-    pub(crate) mod_files: Option<tempfile::TempDir>,
+    pub(crate) mod_files: Option<crate::test::base::settings::OwnFolder>,
     pub(crate) logs: Vec<(Level, String)>,
     pub(crate) faults: Vec<String>,
     /// The handle each log line and fault came under, in order.

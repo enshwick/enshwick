@@ -83,7 +83,6 @@ windows-sys = { version = "0.61.2", default-features = false }
 twox-hash = { version = "2.1.5", default-features = false, features = ["std", "xxhash3_128"] }
 ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
 thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
-tempfile = { version = "3.27.0", default-features = false }
 
 [workspace.lints.rust]
 missing_docs = "deny"
