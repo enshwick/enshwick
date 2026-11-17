@@ -24,6 +24,8 @@ use std::process::Command;
 use std::thread;
 use std::time::Instant;
 
+use clap::ValueEnum as _;
+
 use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
@@ -72,10 +74,22 @@ pub(crate) struct Args {
     /// crates.io; repeatable, and the part checks none without one.
     #[arg(long, value_name = "PACKAGE")]
     semver: Vec<String>,
-    /// Lists, one a line, the packages whose Windows tests the change
-    /// reaches, and checks nothing.
-    #[arg(long)]
-    list_windows_tests: bool,
+    /// Lists what the change needs, one a line, and checks nothing.
+    #[arg(long, value_enum)]
+    list: Option<Listing>,
+}
+
+/// What `--list` names, for CI to start a job only where one has work.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum Listing {
+    /// The packages whose Windows tests the change reaches, which CI tests
+    /// on a Windows runner.
+    WindowsTests,
+    /// The parts named with `--part` that may have a step for the change:
+    /// the trybuild test and the stable surface only where the change
+    /// reaches them; every other part is listed, since it finds its own work
+    /// only when it runs.
+    Parts,
 }
 
 /// The crates of the API ([`crate::check::crate_rules::is_api_crate`]) with
@@ -108,7 +122,8 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     };
     let merge_base = merge_base(&args.base);
     let changed = merge_base.as_deref().and_then(changed_files);
-    if parts.contains(&Part::Fuzz) {
+    let listing = args.list.is_some();
+    if parts.contains(&Part::Fuzz) && !listing {
         let fuzzed = fuzz_part(changed.as_deref(), args.all);
         if !fuzzed || parts.len() == 1 {
             return Ok(fuzzed);
@@ -116,7 +131,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = workspace_root();
-    if parts.contains(&Part::Host) && !args.list_windows_tests {
+    if parts.contains(&Part::Host) && !listing {
         let mut problems = crate::check::problems(&root, &packages)?;
         problems.extend(
             merge_base
@@ -153,9 +168,12 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         Scope::All
     };
     let windows_tests = windows_tests(&scope, &packages);
-    if args.list_windows_tests {
-        // One name a line: the packages CI tests on a Windows runner.
-        for name in &windows_tests {
+    if let Some(listing) = args.list {
+        let names = match listing {
+            Listing::WindowsTests => windows_tests.iter().map(|&name| name.to_owned()).collect(),
+            Listing::Parts => due_parts(&parts, &scope),
+        };
+        for name in names {
             let _shown = writeln!(std::io::stdout(), "{name}");
         }
         return Ok(true);
@@ -175,7 +193,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     {
         return Ok(false);
     }
-    if parts.contains(&Part::Trybuild) && (!touches(&scope, FACADE) || wide(&scope)) {
+    if parts.contains(&Part::Trybuild) && !Part::Trybuild.due(&scope) {
         say(&if touches(&scope, FACADE) {
             format!(
                 "the trybuild test is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
@@ -375,6 +393,31 @@ impl Part {
         }
         every
     }
+
+    /// Whether the part has a step for the change `scope`: the trybuild test
+    /// and the stable surface only where the change reaches the facade and
+    /// is not [`wide`]; the other parts find their own work.
+    fn due(self, scope: &Scope) -> bool {
+        match self {
+            Self::Trybuild => touches(scope, FACADE) && !wide(scope),
+            Self::StableApi => stable_api_due(scope) && !wide(scope),
+            Self::Host
+            | Self::Docs
+            | Self::WindowsLint
+            | Self::WindowsTests
+            | Self::Fuzz
+            | Self::Semver => true,
+        }
+    }
+}
+
+/// The names of the `parts` that have a step for the change `scope`.
+fn due_parts(parts: &[Part], scope: &Scope) -> Vec<String> {
+    parts
+        .iter()
+        .filter(|part| part.due(scope))
+        .filter_map(|part| Some(part.to_possible_value()?.get_name().to_owned()))
+        .collect()
 }
 
 /// Files changed between `merge_base` and the working tree, untracked ones
@@ -759,7 +802,7 @@ fn host_steps(
             steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
         }
     }
-    if parts.contains(&Part::Trybuild) && touches(scope, FACADE) && !wide(scope) {
+    if parts.contains(&Part::Trybuild) && Part::Trybuild.due(scope) {
         steps.push(Step::new(&[
             "nextest",
             "run",
@@ -783,7 +826,7 @@ fn host_steps(
         }
         steps.push(step);
     }
-    if parts.contains(&Part::StableApi) && stable_api_due(scope) && !wide(scope) {
+    if parts.contains(&Part::StableApi) && Part::StableApi.due(scope) {
         steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, wide(scope), full) {

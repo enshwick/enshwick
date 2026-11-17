@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn the_old_build_s_side_comes_from_a_kept_table_in_the_data_folder_given() {
-        let data = std::env::temp_dir().join(format!("pin-old-side-{}", std::process::id()));
+        let data = crate::scratch::Scratch::new("pin-old-side").unwrap();
         fs::create_dir_all(data.join(table::DIR)).unwrap();
         fs::write(
             data.join(table::DIR).join("server-00000000000000000000000000000001-2.toml"),
@@ -91,7 +91,6 @@ mod tests {
         let files = table_files(Some(&data)).unwrap();
         // `patterns --write` writes the table back where the folder holds it.
         let kept = data.join(&files[0].0).is_file();
-        drop(fs::remove_dir_all(&data));
         assert_eq!(side.unwrap(), enshwick_gamedata::Side::Server);
         assert_eq!(files.len(), 1);
         assert!(files[0].0.is_relative(), "{:?}", files[0].0);

@@ -158,8 +158,7 @@ mod tests {
 
     #[test]
     fn hand_edits_malformed_and_orphaned_change_files_are_problems() {
-        let root = std::env::temp_dir().join(format!("xtask-changes-{}", std::process::id()));
-        drop(std::fs::remove_dir_all(&root));
+        let root = crate::scratch::Scratch::new("changes").unwrap();
         let write = |path: &str, text: &str| {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -175,7 +174,6 @@ mod tests {
             "## [Unreleased]\n\n## [1.0.0]\n\n- First.\n",
         );
         let problems = check(&root, &[package("a"), package("b"), package("c")]);
-        drop(std::fs::remove_dir_all(&root));
         assert_eq!(
             problems,
             [

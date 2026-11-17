@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn a_link_to_a_missing_file_is_named_with_its_chapter_and_line() {
-        let dir = std::env::temp_dir().join(format!("xtask-book-links-{}", std::process::id()));
+        let dir = crate::scratch::Scratch::new("book-links").unwrap();
         let source = dir.join(SOURCE);
         std::fs::create_dir_all(&source).unwrap();
         std::fs::create_dir_all(dir.join("mods/kept")).unwrap();
@@ -253,7 +253,6 @@ mod tests {
         .unwrap();
         let found = check(&dir, Some(&dir.join("mods")));
         let skipped = check(&dir, None);
-        std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(
             found.problems,
             ["book/src/hooks.md:4: links gone/src/lib.rs, which enshwick/mods does not have"]

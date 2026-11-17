@@ -30,6 +30,8 @@ mod pin;
 mod report;
 #[path = "../check/reports.rs"]
 mod reports;
+#[path = "../scratch.rs"]
+mod scratch;
 #[cfg(all(test, windows))]
 use report::report_data;
 use report::{data, refresh};
@@ -604,9 +606,8 @@ fn dlls(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
 /// Copies the mods among `dlls` into a fresh game folder and runs the
 /// loader on it in a process of its own; how each mod fared.
 fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> {
-    let game = std::env::temp_dir().join(format!("enshwick-compat-{}", std::process::id()));
+    let game = scratch::Scratch::new("compat")?;
     let mods = game.join("mods");
-    let _old = std::fs::remove_dir_all(&game);
     std::fs::create_dir_all(&mods).map_err(|e| format!("{}: {e}", mods.display()))?;
     for dll in dlls {
         let bytes = std::fs::read(dll).map_err(|e| format!("{}: {e}", dll.display()))?;
@@ -627,7 +628,7 @@ fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> 
         command.arg("--patterns");
     }
     let output = command.output().map_err(|e| e.to_string())?;
-    let _gone = std::fs::remove_dir_all(&game);
+    drop(game);
     if !output.status.success() {
         return Err(format!(
             "the loader stopped ({}): {}",
@@ -887,11 +888,11 @@ mod tests {
                 let version = number(&stated, "game_version").and_then(|n| u64::try_from(n).ok());
                 assert_eq!(first.game_version, version, "{}", exe.display());
             }
-            let shown = std::env::temp_dir().join(format!("enshwick-compat-{file}.md"));
+            let shown_in = scratch::Scratch::new("compat-report").unwrap();
+            let shown = shown_in.join(format!("{file}.md"));
             args.report = Some(shown.clone());
             let works = run(&args).unwrap();
             let text = std::fs::read_to_string(&shown).unwrap();
-            let _gone = std::fs::remove_file(&shown);
             let entries = number(&stated, "entries").unwrap();
             assert!(
                 text.contains(&format!("The loader finds {entries} entries")),

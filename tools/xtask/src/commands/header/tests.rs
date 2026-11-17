@@ -1,23 +1,5 @@
 use super::*;
 
-/// Tests of one binary share a process under `cargo test`, so a second
-/// folder of the same purpose must not remove the first; each goes when
-/// its use ends, however it ends.
-#[test]
-fn a_scratch_folder_is_its_own_even_within_one_process_and_goes_with_its_use() {
-    let first = scratch_dir("test-apart").unwrap();
-    let kept = first.join("kept");
-    std::fs::write(&kept, "").unwrap();
-    let second = scratch_dir("test-apart").unwrap();
-    assert_ne!(first.to_path_buf(), second.to_path_buf());
-    assert!(kept.exists(), "the second folder removed the first");
-    let paths = [first.to_path_buf(), second.to_path_buf()];
-    drop((first, second));
-    for path in paths {
-        assert!(!path.exists(), "{} stayed", path.display());
-    }
-}
-
 #[test]
 fn only_annotation_lines_have_their_brackets_unescaped() {
     let source = "/// cbindgen:field-names=\\[bytes\\]\n/// Not \\[here\\].\nlet a = [1];\n";
@@ -108,7 +90,7 @@ fn a_header_cpp_refuses_fails_only_the_cpp_compile() {
         return;
     }
     let include = "#include \"enshwick.h\"\n";
-    let dir = scratch_dir("test-header").unwrap();
+    let dir = Scratch::new("header-test-header").unwrap();
     let header = dir.join("enshwick.h");
     std::fs::write(&header, "void enshwick_f(int template);\n").unwrap();
     let c = compile(&header, Language::C, Packing::Default, include);
@@ -139,7 +121,7 @@ fn the_header_s_packing_holds_under_one_byte_packing_and_its_asserts_catch_a_cha
                 #define ENSHWICK_ALIGNOF(t) _Alignof(t)\n\
                 typedef struct EnshwickPair {\n  uint8_t tag;\n  uint64_t value;\n} EnshwickPair;\n";
     let asserts = asserts(&parse_layout(layout).unwrap(), body);
-    let dir = scratch_dir("test-packing").unwrap();
+    let dir = Scratch::new("header-test-packing").unwrap();
     let header = dir.join("enshwick.h");
     let compiled = |text: String| {
         std::fs::write(&header, text).unwrap();

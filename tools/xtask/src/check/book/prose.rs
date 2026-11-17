@@ -555,13 +555,12 @@ mod tests {
 
     #[test]
     fn a_book_with_a_long_sentence_fails_the_check() {
-        let root = std::env::temp_dir().join(format!("xtask-prose-{}", std::process::id()));
+        let root = crate::scratch::Scratch::new("prose").unwrap();
         let source = root.join(SOURCE);
         std::fs::create_dir_all(&source).unwrap();
         let long = format!("{}.", ["word"; 26].join(" "));
         std::fs::write(source.join("hooks.md"), format!("# Hooks\n\n{long}\n")).unwrap();
         let found = check(&root);
-        std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(
             found,
             [

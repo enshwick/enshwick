@@ -347,16 +347,9 @@ mod tests {
     }
 
     /// A fresh git repository of its own for this test, with `files` as
-    /// `(path, text)`, each added to its index; a reused process id finds no
-    /// index of an earlier run, and tests on threads of one process get one
-    /// each.
-    fn repository(files: &[(&str, &str)]) -> std::path::PathBuf {
-        let thread = format!("{:?}", std::thread::current().id()).replace(['(', ')'], "");
-        let root =
-            std::env::temp_dir().join(format!("xtask-tag-lines-{}-{thread}", std::process::id()));
-        if root.exists() {
-            std::fs::remove_dir_all(&root).unwrap();
-        }
+    /// `(path, text)`, each added to its index.
+    fn repository(files: &[(&str, &str)]) -> crate::scratch::Scratch {
+        let root = crate::scratch::Scratch::new("tag-lines").unwrap();
         std::fs::create_dir_all(root.join("book")).unwrap();
         let root_text = root.to_str().unwrap();
         assert!(git(&["-C", root_text, "init", "--quiet"]).is_some());
@@ -381,7 +374,6 @@ mod tests {
             ("notes.txt", line),
         ]);
         let problems = check(&root, &loader("1.0.0-alpha.13"));
-        std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(
             problems,
             [
@@ -401,7 +393,6 @@ mod tests {
         api.name = "enshwick".to_owned();
         packages.push(api);
         let problems = check(&root, &packages);
-        std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(
             problems,
             [

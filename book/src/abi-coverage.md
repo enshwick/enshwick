@@ -242,20 +242,20 @@ names every entry of the golden layout once, in that order.
 | `map_marker_types` | game | — | client |
 | `ui_extension` | game | — | client |
 | `local_held` | game | — | client |
-| `local_input_status` | loader | fake client/server and cached-state tests | not exercised |
-| `client_snapshot` | game | fake client/server, snapshot composition and session tests | client |
-| `loader_off` | loader | fake listing and kept-text tests | — |
-| `client_command` | game | fake client/server, bounds, command and handoff tests, join and leave refusal, duplicate and cancel, Luau | client |
-| `client_command_status` | game | fake states, every cancel reason, join phases and failures, Luau | client |
+| `local_input_status` | loader | — | not exercised |
+| `client_snapshot` | game | — | client |
+| `loader_off` | loader | — | — |
+| `client_command` | game | — | client |
+| `client_command_status` | game | — | client |
 | `terrain_material_add` | game | — | client |
 | `interaction_prompt` | game | — | with a player, client |
 | `ui_item_tooltip` | game | — | client |
 | `change_permissions` | game | — | with a player |
 | `transaction_settled` | game | probe: transaction | — |
-| `prop_placement_info` | game | fake metadata, unknown bounds and guarded headers | not exercised |
+| `prop_placement_info` | game | — | not exercised |
 | `container_rule` | game | — | with a player |
 | `show_pickup` | game | — | with a player |
-| `respawn_point` | game | fake read, refusals, Luau | with a player |
-| `set_respawn_point` | game | fake set, refusals, Luau | with a player |
+| `respawn_point` | game | — | with a player |
+| `set_respawn_point` | game | — | with a player |
 | `buff_type_add` | game | — | client |
 | `damage_causes_off` | loader | — | — |

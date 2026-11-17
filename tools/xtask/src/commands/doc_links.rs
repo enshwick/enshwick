@@ -193,8 +193,7 @@ mod tests {
 
     #[test]
     fn a_link_to_a_missing_page_or_anchor_is_named_and_good_links_pass() {
-        let doc = std::env::temp_dir().join(format!("xtask-doc-links-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&doc);
+        let doc = crate::scratch::Scratch::new("doc-links").unwrap();
         write(
             &doc.join("enshwick/struct.Load.html"),
             r##"<h4 id="method.add_item">add_item</h4><a href="#method.add_item">self</a>"##,
@@ -225,7 +224,6 @@ mod tests {
             ),
         );
         let problems = check(&doc, "enshwick").unwrap();
-        std::fs::remove_dir_all(&doc).unwrap();
         let page = Path::new("enshwick").join("content").join("index.html");
         let index = Path::new("enshwick").join("index.html");
         assert_eq!(
@@ -258,11 +256,8 @@ mod tests {
 
     #[test]
     fn a_root_without_built_docs_is_an_error_not_a_pass() {
-        let root = std::env::temp_dir().join(format!("xtask-no-docs-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
+        let root = crate::scratch::Scratch::new("no-docs").unwrap();
         let outcome = run(&root);
-        std::fs::remove_dir_all(&root).unwrap();
         assert!(outcome.unwrap_err().contains("holds no docs"));
     }
 }

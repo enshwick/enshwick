@@ -8,9 +8,10 @@
 
 use std::ffi::OsStr;
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicU32, Ordering};
+
+use crate::scratch::Scratch;
 
 /// The package the header describes.
 pub(crate) const PACKAGE: &str = "enshwick";
@@ -101,7 +102,7 @@ fn generate(root: &Path) -> Result<String, String> {
     let shapes = parse_layout(&layout)?;
     let config = cbindgen::Config::from_file(root.join(CONFIG))
         .map_err(|error| format!("{CONFIG}: {error}"))?;
-    let crate_root = scratch_dir("abi")?;
+    let crate_root = Scratch::new("header-abi")?;
     let copied = copy_abi(root, &crate_root);
     let mut builder = cbindgen::Builder::new()
         .with_config(config)
@@ -528,38 +529,6 @@ fn plain_links(line: &str) -> String {
     out
 }
 
-/// A fresh, empty directory of its own for one use, removed when dropped.
-struct Scratch(PathBuf);
-
-impl core::ops::Deref for Scratch {
-    type Target = Path;
-
-    fn deref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _removed = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-/// A [`Scratch`] named by the process and a count, since tests run as
-/// threads of one process under `cargo test` and the process alone would
-/// give two of them one folder.
-fn scratch_dir(purpose: &str) -> Result<Scratch, String> {
-    static MADE: AtomicU32 = AtomicU32::new(0);
-    let made = MADE.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "enshwick-header-{purpose}-{}-{made}",
-        std::process::id()
-    ));
-    let _stale = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-    Ok(Scratch(dir))
-}
-
 /// Copies the ABI module into `to` as a crate of its own, `abi.rs` as
 /// `lib.rs` beside its submodules and the value types' ABI file: cbindgen
 /// looks for the submodules of a single source file next to it, and the
@@ -727,7 +696,7 @@ enum Language {
 /// `language` under `packing`; a failing layout assert names its type and
 /// field.
 fn compile(header: &Path, language: Language, packing: Packing, source: &str) -> Vec<String> {
-    let dir = match scratch_dir("layout") {
+    let dir = match Scratch::new("header-layout") {
         Ok(dir) => dir,
         Err(error) => return vec![error],
     };

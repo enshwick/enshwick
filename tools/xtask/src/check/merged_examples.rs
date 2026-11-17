@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn a_library_with_merged_examples_and_no_sentinel_is_a_problem() {
-        let root = std::env::temp_dir().join(format!("xtask-merged-{}", std::process::id()));
+        let root = crate::scratch::Scratch::new("merged").unwrap();
         let write = |path: &str, text: &str| {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -232,7 +232,6 @@ mod tests {
             &root,
             &[package("bare"), package("alone"), package("guarded")],
         );
-        std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].starts_with("bare/src/lib.rs: 1 examples build as one binary"));
     }

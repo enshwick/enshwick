@@ -23,7 +23,7 @@ fn map(upward: &[&str]) -> Map {
 
 #[test]
 fn a_peeled_crate_may_name_only_the_crates_below_it() {
-    let root = std::env::temp_dir().join(format!("xtask-crates-{}", std::process::id()));
+    let root = crate::scratch::Scratch::new("crates").unwrap();
     let manifest = |dir: &str, name: &str, deps: &str| {
         let path = root.join("crates/internal").join(dir);
         std::fs::create_dir_all(&path).unwrap();
@@ -52,7 +52,6 @@ fn a_peeled_crate_may_name_only_the_crates_below_it() {
     ]
     .into();
     let problems = crate_problems(&root, &map);
-    let _gone = std::fs::remove_dir_all(&root);
     assert_eq!(problems.len(), 3, "{problems:?}");
     assert!(problems[0].contains("enshwick-base, the crate of base, depends on enshwick-ui"));
     assert!(problems[1].contains("enshwick-ui, the crate of ui, depends on enshwick-core"));
@@ -98,7 +97,7 @@ pub(super) fn module(path: &str) -> Vec<String> {
 
 /// A tree of files under a temporary root, removed however the test
 /// ends.
-pub(super) struct Tree(pub(super) std::path::PathBuf);
+pub(super) struct Tree(pub(super) crate::scratch::Scratch);
 
 impl Tree {
     /// Writes `text` to `path` under the root, its folders made.
@@ -106,12 +105,6 @@ impl Tree {
         let path = self.0.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
-    }
-}
-
-impl Drop for Tree {
-    fn drop(&mut self) {
-        let _gone = std::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -291,9 +284,8 @@ fn a_listed_edge_that_is_gone_and_a_module_without_domain_fail() {
 
 #[test]
 fn a_tree_with_an_edge_up_a_stray_namespace_and_a_join_out_of_order_fails() {
-    let root = std::env::temp_dir().join(format!("xtask-domains-{}", std::process::id()));
-    let _gone = std::fs::remove_dir_all(&root);
-    let tree = Tree(root.clone());
+    let tree = Tree(crate::scratch::Scratch::new("domains").unwrap());
+    let root = &*tree.0;
     let write = |path: &str, text: &str| tree.write(&format!("{SOURCES}/{path}"), text);
     tree.write(
         MAP,
@@ -320,7 +312,7 @@ fn a_tree_with_an_edge_up_a_stray_namespace_and_a_join_out_of_order_fails() {
     write("script.rs", "mod namespaces;\n#[cfg(test)]\nmod checks;");
     tree.write(&format!("{}/{}.rs", fake::SOURCES, fake::ROOT), "");
     tree.write(CORE_MANIFEST, "[package]\nname = \"enshwick-core\"\n");
-    let problems = check(&root);
+    let problems = check(root);
     assert!(
         problems.iter().any(|p| p.starts_with("host -> ui goes up")),
         "{problems:?}"
@@ -348,9 +340,8 @@ fn a_tree_with_an_edge_up_a_stray_namespace_and_a_join_out_of_order_fails() {
 
 #[test]
 fn a_load_method_calling_on_self_one_of_a_domain_above_is_an_edge_up() {
-    let root = std::env::temp_dir().join(format!("xtask-domains-calls-{}", std::process::id()));
-    let _gone = std::fs::remove_dir_all(&root);
-    let tree = Tree(root.clone());
+    let tree = Tree(crate::scratch::Scratch::new("domains-calls").unwrap());
+    let root = &*tree.0;
     let write = |path: &str, text: &str| tree.write(&format!("{SOURCES}/{path}"), text);
     tree.write(
         MAP,
@@ -369,7 +360,7 @@ fn a_load_method_calling_on_self_one_of_a_domain_above_is_an_edge_up() {
     );
     tree.write(&format!("{}/{}.rs", fake::SOURCES, fake::ROOT), "");
     tree.write(CORE_MANIFEST, "[package]\nname = \"enshwick-core\"\n");
-    let problems = check(&root);
+    let problems = check(root);
     assert_eq!(problems.len(), 1, "{problems:?}");
     assert!(
         problems[0].starts_with("altars -> ui goes up"),

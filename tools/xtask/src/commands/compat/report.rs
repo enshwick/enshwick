@@ -292,16 +292,6 @@ mod tests {
         assert!(!known.contains("x.slot"));
     }
 
-    /// A folder of its own for this test.
-    fn empty_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("xtask-{name}-{}", std::process::id()));
-        if dir.exists() {
-            std::fs::remove_dir_all(&dir).unwrap();
-        }
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     #[test]
     fn an_untracked_file_among_the_inputs_refuses_new_seals() {
         let root = reports::tests::repository("unstaged");
@@ -312,7 +302,6 @@ mod tests {
         .unwrap();
         let refused = sealing_inputs(&root).unwrap_err();
         assert!(refused.contains("routes/walk.rs"), "{refused}");
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -341,12 +330,11 @@ mod tests {
         );
         write(&root, &[first, second]).unwrap();
         assert_eq!(reports::stale(&root, &[]), Vec::<String>::new());
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
     fn refresh_without_a_readable_executable_fails() {
-        let dir = empty_dir("refresh-none");
+        let dir = crate::scratch::Scratch::new("refresh-none").unwrap();
         assert!(refresh(&dir, None).is_err());
         assert!(refresh(&dir, Some("".into())).is_err());
         let missing = dir.join("no-such-dir").join("enshrouded.exe");
@@ -375,12 +363,11 @@ mod tests {
                 .collect()
         };
         let before = texts();
-        let dir = empty_dir("refresh-partial");
+        let dir = crate::scratch::Scratch::new("refresh-partial").unwrap();
         let list =
             std::env::join_paths([std::path::PathBuf::from(server), dir.join("missing.exe")])
                 .unwrap();
         assert!(refresh(root, Some(list)).is_err());
         assert_eq!(texts(), before);
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn a_name_anywhere_under_the_folder_counts_and_its_target_does_not() {
-        let dir = std::env::temp_dir().join(format!("xtask-names-{}", std::process::id()));
+        let dir = crate::scratch::Scratch::new("names").unwrap();
         std::fs::create_dir_all(dir.join("src/ui")).unwrap();
         std::fs::create_dir_all(dir.join("target/debug")).unwrap();
         std::fs::write(dir.join("src/lib.rs"), "pub mod ui;").unwrap();
@@ -125,7 +125,6 @@ mod tests {
         std::fs::write(dir.join("src/ui/tests.rs"), "use x::FakeHost;").unwrap();
         let after = names(&dir, "FakeHost");
         let missing = names(&dir.join("missing"), "FakeHost");
-        std::fs::remove_dir_all(&dir).unwrap();
         assert!(!before && after && missing);
     }
 }
