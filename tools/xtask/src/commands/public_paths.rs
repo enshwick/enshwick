@@ -140,37 +140,28 @@ fn paths(
 ) -> Result<BTreeSet<String>, String> {
     let documented = documented(root, packages, features)?;
     let target = root.join(TARGET_DIR);
-    let mut step = Step::new(&[
-        "doc",
-        "--no-deps",
-        "--target",
-        WINDOWS_TARGET,
-        "--target-dir",
-        &target.display().to_string(),
-    ])
-    .env("RUSTC_BOOTSTRAP", "1")
-    .env("RUSTDOCFLAGS", RUSTDOC_FLAGS);
-    for (name, _) in &documented {
-        step = step.then(&["--package", name]);
-    }
-    if let Some(features) = features {
-        step = step.then(&["--features", features]);
-    }
-    if !step.run(false) {
-        return Err("cargo doc for the public paths failed".to_owned());
-    }
+    let names: Vec<&str> = documented.iter().map(|(name, _)| name.as_str()).collect();
+    document(&target, &names, Some(WINDOWS_TARGET), features)?;
     let doc = target.join(WINDOWS_TARGET).join("doc");
-    // A proc-macro crate builds for the host, so its rustdoc lands outside
-    // the target's folder.
-    let host_doc = target.join("doc");
+    // A proc-macro crate builds for the host, and cargo writes no JSON of
+    // it for another target: it is documented for the host, where its
+    // macros' names are the same.
+    let host: Vec<&str> = documented
+        .iter()
+        .filter(|(_, lib)| !doc.join(format!("{lib}.json")).is_file())
+        .map(|(name, _)| name.as_str())
+        .collect();
+    if !host.is_empty() {
+        document(&target, &host, None, None)?;
+    }
     let mut crates = BTreeMap::new();
-    for (_, lib) in documented {
-        let name = format!("{lib}.json");
-        let file = if doc.join(&name).is_file() {
-            doc.join(&name)
+    for (name, lib) in &documented {
+        let folder = if host.contains(&name.as_str()) {
+            target.join("doc")
         } else {
-            host_doc.join(&name)
+            doc.clone()
         };
+        let file = folder.join(format!("{lib}.json"));
         let text = std::fs::read_to_string(&file)
             .map_err(|error| format!("{}: {error}", file.display()))?;
         let krate: Crate = serde_json::from_str(&text).map_err(|error| {
@@ -186,9 +177,41 @@ fn paths(
                 krate.format_version
             ));
         }
-        crates.insert(lib, krate);
+        crates.insert(lib.clone(), krate);
     }
     walk::Surface::new(&crates).paths(FACADE)
+}
+
+/// Writes the rustdoc JSON of `packages` into `target`, for `triple` or the
+/// host, with `features`.
+fn document(
+    target: &Path,
+    packages: &[&str],
+    triple: Option<&str>,
+    features: Option<&str>,
+) -> Result<(), String> {
+    let mut step = Step::new(&[
+        "doc",
+        "--no-deps",
+        "--target-dir",
+        &target.display().to_string(),
+    ])
+    .env("RUSTC_BOOTSTRAP", "1")
+    .env("RUSTDOCFLAGS", RUSTDOC_FLAGS);
+    if let Some(triple) = triple {
+        step = step.then(&["--target", triple]);
+    }
+    for name in packages {
+        step = step.then(&["--package", name]);
+    }
+    if let Some(features) = features {
+        step = step.then(&["--features", features]);
+    }
+    if step.run(false) {
+        Ok(())
+    } else {
+        Err("cargo doc for the public paths failed".to_owned())
+    }
 }
 
 /// The workspace packages, name and library, a build of the facade with

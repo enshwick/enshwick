@@ -53,7 +53,7 @@ pub struct ItemTraits {
     pub max_stack: u16,
     /// The number of its `ItemCategory`.
     pub category: u8,
-    /// Its flags, such as [`ItemTypeInfo::HAS_PIDE`].
+    /// Its flags, such as [`HAS_PIDE`](crate::abi::ItemTypeInfo::HAS_PIDE).
     pub flags: u32,
     /// How many slots the container it places holds; `None` when it places
     /// none.
