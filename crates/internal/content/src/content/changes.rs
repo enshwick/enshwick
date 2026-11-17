@@ -637,7 +637,7 @@ impl Change {
 
     /// The change an ABI record describes, checked as [`Change::check`]
     /// checks it; `None` for a field or operation this crate does not know,
-    /// or a record that selects items ([`ItemsChange::from_abi`]).
+    /// or a record that selects items (`ItemsChange::from_abi`).
     ///
     /// # Errors
     ///
