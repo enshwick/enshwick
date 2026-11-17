@@ -365,8 +365,8 @@ fn a_request_reads_as_the_edit_it_names() {
             ..edit(0)
         }
     );
-    assert!(read.has_icon());
-    assert!(!read.without_icon().has_icon());
+    assert!(read.icon().is_some());
+    assert_eq!(read.without_icon().icon(), None);
     request.changes |= 1 << 8;
     assert_eq!(Edit::of(&request), None, "a change it does not know");
     request.changes = 0;

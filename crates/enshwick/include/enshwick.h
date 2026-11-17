@@ -609,7 +609,9 @@ typedef struct EnshwickBuffTypeAdd {
   struct EnshwickGuid name;
   // The tag of its description, with `EnshwickBuffTypeAdd_DESCRIPTION`.
   struct EnshwickGuid description;
-  // The UI image of its icon, with `EnshwickBuffTypeAdd_ICON`.
+  // The UI image of its icon, with `EnshwickBuffTypeAdd_ICON`. A client names
+  // it only once its UI knows that image, a game one or a served one, and
+  // shows the copied type's icon until then.
   struct EnshwickGuid icon;
   // How long it lasts, in game nanoseconds, 0 or more, with
   // `EnshwickBuffTypeAdd_LIFE_TIME`.

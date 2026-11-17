@@ -169,7 +169,9 @@ pub struct BuffTypeAdd {
     pub name: Guid,
     /// The tag of its description, with [`BuffTypeAdd::DESCRIPTION`].
     pub description: Guid,
-    /// The UI image of its icon, with [`BuffTypeAdd::ICON`].
+    /// The UI image of its icon, with [`BuffTypeAdd::ICON`]. A client names
+    /// it only once its UI knows that image, a game one or a served one, and
+    /// shows the copied type's icon until then.
     pub icon: Guid,
     /// How long it lasts, in game nanoseconds, 0 or more, with
     /// [`BuffTypeAdd::LIFE_TIME`].

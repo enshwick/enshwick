@@ -96,7 +96,7 @@ fn place_all(requests: &[BuffTypeAdd]) -> (Vec<Added>, Vec<Result<BuffTypeId, Bu
         .iter()
         .enumerate()
         .map(|(n, request)| {
-            let edit = place(&layout, &base, &added, request)?;
+            let edit = place(&layout, &base, &serving(&added, |_| true), request)?;
             added.push(Added {
                 owner: mod_index(n + 1),
                 edit,
@@ -111,7 +111,10 @@ fn place_all(requests: &[BuffTypeAdd]) -> (Vec<Added>, Vec<Result<BuffTypeId, Bu
 fn a_second_mod_taking_an_id_a_mod_before_took_is_refused_at_its_init() {
     let (added, answers) = place_all(&[request(1, FOOD), request(1, RESTED), request(2, RESTED)]);
     assert_eq!(answers[0], Ok(BuffTypeId::from_guid(Guid([1; 16]))));
-    assert!(matches!(answers[1], Err(BuffTypeError::Taken(_))));
+    assert!(matches!(
+        answers[1],
+        Err(BuffTypeError::Refused(Refusal::Taken))
+    ));
     assert!(answers[2].is_ok());
     assert_eq!(added.len(), 2);
 }
@@ -125,9 +128,15 @@ fn a_request_the_game_cannot_take_is_refused_with_its_reason() {
         request(2, BuffTypeId::from_guid(Guid([2; 16]))),
         odd,
     ]);
-    assert!(matches!(answers[0], Err(BuffTypeError::NotVanilla(_))));
+    assert!(matches!(
+        answers[0],
+        Err(BuffTypeError::Refused(Refusal::NotVanilla(_)))
+    ));
     assert!(
-        matches!(answers[1], Err(BuffTypeError::NotVanilla(_))),
+        matches!(
+            answers[1],
+            Err(BuffTypeError::Refused(Refusal::NotVanilla(_)))
+        ),
         "a mod's own type is no vanilla one to copy"
     );
     assert_eq!(answers[2], Err(BuffTypeError::BadRequest));
@@ -155,7 +164,7 @@ fn icons_are_named_only_once_the_client_shows_them_and_the_length_holds() {
         let left = enshwick_core::__private::rules::buff_types::build(
             &layout,
             &base,
-            &named(&types, icons),
+            &named(&types, |_| icons),
             &mut out,
         );
         assert_eq!(left, Some(Vec::new()));
@@ -174,4 +183,27 @@ fn icons_are_named_only_once_the_client_shows_them_and_the_length_holds() {
     let at = differ[0];
     assert_eq!(&after[at..at + 16], &ICON.0);
     assert_eq!(&before[at..at + 16], &[0; 16], "the vanilla icon before");
+}
+
+#[test]
+fn an_icon_the_client_s_ui_does_not_know_is_never_named() {
+    let (added, _) = place_all(&[request(1, FOOD)]);
+    let types = serving(&added, |_| true);
+    assert_eq!(named(&types, |guid| guid == ICON)[0].icon(), Some(ICON));
+    assert_eq!(named(&types, |guid| guid != ICON)[0].icon(), None);
+}
+
+#[test]
+fn an_id_a_mod_turned_off_took_is_free_for_a_later_mod() {
+    let layout = layout();
+    let base = vanilla(&layout, &[FOOD]);
+    let (added, _) = place_all(&[request(1, FOOD)]);
+    let taken = request(1, FOOD);
+    let on = serving(&added, |owner| owner != mod_index(1));
+    assert!(place(&layout, &base, &on, &taken).is_ok());
+    let all = serving(&added, |_| true);
+    assert_eq!(
+        place(&layout, &base, &all, &taken),
+        Err(BuffTypeError::Refused(Refusal::Taken))
+    );
 }

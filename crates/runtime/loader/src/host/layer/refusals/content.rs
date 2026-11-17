@@ -43,9 +43,9 @@ impl Refusal for crate::content::buff_types::BuffTypeError {
     fn status(&self) -> Status {
         match self {
             Self::TooLate => Status::TOO_LATE,
-            Self::Unread => Status::UNAVAILABLE,
-            Self::BadRequest | Self::NotVanilla(_) => Status::BAD_ARGS,
-            Self::NotBoth | Self::Taken(_) => Status::REFUSED,
+            Self::BadRequest => Status::BAD_ARGS,
+            Self::NotBoth => Status::REFUSED,
+            Self::Refused(refusal) => refusal.status(),
         }
     }
 

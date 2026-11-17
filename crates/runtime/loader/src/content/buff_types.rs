@@ -12,6 +12,7 @@
 use enshwick_core::__private::rules::buff_types::{Edit, Refusal, check};
 use enshwick_core::abi::BuffTypeAdd;
 use enshwick_core::buffs::BuffLayout;
+use enshwick_core::content::Guid;
 
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Sealed;
@@ -22,10 +23,6 @@ pub(crate) enum BuffTypeError {
     /// Asked after init.
     #[error("asked after init")]
     TooLate,
-    /// The archive or reflection lacks the collection, or it does not read
-    /// with the build's layout.
-    #[error("this build lacks the game's buff collection or its layout")]
-    Unread,
     /// Its mod does not run on the clients that join, which look its id up
     /// too.
     #[error("a buff type needs a mod of side both, as clients look its id up too")]
@@ -37,12 +34,10 @@ pub(crate) enum BuffTypeError {
     /// A change or flag the ABI does not name, or a negative life time.
     #[error("a change or flag it does not know, or a negative life time")]
     BadRequest,
-    /// The type it copies is none of the game's.
+    /// The game's collection does not take it: unread, no vanilla type to
+    /// copy, or its id taken.
     #[error("{0}")]
-    NotVanilla(Refusal),
-    /// The game or a mod loaded before has its id.
-    #[error("{0}")]
-    Taken(Refusal),
+    Refused(Refusal),
 }
 
 impl From<Sealed> for BuffTypeError {
@@ -59,20 +54,15 @@ pub(crate) struct Added {
 }
 
 /// The edit `request` makes, checked against the vanilla collection
-/// `vanilla` read with `layout` and the types `added` before it.
+/// `vanilla` read with `layout` and the types `before` it of mods still on.
 fn place(
     layout: &BuffLayout,
     vanilla: &[u8],
-    added: &[Added],
+    before: &[Edit],
     request: &BuffTypeAdd,
 ) -> Result<Edit, BuffTypeError> {
     let edit = Edit::of(request).ok_or(BuffTypeError::BadRequest)?;
-    let before: Vec<Edit> = added.iter().map(|added| added.edit).collect();
-    check(layout, vanilla, &edit, &before).map_err(|refusal| match refusal {
-        Refusal::Unread => BuffTypeError::Unread,
-        Refusal::NotVanilla(_) => BuffTypeError::NotVanilla(refusal),
-        Refusal::Taken => BuffTypeError::Taken(refusal),
-    })?;
+    check(layout, vanilla, &edit, before).map_err(BuffTypeError::Refused)?;
     Ok(edit)
 }
 
@@ -86,12 +76,15 @@ fn serving(added: &[Added], on: impl Fn(ModIndex) -> bool) -> Vec<Edit> {
         .collect()
 }
 
-/// `types` as a build names them: each with its icon only while `icons`
-/// holds.
-fn named(types: &[Edit], icons: bool) -> Vec<Edit> {
+/// `types` as a build names them: each with its icon only when `shows` it,
+/// since naming a UI image the client's UI does not know ends the game.
+fn named(types: &[Edit], shows: impl Fn(Guid) -> bool) -> Vec<Edit> {
     types
         .iter()
-        .map(|edit| if icons { *edit } else { edit.without_icon() })
+        .map(|edit| match edit.icon() {
+            Some(icon) if !shows(icon) => edit.without_icon(),
+            _ => *edit,
+        })
         .collect()
 }
 
@@ -107,14 +100,16 @@ pub(crate) use running::{add, icons_shown, sealed, serve};
 #[cfg(windows)]
 mod running {
     use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
-    use enshwick_core::__private::rules::buff_types::{Edit, build};
-    use enshwick_core::abi::{BuffTypeAdd, BuffTypeId, ResourceKey};
+    use enshwick_core::__private::rules::buff_types::{Refusal, build};
+    use enshwick_core::abi::{BuffTypeAdd, BuffTypeId, ResourceKey, Side};
     use enshwick_core::buffs::{BUFF_COLLECTION, BUFF_COLLECTION_RESOURCE, BuffLayout};
 
-    use super::{Added, BuffTypeError, named, place, serving};
+    use super::{Added, BuffTypeError, FEATURE, named, place, serving};
     use crate::content::served::{Builder, mod_on};
     use crate::engine::catalogue::Reflected;
+    use crate::engine::fuse::Fuse;
     use crate::engine::loader::Loader;
     use crate::engine::mod_index::ModIndex;
     use crate::engine::registry::Registry;
@@ -127,11 +122,15 @@ mod running {
         /// read once from the archive; `None` when the archive or
         /// reflection lacks them.
         collection: OnceLock<Option<(BuffLayout, ResourceKey, Vec<u8>)>>,
+        /// Whether the served patch names icons, which a client writes once
+        /// it shows served UI images.
+        icons: AtomicBool,
     }
 
     static BUFFS: Buffs = Buffs {
         types: Registry::new(),
         collection: OnceLock::new(),
+        icons: AtomicBool::new(false),
     };
 
     /// The build's layout, the collection's key and its vanilla bytes.
@@ -168,9 +167,10 @@ mod running {
         if !joins {
             return Err(BuffTypeError::NotBoth);
         }
-        let (layout, _, vanilla) = collection(loader).ok_or(BuffTypeError::Unread)?;
+        let unread = BuffTypeError::Refused(Refusal::Unread);
+        let (layout, _, vanilla) = collection(loader).ok_or(unread)?;
         BUFFS.types.edit(|added| {
-            let edit = place(layout, vanilla, added, request)?;
+            let edit = place(layout, vanilla, &serving(added, mod_on), request)?;
             added.push(Added { owner, edit });
             Ok(edit.id())
         })?
@@ -181,33 +181,26 @@ mod running {
         BUFFS.types.seal()
     }
 
-    /// The loader's patch of the collection with the types `added`, with
-    /// whether it keeps the base to name icons later; `None` when there are
-    /// none to serve.
+    /// The loader's patch of the collection with the types `added` of the
+    /// mods on at each build, with whether it keeps the base to name icons
+    /// later, which only a client does; `None` when there are none to serve.
     pub(crate) fn serve(
         loader: &'static Loader,
-        added: &[Added],
+        added: &'static [Added],
     ) -> Option<(ResourceKey, Builder, bool)> {
-        if added.is_empty() {
-            return None;
-        }
-        let Some(&(layout, key, _)) = collection(loader) else {
-            crate::log!(
-                WARN,
-                "buff types off: this build lacks the game's buff collection or its layout"
-            );
-            return None;
-        };
         let types = serving(added, mod_on);
         if types.is_empty() {
             return None;
         }
+        // `add` took every type with the collection read.
+        let &(layout, key, _) = collection(loader)?;
         for edit in &types {
             crate::log!(INFO, "buff type {:?} served", edit.id());
         }
-        let icons = types.iter().any(Edit::has_icon);
+        let icons = loader.side == Side::CLIENT && types.iter().any(|edit| edit.icon().is_some());
+        BUFFS.icons.store(icons, Ordering::Release);
         let builder: Builder = Box::new(move |base: &[u8]| {
-            let types = named(&types, crate::content::textures::ready());
+            let types = named(&serving(added, mod_on), crate::content::textures::knows);
             let mut out = Vec::new();
             let Some(left) = build(&layout, base, &types, &mut out) else {
                 crate::log!(
@@ -232,16 +225,16 @@ mod running {
     /// Runs on the UI thread, which draws every buff icon, so no icon GUID
     /// is read while its bytes change one at a time.
     pub(crate) fn icons_shown() {
-        let Some(added) = BUFFS.types.sealed() else {
+        if !BUFFS.icons.load(Ordering::Acquire) {
             return;
-        };
+        }
         let Some(Some((_, key, _))) = BUFFS.collection.get() else {
             return;
         };
-        if !added.iter().any(|added| added.edit.has_icon()) {
-            return;
-        }
-        if let Err(why) = crate::content::served::rebuild(ModIndex::LOADER, *key) {
+        let rebuilt = Fuse::named(FEATURE).run("the buff icon rebuild", || {
+            crate::content::served::rebuild(ModIndex::LOADER, *key)
+        });
+        if let Some(Err(why)) = rebuilt {
             crate::log!(WARN, "buff type icons not shown: {why}");
         }
     }

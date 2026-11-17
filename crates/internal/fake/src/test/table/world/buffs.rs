@@ -41,6 +41,7 @@ mod served {
     use enshwick_core::abi::{BuffTypeAdd, ModHandle, ResourceKey, Status};
     use enshwick_core::buffs::{BUFF_COLLECTION, BuffLayout, BuffTypeId};
     use enshwick_core::content::EngineFacts as _;
+    use enshwick_core::content::Guid;
 
     use crate::test::table::base::registered::Registered;
     use crate::test::table::{Registration, State, with};
@@ -73,11 +74,7 @@ mod served {
                 .get(&(key.guid, key.type_hash, key.part))
                 .ok_or(Status::UNAVAILABLE)?;
             let added: Vec<Edit> = s.buff_types_added.iter().map(|(_, e)| *e).collect();
-            check(&layout, vanilla, &edit, &added).map_err(|refusal| match refusal {
-                Refusal::Unread => Status::UNAVAILABLE,
-                Refusal::NotVanilla(_) => Status::BAD_ARGS,
-                Refusal::Taken => Status::REFUSED,
-            })?;
+            check(&layout, vanilla, &edit, &added).map_err(Refusal::status)?;
             if s.buff_types_added.is_empty() {
                 serve(s, key);
             }
@@ -102,17 +99,17 @@ mod served {
     }
 
     /// The types served now: those of mods still on, each naming its icon
-    /// only while the fake shows served UI images.
+    /// only while the fake shows served UI images and serves that image.
     fn serving(s: &State) -> Vec<Edit> {
+        let shows = |icon: Guid| {
+            s.host.icons_ready && s.served.iter().any(|(served, _)| served.key.guid == icon)
+        };
         s.buff_types_added
             .iter()
             .filter(|(owner, _)| !s.off.contains(owner))
-            .map(|(_, edit)| {
-                if s.host.icons_ready {
-                    *edit
-                } else {
-                    edit.without_icon()
-                }
+            .map(|(_, edit)| match edit.icon() {
+                Some(icon) if !shows(icon) => edit.without_icon(),
+                _ => *edit,
             })
             .collect()
     }

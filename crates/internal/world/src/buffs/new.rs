@@ -422,10 +422,10 @@ impl Edit {
         self.id
     }
 
-    /// Whether it names an icon of its own.
+    /// The UI image of its own icon, if it names one.
     #[must_use]
-    pub const fn has_icon(&self) -> bool {
-        self.icon.is_some()
+    pub const fn icon(&self) -> Option<Guid> {
+        self.icon
     }
 
     /// The edit with the vanilla type's icon: an icon a client's UI does
@@ -490,8 +490,23 @@ pub enum Refusal {
     #[error("the game has no buff type {0:?} to copy")]
     NotVanilla(BuffTypeId),
     /// The game or a type added before has its id.
-    #[error("the game or a mod loaded before has a buff type with this id; it needs another id")]
+    #[error(
+        "the game, this mod or a mod loaded before has a buff type with this id; it needs another id"
+    )]
     Taken,
+}
+
+#[doc(hidden)]
+impl Refusal {
+    /// The loader's answer for it, which the fake host gives too.
+    #[must_use]
+    pub const fn status(self) -> Status {
+        match self {
+            Self::Unread => Status::UNAVAILABLE,
+            Self::NotVanilla(_) => Status::BAD_ARGS,
+            Self::Taken => Status::REFUSED,
+        }
+    }
 }
 
 /// Where the collection read through `blob` holds the buff type `id`.
@@ -718,7 +733,7 @@ impl NewBuff {
 /// Why the loader refused a buff type, from its answer.
 fn refused(status: Status, like: BuffTypeId) -> String {
     match status {
-        Status::BAD_ARGS => format!("the game has no buff type {like:?} to copy"),
+        Status::BAD_ARGS => Refusal::NotVanilla(like).to_string(),
         Status::REFUSED => Refusal::Taken.to_string(),
         Status::UNAVAILABLE => {
             "the game's buff collection does not read on this build; buff types are off".into()
@@ -745,16 +760,16 @@ impl LoadMethods for crate::BaseLoad {
         }
         let request = new.request().map_err(fail)?;
         self.declare(new.id)?;
-        // The icon is served before the loader may name it: an icon the
-        // client's UI does not know ends the game.
-        if let Some(icon) = new.icon {
-            self.add_icon(icon)?;
-        }
         let host = self.host();
         let mut id = BuffTypeId(0);
         let status = (host.api().buff_type_add)(host.handle(), &raw const request, &raw mut id);
         if !status.is_ok() {
             return Err(fail(&refused(status, new.like)));
+        }
+        // Served only for a type the loader took; it names the icon only once
+        // the client's UI knows the image.
+        if let Some(icon) = new.icon {
+            self.add_icon(icon)?;
         }
         Ok(id)
     }
