@@ -260,8 +260,9 @@ end)
 ```
 
 The game's screens have no place to add to. So the loader draws the panels at
-each edge in one window of its own. That window sits on a layer over the
-game's screen and under the game's tooltips and the item being dragged. It
+each edge in one window of its own. That window sits on a layer just over
+the game's screen. It stays under the screen's popups, such as the split
+stack menu, and under the tooltips and the item being dragged. It
 shows only once a panel draws a widget in it, so a panel that draws nothing
 shows nothing. The panel never moves or changes the game's screen.
 `frame.window` is refused inside a panel, which is already one.
