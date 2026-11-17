@@ -78,6 +78,7 @@ pub(crate) fn own_account() -> Option<enshwick_core::PlayerKey> {
 #[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_own_account() -> impl FnMut() -> Option<enshwick_core::PlayerKey> {
+    scratch_only_beside_test();
     set_host(7);
     own_account
 }
@@ -144,3 +145,6 @@ pub(crate) fn take_hosted() {
         crate::base::net::server_carried(message.host, message.channel, &message.data, true);
     }
 }
+
+#[cfg(windows)]
+fn scratch_only_beside_test() {}
