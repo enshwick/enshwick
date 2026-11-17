@@ -63,7 +63,7 @@ impl Mod for ItemUi {
             .iter()
             .filter_map(|&(name, count)| item(name).ok().map(|id| (id, count)))
             .collect();
-        load.extend_screen(HudScreenType::Backpack, Edge::Right, move |panel| {
+        load.extend_screen(HudScreenType::Backpack, Edge::Left, move |panel| {
             for &(item, count) in &shown {
                 if panel.item_slot(item, count).clicked {
                     enshwick::info!("slot of item {} clicked", item.get());
@@ -172,7 +172,7 @@ mod tests {
         loader.hover_slot(Some((at.0, ItemId::from_guid(LOGS), 7, Entity(0))));
         let drawn = loader.draw_screen(HudScreenType::Backpack);
         assert_eq!(drawn.len(), 1);
-        assert_eq!(drawn[0].0, UiExtension::RIGHT);
+        assert_eq!(drawn[0].0, UiExtension::LEFT);
         let slots: Vec<_> = drawn[0]
             .1
             .iter()

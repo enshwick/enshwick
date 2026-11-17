@@ -39,7 +39,9 @@ impl Frame<'_> {
     /// more than one. Inside a window or a screen extension; nothing shows
     /// for a count of 0, an item the client does not know, or on a game
     /// build where the loader does not find the game's slot, and the slot
-    /// then reads as neither clicked nor hovered.
+    /// then reads as neither clicked nor hovered. Slots drawn one after
+    /// another sit side by side, as in the game's grids: three to a row in
+    /// a panel, five in a window.
     ///
     /// # Examples
     ///
@@ -49,7 +51,7 @@ impl Frame<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let torch = ItemId::new(0x5e01);
-    ///     load.extend_screen(HudScreenType::Backpack, Edge::Right, move |panel| {
+    ///     load.extend_screen(HudScreenType::Backpack, Edge::Left, move |panel| {
     ///         if panel.item_slot(torch, 3).clicked {
     ///             // Send the server a player action of the mod's own.
     ///         }
@@ -87,7 +89,7 @@ impl Frame<'_> {
     /// use enshwick::ui::{Edge, HudScreenType, Label, Style};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.extend_screen(HudScreenType::Backpack, Edge::Right, |panel| {
+    ///     load.extend_screen(HudScreenType::Backpack, Edge::Left, |panel| {
     ///         if let Some(slot) = panel.hovered_slot() {
     ///             let text = format!("Slot {} holds {}", slot.at.index(), slot.count);
     ///             panel.label(Label::new(&text).style(Style::Secondary));

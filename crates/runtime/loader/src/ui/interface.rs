@@ -432,6 +432,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     ARENA.with_borrow_mut(Arena::next_frame);
     item_slots::end_frame();
     tooltips::end_frame();
+    painter::next_frame();
     // A client that never hosts never steps, so its waiting patches are also
     // tried here; one atomic compare until a check is due.
     if let Some(loader) = crate::engine::loader::loader() {
@@ -570,7 +571,7 @@ static DRAWS: [Draw; 6] = [
         site: "the carried windows' draw",
         // SAFETY: `Draw::run`'s contract, and `demo::draw` ends its window
         // before it returns.
-        run: |drawn| unsafe { carried::draw(drawn.engine, drawn.context, drawn.reads.screen) },
+        run: |drawn| unsafe { carried::draw(drawn.engine, drawn.context, drawn.reads.seen[0]) },
     },
     Draw {
         fuse: &MODS_SCREEN_FUSE,
@@ -801,6 +802,10 @@ fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::Frame
             if let Some(drawing) = left
                 && drawing.window_open
             {
+                // SAFETY: inside the frame on the interface thread, in the
+                // callback's window, still open; widgets close every frame
+                // they open.
+                unsafe { painter::end_slots(engine) };
                 // SAFETY: `window_open` is set only when the callback's
                 // `WINDOW` widget started the thread-local window in this
                 // frame with this `context`; it stayed in place, and widgets

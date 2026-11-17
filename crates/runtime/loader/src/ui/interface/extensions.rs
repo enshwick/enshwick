@@ -12,6 +12,7 @@ use enshwick_core::abi::{Header, Side, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_core::ui::HudScreenType;
 use enshwick_gamedata::catalogue;
 
+use crate::actions::client_snapshot::TabRead;
 use crate::engine::builds::ABSENT;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered};
@@ -49,22 +50,12 @@ const MENU_LAYER: u32 = 0xa;
 /// A panel's layer beside the Skill Tree, whose window draws on 0xb (client
 /// 520): above it, under the tooltips (0xe) and the dragged item (0xf).
 const SKILL_TREE_LAYER: u32 = 0xc;
-/// The screens the in-game menu draws besides the Skill Tree (screen bytes 4
-/// to 9 on client 26430625).
-const MENU_SCREENS: [HudScreenType; 6] = [
-    HudScreenType::InGameMenu,
-    HudScreenType::Map,
-    HudScreenType::Journal,
-    HudScreenType::Character,
-    HudScreenType::PlayerCrafting,
-    HudScreenType::Backpack,
-];
 
 /// The layer a panel draws on beside the screen the game names `screen`.
 fn layer(screen: &str) -> u32 {
     if screen == HudScreenType::SkillTree.name() {
         SKILL_TREE_LAYER
-    } else if MENU_SCREENS.iter().any(|menu| menu.name() == screen) {
+    } else if crate::actions::client_control::MENU_SCREENS.contains(&screen) {
         MENU_LAYER
     } else {
         SCREEN_LAYER
@@ -135,13 +126,17 @@ pub(super) struct FrameReads {
     pub(super) screen_host_template: [u8; 16],
     /// The host's fixed-point position, from the same step.
     pub(super) screen_host_position: [i64; 3],
-    /// The HUD screen byte, `None` outside a game.
-    pub(super) screen: Option<u8>,
+    /// The screens the player sees, as [`Tab::seen`] gives them: the shown
+    /// tab's on the in-game menu, and the menu's own where it opened as a
+    /// whole; both `None` outside a game.
+    ///
+    /// [`Tab::seen`]: crate::actions::client_control::Tab::seen
+    pub(super) seen: [Option<u8>; 2],
 }
 
 impl FrameReads {
     pub(super) const NONE: Self = Self {
-        screen: None,
+        seen: [None; 2],
         hud_screen: Str::EMPTY,
         prompt_title: Str::EMPTY,
         prompt_verb: 0,
@@ -457,9 +452,12 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: b
     } else {
         ([0; 16], [0; 3])
     };
+    // SAFETY: `view` is this frame's, read on the interface thread by the
+    // caller's contract.
+    let seen = unsafe { seen(&view) };
     FrameReads {
-        screen: Some(screen),
-        hud_screen: screen_name(Some(screen)),
+        seen,
+        hud_screen: screen_name(Some(seen[0].unwrap_or(screen))),
         prompt_title,
         prompt_verb,
         screen_host: enshwick_core::Entity(host),
@@ -551,15 +549,56 @@ pub(super) unsafe fn screen_view(engine: &Engine, context: usize) -> Option<Scre
     })
 }
 
-/// The panels of `screen`, edge by edge and in registration order within
+/// What `view`'s frame reads of the in-game menu's tab; [`TabRead::Unread`]
+/// on a build without the tab read.
+///
+/// # Safety
+///
+/// - `view` is this frame's, read on the interface thread.
+pub(super) unsafe fn tab(view: &ScreenView) -> TabRead {
+    crate::actions::client_control::GROUPS
+        .tab
+        .get()
+        .map_or(TabRead::Unread, |tab| {
+            // SAFETY: `view.state` is this frame's interface state, the one
+            // the in-game menu draws from, read on the interface thread; its
+            // tab index sits at the routed `ui.menu_tab`.
+            unsafe { tab.shown(core::ptr::with_exposed_provenance(view.state), view.screen) }
+        })
+}
+
+/// The screens the player sees in `view`'s frame, as [`Tab::seen`] gives
+/// them; the HUD screen alone on a build without the tab read.
+///
+/// [`Tab::seen`]: crate::actions::client_control::Tab::seen
+///
+/// # Safety
+///
+/// - `view` is this frame's, read on the interface thread.
+unsafe fn seen(view: &ScreenView) -> [Option<u8>; 2] {
+    crate::actions::client_control::GROUPS
+        .tab
+        .get()
+        .map_or([Some(view.screen), None], |tab| {
+            // SAFETY: as in `tab`: this frame's interface state, read on the
+            // interface thread, its tab index at the routed `ui.menu_tab`.
+            unsafe { tab.seen(core::ptr::with_exposed_provenance(view.state), view.screen) }
+        })
+}
+
+/// The panels of `screens`, edge by edge and in registration order within
 /// an edge, so each edge's window opens at most once a frame.
 fn by_edge<T>(
     panels: &[T],
-    screen: u8,
+    screens: [Option<u8>; 2],
     place: impl Fn(&T) -> (u8, u32) + Copy,
 ) -> impl Iterator<Item = &T> {
-    (UiExtension::LEFT..=UiExtension::BOTTOM)
-        .flat_map(move |edge| panels.iter().filter(move |p| place(p) == (screen, edge)))
+    (UiExtension::LEFT..=UiExtension::BOTTOM).flat_map(move |edge| {
+        panels.iter().filter(move |p| {
+            let (screen, at) = place(p);
+            at == edge && screens.contains(&Some(screen))
+        })
+    })
 }
 
 /// Draws the panels of the screen the player has open, each edge's in one
@@ -575,12 +614,15 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, reads: FrameReads) {
     let Some(extensions) = EXTENSIONS.sealed() else {
         return;
     };
-    let Some(screen) = reads.screen.filter(|_| !extensions.is_empty()) else {
+    let Some(shown) = reads.seen[0]
+        .or(reads.seen[1])
+        .filter(|_| !extensions.is_empty())
+    else {
         return;
     };
-    let on = layer(screen_named(screen));
+    let on = layer(screen_named(shown));
     WINDOWS.with_borrow_mut(|windows| windows.iter_mut().for_each(|w| w.set_layer(on)));
-    for extension in by_edge(extensions, screen, |e| (e.screen, e.edge)) {
+    for extension in by_edge(extensions, reads.seen, |e| (e.screen, e.edge)) {
         if extension.registered.live() && extension.shows_for(reads.screen_host_template) {
             // SAFETY: this function's `# Safety` gives the frame, its thread
             // and its `context`; the only window open is the extensions' own,
@@ -668,6 +710,12 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, read
         crate::engine::profile::Feature::Interface,
         || unsafe { (registered.callback)(&raw const frame, registered.user()) },
     );
+    if let Some(engine) = super::ENGINE.get() {
+        // SAFETY: this function's `# Safety` gives the frame and its thread;
+        // the edge's window the callback's slots drew in stays open until
+        // `draw` closes it after every panel ran.
+        unsafe { super::painter::end_slots(engine) };
+    }
     DRAWING.set(None);
 }
 
@@ -691,7 +739,13 @@ mod tests {
         let on = |screen: HudScreenType| layer(screen.name());
         // The in-game menu draws on 9 and the split stack menu on 0xb.
         assert!((10..0xb).contains(&on(HudScreenType::Backpack)));
-        assert_eq!(on(HudScreenType::Map), on(HudScreenType::Backpack));
+        for menu in [
+            HudScreenType::InGameMenu,
+            HudScreenType::Map,
+            HudScreenType::Social,
+        ] {
+            assert_eq!(on(menu), on(HudScreenType::Backpack), "{menu:?}");
+        }
         // The Skill Tree's own window draws on 0xb, the tooltips on 0xe.
         assert!((0xc..0xe).contains(&on(HudScreenType::SkillTree)));
         // A chest screen draws on 6, its button hints on 0xa.
@@ -793,10 +847,25 @@ mod tests {
     fn panels_of_the_open_screen_draw_edge_by_edge_in_registration_order() {
         let (left, right, top) = (UiExtension::LEFT, UiExtension::RIGHT, UiExtension::TOP);
         let panels = [(5, right), (5, left), (7, left), (5, right), (5, top)];
-        let order: Vec<_> = by_edge(&panels, 5, |p| *p)
+        let order: Vec<_> = by_edge(&panels, [Some(5), None], |p| *p)
             .map(core::ptr::from_ref)
             .collect();
         let expected = [1, 0, 3, 4].map(|i| core::ptr::from_ref(&panels[i]));
         assert_eq!(order, expected);
+    }
+
+    #[test]
+    fn the_in_game_menu_s_panels_draw_beside_the_tab_it_shows_and_a_hidden_tab_s_do_not() {
+        let (left, right) = (UiExtension::LEFT, UiExtension::RIGHT);
+        let (menu, character, backpack) = (4, 7, 9);
+        let panels = [(backpack, left), (menu, right), (character, left)];
+        let drawn = |seen| -> Vec<_> { by_edge(&panels, seen, |p| *p).copied().collect() };
+        assert_eq!(
+            drawn([Some(character), Some(menu)]),
+            [(character, left), (menu, right)]
+        );
+        assert_eq!(drawn([Some(character), None]), [(character, left)]);
+        assert_eq!(drawn([None, Some(menu)]), [(menu, right)]);
+        assert!(drawn([None, None]).is_empty());
     }
 }
