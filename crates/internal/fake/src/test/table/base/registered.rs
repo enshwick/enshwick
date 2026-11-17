@@ -158,6 +158,17 @@ impl<F: Copy> Registered<F> {
         } else {
             self.callback
         };
+        self.run_as_owner(callback, call)
+    }
+
+    /// Runs `call` as [`run`](Self::run) does, also when the owner is off:
+    /// the loader's rebuild of bytes the game holds runs the patches of every
+    /// mod that built them.
+    pub(crate) fn run_even_off<R>(&self, call: impl FnOnce(F, *mut c_void) -> R) -> R {
+        self.run_as_owner(self.callback, call)
+    }
+
+    fn run_as_owner<R>(&self, callback: F, call: impl FnOnce(F, *mut c_void) -> R) -> R {
         let user = core::ptr::with_exposed_provenance_mut(self.user);
         match self.owner {
             // SAFETY: `TABLE` is the fake's table, a static.

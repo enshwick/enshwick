@@ -244,6 +244,7 @@ mod screen_hosts;
 mod served_panic;
 #[cfg(feature = "typed")]
 mod served_reads;
+mod served_rebuild;
 #[cfg(feature = "unstable")]
 mod server_controls;
 mod services;

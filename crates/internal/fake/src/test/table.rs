@@ -366,8 +366,10 @@ pub(crate) struct State {
     /// ready failed, or it faulted. None of their callbacks runs again.
     pub(crate) off: Vec<ModHandle>,
     /// The patches in `served` whose builder panicked, by place: each build
-    /// runs without them, as the loader's.
+    /// but a rebuild runs without them, as the loader's.
     pub(crate) served_off: Vec<usize>,
+    /// What the game's builds of served keys left for a rebuild.
+    pub(crate) served_builds: ServedBuilds,
     /// The mods' changes to players' permissions.
     pub(crate) permission_changes: permissions::Changes,
     /// The waits on transactions' ends, in the order asked.
@@ -606,6 +608,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         settings: Vec::new(),
         off: Vec::new(),
         served_off: Vec::new(),
+        served_builds: ServedBuilds::default(),
         permission_changes: permissions::Changes::default(),
         settle_waits: Vec::new(),
         containers: containers::Containers::default(),

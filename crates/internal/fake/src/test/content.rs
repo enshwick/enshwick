@@ -694,6 +694,13 @@ impl Installed {
     /// back bytes it was not lent, turns its mod off with the loader's
     /// reason, as in the game. A mod's own served read skips such a patch.
     ///
+    /// The first build of a key stands for the bytes the game holds: a later
+    /// `enshwick::content::rebuild` runs the patches that
+    /// built them again, also of a mod turned off since, and runs none for a
+    /// key no build reached. As in the game, that rebuild needs the base kept:
+    /// the mod asked for it in init, or a patch read another served key. A
+    /// later call builds again but leaves the first build's record.
+    ///
     /// # Errors
     ///
     /// [`Status::MISSING`] when no patch built `key`, and
