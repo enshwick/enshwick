@@ -667,6 +667,7 @@ fn fits(at: usize, size: usize, record: usize) -> bool {
 
 /// The input layout the builder's benchmark runs on, client 26430625's,
 /// over buffers of its own; never linked in a game.
+#[cfg(any(test, feature = "test"))]
 pub(crate) const BENCH_INPUT: InputLayout = InputLayout {
     movement_stick: 0x2b8,
     camera_rotation: 0x2c4,
@@ -674,6 +675,7 @@ pub(crate) const BENCH_INPUT: InputLayout = InputLayout {
 };
 
 /// Links the input group with [`BENCH_INPUT`], for the builder's benchmark.
+#[cfg(feature = "test")]
 pub(crate) fn bench_input() {
     let _first = GROUPS.input.layout.set(BENCH_INPUT);
 }

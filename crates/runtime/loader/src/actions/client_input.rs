@@ -308,6 +308,7 @@ crate::engine::chains::chain_detour! {
 /// Readies the builder's detour for its benchmark with a stand-in for the
 /// game's pass: the closure runs one step pass and answers the stick's
 /// forward bits, with nothing handed or with a move held.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
     /// Stands in for the game's step pass: rewrites the stick as the

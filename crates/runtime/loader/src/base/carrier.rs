@@ -40,6 +40,7 @@ mod hosted;
 pub(crate) mod tests;
 
 use game::{Game, Taken, Unopened};
+#[cfg(feature = "test")]
 pub use hosted::bench_own_account;
 use hosted::{Looped, client_hosts, hosted_step, loop_back, set_host, take_looped};
 #[cfg(test)]

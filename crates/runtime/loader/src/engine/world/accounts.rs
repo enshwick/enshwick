@@ -144,6 +144,7 @@ pub(super) fn clear() {
 
 /// What a build check pays to find the last of [`MAX_PLAYERS`] characters
 /// in a full copy, and a server step to write one, for their benchmark.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_accounts() -> (impl FnMut() -> Option<PlayerKey>, impl FnMut()) {
     let most = u32::try_from(MAX_PLAYERS).unwrap_or(u32::MAX);
