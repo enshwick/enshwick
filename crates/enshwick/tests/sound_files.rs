@@ -14,18 +14,21 @@ mod tests {
 
     static RESULTS: Mutex<Vec<Result<(), String>>> = Mutex::new(Vec::new());
 
-    fn write_wav(path: &std::path::Path, rate: u32) {
+    /// A short mono 16-bit WAV file at `rate`.
+    fn wav(rate: u32) -> Vec<u8> {
         let spec = hound::WavSpec {
             channels: 1,
             sample_rate: rate,
             bits_per_sample: 16,
             sample_format: hound::SampleFormat::Int,
         };
-        let mut writer = hound::WavWriter::create(path, spec).unwrap();
+        let mut file = std::io::Cursor::new(Vec::new());
+        let mut writer = hound::WavWriter::new(&mut file, spec).unwrap();
         for i in 0..4800i16 {
             writer.write_sample(i).unwrap();
         }
         writer.finalize().unwrap();
+        file.into_inner()
     }
 
     struct Horns;
@@ -85,13 +88,10 @@ mod tests {
 
     #[test]
     fn a_server_checks_each_file_and_serves_nothing() {
-        let dir = std::env::temp_dir().join(format!("enshwick-sound-files-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        write_wav(&dir.join("horn.wav"), SAMPLE_RATE);
-        write_wav(&dir.join("slow.wav"), 44_100);
         let loader = FakeHost::new()
             .side(Side::SERVER)
-            .mod_dir(dir.to_str().unwrap())
+            .mod_file("horn.wav", wav(SAMPLE_RATE))
+            .mod_file("slow.wav", wav(44_100))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Horns)`.
         let status =
@@ -113,18 +113,13 @@ mod tests {
             "an id whose game id another holds is refused"
         );
         assert!(loader.resources().is_empty(), "a server plays no sound");
-        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
     fn a_client_without_a_sound_to_build_from_declares_nothing_for_a_refused_sound() {
-        let dir =
-            std::env::temp_dir().join(format!("enshwick-sound-client-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        write_wav(&dir.join("horn.wav"), SAMPLE_RATE);
         let loader = FakeHost::new()
             .side(Side::CLIENT)
-            .mod_dir(dir.to_str().unwrap())
+            .mod_file("horn.wav", wav(SAMPLE_RATE))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Horns)`.
         let status =
@@ -140,6 +135,5 @@ mod tests {
             "{declared:?}"
         );
         assert!(loader.resources().is_empty());
-        std::fs::remove_dir_all(dir).unwrap();
     }
 }

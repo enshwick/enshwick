@@ -669,6 +669,7 @@ dependencies = [
  "postcard",
  "rustc-hash",
  "serde",
+ "tempfile",
  "thiserror",
  "toml 1.2.1+spec-1.1.0",
 ]

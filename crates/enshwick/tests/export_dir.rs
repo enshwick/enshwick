@@ -69,6 +69,19 @@ mod tests {
     }
 
     #[test]
+    fn a_mod_given_files_of_its_own_folder_still_has_its_export_folder() {
+        let answer = answer(
+            FakeHost::new()
+                .mod_dir("game/mods/Exporter")
+                .mod_file("settings.toml", "")
+                .loaded(info("you.exporter", "mods/Exporter/exporter.dll")),
+        );
+        let named = Path::new("export").join("you.exporter");
+        assert!(answer.starts_with("export "), "{answer}");
+        assert!(answer.ends_with(&*named.to_string_lossy()), "{answer}");
+    }
+
+    #[test]
     fn a_folder_the_loader_lists_no_mod_in_has_no_export_folder() {
         let answer = answer(
             FakeHost::new()
