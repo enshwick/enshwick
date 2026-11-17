@@ -49,12 +49,12 @@ pub use actions::client_input::bench_client_build;
 #[cfg(windows)]
 #[doc(hidden)]
 pub use base::carrier::bench_own_account;
+#[cfg(all(windows, feature = "test"))]
+#[doc(hidden)]
+pub use content::served::{bench_served_build, bench_text_lookup};
 #[cfg(windows)]
 #[doc(hidden)]
-pub use content::{
-    served::{bench_served_build, bench_text_lookup},
-    textures::bench_texture_request,
-};
+pub use content::textures::bench_texture_request;
 #[cfg(windows)]
 #[doc(hidden)]
 pub use engine::pages::{forget as forget_read_only, read_only};
@@ -71,6 +71,9 @@ pub use ui::interface::item_slots::bench_item_slot;
 pub use ui::interface::tooltips::bench_tooltip_lines;
 #[doc(hidden)]
 pub use world::transactions::bench_settle_step;
+#[cfg(all(windows, feature = "test"))]
+#[doc(hidden)]
+pub use world::waypoints::bench_waypoint_idle_step;
 
 /// The loader's `HostApi` table, for the benchmark of one entry call.
 #[cfg(windows)]

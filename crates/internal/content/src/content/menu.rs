@@ -13,7 +13,7 @@ use crate::abi::Side;
 use crate::engine_ids as ids;
 
 use super::workshops::WorkshopId;
-use super::{Blob, EngineFacts, Guid, Room, built_apart, types};
+use super::{Blob, EngineFacts, Guid, built_apart, sized, types};
 use crate::resources::{Grow, Output};
 
 /// The client's UI bundle resource, which holds the crafting menu.
@@ -143,9 +143,9 @@ pub fn list_recipes(
     entries: &[MenuEntry],
     out: &mut impl Grow,
 ) -> Option<()> {
-    // shortcut: where one entry lands decides the room the next needs, so the
-    // bundle is listed apart and handed over whole, one copy more; an exact
-    // room first would run the placement twice.
+    // shortcut: each entry reads back the set an earlier one moved, which a
+    // measure does not hold, so the bundle is listed apart and handed over
+    // whole, one copy more; an exact measure would hold the moved sets.
     built_apart(out, bundle, |blob| list_in(layout, blob, entries))
 }
 
@@ -424,47 +424,34 @@ pub fn list_workshop(
         Blob::over(out, bundle);
         return Some(());
     }
-    let room = Room::new(bundle)
-        .append(layout.set, 8)?
-        .append(layout.group, 8)?
-        .grow_array(workshops, 4, 4, 1)?
-        .grow_array(trees, layout.tree, 8, 1)?;
-    let mut blob = Blob::over_with_room(out, room);
-    let set = blob.append(&vec![0; layout.set], 8);
-    let mut group = vec![0u8; layout.group];
-    group
+    let empty_set = vec![0; layout.set];
+    let mut new_group = vec![0u8; layout.group];
+    new_group
         .get_mut(layout.group_id..layout.group_id + 16)?
         .copy_from_slice(&workshop.guid().0);
-    let group = blob.append(&group, 8);
-    if !blob.set_array(group + layout.sets, set, 1) {
-        return None;
-    }
-    blob.grow_array(
-        workshops,
-        4,
-        4,
-        &[],
-        &[(workshop.id().to_le_bytes().to_vec(), None)],
-    )?;
-    let index = blob.grow_array(
-        trees,
-        layout.tree,
-        8,
-        &[layout.groups],
-        &[(vec![0; layout.tree], None)],
-    )?;
-    let (start, _) = blob.array(trees)?;
-    let tree = start + usize::try_from(index).ok()? * layout.tree;
-    if !blob.set_array(tree + layout.groups, group, 1) {
-        return None;
-    }
-    for max in [layout.max_groups, layout.max_sets] {
-        let at = layout.collection + max;
-        if blob.read_u32(at)? < 1 && !blob.write(at, &1u32.to_le_bytes()) {
+    let id = [(workshop.id().to_le_bytes().to_vec(), None)];
+    let new_tree = [(vec![0; layout.tree], None)];
+    sized(out, bundle, |blob| {
+        let set = blob.append(&empty_set, 8);
+        let group = blob.append(&new_group, 8);
+        if !blob.set_array(group + layout.sets, set, 1) {
             return None;
         }
-    }
-    Some(())
+        blob.grow_array(workshops, 4, 4, &[], &id)?;
+        let index = blob.grow_array(trees, layout.tree, 8, &[layout.groups], &new_tree)?;
+        let (start, _) = blob.array(trees)?;
+        let tree = start + usize::try_from(index).ok()? * layout.tree;
+        if !blob.set_array(tree + layout.groups, group, 1) {
+            return None;
+        }
+        for max in [layout.max_groups, layout.max_sets] {
+            let at = layout.collection + max;
+            if blob.read_u32(at)? < 1 && !blob.write(at, &1u32.to_le_bytes()) {
+                return None;
+            }
+        }
+        Some(())
+    })
 }
 
 /// Serves the UI bundle with `edit` on it, on the client only. A layout

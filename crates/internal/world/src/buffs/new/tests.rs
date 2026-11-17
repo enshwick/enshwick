@@ -66,7 +66,8 @@ fn collection() -> Vec<u8> {
         assert!(blob.set_array(field, at, 3));
     }
     let mut pairs = vec![(0x10, 2), (0x23, 1), (0x30, 0)];
-    assert_eq!(write_map(&LAYOUT, &mut blob, &mut pairs, 0), Some(()));
+    assert_eq!(by_bucket(&mut pairs, BUCKETS), Some(()));
+    assert_eq!(write_map(&LAYOUT, &mut blob, &pairs, 0), Some(()));
     blob.into_bytes()
 }
 
@@ -107,11 +108,18 @@ fn edit(id: u32) -> Edit {
 }
 
 /// `base` with `types`, as the loader serves it: the base as it is when it
-/// does not read.
+/// does not read. A build reserves its final length once, up front.
 fn add(base: &[u8], types: &[Edit]) -> Vec<u8> {
     let mut out = Vec::new();
     match build(&LAYOUT, base, types, &mut out) {
-        Some(_) => out,
+        Some(_) => {
+            assert_eq!(
+                out.capacity(),
+                out.len(),
+                "the build grew past what it reserved"
+            );
+            out
+        }
         None => base.to_vec(),
     }
 }

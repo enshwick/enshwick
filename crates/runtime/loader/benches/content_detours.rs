@@ -23,10 +23,16 @@ fn content_detours(c: &mut Criterion) {
     group.bench_function("texture_request_nothing_served", |b| {
         b.iter(&mut request);
     });
-    let mut build = enshwick_loader::bench_served_build();
-    group.bench_function("served_game_build_three_patches", |b| {
-        b.iter(&mut build);
-    });
+    for (of_a_mod, name) in [
+        (false, "served_game_build_three_patches"),
+        (true, "served_game_build_three_mod_patches"),
+    ] {
+        let mut build = enshwick_loader::bench_served_build(of_a_mod);
+        assert_eq!(build(), 64 + 3, "{name}: every patch runs");
+        group.bench_function(name, |b| {
+            b.iter(&mut build);
+        });
+    }
     let mut idle = enshwick_loader::content::recipes::bench_recipe_filter(&[]);
     group.bench_function("recipe_filter_nothing_disabled", |b| {
         b.iter(&mut idle);

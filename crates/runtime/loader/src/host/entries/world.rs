@@ -164,6 +164,14 @@ entries! {
         out.put(crate::world::scene::frame_info(loader)?)
     }
 
+    fn waypoint(
+        loader as Caller,
+        entity: Entity,
+        out as HeadedOut<api_frame::WaypointData>,
+    ) -> Status {
+        out.put(crate::world::waypoints::read_now(loader, entity)?)
+    }
+
     fn fog_uncover(
         loader as Caller,
         player: enshwick_core::PlayerKey,

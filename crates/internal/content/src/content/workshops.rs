@@ -13,7 +13,7 @@ use crate::engine_ids as ids;
 use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
 use super::templates::{ComponentChange, NewTemplate};
-use super::{Blob, EngineFacts, Guid, Id, Room, types};
+use super::{Blob, EngineFacts, Guid, Id, sized, types};
 use crate::resources::Grow;
 
 /// The game's workshop registry resource.
@@ -479,10 +479,11 @@ pub fn list_workshop(
         let name = new.id.try_part(NAME)?.guid();
         put(layout.entry_name, &name.fnv1a().to_le_bytes())?;
     }
-    let room = Room::new(registry).grow_array(layout.workshops, layout.entry, 4, 1)?;
-    let mut blob = Blob::over_with_room(out, room);
-    blob.grow_array(layout.workshops, layout.entry, 4, &[], &[(entry, None)])?;
-    Some(())
+    let entry = [(entry, None)];
+    sized(out, registry, |blob| {
+        blob.grow_array(layout.workshops, layout.entry, 4, &[], &entry)
+            .map(drop)
+    })
 }
 
 /// The station item as a plain new item; `None` when its tags do not fit.

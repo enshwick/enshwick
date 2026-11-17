@@ -277,6 +277,43 @@ mod tests {
     }
 
     #[test]
+    fn a_waypoint_outside_the_map_s_frame_or_unmoved_across_a_reopen_runs_nothing() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let frame = enshwick::abi::MapFrameInfo {
+            origin: [0.0, 0.0],
+            size: [1000.0, 1000.0],
+            metres_per_cell: 8.0,
+            ..enshwick::abi::MapFrameInfo::EMPTY
+        };
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .player(root)
+                .map_frame(frame),
+        );
+        let show = || {
+            let window = Window::new("map", "Players").map(players_map());
+            actions().show(window, &[root.key]).unwrap();
+            assert_eq!(loader.carried_windows(&root, 0).len(), 1, "the map shows");
+        };
+        show();
+        assert_eq!(
+            loader.set_waypoint(&root, 0, [5000.0, 0.0, 10.0]),
+            None,
+            "outside the frame"
+        );
+        let far = loader.set_waypoint(&root, 0, [400.0, 2.0, 3.5]);
+        assert_eq!(far.as_deref(), Some("1place 400 2 3.5"));
+
+        loader.close_window(&root, "map");
+        show();
+        assert_eq!(
+            loader.set_waypoint(&root, 0, [400.0, 2.0, 3.5]),
+            None,
+            "the waypoint did not move while the map was closed"
+        );
+    }
+
+    #[test]
     fn a_map_that_runs_an_action_it_cannot_is_refused_at_show() {
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
         let _loader = start(enshwick::test::FakeHost::new().player(root));

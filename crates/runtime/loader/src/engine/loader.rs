@@ -660,22 +660,31 @@ impl Loader {
                 .is_some_and(|d| d.iter().any(|s| s.event == event))
     }
 
-    /// Raises `event` with `data` for every mod still on, or for mod `only`.
-    pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
-        if only.is_none() && is_world_event(event) {
-            self.parts.world_event(self, event);
-        }
-        let Some(delivery) = self.delivery.get() else {
-            return;
-        };
-        for subscription in of_event(delivery, event).iter().filter(|s| {
+    /// The subscriptions to `event` of mods still on, or of mod `only`.
+    fn live(&self, event: Event, only: Option<usize>) -> impl Iterator<Item = &Subscription> {
+        let delivery = self.delivery.get().map_or(&[][..], |d| of_event(d, event));
+        delivery.iter().filter(move |s| {
             s.event == event
                 && only.is_none_or(|only| only == s.owner.get())
                 && self
                     .mods
                     .get(s.owner.get())
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
-        }) {
+        })
+    }
+
+    /// Whether a mod still on hears `event`, so work that only feeds it
+    /// stops once its last subscriber is turned off.
+    pub(crate) fn hears(&self, event: Event) -> bool {
+        handles(event) && self.live(event, None).next().is_some()
+    }
+
+    /// Raises `event` with `data` for every mod still on, or for mod `only`.
+    pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
+        if only.is_none() && is_world_event(event) {
+            self.parts.world_event(self, event);
+        }
+        for subscription in self.live(event, only) {
             crate::engine::profile::call(
                 subscription.owner,
                 crate::engine::profile::Feature::Events,

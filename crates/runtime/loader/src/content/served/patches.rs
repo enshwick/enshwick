@@ -157,6 +157,7 @@ fn read_served(
         list: core::slice::from_ref(entry),
         sealed: true,
         archive: move |key: &ResourceKey| archive(key).ok(),
+        on: mod_on,
     };
     builds::read_built(&table, entry, base)
 }
@@ -617,6 +618,8 @@ struct Table<'a, A> {
     list: &'a [Served],
     sealed: bool,
     archive: A,
+    /// Whether a patch's owner is on: [`mod_on`], but in a benchmark.
+    on: fn(ModIndex) -> bool,
 }
 
 impl<'a> Table<'a, fn(&ResourceKey) -> Option<Vec<u8>>> {
@@ -626,6 +629,7 @@ impl<'a> Table<'a, fn(&ResourceKey) -> Option<Vec<u8>>> {
             list,
             sealed: true,
             archive: game_archive,
+            on: mod_on,
         }
     }
 }
@@ -662,7 +666,7 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
     }
 
     fn on(&self, patch: &&'a Patch) -> bool {
-        patch.runs(mod_on)
+        patch.runs(self.on)
     }
 
     fn enter(&self, key: &'a Served, build: Build) -> Building {
@@ -884,13 +888,17 @@ fn refused(entry: &Served, patch: &Patch, status: Status) {
     }
 }
 
-/// Readies a game build of one served key for its benchmark: three of the
-/// loader's own patches over a 64-byte base, each copying the bytes into a
-/// buffer the build lends, as a mod's patch does. The closure runs one build,
-/// frees its bytes and returns their length.
+/// Readies a game build of one served key for its benchmark: three patches
+/// over a 64-byte base, each copying the bytes with one more into a buffer
+/// the build lends, as a mod's patch does. With `of_a_mod` they are a mod's,
+/// which the build runs through its profiled call, and that mod counts as
+/// on without a running loader; else they are the loader's own. The closure
+/// runs one build, frees its bytes and returns their length, 67 when every
+/// patch ran.
+#[cfg(feature = "test")]
 #[doc(hidden)]
-pub fn bench_served_build() -> impl FnMut() -> usize {
-    /// Copies its base into a buffer the build lends.
+pub fn bench_served_build(of_a_mod: bool) -> impl FnMut() -> usize {
+    /// Copies its base with one byte more into a buffer the build lends.
     unsafe extern "system" fn copy(
         base: *const u8,
         base_len: u32,
@@ -899,17 +907,20 @@ pub fn bench_served_build() -> impl FnMut() -> usize {
         out_len: *mut u32,
     ) -> Status {
         let len = base_len as usize;
-        let Some(at) = lend(len) else {
+        let Some(at) = lend(len + 1) else {
             return Status::REFUSED;
         };
         // SAFETY: the build passes `len` readable bytes at `base`, and `lend`
-        // gave `len` writable bytes at `at` apart from them.
+        // gave `len + 1` writable bytes at `at` apart from them.
         unsafe { core::ptr::copy_nonoverlapping(base, at, len) };
+        // SAFETY: `lend` gave `len + 1` writable bytes at `at`, so the byte
+        // at `len` is its last.
+        unsafe { at.wrapping_add(len).write(0) };
         // SAFETY: the build passes `out` pointing at a local, writable for
         // the call.
         unsafe { out.write(at) };
         // SAFETY: as `out`, for `out_len`.
-        unsafe { out_len.write(base_len) };
+        unsafe { out_len.write(base_len + 1) };
         Status::OK
     }
     let key = ResourceKey {
@@ -917,16 +928,19 @@ pub fn bench_served_build() -> impl FnMut() -> usize {
         type_hash: 1,
         part: 0,
     };
-    // shortcut: loader-owned patches skip `profile::call`, since without a
-    // running loader every other mod reads as off and its patch never runs;
-    // add a mod case once a bench can load a mod.
-    let patches = (0..3)
-        .map(|_| Patch::new(ModIndex::LOADER, copy, 0))
-        .collect();
+    let owner = if of_a_mod {
+        ModIndex::new(0)
+    } else {
+        ModIndex::LOADER
+    };
+    let patches = (0..3).map(|_| Patch::new(owner, copy, 0)).collect();
     let entry: &'static Served = Box::leak(Box::new(Served::new(key, key, patches, false)));
     let base: &'static [u8] = Box::leak(vec![7u8; 64].into_boxed_slice());
     let at = base.as_ptr().expose_provenance();
-    let table = Table::game(core::slice::from_ref(entry));
+    let table = Table {
+        on: |_| true,
+        ..Table::game(core::slice::from_ref(entry))
+    };
     move || {
         // SAFETY: `base` is leaked, so its bytes stay readable and unchanged.
         unsafe { builds::build(&table, entry, (at, base.len()), Build::Game, None) }

@@ -805,6 +805,7 @@ const _: () = {
     assert!(size_of::<KnowledgeInfo>() == 8 + 16);
     assert!(size_of::<KnowledgeData>() == 8 + 12);
     assert!(size_of::<PlayerDeathData>() == 8 + 4 + 4 + 8 + 24 + 16 + 4 + 4);
+    assert!(size_of::<WaypointData>() == 8 + 8 + 8 + 24 + 4 + 4);
     assert!(size_of::<QuestData>() == 8 + 8);
     // Headed: written at the entry size the caller states.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);

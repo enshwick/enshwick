@@ -1,76 +1,21 @@
 //! Keeps the windows' waiting changes and what each client holds, and
 //! carries them on the server's game thread.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::Side;
-use enshwick_core::{Entity, PlayerKey};
-use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+use enshwick_core::PlayerKey;
+use enshwick_core::abi::{Side, WaypointData};
 
-use super::maps::{HeldMap, WATCH_MS, kept, note_map, runs};
+use super::maps::{HeldMap, kept, note_map, run_at};
 use super::{
     Change, Held, MAX_PLAYERS, Route, Told, Waiting, close_told, greeted, heard, holds, leaving,
     merged, message, note, pend, queue, route,
 };
-use crate::engine::catalogue::{self, ids};
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::engine::world::WorldError;
 use enshwick_base::Relock;
-
-/// Where a `PlayerWaypoint` keeps what the server reads, from the running
-/// game's reflection.
-#[derive(Debug)]
-struct WaypointAt {
-    hash: u32,
-    enabled: usize,
-    position: usize,
-}
-
-impl WaypointAt {
-    /// The layout, when the build reflects the type with both fields
-    /// inside it.
-    fn resolve(loader: &Loader) -> Option<Self> {
-        let size = catalogue::size(loader, ids::PLAYER_WAYPOINT)?;
-        let enabled = catalogue::offset(loader, ids::PLAYER_WAYPOINT_ENABLED)?;
-        let position = catalogue::offset(loader, ids::PLAYER_WAYPOINT_POSITION)?;
-        let inside = enabled < size && position.checked_add(24).is_some_and(|end| end <= size);
-        let hash = catalogue::component_hash(loader, ids::PLAYER_WAYPOINT)?;
-        inside.then_some(Self {
-            hash,
-            enabled,
-            position,
-        })
-    }
-
-    /// Where `entity`'s waypoint is, in metres, `None` while it is off or
-    /// the entity has none. On the server's game thread at a quiet moment.
-    fn read(&self, loader: &Loader, entity: Entity) -> Result<Option<[f64; 3]>, WorldError> {
-        let data = match crate::engine::world::component(loader, entity, self.hash) {
-            Ok(data) => data.cast::<u8>(),
-            Err(WorldError::Absent) => return Ok(None),
-            Err(why) => return Err(why),
-        };
-        // SAFETY: `data` is the entity's live PlayerWaypoint (`component`
-        // found it), read on the game thread at a quiet moment (the caller
-        // asked `quiet_world`), so no system writes it now; `resolve` checked
-        // that the byte at `enabled` lies inside the type. It is read as a
-        // byte, never as a bool.
-        let enabled = unsafe { enshwick_core::raw::read_at::<u8>(data, self.enabled) };
-        if enabled == 0 {
-            return Ok(None);
-        }
-        // SAFETY: `data` is the entity's live PlayerWaypoint (`component`
-        // found it), read on the game thread at a quiet moment (the caller
-        // asked `quiet_world`), so no system writes it now; `resolve` checked
-        // that the 24 bytes from `position`, the three i64 of
-        // `waypointPosition` in 32.32 fixed point, lie inside the type.
-        let fixed = unsafe { enshwick_core::raw::read_at::<[i64; 3]>(data, self.position) };
-        Ok(Some(enshwick_core::ecs::metres(fixed)))
-    }
-}
 
 /// The windows' state on the server.
 struct Windows {
@@ -92,14 +37,6 @@ struct Windows {
     maps: Mutex<Vec<HeldMap>>,
     /// Set while `maps` holds any, so a step without one takes no lock.
     any_map: AtomicBool,
-    /// Each map holder's waypoint at the last look.
-    seen: Mutex<Vec<(u64, Option<[f64; 3]>)>>,
-    /// When the waypoints were last looked at, in milliseconds since the
-    /// system started.
-    looked: AtomicU64,
-    /// The waypoint's layout, once read; `None` for good on a build that
-    /// lacks it.
-    waypoint: OnceLock<Option<WaypointAt>>,
 }
 
 static WINDOWS: Windows = Windows {
@@ -111,78 +48,40 @@ static WINDOWS: Windows = Windows {
     warned: AtomicBool::new(false),
     maps: Mutex::new(Vec::new()),
     any_map: AtomicBool::new(false),
-    seen: Mutex::new(Vec::new()),
-    looked: AtomicU64::new(0),
-    waypoint: OnceLock::new(),
 };
 
-/// The waypoints of maps in carried windows: off on a build whose
-/// reflection lacks the `PlayerWaypoint` the server reads.
-static WAYPOINTS_FUSE: Fuse = Fuse::new("map waypoints");
-
-/// Keeps only the maps of windows clients still hold, and the waypoints
-/// seen of their players.
+/// Keeps only the maps of windows clients still hold.
 fn keep_maps() {
     let held = WINDOWS.held.relock();
     let mut maps = WINDOWS.maps.relock();
-    kept(&mut maps, &mut WINDOWS.seen.relock(), &held);
+    kept(&mut maps, &held);
     WINDOWS.any_map.store(!maps.is_empty(), Ordering::Release);
 }
 
-/// The waypoint's layout, read once; `None` while `feature`, which turns
-/// off with the reason in the Mods screen and status report on a build
-/// without it, is off.
-fn waypoint_at(loader: &Loader, feature: &'static Fuse) -> Option<&'static WaypointAt> {
-    if feature.is_off() {
-        return None;
-    }
-    let at = WINDOWS.waypoint.get_or_init(|| WaypointAt::resolve(loader));
-    if at.is_none() {
-        loader.fuse_off(
-            feature,
-            ids::PLAYER_WAYPOINT,
-            "is not reflected with the fields the server reads, so a map's waypoint runs nothing",
-        );
-    }
-    at.as_ref()
+/// Whether a client holds a window with a map, so the waypoints are
+/// watched for it.
+pub(crate) fn holds_map() -> bool {
+    WINDOWS.any_map.load(Ordering::Acquire)
 }
 
-/// Runs what the waypoints of players holding a map ask for, at most every
-/// [`WATCH_MS`]: an interface run from that player, admitted and checked
-/// as a press of a window's button is.
-fn watch_waypoints(loader: &Loader) {
-    if !WINDOWS.any_map.load(Ordering::Acquire) {
+/// The maps' runs of waypoint changes: a panic in one turns off only these.
+pub(crate) static MAP_RUNS: Fuse = Fuse::new("map runs");
+
+/// Runs what the waypoint `change` asks of the newest map its player
+/// holds: an interface run from that player, admitted and checked as a
+/// press of a window's button is. A cleared waypoint runs nothing.
+pub(crate) fn waypoint_changed(loader: &Loader, change: &WaypointData) {
+    if change.set == 0 {
         return;
     }
-    // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
-    let now = unsafe { GetTickCount64() };
-    if now.saturating_sub(WINDOWS.looked.load(Ordering::Relaxed)) < WATCH_MS {
-        return;
-    }
-    WINDOWS.looked.store(now, Ordering::Relaxed);
-    let Some(at) = waypoint_at(loader, &WAYPOINTS_FUSE) else {
+    let Some(run) = run_at(&WINDOWS.maps.relock(), change.key, change.position) else {
         return;
     };
-    if crate::engine::world::quiet_world(loader).is_err() {
+    let Some(record) = loader.mods.get(run.owner.get()) else {
         return;
-    }
-    let online = crate::engine::world::players(loader).unwrap_or_default();
-    let frame = crate::world::scene::frame_info(loader).ok();
-    let asked = {
-        let maps = WINDOWS.maps.relock();
-        let waypoint = |key: u64| {
-            let player = online.iter().find(|p| p.key == PlayerKey::new(key))?;
-            at.read(loader, player.entity).ok()
-        };
-        runs(&maps, &mut WINDOWS.seen.relock(), frame.as_ref(), waypoint)
     };
-    for run in asked {
-        let Some(record) = loader.mods.get(run.owner.get()) else {
-            continue;
-        };
-        let args = enshwick_core::actions::sheet::encode_args(&run.args);
-        crate::actions::player_actions::run(loader, run.key, &record.id, &run.action, &args, None);
-    }
+    let args = enshwick_core::actions::sheet::encode_args(&run.args);
+    crate::actions::player_actions::run(loader, run.key, &record.id, &run.action, &args, None);
 }
 
 /// Queues `more` and notes that a step has work; false past the bound.
@@ -364,11 +263,7 @@ fn taken() -> (Vec<Told>, Vec<Waiting>) {
 /// players who left and of every window a client no longer holds: closed
 /// by the client, let go for a newer one, or closed by a render; not one
 /// its mod closed itself.
-///
-/// Before that, at most every [`WATCH_MS`], runs what the waypoints of
-/// players holding a window's map ask for.
 pub(crate) fn after_step(loader: &Loader) {
-    watch_waypoints(loader);
     if !WINDOWS.any.swap(false, Ordering::AcqRel) {
         return;
     }
@@ -460,7 +355,6 @@ pub(crate) fn forget(loader: Option<&Loader>) {
     let mut held = core::mem::take(&mut *WINDOWS.held.relock());
     held.append(&mut WINDOWS.pending.relock());
     WINDOWS.maps.relock().clear();
-    WINDOWS.seen.relock().clear();
     WINDOWS.any_map.store(false, Ordering::Release);
     WINDOWS.warned.store(false, Ordering::Relaxed);
     if let Some(loader) = loader {
@@ -697,22 +591,6 @@ pub(crate) mod tests {
         assert!(serving.sent().is_empty(), "a forgotten show is not carried");
         forget(Some(serving.loader));
         assert!(serving.heard().is_empty(), "no window, no one to tell");
-    }
-
-    #[test]
-    fn map_waypoints_a_build_cannot_read_are_listed_off_not_only_logged() {
-        static WAYPOINTS_OFF: Fuse = Fuse::new("test map waypoints");
-        let loader = crate::start::tests::bare_loader();
-        assert!(waypoint_at(&loader, &WAYPOINTS_OFF).is_none());
-        assert!(WAYPOINTS_OFF.is_off());
-        let listed = crate::engine::diag::parts_off();
-        assert!(
-            listed
-                .iter()
-                .any(|p| p.part == WAYPOINTS_OFF.feature()
-                    && p.reason.starts_with(ids::PLAYER_WAYPOINT)),
-            "the reason names what the build lacks: {listed:?}"
-        );
     }
 
     #[test]

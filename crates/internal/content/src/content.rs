@@ -188,15 +188,14 @@ impl<B: Grow> Blob<B> {
         Self(out)
     }
 
-    /// A blob that edits in `out`, which first becomes a copy of the base
-    /// of `room` with room for all `room` counted, so the edits grow `out`
-    /// in place: over an [`Output`](crate::resources::Output), its build
-    /// takes one loan and moves nothing.
-    #[doc(hidden)]
-    pub fn over_with_room(mut out: B, room: Room<'_>) -> Self {
+    /// A blob that edits in `out`, which first becomes a copy of `base`
+    /// with room for `len` bytes, so edits that reach `len` grow `out` in
+    /// place: over an [`Output`](crate::resources::Output), its build takes
+    /// one loan and moves nothing.
+    fn reserved(mut out: B, base: &[u8], len: usize) -> Self {
         out.grow(0);
-        out.reserve(room.len);
-        out.put(room.base);
+        out.reserve(len);
+        out.put(base);
         Self(out)
     }
 }
@@ -211,52 +210,217 @@ impl<'a> Blob<&'a [u8]> {
     }
 }
 
-/// The length a blob over a base reaches through the appends and array
-/// growths a helper makes, worked out on the base before the blob copies
-/// it, with the arithmetic [`Blob::append`] and [`Blob::grow_array`] use.
+/// What a content helper's edits run on: the [`Blob`] they build, or the
+/// measure of how long they make it, which [`sized`] runs them on first.
 #[doc(hidden)]
-#[derive(Clone, Copy, Debug)]
-pub struct Room<'a> {
-    base: &'a [u8],
-    len: usize,
+pub trait Draft {
+    /// As [`Blob::read_u32`].
+    fn read_u32(&self, at: usize) -> Option<u32>;
+    /// As [`Blob::array`].
+    fn array(&self, field: usize) -> Option<(usize, u32)>;
+    /// As [`Blob::write`].
+    fn write(&mut self, at: usize, bytes: &[u8]) -> bool;
+    /// As [`Blob::set_array`].
+    fn set_array(&mut self, field: usize, start: usize, count: u32) -> bool;
+    /// As [`Blob::append`].
+    fn append(&mut self, data: &[u8], align: usize) -> usize;
+    /// As [`Blob::grow_array`].
+    fn grow_array(
+        &mut self,
+        field: usize,
+        size: usize,
+        align: usize,
+        relative: &[usize],
+        extra: &[(Vec<u8>, Option<usize>)],
+    ) -> Option<u32>;
 }
 
-impl<'a> Room<'a> {
-    /// The room `base` takes as it is.
-    #[doc(hidden)]
-    #[must_use]
-    pub const fn new(base: &'a [u8]) -> Self {
+impl<B: Grow> Draft for Blob<B> {
+    fn read_u32(&self, at: usize) -> Option<u32> {
+        Blob::read_u32(self, at)
+    }
+
+    fn array(&self, field: usize) -> Option<(usize, u32)> {
+        Blob::array(self, field)
+    }
+
+    fn write(&mut self, at: usize, bytes: &[u8]) -> bool {
+        Blob::write(self, at, bytes)
+    }
+
+    fn set_array(&mut self, field: usize, start: usize, count: u32) -> bool {
+        Blob::set_array(self, field, start, count)
+    }
+
+    fn append(&mut self, data: &[u8], align: usize) -> usize {
+        Blob::append(self, data, align)
+    }
+
+    fn grow_array(
+        &mut self,
+        field: usize,
+        size: usize,
+        align: usize,
+        relative: &[usize],
+        extra: &[(Vec<u8>, Option<usize>)],
+    ) -> Option<u32> {
+        Blob::grow_array(self, field, size, align, relative, extra)
+    }
+}
+
+/// How many array headers of the base a [`Measure`] follows as the edits
+/// move them; a helper grows at most three.
+const MEASURED_ARRAYS: usize = 4;
+
+/// The length edits bring a copy of a base to, worked out without the copy:
+/// it follows the length and the base's array headers the edits set, so
+/// appends and grown arrays land where a [`Blob`] puts them. It holds no
+/// other byte the edits write; a read past the base or a fifth header fails
+/// the measure, and [`sized`] then reserves only the base.
+struct Measure<'a> {
+    base: &'a [u8],
+    len: usize,
+    arrays: [Option<(usize, (usize, u32))>; MEASURED_ARRAYS],
+}
+
+impl<'a> Measure<'a> {
+    const fn new(base: &'a [u8]) -> Self {
         Self {
             base,
             len: base.len(),
+            arrays: [None; MEASURED_ARRAYS],
         }
     }
 
-    /// The room after [`Blob::append`] of `len` bytes at `align`.
-    #[doc(hidden)]
-    #[must_use]
-    pub fn append(self, len: usize, align: usize) -> Option<Self> {
-        Some(Self {
-            len: aligned(self.len, align).checked_add(len)?,
-            ..self
-        })
+    /// Notes the header at `field` of the base as edited; false when no
+    /// slot is left. A header past the base is not noted: nothing reads it
+    /// back from the base.
+    fn note(&mut self, field: usize, start: usize, count: u32) -> bool {
+        if field.checked_add(8).is_none_or(|end| end > self.base.len()) {
+            return true;
+        }
+        let slot = self
+            .arrays
+            .iter_mut()
+            .find(|slot| slot.is_none_or(|(at, _)| at == field));
+        slot.map(|slot| *slot = Some((field, (start, count))))
+            .is_some()
     }
 
-    /// The room after [`Blob::grow_array`] of the base's array at `field`,
-    /// of `size`-byte elements, by `extra` elements; `None` when the base
-    /// has no array there.
-    #[doc(hidden)]
-    #[must_use]
-    pub fn grow_array(self, field: usize, size: usize, align: usize, extra: usize) -> Option<Self> {
-        let (_, count) = Blob::reading(self.base).array(field)?;
-        let elements = usize::try_from(count).ok()?.checked_add(extra)?;
-        self.append(elements.checked_mul(size)?, align)
+    const fn fits(&self, at: usize, len: usize) -> bool {
+        matches!(at.checked_add(len), Some(end) if end <= self.len)
     }
+}
+
+impl Draft for Measure<'_> {
+    fn read_u32(&self, at: usize) -> Option<u32> {
+        Blob::reading(self.base).read_u32(at)
+    }
+
+    fn array(&self, field: usize) -> Option<(usize, u32)> {
+        self.arrays
+            .iter()
+            .flatten()
+            .find_map(|&(at, header)| (at == field).then_some(header))
+            .or_else(|| Blob::reading(self.base).array(field))
+    }
+
+    fn write(&mut self, at: usize, bytes: &[u8]) -> bool {
+        self.fits(at, bytes.len())
+    }
+
+    fn set_array(&mut self, field: usize, start: usize, count: u32) -> bool {
+        self.fits(field, 8)
+            && i32::try_from(start.cast_signed() - field.cast_signed()).is_ok()
+            && self.note(field, start, count)
+    }
+
+    fn append(&mut self, data: &[u8], align: usize) -> usize {
+        let start = aligned(self.len, align);
+        self.len = start.saturating_add(data.len());
+        start
+    }
+
+    fn grow_array(
+        &mut self,
+        field: usize,
+        size: usize,
+        align: usize,
+        _relative: &[usize],
+        extra: &[(Vec<u8>, Option<usize>)],
+    ) -> Option<u32> {
+        let (start, count) = self.array(field)?;
+        let growth = Growth::of(self.len, start, count, size, align, extra)?;
+        self.len = growth.end;
+        self.note(field, growth.to, growth.total).then_some(count)
+    }
+}
+
+/// Where [`Blob::grow_array`] moves an array, worked out once for the blob
+/// and its [`Measure`].
+struct Growth {
+    /// The end of the old elements.
+    old_end: usize,
+    /// Where the elements go.
+    to: usize,
+    /// The end of the moved and extra elements: the blob's new length.
+    end: usize,
+    /// How many elements the array holds then.
+    total: u32,
+}
+
+impl Growth {
+    /// The move of the `count` `size`-byte elements at `start`, in bytes
+    /// `len` long, to the end at `align` with `extra` after them; `None`
+    /// when they do not fit or an extra element is not `size` long.
+    fn of(
+        len: usize,
+        start: usize,
+        count: u32,
+        size: usize,
+        align: usize,
+        extra: &[(Vec<u8>, Option<usize>)],
+    ) -> Option<Self> {
+        if size == 0 {
+            return None;
+        }
+        let old = usize::try_from(count).ok()?;
+        let old_end = start.checked_add(old.checked_mul(size)?)?;
+        if old_end > len || extra.iter().any(|(bytes, _)| bytes.len() != size) {
+            return None;
+        }
+        let to = aligned(len, align);
+        let end = to.checked_add(old.checked_add(extra.len())?.checked_mul(size)?)?;
+        let total = count.checked_add(u32::try_from(extra.len()).ok()?)?;
+        Some(Self {
+            old_end,
+            to,
+            end,
+            total,
+        })
+    }
+}
+
+/// Builds in `out` a copy of `base` with `edits`, which run twice: on a
+/// measure first, then on a blob over `out` with room for the length the
+/// measure reached, so over an [`Output`](crate::resources::Output) the
+/// build takes one loan and moves nothing. `edits` must make the same edits
+/// both times; what it decides before it edits belongs outside it.
+#[doc(hidden)]
+pub fn sized(
+    out: impl Grow,
+    base: &[u8],
+    mut edits: impl FnMut(&mut dyn Draft) -> Option<()>,
+) -> Option<()> {
+    let mut measure = Measure::new(base);
+    let len = edits(&mut measure).map_or(base.len(), |()| measure.len);
+    edits(&mut Blob::reserved(out, base, len))
 }
 
 /// Edits a copy of `base` with `edit` in a `Vec`, then hands the bytes to
 /// `out` in one reserve: one loan of the final length and one more copy,
-/// for a helper whose edits decide the room the next one needs.
+/// for a helper whose edits read back bytes they wrote, which a measure
+/// does not hold.
 pub(crate) fn built_apart(
     out: impl Grow,
     base: &[u8],
@@ -265,7 +429,7 @@ pub(crate) fn built_apart(
     let mut edited = Blob::new(base);
     edit(&mut edited)?;
     let edited = edited.into_bytes();
-    Blob::over_with_room(out, Room::new(&edited));
+    Blob::reserved(out, &edited, edited.len());
     Some(())
 }
 
@@ -410,17 +574,14 @@ impl<B: Grow> Blob<B> {
         relative: &[usize],
         extra: &[(Vec<u8>, Option<usize>)],
     ) -> Option<u32> {
-        if size == 0 {
-            return None;
-        }
         let (start, count) = self.array(field)?;
+        let Growth {
+            old_end,
+            to: new_start,
+            end,
+            total,
+        } = Growth::of(self.bytes().len(), start, count, size, align, extra)?;
         let old = usize::try_from(count).ok()?;
-        let old_end = start.checked_add(old.checked_mul(size)?)?;
-        if old_end > self.bytes().len() || extra.iter().any(|(bytes, _)| bytes.len() != size) {
-            return None;
-        }
-        let new_start = aligned(self.bytes().len(), align);
-        let end = new_start.checked_add(old.checked_add(extra.len())?.checked_mul(size)?)?;
         self.0.grow(end);
         let bytes = self.0.as_mut();
         if bytes.len() < end {
@@ -450,7 +611,6 @@ impl<B: Grow> Blob<B> {
                 }
             }
         }
-        let total = count.checked_add(u32::try_from(extra.len()).ok()?)?;
         self.set_array(field, new_start, total).then_some(count)
     }
 }

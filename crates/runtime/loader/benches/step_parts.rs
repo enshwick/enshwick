@@ -1,4 +1,4 @@
-//! What the post-step pays to reach its parts: 26 parts whose work does
+//! What the post-step pays to reach its parts: 27 parts whose work does
 //! nothing but may panic, each turned off alone by a panic. `direct` calls
 //! them one by one, each under its own guard; `guarded` calls them through
 //! references into each layer's list, each under its own guard; `walked`
@@ -13,7 +13,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick_loader::engine::fuse::Fuse;
 
 /// The parts the step calls, as many as the loader registers.
-const PARTS: usize = 26;
+const PARTS: usize = 27;
 
 /// What each part is given.
 struct Stepping {
@@ -62,7 +62,7 @@ fn direct(stepping: &Stepping) {
             $(let _ran = FUSES[$i].run("the post-step link", || work(stepping));)*
         };
     }
-    parts!(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25);
+    parts!(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26);
 }
 
 fn guarded(steps: &[&Step], stepping: &Stepping) {
@@ -115,6 +115,12 @@ fn step_parts(c: &mut Criterion) {
     group.bench_function("walked_by_part", |b| {
         b.iter(|| walked_by_part(black_box(&STEPS), black_box(&stepping)));
     });
+    #[cfg(all(windows, feature = "test"))]
+    {
+        let mut idle = enshwick_loader::bench_waypoint_idle_step();
+        assert!(idle(), "nothing watches the waypoints without a loader");
+        group.bench_function("waypoint_step_idle", |b| b.iter(&mut idle));
+    }
     group.finish();
 }
 

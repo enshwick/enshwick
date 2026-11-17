@@ -920,6 +920,7 @@ abi::Event::TERRAIN_PAGE_LOADED
 abi::Event::TERRAIN_PAGE_UNLOADED
 abi::Event::TICKED
 abi::Event::VOXELS_CHANGED
+abi::Event::WAYPOINT_CHANGED
 abi::Event::WORLD_LOADED
 abi::Event::WORLD_SAVED
 abi::Event::WORLD_SAVING
@@ -1241,6 +1242,7 @@ abi::HostApi::ui_markers
 abi::HostApi::ui_widget
 abi::HostApi::use_content
 abi::HostApi::voxel_read
+abi::HostApi::waypoint
 abi::HostApi::weather_at
 abi::HostApi::weather_fronts
 abi::HostApi::workshop_recipes
@@ -2391,6 +2393,15 @@ abi::VoxelWrite::voxels
 abi::WINDOW_CLOSE
 abi::WINDOW_SHOW
 abi::WINDOW_UPDATE
+abi::WaypointData
+abi::WaypointData::BORN
+abi::WaypointData::EMPTY
+abi::WaypointData::entity
+abi::WaypointData::header
+abi::WaypointData::key
+abi::WaypointData::position
+abi::WaypointData::reserved_tail
+abi::WaypointData::set
 abi::WeatherFront
 abi::WeatherFront::BLIZZARD
 abi::WeatherFront::BORN

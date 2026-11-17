@@ -150,6 +150,65 @@ impl Event {
     /// a write still waiting when a hosted game ends is heard as dropped
     /// then. The name is enshwick's. Server only.
     pub const PROGRESS_WRITTEN: Self = Self(26);
+    /// A player online set, moved or cleared the waypoint all players see;
+    /// data is a [`WaypointData`]. The loader looks at the waypoints every
+    /// 100 ms while a mod subscribed, on the server's game thread after the
+    /// step: a player's first look, as at a join, only notes the waypoint,
+    /// and one set outside the map's frame raises nothing, though a move
+    /// back from there does. A mod's waypoint handler hears it. The name
+    /// is enshwick's. Server only. ABI 12.16.
+    pub const WAYPOINT_CHANGED: Self = Self(27);
+}
+
+/// The data of [`Event::WAYPOINT_CHANGED`], and what
+/// [`HostApi::waypoint`](super::HostApi::waypoint) reads now.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, WaypointData};
+///
+/// let moved = WaypointData {
+///     header: Header::of::<WaypointData>(),
+///     key: enshwick::PlayerKey::new(7),
+///     entity: enshwick::Entity(2),
+///     position: [12.5, 3.0, -7.25],
+///     set: 1,
+///     reserved_tail: 0,
+/// };
+/// assert_eq!(moved.set, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct WaypointData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The player's account; 0 when the loader answers for an entity no
+    /// player online holds.
+    pub key: PlayerKey,
+    /// Their character.
+    pub entity: Entity,
+    /// Where the waypoint is, in metres, while `set` is 1; zero otherwise.
+    pub position: Metres,
+    /// 1 while the waypoint is set, 0 once it is cleared or for an entity
+    /// without one.
+    pub set: u32,
+    /// Zero.
+    pub reserved_tail: u32,
+}
+
+impl_headed!(WaypointData);
+
+impl WaypointData {
+    /// No waypoint, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        key: PlayerKey::new(0),
+        entity: Entity(0),
+        position: [0.0; 3],
+        set: 0,
+        reserved_tail: 0,
+    };
 }
 
 /// The data of the `PlayerDied` event.

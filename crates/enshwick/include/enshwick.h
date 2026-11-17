@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 15
+#define ENSHWICK_ABI_MINOR 16
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1781,6 +1781,14 @@ typedef uint32_t EnshwickEvent;
 // a write still waiting when a hosted game ends is heard as dropped
 // then. The name is enshwick's. Server only.
 #define EnshwickEvent_PROGRESS_WRITTEN 26
+// A player online set, moved or cleared the waypoint all players see;
+// data is a `EnshwickWaypointData`. The loader looks at the waypoints every
+// 100 ms while a mod subscribed, on the server's game thread after the
+// step: a player's first look, as at a join, only notes the waypoint,
+// and one set outside the map's frame raises nothing, though a move
+// back from there does. A mod's waypoint handler hears it. The name
+// is enshwick's. Server only. ABI 12.16.
+#define EnshwickEvent_WAYPOINT_CHANGED 27
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -3499,6 +3507,25 @@ typedef struct EnshwickRespawnPointInfo {
 #define EnshwickRespawnPointInfo_NO_RESPAWN 3
 // A kind the loader does not know on this build.
 #define EnshwickRespawnPointInfo_OTHER UINT32_MAX
+
+// The data of `EnshwickEvent_WAYPOINT_CHANGED`, and what
+// `EnshwickHostApi.waypoint` reads now.
+typedef struct EnshwickWaypointData {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The player's account; 0 when the loader answers for an entity no
+  // player online holds.
+  EnshwickPlayerKey key;
+  // Their character.
+  EnshwickEntity entity;
+  // Where the waypoint is, in metres, while `set` is 1; zero otherwise.
+  EnshwickMetres position;
+  // 1 while the waypoint is set, 0 once it is cleared or for an entity
+  // without one.
+  uint32_t set;
+  // Zero.
+  uint32_t reserved_tail;
+} EnshwickWaypointData;
 
 
 // A player about to interact with an entity, as
@@ -7019,6 +7046,18 @@ typedef struct EnshwickHostApi {
                                       uint32_t *out,
                                       uint32_t capacity,
                                       uint32_t *count);
+  // Writes to `out` the waypoint all players see that the character
+  // `entity` has set now, read as `EnshwickEvent_WAYPOINT_CHANGED`
+  // reads it: `set` 0 while it is off or for an entity without one, and
+  // `key` 0 when no player online plays `entity`. `out` is the caller's,
+  // at least a `EnshwickHeader` and writable for the size its header states;
+  // `EnshwickStatus_BAD_ARGS` for a null or smaller one. On the server's game
+  // thread at a quiet moment (`EnshwickStatus_WRONG_THREAD` elsewhere or
+  // inside a step); `EnshwickStatus_UNAVAILABLE` before a world runs or on a
+  // build whose reflection lacks the waypoint. ABI 12.16.
+  EnshwickStatus (*waypoint)(EnshwickModHandle me,
+                             EnshwickEntity entity,
+                             struct EnshwickWaypointData *out);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7481,7 +7520,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1776, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1784, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7704,6 +7743,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, respawn_point) == 1744, "offset
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_respawn_point) == 1752, "offset of HostApi.set_respawn_point");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buff_type_add) == 1760, "offset of HostApi.buff_type_add");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, damage_causes_off) == 1768, "offset of HostApi.damage_causes_off");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, waypoint) == 1776, "offset of HostApi.waypoint");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -8412,6 +8452,14 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickVoxelWrite, min) == 8, "offset of VoxelW
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickVoxelWrite, size) == 20, "offset of VoxelWrite.size");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickVoxelWrite, voxels) == 32, "offset of VoxelWrite.voxels");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickVoxelWrite, count) == 40, "offset of VoxelWrite.count");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickWaypointData) == 56, "size of WaypointData");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickWaypointData) == 8, "alignment of WaypointData");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickWaypointData, header) == 0, "offset of WaypointData.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickWaypointData, key) == 8, "offset of WaypointData.key");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickWaypointData, entity) == 16, "offset of WaypointData.entity");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickWaypointData, position) == 24, "offset of WaypointData.position");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickWaypointData, set) == 48, "offset of WaypointData.set");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickWaypointData, reserved_tail) == 52, "offset of WaypointData.reserved_tail");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickWeatherFront) == 72, "size of WeatherFront");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickWeatherFront) == 8, "alignment of WeatherFront");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickWeatherFront, header) == 0, "offset of WeatherFront.header");

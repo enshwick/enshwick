@@ -125,6 +125,7 @@ macro_rules! headed {
             VoxelEditRequest,
             VoxelRegion,
             VoxelWrite,
+            WaypointData,
             WeatherFront,
             WeatherSample,
             BuildingZoneCheck

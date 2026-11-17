@@ -15,6 +15,7 @@ pub(crate) mod environment;
 pub(crate) mod permissions;
 pub(crate) mod saves;
 pub(crate) mod transactions;
+pub(crate) mod waypoints;
 
 /// What the installed fake's world answers and has recorded.
 #[derive(Default)]
@@ -58,6 +59,8 @@ pub(crate) struct WorldState {
     pub(crate) stops: u8,
     /// The fog uncovers the mod sent: player, centre and radius.
     pub(crate) uncovers: Vec<(enshwick_core::PlayerKey, [f32; 2], f32)>,
+    /// The waypoints at the watcher's last look.
+    pub(crate) waypoints: waypoints::Watched,
     /// Notices the mod showed: account key and text.
     pub(crate) notices: Vec<(enshwick_core::PlayerKey, String)>,
     /// The clock `time_of_day` writes, settable while installed.

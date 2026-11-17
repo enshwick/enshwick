@@ -24,9 +24,9 @@ pub(crate) struct FakeCommands {
     /// first: account key and window id.
     #[cfg(feature = "unstable")]
     pub(crate) pending: Vec<(u64, String)>,
-    /// Each map holder's waypoint at the last look: account key and place.
+    /// Each player's waypoint as the maps' watcher saw it last.
     #[cfg(feature = "unstable")]
-    pub(crate) waypoints: Vec<(u64, [f64; 3])>,
+    pub(crate) waypoints: enshwick_base::__internal::waypoints::Waypoints,
 }
 
 #[cfg(feature = "unstable")]

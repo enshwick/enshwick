@@ -12,6 +12,7 @@ use crate::game_events::CraftRecipeEvent;
 use crate::{Entity, Host, RecipeId};
 
 mod builds;
+pub mod waypoints;
 
 pub use crate::game_events::notify::NotifyLayout;
 pub use builds::{

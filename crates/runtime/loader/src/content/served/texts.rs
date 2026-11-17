@@ -273,6 +273,7 @@ fn link_texts(loader: &Loader) -> usize {
 /// Readies the text lookup for its benchmark: one mod text with tag 7, an
 /// English text pool and a stand-in for the game's lookup. The closure runs
 /// one lookup of a tag and returns the out record's first word.
+#[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_text_lookup() -> impl FnMut(u32) -> u64 {
     /// Stands in for the game's lookup: answers nothing.

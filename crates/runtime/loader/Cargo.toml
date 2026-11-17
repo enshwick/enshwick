@@ -63,6 +63,11 @@ windows-sys = { workspace = true, features = [
 [target.'cfg(loom)'.dependencies]
 loom = { version = "0.7.2", default-features = false }
 
+[features]
+## `test`: what the benchmarks need and the shipped DLL leaves out, such as
+## a served build of a mod's patches without a running loader.
+test = []
+
 [dev-dependencies]
 criterion.workspace = true
 # The discovery tests build mods against `crates/enshwick` by path.
@@ -143,6 +148,7 @@ harness = false
 [[bench]]
 name = "content_detours"
 harness = false
+required-features = ["test"]
 
 [[bench]]
 name = "client_build"

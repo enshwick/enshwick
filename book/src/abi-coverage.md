@@ -259,3 +259,4 @@ names every entry of the golden layout once, in that order.
 | `set_respawn_point` | game | — | with a player |
 | `buff_type_add` | game | — | client |
 | `damage_causes_off` | loader | — | — |
+| `waypoint` | game | — | with a player |

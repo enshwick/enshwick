@@ -22,8 +22,8 @@ use crate::abi::{
     StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn, SurvivorLookupFn,
     SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo,
     TickHandle, TransactionInfo, TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn,
-    UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel, WeatherFront,
-    WeatherSample,
+    UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel, WaypointData,
+    WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2347,6 +2347,17 @@ pub struct HostApi {
     /// thread. ABI 12.14.
     pub damage_causes_off:
         extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
+    /// Writes to `out` the waypoint all players see that the character
+    /// `entity` has set now, read as [`Event::WAYPOINT_CHANGED`](super::Event::WAYPOINT_CHANGED)
+    /// reads it: `set` 0 while it is off or for an entity without one, and
+    /// `key` 0 when no player online plays `entity`. `out` is the caller's,
+    /// at least a [`Header`] and writable for the size its header states;
+    /// [`Status::BAD_ARGS`] for a null or smaller one. On the server's game
+    /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
+    /// inside a step); [`Status::UNAVAILABLE`] before a world runs or on a
+    /// build whose reflection lacks the waypoint. ABI 12.16.
+    pub waypoint:
+        extern "system" fn(me: ModHandle, entity: Entity, out: *mut WaypointData) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2576,5 +2587,6 @@ const _: () = {
     assert!(offset_of!(HostApi, set_respawn_point) == 24 + 216 * 8);
     assert!(offset_of!(HostApi, buff_type_add) == 24 + 217 * 8);
     assert!(offset_of!(HostApi, damage_causes_off) == 24 + 218 * 8);
-    assert!(size_of::<HostApi>() == 24 + 219 * 8);
+    assert!(offset_of!(HostApi, waypoint) == 24 + 219 * 8);
+    assert!(size_of::<HostApi>() == 24 + 220 * 8);
 };

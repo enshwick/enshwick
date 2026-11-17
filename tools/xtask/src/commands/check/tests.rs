@@ -614,12 +614,26 @@ fn host_args_leave_out_windows_only_crates_only_off_windows() {
         package("api", "api", false),
         package("loader", "loader", true),
     ];
-    let base = ["--workspace", "--features", TEST_FEATURE];
-    assert_eq!(host_args(&packages, true), base);
+    assert_eq!(
+        host_args(&packages, true),
+        ["--workspace", "--features", WINDOWS_TEST_FEATURE]
+    );
     assert_eq!(
         host_args(&packages, false),
-        [&base[..], &["--exclude", "loader"]].concat()
+        [
+            "--workspace",
+            "--features",
+            TEST_FEATURE,
+            "--exclude",
+            "loader"
+        ]
     );
+}
+
+#[test]
+fn the_windows_builds_lint_the_loader_s_benchmark_hooks_too() {
+    assert!(WINDOWS_TEST_FEATURE.starts_with(TEST_FEATURE));
+    assert!(WINDOWS_TEST_FEATURE.ends_with(",enshwick-loader/test"));
 }
 
 #[test]
