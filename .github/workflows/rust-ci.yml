@@ -3,15 +3,16 @@ name: Rust CI
 # `cargo xtask check` for a pull request, a merge queue entry or a push to
 # main, on GitHub-hosted runners, with the toolchain, the Windows SDK and the
 # build cached between runs; a push to main runs the full suite and fills the
-# caches pull requests start from. With `split` the host check, the doctests
-# and rustdoc, the Windows lint, the API's trybuild test, its stable surface
-# and cargo-semver-checks run as parallel jobs, the workspace's doctests and
-# rustdoc only in the merge queue, on main and with `full`, and the trybuild
-# test and the stable surface of a pull request only when its change needs
-# them. The Windows tests run natively on a Windows runner. Each part runs
-# through rust-ci-part.yml. Only the job `list` builds xtask, and only the
-# jobs whose work it lists wait for it. The job `check` sums them up and is
-# the required check.
+# caches pull requests start from. With `split` the host check, the lints of
+# each feature alone, the doctests and rustdoc, the Windows lint, the API's
+# trybuild test, its stable surface and cargo-semver-checks run as parallel
+# jobs, the workspace's doctests and rustdoc only in the merge queue, on main
+# and with `full`, and the trybuild test and the stable surface of a pull
+# request only when its change needs them. The Windows tests run natively on
+# a Windows runner, only those the change reaches. Each part runs through
+# rust-ci-part.yml. The job `list` asks xtask what the change needs beside
+# the parts, which start without waiting for it. The job `check` sums them
+# up and is the required check.
 
 on:
   workflow_call:
@@ -21,11 +22,11 @@ on:
         type: boolean
         default: false
       windows-tests:
-        description: Run the Windows-only crates' tests natively on a GitHub-hosted Windows runner.
+        description: Run natively on a GitHub-hosted Windows runner the tests of the Windows crates the change reaches, as the repository's `cargo xtask check --list windows-tests` names them.
         type: boolean
         default: true
       split:
-        description: Run the host check, the doctests and rustdoc, the Windows lint, the API's trybuild test, its stable surface and cargo-semver-checks as parallel jobs, and only the Windows tests, trybuild test and stable surface a change needs; the repository's `cargo xtask` must know `check --part` with the parts `stable-api`, `trybuild` and `semver`, `check --semver` and `check --list` with `windows-tests` and `parts`.
+        description: Run the host check, the lints of each feature alone, the doctests and rustdoc, the Windows lint, the API's trybuild test, its stable surface and cargo-semver-checks as parallel jobs, and only the trybuild test and stable surface a change needs; the repository's `cargo xtask` must know `check --part` with the parts `features`, `stable-api`, `trybuild` and `semver`, `check --semver` and `check --list parts`.
         type: boolean
         default: false
       semver:
@@ -40,6 +41,10 @@ env:
   # is full, and entries of pull requests and merge queue groups, which no
   # other run restores, would evict the ones every run starts from.
   STORE_CACHES: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+  # The parts only some changes need. The stable surface runs on pull
+  # requests too: it is the one build without `unstable`, so an item moved
+  # behind it, or code only unstable items use, breaks there alone.
+  API_PARTS: trybuild stable-api
 
 jobs:
   scope:
@@ -53,6 +58,8 @@ jobs:
       BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || github.event.repository.default_branch) }}
       FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
     outputs:
+      base: ${{ steps.scope.outputs.base }}
+      full: ${{ steps.scope.outputs.full }}
       skip: ${{ steps.scope.outputs.skip }}
       proven: ${{ steps.scope.outputs.proven }}
       deny: ${{ steps.scope.outputs.deny }}
@@ -78,6 +85,10 @@ jobs:
           SPLIT: ${{ inputs.split }}
         run: |
           git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
+          {
+            echo "base=$BASE"
+            echo "full=$FULL"
+          } >> "$GITHUB_OUTPUT"
           reason=""
           proven=""
           if [ "$EVENT" = merge_group ]; then
@@ -120,8 +131,9 @@ jobs:
           fi
           echo "deny=$deny" >> "$GITHUB_OUTPUT"
 
-      # One runner per part through rust-ci-part.yml; the trybuild test and
-      # the stable surface wait for the job `list` in the job `api`.
+      # A pull request and a push to main run the trybuild test and the
+      # stable surface when the job `list` names them; any other event runs
+      # both here.
       - name: Parts
         id: parts
         env:
@@ -136,11 +148,15 @@ jobs:
           elif [ -n "$PROVEN" ]; then
             parts=(docs)
           else
-            parts=(host windows-lint)
+            parts=(host features windows-lint)
             # The workspace's doctests and rustdoc run in the merge queue, on
             # main and in the full suite, which keeps the pull request lane
             # short.
             if [ "$EVENT" != pull_request ] || [ "$FULL" = true ]; then parts+=(docs); fi
+            if [ "$EVENT" != pull_request ] && [ "$EVENT" != push ]; then
+              read -ra api <<< "$API_PARTS"
+              parts+=("${api[@]}")
+            fi
             # A pull request also fuzzes, briefly, the targets its change
             # reaches; a push to main fuzzes every target and fills the fuzz
             # build cache pull requests restore.
@@ -152,29 +168,24 @@ jobs:
   # What only the repository's xtask knows, built once and off the parts'
   # critical path: the API parts a pull request's change needs and the
   # packages whose Windows tests the change reaches. A push to main lists
-  # too, so the build cache pull requests restore holds xtask; the merge
-  # queue runs every API part. A listing that fails leaves every API part
-  # and every Windows test to run, so a broken xtask fails in the jobs that
-  # name the fault.
+  # too, so the build cache pull requests restore holds xtask. A failed API
+  # listing still runs every API part; any failed listing fails the job.
   list:
     needs: scope
-    if: inputs.split && needs.scope.outputs.skip == '' && needs.scope.outputs.proven == ''
+    if: >-
+      needs.scope.outputs.skip == '' && needs.scope.outputs.proven == '' &&
+      (inputs.windows-tests || (inputs.split && (github.event_name == 'pull_request' || github.event_name == 'push')))
     runs-on: ubuntu-26.04
     # A cold xtask build, after a toolchain bump.
     timeout-minutes: 15
     permissions:
       contents: read
     env:
-      BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || github.event.repository.default_branch) }}
-      FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
-      # The stable surface runs on pull requests too: it is the one build
-      # without `unstable`, so an item moved behind it, or code only
-      # unstable items use, breaks there alone.
-      API_PARTS: trybuild stable-api
+      BASE: ${{ needs.scope.outputs.base }}
+      FULL: ${{ needs.scope.outputs.full }}
     outputs:
       api: ${{ steps.listing.outputs.api }}
       windows: ${{ steps.listing.outputs.windows }}
-      windows-listed: ${{ steps.listing.outputs.windows-listed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -210,7 +221,7 @@ jobs:
       # listing as an empty one.
       - name: The API parts the change needs
         id: api
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        if: inputs.split && (github.event_name == 'pull_request' || github.event_name == 'push')
         continue-on-error: true
         shell: bash
         run: |
@@ -241,20 +252,27 @@ jobs:
           WINDOWS_OUTCOME: ${{ steps.windows.outcome }}
           WINDOWS: ${{ steps.windows.outputs.tests }}
         run: |
-          api=$API_PARTS
-          if [ "$API_OUTCOME" = success ]; then api=$API; fi
+          case $API_OUTCOME in
+            success) api=$API ;;
+            skipped) api="" ;;
+            *) api=$API_PARTS ;;
+          esac
           read -ra parts <<< "$api"
-          listed=false
-          if [ "$WINDOWS_OUTCOME" = success ]; then listed=true; fi
           {
             echo "API parts: ${api:-none}"
-            if [ "$listed" = true ]; then echo "Windows tests: ${WINDOWS:-none}"; else echo "Windows tests: every crate that has them"; fi
+            echo "Windows tests: ${WINDOWS:-none}"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           {
             echo "api=$(jq -cn '$ARGS.positional' --args "${parts[@]}")"
             echo "windows=$WINDOWS"
-            echo "windows-listed=$listed"
           } >> "$GITHUB_OUTPUT"
+          failed=()
+          if [ "$API_OUTCOME" = failure ]; then failed+=("the API parts (all of them run)"); fi
+          if [ "$WINDOWS_OUTCOME" = failure ]; then failed+=("the Windows tests"); fi
+          if [ ${#failed[@]} != 0 ]; then
+            echo "::error::cargo xtask check --list failed for ${failed[*]}; see that step's log"
+            exit 1
+          fi
 
   part:
     name: part (${{ matrix.part }})
@@ -269,15 +287,17 @@ jobs:
     uses: ./.github/workflows/rust-ci-part.yml
     with:
       part: ${{ matrix.part }}
-      full: ${{ inputs.full }}
+      base: ${{ needs.scope.outputs.base }}
+      full: ${{ needs.scope.outputs.full == 'true' }}
       semver: ${{ inputs.semver }}
       deny: ${{ needs.scope.outputs.deny == 'true' }}
 
-  # The parts the job `list` names.
   api:
-    name: part (${{ matrix.part }})
-    needs: list
-    if: needs.list.outputs.api != '[]'
+    name: api (${{ matrix.part }})
+    needs: [scope, list]
+    # A failed listing still names the API parts it falls back to.
+    if: >-
+      !cancelled() && needs.list.outputs.api != '' && needs.list.outputs.api != '[]'
     permissions:
       contents: read
     strategy:
@@ -287,19 +307,15 @@ jobs:
     uses: ./.github/workflows/rust-ci-part.yml
     with:
       part: ${{ matrix.part }}
-      full: ${{ inputs.full }}
+      base: ${{ needs.scope.outputs.base }}
+      full: ${{ needs.scope.outputs.full == 'true' }}
       semver: ${{ inputs.semver }}
 
-  # The tests of the crates marked `windows-tests` or `windows-only`, natively
-  # on Windows. With `split` the job `list` names the ones a change touches,
-  # and the job starts only when it names one; without, or when the listing
-  # failed, every such crate of the workspace runs.
+  # The tests of the crates marked `windows-tests` or `windows-only` that the
+  # job `list` names, natively on Windows.
   windows:
-    needs: [scope, list]
-    if: >-
-      !cancelled() && inputs.windows-tests && needs.scope.result == 'success' &&
-      needs.scope.outputs.skip == '' && needs.scope.outputs.proven == '' &&
-      (needs.list.outputs.windows-listed != 'true' || needs.list.outputs.windows != '')
+    needs: list
+    if: needs.list.outputs.windows != ''
     runs-on: windows-2025
     timeout-minutes: 45
     permissions:
@@ -330,27 +346,10 @@ jobs:
           key: windows
           save-if: ${{ env.STORE_CACHES }}
 
-      - name: Windows tests to run
-        id: list
-        env:
-          LISTED: ${{ needs.list.outputs.windows-listed }}
-          LISTED_TESTS: ${{ needs.list.outputs.windows }}
-        run: |
-          if [ "$LISTED" = true ]; then
-            tests=$LISTED_TESTS
-          else
-            tests=$(cargo metadata --no-deps --format-version 1 | jq -r \
-              '.packages[] | select(.metadata.xtask["windows-tests"] == true or .metadata.xtask["windows-only"] == true) | .name' |
-              xargs)
-          fi
-          echo "Windows tests: ${tests:-none}"
-          echo "tests=$tests" >> "$GITHUB_OUTPUT"
-
       # One test thread: the hook and patch tests share the process.
       - name: Windows tests
-        if: steps.list.outputs.tests != ''
         env:
-          TESTS: ${{ steps.list.outputs.tests }}
+          TESTS: ${{ needs.list.outputs.windows }}
         run: |
           packages=()
           for package in $TESTS; do packages+=(-p "$package"); done

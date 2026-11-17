@@ -4,9 +4,9 @@
 //! Nothing runs when no package changed since the branch left `origin/main`.
 //! Otherwise the tree's own rules run ([`crate::check`]), then clippy and
 //! rustdoc over the workspace, where unchanged packages are already fresh,
-//! clippy of each checked package with none and each one of its features
-//! ([`features`]), and nextest and the doctests run for the changed packages and every
-//! package that depends on them; a local check leaves the widest part of
+//! and nextest and the doctests run for the changed packages and every
+//! package that depends on them, after clippy of each checked package with
+//! none and each one of its features ([`features`], a part of its own in CI); a local check leaves the widest part of
 //! that to CI ([`affected::Lane`]) and runs the tests a wide change only
 //! reaches one process per binary ([`in_process`]). Off Windows the workspace is also
 //! linted for Windows through `cargo xwin`, beside the host checks.
@@ -354,6 +354,9 @@ pub(crate) enum Part {
     /// fmt with `--all`, clippy, nextest and cargo-deny for the host, and the
     /// repository's own checks.
     Host,
+    /// clippy of each checked package with none and each one of its
+    /// features alone, for the host ([`features`]).
+    Features,
     /// The doctests and the workspace rustdoc, for the host.
     Docs,
     /// The API crate's stable-surface checks ([`stable_api_steps`]): a
@@ -377,12 +380,14 @@ pub(crate) enum Part {
 }
 
 impl Part {
-    /// The parts that run when none is named: the host check, the docs, the
-    /// stable surface, the Windows lint, the trybuild test and semver-checks,
-    /// and the Windows tests with `--all` or `--windows`.
+    /// The parts that run when none is named: the host check, the lints of
+    /// each feature alone, the docs, the stable surface, the Windows lint,
+    /// the trybuild test and semver-checks, and the Windows tests with
+    /// `--all` or `--windows`.
     fn every(windows_tests: bool) -> Vec<Self> {
         let mut every = vec![
             Self::Host,
+            Self::Features,
             Self::Docs,
             Self::StableApi,
             Self::WindowsLint,
@@ -403,6 +408,7 @@ impl Part {
             Self::Trybuild => touches(scope, FACADE) && !wide(scope),
             Self::StableApi => stable_api_due(scope) && !wide(scope),
             Self::Host
+            | Self::Features
             | Self::Docs
             | Self::WindowsLint
             | Self::WindowsTests
@@ -914,7 +920,14 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     });
     let workspace = host_args(packages, on_windows);
     let stable = stable_api(packages);
-    let mut host_steps = host_steps(
+    // The feature lints go first: they are cheap, and the first failing
+    // step ends the host checks.
+    let mut host_run = if parts.contains(&Part::Features) {
+        features::steps(scope, packages, host_ok)
+    } else {
+        Vec::new()
+    };
+    host_run.extend(host_steps(
         scope,
         (&workspace, &stable),
         flags,
@@ -922,10 +935,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         &doctests,
         full,
         parts,
-    );
-    if parts.contains(&Part::Host) {
-        host_steps.extend(features::steps(scope, packages, host_ok));
-    }
+    ));
     // Off Windows the whole workspace is also linted for Windows, where the
     // `cfg(windows)` code builds.
     let windows = (!on_windows && flags.0 && parts.contains(&Part::WindowsLint)).then(|| {
@@ -950,7 +960,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     thread::scope(|scope| {
         let windows = windows.as_ref().map(|step| scope.spawn(|| step.run(true)));
         // The first failing host step ends the host checks.
-        let host_passed = host_steps.iter().all(|step| step.run(false))
+        let host_passed = host_run.iter().all(|step| step.run(false))
             && (separate.is_empty() || in_process::run(&separate, &workspace));
         let windows_passed = windows.is_none_or(|handle| handle.join().unwrap_or(false));
         host_passed && windows_passed

@@ -3,7 +3,8 @@ use std::collections::BTreeSet;
 use super::*;
 
 #[test]
-fn the_docs_stable_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
+fn the_features_docs_stable_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
+    assert_eq!(Part::from_str("features", false), Ok(Part::Features));
     assert_eq!(Part::from_str("docs", false), Ok(Part::Docs));
     assert_eq!(Part::from_str("stable-api", false), Ok(Part::StableApi));
     assert_eq!(
@@ -12,7 +13,13 @@ fn the_docs_stable_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named
     );
     assert_eq!(Part::from_str("trybuild", false), Ok(Part::Trybuild));
     assert_eq!(Part::from_str("semver", false), Ok(Part::Semver));
-    for part in [Part::Docs, Part::StableApi, Part::Trybuild, Part::Semver] {
+    for part in [
+        Part::Features,
+        Part::Docs,
+        Part::StableApi,
+        Part::Trybuild,
+        Part::Semver,
+    ] {
         assert!(Part::every(false).contains(&part), "{part:?}");
         assert!(Part::every(true).contains(&part), "{part:?}");
     }

@@ -12,6 +12,10 @@ on:
         description: The xtask part, or `all` for the whole check.
         type: string
         required: true
+      base:
+        description: The commit or branch the change is checked against.
+        type: string
+        required: true
       full:
         description: Run the full suite instead of the packages a change touches.
         type: boolean
@@ -41,10 +45,8 @@ jobs:
     permissions:
       contents: read
     env:
-      # A merge queue entry is checked against the entry before it (its
-      # group's parent): only its own pull request's changes are new.
-      BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || github.event.repository.default_branch) }}
-      FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
+      BASE: ${{ inputs.base }}
+      FULL: ${{ inputs.full }}
       PART: ${{ inputs.part }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -82,12 +84,12 @@ jobs:
         with:
           path: ${{ runner.tool_cache }}/xwin
           key: xwin-${{ runner.os }}-0.23.1-v1
-      # clang of the toolchain's LLVM; the docs, stable-api, trybuild and
-      # semver parts install the host part's packages.
+      # clang of the toolchain's LLVM; the docs, features, stable-api,
+      # trybuild and semver parts install the host part's packages.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/apt-archives
-          key: apt-${{ runner.os }}-${{ (inputs.part == 'docs' || inputs.part == 'stable-api' || inputs.part == 'trybuild' || inputs.part == 'semver') && 'host' || inputs.part }}-v2
+          key: apt-${{ runner.os }}-${{ (inputs.part == 'docs' || inputs.part == 'features' || inputs.part == 'stable-api' || inputs.part == 'trybuild' || inputs.part == 'semver') && 'host' || inputs.part }}-v2
 
       - uses: ./.github/actions/setup-rust
         with:
