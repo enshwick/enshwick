@@ -188,6 +188,10 @@ pub fn server_name(name: &str, mods: usize) -> String {
 }
 
 /// A dedicated server's configuration, in its game folder.
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the running server reads its configuration")
+)]
 pub(crate) const SERVER_CONFIG: &str = "enshrouded_server.json";
 
 /// The `"name"` of an `enshrouded_server.json`.

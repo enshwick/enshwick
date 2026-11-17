@@ -40,6 +40,10 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
 
 /// The terrain table a server advertises across its terrain rules; `None`
 /// when it advertises none.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game's join check reads it")
+)]
 pub(crate) fn terrain_rules_value(reply: &[u8]) -> Option<String> {
     let parts: Vec<String> = (0..crate::base::advertise::TERRAIN_RULES)
         .map_while(|i| {
