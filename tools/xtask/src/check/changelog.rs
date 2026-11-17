@@ -133,6 +133,7 @@ mod tests {
             windows_only: false,
             windows_tests: false,
             stable_build: false,
+            features: Vec::new(),
         }
     }
 

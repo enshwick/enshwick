@@ -30,8 +30,9 @@ whose package has no unsafe code declares `#![forbid(unsafe_code)]`, only a
 dev-dependency turns on a crate's `test` feature, a package that builds a DLL
 names its version), the code rules clippy
 cannot express (ast-grep, from [`sgconfig.yml`](sgconfig.yml)), unused
-dependencies, clippy and the doctests, and the tests of the packages the
-change touches and of the packages that depend on them. Off Windows it also
+dependencies, clippy and the doctests, clippy of each package it checks with
+none of its features and with each one alone, and the tests of the packages
+the change touches and of the packages that depend on them. Off Windows it also
 lints the workspace for Windows through
 [cargo-xwin](https://github.com/rust-cross/cargo-xwin). Most of the loader runs
 only on Windows: off Windows its portable modules are tested on the host, and

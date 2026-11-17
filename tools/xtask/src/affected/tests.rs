@@ -13,6 +13,7 @@ fn package(name: &str, dir: &str, deps: &[&str]) -> Package {
         windows_only: false,
         windows_tests: false,
         stable_build: false,
+        features: Vec::new(),
     }
 }
 

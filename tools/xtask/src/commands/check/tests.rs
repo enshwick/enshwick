@@ -3,7 +3,8 @@ use std::collections::BTreeSet;
 use super::*;
 
 #[test]
-fn the_docs_stable_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
+fn the_features_docs_stable_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
+    assert_eq!(Part::from_str("features", false), Ok(Part::Features));
     assert_eq!(Part::from_str("docs", false), Ok(Part::Docs));
     assert_eq!(Part::from_str("stable-api", false), Ok(Part::StableApi));
     assert_eq!(
@@ -12,7 +13,13 @@ fn the_docs_stable_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named
     );
     assert_eq!(Part::from_str("trybuild", false), Ok(Part::Trybuild));
     assert_eq!(Part::from_str("semver", false), Ok(Part::Semver));
-    for part in [Part::Docs, Part::StableApi, Part::Trybuild, Part::Semver] {
+    for part in [
+        Part::Features,
+        Part::Docs,
+        Part::StableApi,
+        Part::Trybuild,
+        Part::Semver,
+    ] {
         assert!(Part::every(false).contains(&part), "{part:?}");
         assert!(Part::every(true).contains(&part), "{part:?}");
     }
@@ -524,6 +531,7 @@ fn package(name: &str, dir: &str, windows_only: bool) -> Package {
         windows_only,
         windows_tests: windows_only,
         stable_build: false,
+        features: Vec::new(),
     }
 }
 
@@ -546,6 +554,49 @@ fn the_test_filter_names_each_package() {
     let names = ["a".to_owned(), "b".to_owned()];
     assert_eq!(test_filter(names.iter()), "package(a) | package(b)");
     assert_eq!(test_filter([].iter()), "");
+}
+
+#[test]
+fn each_checked_package_is_linted_without_features_and_with_each_alone() {
+    let mut content = package("enshwick-content", "crates/api/content", false);
+    content.features = vec!["fake".to_owned(), "unstable".to_owned()];
+    let mut stub = package("enshwick-loader-stub", "crates/runtime/stub", true);
+    stub.features = vec!["trace".to_owned()];
+    let mut untouched = package("enshwick-world", "crates/api/world", false);
+    untouched.features = vec!["fake".to_owned()];
+    let packages = [
+        content,
+        stub,
+        untouched,
+        package("enshwick-abi", "crates/abi", false),
+    ];
+    let scope = Scope::Some {
+        code: ["enshwick-content", "enshwick-loader-stub", "enshwick-abi"]
+            .map(str::to_owned)
+            .into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: false,
+    };
+    let host_ok = |name: &String| name != "enshwick-loader-stub";
+    let lines: Vec<String> = features::steps(&scope, &packages, host_ok)
+        .iter()
+        .map(Step::line)
+        .collect();
+    let clippy = "cargo clippy --package enshwick-content --no-default-features";
+    assert_eq!(
+        lines,
+        [
+            format!("{clippy} -- -D warnings"),
+            format!("{clippy} --features fake -- -D warnings"),
+            format!("{clippy} --features unstable -- -D warnings"),
+        ]
+    );
+    assert_eq!(
+        features::steps(&Scope::All, &packages, |_| true).len(),
+        3 + 2 + 2
+    );
 }
 
 #[test]
