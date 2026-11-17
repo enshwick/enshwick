@@ -143,6 +143,7 @@ fn outside(me: ModHandle, id: &str) -> bool {
 
 /// Whether mod `me` declared the content id `guid` comes from, as the
 /// loader asks of every call that adds content by GUID.
+#[cfg(feature = "unstable")]
 pub(crate) fn declared(
     s: &crate::test::table::State,
     me: ModHandle,
