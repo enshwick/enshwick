@@ -49,7 +49,9 @@ these:
 - `position`, where, in metres;
 - `account`, the builder's account key, which stays the same when the player
   gets a new character. It is `None` (nil in Luau) where the loader cannot
-  tell, such as in a client's own prediction.
+  tell. That is in the prediction of a client that joined a server. It is
+  also on the server for a character made in the step under way, until the
+  next step.
 
 It answers a `BuildVerdict`:
 
@@ -108,9 +110,11 @@ The server's answer decides. A client that runs the mod too shows the cursor
 as not allowed, so give the same answer on both sides. Base it on what both
 know, the item and the place, or on
 [settings](settings.md#on-a-joined-server) the server sends. A client without
-the mod shows the placement as allowed, and the server places nothing. Only
-the server knows the account: a client's prediction gets `None`. So a filter
-that judges by account lets `None` pass, and the server's answer stands.
+the mod shows the placement as allowed, and the server places nothing. A
+client that joined a server does not know the account: its prediction gets
+`None`. So a filter that runs on both sides and judges by account lets `None`
+pass there, and the server's answer stands. A client that hosts the game gives
+its own prediction its player's account.
 
 ## Interactions
 

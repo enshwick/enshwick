@@ -40,10 +40,11 @@ mod hosted;
 pub(crate) mod tests;
 
 use game::{Game, Taken, Unopened};
-pub(crate) use hosted::is_host;
+pub use hosted::bench_own_account;
 use hosted::{Looped, client_hosts, hosted_step, loop_back, set_host, take_looped};
 #[cfg(test)]
 pub(crate) use hosted::{host_for_test, take_hosted, unhost_for_test};
+pub(crate) use hosted::{is_host, own_account};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

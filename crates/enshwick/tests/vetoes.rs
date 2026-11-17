@@ -131,6 +131,27 @@ mod tests {
     }
 
     #[test]
+    fn a_hosting_client_s_own_prediction_gives_build_filters_the_host_s_account() {
+        let guest = PlayerInfo::with_name(Entity(3), PlayerKey::new(8), 0, "Bob");
+        let loader = enshwick::test::FakeHost::new()
+            .side(enshwick::abi::Side::CLIENT)
+            .hosting(true)
+            .host_key(BANNED)
+            .player(guest)
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Picky)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert_eq!(
+            loader.build(&wall(40)),
+            Err(None),
+            "the host's character in its own world"
+        );
+        assert_eq!(loader.build(&wall(3)), Ok(()), "a guest keeps their own");
+    }
+
+    #[test]
     fn a_build_filter_runs_off_the_game_thread_where_world_reads_find_nothing() {
         let ann = PlayerInfo::with_name(Entity(2), BANNED, 0, "Ann");
         let loader = enshwick::test::FakeHost::new()

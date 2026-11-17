@@ -16,7 +16,8 @@
 //! cursor shows as not allowed. The builder's account comes from the copy of
 //! the player slots the loader takes before each server step
 //! ([`crate::engine::world::accounts`]), since world reads are refused on
-//! those threads.
+//! those threads; a client's own prediction is its local player's, so a
+//! client that hosts the game gives it its own player's account.
 
 use core::ffi::c_void;
 use core::ops::ControlFlow;
@@ -350,17 +351,22 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // item's static data, which starts with its `u32` id and stays loaded.
         unsafe { read_at::<u32>(info, 0) }
     };
-    let server = crate::engine::loader::loader()
+    let server_world = crate::engine::world::server_world();
+    let world = if crate::engine::loader::loader()
         .is_some_and(|loader| loader.side == enshwick_core::abi::Side::SERVER)
         // SAFETY: `system` is the cursor's system context, null or live, on
         // the thread running that system (the caller's contract), all
         // `is_world` asks for.
-        || unsafe { engine.is_world(system, crate::engine::world::server_world()) };
+        || unsafe { engine.is_world(system, server_world) }
+    {
+        CursorWorld::Server
+    } else if server_world != 0 {
+        CursorWorld::Client
+    } else {
+        CursorWorld::Unknown
+    };
+    let server = world == CursorWorld::Server;
     let character = enshwick_core::Entity(player);
-    let account = server
-        .then(|| crate::engine::world::accounts::account_of(character))
-        .flatten()
-        .unwrap_or_default();
     let mut reason = Str::new("");
     let call = BuildCheck {
         header: Header::of::<BuildCheck>(),
@@ -371,7 +377,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // starts with its 32.32 position, three `i64`.
         position: enshwick_core::ecs::metres(unsafe { read_at::<[i64; 3]>(transform.cast(), 0) }),
         reason: &raw mut reason,
-        account,
+        account: builder_account(world, character),
     };
     // SAFETY: `call.reason` points at `reason`, live on this stack for the
     // whole chain.
@@ -386,6 +392,37 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // call (the caller's contract) and the building systems read after it.
         unsafe { write_at(flags.cast(), 0, current | layout.no_permission) };
     }
+}
+
+/// Which world's cursor check runs, as far as the loader can tell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorWorld {
+    /// The server's world, which judges every player's placement.
+    Server,
+    /// A client's own world, while the server's world is known to be
+    /// another.
+    Client,
+    /// Not the server's world, but with no server world known to tell the
+    /// two apart, such as while a hosted game's server starts.
+    Unknown,
+}
+
+/// The account of `character`, whose cursor the check of `world` runs on;
+/// zero when unknown.
+fn builder_account(
+    world: CursorWorld,
+    character: enshwick_core::Entity,
+) -> enshwick_core::PlayerKey {
+    match world {
+        CursorWorld::Server => crate::engine::world::accounts::account_of(character),
+        // The client world checks only its local player's cursor: its
+        // `client_cursor` skips every row but the one its local player check
+        // passes, the check `player_ui` makes (client 26430625).
+        CursorWorld::Client => crate::base::carrier::own_account(),
+        // Perhaps the server's world misread: never a guest judged as the host.
+        CursorWorld::Unknown => None,
+    }
+    .unwrap_or_default()
 }
 
 /// The first of `filters` that refuses `call`, with its reason emptied
@@ -504,6 +541,31 @@ mod tests {
         assert!(
             off.as_deref().is_some_and(|r| r.starts_with(CRAFT_EVENT)),
             "{off:?}"
+        );
+    }
+
+    #[test]
+    fn a_hosting_client_s_own_prediction_gets_its_own_player_s_account() {
+        let _carrier = crate::base::carrier::tests::alone();
+        let local = enshwick_core::Entity(40);
+        assert_eq!(
+            builder_account(CursorWorld::Client, local),
+            enshwick_core::PlayerKey::default(),
+            "a client that hosts nothing"
+        );
+        crate::base::carrier::host_for_test(7);
+        let hosted = builder_account(CursorWorld::Client, local);
+        let unknown = builder_account(CursorWorld::Unknown, local);
+        crate::base::carrier::unhost_for_test();
+        assert_eq!(hosted, enshwick_core::PlayerKey(7));
+        assert_eq!(
+            unknown,
+            enshwick_core::PlayerKey::default(),
+            "no server world known to tell a guest's check from the host's"
+        );
+        assert_eq!(
+            builder_account(CursorWorld::Client, local),
+            enshwick_core::PlayerKey::default()
         );
     }
 

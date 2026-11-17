@@ -4,7 +4,7 @@
   and Luau, and `BuildCheck::account` appended to the ABI as minor 12.10. The
   loader copies each player's account before every server step, so a filter
   judges a player whose character changed from the next step, without a world
-  read. A client's own prediction gets no account, in the fake host too.
+  read.
 
 ### Fixed
 

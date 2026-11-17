@@ -533,7 +533,7 @@ pub(crate) extern "system" fn fog_uncover(
         }
         // As the loader: a client that hosts uncovers its own player's fog
         // itself; another player only when its client takes the messages.
-        let own = s.host.base.hosting && s.host.base.host_key == Some(player);
+        let own = s.host.base.own_key() == Some(player);
         if !own && !s.host.base.net_peers.contains(&player.get()) {
             return Status::UNAVAILABLE;
         }
@@ -702,7 +702,7 @@ pub(crate) extern "system" fn account_action(
             .any(|p| p.key == account && p.is_admin());
         match action {
             AccountActionType::UNBAN => s.world.banned.retain(|&banned| banned != account),
-            _ if admin || s.host.base.host_key == Some(account) => return Status::REFUSED,
+            _ if admin || s.host.base.own_key() == Some(account) => return Status::REFUSED,
             _ if online.is_none() => return Status::REFUSED,
             _ => {
                 if action == AccountActionType::BAN && !s.world.banned.contains(&account) {
@@ -738,7 +738,7 @@ pub(crate) extern "system" fn set_chat_mute(
             .players
             .iter()
             .any(|p| p.key == account && p.is_admin());
-        if muted == 1 && (admin || s.host.base.host_key == Some(account)) {
+        if muted == 1 && (admin || s.host.base.own_key() == Some(account)) {
             return Status::REFUSED;
         }
         if s.host.base.world_key.is_none() {

@@ -61,8 +61,10 @@ pub struct Placement {
     pub position: [f64; 3],
     /// The building player's account, which stays the same when the player
     /// gets a new character, so a filter judges the player without a world
-    /// read; `None` where the loader cannot tell, such as in a client's own
-    /// prediction.
+    /// read; `None` where the loader cannot tell: in the prediction of a
+    /// client that joined a server, in a hosting client's own prediction
+    /// until its server half finds the host's account, and on the server
+    /// for a character made in the step under way, until the next step.
     pub account: Option<PlayerKey>,
 }
 

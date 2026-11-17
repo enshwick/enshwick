@@ -60,7 +60,25 @@ pub(super) fn set_host(key: u64) {
 
 /// Whether `key` is the own player of this client that hosts the game.
 pub(crate) fn is_host(key: u64) -> bool {
-    key != 0 && client_hosts() && CARRIER.host_key.load(Ordering::Acquire) == key
+    own_account().is_some_and(|own| own.0 == key)
+}
+
+/// The account of this client's own player while it hosts the game, on
+/// any thread, without a lock; `None` on a dedicated server, on a client
+/// that hosts nothing and before the server half found its own player.
+pub(crate) fn own_account() -> Option<enshwick_core::PlayerKey> {
+    let key = CARRIER.host_key.load(Ordering::Acquire);
+    (key != 0 && client_hosts()).then_some(enshwick_core::PlayerKey(key))
+}
+
+/// What the own prediction of a client that joined a server pays to find
+/// it has no account, for its benchmark: the host key's load and the
+/// hosting check, which finds no server in the bench. A hosting client
+/// reads on to the loader's side, one more load and a compare.
+#[doc(hidden)]
+pub fn bench_own_account() -> impl FnMut() -> Option<enshwick_core::PlayerKey> {
+    set_host(7);
+    own_account
 }
 
 pub(super) fn loop_back(

@@ -328,8 +328,10 @@ pub struct BuildCheck {
     /// loader copies it before then, on that thread.
     pub reason: *mut Str,
     /// The building player's account, which a new character of the same
-    /// player keeps; 0 where the loader cannot tell, such as in a client's
-    /// own prediction. A mod reads it only where `header` covers it.
+    /// player keeps; 0 where the loader cannot tell, such as in the own
+    /// prediction of a client that joined a server. A hosting client's own
+    /// prediction gets its player's account. A mod reads it only where
+    /// `header` covers it.
     pub account: PlayerKey,
 }
 

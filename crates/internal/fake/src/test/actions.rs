@@ -178,8 +178,11 @@ impl Installed {
     /// else the reason the first refusing filter gave, if any. `call`'s own
     /// `reason` is not used; the fake host gives each filter a slot. A zero
     /// `account` becomes that of the player whose character `call` names,
-    /// as the loader fills it for the server's world; a client that does not
-    /// host keeps it zero, as in its own prediction. The filters run as on the game's worker
+    /// as the loader fills it for the server's world. A client's own
+    /// prediction runs on a character of its own world, which no server
+    /// player names: a client that hosts gives it the
+    /// [`host_key`](crate::test::FakeHost::host_key), its own player's, and
+    /// one that does not host keeps it zero. The filters run as on the game's worker
     /// threads, where world reads answer [`Status::WRONG_THREAD`](enshwick_core::abi::Status::WRONG_THREAD).
     ///
     /// # Errors
@@ -203,18 +206,17 @@ impl Installed {
     /// assert_eq!(loader.build(&wall), Ok(()));
     /// ```
     pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {
-        // shortcut: the loader finds a character made in the current server step only from the next step, and the fake has no steps, so a respawned character's account comes at once; model it if a mod test ever needs that gap.
+        // shortcut: the fake has no worlds or steps, so a hosting fake takes any character no player names for its own prediction, and a respawned character's account comes at once, where the loader gives a character made in the current server step none until the next step; model both if a mod test ever needs those gaps.
         let (filters, account) = table::with((Vec::new(), None), |s| {
-            let server = s.host.base.serving();
-            let account = s
-                .host
-                .base
-                .players
-                .iter()
-                .find(|p| p.entity == call.character);
+            let base = &s.host.base;
+            let server = base.serving();
+            let player = base.players.iter().find(|p| p.entity == call.character);
             (
                 s.actions.build_filters.clone(),
-                account.filter(|_| server).map(|p| p.key),
+                player
+                    .filter(|_| server)
+                    .map(|p| p.key)
+                    .or_else(|| base.own_key()),
             )
         });
         for filter in filters {
