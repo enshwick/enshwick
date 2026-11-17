@@ -748,7 +748,7 @@ fn host_steps(
     }
     if lint && run_host {
         steps.push(host(&["clippy", "--all-targets"]).then(&["--", "-D", "warnings"]));
-        // CI runs each part in a job of its own, so the host part never
+        // CI runs each part in a call of its own, so the host part never
         // runs the trybuild test, whatever other parts this command runs.
         let filter = match tests {
             Some("") => None,
