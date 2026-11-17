@@ -350,6 +350,15 @@ crate::engine::chains::chain_detour! {
 /// Writes the verb and the action of every row the reset of `ctx` holds
 /// whose object was placed from an item with a prompt.
 ///
+/// Its cost, timed live on client 26430625 hosting a world with two
+/// prompted objects (2026-11-17, release build): 840 to 900 runs a second
+/// of about 2 rows each, 330 to 400 ns a run and 150 to 200 ns a row
+/// (the game's own reset takes about 190 ns a run), so about 0.3 ms a
+/// second, 0.03% of a 60 Hz step. At the 15 rows a run seen elsewhere in
+/// a hosted world it stays near 0.2%, under the 1% at which a per-row
+/// cache would pay. Without a registered prompt neither this walk nor
+/// `prompt_site` links, so they cost nothing.
+///
 /// # Safety
 ///
 /// - `ctx` is null or the live query context the game passed to
@@ -449,6 +458,12 @@ crate::engine::mid::mid_handler! {
     /// The table's `ui.prompt_site` in `player_ui`, after the prompt's
     /// title and verb are stored and before a lock may put its reason in the
     /// verb's place: shows a mod's text there for its objects.
+    ///
+    /// It runs once a frame while any prompt shows and never otherwise.
+    /// Timed live on client 26430625 (2026-11-17, release build) at 108
+    /// frames a second: 440 ns a hit on a vanilla object, 365 ns on a
+    /// mod's object where it writes the text, about 40 µs a second, under
+    /// 0.01% of a 60 Hz step.
     fn prompt_site;
     fuse TEXT_FUSE, "the prompt's text";
     |registers| {
