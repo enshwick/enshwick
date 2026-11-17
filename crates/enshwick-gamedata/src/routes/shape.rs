@@ -26,6 +26,9 @@ use rustc_hash::FxHashMap;
 /// How many registers a shape can bind, `?1` to `?9`.
 const BINDS: usize = 9;
 
+/// What a memory operand's displacement may be written as.
+const DISPLACEMENTS: &str = "a displacement is `*`, `?`, `{id}` or a hexadecimal number";
+
 /// What a memory operand's displacement must be.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Disp {
@@ -500,13 +503,9 @@ fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Resul
                     Some(id) => Disp::Entry(id.to_owned()),
                     None => {
                         let exact = hex(other)
-                        .and_then(|v| i64::try_from(v).ok())
-                        .filter(|&v| v != 0)
-                        .ok_or_else(|| {
-                            ShapeError(format!(
-                                "{other:?}: a displacement is `*`, `?`, `{{id}}` or a hexadecimal number"
-                            ))
-                        })?;
+                            .and_then(|v| i64::try_from(v).ok())
+                            .filter(|&v| v != 0)
+                            .ok_or_else(|| ShapeError(format!("{other:?}: {DISPLACEMENTS}")))?;
                         Disp::Exact(if negative { -exact } else { exact })
                     }
                 },

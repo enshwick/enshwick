@@ -20,8 +20,14 @@
   no longer the n-th call.
 - The compatibility reports of the kept builds hold the changed routes.
 
+### Fixed
+
+- A shape's `{id}` for a constant route stands for that route's value or
+  the table's constant, never for a symbol of the same name.
+
 ### Removed
 
 - The routes of each builder's first text read
-  (`ui.attribute_rows_<group>_text`) and of the breakdown flag
-  (`ui.attribute_row_breakdown_set`, `ui.attribute_row_breakdown_row`).
+  (`ui.attribute_rows_<group>_text`), of the breakdown flag
+  (`ui.attribute_row_breakdown_set`, `ui.attribute_row_breakdown_row`) and
+  of the row list's count (`ui.attribute_list_filled`).

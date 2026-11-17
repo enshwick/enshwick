@@ -174,7 +174,7 @@ pub(super) const ATTRIBUTE_SYMBOLS: &[(&str, &str, u64)] = &[
 /// with -1 (`doAttributesSubmenu`, its row widget 0x140b8f0b0, value text
 /// 0x140d486c0 and push 0x140d6bd60 in the decompiler on client 26430625,
 /// 2026-11-16 and 2026-11-17).
-pub(super) const ATTRIBUTE_ROW_READS: [(&str, u64); 16] = [
+pub(super) const ATTRIBUTE_ROW_READS: [(&str, u64); 15] = [
     ("ui.attribute_row_hovered", 0x3a8),
     ("ui.attribute_row_hovered_tooltip", 0x3c0),
     ("ui.attribute_row_hovered_flag", 0x628),
@@ -190,7 +190,6 @@ pub(super) const ATTRIBUTE_ROW_READS: [(&str, u64); 16] = [
     ("ui.attribute_row_percent", 0x298),
     ("ui.attribute_row_plus", 0x299),
     ("ui.attribute_list_rows", 0),
-    ("ui.attribute_list_filled", 8),
 ];
 
 /// Per group of the Character screen, where reflection puts the text that

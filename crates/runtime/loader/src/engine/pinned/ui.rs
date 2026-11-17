@@ -7,7 +7,6 @@ pub(crate) const ACTION_EXTENT: Constant = Constant::new("ui.action_extent");
 pub(crate) const ACTION_NEW: Symbol = Symbol::new("ui.action_new");
 pub(crate) const ACTION_NODE: Constant = Constant::new("ui.action_node");
 pub(crate) const ACTION_QUERY: Symbol = Symbol::new("ui.action_query");
-pub(crate) const ATTRIBUTE_LIST_FILLED: Constant = Constant::new("ui.attribute_list_filled");
 pub(crate) const ATTRIBUTE_LIST_ROWS: Constant = Constant::new("ui.attribute_list_rows");
 pub(crate) const ATTRIBUTE_ROW_CELL: Constant = Constant::new("ui.attribute_row_cell");
 pub(crate) const ATTRIBUTE_ROW_CELL_SECOND: Constant =

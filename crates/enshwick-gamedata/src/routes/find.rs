@@ -293,13 +293,17 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
     /// The value `name` stands for in a shape: what the constant route of
     /// that id finds, else the table's constant, else the address of the
     /// symbol [`Self::address`] gives. A route that finds another constant
-    /// than the table holds stands for nothing.
+    /// than the table holds stands for nothing, and the id of a constant
+    /// route never stands for a symbol.
     fn value(&mut self, name: &str) -> Option<u64> {
         let pinned = self.known.constant(name);
         if let Ok(i) = self.routes.binary_search_by(|r| r.id.as_str().cmp(name))
-            && let Some(Routed::Constant(value)) = self.resolve(i)
+            && (self.routes[i].take.is_constant() || self.routes[i].finds_constant())
         {
-            return pinned.is_none_or(|p| p == value).then_some(value);
+            return match self.resolve(i) {
+                Some(Routed::Constant(value)) => pinned.is_none_or(|p| p == value).then_some(value),
+                _ => pinned,
+            };
         }
         pinned.or_else(|| Some(self.code.base() + u64::from(self.address(name)?)))
     }

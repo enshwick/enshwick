@@ -90,12 +90,12 @@ const FLAG: u8 = 1;
 /// The game's text as three words: its bytes, their length and their hash.
 type UiTextWords = [u64; 3];
 
-/// A row list's head: its rows and how many (client 26430625, decompiler).
+/// A row list's head, as far as the loader reads it: its rows' storage
+/// (client 26430625, decompiler).
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct List {
     rows: u64,
-    filled: u64,
 }
 
 /// What the rows need of this build.
@@ -206,19 +206,41 @@ pub(super) fn link(loader: &Loader) {
     };
     let groups = Box::leak(Box::new(groups));
     let _first = LINKED.set(Linked { push, groups });
-    let linked = groups
-        .iter()
-        .zip(&DETOURS)
-        .zip(pinned::ui::ATTRIBUTE_ROWS)
-        .filter(|((kinds, _), _)| !kinds.is_empty())
-        .filter(|&((_, &(detour, next, fuse)), builder)| {
-            loader.link_feature(fuse, Target::Pinned(builder), next, detour, HookFlags::NONE)
-        })
-        .count();
+    let builders = pinned::ui::ATTRIBUTE_ROWS;
+    let shared = shared(&builders.map(|builder| loader.address(builder)));
+    let mut linked = 0;
+    for (at, (kinds, &(detour, next, fuse))) in groups.iter().zip(&DETOURS).enumerate() {
+        if kinds.is_empty() {
+            continue;
+        }
+        if shared[at] {
+            loader.fuse_off(fuse, builders[at].id(), SHARED);
+        } else if loader.link_feature(
+            fuse,
+            Target::Pinned(builders[at]),
+            next,
+            detour,
+            HookFlags::NONE,
+        ) {
+            linked += 1;
+        }
+    }
     crate::log!(
         INFO,
         "interface: stat rows in {linked} groups of the Character screen"
     );
+}
+
+/// Why a group whose builder is another group's too shows no rows.
+const SHARED: &str = "is the builder of another group too, so its rows could go under either";
+
+/// Which groups' builders lie at one address with another group's: a
+/// function two builder routes find cannot tell whose rows it builds, so
+/// neither group links, whatever kinds the groups show.
+fn shared(addresses: &[Option<u64>; GROUPS]) -> [bool; GROUPS] {
+    core::array::from_fn(|at| {
+        addresses[at].is_some_and(|a| addresses.iter().filter(|&&b| b == Some(a)).count() > 1)
+    })
 }
 
 /// What a route lookup failed on: the entry, and why.
@@ -288,7 +310,6 @@ fn fields_hold(lookup: &dyn Fn(pinned::Constant) -> Option<usize>) -> Result<(),
         (ids::ATTRIBUTE_ROW_PERCENT, offset_of!(Row, percent)),
         (ids::ATTRIBUTE_ROW_PLUS, offset_of!(Row, plus)),
         (ids::ATTRIBUTE_LIST_ROWS, offset_of!(List, rows)),
-        (ids::ATTRIBUTE_LIST_FILLED, offset_of!(List, filled)),
     ];
     for (id, field) in read {
         if offset(id)? != field {
@@ -443,7 +464,6 @@ mod tests {
                 0x18, 0x30, 0x34, 0x38, 0x3c, 0x278, 0x280, 0x281, 0x282, 0x288, 0x298, 0x299
             ]
         );
-        assert_eq!(offset_of!(List, filled), 8);
     }
 
     #[test]
@@ -486,15 +506,26 @@ mod tests {
 
     #[test]
     fn a_list_without_storage_takes_no_row() {
-        assert!(!stored(List { rows: 0, filled: 0 }));
-        assert!(!stored(List { rows: 0, filled: 3 }));
+        assert!(!stored(List { rows: 0 }));
         assert!(
-            stored(List {
-                rows: 0x1000,
-                filled: 0
-            }),
+            stored(List { rows: 0x1000 }),
             "an empty list with its inline rows takes the kinds' rows"
         );
+    }
+
+    #[test]
+    fn two_groups_whose_builders_are_one_function_both_stay_unlinked() {
+        let mut addresses = [None; GROUPS];
+        assert_eq!(shared(&addresses), [false; GROUPS], "absent is not shared");
+        for (at, address) in addresses.iter_mut().enumerate() {
+            *address = Some(0x1000 + at as u64 * 0x10);
+        }
+        assert_eq!(shared(&addresses), [false; GROUPS]);
+        addresses[7] = addresses[6];
+        let mut want = [false; GROUPS];
+        want[6] = true;
+        want[7] = true;
+        assert_eq!(shared(&addresses), want);
     }
 
     /// The offsets client 26430625's routes give, by entry.
@@ -512,7 +543,6 @@ mod tests {
             (ids::ATTRIBUTE_ROW_PERCENT, 0x298),
             (ids::ATTRIBUTE_ROW_PLUS, 0x299),
             (ids::ATTRIBUTE_LIST_ROWS, 0),
-            (ids::ATTRIBUTE_LIST_FILLED, 8),
             (ids::ATTRIBUTE_ROW_HOVERED, 0x3a8),
             (ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP, 0x3c0),
             (ids::ATTRIBUTE_ROW_HOVERED_FLAG, 0x628),
@@ -536,8 +566,8 @@ mod tests {
         for (at, moved_to, entry) in [
             (1, 0x2c, ids::ATTRIBUTE_ROW_VALUE),
             (7, 0x298, ids::ATTRIBUTE_ROW_CELL_SECOND),
-            (13, 0x3b0, ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP),
-            (14, 0x630, ids::ATTRIBUTE_ROW_HOVERED_FLAG),
+            (12, 0x3b0, ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP),
+            (13, 0x630, ids::ATTRIBUTE_ROW_HOVERED_FLAG),
         ] {
             let mut moved = routed();
             moved[at].1 = moved_to;

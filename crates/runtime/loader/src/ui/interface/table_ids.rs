@@ -24,7 +24,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::ACTION_NEW.id(),
     pinned::ui::ACTION_NODE.id(),
     pinned::ui::ACTION_QUERY.id(),
-    pinned::ui::ATTRIBUTE_LIST_FILLED.id(),
     pinned::ui::ATTRIBUTE_LIST_ROWS.id(),
     pinned::ui::ATTRIBUTE_ROW_CELL.id(),
     pinned::ui::ATTRIBUTE_ROW_CELL_SECOND.id(),

@@ -630,6 +630,80 @@ fn nothing_builds_on_a_route_the_table_contradicts() {
     assert_eq!(of("t.shift"), None);
 }
 
+/// Shapes over [`fake`] that name a constant: `t.offset` finds 0x78, the
+/// leaf's displacement, and `t.field` finds nothing.
+const NAMED_CONSTANTS: &str = r#"
+[[route]]
+id = "t.reader"
+callees = "~fn:a"
+shape = ["mov eax,[rcx+{t.offset}]"]
+
+[[route]]
+id = "t.field_reader"
+callees = "~fn:a"
+shape = ["mov eax,[rcx+{t.field}]"]
+
+[[route]]
+id = "t.field_call"
+in = "~fn:a"
+shape = ["call {t.field}", "ret"]
+
+[[route]]
+id = "t.offset"
+in = "t.leaf"
+shape = ["mov eax,[rcx+*]", "shl eax,?"]
+take = "value"
+
+[[route]]
+id = "t.field"
+field = ["keen::Missing.value"]
+
+[[route]]
+id = "t.leaf"
+called_by = ["~fn:a", "sys_b"]
+
+[[route]]
+id = "sys_b"
+system = "sys_b"
+
+[[route]]
+id = "~fn:a"
+loads = ["hello"]
+"#;
+
+#[test]
+fn a_named_constant_is_the_route_s_value_else_the_table_s_and_never_a_symbol() {
+    let fake = fake();
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let routes = Routes::parse(NAMED_CONSTANTS).unwrap();
+    let with = |table: &str| {
+        let known = Table::parse(&format!("{EMPTY}\n{table}"))
+            .unwrap()
+            .resolve();
+        let found = routes.find(&image, &reflection, Side::Server, &known);
+        let of = |id: &str| found.iter().find(|(f, _)| *f == id).unwrap().1;
+        [of("t.reader"), of("t.field_reader"), of("t.field_call")]
+    };
+    let leaf = Some(Routed::Reached(0x1040));
+    assert_eq!(with(""), [leaf, None, None]);
+    assert_eq!(
+        with("[constants]\n\"t.offset\" = 0x70"),
+        [None, None, None],
+        "a route the table contradicts stands for nothing"
+    );
+    assert_eq!(
+        with("[constants]\n\"t.field\" = 0x78"),
+        [leaf, leaf, None],
+        "the table's constant stands where its route finds nothing"
+    );
+    assert_eq!(
+        with("[symbols]\n\"t.field\" = 0x1040"),
+        [leaf, None, None],
+        "a constant's id never stands for a symbol of that name"
+    );
+}
+
 #[test]
 fn a_loose_constant_a_fixed_value_or_a_taking_check_is_refused() {
     let row = |keys: &str| format!("[[route]]\nid = \"a.b\"\nin = \"s\"\n{keys}");

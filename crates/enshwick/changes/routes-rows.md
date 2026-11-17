@@ -6,3 +6,7 @@
   game row, and links a group's builder only when a kind shows in it.
 - A build that reorders the Character screen's groups still gives each
   group's rows to its own builder, found by the text the builder reads.
+- Two groups whose builders a build finds at one function show no rows,
+  with the reason, instead of rows under the wrong header.
+- The Character screen's rows no longer turn off when a build moves the row
+  list's count, which the loader does not read.

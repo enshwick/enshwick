@@ -213,7 +213,6 @@ impl Route {
 
     /// Whether the route finds a constant: one it takes from code, or a
     /// reflected offset or size.
-    #[cfg(test)]
     fn finds_constant(&self) -> bool {
         matches!(
             self.take,
