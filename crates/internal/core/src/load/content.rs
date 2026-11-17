@@ -6,6 +6,7 @@ use crate::{Load, Off};
 use enshwick_content::__load::*;
 
 mod changes;
+#[cfg(feature = "unstable")]
 mod changes_items;
 mod changes_live;
 mod changes_recipes;

@@ -20,6 +20,8 @@ pub(crate) mod survivors;
 pub(crate) struct InventoryPresets {
     pub(crate) no_inventories: bool,
     pub(crate) no_item_filters: bool,
+    /// The damage causes, by their ABI number, whose sites the build lacks.
+    pub(crate) missing_damage_sites: Vec<u32>,
 }
 
 impl FakeHost {
@@ -263,6 +265,33 @@ impl FakeHost {
     #[must_use]
     pub fn without_item_filters(mut self) -> Self {
         self.inventory.no_item_filters = true;
+        self
+    }
+
+    /// Plays a game build without the damage sites of `causes`: as on the
+    /// loader, a cause that shares its sites with others takes them along
+    /// (the shroud's `Fog` and `DeadlyFog`, drowning's `Suffocated` and
+    /// `DrowningDeath`), so `damage::causes_off` lists them all, while the
+    /// filters still register.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::damage::DamageCause;
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .without_damage_sites(&[DamageCause::Fog])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn without_damage_sites(mut self, causes: &[enshwick_core::damage::DamageCause]) -> Self {
+        self.inventory
+            .missing_damage_sites
+            .extend(causes.iter().map(|cause| cause.to_abi()));
         self
     }
 }

@@ -82,6 +82,7 @@ mod tests {
                 ),
             ]
         );
+        #[cfg(feature = "unstable")]
         assert!(loader.item_changes().is_empty());
     }
 }

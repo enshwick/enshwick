@@ -84,4 +84,27 @@ mod tests {
         );
         assert!(logged(&loader, "stale false"), "{:?}", loader.logs());
     }
+
+    #[test]
+    fn a_script_learns_the_causes_its_filter_does_not_get_once_the_world_loads() {
+        let loader = run(
+            FakeHost::new().without_damage_sites(&[enshwick::damage::DamageCause::FallDamage]),
+            r#"
+            enshwick.damage.on_damage(function(damage) damage:scale(2) end)
+            local early = pcall(enshwick.damage.causes_off)
+            enshwick.log.info(`early {early}`)
+            enshwick.on("WorldLoaded", function()
+                local off = enshwick.damage.causes_off()
+                enshwick.log.info(`off {#off} {off[1]}`)
+            end)
+            "#,
+        );
+        assert!(
+            loader.raise::<enshwick::events::WorldLoaded>(&()) > 0,
+            "{:?}",
+            loader.logs()
+        );
+        assert!(logged(&loader, "early false"), "{:?}", loader.logs());
+        assert!(logged(&loader, "off 1 FallDamage"), "{:?}", loader.logs());
+    }
 }

@@ -13,6 +13,8 @@ impl Load<'_> {
     /// the game's data, in this mod's place in load order. Items of mods
     /// are not picked.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] for a field a selection does not change, a value the field

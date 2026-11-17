@@ -58,6 +58,8 @@ mod content_renames;
 mod controls;
 #[cfg(feature = "unstable")]
 mod damage;
+#[cfg(feature = "unstable")]
+mod damage_causes_off;
 mod daytime;
 mod declared_content;
 pub mod deps;
@@ -144,9 +146,7 @@ mod language;
 #[cfg(feature = "unstable")]
 mod language_of;
 mod lifecycle;
-#[cfg(feature = "unstable")]
 mod live_changes;
-#[cfg(feature = "unstable")]
 mod live_changes_join;
 mod loader_off;
 #[cfg(feature = "unstable")]
@@ -285,6 +285,7 @@ mod template_arguments;
 #[cfg(feature = "typed")]
 mod templates;
 mod terrain;
+#[cfg(feature = "unstable")]
 mod terrain_materials;
 mod terrain_pages;
 mod ticks;

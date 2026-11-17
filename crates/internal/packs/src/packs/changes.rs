@@ -3,10 +3,11 @@
 use rustc_hash::FxHashMap;
 
 use crate::content::Guid;
+#[cfg(feature = "unstable")]
 use crate::content::categories::ItemCategoryMask;
-use crate::content::changes::{
-    Change, Entry, Field, Items, ItemsChange, Recipes, RecipesChange, Value,
-};
+use crate::content::changes::{Change, Entry, Field, Recipes, RecipesChange, Value};
+#[cfg(feature = "unstable")]
+use crate::content::changes::{Items, ItemsChange};
 use crate::content::recipes::RecipeKind;
 use crate::content::vanilla::VanillaError;
 
@@ -32,6 +33,7 @@ use crate::near::{near, suffix};
 type RecipeField = (Field, Option<(Guid, String)>, Value);
 
 /// Changes of every item a selection picks, each with its source.
+#[cfg(feature = "unstable")]
 type Selections = Vec<(ItemsChange, String)>;
 
 /// Changes of every recipe a selection picks, each with its source.
@@ -125,21 +127,71 @@ pub(super) fn item_changes(
     reader: &mut Reader<'_>,
     items_file: &ItemsFile,
     text: &str,
-) -> (Vec<(Change, String)>, Selections) {
+) -> ItemChanges {
     let mut by_name: Vec<ChangeEntry<'_>> = Vec::new();
-    let mut selections = Vec::new();
-    let mut seen: FxHashMap<(Items, Field), usize> = FxHashMap::default();
+    #[cfg(feature = "unstable")]
+    let mut selected = Selected::default();
     for (index, entry) in items_file.change.iter().enumerate() {
         let e = entry.get_ref();
         let at = entry.span().start;
         let number = index + 1;
-        let selected = match (&e.items, &e.category) {
-            (Some(_), Some(_)) => Err("give items or category, not both".to_owned()),
+        let why = match (&e.items, &e.category) {
             (Some(ItemsEntry::Names(list)), None) => {
                 by_name.push((at, list.as_slice(), item_fields(e)));
                 continue;
             }
-            (Some(ItemsEntry::Word(word)), None) => match word.as_str() {
+            (Some(_), Some(_)) => "give items or category, not both",
+            (None, None) => "give items or category",
+            #[cfg(feature = "unstable")]
+            _ => {
+                selected.add(reader, text, at, number, e);
+                continue;
+            }
+            #[cfg(not(feature = "unstable"))]
+            _ => {
+                let why = format!("change {number}: changes nothing; {NOTHING_HINT}");
+                reader.error(ITEMS_FILE, text, at, why);
+                continue;
+            }
+        };
+        reader.error(ITEMS_FILE, text, at, format!("change {number}: {why}"));
+    }
+    let changes = changes_of(reader, ITEMS_FILE, Entry::Item, &by_name, text);
+    #[cfg(feature = "unstable")]
+    let changes = (changes, selected.list);
+    changes
+}
+
+/// What [`item_changes`] reads: the changes of named items, and with
+/// `unstable` those of every item a selection picks.
+#[cfg(feature = "unstable")]
+type ItemChanges = (Vec<(Change, String)>, Selections);
+#[cfg(not(feature = "unstable"))]
+type ItemChanges = Vec<(Change, String)>;
+
+/// The item selections of an items file read so far, and the line where
+/// each selection's field was changed first.
+#[cfg(feature = "unstable")]
+#[derive(Default)]
+struct Selected {
+    list: Selections,
+    seen: FxHashMap<(Items, Field), usize>,
+}
+
+#[cfg(feature = "unstable")]
+impl Selected {
+    /// Reads change `number`, a selection at `at`; problems are noted at
+    /// the change.
+    fn add(
+        &mut self,
+        reader: &mut Reader<'_>,
+        text: &str,
+        at: usize,
+        number: usize,
+        e: &ItemChangeEntry,
+    ) {
+        let selected = match (&e.items, &e.category) {
+            (Some(ItemsEntry::Word(word)), _) => match word.as_str() {
                 "stackable" => Ok((Items::Stackable, word.clone())),
                 "containers" => Ok((Items::Containers, word.clone())),
                 "backpacks" => Ok((Items::Backpacks, word.clone())),
@@ -157,13 +209,13 @@ pub(super) fn item_changes(
                         )
                     })
             }
-            (None, None) => Err("give items or category".to_owned()),
+            _ => Err("give items or category".to_owned()),
         };
         match selected {
             Ok((items, label)) => {
                 let line = PackError::at(ITEMS_FILE, text, at, "").line;
                 for change in select(reader, text, at, number, items, &item_fields(e)) {
-                    if let Some(&first) = seen.get(&(items, change.field)) {
+                    if let Some(&first) = self.seen.get(&(items, change.field)) {
                         reader.error(
                             ITEMS_FILE,
                             text,
@@ -175,18 +227,18 @@ pub(super) fn item_changes(
                         );
                         continue;
                     }
-                    seen.insert((items, change.field), line);
-                    selections.push((change, format!("{ITEMS_FILE}:{line} ({label})")));
+                    self.seen.insert((items, change.field), line);
+                    self.list
+                        .push((change, format!("{ITEMS_FILE}:{line} ({label})")));
                 }
             }
             Err(why) => reader.error(ITEMS_FILE, text, at, format!("change {number}: {why}")),
         }
     }
-    let changes = changes_of(reader, ITEMS_FILE, Entry::Item, &by_name, text);
-    (changes, selections)
 }
 
 /// The categories the game names `names`, or why not.
+#[cfg(feature = "unstable")]
 fn category(names: &[String]) -> Result<ItemCategoryMask, ReadCategoryError> {
     if names.is_empty() {
         return Err(ReadCategoryError::Empty);
@@ -208,6 +260,7 @@ fn category(names: &[String]) -> Result<ItemCategoryMask, ReadCategoryError> {
 }
 
 /// Why a change's `category` names no item category.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 enum ReadCategoryError {
     /// An empty list.
@@ -223,6 +276,7 @@ enum ReadCategoryError {
 
 /// The checked changes of each field `fields` gives through the selection
 /// `items`; problems are noted at the change.
+#[cfg(feature = "unstable")]
 fn select(
     reader: &mut Reader<'_>,
     text: &str,

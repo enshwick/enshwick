@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::Off;
-use crate::content::changes::{Change, Entry, ItemsChange, RecipesChange};
+#[cfg(feature = "unstable")]
+use crate::content::changes::ItemsChange;
+use crate::content::changes::{Change, Entry, RecipesChange};
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
 use crate::content::vanilla::Vanilla;
@@ -115,6 +117,7 @@ pub struct Pack {
     /// Their schema, the mod's settings.
     pub(super) settings_schema: Option<crate::config::Schema>,
     pub(super) changes: Vec<(Change, String)>,
+    #[cfg(feature = "unstable")]
     pub(super) selections: Vec<(ItemsChange, String)>,
     pub(super) recipe_selections: Vec<(RecipesChange, String)>,
     pub(super) skipped: Vec<PackError>,
@@ -234,6 +237,7 @@ impl Pack {
             settings: Vec::new(),
             settings_schema: None,
             changes: Vec::new(),
+            #[cfg(feature = "unstable")]
             selections: Vec::new(),
             recipe_selections: Vec::new(),
             skipped: Vec::new(),
@@ -250,8 +254,7 @@ impl Pack {
         );
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
         pack.read_settings_and_rewards(&mut reader, files, &loot_file, &loot_text);
-        (pack.changes, pack.selections) =
-            super::changes::item_changes(&mut reader, &items_file, &items_text);
+        pack.read_item_changes(&mut reader, &items_file, &items_text);
         pack.changes.extend(super::changes::loot_changes(
             &mut reader,
             &loot_file,
@@ -284,6 +287,19 @@ impl Pack {
             .chain(self.items.iter().map(|i| i.id.as_str()))
             .chain(self.recipes.iter().map(|r| r.id.as_str()))
             .collect()
+    }
+
+    /// Reads the changes of `items`: of named items, and with `unstable`
+    /// of every item a selection picks.
+    fn read_item_changes(&mut self, reader: &mut Reader<'_>, items: &ItemsFile, text: &str) {
+        #[cfg(feature = "unstable")]
+        {
+            (self.changes, self.selections) = super::changes::item_changes(reader, items, text);
+        }
+        #[cfg(not(feature = "unstable"))]
+        {
+            self.changes = super::changes::item_changes(reader, items, text);
+        }
     }
 
     /// Reads the settings of `pack.toml`, then the drops of `loot` and the
@@ -402,6 +418,8 @@ impl Pack {
     /// The pack's changes of every vanilla item a selection picks, each with
     /// its source: the file and line, then the selection.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Examples
     ///
     /// ```
@@ -417,6 +435,7 @@ impl Pack {
     /// # }
     /// # Ok::<(), enshwick::packs::ParsePackError>(())
     /// ```
+    #[cfg(feature = "unstable")]
     #[must_use]
     pub fn selections(&self) -> &[(ItemsChange, String)] {
         &self.selections
@@ -464,6 +483,10 @@ impl Pack {
     /// ```
     #[must_use]
     pub fn reaches_players(&self) -> bool {
+        #[cfg(feature = "unstable")]
+        let no_selections = self.selections.is_empty();
+        #[cfg(not(feature = "unstable"))]
+        let no_selections = true;
         !(self.items.is_empty()
             && self.workshops.is_empty()
             && self.recipes.is_empty()
@@ -471,7 +494,7 @@ impl Pack {
                 .changes
                 .iter()
                 .all(|(change, _)| change.field.entry() == Entry::Loot)
-            && self.selections.is_empty()
+            && no_selections
             && self.recipe_selections.is_empty()
             && self.sounds.is_empty()
             && self.texts.trim().is_empty())

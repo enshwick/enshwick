@@ -4,7 +4,8 @@
 mod served;
 
 use crate::test::table::{found, put, put_list, text, with, with_open};
-use enshwick_core::abi::{ModHandle, RateId, ResourceKey, Status, Str};
+use enshwick_core::__fake::UnnamedField;
+use enshwick_core::abi::{DataChange, ModHandle, RateId, ResourceKey, Status, Str};
 pub(crate) use served::*;
 
 /// What the installed fake's content answers and has recorded.
@@ -57,12 +58,31 @@ pub(crate) struct DataChanges {
     /// Changes of one entry.
     pub(crate) one: Vec<(enshwick_core::content::changes::Change, String)>,
     /// Changes of every item a selection picks.
+    #[cfg(feature = "unstable")]
     pub(crate) items: Vec<(enshwick_core::content::changes::ItemsChange, String)>,
     /// Changes of every recipe a selection picks.
     pub(crate) recipes: Vec<(enshwick_core::content::changes::RecipesChange, String)>,
-    /// Changes the mod sets later, numbered from 1 in this order, with
-    /// the value in force.
-    pub(crate) live: Vec<crate::test::LiveChange>,
+    /// Changes the mod sets later, numbered from 1 in this order.
+    pub(crate) live: Vec<LiveSlot>,
+}
+
+/// A change a mod sets later, as the fake keeps it.
+#[derive(Clone, Debug)]
+pub(crate) enum LiveSlot {
+    /// Of a field this build names, with the value in force.
+    Named(crate::test::LiveChange),
+    /// Of a field a mod built without `unstable` cannot name, from its raw
+    /// record, which the loader takes as well.
+    Unnamed(UnnamedField),
+}
+
+/// The status the loader answers a raw change `raw` the typed decoding did
+/// not take: OK for a valid change of a field this build does not name.
+fn unnamed(raw: &DataChange) -> Status {
+    match UnnamedField::of(raw) {
+        Some(field) if field.takes(raw) => Status::OK,
+        _ => Status::BAD_ARGS,
+    }
 }
 
 /// The bytes from `address` to the end of the test's component that holds
@@ -453,7 +473,7 @@ pub(crate) extern "system" fn recipe_kind(
 /// As the loader's: a fixed change, or a live one when `out` is set.
 pub(crate) extern "system" fn change_data(
     me: ModHandle,
-    change: *const enshwick_core::abi::DataChange,
+    change: *const DataChange,
     out: *mut enshwick_core::abi::ChangeId,
 ) -> Status {
     if !out.is_null() {
@@ -463,10 +483,7 @@ pub(crate) extern "system" fn change_data(
     // for the call; an all-zero record is valid, and `item` reads as zero
     // for a record of a mod built before it.
     let Some(raw) = (unsafe {
-        enshwick_core::abi::read_headed(
-            change,
-            core::mem::offset_of!(enshwick_core::abi::DataChange, item),
-        )
+        enshwick_core::abi::read_headed(change, core::mem::offset_of!(DataChange, item))
     }) else {
         return Status::BAD_ARGS;
     };
@@ -485,16 +502,17 @@ pub(crate) extern "system" fn change_data(
                 Status::OK
             });
         }
-        let Ok(Some(change)) = enshwick_core::content::changes::ItemsChange::from_abi(&raw) else {
-            return Status::BAD_ARGS;
-        };
-        return with(Status::MISSING, |s| {
-            s.content.changes.items.push((change, source));
-            Status::OK
-        });
+        #[cfg(feature = "unstable")]
+        if let Ok(Some(change)) = enshwick_core::content::changes::ItemsChange::from_abi(&raw) {
+            return with(Status::MISSING, |s| {
+                s.content.changes.items.push((change, source));
+                Status::OK
+            });
+        }
+        return unnamed(&raw);
     }
     let Ok(Some(change)) = enshwick_core::content::changes::Change::from_abi(&raw) else {
-        return Status::BAD_ARGS;
+        return unnamed(&raw);
     };
     with(Status::MISSING, |s| {
         s.content.changes.one.push((change, source));
@@ -505,54 +523,72 @@ pub(crate) extern "system" fn change_data(
 /// A live change, whose value `set_change` sets later; `out` is non-null.
 fn live(
     me: ModHandle,
-    change: *const enshwick_core::abi::DataChange,
+    change: *const DataChange,
     out: *mut enshwick_core::abi::ChangeId,
 ) -> Status {
-    use enshwick_core::content::changes::{Change, Field, ItemsChange, Target};
+    use enshwick_core::content::changes::{Change, Field, Target};
     // SAFETY: the safe layer passes null or a full record with its header,
     // valid for the call.
-    let Some(raw) = (unsafe {
-        enshwick_core::abi::read_headed(
-            change,
-            <enshwick_core::abi::DataChange as enshwick_core::abi::Headed>::BORN,
-        )
+    let Some(mut raw) = (unsafe {
+        enshwick_core::abi::read_headed(change, <DataChange as enshwick_core::abi::Headed>::BORN)
     }) else {
         return Status::BAD_ARGS;
     };
+    // As the loader: a change is declared in init only.
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
+    // As the loader: a live change starts as "times 1", whatever the mod passed.
+    raw.op = enshwick_core::abi::ChangeOp::TIMES;
+    raw.value = 1.0;
     let target = if raw.select == enshwick_core::abi::DataSelect::ENTRY {
         Change::from_abi(&raw)
             .ok()
             .flatten()
             .map(|c| (Target::Entry(c.entry), c.field))
     } else {
-        ItemsChange::from_abi(&raw)
+        #[cfg(feature = "unstable")]
+        let items = enshwick_core::content::changes::ItemsChange::from_abi(&raw)
             .ok()
             .flatten()
-            .map(|c| (Target::Items(c.items), c.field))
-    };
-    let Some((target, field)) = target.filter(|(_, field)| *field != Field::Ingredient) else {
-        return Status::BAD_ARGS;
+            .map(|c| (Target::Items(c.items), c.field));
+        #[cfg(not(feature = "unstable"))]
+        let items = None;
+        items
     };
     // SAFETY: the safe layer borrows the source for the call.
     let source = unsafe { raw.source.as_str() }
         .unwrap_or_default()
         .to_owned();
-    with(Status::MISSING, |s| {
-        if field.seen_by_clients() && !super::base::mods::joins(s, me) {
-            return Status::REFUSED;
-        }
-        s.content
-            .changes
-            .live
-            .push(crate::test::content::LiveChange {
+    let (mut slot, seen_by_clients) = match target {
+        Some((_, Field::Ingredient)) => return Status::BAD_ARGS,
+        Some((target, field)) => (
+            LiveSlot::Named(crate::test::content::LiveChange {
+                id: enshwick_core::abi::ChangeId(0),
                 target,
                 field,
                 source,
                 value: None,
-            });
+            }),
+            field.seen_by_clients(),
+        ),
+        // Both fields a build may not name are items', which players' games read.
+        None => match UnnamedField::of(&raw) {
+            Some(field) if field.takes(&raw) => (LiveSlot::Unnamed(field), true),
+            _ => return Status::BAD_ARGS,
+        },
+    };
+    with(Status::MISSING, |s| {
+        if seen_by_clients && !super::base::mods::joins(s, me) {
+            return Status::REFUSED;
+        }
         let id = enshwick_core::abi::ChangeId(
-            u32::try_from(s.content.changes.live.len()).unwrap_or(u32::MAX),
+            u32::try_from(s.content.changes.live.len() + 1).unwrap_or(u32::MAX),
         );
+        if let LiveSlot::Named(live) = &mut slot {
+            live.id = id;
+        }
+        s.content.changes.live.push(slot);
         // SAFETY: `out` is non-null by the check above and the safe layer
         // points it at a writable `ChangeId` for the call.
         unsafe { out.write(id) };
@@ -578,10 +614,19 @@ pub(crate) extern "system" fn set_change(
         let Some(live) = at.and_then(|at| s.content.changes.live.get_mut(at)) else {
             return Status::BAD_ARGS;
         };
-        if value.is_some_and(|value| live.field.check(value).is_err()) {
-            return Status::BAD_ARGS;
+        match live {
+            LiveSlot::Named(named) => {
+                if value.is_some_and(|value| named.field.check(value).is_err()) {
+                    return Status::BAD_ARGS;
+                }
+                named.value = value;
+            }
+            LiveSlot::Unnamed(field) => {
+                if value.is_some_and(|value| !field.takes_value(value)) {
+                    return Status::BAD_ARGS;
+                }
+            }
         }
-        live.value = value;
         Status::OK
     })
 }

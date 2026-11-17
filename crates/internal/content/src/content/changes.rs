@@ -21,10 +21,15 @@ use crate::Off;
 use crate::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
 use crate::content::Guid;
 
+#[cfg(feature = "unstable")]
 pub(crate) mod items;
 pub(crate) mod live;
 pub(crate) mod recipes;
+pub(crate) mod rules;
 
+use rules::Rules;
+
+#[cfg(feature = "unstable")]
 pub use items::{ItemTraits, Items, ItemsChange};
 pub use live::{ChangeHandle, SetChangeError, Target};
 pub use recipes::{RecipeTraits, Recipes, RecipesChange};
@@ -203,56 +208,13 @@ impl Field {
         }
     }
 
-    /// The smallest and the largest value the field holds.
-    const fn range(self) -> (f64, f64) {
-        match self {
-            #[cfg(feature = "unstable")]
-            Self::MaxStackSize => (1.0, 65535.0),
-            Self::Output | Self::Cost | Self::StackSize => (1.0, 65535.0),
-            Self::Ingredient | Self::Count => (0.0, 65535.0),
-            Self::CraftingDuration | Self::BurnTime => (0.0, 86400.0),
-            #[cfg(feature = "unstable")]
-            Self::Slots => (8.0, 128.0),
-            Self::DamageMod => (0.0, 100.0),
-            Self::SpeedMod => (0.0, 10.0),
-            Self::Armor | Self::EnergyOutput | Self::Weight => (0.0, 1_000_000.0),
-            Self::SpawnProbability => (0.0, 1.0),
-            Self::ComfortAmount => (0.0, 1000.0),
-            Self::Station => (0.0, 4_294_967_295.0),
-        }
-    }
-
-    /// The step the field's values come in: 8 for slots, which come in
-    /// pages of 8, else 1.
-    const fn step(self) -> f64 {
-        match self {
-            #[cfg(feature = "unstable")]
-            Self::Slots => 8.0,
-            _ => 1.0,
-        }
-    }
-
-    /// Whether the field holds whole numbers only.
-    const fn whole(self) -> bool {
-        match self {
-            #[cfg(feature = "unstable")]
-            Self::MaxStackSize | Self::Slots => true,
-            Self::Output
-            | Self::Cost
-            | Self::Ingredient
-            | Self::EnergyOutput
-            | Self::ComfortAmount
-            | Self::StackSize
-            | Self::Count
-            | Self::Station => true,
-            Self::CraftingDuration
-            | Self::DamageMod
-            | Self::SpeedMod
-            | Self::Armor
-            | Self::BurnTime
-            | Self::SpawnProbability
-            | Self::Weight => false,
-        }
+    /// What the field's values must be, from the one table by ABI id.
+    #[expect(
+        clippy::expect_used,
+        reason = "every field's ABI id has rules, as a test of the table checks"
+    )]
+    pub(crate) const fn rules(self) -> Rules {
+        Rules::of(self.to_abi()).expect("every field has rules")
     }
 
     /// Whether `value` is one the field takes: a set inside its range, whole
@@ -266,40 +228,9 @@ impl Field {
     ///
     /// See [`Field`].
     pub fn check(self, value: Value) -> Result<(), ValueError> {
-        let (low, high) = self.range();
-        match value {
-            Value::Set(v) if !v.is_finite() || v < low || v > high => Err(ValueError::OutOfRange {
-                field: self,
-                value: v,
-                low,
-                high,
-            }),
-            Value::Set(_) if matches!(self, Self::Armor) => {
-                Err(ValueError::FactorOnly { field: self })
-            }
-            Value::Set(v) if self.step() > 1.0 && (v / self.step()).fract() != 0.0 => {
-                Err(ValueError::NotInSteps {
-                    field: self,
-                    value: v,
-                    step: self.step(),
-                })
-            }
-            Value::Set(v) if self.whole() && v.fract() != 0.0 => Err(ValueError::NotWhole {
-                field: self,
-                value: v,
-            }),
-            Value::Times(_) if matches!(self, Self::Station) => {
-                Err(ValueError::SetOnly { field: self })
-            }
-            #[cfg(feature = "unstable")]
-            Value::Times(f) if matches!(self, Self::Slots) && f < 1.0 => {
-                Err(ValueError::Shrinks { field: self })
-            }
-            Value::Times(f) if !f.is_finite() || !(0.0..=MAX_FACTOR).contains(&f) => {
-                Err(ValueError::BadFactor { factor: f })
-            }
-            _ => Ok(()),
-        }
+        self.rules()
+            .check(value)
+            .map_err(|refusal| refusal.of(self))
     }
 
     /// The value in force: the last set of `values`, or `base` without one,
@@ -327,18 +258,18 @@ impl Field {
         }
         let start = set.unwrap_or(base);
         let value = start * factor;
-        let value = if self.whole() {
-            (value / self.step()).round() * self.step()
+        let rules = self.rules();
+        let value = if rules.whole {
+            (value / rules.step).round() * rules.step
         } else {
             value
         };
-        let (low, high) = self.range();
-        let low = if self.whole() && start >= 1.0 && factor > 0.0 {
-            low.max(1.0)
+        let low = if rules.whole && start >= 1.0 && factor > 0.0 {
+            rules.low.max(1.0)
         } else {
-            low
+            rules.low
         };
-        value.clamp(low, high)
+        value.clamp(low, rules.high)
     }
 
     /// Whether players' games read the field, so every side needs the same
@@ -528,6 +459,9 @@ pub enum ValueError {
         field: Field,
     },
     /// A selection of items for a field it does not reach.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    #[cfg(feature = "unstable")]
     #[error("{field} is no field a selection of items changes")]
     NotSelectable {
         /// The field.
@@ -691,7 +625,7 @@ impl Change {
 
     /// The change an ABI record describes, checked as [`Change::check`]
     /// checks it; `None` for a field or operation this crate does not know,
-    /// or a record that selects items ([`ItemsChange::from_abi`]).
+    /// or a record that selects items (`ItemsChange::from_abi`).
     ///
     /// # Errors
     ///

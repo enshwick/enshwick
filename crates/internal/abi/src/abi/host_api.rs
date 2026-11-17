@@ -2335,6 +2335,16 @@ pub struct HostApi {
     /// `enshwick_mod_init` only. ABI 12.13.
     pub buff_type_add:
         extern "system" fn(me: ModHandle, buff: *const BuffTypeAdd, id: *mut BuffTypeId) -> Status,
+    /// Up to `capacity` damage causes, as [`DamageCheck`](super::DamageCheck)
+    /// numbers them, whose sites are not armed, and how many there are, as
+    /// every list answers: the causes no damage filter gets on this build
+    /// and run. A site arms when a mod registered a damage filter and the
+    /// build has it, and stops when it faults; with no filter, only the hit
+    /// site arms, and only for stats. [`Status::UNAVAILABLE`] until the
+    /// loader has linked and armed its hooks, after every mod's init. Any
+    /// thread. ABI 12.14.
+    pub damage_causes_off:
+        extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2563,5 +2573,6 @@ const _: () = {
     assert!(offset_of!(HostApi, respawn_point) == 24 + 215 * 8);
     assert!(offset_of!(HostApi, set_respawn_point) == 24 + 216 * 8);
     assert!(offset_of!(HostApi, buff_type_add) == 24 + 217 * 8);
-    assert!(size_of::<HostApi>() == 24 + 218 * 8);
+    assert!(offset_of!(HostApi, damage_causes_off) == 24 + 218 * 8);
+    assert!(size_of::<HostApi>() == 24 + 219 * 8);
 };

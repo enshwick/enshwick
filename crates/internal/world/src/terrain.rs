@@ -35,9 +35,13 @@
 //! ```
 
 use crate::WorldError;
-use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo};
-use crate::content::{Guid, Id};
+use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 use crate::{Host, ItemId, Off};
+#[cfg(feature = "unstable")]
+use crate::{
+    abi::TerrainMaterialAdd,
+    content::{Guid, Id},
+};
 
 /// The largest radius and height of an edit, in metres.
 pub const MAX_RADIUS: f32 = 16.0;
@@ -78,6 +82,8 @@ pub struct TerrainTerraformingConfig {
 /// client draws the ground from its own copy of the game's tables, so a mod
 /// that adds one runs on clients too.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -91,6 +97,7 @@ pub struct TerrainTerraformingConfig {
 ///     load.add_terrain_material(new)
 /// }
 /// ```
+#[cfg(feature = "unstable")]
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct NewTerrainMaterial {
@@ -118,6 +125,7 @@ pub struct NewTerrainMaterial {
     pub can_be_flattened: Option<bool>,
 }
 
+#[cfg(feature = "unstable")]
 impl NewTerrainMaterial {
     /// A copy of the game's terrain material `like` under the content id
     /// `id`, falling back to `like`.
@@ -541,6 +549,7 @@ pub trait LoadMethods {
     fn terrain(&mut self) -> Terrain;
 
     /// As `Load::add_terrain_material`.
+    #[cfg(feature = "unstable")]
     #[doc(hidden)]
     fn add_terrain_material(&mut self, new: NewTerrainMaterial) -> Result<u8, Off>;
 }
@@ -566,6 +575,7 @@ impl LoadMethods for crate::BaseLoad {
         }
     }
 
+    #[cfg(feature = "unstable")]
     fn add_terrain_material(&mut self, new: NewTerrainMaterial) -> Result<u8, Off> {
         let host = self.host();
         let guid = crate::resources::declare(host, &new.id.to_string())?;

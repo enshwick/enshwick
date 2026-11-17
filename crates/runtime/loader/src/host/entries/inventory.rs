@@ -7,8 +7,8 @@ use enshwick_core::{Entity, abi as api_frame};
 use crate::engine::conflicts::Mode;
 use crate::host::entries::base::services::exported;
 use crate::host::layer::{
-    Asker, Callback, Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded, Mod, Out,
-    Text, entries,
+    AnyMod, Asker, Callback, Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded,
+    Mod, Out, Text, entries,
 };
 
 /// Where every inventory request's required fields end: its op count.
@@ -186,6 +186,11 @@ entries! {
             Mode::Chained,
             crate::inventory::damage::register(me.loader, me.index, callback, user),
         )
+    }
+
+    fn damage_causes_off(_me as AnyMod, [out, capacity, count] as ListOut<u32>) -> Status {
+        let off = crate::inventory::damage::causes_off().ok_or(Status::UNAVAILABLE)?;
+        out.put(&off)
     }
 
     fn request_inventory(loader as Caller) -> Status {

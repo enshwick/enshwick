@@ -37,6 +37,7 @@ pub(super) const NAMESPACES: &[Namespace] = &[
             Load::SCRIPT_CONTENT_ICONS,
             Load::SCRIPT_CONTENT_RENAMES,
             Load::SCRIPT_CONTENT_CHANGE,
+            #[cfg(feature = "unstable")]
             Load::SCRIPT_CONTENT_CHANGE_ITEMS,
             Load::SCRIPT_CONTENT_CHANGE_RECIPES,
             Load::SCRIPT_CONTENT_LIVE,

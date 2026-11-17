@@ -1299,10 +1299,10 @@ export type ItemStats = {
 	rolled: boolean,
 }
 
---- The vanilla items an `ItemsChange` reaches at once. A stack size reaches only items one slot already holds more than one of and that keep no state of their own, such as durability; container slots reach only items that place a container or are backpacks, and `Items.Containers` and `Items.Backpacks` pick one kind alone.
+--- The vanilla items an `ItemsChange` reaches at once. A stack size reaches only items one slot already holds more than one of and that keep no state of their own, such as durability; container slots reach only items that place a container or are backpacks, and `Items.Containers` and `Items.Backpacks` pick one kind alone. Unstable: needs the `unstable` feature and may change in any release.
 export type Items = { Category: {string} } | "Stackable" | "Containers" | "Backpacks"
 
---- One change of a field of every vanilla item a selection picks.
+--- One change of a field of every vanilla item a selection picks. Unstable: needs the `unstable` feature and may change in any release.
 export type ItemsChange = {
 	--- The items.
 	items: Items,
@@ -1972,7 +1972,7 @@ export type NewTemplate = {
 	changes: {ComponentChange},
 }
 
---- A terrain material of a mod's own: a copy of one of the game's, its look included, with rules changed, for `Load.add_terrain_material`. The loader gives mods' materials the terrain ids the game leaves free, 117 to 127, in load order, so the twelfth is refused. Its id holds for one run; saves name its ground by its content id, so a world keeps it from run to run. In a world loaded without the mod, its ground loads as `fallback` under Enshwick and as air under a server without it. Every client draws the ground from its own copy of the game's tables, so a mod that adds one runs on clients too.
+--- A terrain material of a mod's own: a copy of one of the game's, its look included, with rules changed, for `Load.add_terrain_material`. The loader gives mods' materials the terrain ids the game leaves free, 117 to 127, in load order, so the twelfth is refused. Its id holds for one run; saves name its ground by its content id, so a world keeps it from run to run. In a world loaded without the mod, its ground loads as `fallback` under Enshwick and as air under a server without it. Every client draws the ground from its own copy of the game's tables, so a mod that adds one runs on clients too. Unstable: needs the `unstable` feature and may change in any release.
 export type NewTerrainMaterial = {
 	--- Its content id, `mod:name`.
 	id: string,
@@ -3963,7 +3963,7 @@ declare enshwick: {
 		--- Declares `change` during `init`, from `source`, such as `items.toml:12`, which the conflict reports name. The loader merges it with every mod's changes as the module says, and applies it on this side; a value players' games read needs the same change on every side, so such a mod is a join mod. The loader keeps every stack size above the game's that a world was saved with and never serves less, and holds the game on a build it would leave vanilla.
 		--- Only while the mod starts, at the top level of main.luau.
 		change: (change: Change, source: string) -> (),
-		--- Declares `change` during `init`, from `source`, as `Load.change` declares a change of one entry; the loader turns it into one change of each vanilla item the selection picks, read from the game's data, in this mod's place in load order. Items of mods are not picked.
+		--- Declares `change` during `init`, from `source`, as `Load.change` declares a change of one entry; the loader turns it into one change of each vanilla item the selection picks, read from the game's data, in this mod's place in load order. Items of mods are not picked. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_items: (change: ItemsChange, source: string) -> (),
 		--- Declares `change` during `init`, from `source`, as `Load.change` declares a change of one recipe; the loader turns it into one change of each vanilla recipe the selection picks, read from the game's data, in this mod's place in load order. Recipes of mods are not picked, and a recipe the mod changes by name keeps that change of the field alone.
@@ -4276,7 +4276,7 @@ declare enshwick: {
 		flatten: (position: vector, radius: number, material: number, shape: Shape) -> boolean,
 		--- The same terrain for edits that only count: each returns what it would change and changes nothing.
 		dry: () -> Terrain,
-		--- Adds the terrain material `new` to the game and returns its voxel id for this run, to place with `Terrain.add`; the material's rules, effects and look are served on both sides, and `Terrain.materials` lists it once the world runs.
+		--- Adds the terrain material `new` to the game and returns its voxel id for this run, to place with `Terrain.add`; the material's rules, effects and look are served on both sides, and `Terrain.materials` lists it once the world runs. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_terrain_material: (new: NewTerrainMaterial) -> number,
 	},
@@ -4321,7 +4321,10 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		container_rule: (item: number, rule: (arg1: ContainerPut) -> boolean?) -> (),
 	},
+	--- Damage filters, and the damage causes they do not get.
 	damage: {
+		--- The damage causes no damage filter gets on the running build, as `causes_off` lists them.
+		causes_off: () -> {DamageCause},
 		--- Runs `filter` on damage about to reach an entity's health, as `Load.on_damage` does: it gets the damage as an object whose methods change it.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_damage: (filter: (arg1: Damage) -> ()) -> (),

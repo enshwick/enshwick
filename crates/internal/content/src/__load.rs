@@ -3,6 +3,7 @@
 
 pub use crate::content::LoadMethods as _;
 pub use crate::content::changes::LoadMethods as _;
+#[cfg(feature = "unstable")]
 pub use crate::content::changes::items::LoadMethods as _;
 pub use crate::content::changes::live::LoadMethods as _;
 pub use crate::content::changes::recipes::LoadMethods as _;

@@ -95,6 +95,19 @@ A game build may lack what the loader needs for some causes. Then the filter
 no longer gets those causes, and it still gets the others. The log, the
 status summary and the Mods screen name the causes that are off.
 
+A mod reads the same list with `enshwick::damage::causes_off()`, in Luau
+`enshwick.damage.causes_off()`. It answers after init, such as on
+`WorldLoaded`, and fails during init, before the loader has armed its hooks.
+The mod can then tell the player, or turn off a feature that needs a cause:
+
+```rust
+use enshwick::damage::{DamageCause, causes_off};
+
+fn falls_reach_the_filter() -> Result<bool, enshwick::Off> {
+    Ok(!causes_off()?.contains(&DamageCause::FallDamage))
+}
+```
+
 ## Where it runs
 
 The filter runs on the game's worker threads, in parallel, inside the

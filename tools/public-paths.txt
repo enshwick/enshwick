@@ -89,7 +89,7 @@ Load::add_spawn_entry unstable
 Load::add_status
 Load::add_summon_item
 Load::add_template
-Load::add_terrain_material
+Load::add_terrain_material unstable
 Load::add_text
 Load::add_texts
 Load::add_weather_phenomenon unstable
@@ -104,7 +104,7 @@ Load::caller unstable
 Load::cap_task_workers
 Load::change
 Load::change_arsenal unstable
-Load::change_items
+Load::change_items unstable
 Load::change_quest unstable
 Load::change_recipes
 Load::change_sound
@@ -1077,6 +1077,7 @@ abi::HostApi::content_serve
 abi::HostApi::control
 abi::HostApi::craft_filter
 abi::HostApi::crafting_prop
+abi::HostApi::damage_causes_off
 abi::HostApi::damage_filter
 abi::HostApi::data_dir
 abi::HostApi::declare_content
@@ -3263,34 +3264,34 @@ content::changes::Field::into_value
 content::changes::Field::name
 content::changes::Field::resolve
 content::changes::Field::seen_by_clients
-content::changes::Field::selectable
+content::changes::Field::selectable unstable
 content::changes::Field::to_abi
-content::changes::ItemTraits
-content::changes::ItemTraits::backpack_slots
-content::changes::ItemTraits::category
-content::changes::ItemTraits::flags
-content::changes::ItemTraits::max_stack
-content::changes::ItemTraits::slots
-content::changes::Items
-content::changes::Items::Backpacks
-content::changes::Items::Category
-content::changes::Items::Containers
-content::changes::Items::Stackable
-content::changes::Items::TY
-content::changes::Items::from_value
-content::changes::Items::into_value
-content::changes::Items::picks
-content::changes::ItemsChange
-content::changes::ItemsChange::TY
-content::changes::ItemsChange::check
-content::changes::ItemsChange::field
-content::changes::ItemsChange::from_abi
-content::changes::ItemsChange::from_value
-content::changes::ItemsChange::into_value
-content::changes::ItemsChange::items
-content::changes::ItemsChange::new
-content::changes::ItemsChange::of
-content::changes::ItemsChange::value
+content::changes::ItemTraits unstable
+content::changes::ItemTraits::backpack_slots unstable
+content::changes::ItemTraits::category unstable
+content::changes::ItemTraits::flags unstable
+content::changes::ItemTraits::max_stack unstable
+content::changes::ItemTraits::slots unstable
+content::changes::Items unstable
+content::changes::Items::Backpacks unstable
+content::changes::Items::Category unstable
+content::changes::Items::Containers unstable
+content::changes::Items::Stackable unstable
+content::changes::Items::TY unstable
+content::changes::Items::from_value unstable
+content::changes::Items::into_value unstable
+content::changes::Items::picks unstable
+content::changes::ItemsChange unstable
+content::changes::ItemsChange::TY unstable
+content::changes::ItemsChange::check unstable
+content::changes::ItemsChange::field unstable
+content::changes::ItemsChange::from_abi unstable
+content::changes::ItemsChange::from_value unstable
+content::changes::ItemsChange::into_value unstable
+content::changes::ItemsChange::items unstable
+content::changes::ItemsChange::new unstable
+content::changes::ItemsChange::of unstable
+content::changes::ItemsChange::value unstable
 content::changes::MAX_FACTOR
 content::changes::RecipeTraits
 content::changes::RecipeTraits::kind
@@ -3319,7 +3320,7 @@ content::changes::SetChangeError::Restart
 content::changes::SetChangeError::Value
 content::changes::Target
 content::changes::Target::Entry
-content::changes::Target::Items
+content::changes::Target::Items unstable
 content::changes::Target::TY
 content::changes::Target::from_value
 content::changes::Target::into_value
@@ -3337,7 +3338,7 @@ content::changes::ValueError::Item
 content::changes::ValueError::NotInSteps
 content::changes::ValueError::NotLive
 content::changes::ValueError::NotRecipeSelectable
-content::changes::ValueError::NotSelectable
+content::changes::ValueError::NotSelectable unstable
 content::changes::ValueError::NotWhole
 content::changes::ValueError::OutOfRange
 content::changes::ValueError::SetOnly
@@ -4171,8 +4172,10 @@ damage::DamageCause::NAMED unstable
 damage::DamageCause::Other unstable
 damage::DamageCause::Suffocated unstable
 damage::DamageCause::TY unstable
+damage::DamageCause::from_abi unstable
 damage::DamageCause::from_value unstable
 damage::DamageCause::into_value unstable
+damage::DamageCause::to_abi unstable
 damage::DamageTypeNew
 damage::DamageTypeNew::ALL
 damage::DamageTypeNew::Explosion
@@ -4192,6 +4195,7 @@ damage::DamageTypeNew::Wood
 damage::DamageTypeNew::from_value
 damage::DamageTypeNew::index
 damage::DamageTypeNew::into_value
+damage::causes_off unstable
 daytime
 daytime::Clock
 daytime::Clock::DOC
@@ -5905,7 +5909,7 @@ packs::Pack::parse
 packs::Pack::parse_with
 packs::Pack::reaches_players
 packs::Pack::recipe_selections
-packs::Pack::selections
+packs::Pack::selections unstable
 packs::Pack::skipped
 packs::PackDependency
 packs::PackDependency::from
@@ -7024,18 +7028,18 @@ survivors::WorkshopSurvivor::staff
 survivors::WorkshopSurvivor::template
 terrain
 terrain::MAX_RADIUS
-terrain::NewTerrainMaterial
-terrain::NewTerrainMaterial::TY
-terrain::NewTerrainMaterial::can_be_flattened
-terrain::NewTerrainMaterial::fallback
-terrain::NewTerrainMaterial::from_value
-terrain::NewTerrainMaterial::hardness
-terrain::NewTerrainMaterial::health_points
-terrain::NewTerrainMaterial::id
-terrain::NewTerrainMaterial::into_value
-terrain::NewTerrainMaterial::like
-terrain::NewTerrainMaterial::new
-terrain::NewTerrainMaterial::terrain_item
+terrain::NewTerrainMaterial unstable
+terrain::NewTerrainMaterial::TY unstable
+terrain::NewTerrainMaterial::can_be_flattened unstable
+terrain::NewTerrainMaterial::fallback unstable
+terrain::NewTerrainMaterial::from_value unstable
+terrain::NewTerrainMaterial::hardness unstable
+terrain::NewTerrainMaterial::health_points unstable
+terrain::NewTerrainMaterial::id unstable
+terrain::NewTerrainMaterial::into_value unstable
+terrain::NewTerrainMaterial::like unstable
+terrain::NewTerrainMaterial::new unstable
+terrain::NewTerrainMaterial::terrain_item unstable
 terrain::Shape
 terrain::Shape::Round
 terrain::Shape::Square

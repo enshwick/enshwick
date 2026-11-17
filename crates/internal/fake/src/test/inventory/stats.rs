@@ -46,9 +46,17 @@ pub(crate) struct FakeStats {
     /// Affixes by full id with their text keys, in the order they were
     /// defined.
     affixes: Vec<(Box<str>, AffixDef, Box<str>)>,
+    /// Whether a mod used stats during init, which alone makes the loader
+    /// want them and arm the hit site for them.
+    used_in_init: bool,
 }
 
 impl FakeStats {
+    /// Whether the loader wants stats: a mod used them during init.
+    pub(crate) fn wanted(&self) -> bool {
+        self.used_in_init
+    }
+
     fn with_builtins() -> Self {
         let mut stats = Self::default();
         for (id, def) in builtin::ALL {
@@ -102,9 +110,11 @@ fn index_of(stats: &mut FakeStats, id: &str) -> u32 {
 }
 
 fn state_stats(s: &mut crate::test::table::State) -> &mut FakeStats {
+    let in_init = !s.base.closed();
     if s.inventory.stats.kinds.is_empty() {
         s.inventory.stats = FakeStats::with_builtins();
     }
+    s.inventory.stats.used_in_init |= in_init;
     &mut s.inventory.stats
 }
 
