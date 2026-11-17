@@ -170,14 +170,10 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             return Ok(false);
         }
     }
-    if parts.contains(&Part::Host) && reaches(&scope, FACADE) {
-        let problems = public_paths::check(&root);
-        for problem in &problems {
-            say(&format!("public paths: {problem}"));
-        }
-        if !problems.is_empty() {
-            return Ok(false);
-        }
+    if parts.contains(&Part::Host)
+        && !public_paths_hold(&scope, changed.as_deref(), &root, &packages)
+    {
+        return Ok(false);
     }
     if parts.contains(&Part::Trybuild) && (!touches(&scope, FACADE) || wide(&scope)) {
         say(&if touches(&scope, FACADE) {
@@ -202,6 +198,40 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         return Ok(true);
     }
     Ok(wine::run(&windows_tests, args.windows))
+}
+
+/// Whether the committed public paths list is current, or left to CI: a
+/// wide local change leaves it there with the dependents' rustdoc, since it
+/// documents the facade twice.
+fn public_paths_hold(
+    scope: &Scope,
+    changed: Option<&[String]>,
+    root: &Path,
+    packages: &[Package],
+) -> bool {
+    if !lists_public_paths(scope, changed) {
+        return true;
+    }
+    if wide(scope) {
+        say(&format!(
+            "the public paths list is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
+        ));
+        return true;
+    }
+    let problems = public_paths::check(root, packages);
+    for problem in &problems {
+        say(&format!("public paths: {problem}"));
+    }
+    problems.is_empty()
+}
+
+/// Whether a change can move [`public_paths::FILE`]: it reaches the facade,
+/// changes this task, which writes the list, or edits the list, which no
+/// package owns.
+fn lists_public_paths(scope: &Scope, changed: Option<&[String]>) -> bool {
+    reaches(scope, FACADE)
+        || touches(scope, env!("CARGO_PKG_NAME"))
+        || changed.is_some_and(|files| files.iter().any(|file| file == public_paths::FILE))
 }
 
 /// Whether `scope` checks the code of `package`.
@@ -428,7 +458,7 @@ impl Step {
         self
     }
 
-    fn env(mut self, name: &'static str, value: impl Into<String>) -> Self {
+    pub(crate) fn env(mut self, name: &'static str, value: impl Into<String>) -> Self {
         self.env.push((name, value.into()));
         self
     }

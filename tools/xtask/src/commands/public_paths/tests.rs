@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rustdoc_types::{
     Attribute, Crate, Enum, ExternalCrate, Generics, Id, Impl, Item, ItemEnum, ItemKind,
-    ItemSummary, Module, Path, Struct, StructKind, Target, Type, Use, Variant, VariantKind,
+    ItemSummary, Module, Path, Struct, StructKind, Target, Trait, Type, Use, Variant, VariantKind,
     Visibility,
 };
 
 use super::walk::Surface;
-use super::{built_on, render, stale};
+use super::{in_tree, render, stale};
 
 fn item(id: u32, name: Option<&str>, visibility: Visibility, inner: ItemEnum) -> Item {
     Item {
@@ -282,20 +282,143 @@ fn a_stale_list_names_the_paths_it_lacks_and_those_gone() {
 }
 
 #[test]
-fn the_documented_crates_are_the_required_workspace_dependencies() {
-    let metadata = serde_json::json!({"packages": [
-        {"name": "top", "dependencies": [
-            {"name": "mid", "kind": null, "path": "x", "optional": false},
-            {"name": "opt", "kind": null, "path": "x", "optional": true},
-            {"name": "dev", "kind": "dev", "path": "x", "optional": false},
-            {"name": "serde", "kind": null, "optional": false},
-        ]},
-        {"name": "mid", "dependencies": [
-            {"name": "low", "kind": null, "path": "x", "optional": false},
-        ]},
-        {"name": "low", "dependencies": []},
-        {"name": "opt", "dependencies": []},
-        {"name": "dev", "dependencies": []},
-    ]});
-    assert_eq!(built_on(&metadata, "top"), ["low", "mid", "top"]);
+fn the_documented_crates_are_the_workspace_packages_the_build_compiles_by_their_library() {
+    let tree = "\
+top v1.0.0 (/w/crates/top)
+typed v1.0.0 (/w/crates/typed)
+serde v1.0.228
+typed v1.0.0 (/w/crates/typed) (*)
+";
+    let libraries = [("top", "top"), ("typed", "typed_lib"), ("loader", "loader")].into();
+    assert_eq!(
+        in_tree(tree, &libraries),
+        [
+            ("top".to_owned(), "top".to_owned()),
+            ("typed".to_owned(), "typed_lib".to_owned())
+        ]
+    );
+}
+
+#[test]
+fn a_re_export_reaches_the_item_of_the_namespace_it_names_where_a_path_has_two() {
+    use Visibility::Public;
+    let low = krate(
+        0,
+        vec![
+            item(0, Some("low"), Public, module(&[1, 2])),
+            item(1, Some("log"), Public, function()),
+            item(2, Some("log"), Public, module(&[3])),
+            item(3, Some("f"), Public, function()),
+        ],
+        vec![
+            (1, summary(0, &["low", "log"], ItemKind::Macro)),
+            (2, summary(0, &["low", "log"], ItemKind::Module)),
+            (3, summary(0, &["low", "log", "f"], ItemKind::Macro)),
+        ],
+        &[],
+    );
+    let top = krate(
+        0,
+        vec![
+            item(0, Some("top"), Public, module(&[1, 2])),
+            item(1, Some("log"), Public, used("log", Some(100), false)),
+            item(2, Some("log"), Public, used("log", Some(101), false)),
+        ],
+        vec![
+            (100, summary(1, &["low", "log"], ItemKind::Module)),
+            (101, summary(1, &["low", "log"], ItemKind::Macro)),
+        ],
+        &[(1, "low")],
+    );
+    let crates = [("low".to_owned(), low), ("top".to_owned(), top)].into();
+    assert_eq!(
+        Surface::new(&crates).paths("top").unwrap(),
+        set(&["log", "log::f"])
+    );
+}
+
+#[test]
+fn a_trait_impl_gives_its_type_the_methods_a_path_reaches_and_no_associated_type() {
+    use Visibility::{Default, Public};
+    let impl_of = |trait_id: u32, items: &[u32], provided: &str| Impl {
+        trait_: Some(Path {
+            path: String::new(),
+            id: Id(trait_id),
+            args: None,
+        }),
+        provided_trait_methods: vec![provided.to_owned()],
+        for_: Type::ResolvedPath(Path {
+            path: "Thing".to_owned(),
+            id: Id(1),
+            args: None,
+        }),
+        ..block(None, items)
+    };
+    let own = krate(
+        0,
+        vec![
+            item(0, Some("own"), Public, module(&[1, 2, 3])),
+            item(
+                1,
+                Some("Thing"),
+                Public,
+                ItemEnum::Struct(Struct {
+                    kind: StructKind::Unit,
+                    generics: generics(),
+                    impls: vec![Id(4), Id(5)],
+                }),
+            ),
+            item(
+                2,
+                Some("Ext"),
+                Public,
+                ItemEnum::Trait(Trait {
+                    is_auto: false,
+                    is_unsafe: false,
+                    is_dyn_compatible: true,
+                    items: Vec::new(),
+                    generics: generics(),
+                    bounds: Vec::new(),
+                    implementations: vec![Id(4)],
+                }),
+            ),
+            Item {
+                attrs: vec![Attribute::Other(
+                    "#[doc(alias = \"hidden_items\")]".to_owned(),
+                )],
+                ..item(3, Some("kept"), Public, function())
+            },
+            item(
+                4,
+                None,
+                Default,
+                ItemEnum::Impl(impl_of(2, &[6, 7], "provided")),
+            ),
+            item(
+                5,
+                None,
+                Default,
+                ItemEnum::Impl(impl_of(500, &[], "by_std")),
+            ),
+            item(
+                6,
+                Some("Output"),
+                Default,
+                ItemEnum::AssocType {
+                    generics: generics(),
+                    bounds: Vec::new(),
+                    type_: None,
+                    default_unstable: None,
+                },
+            ),
+            item(7, Some("written"), Default, function()),
+        ],
+        vec![(500, summary(1, &["core", "fmt", "Debug"], ItemKind::Trait))],
+        &[(1, "core")],
+    );
+    let crates = [("own".to_owned(), own)].into();
+    assert_eq!(
+        Surface::new(&crates).paths("own").unwrap(),
+        set(&["Ext", "Thing", "Thing::provided", "Thing::written", "kept"])
+    );
 }

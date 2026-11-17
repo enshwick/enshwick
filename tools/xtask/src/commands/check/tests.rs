@@ -616,6 +616,30 @@ fn a_wide_change_to_the_facade_documents_it_with_the_features_of_a_workspace_bui
 }
 
 #[test]
+fn the_public_paths_list_is_checked_when_its_writer_or_the_list_alone_changes() {
+    let scope = |code: &[&str]| Scope::Some {
+        code: code.iter().map(|name| (*name).to_owned()).collect(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: false,
+    };
+    let list = [public_paths::FILE.to_owned()];
+    let other = ["README.md".to_owned()];
+    assert!(lists_public_paths(&scope(&[FACADE]), Some(&other)));
+    assert!(lists_public_paths(
+        &scope(&[env!("CARGO_PKG_NAME")]),
+        Some(&other)
+    ));
+    assert!(lists_public_paths(&scope(&[]), Some(&list)));
+    assert!(!lists_public_paths(
+        &scope(&["enshwick-loader"]),
+        Some(&other)
+    ));
+    assert!(!lists_public_paths(&scope(&[]), None));
+}
+
+#[test]
 fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
     let steps = stable_api_steps(false, &stable());
     let skipped = |name: &str| {

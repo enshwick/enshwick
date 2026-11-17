@@ -32,7 +32,8 @@ pub(crate) struct Surface<'a> {
     crates: &'a BTreeMap<String, Crate>,
     /// Each crate's own items by their path, the crate's name first: how a
     /// re-export in another crate, which names an item by that path, finds it.
-    by_path: FxHashMap<&'a str, FxHashMap<Vec<String>, Id>>,
+    /// A path may name one item in each namespace, a macro and a module.
+    by_path: FxHashMap<&'a str, FxHashMap<Vec<String>, Vec<Id>>>,
     /// The names `Type::name` reaches through impl blocks, wherever they are
     /// written: an inherent block's public items and a trait impl's items.
     impl_members: FxHashMap<Key<'a>, BTreeSet<&'a str>>,
@@ -43,12 +44,12 @@ impl<'a> Surface<'a> {
         let by_path = crates
             .iter()
             .map(|(name, krate)| {
-                let mut own: FxHashMap<Vec<String>, Id> = krate
-                    .paths
-                    .iter()
-                    .filter(|(id, summary)| summary.crate_id == 0 && krate.index.contains_key(id))
-                    .map(|(id, summary)| (summary.path.clone(), *id))
-                    .collect();
+                let mut own: FxHashMap<Vec<String>, Vec<Id>> = FxHashMap::default();
+                for (id, summary) in &krate.paths {
+                    if summary.crate_id == 0 && krate.index.contains_key(id) {
+                        own.entry(summary.path.clone()).or_default().push(*id);
+                    }
+                }
                 // A proc-macro crate's `paths` gives its macros other ids than its index.
                 declared(krate, krate.root, &mut vec![name.clone()], &mut own);
                 (name.as_str(), own)
@@ -232,7 +233,11 @@ impl<'a> Surface<'a> {
     }
 
     /// The members every written impl block gives the type it is for: an
-    /// inherent block's public items and a trait impl's items. Blanket and
+    /// inherent block's public items and a trait impl's methods and
+    /// constants, with the provided methods of a trait of the documented
+    /// crates; `Type::Assoc` does not compile, so associated types stay out,
+    /// and a standard trait's provided methods, which move with the
+    /// toolchain, too. Blanket and
     /// auto-trait impls give none, or every type would list `into` and
     /// `type_id`, and neither do `#[derive]`d ones, whose `clone`, `fmt` and
     /// `eq` no table names and which would move the list with each derive.
@@ -263,10 +268,20 @@ impl<'a> Surface<'a> {
                     .filter_map(|id| krate.index.get(id))
                     .filter(|member| {
                         !hidden(member)
+                            && !matches!(member.inner, ItemEnum::AssocType { .. })
                             && (block.trait_.is_some() || member.visibility == Visibility::Public)
                     })
                     .filter_map(|member| member.name.as_deref());
-                members.entry(owner).or_default().extend(names);
+                let provided = block
+                    .trait_
+                    .as_ref()
+                    .filter(|used| {
+                        matches!(self.resolve(crate_name, used.id), Some(Target::Item(_)))
+                    })
+                    .map(|_| block.provided_trait_methods.iter().map(String::as_str));
+                let listed = members.entry(owner).or_default();
+                listed.extend(names);
+                listed.extend(provided.into_iter().flatten());
             }
         }
         members
@@ -290,9 +305,24 @@ impl<'a> Surface<'a> {
         let Some((owner, own)) = self.by_path.get_key_value(owner) else {
             return Some(Target::Outside);
         };
-        own.get(summary.path.as_slice())
-            .filter(|found| self.crates[*owner].index.contains_key(found))
-            .map(|found| Target::Item((owner, *found)))
+        let krate = &self.crates[*owner];
+        let found: Vec<&Id> = own
+            .get(summary.path.as_slice())
+            .into_iter()
+            .flatten()
+            .filter(|found| krate.index.contains_key(found))
+            .collect();
+        // The item of the namespace the reference names, where the path has several.
+        found
+            .iter()
+            .find(|found| {
+                krate
+                    .paths
+                    .get(found)
+                    .is_some_and(|own| own.kind == summary.kind)
+            })
+            .or(found.first())
+            .map(|found| Target::Item((owner, **found)))
     }
 
     fn item(&self, (crate_name, id): Key<'a>) -> Option<&'a Item> {
@@ -319,14 +349,16 @@ fn written(name: &str) -> Cow<'_, str> {
     }
 }
 
+/// How rustdoc's JSON writes `#[doc(hidden)]` (format 61).
+const DOC_HIDDEN: &str = "#[doc(hidden)]";
+
 /// Whether the item is marked `#[doc(hidden)]` itself, which leaves it out
 /// of the documented surface; one only inside a hidden module stays when the
 /// crate re-exports it.
 fn hidden(item: &Item) -> bool {
-    item.attrs.iter().any(|attribute| {
-        matches!(attribute, Attribute::Other(text)
-            if text.starts_with("#[doc(") && text.contains("hidden"))
-    })
+    item.attrs
+        .iter()
+        .any(|attribute| matches!(attribute, Attribute::Other(text) if text == DOC_HIDDEN))
 }
 
 /// Adds each item `krate` declares below the module `module`, at `path`,
@@ -335,7 +367,7 @@ fn declared(
     krate: &Crate,
     module: Id,
     path: &mut Vec<String>,
-    found: &mut FxHashMap<Vec<String>, Id>,
+    found: &mut FxHashMap<Vec<String>, Vec<Id>>,
 ) {
     let Some(ItemEnum::Module(inner)) = krate.index.get(&module).map(|item| &item.inner) else {
         return;
@@ -351,7 +383,10 @@ fn declared(
             continue;
         }
         path.push(name.clone());
-        found.entry(path.clone()).or_insert(*id);
+        let ids = found.entry(path.clone()).or_default();
+        if !ids.contains(id) {
+            ids.push(*id);
+        }
         if matches!(item.inner, ItemEnum::Module(_)) {
             declared(krate, *id, path, found);
         }

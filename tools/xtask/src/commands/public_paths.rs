@@ -1,8 +1,9 @@
 //! The public paths of the API crate, `tools/public-paths.txt`, in no package:
 //! every module, item and member a mod can name after `enshwick::`, from
-//! rustdoc's JSON of the crate and of the workspace crates it re-exports,
-//! built once with its default features and once with `typed`, the widest,
-//! which builds on `unstable`. The docs
+//! rustdoc's JSON of the crate and of the workspace crates its build
+//! compiles, built once with its default features and once with `typed`,
+//! which builds on `unstable`; `test` and `schema`, which serve tools and
+//! tests, are left out. The docs
 //! site reads the file at the ref it pins, so the paths its coverage table
 //! names are checked against what the compiler sees, and a rename shows in
 //! the pull request that makes it.
@@ -10,11 +11,14 @@
 mod walk;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::ErrorKind;
 use std::path::Path;
 use std::process::Command;
 
 use rustdoc_types::{Crate, FORMAT_VERSION};
 
+use crate::affected::Package;
+use crate::commands::check::Step;
 use crate::{FACADE, cargo};
 
 /// The committed list, relative to the workspace root.
@@ -32,8 +36,9 @@ const TARGET_DIR: &str = "target/public-paths";
 const RUSTDOC_FLAGS: &str = "-Z unstable-options --output-format json --document-private-items --document-hidden-items --cap-lints allow";
 /// The file's opening lines.
 const HEADER: &str = "\
-# The public paths of the enshwick crate, one a line, each followed by
-# ` unstable` when only the `unstable` feature, or `typed` on it, compiles it.
+# The public paths of the enshwick crate with its default features or `typed`,
+# one a line, each followed by ` unstable` when only the `unstable` feature, or
+# `typed` on it, compiles it.
 # Written by `cargo xtask public-paths`; `cargo xtask check` refuses a stale copy.
 ";
 /// How many differing paths a stale list's problem names.
@@ -41,7 +46,7 @@ const SHOWN: usize = 10;
 
 /// `cargo xtask public-paths`: rewrites the committed list.
 pub(crate) fn run(root: &Path) -> Result<bool, String> {
-    let list = generate(root)?;
+    let list = generate(root, &crate::packages()?)?;
     let path = root.join(FILE);
     std::fs::write(&path, list).map_err(|error| format!("{}: {error}", path.display()))?;
     Ok(true)
@@ -49,12 +54,17 @@ pub(crate) fn run(root: &Path) -> Result<bool, String> {
 
 /// The problems with the committed list under `root`: the paths it lacks
 /// or names that the crate no longer has, a few of each.
-pub(crate) fn check(root: &Path) -> Vec<String> {
-    let fresh = match generate(root) {
+pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
+    let fresh = match generate(root, packages) {
         Ok(list) => list,
         Err(error) => return vec![error],
     };
-    let committed = std::fs::read_to_string(root.join(FILE)).unwrap_or_default();
+    let path = root.join(FILE);
+    let committed = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
+        Err(error) => return vec![format!("{}: {error}", path.display())],
+    };
     stale(&committed, &fresh)
 }
 
@@ -89,10 +99,9 @@ fn stale(committed: &str, fresh: &str) -> Vec<String> {
 }
 
 /// The list as the crate under `root` has it now.
-fn generate(root: &Path) -> Result<String, String> {
-    let documented = documented(root)?;
-    let stable = paths(root, &documented, false)?;
-    let unstable = paths(root, &documented, true)?;
+fn generate(root: &Path, packages: &[Package]) -> Result<String, String> {
+    let stable = paths(root, packages, None)?;
+    let unstable = paths(root, packages, Some(&format!("{FACADE}/{WIDEST}")))?;
     Ok(render(&stable, &unstable))
 }
 
@@ -111,33 +120,35 @@ fn render(stable: &BTreeSet<String>, unstable: &BTreeSet<String>) -> String {
     text
 }
 
-// The public paths of the facade, documented with its widest feature or/n/// with its default ones.
-fn paths(root: &Path, documented: &[String], widest: bool) -> Result<BTreeSet<String>, String> {
-    let mut command = Command::new(cargo());
-    command
-        .current_dir(root)
-        .env("RUSTC_BOOTSTRAP", "1")
-        .env("RUSTDOCFLAGS", RUSTDOC_FLAGS)
-        .args(["doc", "--quiet", "--no-deps", "--target-dir", TARGET_DIR]);
-    for name in documented {
-        command.args(["--package", name]);
+/// The public paths of the facade, documented with `features` or with its
+/// default ones.
+fn paths(
+    root: &Path,
+    packages: &[Package],
+    features: Option<&str>,
+) -> Result<BTreeSet<String>, String> {
+    let documented = documented(root, packages, features)?;
+    let target = root.join(TARGET_DIR);
+    let mut step = Step::new(&[
+        "doc",
+        "--no-deps",
+        "--target-dir",
+        &target.display().to_string(),
+    ])
+    .env("RUSTC_BOOTSTRAP", "1")
+    .env("RUSTDOCFLAGS", RUSTDOC_FLAGS);
+    for (name, _) in &documented {
+        step = step.then(&["--package", name]);
     }
-    if widest {
-        command.args(["--features", &format!("{FACADE}/{WIDEST}")]);
+    if let Some(features) = features {
+        step = step.then(&["--features", features]);
     }
-    let output = command
-        .output()
-        .map_err(|error| format!("running cargo doc: {error}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "cargo doc for the public paths failed:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    if !step.run(false) {
+        return Err("cargo doc for the public paths failed".to_owned());
     }
-    let doc = root.join(TARGET_DIR).join("doc");
+    let doc = target.join("doc");
     let mut crates = BTreeMap::new();
-    for name in documented {
-        let lib = name.replace('-', "_");
+    for (_, lib) in documented {
         let file = doc.join(format!("{lib}.json"));
         let text = std::fs::read_to_string(&file)
             .map_err(|error| format!("{}: {error}", file.display()))?;
@@ -147,56 +158,69 @@ fn paths(root: &Path, documented: &[String], widest: bool) -> Result<BTreeSet<St
                 file.display()
             )
         })?;
+        if krate.format_version != FORMAT_VERSION {
+            return Err(format!(
+                "{}: rustdoc wrote format {}, rustdoc-types reads {FORMAT_VERSION}; move it with the toolchain",
+                file.display(),
+                krate.format_version
+            ));
+        }
         crates.insert(lib, krate);
     }
     walk::Surface::new(&crates).paths(FACADE)
 }
 
-/// The facade and the workspace crates it builds on, its optional ones
-/// left out: selecting only these keeps their features as a build of the
-/// facade unifies them.
-fn documented(root: &Path) -> Result<Vec<String>, String> {
-    let output = Command::new(cargo())
-        .current_dir(root)
-        .args(["metadata", "--format-version", "1", "--no-deps"])
+/// The workspace packages, name and library, a build of the facade with
+/// `features` compiles, optional ones its features turn on included:
+/// selecting only these keeps their features as that build unifies them.
+fn documented(
+    root: &Path,
+    packages: &[Package],
+    features: Option<&str>,
+) -> Result<Vec<(String, String)>, String> {
+    let mut command = Command::new(cargo());
+    command.current_dir(root).args([
+        "tree",
+        "--package",
+        FACADE,
+        "--edges",
+        "normal",
+        "--prefix",
+        "none",
+        "--format",
+        "{p}",
+    ]);
+    if let Some(features) = features {
+        command.args(["--features", features]);
+    }
+    let output = command
         .output()
-        .map_err(|error| format!("running cargo metadata: {error}"))?;
+        .map_err(|error| format!("running cargo tree: {error}"))?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).into_owned());
     }
-    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("reading cargo metadata: {error}"))?;
-    Ok(built_on(&metadata, FACADE))
+    let libraries = packages
+        .iter()
+        .filter_map(|package| Some((package.name.as_str(), package.lib.as_deref()?)))
+        .collect();
+    Ok(in_tree(
+        &String::from_utf8_lossy(&output.stdout),
+        &libraries,
+    ))
 }
 
-/// `package` and the workspace packages it depends on through normal,
-/// required dependencies, directly or not, from `cargo metadata --no-deps`.
-fn built_on(metadata: &serde_json::Value, package: &str) -> Vec<String> {
-    let deps: BTreeMap<&str, Vec<&str>> = metadata["packages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|entry| {
-            let deps = entry["dependencies"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|dep| {
-                    dep["kind"].is_null() && dep["path"].is_string() && dep["optional"] != true
-                })
-                .filter_map(|dep| dep["name"].as_str())
-                .collect();
-            Some((entry["name"].as_str()?, deps))
-        })
+/// The workspace packages among the lines of `tree`, `cargo tree --prefix
+/// none --format {p}` output, each with its library from `libraries`.
+fn in_tree(tree: &str, libraries: &BTreeMap<&str, &str>) -> Vec<(String, String)> {
+    let named: BTreeSet<&str> = tree
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
         .collect();
-    let mut reached = BTreeSet::new();
-    let mut pending = vec![package];
-    while let Some(name) = pending.pop() {
-        if reached.insert(name) {
-            pending.extend(deps.get(name).into_iter().flatten());
-        }
-    }
-    reached.into_iter().map(str::to_owned).collect()
+    libraries
+        .iter()
+        .filter(|(name, _)| named.contains(*name))
+        .map(|(name, lib)| ((*name).to_owned(), (*lib).to_owned()))
+        .collect()
 }
 
 #[cfg(test)]

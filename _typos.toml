@@ -5,6 +5,7 @@ extend-exclude = ["CHANGELOG.md", "*.lock", "*.exports", "texts.toml", "fuzz/cor
   "crates/internal/typed/src/typed.rs", "crates/internal/typed/src/typed/*.rs",
   "!crates/internal/typed/src/typed/runtime.rs",
   "crates/enshwick-gamedata/src/typed/ids.rs", "crates/enshwick-gamedata/typed/",
+  "tools/public-paths.txt",
   # Texts in other languages than English; the English ones are checked.
   "crates/runtime/loader/src/engine/texts/*.toml", "!crates/runtime/loader/src/engine/texts/en.toml"]
 
