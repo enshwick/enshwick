@@ -253,7 +253,7 @@ pub(crate) fn after_step(loader: &Loader) {
             command.owner.get(),
             if reply.done { "done" } else { "refused" }
         );
-        crate::actions::reply::answer(loader, Path::Chat, command.key, reply.done, &reply.text);
+        crate::actions::reply::answer(loader, Path::Chat, command.key, &reply.text);
     }
     for (command, refusal) in refused {
         crate::actions::player_actions::refuse(

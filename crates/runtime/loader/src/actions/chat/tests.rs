@@ -11,6 +11,12 @@ fn a_line_that_is_not_utf8_stays_within_the_limit_once_replaced() {
 }
 
 #[test]
+fn a_reply_before_the_chat_is_linked_says_it_was_not_queued() {
+    assert!(LINKED.get().is_none());
+    assert!(!reply(7, "Done"), "so its caller tells it as a notice");
+}
+
+#[test]
 fn a_panic_in_the_part_for_mods_leaves_the_chat_mute_on() {
     let panicked = MODS_FUSE.run("a test", || panic!("a test"));
     assert_eq!(panicked, None::<()>);
