@@ -3,7 +3,7 @@
 //! luau-lsp and other Luau tools.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map};
 use std::fmt::Write as _;
 
 use enshwick_core::script::{self, Choice, Class, Declared, Record, Signature, Ty, Union};
@@ -51,6 +51,7 @@ fn luau_name(name: &str) -> Cow<'_, str> {
 }
 
 /// A named type the definitions declare.
+#[derive(Clone, Copy)]
 enum Named {
     Record(&'static Record),
     Choice(&'static Choice),
@@ -59,6 +60,35 @@ enum Named {
 }
 
 impl Named {
+    /// The name the definitions declare the type by.
+    fn luau_name(&self) -> Cow<'static, str> {
+        luau_name(match self {
+            Self::Record(record) => record.name(),
+            Self::Choice(choice) => choice.name(),
+            Self::Object(class) => class.name(),
+            Self::Union(union) => union.name(),
+        })
+    }
+
+    /// Whether `other` is this type or declares exactly the same.
+    fn same(&self, other: &Self) -> bool {
+        let one = match (self, other) {
+            (Self::Record(a), Self::Record(b)) => core::ptr::eq(*a, *b),
+            (Self::Choice(a), Self::Choice(b)) => core::ptr::eq(*a, *b),
+            (Self::Object(a), Self::Object(b)) => core::ptr::eq(*a, *b),
+            (Self::Union(a), Self::Union(b)) => core::ptr::eq(*a, *b),
+            _ => false,
+        };
+        one || self.declaration() == other.declaration()
+    }
+
+    /// The type's declaration on its own.
+    fn declaration(&self) -> String {
+        let mut out = String::new();
+        self.write(&mut out);
+        out
+    }
+
     /// The type's declaration, with its doc.
     fn write(&self, out: &mut String) {
         match self {
@@ -188,27 +218,32 @@ fn namespaces() -> Vec<(&'static str, &'static str, Vec<Entry>)> {
     merged
 }
 
+/// Named types by the name the definitions declare them by.
+type Names = BTreeMap<Cow<'static, str>, Named>;
+
 /// Collects every named type inside `ty`.
-fn collect(ty: &'static Ty, named: &mut BTreeMap<&'static str, Named>) {
+///
+/// # Panics
+///
+/// When two different types share a Luau name, as [`add`] says.
+fn collect(ty: &'static Ty, named: &mut Names) {
     match *ty {
         Ty::Optional(inner) | Ty::List(inner) => collect(inner, named),
-        Ty::Record(record) => {
-            if named.insert(record.name(), Named::Record(record)).is_none() {
-                for field in record.fields() {
-                    collect(field.ty(), named);
-                }
+        Ty::Record(record) if add(named, Named::Record(record)) => {
+            for field in record.fields() {
+                collect(field.ty(), named);
             }
         }
         Ty::Choice(choice) => {
-            named.insert(choice.name(), Named::Choice(choice));
+            add(named, Named::Choice(choice));
         }
         Ty::Function(signature) => collect_signature(signature, named),
-        Ty::Union(union) if named.insert(union.name(), Named::Union(union)).is_none() => {
+        Ty::Union(union) if add(named, Named::Union(union)) => {
             for ty in union.variants().iter().filter_map(script::Variant::ty) {
                 collect(ty, named);
             }
         }
-        Ty::Object(class) if named.insert(class.name(), Named::Object(class)).is_none() => {
+        Ty::Object(class) if add(named, Named::Object(class)) => {
             for method in class.methods() {
                 collect_signature(method.signature(), named);
             }
@@ -217,8 +252,41 @@ fn collect(ty: &'static Ty, named: &mut BTreeMap<&'static str, Named>) {
     }
 }
 
+/// Adds `ty` under its Luau name; whether it is new, so its inner types are
+/// walked once.
+///
+/// # Panics
+///
+/// When a type that declares something else already has that name, since
+/// every Luau type shares one namespace and one would hide the other. The
+/// types are the API's own, which every definitions test walks, so a
+/// release never reaches it.
+fn add(named: &mut Names, ty: Named) -> bool {
+    match named.entry(ty.luau_name()) {
+        btree_map::Entry::Vacant(free) => {
+            free.insert(ty);
+            true
+        }
+        btree_map::Entry::Occupied(taken) => {
+            let known = taken.get();
+            assert!(
+                known.same(&ty),
+                "two script types are named {}:\n{}\n{}",
+                taken.key(),
+                known.declaration(),
+                ty.declaration()
+            );
+            false
+        }
+    }
+}
+
 /// Collects every named type of `signature`'s parameters and answer.
-fn collect_signature(signature: &'static Signature, named: &mut BTreeMap<&'static str, Named>) {
+///
+/// # Panics
+///
+/// When two different types share a Luau name, as [`add`] says.
+fn collect_signature(signature: &'static Signature, named: &mut Names) {
     for param in signature.params() {
         collect(param.ty(), named);
     }
@@ -335,8 +403,12 @@ fn luau_words(text: &str) -> String {
 }
 
 /// Every named type the definitions declare, by name.
-fn named() -> BTreeMap<&'static str, Named> {
-    let mut named = BTreeMap::new();
+///
+/// # Panics
+///
+/// When two different types share a Luau name, as [`add`] says.
+fn named() -> Names {
+    let mut named = Names::new();
     for (_, _, entries) in namespaces() {
         for entry in entries {
             collect_signature(entry.signature, &mut named);
@@ -354,20 +426,29 @@ fn named() -> BTreeMap<&'static str, Named> {
 /// The names of the types [`definitions`] exports, which are global in
 /// luau-lsp, so other definitions loaded beside them keep clear of them.
 ///
+/// # Panics
+///
+/// When two script types of the API share a name, which its tests rule out.
+///
 /// # Examples
 ///
 /// ```
 /// assert!(cargo_enshwick::luau::type_names().any(|name| name == "Player"));
 /// ```
-pub fn type_names() -> impl Iterator<Item = &'static str> {
-    named().into_keys()
+pub fn type_names() -> impl Iterator<Item = String> {
+    named().into_keys().map(Cow::into_owned)
 }
 
 /// The types of the values `enshwick.typed` hands a script, a file of their
-/// own beside [`definitions`].
+/// own loaded beside [`definitions`], which leaves out the types that file
+/// declares already.
 ///
 /// A type for each generated struct and enum, which a script names where it
 /// helps: `local value: typed_ecs_Health = health:read(entity)`.
+///
+/// # Panics
+///
+/// When two script types of the API share a name, which its tests rule out.
 ///
 /// # Examples
 ///
@@ -377,21 +458,28 @@ pub fn type_names() -> impl Iterator<Item = &'static str> {
 /// ```
 #[must_use]
 pub fn typed_definitions() -> String {
-    let mut named = BTreeMap::new();
+    let main = named();
+    let mut named = main.clone();
     for ty in enshwick_core::typed::SCRIPT_TYPES {
         collect(ty, &mut named);
     }
     let mut out = String::from(
         "--!strict\n-- The types of the values of `enshwick.typed`, the game's components, events and\n-- resources, generated by `cargo enshwick` from the API's own descriptions; do not edit.\n",
     );
-    for ty in named.values() {
-        out.push('\n');
-        ty.write(&mut out);
+    for (name, ty) in &named {
+        if !main.contains_key(name) {
+            out.push('\n');
+            ty.write(&mut out);
+        }
     }
     out
 }
 
 /// The whole definitions file.
+///
+/// # Panics
+///
+/// When two script types of the API share a name, which its tests rule out.
 ///
 /// # Examples
 ///
@@ -471,32 +559,75 @@ mod tests {
         assert_eq!(plain("a [b"), "a [b");
     }
 
-    #[test]
-    fn no_two_types_share_a_name() {
-        let doc = |named: &Named| match named {
-            Named::Record(r) => r.doc(),
-            Named::Choice(c) => c.doc(),
-            Named::Union(u) => u.doc(),
-            Named::Object(o) => o.doc(),
-        };
-        let mut first: BTreeMap<&str, &str> = BTreeMap::new();
-        let mut clashes = Vec::new();
-        let signatures = namespaces()
-            .into_iter()
-            .flat_map(|(_, _, entries)| entries.into_iter().map(|e| e.signature));
-        for signature in signatures {
-            let mut one = BTreeMap::new();
-            collect_signature(signature, &mut one);
-            for (name, named) in &one {
-                let known = *first.entry(name).or_insert_with(|| doc(named));
-                if known != doc(named) {
-                    clashes.push(*name);
-                }
-            }
+    const PLACEMENT: &str = "Where it stands.";
+    static BUILDING: Record = Record::new("Placement", "Where a building stands.", &[]);
+    static PANEL: Record = Record::new("Placement", "Where a panel sits.", &[]);
+    static BUILDING_TY: Ty = Ty::Record(&BUILDING);
+    static PANEL_TY: Ty = Ty::Record(&PANEL);
+    static BARE: Record = Record::new("Placement", PLACEMENT, &[]);
+    static BARE_TY: Ty = Ty::Record(&BARE);
+    static BARE_COPY: Record = Record::new("Placement", PLACEMENT, &[]);
+    static BARE_COPY_TY: Ty = Ty::Record(&BARE_COPY);
+    static EDGED: Record = Record::new(
+        "Placement",
+        PLACEMENT,
+        &[script::Field::new("edge", "", &Ty::Nil)],
+    );
+    static EDGED_TY: Ty = Ty::Record(&EDGED);
+    static CHOSEN: Choice = Choice::new("Placement", PLACEMENT, &[("Left", "")]);
+    static CHOSEN_TY: Ty = Ty::Choice(&CHOSEN);
+
+    /// The named types of `types`, collected in order.
+    fn collected(types: &[&'static Ty]) -> Names {
+        let mut named = Names::new();
+        for ty in types {
+            collect(ty, &mut named);
         }
-        clashes.sort_unstable();
-        clashes.dedup();
-        assert!(clashes.is_empty(), "types of one name: {clashes:?}");
+        named
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "two script types are named Placement:\n--- Where a building stands."
+    )]
+    fn two_script_types_of_one_name_fail_the_definitions_naming_both() {
+        collected(&[&BUILDING_TY, &PANEL_TY]);
+    }
+
+    #[test]
+    #[should_panic(expected = "two script types are named Placement")]
+    fn two_records_of_one_name_and_doc_but_other_fields_fail_the_definitions() {
+        collected(&[&BARE_TY, &EDGED_TY]);
+    }
+
+    #[test]
+    #[should_panic(expected = "two script types are named Placement")]
+    fn a_record_and_a_choice_of_one_name_and_doc_fail_the_definitions() {
+        collected(&[&BARE_TY, &CHOSEN_TY]);
+    }
+
+    #[test]
+    #[should_panic(expected = "two script types are named typed_a_b_c_T")]
+    fn two_typed_paths_of_one_luau_name_fail_the_definitions() {
+        static NESTED: Record = Record::new("enshwick::typed::a::b_c::T", "", &[]);
+        static NESTED_TY: Ty = Ty::Record(&NESTED);
+        static FLAT: Record = Record::new(
+            "enshwick::typed::a_b::c::T",
+            "",
+            &[script::Field::new("edge", "", &Ty::Nil)],
+        );
+        static FLAT_TY: Ty = Ty::Record(&FLAT);
+        collected(&[&NESTED_TY, &FLAT_TY]);
+    }
+
+    #[test]
+    fn one_script_type_reached_twice_is_declared_once() {
+        assert_eq!(collected(&[&BUILDING_TY, &BUILDING_TY]).len(), 1);
+    }
+
+    #[test]
+    fn two_copies_of_one_declaration_are_declared_once() {
+        assert_eq!(collected(&[&BARE_TY, &BARE_COPY_TY]).len(), 1);
     }
 
     #[test]
@@ -572,24 +703,38 @@ mod tests {
                 assert!(names.insert(name.to_owned()), "{name} declared twice");
             }
         }
+        let main: std::collections::BTreeSet<String> = type_names().collect();
+        assert!(
+            names.is_disjoint(&main),
+            "the typed file declares a type the main one does"
+        );
         let script = enshwick::typed::SCRIPT_TYPES.iter();
         for (row, ty) in enshwick::typed::NAMED.iter().zip(script) {
             let Ty::Record(record) = ty else {
                 panic!("{}: no record", row.id);
             };
             let name = luau_name(record.name());
-            assert!(names.contains(name.as_ref()), "{} has no Luau type", row.id);
+            assert!(
+                names.contains(name.as_ref()) || main.contains(name.as_ref()),
+                "{} has no Luau type",
+                row.id
+            );
         }
         assert!(
             enshwick::typed::NAMED.len() > 900,
             "{} covered types",
             enshwick::typed::NAMED.len()
         );
-        let main: Vec<&str> = type_names().collect();
+    }
+
+    #[test]
+    fn the_api_s_type_names_are_the_names_luau_sees() {
+        let main: Vec<String> = type_names().collect();
         assert!(
-            names.iter().all(|name| !main.contains(&name.as_str())),
-            "a typed type takes a name of the API's"
+            main.iter().any(|name| name.starts_with("typed_")),
+            "{main:?}"
         );
+        assert!(!main.iter().any(|name| name.contains("::")), "{main:?}");
     }
 
     #[test]

@@ -15,9 +15,7 @@ use enshwick_gamedata::typed::names::{camel, is_luau_name, split, unique};
 /// `source`; no type takes a name of the API's definitions, which a Luau mod
 /// loads beside them.
 pub(crate) fn render(catalogue: &Catalogue, chosen: &BTreeSet<String>, source: &str) -> String {
-    let reserved: BTreeSet<String> = cargo_enshwick::luau::type_names()
-        .map(str::to_owned)
-        .collect();
+    let reserved: BTreeSet<String> = cargo_enshwick::luau::type_names().collect();
     let names = luau_names(chosen, &reserved);
     let mut out = format!(
         "-- The game's own types, written by `cargo enshwick types` from the\n\
