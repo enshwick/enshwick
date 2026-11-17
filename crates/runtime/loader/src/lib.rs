@@ -63,7 +63,7 @@ pub use engine::pages::{forget as forget_read_only, read_only};
 pub use engine::world::accounts::bench_accounts;
 #[cfg(windows)]
 pub use parts::table_ids;
-#[cfg(windows)]
+#[cfg(all(windows, any(test, feature = "test")))]
 #[doc(hidden)]
 pub use ui::interface::item_slots::bench_item_slot;
 #[cfg(all(windows, feature = "test"))]

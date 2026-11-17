@@ -1,8 +1,8 @@
 use enshwick_core::abi::UiWidget;
 
 use super::{
-    BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, Icon, LABEL_SIZE,
-    SLIDER_CONFIG, TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
+    BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, Icon, LABEL_SIZE, SLIDER_CONFIG,
+    TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
 };
 
 /// `ui.button`'s size mode that fits the button to its text; 1 is a fixed
@@ -21,8 +21,17 @@ pub(super) const BUTTON_ALIGN_RIGHT: u16 = 0x203;
 /// The space an icon leaves above and below it in its button, before the
 /// interface's scale; the game's own gear buttons leave 25 (client 26430625).
 const ICON_MARGIN: f32 = 25.0;
-/// The height of an icon button, which an empty slot keeps free.
-const ICON_SLOT: f32 = 50.0;
+/// The height of an icon button at 1280x720 (client 26430625), which an
+/// empty slot keeps where the drawn button's height does not read.
+const SLOT_FALLBACK: f32 = 50.0;
+
+/// The height an empty slot keeps for a button the game laid out `laid`
+/// high: [`SLOT_FALLBACK`] where that does not read, is not yet laid out
+/// (0), or is no height a button on a screen can have.
+fn slot_height(laid: Option<f32>) -> f32 {
+    laid.filter(|h| *h > 0.0 && *h <= crate::ui::listing::SCREEN_HEIGHT)
+        .unwrap_or(SLOT_FALLBACK)
+}
 /// The slider's value format that the game fills as a rounded whole number.
 /// Formats 3 to 5 show the value the player drags while the drag lasts, and
 /// the caller's value otherwise; format 2 shows only a text the caller wrote
@@ -362,27 +371,56 @@ impl Engine {
         Some(clicked && enabled)
     }
 
-    /// Keeps an icon button's place free, so the buttons above it sit where
-    /// they would with one there.
+    /// Runs `draw` in a frame at the right of its column, which fits what it
+    /// draws; with what `draw` gives, the height an empty slot keeps for it:
+    /// the height the game laid that frame out at in the last frame, see
+    /// [`slot_height`].
     ///
     /// # Safety
     ///
     /// - Called inside a window, on the frame's thread.
-    pub(in crate::ui::interface) unsafe fn icon_slot(&self) {
-        let mut frame = Buf::<FRAME_SIZE>::zeroed();
-        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
-        // `Engine::resolve`, inside the window this function's `# Safety`
-        // gives; `frame` holds the table's `ui.frame_extent` bytes
-        // (`Layout::read`), name 0 for none.
-        unsafe { (self.frame_open)(frame.ptr(), 0) };
-        let node = self.frame_node(&frame);
+    /// - `draw` closes every frame it opens.
+    pub(in crate::ui::interface) unsafe fn measured<R>(
+        &self,
+        draw: impl FnOnce() -> R,
+    ) -> (R, f32) {
+        let body = |node: usize| {
+            let align = BUTTON_ALIGN_RIGHT;
+            // SAFETY: `self.node_align` is the game's `ui.node_align`, checked
+            // in `Engine::resolve`, on the node of the frame `framed` just
+            // opened, with a live alignment word.
+            unsafe { (self.node_align)(node, &raw const align) };
+            let laid = self
+                .layout
+                .node_laid_height
+                .filter(|_| node != 0)
+                .map(|at| {
+                    // SAFETY: `node` is non-zero, checked by the filter before it:
+                    // the live node of the frame `framed` just opened, whose laid
+                    // height, a float, sits at the table's `ui.node_laid_height`
+                    // (client 26430625, `ui.frame_close` reads it the same way).
+                    unsafe { crate::engine::memory::read::<f32>(node, at) }
+                });
+            (draw(), slot_height(laid))
+        };
+        // SAFETY: inside a window, on the frame's thread, by this function's
+        // `# Safety`; `draw` closes every frame it opens.
+        unsafe { self.framed(body) }
+    }
+
+    /// Keeps the place of a button `height` high free, so the buttons above
+    /// it sit where they would with one there.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    pub(in crate::ui::interface) unsafe fn button_slot(&self, height: f32) {
         // SAFETY: `self.node_height` is the game's `ui.node_height`, checked
-        // in `Engine::resolve`, on the node the game just wrote into `frame`.
-        unsafe { (self.node_height)(node, ICON_SLOT) };
-        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
-        // in `Engine::resolve`, on the frame `frame_open` opened above, with
-        // nothing opened inside it.
-        unsafe { (self.frame_close)(frame.ptr()) };
+        // in `Engine::resolve`, on the node of the frame `framed` opened.
+        let body = |node| unsafe { (self.node_height)(node, height) };
+        // SAFETY: inside a window, on the frame's thread, by this function's
+        // `# Safety`; `body` opens no frame.
+        unsafe { self.framed(body) };
     }
 
     pub(super) fn setting_texts(&self, context: usize) -> [UiText; TOGGLE_ENTRIES] {
@@ -594,29 +632,25 @@ impl Engine {
     ///
     /// - Called inside a window or a HUD column, on the frame's thread.
     pub(in crate::ui::interface) unsafe fn progress(&self, value: f32, min: f32, max: f32) {
-        let mut frame = Buf::<FRAME_SIZE>::zeroed();
-        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
-        // `Engine::resolve`, inside the window this function's `# Safety`
-        // gives; `frame` holds the table's `ui.frame_extent` bytes
-        // (`Layout::read`), name 0 for none.
-        unsafe { (self.frame_open)(frame.ptr(), 0) };
-        let node = self.frame_node(&frame);
-        // SAFETY: `self.node_height` is the game's `ui.node_height`, checked
-        // in `Engine::resolve`, on the node the game just wrote into `frame`.
-        unsafe { (self.node_height)(node, BAR_HEIGHT) };
-        // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`, checked
-        // in `Engine::resolve`, on the node the game just wrote into `frame`.
-        unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
-        let white = 0xffff_ffff | u64::from(1.0f32.to_bits()) << 32;
-        let shade = 0x8000_0000 | u64::from(1.0f32.to_bits()) << 32;
-        // SAFETY: `self.progress` is the game's `ui.progress`, checked in
-        // `Engine::resolve`, inside the frame opened above; it takes values
-        // only.
-        unsafe { (self.progress)(value - min, max - min, white, shade) };
-        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
-        // in `Engine::resolve`, on the frame `frame_open` opened above, with
-        // nothing opened inside it.
-        unsafe { (self.frame_close)(frame.ptr()) };
+        let bar = |node| {
+            // SAFETY: `self.node_height` is the game's `ui.node_height`,
+            // checked in `Engine::resolve`, on the node of the frame `framed`
+            // just opened.
+            unsafe { (self.node_height)(node, BAR_HEIGHT) };
+            // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`,
+            // checked in `Engine::resolve`, on the node of the frame `framed`
+            // just opened.
+            unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
+            let white = 0xffff_ffff | u64::from(1.0f32.to_bits()) << 32;
+            let shade = 0x8000_0000 | u64::from(1.0f32.to_bits()) << 32;
+            // SAFETY: `self.progress` is the game's `ui.progress`, checked in
+            // `Engine::resolve`, inside the frame `framed` opened; it takes
+            // values only.
+            unsafe { (self.progress)(value - min, max - min, white, shade) };
+        };
+        // SAFETY: inside a window or HUD column, on the frame's thread, by
+        // this function's `# Safety`; `bar` opens no frame.
+        unsafe { self.framed(bar) };
     }
 }
 
@@ -754,5 +788,25 @@ mod dropdown_tests {
         assert_eq!(toggled(Some(1), 1, true), None);
         assert_eq!(toggled(Some(1), 2, true), Some(2), "one list at a time");
         assert_eq!(toggled(Some(1), 2, false), Some(1), "another row leaves it");
+    }
+}
+
+#[cfg(test)]
+mod slot_tests {
+    use super::{SLOT_FALLBACK, slot_height};
+
+    #[test]
+    fn an_empty_slot_keeps_the_laid_height_only_when_it_is_a_button_s_height() {
+        assert_eq!(slot_height(Some(64.0)), 64.0);
+        assert_eq!(slot_height(None), SLOT_FALLBACK, "no route");
+        assert_eq!(slot_height(Some(0.0)), SLOT_FALLBACK, "not laid out yet");
+        assert_eq!(slot_height(Some(-3.0)), SLOT_FALLBACK);
+        assert_eq!(slot_height(Some(f32::NAN)), SLOT_FALLBACK);
+        assert_eq!(slot_height(Some(f32::INFINITY)), SLOT_FALLBACK);
+        assert_eq!(
+            slot_height(Some(5000.0)),
+            SLOT_FALLBACK,
+            "taller than a screen"
+        );
     }
 }

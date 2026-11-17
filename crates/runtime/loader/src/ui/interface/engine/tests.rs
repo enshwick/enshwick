@@ -134,6 +134,13 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
             Some(None),
             "a build whose dropdown mode byte no route finds keeps the interface"
         );
+        assert_eq!(layout.node_laid_height, Some(0x120));
+        let unrouted = |id: &str| (id != pinned::ui::NODE_LAID_HEIGHT.id()).then(|| lookup(id))?;
+        assert_eq!(
+            Layout::read(&unrouted).map(|l| l.node_laid_height).ok(),
+            Some(None),
+            "a build whose laid node height no route finds keeps the interface"
+        );
         DialogLayout::read(&lookup).unwrap();
         let grown = |id: &str| {
             if id == pinned::ui::LABEL_EXTENT.id() {
@@ -161,8 +168,8 @@ fn client_tables() -> Vec<enshwick_gamedata::Table> {
 
 /// A table's constant by id; the entries only their engine routes find
 /// stand in: the text field's kept-state key as 1, its start byte as
-/// 0x198a and the dropdown's external mode byte as 0xc76, their offsets on
-/// every kept client build.
+/// 0x198a, the dropdown's external mode byte as 0xc76 and a node's laid
+/// height as 0x120, their offsets on every kept client build.
 fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
     if id == pinned::ui::TEXT_FIELD_STATE_KEY.id() {
         return Some(1);
@@ -172,6 +179,9 @@ fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
     }
     if id == pinned::ui::DROPDOWN_EXTERNAL.id() {
         return Some(0xc76);
+    }
+    if id == pinned::ui::NODE_LAID_HEIGHT.id() {
+        return Some(0x120);
     }
     table
         .constants()

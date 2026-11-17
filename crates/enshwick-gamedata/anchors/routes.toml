@@ -6264,6 +6264,15 @@ take = "value"
 range = [24, 96]
 
 [[route]]
+id = "ui.node_laid_height"
+sides = ["client"]
+callees = "ui.frame_close"
+shape = ["lea rax,[rcx+*]", "ret"]
+take = "value"
+plus = 12
+range = [150, 564]
+
+[[route]]
 id = "ui.node_id_get"
 sides = ["client"]
 in = "ui.slider"

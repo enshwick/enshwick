@@ -7,8 +7,8 @@ use crate::ui::place::Place;
 use crate::ui::window_node::{NAME_FITS, SHORT_LEN, short_name};
 
 use super::{
-    Buf, EXTENSION_WIDTH, Engine, HUD_MARGIN, NAV_CONFIG, PANEL_CONFIG, UiText, WINDOW_WIDTH,
-    Window, text_field,
+    Buf, EXTENSION_WIDTH, Engine, FRAME_SIZE, HUD_MARGIN, NAV_CONFIG, PANEL_CONFIG, UiText,
+    WINDOW_WIDTH, Window, text_field,
 };
 
 /// The window flag that holds every action and click from the windows on
@@ -62,6 +62,28 @@ impl Engine {
     /// The node of a frame the game opened in `frame`.
     pub(super) fn frame_node<const N: usize>(&self, frame: &Buf<N>) -> usize {
         frame.read_usize(self.layout.frame_node)
+    }
+
+    /// Runs `body` inside a new unnamed frame with that frame's node, which
+    /// `body` sets up before it draws; what `body` gives.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window or a HUD column, on the frame's thread.
+    /// - `body` closes every frame it opens.
+    pub(super) unsafe fn framed<R>(&self, body: impl FnOnce(usize) -> R) -> R {
+        let mut frame = Buf::<FRAME_SIZE>::zeroed();
+        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
+        // `Engine::resolve`, inside the window or HUD column this function's
+        // `# Safety` gives; `frame` holds the table's `ui.frame_extent` bytes
+        // (`Layout::read`), name 0 for none.
+        unsafe { (self.frame_open)(frame.ptr(), 0) };
+        let drawn = body(self.frame_node(&frame));
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the frame opened above; `body` closed every
+        // frame it opened, by this function's `# Safety`.
+        unsafe { (self.frame_close)(frame.ptr()) };
+        drawn
     }
 
     /// The id of `window`'s panel node, for actions bound to the window;
