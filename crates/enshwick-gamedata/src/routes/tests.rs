@@ -1,3 +1,4 @@
+mod among;
 mod bounds;
 mod builds;
 mod shapes;
@@ -796,6 +797,14 @@ fn an_extent_is_the_end_of_the_highest_store_off_the_stack() {
     );
     // mov [rsp+8],rax; ret
     assert_eq!(extent(&[0x48, 0x89, 0x44, 0x24, 0x08, 0xc3]), None);
+    // mov [esp+8],rax; mov [ebp+8],rax; ret
+    assert_eq!(
+        extent(&[
+            0x67, 0x48, 0x89, 0x44, 0x24, 0x08, 0x67, 0x48, 0x89, 0x45, 0x08, 0xc3
+        ]),
+        None,
+        "a 32-bit stack or frame address is still the stack"
+    );
 }
 
 /// The record sizes of the game's code, each held only in index arithmetic,

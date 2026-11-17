@@ -17,6 +17,7 @@
 //! | `system` or `in`, with `shape` | the one run of instructions of the [shape](shape) in the listed function's code |
 //! | `callers`, with `shape` | among the functions that call the listed function directly, the one whose code the shape matches; a call in a chained fragment counts for its function |
 //! | `callees`, with `shape` | among the functions the listed function calls directly, the one whose code the shape matches, such as the one of several builders that reads its own reflected field |
+//! | `callers` or `callees` listing several functions, with `shape` | what each listed function that is found gives as above, every one that gives something giving the same, so the entry hangs on none of them alone; a match the `check` refuses gives nothing, and two matches for one of them leave the entry not found |
 //! | `vtable`, with `slot` | the function the 64-bit pointer at the listed vtable + 8 · `slot` points at, which must start a function |
 //! | `field` | a constant: the sum of the reflected offsets of each `<type>.<field>` listed, each field holding the next type |
 //! | `size` | a constant: the reflected size of the type |
@@ -167,14 +168,14 @@ enum How {
     Size(String),
 }
 
-/// The functions an [`How::Among`] route looks through, by the function they
-/// are named for.
+/// The functions an [`How::Among`] route looks through, by the functions
+/// they are named for, each looked through on its own.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Kin {
-    /// The functions that call this one directly.
-    Callers(String),
-    /// The functions this one calls directly.
-    Callees(String),
+    /// The functions that call each of these directly.
+    Callers(Vec<String>),
+    /// The functions each of these calls directly.
+    Callees(Vec<String>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -269,8 +270,8 @@ struct RouteRow {
     value: Option<u64>,
     field: Option<Vec<String>>,
     size: Option<String>,
-    callers: Option<String>,
-    callees: Option<String>,
+    callers: Option<Names>,
+    callees: Option<Names>,
     vtable: Option<String>,
     slot: Option<u32>,
     after: Option<Vec<String>>,
@@ -281,6 +282,23 @@ struct RouteRow {
     align: Option<u64>,
     #[serde(rename = "type")]
     holds: Option<String>,
+}
+
+/// A row's `callers` or `callees`: one function or a list of them.
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum Names {
+    One(String),
+    Several(Vec<String>),
+}
+
+impl Names {
+    fn into_vec(self) -> Vec<String> {
+        match self {
+            Self::One(name) => vec![name],
+            Self::Several(names) => names,
+        }
+    }
 }
 
 impl RouteRow {
@@ -422,9 +440,13 @@ impl RouteRow {
             return Err(bad("`slot` goes with `vtable`"));
         }
         let within_given = self.within.is_some();
-        let kin = match (self.callers.take(), self.callees.take()) {
-            (Some(callee), _) => Some(Kin::Callers(callee)),
-            (_, Some(caller)) => Some(Kin::Callees(caller)),
+        let functions = |given: Option<Names>| listed(given.map(Names::into_vec));
+        let kin = match (
+            functions(self.callers.take()),
+            functions(self.callees.take()),
+        ) {
+            (Some(callees), _) => Some(Kin::Callers(callees)),
+            (_, Some(callers)) => Some(Kin::Callees(callers)),
             _ => None,
         };
         let how = match (

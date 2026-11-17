@@ -156,3 +156,36 @@ fn a_memory_operand_through_any_base_matches_every_register_but_rip() {
     assert!(first(&["mov eax,[?+r10*4+0x10]"], &none).is_some());
     assert!(first(&["mov ecx,[?+?]"], &none).is_none());
 }
+
+#[test]
+fn a_memory_operand_off_the_stack_matches_no_stack_frame_or_rip_base() {
+    let text = |_: &str| Some(0x3a0);
+    let read = ["movups xmm0,[?o+{text}]"];
+    // movups xmm0,[<base>+0x3a0], encoded per base.
+    let through = |bytes: &[u8]| first_in(bytes, &read, &text).is_some();
+    assert!(through(&[0x0f, 0x10, 0x87, 0xa0, 3, 0, 0]), "rdi");
+    assert!(
+        through(&[0x41, 0x0f, 0x10, 0x84, 0x24, 0xa0, 3, 0, 0]),
+        "r12"
+    );
+    assert!(through(&[0x41, 0x0f, 0x10, 0x85, 0xa0, 3, 0, 0]), "r13");
+    assert!(!through(&[0x0f, 0x10, 0x84, 0x24, 0xa0, 3, 0, 0]), "rsp");
+    assert!(!through(&[0x0f, 0x10, 0x85, 0xa0, 3, 0, 0]), "rbp");
+    assert!(
+        !through(&[0x67, 0x0f, 0x10, 0x84, 0x24, 0xa0, 3, 0, 0]),
+        "esp"
+    );
+    let none = |_: &str| None;
+    let rip = [0x0f, 0x10, 0x05, 0xa0, 3, 0, 0];
+    assert!(first_in(&rip, &["movups xmm0,[?+?]"], &none).is_none());
+    assert!(first_in(&rip, &["movups xmm0,[?o+?]"], &none).is_none());
+    assert!(
+        first_in(
+            &[0x0f, 0x10, 0x85, 0xa0, 3, 0, 0],
+            &["movups xmm0,[?+?]"],
+            &none
+        )
+        .is_some(),
+        "`?` takes a frame base"
+    );
+}

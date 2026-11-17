@@ -59,9 +59,10 @@ pub(crate) fn refresh(
         });
         let take = row.get("take").and_then(Item::as_str).unwrap_or("start");
         // The loader counts a start shape as the check only for `in` and
-        // `system` rows; a `callers` row keeps its own.
+        // `system` rows; a `callers` or `callees` row keeps its own.
         if take == "start"
             && !row.contains_key("callers")
+            && !row.contains_key("callees")
             && shape.is_some_and(|shape| {
                 code.iter()
                     .all(|&(image, rva)| shape_checks(&names, &shape, image, rva))
@@ -203,6 +204,13 @@ sides = ["server"]
 callers = "x"
 shape = ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]
 check = ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]
+
+[[route]]
+id = "a.callee"
+sides = ["server"]
+callees = ["x", "y"]
+shape = ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]
+check = ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]
 "#;
 
     #[test]
@@ -213,14 +221,14 @@ check = ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]
         let old = Image::parse(&old, Layout::File, None).unwrap();
         let new = Image::parse(&new, Layout::File, None).unwrap();
         let table = Table::parse(
-            "name = \"t\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 1\n[symbols]\n\"a.kept\" = 0x1000\n\"a.stale\" = 0x1000\n\"a.new\" = 0x1000\n\"a.shared\" = 0x1000\n\"a.start\" = 0x1000\n\"a.client\" = 0x1000\n\"a.data\" = 0x3000\n\"a.caller\" = 0x1000",
+            "name = \"t\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 1\n[symbols]\n\"a.kept\" = 0x1000\n\"a.stale\" = 0x1000\n\"a.new\" = 0x1000\n\"a.shared\" = 0x1000\n\"a.start\" = 0x1000\n\"a.client\" = 0x1000\n\"a.data\" = 0x3000\n\"a.caller\" = 0x1000\n\"a.callee\" = 0x1000",
         )
         .unwrap()
         .resolve();
         let (text, notes) =
             refresh(ROUTES, Side::Server, &[(&old, &table), (&new, &table)]).unwrap();
         let routes = enshwick_gamedata::Routes::parse(&text).unwrap();
-        assert_eq!(routes.ids().count(), 8);
+        assert_eq!(routes.ids().count(), 9);
         let doc: toml_edit::DocumentMut = text.parse().unwrap();
         let check = |i: usize| doc["route"][i].get("check").map(ToString::to_string);
         let made = Some(r#" ["mov [rsp+0x8],rbx", "push rdi", "sub rsp,?i"]"#.to_owned());
@@ -234,10 +242,13 @@ check = ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]
         assert_eq!(check(4), made);
         assert_eq!(check(5), None);
         assert_eq!(check(6), None);
-        assert_eq!(
-            check(7).as_deref(),
-            Some(r#" ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]"#)
-        );
+        for among in [7, 8] {
+            assert_eq!(
+                check(among).as_deref(),
+                Some(r#" ["mov [rsp+?],rbx", "push rdi", "sub rsp,?"]"#),
+                "route {among}"
+            );
+        }
         assert_eq!(notes.len(), 1, "{notes:?}");
         assert!(notes[0].starts_with("a.shared"));
     }

@@ -38,7 +38,12 @@ game update that moves a field changes this crate, not the mods.
   instructions in a function another route finds (`in` and `shape`, such as
   `lea rdx,[rbp-*]`), which survives a changed encoding or displacement,
   or the one direct caller (`callers`) or callee (`callees`) of a function
-  another route finds whose code the shape matches.
+  another route finds whose code the shape matches. `callers` and `callees`
+  may list several functions: each one found is looked through on its own,
+  a match the row's `check` refuses counts as none, two matches find
+  nothing, and every one that finds something must find the same, so the entry
+  rests on none of them alone, as the Character screen's row push rests on
+  the builders of all its groups.
   A constant is an operand the shape takes (`value`, `cell`), a reflected
   field offset or type size (`field`, each field holding the next type
   inline; `size`), or a value the shape spells
@@ -50,10 +55,11 @@ game update that moves a field changes this crate, not the mods.
   the end of its highest store off the stack), which counts only
   where the shape matches once; a taken constant's shape has two steps,
   an exact operand or an `{entry}`. A memory operand through `[?+*]` takes
-  any base register; `?1` to `?9` bind one register across the shape, so
+  any base register but RIP, and one through `[?o+*]` any but RSP, RBP and
+  RIP, so a local at the same displacement cannot match; `?1` to `?9` bind one register across the shape, so
   `mov [?1+*],eax` and `mov [?1],al` store into one object; `{entry}` is
   another entry's value, a symbol's address or a constant such as a
-  reflected field offset, as in `movups xmm0,[?+{ui.attribute_text_main}]`;
+  reflected field offset, as in `movups xmm0,[?o+{ui.attribute_text_main}]`;
   and `nth` takes the n-th run of a shape that repeats,
   counted after the one match of an `after` shape in the same part, only
   where there are exactly `of` runs.

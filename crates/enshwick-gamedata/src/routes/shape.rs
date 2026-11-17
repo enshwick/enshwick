@@ -8,7 +8,9 @@
 //! its scale and a displacement (`[rcx]`, `[rbp-*]`, `[rbp+?]`, `[rdx+0x78]`,
 //! `[rcx+r10*4+?]`) or RIP-relative (`[rip+*]`); an exact immediate
 //! (`0x1`); `?` for the base of memory through any register but RIP
-//! (`[?+*]`); memory with its size first where the registers do not give it
+//! (`[?+*]`), and `?o` for one off the stack, any but RSP, RBP and RIP
+//! (`[?o+*]`), which a local at the same displacement cannot match; memory
+//! with its size first where the registers do not give it
 //! (`dword [rcx+0xb8]`); `?` for any operand; `?r`, `?i`, `?b` and `?m` for
 //! any register, immediate, branch target and memory operand; `?1` to `?9`
 //! for a register bound across the shape, any register at its first use and
@@ -47,6 +49,8 @@ enum Disp {
 enum Base {
     /// Any register but RIP.
     Any,
+    /// Any register but RSP, RBP and RIP: an object, never a local.
+    Object,
     /// This register.
     Exact(Register),
     /// The register bound to this hole, from 0, any but RIP.
@@ -327,6 +331,7 @@ impl Step {
                         && size.is_none_or(|bytes| ins.memory_size().size() == bytes)
                         && match *base {
                             Base::Any => any,
+                            Base::Object => off_stack(have),
                             Base::Exact(want) => have == want,
                             Base::Bound(hole) => any && run.binds(hole, have),
                         }
@@ -464,6 +469,7 @@ fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Resul
     let at = cut(inner);
     let base = match &inner[..at] {
         "?" => Base::Any,
+        "?o" => Base::Object,
         name => match hole(name) {
             Some(hole) => Base::Bound(hole?),
             None => Base::Exact(names.register(name)?),
@@ -572,6 +578,15 @@ const WRITES: [OpAccess; 4] = [
     OpAccess::ReadCondWrite,
 ];
 
+/// Whether memory through `base` is an object's: no base, the stack, its
+/// frame and RIP are not, at any width.
+fn off_stack(base: Register) -> bool {
+    !matches!(
+        base.full_register(),
+        Register::None | Register::RSP | Register::RBP | Register::RIP
+    )
+}
+
 /// The end of the highest store `code` makes through a base register that
 /// is not the stack's, its frame's or RIP: how far a function writes the
 /// object it is handed. None for no such store, or for one with an index or
@@ -582,11 +597,7 @@ pub(crate) fn extent<'i>(code: impl IntoIterator<Item = &'i Instruction>) -> Opt
     let mut end = None;
     for ins in code {
         for used in info.info(ins).used_memory() {
-            let off_stack = !matches!(
-                used.base(),
-                Register::None | Register::RSP | Register::RBP | Register::RIP
-            );
-            if !off_stack || !WRITES.contains(&used.access()) {
+            if !off_stack(used.base()) || !WRITES.contains(&used.access()) {
                 continue;
             }
             if used.index() != Register::None {

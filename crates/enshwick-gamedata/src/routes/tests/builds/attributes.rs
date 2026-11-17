@@ -1,10 +1,17 @@
 //! The Character screen's row builders on every kept client: their
 //! addresses and the text each one opens its group with.
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::Side;
+use crate::reflect::{Image, Layout, Reflection};
 use crate::routes::shape::Step;
-use crate::routes::{How, Kin, Routes};
+use crate::routes::{How, Kin, Route, Routed, Routes};
+
+/// The Character screen's row push.
+const PUSH: &str = "ui.attribute_row_push";
+/// What every row builder route's id starts with, its group after it.
+const BUILDER: &str = "ui.attribute_rows_";
 
 /// The Character screen's row builders, one per group, and the push they
 /// share, by table, read in the decompiler on client 26430625 (2026-11-16).
@@ -235,4 +242,121 @@ fn every_builder_route_reads_its_own_group_s_text_and_the_nine_texts_differ() {
     }
     let texts: FxHashSet<u64> = ATTRIBUTE_TEXT_READS.iter().map(|&(_, t)| t).collect();
     assert_eq!(texts.len(), ATTRIBUTE_TEXT_READS.len());
+}
+
+/// Each builder route matches its group's text read through an object
+/// register, never a 16-byte stack or frame read at the same displacement,
+/// which another callee of the submenu may make.
+#[test]
+fn a_builder_route_matches_its_text_read_but_no_stack_read() {
+    use iced_x86::{Decoder, DecoderOptions, Instruction};
+
+    use crate::routes::shape;
+
+    let routes = Routes::embedded().unwrap();
+    // movups xmm0,[<base>+disp32], by the ModRM (and SIB) bytes of each base.
+    let read = |base: &[u8], disp: u64| -> Vec<Instruction> {
+        let mut bytes = vec![0x0f, 0x10];
+        bytes.extend_from_slice(base);
+        bytes.extend_from_slice(&u32::try_from(disp).unwrap().to_le_bytes());
+        let mut decoder = Decoder::with_ip(64, &bytes, 0x1000, DecoderOptions::NONE);
+        core::iter::from_fn(|| decoder.can_decode().then(|| decoder.decode())).collect()
+    };
+    for &(text, disp) in &ATTRIBUTE_TEXT_READS {
+        let builder = text.replace("ui.attribute_text_", "ui.attribute_rows_");
+        let route = routes.routes.iter().find(|r| r.id == builder).unwrap();
+        let How::Among { steps, .. } = &route.how else {
+            panic!("{builder} is no `callees` route");
+        };
+        let entry = |id: &str| (id == text).then_some(disp);
+        let matches = |code: &[Instruction]| shape::matches(steps, code, &entry).count();
+        assert_eq!(matches(&read(&[0x87], disp)), 1, "{builder} through rdi");
+        assert_eq!(
+            matches(&read(&[0x84, 0x24], disp)),
+            0,
+            "{builder} through rsp"
+        );
+        assert_eq!(matches(&read(&[0x85], disp)), 0, "{builder} through rbp");
+    }
+}
+
+/// The push route and the builders it looks through.
+fn push_and_builders(routes: &Routes) -> (&Route, &[String]) {
+    let push = routes.routes.iter().find(|r| r.id == PUSH).unwrap();
+    let How::Among {
+        kin: Kin::Callees(builders),
+        ..
+    } = &push.how
+    else {
+        panic!("the push is no `callees` route");
+    };
+    (push, builders)
+}
+
+/// The push is found among the callees of every group's builder alike, so
+/// no group's rows hang on another group's builder route: it lists every
+/// builder route of the table.
+#[test]
+fn the_push_route_looks_through_every_group_s_builder() {
+    let routes = Routes::embedded().unwrap();
+    let (_, listed) = push_and_builders(&routes);
+    let mut listed = listed.to_vec();
+    listed.sort_unstable();
+    let builders: Vec<&str> = routes
+        .routes
+        .iter()
+        .map(|r| r.id.as_str())
+        .filter(|id| id.starts_with(BUILDER))
+        .collect();
+    assert_eq!(listed, builders);
+}
+
+/// On every kept client each builder but Primary, which pushes inline,
+/// finds the push alone, so the push holds while any of them holds.
+#[test]
+#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+fn every_builder_but_primary_finds_the_push_alone_on_every_kept_client() {
+    let mut routes = Routes::embedded().unwrap();
+    let (push, builders) = push_and_builders(&routes);
+    let alone: Vec<Route> = builders
+        .iter()
+        .map(|builder| Route {
+            id: format!("{PUSH}.through.{builder}"),
+            how: match &push.how {
+                How::Among { steps, .. } => How::Among {
+                    kin: Kin::Callees(vec![builder.clone()]),
+                    steps: steps.clone(),
+                },
+                _ => unreachable!(),
+            },
+            ..push.clone()
+        })
+        .collect();
+    routes.routes.extend(alone);
+    routes.routes.sort_unstable_by(|a, b| a.id.cmp(&b.id));
+    for (path, side) in super::executables() {
+        if side != Side::Client {
+            continue;
+        }
+        let bytes = std::fs::read(&path).unwrap();
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let found: FxHashMap<&str, Option<Routed>> = routes
+            .find(&image, &reflection, side, &super::super::empty())
+            .into_iter()
+            .collect();
+        let push = found[PUSH];
+        assert!(push.is_some(), "{}: no push", path.display());
+        for (id, routed) in &found {
+            let Some(builder) = id.strip_prefix(&format!("{PUSH}.through.")) else {
+                continue;
+            };
+            let want = if *builder == format!("{BUILDER}primary") {
+                None
+            } else {
+                push
+            };
+            assert_eq!(*routed, want, "{}: {builder}", path.display());
+        }
+    }
 }

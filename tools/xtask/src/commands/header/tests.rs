@@ -1,5 +1,23 @@
 use super::*;
 
+/// Tests of one binary share a process under `cargo test`, so a second
+/// folder of the same purpose must not remove the first; each goes when
+/// its use ends, however it ends.
+#[test]
+fn a_scratch_folder_is_its_own_even_within_one_process_and_goes_with_its_use() {
+    let first = scratch_dir("test-apart").unwrap();
+    let kept = first.join("kept");
+    std::fs::write(&kept, "").unwrap();
+    let second = scratch_dir("test-apart").unwrap();
+    assert_ne!(first.to_path_buf(), second.to_path_buf());
+    assert!(kept.exists(), "the second folder removed the first");
+    let paths = [first.to_path_buf(), second.to_path_buf()];
+    drop((first, second));
+    for path in paths {
+        assert!(!path.exists(), "{} stayed", path.display());
+    }
+}
+
 #[test]
 fn only_annotation_lines_have_their_brackets_unescaped() {
     let source = "/// cbindgen:field-names=\\[bytes\\]\n/// Not \\[here\\].\nlet a = [1];\n";
@@ -97,7 +115,7 @@ fn a_header_cpp_refuses_fails_only_the_cpp_compile() {
     let cpp = compile(&header, Language::Cpp, Packing::Default, include);
     std::fs::write(&header, "void enshwick_f(int defaults);\n").unwrap();
     let renamed = compile(&header, Language::Cpp, Packing::Default, include);
-    let _removed = std::fs::remove_dir_all(&dir);
+    drop(dir);
     assert_eq!(c, Vec::<String>::new());
     assert!(
         !cpp.is_empty() && cpp.iter().all(|line| line.contains("in C++")),
@@ -129,7 +147,7 @@ fn the_header_s_packing_holds_under_one_byte_packing_and_its_asserts_catch_a_cha
     };
     let packed = compiled(format!("#pragma pack(push, 8)\n{body}{asserts}{TRAILER}\n"));
     let unpacked = compiled(format!("{body}{asserts}"));
-    let _removed = std::fs::remove_dir_all(&dir);
+    drop(dir);
     assert_eq!(packed, Vec::<String>::new());
     assert!(
         unpacked.iter().any(|line| line.contains("size of Pair")),

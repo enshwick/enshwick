@@ -9456,71 +9456,80 @@ loads = ["doAttributesSubmenu"]
 id = "ui.attribute_rows_main"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_main}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_main}]"]
 check = ["push rbp", "push rbx", "push r12", "lea rbp,[rsp-?]"]
 
 [[route]]
 id = "ui.attribute_rows_fog_survival"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_fog_survival}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_fog_survival}]"]
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x10],rsi", "mov [rax+0x18],rdi"]
 
 [[route]]
 id = "ui.attribute_rows_weapon_damage"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_weapon_damage}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_weapon_damage}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r12"]
 
 [[route]]
 id = "ui.attribute_rows_enemy_damage"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_enemy_damage}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_enemy_damage}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "mov [rsp+0x20],r14"]
 
 [[route]]
 id = "ui.attribute_rows_regeneration"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_regeneration}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_regeneration}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "mov [rsp+0x20],r13"]
 
 [[route]]
 id = "ui.attribute_rows_misc"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_misc}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_misc}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r12"]
 
 [[route]]
 id = "ui.attribute_rows_protection"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_protection}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_protection}]"]
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rsi", "mov [rax+0x20],rdi"]
 
 [[route]]
 id = "ui.attribute_rows_damage"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_damage}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_damage}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r14"]
 
 [[route]]
 id = "ui.attribute_rows_primary"
 sides = ["client"]
 callees = "~fn:ui.attributes"
-shape = ["movups xmm0,[?+{ui.attribute_text_primary}]"]
+shape = ["movups xmm0,[?o+{ui.attribute_text_primary}]"]
 check = ["push rbp", "push rsi", "push rdi", "push r12", "push r14"]
 
 [[route]]
 id = "ui.attribute_row_push"
 sides = ["client"]
-in = "ui.attribute_rows_main"
-shape = ["mov rcx,?r", "call *", "movaps xmm13,[rsp+?]"]
-take = "address"
+callees = [
+  "ui.attribute_rows_main",
+  "ui.attribute_rows_fog_survival",
+  "ui.attribute_rows_primary",
+  "ui.attribute_rows_regeneration",
+  "ui.attribute_rows_misc",
+  "ui.attribute_rows_damage",
+  "ui.attribute_rows_weapon_damage",
+  "ui.attribute_rows_enemy_damage",
+  "ui.attribute_rows_protection",
+]
+shape = ["imul rdx,[rdi+?],?i", "mov eax,?i", "add rdx,[rdi]"]
 check = ["mov [rsp+0x10],rbx", "push rdi", "sub rsp,0x20", "mov rbx,rdx", "lea r8,[rcx+0x10]"]
 
 [[route]]
