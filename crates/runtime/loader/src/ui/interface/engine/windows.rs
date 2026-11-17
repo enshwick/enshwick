@@ -1,3 +1,5 @@
+use core::num::NonZeroU64;
+
 use enshwick_core::abi::UiExtension;
 
 use super::{
@@ -28,16 +30,17 @@ impl Engine {
         frame.read_usize(self.layout.frame_node)
     }
 
-    /// The id of `window`'s panel node, for actions bound to the window.
-    pub(in crate::ui::interface) fn node_id(&self, window: &Window) -> u64 {
+    /// The id of `window`'s panel node, for actions bound to the window;
+    /// `None` before the window was drawn.
+    pub(in crate::ui::interface) fn node_id(&self, window: &Window) -> Option<NonZeroU64> {
         let node = self.frame_node(&window.panel);
         if node == 0 {
-            return 0;
+            return None;
         }
         // SAFETY: `node` is non-zero, checked by the guard before it: the game
         // wrote it into the panel frame when the window was drawn, and its id
         // sits at the table's `ui.node_id`.
-        unsafe { crate::engine::memory::read::<u64>(node, self.layout.node_id) }
+        NonZeroU64::new(unsafe { crate::engine::memory::read::<u64>(node, self.layout.node_id) })
     }
 
     /// Starts a window: the game's popup panel over a dimmed screen, `width`
