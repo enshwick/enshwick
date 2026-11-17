@@ -64,6 +64,8 @@ pub const DUPLICATE_MOD: Code = Code("E2005");
 pub const HELD: Code = Code("E2007");
 /// The server runs join mods the client lacks.
 pub const JOIN_MISSING: Code = Code("E3001");
+/// The client's mods give a terrain material another id than the server.
+pub const JOIN_TERRAIN: Code = Code("E3002");
 
 /// Every code a loader message carries.
 pub const ALL: &[Code] = &[
@@ -83,6 +85,7 @@ pub const ALL: &[Code] = &[
     DUPLICATE_MOD,
     HELD,
     JOIN_MISSING,
+    JOIN_TERRAIN,
 ];
 
 /// Windows could not find a module the DLL imports.

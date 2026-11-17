@@ -210,6 +210,17 @@ title = "На сервері є моди, яких у вас немає"
 cause = "Серверу потрібні моди, яких у вас немає або які у вас іншої версії, тому ви не приєднуєтеся."
 fix = "Встановіть моди й версії, які перелічує діалог, а тоді приєднайтеся знову."
 
+[[error]]
+code = "E3002"
+title = "Your mods give terrain other ids than the server"
+cause = "Mods that the server does not run add terrain materials on your game. They take terrain ids at the start of the game, so a mod that the server runs has another id for its terrain on your game. You do not join, because the ground would show wrong."
+fix = "Turn off the mods that the dialog lists on the Mods screen, restart the game, then join again."
+
+[error.translations.uk]
+title = "Ваші моди дають ґрунту інші номери, ніж сервер"
+cause = "Моди, яких сервер не запускає, додають у вашій грі матеріали ґрунту. Вони беруть номери ґрунту на старті гри, тож мод, який запускає сервер, має у вашій грі інший номер для свого ґрунту. Ви не приєднуєтеся, бо ґрунт показувався б неправильно."
+fix = "Вимкніть моди, які перелічує діалог, на екрані модів, перезапустіть гру, а тоді приєднайтеся знову."
+
 [[step]]
 id = "start"
 question = "Does the game start when you remove powrprof.dll from the game's folder?"

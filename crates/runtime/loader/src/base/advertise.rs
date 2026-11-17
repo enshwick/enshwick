@@ -3,7 +3,10 @@
 //! Once the dedicated server has logged on to Steam, the loader appends
 //! `[mods: <count of mods of side both>]` to its Steam name and sets the
 //! rules `enshwick` (the fingerprint) and `enshwick.mods`, `enshwick.mods.1`,
-//! ... (the mods that count, `id@version`, split to fit Steam's rule length).
+//! ... (the mods that count, `id@version`, split to fit Steam's rule length),
+//! and `enshwick.terrain`, `enshwick.terrain.1`, ... (the terrain ids it
+//! serves its mods' and removed mods' materials at, which a joining client
+//! takes).
 //! It advertises no homepage or name: a client shows a mod by id and version
 //! alone, so a server points no player anywhere.
 //! Players see it before they join, with or without mods, and a modded client
@@ -25,6 +28,12 @@ pub const MOD_RULES: usize = 32;
 /// The rule that gives the number of mods when the list did not fit in
 /// [`MOD_RULES`] rules, so a client knows it reads only part of it.
 pub const RULE_MOD_COUNT: &str = "enshwick.mods.count";
+/// The rule that names the terrain ids the server serves; further parts are
+/// `enshwick.terrain.1` and on.
+pub const RULE_TERRAIN: &str = "enshwick.terrain";
+/// The most rules the terrain table spreads over: one per free terrain id
+/// always holds it.
+pub const TERRAIN_RULES: usize = 11;
 
 /// The fingerprint of a mod set: FNV-1a over the loader version and every
 /// `id@version`, sorted, as eight hex digits.
@@ -50,7 +59,7 @@ pub struct Advert {
     pub name: String,
     /// The fingerprint, the value of [`RULE`].
     pub fingerprint: String,
-    /// The mod list rules.
+    /// The mod list rules, then the terrain table's.
     pub rules: Vec<(String, String)>,
     /// Mods left out of the mod list rules, which hold at most
     /// [`MOD_RULES`]; they still count in the fingerprint.
@@ -58,12 +67,21 @@ pub struct Advert {
 }
 
 impl Advert {
-    /// The advert of a server named `configured` running `mods`.
+    /// The advert of a server named `configured` running `mods` and serving
+    /// the terrain table `terrain`.
     #[must_use]
-    pub fn new(loader_version: &str, configured: &str, mods: &[(String, String)]) -> Self {
+    pub fn new(
+        loader_version: &str,
+        configured: &str,
+        mods: &[(String, String)],
+        terrain: &str,
+    ) -> Self {
         let (mut rules, mods_cut) = mod_rules(mods);
         if mods_cut > 0 {
             rules.push((RULE_MOD_COUNT.to_owned(), mods.len().to_string()));
+        }
+        if !terrain.is_empty() {
+            rules.extend(terrain_rules(terrain));
         }
         Self {
             name: server_name(configured, mods.len()),
@@ -100,14 +118,29 @@ pub fn mod_list(mods: &[(String, String)]) -> String {
 /// and the number of mods that did not fit, the last in sorted order.
 #[must_use]
 pub fn mod_rules(mods: &[(String, String)]) -> (Vec<(String, String)>, usize) {
+    split_rules(RULE_MODS, &mod_list(mods), MOD_RULES)
+}
+
+/// The terrain table a server serves (`<id>:<guid>:<fallback>,...`) as the
+/// rules `enshwick.terrain`, then `enshwick.terrain.1` and on, each within
+/// Steam's limit; its at most 11 entries always fit.
+#[must_use]
+pub fn terrain_rules(table: &str) -> Vec<(String, String)> {
+    split_rules(RULE_TERRAIN, table, TERRAIN_RULES).0
+}
+
+/// The comma-separated `entries` as rules named `base`, then `base.1` and on,
+/// at most `most`, each value within Steam's limit and holding whole
+/// entries; and the number of entries that did not fit, the last ones.
+fn split_rules(base: &str, entries: &str, most: usize) -> (Vec<(String, String)>, usize) {
     let mut parts: Vec<String> = vec![String::new()];
     let mut cut = 0;
-    for entry in mod_list(mods).split(',').filter(|e| !e.is_empty()) {
+    for entry in entries.split(',').filter(|e| !e.is_empty()) {
         let Some(last) = parts.last_mut() else {
             break;
         };
         if cut > 0 || (!last.is_empty() && last.len() + 1 + entry.len() > RULE_LIMIT) {
-            if cut > 0 || parts.len() == MOD_RULES {
+            if cut > 0 || parts.len() == most {
                 cut += 1;
                 continue;
             }
@@ -123,7 +156,7 @@ pub fn mod_rules(mods: &[(String, String)]) -> (Vec<(String, String)>, usize) {
     let rules = parts
         .into_iter()
         .enumerate()
-        .map(|(i, value)| (rule_name(i), value))
+        .map(|(i, value)| (part_name(base, i), value))
         .collect();
     (rules, cut)
 }
@@ -154,10 +187,21 @@ pub fn server_name(name: &str, mods: usize) -> String {
     format!("{}{suffix}", base[..cut].trim_end())
 }
 
+/// A dedicated server's configuration, in its game folder.
+pub(crate) const SERVER_CONFIG: &str = "enshrouded_server.json";
+
 /// The `"name"` of an `enshrouded_server.json`.
 #[must_use]
 pub fn configured_name(json: &str) -> Option<String> {
-    let start = json.find("\"name\"")? + "\"name\"".len();
+    configured(json, "name")
+}
+
+/// The text value of the top-level `field` of an `enshrouded_server.json`,
+/// such as its `saveDirectory`.
+#[must_use]
+pub(crate) fn configured(json: &str, field: &str) -> Option<String> {
+    let quoted = format!("\"{field}\"");
+    let start = json.find(&quoted)? + quoted.len();
     let rest = json[start..]
         .trim_start()
         .strip_prefix(':')?
@@ -224,7 +268,7 @@ mod runtime {
 
     /// Starts the thread that advertises the mod set.
     pub(crate) fn start(game_dir: &Path, mods: JoinMods) {
-        let config = std::fs::read_to_string(game_dir.join("enshrouded_server.json")).ok();
+        let config = std::fs::read_to_string(game_dir.join(super::SERVER_CONFIG)).ok();
         let configured = config
             .and_then(|json| super::configured_name(&json))
             .unwrap_or_else(|| "Enshrouded Server".to_owned());
@@ -271,7 +315,10 @@ mod runtime {
         };
         let mut last: Option<super::Advert> = None;
         loop {
-            let advert = super::Advert::new(env!("CARGO_PKG_VERSION"), configured, &mods());
+            let terrain =
+                crate::base::join::terrain_ids().map_or_else(String::new, |ids| (ids.served)());
+            let advert =
+                super::Advert::new(env!("CARGO_PKG_VERSION"), configured, &mods(), &terrain);
             let mut stale = Vec::new();
             if last.as_ref() != Some(&advert) {
                 describe(&advert);
@@ -424,7 +471,7 @@ mod tests {
 
     #[test]
     fn the_advert_lists_the_mods_and_no_settings() {
-        let advert = Advert::new("0.1.0", "Homelab", &mods());
+        let advert = Advert::new("0.1.0", "Homelab", &mods(), "");
         assert_eq!(
             advert.rules,
             [(
@@ -446,7 +493,7 @@ mod tests {
         );
         let long = server_name(&"ї".repeat(40), 12);
         assert!(long.len() <= NAME_LIMIT && long.ends_with("ї [mods: 12]"));
-        let advert = Advert::new("0.1.0", "Homelab", &mods());
+        let advert = Advert::new("0.1.0", "Homelab", &mods(), "");
         assert_eq!(advert.name, format!("Homelab [mods: {}]", mods().len()));
     }
 
@@ -487,16 +534,33 @@ mod tests {
         assert!(cut > 0);
         let joined: Vec<&str> = rules.iter().map(|(_, v)| v.as_str()).collect();
         assert!(mod_list(&many).starts_with(&joined.join(",")));
-        let advert = Advert::new("0.1.0", "Homelab", &many);
+        let advert = Advert::new("0.1.0", "Homelab", &many, "");
         assert_eq!(advert.mods_cut, cut);
         assert!(
             advert
                 .rules
                 .contains(&(RULE_MOD_COUNT.to_owned(), "400".to_owned()))
         );
-        let small = Advert::new("0.1.0", "Homelab", &mods());
+        let small = Advert::new("0.1.0", "Homelab", &mods(), "");
         assert_eq!(small.mods_cut, 0);
         assert!(small.rules.iter().all(|(key, _)| key != RULE_MOD_COUNT));
+    }
+
+    #[test]
+    fn a_full_terrain_table_fits_its_rules_whole() {
+        let table: Vec<String> = (117..=127)
+            .map(|id| format!("{id}:{}:24", "f".repeat(32)))
+            .collect();
+        let table = table.join(",");
+        let rules = terrain_rules(&table);
+        assert!(rules.len() <= TERRAIN_RULES);
+        assert!(rules.iter().all(|(_, value)| value.len() <= RULE_LIMIT));
+        assert_eq!(rules[1].0, "enshwick.terrain.1");
+        let joined: Vec<&str> = rules.iter().map(|(_, v)| v.as_str()).collect();
+        assert_eq!(joined.join(","), table);
+        let advert = Advert::new("0.1.0", "Homelab", &mods(), &table);
+        assert!(advert.rules.ends_with(&rules));
+        assert_eq!(advert.mods_cut, 0);
     }
 
     #[test]
@@ -504,5 +568,9 @@ mod tests {
         let json = "{\n\t\"name\": \"Our \\\"Base\\\"\",\n\t\"saveDirectory\": \"./savegame\"\n}";
         assert_eq!(configured_name(json).as_deref(), Some("Our \"Base\""));
         assert_eq!(configured_name("{}"), None);
+        assert_eq!(
+            configured(json, "saveDirectory").as_deref(),
+            Some("./savegame")
+        );
     }
 }

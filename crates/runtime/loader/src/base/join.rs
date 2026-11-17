@@ -40,6 +40,11 @@ pub use info::{ServerInfo, parse_info, query_info};
 pub(crate) use plan::entries;
 use plan::label;
 pub use plan::{Plan, differences, plan, wanted};
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(unused_imports, reason = "only the running game's join check reads it")
+)]
+pub(crate) use rules::terrain_rules_value;
 pub use rules::{mod_rules_value, mods_complete, query_rules, rule};
 pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 
@@ -63,4 +68,7 @@ pub(crate) mod client;
 mod runtime;
 
 #[cfg(windows)]
-pub(crate) use runtime::{JOIN_FUSE, layout, link, names, refusals, set_layout, set_names};
+pub(crate) use runtime::{
+    JOIN_FUSE, TerrainIds, layout, link, names, refusals, set_layout, set_names, set_terrain_ids,
+    terrain_ids,
+};

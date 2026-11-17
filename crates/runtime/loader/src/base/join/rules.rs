@@ -38,6 +38,21 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
         .join(",")
 }
 
+/// The terrain table a server advertises across its terrain rules; `None`
+/// when it advertises none.
+pub(crate) fn terrain_rules_value(reply: &[u8]) -> Option<String> {
+    let parts: Vec<String> = (0..crate::base::advertise::TERRAIN_RULES)
+        .map_while(|i| {
+            rule(
+                reply,
+                &crate::base::advertise::part_name(crate::base::advertise::RULE_TERRAIN, i),
+            )
+        })
+        .filter(|part| !part.is_empty())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(","))
+}
+
 /// Whether the mod list across the mod rules is the server's whole list: a
 /// server whose list did not fit gives its number of mods in
 /// [`crate::base::advertise::RULE_MOD_COUNT`].
@@ -410,6 +425,20 @@ mod tests {
         );
         let missing = plan("ab", "", Some(("cd", server)), true);
         assert_eq!(missing.missing.len(), 2, "{:?}", missing.missing);
+    }
+
+    #[test]
+    fn the_terrain_table_is_read_across_rules_and_none_reads_as_none() {
+        let split = reply(&[
+            ("enshwick.terrain", "117:aa:9"),
+            ("enshwick.terrain.1", "118:bb:24"),
+        ]);
+        assert_eq!(
+            terrain_rules_value(&split).as_deref(),
+            Some("117:aa:9,118:bb:24")
+        );
+        let none = reply(&[("enshwick.mods", "you.a@1"), ("enshwick.terrain", "")]);
+        assert_eq!(terrain_rules_value(&none), None);
     }
 
     #[test]

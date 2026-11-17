@@ -1,5 +1,6 @@
 ---
 source: crates/runtime/loader/src/parts.rs
+assertion_line: 504
 expression: phases()
 ---
 seal: services, points, calls, status, net, content, rate_links, altars, daytime, label, join_gate, bases, fog, containers, damage, item_actions, survivors, stats, item_data, knowledge, progress, vetoes, commands, chat, interactions, interaction_prompts, controls, player_actions, ui, windows
@@ -12,5 +13,5 @@ left: the wire at leave, remote edits at leave, join admission at leave, permiss
 hosting: saves, join, drops, controls
 end: windows, progress, inventory
 forget: events, saves, net, lobby, remote, admission, recipes, altars, daytime, waypoints, game_settings, weather, bases, fog, transactions, voxels, terrain_pages, permissions, scene, deaths, item_actions, survivors, stats, item_data, spawns, knowledge, knowledge changes, console, commands, chat, interactions, controls, player_actions, build_reasons, ui
-world event: data changes at world events, recipe rates at world events, game settings at world events, weather at world events, stats at world events, item data at world events, knowledge changes at world events, chat mutes at world events
-follows: data_changes, rate_links, weather, stats, item_data
+world event: terrain materials at world events, data changes at world events, recipe rates at world events, game settings at world events, weather at world events, stats at world events, item data at world events, knowledge changes at world events, chat mutes at world events
+follows: terrain_materials, data_changes, rate_links, weather, stats, item_data

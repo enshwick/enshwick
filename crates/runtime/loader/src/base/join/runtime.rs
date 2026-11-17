@@ -40,11 +40,47 @@ struct State {
     /// How many joins the check refused, so a caller that started a join
     /// tells a refusal from another failure.
     refusals: AtomicU64,
+    /// The terrain ids this side serves, once the layer that serves them
+    /// set them.
+    terrain: OnceLock<TerrainIds>,
 }
 
 static STATE: State = State {
     refusals: AtomicU64::new(0),
+    terrain: OnceLock::new(),
 };
+
+/// The terrain ids this side serves, as the layer that serves terrain hands
+/// them to the join check, the lobby and the advertisement: a joining
+/// client must name each terrain id as its host does.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TerrainIds {
+    /// The table served now, as the host's rules and lobby carry it.
+    pub(crate) served: fn() -> String,
+    /// Takes a host's table before the game connects, `None` for a host
+    /// that serves none it can read; the player's text, naming the host by
+    /// the word given, when a mod of this side now reads a wrong id.
+    pub(crate) adopt: fn(Option<&str>, &str) -> Option<String>,
+    /// Serves this side's own table again.
+    pub(crate) own_again: fn(),
+}
+
+/// Sets the terrain ids this side serves; the first call holds.
+pub(crate) fn set_terrain_ids(ids: TerrainIds) {
+    let _first = STATE.terrain.set(ids);
+}
+
+/// The terrain ids this side serves, `None` while it serves no terrain.
+pub(crate) fn terrain_ids() -> Option<TerrainIds> {
+    STATE.terrain.get().copied()
+}
+
+/// Serves this side's own terrain ids again, when it serves terrain.
+fn own_terrain_again() {
+    if let Some(ids) = terrain_ids() {
+        (ids.own_again)();
+    }
+}
 
 /// The count of joins the check refused so far.
 pub(crate) fn refusals() -> u64 {
@@ -103,7 +139,7 @@ crate::engine::chains::chain_detour! {
             super::interaction::joining(false);
             return onward.call();
         }
-        crate::log!(WARN, "join refused: the server runs mods this client lacks");
+        crate::log!(WARN, "join refused by the join check");
         STATE.refusals.fetch_add(1, Ordering::AcqRel);
         super::interaction::joining(true);
         // The provider copies the target into its own state before it
@@ -131,6 +167,7 @@ crate::engine::chains::chain_detour! {
 /// Joins a game whose mods the check cannot read: the client's mods stay
 /// on, as the world it joins may run them.
 fn unchecked() -> bool {
+    own_terrain_again();
     crate::base::net::joining(false);
     crate::base::join::client::forget_server_values();
     crate::base::join::client::back_on();
@@ -205,6 +242,16 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         crate::base::join::client::turn_off_for_world(id);
     }
     if plan.joins() {
+        // A server with Enshwick and no terrain rules serves no terrain id.
+        let terrain = server
+            .is_some()
+            .then(|| super::terrain_rules_value(&reply).unwrap_or_default());
+        let moved = terrain_ids().and_then(|ids| (ids.adopt)(terrain.as_deref(), "server"));
+        if let Some(text) = moved {
+            own_terrain_again();
+            terrain_refused(&text);
+            return false;
+        }
         if let Some(note) = plan.note(names) {
             // The join goes on, and the note shows over the game.
             crate::ui::interface::show("Enshwick", &note, "", 1 << UiDialog::OK, |_| {});
@@ -214,6 +261,19 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
     let server_mods = server.as_ref().map_or("", |(_, m)| m.as_str());
     refused(&plan.missing, server_mods, &ours_mods, complete, names);
     false
+}
+
+/// Tells the player that the client's mods give terrain other ids than the
+/// server, which keeps the client out: the ground would show wrong.
+#[cold]
+fn terrain_refused(text: &str) {
+    crate::log!(
+        WARN,
+        "the join is refused ({}): {}",
+        crate::engine::errors::JOIN_TERRAIN,
+        text.replace("\n\n", " ").replace('\n', ", ")
+    );
+    crate::ui::interface::show("Enshwick", text, "", 1 << UiDialog::OK, |_| {});
 }
 
 /// Tells the player which of the server's mods keep the client out, on the

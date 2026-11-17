@@ -12,12 +12,18 @@
 //!
 //! A hosted game cannot keep a client out before it connects: the client
 //! turns off the join mods the host lacks and says which of the host's mods
-//! it lacks or runs in another version, and joins all the same.
+//! it lacks or runs in another version, and joins all the same. It takes the
+//! host's terrain ids from the lobby too, and says so when one of its mods
+//! was told another id at its start.
 
 /// The lobby data key with the host's loader version.
 pub(crate) const KEY: &str = "enshwick";
 /// The lobby data key with the host's join mods, `id@version,...`.
 pub(crate) const KEY_MODS: &str = "enshwick.mods";
+/// The lobby data key with the terrain ids the host serves, as the server
+/// rule [`crate::base::advertise::RULE_TERRAIN`] gives them; empty when it
+/// serves none.
+pub(crate) const KEY_TERRAIN: &str = "enshwick.terrain";
 /// The longest value Steam keeps under one lobby data key, in bytes.
 pub(crate) const MAX_VALUE: usize = 8192;
 
@@ -401,7 +407,12 @@ mod runtime {
             );
             return;
         }
+        let terrain =
+            crate::base::join::terrain_ids().map_or_else(String::new, |ids| (ids.served)());
+        // The terrain ids go first: a friend reads them once the version
+        // names the host as one with Enshwick.
         let set = api.set(lobby, super::KEY_MODS, &mods)
+            && api.set(lobby, super::KEY_TERRAIN, &terrain)
             && api.set(lobby, super::KEY, env!("CARGO_PKG_VERSION"));
         if set {
             crate::log!(
@@ -442,9 +453,19 @@ mod runtime {
         crate::base::join::client::back_on();
         let ours = crate::base::advertise::mod_list(&crate::base::join::client::join_mods());
         let names = crate::base::join::names();
-        let (turn_off, note) = super::plan(&host, &ours, &names);
+        let (turn_off, mut note) = super::plan(&host, &ours, &names);
         for id in &turn_off {
             crate::base::join::client::turn_off_for_world(id);
+        }
+        // A hosted game cannot be refused before it connects: the client
+        // joins with the host's ids, and a mod whose id moved reads it
+        // wrong for this game.
+        let terrain = api.get(lobby, super::KEY_TERRAIN);
+        let moved =
+            crate::base::join::terrain_ids().and_then(|ids| (ids.adopt)(Some(&terrain), "host"));
+        if let Some(text) = moved {
+            crate::log!(WARN, "hosted game: {}", text.replace('\n', " "));
+            note = Some(note.map_or_else(|| text.clone(), |n| format!("{n}\n\n{text}")));
         }
         if let Some(text) = note {
             crate::ui::interface::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});

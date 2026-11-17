@@ -2,12 +2,12 @@ use enshwick_core::abi::{Header, TerrainMaterialInfo};
 
 use super::*;
 
-const SAND: u8 = 9;
-const ROCK: u8 = 24;
+pub(super) const SAND: u8 = 9;
+pub(super) const ROCK: u8 = 24;
 /// The mod the tests add materials as.
-const MOD: ModIndex = ModIndex::new(1);
+pub(super) const MOD: ModIndex = ModIndex::new(1);
 
-fn guid(n: u8) -> Guid {
+pub(super) fn guid(n: u8) -> Guid {
     Guid([n; 16])
 }
 
@@ -48,11 +48,11 @@ fn rules() -> Value {
     )])
 }
 
-fn palette() -> Palette {
+pub(super) fn palette() -> Palette {
     Palette::read([&world()], &rules()).unwrap()
 }
 
-fn request(n: u8) -> TerrainMaterialAdd {
+pub(super) fn request(n: u8) -> TerrainMaterialAdd {
     TerrainMaterialAdd {
         header: Header::of::<TerrainMaterialAdd>(),
         guid: guid(n),
@@ -142,11 +142,11 @@ fn a_material_is_named_in_the_palette_and_copies_its_rule_with_its_changes() {
     assert_eq!(guids[117], Value::Guid(guid(150)));
     assert_eq!(guids[118], Value::Guid(Guid::NIL));
     let mut rules = rules();
-    assert_eq!(add_rules(&mut rules, &added), Some(()));
+    assert_eq!(add_rules(&mut rules, &palette().free(), &added), Some(()));
     let Some(Value::List(configs)) = rules.field(TERRAIN_CONFIGS) else {
         panic!()
     };
-    assert_eq!(configs.len(), 117);
+    assert_eq!(configs.len(), 127, "a rule for each free id");
     let new = &configs[116];
     assert_eq!(config_id(new), Some(117));
     assert_eq!(new.field(TERRAIN_ITEM), Some(&Value::Guid(guid(201))));
@@ -280,22 +280,117 @@ fn an_orphan_whose_fallback_the_game_lacks_leaves_its_free_id_to_the_next() {
 }
 
 #[test]
-fn rules_without_a_material_s_like_leave_it_out_and_keep_the_others() {
+fn rules_without_a_material_s_like_give_it_the_first_rule_so_their_size_holds() {
     let mut rock = request(151);
     rock.like = ROCK;
+    rock.changes = TerrainMaterialAdd::HEALTH;
+    rock.health = 7;
     let (added, _) = add_all(&[request(150), rock]);
     let mut rules = Value::Struct(vec![(
         TERRAIN_CONFIGS.into(),
         Value::List(vec![config(u64::from(SAND))]),
     )]);
-    assert_eq!(add_rules(&mut rules, &added), Some(()));
+    assert_eq!(add_rules(&mut rules, &[117, 118, 119], &added), Some(()));
     let Some(Value::List(configs)) = rules.field(TERRAIN_CONFIGS) else {
         panic!()
     };
     assert_eq!(
         configs.iter().map(config_id).collect::<Vec<_>>(),
-        [Some(SAND), Some(117)]
+        [Some(SAND), Some(117), Some(118), Some(119)]
     );
+    assert_eq!(configs[2].field(HEALTH_POINTS), Some(&Value::Int(7)));
+    assert_eq!(configs[3].field(HEALTH_POINTS), Some(&Value::Int(3)));
+}
+
+/// A rule whose conditional buffs number `count`.
+fn buffed(n: u64, count: usize) -> Value {
+    let Value::Struct(mut fields) = config(n) else {
+        unreachable!()
+    };
+    let buff = |at: f64| {
+        Value::Struct(vec![
+            (MIN_SUBMERGE.into(), Value::Float(at)),
+            ("buffType".into(), Value::Guid(guid(220))),
+        ])
+    };
+    let list = [0.25, 0.9].into_iter().take(count).map(buff).collect();
+    fields.push((CONDITIONAL_BUFFS.into(), Value::List(list)));
+    Value::Struct(fields)
+}
+
+#[test]
+fn the_rules_come_out_one_size_whichever_materials_a_session_serves() {
+    let rules = Value::Struct(vec![(
+        TERRAIN_CONFIGS.into(),
+        Value::List(vec![buffed(1, 0), buffed(u64::from(SAND), 2)]),
+    )]);
+    let mut wet = request(150);
+    wet.like = SAND;
+    let mut dry = request(151);
+    dry.like = 1;
+    let free = palette().free();
+    let sizes: Vec<Vec<usize>> = [vec![], vec![wet], vec![dry, wet]]
+        .iter()
+        .map(|requests| {
+            let mut served = rules.clone();
+            let (added, _) = add_all(requests);
+            add_rules(&mut served, &free, &added).unwrap();
+            let Some(Value::List(configs)) = served.field(TERRAIN_CONFIGS) else {
+                panic!()
+            };
+            configs
+                .iter()
+                .skip(2)
+                .map(|c| match c.field(CONDITIONAL_BUFFS) {
+                    Some(Value::List(list)) => list.len(),
+                    _ => 0,
+                })
+                .collect()
+        })
+        .collect();
+    assert!(sizes.iter().all(|s| *s == vec![2; 11]), "{sizes:?}");
+    let mut served = rules;
+    let (added, _) = add_all(&[dry]);
+    add_rules(&mut served, &free, &added).unwrap();
+    let Some(Value::List(configs)) = served.field(TERRAIN_CONFIGS) else {
+        panic!()
+    };
+    let Some(Value::List(padded)) = configs[2].field(CONDITIONAL_BUFFS) else {
+        panic!()
+    };
+    assert!(
+        padded
+            .iter()
+            .all(|b| b.field(MIN_SUBMERGE) == Some(&Value::Float(f64::INFINITY))),
+        "a padded buff never applies"
+    );
+}
+
+#[test]
+fn a_world_s_record_of_its_materials_reads_back_and_a_bad_one_reads_as_none() {
+    let (added, _) = add_all(&[request(150), request(151)]);
+    assert_eq!(held_of(&held_text(&added)), [guid(150), guid(151)]);
+    assert_eq!(held_of("held = [\"no guid\"]"), []);
+    assert_eq!(held_of("not toml ["), []);
+}
+
+#[test]
+fn the_loaded_world_s_orphans_take_the_free_ids_first() {
+    let (added, _) = add_all(&(150..159).map(request).collect::<Vec<_>>());
+    let recorded = [
+        (guid(170), guid(SAND)),
+        (guid(171), guid(SAND)),
+        (guid(172), guid(ROCK)),
+    ];
+    let preferred = prefer(&recorded, &[guid(172)]);
+    assert_eq!(preferred[0], (guid(172), guid(ROCK)));
+    let (kept, lost) = orphans(&palette(), &added, &preferred);
+    assert_eq!(
+        kept.iter().map(|m| (m.guid, m.id)).collect::<Vec<_>>(),
+        [(guid(172), 126), (guid(170), 127)]
+    );
+    assert_eq!(lost, [guid(171)]);
+    assert_eq!(prefer(&recorded, &[]), recorded);
 }
 
 #[test]
@@ -310,7 +405,7 @@ fn a_change_whose_rule_field_is_missing_fails_the_rules_instead_of_vanishing() {
     };
     fields.retain(|(name, _)| name != HEALTH_POINTS);
     let mut rules = Value::Struct(vec![(TERRAIN_CONFIGS.into(), Value::List(vec![renamed]))]);
-    assert_eq!(add_rules(&mut rules, &added), None);
+    assert_eq!(add_rules(&mut rules, &[117], &added), None);
 }
 
 #[test]

@@ -27,7 +27,7 @@ pub(crate) use crate::engine::server_pin::ServerAccess;
 use crate::engine::server_pin::{Place, ServerCell};
 
 mod whose;
-pub(crate) use whose::{Whose, server_left, server_starts, whose};
+pub(crate) use whose::{Whose, on_hosted_start, server_left, server_starts, whose};
 
 pub(crate) mod accounts;
 pub(crate) mod permissions;
