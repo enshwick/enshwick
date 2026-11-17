@@ -534,6 +534,10 @@ fn live(
     }) else {
         return Status::BAD_ARGS;
     };
+    // As the loader: a change is declared in init only.
+    if crate::test::table::late() {
+        return Status::TOO_LATE;
+    }
     // As the loader: a live change starts as "times 1", whatever the mod passed.
     raw.op = enshwick_core::abi::ChangeOp::TIMES;
     raw.value = 1.0;
@@ -556,10 +560,11 @@ fn live(
     let source = unsafe { raw.source.as_str() }
         .unwrap_or_default()
         .to_owned();
-    let (slot, seen_by_clients) = match target {
+    let (mut slot, seen_by_clients) = match target {
         Some((_, Field::Ingredient)) => return Status::BAD_ARGS,
         Some((target, field)) => (
             LiveSlot::Named(crate::test::content::LiveChange {
+                id: enshwick_core::abi::ChangeId(0),
                 target,
                 field,
                 source,
@@ -577,10 +582,13 @@ fn live(
         if seen_by_clients && !super::base::mods::joins(s, me) {
             return Status::REFUSED;
         }
-        s.content.changes.live.push(slot);
         let id = enshwick_core::abi::ChangeId(
-            u32::try_from(s.content.changes.live.len()).unwrap_or(u32::MAX),
+            u32::try_from(s.content.changes.live.len() + 1).unwrap_or(u32::MAX),
         );
+        if let LiveSlot::Named(live) = &mut slot {
+            live.id = id;
+        }
+        s.content.changes.live.push(slot);
         // SAFETY: `out` is non-null by the check above and the safe layer
         // points it at a writable `ChangeId` for the call.
         unsafe { out.write(id) };

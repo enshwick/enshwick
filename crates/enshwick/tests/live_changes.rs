@@ -49,6 +49,8 @@ mod tests {
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Fuel)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
         let live = loader.live_changes();
+        let declared = if cfg!(feature = "unstable") { 3 } else { 2 };
+        assert_eq!(live.len(), declared, "{live:?}");
         assert_eq!(live[0].target, Target::Entry(WOOD));
         assert_eq!(live[1].field, Field::DamageMod);
         assert!(live.iter().all(|c| c.value.is_none()));

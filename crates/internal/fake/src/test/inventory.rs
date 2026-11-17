@@ -268,9 +268,11 @@ impl FakeHost {
         self
     }
 
-    /// Plays a game build without the damage sites of `causes`: they stay
-    /// off, so `damage::causes_off` lists them, while the filters still
-    /// register.
+    /// Plays a game build without the damage sites of `causes`: as on the
+    /// loader, a cause that shares its sites with others takes them along
+    /// (the shroud's `Fog` and `DeadlyFog`, drowning's `Suffocated` and
+    /// `DrowningDeath`), so `damage::causes_off` lists them all, while the
+    /// filters still register.
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
@@ -280,7 +282,7 @@ impl FakeHost {
     /// use enshwick::damage::DamageCause;
     ///
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .without_damage_sites(&[DamageCause::Fog, DamageCause::DeadlyFog])
+    ///     .without_damage_sites(&[DamageCause::Fog])
     ///     .install();
     /// # let _ = loader;
     /// ```

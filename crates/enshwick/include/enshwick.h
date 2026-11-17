@@ -6983,8 +6983,8 @@ typedef struct EnshwickHostApi {
   // every list answers: the causes no damage filter gets on this build
   // and run. A site arms when a mod registered a damage filter and the
   // build has it, and stops when it faults; with no filter, only the hit
-  // site arms, and only for stats. `EnshwickStatus_UNAVAILABLE` before the
-  // loader links its parts, which it does after every mod's init. Any
+  // site arms, and only for stats. `EnshwickStatus_UNAVAILABLE` until the
+  // loader has linked and armed its hooks, after every mod's init. Any
   // thread. ABI 12.14.
   EnshwickStatus (*damage_causes_off)(EnshwickModHandle me,
                                       uint32_t *out,

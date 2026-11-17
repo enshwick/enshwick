@@ -97,7 +97,7 @@ status summary and the Mods screen name the causes that are off.
 
 A mod reads the same list with `enshwick::damage::causes_off()`, in Luau
 `enshwick.damage.causes_off()`. It answers after init, such as on
-`WorldLoaded`, and fails during init, before the loader links its parts.
+`WorldLoaded`, and fails during init, before the loader has armed its hooks.
 The mod can then tell the player, or turn off a feature that needs a cause:
 
 ```rust

@@ -105,9 +105,6 @@ impl Items {
     /// The selection an ABI record names; `None` for [`DataSelect::ENTRY`]
     /// and a selection this crate does not know.
     const fn from_abi(select: DataSelect, categories: u32) -> Option<Self> {
-        if !super::rules::selects_items(select) {
-            return None;
-        }
         match select {
             DataSelect::CATEGORY => Some(Self::Category(ItemCategoryMask(categories))),
             DataSelect::STACKABLE => Some(Self::Stackable),

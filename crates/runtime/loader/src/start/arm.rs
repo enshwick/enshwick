@@ -74,6 +74,7 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
             );
         }
     }
+    crate::inventory::damage::settle();
     crate::log!(INFO, "{armed} hook targets armed");
     if crate::engine::diag::timing() {
         crate::log!(INFO, "diagnostics on: hook calls counted, one in 256 timed");

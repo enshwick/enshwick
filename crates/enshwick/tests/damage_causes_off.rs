@@ -28,9 +28,9 @@ mod tests {
     );
 
     #[test]
-    fn a_build_without_the_shroud_sites_answers_only_the_shroud_causes_off() {
+    fn a_build_without_the_shroud_site_answers_both_shroud_causes_off() {
         let loader = FakeHost::new()
-            .without_damage_sites(&[DamageCause::Fog, DamageCause::DeadlyFog])
+            .without_damage_sites(&[DamageCause::Fog])
             .install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Filtering)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);

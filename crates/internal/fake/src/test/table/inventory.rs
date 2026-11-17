@@ -194,20 +194,21 @@ pub(crate) extern "system" fn damage_filter(
     })
 }
 
-/// The damage causes the API names, by their ABI number.
-const CAUSES: [u32; 8] = [
-    DamageCheck::IMPACT,
-    DamageCheck::FALL_DAMAGE,
-    DamageCheck::FOG,
-    DamageCheck::DEADLY_FOG,
-    DamageCheck::SUFFOCATED,
-    DamageCheck::DROWNING_DEATH,
-    DamageCheck::FREEZING,
-    DamageCheck::ADMIN_KILL,
+/// The damage causes the API names, by their ABI number, in the loader's
+/// groups: the causes whose sites arm all or none, so a build without one
+/// site of a group loses all its causes. The hits come first.
+pub(crate) const CAUSE_GROUPS: [&[u32]; 6] = [
+    &[DamageCheck::IMPACT],
+    &[DamageCheck::FALL_DAMAGE],
+    &[DamageCheck::FOG, DamageCheck::DEADLY_FOG],
+    &[DamageCheck::SUFFOCATED, DamageCheck::DROWNING_DEATH],
+    &[DamageCheck::FREEZING],
+    &[DamageCheck::ADMIN_KILL],
 ];
 
 /// As the loader's: after init, the causes whose sites are not armed. A
-/// filter arms every site the build has; stats alone arm the hit's.
+/// filter arms every group the build has whole; stats used in init arm the
+/// hits alone.
 pub(crate) extern "system" fn damage_causes_off(
     _me: ModHandle,
     out: *mut u32,
@@ -219,13 +220,16 @@ pub(crate) extern "system" fn damage_causes_off(
             return Status::UNAVAILABLE;
         }
         let filtering = !s.inventory.damage_filters.is_empty();
-        let stats = s.inventory.stats.has_kinds();
-        let off: Vec<u32> = CAUSES
-            .into_iter()
-            .filter(|&cause| {
-                let linked = filtering || (stats && cause == DamageCheck::IMPACT);
-                !linked || s.host.inventory.missing_damage_sites.contains(&cause)
+        let stats = s.inventory.stats.wanted();
+        let missing = &s.host.inventory.missing_damage_sites;
+        let off: Vec<u32> = CAUSE_GROUPS
+            .iter()
+            .enumerate()
+            .filter(|&(index, group)| {
+                let linked = filtering || (stats && index == 0);
+                !linked || group.iter().any(|cause| missing.contains(cause))
             })
+            .flat_map(|(_, group)| group.iter().copied())
             .collect();
         crate::test::table::put_list(&off, out, capacity, count)
     })
@@ -390,13 +394,16 @@ pub(crate) extern "system" fn inventory_submit(
 
 #[cfg(test)]
 mod tests {
+    use core::ffi::c_void;
+
     use enshwick_core::abi::{
-        Header, InventoryOp, InventoryRequest, InventoryResult, ModHandle, Side, Status,
+        DamageCheck, Header, InventoryOp, InventoryRequest, InventoryResult, ModHandle, Side,
+        Status,
     };
 
     use crate::test::FakeHost;
 
-    unsafe extern "system" fn ignored(result: *const InventoryResult, _: *mut core::ffi::c_void) {
+    unsafe extern "system" fn ignored(result: *const InventoryResult, _: *mut c_void) {
         let _read = crate::test::table::base::io::get_headed(result);
     }
 
@@ -440,6 +447,85 @@ mod tests {
         );
         assert_eq!(submit(&[give(0)]), Status::BAD_ARGS, "a give of nothing");
         assert_eq!(submit(&[give(1)]), Status::OK);
+    }
+
+    unsafe extern "system" fn keep(check: *mut DamageCheck, _: *mut c_void) {
+        let _read = crate::test::table::base::io::get_headed(check.cast_const());
+    }
+
+    fn close_init() {
+        crate::test::table::with((), |s| {
+            s.base.registration = crate::test::table::Registration::Closed;
+        });
+    }
+
+    fn causes_off() -> Vec<u32> {
+        let mut out = [0u32; 16];
+        let mut count = 0u32;
+        let status = super::damage_causes_off(ModHandle(1), out.as_mut_ptr(), 16, &raw mut count);
+        assert_eq!(status, Status::OK);
+        out[..count as usize].to_vec()
+    }
+
+    /// Reads a stat kind that does not exist, which still loads the stats.
+    fn use_stats() {
+        let status = crate::test::inventory::stats::stat_info(
+            ModHandle(1),
+            u32::MAX,
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+        );
+        assert_eq!(status, Status::MISSING);
+    }
+
+    #[test]
+    fn a_missing_site_takes_its_whole_group_off_as_on_the_loader() {
+        let _loader = FakeHost::new().install();
+        crate::test::table::with((), |s| {
+            s.host
+                .inventory
+                .missing_damage_sites
+                .push(DamageCheck::SUFFOCATED);
+        });
+        assert_eq!(
+            super::damage_filter(ModHandle(1), Some(keep), core::ptr::null_mut()),
+            Status::OK
+        );
+        close_init();
+        assert_eq!(
+            causes_off(),
+            [DamageCheck::SUFFOCATED, DamageCheck::DROWNING_DEATH]
+        );
+    }
+
+    #[test]
+    fn stats_arm_the_hits_only_when_a_mod_used_them_during_init() {
+        let _loader = FakeHost::new().install();
+        close_init();
+        use_stats();
+        let every: Vec<u32> = super::CAUSE_GROUPS.concat();
+        assert_eq!(causes_off(), every, "stats read after init arm nothing");
+    }
+
+    #[test]
+    fn stats_used_during_init_arm_the_hits() {
+        let _loader = FakeHost::new().install();
+        use_stats();
+        close_init();
+        assert!(!causes_off().contains(&DamageCheck::IMPACT));
+    }
+
+    #[cfg(feature = "unstable")]
+    #[test]
+    fn the_groups_hold_every_cause_the_api_names_once() {
+        let mut grouped = super::CAUSE_GROUPS.concat();
+        grouped.sort_unstable();
+        let mut named: Vec<u32> = enshwick_core::damage::DamageCause::NAMED
+            .iter()
+            .map(|cause| cause.to_abi())
+            .collect();
+        named.sort_unstable();
+        assert_eq!(grouped, named);
     }
 
     #[test]

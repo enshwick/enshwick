@@ -73,7 +73,7 @@ fn every_site_arms_on_the_game_executables() {
 
 #[test]
 fn a_hit_no_filter_or_stat_watches_is_left_unread() {
-    let _first = LAYOUT.set(Layout {
+    let _first = STATE.layout.set(Layout {
         vector: 0x40,
         target: 0x10,
         source: 0x14,
@@ -236,10 +236,12 @@ fn a_build_without_the_fall_sites_answers_only_the_falls_off_to_a_filter() {
     let filters = one_filter();
     let loader = loader_without(Some(pinned::damage::FALL_DEATH), true);
     link_in(&loader, filters.sealed().unwrap_or_default(), false);
-    let off = off_of(true, false);
-    assert!(off.contains(&DamageCause::FallDamage.to_abi()), "{off:?}");
-    assert!(!off.contains(&DamageCause::Fog.to_abi()), "{off:?}");
-    assert!(!off.contains(&DamageCause::AdminKill.to_abi()), "{off:?}");
+    // The bare reflection lacks the damage types, so the hits are off too.
+    let expected: Vec<u32> = [DamageCause::Impact, DamageCause::FallDamage]
+        .iter()
+        .map(|cause| cause.to_abi())
+        .collect();
+    assert_eq!(off_of(true, false), expected);
 }
 
 #[test]
@@ -255,6 +257,18 @@ fn without_a_filter_every_cause_is_off_but_the_hits_stats_arm() {
 #[test]
 fn nothing_answers_before_the_filters_are_sealed() {
     assert_eq!(causes_off(), None);
+}
+
+#[test]
+fn nothing_answers_between_the_link_and_the_end_of_arming() {
+    seal();
+    link_in(&crate::start::tests::bare_loader(), &[], false);
+    assert_eq!(causes_off(), None, "a switch may still go off while arming");
+    settle();
+    assert_eq!(
+        causes_off().map(|off| off.len()),
+        Some(DamageCause::NAMED.len())
+    );
 }
 
 /// `rflags` after `comiss` of a survivable fall (above) and a lethal

@@ -657,15 +657,55 @@ impl Installed {
         table::with(Vec::new(), |s| s.content.changes.recipes.clone())
     }
 
-    /// The changes the mod declared to set later, in order, each with its
-    /// value in force: `None` until set or after a reset. A change of a
-    /// field this build does not name, from a raw record, is left out.
+    /// The changes the mod declared to set later, in order, each with its id
+    /// and its value in force: `None` until set or after a reset. A change of
+    /// a field this build does not name, from a raw record, is left out but
+    /// keeps its id, as a mod built without `unstable` declares a stack size
+    /// or container slots, which the loader takes.
     ///
     /// # Examples
     ///
     /// ```
+    /// use enshwick::abi::{
+    ///     ChangeId, ChangeOp, DataChange, DataField, DataSelect, Guid, Header, Status, Str,
+    /// };
+    /// use enshwick::content::changes::Field;
+    ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.live_changes().is_empty());
+    /// let api = loader.api();
+    /// let declare = |field, select, entry| {
+    ///     let change = DataChange {
+    ///         header: Header::of::<DataChange>(),
+    ///         entry,
+    ///         field,
+    ///         op: ChangeOp::TIMES,
+    ///         value: 1.0,
+    ///         source: Str::new("raw"),
+    ///         item: Guid::NIL,
+    ///         select,
+    ///         categories: 0,
+    ///     };
+    ///     let mut id = ChangeId(0);
+    ///     // SAFETY: the fake's table lives for the process; `change` and
+    ///     // `id` are locals alive for the call.
+    ///     let status = (unsafe { &*api }.change_data)(loader.handle(), &raw const change, &raw mut id);
+    ///     (status, id)
+    /// };
+    /// // The same answers whether this build names container slots or not.
+    /// let slots = declare(DataField::CONTAINER_SLOTS, DataSelect::CONTAINERS, Guid::NIL);
+    /// assert_eq!(slots, (Status::OK, ChangeId(1)));
+    /// let burn = declare(Field::BurnTime.to_abi(), DataSelect::ENTRY, Guid([7; 16]));
+    /// assert_eq!(burn, (Status::OK, ChangeId(2)));
+    /// let set = |value| {
+    ///     // SAFETY: as above.
+    ///     (unsafe { &*api }.set_change)(loader.handle(), ChangeId(1), ChangeOp::SET, value)
+    /// };
+    /// assert_eq!(set(50.0), Status::BAD_ARGS, "slots come in pages of 8");
+    /// assert_eq!(set(48.0), Status::OK);
+    /// let live = loader.live_changes();
+    /// let burning = live.iter().find(|change| change.field == Field::BurnTime);
+    /// assert_eq!(burning.map(|change| change.id), Some(ChangeId(2)));
     /// ```
     #[must_use]
     pub fn live_changes(&self) -> Vec<LiveChange> {
@@ -944,6 +984,9 @@ pub struct ServedResource {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct LiveChange {
+    /// The id the fake answered its declaration with, which `set_change`
+    /// takes.
+    pub id: enshwick_core::abi::ChangeId,
     /// What it reaches.
     pub target: enshwick_core::content::changes::Target,
     /// What it changes.

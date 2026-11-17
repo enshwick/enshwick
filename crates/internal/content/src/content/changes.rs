@@ -208,25 +208,13 @@ impl Field {
         }
     }
 
-    /// What the field's values must be.
+    /// What the field's values must be, from the one table by ABI id.
+    #[expect(
+        clippy::expect_used,
+        reason = "every field's ABI id has rules, as a test of the table checks"
+    )]
     pub(crate) const fn rules(self) -> Rules {
-        match self {
-            #[cfg(feature = "unstable")]
-            Self::MaxStackSize => rules::MAX_STACK,
-            #[cfg(feature = "unstable")]
-            Self::Slots => rules::SLOTS,
-            Self::Output | Self::Cost | Self::StackSize => Rules::whole(1.0, 65535.0),
-            Self::Ingredient | Self::Count => Rules::whole(0.0, 65535.0),
-            Self::CraftingDuration | Self::BurnTime => Rules::fraction(0.0, 86400.0),
-            Self::DamageMod => Rules::fraction(0.0, 100.0),
-            Self::SpeedMod => Rules::fraction(0.0, 10.0),
-            Self::Armor => Rules::fraction(0.0, 1_000_000.0).factor_only(),
-            Self::EnergyOutput => Rules::whole(0.0, 1_000_000.0),
-            Self::Weight => Rules::fraction(0.0, 1_000_000.0),
-            Self::SpawnProbability => Rules::fraction(0.0, 1.0),
-            Self::ComfortAmount => Rules::whole(0.0, 1000.0),
-            Self::Station => Rules::whole(0.0, 4_294_967_295.0).set_only(),
-        }
+        Rules::of(self.to_abi()).expect("every field has rules")
     }
 
     /// Whether `value` is one the field takes: a set inside its range, whole

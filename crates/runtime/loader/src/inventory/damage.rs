@@ -20,6 +20,7 @@
 //! causes it serves.
 
 use core::ffi::c_void;
+use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
@@ -73,7 +74,19 @@ const ZERO: u64 = 1 << 6;
 static NO_HEALTH: u64 = 0;
 
 static FILTERS: Filters<DamageFilterFn> = Filters::new(Feature::Damage);
-static LAYOUT: OnceLock<Layout> = OnceLock::new();
+static STATE: State = State {
+    layout: OnceLock::new(),
+    settled: AtomicBool::new(false),
+};
+
+/// What linking and arming left of the sites.
+struct State {
+    /// The hit's layout, once the hit group links.
+    layout: OnceLock<Layout>,
+    /// Whether arming is over, so every switch a site that failed to link or
+    /// arm turns off is off.
+    settled: AtomicBool,
+}
 
 /// Where each site keeps what the filters need, from the build table.
 #[derive(Debug, Clone, Copy)]
@@ -255,10 +268,19 @@ fn groups(filtering: bool) -> &'static [Group] {
     if filtering { &GROUPS } else { &[HITS] }
 }
 
+/// Marks arming over, after every site that failed to arm turned its switch
+/// off, so [`causes_off`] answers from then on.
+pub(crate) fn settle() {
+    STATE.settled.store(true, Ordering::Release);
+}
+
 /// The ABI numbers of the causes whose sites are not armed: not linked, or
-/// switched off; `None` before the filters are sealed, when no part has
-/// linked yet. Read outside every hit.
+/// switched off; `None` until arming is over, since a switch may still go
+/// off while the parts link and arm. Read outside every hit.
 pub(crate) fn causes_off() -> Option<Vec<u32>> {
+    if !STATE.settled.load(Ordering::Acquire) {
+        return None;
+    }
     let filters = FILTERS.sealed()?;
     Some(off_of(
         !filters.is_empty(),
@@ -266,19 +288,15 @@ pub(crate) fn causes_off() -> Option<Vec<u32>> {
     ))
 }
 
-/// [`causes_off`] once the filters are sealed, `filtering` when a mod
-/// filters damage and `stats` when stats are wanted.
+/// [`causes_off`] once arming is over, `filtering` when a mod filters
+/// damage and `stats` when stats are wanted: a mod's filter links every
+/// group, stats only the hit group.
 fn off_of(filtering: bool, stats: bool) -> Vec<u32> {
-    let linked: &[Group] = if filtering || stats {
-        groups(filtering)
-    } else {
-        &[]
-    };
+    let linked =
+        |group: &Group| filtering || (stats && core::ptr::eq(group.fuse, &raw const HIT_FUSE));
     GROUPS
         .iter()
-        .filter(|group| {
-            group.fuse.is_off() || !linked.iter().any(|l| core::ptr::eq(l.fuse, group.fuse))
-        })
+        .filter(|group| group.fuse.is_off() || !linked(group))
         .flat_map(|group| group.causes)
         .map(|cause| cause.to_abi())
         .collect()
@@ -294,7 +312,7 @@ fn hit_layout(loader: &Loader) -> Result<(), Lacking> {
             OTHER_TYPES,
         ));
     }
-    let _first = LAYOUT.set(layout);
+    let _first = STATE.layout.set(layout);
     Ok(())
 }
 
@@ -391,7 +409,7 @@ mid_handler! {
     gate hits_watched();
     fuse HIT_FUSE, "the hit site";
     |registers| {
-        let Some(layout) = LAYOUT.get() else {
+        let Some(layout) = STATE.layout.get() else {
             return;
         };
         let rbp = address(registers.rbp);

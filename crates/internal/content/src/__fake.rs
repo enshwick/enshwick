@@ -13,20 +13,23 @@ pub use crate::rates::{Rate, scale_whole};
 #[cfg(feature = "typed")]
 use crate::resources::Value;
 
-/// A field a mod built without `unstable` cannot name, a stack size or
-/// container slots, whose raw changes the fake host takes as the loader,
-/// always built with the feature, does.
+/// A field a mod built without `unstable` cannot name (today a stack size or
+/// container slots, both items'), whose raw changes the fake host takes as
+/// the loader, always built with the feature, does.
 #[derive(Clone, Copy, Debug)]
 pub struct UnnamedField(crate::content::changes::rules::Rules);
 
 impl UnnamedField {
-    /// The field `raw` changes, when it is one of the two.
+    /// The field `raw` changes, when this build has no [`Field`] for it but
+    /// the loader has.
+    ///
+    /// [`Field`]: crate::content::changes::Field
     #[must_use]
-    pub const fn of(raw: &crate::abi::DataChange) -> Option<Self> {
-        match crate::content::changes::rules::Rules::of_selectable(raw.field) {
-            Some(rules) => Some(Self(rules)),
-            None => None,
+    pub fn of(raw: &crate::abi::DataChange) -> Option<Self> {
+        if crate::content::changes::Field::from_abi(raw.field).is_some() {
+            return None;
         }
+        crate::content::changes::rules::Rules::of(raw.field).map(Self)
     }
 
     /// Whether the loader takes `raw`, a change of this field: its target

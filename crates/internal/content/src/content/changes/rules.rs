@@ -2,10 +2,11 @@
 //! change of a field a build without `unstable` cannot name is checked by
 //! the same rules as the loader's.
 
+use crate::abi::DataField;
 #[cfg(any(feature = "unstable", feature = "fake"))]
 use crate::abi::DataSelect;
 #[cfg(feature = "fake")]
-use crate::abi::{ChangeOp, DataChange, DataField};
+use crate::abi::{ChangeOp, DataChange};
 #[cfg(feature = "fake")]
 use crate::content::Guid;
 
@@ -37,13 +38,11 @@ enum Takes {
 }
 
 /// An item's stack size.
-#[cfg(any(feature = "unstable", feature = "fake"))]
-pub(crate) const MAX_STACK: Rules = Rules::whole(1.0, 65535.0);
+const MAX_STACK: Rules = Rules::whole(1.0, 65535.0);
 
 /// A container's or a backpack's slots: pages of 8 that only grow, since a
 /// chest a player upgrades moves every item it holds.
-#[cfg(any(feature = "unstable", feature = "fake"))]
-pub(crate) const SLOTS: Rules = Rules {
+const SLOTS: Rules = Rules {
     step: 8.0,
     grows_only: true,
     ..Rules::whole(8.0, 128.0)
@@ -88,16 +87,29 @@ impl Rules {
         }
     }
 
-    /// The rules of the fields a selection of items changes, by their ABI
-    /// ids, in every build: the fake host checks a raw change of them from a
-    /// mod built without `unstable` as the loader, built with it, does.
-    #[cfg(feature = "fake")]
-    pub(crate) const fn of_selectable(field: DataField) -> Option<Self> {
-        match field {
-            DataField::MAX_STACK => Some(MAX_STACK),
-            DataField::CONTAINER_SLOTS => Some(SLOTS),
-            _ => None,
-        }
+    /// The rules of the field the ABI numbers `field`, in every build; `None`
+    /// for a number no field has. [`Field::rules`] reads them, and the fake
+    /// host checks a raw change of a field a mod built without `unstable`
+    /// cannot name by them, as the loader, built with it, does.
+    pub(crate) const fn of(field: DataField) -> Option<Self> {
+        Some(match field {
+            DataField::MAX_STACK => MAX_STACK,
+            DataField::CONTAINER_SLOTS => SLOTS,
+            DataField::RECIPE_OUTPUT | DataField::RECIPE_COST | DataField::LOOT_STACK_SIZE => {
+                Self::whole(1.0, 65535.0)
+            }
+            DataField::RECIPE_INGREDIENT | DataField::LOOT_COUNT => Self::whole(0.0, 65535.0),
+            DataField::RECIPE_TIME | DataField::BURN_TIME => Self::fraction(0.0, 86400.0),
+            DataField::DAMAGE_MOD => Self::fraction(0.0, 100.0),
+            DataField::SPEED_MOD => Self::fraction(0.0, 10.0),
+            DataField::ARMOR => Self::fraction(0.0, 1_000_000.0).factor_only(),
+            DataField::ENERGY_OUTPUT => Self::whole(0.0, 1_000_000.0),
+            DataField::LOOT_WEIGHT => Self::fraction(0.0, 1_000_000.0),
+            DataField::LOOT_SPAWN_PROBABILITY => Self::fraction(0.0, 1.0),
+            DataField::COMFORT_AMOUNT => Self::whole(0.0, 1000.0),
+            DataField::RECIPE_STATION => Self::whole(0.0, 4_294_967_295.0).set_only(),
+            _ => return None,
+        })
     }
 
     /// Whether a raw change of a field with these rules reaches a target
@@ -208,14 +220,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "fake")]
-    fn only_the_two_selectable_fields_have_rules_by_their_abi_id() {
-        assert_eq!(Rules::of_selectable(DataField::MAX_STACK), Some(MAX_STACK));
-        assert_eq!(
-            Rules::of_selectable(DataField::CONTAINER_SLOTS),
-            Some(SLOTS)
-        );
-        assert_eq!(Rules::of_selectable(DataField::RECIPE_TIME), None);
+    fn every_field_has_rules_by_its_abi_id_and_no_other_id_does() {
+        for field in Field::ALL {
+            assert!(Rules::of(field.to_abi()).is_some(), "{field:?}");
+        }
+        assert_eq!(Rules::of(DataField::MAX_STACK), Some(MAX_STACK));
+        assert_eq!(Rules::of(DataField::CONTAINER_SLOTS), Some(SLOTS));
+        assert_eq!(Rules::of(DataField(0)), None);
     }
 
     #[test]

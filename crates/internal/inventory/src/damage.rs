@@ -233,8 +233,8 @@ impl DamageCause {
 ///
 /// # Errors
 ///
-/// [`Off`] during init, before the loader links its parts, and without a
-/// loader.
+/// [`Off`] during init and until the loader has linked and armed its hooks,
+/// and without a loader.
 ///
 /// # Examples
 ///
