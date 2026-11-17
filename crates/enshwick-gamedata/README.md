@@ -37,8 +37,8 @@ game update that moves a field changes this crate, not the mods.
   that loads a set of debug strings (`loads`), or a run of decoded
   instructions in a function another route finds (`in` and `shape`, such as
   `lea rdx,[rbp-*]`), which survives a changed encoding or displacement,
-  or the one direct caller of a function another route finds whose code
-  the shape matches (`callers`).
+  or the one direct caller (`callers`) or callee (`callees`) of a function
+  another route finds whose code the shape matches.
   A constant is an operand the shape takes (`value`, `cell`), a reflected
   field offset or type size (`field`, each field holding the next type
   inline; `size`), or a value the shape spells
@@ -50,7 +50,11 @@ game update that moves a field changes this crate, not the mods.
   the end of its highest store off the stack), which counts only
   where the shape matches once; a taken constant's shape has two steps,
   an exact operand or an `{entry}`. A memory operand through `[?+*]` takes
-  any base register, and `nth` takes the n-th run of a shape that repeats,
+  any base register; `?1` to `?9` bind one register across the shape, so
+  `mov [?1+*],eax` and `mov [?1],al` store into one object; `{entry}` is
+  another entry's value, a symbol's address or a constant such as a
+  reflected field offset, as in `movups xmm0,[?+{ui.attribute_text_main}]`;
+  and `nth` takes the n-th run of a shape that repeats,
   counted after the one match of an `after` shape in the same part, only
   where there are exactly `of` runs.
   Routes build on each other through waypoints, anonymous functions no

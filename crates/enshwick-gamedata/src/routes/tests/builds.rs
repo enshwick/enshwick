@@ -566,11 +566,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
                 .chain(WIDGET_READS)
                 .chain(ITEM_UI_READS)
                 .chain(attributes::ATTRIBUTE_ROW_READS)
-                .chain(
-                    attributes::ATTRIBUTE_TEXT_READS
-                        .iter()
-                        .flat_map(|&(read, named, text)| [(read, text), (named, text)]),
-                )
+                .chain(attributes::ATTRIBUTE_TEXT_READS)
                 .map(move |(id, value)| (table, id, value))
         }))
 }

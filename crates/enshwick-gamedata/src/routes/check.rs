@@ -5,7 +5,7 @@
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
-use super::shape::{ShapeNames, Step};
+use super::shape::{Run, ShapeNames, Step};
 use crate::reflect::Image;
 
 /// The bytes a check covers past its last jump, as a `<id>.bytes` check does.
@@ -43,7 +43,7 @@ fn next_of(ins: &Instruction) -> u64 {
 /// jump or end the function there.
 pub(crate) fn runs(steps: &[Step], image: &Image<'_>, rva: u64) -> bool {
     let mut va = image.base().saturating_add(rva);
-    let mut taken = None;
+    let mut run = Run::default();
     let mut covered = 0;
     let mut ended = false;
     let matched = !steps.is_empty()
@@ -56,7 +56,7 @@ pub(crate) fn runs(steps: &[Step], image: &Image<'_>, rva: u64) -> bool {
             covered = if jump { 0 } else { covered + ins.len() as u64 };
             ended = matches!(ins.mnemonic(), Mnemonic::Ret | Mnemonic::Int3)
                 || ins.mnemonic() == Mnemonic::Jmp && !jump;
-            step.matches(&ins, &|_: &str| None, &mut taken)
+            step.matches(&ins, &|_: &str| None, &mut run)
         });
     matched && (covered >= COVER || ended)
 }
@@ -115,13 +115,13 @@ pub fn shape_checks(names: &ShapeNames, shape: &[String], image: &Image<'_>, rva
     };
     let start = image.base().saturating_add(rva);
     let mut va = start;
-    let mut taken = None;
+    let mut run = Run::default();
     let matched = steps.iter().all(|step| {
         let Some(ins) = one_at(image, va) else {
             return false;
         };
         va = ins.next_ip();
-        step.matches(&ins, &|_: &str| None, &mut taken)
+        step.matches(&ins, &|_: &str| None, &mut run)
     });
     matched && match_checks(steps.len(), start, va)
 }

@@ -5,24 +5,19 @@
 //! header with the game's row widget (client 26430625, decompiler: the
 //! submenu `doAttributesSubmenu`, nine builders, the row push they share).
 //! A detour on a group's builder lets it fill its list, then pushes a row
-//! per kind of that group: a copy of the list's last game row, so every
-//! field the loader does not set keeps the game's own layout, with the
-//! kind's name, description and the local player's value as the server
-//! last sent it. A group whose list is empty this frame copies a spare
-//! row kept without the fields that point into its frame. The game formats
-//! the value as it formats its own rows, an integer with a sign or a
-//! percent sign.
+//! per kind of that group, built from zeroed bytes as the submenu builds its
+//! own empty row: the kind's name, description and the local player's value
+//! as the server last sent it, the byte every game row holds 1 in, and no
+//! grid cell, so the row follows the group's game rows; its breakdown stays
+//! off. The game formats the value as it formats its own rows, an integer
+//! with a sign or a percent sign.
 //!
-//! A detour links only for a group some kind shows in, and for the Main
-//! group, whose rows give the spare, under a fuse of its own, so a builder
-//! this build lacks or changed turns off only its group; Main's builder,
-//! when no kind shows there, is never listed off. A build whose breakdown
-//! flag no route finds keeps every group's rows but the spare.
-//! Per hit it pays, for each kind of its group, a load of the player's
-//! value and a lookup of texts kept with their hashes; Main's detour without
-//! kinds returns at once once the spare is kept.
+//! A detour links only for a group some kind shows in, under a fuse of its
+//! own, so a builder this build lacks or changed turns off only its group.
+//! Per hit it pays, for each kind of its group, a load of the player's value
+//! and a lookup of texts kept with their hashes.
 
-use core::cell::{OnceCell, RefCell};
+use core::cell::RefCell;
 use std::sync::OnceLock;
 
 use enshwick_core::abi::HookFlags;
@@ -39,11 +34,6 @@ use crate::engine::pinned;
 /// How many groups the Character screen has.
 const GROUPS: usize = StatGroup::ALL.len();
 
-/// The group whose builder links whenever a kind shows anywhere, as the
-/// source of the spare template: its list always holds rows (health, mana,
-/// stamina; client 26430625).
-const SPARE_SOURCE: StatGroup = StatGroup::Main;
-
 /// What every group's rows need: the push and the row layout.
 static FUSE: Fuse = Fuse::new("stat rows");
 static LINKED: OnceLock<Linked> = OnceLock::new();
@@ -52,10 +42,11 @@ type BuilderFn = unsafe extern "system" fn(list: *mut u8);
 type PushFn = unsafe extern "system" fn(list: *mut u8, row: *const Row) -> *mut u8;
 
 /// A row of the game's attribute lists (client 26430625, decompiler of the
-/// builders, the row widget and its value text): two texts, the value, the
-/// flags that pick how it reads, and the breakdown the cursor shows. Its
-/// size and the offsets of the fields the loader sets are the table's,
-/// checked at the link ([`fields_hold`]).
+/// builders, the submenu's empty row, the row widget and its value text):
+/// two texts, the value, the flags that pick how it reads, the breakdown the
+/// cursor shows and the row's grid cell. Its size and the offsets of the
+/// fields the loader sets are the table's, checked at the link
+/// ([`fields_hold`]).
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Row {
@@ -72,35 +63,45 @@ struct Row {
     /// The breakdown's entries, which show only with `breakdown`.
     entries: [u8; 571],
     breakdown: u8,
-    entries_rest: [u8; 8],
+    breakdown_rest: [u8; 7],
+    /// A byte every row of the game holds 1 in: its builders' rows and the
+    /// submenu's empty row; no code of the screen reads it.
+    flag: u8,
     /// The value reads as seconds, or as milliseconds.
     seconds: u8,
     milliseconds: u8,
-    layout: [u8; 21],
+    cell_rest: [u8; 5],
+    /// The grid cell the widget places the row in; [`NO_CELL`] places it
+    /// after the rows before it.
+    cell: [i64; 2],
     /// The value reads `%d%%`, and a positive one gets a `+`.
     percent: u8,
     plus: u8,
     rest: [u8; 6],
 }
 
+/// The grid cell of a row the widget lays out in order, as every game row
+/// is: either word -1 (client 26430625, decompiler of the row widget).
+const NO_CELL: [i64; 2] = [-1, -1];
+
+/// The value of [`Row::flag`] in every game row.
+const FLAG: u8 = 1;
+
 /// The game's text as three words: its bytes, their length and their hash.
 type UiTextWords = [u64; 3];
 
-/// A row list's head: its rows and how many (client 26430625, decompiler).
+/// A row list's head, as far as the loader reads it: its rows' storage
+/// (client 26430625, decompiler).
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct List {
     rows: u64,
-    filled: u64,
 }
 
 /// What the rows need of this build.
 #[derive(Clone, Copy, Debug)]
 struct Linked {
     push: PushFn,
-    /// The routes put the breakdown flag where [`Row`] keeps it, so a row
-    /// can turn it off and a spare can stand without its entries.
-    breakdown: bool,
     /// The kinds of each group and their stat keys, in the order of
     /// [`StatGroup::ALL`].
     groups: &'static [Box<[(u32, u32)]>; GROUPS],
@@ -144,25 +145,6 @@ thread_local! {
     /// The kinds' texts by kind and language, filled the first time a row
     /// shows; never emptied, so a row's text stays valid.
     static TEXTS: RefCell<FxHashMap<(u32, u32), Option<Texts>>> = RefCell::default();
-    /// The first labelled row of [`SPARE_SOURCE`]'s list, without the
-    /// fields that point into its frame ([`spare`]): the template of a
-    /// group whose own list has no row this frame.
-    static SPARE: OnceCell<Row> = const { OnceCell::new() };
-}
-
-/// `row` without the fields that point into the frame that built it: its
-/// two texts and the breakdown's entries, the only pointers a builder
-/// writes into a row (the 0x288 and 0x290 words are a grid position, -1 for
-/// none; client 26430625, decompiler of the builders and the row widget).
-/// Its breakdown is off, so the game reads no entry of it.
-fn spare(row: &Row) -> Row {
-    Row {
-        label: [0; 3],
-        tooltip: [0; 3],
-        entries: [0; 571],
-        breakdown: 0,
-        ..*row
-    }
 }
 
 macro_rules! row_detours {
@@ -215,58 +197,50 @@ pub(super) fn link(loader: &Loader) {
     if groups.iter().all(|kinds| kinds.is_empty()) {
         return;
     }
-    let (push, breakdown) = match linked_push(loader) {
-        Ok(linked) => linked,
+    let push = match linked_push(loader) {
+        Ok(push) => push,
         Err((id, reason)) => {
             loader.fuse_off(&FUSE, id, reason);
             return;
         }
     };
     let groups = Box::leak(Box::new(groups));
-    let _first = LINKED.set(Linked {
-        push,
-        breakdown,
-        groups,
-    });
-    let lookup = |id: pinned::Constant| loader.offset(id);
+    let _first = LINKED.set(Linked { push, groups });
+    let builders = pinned::ui::ATTRIBUTE_ROWS;
+    let shared = shared(&builders.map(|builder| loader.address(builder)));
     let mut linked = 0;
-    for (at, ((kinds, &(detour, next, fuse)), builder)) in groups
-        .iter()
-        .zip(&DETOURS)
-        .zip(pinned::ui::ATTRIBUTE_ROWS)
-        .enumerate()
-    {
-        let asked = !kinds.is_empty();
-        if !asked && (StatGroup::ALL[at] != SPARE_SOURCE || !breakdown) {
+    for (at, (kinds, &(detour, next, fuse))) in groups.iter().zip(&DETOURS).enumerate() {
+        if kinds.is_empty() {
             continue;
         }
-        let found = if loader.address(builder).is_none() {
-            Err((builder.id(), crate::engine::builds::ABSENT))
-        } else {
-            opens_its_group(&lookup, at)
-        };
-        match found {
-            Err((id, reason)) if asked => {
-                let _off = loader.fuse_off(fuse, id, reason);
-            }
-            Err((id, reason)) => crate::log!(
-                INFO,
-                "interface: no spare stat row, no kind shows in Main: {id} {}",
-                loader.build.reason(id, reason)
-            ),
-            Ok(()) => {
-                if loader.link_feature(fuse, Target::Pinned(builder), next, detour, HookFlags::NONE)
-                    && asked
-                {
-                    linked += 1;
-                }
-            }
+        if shared[at] {
+            loader.fuse_off(fuse, builders[at].id(), SHARED);
+        } else if loader.link_feature(
+            fuse,
+            Target::Pinned(builders[at]),
+            next,
+            detour,
+            HookFlags::NONE,
+        ) {
+            linked += 1;
         }
     }
     crate::log!(
         INFO,
         "interface: stat rows in {linked} groups of the Character screen"
     );
+}
+
+/// Why a group whose builder is another group's too shows no rows.
+const SHARED: &str = "is the builder of another group too, so its rows could go under either";
+
+/// Which groups' builders lie at one address with another group's: a
+/// function two builder routes find cannot tell whose rows it builds, so
+/// neither group links, whatever kinds the groups show.
+fn shared(addresses: &[Option<u64>; GROUPS]) -> [bool; GROUPS] {
+    core::array::from_fn(|at| {
+        addresses[at].is_some_and(|a| addresses.iter().filter(|&&b| b == Some(a)).count() > 1)
+    })
 }
 
 /// What a route lookup failed on: the entry, and why.
@@ -280,28 +254,10 @@ fn offset(
     lookup(id).ok_or((id.id(), crate::engine::builds::ABSENT))
 }
 
-/// Whether the builder of group `at` (in the order of [`StatGroup::ALL`])
-/// first loads the text that opens its group, as reflection names it: a
-/// builder that loads another group's text fills another group's list, as
-/// when a build reorders the submenu's calls, and its group shows no rows.
-fn opens_its_group(
-    lookup: &dyn Fn(pinned::Constant) -> Option<usize>,
-    at: usize,
-) -> Result<(), Failed> {
-    let read = pinned::ui::ATTRIBUTE_ROWS_TEXT[at];
-    let named = pinned::ui::ATTRIBUTE_TEXTS[at];
-    (offset(lookup, read)? == offset(lookup, named)?)
-        .then_some(())
-        .ok_or((
-            read.id(),
-            "is not the text that opens the builder's group, so the build calls another group's builder there",
-        ))
-}
-
-/// The row push of this build and whether [`fields_hold`] found the
-/// breakdown flag, once its row size is the one the loader lays rows out
-/// in, or the first table entry it lacks, with why.
-fn linked_push(loader: &Loader) -> Result<(PushFn, bool), Failed> {
+/// The row push of this build, once its row size is the one the loader lays
+/// rows out in and [`fields_hold`], or the first table entry it lacks, with
+/// why.
+fn linked_push(loader: &Loader) -> Result<PushFn, Failed> {
     use crate::engine::builds::ABSENT;
     let push = pinned::ui::ATTRIBUTE_ROW_PUSH;
     let address = loader
@@ -315,25 +271,20 @@ fn linked_push(loader: &Loader) -> Result<(PushFn, bool), Failed> {
         Some(_) => return Err((size.id(), "is not the row size the loader lays rows out in")),
         None => return Err((size.id(), ABSENT)),
     }
-    let breakdown = fields_hold(&|id| loader.offset(id))?;
+    fields_hold(&|id| loader.offset(id))?;
     // SAFETY: `code_holds` checked the code at `ui.attribute_row_push`
     // against its route's check, so it is the game's push of an attribute
     // row, typed `PushFn` (client 26430625, decompiler).
-    Ok((
-        unsafe { core::mem::transmute::<usize, PushFn>(address) },
-        breakdown,
-    ))
+    Ok(unsafe { core::mem::transmute::<usize, PushFn>(address) })
 }
 
 /// Whether every field of [`Row`] and [`List`] the loader reads or writes
 /// lies where the game's code reads it on this build, else the first entry
 /// that disagrees or is absent, with why. Most fields are one read through
 /// a row pointer; the tooltip is a read of the submenu's copy of the hovered
-/// row, the pair flag a read beside the second value, and the breakdown flag
-/// a builder's store below the row it pushes (client 26430625, decompiler).
-/// The breakdown flag's routes lie in one builder, Fog Survival's: when they
-/// are absent, `Ok(false)`, and rows leave the flag as their template has it.
-fn fields_hold(lookup: &dyn Fn(pinned::Constant) -> Option<usize>) -> Result<bool, Failed> {
+/// row and the flag a store into its empty row there, and the pair flag a
+/// read beside the second value (client 26430625, decompiler).
+fn fields_hold(lookup: &dyn Fn(pinned::Constant) -> Option<usize>) -> Result<(), Failed> {
     use core::mem::offset_of;
     use pinned::ui as ids;
     let offset = |id| offset(lookup, id);
@@ -351,22 +302,31 @@ fn fields_hold(lookup: &dyn Fn(pinned::Constant) -> Option<usize>) -> Result<boo
             ids::ATTRIBUTE_ROW_MILLISECONDS,
             offset_of!(Row, milliseconds),
         ),
+        (ids::ATTRIBUTE_ROW_CELL, offset_of!(Row, cell)),
+        (
+            ids::ATTRIBUTE_ROW_CELL_SECOND,
+            offset_of!(Row, cell) + size_of::<i64>(),
+        ),
         (ids::ATTRIBUTE_ROW_PERCENT, offset_of!(Row, percent)),
         (ids::ATTRIBUTE_ROW_PLUS, offset_of!(Row, plus)),
         (ids::ATTRIBUTE_LIST_ROWS, offset_of!(List, rows)),
-        (ids::ATTRIBUTE_LIST_FILLED, offset_of!(List, filled)),
     ];
     for (id, field) in read {
         if offset(id)? != field {
             return Err((id.id(), moved));
         }
     }
+    let hovered = offset(ids::ATTRIBUTE_ROW_HOVERED)?;
     let composed = [
         (
             ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP,
-            offset(ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP)?
-                .checked_sub(offset(ids::ATTRIBUTE_ROW_HOVERED)?),
+            offset(ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP)?.checked_sub(hovered),
             offset_of!(Row, tooltip),
+        ),
+        (
+            ids::ATTRIBUTE_ROW_HOVERED_FLAG,
+            offset(ids::ATTRIBUTE_ROW_HOVERED_FLAG)?.checked_sub(hovered),
+            offset_of!(Row, flag),
         ),
         (
             ids::ATTRIBUTE_ROW_PAIR_AFTER_SECOND,
@@ -380,16 +340,7 @@ fn fields_hold(lookup: &dyn Fn(pinned::Constant) -> Option<usize>) -> Result<boo
             return Err((id.id(), moved));
         }
     }
-    let (Some(set), Some(row)) = (
-        lookup(ids::ATTRIBUTE_ROW_BREAKDOWN_SET),
-        lookup(ids::ATTRIBUTE_ROW_BREAKDOWN_ROW),
-    ) else {
-        return Ok(false);
-    };
-    if set.checked_add(row) != Some(offset_of!(Row, breakdown)) {
-        return Err((ids::ATTRIBUTE_ROW_BREAKDOWN_SET.id(), moved));
-    }
-    Ok(true)
+    Ok(())
 }
 
 /// How a value shows in a row: the integer, and whether it reads as a
@@ -415,44 +366,14 @@ fn shown_value(value: f32, format: StatFormat) -> (i32, bool, bool) {
 /// - `list` is a row list of the game's attribute submenu that its builder
 ///   just filled, live for the call on the interface thread.
 unsafe fn push_rows(list: usize, group: StatGroup) {
-    use crate::engine::memory::read;
     let Some(linked) = LINKED.get() else {
         return;
     };
     let kinds = &linked.groups[group as usize];
-    let keeps_spare = linked.breakdown && group == SPARE_SOURCE;
-    if list == 0 || kinds.is_empty() && (!keeps_spare || SPARE.with(|s| s.get().is_some())) {
-        return;
-    }
     // SAFETY: the caller's contract: a live row list, whose head is a `List`.
-    let Some((rows, filled)) = stored(unsafe { read::<List>(list, 0) }) else {
-        return;
-    };
-    let game_row = |at: usize| {
-        // SAFETY: row `at` of the list's `filled` rows of `Row`s from
-        // `rows`, non-null by `stored`; the table's row size is `Row`'s,
-        // checked at the link.
-        unsafe { read::<Row>(rows + at * size_of::<Row>(), 0) }
-    };
-    let own = (0..filled).rev().map(game_row).find(is_template);
-    if keeps_spare && let Some(row) = &own {
-        SPARE.with(|s| {
-            let _kept = s.get_or_init(|| spare(row));
-        });
-    }
-    if kinds.is_empty() {
+    if list == 0 || kinds.is_empty() || !stored(unsafe { crate::engine::memory::read(list, 0) }) {
         return;
     }
-    // A group whose list is empty this frame, such as Fog Survival outside
-    // the shroud, takes the spare Main's list left.
-    let Some(template) = own.or_else(|| {
-        linked
-            .breakdown
-            .then(|| SPARE.with(|s| s.get().copied()))
-            .flatten()
-    }) else {
-        return;
-    };
     let language = crate::content::served::language().0;
     for &(kind, key) in kinds {
         let Some(value) = crate::inventory::stats::own_value(kind, key) else {
@@ -465,7 +386,7 @@ unsafe fn push_rows(list: usize, group: StatGroup) {
             else {
                 return;
             };
-            let row = row(&template, shown, value, linked.breakdown);
+            let row = row(shown, value);
             // SAFETY: the game's push on its own live list, from this thread,
             // with a row laid out as its builders lay theirs (client
             // 26430625); it copies the row, whose texts live for the process.
@@ -476,11 +397,10 @@ unsafe fn push_rows(list: usize, group: StatGroup) {
     }
 }
 
-/// Where a list `head` keeps its rows and how many it holds; `None` for a
-/// list with no storage, which the game's push would grow from nothing.
-fn stored(head: List) -> Option<(usize, usize)> {
-    let rows = usize::try_from(head.rows).ok().filter(|&rows| rows != 0)?;
-    Some((rows, usize::try_from(head.filled).ok()?))
+/// Whether a list `head` has its storage; one without, which the game's push
+/// would grow from nothing, takes no row.
+fn stored(head: List) -> bool {
+    head.rows != 0
 }
 
 /// Kind `kind`'s texts in `language`; `None` when it shows no row.
@@ -492,31 +412,19 @@ fn texts_of(kind: u32, language: u32) -> Option<Texts> {
     Some(Texts::new(&shown.name, &shown.description, shown.format))
 }
 
-/// Whether a game row can stand as the template of a kind's: a row with a
-/// label, not one of the blank rows the builders put between parts of a
-/// group (client 26430625, decompiler).
-fn is_template(row: &Row) -> bool {
-    row.label[1] != 0
-}
-
-/// A row for `texts` with `value`, from the game's row `template`; its
-/// breakdown off when the routes found where the flag lies (`breakdown`),
-/// else as the template has it.
-fn row(template: &Row, texts: &Texts, value: f32, breakdown: bool) -> Row {
+/// A row for `texts` with `value`, from zeroed bytes as the submenu's empty
+/// row: no breakdown, no second value, no trend.
+fn row(texts: &Texts, value: f32) -> Row {
     let (value, percent, plus) = shown_value(value, texts.format);
     Row {
         label: texts.label,
         tooltip: texts.tooltip,
         value,
-        second: 0,
-        pair: 0,
-        trend: 0,
-        breakdown: if breakdown { 0 } else { template.breakdown },
-        seconds: 0,
-        milliseconds: 0,
+        flag: FLAG,
+        cell: NO_CELL,
         percent: u8::from(percent),
         plus: u8::from(plus),
-        ..*template
+        ..bytemuck::Zeroable::zeroed()
     }
 }
 
@@ -543,34 +451,47 @@ mod tests {
             offset_of!(Row, pair),
             offset_of!(Row, trend),
             offset_of!(Row, breakdown),
+            offset_of!(Row, flag),
             offset_of!(Row, seconds),
             offset_of!(Row, milliseconds),
+            offset_of!(Row, cell),
             offset_of!(Row, percent),
             offset_of!(Row, plus),
         ];
         assert_eq!(
             fields,
             [
-                0x18, 0x30, 0x34, 0x38, 0x3c, 0x278, 0x281, 0x282, 0x298, 0x299
+                0x18, 0x30, 0x34, 0x38, 0x3c, 0x278, 0x280, 0x281, 0x282, 0x288, 0x298, 0x299
             ]
         );
-        assert_eq!(offset_of!(List, filled), 8);
     }
 
     #[test]
-    fn a_row_keeps_the_game_s_layout_and_sets_only_its_own_fields() {
-        let mut template: Row = bytemuck::cast([0xab_u8; 0x2a0]);
-        template.layout[5] = 7;
-        let texts = Texts::new("Luck", "", StatFormat::Percent);
-        let row = row(&template, &texts, 0.1, true);
-        assert_eq!(row.layout[5], 7, "the game's layout");
-        assert_eq!(row.entries, template.entries);
-        assert_eq!(row.value, 10);
-        assert_eq!((row.label[1], row.tooltip[1]), (4, 0));
+    fn a_row_is_zero_but_its_texts_value_format_flag_and_cell() {
+        let texts = Texts::new("Luck", "Fortune", StatFormat::Percent);
+        let built = row(&texts, 0.1);
+        let mut want: Row = bytemuck::Zeroable::zeroed();
+        want.label = texts.label;
+        want.tooltip = texts.tooltip;
+        want.value = 10;
+        want.percent = 1;
+        want.flag = 1;
+        want.cell = [-1, -1];
+        assert_eq!(bytemuck::bytes_of(&built), bytemuck::bytes_of(&want));
+        assert_eq!((built.label[1], built.tooltip[1]), (4, 7));
         assert_eq!(
-            (row.percent, row.plus, row.breakdown, row.pair, row.trend),
-            (1, 0, 0, 0, 0)
+            (built.breakdown, built.pair, built.trend, built.seconds),
+            (0, 0, 0, 0),
+            "no breakdown, pair, trend or time"
         );
+        assert!(built.entries.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn a_signed_row_gets_its_plus_and_no_percent() {
+        let texts = Texts::new("Grit", "", StatFormat::Signed);
+        let built = row(&texts, 2.0);
+        assert_eq!((built.value, built.percent, built.plus), (2, 0, 1));
     }
 
     #[test]
@@ -584,38 +505,27 @@ mod tests {
     }
 
     #[test]
-    fn a_spare_row_keeps_the_layout_and_drops_what_points_into_its_frame() {
-        let mut row: Row = bytemuck::cast([0xab_u8; 0x2a0]);
-        row.layout[5] = 7;
-        let spare = spare(&row);
-        assert_eq!((spare.label, spare.tooltip), ([0; 3], [0; 3]));
-        assert!(spare.entries.iter().all(|&b| b == 0));
-        assert_eq!(spare.breakdown, 0, "no entry is read");
-        assert_eq!(spare.layout, row.layout, "the grid position stays");
-        assert_eq!(spare.entries_rest, row.entries_rest);
-    }
-
-    #[test]
-    fn a_row_keeps_its_template_s_breakdown_flag_where_no_route_found_it() {
-        let mut template: Row = bytemuck::Zeroable::zeroed();
-        template.breakdown = 1;
-        let texts = Texts::new("Luck", "", StatFormat::Number);
-        assert_eq!(row(&template, &texts, 1.0, false).breakdown, 1);
-        assert_eq!(row(&template, &texts, 1.0, true).breakdown, 0);
-    }
-
-    #[test]
     fn a_list_without_storage_takes_no_row() {
-        assert_eq!(stored(List { rows: 0, filled: 0 }), None);
-        assert_eq!(stored(List { rows: 0, filled: 3 }), None);
-        assert_eq!(
-            stored(List {
-                rows: 0x1000,
-                filled: 0
-            }),
-            Some((0x1000, 0)),
-            "an empty list with its inline rows takes the spare"
+        assert!(!stored(List { rows: 0 }));
+        assert!(
+            stored(List { rows: 0x1000 }),
+            "an empty list with its inline rows takes the kinds' rows"
         );
+    }
+
+    #[test]
+    fn two_groups_whose_builders_are_one_function_both_stay_unlinked() {
+        let mut addresses = [None; GROUPS];
+        assert_eq!(shared(&addresses), [false; GROUPS], "absent is not shared");
+        for (at, address) in addresses.iter_mut().enumerate() {
+            *address = Some(0x1000 + at as u64 * 0x10);
+        }
+        assert_eq!(shared(&addresses), [false; GROUPS]);
+        addresses[7] = addresses[6];
+        let mut want = [false; GROUPS];
+        want[6] = true;
+        want[7] = true;
+        assert_eq!(shared(&addresses), want);
     }
 
     /// The offsets client 26430625's routes give, by entry.
@@ -628,19 +538,19 @@ mod tests {
             (ids::ATTRIBUTE_ROW_TREND, 0x3c),
             (ids::ATTRIBUTE_ROW_SECONDS, 0x281),
             (ids::ATTRIBUTE_ROW_MILLISECONDS, 0x282),
+            (ids::ATTRIBUTE_ROW_CELL, 0x288),
+            (ids::ATTRIBUTE_ROW_CELL_SECOND, 0x290),
             (ids::ATTRIBUTE_ROW_PERCENT, 0x298),
             (ids::ATTRIBUTE_ROW_PLUS, 0x299),
             (ids::ATTRIBUTE_LIST_ROWS, 0),
-            (ids::ATTRIBUTE_LIST_FILLED, 8),
             (ids::ATTRIBUTE_ROW_HOVERED, 0x3a8),
             (ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP, 0x3c0),
+            (ids::ATTRIBUTE_ROW_HOVERED_FLAG, 0x628),
             (ids::ATTRIBUTE_ROW_PAIR_AFTER_SECOND, 4),
-            (ids::ATTRIBUTE_ROW_BREAKDOWN_SET, 0x238),
-            (ids::ATTRIBUTE_ROW_BREAKDOWN_ROW, 0x40),
         ]
     }
 
-    fn holds(table: &[(pinned::Constant, usize)]) -> Result<bool, Failed> {
+    fn holds(table: &[(pinned::Constant, usize)]) -> Result<(), Failed> {
         fields_hold(&|id| {
             table
                 .iter()
@@ -652,63 +562,27 @@ mod tests {
     #[test]
     fn the_routed_fields_hold_and_a_moved_one_names_its_entry() {
         use pinned::ui as ids;
-        assert_eq!(holds(&routed()), Ok(true));
-        let mut moved = routed();
-        moved[1].1 = 0x2c;
-        assert_eq!(
-            holds(&moved).map_err(|(id, _)| id),
-            Err(ids::ATTRIBUTE_ROW_VALUE.id())
-        );
-        let mut tooltip = routed();
-        tooltip[11].1 = 0x3b0;
-        assert_eq!(
-            holds(&tooltip).map_err(|(id, _)| id),
-            Err(ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP.id())
-        );
-        let mut breakdown = routed();
-        breakdown[14].1 = 0x48;
-        assert_eq!(
-            holds(&breakdown).map_err(|(id, _)| id),
-            Err(ids::ATTRIBUTE_ROW_BREAKDOWN_SET.id())
-        );
+        assert_eq!(holds(&routed()), Ok(()));
+        for (at, moved_to, entry) in [
+            (1, 0x2c, ids::ATTRIBUTE_ROW_VALUE),
+            (7, 0x298, ids::ATTRIBUTE_ROW_CELL_SECOND),
+            (12, 0x3b0, ids::ATTRIBUTE_ROW_HOVERED_TOOLTIP),
+            (13, 0x630, ids::ATTRIBUTE_ROW_HOVERED_FLAG),
+        ] {
+            let mut moved = routed();
+            moved[at].1 = moved_to;
+            assert_eq!(holds(&moved).map_err(|(id, _)| id), Err(entry.id()));
+        }
     }
 
     #[test]
-    fn a_build_without_the_breakdown_routes_keeps_the_rows_without_the_flag() {
+    fn a_build_without_a_routed_field_names_it_as_absent() {
+        use pinned::ui as ids;
         let mut table = routed();
-        table.truncate(14);
+        table.retain(|(id, _)| id.id() != ids::ATTRIBUTE_ROW_CELL.id());
         assert_eq!(
             holds(&table),
-            Ok(false),
-            "only Fog Survival's builder routes it"
+            Err((ids::ATTRIBUTE_ROW_CELL.id(), crate::engine::builds::ABSENT))
         );
-    }
-
-    #[test]
-    fn a_builder_that_opens_another_group_s_text_is_refused() {
-        use pinned::ui as ids;
-        let (read, named) = (ids::ATTRIBUTE_ROWS_TEXT[2], ids::ATTRIBUTE_TEXTS[2]);
-        let lookup = |text: usize| {
-            move |id: pinned::Constant| {
-                if id.id() == read.id() {
-                    Some(text)
-                } else {
-                    (id.id() == named.id()).then_some(0x820)
-                }
-            }
-        };
-        assert_eq!(opens_its_group(&lookup(0x820), 2), Ok(()));
-        assert_eq!(
-            opens_its_group(&lookup(0x10e0), 2).map_err(|(id, _)| id),
-            Err(read.id())
-        );
-    }
-
-    #[test]
-    fn a_blank_separator_row_is_no_template_and_a_labelled_row_is() {
-        let mut row: Row = bytemuck::Zeroable::zeroed();
-        assert!(!is_template(&row), "a separator's label is empty");
-        row.label = Texts::new("Strength", "", StatFormat::Number).label;
-        assert!(is_template(&row));
     }
 }

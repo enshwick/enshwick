@@ -7,7 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::check;
 use super::code::{self, Code};
 use super::shape::{self, Step};
-use super::{How, Route, Routed, Take};
+use super::{How, Kin, Route, Routed, Take};
 use crate::Resolved;
 use crate::reflect::{Image, Reflection, System};
 
@@ -106,7 +106,7 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             How::Loads(strings) => self.loading(strings)?,
             How::Slot { vtable, slot } => self.slot(vtable, *slot)?,
             How::Shape { within, steps } => return self.shaped(within, steps, route),
-            How::Callers { callee, steps } => return self.called_from(callee, steps, route),
+            How::Among { kin, steps } => return self.among(kin, steps, route),
             How::Field(path) => {
                 return self
                     .reflection
@@ -278,27 +278,48 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect())
     }
 
-    /// The address of each entry `steps` name, by id; none when one is not
-    /// found.
+    /// The value of each entry `steps` name, by id: a constant's value, else
+    /// a symbol's address; none when one is not found.
     fn entries<'s>(
         &mut self,
         steps: impl Iterator<Item = &'s Step>,
     ) -> Option<Vec<(&'s str, u64)>> {
-        let base = self.code.base();
         steps
             .flat_map(Step::entries)
-            .map(|id| Some((id, base + u64::from(self.address(id)?))))
+            .map(|id| Some((id, self.value(id)?)))
             .collect()
     }
 
-    /// Among the functions that call `callee` directly, the one whose code
-    /// the shape matches, as [`Self::shaped`] takes it; `start` is that
-    /// function.
-    fn called_from(&mut self, callee: &str, steps: &'f [Step], route: &Route) -> Option<Routed> {
-        let callee = self.address(callee)?;
-        let mut callers: Vec<u32> = self.code.callers(callee).into_iter().collect();
-        callers.sort_unstable();
-        let (function, one) = self.only_match(callers, steps)?;
+    /// The value `name` stands for in a shape: what the constant route of
+    /// that id finds, else the table's constant, else the address of the
+    /// symbol [`Self::address`] gives. A route that finds another constant
+    /// than the table holds stands for nothing, and the id of a constant
+    /// route never stands for a symbol.
+    fn value(&mut self, name: &str) -> Option<u64> {
+        let pinned = self.known.constant(name);
+        if let Ok(i) = self.routes.binary_search_by(|r| r.id.as_str().cmp(name))
+            && (self.routes[i].take.is_constant() || self.routes[i].finds_constant())
+        {
+            return match self.resolve(i) {
+                Some(Routed::Constant(value)) => pinned.is_none_or(|p| p == value).then_some(value),
+                _ => pinned,
+            };
+        }
+        pinned.or_else(|| Some(self.code.base() + u64::from(self.address(name)?)))
+    }
+
+    /// Among the functions that call `callee` directly, or that `caller`
+    /// calls directly, the one whose code the shape matches, as
+    /// [`Self::shaped`] takes it; `start` is that function.
+    fn among(&mut self, kin: &Kin, steps: &'f [Step], route: &Route) -> Option<Routed> {
+        let mut functions: Vec<u32> = match kin {
+            Kin::Callers(callee) => self.code.callers(self.address(callee)?),
+            Kin::Callees(caller) => self.code.callees(self.address(caller)?),
+        }
+        .into_iter()
+        .collect();
+        functions.sort_unstable();
+        let (function, one) = self.only_match(functions, steps)?;
         match route.take {
             Take::Start => self
                 .code

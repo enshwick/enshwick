@@ -9408,91 +9408,64 @@ loads = ["doAttributesSubmenu"]
 [[route]]
 id = "ui.attribute_rows_main"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
-nth = 1
-of = 7
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_main}]"]
 check = ["push rbp", "push rbx", "push r12", "lea rbp,[rsp-?]"]
 
 [[route]]
 id = "ui.attribute_rows_fog_survival"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
-nth = 2
-of = 7
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_fog_survival}]"]
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x10],rsi", "mov [rax+0x18],rdi"]
 
 [[route]]
 id = "ui.attribute_rows_weapon_damage"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
-nth = 3
-of = 7
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_weapon_damage}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r12"]
 
 [[route]]
 id = "ui.attribute_rows_enemy_damage"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
-nth = 4
-of = 7
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_enemy_damage}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "mov [rsp+0x20],r14"]
 
 [[route]]
 id = "ui.attribute_rows_regeneration"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
-nth = 5
-of = 7
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_regeneration}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "mov [rsp+0x20],r13"]
 
 [[route]]
 id = "ui.attribute_rows_misc"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "mov [rbp+?],?r", "call *"]
-nth = 6
-of = 7
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_misc}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r12"]
 
 [[route]]
 id = "ui.attribute_rows_protection"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "call *"]
-nth = 1
-of = 4
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_protection}]"]
 check = ["mov rax,rsp", "mov [rax+0x8],rbx", "mov [rax+0x18],rsi", "mov [rax+0x20],rdi"]
 
 [[route]]
 id = "ui.attribute_rows_damage"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "call *"]
-nth = 3
-of = 4
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_damage}]"]
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "mov [rsp+0x18],rdi", "push rbp", "push r14"]
 
 [[route]]
 id = "ui.attribute_rows_primary"
 sides = ["client"]
-in = "~fn:ui.attributes"
-shape = ["mov qword [rbp+?],0x14", "call *"]
-nth = 4
-of = 4
-take = "address"
+callees = "~fn:ui.attributes"
+shape = ["movups xmm0,[?+{ui.attribute_text_primary}]"]
 check = ["push rbp", "push rsi", "push rdi", "push r12", "push r14"]
 
 [[route]]
@@ -9620,21 +9593,21 @@ range = [0x48, 0x122]
 [[route]]
 id = "inventory.put_out_left"
 in = "inventory.put_slot"
-shape = ["mov eax,[rsp+?]", "mov [?+*],eax", "xor eax,eax", "mov [?+?],eax", "mov [?],al", "jmp ?b"]
+shape = ["mov eax,[rsp+?]", "mov [?1+*],eax", "xor eax,eax", "mov [?1+?],eax", "mov [?1],al", "jmp ?b"]
 take = "value"
 range = [4, 0x10]
 
 [[route]]
 id = "inventory.put_out_placed"
 in = "inventory.put_slot"
-shape = ["mov eax,[rsp+?]", "mov [?+?],eax", "xor eax,eax", "mov [?+*],eax", "mov [?],al", "jmp ?b"]
+shape = ["mov eax,[rsp+?]", "mov [?1+?],eax", "xor eax,eax", "mov [?1+*],eax", "mov [?1],al", "jmp ?b"]
 take = "value"
 range = [2, 0x10]
 
 [[route]]
 id = "inventory.put_out_error"
 in = "inventory.put_slot"
-shape = ["mov eax,[rsp+?]", "mov [?+?],eax", "xor eax,eax", "mov [?+?],eax", "mov [?],al", "jmp ?b"]
+shape = ["mov eax,[rsp+?]", "mov [?1+?],eax", "xor eax,eax", "mov [?1+?],eax", "mov [?1],al", "jmp ?b"]
 take = "spelled"
 value = 0x0
 
@@ -9646,26 +9619,10 @@ type = "keen::FbUiLocaAttributeInfo"
 range = [0x1d0, 0x740]
 
 [[route]]
-id = "ui.attribute_rows_main_text"
-sides = ["client"]
-in = "ui.attribute_rows_main"
-shape = ["movups xmm0,[?+*]", "mov word [rbp+?],0x1", "mov byte [rbp+?],0x0"]
-take = "value"
-range = [0x1d0, 0x740]
-
-[[route]]
 id = "ui.attribute_text_fog_survival"
 sides = ["client"]
 field = ["keen::FbUiBundle.locatags", "keen::FbUiLocaLinks.rpgTerms", "keen::FbUiLocaRpgTerms.attributes", "keen::FbUiLocaAttributes.fogResistance"]
 type = "keen::FbUiLocaAttributeInfo"
-range = [0x230, 0x8c0]
-
-[[route]]
-id = "ui.attribute_rows_fog_survival_text"
-sides = ["client"]
-in = "ui.attribute_rows_fog_survival"
-shape = ["movups xmm0,[?+*]", "mov word [rbp+?],0x1", "mov [rbp+?],bl"]
-take = "value"
 range = [0x230, 0x8c0]
 
 [[route]]
@@ -9676,26 +9633,10 @@ type = "keen::FbUiLocaAttributeInfo"
 range = [0x3b0, 0xec0]
 
 [[route]]
-id = "ui.attribute_rows_primary_text"
-sides = ["client"]
-in = "ui.attribute_rows_primary"
-shape = ["movups xmm0,[?+*]", "movzx eax,byte [?+?]", "lea rcx,[rsp+?]"]
-take = "value"
-range = [0x3b0, 0xec0]
-
-[[route]]
 id = "ui.attribute_text_regeneration"
 sides = ["client"]
 field = ["keen::FbUiBundle.locatags", "keen::FbUiLocaLinks.rpgTerms", "keen::FbUiLocaRpgTerms.attributes", "keen::FbUiLocaAttributes.healthRegeneration"]
 type = "keen::FbUiLocaAttributeInfo"
-range = [0x410, 0x1040]
-
-[[route]]
-id = "ui.attribute_rows_regeneration_text"
-sides = ["client"]
-in = "ui.attribute_rows_regeneration"
-shape = ["movups xmm0,[?+*]", "movaps [rsp+?],xmm0", "movups xmm1,[?+?]"]
-take = "value"
 range = [0x410, 0x1040]
 
 [[route]]
@@ -9706,26 +9647,10 @@ type = "keen::FbUiLocaAttributeInfo"
 range = [0x870, 0x21c0]
 
 [[route]]
-id = "ui.attribute_rows_misc_text"
-sides = ["client"]
-in = "ui.attribute_rows_misc"
-shape = ["movups xmm0,[?+*]", "movaps [rbp+?],xmm0", "movups xmm1,[?+?]"]
-take = "value"
-range = [0x870, 0x21c0]
-
-[[route]]
 id = "ui.attribute_text_damage"
 sides = ["client"]
 field = ["keen::FbUiBundle.locatags", "keen::FbUiLocaLinks.rpgTerms", "keen::FbUiLocaRpgTerms.attributes", "keen::FbUiLocaAttributes.offenseCritical"]
 type = "keen::FbUiLocaAttributeInfo"
-range = [0x970, 0x25c0]
-
-[[route]]
-id = "ui.attribute_rows_damage_text"
-sides = ["client"]
-in = "ui.attribute_rows_damage"
-shape = ["movups xmm0,[?+*]", "movaps [rsp+?],xmm0", "movups xmm1,[?+?]"]
-take = "value"
 range = [0x970, 0x25c0]
 
 [[route]]
@@ -9736,14 +9661,6 @@ type = "keen::FbUiLocaAttributeInfo"
 range = [0x610, 0x1840]
 
 [[route]]
-id = "ui.attribute_rows_weapon_damage_text"
-sides = ["client"]
-in = "ui.attribute_rows_weapon_damage"
-shape = ["mov r9l,0x1", "mov byte [rsp+0x20],0x1", "movups xmm0,[?+*]", "movaps [rbp+?],xmm0"]
-take = "value"
-range = [0x610, 0x1840]
-
-[[route]]
 id = "ui.attribute_text_enemy_damage"
 sides = ["client"]
 field = ["keen::FbUiBundle.locatags", "keen::FbUiLocaLinks.rpgTerms", "keen::FbUiLocaRpgTerms.attributes", "keen::FbUiLocaAttributes.foeMagicalDamage"]
@@ -9751,26 +9668,10 @@ type = "keen::FbUiLocaAttributeInfo"
 range = [0x730, 0x1cc0]
 
 [[route]]
-id = "ui.attribute_rows_enemy_damage_text"
-sides = ["client"]
-in = "ui.attribute_rows_enemy_damage"
-shape = ["movups xmm0,[?+*]", "movaps [rsp+?],xmm0", "movups xmm1,[?+?]"]
-take = "value"
-range = [0x730, 0x1cc0]
-
-[[route]]
 id = "ui.attribute_text_protection"
 sides = ["client"]
 field = ["keen::FbUiBundle.locatags", "keen::FbUiLocaLinks.rpgTerms", "keen::FbUiLocaRpgTerms.attributes", "keen::FbUiLocaAttributes.blockAttribute"]
 type = "keen::FbUiLocaAttributeInfo"
-range = [0xa10, 0x2840]
-
-[[route]]
-id = "ui.attribute_rows_protection_text"
-sides = ["client"]
-in = "ui.attribute_rows_protection"
-shape = ["movups xmm0,[?+*]", "mov word [rbp+?],0x1", "movups xmm1,[?+?]"]
-take = "value"
 range = [0xa10, 0x2840]
 
 [[route]]
@@ -9882,28 +9783,28 @@ take = "value"
 range = [0x14c, 0x532]
 
 [[route]]
-id = "ui.attribute_row_breakdown_set"
+id = "ui.attribute_row_cell"
 sides = ["client"]
-in = "ui.attribute_rows_fog_survival"
-shape = ["mov byte [rbp+*],0x1", "call {ui.attribute_row_push}", "lea rdx,[rbp-?]", "mov rcx,rsi", "call {ui.attribute_row_push}"]
+in = "~fn:ui.attribute_row_widget"
+shape = ["mov rdx,[?1+*]", "cmp rdx,0xffffffffffffffff", "je ?b", "cmp qword [?1+?],0xffffffffffffffff", "je ?b"]
 take = "value"
-range = [0x11c, 0x470]
+range = [0x144, 0x510]
 
 [[route]]
-id = "ui.attribute_row_breakdown_row"
+id = "ui.attribute_row_cell_second"
 sides = ["client"]
-in = "ui.attribute_rows_fog_survival"
-shape = ["mov byte [rbp+?],0x1", "call {ui.attribute_row_push}", "lea rdx,[rbp-*]", "mov rcx,rsi", "call {ui.attribute_row_push}"]
+in = "~fn:ui.attribute_row_widget"
+shape = ["mov rdx,[?1+?]", "cmp rdx,0xffffffffffffffff", "je ?b", "cmp qword [?1+*],0xffffffffffffffff", "je ?b"]
 take = "value"
-range = [0x20, 0x80]
+range = [0x148, 0x520]
 
 [[route]]
-id = "ui.attribute_list_filled"
+id = "ui.attribute_row_hovered_flag"
 sides = ["client"]
-in = "ui.attribute_row_push"
-shape = ["imul rdx,[rdi+*],?i", "mov eax,?i", "add rdx,[rdi]"]
+in = "~fn:ui.attributes"
+shape = ["movups [rbp+?],?r", "mov [rbp+?],?r", "movups [rbp+?],?r", "mov word [rbp+*],0x1"]
 take = "value"
-range = [4, 0x10]
+range = [0x314, 0xc50]
 
 [[route]]
 id = "ui.attribute_list_rows"

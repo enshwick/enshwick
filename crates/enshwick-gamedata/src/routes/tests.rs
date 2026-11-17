@@ -1,9 +1,10 @@
 mod bounds;
 mod builds;
+mod shapes;
 
 use iced_x86::{Decoder, DecoderOptions, Instruction};
 
-use super::shape::{self, Step};
+use super::shape;
 use super::{How, Routed, Routes};
 use crate::reflect::{Image, Layout, Reflection};
 use crate::{Side, Table, kept};
@@ -137,6 +138,12 @@ fn a_route_without_exactly_one_way_or_with_a_wrong_take_is_refused() {
         r#"id = "a"
            callers = "s""#,
         r#"id = "a"
+           callees = "s""#,
+        r#"id = "a"
+           callers = "s"
+           callees = "t"
+           shape = ["ret"]"#,
+        r#"id = "a"
            system = "s"
            shape = []"#,
     ] {
@@ -183,76 +190,6 @@ fn waypoints_are_no_entries() {
     assert_eq!(routes.ids().collect::<Vec<_>>(), ["a.x"]);
     assert!(!routes.routes("~fn:a.x", Side::Server));
     assert!(!routes.routes("some_system", Side::Server));
-}
-
-/// `mov r8d, 0x1b8; lea rdx, [rbp-0x60]; mov rcx, r13; call +0; mov ecx,
-/// [rip+0x10]; call -0x0a; mov eax, [rcx+r10*4+0x10]`, at 0x1000: the calls
-/// go to 0x1012 and 0x1013.
-const CODE: [u8; 34] = [
-    0x41, 0xb8, 0xb8, 0x01, 0x00, 0x00, 0x48, 0x8d, 0x55, 0xa0, 0x49, 0x8b, 0xcd, 0xe8, 0x00, 0x00,
-    0x00, 0x00, 0x8b, 0x0d, 0x10, 0x00, 0x00, 0x00, 0xe8, 0xf6, 0xff, 0xff, 0xff, 0x42, 0x8b, 0x44,
-    0x91, 0x10,
-];
-
-fn decoded() -> Vec<Instruction> {
-    let mut decoder = Decoder::with_ip(64, &CODE, 0x1000, DecoderOptions::NONE);
-    let mut out = Vec::new();
-    while decoder.can_decode() {
-        out.push(decoder.decode());
-    }
-    out
-}
-
-fn steps(text: &[&str]) -> Vec<Step> {
-    let names = shape::ShapeNames::new();
-    text.iter()
-        .map(|s| Step::parse(s, &names).unwrap())
-        .collect()
-}
-
-fn first(text: &[&str], entry: &impl Fn(&str) -> Option<u64>) -> Option<shape::Match> {
-    let steps = steps(text);
-    let code = decoded();
-    shape::matches(&steps, &code, entry).next()
-}
-
-#[test]
-fn a_shape_matches_what_the_instructions_do_and_takes_its_hole() {
-    let none = |_: &str| None;
-    let found = first(&["lea rdx,[rbp-*]", "mov rcx,r13", "call ?"], &none).unwrap();
-    assert_eq!(
-        (found.start, found.end, found.taken),
-        (0x1006, 0x1012, Some(0x60))
-    );
-    let rip = first(&["mov ecx,[rip+*]"], &none).unwrap();
-    assert_eq!(rip.taken, Some(0x1018 + 0x10));
-    assert!(first(&["lea rdx,[rbp+?]"], &none).is_none());
-    assert!(first(&["mov rcx,r12"], &none).is_none());
-}
-
-#[test]
-fn a_shape_matches_an_index_register_an_exact_displacement_and_an_exact_immediate() {
-    let none = |_: &str| None;
-    let indexed = first(&["mov eax,[rcx+r10*4+*]"], &none).unwrap();
-    assert_eq!((indexed.start, indexed.taken), (0x101d, Some(0x10)));
-    assert!(first(&["mov eax,[rcx+r10*4+0x10]"], &none).is_some());
-    assert!(first(&["mov eax,[rcx+r10*4+0x18]"], &none).is_none());
-    assert!(first(&["mov eax,[rcx+r10*8+?]"], &none).is_none());
-    assert!(first(&["mov eax,[rcx+?]"], &none).is_none());
-    assert!(first(&["lea rdx,[rbp-0x60]"], &none).is_some());
-    assert!(first(&["lea rdx,[rbp+0x60]"], &none).is_none());
-    assert!(first(&["mov r8d,0x1b8"], &none).is_some());
-    assert!(first(&["mov r8d,0x1b9"], &none).is_none());
-}
-
-#[test]
-fn a_shape_names_another_entry_by_its_address() {
-    let at = |want: u64| move |id: &str| (id == "f.callee").then_some(want);
-    let found = first(&["call {f.callee}"], &at(0x1012)).unwrap();
-    assert_eq!((found.start, found.end), (0x100d, 0x1012));
-    let second = first(&["call {f.callee}"], &at(0x1013)).unwrap();
-    assert_eq!(second.start, 0x1018);
-    assert!(first(&["call {f.callee}"], &at(0x2000)).is_none());
 }
 
 /// A PE32+ file with `.text`, `.rdata` and `.pdata`, each at the same
@@ -414,6 +351,27 @@ take = "value"
 plus = 1
 
 [[route]]
+id = "t.reader"
+callees = "~fn:a"
+shape = ["mov eax,[rcx+{t.offset}]"]
+
+[[route]]
+id = "t.misread"
+callees = "~fn:a"
+shape = ["mov eax,[rcx+{t.disp}]"]
+
+[[route]]
+id = "t.callee"
+callees = "t.caller"
+shape = ["mov eax,0x7", "ret"]
+
+[[route]]
+id = "t.offset"
+in = "t.leaf"
+shape = ["mov eax,[rcx+*]", "shl eax,?"]
+take = "value"
+
+[[route]]
 id = "t.shift"
 in = "t.leaf"
 shape = ["mov eax,[rcx+0x78]", "shl eax,*"]
@@ -514,6 +472,7 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
             ("t.ambiguous", None),
             ("t.called", Some(Routed::Reached(0x1010))),
             ("t.called_twice", None),
+            ("t.callee", Some(Routed::Reached(0x1010))),
             ("t.caller", Some(Routed::Reached(0x1020))),
             ("t.checked", Some(Routed::Symbol(0x1040))),
             ("t.disp", Some(Routed::Constant(0x79))),
@@ -522,7 +481,10 @@ fn every_kind_of_route_finds_its_entry_in_any_row_order() {
             ("t.leaf", Some(Routed::Reached(0x1040))),
             ("t.long", Some(Routed::Symbol(0x1010))),
             ("t.loop", None),
+            ("t.misread", None),
+            ("t.offset", Some(Routed::Constant(0x78))),
             ("t.once", Some(Routed::Reached(0x101a))),
+            ("t.reader", Some(Routed::Reached(0x1040))),
             ("t.shift", Some(Routed::Constant(8))),
             ("t.spelled", Some(Routed::Constant(3))),
             ("t.string", Some(Routed::Reached(0x2180))),
@@ -589,15 +551,6 @@ fn an_ordinal_takes_the_nth_run_after_its_anchor() {
     ] {
         assert!(Routes::parse(&bad).is_err(), "{bad}");
     }
-}
-
-#[test]
-fn a_memory_operand_through_any_base_matches_every_register_but_rip() {
-    let none = |_: &str| None;
-    let any = first(&["lea rdx,[?-*]"], &none).unwrap();
-    assert_eq!((any.start, any.taken), (0x1006, Some(0x60)));
-    assert!(first(&["mov eax,[?+r10*4+0x10]"], &none).is_some());
-    assert!(first(&["mov ecx,[?+?]"], &none).is_none());
 }
 
 /// A slot route takes the function a vtable slot points at, only where the
@@ -675,6 +628,80 @@ fn nothing_builds_on_a_route_the_table_contradicts() {
     assert_eq!(of("t.leaf"), Some(Routed::Reached(0x1040)));
     assert_eq!(of("t.disp"), None);
     assert_eq!(of("t.shift"), None);
+}
+
+/// Shapes over [`fake`] that name a constant: `t.offset` finds 0x78, the
+/// leaf's displacement, and `t.field` finds nothing.
+const NAMED_CONSTANTS: &str = r#"
+[[route]]
+id = "t.reader"
+callees = "~fn:a"
+shape = ["mov eax,[rcx+{t.offset}]"]
+
+[[route]]
+id = "t.field_reader"
+callees = "~fn:a"
+shape = ["mov eax,[rcx+{t.field}]"]
+
+[[route]]
+id = "t.field_call"
+in = "~fn:a"
+shape = ["call {t.field}", "ret"]
+
+[[route]]
+id = "t.offset"
+in = "t.leaf"
+shape = ["mov eax,[rcx+*]", "shl eax,?"]
+take = "value"
+
+[[route]]
+id = "t.field"
+field = ["keen::Missing.value"]
+
+[[route]]
+id = "t.leaf"
+called_by = ["~fn:a", "sys_b"]
+
+[[route]]
+id = "sys_b"
+system = "sys_b"
+
+[[route]]
+id = "~fn:a"
+loads = ["hello"]
+"#;
+
+#[test]
+fn a_named_constant_is_the_route_s_value_else_the_table_s_and_never_a_symbol() {
+    let fake = fake();
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let routes = Routes::parse(NAMED_CONSTANTS).unwrap();
+    let with = |table: &str| {
+        let known = Table::parse(&format!("{EMPTY}\n{table}"))
+            .unwrap()
+            .resolve();
+        let found = routes.find(&image, &reflection, Side::Server, &known);
+        let of = |id: &str| found.iter().find(|(f, _)| *f == id).unwrap().1;
+        [of("t.reader"), of("t.field_reader"), of("t.field_call")]
+    };
+    let leaf = Some(Routed::Reached(0x1040));
+    assert_eq!(with(""), [leaf, None, None]);
+    assert_eq!(
+        with("[constants]\n\"t.offset\" = 0x70"),
+        [None, None, None],
+        "a route the table contradicts stands for nothing"
+    );
+    assert_eq!(
+        with("[constants]\n\"t.field\" = 0x78"),
+        [leaf, leaf, None],
+        "the table's constant stands where its route finds nothing"
+    );
+    assert_eq!(
+        with("[symbols]\n\"t.field\" = 0x1040"),
+        [leaf, None, None],
+        "a constant's id never stands for a symbol of that name"
+    );
 }
 
 #[test]

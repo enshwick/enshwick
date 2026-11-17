@@ -7,13 +7,13 @@ pub(crate) const ACTION_EXTENT: Constant = Constant::new("ui.action_extent");
 pub(crate) const ACTION_NEW: Symbol = Symbol::new("ui.action_new");
 pub(crate) const ACTION_NODE: Constant = Constant::new("ui.action_node");
 pub(crate) const ACTION_QUERY: Symbol = Symbol::new("ui.action_query");
-pub(crate) const ATTRIBUTE_LIST_FILLED: Constant = Constant::new("ui.attribute_list_filled");
 pub(crate) const ATTRIBUTE_LIST_ROWS: Constant = Constant::new("ui.attribute_list_rows");
-pub(crate) const ATTRIBUTE_ROW_BREAKDOWN_ROW: Constant =
-    Constant::new("ui.attribute_row_breakdown_row");
-pub(crate) const ATTRIBUTE_ROW_BREAKDOWN_SET: Constant =
-    Constant::new("ui.attribute_row_breakdown_set");
+pub(crate) const ATTRIBUTE_ROW_CELL: Constant = Constant::new("ui.attribute_row_cell");
+pub(crate) const ATTRIBUTE_ROW_CELL_SECOND: Constant =
+    Constant::new("ui.attribute_row_cell_second");
 pub(crate) const ATTRIBUTE_ROW_HOVERED: Constant = Constant::new("ui.attribute_row_hovered");
+pub(crate) const ATTRIBUTE_ROW_HOVERED_FLAG: Constant =
+    Constant::new("ui.attribute_row_hovered_flag");
 pub(crate) const ATTRIBUTE_ROW_HOVERED_TOOLTIP: Constant =
     Constant::new("ui.attribute_row_hovered_tooltip");
 pub(crate) const ATTRIBUTE_ROW_LABEL_LENGTH: Constant =
@@ -42,32 +42,6 @@ pub(crate) const ATTRIBUTE_ROWS: [Symbol; enshwick_core::stats::StatGroup::ALL.l
     Symbol::new("ui.attribute_rows_weapon_damage"),
     Symbol::new("ui.attribute_rows_enemy_damage"),
     Symbol::new("ui.attribute_rows_protection"),
-];
-/// The first text each row builder loads, where its code reads it in the
-/// UI bundle, in the order of `StatGroup::ALL`.
-pub(crate) const ATTRIBUTE_ROWS_TEXT: [Constant; enshwick_core::stats::StatGroup::ALL.len()] = [
-    Constant::new("ui.attribute_rows_main_text"),
-    Constant::new("ui.attribute_rows_fog_survival_text"),
-    Constant::new("ui.attribute_rows_primary_text"),
-    Constant::new("ui.attribute_rows_regeneration_text"),
-    Constant::new("ui.attribute_rows_misc_text"),
-    Constant::new("ui.attribute_rows_damage_text"),
-    Constant::new("ui.attribute_rows_weapon_damage_text"),
-    Constant::new("ui.attribute_rows_enemy_damage_text"),
-    Constant::new("ui.attribute_rows_protection_text"),
-];
-/// Where the UI bundle keeps the text that opens each group's rows, by its
-/// reflected name, in the order of `StatGroup::ALL`.
-pub(crate) const ATTRIBUTE_TEXTS: [Constant; enshwick_core::stats::StatGroup::ALL.len()] = [
-    Constant::new("ui.attribute_text_main"),
-    Constant::new("ui.attribute_text_fog_survival"),
-    Constant::new("ui.attribute_text_primary"),
-    Constant::new("ui.attribute_text_regeneration"),
-    Constant::new("ui.attribute_text_misc"),
-    Constant::new("ui.attribute_text_damage"),
-    Constant::new("ui.attribute_text_weapon_damage"),
-    Constant::new("ui.attribute_text_enemy_damage"),
-    Constant::new("ui.attribute_text_protection"),
 ];
 pub(crate) const BUTTON: Symbol = Symbol::new("ui.button");
 pub(crate) const BUTTON_ALIGN: Constant = Constant::new("ui.button_align");
