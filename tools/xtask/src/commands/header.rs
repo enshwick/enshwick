@@ -120,7 +120,7 @@ fn generate(root: &Path) -> Result<String, String> {
             .generate()
             .map_err(|error| format!("cbindgen: {error}"))
     });
-    let _removed = std::fs::remove_dir_all(&crate_root);
+    drop(crate_root);
     let bindings = bindings?;
     let mut bytes = Vec::new();
     bindings.write(&mut bytes);
@@ -528,10 +528,27 @@ fn plain_links(line: &str) -> String {
     out
 }
 
-/// A fresh, empty directory of its own for one use, named by the process
-/// and a count, since tests run as threads of one process under `cargo
-/// test` and the process alone would give two of them one folder.
-fn scratch_dir(purpose: &str) -> Result<PathBuf, String> {
+/// A fresh, empty directory of its own for one use, removed when dropped.
+struct Scratch(PathBuf);
+
+impl core::ops::Deref for Scratch {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _removed = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A [`Scratch`] named by the process and a count, since tests run as
+/// threads of one process under `cargo test` and the process alone would
+/// give two of them one folder.
+fn scratch_dir(purpose: &str) -> Result<Scratch, String> {
     static MADE: AtomicU32 = AtomicU32::new(0);
     let made = MADE.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
@@ -540,7 +557,7 @@ fn scratch_dir(purpose: &str) -> Result<PathBuf, String> {
     ));
     let _stale = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-    Ok(dir)
+    Ok(Scratch(dir))
 }
 
 /// Copies the ABI module into `to` as a crate of its own, `abi.rs` as
@@ -744,7 +761,7 @@ fn compile(header: &Path, language: Language, packing: Packing, source: &str) ->
         .arg(include)
         .arg(&file)
         .output();
-    let _removed = std::fs::remove_dir_all(&dir);
+    drop(dir);
     match output {
         Ok(output) if output.status.success() => Vec::new(),
         Ok(output) => failures(

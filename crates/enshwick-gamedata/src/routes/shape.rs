@@ -331,12 +331,7 @@ impl Step {
                         && size.is_none_or(|bytes| ins.memory_size().size() == bytes)
                         && match *base {
                             Base::Any => any,
-                            Base::Object => {
-                                any && !matches!(
-                                    have.full_register(),
-                                    Register::RSP | Register::RBP
-                                )
-                            }
+                            Base::Object => off_stack(have),
                             Base::Exact(want) => have == want,
                             Base::Bound(hole) => any && run.binds(hole, have),
                         }
@@ -583,6 +578,15 @@ const WRITES: [OpAccess; 4] = [
     OpAccess::ReadCondWrite,
 ];
 
+/// Whether memory through `base` is an object's: no base, the stack, its
+/// frame and RIP are not, at any width.
+fn off_stack(base: Register) -> bool {
+    !matches!(
+        base.full_register(),
+        Register::None | Register::RSP | Register::RBP | Register::RIP
+    )
+}
+
 /// The end of the highest store `code` makes through a base register that
 /// is not the stack's, its frame's or RIP: how far a function writes the
 /// object it is handed. None for no such store, or for one with an index or
@@ -593,11 +597,7 @@ pub(crate) fn extent<'i>(code: impl IntoIterator<Item = &'i Instruction>) -> Opt
     let mut end = None;
     for ins in code {
         for used in info.info(ins).used_memory() {
-            let off_stack = !matches!(
-                used.base(),
-                Register::None | Register::RSP | Register::RBP | Register::RIP
-            );
-            if !off_stack || !WRITES.contains(&used.access()) {
+            if !off_stack(used.base()) || !WRITES.contains(&used.access()) {
                 continue;
             }
             if used.index() != Register::None {

@@ -17,7 +17,7 @@
 //! | `system` or `in`, with `shape` | the one run of instructions of the [shape](shape) in the listed function's code |
 //! | `callers`, with `shape` | among the functions that call the listed function directly, the one whose code the shape matches; a call in a chained fragment counts for its function |
 //! | `callees`, with `shape` | among the functions the listed function calls directly, the one whose code the shape matches, such as the one of several builders that reads its own reflected field |
-//! | `callers` or `callees` listing several functions, with `shape` | what each listed function that is found gives as above, every one that gives something giving the same, so the entry hangs on none of them alone |
+//! | `callers` or `callees` listing several functions, with `shape` | what each listed function that is found gives as above, every one that gives something giving the same, so the entry hangs on none of them alone; a match the `check` refuses gives nothing, and two matches for one of them leave the entry not found |
 //! | `vtable`, with `slot` | the function the 64-bit pointer at the listed vtable + 8 · `slot` points at, which must start a function |
 //! | `field` | a constant: the sum of the reflected offsets of each `<type>.<field>` listed, each field holding the next type |
 //! | `size` | a constant: the reflected size of the type |

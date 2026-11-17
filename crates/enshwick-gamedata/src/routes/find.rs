@@ -309,15 +309,19 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
     }
 
     /// What [`Self::among_one`] gives for each function `kin` names, when
-    /// every one that gives something gives the same.
+    /// every one that gives something gives the same and none is ambiguous.
     fn among(&mut self, kin: &Kin, steps: &'f [Step], route: &Route) -> Option<Routed> {
         let (names, callers) = match kin {
             Kin::Callers(callees) => (callees, true),
             Kin::Callees(callers) => (callers, false),
         };
+        let entries = self.entries(steps.iter())?;
         let mut agreed = None;
         for name in names {
-            if let Some(found) = self.among_one(name, callers, steps, route)
+            let Ok(found) = self.among_one(name, callers, steps, &entries, route) else {
+                return None;
+            };
+            if let Some(found) = found
                 && agreed.replace(found).is_some_and(|was| was != found)
             {
                 return None;
@@ -328,15 +332,20 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
 
     /// Among the functions that call `name` directly (`callers`), or that
     /// `name` calls directly, the one whose code the shape matches, as
-    /// [`Self::shaped`] takes it; `start` is that function.
+    /// [`Self::shaped`] takes it and the route's check holds; `start` is that
+    /// function. Nothing when `name` or the match is not found or the check
+    /// fails, [`Ambiguous`] when the shape matches more than once.
     fn among_one(
         &mut self,
         name: &str,
         callers: bool,
         steps: &'f [Step],
+        entries: &[(&str, u64)],
         route: &Route,
-    ) -> Option<Routed> {
-        let named = self.address(name)?;
+    ) -> Result<Option<Routed>, Ambiguous> {
+        let Some(named) = self.address(name) else {
+            return Ok(None);
+        };
         let mut functions: Vec<u32> = if callers {
             self.code.callers(named)
         } else {
@@ -345,14 +354,17 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         .into_iter()
         .collect();
         functions.sort_unstable();
-        let (function, one) = self.only_match(functions, steps)?;
-        match route.take {
+        let Some((function, one)) = self.one_run(functions, steps, entries)? else {
+            return Ok(None);
+        };
+        let found = match route.take {
             Take::Start => self
                 .code
                 .is_function(function)
                 .then_some(Routed::Reached(u64::from(function))),
             _ => self.take(route, steps, one),
-        }
+        };
+        Ok(found.and_then(|found| self.checked(route, found)))
     }
 
     /// The one run of `steps` in the code of all `functions`, with the
@@ -363,6 +375,17 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         steps: &'f [Step],
     ) -> Option<(u32, shape::Match)> {
         let entries = self.entries(steps.iter())?;
+        self.one_run(functions, steps, &entries).ok().flatten()
+    }
+
+    /// The one run of `steps` in the code of all `functions`, with the
+    /// function it lies in, the entries the steps name valued by `entries`.
+    fn one_run(
+        &mut self,
+        functions: impl IntoIterator<Item = u32>,
+        steps: &[Step],
+        entries: &[(&str, u64)],
+    ) -> Result<Option<(u32, shape::Match)>, Ambiguous> {
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
         let mut found = None;
         for function in functions {
@@ -372,11 +395,11 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
                 .flat_map(|part| shape::matches(steps, part, &entry))
             {
                 if found.replace((function, one)).is_some() {
-                    return None;
+                    return Err(Ambiguous);
                 }
             }
         }
-        found
+        Ok(found)
     }
 
     /// What a route takes from its shape's one match.
@@ -431,6 +454,9 @@ fn one(mut items: impl Iterator<Item = u32>) -> Option<u32> {
     let first = items.next()?;
     items.next().is_none().then_some(first)
 }
+
+/// A shape that matches more than once where it must match once.
+struct Ambiguous;
 
 /// The `.rdata` addresses of each string any of `routes` names, by string.
 pub(super) fn strings(

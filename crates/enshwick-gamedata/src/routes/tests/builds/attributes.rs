@@ -1,10 +1,17 @@
 //! The Character screen's row builders on every kept client: their
 //! addresses and the text each one opens its group with.
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::Side;
+use crate::reflect::{Image, Layout, Reflection};
 use crate::routes::shape::Step;
-use crate::routes::{How, Kin, Routes};
+use crate::routes::{How, Kin, Route, Routed, Routes};
+
+/// The Character screen's row push.
+const PUSH: &str = "ui.attribute_row_push";
+/// What every row builder route's id starts with, its group after it.
+const BUILDER: &str = "ui.attribute_rows_";
 
 /// The Character screen's row builders, one per group, and the push they
 /// share, by table, read in the decompiler on client 26430625 (2026-11-16).
@@ -273,30 +280,83 @@ fn a_builder_route_matches_its_text_read_but_no_stack_read() {
     }
 }
 
-/// The push is found among the callees of every group's builder alike, so
-/// no group's rows hang on another group's builder route; the Primary
-/// builder pushes inline and gives nothing, on every kept client.
-#[test]
-fn the_push_route_looks_through_every_group_s_builder() {
-    let routes = Routes::embedded().unwrap();
-    let push = routes
-        .routes
-        .iter()
-        .find(|r| r.id == "ui.attribute_row_push")
-        .unwrap();
+/// The push route and the builders it looks through.
+fn push_and_builders(routes: &Routes) -> (&Route, &[String]) {
+    let push = routes.routes.iter().find(|r| r.id == PUSH).unwrap();
     let How::Among {
-        kin: Kin::Callees(callers),
+        kin: Kin::Callees(builders),
         ..
     } = &push.how
     else {
         panic!("the push is no `callees` route");
     };
-    let mut builders: Vec<String> = ATTRIBUTE_TEXT_READS
+    (push, builders)
+}
+
+/// The push is found among the callees of every group's builder alike, so
+/// no group's rows hang on another group's builder route: it lists every
+/// builder route of the table.
+#[test]
+fn the_push_route_looks_through_every_group_s_builder() {
+    let routes = Routes::embedded().unwrap();
+    let (_, listed) = push_and_builders(&routes);
+    let mut listed = listed.to_vec();
+    listed.sort_unstable();
+    let builders: Vec<&str> = routes
+        .routes
         .iter()
-        .map(|&(text, _)| text.replace("ui.attribute_text_", "ui.attribute_rows_"))
+        .map(|r| r.id.as_str())
+        .filter(|id| id.starts_with(BUILDER))
         .collect();
-    let mut callers = callers.clone();
-    builders.sort_unstable();
-    callers.sort_unstable();
-    assert_eq!(callers, builders);
+    assert_eq!(listed, builders);
+}
+
+/// On every kept client each builder but Primary, which pushes inline,
+/// finds the push alone, so the push holds while any of them holds.
+#[test]
+#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+fn every_builder_but_primary_finds_the_push_alone_on_every_kept_client() {
+    let mut routes = Routes::embedded().unwrap();
+    let (push, builders) = push_and_builders(&routes);
+    let alone: Vec<Route> = builders
+        .iter()
+        .map(|builder| Route {
+            id: format!("{PUSH}.through.{builder}"),
+            how: match &push.how {
+                How::Among { steps, .. } => How::Among {
+                    kin: Kin::Callees(vec![builder.clone()]),
+                    steps: steps.clone(),
+                },
+                _ => unreachable!(),
+            },
+            ..push.clone()
+        })
+        .collect();
+    routes.routes.extend(alone);
+    routes.routes.sort_unstable_by(|a, b| a.id.cmp(&b.id));
+    for (path, side) in super::executables() {
+        if side != Side::Client {
+            continue;
+        }
+        let bytes = std::fs::read(&path).unwrap();
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let found: FxHashMap<&str, Option<Routed>> = routes
+            .find(&image, &reflection, side, &super::super::empty())
+            .into_iter()
+            .collect();
+        let push = found[PUSH];
+        assert!(push.is_some(), "{}: no push", path.display());
+        for (id, routed) in &found {
+            let Some(builder) = id.strip_prefix(&format!("{PUSH}.through.")) else {
+                continue;
+            };
+            let want = if *builder == format!("{BUILDER}primary") {
+                None
+            } else {
+                push
+            };
+            assert_eq!(*routed, want, "{}: {builder}", path.display());
+        }
+    }
 }

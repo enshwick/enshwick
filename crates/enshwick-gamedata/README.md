@@ -40,7 +40,8 @@ game update that moves a field changes this crate, not the mods.
   or the one direct caller (`callers`) or callee (`callees`) of a function
   another route finds whose code the shape matches. `callers` and `callees`
   may list several functions: each one found is looked through on its own,
-  and every one that finds something must find the same, so the entry
+  a match the row's `check` refuses counts as none, two matches find
+  nothing, and every one that finds something must find the same, so the entry
   rests on none of them alone, as the Character screen's row push rests on
   the builders of all its groups.
   A constant is an operand the shape takes (`value`, `cell`), a reflected

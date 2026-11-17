@@ -1,3 +1,4 @@
+mod among;
 mod bounds;
 mod builds;
 mod shapes;
@@ -553,62 +554,6 @@ fn an_ordinal_takes_the_nth_run_after_its_anchor() {
     }
 }
 
-/// A `callees` route over several functions gives what each found one
-/// gives, all agreeing: `~fn:a` and `sys_b` each call only the leaf; `c`
-/// calls `a` and `b`, neither of which reads like the leaf, and is passed
-/// over, as is a name nothing finds; `~fn:x`, which calls only the run
-/// `mov eax,5; ret`, finds another `ret` than `~fn:a` does, so the two give
-/// nothing.
-#[test]
-fn a_route_over_several_functions_gives_what_every_found_one_agrees_on() {
-    let mut fake = fake();
-    let world = RDATA + 0x190;
-    fake.put(world, b"world\0");
-    let mut x = vec![0x48, 0x8d, 0x0d];
-    x.extend(rel(0x1087, world));
-    x.push(0xe8);
-    x.extend(rel(0x108c, 0x1062));
-    x.push(0xc3);
-    fake.function(0x1080, &x, Some(6));
-    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
-    let reflection = Reflection::scan(&image);
-    let row = |id: &str, callers: &str, shape: &str| {
-        format!("[[route]]\nid = \"{id}\"\ncallees = {callers}\nshape = [\"{shape}\"]\n")
-    };
-    let leaf = |id: &str, callers: &str| row(id, callers, "mov eax,[rcx+?]");
-    let text = [
-        leaf("t.agreed", r#"["~fn:a", "sys_b"]"#),
-        leaf("t.one_absent", r#"["t.absent", "~fn:a", "sys_b"]"#),
-        leaf("t.passed_over", r#"["t.c", "sys_b"]"#),
-        leaf("t.none_found", r#"["t.absent", "t.nowhere"]"#),
-        row("t.apart", r#"["~fn:a", "~fn:x"]"#, "ret"),
-        row("t.alone", r#"["~fn:x"]"#, "ret"),
-        "[[route]]\nid = \"~fn:a\"\nloads = [\"hello\"]\n".to_owned(),
-        "[[route]]\nid = \"~fn:x\"\nloads = [\"world\"]\n".to_owned(),
-        "[[route]]\nid = \"sys_b\"\nsystem = \"sys_b\"\n".to_owned(),
-        "[[route]]\nid = \"t.c\"\ncalls = [\"~fn:a\", \"sys_b\"]\n".to_owned(),
-    ]
-    .concat();
-    let routes = Routes::parse(&text).unwrap();
-    let found: Vec<(&str, Option<Routed>)> =
-        routes.find(&image, &reflection, Side::Server, &empty());
-    assert_eq!(
-        found,
-        [
-            ("t.agreed", Some(Routed::Reached(0x1040))),
-            ("t.alone", Some(Routed::Reached(0x1062))),
-            ("t.apart", None),
-            ("t.c", Some(Routed::Reached(0x1020))),
-            ("t.none_found", None),
-            ("t.one_absent", Some(Routed::Reached(0x1040))),
-            ("t.passed_over", Some(Routed::Reached(0x1040))),
-        ]
-    );
-    for bad in [row("t.empty", "[]", "ret"), row("t.number", "[1]", "ret")] {
-        assert!(Routes::parse(&bad).is_err(), "{bad}");
-    }
-}
-
 /// A slot route takes the function a vtable slot points at, only where the
 /// pointer starts a function and the route's check holds; a slot row names
 /// its vtable and slot and nothing else.
@@ -852,6 +797,14 @@ fn an_extent_is_the_end_of_the_highest_store_off_the_stack() {
     );
     // mov [rsp+8],rax; ret
     assert_eq!(extent(&[0x48, 0x89, 0x44, 0x24, 0x08, 0xc3]), None);
+    // mov [esp+8],rax; mov [ebp+8],rax; ret
+    assert_eq!(
+        extent(&[
+            0x67, 0x48, 0x89, 0x44, 0x24, 0x08, 0x67, 0x48, 0x89, 0x45, 0x08, 0xc3
+        ]),
+        None,
+        "a 32-bit stack or frame address is still the stack"
+    );
 }
 
 /// The record sizes of the game's code, each held only in index arithmetic,
