@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 13
+#define ENSHWICK_ABI_MINOR 14
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -6978,6 +6978,18 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*buff_type_add)(EnshwickModHandle me,
                                   const struct EnshwickBuffTypeAdd *buff,
                                   EnshwickBuffTypeId *id);
+  // Up to `capacity` damage causes, as `EnshwickDamageCheck`
+  // numbers them, whose sites are not armed, and how many there are, as
+  // every list answers: the causes no damage filter gets on this build
+  // and run. A site arms when a mod registered a damage filter and the
+  // build has it, and stops when it faults; with no filter, only the hit
+  // site arms, and only for stats. `EnshwickStatus_UNAVAILABLE` before the
+  // loader links its parts, which it does after every mod's init. Any
+  // thread. ABI 12.14.
+  EnshwickStatus (*damage_causes_off)(EnshwickModHandle me,
+                                      uint32_t *out,
+                                      uint32_t capacity,
+                                      uint32_t *count);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7440,7 +7452,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1768, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1776, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7662,6 +7674,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, show_pickup) == 1736, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, respawn_point) == 1744, "offset of HostApi.respawn_point");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_respawn_point) == 1752, "offset of HostApi.set_respawn_point");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buff_type_add) == 1760, "offset of HostApi.buff_type_add");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, damage_causes_off) == 1768, "offset of HostApi.damage_causes_off");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

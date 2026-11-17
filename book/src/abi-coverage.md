@@ -258,3 +258,4 @@ names every entry of the golden layout once, in that order.
 | `respawn_point` | game | fake read, refusals, Luau | with a player |
 | `set_respawn_point` | game | fake set, refusals, Luau | with a player |
 | `buff_type_add` | game | — | client |
+| `damage_causes_off` | loader | fake missing sites, Luau, loader groups | — |

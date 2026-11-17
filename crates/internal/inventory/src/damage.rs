@@ -173,8 +173,20 @@ impl DamageCause {
         Self::AdminKill,
     ];
 
-    /// The cause of the ABI's code, as [`DamageCheck`] numbers them.
-    const fn from_code(code: u32) -> Self {
+    /// The cause the ABI numbers `code`, as [`DamageCheck`] and
+    /// [`HostApi::damage_causes_off`](crate::abi::HostApi::damage_causes_off)
+    /// do; [`Other`](Self::Other) for a number this API does not name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::damage::DamageCause;
+    ///
+    /// assert_eq!(DamageCause::from_abi(DamageCause::Fog.to_abi()), DamageCause::Fog);
+    /// assert_eq!(DamageCause::from_abi(99), DamageCause::Other(99));
+    /// ```
+    #[must_use]
+    pub const fn from_abi(code: u32) -> Self {
         match code {
             DamageCheck::IMPACT => Self::Impact,
             DamageCheck::FALL_DAMAGE => Self::FallDamage,
@@ -186,6 +198,111 @@ impl DamageCause {
             DamageCheck::ADMIN_KILL => Self::AdminKill,
             other => Self::Other(other),
         }
+    }
+
+    /// The cause's number in the ABI.
+    ///
+    /// # Examples
+    ///
+    /// See [`DamageCause::from_abi`].
+    #[must_use]
+    pub const fn to_abi(self) -> u32 {
+        match self {
+            Self::Impact => DamageCheck::IMPACT,
+            Self::FallDamage => DamageCheck::FALL_DAMAGE,
+            Self::Fog => DamageCheck::FOG,
+            Self::DeadlyFog => DamageCheck::DEADLY_FOG,
+            Self::Suffocated => DamageCheck::SUFFOCATED,
+            Self::DrowningDeath => DamageCheck::DROWNING_DEATH,
+            Self::Freezing => DamageCheck::FREEZING,
+            Self::AdminKill => DamageCheck::ADMIN_KILL,
+            Self::Other(code) => code,
+        }
+    }
+}
+
+/// The damage causes no filter of
+/// [`Load::on_damage`](../struct.Load.html#method.on_damage) gets on the
+/// running build, to tell the player or turn a feature of the mod off.
+///
+/// The loader found no site for them, or their site faulted; the list has
+/// no set order. Ask after init, such as on `WorldLoaded`. With no filter
+/// registered by any mod, every cause is off but a hit that stats arm.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Errors
+///
+/// [`Off`] during init, before the loader links its parts, and without a
+/// loader.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::damage::{DamageCause, causes_off};
+///
+/// fn falls_reach_us() -> Result<bool, enshwick::Off> {
+///     Ok(!causes_off()?.contains(&DamageCause::FallDamage))
+/// }
+/// ```
+#[cfg(feature = "unstable")]
+pub fn causes_off() -> Result<Vec<DamageCause>, Off> {
+    let host = crate::host().ok_or_else(|| Off::new("damage causes: no loader"))?;
+    let mut codes = vec![0u32; DamageCause::NAMED.len()];
+    loop {
+        let mut count = 0u32;
+        let capacity = u32::try_from(codes.len()).unwrap_or(u32::MAX);
+        let status = (host.api().damage_causes_off)(
+            host.handle(),
+            codes.as_mut_ptr(),
+            capacity,
+            &raw mut count,
+        );
+        crate::load::ok(status, (), || "damage causes".to_owned())?;
+        let count = count as usize;
+        if count <= codes.len() {
+            return Ok(codes[..count]
+                .iter()
+                .map(|&c| DamageCause::from_abi(c))
+                .collect());
+        }
+        codes = vec![0u32; count];
+    }
+}
+
+/// The free functions of [`damage`](self) as a script's namespace `damage`.
+#[doc(hidden)]
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug)]
+pub struct DamageFns;
+
+#[cfg(feature = "unstable")]
+impl crate::script::Bound for DamageFns {
+    const NAME: &'static str = "damage";
+    const DOC: &'static str = "Damage filters, and the damage causes they do not get.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_DAMAGE_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(damage_fns)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script call takes its namespace, though a free function reads nothing of it"
+)]
+impl DamageFns {
+    /// The damage causes no damage filter gets on the running build, as
+    /// [`causes_off`] lists them.
+    ///
+    /// # Errors
+    ///
+    /// As [`causes_off`].
+    #[script]
+    pub fn causes_off(self) -> Result<Vec<DamageCause>, Off> {
+        causes_off()
     }
 }
 
@@ -291,7 +408,7 @@ impl Damage<'_> {
     /// See the [module](self).
     #[must_use]
     pub const fn cause(&self) -> DamageCause {
-        DamageCause::from_code(self.hit.cause)
+        DamageCause::from_abi(self.hit.cause)
     }
 
     /// The entity that takes it.
@@ -573,7 +690,7 @@ mod tests {
     #[test]
     fn every_cause_the_api_names_is_in_named() {
         let named: Vec<DamageCause> = (0..=u32::from(u8::MAX))
-            .map(DamageCause::from_code)
+            .map(DamageCause::from_abi)
             .filter(|cause| !matches!(cause, DamageCause::Other(_)))
             .collect();
         assert_eq!(named, DamageCause::NAMED);

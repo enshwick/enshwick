@@ -1,7 +1,9 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::terrain::{NewTerrainMaterial, Terrain};
-use crate::{Load, Off};
+use crate::Load;
+use crate::terrain::Terrain;
+#[cfg(feature = "unstable")]
+use crate::{Off, terrain::NewTerrainMaterial};
 use enshwick_world::__load::*;
 
 #[enshwick_macros::forward(base)]
@@ -16,6 +18,7 @@ impl Load<'_> {
     pub fn terrain(&mut self) -> Terrain;
 }
 
+#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 #[crate::script(terrain_materials)]
 impl Load<'_> {
@@ -23,6 +26,8 @@ impl Load<'_> {
     /// id for this run, to place with [`Terrain::add`]; the material's
     /// rules, effects and look are served on both sides, and
     /// [`Terrain::materials`] lists it once the world runs.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///

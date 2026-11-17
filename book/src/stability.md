@@ -48,6 +48,7 @@ change in any release, a patch included.
 | `Effects::ping` | whether a client shows a ping the server raised is not yet seen |
 | `Effects::notify`, `Notify`, `NotifyAt`, `MAX_NOTIFIES_PER_STEP` | whether a client plays a notifier the server raised is not yet seen |
 | Buff types of a mod's own. `Load::add_buff`, `buffs::NewBuff`, `buffs::BuffLayout`, `buffs::BUFF_COLLECTION`, `buffs::BUFF_COLLECTION_RESOURCE`. | how a client shows a served buff type is read from its code only, not yet seen in the game |
+| Terrain materials of a mod's own. `Load::add_terrain_material`, `terrain::NewTerrainMaterial`. | the material's look on clients, what digging it drops and its fallback are not yet seen in the game |
 | `Load::add_experience` | whether a player gets the gain of an experience value a mod added is not yet seen in the game |
 | `Load::add_journal_page` and `content::journal::lore_category` | which categories the client draws a page under is read from its code only, not yet seen in the game |
 | `Knowledge::revoke` and `Load::on_knowledge_input`. `Knowledge::revoke_world`, `Knowledge::revoke_account`, `knowledge::Revoke`, `knowledge::Refusal`, `knowledge::KnowledgeRequest`. | how a vanilla client takes a revoke, and what it asks for, is not yet seen |
@@ -56,7 +57,8 @@ change in any release, a patch included.
 | `item_data` and `entity_data`. `Stats::set_item`. Rolling affixes onto items with `Affixes::roll`. Also `Load::add_loot_affixes` and `Load::add_craft_affixes`. `Load::item_data`, `Load::entity_data`, `affixes::AffixLoot`, `affixes::AffixCraft`. | after a restart, a value on an item outside a placed container or a player's inventory stays aside |
 | `rates`: every game rate. Also `Load::rate`. | how a lowered skill-point total and the loot counts play out is not yet seen in the client |
 | Changes of `Field::MaxStackSize` and `Field::Slots` from a mod; the same changes in data packs carry no promise either | how a player's game shows a chest above 72 slots, a raised stack and a grown backpack is not yet seen |
-| Damage filters: `Load::on_damage` and `Damage`. Also `DamageCause` and `events::PlayerDied`. `EntityDiedEvent::killer` and `EntityDiedEvent::killer_player`. | the order of the game's attributes and who it records as a killer are not yet seen |
+| Item selections, which change only those two fields. `Load::change_items`, `content::changes::Items`, `content::changes::ItemTraits`, `content::changes::ItemsChange`, `Target::Items`, `Field::selectable`, `ValueError::NotSelectable`, `Installed::item_changes`, `Pack::selections`. | they change only fields that are unstable |
+| Damage filters: `Load::on_damage` and `Damage`. Also `DamageCause` and `events::PlayerDied`. `EntityDiedEvent::killer` and `EntityDiedEvent::killer_player`. `damage::causes_off`. | the order of the game's attributes and who it records as a killer are not yet seen |
 | `Load::add_recipe` and `Load::add_recipe_with`. Also `Load::derive_recipes`. | what crafting a new recipe leaves in a player's knowledge is not yet seen |
 | `input`. `Frame::open_screen` and `Load::on_screen_changed`. Also `Load::input`. | young; which control each bit stands for and which screen is open are not yet seen in the game |
 | `Frame::prompt` and `Frame::screen_host`. Also `interactions::Targets` and `Load::on_fog_uncovered`. `ui::Prompt`, `Load::interaction_targets`. | the prompt, the screen's host, a player's prompt target and the uncovered fog are not yet seen in the game |

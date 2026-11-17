@@ -13,6 +13,36 @@ pub use crate::rates::{Rate, scale_whole};
 #[cfg(feature = "typed")]
 use crate::resources::Value;
 
+/// A field a mod built without `unstable` cannot name, a stack size or
+/// container slots, whose raw changes the fake host takes as the loader,
+/// always built with the feature, does.
+#[derive(Clone, Copy, Debug)]
+pub struct UnnamedField(crate::content::changes::rules::Rules);
+
+impl UnnamedField {
+    /// The field `raw` changes, when it is one of the two.
+    #[must_use]
+    pub const fn of(raw: &crate::abi::DataChange) -> Option<Self> {
+        match crate::content::changes::rules::Rules::of_selectable(raw.field) {
+            Some(rules) => Some(Self(rules)),
+            None => None,
+        }
+    }
+
+    /// Whether the loader takes `raw`, a change of this field: its target
+    /// and its value.
+    #[must_use]
+    pub fn takes(self, raw: &crate::abi::DataChange) -> bool {
+        self.0.takes(raw)
+    }
+
+    /// Whether the field takes `value`, as a later set of a live change.
+    #[must_use]
+    pub fn takes_value(self, value: crate::content::changes::Value) -> bool {
+        self.0.check(value).is_ok()
+    }
+}
+
 /// The fields of an image resource the game's catalogue names, in the order
 /// an icon reads them.
 pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;

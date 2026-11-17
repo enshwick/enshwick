@@ -49,6 +49,12 @@ pub(crate) struct FakeStats {
 }
 
 impl FakeStats {
+    /// Whether a mod defined a stat kind, so the loader arms the hit site
+    /// for stats.
+    pub(crate) fn has_kinds(&self) -> bool {
+        !self.kinds.is_empty()
+    }
+
     fn with_builtins() -> Self {
         let mut stats = Self::default();
         for (id, def) in builtin::ALL {

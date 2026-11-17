@@ -16,8 +16,9 @@ pub(crate) struct OpenRequest {
     pub(crate) done: Registered<InventoryResultFn>,
 }
 use enshwick_core::abi::{
-    BedCheckFn, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemFilterFn, ModHandle, Side,
-    SpawnRequest, Status, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    BedCheckFn, DamageCheck, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemFilterFn,
+    ModHandle, Side, SpawnRequest, Status, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn,
+    TeleportRequest,
 };
 
 /// What the installed fake's inventories answer and have recorded.
@@ -190,6 +191,43 @@ pub(crate) extern "system" fn damage_filter(
             .damage_filters
             .push(Registered::new(callback, user, me));
         Status::OK
+    })
+}
+
+/// The damage causes the API names, by their ABI number.
+const CAUSES: [u32; 8] = [
+    DamageCheck::IMPACT,
+    DamageCheck::FALL_DAMAGE,
+    DamageCheck::FOG,
+    DamageCheck::DEADLY_FOG,
+    DamageCheck::SUFFOCATED,
+    DamageCheck::DROWNING_DEATH,
+    DamageCheck::FREEZING,
+    DamageCheck::ADMIN_KILL,
+];
+
+/// As the loader's: after init, the causes whose sites are not armed. A
+/// filter arms every site the build has; stats alone arm the hit's.
+pub(crate) extern "system" fn damage_causes_off(
+    _me: ModHandle,
+    out: *mut u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if !s.base.closed() {
+            return Status::UNAVAILABLE;
+        }
+        let filtering = !s.inventory.damage_filters.is_empty();
+        let stats = s.inventory.stats.has_kinds();
+        let off: Vec<u32> = CAUSES
+            .into_iter()
+            .filter(|&cause| {
+                let linked = filtering || (stats && cause == DamageCheck::IMPACT);
+                !linked || s.host.inventory.missing_damage_sites.contains(&cause)
+            })
+            .collect();
+        crate::test::table::put_list(&off, out, capacity, count)
     })
 }
 

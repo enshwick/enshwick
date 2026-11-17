@@ -382,6 +382,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     respawn_point: crate::test::world::respawn::respawn_point,
     set_respawn_point: crate::test::world::respawn::set_respawn_point,
     buff_type_add,
+    damage_causes_off,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

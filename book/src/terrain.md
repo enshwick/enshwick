@@ -66,7 +66,9 @@ stone item.
 `load.add_terrain_material(new)` adds a terrain material during `init` and
 returns its voxel id for this run. The material is a copy of one of the
 game's, named by voxel id in `like`. It takes that material's look and every
-rule `new` does not change. `NewTerrainMaterial` can change these rules:
+rule `new` does not change. The call is unstable: it needs the `unstable`
+feature and may change in any release ([Stability](stability.md)).
+`NewTerrainMaterial` can change these rules:
 
 - the item digging it yields (`terrain_item`, by the item's GUID)
 - the game's hardness category, from 0 (soft) to 5 (unbreakable)

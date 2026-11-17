@@ -1,11 +1,13 @@
-//! Changes a mod declares at init and sets any time after, such as a stack
-//! size from a setting that changes per world.
+//! Changes a mod declares at init and sets any time after, such as a burn
+//! time from a setting that changes per world.
 
 use crate::abi::{ChangeId, ChangeOp, DataChange, DataSelect, Header, Status, Str};
 use crate::content::Guid;
 use crate::{Host, Off};
 
-use super::{Field, Items, Value, ValueError};
+#[cfg(feature = "unstable")]
+use super::Items;
+use super::{Field, Value, ValueError};
 
 /// What a change a mod sets later reaches.
 ///
@@ -18,6 +20,9 @@ pub enum Target {
     /// One vanilla entry, such as an item's GUID.
     Entry(Guid),
     /// Every vanilla item a selection picks.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    #[cfg(feature = "unstable")]
     Items(Items),
 }
 
@@ -27,6 +32,7 @@ impl Target {
     fn to_abi(self, field: Field, source: &str) -> DataChange {
         let (entry, select, categories) = match self {
             Self::Entry(entry) => (entry, DataSelect::ENTRY, 0),
+            #[cfg(feature = "unstable")]
             Self::Items(items) => {
                 let (select, categories) = items.to_abi();
                 (Guid::NIL, select, categories)
@@ -48,6 +54,7 @@ impl Target {
     /// Whether a change of `field` may reach this target.
     fn check(self, field: Field) -> Result<(), ValueError> {
         match self {
+            #[cfg(feature = "unstable")]
             Self::Items(_) if !field.selectable() => Err(ValueError::NotSelectable { field }),
             _ if matches!(field, Field::Ingredient | Field::Station) => {
                 Err(ValueError::NotLive { field })
@@ -237,6 +244,7 @@ mod tests {
             })
         );
         assert!(target.check(Field::Output).is_ok());
+        #[cfg(feature = "unstable")]
         assert!(
             Target::Items(Items::Stackable)
                 .check(Field::Output)

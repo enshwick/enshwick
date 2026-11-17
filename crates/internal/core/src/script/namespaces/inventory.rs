@@ -14,6 +14,8 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     #[cfg(feature = "unstable")]
     Namespace::starting("inventory", "", &[Load::SCRIPT_CONTAINERS]),
     #[cfg(feature = "unstable")]
+    Namespace::of::<crate::damage::DamageFns>(),
+    #[cfg(feature = "unstable")]
     Namespace::starting("damage", "", &[Load::SCRIPT_DAMAGE_FILTER]),
     Namespace::of::<Effects>(),
     Namespace::of::<SurvivorFns>(),

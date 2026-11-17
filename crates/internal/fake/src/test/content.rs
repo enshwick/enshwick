@@ -629,12 +629,15 @@ impl Installed {
     /// The changes of every item a selection picks the mod declared, in
     /// order, each with its source.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.item_changes().is_empty());
     /// ```
+    #[cfg(feature = "unstable")]
     #[must_use]
     pub fn item_changes(&self) -> Vec<(enshwick_core::content::changes::ItemsChange, String)> {
         table::with(Vec::new(), |s| s.content.changes.items.clone())
@@ -655,7 +658,8 @@ impl Installed {
     }
 
     /// The changes the mod declared to set later, in order, each with its
-    /// value in force: `None` until set or after a reset.
+    /// value in force: `None` until set or after a reset. A change of a
+    /// field this build does not name, from a raw record, is left out.
     ///
     /// # Examples
     ///
@@ -665,7 +669,17 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn live_changes(&self) -> Vec<LiveChange> {
-        table::with(Vec::new(), |s| s.content.changes.live.clone())
+        table::with(Vec::new(), |s| {
+            s.content
+                .changes
+                .live
+                .iter()
+                .filter_map(|slot| match slot {
+                    table::content::LiveSlot::Named(live) => Some(live.clone()),
+                    table::content::LiveSlot::Unnamed(_) => None,
+                })
+                .collect()
+        })
     }
 
     /// The mod's recipe rules in force, from

@@ -242,4 +242,5 @@ pub(crate) static API: HostApi = HostApi {
     respawn_point,
     set_respawn_point,
     buff_type_add,
+    damage_causes_off,
 };

@@ -221,6 +221,7 @@ impl LoadHelpers for crate::BaseLoad {
         for (change, source) in &pack.changes {
             self.change(change, source)?;
         }
+        #[cfg(feature = "unstable")]
         for (change, source) in &pack.selections {
             self.change_items(change, source)?;
         }

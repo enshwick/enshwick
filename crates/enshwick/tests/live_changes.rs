@@ -4,39 +4,41 @@
 mod tests {
     use enshwick::abi::Status;
     use enshwick::content::Guid;
-    use enshwick::content::changes::{ChangeHandle, Field, Items, Target, Value};
+    use enshwick::content::changes::{ChangeHandle, Field, Target, Value};
     use enshwick::state::ModLocal;
     use enshwick::test::FakeHost;
 
     const WOOD: Guid = Guid::parse("3f4093ae-75ed-4e5d-bd0b-784ba83b88f5");
 
-    static STACKS: ModLocal<ChangeHandle> = ModLocal::new();
+    static BURN: ModLocal<ChangeHandle> = ModLocal::new();
 
-    struct Stacks;
+    struct Fuel;
 
-    impl enshwick::Mod for Stacks {
+    impl enshwick::Mod for Fuel {
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-            let stacks = load.declare_change(
-                Target::Items(Items::Stackable),
-                Field::MaxStackSize,
-                "stacks",
-            )?;
-            let _set = STACKS.set(stacks);
-            load.declare_change(Target::Entry(WOOD), Field::MaxStackSize, "wood")?;
+            let burn = load.declare_change(Target::Entry(WOOD), Field::BurnTime, "burn")?;
+            let _set = BURN.set(burn);
+            load.declare_change(Target::Entry(WOOD), Field::DamageMod, "wood")?;
             if load
                 .declare_change(Target::Entry(WOOD), Field::Ingredient, "x")
                 .is_ok()
             {
                 return Err(enshwick::Off::new("an ingredient took"));
             }
+            #[cfg(feature = "unstable")]
+            {
+                use enshwick::content::changes::Items;
+                let stacks = Target::Items(Items::Stackable);
+                load.declare_change(stacks, Field::MaxStackSize, "stacks")?;
+            }
             Ok(Self)
         }
     }
 
     enshwick::test::declare_mod!(
-        Stacks,
+        Fuel,
         r#"
-        id = "you.stacks"
+        id = "you.fuel"
         side = "both"
         "#
     );
@@ -44,20 +46,24 @@ mod tests {
     #[test]
     fn a_change_holds_no_value_until_set_and_takes_each_set_and_reset() {
         let loader = FakeHost::new().install();
-        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Stacks)`.
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Fuel)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
         let live = loader.live_changes();
-        assert_eq!(live.len(), 2);
-        assert_eq!(live[0].target, Target::Items(Items::Stackable));
-        assert_eq!(live[1].target, Target::Entry(WOOD));
+        assert_eq!(live[0].target, Target::Entry(WOOD));
+        assert_eq!(live[1].field, Field::DamageMod);
         assert!(live.iter().all(|c| c.value.is_none()));
+        #[cfg(feature = "unstable")]
+        assert_eq!(
+            live[2].target,
+            Target::Items(enshwick::content::changes::Items::Stackable)
+        );
 
-        let stacks = STACKS.get().copied().unwrap();
-        stacks.set(Value::Times(4.0)).unwrap();
+        let burn = BURN.get().copied().unwrap();
+        burn.set(Value::Times(4.0)).unwrap();
         assert_eq!(loader.live_changes()[0].value, Some(Value::Times(4.0)));
-        assert!(stacks.set(Value::Set(70000.0)).is_err());
+        assert!(burn.set(Value::Set(90000.0)).is_err());
         assert_eq!(loader.live_changes()[0].value, Some(Value::Times(4.0)));
-        stacks.reset().unwrap();
+        burn.reset().unwrap();
         assert_eq!(loader.live_changes()[0].value, None);
     }
 }
