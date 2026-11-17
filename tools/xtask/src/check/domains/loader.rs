@@ -356,9 +356,7 @@ mod tests {
     }
 
     fn tree(name: &str) -> Tree {
-        let root = std::env::temp_dir().join(format!("xtask-loader-{name}-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root);
+        let tree = Tree(crate::scratch::Scratch::new(&format!("loader-{name}")).unwrap());
         tree.write(
             &format!("{SOURCES}/lib.rs"),
             "pub mod engine;\npub mod base;\npub mod world;\nmod host;\npub use world::map::Map;\npub use crate::world::map::open as open_map;",
@@ -460,9 +458,7 @@ mod tests {
 
     #[test]
     fn a_missing_loader_with_a_table_fails_and_without_one_passes() {
-        let root = std::env::temp_dir().join(format!("xtask-loader-none-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap_or_else(|e| panic!("{e}"));
+        let root = crate::scratch::Scratch::new("loader-none").unwrap();
         let found = problems(&root, &map("\"base::net -> world::map\"")).unwrap_or_default();
         assert!(
             found.len() == 1 && found[0].contains("is missing"),

@@ -98,8 +98,7 @@ mod tests {
 
     #[test]
     fn each_changelog_closes_with_its_change_files_and_they_go() {
-        let root = std::env::temp_dir().join(format!("xtask-close-{}", std::process::id()));
-        drop(std::fs::remove_dir_all(&root));
+        let root = crate::scratch::Scratch::new("close").unwrap();
         let write = |path: &str, text: &str| {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -124,7 +123,6 @@ mod tests {
         let (api, loader) = (read("api/CHANGELOG.md"), read("loader/CHANGELOG.md"));
         let left = root.join("api/changes").exists();
         let tool_left_alone = !root.join("tool/CHANGELOG.md").exists();
-        drop(std::fs::remove_dir_all(&root));
         assert_eq!(
             done,
             "closed 2 changelogs for 1.0.0-alpha.15, joining 2 change files"
@@ -147,8 +145,7 @@ mod tests {
 
     #[test]
     fn a_changelog_that_does_not_close_leaves_every_file_as_it_was() {
-        let root = std::env::temp_dir().join(format!("xtask-close-refused-{}", std::process::id()));
-        drop(std::fs::remove_dir_all(&root));
+        let root = crate::scratch::Scratch::new("close-refused").unwrap();
         let write = |path: &str, text: &str| {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -164,7 +161,6 @@ mod tests {
         let error = run(&root, &packages, &args).unwrap_err();
         let api = std::fs::read_to_string(root.join("api/CHANGELOG.md")).unwrap();
         let kept = root.join("api/changes/a.md").exists();
-        drop(std::fs::remove_dir_all(&root));
         assert!(error.contains("Unreleased"), "{error}");
         assert_eq!(api, "## [Unreleased]\n\n");
         assert!(kept);

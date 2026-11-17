@@ -666,7 +666,7 @@ mod tests {
 
     #[test]
     fn a_book_with_an_untyped_chapter_fails_the_check() {
-        let root = std::env::temp_dir().join(format!("xtask-book-{}", std::process::id()));
+        let root = crate::scratch::Scratch::new("book").unwrap();
         let source = root.join(SOURCE);
         std::fs::create_dir_all(&source).unwrap();
         std::fs::create_dir_all(root.join("crates/enshwick/src")).unwrap();
@@ -677,7 +677,6 @@ mod tests {
         std::fs::write(source.join("SUMMARY.md"), "- [Hooks](hooks.md)\n").unwrap();
         std::fs::write(source.join("hooks.md"), "# Hooks\n\nA hook runs first.\n").unwrap();
         let found = check(&root);
-        std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(
             found,
             [
@@ -778,8 +777,7 @@ mod tests {
     /// The coverage problem of a tree holding `ENTRIES` and a golden layout
     /// whose `HostApi` has `fields`, made in a folder named after `case`.
     fn coverage_with(case: &str, fields: &[&str]) -> Option<String> {
-        let root =
-            std::env::temp_dir().join(format!("xtask-coverage-{case}-{}", std::process::id()));
+        let root = crate::scratch::Scratch::new(&format!("coverage-{case}")).unwrap();
         let layout = root.join(header::LAYOUT);
         std::fs::create_dir_all(layout.parent().unwrap()).unwrap();
         std::fs::create_dir_all(root.join(SOURCE)).unwrap();
@@ -791,9 +789,8 @@ mod tests {
             .concat();
         std::fs::write(&layout, format!("abi 5.0\nHostApi size 16 align 8\n{rows}")).unwrap();
         std::fs::write(root.join(SOURCE).join(COVERAGE_CHAPTER), ENTRIES).unwrap();
-        let found = coverage_problem(&root);
-        std::fs::remove_dir_all(&root).unwrap();
-        found
+
+        coverage_problem(&root)
     }
 
     #[test]

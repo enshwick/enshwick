@@ -434,9 +434,8 @@ mod tests {
     #[test]
     fn a_compound_feature_cfg_a_gated_statement_field_or_arm_and_a_gated_module_in_an_inline_module_count_as_gated()
      {
-        let root = std::env::temp_dir().join(format!("xtask-deps-gates-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root.clone());
+        let tree = Tree(crate::scratch::Scratch::new("deps-gates").unwrap());
+        let root = &*tree.0;
         let below = [
             "base",
             "content",
@@ -499,7 +498,7 @@ mod tests {
         );
         let mut dirs = below.to_vec();
         dirs.push("ui");
-        let (problems, _) = manifests(&root, &map(&dirs));
+        let (problems, _) = manifests(root, &map(&dirs));
         let mut gated: Vec<&str> = problems
             .iter()
             .filter_map(|problem| {
@@ -548,9 +547,8 @@ mod tests {
 
     #[test]
     fn a_renamed_dependency_a_derive_path_and_test_only_impl_items_count_by_what_the_code_names() {
-        let root = std::env::temp_dir().join(format!("xtask-deps-names-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root.clone());
+        let tree = Tree(crate::scratch::Scratch::new("deps-names").unwrap());
+        let root = &*tree.0;
         for dir in ["base", "world", "inventory", "core"] {
             tree.write(
                 &format!("crates/internal/{dir}/Cargo.toml"),
@@ -568,7 +566,7 @@ mod tests {
             "crates/internal/ui/src/lib.rs",
             "use low::x;\n#[derive(enshwick_world::Shape)]\nstruct S;\nimpl S {\n    #[cfg(test)]\n    fn fixture() { enshwick_inventory::f(); }\n}\n",
         );
-        let (problems, _) = manifests(&root, &map(&["base", "world", "inventory", "ui"]));
+        let (problems, _) = manifests(root, &map(&["base", "world", "inventory", "ui"]));
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(
             problems[0].contains(
@@ -580,9 +578,8 @@ mod tests {
 
     #[test]
     fn a_domain_without_its_folder_is_one_problem_and_the_others_are_still_read() {
-        let root = std::env::temp_dir().join(format!("xtask-deps-gone-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root.clone());
+        let tree = Tree(crate::scratch::Scratch::new("deps-gone").unwrap());
+        let root = &*tree.0;
         for dir in ["base", "core"] {
             tree.write(
                 &format!("crates/internal/{dir}/Cargo.toml"),
@@ -592,7 +589,7 @@ mod tests {
         }
         let mut map = map(&["base", "sound"]);
         map.below = vec!["enshwick-abi".to_owned()];
-        let (problems, _) = manifests(&root, &map);
+        let (problems, _) = manifests(root, &map);
         assert_eq!(problems.len(), 3, "{problems:?}");
         assert!(
             problems[0].starts_with("crates/internal/sound/Cargo.toml"),
@@ -641,9 +638,8 @@ mod tests {
 
     #[test]
     fn a_dependency_named_nowhere_in_tests_only_or_only_under_a_feature_without_optional_fails() {
-        let root = std::env::temp_dir().join(format!("xtask-deps-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root.clone());
+        let tree = Tree(crate::scratch::Scratch::new("deps").unwrap());
+        let root = &*tree.0;
         let manifest = |dir: &str, deps: &str| {
             tree.write(
                 &format!("crates/internal/{dir}/Cargo.toml"),
@@ -675,7 +671,7 @@ mod tests {
             "crates/internal/core/src/lib.rs",
             "pub use enshwick_ui::ui;\n#[cfg(test)]\nmod tests { use enshwick_base::x; }",
         );
-        let (problems, _) = manifests(&root, &map(&["base", "world", "inventory", "ui"]));
+        let (problems, _) = manifests(root, &map(&["base", "world", "inventory", "ui"]));
         assert_eq!(problems.len(), 3, "{problems:?}");
         assert!(problems[0].contains("enshwick-ui names enshwick-base only under a cfg(feature)"));
         assert!(problems[1].contains("enshwick-ui names enshwick-world only under a cfg(feature)"));
@@ -692,9 +688,8 @@ mod tests {
     /// `features` as ui's feature table, `lib` as its root and `code` as
     /// its `screens` module.
     fn screens(name: &str, features: &str, lib: &str, code: &str) -> Vec<String> {
-        let root = std::env::temp_dir().join(format!("xtask-deps-{name}-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root.clone());
+        let tree = Tree(crate::scratch::Scratch::new(&format!("deps-{name}")).unwrap());
+        let root = &*tree.0;
         for dir in ["world", "core"] {
             tree.write(
                 &format!("crates/internal/{dir}/Cargo.toml"),
@@ -710,7 +705,7 @@ mod tests {
         );
         tree.write("crates/internal/ui/src/lib.rs", lib);
         tree.write("crates/internal/ui/src/screens.rs", code);
-        manifests(&root, &map(&["world", "ui"])).0
+        manifests(root, &map(&["world", "ui"])).0
     }
 
     #[test]

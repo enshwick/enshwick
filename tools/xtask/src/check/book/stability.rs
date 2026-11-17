@@ -650,12 +650,7 @@ mod tests {
     }
 
     fn walk(source: &str) -> Vec<String> {
-        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "xtask-stability-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
+        let dir = crate::scratch::Scratch::new("stability").unwrap();
         std::fs::create_dir_all(dir.join("src/inner")).unwrap();
         std::fs::write(dir.join("src/lib.rs"), source).unwrap();
         std::fs::write(
@@ -684,7 +679,6 @@ mod tests {
             &mut found,
         )
         .unwrap();
-        std::fs::remove_dir_all(&dir).unwrap();
         found.into_iter().map(|item| item.name).collect()
     }
 

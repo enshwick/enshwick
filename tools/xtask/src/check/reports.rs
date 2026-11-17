@@ -258,11 +258,8 @@ pub(crate) mod tests {
 
     /// A git repository of its own for this test, holding a route file and
     /// a report sealed for it.
-    pub(crate) fn repository(name: &str) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("xtask-seal-{name}-{}", std::process::id()));
-        if root.exists() {
-            std::fs::remove_dir_all(&root).unwrap();
-        }
+    pub(crate) fn repository(name: &str) -> crate::scratch::Scratch {
+        let root = crate::scratch::Scratch::new(&format!("seal-{name}")).unwrap();
         std::fs::create_dir_all(root.join(REPORTS)).unwrap();
         assert!(
             Command::new("git")
@@ -312,7 +309,6 @@ pub(crate) mod tests {
         let problems = stale(&root, &[]);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].starts_with("server-ab-1.toml"), "{problems:?}");
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -321,7 +317,6 @@ pub(crate) mod tests {
         let scratch = root.join("crates/enshwick-gamedata/src/routes/find.rs.orig");
         std::fs::write(scratch, "fn old() {}\n").unwrap();
         assert_eq!(stale(&root, &[]), Vec::<String>::new());
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -339,7 +334,6 @@ pub(crate) mod tests {
         let problems = stale(&root, &[]);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].contains("tracks none"), "{problems:?}");
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -350,7 +344,6 @@ pub(crate) mod tests {
         assert!(report.starts_with("# A report.\n\nsealed = \""), "{report}");
         let data: toml::Table = report.parse().unwrap();
         assert_eq!(data["sealed"].as_str().unwrap().len(), 64);
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -364,7 +357,6 @@ pub(crate) mod tests {
             problems[0].starts_with("server-cd-1.toml is not filed"),
             "{problems:?}"
         );
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -378,7 +370,6 @@ pub(crate) mod tests {
             problems[0].contains("cargo xtask compat refresh"),
             "{problems:?}"
         );
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -390,7 +381,6 @@ pub(crate) mod tests {
             "fn each() {}\n",
         );
         assert_eq!(stale(&root, &[]).len(), 1);
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -403,7 +393,6 @@ pub(crate) mod tests {
         assert_eq!(stale(&root, &[]), Vec::<String>::new());
         write_file(&root, LOCK, &lock("1.22.0", "2.8.0"));
         assert_eq!(stale(&root, &[]).len(), 1);
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -415,7 +404,6 @@ pub(crate) mod tests {
             "[x]\n",
         );
         assert_eq!(stale(&root, &[]).len(), 1);
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -433,7 +421,6 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert_eq!(stale(&root, &[]).len(), 1, "a report with two seals");
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -451,7 +438,6 @@ pub(crate) mod tests {
             write_file(&root, file, "\n");
         }
         assert_eq!(stale(&root, &[]), Vec::<String>::new());
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -462,7 +448,6 @@ pub(crate) mod tests {
         let report = std::fs::read_to_string(&file).unwrap();
         std::fs::write(&file, report.replace('\n', "\r\n")).unwrap();
         assert_eq!(stale(&root, &[]), Vec::<String>::new());
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

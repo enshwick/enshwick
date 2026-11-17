@@ -15,6 +15,7 @@ mod affected;
 mod cargo_files;
 mod check;
 mod commands;
+mod scratch;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
@@ -370,15 +371,13 @@ mod tests {
 
     #[test]
     fn a_self_alias_holds_only_when_the_library_is_the_only_crate_with_tests() {
-        let dir = std::env::temp_dir().join(format!("xtask-alias-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = scratch::Scratch::new("alias").unwrap();
         let lib = dir.join("lib.rs");
         std::fs::write(&lib, "extern crate self as enshwick;").unwrap();
         let target = |kind: &str| serde_json::json!({ "kind": [kind], "src_path": lib });
         let package = |targets: &[serde_json::Value]| serde_json::json!({ "targets": targets });
         let alone = self_alias(&package(&[target("lib"), target(BUILD_SCRIPT)]));
         let with_test = self_alias(&package(&[target("lib"), target("test")]));
-        std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(alone.as_deref(), Some(FACADE));
         assert_eq!(with_test, None);
     }

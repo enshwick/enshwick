@@ -106,7 +106,7 @@ impl Load<'_> {
 
 #[test]
 fn peel_load_writes_each_module_and_starts_or_extends_its_forwarder_file() {
-    let root = std::env::temp_dir().join(format!("xtask-peel-{}", std::process::id()));
+    let root = crate::scratch::Scratch::new("peel").unwrap();
     let base = "crates/internal/base/src";
     std::fs::create_dir_all(root.join(base)).unwrap();
     let module = "use crate::Host;\n\nimpl Load<'_> {\n    /// Docs.\n    pub fn f(&self) {}\n}\n";
@@ -135,7 +135,6 @@ fn peel_load_writes_each_module_and_starts_or_extends_its_forwarder_file() {
     let peeled = std::fs::read_to_string(root.join(base).join("a.rs")).unwrap();
     let private_only = root.join("core/load/c.rs").exists();
     let odd = std::fs::read(root.join("core/load/odd.rs")).unwrap();
-    std::fs::remove_dir_all(&root).unwrap();
     assert_eq!(ran, Ok(true));
     assert_eq!(unpaired, Err(format!("{base}/a.rs: not <from>=<into>")));
     assert!(
@@ -345,13 +344,13 @@ fn a_forwarder_file_gains_the_trait_glob_once_and_the_crate_re_exports_each_trai
         "//! Doc.\nuse enshwick_content::__load::*;\nuse crate::Load;\n",
         "the glob goes after the inner docs even with no blank line"
     );
-    let file = std::env::temp_dir().join(format!("xtask-reexport-{}.rs", std::process::id()));
+    let dir = crate::scratch::Scratch::new("reexport").unwrap();
+    let file = dir.join("__load.rs");
     let first = reexport(&file, "content::items", "LoadMethods");
     let again = reexport(&file, "content::items", "LoadMethods");
     let second = reexport(&file, "rates", "LoadHelpers");
     let root = reexport(&file, "", "LoadMethods");
     let text = std::fs::read_to_string(&file).unwrap();
-    std::fs::remove_file(&file).unwrap();
     assert_eq!(
         (first, again, second, root),
         (Ok(()), Ok(()), Ok(()), Ok(()))
@@ -368,7 +367,7 @@ fn a_forwarder_file_gains_the_trait_glob_once_and_the_crate_re_exports_each_trai
 #[test]
 fn a_peeled_module_imports_the_crate_traits_only_when_it_calls_another_module_s_method()
 -> Result<(), String> {
-    let src = std::env::temp_dir().join(format!("xtask-moved-{}", std::process::id()));
+    let src = crate::scratch::Scratch::new("moved").unwrap();
     std::fs::create_dir_all(src.join("content")).map_err(|e| e.to_string())?;
     let write = |name: &str, text: &str| std::fs::write(src.join(name), text).unwrap();
     write(
@@ -383,9 +382,7 @@ fn a_peeled_module_imports_the_crate_traits_only_when_it_calls_another_module_s_
         "content/icons.rs",
         "pub(crate) trait LoadHelpers {\n    fn add_icon(&mut self);\n}\n",
     );
-    let others = moved_methods(&src.join("__load.rs"), &src.join("content/items.rs"));
-    std::fs::remove_dir_all(&src).map_err(|e| e.to_string())?;
-    let others = others?;
+    let others = moved_methods(&src.join("__load.rs"), &src.join("content/items.rs"))?;
     assert_eq!(
         others,
         ["add_icon"],

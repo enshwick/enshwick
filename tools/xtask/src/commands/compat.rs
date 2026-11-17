@@ -30,6 +30,8 @@ mod pin;
 mod report;
 #[path = "../check/reports.rs"]
 mod reports;
+#[path = "../scratch.rs"]
+mod scratch;
 #[cfg(all(test, windows))]
 use report::report_data;
 use report::{data, refresh};
@@ -604,9 +606,8 @@ fn dlls(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
 /// Copies the mods among `dlls` into a fresh game folder and runs the
 /// loader on it in a process of its own; how each mod fared.
 fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> {
-    let game = std::env::temp_dir().join(format!("enshwick-compat-{}", std::process::id()));
+    let game = scratch::Scratch::new("compat")?;
     let mods = game.join("mods");
-    let _old = std::fs::remove_dir_all(&game);
     std::fs::create_dir_all(&mods).map_err(|e| format!("{}: {e}", mods.display()))?;
     for dll in dlls {
         let bytes = std::fs::read(dll).map_err(|e| format!("{}: {e}", dll.display()))?;
@@ -627,7 +628,7 @@ fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> 
         command.arg("--patterns");
     }
     let output = command.output().map_err(|e| e.to_string())?;
-    let _gone = std::fs::remove_dir_all(&game);
+    drop(game);
     if !output.status.success() {
         return Err(format!(
             "the loader stopped ({}): {}",

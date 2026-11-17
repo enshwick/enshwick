@@ -223,8 +223,7 @@ mod tests {
             .map(|(_, p)| p)
             .unwrap();
         let repo = super::super::tests::repo();
-        let held = std::env::temp_dir().join(format!("enshwick-pin-held-{}", std::process::id()));
-        let _old = fs::remove_dir_all(&held);
+        let held = crate::scratch::Scratch::new("pin-held").unwrap();
         let anchors = held.join(ANCHORS);
         fs::create_dir_all(anchors.parent().unwrap()).unwrap();
         fs::copy(repo.join(ANCHORS), &anchors).unwrap();
@@ -232,11 +231,10 @@ mod tests {
         let report = held.join("report.md");
         let args = Args {
             report: Some(report.clone()),
-            ..super::super::tests::args(old.clone(), new.clone(), held.clone())
+            ..super::super::tests::args(old.clone(), new.clone(), held.to_path_buf())
         };
         run(&args).unwrap();
         let text = fs::read_to_string(&report).unwrap();
-        fs::remove_dir_all(&held).unwrap();
         assert!(text.contains(&format!("Old values: {FOUND}.")), "{text}");
         assert!(text.contains("anchors/routes.toml: check shapes"), "{text}");
         assert!(text.contains("| symbol |"), "{text}");

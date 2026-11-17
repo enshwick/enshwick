@@ -1,7 +1,5 @@
 use std::collections::BTreeSet;
 
-use clap::ValueEnum as _;
-
 use super::*;
 
 #[test]
@@ -130,6 +128,41 @@ fn only_a_wide_check_that_would_check_the_stable_surface_says_it_left_it_to_ci()
         &scope(&[FACADE], &[], &[], false),
         &parts
     ));
+}
+
+/// CI starts the trybuild and stable surface jobs only for the parts this
+/// lists, so a part listed here must have a step and one left out none.
+#[test]
+fn only_a_change_that_reaches_the_facade_lists_the_trybuild_and_stable_surface_parts() {
+    let scope = |code: &[&str], docs: &[&str], wide: bool| Scope::Some {
+        code: code.iter().map(|name| (*name).to_owned()).collect(),
+        docs: docs.iter().map(|name| (*name).to_owned()).collect(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide,
+    };
+    let due = |scope: &Scope| -> Vec<Part> {
+        [Part::Trybuild, Part::StableApi]
+            .into_iter()
+            .filter(|part| part.due(scope))
+            .collect()
+    };
+    assert_eq!(due(&scope(&["xtask"], &[], false)), []);
+    assert_eq!(
+        due(&scope(&[FACADE], &[], false)),
+        [Part::Trybuild, Part::StableApi]
+    );
+    assert_eq!(due(&scope(&[], &[FACADE], false)), [Part::StableApi]);
+    assert_eq!(due(&scope(&[FACADE], &[], true)), []);
+    assert_eq!(due(&Scope::All), [Part::Trybuild, Part::StableApi]);
+    for (part, planned) in [
+        (Part::Trybuild, planned_for(&["xtask"], &[Part::Trybuild])),
+        (Part::StableApi, planned_for(&["xtask"], &[Part::StableApi])),
+    ] {
+        assert!(!part.due(&scope(&["xtask"], &[], false)));
+        assert!(planned.is_empty(), "{part:?} plans {planned:?}");
+    }
+    assert!(Part::Host.due(&scope(&["xtask"], &[], false)));
 }
 
 #[test]

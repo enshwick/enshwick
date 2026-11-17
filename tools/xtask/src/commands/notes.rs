@@ -393,9 +393,7 @@ mod tests {
 
     #[test]
     fn only_the_newest_report_of_each_side_counts() -> Result<(), String> {
-        let dir = std::env::temp_dir().join(format!("xtask-notes-builds-{}", std::process::id()));
-        let _fresh = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let dir = crate::scratch::Scratch::new("notes-builds").unwrap();
         for (file, text) in [
             (
                 "server-a.toml",
@@ -428,7 +426,6 @@ mod tests {
                 side("server", 1_287_369, 2),
             ]
         );
-        let _cleaned = std::fs::remove_dir_all(&dir);
         Ok(())
     }
 
@@ -446,10 +443,10 @@ mod tests {
         }
     }
 
-    /// A workspace of its own for this test process, with `changelogs` as
+    /// A workspace of its own for this test, with `changelogs` as
     /// `(package dir, CHANGELOG.md)`.
-    fn workspace(changelogs: &[(&str, &str)]) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("xtask-notes-{}", std::process::id()));
+    fn workspace(changelogs: &[(&str, &str)]) -> crate::scratch::Scratch {
+        let root = crate::scratch::Scratch::new("notes").unwrap();
         for (dir, text) in changelogs {
             std::fs::create_dir_all(root.join(dir)).unwrap();
             std::fs::write(root.join(dir).join("CHANGELOG.md"), text).unwrap();

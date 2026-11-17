@@ -453,9 +453,7 @@ mod tests {
     /// `__fake.rs` handing down a ui item, a world one and the `__fake` of
     /// a peeled `content` crate.
     fn tree(name: &str) -> Tree {
-        let root = std::env::temp_dir().join(format!("xtask-fake-{name}-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root);
+        let tree = Tree(crate::scratch::Scratch::new(&format!("fake-{name}")).unwrap());
         tree.write(
             "crates/internal/content/Cargo.toml",
             "[package]\nname = \"enshwick-content\"\n",
