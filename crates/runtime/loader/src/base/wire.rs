@@ -461,9 +461,7 @@ pub fn read_probe(data: &[u8]) -> Option<(u8, bool)> {
 
 /// FNV-1a over `bytes`: enough to tell a damaged probe.
 fn probe_hash(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
+    crate::base::fnv::fnv1a64(crate::base::fnv::BASIS, bytes)
 }
 #[cfg(test)]
 mod tests {

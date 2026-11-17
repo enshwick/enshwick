@@ -63,7 +63,8 @@ impl Engine {
     /// - Called inside a frame of the game's interface update, on its
     ///   thread.
     /// - `node` is the id of a panel the game drew in this frame or the last
-    ///   one, as [`Engine::node_id`] gives it.
+    ///   one, as [`Engine::node_id`] gives it, or of the popup window drawn
+    ///   in this frame, as [`Engine::popup_node`] gives it.
     pub(in crate::ui::interface) unsafe fn back_pressed(&self, node: NonZeroU64) -> bool {
         let (Some(layout), Some(new), Some(query)) =
             (self.menu, self.action_new, self.action_query)

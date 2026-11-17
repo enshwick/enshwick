@@ -162,7 +162,8 @@ impl Ui {
     }
 
     /// Queues `dialog` and runs `on_answer` with the player's answer, or
-    /// `None` when it closed without one, as when the game quits. Dialogs
+    /// `None` when it closed without one, as when the player pressed Back
+    /// over it in game or the game quits. Dialogs
     /// show one at a time, in order. Any thread; `on_answer` runs on the
     /// thread that draws the interface.
     ///

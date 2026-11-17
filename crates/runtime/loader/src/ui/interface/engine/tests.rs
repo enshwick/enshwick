@@ -99,15 +99,12 @@ fn a_layout_keeps_icon_buttons_only_where_the_routed_kind_word_fits() {
 
 #[test]
 fn texts_hash_as_the_game_does() {
-    const FNV_PRIME: u64 = 0x0100_0000_01b3;
-    assert_eq!(hash(b""), FNV_BASIS);
+    use crate::base::fnv::{BASIS, fnv1a64};
+    assert_eq!(hash(b""), BASIS);
     assert_eq!(hash(b"doBasicProgressBar()"), 0xb37b_692b_58e0_8ab5);
     assert_eq!(hash(b"contentLayer"), 0xffd8_6fcd_3b62_1d0f);
     // Non-ASCII bytes are sign-extended before the xor.
-    let plain = "ж"
-        .bytes()
-        .fold(FNV_BASIS, |h, b| (h ^ u64::from(b)).wrapping_mul(FNV_PRIME));
-    assert_ne!(hash("ж".as_bytes()), plain);
+    assert_ne!(hash("ж".as_bytes()), fnv1a64(BASIS, "ж".as_bytes()));
 }
 
 #[test]

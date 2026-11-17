@@ -4,14 +4,14 @@
 /// The game's hash of a text view: FNV-1a over 64 bits, each byte
 /// sign-extended, as the text format of client 26430625 computes it.
 pub(crate) const fn hash(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    let mut hash = super::fnv::BASIS;
     let mut i = 0;
     while i < bytes.len() {
         #[expect(clippy::cast_possible_wrap, reason = "the game sign-extends each byte")]
         let byte = bytes[i] as i8;
         #[expect(clippy::cast_sign_loss, reason = "the game sign-extends each byte")]
         let wide = byte as i64 as u64;
-        hash = (hash ^ wide).wrapping_mul(0x100_0000_01b3);
+        hash = (hash ^ wide).wrapping_mul(super::fnv::PRIME);
         i += 1;
     }
     hash
@@ -65,9 +65,7 @@ impl Handed {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x100_0000_01b3;
+    use crate::base::fnv::{BASIS, PRIME};
 
     #[test]
     fn the_hash_is_fnv1a_over_bytes_sign_extended_as_the_game_hashes() {

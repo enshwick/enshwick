@@ -16,6 +16,7 @@ pub(crate) mod developer_tools;
 pub mod discovery;
 #[cfg(windows)]
 pub(crate) mod emits;
+pub(crate) mod fnv;
 #[cfg(windows)]
 pub mod game_events;
 #[cfg_attr(

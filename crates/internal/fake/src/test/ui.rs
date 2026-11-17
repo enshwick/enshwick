@@ -122,6 +122,11 @@ impl Installed {
                 drawn.extend(list);
             }
         }
+        // The loader draws its dialog after the windows, so Back taken under
+        // it closes it without an answer in the same frame.
+        if table::with(false, |s| core::mem::take(&mut s.ui.dialog_backed)) {
+            self.answer(None);
+        }
         drawn
     }
 

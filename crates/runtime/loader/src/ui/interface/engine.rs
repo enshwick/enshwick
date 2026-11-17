@@ -11,7 +11,6 @@
 //! code that uses it. Each object the game fills or reads has a constant for
 //! how far it reaches, checked against the loader's buffer for it.
 
-use crate::engine::fuse::Fuse;
 pub(crate) use crate::engine::interface_parts::Missing;
 use crate::engine::interface_parts::{Part, check_functions};
 use crate::engine::loader::Loader;
@@ -101,7 +100,6 @@ pub(crate) struct UiText {
 
 /// The byte the game points empty texts at.
 static NUL: u8 = 0;
-const FNV_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 
 impl UiText {
     /// The text over `bytes`, which must outlive every use the game makes of
@@ -120,7 +118,7 @@ impl UiText {
     pub(crate) const EMPTY: Self = Self {
         ptr: &raw const NUL,
         len: 0,
-        hash: FNV_BASIS,
+        hash: crate::base::fnv::BASIS,
     };
 }
 
@@ -514,6 +512,14 @@ pub(super) struct Window {
     began: Option<u64>,
 }
 
+/// Whether interface update `at` is `now` or the one before.
+pub(in crate::ui::interface) const fn lately(at: Option<u64>, now: u64) -> bool {
+    match at {
+        Some(at) => now.saturating_sub(at) <= 1,
+        None => false,
+    }
+}
+
 impl Window {
     pub(super) const fn new() -> Self {
         Self {
@@ -532,10 +538,7 @@ impl Window {
     /// Whether the window began in interface update `now` or the one
     /// before, so the game still knows its panel node.
     const fn drawn_lately(&self, now: u64) -> bool {
-        match self.began {
-            Some(began) => now.saturating_sub(began) <= 1,
-            None => false,
-        }
+        lately(self.began, now)
     }
 
     /// A screen extension's window: its panel at `edge`
@@ -590,6 +593,9 @@ pub(crate) struct Engine {
     pub(super) menu: Option<MenuLayout>,
     /// The dialogs' fields; `None` keeps dialogs in system windows.
     pub(super) dialog: Option<DialogLayout>,
+    /// The game's popup window's root node; `None` leaves dialogs to their
+    /// buttons.
+    popup_root: Option<PopupRoot>,
     /// The scroll area's functions and looks; `None` pages long lists.
     scroll: Option<scroll::Scrolling>,
     /// The text field's functions; `None` shows texts read-only.
@@ -689,68 +695,9 @@ unsafe fn game_fn<F: Copy>(loader: &Loader, name: Symbol) -> Result<F, Missing> 
     Ok(unsafe { core::mem::transmute_copy::<usize, F>(&address) })
 }
 
-/// The Mods screen's lists scroll; off, they page.
-static SCROLLING_FUSE: Fuse = Fuse::new("scrolling on the Mods screen (lists page)");
-/// The Mods screen edits text settings; off, they are read-only.
-static TEXT_FIELDS_FUSE: Fuse = Fuse::new("text settings on the Mods screen (read-only)");
-static HINTS_FUSE: Fuse = Fuse::new("input hints");
-/// The Mods screen lays settings out in rows; off, they stack.
-static ROWS_FUSE: Fuse = Fuse::new("rows on the Mods screen (stacked)");
-
-/// The interface's optional parts read from the build's table and
-/// reflection, each `None` when it turned off alone.
-struct Optional {
-    menu: Option<MenuLayout>,
-    dialog: Option<DialogLayout>,
-    scroll: Option<scroll::Scrolling>,
-    text_fields: Option<text_field::TextFields>,
-    hint: Option<hint::InputHints>,
-    rows: Option<rows::Rows>,
-}
-
-impl Optional {
-    /// Reads each optional layout, adding the menus' entries to `parts_off`
-    /// when theirs does not read, then turns off each of `parts_off` and
-    /// each other layout that does not read, with its reason.
-    fn resolve(loader: &Loader, parts_off: &mut Vec<(Part, Missing)>) -> Self {
-        let lookup = |id: &str| loader.build.constant(id);
-        let menu = MenuLayout::read(&lookup);
-        if let Err(why) = menu {
-            for part in [Part::MAIN_MENU, Part::PAUSE_MENU] {
-                if !parts_off.iter().any(|(p, _)| *p == part) {
-                    parts_off.push((part, why));
-                }
-            }
-        }
-        let off = |fuse: &'static Fuse| {
-            move |why: &Missing| {
-                loader.fuse_off(fuse, why.id(), &why.reason());
-            }
-        };
-        for (part, fuse) in Part::ALL.iter().zip(super::PART_FUSES) {
-            if let Some((_, why)) = parts_off.iter().find(|(off, _)| off == part) {
-                off(fuse)(why);
-            }
-        }
-        Self {
-            menu: menu.ok(),
-            dialog: DialogLayout::read(&lookup)
-                .inspect_err(off(&super::DIALOGS_FUSE))
-                .ok(),
-            scroll: scroll::Scrolling::resolve(loader)
-                .inspect_err(off(&SCROLLING_FUSE))
-                .ok(),
-            text_fields: text_field::TextFields::resolve(loader)
-                .inspect_err(off(&TEXT_FIELDS_FUSE))
-                .ok(),
-            hint: hint::InputHints::resolve(loader)
-                .inspect_err(off(&HINTS_FUSE))
-                .ok(),
-            rows: rows::Rows::resolve(loader)
-                .inspect_err(off(&ROWS_FUSE))
-                .ok(),
-        }
-    }
+/// Where the build puts symbol `name` in this process.
+fn address(loader: &Loader, name: Symbol) -> Option<usize> {
+    loader.address(name).and_then(|a| usize::try_from(a).ok())
 }
 
 /// Checks interface function `name` by [`verify`]; `ui.context`, a data
@@ -792,6 +739,7 @@ impl Engine {
         let Optional {
             menu,
             dialog,
+            popup_root,
             scroll,
             text_fields,
             hint,
@@ -799,12 +747,7 @@ impl Engine {
         } = Optional::resolve(loader, &mut parts_off);
         let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
         let menus = on(Part::MAIN_MENU) || on(Part::PAUSE_MENU);
-        let at = |name: Symbol| {
-            loader
-                .address(name)
-                .and_then(|a| usize::try_from(a).ok())
-                .unwrap_or(0)
-        };
+        let at = |name: Symbol| address(loader, name).unwrap_or(0);
         let site = |part: Part, name: Symbol| {
             if on(part) {
                 loader.address(name).unwrap_or(0)
@@ -829,6 +772,7 @@ impl Engine {
             layout,
             menu,
             dialog,
+            popup_root,
             scroll,
             text_fields,
             hint,
@@ -976,6 +920,8 @@ mod hint;
 mod hud;
 mod looks;
 mod menus;
+mod optional;
+mod popup;
 mod rows;
 mod scroll;
 #[cfg(test)]
@@ -986,6 +932,8 @@ mod windows;
 
 pub(in crate::ui::interface) use looks::Icon;
 use looks::{BUNDLE, Legal, Looks, looks, path, sound};
+use optional::Optional;
+use popup::PopupRoot;
 pub(super) use rows::Row;
 pub(super) use scroll::Scroll;
 pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame};

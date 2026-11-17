@@ -172,6 +172,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::POPUP_EXTENT.id(),
     pinned::ui::POPUP_MESSAGE.id(),
     pinned::ui::POPUP_TITLE.id(),
+    pinned::ui::POPUP_WINDOW.id(),
+    pinned::ui::POPUP_WINDOW_LEN.id(),
     pinned::ui::PROGRESS.id(),
     pinned::ui::SCROLLBAR_LOOK.id(),
     pinned::ui::SCROLL_BEGIN.id(),
@@ -225,6 +227,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::TOGGLE_LABEL.id(),
     pinned::ui::TOOLTIP_PANEL_SITE.id(),
     pinned::ui::TOOLTIP_PLAIN_SITE.id(),
+    pinned::ui::VIEW_SLOT.id(),
     pinned::ui::VIEWER_ITEM.id(),
     pinned::ui::VIEWER_LAYOUT.id(),
     pinned::ui::VIEWER_PIDE.id(),
@@ -233,4 +236,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::WINDOW_END.id(),
     pinned::ui::WINDOW_EXTENT.id(),
     pinned::ui::WINDOW_NODE.id(),
+    pinned::ui::WINDOWS.id(),
+    pinned::ui::WINDOWS_VIEW.id(),
 ];

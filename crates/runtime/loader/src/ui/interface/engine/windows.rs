@@ -2,6 +2,8 @@ use core::num::NonZeroU64;
 
 use enshwick_core::abi::UiExtension;
 
+use crate::ui::window_node::{NAME_FITS, SHORT_LEN, short_name};
+
 use super::{
     Buf, EXTENSION_WIDTH, Engine, HUD_MARGIN, NAV_CONFIG, PANEL_CONFIG, UiText, WINDOW_WIDTH,
     Window, text_field,
@@ -73,13 +75,26 @@ impl Engine {
         window.began = Some(crate::ui::interface::tick());
         window.saved_nav = self.nav(context);
         super::widgets::twins_window(name.hash);
-        let name = [name.ptr.expose_provenance() as u64, name.len];
+        let short;
+        let len = usize::try_from(name.len).unwrap_or(0);
+        let name = if len <= NAME_FITS {
+            [name.ptr.expose_provenance() as u64, name.len]
+        } else {
+            // SAFETY: `name` is a loader text whose bytes outlive the frame,
+            // by this function's `# Safety`, `len` of them at `ptr`.
+            let bytes = unsafe { core::slice::from_raw_parts(name.ptr, len) };
+            short = short_name(bytes);
+            [short.as_ptr().expose_provenance() as u64, SHORT_LEN as u64]
+        };
         // SAFETY: `self.window_begin` is the game's `ui.window_begin`, its
         // entry bytes checked in `Engine::resolve`, called in a frame on its
         // thread by this function's `# Safety`; `window.object` holds the
         // table's `ui.window_extent` bytes (`Layout::read`), and `name` is a
-        // live local over bytes that outlive the frame. The arguments are
-        // the game popup's: full screen, its layer, all input, flags 1.
+        // live local over bytes that live through the call, at most
+        // `NAME_FITS` of them: on client 26430625 the game copies the name
+        // into its own 64-byte slice with its suffix and keeps no pointer
+        // (`0x140a3c460`), and stops on a longer one. The arguments are the
+        // game popup's: full screen, its layer, all input, flags 1.
         unsafe {
             (self.window_begin)(
                 window.object.ptr(),
