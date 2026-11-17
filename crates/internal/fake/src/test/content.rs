@@ -17,8 +17,7 @@ pub(crate) mod removal;
 pub(crate) mod template_names;
 pub(crate) mod templates;
 
-/// What the fake's content answers, as the test set it: item types,
-/// templates, the archive, resources, reflected types, texts and recipes.
+/// What the fake's content answers, as the test set it.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ContentPresets {
     pub(crate) templates: rustc_hash::FxHashMap<u32, Guid>,
@@ -799,7 +798,7 @@ impl Installed {
     pub fn served_content(&self) -> Vec<([u32; 4], Vec<u8>)> {
         table::with(Vec::new(), |s| {
             s.content
-                .archive
+                .served_archive
                 .iter()
                 .map(|(h, b)| (*h, b.clone()))
                 .collect()

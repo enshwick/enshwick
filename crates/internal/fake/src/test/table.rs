@@ -38,8 +38,7 @@ use knowledge::*;
 use ui::*;
 use world::{altars::*, buffs::*, environment::*, saves::*, transactions::*, *};
 
-/// What the installed fake answers and what it has recorded: the test's
-/// presets and one state per domain, each kept in its domain's slice.
+/// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
     pub(crate) host: FakeHost,
     pub(crate) base: BaseState,

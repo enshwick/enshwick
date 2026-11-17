@@ -16,8 +16,7 @@ pub(crate) mod points;
 pub(crate) mod settings;
 pub(crate) mod ticks;
 
-/// What the fake's base answers, as the test set it: the side, the build,
-/// symbols and reflected types, settings, the mods and the players.
+/// What the fake's base answers, as the test set it.
 #[derive(Clone, Debug)]
 pub(crate) struct BasePresets {
     pub(crate) side: enshwick_core::abi::Side,

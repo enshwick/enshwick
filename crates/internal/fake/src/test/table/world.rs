@@ -16,8 +16,7 @@ pub(crate) mod permissions;
 pub(crate) mod saves;
 pub(crate) mod transactions;
 
-/// What the installed fake's world answers and has recorded: players,
-/// entities, saves, the clock, weather, terrain, buffs and altars.
+/// What the installed fake's world answers and has recorded.
 #[derive(Default)]
 pub(crate) struct WorldState {
     pub(crate) chat: Vec<(enshwick_core::PlayerKey, String)>,
@@ -38,6 +37,9 @@ pub(crate) struct WorldState {
     pub(crate) writes: Vec<(u32, u32)>,
     /// The game events the mod raised: type hash and bytes.
     pub(crate) emits: Vec<(u32, Vec<u8>)>,
+    /// The game events each mod raised with notify in the step it last
+    /// raised one.
+    pub(crate) notified: Notified,
     /// The teleports the mod asked for.
     pub(crate) teleports: Vec<enshwick_core::abi::TeleportRequest>,
     /// The spawns the mod asked for, with the ids handed out.
@@ -106,6 +108,17 @@ pub(crate) struct WorldState {
     pub(crate) permission_changes: permissions::Changes,
     /// The waits on transactions' ends, in the order asked.
     pub(crate) settle_waits: Vec<transactions::SettleWait>,
+}
+
+/// The notifies of each mod in a step, at the loader's limit per step.
+pub(crate) struct Notified(pub(crate) enshwick_core::peer::PerStep);
+
+impl Default for Notified {
+    fn default() -> Self {
+        Self(enshwick_core::peer::PerStep::new(
+            enshwick_core::peer::MAX_NOTIFIES_PER_STEP,
+        ))
+    }
 }
 
 /// The changes of the world the mod asked for, and its voxel reads, in

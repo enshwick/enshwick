@@ -9,6 +9,7 @@ use super::{FakeHost, Installed};
 #[derive(Clone, Debug, Default)]
 pub(crate) struct UiPresets {
     pub(crate) fog: Option<(enshwick_core::abi::FogInfo, Vec<u8>)>,
+    pub(crate) map_marker_types: Option<Vec<enshwick_core::abi::MapMarkerTypeInfo>>,
 }
 
 /// The prompt and the screen's host the fake's frames hear, as a test set
@@ -754,6 +755,28 @@ pub struct ShownDialog {
 }
 
 impl FakeHost {
+    /// The client's marker type registry, as the loader reads it from the
+    /// game's archive for `Ui::map_marker_types`; without one the registry
+    /// does not read, as on a dedicated server.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{MapMarkerTypeInfo, Side};
+    ///
+    /// let altar = MapMarkerTypeInfo { marker_id: 0x0a0b_0c0d, ..MapMarkerTypeInfo::EMPTY };
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .side(Side::CLIENT)
+    ///     .map_marker_types(vec![altar])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn map_marker_types(mut self, types: Vec<enshwick_core::abi::MapMarkerTypeInfo>) -> Self {
+        self.ui.map_marker_types = Some(types);
+        self
+    }
+
     /// The client's fog of war as the loader keeps it: `info` and its
     /// `info.width` × `info.height` pixels, row by row.
     ///

@@ -11,8 +11,7 @@ pub(crate) mod commands;
 #[cfg(feature = "unstable")]
 pub(crate) mod controls;
 
-/// What the fake's actions answer, as the test set it: the console's
-/// answers, other mods' commands and the player's keys.
+/// What the fake's actions answer, as the test set it.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ActionsPresets {
     pub(crate) console_answers: rustc_hash::FxHashMap<String, String>,

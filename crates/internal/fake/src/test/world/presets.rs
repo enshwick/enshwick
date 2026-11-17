@@ -17,8 +17,7 @@ pub(crate) enum BaseCode {
     Unknown,
 }
 
-/// What the fake's world answers, as the test set it: entities, the map,
-/// voxels, zones, props and spawn points.
+/// What the fake's world answers, as the test set it.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WorldPresets {
     pub(crate) no_entity_commands: bool,
@@ -26,7 +25,6 @@ pub(crate) struct WorldPresets {
     pub(crate) placed: Vec<(u32, EntityPlace)>,
     pub(crate) map_markers: Vec<enshwick_core::abi::MapMarkerInfo>,
     pub(crate) map_frame: Option<enshwick_core::abi::MapFrameInfo>,
-    pub(crate) map_marker_types: Option<Vec<enshwick_core::abi::MapMarkerTypeInfo>>,
     pub(crate) refused_writes: rustc_hash::FxHashSet<u32>,
     pub(crate) static_halves: rustc_hash::FxHashSet<u32>,
     pub(crate) voxels: Vec<VoxelGrid>,

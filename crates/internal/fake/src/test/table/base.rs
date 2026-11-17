@@ -29,8 +29,7 @@ pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32);
 /// A mod event handler: name, layout, the bytes it reads and the handler.
 pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, Registered<ModEventFn>);
 
-/// What the installed fake's base answers and has recorded: logs, hooks,
-/// events, services, settings and the mods' life.
+/// What the installed fake's base answers and has recorded.
 #[derive(Default)]
 pub(crate) struct BaseState {
     pub(crate) logs: Vec<(Level, String)>,

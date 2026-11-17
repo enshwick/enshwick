@@ -7,8 +7,7 @@ use crate::test::table::{found, put, put_list, text, with, with_open};
 use enshwick_core::abi::{ModHandle, RateId, ResourceKey, Status, Str};
 pub(crate) use served::*;
 
-/// What the installed fake's content answers and has recorded: served
-/// resources, data changes, recipes, texts, item data and rates.
+/// What the installed fake's content answers and has recorded.
 #[derive(Default)]
 pub(crate) struct ContentState {
     pub(crate) served: Vec<(
@@ -35,8 +34,8 @@ pub(crate) struct ContentState {
     /// Item data kinds by full id, and values by kind and entity: the item
     /// and the bytes.
     pub(crate) item_kinds: Vec<String>,
-    /// Content served or put in the fake archive, by hash.
-    pub(crate) archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
+    /// The content the mod served into the fake archive, by hash.
+    pub(crate) served_archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
     /// The rates the mod declared, with the factor it set for each.
     pub(crate) rates: Vec<(RateId, f32)>,
@@ -558,7 +557,7 @@ pub(crate) extern "system" fn content_serve(
         1,
     ];
     with(Status::MISSING, |s| {
-        s.content.archive.insert(hash, bytes);
+        s.content.served_archive.insert(hash, bytes);
         Status::OK
     });
     found(Some(hash), out)
@@ -577,7 +576,7 @@ pub(crate) extern "system" fn content_read(
     };
     let Some(data) = with(None, |s| {
         s.content
-            .archive
+            .served_archive
             .get(&hash)
             .or_else(|| s.host.content.archive.get(&hash))
             .cloned()

@@ -240,28 +240,6 @@ impl FakeHost {
         self
     }
 
-    /// The client's marker type registry, as the loader reads it from the
-    /// game's archive for `Ui::map_marker_types`; without one the registry
-    /// does not read, as on a dedicated server.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::abi::{MapMarkerTypeInfo, Side};
-    ///
-    /// let altar = MapMarkerTypeInfo { marker_id: 0x0a0b_0c0d, ..MapMarkerTypeInfo::EMPTY };
-    /// let loader = enshwick::test::FakeHost::new()
-    ///     .side(Side::CLIENT)
-    ///     .map_marker_types(vec![altar])
-    ///     .install();
-    /// # let _ = loader;
-    /// ```
-    #[must_use]
-    pub fn map_marker_types(mut self, types: Vec<enshwick_core::abi::MapMarkerTypeInfo>) -> Self {
-        self.world.map_marker_types = Some(types);
-        self
-    }
-
     /// The template GUID of `entity`.
     ///
     /// # Examples

@@ -29,8 +29,7 @@ pub(crate) struct Held {
     pub(crate) stepped: bool,
 }
 
-/// What the installed fake's interface answers and has recorded: frames,
-/// HUDs, extensions, the open screen, input, tooltips, markers and dialogs.
+/// What the installed fake's interface answers and has recorded.
 pub(crate) struct UiState {
     /// Whether the mod opened the fog of war.
     pub(crate) fog_opened: bool,
@@ -568,7 +567,7 @@ pub(crate) extern "system" fn ui_markers(
             return Status::UNAVAILABLE;
         }
         for marker in markers.iter().filter(|m| m.marker_type != 0) {
-            let Some(types) = &s.host.world.map_marker_types else {
+            let Some(types) = &s.host.ui.map_marker_types else {
                 return Status::UNAVAILABLE;
             };
             if !types.iter().any(|t| t.marker_id == marker.marker_type) {
@@ -589,7 +588,7 @@ pub(crate) extern "system" fn map_marker_types(
 ) -> Status {
     let Some(types) = with(None, |s| {
         (s.host.base.side != Side::SERVER)
-            .then(|| s.host.world.map_marker_types.clone())
+            .then(|| s.host.ui.map_marker_types.clone())
             .flatten()
     }) else {
         return Status::UNAVAILABLE;

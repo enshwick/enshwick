@@ -20,12 +20,10 @@ use enshwick_core::abi::{
     SpawnRequest, Status, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
 };
 
-/// What the installed fake's inventories answer and have recorded:
-/// requests, filters, survivors, stats and containers.
+/// What the installed fake's inventories answer and have recorded.
+#[derive(Default)]
 pub(crate) struct InventoryState {
     pub(crate) inventory_requests: Vec<OpenRequest>,
-    /// The notifiers each mod raised in the step it last raised one.
-    pub(crate) notified: enshwick_core::peer::PerStep,
     pub(crate) damage_filters: Vec<Registered<DamageFilterFn>>,
     /// Each mod's survivor lookup, in load order.
     pub(crate) survivor_lookup: Vec<Registered<SurvivorLookupFn>>,
@@ -40,25 +38,6 @@ pub(crate) struct InventoryState {
     pub(crate) item_filters: Vec<Registered<ItemFilterFn>>,
     /// The mods' container rules and the pickup messages they showed.
     pub(crate) containers: containers::Containers,
-}
-
-impl Default for InventoryState {
-    fn default() -> Self {
-        Self {
-            inventory_requests: Vec::new(),
-            notified: enshwick_core::peer::PerStep::new(enshwick_core::peer::MAX_NOTIFIES_PER_STEP),
-            damage_filters: Vec::new(),
-            survivor_lookup: Vec::new(),
-            bed_checks: Vec::new(),
-            summons: Vec::new(),
-            summoned: Vec::new(),
-            summon_items: Vec::new(),
-            stats: crate::test::inventory::stats::FakeStats::default(),
-            survivor_status: Vec::new(),
-            item_filters: Vec::new(),
-            containers: containers::Containers::default(),
-        }
-    }
 }
 
 pub(crate) extern "system" fn item_filter(
@@ -137,11 +116,11 @@ pub(crate) extern "system" fn emit(
         }
         let step = s.base.ticks.step;
         let notify = s.host.base.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
-        if notify && !s.inventory.notified.has_room(me, step) {
+        if notify && !s.world.notified.0.has_room(me, step) {
             return Status::REFUSED;
         }
         if notify {
-            s.inventory.notified.count(me, step);
+            s.world.notified.0.count(me, step);
         }
         s.world.emits.push((type_hash, bytes));
         Status::OK

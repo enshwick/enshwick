@@ -9,8 +9,7 @@ use enshwick_core::abi::{
     SkillCheckFn, Status,
 };
 
-/// What the installed fake's knowledge answers and has recorded: values,
-/// quests, game queries, the mod's changes and its filters.
+/// What the installed fake's knowledge answers and has recorded.
 #[derive(Default)]
 pub(crate) struct KnowledgeState {
     pub(crate) knowledge_input_filters: Vec<Registered<KnowledgeInputFilterFn>>,

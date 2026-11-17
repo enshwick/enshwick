@@ -13,8 +13,7 @@ use enshwick_core::abi::{ControlFn, ControlSpec};
 
 pub(crate) mod commands;
 
-/// What the installed fake's actions answer and have recorded: the
-/// player actions callback, controls, commands and the vetoes.
+/// What the installed fake's actions answer and have recorded.
 #[derive(Default)]
 pub(crate) struct ActionsState {
     /// The mod's player actions callback, once registered.
