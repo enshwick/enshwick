@@ -1,7 +1,7 @@
 //! The rule that the book's stability chapter names every public item the
-//! API compiles only with its `unstable` or `typed` feature. The developer
-//! site reads stability from that chapter alone, so an item missing there
-//! shows as stable while a mod built without the feature fails to compile.
+//! API compiles only with its `unstable` or `typed` feature. Mod authors
+//! read what carries no promise there, so an item missing there looks
+//! stable while a mod built without the feature fails to compile.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -107,12 +107,14 @@ fn is_named(item: &Gated, named: &BTreeSet<String>) -> bool {
 }
 
 /// The names in backticks in the first column of the chapter's tables, as
-/// the developer site reads them: a name the row gives after "of" only for
-/// context, once it has named something, does not count.
-fn chapter_names(chapter: &str) -> BTreeSet<String> {
+/// a reader takes them: a name the row gives after "of" only for
+/// context, once it has named something, does not count. A call's `()` and
+/// a type's generic arguments are no part of the name.
+pub(crate) fn chapter_names(chapter: &str) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
     for line in chapter.lines() {
         let Some(part) = line
+            .trim_start()
             .strip_prefix('|')
             .and_then(|rest| rest.split('|').next())
         else {
@@ -124,7 +126,8 @@ fn chapter_names(chapter: &str) -> BTreeSet<String> {
             let before = &rest[..open];
             let after = &rest[open + 1..];
             let Some(close) = after.find('`') else { break };
-            let span = &after[..close];
+            let span = after[..close].trim_end_matches("()");
+            let span = span.split_once('<').map_or(span, |(name, _)| name);
             let context = before
                 .strip_suffix("of ")
                 .is_some_and(|start| start.chars().last().is_none_or(|c| !c.is_alphanumeric()));

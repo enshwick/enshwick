@@ -17,6 +17,14 @@ use super::entries::{
 use super::files::PackError;
 use super::reader::{Dropped, Reader};
 use super::{ITEMS_FILE, LOOT_FILE, NEAR, RECIPES_FILE};
+
+/// What an item selection that changes nothing should give: its two fields
+/// read only with the `unstable` feature.
+#[cfg(feature = "unstable")]
+pub(super) const NOTHING_HINT: &str = "give max_stack or slots";
+#[cfg(not(feature = "unstable"))]
+pub(super) const NOTHING_HINT: &str =
+    "an item selection changes max_stack or slots, which need the `unstable` feature";
 use crate::near::{near, suffix};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
@@ -232,7 +240,7 @@ fn select(
             ITEMS_FILE,
             text,
             at,
-            format!("change {number}: changes nothing; give max_stack or slots"),
+            format!("change {number}: changes nothing; {NOTHING_HINT}"),
         );
     }
     given

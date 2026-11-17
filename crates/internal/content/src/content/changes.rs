@@ -48,7 +48,8 @@ pub const MAX_FACTOR: f64 = 100.0;
 pub enum Field {
     /// How many of an item one inventory slot holds, 1 to 65535; the entry
     /// is an item. The game cuts a saved stack above it, so a world saved
-    /// while it was raised depends on the change.
+    /// while it was raised depends on the change. Unstable: it needs the
+    /// `unstable` feature and may change in any release.
     #[cfg(feature = "unstable")]
     MaxStackSize,
     /// How many of each item a recipe makes, 1 to 65535; the entry is a
@@ -69,7 +70,8 @@ pub enum Field {
     /// change reaches every item that places the same container. Every placed
     /// container of the kind takes the size at each world load, those placed
     /// before the change too; one saved with more slots than its kind now
-    /// gives comes back at 128 slots with every item kept.
+    /// gives comes back at 128 slots with every item kept. Unstable: it needs
+    /// the `unstable` feature and may change in any release.
     #[cfg(feature = "unstable")]
     Slots,
     /// A weapon's damage factor, `dmgMod`, from 0 to 100; the entry is an
@@ -789,11 +791,11 @@ impl LoadMethods for crate::BaseLoad {
 }
 
 #[cfg(test)]
-#[cfg(feature = "unstable")]
 mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn the_last_set_wins_and_factors_multiply_whatever_their_order() {
         let a = [
             Value::Times(2.0),
@@ -812,6 +814,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn a_whole_field_rounds_half_away_from_zero_and_stays_in_range() {
         assert_eq!(Field::MaxStackSize.resolve(5.0, [Value::Times(0.5)]), 3.0);
         assert_eq!(
@@ -823,10 +826,11 @@ mod tests {
 
     #[test]
     fn no_value_keeps_the_base() {
-        assert_eq!(Field::MaxStackSize.resolve(20.0, []), 20.0);
+        assert_eq!(Field::BurnTime.resolve(20.0, []), 20.0);
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn fractions_and_bad_factors_are_refused() {
         assert!(Field::MaxStackSize.check(Value::Set(2.5)).is_err());
         assert!(Field::MaxStackSize.check(Value::Times(f64::NAN)).is_err());
@@ -870,6 +874,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn slots_come_in_pages_of_eight() {
         assert!(Field::Slots.check(Value::Set(48.0)).is_ok());
         assert_eq!(
@@ -900,7 +905,7 @@ mod tests {
 
     #[test]
     fn a_change_goes_through_the_abi_and_back() {
-        let change = Change::new(Guid([7; 16]), Field::MaxStackSize, Value::Set(50.0));
+        let change = Change::new(Guid([7; 16]), Field::BurnTime, Value::Set(50.0));
         let raw = change.to_abi("items.toml:3");
         assert_eq!(Change::from_abi(&raw), Ok(Some(change)));
     }

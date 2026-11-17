@@ -199,6 +199,10 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | `energy_output` | the energy the item gives as fuel | 0 to 1000000 |
 | `comfort_amount` | the comfort the placed item gives | 0 to 1000 |
 
+`max_stack` and `slots` are [unstable](../stability.md). The loader reads them
+in every pack. A Rust mod reads them with `Pack::parse` only with the
+`unstable` feature.
+
 A change is a problem at its line, like every other problem, when it:
 
 - names no item;

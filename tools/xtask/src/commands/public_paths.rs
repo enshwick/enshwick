@@ -64,19 +64,41 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
         Ok(list) => list,
         Err(error) => return vec![error],
     };
-    let path = root.join(FILE);
-    let committed = match std::fs::read_to_string(&path) {
+    let committed = match committed(root) {
         Ok(text) => text,
-        Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
-        Err(error) => return vec![format!("{}: {error}", path.display())],
+        Err(error) => return vec![error],
     };
     let mut problems = stale(&committed, &fresh);
+    problems.extend(chapter_problems(root, &committed));
+    problems
+}
+
+/// The items the book's stability chapter under `root` names that the
+/// committed list does not mark unstable, without documenting the crate: a
+/// stale list is the full [`check`]'s to find.
+pub(crate) fn check_chapter(root: &Path) -> Vec<String> {
+    match committed(root) {
+        Ok(list) => chapter_problems(root, &list),
+        Err(error) => vec![error],
+    }
+}
+
+/// The committed list under `root`, empty when there is none yet.
+fn committed(root: &Path) -> Result<String, String> {
+    let path = root.join(FILE);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(text),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(format!("{}: {error}", path.display())),
+    }
+}
+
+fn chapter_problems(root: &Path, list: &str) -> Vec<String> {
     let book = root.join(chapter::FILE);
     match std::fs::read_to_string(&book) {
-        Ok(text) => problems.extend(chapter::problems(&text, &fresh)),
-        Err(error) => problems.push(format!("{}: {error}", book.display())),
+        Ok(text) => chapter::problems(&text, list),
+        Err(error) => vec![format!("{}: {error}", book.display())],
     }
-    problems
 }
 
 /// What sets `committed` apart from `fresh`, a few lines of each side.

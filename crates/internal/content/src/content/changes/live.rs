@@ -245,10 +245,16 @@ mod tests {
     }
 
     #[test]
-    fn a_target_names_its_entry_or_its_selection_in_the_abi() {
+    fn a_target_names_its_entry_in_the_abi() {
         let one = Target::Entry(Guid([3; 16])).to_abi(Field::BurnTime, "x");
         assert_eq!((one.entry, one.select), (Guid([3; 16]), DataSelect::ENTRY));
-        let many = Target::Items(Items::Containers).to_abi(Field::DamageMod, "x");
+    }
+
+    #[test]
+    #[cfg(feature = "unstable")]
+    fn a_target_names_its_selection_in_the_abi() {
+        assert!(Target::Items(Items::Containers).check(Field::Slots).is_ok());
+        let many = Target::Items(Items::Containers).to_abi(Field::Slots, "x");
         assert_eq!(
             (many.entry, many.select),
             (Guid([0; 16]), DataSelect::CONTAINERS)
