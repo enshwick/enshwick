@@ -5,12 +5,14 @@
 //! the first build that turns on that feature by itself. Only
 //! the library and binaries: the dev-dependencies of the other targets turn
 //! the features back on and hide the gap, and the workspace's clippy lints
-//! those targets. Off Windows the Windows lint runs them again for the
-//! Windows target, where the `cfg(windows)` code builds, for the packages
-//! with such code ([`windows_code`]).
+//! those targets. Off Windows the Windows part of them runs them again for
+//! the Windows target, where code gated on the target platform differs, for
+//! the packages with such code ([`windows_code`]).
 
 use std::fs;
 use std::path::Path;
+
+use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 
 use super::Step;
 use crate::affected::{Package, Scope};
@@ -49,25 +51,104 @@ pub(super) fn steps(
 
 /// Whether `package` has code that builds only for Windows, so its lints
 /// for the Windows target can differ from those on the host: it is
-/// Windows-only, or a source file under `root` names `windows` (a
-/// `cfg(windows)`, a `target_os = "windows"`, a comment).
+/// Windows-only, or a source file under `root` holds a `cfg` predicate on
+/// the target platform ([`gates_target`]) outside test code, which these
+/// lints do not build: a `tests` module's file or folder is skipped.
 pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
     if package.windows_only {
         return true;
     }
+    let src = root.join(&package.dir).join("src");
     let mut files = Vec::new();
     // A false yes, or an unreadable tree, costs only a lint too many.
-    rust_files(&root.join(&package.dir).join("src"), &mut files).is_err()
+    rust_files(&src, &mut files).is_err()
         || files
             .iter()
-            .any(|file| fs::read_to_string(file).map_or(true, |text| names_windows(&text)))
+            .filter(|file| {
+                file.strip_prefix(&src).map_or(true, |path| {
+                    !path
+                        .with_extension("")
+                        .components()
+                        .any(|part| part.as_os_str() == "tests")
+                })
+            })
+            .any(|file| fs::read_to_string(file).map_or(true, |text| gates_target(&text)))
 }
 
-/// Whether `text` holds `windows` as a word of its own, not inside an
-/// identifier such as `windows_sys`.
-pub(super) fn names_windows(text: &str) -> bool {
-    let ident = |c: char| c.is_alphanumeric() || c == '_';
-    text.match_indices("windows").any(|(at, word)| {
-        !text[..at].ends_with(ident) && !text[at + word.len()..].starts_with(ident)
+/// The `cfg` options that tell the Windows target from the host, so code
+/// under one builds on only one of them.
+const TARGET_OPTIONS: [&str; 5] = [
+    "windows",
+    "unix",
+    "target_os",
+    "target_family",
+    "target_env",
+];
+
+/// Whether `text` holds a `cfg(..)`, `cfg!(..)` or `cfg_attr(..)` whose
+/// predicate names one of the [`TARGET_OPTIONS`] (`windows`, `not(unix)`,
+/// `target_env = "msvc"`); a comment, a string or an item under
+/// `#[cfg(test)]` names nothing, and text that does not lex counts as one
+/// that does.
+pub(super) fn gates_target(text: &str) -> bool {
+    let Ok(tokens) = text.parse::<TokenStream>() else {
+        return true;
+    };
+    let mut streams = vec![tokens];
+    while let Some(stream) = streams.pop() {
+        let mut after_cfg = false;
+        let mut in_test_item = false;
+        for token in stream {
+            if in_test_item {
+                // The item ends at its body or its semicolon.
+                in_test_item = !matches!(&token, TokenTree::Group(group) if group.delimiter() == Delimiter::Brace)
+                    && !matches!(&token, TokenTree::Punct(punct) if punct.as_char() == ';');
+                continue;
+            }
+            match token {
+                TokenTree::Ident(ident) => after_cfg = ident == "cfg" || ident == "cfg_attr",
+                TokenTree::Punct(punct) if punct.as_char() == '!' => {}
+                TokenTree::Group(group) if is_cfg_test(&group) => {
+                    in_test_item = true;
+                    after_cfg = false;
+                }
+                TokenTree::Group(group) => {
+                    if after_cfg
+                        && group.delimiter() == Delimiter::Parenthesis
+                        && names_target(group.stream())
+                    {
+                        return true;
+                    }
+                    streams.push(group.stream());
+                    after_cfg = false;
+                }
+                TokenTree::Punct(_) | TokenTree::Literal(_) => after_cfg = false,
+            }
+        }
+    }
+    false
+}
+
+/// Whether `group` is the `[cfg(test)]` of an attribute.
+fn is_cfg_test(group: &Group) -> bool {
+    let only = |stream: TokenStream, word: &str| {
+        let mut tokens = stream.into_iter();
+        matches!(tokens.next(), Some(TokenTree::Ident(ident)) if ident == word)
+            && tokens.next().is_none()
+    };
+    let mut tokens = group.stream().into_iter();
+    group.delimiter() == Delimiter::Bracket
+        && matches!(tokens.next(), Some(TokenTree::Ident(cfg)) if cfg == "cfg")
+        && matches!(tokens.next(), Some(TokenTree::Group(predicate))
+            if predicate.delimiter() == Delimiter::Parenthesis && only(predicate.stream(), "test"))
+        && tokens.next().is_none()
+}
+
+/// Whether a `cfg` predicate names one of the [`TARGET_OPTIONS`].
+fn names_target(predicate: TokenStream) -> bool {
+    predicate.into_iter().any(|token| match token {
+        TokenTree::Ident(ident) => TARGET_OPTIONS.iter().any(|option| ident == option),
+        TokenTree::Group(group) => names_target(group.stream()),
+        TokenTree::Punct(_) | TokenTree::Literal(_) => false,
     })
 }

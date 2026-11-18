@@ -618,24 +618,34 @@ fn the_windows_lint_lints_each_feature_alone_of_the_checked_packages_with_window
         wide: false,
     };
     let windows_code = |p: &Package| p.name != "enshwick-values";
-    let lines: Vec<String> = windows_lint_steps(&scope, &packages, windows_code)
-        .iter()
-        .map(Step::line)
-        .collect();
+    let lines = |parts: &[Part]| -> Vec<String> {
+        windows_lint::steps(&scope, &packages, parts, windows_code)
+            .iter()
+            .map(Step::line)
+            .collect()
+    };
     let xwin = format!("cargo xwin clippy --target {WINDOWS_TARGET}");
     let stub = format!("{xwin} --package enshwick-loader-stub --no-default-features");
+    let workspace =
+        format!("{xwin} --workspace --features {TEST_FEATURE} --all-targets -- -D warnings");
+    let alone = [
+        format!("{stub} -- -D warnings"),
+        format!("{stub} --features trace -- -D warnings"),
+    ];
     assert_eq!(
-        lines,
-        [
-            format!("{xwin} --workspace --features {TEST_FEATURE} --all-targets -- -D warnings"),
-            format!("{stub} -- -D warnings"),
-            format!("{stub} --features trace -- -D warnings"),
-        ]
+        lines(&[Part::WindowsLint]),
+        std::slice::from_ref(&workspace)
     );
+    assert_eq!(lines(&[Part::WindowsFeatures]), alone);
+    assert_eq!(
+        lines(&Part::every(false)),
+        [[workspace].as_slice(), &alone].concat()
+    );
+    assert!(lines(&[Part::Host, Part::Features]).is_empty());
 }
 
 #[test]
-fn a_package_has_windows_code_when_it_is_windows_only_or_its_source_names_windows() {
+fn a_package_has_windows_code_when_it_is_windows_only_or_a_cfg_in_its_source_names_the_target() {
     let root = workspace_root();
     assert!(features::windows_code(
         &root,
@@ -651,14 +661,52 @@ fn a_package_has_windows_code_when_it_is_windows_only_or_its_source_names_window
     ));
     for text in [
         "#[cfg(windows)]",
-        "#[cfg(target_os = \"windows\")]",
-        "cfg!(windows)",
+        "#[cfg(not(windows))]",
+        "#[cfg(all(test, target_os = \"windows\"))]",
+        "fn f() { if cfg!(windows) {} }",
+        "#[cfg_attr(windows, expect(dead_code))]",
+        "#[cfg(unix)] mod paths;",
+        "#[cfg(not(target_os = \"linux\"))] fn f() {}",
+        "#[cfg(target_env = \"msvc\")] fn f() {}",
+        "fn f() { \"open",
     ] {
-        assert!(features::names_windows(text), "{text}");
+        assert!(features::gates_target(text), "{text}");
     }
-    for text in ["use windows_sys::Win32;", "Windows", "my_windows", ""] {
-        assert!(!features::names_windows(text), "{text}");
+    for text in [
+        "use windows_sys::Win32;",
+        "/// Runs on Windows only, under #[cfg(windows)].",
+        "const GATE: &str = \"cfg(windows)\";",
+        "#[cfg_attr(feature = \"a\", doc = \")\")] fn windows() {}",
+        "#[cfg(feature = \"test\")] mod windows_paths;",
+        "fn mycfg() {} fn f() { mycfg(windows) }",
+        "#[cfg(test)]\n#[expect(dead_code)]\nmod tests { #[cfg(windows)] fn f() {} }",
+        "#[cfg(test)] use std::os::windows as _; #[cfg(test)] fn f() { if cfg!(unix) {} }",
+        "cfg",
+        "",
+    ] {
+        assert!(!features::gates_target(text), "{text}");
     }
+    assert!(features::gates_target(
+        "#[cfg(test)] mod tests;\n#[cfg(windows)] mod paths;"
+    ));
+}
+
+#[test]
+fn a_target_cfg_in_a_tests_file_or_folder_gives_a_package_no_windows_code() {
+    let root = crate::scratch::Scratch::new("windows-code").unwrap();
+    let write = |path: &str, text: &str| {
+        let path = root.join("p/src").join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write("lib.rs", "#[cfg(test)]\nmod tests;\nmod a;\n");
+    write("tests.rs", "#[cfg(windows)] fn f() {}");
+    write("a.rs", "pub fn a() {}");
+    write("a/tests/files.rs", "#[cfg(unix)] fn f() {}");
+    let package = package("p", "p", false);
+    assert!(!features::windows_code(&root, &package));
+    write("a.rs", "#[cfg(unix)] pub fn a() {}");
+    assert!(features::windows_code(&root, &package));
 }
 
 #[test]

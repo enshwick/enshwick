@@ -47,6 +47,10 @@ crate-type = ["cdylib"]
 name = "imports"
 crate-type = ["cdylib"]
 
+[[example]]
+name = "dependency"
+crate-type = ["cdylib"]
+
 [workspace]
 "#;
 
@@ -130,12 +134,22 @@ const BAD_ID_MANIFEST: &str = r#"{
 /// place it where the search must not look.
 const DEPENDENCY: &str = "enshwick-fixture-dependency";
 
-/// A mod that imports a function of [`DEPENDENCY`], a copy of the system's
-/// `version.dll`, which it does not ship beside itself.
+/// The fixture copied as [`DEPENDENCY`]: it exports a function no Windows
+/// binding declares, so no crate the fixtures link can bind the `imports`
+/// fixture's import to a system DLL instead.
+const DEPENDENCY_SOURCE: &str = r#"
+#[unsafe(no_mangle)]
+pub extern "system" fn enshwick_fixture_dependency() -> u32 {
+    7
+}
+"#;
+
+/// A mod that imports the function of [`DEPENDENCY`], which it does not ship
+/// beside itself.
 const IMPORTS: &str = r##"
 #[link(name = "{dependency}", kind = "raw-dylib")]
 unsafe extern "system" {
-    fn GetFileVersionInfoSizeW(file: *const u16, handle: *mut u32) -> u32;
+    fn enshwick_fixture_dependency() -> u32;
 }
 
 #[derive(Debug)]
@@ -143,8 +157,8 @@ pub struct Imports;
 
 impl enshwick::Mod for Imports {
     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-        // SAFETY: a null file name is refused with an error, never read.
-        let _size = unsafe { GetFileVersionInfoSizeW(core::ptr::null(), core::ptr::null_mut()) };
+        // SAFETY: the function takes nothing and only returns a number.
+        let _number = unsafe { enshwick_fixture_dependency() };
         Ok(Self)
     }
 }
@@ -222,6 +236,7 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
                 .replace("{query}", BAD_ID_MANIFEST),
         ),
         ("imports", IMPORTS.replace("{dependency}", DEPENDENCY)),
+        ("dependency", DEPENDENCY_SOURCE.to_owned()),
     ];
     for (name, source) in sources {
         std::fs::write(examples.join(format!("{name}.rs")), source).unwrap();
@@ -604,8 +619,7 @@ fn a_mods_import_never_resolves_from_the_current_directory() {
     let imports = folder.join("imports.dll");
     std::fs::copy(built.join("imports.dll"), &imports).unwrap();
     let dependency = format!("{DEPENDENCY}.dll");
-    let system = crate::engine::module::system_dir().unwrap();
-    std::fs::copy(system.join("version.dll"), current.join(&dependency)).unwrap();
+    std::fs::copy(built.join("dependency.dll"), current.join(&dependency)).unwrap();
 
     // The current directory is the process's, so the load runs in a child.
     let child = Command::new(std::env::current_exe().unwrap())
