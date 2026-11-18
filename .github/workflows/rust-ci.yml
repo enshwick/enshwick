@@ -8,12 +8,13 @@ name: Rust CI
 # workspace and of each feature alone, the API's trybuild test, its stable
 # surface and cargo-semver-checks run as parallel jobs, the workspace's
 # doctests and rustdoc only in the merge queue, on main
-# and with `full`, and the trybuild test and the stable surface of a pull
-# request only when its change needs them. The Windows tests run natively on
-# a Windows runner, only those the change reaches. Each part runs through
-# rust-ci-part.yml. The job `list` asks xtask what the change needs beside
-# the parts, which start without waiting for it. The job `check` sums them
-# up and is the required check.
+# and with `full`, and the trybuild test, the stable surface and the Windows
+# feature lints of a pull request or a push to main only when its change needs
+# them. The Windows tests run natively on a Windows runner, only those the
+# change reaches. Each part runs through rust-ci-part.yml. The job `list` asks
+# xtask which of those listed parts and Windows tests the change needs; they
+# wait for it, and the other parts start without waiting. The job `check` sums
+# them up and is the required check.
 
 on:
   workflow_call:
@@ -27,7 +28,7 @@ on:
         type: boolean
         default: true
       split:
-        description: Run the host check, the lints of each feature alone, the doctests and rustdoc, the Windows lints of the workspace and of each feature alone, the API's trybuild test, its stable surface and cargo-semver-checks as parallel jobs, and only the trybuild test and stable surface a change needs; the repository's `cargo xtask` must know `check --part` with the parts `features`, `windows-features`, `stable-api`, `trybuild` and `semver`, `check --semver` and `check --list parts`.
+        description: Run the host check, the lints of each feature alone, the doctests and rustdoc, the Windows lints of the workspace and of each feature alone, the API's trybuild test, its stable surface and cargo-semver-checks as parallel jobs, and only the trybuild test, stable surface and Windows feature lints a change needs; the repository's `cargo xtask` must know `check --part` with the parts `features`, `windows-features`, `stable-api`, `trybuild` and `semver`, `check --semver` and `check --list parts`.
         type: boolean
         default: false
       semver:
@@ -44,8 +45,11 @@ env:
   STORE_CACHES: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
   # The parts only some changes need. The stable surface runs on pull
   # requests too: it is the one build without `unstable`, so an item moved
-  # behind it, or code only unstable items use, breaks there alone.
-  API_PARTS: trybuild stable-api
+  # behind it, or code only unstable items use, breaks there alone. The
+  # Windows feature lints need a checked package with features and Windows
+  # code; waiting for the listing keeps them shorter than the host part
+  # (2026-11-18: listing 30 s, part 2.7 to 3.5 min, host 4.5 to 5.1 min).
+  LISTED_PARTS: trybuild stable-api windows-features
 
 jobs:
   scope:
@@ -132,9 +136,8 @@ jobs:
           fi
           echo "deny=$deny" >> "$GITHUB_OUTPUT"
 
-      # A pull request and a push to main run the trybuild test and the
-      # stable surface when the job `list` names them; any other event runs
-      # both here.
+      # A pull request and a push to main run the listed parts when the job
+      # `list` names them; any other event runs them all here.
       - name: Parts
         id: parts
         env:
@@ -149,14 +152,14 @@ jobs:
           elif [ -n "$PROVEN" ]; then
             parts=(docs)
           else
-            parts=(host features windows-lint windows-features)
+            parts=(host features windows-lint)
             # The workspace's doctests and rustdoc run in the merge queue, on
             # main and in the full suite, which keeps the pull request lane
             # short.
             if [ "$EVENT" != pull_request ] || [ "$FULL" = true ]; then parts+=(docs); fi
             if [ "$EVENT" != pull_request ] && [ "$EVENT" != push ]; then
-              read -ra api <<< "$API_PARTS"
-              parts+=("${api[@]}")
+              read -ra listed <<< "$LISTED_PARTS"
+              parts+=("${listed[@]}")
             fi
             # A pull request also fuzzes, briefly, the targets its change
             # reaches; a push to main fuzzes every target and fills the fuzz
@@ -166,11 +169,13 @@ jobs:
           fi
           echo "parts=$(jq -cn '$ARGS.positional' --args "${parts[@]}")" | tee -a "$GITHUB_OUTPUT"
 
-  # What only the repository's xtask knows, built once and off the parts'
-  # critical path: the API parts a pull request's change needs and the
-  # packages whose Windows tests the change reaches. A push to main lists
-  # too, so the build cache pull requests restore holds xtask. A failed API
-  # listing still runs every API part; any failed listing fails the job.
+  # What only the repository's xtask knows, built once and off the critical
+  # path of the parts that start at once: the listed parts a pull request's
+  # change needs and the packages whose Windows tests the change reaches. A
+  # push to main lists too, so the build cache pull requests restore holds
+  # xtask. A failed
+  # listing of the parts still runs every listed part; any failed listing
+  # fails the job.
   list:
     needs: scope
     if: >-
@@ -185,7 +190,7 @@ jobs:
       BASE: ${{ needs.scope.outputs.base }}
       FULL: ${{ needs.scope.outputs.full }}
     outputs:
-      api: ${{ steps.listing.outputs.api }}
+      listed: ${{ steps.listing.outputs.listed }}
       windows: ${{ steps.listing.outputs.windows }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -220,15 +225,15 @@ jobs:
 
       # `shell: bash` adds pipefail, without which xargs would hide a failed
       # listing as an empty one.
-      - name: The API parts the change needs
-        id: api
+      - name: The listed parts the change needs
+        id: listed
         if: inputs.split && (github.event_name == 'pull_request' || github.event_name == 'push')
         continue-on-error: true
         shell: bash
         run: |
           args=()
           if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi
-          for part in $API_PARTS; do args+=(--part "$part"); done
+          for part in $LISTED_PARTS; do args+=(--part "$part"); done
           parts=$(cargo xtask check "${args[@]}" --list parts | xargs)
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
 
@@ -248,27 +253,27 @@ jobs:
       - name: Listing
         id: listing
         env:
-          API_OUTCOME: ${{ steps.api.outcome }}
-          API: ${{ steps.api.outputs.parts }}
+          LISTED_OUTCOME: ${{ steps.listed.outcome }}
+          LISTED: ${{ steps.listed.outputs.parts }}
           WINDOWS_OUTCOME: ${{ steps.windows.outcome }}
           WINDOWS: ${{ steps.windows.outputs.tests }}
         run: |
-          case $API_OUTCOME in
-            success) api=$API ;;
-            skipped) api="" ;;
-            *) api=$API_PARTS ;;
+          case $LISTED_OUTCOME in
+            success) listed=$LISTED ;;
+            skipped) listed="" ;;
+            *) listed=$LISTED_PARTS ;;
           esac
-          read -ra parts <<< "$api"
+          read -ra parts <<< "$listed"
           {
-            echo "API parts: ${api:-none}"
+            echo "Listed parts: ${listed:-none}"
             echo "Windows tests: ${WINDOWS:-none}"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           {
-            echo "api=$(jq -cn '$ARGS.positional' --args "${parts[@]}")"
+            echo "listed=$(jq -cn '$ARGS.positional' --args "${parts[@]}")"
             echo "windows=$WINDOWS"
           } >> "$GITHUB_OUTPUT"
           failed=()
-          if [ "$API_OUTCOME" = failure ]; then failed+=("the API parts (all of them run)"); fi
+          if [ "$LISTED_OUTCOME" = failure ]; then failed+=("the listed parts (all of them run)"); fi
           if [ "$WINDOWS_OUTCOME" = failure ]; then failed+=("the Windows tests"); fi
           if [ ${#failed[@]} != 0 ]; then
             echo "::error::cargo xtask check --list failed for ${failed[*]}; see that step's log"
@@ -293,18 +298,18 @@ jobs:
       semver: ${{ inputs.semver }}
       deny: ${{ needs.scope.outputs.deny == 'true' }}
 
-  api:
-    name: api (${{ matrix.part }})
+  listed:
+    name: listed (${{ matrix.part }})
     needs: [scope, list]
-    # A failed listing still names the API parts it falls back to.
+    # A failed listing still names the listed parts it falls back to.
     if: >-
-      !cancelled() && needs.list.outputs.api != '' && needs.list.outputs.api != '[]'
+      !cancelled() && needs.list.outputs.listed != '' && needs.list.outputs.listed != '[]'
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(needs.list.outputs.api) }}
+        part: ${{ fromJSON(needs.list.outputs.listed) }}
     uses: ./.github/workflows/rust-ci-part.yml
     with:
       part: ${{ matrix.part }}
@@ -379,7 +384,7 @@ jobs:
   # In the merge queue main must be green too, judged when the entry is
   # done: only a fix or a revert merges onto a red main, so it goes first.
   check:
-    needs: [scope, list, part, api, windows]
+    needs: [scope, list, part, listed, windows]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -395,7 +400,7 @@ jobs:
           SCOPE: ${{ needs.scope.result }}
           LIST: ${{ needs.list.result }}
           PART: ${{ needs.part.result }}
-          API: ${{ needs.api.result }}
+          LISTED: ${{ needs.listed.result }}
           WINDOWS: ${{ needs.windows.result }}
           EVENT: ${{ github.event_name }}
           BRANCH: ${{ needs.scope.outputs.branch }}
@@ -403,9 +408,9 @@ jobs:
           MAIN: ${{ github.event.repository.default_branch }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
-          echo "scope: $SCOPE, listing: $LIST, parts: $PART, API parts: $API, Windows tests: $WINDOWS"
+          echo "scope: $SCOPE, listing: $LIST, parts: $PART, listed parts: $LISTED, Windows tests: $WINDOWS"
           ok() { [ "$1" = success ] || [ "$1" = skipped ]; }
-          if ! { [ "$SCOPE" = success ] && ok "$LIST" && ok "$PART" && ok "$API" && ok "$WINDOWS"; }; then exit 1; fi
+          if ! { [ "$SCOPE" = success ] && ok "$LIST" && ok "$PART" && ok "$LISTED" && ok "$WINDOWS"; }; then exit 1; fi
           [ "$EVENT" = merge_group ] || exit 0
           # The caller's workflow file: a called workflow's context is its caller's.
           workflow=${WORKFLOW_REF%%@*}

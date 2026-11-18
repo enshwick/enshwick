@@ -116,6 +116,14 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
         "net.provider_transition",
         0x108_a100,
     ),
+    // The provider's state with no session, which its leave (the
+    // provider's function after its join) passes to that transition; read
+    // in the decompiler on 26430625, found by the route on the other kept
+    // clients.
+    ("1.0 client (26430625)", "net.no_session_state", 1),
+    ("1.0 client (26320373)", "net.no_session_state", 1),
+    ("1.0 client (1269579)", "net.no_session_state", 1),
+    ("1.0 client (26082781)", "net.no_session_state", 1),
     // The predicate the client tick shows the cursor by in the world, from
     // the HUD screen byte; read in the decompiler on 26430625, found by the
     // route on the other kept clients.
