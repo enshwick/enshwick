@@ -16,6 +16,8 @@
 //! free id as a copy of the fallback, so its ground loads as the fallback,
 //! and is the mod's material again once the mod is back.
 
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
 use enshwick_base::resources::Value;
 use enshwick_core::abi::TerrainMaterialAdd;
 use enshwick_core::content::Guid;
@@ -609,12 +611,66 @@ impl Session {
     }
 }
 
+/// The game's reads of the served terrain resources, which tell a client
+/// back at the main menu from a game it joined from one still joining: a
+/// session opens its palette as it starts (client 26430625), after the join
+/// check took the host's table.
+#[derive(Debug)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+struct Reads {
+    /// Every open and resolve of a served terrain resource so far.
+    seen: AtomicU64,
+    /// Whether the served table is a host's.
+    host: AtomicBool,
+    /// `seen` when the host's table came.
+    host_from: AtomicU64,
+}
+
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+impl Reads {
+    const fn new() -> Self {
+        Self {
+            seen: AtomicU64::new(0),
+            host: AtomicBool::new(false),
+            host_from: AtomicU64::new(0),
+        }
+    }
+
+    /// The game opened or resolved a served terrain resource.
+    fn read(&self) {
+        self.seen.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// The served table is now `session`'s.
+    fn serving(&self, session: &Session) {
+        let host = matches!(session, Session::Host(_));
+        if host {
+            self.host_from
+                .store(self.seen.load(Ordering::Relaxed), Ordering::Relaxed);
+        }
+        self.host.store(host, Ordering::Release);
+    }
+
+    /// Whether a session read the host's table served now, so its game was
+    /// joined and the client is back from it.
+    fn host_read(&self) -> bool {
+        self.host.load(Ordering::Acquire)
+            && self.seen.load(Ordering::Relaxed) != self.host_from.load(Ordering::Relaxed)
+    }
+}
+
 /// The feature every terrain material patch's switch names.
 #[cfg(windows)]
 pub(crate) const FEATURE: &str = "terrain materials";
 
 #[cfg(windows)]
-pub(crate) use running::{add, in_time, padding, record, sealed, serve, world_event};
+pub(crate) use running::{add, in_time, padding, read, record, sealed, serve, world_event};
 
 /// The materials in the running game: mods' registrations, the archive's
 /// palette, the loader's patches and the table a session serves.

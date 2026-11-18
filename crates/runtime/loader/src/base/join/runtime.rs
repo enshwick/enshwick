@@ -63,6 +63,9 @@ pub(crate) struct TerrainIds {
     pub(crate) adopt: fn(Option<&str>, crate::base::join::Host) -> Option<String>,
     /// Serves this side's own table again.
     pub(crate) own_again: fn(),
+    /// Whether a session read the host's table served now: its game was
+    /// joined. One atomic read, for each frame of the main menu.
+    pub(crate) host_read: fn() -> bool,
 }
 
 /// Sets the terrain ids this side serves; the first call holds.
@@ -88,6 +91,18 @@ fn own_terrain_again() {
 pub(crate) fn hosting_starts() {
     crate::base::join::client::back_on();
     own_terrain_again();
+}
+
+/// Each frame the main menu shows: a client back from a game it joined,
+/// whose session read the host's terrain ids, gets its own world back as
+/// before a game it hosts, so one whose hosted start the loader does not see
+/// still serves its own ids. A join still connecting, whose session read
+/// nothing yet, keeps the host's.
+pub(crate) fn menu_shows() {
+    if terrain_ids().is_some_and(|ids| (ids.host_read)()) {
+        crate::log!(INFO, "back from a joined game: own terrain ids again");
+        hosting_starts();
+    }
 }
 
 /// The count of joins the check refused so far.
@@ -345,4 +360,39 @@ fn refused(
         1 << UiDialog::OK,
         move |_| crate::base::join::client::report_join_missing(&wanted),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+    use super::{TerrainIds, menu_shows, set_terrain_ids};
+
+    static HOST_READ: AtomicBool = AtomicBool::new(false);
+    static OWN_AGAIN: AtomicU32 = AtomicU32::new(0);
+
+    #[test]
+    fn the_main_menu_brings_the_own_terrain_ids_back_only_after_a_joined_session_read_the_host_s() {
+        set_terrain_ids(TerrainIds {
+            served: String::new,
+            adopt: |_, _| None,
+            own_again: || {
+                OWN_AGAIN.fetch_add(1, Ordering::Relaxed);
+            },
+            host_read: || HOST_READ.load(Ordering::Relaxed),
+        });
+        menu_shows();
+        assert_eq!(
+            OWN_AGAIN.load(Ordering::Relaxed),
+            0,
+            "own table or a join still connecting"
+        );
+        HOST_READ.store(true, Ordering::Relaxed);
+        menu_shows();
+        assert_eq!(
+            OWN_AGAIN.load(Ordering::Relaxed),
+            1,
+            "back from a joined game"
+        );
+    }
 }

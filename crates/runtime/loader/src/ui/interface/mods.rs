@@ -336,6 +336,7 @@ crate::engine::mid::mid_handler! {
     fn main_menu;
     fuse MAIN_MENU_FUSE, "the main menu's entry";
     |registers| {
+        crate::base::join::menu_shows();
         let Some(menu) = usize::try_from(registers.rdi)
             .ok()
             .filter(|&page| page != 0)

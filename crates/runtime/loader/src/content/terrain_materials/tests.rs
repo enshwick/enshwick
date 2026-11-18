@@ -555,3 +555,40 @@ fn a_moved_terrain_id_is_told_in_the_reader_s_language_naming_who_hosts() {
         "Ores дає своєму ґрунту тут інший номер, ніж хост. Запустіть моди хоста в його версіях."
     );
 }
+
+#[test]
+fn a_host_s_table_counts_as_left_only_once_a_session_read_it() {
+    let (table, _) = add_all(&[request(150)]);
+    let reads = Reads::new();
+    reads.read();
+    assert!(!reads.host_read(), "the client's own table");
+    reads.serving(&Session::Host(table.clone()));
+    assert!(!reads.host_read(), "a join still connecting");
+    reads.read();
+    assert!(reads.host_read(), "the joined session opened the palette");
+    reads.serving(&Session::Own(table.clone()));
+    assert!(!reads.host_read(), "its own table again");
+    reads.serving(&Session::Host(table));
+    assert!(
+        !reads.host_read(),
+        "reads before the next join do not count"
+    );
+}
+
+#[test]
+fn an_empty_table_changes_no_palette_world_effect_or_look() {
+    let types = (0..256).map(|n| Value::Uint(n % 7)).collect();
+    let effects = Value::Struct(vec![(MATERIAL_TYPE.into(), Value::List(types))]);
+    let data = (0..TERRAIN_IDS * LOOK_ENTRY)
+        .map(|n| Value::Uint(n as u64 % 251))
+        .collect();
+    let block = Value::Struct(vec![(DATA.into(), Value::List(data))]);
+    let blending = Value::Struct(vec![(BAKING_VOXEL_MATERIALS.into(), block)]);
+    let unchanged = |value: &Value, edit: fn(&mut Value, &[Material]) -> Option<()>| {
+        let mut edited = value.clone();
+        edit(&mut edited, &[]).is_some() && edited == *value
+    };
+    assert!(unchanged(&world(), name_in));
+    assert!(unchanged(&effects, copy_effects));
+    assert!(unchanged(&blending, copy_looks));
+}
