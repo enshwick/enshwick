@@ -272,10 +272,6 @@ pub(crate) fn serve(
                 matches!(*TERRAIN.session.relock(), Session::Host(_))
             })
         },
-        left: || {
-            let _played = TERRAIN.played.ended();
-            matches!(*TERRAIN.session.relock(), Session::Host(_))
-        },
     });
     crate::engine::world::on_hosted_start(crate::base::join::hosting_starts);
     patches

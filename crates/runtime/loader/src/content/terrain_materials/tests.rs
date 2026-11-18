@@ -581,17 +581,6 @@ fn a_host_s_table_taken_while_still_in_a_game_stays_when_that_game_ends() {
 }
 
 #[test]
-fn a_game_whose_session_ended_first_does_not_end_again_at_its_stage() {
-    let played = Played::new();
-    assert!(!played.changed(true, || true), "a joined game starts");
-    assert!(played.ended(), "its session ends");
-    assert!(
-        !played.changed(false, || unreachable!()),
-        "the stage leaving play switches back no second time"
-    );
-}
-
-#[test]
 fn an_empty_table_changes_no_palette_world_effect_or_look() {
     let types = (0..256).map(|n| Value::Uint(n % 7)).collect();
     let effects = Value::Struct(vec![(MATERIAL_TYPE.into(), Value::List(types))]);

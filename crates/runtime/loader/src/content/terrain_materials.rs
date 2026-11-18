@@ -641,18 +641,12 @@ impl Played {
     /// played with a host's table, once per such game.
     fn changed(&self, playing: bool, host: impl FnOnce() -> bool) -> bool {
         if !playing {
-            return self.ended();
+            return self.0.swap(false, Ordering::AcqRel);
         }
         if host() {
             self.0.store(true, Ordering::Release);
         }
         false
-    }
-
-    /// The game played with the host's table ended, by its stage or its
-    /// session: whether one was played, once per such game.
-    fn ended(&self) -> bool {
-        self.0.swap(false, Ordering::AcqRel)
     }
 }
 
