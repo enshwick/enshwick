@@ -18,23 +18,32 @@ use super::Step;
 use crate::affected::{Package, Scope};
 use crate::check::rust_files;
 
+/// The packages `scope` checks in full that have features and that `keep`
+/// keeps, the ones [`steps`] lints.
+pub(super) fn linted<'a>(
+    scope: &'a Scope,
+    packages: &'a [Package],
+    keep: impl Fn(&Package) -> bool + 'a,
+) -> impl Iterator<Item = &'a Package> {
+    packages
+        .iter()
+        .filter(move |package| match scope {
+            Scope::All => true,
+            Scope::Some { code, .. } => code.contains(&package.name),
+        })
+        .filter(move |package| !package.features.is_empty() && keep(package))
+}
+
 /// The runs of `clippy` (its cargo words, such as `["clippy"]` or the
 /// cross-compiling `["xwin", "clippy", "--target", ..]`) over the packages
-/// `scope` checks in full that have features and that `keep` keeps: one
-/// without any feature, then one for each feature alone.
+/// [`linted`] gives: one without any feature, then one for each feature alone.
 pub(super) fn steps(
     scope: &Scope,
     packages: &[Package],
     keep: impl Fn(&Package) -> bool,
     clippy: &[&str],
 ) -> Vec<Step> {
-    packages
-        .iter()
-        .filter(|package| match scope {
-            Scope::All => true,
-            Scope::Some { code, .. } => code.contains(&package.name),
-        })
-        .filter(|package| !package.features.is_empty() && keep(package))
+    linted(scope, packages, keep)
         .flat_map(|package| {
             let alone = package.features.iter().map(Some);
             std::iter::once(None).chain(alone).map(|feature| {

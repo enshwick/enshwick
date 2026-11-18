@@ -153,7 +153,7 @@ fn only_a_change_that_reaches_the_facade_lists_the_trybuild_and_stable_surface_p
     let due = |scope: &Scope| -> Vec<Part> {
         [Part::Trybuild, Part::StableApi]
             .into_iter()
-            .filter(|part| part.due(scope, &[], |_| true))
+            .filter(|part| part.due(scope, true))
             .collect()
     };
     assert_eq!(due(&scope(&["xtask"], &[], false)), []);
@@ -168,10 +168,10 @@ fn only_a_change_that_reaches_the_facade_lists_the_trybuild_and_stable_surface_p
         (Part::Trybuild, planned_for(&["xtask"], &[Part::Trybuild])),
         (Part::StableApi, planned_for(&["xtask"], &[Part::StableApi])),
     ] {
-        assert!(!part.due(&scope(&["xtask"], &[], false), &[], |_| true));
+        assert!(!part.due(&scope(&["xtask"], &[], false), true));
         assert!(planned.is_empty(), "{part:?} plans {planned:?}");
     }
-    assert!(Part::Host.due(&scope(&["xtask"], &[], false), &[], |_| true));
+    assert!(Part::Host.due(&scope(&["xtask"], &[], false), true));
 }
 
 /// CI starts the Windows feature lint job only where this lists it, so a
@@ -187,32 +187,27 @@ fn only_a_change_that_checks_a_package_with_features_and_windows_code_lists_the_
     let plain = package("enshwick-abi", "crates/abi", true);
     let packages = [loader, values, plain];
     let windows_code = |p: &Package| p.name != "enshwick-values";
-    let listed = |code: &[&str]| {
-        let scope = Scope::Some {
-            code: code.iter().map(|name| (*name).to_owned()).collect(),
-            docs: BTreeSet::new(),
-            tested: BTreeSet::new(),
-            built: BTreeSet::new(),
-            wide: false,
-        };
-        due_parts(&[Part::WindowsFeatures], &scope, &packages, windows_code)
+    let listed = |scope: &Scope| {
+        let due = windows_features_due(scope, &packages, windows_code);
+        let planned = windows_lint::steps(scope, &packages, &[Part::WindowsFeatures], windows_code);
+        assert_eq!(due, !planned.is_empty(), "the listing and the plan differ");
+        due_parts(&[Part::WindowsFeatures], scope, due)
     };
-    assert!(listed(&["enshwick-values"]).is_empty());
-    assert!(listed(&["enshwick-abi"]).is_empty());
-    assert!(listed(&[]).is_empty());
+    let some = |code: &[&str]| Scope::Some {
+        code: code.iter().map(|name| (*name).to_owned()).collect(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: false,
+    };
+    assert!(listed(&some(&["enshwick-values"])).is_empty());
+    assert!(listed(&some(&["enshwick-abi"])).is_empty());
+    assert!(listed(&some(&[])).is_empty());
     assert_eq!(
-        listed(&["enshwick-values", "enshwick-loader"]),
+        listed(&some(&["enshwick-values", "enshwick-loader"])),
         ["windows-features"]
     );
-    assert_eq!(
-        due_parts(
-            &[Part::WindowsFeatures],
-            &Scope::All,
-            &packages,
-            windows_code
-        ),
-        ["windows-features"]
-    );
+    assert_eq!(listed(&Scope::All), ["windows-features"]);
 }
 
 #[test]

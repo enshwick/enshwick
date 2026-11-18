@@ -3,7 +3,7 @@
 
 use clap::ValueEnum as _;
 
-use super::{FACADE, Package, Scope, touches, wide, windows_lint};
+use super::{FACADE, Package, Scope, features, touches, wide};
 
 /// A part of the check, so CI can run the parts as parallel jobs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -12,7 +12,7 @@ pub(crate) enum Part {
     /// repository's own checks.
     Host,
     /// clippy of each checked package with none and each one of its
-    /// features alone, for the host ([`features`](super::features)).
+    /// features alone, for the host ([`features`]).
     Features,
     /// The doctests and the workspace rustdoc, for the host.
     Docs,
@@ -21,11 +21,11 @@ pub(crate) enum Part {
     /// other parts' builds.
     StableApi,
     /// clippy of the workspace for the Windows target through cargo-xwin,
-    /// off Windows ([`windows_lint::steps`]).
+    /// off Windows ([`windows_lint::steps`](super::windows_lint::steps)).
     WindowsLint,
     /// clippy for the Windows target through cargo-xwin, off Windows, of
     /// each checked package with Windows code with none and each one of its
-    /// features alone ([`windows_lint::steps`]); a part of its own, so CI runs
+    /// features alone ([`windows_lint::steps`](super::windows_lint::steps)); a part of its own, so CI runs
     /// it beside the workspace's Windows lint.
     WindowsFeatures,
     /// The tests of the changed packages that run only on Windows, under
@@ -65,23 +65,15 @@ impl Part {
         every
     }
 
-    /// Whether the part has a step for the change `scope` to `packages`: the
-    /// trybuild test and the stable surface only where the change reaches the
-    /// facade and is not [`wide`], the Windows feature lints only where it
-    /// checks a package with features and Windows code (`windows_code`); the
-    /// other parts find their own work.
-    pub(super) fn due(
-        self,
-        scope: &Scope,
-        packages: &[Package],
-        windows_code: impl Fn(&Package) -> bool,
-    ) -> bool {
+    /// Whether the part has a step for the change `scope`: the trybuild test
+    /// and the stable surface only where the change reaches the facade and is
+    /// not [`wide`], the Windows feature lints only as `windows_features`
+    /// ([`windows_features_due`]) says; the other parts find their own work.
+    pub(super) fn due(self, scope: &Scope, windows_features: bool) -> bool {
         match self {
             Self::Trybuild => trybuild_due(scope),
             Self::StableApi => stable_api_runs(scope),
-            Self::WindowsFeatures => {
-                !windows_lint::steps(scope, packages, &[self], windows_code).is_empty()
-            }
+            Self::WindowsFeatures => windows_features,
             Self::Host
             | Self::Features
             | Self::Docs
@@ -105,24 +97,34 @@ pub(super) fn stable_api_runs(scope: &Scope) -> bool {
     stable_api_due(scope) && !wide(scope)
 }
 
-/// The names of the `parts` that have a step for the change `scope` to
-/// `packages` ([`Part::due`]).
-pub(super) fn due_parts(
-    parts: &[Part],
+/// Whether the Windows feature lints have a step for the change `scope` to
+/// `packages`: it checks a package with features and Windows code
+/// (`windows_code`), the packages [`windows_lint::steps`](super::windows_lint::steps) lints off Windows.
+/// On Windows the host's own lints cover that code, so the part plans no step
+/// there whatever this says.
+pub(super) fn windows_features_due(
     scope: &Scope,
     packages: &[Package],
     windows_code: impl Fn(&Package) -> bool,
-) -> Vec<String> {
+) -> bool {
+    features::linted(scope, packages, windows_code)
+        .next()
+        .is_some()
+}
+
+/// The names of the `parts` that have a step for the change `scope`
+/// ([`Part::due`]).
+pub(super) fn due_parts(parts: &[Part], scope: &Scope, windows_features: bool) -> Vec<String> {
     parts
         .iter()
-        .filter(|part| part.due(scope, packages, &windows_code))
+        .filter(|part| part.due(scope, windows_features))
         .filter_map(|part| Some(part.to_possible_value()?.get_name().to_owned()))
         .collect()
 }
 
 /// Whether `scope` needs the facade's stable surface checked: its examples,
 /// the book's among them, change with its documents as well as its code.
-pub(super) fn stable_api_due(scope: &Scope) -> bool {
+fn stable_api_due(scope: &Scope) -> bool {
     touches(scope, FACADE) || matches!(scope, Scope::Some { docs, .. } if docs.contains(FACADE))
 }
 

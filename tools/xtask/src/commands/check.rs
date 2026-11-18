@@ -32,6 +32,7 @@ use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 use part::{
     Part, due_parts, stable_api_left_to_ci, stable_api_out_of_scope, stable_api_runs, trybuild_due,
+    windows_features_due,
 };
 
 pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
@@ -227,7 +228,14 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
 /// The names of the `parts` with a step for the change `scope` to the
 /// `packages` under `root` ([`due_parts`]).
 fn listed_parts(parts: &[Part], scope: &Scope, packages: &[Package], root: &Path) -> Vec<String> {
-    due_parts(parts, scope, packages, |p| features::windows_code(root, p))
+    let windows_features = windows_features_due(scope, packages, windows_code(root));
+    due_parts(parts, scope, windows_features)
+}
+
+/// Whether a package under `root` has Windows code ([`features::windows_code`]),
+/// the one rule the Windows feature lints and their listing share.
+fn windows_code(root: &Path) -> impl Fn(&Package) -> bool + '_ {
+    move |package| features::windows_code(root, package)
 }
 
 /// Whether the committed public paths list is current and the book's
@@ -852,7 +860,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     ));
     let windows = if !on_windows && flags.0 {
         let root = workspace_root();
-        windows_lint::steps(scope, packages, parts, |p| features::windows_code(&root, p))
+        windows_lint::steps(scope, packages, parts, windows_code(&root))
     } else {
         Vec::new()
     };

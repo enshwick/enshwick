@@ -8,12 +8,13 @@ name: Rust CI
 # workspace and of each feature alone, the API's trybuild test, its stable
 # surface and cargo-semver-checks run as parallel jobs, the workspace's
 # doctests and rustdoc only in the merge queue, on main
-# and with `full`, and the trybuild test and the stable surface of a pull
-# request only when its change needs them. The Windows tests run natively on
-# a Windows runner, only those the change reaches. Each part runs through
-# rust-ci-part.yml. The job `list` asks xtask what the change needs beside
-# the parts, which start without waiting for it. The job `check` sums them
-# up and is the required check.
+# and with `full`, and the trybuild test, the stable surface and the Windows
+# feature lints of a pull request or a push to main only when its change needs
+# them. The Windows tests run natively on a Windows runner, only those the
+# change reaches. Each part runs through rust-ci-part.yml. The job `list` asks
+# xtask which of those listed parts and Windows tests the change needs; they
+# wait for it, and the other parts start without waiting. The job `check` sums
+# them up and is the required check.
 
 on:
   workflow_call:
@@ -168,10 +169,11 @@ jobs:
           fi
           echo "parts=$(jq -cn '$ARGS.positional' --args "${parts[@]}")" | tee -a "$GITHUB_OUTPUT"
 
-  # What only the repository's xtask knows, built once and off the parts'
-  # critical path: the listed parts a pull request's change needs and the
-  # packages whose Windows tests the change reaches. A push to main lists
-  # too, so the build cache pull requests restore holds xtask. A failed
+  # What only the repository's xtask knows, built once and off the critical
+  # path of the parts that start at once: the listed parts a pull request's
+  # change needs and the packages whose Windows tests the change reaches. A
+  # push to main lists too, so the build cache pull requests restore holds
+  # xtask. A failed
   # listing of the parts still runs every listed part; any failed listing
   # fails the job.
   list:
