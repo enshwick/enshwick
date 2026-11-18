@@ -240,7 +240,7 @@ impl Route {
     fn checks_code(&self) -> bool {
         !self.check.is_empty()
             || self.take == Take::Start
-                && matches!(&self.how, How::Shape { steps, .. } if steps.len() >= 2)
+                && matches!(&self.how, How::Shape { steps, .. } if shape::lead(steps) >= 2)
     }
 }
 
@@ -353,8 +353,9 @@ impl RouteRow {
             (_, Some(_)) => return Err(bad("only a `spelled` take names a `value`")),
         };
         let check = parse_steps(self.check, names).map_err(|e| bad(&e.to_string()))?;
-        if !check.is_empty() && (constant || check.iter().any(|s| s.takes() > 0)) {
-            return Err(bad("`check` is a shape without `*` for a symbol"));
+        let loose = |s: &Step| s.takes() > 0 || s.follows_gap();
+        if !check.is_empty() && (constant || check.iter().any(loose)) {
+            return Err(bad("`check` is a shape without `*` or a gap for a symbol"));
         }
         if (self.shift.is_some() || self.plus.is_some())
             && !matches!(take, Take::Value | Take::Cell)
@@ -546,11 +547,7 @@ const fn is_name_hash(value: u64) -> bool {
 
 /// The steps of a shape's text, none for none.
 fn parse_steps(texts: Option<Vec<String>>, names: &ShapeNames) -> Result<Vec<Step>, ShapeError> {
-    texts
-        .unwrap_or_default()
-        .iter()
-        .map(|step| Step::parse(step, names))
-        .collect()
+    shape::parse_shape(&texts.unwrap_or_default(), names)
 }
 
 /// The engine routes, read from their data.

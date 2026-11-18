@@ -5,7 +5,9 @@
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
-use super::shape::{Run, ShapeNames, Step};
+use rustc_hash::FxHashSet;
+
+use super::shape::{self, Run, ShapeNames, Step};
 use crate::reflect::Image;
 
 /// The bytes a check covers past its last jump, as a `<id>.bytes` check does.
@@ -89,7 +91,8 @@ pub fn check_holds(names: &ShapeNames, check: &[String], image: &Image<'_>, rva:
 }
 
 /// Whether a route's start shape checks the code at `rva` as a hook needs:
-/// two steps or more, matching there one after the other, over eight bytes.
+/// the shape matches there, and its steps before the first gap, two or
+/// more, cover eight bytes.
 ///
 /// A step naming another entry does not match here, where no entry is known.
 ///
@@ -110,20 +113,21 @@ pub fn check_holds(names: &ShapeNames, check: &[String], image: &Image<'_>, rva:
 /// ```
 #[must_use]
 pub fn shape_checks(names: &ShapeNames, shape: &[String], image: &Image<'_>, rva: u64) -> bool {
-    let Some(steps) = parse(names, shape) else {
+    let Ok(steps) = shape::parse_shape(shape, names) else {
         return false;
     };
-    let start = image.base().saturating_add(rva);
-    let mut va = start;
-    let mut run = Run::default();
-    let matched = steps.iter().all(|step| {
-        let Some(ins) = one_at(image, va) else {
-            return false;
-        };
+    let most = shape::reach(&steps);
+    let mut code = Vec::with_capacity(most);
+    let mut va = image.base().saturating_add(rva);
+    while code.len() < most
+        && let Some(ins) = one_at(image, va)
+    {
         va = ins.next_ip();
-        step.matches(&ins, &|_: &str| None, &mut run)
-    });
-    matched && match_checks(steps.len(), start, va)
+        code.push(ins);
+    }
+    // No function is known here, so a gap is checked without branch targets.
+    shape::match_at(&steps, &code, &|_: &str| None, &FxHashSet::default())
+        .is_some_and(|one| match_checks(shape::lead(&steps), one.start, one.lead))
 }
 
 /// Whether a start shape's match from `start` to `end` checks the code at

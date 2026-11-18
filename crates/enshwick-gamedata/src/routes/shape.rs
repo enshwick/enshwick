@@ -21,12 +21,28 @@
 //! constant's value as an immediate or a displacement (`[?+{id}]`), such as
 //! a reflected field offset. A `*` or `?` displacement is not zero and has
 //! the sign written.
+//!
+//! A gap, `... n` between two steps, lets up to `n` instructions, 1 to 16,
+//! lie between them, the fewest that let the rest match, such as an
+//! epilogue whose pops change with the registers a build saves. A skipped
+//! instruction never branches, calls or returns, and no direct branch of
+//! the function lands in the gap or on the step after it, so a run never
+//! reaches into code another path joins or into another function. A
+//! start shape checks the code at its symbol only up to its first gap.
 
-use iced_x86::{Instruction, InstructionInfoFactory, Mnemonic, OpAccess, OpKind, Register};
-use rustc_hash::FxHashMap;
+use iced_x86::{
+    FlowControl, Instruction, InstructionInfoFactory, Mnemonic, OpAccess, OpKind, Register,
+};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// How many registers a shape can bind, `?1` to `?9`.
 const BINDS: usize = 9;
+
+/// What a gap step starts with.
+const GAP: &str = "...";
+
+/// The most instructions one gap skips.
+const MAX_GAP: u8 = 16;
 
 /// What a memory operand's displacement may be written as.
 const DISPLACEMENTS: &str = "a displacement is `*`, `?`, `{id}` or a hexadecimal number";
@@ -154,6 +170,9 @@ fn is_immediate(kind: OpKind) -> bool {
 pub(crate) struct Step {
     mnemonic: Mnemonic,
     ops: Vec<Op>,
+    /// The most instructions that may lie between the step before and this
+    /// one; 0 for none.
+    gap: u8,
 }
 
 /// Why a step does not parse.
@@ -235,7 +254,16 @@ impl Step {
             .filter(|op| !op.is_empty())
             .map(|op| operand(op, names))
             .collect::<Result<_, _>>()?;
-        Ok(Self { mnemonic, ops })
+        Ok(Self {
+            mnemonic,
+            ops,
+            gap: 0,
+        })
+    }
+
+    /// Whether a gap lies before the step.
+    pub(crate) const fn follows_gap(&self) -> bool {
+        self.gap > 0
     }
 
     /// How many values the step takes.
@@ -352,6 +380,69 @@ impl Step {
             }
         })
     }
+}
+
+/// Reads a shape: its steps, each gap `... n` folded into the step after it.
+pub(crate) fn parse_shape<S: AsRef<str>>(
+    texts: &[S],
+    names: &ShapeNames,
+) -> Result<Vec<Step>, ShapeError> {
+    let mut steps: Vec<Step> = Vec::with_capacity(texts.len());
+    let mut gap = 0;
+    for text in texts {
+        let text = text.as_ref().trim();
+        let Some(most) = text.strip_prefix(GAP) else {
+            let mut step = Step::parse(text, names)?;
+            step.gap = core::mem::take(&mut gap);
+            steps.push(step);
+            continue;
+        };
+        if steps.is_empty() || gap > 0 {
+            return Err(ShapeError(format!(
+                "{text:?}: a gap stands between two instructions"
+            )));
+        }
+        gap = most
+            .trim()
+            .parse()
+            .ok()
+            .filter(|n| (1..=MAX_GAP).contains(n))
+            .ok_or_else(|| ShapeError(format!("{text:?}: a gap is `... n`, n 1 to {MAX_GAP}")))?;
+    }
+    if gap > 0 {
+        return Err(ShapeError(
+            "a shape ends with an instruction, not a gap".to_owned(),
+        ));
+    }
+    Ok(steps)
+}
+
+/// How many steps come before the first gap: the run a match checks.
+pub(crate) fn lead(steps: &[Step]) -> usize {
+    steps
+        .iter()
+        .position(Step::follows_gap)
+        .unwrap_or(steps.len())
+}
+
+/// The most instructions a run of `steps` covers.
+pub(crate) fn reach(steps: &[Step]) -> usize {
+    steps.iter().map(|s| 1 + usize::from(s.gap)).sum()
+}
+
+/// The direct branch targets of `code`: where its jumps can land.
+pub(crate) fn branch_targets<'i>(
+    code: impl IntoIterator<Item = &'i Instruction>,
+) -> FxHashSet<u64> {
+    code.into_iter()
+        .filter(|ins| {
+            matches!(
+                ins.flow_control(),
+                FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch
+            ) && ins.op0_kind() == OpKind::NearBranch64
+        })
+        .map(Instruction::near_branch64)
+        .collect()
 }
 
 fn set(taken: &mut Option<u64>, value: u64) -> bool {
@@ -536,32 +627,74 @@ fn memory_operand(inner: &str, size: Option<usize>, names: &ShapeNames) -> Resul
 }
 
 /// Where a shape matched: the first instruction's address, the address after
-/// the last, and the value it took.
+/// the last, the address after the last step before the first gap, and the
+/// value it took.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Match {
     pub(crate) start: u64,
     pub(crate) end: u64,
+    pub(crate) lead: u64,
     pub(crate) taken: Option<u64>,
 }
 
-/// Every run of `instructions` that is `steps`, in order.
+/// Every run of `instructions` that is `steps`, in order, one per start;
+/// `targets` holds where the function's direct branches land, which no gap
+/// covers.
 pub(crate) fn matches<'s>(
     steps: &'s [Step],
     instructions: &'s [Instruction],
     entry: &'s impl Fn(&str) -> Option<u64>,
+    targets: &'s FxHashSet<u64>,
 ) -> impl Iterator<Item = Match> + 's {
-    instructions.windows(steps.len()).filter_map(move |code| {
-        let mut run = Run::default();
-        steps
-            .iter()
-            .zip(code)
-            .all(|(step, ins)| step.matches(ins, entry, &mut run))
-            .then(|| Match {
-                start: code[0].ip(),
-                end: code[code.len() - 1].next_ip(),
-                taken: run.taken,
-            })
+    (0..instructions.len())
+        .filter_map(move |at| match_at(steps, &instructions[at..], entry, targets))
+}
+
+/// The run of `steps` that starts at `code`'s first instruction, as
+/// [`matches`] finds it.
+pub(crate) fn match_at(
+    steps: &[Step],
+    code: &[Instruction],
+    entry: &impl Fn(&str) -> Option<u64>,
+    targets: &FxHashSet<u64>,
+) -> Option<Match> {
+    let (used, run) = run_from(steps, code, entry, targets, Run::default())?;
+    let after = |n: usize| Some(code.get(n.checked_sub(1)?)?.next_ip());
+    Some(Match {
+        start: code.first()?.ip(),
+        end: after(used)?,
+        lead: after(lead(steps))?,
+        taken: run.taken,
     })
+}
+
+/// How many of `code`'s instructions `steps` cover from its first, each gap
+/// skipping the fewest that let the rest match, and what `run` gathered.
+fn run_from(
+    steps: &[Step],
+    code: &[Instruction],
+    entry: &impl Fn(&str) -> Option<u64>,
+    targets: &FxHashSet<u64>,
+    run: Run,
+) -> Option<(usize, Run)> {
+    let Some((step, later)) = steps.split_first() else {
+        return Some((0, run));
+    };
+    for skip in 0..=usize::from(step.gap) {
+        let ins = code.get(skip)?;
+        if step.follows_gap() && targets.contains(&ins.ip())
+            || skip > 0 && code[skip - 1].flow_control() != FlowControl::Next
+        {
+            return None;
+        }
+        let mut tried = run;
+        if step.matches(ins, entry, &mut tried)
+            && let Some((used, done)) = run_from(later, &code[skip + 1..], entry, targets, tried)
+        {
+            return Some((skip + 1 + used, done));
+        }
+    }
+    None
 }
 
 const READS: [OpAccess; 4] = [
