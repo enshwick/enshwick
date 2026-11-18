@@ -27,14 +27,22 @@ pub(crate) fn link(loader: &Loader, join: u64) -> bool {
 /// interface does not read the stage.
 pub(crate) static ENDED_FUSE: Fuse = Fuse::new("join end");
 
-/// The provider's state with no session: its leave, and every online error
-/// as the game's dialog opens, move its state tree there; a session, hosted
-/// or joined, is state 2 (client 26430625, read in the decompiler).
-const NO_SESSION: u32 = 1;
-
-/// Links the join end on the provider's state tree transition; true when
-/// linked.
+/// Links the join end on the provider's state tree transition, once the
+/// build names the provider's state with no session; true when linked.
 pub(crate) fn link_ended(loader: &Loader) -> bool {
+    let id = pinned::net::NO_SESSION_STATE.id();
+    let Some(no_session) = loader
+        .build
+        .constant(id)
+        .and_then(|state| u32::try_from(state).ok())
+    else {
+        return loader.fuse_off(
+            &ENDED_FUSE,
+            id,
+            "is not found: the provider's leave does not name the state it moves to",
+        );
+    };
+    let _first = STATE.no_session.set(no_session);
     let target = Target::Pinned(pinned::net::PROVIDER_TRANSITION);
     loader.link_feature(
         &ENDED_FUSE,
@@ -68,12 +76,18 @@ struct State {
     terrain: OnceLock<TerrainIds>,
     /// The last join the provider took, until it ends.
     join: Join,
+    /// The provider's state with no session, which its leave and every
+    /// online error move its state tree to, as the build names it
+    /// (`net.no_session_state`): 1 on every kept client, a session hosted
+    /// or joined 2 (client 26430625, read in the decompiler).
+    no_session: OnceLock<u32>,
 }
 
 static STATE: State = State {
     refusals: AtomicU64::new(0),
     terrain: OnceLock::new(),
     join: Join::new(),
+    no_session: OnceLock::new(),
 };
 
 /// The last join the provider took, one record for its whole life, so it
@@ -340,7 +354,7 @@ crate::engine::chains::chain_detour! {
     /// The online provider's state tree transition at the table's
     /// `net.provider_transition`, which the provider's join ends in with a
     /// session (2) and its leave and every online error, as the game's
-    /// dialog opens, with none ([`NO_SESSION`]); it takes the provider's tree
+    /// dialog opens, with none (`State::no_session`); it takes the provider's tree
     /// and the state's index and returns whether the transition started
     /// (client 26430625, read in the decompiler). The game calls it on the
     /// thread that moves the provider.
@@ -349,7 +363,7 @@ crate::engine::chains::chain_detour! {
     fuse &ENDED_FUSE, "the join end";
     |onward| {
         let started = onward.call();
-        if started != 0 && state == NO_SESSION {
+        if started != 0 && STATE.no_session.get() == Some(&state) {
             session_ended();
         }
         started
@@ -586,9 +600,10 @@ mod tests {
         let loader = crate::start::tests::pinning_loader(
             Side::CLIENT,
             &[pinned::net::PROVIDER_TRANSITION],
-            &[],
+            &[(pinned::net::NO_SESSION_STATE, 1)],
         );
         assert!(link_ended(&loader));
+        assert_eq!(STATE.no_session.get(), Some(&1));
         let at = loader
             .address(pinned::net::PROVIDER_TRANSITION)
             .unwrap_or_default();
@@ -600,6 +615,23 @@ mod tests {
             .map(Fuse::feature)
             .collect();
         assert_eq!(features, [ENDED_FUSE.feature()]);
+    }
+
+    #[test]
+    fn a_build_whose_leave_names_no_state_turns_off_only_the_join_end() {
+        let loader = crate::start::tests::pinning_loader(
+            Side::CLIENT,
+            &[pinned::net::PROVIDER_TRANSITION],
+            &[],
+        );
+        assert!(!link_ended(&loader));
+        assert!(ENDED_FUSE.is_off());
+        assert!(!JOIN_FUSE.is_off());
+        assert!(!LEFT_FUSE.is_off());
+        let at = loader
+            .address(pinned::net::PROVIDER_TRANSITION)
+            .unwrap_or_default();
+        assert!(loader.chains.relock().owners(at).is_empty());
     }
 
     #[test]

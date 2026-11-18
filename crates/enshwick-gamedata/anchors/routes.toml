@@ -164,6 +164,20 @@ take = "address"
 check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp", "mov [rsp+0x20],rsi", "push rdi"]
 
 [[route]]
+id = "~provider_leave"
+sides = ["client"]
+vtable = "net.provider_vtable"
+slot = 17
+
+[[route]]
+id = "net.no_session_state"
+sides = ["client"]
+in = "~provider_leave"
+shape = ["mov edx,*", "jmp {net.provider_transition}"]
+take = "value"
+range = [1, 16]
+
+[[route]]
 id = "net.provider_vtable"
 sides = ["client"]
 in = "~provider_ctor"

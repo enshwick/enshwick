@@ -165,6 +165,13 @@ panic = "unwind"
 debug = "line-tables-only"
 strip = "none"
 
+# Each bench is a binary of its own, and fat LTO links each one alone over the
+# whole loader: a clean build of the loader's benches took about 990 s and up
+# to 26 GB of commit beside other work, thin LTO 536 s and half the commit, its
+# times within 3% of fat LTO's (ticks bench, 2026-11-18).
+[profile.bench]
+lto = "thin"
+
 [profile.profiling]
 inherits = "release"
 debug = "full"

@@ -19,6 +19,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::join::TARGET_QUERY_PORT_READ.id(),
     pinned::join::TARGET_WORD_COPY.id(),
     pinned::net::JOIN_GAME.id(),
+    pinned::net::NO_SESSION_STATE.id(),
     pinned::net::PROVIDER_TRANSITION.id(),
     pinned::net::PROVIDER_VTABLE.id(),
     pinned::user::START_INTERACTION.id(),

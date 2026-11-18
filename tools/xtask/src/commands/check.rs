@@ -27,11 +27,12 @@ use std::process::Command;
 use std::thread;
 use std::time::Instant;
 
-use clap::ValueEnum as _;
-
 use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
+use part::{
+    Part, due_parts, stable_api_left_to_ci, stable_api_out_of_scope, stable_api_runs, trybuild_due,
+};
 
 pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 macro_rules! facade_features {
@@ -91,8 +92,9 @@ enum Listing {
     WindowsTests,
     /// The parts named with `--part` that may have a step for the change:
     /// the trybuild test and the stable surface only where the change
-    /// reaches them; every other part is listed, since it finds its own work
-    /// only when it runs.
+    /// reaches them, the Windows feature lints only where it checks a package
+    /// with features and Windows code; every other part is listed, since it
+    /// finds its own work only when it runs.
     Parts,
 }
 
@@ -175,7 +177,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     if let Some(listing) = args.list {
         let names = match listing {
             Listing::WindowsTests => windows_tests.iter().map(|&name| name.to_owned()).collect(),
-            Listing::Parts => due_parts(&parts, &scope),
+            Listing::Parts => listed_parts(&parts, &scope, &packages, &root),
         };
         for name in names {
             let _shown = writeln!(std::io::stdout(), "{name}");
@@ -197,7 +199,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     {
         return Ok(false);
     }
-    if parts.contains(&Part::Trybuild) && !Part::Trybuild.due(&scope) {
+    if parts.contains(&Part::Trybuild) && !trybuild_due(&scope) {
         say(&if touches(&scope, FACADE) {
             format!(
                 "the trybuild test is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
@@ -220,6 +222,12 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         return Ok(true);
     }
     Ok(wine::run(&windows_tests, args.windows))
+}
+
+/// The names of the `parts` with a step for the change `scope` to the
+/// `packages` under `root` ([`due_parts`]).
+fn listed_parts(parts: &[Part], scope: &Scope, packages: &[Package], root: &Path) -> Vec<String> {
+    due_parts(parts, scope, packages, |p| features::windows_code(root, p))
 }
 
 /// Whether the committed public paths list is current and the book's
@@ -290,24 +298,6 @@ fn wide(scope: &Scope) -> bool {
     matches!(scope, Scope::Some { wide: true, .. })
 }
 
-/// Whether `scope` needs the facade's stable surface checked: its examples,
-/// the book's among them, change with its documents as well as its code.
-fn stable_api_due(scope: &Scope) -> bool {
-    touches(scope, FACADE) || matches!(scope, Scope::Some { docs, .. } if docs.contains(FACADE))
-}
-
-/// Whether a check of `parts` would check the stable surface of `scope` but
-/// leaves it to CI because the change is [`wide`].
-fn stable_api_left_to_ci(scope: &Scope, parts: &[Part]) -> bool {
-    wide(scope) && parts.contains(&Part::StableApi) && stable_api_due(scope)
-}
-
-/// Whether a check of `parts` names the stable surface but `scope` does not
-/// reach it, so the part passes without a step.
-fn stable_api_out_of_scope(scope: &Scope, parts: &[Part]) -> bool {
-    parts.contains(&Part::StableApi) && !stable_api_due(scope)
-}
-
 /// Whether `scope` checks, tests or only builds the code of `package`.
 fn reaches(scope: &Scope, package: &str) -> bool {
     match scope {
@@ -349,94 +339,6 @@ fn fuzz_part(changed: Option<&[String]>, all: bool) -> bool {
         _ => fuzz::all(),
     };
     fuzz::run(&targets)
-}
-
-/// A part of the check, so CI can run the parts as parallel jobs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub(crate) enum Part {
-    /// fmt with `--all`, clippy, nextest and cargo-deny for the host, and the
-    /// repository's own checks.
-    Host,
-    /// clippy of each checked package with none and each one of its
-    /// features alone, for the host ([`features`]).
-    Features,
-    /// The doctests and the workspace rustdoc, for the host.
-    Docs,
-    /// The API crate's stable-surface checks ([`stable_api_steps`]): a
-    /// build of its own without `unstable`, which shares nothing with the
-    /// other parts' builds.
-    StableApi,
-    /// clippy of the workspace for the Windows target through cargo-xwin,
-    /// off Windows ([`windows_lint::steps`]).
-    WindowsLint,
-    /// clippy for the Windows target through cargo-xwin, off Windows, of
-    /// each checked package with Windows code with none and each one of its
-    /// features alone ([`windows_lint::steps`]); a part of its own, so CI runs
-    /// it beside the workspace's Windows lint.
-    WindowsFeatures,
-    /// The tests of the changed packages that run only on Windows, under
-    /// Wine on an amd64 Linux host.
-    WindowsTests,
-    /// Short runs of the fuzz targets the change reaches ([`fuzz`]); only
-    /// when named, since it needs the nightly compiler.
-    Fuzz,
-    /// The trybuild test ([`TRYBUILD`]), when the API crate's tests are in
-    /// the change's scope; a run that finds no such test fails, so a moved
-    /// test does not go untested. The host part never runs it.
-    Trybuild,
-    /// cargo-semver-checks for the packages `--semver` names.
-    Semver,
-}
-
-impl Part {
-    /// The parts that run when none is named: the host check, the lints of
-    /// each feature alone, the docs, the stable surface, the Windows lints
-    /// of the workspace and of each feature alone, the trybuild test and
-    /// semver-checks, and the Windows tests with
-    /// `--all` or `--windows`.
-    fn every(windows_tests: bool) -> Vec<Self> {
-        let mut every = vec![
-            Self::Host,
-            Self::Features,
-            Self::Docs,
-            Self::StableApi,
-            Self::WindowsLint,
-            Self::WindowsFeatures,
-            Self::Trybuild,
-            Self::Semver,
-        ];
-        if windows_tests {
-            every.push(Self::WindowsTests);
-        }
-        every
-    }
-
-    /// Whether the part has a step for the change `scope`: the trybuild test
-    /// and the stable surface only where the change reaches the facade and
-    /// is not [`wide`]; the other parts find their own work.
-    fn due(self, scope: &Scope) -> bool {
-        match self {
-            Self::Trybuild => touches(scope, FACADE) && !wide(scope),
-            Self::StableApi => stable_api_due(scope) && !wide(scope),
-            Self::Host
-            | Self::Features
-            | Self::Docs
-            | Self::WindowsLint
-            | Self::WindowsFeatures
-            | Self::WindowsTests
-            | Self::Fuzz
-            | Self::Semver => true,
-        }
-    }
-}
-
-/// The names of the `parts` that have a step for the change `scope`.
-fn due_parts(parts: &[Part], scope: &Scope) -> Vec<String> {
-    parts
-        .iter()
-        .filter(|part| part.due(scope))
-        .filter_map(|part| Some(part.to_possible_value()?.get_name().to_owned()))
-        .collect()
 }
 
 /// Files changed between `merge_base` and the working tree, untracked ones
@@ -821,7 +723,7 @@ fn host_steps(
             steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
         }
     }
-    if parts.contains(&Part::Trybuild) && Part::Trybuild.due(scope) {
+    if parts.contains(&Part::Trybuild) && trybuild_due(scope) {
         steps.push(Step::new(&[
             "nextest",
             "run",
@@ -845,7 +747,7 @@ fn host_steps(
         }
         steps.push(step);
     }
-    if parts.contains(&Part::StableApi) && Part::StableApi.due(scope) {
+    if parts.contains(&Part::StableApi) && stable_api_runs(scope) {
         steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, wide(scope), full) {
@@ -971,6 +873,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
 
 mod features;
 mod in_process;
+mod part;
 #[cfg(test)]
 mod tests;
 mod windows_lint;
