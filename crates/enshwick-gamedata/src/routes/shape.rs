@@ -646,7 +646,9 @@ pub(crate) fn matches<'s>(
     entry: &'s impl Fn(&str) -> Option<u64>,
     targets: &'s FxHashSet<u64>,
 ) -> impl Iterator<Item = Match> + 's {
+    let first = steps.first().map(|step| step.mnemonic);
     (0..instructions.len())
+        .filter(move |&at| first == Some(instructions[at].mnemonic()))
         .filter_map(move |at| match_at(steps, &instructions[at..], entry, targets))
 }
 
@@ -675,14 +677,26 @@ fn run_from(
     code: &[Instruction],
     entry: &impl Fn(&str) -> Option<u64>,
     targets: &FxHashSet<u64>,
-    run: Run,
+    mut run: Run,
 ) -> Option<(usize, Run)> {
-    let Some((step, later)) = steps.split_first() else {
-        return Some((0, run));
+    // The steps up to a gap match one after the other, as fast as a shape
+    // without one; only a gap tries more than one way.
+    let lead = lead(steps);
+    let straight = code.get(..lead)?;
+    if !steps
+        .iter()
+        .zip(straight)
+        .all(|(step, ins)| step.matches(ins, entry, &mut run))
+    {
+        return None;
+    }
+    let Some((step, later)) = steps[lead..].split_first() else {
+        return Some((lead, run));
     };
+    let code = &code[lead..];
     for skip in 0..=usize::from(step.gap) {
         let ins = code.get(skip)?;
-        if step.follows_gap() && targets.contains(&ins.ip())
+        if targets.contains(&ins.ip())
             || skip > 0 && code[skip - 1].flow_control() != FlowControl::Next
         {
             return None;
@@ -691,7 +705,7 @@ fn run_from(
         if step.matches(ins, entry, &mut tried)
             && let Some((used, done)) = run_from(later, &code[skip + 1..], entry, targets, tried)
         {
-            return Some((skip + 1 + used, done));
+            return Some((lead + skip + 1 + used, done));
         }
     }
     None
