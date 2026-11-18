@@ -63,10 +63,14 @@ pub(crate) struct TerrainIds {
     pub(crate) adopt: fn(Option<&str>, crate::base::join::Host) -> Option<String>,
     /// Serves this side's own table again.
     pub(crate) own_again: fn(),
-    /// Whether a session read the host's table served now: its game was
-    /// joined. One atomic read, for each frame of the main menu.
-    pub(crate) host_read: fn() -> bool,
+    /// Play started (`true`) or ended: whether it ended in a game played
+    /// with a host's table, once per such game.
+    pub(crate) play_changed: fn(bool) -> bool,
 }
+
+/// Serving this side's own world again once a joined game ends: a panic
+/// there turns off only that, and the hosted start still does it.
+static LEFT_FUSE: Fuse = Fuse::new("own world after a joined game");
 
 /// Sets the terrain ids this side serves; the first call holds.
 pub(crate) fn set_terrain_ids(ids: TerrainIds) {
@@ -93,16 +97,21 @@ pub(crate) fn hosting_starts() {
     own_terrain_again();
 }
 
-/// Each frame the main menu shows: a client back from a game it joined,
-/// whose session read the host's terrain ids, gets its own world back as
-/// before a game it hosts, so one whose hosted start the loader does not see
-/// still serves its own ids. A join still connecting, whose session read
-/// nothing yet, keeps the host's.
-pub(crate) fn menu_shows() {
-    if terrain_ids().is_some_and(|ids| (ids.host_read)()) {
-        crate::log!(INFO, "back from a joined game: own terrain ids again");
-        hosting_starts();
+/// The client's play started (`playing`) or ended, as the interface frame
+/// reads the app's stage: once a game played with a host's terrain ids
+/// ends, the client gets its own world back as before a game it hosts, so
+/// one whose hosted start the loader does not see still serves its own ids.
+/// The rebuild runs on a thread of its own, off the interface frame.
+pub(crate) fn play_changed(playing: bool) {
+    if !terrain_ids().is_some_and(|ids| (ids.play_changed)(playing)) {
+        return;
     }
+    crate::engine::off_thread::start("own world", || {
+        let _ran = LEFT_FUSE.run("the client's own world", || {
+            crate::log!(INFO, "back from a joined game: own terrain ids again");
+            hosting_starts();
+        });
+    });
 }
 
 /// The count of joins the check refused so far.
@@ -360,39 +369,4 @@ fn refused(
         1 << UiDialog::OK,
         move |_| crate::base::join::client::report_join_missing(&wanted),
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-
-    use super::{TerrainIds, menu_shows, set_terrain_ids};
-
-    static HOST_READ: AtomicBool = AtomicBool::new(false);
-    static OWN_AGAIN: AtomicU32 = AtomicU32::new(0);
-
-    #[test]
-    fn the_main_menu_brings_the_own_terrain_ids_back_only_after_a_joined_session_read_the_host_s() {
-        set_terrain_ids(TerrainIds {
-            served: String::new,
-            adopt: |_, _| None,
-            own_again: || {
-                OWN_AGAIN.fetch_add(1, Ordering::Relaxed);
-            },
-            host_read: || HOST_READ.load(Ordering::Relaxed),
-        });
-        menu_shows();
-        assert_eq!(
-            OWN_AGAIN.load(Ordering::Relaxed),
-            0,
-            "own table or a join still connecting"
-        );
-        HOST_READ.store(true, Ordering::Relaxed);
-        menu_shows();
-        assert_eq!(
-            OWN_AGAIN.load(Ordering::Relaxed),
-            1,
-            "back from a joined game"
-        );
-    }
 }

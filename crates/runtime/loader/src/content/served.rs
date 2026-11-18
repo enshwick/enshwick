@@ -108,9 +108,6 @@ struct Served {
     /// Whether a game build asked if this client shows served UI images
     /// before they showed: the key is built again once they show.
     reads_icons: AtomicBool,
-    /// What hears the game open or resolve it, for the loader feature that
-    /// serves it.
-    heard_by: Option<fn()>,
 }
 
 impl Served {
@@ -124,14 +121,6 @@ impl Served {
             rebuilding: Mutex::new(()),
             read_by: Mutex::new(Vec::new()),
             reads_icons: AtomicBool::new(false),
-            heard_by: None,
-        }
-    }
-
-    /// Tells the feature that hears its reads that the game read it.
-    fn heard(&self) {
-        if let Some(hears) = self.heard_by {
-            hears();
         }
     }
 }
@@ -653,7 +642,6 @@ unsafe extern "system" fn open(
         return unsafe { OPEN_NEXT.get()(out, database, key) };
     }
     entry.state.relock().base_handle = base_handle;
-    entry.heard();
     let handle = u32::try_from(index + 1).unwrap_or(0) | SERVED;
     if !out.is_null() {
         // SAFETY: `out` is non-null by the check before it and is the open's
@@ -693,7 +681,6 @@ unsafe extern "system" fn resolve(
         }
         return resolved;
     };
-    entry.heard();
     // A served handle never reaches the game's resolve, even once the
     // resources are off: it would read past the game's table.
     let result = SERVING_FUSE

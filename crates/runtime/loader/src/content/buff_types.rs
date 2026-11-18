@@ -203,10 +203,10 @@ mod running {
         for edit in &types {
             crate::log!(INFO, "buff type {:?} served", edit.id());
         }
-        let builder: Builder = Box::new(move |base: &[u8]| {
+        let builder: Builder = Box::new(move |base: Vec<u8>| {
             let types = named(&serving(added, mod_on), crate::content::textures::knows);
             let mut out = Vec::new();
-            let Some(left) = build(&layout, base, &types, &mut out) else {
+            let Some(left) = build(&layout, &base, &types, &mut out) else {
                 crate::log!(
                     WARN,
                     "buff types left out: the game's buff collection does not read with this build's layout"

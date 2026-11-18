@@ -557,21 +557,26 @@ fn a_moved_terrain_id_is_told_in_the_reader_s_language_naming_who_hosts() {
 }
 
 #[test]
-fn a_host_s_table_counts_as_left_only_once_a_session_read_it() {
-    let (table, _) = add_all(&[request(150)]);
-    let reads = Reads::new();
-    reads.read();
-    assert!(!reads.host_read(), "the client's own table");
-    reads.serving(&Session::Host(table.clone()));
-    assert!(!reads.host_read(), "a join still connecting");
-    reads.read();
-    assert!(reads.host_read(), "the joined session opened the palette");
-    reads.serving(&Session::Own(table.clone()));
-    assert!(!reads.host_read(), "its own table again");
-    reads.serving(&Session::Host(table));
+fn a_host_s_table_goes_once_when_the_game_played_with_it_ends() {
+    let played = Played::new();
+    assert!(!played.changed(true, || false), "a game the client hosts");
+    assert!(!played.changed(false, || unreachable!()), "its end");
+    assert!(!played.changed(true, || true), "a joined game starts");
+    assert!(played.changed(false, || unreachable!()), "and ends");
     assert!(
-        !reads.host_read(),
-        "reads before the next join do not count"
+        !played.changed(false, || unreachable!()),
+        "only once per game"
+    );
+}
+
+#[test]
+fn a_host_s_table_taken_while_still_in_a_game_stays_when_that_game_ends() {
+    let played = Played::new();
+    assert!(!played.changed(true, || true), "a joined game starts");
+    played.switched();
+    assert!(
+        !played.changed(false, || unreachable!()),
+        "the next host's table, taken in play, stays"
     );
 }
 

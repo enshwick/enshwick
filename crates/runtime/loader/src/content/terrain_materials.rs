@@ -16,7 +16,7 @@
 //! free id as a copy of the fallback, so its ground loads as the fallback,
 //! and is the mod's material again once the mod is back.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_base::resources::Value;
 use enshwick_core::abi::TerrainMaterialAdd;
@@ -611,57 +611,42 @@ impl Session {
     }
 }
 
-/// The game's reads of the served terrain resources, which tell a client
-/// back at the main menu from a game it joined from one still joining: a
-/// session opens its palette as it starts (client 26430625), after the join
-/// check took the host's table.
+/// Whether the host's table served now is the one of a game the client
+/// plays or played: set when play starts with a host's table, cleared by
+/// every switch of the table, so a join taken while still in a game keeps
+/// the table it took when that game ends.
 #[derive(Debug)]
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "terrain is served only in the game")
 )]
-struct Reads {
-    /// Every open and resolve of a served terrain resource so far.
-    seen: AtomicU64,
-    /// Whether the served table is a host's.
-    host: AtomicBool,
-    /// `seen` when the host's table came.
-    host_from: AtomicU64,
-}
+struct Played(AtomicBool);
 
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "terrain is served only in the game")
 )]
-impl Reads {
+impl Played {
     const fn new() -> Self {
-        Self {
-            seen: AtomicU64::new(0),
-            host: AtomicBool::new(false),
-            host_from: AtomicU64::new(0),
+        Self(AtomicBool::new(false))
+    }
+
+    /// The served table changed.
+    fn switched(&self) {
+        self.0.store(false, Ordering::Release);
+    }
+
+    /// Play started (`playing`) or ended; `host` answers, only at a start,
+    /// whether the table served is a host's. Whether play ended in a game
+    /// played with a host's table, once per such game.
+    fn changed(&self, playing: bool, host: impl FnOnce() -> bool) -> bool {
+        if !playing {
+            return self.0.swap(false, Ordering::AcqRel);
         }
-    }
-
-    /// The game opened or resolved a served terrain resource.
-    fn read(&self) {
-        self.seen.fetch_add(1, Ordering::Relaxed);
-    }
-
-    /// The served table is now `session`'s.
-    fn serving(&self, session: &Session) {
-        let host = matches!(session, Session::Host(_));
-        if host {
-            self.host_from
-                .store(self.seen.load(Ordering::Relaxed), Ordering::Relaxed);
+        if host() {
+            self.0.store(true, Ordering::Release);
         }
-        self.host.store(host, Ordering::Release);
-    }
-
-    /// Whether a session read the host's table served now, so its game was
-    /// joined and the client is back from it.
-    fn host_read(&self) -> bool {
-        self.host.load(Ordering::Acquire)
-            && self.seen.load(Ordering::Relaxed) != self.host_from.load(Ordering::Relaxed)
+        false
     }
 }
 
@@ -670,7 +655,7 @@ impl Reads {
 pub(crate) const FEATURE: &str = "terrain materials";
 
 #[cfg(windows)]
-pub(crate) use running::{add, in_time, padding, read, record, sealed, serve, world_event};
+pub(crate) use running::{add, in_time, padding, record, sealed, serve, world_event};
 
 /// The materials in the running game: mods' registrations, the archive's
 /// palette, the loader's patches and the table a session serves.

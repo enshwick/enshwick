@@ -616,7 +616,13 @@ pub(crate) fn play_frame(
     let _ran = FUSE.run(FEATURE, || {
         let now = local_held::now_ms();
         let byte = byte();
-        play::note_stage(byte, now);
+        let edge = play::note_stage(byte, now);
+        #[cfg(windows)]
+        if let Some(playing) = edge {
+            crate::base::join::play_changed(playing);
+        }
+        #[cfg(not(windows))]
+        let _ = edge;
         play::frame(play::Stage::of(byte), now, game, post);
     });
 }

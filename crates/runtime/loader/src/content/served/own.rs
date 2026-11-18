@@ -60,23 +60,19 @@ pub(super) fn serve_own(
 /// every mod's patch on each key, so a mod's patch of the rules sees the
 /// new ones; the loader's changes of vanilla values, served after, go
 /// first again, so a material copies the rules as changed. Each key keeps
-/// its base, since a joining client builds it again from its host's table,
-/// and tells the terrain of each read, which shows a joined game read it.
+/// its base, since a joining client builds it again from its host's table.
 /// How many keys.
 fn serve_terrain(served: &mut Vec<Served>, patches: Vec<(ResourceKey, Builder)>) -> usize {
-    use crate::content::terrain_materials;
-
     let count = patches.len();
     for (key, builder) in patches {
-        let patch = BuilderPatch::new(builder, terrain_materials::FEATURE).patch();
-        let at = served.iter().position(|s| s.key == key).unwrap_or_else(|| {
-            served.push(Served::new(key, key, Vec::new(), true));
-            served.len() - 1
-        });
-        let entry = &mut served[at];
-        entry.patches.insert(0, patch);
-        entry.keeps_base.store(true, Ordering::Relaxed);
-        entry.heard_by = Some(terrain_materials::read);
+        let patch = BuilderPatch::new(builder, crate::content::terrain_materials::FEATURE).patch();
+        match served.iter_mut().find(|s| s.key == key) {
+            Some(entry) => {
+                entry.patches.insert(0, patch);
+                entry.keeps_base.store(true, Ordering::Relaxed);
+            }
+            None => served.push(Served::new(key, key, vec![patch], true)),
+        }
     }
     count
 }
@@ -142,8 +138,9 @@ pub(super) fn serve_changes(
     count
 }
 
-/// Builds a served resource from its base's bytes.
-pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
+/// Builds a served resource from its base's bytes, which it may hand back
+/// unchanged without a copy.
+pub(crate) type Builder = Box<dyn Fn(Vec<u8>) -> Option<Vec<u8>> + Send + Sync>;
 
 /// One of the loader's own patches that a [`Builder`] makes: a stand-in,
 /// the item registry that lists them, or a resource terrain materials
@@ -180,7 +177,7 @@ impl OwnPatch for BuilderPatch {
     }
 
     fn build(&self, base: Vec<u8>) -> Option<Vec<u8>> {
-        (self.builder)(&base)
+        (self.builder)(base)
     }
 }
 
