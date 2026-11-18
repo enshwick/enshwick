@@ -177,6 +177,36 @@ fn a_wide_change_lints_and_documents_the_stable_surface_but_leaves_its_examples(
     );
 }
 
+#[test]
+fn a_wide_change_that_reaches_only_the_facade_s_documents_does_not_lint_its_stable_surface() {
+    let scope = Scope::Some {
+        code: ["enshwick-abi".to_owned()].into(),
+        docs: [FACADE.to_owned()].into(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: true,
+    };
+    let stable = stable();
+    let steps = host_steps(
+        &scope,
+        (&["--workspace".to_owned()], &stable),
+        (true, true, false),
+        Some(""),
+        &[],
+        false,
+        &[Part::StableApi],
+    );
+    let lines: Vec<String> = steps.iter().map(Step::line).collect();
+    assert!(
+        !lines.contains(&format!(
+            "cargo clippy --all-targets {} -- -D warnings",
+            stable.join(" ")
+        )),
+        "{lines:?}"
+    );
+    assert!(runs_stable_rustdoc(&steps, &stable), "{lines:?}");
+}
+
 /// CI starts the trybuild and stable surface jobs only for the parts this
 /// lists, so a part listed here must have a step and one left out none.
 #[test]
@@ -601,14 +631,9 @@ fn package(name: &str, dir: &str, windows_only: bool) -> Package {
         name: name.to_owned(),
         version: "0.0.0-dev".to_owned(),
         dir: dir.to_owned(),
-        deps: Vec::new(),
-        doc_deps: Vec::new(),
-        lib: None,
         windows_only,
         windows_tests: windows_only,
-        compiles_c: false,
-        stable_build: false,
-        features: Vec::new(),
+        ..Package::default()
     }
 }
 

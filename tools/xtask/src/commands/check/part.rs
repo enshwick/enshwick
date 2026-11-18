@@ -117,13 +117,15 @@ pub(super) fn due_parts(parts: &[Part], scope: &Scope, windows_features: bool) -
 }
 
 /// Whether `scope` needs the facade's stable surface checked: its examples,
-/// the book's among them, change with its documents as well as its code,
-/// and a [`wide`] change that tests the facade can break its lints and
-/// rustdoc without `unstable` from a crate below it.
+/// the book's among them, change with its documents as well as its code.
 pub(super) fn stable_api_due(scope: &Scope) -> bool {
-    touches(scope, FACADE)
-        || matches!(scope, Scope::Some { docs, tested, wide, .. }
-            if docs.contains(FACADE) || (*wide && tested.contains(FACADE)))
+    facade_code_reached(scope) || matches!(scope, Scope::Some { docs, .. } if docs.contains(FACADE))
+}
+
+/// Whether `scope` reaches the facade's code, so its stable surface's lints
+/// can break: it changed, or a [`wide`] change tests it from a crate below.
+pub(super) fn facade_code_reached(scope: &Scope) -> bool {
+    touches(scope, FACADE) || matches!(scope, Scope::Some { tested, .. } if tested.contains(FACADE))
 }
 
 /// Whether a check of `parts` checks the stable surface of `scope` but

@@ -87,14 +87,7 @@ mod tests {
             name: name.to_owned(),
             version: "1.0.0-alpha.15".to_owned(),
             dir: dir.to_owned(),
-            deps: Vec::new(),
-            doc_deps: Vec::new(),
-            lib: None,
-            windows_only: false,
-            compiles_c: false,
-            windows_tests: false,
-            stable_build: false,
-            features: Vec::new(),
+            ..Package::default()
         }
     }
 

@@ -8,13 +8,7 @@ fn package(name: &str, dir: &str, deps: &[&str]) -> Package {
         version: "0.0.0-dev".to_owned(),
         dir: dir.to_owned(),
         deps: deps.iter().map(|d| (*d).to_owned()).collect(),
-        doc_deps: Vec::new(),
-        lib: None,
-        windows_only: false,
-        compiles_c: false,
-        windows_tests: false,
-        stable_build: false,
-        features: Vec::new(),
+        ..Package::default()
     }
 }
 

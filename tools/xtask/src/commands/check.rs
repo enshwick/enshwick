@@ -31,8 +31,8 @@ use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 use part::{
-    Part, due_parts, stable_api_due, stable_api_out_of_scope, stable_examples_left_to_ci,
-    trybuild_due, windows_features_due,
+    Part, due_parts, facade_code_reached, stable_api_due, stable_api_out_of_scope,
+    stable_examples_left_to_ci, trybuild_due, windows_features_due,
 };
 
 pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
@@ -669,23 +669,19 @@ fn changed_rustdoc(scope: &Scope, workspace: &[String]) -> Vec<Step> {
 const LINUX_TARGET: &str = "x86_64-unknown-linux-gnu";
 
 /// The clippy of the workspace's libraries and binaries for Linux, which a
-/// local check on Windows runs when `scope` reaches a package with code
-/// gated on the target platform (`windows_code`): CI lints on Linux, where
-/// such gates leave imports and items unused that the Windows build uses (four
-/// red runs, 2026-11-16 to 17); 10 s after an ABI change. The other targets
+/// local check on Windows runs when `scope` reaches a package it lints: CI
+/// lints on Linux, where target gates (in the package, its manifest or a
+/// dependency) leave imports and items unused or unresolved that the
+/// Windows build uses (four red runs, 2026-11-16 to 17); 11 s from clean,
+/// 10 s after an ABI change. The other targets
 /// stay out, since their dev-dependencies (criterion) compile C, and so do
 /// the packages that compile C ([`Package::compiles_c`]): both need a Linux
 /// cross compiler, so CI lints them.
-fn linux_lint(
-    scope: &Scope,
-    packages: &[Package],
-    windows_code: impl Fn(&Package) -> bool,
-) -> Option<Step> {
-    let linted = |package: &&Package| !package.windows_only && !package.compiles_c;
+fn linux_lint(scope: &Scope, packages: &[Package]) -> Option<Step> {
     packages
         .iter()
-        .filter(linted)
-        .any(|package| reaches(scope, &package.name) && windows_code(package))
+        .filter(|package| !package.windows_only && !package.compiles_c)
+        .any(|package| reaches(scope, &package.name))
         .then(|| {
             let mut step = Step::new(&["clippy", "--target", LINUX_TARGET])
                 .then_owned(&host_args(packages, false));
@@ -707,7 +703,7 @@ fn local_linux_lint(
     if !(cfg!(windows) && lints && Lane::current() == Lane::Local) {
         return Ok(None);
     }
-    match linux_lint(scope, packages, windows_code(&workspace_root())) {
+    match linux_lint(scope, packages) {
         Some(_) if !linux_std_installed() => Err(format!(
             "the Linux lint needs the Linux standard library: run `rustup target add {LINUX_TARGET}` once"
         )),
@@ -815,10 +811,9 @@ fn host_steps(
         steps.push(step);
     }
     if parts.contains(&Part::StableApi) && stable_api_due(scope) {
-        let wide = wide(scope);
         steps.extend(stable_api_steps(
-            touches(scope, FACADE) || wide,
-            !wide,
+            facade_code_reached(scope),
+            !wide(scope),
             stable,
         ));
     }
