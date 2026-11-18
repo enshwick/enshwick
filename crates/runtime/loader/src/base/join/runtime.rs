@@ -27,30 +27,37 @@ pub(crate) fn link(loader: &Loader, join: u64) -> bool {
 /// interface does not read the stage.
 pub(crate) static ENDED_FUSE: Fuse = Fuse::new("join end");
 
-/// The provider's state with a session, hosted or joined: the join passes it
-/// to the transition, and the transition's route finds it by that
-/// (`mov edx,0x2` in `net.provider_transition`, client 26430625).
-const SESSION: u32 = 2;
-
 /// Links the join end on the provider's state tree transition, once the
-/// build names the provider's state with no session; true when linked.
+/// build names the provider's states with a session and with none, and they
+/// differ; true when linked.
 pub(crate) fn link_ended(loader: &Loader) -> bool {
-    // The state's route goes through the transition, so a missing transition
+    // Both states' routes go through the transition, so a missing transition
     // is left to the link below to name.
     if loader.address(pinned::net::PROVIDER_TRANSITION).is_some() {
-        let id = pinned::net::NO_SESSION_STATE.id();
-        let Some(no_session) = loader
-            .build
-            .constant(id)
-            .and_then(|state| u32::try_from(state).ok())
-        else {
-            return loader.fuse_off(&ENDED_FUSE, id, crate::engine::builds::ABSENT);
+        let state = |id| {
+            loader
+                .build
+                .constant(id)
+                .and_then(|state| u32::try_from(state).ok())
+                .ok_or_else(|| loader.fuse_off(&ENDED_FUSE, id, crate::engine::builds::ABSENT))
         };
-        if no_session == SESSION {
+        let session = match state(pinned::net::SESSION_STATE.id()) {
+            Ok(session) => session,
+            Err(linked) => return linked,
+        };
+        let no_session_id = pinned::net::NO_SESSION_STATE.id();
+        let no_session = match state(no_session_id) {
+            Ok(no_session) => no_session,
+            Err(linked) => return linked,
+        };
+        if no_session == session {
             return loader.fuse_off(
                 &ENDED_FUSE,
-                id,
-                "is the session's state, not the one with none",
+                no_session_id,
+                &format!(
+                    "is the session's state ({}), not the one with none",
+                    pinned::net::SESSION_STATE
+                ),
             );
         }
         // The loader links once per process.
@@ -366,11 +373,11 @@ crate::engine::chains::chain_detour! {
 crate::engine::chains::chain_detour! {
     /// The online provider's state tree transition at the table's
     /// `net.provider_transition`, which the provider's join ends in with a
-    /// session (2) and its leave and every online error, as the game's
-    /// dialog opens, with none ([`ends_session`]); it takes the provider's
-    /// tree and the state's index and returns whether the transition started
-    /// (client 26430625, read in the decompiler). The game calls it on the
-    /// thread that moves the provider.
+    /// session (`net.session_state`) and its leave and every online error,
+    /// as the game's dialog opens, with none ([`ends_session`]); it takes the
+    /// provider's tree and the state's index and returns whether the
+    /// transition started (client 26430625, read in the decompiler). The game
+    /// calls it on the thread that moves the provider.
     fn transition(tree: *mut u8, state: u32) -> u64;
     next TRANSITION_NEXT;
     fuse &ENDED_FUSE, "the join end";
@@ -619,13 +626,17 @@ mod tests {
         let loader = crate::start::tests::pinning_loader(
             Side::CLIENT,
             &[pinned::net::PROVIDER_TRANSITION],
-            // Not the kept clients' 1, so the build's value is the one used.
-            &[(pinned::net::NO_SESSION_STATE, 3)],
+            // Not the kept clients' 1 and 2, so the build's values are the
+            // ones used.
+            &[
+                (pinned::net::SESSION_STATE, 1),
+                (pinned::net::NO_SESSION_STATE, 3),
+            ],
         );
         assert!(link_ended(&loader));
         assert!(ends_session(3), "the build's no-session state");
-        assert!(!ends_session(1), "another build's");
-        assert!(!ends_session(2), "a session");
+        assert!(!ends_session(1), "a session");
+        assert!(!ends_session(2), "the kept clients' session");
         let at = loader
             .address(pinned::net::PROVIDER_TRANSITION)
             .unwrap_or_default();
@@ -644,7 +655,7 @@ mod tests {
         let loader = crate::start::tests::pinning_loader(
             Side::CLIENT,
             &[pinned::net::PROVIDER_TRANSITION],
-            &[],
+            &[(pinned::net::SESSION_STATE, 2)],
         );
         assert!(!link_ended(&loader));
         assert!(ENDED_FUSE.is_off());
@@ -659,15 +670,32 @@ mod tests {
 
     #[test]
     fn a_build_whose_leave_names_the_session_s_state_turns_off_only_the_join_end() {
+        // A renumbered tree: the session's state is no longer 2.
         let loader = crate::start::tests::pinning_loader(
             Side::CLIENT,
             &[pinned::net::PROVIDER_TRANSITION],
-            &[(pinned::net::NO_SESSION_STATE, u64::from(SESSION))],
+            &[
+                (pinned::net::SESSION_STATE, 4),
+                (pinned::net::NO_SESSION_STATE, 4),
+            ],
         );
         assert!(!link_ended(&loader));
         assert!(ENDED_FUSE.is_off());
         assert!(!JOIN_FUSE.is_off());
         assert_eq!(off_entry(), pinned::net::NO_SESSION_STATE.id());
+    }
+
+    #[test]
+    fn a_build_whose_join_names_no_state_turns_off_only_the_join_end_naming_the_session_state() {
+        let loader = crate::start::tests::pinning_loader(
+            Side::CLIENT,
+            &[pinned::net::PROVIDER_TRANSITION],
+            &[(pinned::net::NO_SESSION_STATE, 1)],
+        );
+        assert!(!link_ended(&loader));
+        assert!(ENDED_FUSE.is_off());
+        assert!(!JOIN_FUSE.is_off());
+        assert_eq!(off_entry(), pinned::net::SESSION_STATE.id());
     }
 
     #[test]

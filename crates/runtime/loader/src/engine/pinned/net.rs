@@ -15,6 +15,7 @@ pub(crate) const PROVIDER_TRANSITION: Symbol = Symbol::new("net.provider_transit
 pub(crate) const PROVIDER_VTABLE: Symbol = Symbol::new("net.provider_vtable");
 pub(crate) const SESSION_LIMIT: Symbol = Symbol::new("net.session_limit");
 pub(crate) const SESSION_MANAGER: Constant = Constant::new("net.session_manager");
+pub(crate) const SESSION_STATE: Constant = Constant::new("net.session_state");
 pub(crate) const SOCKET_CHANNEL: Constant = Constant::new("net.socket_channel");
 pub(crate) const SOCKET_CREATE: Symbol = Symbol::new("net.socket_create");
 pub(crate) const SOCKET_DESTROY: Symbol = Symbol::new("net.socket_destroy");

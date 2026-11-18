@@ -22,6 +22,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::net::NO_SESSION_STATE.id(),
     pinned::net::PROVIDER_TRANSITION.id(),
     pinned::net::PROVIDER_VTABLE.id(),
+    pinned::net::SESSION_STATE.id(),
     pinned::user::START_INTERACTION.id(),
     pinned::user::INTERACTION_KIND.id(),
     pinned::user::JOIN_FAILED_KIND.id(),
