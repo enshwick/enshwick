@@ -1,7 +1,7 @@
 //! The join hook on the client.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use enshwick_core::abi::UiDialog;
 
@@ -20,6 +20,29 @@ pub(crate) static JOIN_FUSE: Fuse = Fuse::new("join check");
 pub(crate) fn link(loader: &Loader, join: u64) -> bool {
     let target = Target::Found(pinned::net::JOIN_GAME.id(), Some(join));
     loader.link_feature(&JOIN_FUSE, target, &NEXT, detour, HookFlags::NONE)
+}
+
+/// The end of a session a join started: once the provider's session ends,
+/// the client gets its own world back, even when play never started or the
+/// interface does not read the stage.
+static ENDED_FUSE: Fuse = Fuse::new("join end");
+
+/// The provider's state with no session: its leave and every online error,
+/// after the game's dialog, move its state tree there; a session, hosted or
+/// joined, is state 2 (client 26430625, read in the decompiler).
+const NO_SESSION: u32 = 1;
+
+/// Links the join end on the provider's state tree transition; true when
+/// linked.
+pub(crate) fn link_ended(loader: &Loader) -> bool {
+    let target = Target::Pinned(pinned::net::PROVIDER_TRANSITION);
+    loader.link_feature(
+        &ENDED_FUSE,
+        target,
+        &TRANSITION_NEXT,
+        transition,
+        HookFlags::NONE,
+    )
 }
 
 static NAMES: OnceLock<super::Names> = OnceLock::new();
@@ -43,11 +66,16 @@ struct State {
     /// The terrain ids this side serves, once the layer that serves them
     /// set them.
     terrain: OnceLock<TerrainIds>,
+    /// Whether the provider took a join the check let through and its
+    /// session has not ended since: set once the provider's join returns,
+    /// so the end of a session it replaced is not this one's.
+    joined: AtomicBool,
 }
 
 static STATE: State = State {
     refusals: AtomicU64::new(0),
     terrain: OnceLock::new(),
+    joined: AtomicBool::new(false),
 };
 
 /// The terrain ids this side serves, as the layer that serves terrain hands
@@ -66,6 +94,9 @@ pub(crate) struct TerrainIds {
     /// Play started (`true`) or ended: whether it ended in a game played
     /// with a host's table, once per such game.
     pub(crate) play_changed: fn(bool) -> bool,
+    /// The session of a join ended: whether a host's table is still served.
+    /// A game played with it ends no more.
+    pub(crate) left: fn() -> bool,
 }
 
 /// Serving this side's own world again once a joined game ends: a panic
@@ -101,11 +132,36 @@ pub(crate) fn hosting_starts() {
 /// reads the app's stage: once a game played with a host's terrain ids
 /// ends, the client gets its own world back as before a game it hosts, so
 /// one whose hosted start the loader does not see still serves its own ids.
-/// The rebuild runs on a thread of its own, off the interface frame.
 pub(crate) fn play_changed(playing: bool) {
-    if !terrain_ids().is_some_and(|ids| (ids.play_changed)(playing)) {
+    if terrain_ids().is_some_and(|ids| (ids.play_changed)(playing)) {
+        // That game's session ends too, or ended already: it switches back once.
+        STATE.joined.store(false, Ordering::Release);
+        own_world_again();
+    }
+}
+
+/// The provider's state tree moved to `state`: once the session of a join
+/// ends, as it fails, is refused, is left or drops before play starts too,
+/// a host's table still served goes as after a game played with it.
+fn session_changed(state: u32) {
+    if !join_ended(state) {
         return;
     }
+    crate::log!(INFO, "the joined session ended");
+    if terrain_ids().is_some_and(|ids| (ids.left)()) {
+        own_world_again();
+    }
+}
+
+/// Whether `state` ends the session of the last join the provider took,
+/// once per join.
+fn join_ended(state: u32) -> bool {
+    state == NO_SESSION && STATE.joined.swap(false, Ordering::AcqRel)
+}
+
+/// Gives the client its own world back as before a game it hosts, on a
+/// thread of its own, off the game's frame.
+fn own_world_again() {
     crate::engine::off_thread::start("own world", || {
         let _ran = LEFT_FUSE.run("the client's own world", || {
             crate::log!(INFO, "back from a joined game: own terrain ids again");
@@ -169,7 +225,11 @@ crate::engine::chains::chain_detour! {
         };
         if allowed {
             super::interaction::joining(false);
-            return onward.call();
+            let state_changed = onward.call();
+            if !target.is_null() {
+                STATE.joined.store(true, Ordering::Release);
+            }
+            return state_changed;
         }
         crate::log!(WARN, "join refused by the join check");
         STATE.refusals.fetch_add(1, Ordering::AcqRel);
@@ -193,6 +253,24 @@ crate::engine::chains::chain_detour! {
         // host id is a u64 at the layout's `host_at`.
         unsafe { enshwick_core::raw::write_at(target, layout.host_at(), host) };
         state_changed
+    }
+}
+
+crate::engine::chains::chain_detour! {
+    /// The online provider's state tree transition at the table's
+    /// `net.provider_transition`, which the provider's join ends in with a
+    /// session (2) and its leave and every online error, after the game's
+    /// dialog, with none ([`NO_SESSION`]); it takes the provider's tree and
+    /// the state's index and returns whether the transition started (client
+    /// 26430625, read in the decompiler). The game calls it on the thread
+    /// that moves the provider.
+    fn transition(tree: *mut u8, state: u32) -> u64;
+    next TRANSITION_NEXT;
+    fuse &ENDED_FUSE, "the join end";
+    |onward| {
+        let started = onward.call();
+        session_changed(state);
+        started
     }
 }
 
@@ -369,4 +447,51 @@ fn refused(
         1 << UiDialog::OK,
         move |_| crate::base::join::client::report_join_missing(&wanted),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick_base::Relock;
+    use enshwick_core::abi::Side;
+
+    use super::*;
+    use crate::engine::mod_index::ModIndex;
+
+    #[test]
+    fn a_session_end_ends_only_a_join_the_provider_took_and_only_once() {
+        assert!(!join_ended(NO_SESSION), "a hosted session's end");
+        STATE.joined.store(true, Ordering::Release);
+        assert!(!join_ended(2), "the joined session starts");
+        assert!(join_ended(NO_SESSION), "and ends before play");
+        assert!(!join_ended(NO_SESSION), "only once per join");
+    }
+
+    #[test]
+    fn the_join_end_links_on_the_provider_s_state_tree_transition() {
+        let loader = crate::start::tests::pinning_loader(
+            Side::CLIENT,
+            &[pinned::net::PROVIDER_TRANSITION],
+            &[],
+        );
+        assert!(link_ended(&loader));
+        let at = loader
+            .address(pinned::net::PROVIDER_TRANSITION)
+            .unwrap_or_default();
+        let chains = loader.chains.relock();
+        assert_eq!(chains.owners(at), [ModIndex::LOADER]);
+        let features: Vec<_> = chains
+            .features_at(at)
+            .into_iter()
+            .map(Fuse::feature)
+            .collect();
+        assert_eq!(features, [ENDED_FUSE.feature()]);
+    }
+
+    #[test]
+    fn a_build_without_the_transition_turns_off_only_the_join_end() {
+        assert!(!link_ended(&crate::start::tests::bare_loader()));
+        assert!(ENDED_FUSE.is_off());
+        assert!(!JOIN_FUSE.is_off());
+        assert!(!LEFT_FUSE.is_off());
+    }
 }

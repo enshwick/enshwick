@@ -82,6 +82,6 @@ mod runtime;
 
 #[cfg(windows)]
 pub(crate) use runtime::{
-    JOIN_FUSE, TerrainIds, hosting_starts, layout, link, names, play_changed, refusals, set_layout,
-    set_names, set_terrain_ids, terrain_ids,
+    JOIN_FUSE, TerrainIds, hosting_starts, layout, link, link_ended, names, play_changed, refusals,
+    set_layout, set_names, set_terrain_ids, terrain_ids,
 };

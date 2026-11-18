@@ -19,6 +19,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::join::TARGET_QUERY_PORT_READ.id(),
     pinned::join::TARGET_WORD_COPY.id(),
     pinned::net::JOIN_GAME.id(),
+    pinned::net::PROVIDER_TRANSITION.id(),
     pinned::net::PROVIDER_VTABLE.id(),
     pinned::user::START_INTERACTION.id(),
     pinned::user::INTERACTION_KIND.id(),
@@ -40,7 +41,8 @@ pub(super) fn link_join(loader: &Loader) {
 }
 
 /// Links the join check once the build's join target layout reads and the
-/// provider's join checks out; otherwise turns it off, naming why.
+/// provider's join checks out, with the join end it marks joins for;
+/// otherwise turns it off, naming why.
 fn link_check(loader: &Loader) {
     let join_off = |why: &dyn core::fmt::Display| {
         not_checked(loader, &JOIN_FUSE, pinned::net::JOIN_GAME.id(), why);
@@ -53,6 +55,7 @@ fn link_check(loader: &Loader) {
         Ok((join, code)) => {
             if crate::base::join::link(loader, join) {
                 link_join_hold(loader, code);
+                let _ended = crate::base::join::link_ended(loader);
             }
         }
         Err(error) => join_off(&error),

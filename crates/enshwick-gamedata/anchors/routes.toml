@@ -156,6 +156,14 @@ slot = 16
 check = ["push rbx", "push rbp", "push rsi", "push rdi", "sub rsp,0x78"]
 
 [[route]]
+id = "net.provider_transition"
+sides = ["client"]
+in = "net.join_game"
+shape = ["mov edx,0x2", "add rsp,?i", "pop ?r", "pop ?r", "pop ?r", "pop ?r", "jmp *"]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp", "mov [rsp+0x20],rsi", "push rdi"]
+
+[[route]]
 id = "net.provider_vtable"
 sides = ["client"]
 in = "~provider_ctor"

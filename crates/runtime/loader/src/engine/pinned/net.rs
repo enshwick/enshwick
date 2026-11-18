@@ -10,6 +10,7 @@ pub(crate) const MESSAGE_COMMIT: Symbol = Symbol::new("net.message_commit");
 pub(crate) const MESSAGE_OPEN: Symbol = Symbol::new("net.message_open");
 pub(crate) const MESSAGE_RECEIVE: Symbol = Symbol::new("net.message_receive");
 pub(crate) const MESSAGE_RELEASE: Symbol = Symbol::new("net.message_release");
+pub(crate) const PROVIDER_TRANSITION: Symbol = Symbol::new("net.provider_transition");
 pub(crate) const PROVIDER_VTABLE: Symbol = Symbol::new("net.provider_vtable");
 pub(crate) const SESSION_LIMIT: Symbol = Symbol::new("net.session_limit");
 pub(crate) const SESSION_MANAGER: Constant = Constant::new("net.session_manager");
