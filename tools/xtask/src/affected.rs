@@ -9,7 +9,11 @@ mod versions;
 use std::collections::BTreeSet;
 
 /// A workspace package, as far as choosing checks needs it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is a separate fact of the package's manifest, not a state"
+)]
 pub(crate) struct Package {
     pub(crate) name: String,
     /// The package's version.
@@ -35,6 +39,10 @@ pub(crate) struct Package {
     /// Has tests of its Windows code, run under Wine off Windows
     /// (`package.metadata.xtask.windows-tests`, or `windows-only`).
     pub(crate) windows_tests: bool,
+    /// Compiles C for its target, itself or through a dependency
+    /// (`package.metadata.xtask.compiles-c`): a check for another target
+    /// than the host's would need a cross compiler for it.
+    pub(crate) compiles_c: bool,
     /// Has a stable surface to check in a build without `unstable`: an
     /// `unstable` feature of its own, or examples that name the facade as a
     /// stable mod does (a dev-dependency on it with no feature beyond `test`).
@@ -52,7 +60,8 @@ pub(crate) enum Scope {
     /// Only these packages.
     Some {
         /// Packages checked in full (lints, tests, examples, and for the
-        /// facade its trybuild test and stable surface unless `wide`): the
+        /// facade its stable surface and, unless `wide`, its trybuild test
+        /// and stable examples): the
         /// changed ones and their dependents, or when `wide` the changed
         /// ones alone.
         code: BTreeSet<String>,
@@ -62,7 +71,7 @@ pub(crate) enum Scope {
         /// use a changed one ([`Package::doc_deps`]).
         docs: BTreeSet<String>,
         /// Packages a local check runs the tests of but not the examples,
-        /// leaving those, the facade's trybuild test and its stable surface
+        /// leaving those, the facade's trybuild test and its stable examples
         /// to CI: the dependents of a change that reaches
         /// [`WIDE_PACKAGES`] or more.
         tested: BTreeSet<String>,
@@ -71,7 +80,7 @@ pub(crate) enum Scope {
         built: BTreeSet<String>,
         /// A local check of a change that reaches [`WIDE_PACKAGES`] or
         /// more, changed ones included: it leaves the
-        /// facade's trybuild test and stable surface and the dependents'
+        /// facade's trybuild test and stable examples and the dependents'
         /// rustdoc to CI, and runs the dependents' tests one process per
         /// binary.
         wide: bool,
@@ -109,7 +118,7 @@ impl Lane {
 /// The fewest packages, changed ones and their dependents together, that
 /// make a local check wide: one changed package and eight that depend on
 /// it. From it on the dependents' examples and rustdoc, the facade's
-/// trybuild test and its stable surface go to CI. A change to any API crate reaches 23 to
+/// trybuild test and its stable examples go to CI. A change to any API crate reaches 23 to
 /// 27 packages (2026-11-17), whose examples, trybuild test and stable
 /// surface checked in full went past the ten-minute local limit on the
 /// Windows PC (669 s, 2026-11-14).
@@ -171,7 +180,7 @@ pub(crate) fn scope(
             shared::LOCK if local && bump(texts, file, versions::lock) => {}
             shared::MANIFEST if local && bump(texts, file, versions::root) => {
                 // Members that inherit the version build under the new one.
-                bumped.extend(shared::inherited(texts, packages).unwrap_or_default());
+                bumped.extend(shared::inherited(texts, packages, local).unwrap_or_default());
             }
             shared::LOCK => {
                 let Some(reached) = shared::locked(texts, packages) else {
@@ -180,7 +189,7 @@ pub(crate) fn scope(
                 changed.extend(reached);
             }
             shared::MANIFEST => {
-                let Some(reached) = shared::inherited(texts, packages) else {
+                let Some(reached) = shared::inherited(texts, packages, local) else {
                     return Scope::All;
                 };
                 changed.extend(reached);

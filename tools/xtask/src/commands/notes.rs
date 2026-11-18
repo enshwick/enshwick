@@ -432,15 +432,8 @@ mod tests {
     fn package(name: &str, dir: &str) -> Package {
         Package {
             name: name.to_owned(),
-            version: String::new(),
             dir: dir.to_owned(),
-            deps: Vec::new(),
-            doc_deps: Vec::new(),
-            lib: None,
-            windows_only: false,
-            windows_tests: false,
-            stable_build: false,
-            features: Vec::new(),
+            ..Package::default()
         }
     }
 
