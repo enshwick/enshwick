@@ -10,7 +10,7 @@ fn host_entry(c: &mut Criterion) {
 
     use enshwick_core::abi::{Level, ModHandle, Str};
 
-    let api = enshwick_loader::host_api();
+    let api = enshwick_loader::bench::host_api();
     let mut group = c.benchmark_group("host_entry");
     group.bench_function("log_level", |b| {
         let mut level = Level::INFO;

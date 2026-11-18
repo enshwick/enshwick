@@ -618,24 +618,34 @@ fn the_windows_lint_lints_each_feature_alone_of_the_checked_packages_with_window
         wide: false,
     };
     let windows_code = |p: &Package| p.name != "enshwick-values";
-    let lines: Vec<String> = windows_lint_steps(&scope, &packages, windows_code)
-        .iter()
-        .map(Step::line)
-        .collect();
+    let lines = |parts: &[Part]| -> Vec<String> {
+        windows_lint::steps(&scope, &packages, parts, windows_code)
+            .iter()
+            .map(Step::line)
+            .collect()
+    };
     let xwin = format!("cargo xwin clippy --target {WINDOWS_TARGET}");
     let stub = format!("{xwin} --package enshwick-loader-stub --no-default-features");
+    let workspace =
+        format!("{xwin} --workspace --features {TEST_FEATURE} --all-targets -- -D warnings");
+    let alone = [
+        format!("{stub} -- -D warnings"),
+        format!("{stub} --features trace -- -D warnings"),
+    ];
     assert_eq!(
-        lines,
-        [
-            format!("{xwin} --workspace --features {TEST_FEATURE} --all-targets -- -D warnings"),
-            format!("{stub} -- -D warnings"),
-            format!("{stub} --features trace -- -D warnings"),
-        ]
+        lines(&[Part::WindowsLint]),
+        std::slice::from_ref(&workspace)
     );
+    assert_eq!(lines(&[Part::WindowsFeatures]), alone);
+    assert_eq!(
+        lines(&Part::every(false)),
+        [[workspace].as_slice(), &alone].concat()
+    );
+    assert!(lines(&[Part::Host, Part::Features]).is_empty());
 }
 
 #[test]
-fn a_package_has_windows_code_when_it_is_windows_only_or_its_source_names_windows() {
+fn a_package_has_windows_code_when_it_is_windows_only_or_a_cfg_in_its_source_names_windows() {
     let root = workspace_root();
     assert!(features::windows_code(
         &root,
@@ -649,15 +659,30 @@ fn a_package_has_windows_code_when_it_is_windows_only_or_its_source_names_window
         &root,
         &package("values", "crates/internal/values", false)
     ));
+    // Its source names Windows only in prose and in `windows_sys` paths.
+    assert!(!features::windows_code(
+        &root,
+        &package("fake", "crates/internal/fake", false)
+    ));
     for text in [
         "#[cfg(windows)]",
-        "#[cfg(target_os = \"windows\")]",
-        "cfg!(windows)",
+        "#[cfg(not(windows))]",
+        "#[cfg(all(test, target_os = \"windows\"))]",
+        "if cfg!(windows) {",
+        "#[cfg_attr(windows, expect(dead_code))]",
     ] {
-        assert!(features::names_windows(text), "{text}");
+        assert!(features::gates_windows(text), "{text}");
     }
-    for text in ["use windows_sys::Win32;", "Windows", "my_windows", ""] {
-        assert!(!features::names_windows(text), "{text}");
+    for text in [
+        "use windows_sys::Win32;",
+        "/// Runs on Windows only.",
+        "#[cfg(feature = \"test\")] fn windows() {}",
+        "#[cfg(unix)] mod windows_paths;",
+        "mycfg(windows)",
+        "cfg",
+        "",
+    ] {
+        assert!(!features::gates_windows(text), "{text}");
     }
 }
 

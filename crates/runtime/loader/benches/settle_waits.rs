@@ -5,7 +5,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick_loader::bench_settle_step;
+use enshwick_loader::bench::bench_settle_step;
 
 fn settle_waits(c: &mut Criterion) {
     let mut group = c.benchmark_group("settle_waits");

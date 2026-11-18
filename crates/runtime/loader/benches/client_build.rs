@@ -7,9 +7,9 @@ use criterion::{Criterion, criterion_group, criterion_main};
 #[cfg(windows)]
 fn client_build(c: &mut Criterion) {
     let mut group = c.benchmark_group("client_build");
-    let mut idle = enshwick_loader::bench_client_build(false);
+    let mut idle = enshwick_loader::bench::bench_client_build(false);
     group.bench_function("nothing_handed", |b| b.iter(&mut idle));
-    let mut moving = enshwick_loader::bench_client_build(true);
+    let mut moving = enshwick_loader::bench::bench_client_build(true);
     group.bench_function("move_held", |b| b.iter(&mut moving));
     group.finish();
 }

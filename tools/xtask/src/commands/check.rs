@@ -11,7 +11,7 @@
 //! reaches one process per binary ([`in_process`]). Off Windows the workspace is also
 //! linted for Windows through `cargo xwin`, beside the host checks, and
 //! then each checked package with Windows code with none and each one of
-//! its features alone.
+//! its features alone (a part of its own in CI).
 //! `--windows` also runs the Windows tests of the crates marked
 //! `windows-tests` or `windows-only`, under Wine on an amd64 Linux host.
 //! `--all` runs the full suite, the Windows tests included where they can
@@ -366,10 +366,14 @@ pub(crate) enum Part {
     /// build of its own without `unstable`, which shares nothing with the
     /// other parts' builds.
     StableApi,
-    /// clippy for the Windows target through cargo-xwin, off Windows: the
-    /// workspace, then each checked package with none and each one of its
-    /// features alone ([`windows_lint_steps`]).
+    /// clippy of the workspace for the Windows target through cargo-xwin,
+    /// off Windows ([`windows_lint::steps`]).
     WindowsLint,
+    /// clippy for the Windows target through cargo-xwin, off Windows, of
+    /// each checked package with Windows code with none and each one of its
+    /// features alone ([`windows_lint::steps`]); a part of its own, so CI runs
+    /// it beside the workspace's Windows lint.
+    WindowsFeatures,
     /// The tests of the changed packages that run only on Windows, under
     /// Wine on an amd64 Linux host.
     WindowsTests,
@@ -386,8 +390,9 @@ pub(crate) enum Part {
 
 impl Part {
     /// The parts that run when none is named: the host check, the lints of
-    /// each feature alone, the docs, the stable surface, the Windows lint,
-    /// the trybuild test and semver-checks, and the Windows tests with
+    /// each feature alone, the docs, the stable surface, the Windows lints
+    /// of the workspace and of each feature alone, the trybuild test and
+    /// semver-checks, and the Windows tests with
     /// `--all` or `--windows`.
     fn every(windows_tests: bool) -> Vec<Self> {
         let mut every = vec![
@@ -396,6 +401,7 @@ impl Part {
             Self::Docs,
             Self::StableApi,
             Self::WindowsLint,
+            Self::WindowsFeatures,
             Self::Trybuild,
             Self::Semver,
         ];
@@ -416,6 +422,7 @@ impl Part {
             | Self::Features
             | Self::Docs
             | Self::WindowsLint
+            | Self::WindowsFeatures
             | Self::WindowsTests
             | Self::Fuzz
             | Self::Semver => true,
@@ -941,9 +948,9 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         full,
         parts,
     ));
-    let windows = if !on_windows && flags.0 && parts.contains(&Part::WindowsLint) {
+    let windows = if !on_windows && flags.0 {
         let root = workspace_root();
-        windows_lint_steps(scope, packages, |p| features::windows_code(&root, p))
+        windows_lint::steps(scope, packages, parts, |p| features::windows_code(&root, p))
     } else {
         Vec::new()
     };
@@ -962,26 +969,8 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     })
 }
 
-/// The Windows lint off Windows, where the `cfg(windows)` code builds only
-/// through cargo-xwin: the whole workspace with its test features, then each
-/// package `scope` checks that has Windows code (`windows_code`, Windows-only
-/// packages included) with none and each one of its features alone
-/// ([`features`]); the host's feature lints already cover the rest.
-fn windows_lint_steps(
-    scope: &Scope,
-    packages: &[Package],
-    windows_code: impl Fn(&Package) -> bool,
-) -> Vec<Step> {
-    let xwin = ["xwin", "clippy", "--target", WINDOWS_TARGET];
-    let workspace = Step::new(&xwin)
-        .then(&["--workspace", "--features", TEST_FEATURE, "--all-targets"])
-        .then(&["--", "-D", "warnings"]);
-    let mut steps = vec![workspace];
-    steps.extend(features::steps(scope, packages, windows_code, &xwin));
-    steps
-}
-
 mod features;
 mod in_process;
 #[cfg(test)]
 mod tests;
+mod windows_lint;

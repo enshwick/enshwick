@@ -77,19 +77,20 @@ jobs:
           key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}${{ inputs.part == 'fuzz' && format('-fuzz-{0}', hashFiles('.github/actions/setup-rust/action.yml')) || '' }}
       # The Windows SDK and CRT cargo-xwin downloads, about 12 minutes from
       # Microsoft on a hosted runner. Only the cross-compiling parts here
-      # (`windows-lint`, which also lints each feature alone for Windows,
-      # and `all`) use it; rust-ci.yml's job `windows` builds natively.
-      - if: inputs.part == 'windows-lint' || inputs.part == 'all'
+      # (`windows-lint`, `windows-features` and `all`) use it; rust-ci.yml's
+      # job `windows` builds natively.
+      - if: inputs.part == 'windows-lint' || inputs.part == 'windows-features' || inputs.part == 'all'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/xwin
           key: xwin-${{ runner.os }}-0.23.1-v1
       # clang of the toolchain's LLVM; the docs, features, stable-api,
-      # trybuild and semver parts install the host part's packages.
+      # trybuild and semver parts install the host part's packages, the
+      # windows-features part the windows-lint part's.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/apt-archives
-          key: apt-${{ runner.os }}-${{ (inputs.part == 'docs' || inputs.part == 'features' || inputs.part == 'stable-api' || inputs.part == 'trybuild' || inputs.part == 'semver') && 'host' || inputs.part }}-v2
+          key: apt-${{ runner.os }}-${{ (inputs.part == 'docs' || inputs.part == 'features' || inputs.part == 'stable-api' || inputs.part == 'trybuild' || inputs.part == 'semver') && 'host' || inputs.part == 'windows-features' && 'windows-lint' || inputs.part }}-v2
 
       - uses: ./.github/actions/setup-rust
         with:
