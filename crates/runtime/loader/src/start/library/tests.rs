@@ -136,8 +136,7 @@ const DEPENDENCY: &str = "enshwick-fixture-dependency";
 
 /// The fixture copied as [`DEPENDENCY`]: it exports a function no Windows
 /// binding declares, so no crate the fixtures link can bind the `imports`
-/// fixture's import to a system DLL instead, as `windows-sys` did with a
-/// function of `version.dll`.
+/// fixture's import to a system DLL instead.
 const DEPENDENCY_SOURCE: &str = r#"
 #[unsafe(no_mangle)]
 pub extern "system" fn enshwick_fixture_dependency() -> u32 {

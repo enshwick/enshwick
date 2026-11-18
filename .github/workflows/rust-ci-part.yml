@@ -103,14 +103,16 @@ jobs:
         with:
           store: ${{ env.STORE_CACHES }}
 
-      # The build itself, per part: each job builds a different target.
+      # The build itself, per part: each job builds a different target. The
+      # windows-features part starts from the windows-lint part's and stores
+      # none of its own, which would only evict others from the full store.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # A cache saved by a failed run would be restored as it is and
           # never replaced, so only a finished run saves one.
           prefix-key: v1-rust
-          key: ${{ inputs.part }}
-          save-if: ${{ env.STORE_CACHES }}
+          key: ${{ inputs.part == 'windows-features' && 'windows-lint' || inputs.part }}
+          save-if: ${{ env.STORE_CACHES == 'true' && inputs.part != 'windows-features' }}
 
       # The luau-lsp the tests download, kept per pin instead of fetched by
       # each test process.

@@ -645,7 +645,7 @@ fn the_windows_lint_lints_each_feature_alone_of_the_checked_packages_with_window
 }
 
 #[test]
-fn a_package_has_windows_code_when_it_is_windows_only_or_a_cfg_in_its_source_names_windows() {
+fn a_package_has_windows_code_when_it_is_windows_only_or_a_cfg_in_its_source_names_the_target() {
     let root = workspace_root();
     assert!(features::windows_code(
         &root,
@@ -659,30 +659,30 @@ fn a_package_has_windows_code_when_it_is_windows_only_or_a_cfg_in_its_source_nam
         &root,
         &package("values", "crates/internal/values", false)
     ));
-    // Its source names Windows only in prose and in `windows_sys` paths.
-    assert!(!features::windows_code(
-        &root,
-        &package("fake", "crates/internal/fake", false)
-    ));
     for text in [
         "#[cfg(windows)]",
         "#[cfg(not(windows))]",
         "#[cfg(all(test, target_os = \"windows\"))]",
-        "if cfg!(windows) {",
+        "fn f() { if cfg!(windows) {} }",
         "#[cfg_attr(windows, expect(dead_code))]",
+        "#[cfg(unix)] mod paths;",
+        "#[cfg(not(target_os = \"linux\"))] fn f() {}",
+        "#[cfg(target_env = \"msvc\")] fn f() {}",
+        "fn f() { \"open",
     ] {
-        assert!(features::gates_windows(text), "{text}");
+        assert!(features::gates_target(text), "{text}");
     }
     for text in [
         "use windows_sys::Win32;",
-        "/// Runs on Windows only.",
-        "#[cfg(feature = \"test\")] fn windows() {}",
-        "#[cfg(unix)] mod windows_paths;",
-        "mycfg(windows)",
+        "/// Runs on Windows only, under #[cfg(windows)].",
+        "const GATE: &str = \"cfg(windows)\";",
+        "#[cfg_attr(feature = \"a\", doc = \")\")] fn windows() {}",
+        "#[cfg(feature = \"test\")] mod windows_paths;",
+        "fn mycfg() {} fn f() { mycfg(windows) }",
         "cfg",
         "",
     ] {
-        assert!(!features::gates_windows(text), "{text}");
+        assert!(!features::gates_target(text), "{text}");
     }
 }
 

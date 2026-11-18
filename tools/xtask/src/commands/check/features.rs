@@ -6,11 +6,13 @@
 //! the library and binaries: the dev-dependencies of the other targets turn
 //! the features back on and hide the gap, and the workspace's clippy lints
 //! those targets. Off Windows the Windows part of them runs them again for
-//! the Windows target, where the `cfg(windows)` code builds, for the
-//! packages with such code ([`windows_code`]).
+//! the Windows target, where code gated on the target platform differs, for
+//! the packages with such code ([`windows_code`]).
 
 use std::fs;
 use std::path::Path;
+
+use proc_macro2::{Delimiter, TokenStream, TokenTree};
 
 use super::Step;
 use crate::affected::{Package, Scope};
@@ -49,8 +51,8 @@ pub(super) fn steps(
 
 /// Whether `package` has code that builds only for Windows, so its lints
 /// for the Windows target can differ from those on the host: it is
-/// Windows-only, or a source file under `root` holds a `cfg` predicate
-/// naming `windows` ([`gates_windows`]).
+/// Windows-only, or a source file under `root` holds a `cfg` predicate on
+/// the target platform ([`gates_target`]).
 pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
     if package.windows_only {
         return true;
@@ -60,46 +62,56 @@ pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
     rust_files(&root.join(&package.dir).join("src"), &mut files).is_err()
         || files
             .iter()
-            .any(|file| fs::read_to_string(file).map_or(true, |text| gates_windows(&text)))
+            .any(|file| fs::read_to_string(file).map_or(true, |text| gates_target(&text)))
 }
+
+/// The `cfg` options that tell the Windows target from the host, so code
+/// under one builds on only one of them.
+const TARGET_OPTIONS: [&str; 5] = [
+    "windows",
+    "unix",
+    "target_os",
+    "target_family",
+    "target_env",
+];
 
 /// Whether `text` holds a `cfg(..)`, `cfg!(..)` or `cfg_attr(..)` whose
-/// arguments name `windows` (`windows`, `not(windows)`,
-/// `target_os = "windows"`); such text in a comment counts too.
-pub(super) fn gates_windows(text: &str) -> bool {
-    let ident = |c: char| c.is_alphanumeric() || c == '_';
-    text.match_indices("cfg").any(|(at, word)| {
-        let rest = &text[at + word.len()..];
-        let rest = rest
-            .strip_prefix('!')
-            .or_else(|| rest.strip_prefix("_attr"))
-            .unwrap_or(rest);
-        !text[..at].ends_with(ident)
-            && rest
-                .strip_prefix('(')
-                .is_some_and(|args| names_windows(within_parentheses(args)))
-    })
-}
-
-/// `text` up to the parenthesis that closes the one just before it.
-fn within_parentheses(text: &str) -> &str {
-    let mut depth = 0_usize;
-    for (at, c) in text.char_indices() {
-        match c {
-            '(' => depth += 1,
-            ')' if depth == 0 => return &text[..at],
-            ')' => depth -= 1,
-            _ => {}
+/// predicate names one of the [`TARGET_OPTIONS`] (`windows`, `not(unix)`,
+/// `target_env = "msvc"`); a comment or a string names nothing, and text
+/// that does not lex counts as one that does.
+pub(super) fn gates_target(text: &str) -> bool {
+    let Ok(tokens) = text.parse::<TokenStream>() else {
+        return true;
+    };
+    let mut streams = vec![tokens];
+    while let Some(stream) = streams.pop() {
+        let mut after_cfg = false;
+        for token in stream {
+            match token {
+                TokenTree::Ident(ident) => after_cfg = ident == "cfg" || ident == "cfg_attr",
+                TokenTree::Punct(punct) if punct.as_char() == '!' => {}
+                TokenTree::Group(group) => {
+                    if after_cfg
+                        && group.delimiter() == Delimiter::Parenthesis
+                        && names_target(group.stream())
+                    {
+                        return true;
+                    }
+                    streams.push(group.stream());
+                    after_cfg = false;
+                }
+                TokenTree::Punct(_) | TokenTree::Literal(_) => after_cfg = false,
+            }
         }
     }
-    text
+    false
 }
 
-/// Whether `text` holds `windows` as a word of its own, not inside an
-/// identifier such as `windows_sys`.
-fn names_windows(text: &str) -> bool {
-    let ident = |c: char| c.is_alphanumeric() || c == '_';
-    text.match_indices("windows").any(|(at, word)| {
-        !text[..at].ends_with(ident) && !text[at + word.len()..].starts_with(ident)
+/// Whether a `cfg` predicate names one of the [`TARGET_OPTIONS`].
+fn names_target(predicate: TokenStream) -> bool {
+    predicate.into_iter().any(|token| match token {
+        TokenTree::Ident(ident) => TARGET_OPTIONS.iter().any(|option| ident == option),
+        TokenTree::Group(group) => names_target(group.stream()),
+        TokenTree::Punct(_) | TokenTree::Literal(_) => false,
     })
 }

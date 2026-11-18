@@ -49,14 +49,16 @@ pub use engine::pages::{forget as forget_read_only, read_only};
 #[cfg(windows)]
 pub use parts::table_ids;
 
-/// The hooks the loader's benchmarks drive, out of the shipped DLL: each
-/// benchmark that uses one sets `required-features = ["test"]`, and the
-/// loader's own tests drive the two that build without the feature.
+/// The hooks the loader's benchmarks drive, kept out of the shipped DLL by
+/// the `test` feature, which each benchmark that uses one requires or gates
+/// on.
 #[cfg(any(test, feature = "test"))]
 #[doc(hidden)]
 pub mod bench {
     #[cfg(feature = "test")]
     pub use crate::world::transactions::bench_settle_step;
+    // The loader's own tests drive these two without the feature, and a
+    // `pub` item must stay reachable from the root.
     #[cfg(windows)]
     pub use crate::{
         actions::client_input::bench_client_build, ui::interface::item_slots::bench_item_slot,
@@ -65,7 +67,7 @@ pub mod bench {
     pub use crate::{
         base::carrier::bench_own_account,
         base::game_events::bench_server_copy,
-        content::recipes::bench_recipe_filter,
+        content::recipes::live::bench_recipe_filter,
         content::served::{bench_served_build, bench_text_lookup},
         content::textures::bench_texture_request,
         engine::world::accounts::bench_accounts,
