@@ -12,6 +12,7 @@
 //! link see the server step on another thread, that thread counts from
 //! then on, with a warning.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick_core::abi::Side;
@@ -24,12 +25,16 @@ pub(super) struct Hosted {
     /// The hosted server's thread, from its start until it leaves the
     /// game's server list; 0 for none.
     thread: AtomicU32,
+    /// What a higher layer does as a hosted game starts, before the game
+    /// reads its resources; set once.
+    starting: OnceLock<fn()>,
 }
 
 impl Hosted {
     pub(super) const fn new() -> Self {
         Self {
             thread: AtomicU32::new(0),
+            starting: OnceLock::new(),
         }
     }
 
@@ -80,6 +85,16 @@ pub(crate) fn server_starts() {
     let me = current_thread();
     super::STATE.hosted.starts(me);
     crate::log!(INFO, "a hosted game starts on thread {me}");
+    if let Some(starting) = super::STATE.hosted.starting.get() {
+        starting();
+    }
+}
+
+/// Runs `starting` as each hosted game starts, before the game reads its
+/// resources (client 26430625: its terrain palette 55 ms later); the first
+/// call sets it.
+pub(crate) fn on_hosted_start(starting: fn()) {
+    let _first = super::STATE.hosted.starting.set(starting);
 }
 
 /// The hosted server stepped its world on `thread`, as the post-step link

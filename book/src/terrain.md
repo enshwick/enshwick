@@ -109,10 +109,30 @@ world runs.
 
 The loader serves the material's rules and effects on the server and on
 clients, and on clients the look of `like`. Only a mod of both sides
-(`side = "both"`) may add one, since every client names the ids in load
-order too. A server-only mod that asks is turned off. A mod turned off
+(`side = "both"`) may add one, since a client draws only the materials it
+serves. A server-only mod that asks is turned off. A mod turned off
 after it added a material leaves that material its id, as a copy of its
-fallback. A material of a mod's own has the game's default behaviour in water, and a
+fallback.
+
+The game sends voxels to clients as their ids, so a client must name each
+id as the server does. The server lists the ids it serves in its Steam
+rules (`enshwick.terrain`), and a hosting client lists them in its lobby. A
+joining client takes that list before it connects. A material of its own
+mods keeps its rules at the host's id. A removed mod's material that the
+client never had becomes a copy of the fallback the host names. When the
+client leaves, its own ids come back for the next game it hosts.
+
+A client mod that the server does not run is turned off at the join, but
+it took its ids when the game started. A mod of the server's loaded after
+it then has another id on the client than on the server. A dedicated
+server's join is refused with a dialog that names the extra mods (error
+E3002). Turn them off and restart the game. A client that cannot take the
+server's ids, such as a list its game build does not read, is refused with
+the same error. A hosted game cannot refuse a client before it connects.
+The client joins with the host's ids, and the player reads a note. That
+mod reads a wrong id until the game restarts.
+
+A material of a mod's own has the game's default behaviour in water, and a
 texture of its own is not offered.
 
 ### A world without the mod
@@ -123,9 +143,12 @@ set with `fallback`. The loader keeps every material a mod ever added, with
 its fallback, in `mods/enshwick/clones.toml`; keep that file. Once the mod
 is back, the ground is the mod's material again. The fallbacks take the
 free ids that mods' materials leave. Past 11 materials of mods and removed
-mods together, the last ones load as air. The record is one per game
-folder, not per world, and each side reads its own. A client whose record
-differs from the server's can draw that ground otherwise.
+mods together, the last ones load as air. Each world records the materials
+it was served in `<stem>-mod-data/enshwick/terrain.toml` beside its save.
+A dedicated server places the materials that the worlds of its save folder
+held first. A client that hosts a game learns its world only after the
+game reads its terrain, so it places them in the record's order. A joining
+client takes the server's ids, so its own record does not matter there.
 
 A server without Enshwick loads that ground as air, and its next save keeps
 the loss.

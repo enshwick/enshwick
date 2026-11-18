@@ -373,6 +373,7 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Ter
                 health: unsafe { read(config, layout.config_health) },
             }
         })
+        .filter(|info| !crate::content::terrain_materials::padding(info.id))
         .collect())
 }
 

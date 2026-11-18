@@ -40,6 +40,11 @@ pub use info::{ServerInfo, parse_info, query_info};
 pub(crate) use plan::entries;
 use plan::label;
 pub use plan::{Plan, differences, plan, wanted};
+#[cfg_attr(
+    not(windows),
+    expect(unused_imports, reason = "only the running game's join check reads it")
+)]
+pub(crate) use rules::terrain_rules_value;
 pub use rules::{mod_rules_value, mods_complete, query_rules, rule};
 pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 
@@ -57,10 +62,26 @@ pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 /// ```
 pub type Names = BTreeMap<String, String>;
 
+/// Who hosts the game a client joins, which its terrain text names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+pub(crate) enum Host {
+    /// A dedicated server, which refuses the join.
+    Server,
+    /// A player hosting the game, which the client joins all the same.
+    Player,
+}
+
 #[cfg(windows)]
 pub(crate) mod client;
 #[cfg(windows)]
 mod runtime;
 
 #[cfg(windows)]
-pub(crate) use runtime::{JOIN_FUSE, layout, link, names, refusals, set_layout, set_names};
+pub(crate) use runtime::{
+    JOIN_FUSE, TerrainIds, hosting_starts, layout, link, names, refusals, set_layout, set_names,
+    set_terrain_ids, terrain_ids,
+};

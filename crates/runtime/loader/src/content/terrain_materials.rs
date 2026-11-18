@@ -20,6 +20,7 @@ use enshwick_base::resources::Value;
 use enshwick_core::abi::TerrainMaterialAdd;
 use enshwick_core::content::Guid;
 
+use crate::base::join::Host;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Sealed;
 
@@ -38,6 +39,8 @@ const TERRAIN_ITEM: &str = "terrainItem";
 const HARDNESS: &str = "hardness";
 const HEALTH_POINTS: &str = "healthPoints";
 const CAN_BE_FLATTENED: &str = "canBeFlattened";
+const CONDITIONAL_BUFFS: &str = "conditionalBuffTypes";
+const MIN_SUBMERGE: &str = "minSubmergePercentage";
 const MATERIAL_TYPE: &str = "materialType";
 const BAKING_VOXEL_MATERIALS: &str = "bakingVoxelMaterialDataBlock";
 const DATA: &str = "data";
@@ -286,6 +289,44 @@ fn orphans(
     (kept, lost)
 }
 
+/// The recorded materials `recorded` with those the loaded world held last
+/// time, `held`, first, so its ground wins a free id over a removed mod's
+/// it never held; each part keeps its order.
+fn prefer(recorded: &[(Guid, Guid)], held: &[Guid]) -> Vec<(Guid, Guid)> {
+    let (first, rest): (Vec<_>, Vec<_>) = recorded.iter().partition(|(g, _)| held.contains(g));
+    first.into_iter().chain(rest).collect()
+}
+
+/// What a world's record of its terrain materials holds, in its loader data
+/// folder.
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+struct Held {
+    /// The GUIDs of the terrain materials served, mods' and orphans'.
+    held: Vec<String>,
+}
+
+/// The text of a world's record for a world served `materials`.
+fn held_text(materials: &[Material]) -> String {
+    let held = Held {
+        held: materials.iter().map(|m| m.guid.to_string()).collect(),
+    };
+    toml::to_string(&held).unwrap_or_default()
+}
+
+/// The GUIDs a world's record names; none for a file that does not read, and
+/// an entry that is no GUID is skipped.
+fn held_of(text: &str) -> Vec<Guid> {
+    toml::from_str::<Held>(text).map_or_else(
+        |_| Vec::new(),
+        |held| {
+            held.held
+                .iter()
+                .filter_map(|g| Guid::try_parse(g))
+                .collect()
+        },
+    )
+}
+
 /// The materials `added` as served this run: the material of a mod `on`
 /// does not name as a copy of its fallback, in the id the mod was told,
 /// so the ids of the mods after it hold and its ground loads as an orphan's.
@@ -317,28 +358,86 @@ fn name_in(world: &mut Value, materials: &[Material]) -> Option<()> {
     Some(())
 }
 
-/// Adds the terraforming rule of each of `materials` to `rules`: a copy of
-/// its `like`'s with its changes. A material whose `like` these rules do
-/// not hold gets none here, and the others still do.
-fn add_rules(rules: &mut Value, materials: &[Material]) -> Option<()> {
+/// Adds one terraforming rule for each terrain id of `free` to `rules`, so
+/// the rules come out one size whichever materials a session serves, as a
+/// rebuild in place needs. A material of `materials` gets a copy of its
+/// `like`'s rule with its changes; any other id, which no voxel holds, and a
+/// material whose `like` these rules lack, a copy of the first rule.
+fn add_rules(rules: &mut Value, free: &[u8], materials: &[Material]) -> Option<()> {
     let Value::List(configs) = rules.field_mut(TERRAIN_CONFIGS)? else {
         return None;
     };
-    for material in materials {
-        let Some(like) = configs
-            .iter()
-            .find(|config| config_id(config) == Some(material.like))
-        else {
-            continue;
-        };
+    let pad = Padding::of(configs)?;
+    let mut added = Vec::with_capacity(free.len());
+    for &id in free {
+        let material = materials.iter().find(|m| m.id == id);
+        let like = material
+            .and_then(|m| configs.iter().find(|c| config_id(c) == Some(m.like)))
+            .or_else(|| configs.first())?;
         let mut config = like.clone();
         *config
             .field_mut(TERRAIN_MATERIAL)?
-            .field_mut(MATERIAL_ID_VALUE)? = Value::Uint(u64::from(material.id));
-        material.changes.apply(&mut config)?;
-        configs.push(config);
+            .field_mut(MATERIAL_ID_VALUE)? = Value::Uint(u64::from(id));
+        if let Some(material) = material {
+            material.changes.apply(&mut config)?;
+        }
+        pad.fill(&mut config)?;
+        added.push(config);
     }
+    configs.extend(added);
     Some(())
+}
+
+/// How the loader's rules pad their conditional buffs to one count, the
+/// most a game rule holds (2 on client 26430625: ids 16 and 51), since a rule
+/// copied from one with fewer would make the rules smaller.
+struct Padding {
+    most: usize,
+    /// A game rule's conditional buff whose submerge fraction no voxel
+    /// reaches, so it never applies (fractions 0.25 and 0.9 on client
+    /// 26430625).
+    never: Option<Value>,
+}
+
+impl Padding {
+    /// The padding of the game's rules `configs`; `None` when they hold a
+    /// conditional buff without the submerge fraction, so no buff can be
+    /// made that never applies.
+    fn of(configs: &[Value]) -> Option<Self> {
+        let lists = || {
+            configs
+                .iter()
+                .filter_map(|c| match c.field(CONDITIONAL_BUFFS) {
+                    Some(Value::List(list)) => Some(list),
+                    _ => None,
+                })
+        };
+        let never = match lists().flatten().next() {
+            None => None,
+            Some(entry) => {
+                let mut entry = entry.clone();
+                *entry.field_mut(MIN_SUBMERGE)? = Value::Float(f64::INFINITY);
+                Some(entry)
+            }
+        };
+        Some(Self {
+            most: lists().map(Vec::len).max().unwrap_or(0),
+            never,
+        })
+    }
+
+    /// Pads the conditional buffs of `config` to the count; `None` when it
+    /// lacks them while game rules hold some.
+    fn fill(&self, config: &mut Value) -> Option<()> {
+        let Some(never) = &self.never else {
+            return Some(());
+        };
+        let Value::List(list) = config.field_mut(CONDITIONAL_BUFFS)? else {
+            return None;
+        };
+        list.resize(self.most.max(list.len()), never.clone());
+        Some(())
+    }
 }
 
 /// Gives each of `materials` its `like`'s entry of the effects table
@@ -376,249 +475,153 @@ fn copy_looks(blending: &mut Value, materials: &[Material]) -> Option<()> {
     Some(())
 }
 
+/// What the player reads when `shifted`, a mod still on, reads another
+/// terrain id than `host` serves, in the reader's language: `extra` are the
+/// mods turned off for this game whose terrain moved it.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+fn moved_text(host: Host, shifted: &str, extra: &[String]) -> String {
+    use crate::engine::texts;
+    let shifted = [("mod", shifted)];
+    if extra.is_empty() {
+        return match host {
+            Host::Server => texts::fill("join.terrain.server.moved", &shifted),
+            Host::Player => texts::fill("join.terrain.host.moved", &shifted),
+        };
+    }
+    let (head, tail) = match host {
+        Host::Server => (
+            texts::fill("join.terrain.server.extra", &[]),
+            texts::fill("join.terrain.server.shifted", &shifted),
+        ),
+        Host::Player => (
+            texts::fill("join.terrain.host.extra", &[]),
+            texts::fill("join.terrain.host.shifted", &shifted),
+        ),
+    };
+    format!("{head}\n\n{}\n\n{tail}", extra.join("\n"))
+}
+
+/// What the player reads when the terrain ids `host` serves do not read on
+/// this client, or its served resources did not all take them.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+fn untaken_text(host: Host) -> String {
+    match host {
+        Host::Server => crate::engine::texts::fill("join.terrain.server.untaken", &[]),
+        Host::Player => crate::engine::texts::fill("join.terrain.host.untaken", &[]),
+    }
+}
+
+/// The mods whose terrain moved `shifted`'s id: of `added`, in placement
+/// order, the owners before `shifted`'s first material that are `off` for
+/// this game.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "a client joins only in the game")
+)]
+fn moved_by(
+    added: &[Material],
+    shifted: ModIndex,
+    off: impl Fn(ModIndex) -> bool,
+) -> Vec<ModIndex> {
+    let before = added
+        .iter()
+        .position(|m| m.owner == shifted)
+        .unwrap_or(added.len());
+    let mut owners: Vec<ModIndex> = added[..before]
+        .iter()
+        .map(|m| m.owner)
+        .filter(|&owner| off(owner))
+        .collect();
+    owners.dedup();
+    owners
+}
+
+/// Whether terrain id `id` holds only a padding rule of [`add_rules`]: one
+/// of the `free` ids no material of the served `table` takes, which no voxel
+/// holds.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+fn pads(free: &[u8], table: &[Material], id: u8) -> bool {
+    free.contains(&id) && !table.iter().any(|m| m.id == id)
+}
+
+/// The field of the server's configuration that names its save folder.
+const SAVE_DIRECTORY: &str = "saveDirectory";
+/// The save folder a configuration without [`SAVE_DIRECTORY`] gets.
+const DEFAULT_SAVES: &str = "./savegame";
+
+/// The save folder the server's configuration `config` names, as the game
+/// resolves it: a relative one from the working directory, as the world
+/// keys the records are written under.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running server reads its configuration")
+)]
+fn saves_folder(config: Option<&str>) -> std::path::PathBuf {
+    config
+        .and_then(|json| crate::base::advertise::configured(json, SAVE_DIRECTORY))
+        .unwrap_or_else(|| DEFAULT_SAVES.to_owned())
+        .into()
+}
+
+/// The table the served terrain resources build from.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+enum Session {
+    /// None yet: the first build places this side's own, so the loaded
+    /// world's orphans can go first.
+    #[default]
+    Unplaced,
+    /// This side's own.
+    Own(Vec<Material>),
+    /// A host's, while this client joins its game.
+    Host(Vec<Material>),
+}
+
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+impl Session {
+    /// The table the served resources were built from, `None` before one.
+    fn table(&self) -> Option<&[Material]> {
+        match self {
+            Self::Unplaced => None,
+            Self::Own(table) | Self::Host(table) => Some(table),
+        }
+    }
+
+    /// Whether serving `next` means building the served resources again:
+    /// they were built from another table.
+    fn rebuilds_for(&self, next: &[Material]) -> bool {
+        self.table().is_some_and(|now| now != next)
+    }
+}
+
 /// The feature every terrain material patch's switch names.
 #[cfg(windows)]
 pub(crate) const FEATURE: &str = "terrain materials";
 
 #[cfg(windows)]
-pub(crate) use running::{add, in_time, record, sealed, serve};
+pub(crate) use running::{add, in_time, padding, record, sealed, serve, world_event};
 
 /// The materials in the running game: mods' registrations, the archive's
-/// palette, and the loader's patches.
+/// palette, the loader's patches and the table a session serves.
 #[cfg(windows)]
-mod running {
-    use std::sync::OnceLock;
+mod running;
 
-    use enshwick_base::resources::{Registry as Codec, Value};
-    use enshwick_core::abi::{ResourceKey, TerrainMaterialAdd};
-    use enshwick_core::content::Guid;
-    use enshwick_core::typed::{
-        Named, TerraformingEfficiencyRegistryResource, VoxelMaterialVfxDataResource,
-        VoxelWorldResource, WorldMaterialBlending2Resource,
-    };
-    use enshwick_gamedata::catalogue::type_name;
-    use enshwick_gamedata::reflect::fnv1a32;
-
-    use super::{
-        Material, Palette, TerrainMaterialError, add_rules, copy_effects, copy_looks, name_in,
-        orphans, place, serving,
-    };
-    use crate::content::served::{Builder, mod_on};
-    use crate::engine::loader::Loader;
-    use crate::engine::mod_index::ModIndex;
-    use crate::engine::registry::Registry;
-
-    /// The terrain materials of the run.
-    struct Terrain {
-        /// The materials mods added, in load order.
-        materials: Registry<Material>,
-        /// The game's palette and the keys of its palette worlds, read once
-        /// from the archive; `None` when the archive or reflection lacks
-        /// them.
-        palette: OnceLock<Option<(Palette, Vec<ResourceKey>)>>,
-    }
-
-    static TERRAIN: Terrain = Terrain {
-        materials: Registry::new(),
-        palette: OnceLock::new(),
-    };
-
-    /// The engine name and resource type hash of a resource type the loader
-    /// patches.
-    fn of<T: Named>() -> (&'static str, u32) {
-        let name = type_name(T::ID);
-        (name, fnv1a32(name.as_bytes()))
-    }
-
-    /// The game's palette and the keys of its palette worlds; `None` when
-    /// the archive or reflection lacks them.
-    fn palette(loader: &Loader) -> Option<&'static (Palette, Vec<ResourceKey>)> {
-        TERRAIN
-            .palette
-            .get_or_init(|| {
-                let archive = crate::engine::archive::game()?;
-                let codec = loader.reflection.registry();
-                let read = |name: &str, key: &ResourceKey| {
-                    codec.decode(name, &archive.resource(key)?).ok()
-                };
-                let (world, world_hash) = of::<VoxelWorldResource>();
-                let worlds: Vec<(ResourceKey, Value)> = archive
-                    .keys_of(world_hash)
-                    .into_iter()
-                    .filter_map(|key| Some((key, read(world, &key)?)))
-                    .filter(|(_, value)| names_any(value))
-                    .collect();
-                let (rules, rules_hash) = of::<TerraformingEfficiencyRegistryResource>();
-                let rules = archive
-                    .keys_of(rules_hash)
-                    .first()
-                    .and_then(|key| read(rules, key))?;
-                if worlds.is_empty() {
-                    return None;
-                }
-                let palette = Palette::read(worlds.iter().map(|(_, value)| value), &rules)?;
-                Some((palette, worlds.into_iter().map(|(key, _)| key).collect()))
-            })
-            .as_ref()
-    }
-
-    /// Whether the voxel world `world` names any material: a palette world,
-    /// not a voxel model.
-    fn names_any(world: &Value) -> bool {
-        matches!(
-            world.field(super::MATERIAL_GUIDS),
-            Some(Value::List(guids)) if guids.iter().any(|g| matches!(g, Value::Guid(g) if *g != Guid::NIL))
-        )
-    }
-
-    /// Adds the material `request` of mod `owner` asks for and returns its
-    /// terrain id for this run; `owner` pairs the mod with whether it runs
-    /// on the clients that join.
-    ///
-    /// # Errors
-    ///
-    /// [`TerrainMaterialError`] after init, without the archive's palette,
-    /// for a mod clients do not run, a material the game lacks, an unknown
-    /// change, a GUID the game or a mod named before and once every free id
-    /// is taken.
-    pub(crate) fn add(
-        loader: &Loader,
-        (owner, joins): (ModIndex, bool),
-        request: &TerrainMaterialAdd,
-    ) -> Result<u8, TerrainMaterialError> {
-        let (palette, _) = palette(loader).ok_or(TerrainMaterialError::Unread)?;
-        // Clients name terrain ids in load order too, so a material they
-        // lack would shift every id after it.
-        if !joins {
-            return Err(TerrainMaterialError::NotBoth);
-        }
-        TERRAIN.materials.edit(|added| {
-            let material = place(palette, added, owner, request)?;
-            added.push(material);
-            Ok(material.id)
-        })?
-    }
-
-    /// Whether mods may still add terrain materials: the host entry asks it
-    /// before the other refusals, so a late call reads as late.
-    ///
-    /// # Errors
-    ///
-    /// [`TerrainMaterialError::TooLate`] after init.
-    pub(crate) fn in_time() -> Result<(), TerrainMaterialError> {
-        if TERRAIN.materials.is_sealed() {
-            return Err(TerrainMaterialError::TooLate);
-        }
-        Ok(())
-    }
-
-    /// Seals the mods' materials: none is added after.
-    pub(crate) fn sealed() -> &'static [Material] {
-        TERRAIN.materials.seal()
-    }
-
-    /// What the clone record keeps of `materials`: each GUID with its
-    /// fallback's.
-    pub(crate) fn record(loader: &Loader, materials: &[Material]) -> Vec<(Guid, Guid)> {
-        if materials.is_empty() {
-            return Vec::new();
-        }
-        let Some((palette, _)) = palette(loader) else {
-            return Vec::new();
-        };
-        materials
-            .iter()
-            .filter_map(|m| Some((m.guid, palette.guid_of(m.fallback)?)))
-            .collect()
-    }
-
-    /// The loader's patch of each key the materials `added` and the orphans
-    /// of `recorded` change, with its builder; none when there are none.
-    pub(crate) fn serve(
-        loader: &'static Loader,
-        added: &[Material],
-        recorded: &[(Guid, Guid)],
-    ) -> Vec<(ResourceKey, Builder)> {
-        if added.is_empty() && recorded.is_empty() {
-            return Vec::new();
-        }
-        let Some((palette, worlds)) = palette(loader) else {
-            crate::log!(
-                WARN,
-                "terrain materials off: this build's archive lacks the terrain palette"
-            );
-            return Vec::new();
-        };
-        let added = serving(added, mod_on);
-        let (kept, lost) = orphans(palette, &added, recorded);
-        log(&added, &kept, &lost);
-        let materials: Vec<Material> = added.iter().chain(&kept).copied().collect();
-        if materials.is_empty() {
-            return Vec::new();
-        }
-        let Some(archive) = crate::engine::archive::game() else {
-            return Vec::new();
-        };
-        let patch = |name: &'static str, edit: Edit| {
-            let materials = materials.clone();
-            let codec: Codec<'static> = loader.reflection.registry();
-            Box::new(move |base: &[u8]| {
-                let mut value = codec.decode(name, base).ok()?;
-                edit(&mut value, &materials)?;
-                codec.encode(name, &value, Some(base)).ok()
-            }) as Builder
-        };
-        let (world, _) = of::<VoxelWorldResource>();
-        let mut patches: Vec<(ResourceKey, Builder)> = worlds
-            .iter()
-            .map(|key| (*key, patch(world, name_in)))
-            .collect();
-        let tables: [((&'static str, u32), Edit); 3] = [
-            (of::<TerraformingEfficiencyRegistryResource>(), add_rules),
-            (of::<VoxelMaterialVfxDataResource>(), copy_effects),
-            (of::<WorldMaterialBlending2Resource>(), copy_looks),
-        ];
-        for ((name, hash), edit) in tables {
-            for key in archive.keys_of(hash) {
-                patches.push((key, patch(name, edit)));
-            }
-        }
-        patches
-    }
-
-    /// One of the edits a material makes of a resource.
-    type Edit = fn(&mut Value, &[Material]) -> Option<()>;
-
-    /// Logs once what the run's materials are.
-    fn log(added: &[Material], kept: &[Material], lost: &[Guid]) {
-        let named =
-            |guid: Guid| crate::base::ids::content_id(guid).unwrap_or_else(|| guid.to_string());
-        for m in added {
-            crate::log!(
-                INFO,
-                "terrain material {} is terrain id {} this run, like {}",
-                named(m.guid),
-                m.id,
-                m.like
-            );
-        }
-        for m in kept {
-            crate::log!(
-                INFO,
-                "terrain material {} of a removed mod loads as terrain id {} this run, a copy of its fallback {}",
-                m.guid,
-                m.id,
-                m.fallback
-            );
-        }
-        for guid in lost {
-            crate::log!(
-                WARN,
-                "terrain material {guid} of a removed mod loads as air: no free terrain id is left, or the game lacks its fallback"
-            );
-        }
-    }
-}
+pub(crate) mod table;
 
 #[cfg(test)]
 mod tests;

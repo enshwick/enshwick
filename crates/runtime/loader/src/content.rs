@@ -79,6 +79,15 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("textures", textures)
     },
     &Part {
+        world_event: Some(fused!(
+            "terrain materials at world events",
+            |loader, event| {
+                terrain_materials::world_event(loader, event);
+            }
+        )),
+        ..part!("terrain_materials", terrain_materials)
+    },
+    &Part {
         world_event: Some(fused!("data changes at world events", |loader, event| {
             data_changes::world_event(loader, event);
         })),

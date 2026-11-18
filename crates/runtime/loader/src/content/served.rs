@@ -391,7 +391,7 @@ fn serve_stand_ins(
 fn serve_own(
     served: &mut Vec<Served>,
     loader: &'static Loader,
-    materials: &[crate::content::terrain_materials::Material],
+    materials: &'static [crate::content::terrain_materials::Material],
     orphans: &[(Guid, Guid)],
 ) -> usize {
     use crate::content::{buff_types, data_changes, rate_links, terrain_materials};
@@ -409,14 +409,19 @@ fn serve_own(
 /// Adds the loader's patches for terrain materials to `served`, before
 /// every mod's patch on each key, so a mod's patch of the rules sees the
 /// new ones; the loader's changes of vanilla values, served after, go
-/// first again, so a material copies the rules as changed. How many keys.
+/// first again, so a material copies the rules as changed. Each key keeps
+/// its base, since a joining client builds it again from its host's table.
+/// How many keys.
 fn serve_terrain(served: &mut Vec<Served>, patches: Vec<(ResourceKey, Builder)>) -> usize {
     let count = patches.len();
     for (key, builder) in patches {
         let patch = BuilderPatch::new(builder, crate::content::terrain_materials::FEATURE).patch();
         match served.iter_mut().find(|s| s.key == key) {
-            Some(entry) => entry.patches.insert(0, patch),
-            None => served.push(Served::new(key, key, vec![patch], false)),
+            Some(entry) => {
+                entry.patches.insert(0, patch);
+                entry.keeps_base.store(true, Ordering::Relaxed);
+            }
+            None => served.push(Served::new(key, key, vec![patch], true)),
         }
     }
     count

@@ -2,12 +2,12 @@ use enshwick_core::abi::{Header, TerrainMaterialInfo};
 
 use super::*;
 
-const SAND: u8 = 9;
-const ROCK: u8 = 24;
+pub(super) const SAND: u8 = 9;
+pub(super) const ROCK: u8 = 24;
 /// The mod the tests add materials as.
-const MOD: ModIndex = ModIndex::new(1);
+pub(super) const MOD: ModIndex = ModIndex::new(1);
 
-fn guid(n: u8) -> Guid {
+pub(super) fn guid(n: u8) -> Guid {
     Guid([n; 16])
 }
 
@@ -48,11 +48,11 @@ fn rules() -> Value {
     )])
 }
 
-fn palette() -> Palette {
+pub(super) fn palette() -> Palette {
     Palette::read([&world()], &rules()).unwrap()
 }
 
-fn request(n: u8) -> TerrainMaterialAdd {
+pub(super) fn request(n: u8) -> TerrainMaterialAdd {
     TerrainMaterialAdd {
         header: Header::of::<TerrainMaterialAdd>(),
         guid: guid(n),
@@ -142,11 +142,11 @@ fn a_material_is_named_in_the_palette_and_copies_its_rule_with_its_changes() {
     assert_eq!(guids[117], Value::Guid(guid(150)));
     assert_eq!(guids[118], Value::Guid(Guid::NIL));
     let mut rules = rules();
-    assert_eq!(add_rules(&mut rules, &added), Some(()));
+    assert_eq!(add_rules(&mut rules, &palette().free(), &added), Some(()));
     let Some(Value::List(configs)) = rules.field(TERRAIN_CONFIGS) else {
         panic!()
     };
-    assert_eq!(configs.len(), 117);
+    assert_eq!(configs.len(), 127, "a rule for each free id");
     let new = &configs[116];
     assert_eq!(config_id(new), Some(117));
     assert_eq!(new.field(TERRAIN_ITEM), Some(&Value::Guid(guid(201))));
@@ -280,22 +280,117 @@ fn an_orphan_whose_fallback_the_game_lacks_leaves_its_free_id_to_the_next() {
 }
 
 #[test]
-fn rules_without_a_material_s_like_leave_it_out_and_keep_the_others() {
+fn rules_without_a_material_s_like_give_it_the_first_rule_so_their_size_holds() {
     let mut rock = request(151);
     rock.like = ROCK;
+    rock.changes = TerrainMaterialAdd::HEALTH;
+    rock.health = 7;
     let (added, _) = add_all(&[request(150), rock]);
     let mut rules = Value::Struct(vec![(
         TERRAIN_CONFIGS.into(),
         Value::List(vec![config(u64::from(SAND))]),
     )]);
-    assert_eq!(add_rules(&mut rules, &added), Some(()));
+    assert_eq!(add_rules(&mut rules, &[117, 118, 119], &added), Some(()));
     let Some(Value::List(configs)) = rules.field(TERRAIN_CONFIGS) else {
         panic!()
     };
     assert_eq!(
         configs.iter().map(config_id).collect::<Vec<_>>(),
-        [Some(SAND), Some(117)]
+        [Some(SAND), Some(117), Some(118), Some(119)]
     );
+    assert_eq!(configs[2].field(HEALTH_POINTS), Some(&Value::Int(7)));
+    assert_eq!(configs[3].field(HEALTH_POINTS), Some(&Value::Int(3)));
+}
+
+/// A rule whose conditional buffs number `count`.
+fn buffed(n: u64, count: usize) -> Value {
+    let Value::Struct(mut fields) = config(n) else {
+        unreachable!()
+    };
+    let buff = |at: f64| {
+        Value::Struct(vec![
+            (MIN_SUBMERGE.into(), Value::Float(at)),
+            ("buffType".into(), Value::Guid(guid(220))),
+        ])
+    };
+    let list = [0.25, 0.9].into_iter().take(count).map(buff).collect();
+    fields.push((CONDITIONAL_BUFFS.into(), Value::List(list)));
+    Value::Struct(fields)
+}
+
+#[test]
+fn the_rules_come_out_one_size_whichever_materials_a_session_serves() {
+    let rules = Value::Struct(vec![(
+        TERRAIN_CONFIGS.into(),
+        Value::List(vec![buffed(1, 0), buffed(u64::from(SAND), 2)]),
+    )]);
+    let mut wet = request(150);
+    wet.like = SAND;
+    let mut dry = request(151);
+    dry.like = 1;
+    let free = palette().free();
+    let sizes: Vec<Vec<usize>> = [vec![], vec![wet], vec![dry, wet]]
+        .iter()
+        .map(|requests| {
+            let mut served = rules.clone();
+            let (added, _) = add_all(requests);
+            add_rules(&mut served, &free, &added).unwrap();
+            let Some(Value::List(configs)) = served.field(TERRAIN_CONFIGS) else {
+                panic!()
+            };
+            configs
+                .iter()
+                .skip(2)
+                .map(|c| match c.field(CONDITIONAL_BUFFS) {
+                    Some(Value::List(list)) => list.len(),
+                    _ => 0,
+                })
+                .collect()
+        })
+        .collect();
+    assert!(sizes.iter().all(|s| *s == vec![2; 11]), "{sizes:?}");
+    let mut served = rules;
+    let (added, _) = add_all(&[dry]);
+    add_rules(&mut served, &free, &added).unwrap();
+    let Some(Value::List(configs)) = served.field(TERRAIN_CONFIGS) else {
+        panic!()
+    };
+    let Some(Value::List(padded)) = configs[2].field(CONDITIONAL_BUFFS) else {
+        panic!()
+    };
+    assert!(
+        padded
+            .iter()
+            .all(|b| b.field(MIN_SUBMERGE) == Some(&Value::Float(f64::INFINITY))),
+        "a padded buff never applies"
+    );
+}
+
+#[test]
+fn a_world_s_record_of_its_materials_reads_back_and_a_bad_one_reads_as_none() {
+    let (added, _) = add_all(&[request(150), request(151)]);
+    assert_eq!(held_of(&held_text(&added)), [guid(150), guid(151)]);
+    assert_eq!(held_of("held = [\"no guid\"]"), []);
+    assert_eq!(held_of("not toml ["), []);
+}
+
+#[test]
+fn the_loaded_world_s_orphans_take_the_free_ids_first() {
+    let (added, _) = add_all(&(150..159).map(request).collect::<Vec<_>>());
+    let recorded = [
+        (guid(170), guid(SAND)),
+        (guid(171), guid(SAND)),
+        (guid(172), guid(ROCK)),
+    ];
+    let preferred = prefer(&recorded, &[guid(172)]);
+    assert_eq!(preferred[0], (guid(172), guid(ROCK)));
+    let (kept, lost) = orphans(&palette(), &added, &preferred);
+    assert_eq!(
+        kept.iter().map(|m| (m.guid, m.id)).collect::<Vec<_>>(),
+        [(guid(172), 126), (guid(170), 127)]
+    );
+    assert_eq!(lost, [guid(171)]);
+    assert_eq!(prefer(&recorded, &[]), recorded);
 }
 
 #[test]
@@ -310,7 +405,7 @@ fn a_change_whose_rule_field_is_missing_fails_the_rules_instead_of_vanishing() {
     };
     fields.retain(|(name, _)| name != HEALTH_POINTS);
     let mut rules = Value::Struct(vec![(TERRAIN_CONFIGS.into(), Value::List(vec![renamed]))]);
-    assert_eq!(add_rules(&mut rules, &added), None);
+    assert_eq!(add_rules(&mut rules, &[117], &added), None);
 }
 
 #[test]
@@ -349,4 +444,114 @@ fn changes_read_only_the_rules_the_request_sets() {
         })
     );
     assert_eq!(Changes::of(&request(1)), Some(Changes::default()));
+}
+
+#[test]
+fn a_buff_without_its_submerge_fraction_fails_the_rules_instead_of_changing_their_size() {
+    let Value::Struct(mut fields) = buffed(u64::from(SAND), 2) else {
+        unreachable!()
+    };
+    for (name, value) in &mut fields {
+        if name == CONDITIONAL_BUFFS {
+            let Value::List(buffs) = value else {
+                unreachable!()
+            };
+            for buff in buffs {
+                let Value::Struct(buff) = buff else {
+                    unreachable!()
+                };
+                buff.retain(|(field, _)| field != MIN_SUBMERGE);
+            }
+        }
+    }
+    let mut rules = Value::Struct(vec![(
+        TERRAIN_CONFIGS.into(),
+        Value::List(vec![buffed(1, 0), Value::Struct(fields)]),
+    )]);
+    assert_eq!(add_rules(&mut rules, &[117], &[]), None);
+}
+
+#[test]
+fn the_server_s_save_folder_stays_as_its_configuration_names_it() {
+    let json = "{\n\t\"saveDirectory\": \"./saves\"\n}";
+    assert_eq!(saves_folder(Some(json)), std::path::Path::new("./saves"));
+    assert_eq!(saves_folder(Some("{}")), std::path::Path::new("./savegame"));
+    assert_eq!(saves_folder(None), std::path::Path::new("./savegame"));
+}
+
+#[test]
+fn only_free_ids_no_served_material_takes_are_padding() {
+    let (added, _) = add_all(&[request(150)]);
+    let free = palette().free();
+    let taken = added[0].id;
+    assert!(!pads(&free, &added, taken));
+    assert!(pads(&free, &[], taken));
+    assert!(!pads(&free, &added, SAND));
+    assert_eq!(
+        free.iter().filter(|&&id| pads(&free, &added, id)).count(),
+        free.len() - 1
+    );
+}
+
+#[test]
+fn only_mods_off_for_the_game_placed_before_the_shifted_one_moved_its_id() {
+    let owner = ModIndex::new;
+    let base = add_all(&[request(150)]).0[0];
+    let at = |n, id| Material {
+        owner: owner(n),
+        id,
+        ..base
+    };
+    // Placed in load order: 2 and 3 before 4, then 5 after it.
+    let added = [at(2, 117), at(3, 118), at(3, 119), at(4, 120), at(5, 121)];
+    let off = |m: ModIndex| m != owner(4) && m != owner(3);
+    assert_eq!(moved_by(&added, owner(4), off), [owner(2)]);
+    assert_eq!(moved_by(&added, owner(4), |_| true), [owner(2), owner(3)]);
+    assert_eq!(moved_by(&added, owner(2), |_| true), []);
+}
+
+#[test]
+fn a_session_rebuilds_only_for_another_table_once_one_was_built() {
+    let (one, _) = add_all(&[request(150)]);
+    let (two, _) = add_all(&[request(150), request(151)]);
+    assert!(!Session::Unplaced.rebuilds_for(&one));
+    assert!(!Session::Own(one.clone()).rebuilds_for(&one));
+    assert!(!Session::Host(one.clone()).rebuilds_for(&one));
+    assert!(Session::Own(one.clone()).rebuilds_for(&two));
+    assert!(Session::Host(two).rebuilds_for(&one));
+}
+
+#[test]
+fn a_host_table_that_does_not_take_is_told_naming_who_hosts() {
+    assert!(untaken_text(Host::Server).contains("server's terrain ids"));
+    assert!(untaken_text(Host::Player).contains("host's terrain ids"));
+    let uk = Some(enshwick_core::i18n::Language::UK_UA);
+    assert!(
+        crate::engine::texts::for_reader(uk, || untaken_text(Host::Server))
+            .contains("ґрунту сервера")
+    );
+}
+
+#[test]
+fn a_moved_terrain_id_is_told_in_the_reader_s_language_naming_who_hosts() {
+    use crate::engine::texts::for_reader;
+    use enshwick_core::i18n::Language;
+    let extra = ["Caves".to_owned(), "Dunes".to_owned()];
+    assert_eq!(
+        moved_text(Host::Server, "Ores", &[]),
+        "Ores gives its terrain another id here than the server does. Run the server's mods in its versions."
+    );
+    assert_eq!(
+        moved_text(Host::Player, "Ores", &extra),
+        "These Enshwick mods add terrain, and the host does not run them:\n\nCaves\nDunes\n\nSo Ores gives its terrain another id here than the host does. Turn them off on the Mods screen and restart the game."
+    );
+    let uk = Some(Language::UK_UA);
+    assert_eq!(
+        for_reader(uk, || moved_text(Host::Server, "Ores", &extra)),
+        "Ці моди Enshwick додають ґрунт, а сервер їх не запускає:\n\nCaves\nDunes\n\nТож Ores дає своєму ґрунту тут інший номер, ніж сервер. Вимкніть їх на екрані модів і перезапустіть гру."
+    );
+    assert_eq!(
+        for_reader(uk, || moved_text(Host::Player, "Ores", &[])),
+        "Ores дає своєму ґрунту тут інший номер, ніж хост. Запустіть моди хоста в його версіях."
+    );
 }
