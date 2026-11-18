@@ -1,6 +1,6 @@
 //! Linking the loader's join check and its dialog hold on the client.
 
-use crate::base::join::JOIN_FUSE;
+use crate::base::join::{ENDED_FUSE, JOIN_FUSE};
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
@@ -19,6 +19,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::join::TARGET_QUERY_PORT_READ.id(),
     pinned::join::TARGET_WORD_COPY.id(),
     pinned::net::JOIN_GAME.id(),
+    pinned::net::PROVIDER_TRANSITION.id(),
     pinned::net::PROVIDER_VTABLE.id(),
     pinned::user::START_INTERACTION.id(),
     pinned::user::INTERACTION_KIND.id(),
@@ -40,10 +41,20 @@ pub(super) fn link_join(loader: &Loader) {
 }
 
 /// Links the join check once the build's join target layout reads and the
-/// provider's join checks out; otherwise turns it off, naming why.
+/// provider's join checks out, with the join end it marks joins for;
+/// otherwise turns both off, naming why.
 fn link_check(loader: &Loader) {
+    let ended_off = |why: &dyn core::fmt::Display| {
+        not_checked(
+            loader,
+            &ENDED_FUSE,
+            pinned::net::PROVIDER_TRANSITION.id(),
+            why,
+        );
+    };
     let join_off = |why: &dyn core::fmt::Display| {
         not_checked(loader, &JOIN_FUSE, pinned::net::JOIN_GAME.id(), why);
+        ended_off(why);
     };
     match crate::base::join::Layout::from_table(|id| loader.build.constant(id)) {
         Ok(layout) => crate::base::join::set_layout(layout),
@@ -53,6 +64,9 @@ fn link_check(loader: &Loader) {
         Ok((join, code)) => {
             if crate::base::join::link(loader, join) {
                 link_join_hold(loader, code);
+                let _ended = crate::base::join::link_ended(loader);
+            } else {
+                ended_off(&"the join check did not link");
             }
         }
         Err(error) => join_off(&error),
@@ -182,6 +196,7 @@ mod tests {
         }
         link_check(&crate::start::tests::bare_loader());
         assert!(JOIN_FUSE.is_off());
+        assert!(ENDED_FUSE.is_off(), "the join end marks no join");
         let reason = crate::base::off_reason(&JOIN_FUSE).unwrap_or_default();
         assert!(
             reason.starts_with(pinned::net::JOIN_GAME.id())

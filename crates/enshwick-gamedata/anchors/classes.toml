@@ -433,6 +433,7 @@ entries = [
   "net.message_open",
   "net.message_receive",
   "net.message_release",
+  "net.provider_transition",
   "net.provider_vtable",
   "net.session_limit",
   "net.session_manager",
