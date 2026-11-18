@@ -17,6 +17,13 @@ pub(super) const WORKSPACE: &str = "workspace";
 pub(super) const PACKAGE: &str = "package";
 /// The `[workspace]` tables members take keys from with `key.workspace = true`.
 const INHERITED: &[&str] = &[PACKAGE, DEPENDENCIES];
+/// The manifest table of build profiles.
+const PROFILE: &str = "profile";
+/// The profiles the local check builds with: clippy, doc and `test` under
+/// `dev`, the tests under `test`; a change to them can change a test's
+/// outcome (overflow checks, debug assertions, panic strategy), so it stays
+/// wide.
+const CHECKED_PROFILES: &[&str] = &["dev", "test"];
 
 /// The workspace packages a change of the lock file reaches: those whose
 /// locked entries changed and those that depend on such an entry, directly
@@ -98,10 +105,19 @@ fn names(dep: &str, (name, version, source): &Key) -> bool {
 /// entry, and, since features unify across the workspace, every package the
 /// lock file builds on a changed dependency's crate; `None` when another part
 /// changed (lints, profiles, patches, members, metadata), which every package
-/// builds with, or a file does not read.
-pub(super) fn inherited(texts: &dyn Texts, packages: &[Package]) -> Option<BTreeSet<String>> {
+/// builds with, or a file does not read. With `local`, a profile the local
+/// check never builds with (release, bench, a custom one) reaches nothing.
+pub(super) fn inherited(
+    texts: &dyn Texts,
+    packages: &[Package],
+    local: bool,
+) -> Option<BTreeSet<String>> {
     let mut before = toml::from_str::<Table>(&texts.before(MANIFEST)?).ok()?;
     let mut after = toml::from_str::<Table>(&texts.after(MANIFEST)?).ok()?;
+    if local {
+        keep_checked_profiles(&mut before);
+        keep_checked_profiles(&mut after);
+    }
     let mut changed = Vec::new();
     let mut crates = BTreeSet::new();
     for &section in INHERITED {
@@ -155,6 +171,18 @@ pub(super) fn inherited(texts: &dyn Texts, packages: &[Package]) -> Option<BTree
             .map(|package| package.name.clone()),
     );
     Some(reached)
+}
+
+/// Drops from a manifest every `[profile.<name>]` but [`CHECKED_PROFILES`],
+/// and `[profile]` itself when none is left.
+fn keep_checked_profiles(manifest: &mut Table) {
+    let Some(Value::Table(profiles)) = manifest.get_mut(PROFILE) else {
+        return;
+    };
+    profiles.retain(|name, _| CHECKED_PROFILES.contains(&name));
+    if profiles.is_empty() {
+        manifest.remove(PROFILE);
+    }
 }
 
 /// Removes `[workspace.<key>]` from a manifest and returns it as a table,

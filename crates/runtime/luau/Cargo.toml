@@ -31,6 +31,11 @@ syn = { version = "=3.0.10", default-features = false, features = ["full", "pars
 [lints]
 workspace = true
 
+[package.metadata.xtask]
+# Luau's C++ builds through mlua: `cargo xtask check` on Windows leaves it out
+# of its Linux lint, which would need a Linux cross compiler.
+compiles-c = true
+
 # One binary for every file in `tests/`, each a module of `tests/main.rs`.
 [[test]]
 name = "main"

@@ -31,8 +31,8 @@ use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 use part::{
-    Part, due_parts, stable_api_left_to_ci, stable_api_out_of_scope, stable_api_runs, trybuild_due,
-    windows_features_due,
+    Part, due_parts, stable_api_due, stable_api_out_of_scope, stable_examples_left_to_ci,
+    trybuild_due, windows_features_due,
 };
 
 pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
@@ -239,9 +239,10 @@ fn windows_code(root: &Path) -> impl Fn(&Package) -> bool + '_ {
 }
 
 /// Whether the committed public paths list is current and the book's
-/// stability chapter agrees with it, or the list is left to CI: a
-/// wide local change leaves it there with the dependents' rustdoc, since it
-/// documents the facade twice.
+/// stability chapter agrees with it. A wide change checks it too: it
+/// documents the facade in a target of its own, 79 s from clean and 42 s
+/// after an ABI change (2026-11-18), and a stale list was the most common
+/// red CI run of wide changes.
 fn public_paths_hold(
     scope: &Scope,
     changed: Option<&[String]>,
@@ -258,12 +259,6 @@ fn public_paths_hold(
             say(&format!("public paths: {problem}"));
         }
         return problems.is_empty();
-    }
-    if wide(scope) {
-        say(&format!(
-            "the public paths list is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
-        ));
-        return true;
     }
     let problems = public_paths::check(root, packages);
     for problem in &problems {
@@ -297,9 +292,10 @@ fn touches(scope: &Scope, package: &str) -> bool {
 }
 
 /// Whether a local check of `scope` reaches [`WIDE_PACKAGES`] or more
-/// packages: it leaves the trybuild test and the stable
-/// surface's build to CI, which alone kept a check of a facade change over
-/// ten minutes (669 s, 2026-11-14), and the dependents' rustdoc
+/// packages: it leaves the trybuild test and the stable surface's examples
+/// to CI, which alone kept a check of a facade change over ten minutes
+/// (669 s, 2026-11-14), but lints and documents that surface; it leaves the
+/// dependents' rustdoc
 /// ([`changed_rustdoc`]), and runs the dependents' tests one process per
 /// binary ([`in_process`]).
 fn wide(scope: &Scope) -> bool {
@@ -574,11 +570,11 @@ fn windows_tests<'a>(scope: &Scope, packages: &'a [Package]) -> Vec<&'a str> {
 }
 
 /// The checks of the API crate's stable surface, built without `unstable`:
-/// its lints when its code changed, its examples and its rustdoc whenever
-/// it changed. `stable` names the crates and features ([`stable_api`]).
-fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
+/// its lints when `lint`, its examples when `examples`, and its rustdoc
+/// always. `stable` names the crates and features ([`stable_api`]).
+fn stable_api_steps(lint: bool, examples: bool, stable: &[String]) -> Vec<Step> {
     let mut steps = Vec::new();
-    if code {
+    if lint {
         steps.push(
             Step::new(&["clippy", "--all-targets"])
                 .then_owned(stable)
@@ -603,10 +599,11 @@ fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
     // still keep content, core and inventory from merging; the sentinels hold
     // the workspace's run, where every crate merges.
     doctests = doctests.then(&["--skip", crate::check::SENTINEL_NAME]);
-    steps.push(doctests);
-    // A link into an unstable module breaks only this build, and the
-    // crate's own rustdoc takes seconds once the examples above built
-    // its dependencies.
+    if examples {
+        steps.push(doctests);
+    }
+    // A link into an unstable module breaks only this build: 13 s from
+    // clean, 14 s after an ABI change (2026-11-18).
     steps.push(
         Step::new(&["doc", "--no-deps"])
             .then_owned(stable)
@@ -666,6 +663,68 @@ fn changed_rustdoc(scope: &Scope, workspace: &[String]) -> Vec<Step> {
         steps.push(doc_links_step());
     }
     steps
+}
+
+/// The target CI's host checks build for.
+const LINUX_TARGET: &str = "x86_64-unknown-linux-gnu";
+
+/// The clippy of the workspace's libraries and binaries for Linux, which a
+/// local check on Windows runs when `scope` reaches a package with code
+/// gated on the target platform (`windows_code`): CI lints on Linux, where
+/// such gates leave imports and items unused that the Windows build uses (four
+/// red runs, 2026-11-16 to 17); 10 s after an ABI change. The other targets
+/// stay out, since their dev-dependencies (criterion) compile C, and so do
+/// the packages that compile C ([`Package::compiles_c`]): both need a Linux
+/// cross compiler, so CI lints them.
+fn linux_lint(
+    scope: &Scope,
+    packages: &[Package],
+    windows_code: impl Fn(&Package) -> bool,
+) -> Option<Step> {
+    let linted = |package: &&Package| !package.windows_only && !package.compiles_c;
+    packages
+        .iter()
+        .filter(linted)
+        .any(|package| reaches(scope, &package.name) && windows_code(package))
+        .then(|| {
+            let mut step = Step::new(&["clippy", "--target", LINUX_TARGET])
+                .then_owned(&host_args(packages, false));
+            for package in packages.iter().filter(|package| package.compiles_c) {
+                step = step.then(&[EXCLUDE, &package.name]);
+            }
+            step.then(&["--", "-D", "warnings"])
+        })
+}
+
+/// The [`linux_lint`] of a local check on Windows that `lints`, or none; an
+/// error naming the command that installs the Linux standard library when it
+/// is due without one.
+fn local_linux_lint(
+    scope: &Scope,
+    packages: &[Package],
+    lints: bool,
+) -> Result<Option<Step>, String> {
+    if !(cfg!(windows) && lints && Lane::current() == Lane::Local) {
+        return Ok(None);
+    }
+    match linux_lint(scope, packages, windows_code(&workspace_root())) {
+        Some(_) if !linux_std_installed() => Err(format!(
+            "the Linux lint needs the Linux standard library: run `rustup target add {LINUX_TARGET}` once"
+        )),
+        step => Ok(step),
+    }
+}
+
+/// Whether the pinned toolchain has the standard library for
+/// [`LINUX_TARGET`]: it stays out of `rust-toolchain.toml`, which every new
+/// mod copies, since only a Windows host's check needs it.
+fn linux_std_installed() -> bool {
+    Command::new("rustc")
+        .args(["--print", "target-libdir", "--target", LINUX_TARGET])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .is_some_and(|output| Path::new(String::from_utf8_lossy(&output.stdout).trim()).is_dir())
 }
 
 /// The ast-grep rules' own tests, the rules over the repository
@@ -755,8 +814,13 @@ fn host_steps(
         }
         steps.push(step);
     }
-    if parts.contains(&Part::StableApi) && stable_api_runs(scope) {
-        steps.extend(stable_api_steps(touches(scope, FACADE), stable));
+    if parts.contains(&Part::StableApi) && stable_api_due(scope) {
+        let wide = wide(scope);
+        steps.extend(stable_api_steps(
+            touches(scope, FACADE) || wide,
+            !wide,
+            stable,
+        ));
     }
     if run_docs && workspace_rustdoc(code, wide(scope), full) {
         // `code` alone: a package whose version alone moved needs no docs.
@@ -817,9 +881,9 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
                 "the dependents' rustdoc is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
             ));
         }
-        if stable_api_left_to_ci(scope, parts) {
+        if stable_examples_left_to_ci(scope, parts) {
             say(&format!(
-                "{FACADE}'s stable surface is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
+                "{FACADE}'s stable examples are left to CI: the change reaches {WIDE_PACKAGES} or more packages"
             ));
         } else if stable_api_out_of_scope(scope, parts) {
             say(&format!(
@@ -849,6 +913,13 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     } else {
         Vec::new()
     };
+    match local_linux_lint(scope, packages, flags.0 && parts.contains(&Part::Host)) {
+        Ok(step) => host_run.extend(step),
+        Err(problem) => {
+            say(&problem);
+            return false;
+        }
+    }
     host_run.extend(host_steps(
         scope,
         (&workspace, &stable),

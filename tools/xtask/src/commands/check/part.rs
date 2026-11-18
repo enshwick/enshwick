@@ -66,13 +66,13 @@ impl Part {
     }
 
     /// Whether the part has a step for the change `scope`: the trybuild test
-    /// and the stable surface only where the change reaches the facade and is
-    /// not [`wide`], the Windows feature lints only as `windows_features`
+    /// only where the change reaches the facade and is not [`wide`], the
+    /// stable surface where [`stable_api_due`] says, the Windows feature lints only as `windows_features`
     /// ([`windows_features_due`]) says; the other parts find their own work.
     pub(super) fn due(self, scope: &Scope, windows_features: bool) -> bool {
         match self {
             Self::Trybuild => trybuild_due(scope),
-            Self::StableApi => stable_api_runs(scope),
+            Self::StableApi => stable_api_due(scope),
             Self::WindowsFeatures => windows_features,
             Self::Host
             | Self::Features
@@ -89,12 +89,6 @@ impl Part {
 /// code and is not [`wide`].
 pub(super) fn trybuild_due(scope: &Scope) -> bool {
     touches(scope, FACADE) && !wide(scope)
-}
-
-/// Whether the stable surface is checked for `scope`: it needs the check
-/// ([`stable_api_due`]) and the change is not [`wide`].
-pub(super) fn stable_api_runs(scope: &Scope) -> bool {
-    stable_api_due(scope) && !wide(scope)
 }
 
 /// Whether the Windows feature lints have a step for the change `scope` to
@@ -123,14 +117,18 @@ pub(super) fn due_parts(parts: &[Part], scope: &Scope, windows_features: bool) -
 }
 
 /// Whether `scope` needs the facade's stable surface checked: its examples,
-/// the book's among them, change with its documents as well as its code.
-fn stable_api_due(scope: &Scope) -> bool {
-    touches(scope, FACADE) || matches!(scope, Scope::Some { docs, .. } if docs.contains(FACADE))
+/// the book's among them, change with its documents as well as its code,
+/// and a [`wide`] change that tests the facade can break its lints and
+/// rustdoc without `unstable` from a crate below it.
+pub(super) fn stable_api_due(scope: &Scope) -> bool {
+    touches(scope, FACADE)
+        || matches!(scope, Scope::Some { docs, tested, wide, .. }
+            if docs.contains(FACADE) || (*wide && tested.contains(FACADE)))
 }
 
-/// Whether a check of `parts` would check the stable surface of `scope` but
-/// leaves it to CI because the change is [`wide`].
-pub(super) fn stable_api_left_to_ci(scope: &Scope, parts: &[Part]) -> bool {
+/// Whether a check of `parts` checks the stable surface of `scope` but
+/// leaves its examples to CI because the change is [`wide`].
+pub(super) fn stable_examples_left_to_ci(scope: &Scope, parts: &[Part]) -> bool {
     wide(scope) && parts.contains(&Part::StableApi) && stable_api_due(scope)
 }
 

@@ -11,6 +11,7 @@ fn package(name: &str, dir: &str, deps: &[&str]) -> Package {
         doc_deps: Vec::new(),
         lib: None,
         windows_only: false,
+        compiles_c: false,
         windows_tests: false,
         stable_build: false,
         features: Vec::new(),
@@ -280,7 +281,7 @@ fn a_member_whose_manifest_does_not_read_is_checked() {
 }
 
 #[test]
-fn a_lint_profile_or_patch_change_in_the_root_manifest_checks_everything() {
+fn in_ci_a_lint_profile_or_patch_change_in_the_root_manifest_checks_everything() {
     for (before, after) in [
         (
             "[workspace.lints.rust]\nunsafe_code = \"warn\"\n",
@@ -295,6 +296,69 @@ fn a_lint_profile_or_patch_change_in_the_root_manifest_checks_everything() {
         let tree = Tree::changed("Cargo.toml", &manifest(before), &manifest(after));
         assert_eq!(
             super::scope(&files(&["Cargo.toml"]), &workspace(), &tree, Lane::Ci),
+            Scope::All,
+            "{after}"
+        );
+    }
+}
+
+#[test]
+fn locally_a_profile_the_check_never_builds_with_reaches_no_package() {
+    for (before, after) in [
+        (
+            "[profile.release]\nlto = true\n",
+            "# Fat LTO.\n[profile.release]\nlto = false\n",
+        ),
+        ("[profile.bench]\nlto = \"thin\"\n", ""),
+        ("", "# Why the profiles are as they are.\n"),
+        ("", "[profile.profiling]\ninherits = \"release\"\n"),
+        (
+            "[profile.dev]\ndebug = 1\n[profile.release]\nlto = true\n",
+            "[profile.dev]\ndebug = 1\n",
+        ),
+    ] {
+        let tree = Tree::changed("Cargo.toml", &manifest(before), &manifest(after));
+        assert_eq!(
+            code(super::scope(
+                &files(&["Cargo.toml"]),
+                &workspace(),
+                &tree,
+                Lane::Local
+            )),
+            BTreeSet::new(),
+            "{after}"
+        );
+    }
+}
+
+#[test]
+fn locally_a_toolchain_change_of_its_targets_alone_still_checks_everything() {
+    // cargo-enshwick embeds the file as a new mod's toolchain and tests
+    // that the two agree, so no part of it is free of packages.
+    let file = "rust-toolchain.toml";
+    let toolchain =
+        |targets: &str| format!("[toolchain]\nchannel = \"1.100.0\"\ntargets = [{targets}]\n");
+    let tree = Tree::changed(
+        file,
+        &toolchain("\"x86_64-pc-windows-msvc\""),
+        &toolchain("\"x86_64-pc-windows-msvc\", \"x86_64-unknown-linux-gnu\""),
+    );
+    assert_eq!(
+        super::scope(&files(&[file]), &workspace(), &tree, Lane::Local),
+        Scope::All
+    );
+}
+
+#[test]
+fn locally_a_dev_or_test_profile_change_checks_everything() {
+    for (before, after) in [
+        ("[profile.dev]\ndebug = 1\n", "[profile.dev]\ndebug = 0\n"),
+        ("", "[profile.test]\noverflow-checks = false\n"),
+        ("", "[profile.dev.package.\"*\"]\nopt-level = 1\n"),
+    ] {
+        let tree = Tree::changed("Cargo.toml", &manifest(before), &manifest(after));
+        assert_eq!(
+            super::scope(&files(&["Cargo.toml"]), &workspace(), &tree, Lane::Local),
             Scope::All,
             "{after}"
         );

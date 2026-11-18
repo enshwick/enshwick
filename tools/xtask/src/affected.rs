@@ -10,6 +10,10 @@ use std::collections::BTreeSet;
 
 /// A workspace package, as far as choosing checks needs it.
 #[derive(Debug, Clone)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is a separate fact of the package's manifest, not a state"
+)]
 pub(crate) struct Package {
     pub(crate) name: String,
     /// The package's version.
@@ -35,6 +39,10 @@ pub(crate) struct Package {
     /// Has tests of its Windows code, run under Wine off Windows
     /// (`package.metadata.xtask.windows-tests`, or `windows-only`).
     pub(crate) windows_tests: bool,
+    /// Compiles C for its target, itself or through a dependency
+    /// (`package.metadata.xtask.compiles-c`): a check for another target
+    /// than the host's would need a cross compiler for it.
+    pub(crate) compiles_c: bool,
     /// Has a stable surface to check in a build without `unstable`: an
     /// `unstable` feature of its own, or examples that name the facade as a
     /// stable mod does (a dev-dependency on it with no feature beyond `test`).
@@ -171,7 +179,7 @@ pub(crate) fn scope(
             shared::LOCK if local && bump(texts, file, versions::lock) => {}
             shared::MANIFEST if local && bump(texts, file, versions::root) => {
                 // Members that inherit the version build under the new one.
-                bumped.extend(shared::inherited(texts, packages).unwrap_or_default());
+                bumped.extend(shared::inherited(texts, packages, local).unwrap_or_default());
             }
             shared::LOCK => {
                 let Some(reached) = shared::locked(texts, packages) else {
@@ -180,7 +188,7 @@ pub(crate) fn scope(
                 changed.extend(reached);
             }
             shared::MANIFEST => {
-                let Some(reached) = shared::inherited(texts, packages) else {
+                let Some(reached) = shared::inherited(texts, packages, local) else {
                     return Scope::All;
                 };
                 changed.extend(reached);

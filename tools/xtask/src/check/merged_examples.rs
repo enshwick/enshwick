@@ -202,6 +202,7 @@ mod tests {
             doc_deps: Vec::new(),
             lib: Some(dir.to_owned()),
             windows_only: false,
+            compiles_c: false,
             windows_tests: false,
             stable_build: false,
             features: Vec::new(),

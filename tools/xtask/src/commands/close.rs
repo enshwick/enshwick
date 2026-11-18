@@ -91,6 +91,7 @@ mod tests {
             doc_deps: Vec::new(),
             lib: None,
             windows_only: false,
+            compiles_c: false,
             windows_tests: false,
             stable_build: false,
             features: Vec::new(),

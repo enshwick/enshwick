@@ -107,36 +107,74 @@ fn the_host_tests_take_their_filter_after_the_workspace_arguments() {
 }
 
 #[test]
-fn only_a_wide_check_that_would_check_the_stable_surface_says_it_left_it_to_ci() {
+fn only_a_wide_check_that_checks_the_stable_surface_says_it_left_its_examples_to_ci() {
     let set = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
-    let scope = |code: &[&str], docs: &[&str], built: &[&str], wide: bool| Scope::Some {
-        code: set(code),
-        docs: set(docs),
-        tested: BTreeSet::new(),
-        built: set(built),
-        wide,
-    };
+    let scope =
+        |code: &[&str], docs: &[&str], tested: &[&str], built: &[&str], wide: bool| Scope::Some {
+            code: set(code),
+            docs: set(docs),
+            tested: set(tested),
+            built: set(built),
+            wide,
+        };
     let parts = [Part::Host, Part::StableApi];
-    assert!(stable_api_left_to_ci(
-        &scope(&[FACADE], &[], &[], true),
-        &parts
-    ));
-    assert!(stable_api_left_to_ci(
-        &scope(&["enshwick-abi"], &[FACADE], &[], true),
-        &parts
-    ));
-    assert!(!stable_api_left_to_ci(
-        &scope(&["enshwick-abi"], &[], &[FACADE], true),
-        &parts
-    ));
-    assert!(!stable_api_left_to_ci(
-        &scope(&[FACADE], &[], &[], true),
+    for due in [
+        scope(&[FACADE], &[], &[], &[], true),
+        scope(&["enshwick-abi"], &[FACADE], &[], &[], true),
+        scope(&["enshwick-abi"], &[], &[FACADE], &[], true),
+    ] {
+        assert!(stable_examples_left_to_ci(&due, &parts), "{due:?}");
+    }
+    for not_due in [
+        scope(&["enshwick-abi"], &[], &[], &[FACADE], true),
+        scope(&["enshwick-abi"], &[], &[FACADE], &[], false),
+    ] {
+        assert!(!stable_examples_left_to_ci(&not_due, &parts), "{not_due:?}");
+    }
+    assert!(!stable_examples_left_to_ci(
+        &scope(&[FACADE], &[], &[], &[], true),
         &[Part::Host]
     ));
-    assert!(!stable_api_left_to_ci(
-        &scope(&[FACADE], &[], &[], false),
+    assert!(!stable_examples_left_to_ci(
+        &scope(&[FACADE], &[], &[], &[], false),
         &parts
     ));
+}
+
+#[test]
+fn a_wide_change_lints_and_documents_the_stable_surface_but_leaves_its_examples() {
+    let scope = Scope::Some {
+        code: ["enshwick-abi".to_owned()].into(),
+        docs: BTreeSet::new(),
+        tested: [FACADE.to_owned()].into(),
+        built: BTreeSet::new(),
+        wide: true,
+    };
+    let stable = stable();
+    let steps = host_steps(
+        &scope,
+        (&["--workspace".to_owned()], &stable),
+        (true, true, false),
+        Some(""),
+        &[],
+        false,
+        &[Part::StableApi],
+    );
+    let lines: Vec<String> = steps.iter().map(Step::line).collect();
+    let stable_line = stable.join(" ");
+    assert!(
+        lines.contains(&format!(
+            "cargo clippy --all-targets {stable_line} -- -D warnings"
+        )),
+        "{lines:?}"
+    );
+    assert!(runs_stable_rustdoc(&steps, &stable), "{lines:?}");
+    assert!(
+        !lines
+            .iter()
+            .any(|line| line.starts_with("cargo test --doc")),
+        "{lines:?}"
+    );
 }
 
 /// CI starts the trybuild and stable surface jobs only for the parts this
@@ -162,7 +200,7 @@ fn only_a_change_that_reaches_the_facade_lists_the_trybuild_and_stable_surface_p
         [Part::Trybuild, Part::StableApi]
     );
     assert_eq!(due(&scope(&[], &[FACADE], false)), [Part::StableApi]);
-    assert_eq!(due(&scope(&[FACADE], &[], true)), []);
+    assert_eq!(due(&scope(&[FACADE], &[], true)), [Part::StableApi]);
     assert_eq!(due(&Scope::All), [Part::Trybuild, Part::StableApi]);
     for (part, planned) in [
         (Part::Trybuild, planned_for(&["xtask"], &[Part::Trybuild])),
@@ -498,7 +536,7 @@ fn a_package_whose_tests_alone_run_gets_no_examples_trybuild_or_stable_surface_s
 }
 
 #[test]
-fn a_facade_change_with_many_dependents_leaves_trybuild_and_the_stable_surface_to_ci() {
+fn a_facade_change_with_many_dependents_leaves_trybuild_and_the_stable_examples_to_ci() {
     let args = stable();
     let scope = |tested: &[&str]| Scope::Some {
         code: ["enshwick".to_owned()].into(),
@@ -530,8 +568,8 @@ fn a_facade_change_with_many_dependents_leaves_trybuild_and_the_stable_surface_t
     let wide = steps(&scope(&["enshwick-loader", "enshwick-luau"]));
     assert!(!has(&wide, "--test main"), "{wide:?}");
     assert!(!has(&wide, &format!("cargo test --doc {stable_line}")));
-    assert!(!has(&wide, &format!("cargo doc --no-deps {stable_line}")));
-    assert!(!has(
+    assert!(has(&wide, &format!("cargo doc --no-deps {stable_line}")));
+    assert!(has(
         &wide,
         &format!("cargo clippy --all-targets {stable_line}")
     ));
@@ -568,6 +606,7 @@ fn package(name: &str, dir: &str, windows_only: bool) -> Package {
         lib: None,
         windows_only,
         windows_tests: windows_only,
+        compiles_c: false,
         stable_build: false,
         features: Vec::new(),
     }
@@ -786,13 +825,19 @@ fn every_host_build_lints_the_loader_s_benchmark_hooks_and_benchmarks() {
 #[test]
 fn a_change_to_the_api_code_builds_its_stable_rustdoc() {
     let args = stable();
-    assert!(runs_stable_rustdoc(&stable_api_steps(true, &args), &args));
+    assert!(runs_stable_rustdoc(
+        &stable_api_steps(true, true, &args),
+        &args
+    ));
 }
 
 #[test]
 fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
     let args = stable();
-    assert!(runs_stable_rustdoc(&stable_api_steps(false, &args), &args));
+    assert!(runs_stable_rustdoc(
+        &stable_api_steps(false, true, &args),
+        &args
+    ));
 }
 
 #[test]
@@ -888,7 +933,7 @@ fn the_public_paths_list_is_written_again_only_when_its_writer_or_the_list_chang
 
 #[test]
 fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
-    let steps = stable_api_steps(false, &stable());
+    let steps = stable_api_steps(false, true, &stable());
     let skipped = |name: &str| {
         steps.iter().any(|step| {
             step.args
@@ -912,3 +957,5 @@ fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
     ));
     assert!(!skipped("crates\\enshwick\\src\\lib.rs - item (line 1)"));
 }
+
+mod targets;

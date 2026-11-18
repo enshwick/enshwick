@@ -178,6 +178,7 @@ fn packages() -> Result<Vec<Package>, String> {
                 windows_tests: ["windows-tests", "windows-only"]
                     .iter()
                     .any(|key| package["metadata"]["xtask"][key].as_bool() == Some(true)),
+                compiles_c: package["metadata"]["xtask"]["compiles-c"].as_bool() == Some(true),
                 stable_build: package["features"].get("unstable").is_some()
                     || stable_examples(package),
                 features: package["features"]
