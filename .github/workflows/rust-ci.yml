@@ -4,10 +4,10 @@ name: Rust CI
 # main, on GitHub-hosted runners, with the toolchain, the Windows SDK and the
 # build cached between runs; a push to main runs the full suite and fills the
 # caches pull requests start from. With `split` the host check, the lints of
-# each feature alone, the doctests and rustdoc, the Windows lint (the
-# workspace, then each feature alone for Windows), the API's trybuild test,
-# its stable surface and cargo-semver-checks run as parallel jobs, the
-# workspace's doctests and rustdoc only in the merge queue, on main
+# each feature alone, the doctests and rustdoc, the Windows lints of the
+# workspace and of each feature alone, the API's trybuild test, its stable
+# surface and cargo-semver-checks run as parallel jobs, the workspace's
+# doctests and rustdoc only in the merge queue, on main
 # and with `full`, and the trybuild test and the stable surface of a pull
 # request only when its change needs them. The Windows tests run natively on
 # a Windows runner, only those the change reaches. Each part runs through
@@ -27,7 +27,7 @@ on:
         type: boolean
         default: true
       split:
-        description: Run the host check, the lints of each feature alone, the doctests and rustdoc, the Windows lint, the API's trybuild test, its stable surface and cargo-semver-checks as parallel jobs, and only the trybuild test and stable surface a change needs; the repository's `cargo xtask` must know `check --part` with the parts `features`, `stable-api`, `trybuild` and `semver`, `check --semver` and `check --list parts`.
+        description: Run the host check, the lints of each feature alone, the doctests and rustdoc, the Windows lints of the workspace and of each feature alone, the API's trybuild test, its stable surface and cargo-semver-checks as parallel jobs, and only the trybuild test and stable surface a change needs; the repository's `cargo xtask` must know `check --part` with the parts `features`, `windows-features`, `stable-api`, `trybuild` and `semver`, `check --semver` and `check --list parts`.
         type: boolean
         default: false
       semver:
@@ -149,7 +149,7 @@ jobs:
           elif [ -n "$PROVEN" ]; then
             parts=(docs)
           else
-            parts=(host features windows-lint)
+            parts=(host features windows-lint windows-features)
             # The workspace's doctests and rustdoc run in the merge queue, on
             # main and in the full suite, which keeps the pull request lane
             # short.

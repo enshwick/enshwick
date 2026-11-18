@@ -42,7 +42,7 @@ fn world(type_hash: u32) -> (Vec<u64>, Vec<u64>, Vec<u8>) {
 fn copy(c: &mut Criterion) {
     use std::hint::black_box;
 
-    use enshwick_loader::base::game_events::bench_server_copy;
+    use enshwick_loader::bench::bench_server_copy;
 
     let mut group = c.benchmark_group("event_copy");
     for (name, type_hash) in [("selected", WANTED), ("unmatched", WANTED + 1)] {

@@ -43,45 +43,42 @@ mod parts;
 #[cfg(windows)]
 mod start;
 
-#[cfg(all(windows, any(test, feature = "test")))]
-#[doc(hidden)]
-pub use actions::client_input::bench_client_build;
-#[cfg(all(windows, feature = "test"))]
-#[doc(hidden)]
-pub use base::carrier::bench_own_account;
-#[cfg(all(windows, feature = "test"))]
-#[doc(hidden)]
-pub use content::served::{bench_served_build, bench_text_lookup};
-#[cfg(all(windows, feature = "test"))]
-#[doc(hidden)]
-pub use content::textures::bench_texture_request;
 #[cfg(windows)]
 #[doc(hidden)]
 pub use engine::pages::{forget as forget_read_only, read_only};
-#[cfg(all(windows, feature = "test"))]
-#[doc(hidden)]
-pub use engine::world::accounts::bench_accounts;
 #[cfg(windows)]
 pub use parts::table_ids;
-#[cfg(all(windows, any(test, feature = "test")))]
-#[doc(hidden)]
-pub use ui::interface::item_slots::bench_item_slot;
-#[cfg(all(windows, feature = "test"))]
-#[doc(hidden)]
-pub use ui::interface::tooltips::bench_tooltip_lines;
-#[cfg(feature = "test")]
-#[doc(hidden)]
-pub use world::transactions::bench_settle_step;
-#[cfg(all(windows, feature = "test"))]
-#[doc(hidden)]
-pub use world::waypoints::bench_waypoint_idle_step;
 
-/// The loader's `HostApi` table, for the benchmark of one entry call.
-#[cfg(all(windows, feature = "test"))]
+/// The hooks the loader's benchmarks drive, out of the shipped DLL: each
+/// benchmark that uses one sets `required-features = ["test"]`, and the
+/// loader's own tests drive the two that build without the feature.
+#[cfg(any(test, feature = "test"))]
 #[doc(hidden)]
-#[must_use]
-pub fn host_api() -> &'static enshwick_core::abi::HostApi {
-    &host::API
+pub mod bench {
+    #[cfg(feature = "test")]
+    pub use crate::world::transactions::bench_settle_step;
+    #[cfg(windows)]
+    pub use crate::{
+        actions::client_input::bench_client_build, ui::interface::item_slots::bench_item_slot,
+    };
+    #[cfg(all(windows, feature = "test"))]
+    pub use crate::{
+        base::carrier::bench_own_account,
+        base::game_events::bench_server_copy,
+        content::recipes::bench_recipe_filter,
+        content::served::{bench_served_build, bench_text_lookup},
+        content::textures::bench_texture_request,
+        engine::world::accounts::bench_accounts,
+        ui::interface::tooltips::bench_tooltip_lines,
+        world::waypoints::bench_waypoint_idle_step,
+    };
+
+    /// The loader's `HostApi` table, for the benchmark of one entry call.
+    #[cfg(all(windows, feature = "test"))]
+    #[must_use]
+    pub fn host_api() -> &'static enshwick_core::abi::HostApi {
+        &crate::host::API
+    }
 }
 #[cfg(windows)]
 pub use start::{DryMod, DryRun, DryRunError, dry_run};

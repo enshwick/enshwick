@@ -8,11 +8,11 @@ use criterion::{Criterion, criterion_group, criterion_main};
 #[cfg(windows)]
 fn item_ui(c: &mut Criterion) {
     let mut group = c.benchmark_group("item_ui");
-    let mut mods = enshwick_loader::bench_item_slot(false);
+    let mut mods = enshwick_loader::bench::bench_item_slot(false);
     group.bench_function("slot_of_a_mod", |b| b.iter(&mut mods));
-    let mut screen = enshwick_loader::bench_item_slot(true);
+    let mut screen = enshwick_loader::bench::bench_item_slot(true);
     group.bench_function("hovered_slot_of_a_screen", |b| b.iter(&mut screen));
-    let mut lines = enshwick_loader::bench_tooltip_lines();
+    let mut lines = enshwick_loader::bench::bench_tooltip_lines();
     group.bench_function("kept_tooltip_lines", |b| b.iter(&mut lines));
     group.finish();
 }

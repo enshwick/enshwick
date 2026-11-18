@@ -5,9 +5,9 @@
 //! the first build that turns on that feature by itself. Only
 //! the library and binaries: the dev-dependencies of the other targets turn
 //! the features back on and hide the gap, and the workspace's clippy lints
-//! those targets. Off Windows the Windows lint runs them again for the
-//! Windows target, where the `cfg(windows)` code builds, for the packages
-//! with such code ([`windows_code`]).
+//! those targets. Off Windows the Windows part of them runs them again for
+//! the Windows target, where the `cfg(windows)` code builds, for the
+//! packages with such code ([`windows_code`]).
 
 use std::fs;
 use std::path::Path;
@@ -49,8 +49,8 @@ pub(super) fn steps(
 
 /// Whether `package` has code that builds only for Windows, so its lints
 /// for the Windows target can differ from those on the host: it is
-/// Windows-only, or a source file under `root` names `windows` (a
-/// `cfg(windows)`, a `target_os = "windows"`, a comment).
+/// Windows-only, or a source file under `root` holds a `cfg` predicate
+/// naming `windows` ([`gates_windows`]).
 pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
     if package.windows_only {
         return true;
@@ -60,12 +60,44 @@ pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
     rust_files(&root.join(&package.dir).join("src"), &mut files).is_err()
         || files
             .iter()
-            .any(|file| fs::read_to_string(file).map_or(true, |text| names_windows(&text)))
+            .any(|file| fs::read_to_string(file).map_or(true, |text| gates_windows(&text)))
+}
+
+/// Whether `text` holds a `cfg(..)`, `cfg!(..)` or `cfg_attr(..)` whose
+/// arguments name `windows` (`windows`, `not(windows)`,
+/// `target_os = "windows"`); such text in a comment counts too.
+pub(super) fn gates_windows(text: &str) -> bool {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    text.match_indices("cfg").any(|(at, word)| {
+        let rest = &text[at + word.len()..];
+        let rest = rest
+            .strip_prefix('!')
+            .or_else(|| rest.strip_prefix("_attr"))
+            .unwrap_or(rest);
+        !text[..at].ends_with(ident)
+            && rest
+                .strip_prefix('(')
+                .is_some_and(|args| names_windows(within_parentheses(args)))
+    })
+}
+
+/// `text` up to the parenthesis that closes the one just before it.
+fn within_parentheses(text: &str) -> &str {
+    let mut depth = 0_usize;
+    for (at, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return &text[..at],
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    text
 }
 
 /// Whether `text` holds `windows` as a word of its own, not inside an
 /// identifier such as `windows_sys`.
-pub(super) fn names_windows(text: &str) -> bool {
+fn names_windows(text: &str) -> bool {
     let ident = |c: char| c.is_alphanumeric() || c == '_';
     text.match_indices("windows").any(|(at, word)| {
         !text[..at].ends_with(ident) && !text[at + word.len()..].starts_with(ident)
