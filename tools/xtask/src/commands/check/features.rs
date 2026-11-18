@@ -12,7 +12,7 @@
 use std::fs;
 use std::path::Path;
 
-use proc_macro2::{Delimiter, TokenStream, TokenTree};
+use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 
 use super::Step;
 use crate::affected::{Package, Scope};
@@ -52,16 +52,26 @@ pub(super) fn steps(
 /// Whether `package` has code that builds only for Windows, so its lints
 /// for the Windows target can differ from those on the host: it is
 /// Windows-only, or a source file under `root` holds a `cfg` predicate on
-/// the target platform ([`gates_target`]).
+/// the target platform ([`gates_target`]) outside test code, which these
+/// lints do not build: a `tests` module's file or folder is skipped.
 pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
     if package.windows_only {
         return true;
     }
+    let src = root.join(&package.dir).join("src");
     let mut files = Vec::new();
     // A false yes, or an unreadable tree, costs only a lint too many.
-    rust_files(&root.join(&package.dir).join("src"), &mut files).is_err()
+    rust_files(&src, &mut files).is_err()
         || files
             .iter()
+            .filter(|file| {
+                file.strip_prefix(&src).map_or(true, |path| {
+                    !path
+                        .with_extension("")
+                        .components()
+                        .any(|part| part.as_os_str() == "tests")
+                })
+            })
             .any(|file| fs::read_to_string(file).map_or(true, |text| gates_target(&text)))
 }
 
@@ -77,8 +87,9 @@ const TARGET_OPTIONS: [&str; 5] = [
 
 /// Whether `text` holds a `cfg(..)`, `cfg!(..)` or `cfg_attr(..)` whose
 /// predicate names one of the [`TARGET_OPTIONS`] (`windows`, `not(unix)`,
-/// `target_env = "msvc"`); a comment or a string names nothing, and text
-/// that does not lex counts as one that does.
+/// `target_env = "msvc"`); a comment, a string or an item under
+/// `#[cfg(test)]` names nothing, and text that does not lex counts as one
+/// that does.
 pub(super) fn gates_target(text: &str) -> bool {
     let Ok(tokens) = text.parse::<TokenStream>() else {
         return true;
@@ -86,10 +97,21 @@ pub(super) fn gates_target(text: &str) -> bool {
     let mut streams = vec![tokens];
     while let Some(stream) = streams.pop() {
         let mut after_cfg = false;
+        let mut in_test_item = false;
         for token in stream {
+            if in_test_item {
+                // The item ends at its body or its semicolon.
+                in_test_item = !matches!(&token, TokenTree::Group(group) if group.delimiter() == Delimiter::Brace)
+                    && !matches!(&token, TokenTree::Punct(punct) if punct.as_char() == ';');
+                continue;
+            }
             match token {
                 TokenTree::Ident(ident) => after_cfg = ident == "cfg" || ident == "cfg_attr",
                 TokenTree::Punct(punct) if punct.as_char() == '!' => {}
+                TokenTree::Group(group) if is_cfg_test(&group) => {
+                    in_test_item = true;
+                    after_cfg = false;
+                }
                 TokenTree::Group(group) => {
                     if after_cfg
                         && group.delimiter() == Delimiter::Parenthesis
@@ -105,6 +127,21 @@ pub(super) fn gates_target(text: &str) -> bool {
         }
     }
     false
+}
+
+/// Whether `group` is the `[cfg(test)]` of an attribute.
+fn is_cfg_test(group: &Group) -> bool {
+    let only = |stream: TokenStream, word: &str| {
+        let mut tokens = stream.into_iter();
+        matches!(tokens.next(), Some(TokenTree::Ident(ident)) if ident == word)
+            && tokens.next().is_none()
+    };
+    let mut tokens = group.stream().into_iter();
+    group.delimiter() == Delimiter::Bracket
+        && matches!(tokens.next(), Some(TokenTree::Ident(cfg)) if cfg == "cfg")
+        && matches!(tokens.next(), Some(TokenTree::Group(predicate))
+            if predicate.delimiter() == Delimiter::Parenthesis && only(predicate.stream(), "test"))
+        && tokens.next().is_none()
 }
 
 /// Whether a `cfg` predicate names one of the [`TARGET_OPTIONS`].

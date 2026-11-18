@@ -679,11 +679,34 @@ fn a_package_has_windows_code_when_it_is_windows_only_or_a_cfg_in_its_source_nam
         "#[cfg_attr(feature = \"a\", doc = \")\")] fn windows() {}",
         "#[cfg(feature = \"test\")] mod windows_paths;",
         "fn mycfg() {} fn f() { mycfg(windows) }",
+        "#[cfg(test)]\n#[expect(dead_code)]\nmod tests { #[cfg(windows)] fn f() {} }",
+        "#[cfg(test)] use std::os::windows as _; #[cfg(test)] fn f() { if cfg!(unix) {} }",
         "cfg",
         "",
     ] {
         assert!(!features::gates_target(text), "{text}");
     }
+    assert!(features::gates_target(
+        "#[cfg(test)] mod tests;\n#[cfg(windows)] mod paths;"
+    ));
+}
+
+#[test]
+fn a_target_cfg_in_a_tests_file_or_folder_gives_a_package_no_windows_code() {
+    let root = crate::scratch::Scratch::new("windows-code").unwrap();
+    let write = |path: &str, text: &str| {
+        let path = root.join("p/src").join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write("lib.rs", "#[cfg(test)]\nmod tests;\nmod a;\n");
+    write("tests.rs", "#[cfg(windows)] fn f() {}");
+    write("a.rs", "pub fn a() {}");
+    write("a/tests/files.rs", "#[cfg(unix)] fn f() {}");
+    let package = package("p", "p", false);
+    assert!(!features::windows_code(&root, &package));
+    write("a.rs", "#[cfg(unix)] pub fn a() {}");
+    assert!(features::windows_code(&root, &package));
 }
 
 #[test]
