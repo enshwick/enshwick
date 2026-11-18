@@ -438,6 +438,7 @@ entries = [
   "net.provider_vtable",
   "net.session_limit",
   "net.session_manager",
+  "net.session_state",
   "net.socket_channel",
   "net.socket_create",
   "net.socket_destroy",

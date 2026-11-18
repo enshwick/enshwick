@@ -27,34 +27,22 @@ pub(crate) fn link(loader: &Loader, join: u64) -> bool {
 /// interface does not read the stage.
 pub(crate) static ENDED_FUSE: Fuse = Fuse::new("join end");
 
-/// The provider's state with a session, hosted or joined: the join passes it
-/// to the transition, and the transition's route finds it by that
-/// (`mov edx,0x2` in `net.provider_transition`, client 26430625).
-const SESSION: u32 = 2;
-
 /// Links the join end on the provider's state tree transition, once the
-/// build names the provider's state with no session; true when linked.
+/// build names the provider's states with a session and with none, and they
+/// differ; true when linked.
 pub(crate) fn link_ended(loader: &Loader) -> bool {
-    // The state's route goes through the transition, so a missing transition
-    // is left to the link below to name.
+    // Both states' routes go through the transition, so a missing transition
+    // is left to the link below to name. The session state is also the
+    // transition's second witness: the leave's route alone (vtable slot 17)
+    // does not prove the target, so the link needs both states.
     if loader.address(pinned::net::PROVIDER_TRANSITION).is_some() {
-        let id = pinned::net::NO_SESSION_STATE.id();
-        let Some(no_session) = loader
-            .build
-            .constant(id)
-            .and_then(|state| u32::try_from(state).ok())
-        else {
-            return loader.fuse_off(&ENDED_FUSE, id, crate::engine::builds::ABSENT);
-        };
-        if no_session == SESSION {
-            return loader.fuse_off(
-                &ENDED_FUSE,
-                id,
-                "is the session's state, not the one with none",
-            );
+        match no_session_state(loader) {
+            Ok(no_session) => {
+                // The loader links once per process.
+                let _first = STATE.no_session.set(no_session);
+            }
+            Err((id, reason)) => return loader.fuse_off(&ENDED_FUSE, id, reason),
         }
-        // The loader links once per process.
-        let _first = STATE.no_session.set(no_session);
     }
     let target = Target::Pinned(pinned::net::PROVIDER_TRANSITION);
     loader.link_feature(
@@ -75,6 +63,28 @@ pub(crate) fn set_layout(layout: super::Layout) {
 }
 
 /// The build's join target layout, once the join check linked it.
+/// Why the join end turns off when the build's no-session state equals its
+/// session state.
+const SAME_STATE: &str = "is the session's state, not the one with none";
+
+/// The build's provider state with no session, once the build names it and
+/// the session state and the two differ; else the entry to name and why.
+fn no_session_state(loader: &Loader) -> Result<u32, (&'static str, &'static str)> {
+    let state = |id: pinned::Constant| {
+        loader
+            .build
+            .constant(id.id())
+            .and_then(|state| u32::try_from(state).ok())
+            .ok_or((id.id(), crate::engine::builds::ABSENT))
+    };
+    let session = state(pinned::net::SESSION_STATE)?;
+    let no_session = state(pinned::net::NO_SESSION_STATE)?;
+    if no_session == session {
+        return Err((pinned::net::NO_SESSION_STATE.id(), SAME_STATE));
+    }
+    Ok(no_session)
+}
+
 pub(crate) fn layout() -> Option<super::Layout> {
     LAYOUT.get().copied()
 }
@@ -91,8 +101,9 @@ struct State {
     join: Join,
     /// The provider's state with no session, which its leave and every
     /// online error move its state tree to, as the build names it
-    /// (`net.no_session_state`): 1 on every kept client, a session hosted
-    /// or joined 2 (client 26430625, read in the decompiler).
+    /// (`net.no_session_state`), never the state with a session
+    /// (`net.session_state`): 1 and 2 on every kept client (client 26430625,
+    /// read in the decompiler).
     no_session: OnceLock<u32>,
 }
 
@@ -366,11 +377,11 @@ crate::engine::chains::chain_detour! {
 crate::engine::chains::chain_detour! {
     /// The online provider's state tree transition at the table's
     /// `net.provider_transition`, which the provider's join ends in with a
-    /// session (2) and its leave and every online error, as the game's
-    /// dialog opens, with none ([`ends_session`]); it takes the provider's
-    /// tree and the state's index and returns whether the transition started
-    /// (client 26430625, read in the decompiler). The game calls it on the
-    /// thread that moves the provider.
+    /// session (`net.session_state`) and its leave and every online error,
+    /// as the game's dialog opens, with none ([`ends_session`]); it takes the
+    /// provider's tree and the state's index and returns whether the
+    /// transition started (client 26430625, read in the decompiler). The game
+    /// calls it on the thread that moves the provider.
     fn transition(tree: *mut u8, state: u32) -> u64;
     next TRANSITION_NEXT;
     fuse &ENDED_FUSE, "the join end";
@@ -619,13 +630,17 @@ mod tests {
         let loader = crate::start::tests::pinning_loader(
             Side::CLIENT,
             &[pinned::net::PROVIDER_TRANSITION],
-            // Not the kept clients' 1, so the build's value is the one used.
-            &[(pinned::net::NO_SESSION_STATE, 3)],
+            // The kept clients' states swapped and moved (session 2 to 1,
+            // no session 1 to 3), so only the build's values pass.
+            &[
+                (pinned::net::SESSION_STATE, 1),
+                (pinned::net::NO_SESSION_STATE, 3),
+            ],
         );
         assert!(link_ended(&loader));
         assert!(ends_session(3), "the build's no-session state");
-        assert!(!ends_session(1), "another build's");
-        assert!(!ends_session(2), "a session");
+        assert!(!ends_session(1), "a session");
+        assert!(!ends_session(2), "the kept clients' session");
         let at = loader
             .address(pinned::net::PROVIDER_TRANSITION)
             .unwrap_or_default();
@@ -644,7 +659,7 @@ mod tests {
         let loader = crate::start::tests::pinning_loader(
             Side::CLIENT,
             &[pinned::net::PROVIDER_TRANSITION],
-            &[],
+            &[(pinned::net::SESSION_STATE, 2)],
         );
         assert!(!link_ended(&loader));
         assert!(ENDED_FUSE.is_off());
@@ -659,15 +674,33 @@ mod tests {
 
     #[test]
     fn a_build_whose_leave_names_the_session_s_state_turns_off_only_the_join_end() {
+        // A renumbered tree: the session's state is no longer 2.
         let loader = crate::start::tests::pinning_loader(
             Side::CLIENT,
             &[pinned::net::PROVIDER_TRANSITION],
-            &[(pinned::net::NO_SESSION_STATE, u64::from(SESSION))],
+            &[
+                (pinned::net::SESSION_STATE, 4),
+                (pinned::net::NO_SESSION_STATE, 4),
+            ],
         );
         assert!(!link_ended(&loader));
         assert!(ENDED_FUSE.is_off());
         assert!(!JOIN_FUSE.is_off());
         assert_eq!(off_entry(), pinned::net::NO_SESSION_STATE.id());
+        assert!(off_reason().ends_with(SAME_STATE), "{}", off_reason());
+    }
+
+    #[test]
+    fn a_build_whose_join_names_no_state_turns_off_only_the_join_end_naming_the_session_state() {
+        let loader = crate::start::tests::pinning_loader(
+            Side::CLIENT,
+            &[pinned::net::PROVIDER_TRANSITION],
+            &[(pinned::net::NO_SESSION_STATE, 1)],
+        );
+        assert!(!link_ended(&loader));
+        assert!(ENDED_FUSE.is_off());
+        assert!(!JOIN_FUSE.is_off());
+        assert_eq!(off_entry(), pinned::net::SESSION_STATE.id());
     }
 
     #[test]
@@ -681,12 +714,17 @@ mod tests {
 
     /// The entry the join end went off for, as the status summary lists it.
     fn off_entry() -> String {
+        off_reason()
+            .split_once(' ')
+            .map_or_else(String::new, |(id, _)| id.to_owned())
+    }
+
+    /// The join end's off reason as the Mods screen and the log show it.
+    fn off_reason() -> String {
         let parts = crate::engine::diag::parts_off();
         let Some(off) = parts.iter().find(|p| p.part == ENDED_FUSE.feature()) else {
             panic!("the join end is not listed off: {parts:?}");
         };
-        off.reason
-            .split_once(' ')
-            .map_or_else(String::new, |(id, _)| id.to_owned())
+        off.reason.clone()
     }
 }

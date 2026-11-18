@@ -93,9 +93,10 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "recipe.menu_known", 0xd6_62f0),
     ("1.0 client (1269579)", "recipe.menu_known", 0xd5_0c90),
     ("1.0 client (26082781)", "recipe.menu_known", 0xd5_2710),
-    // The online provider's state tree transition, which its leave and every
-    // online error end in; read in the decompiler on 26430625, found by the
-    // route on the other kept clients.
+    // The online provider's state tree transition, which its leave, its join
+    // and every online error end in, found through the leave, which names no
+    // state; read in the decompiler on 26430625, found by the route on the
+    // other kept clients.
     (
         "1.0 client (26430625)",
         "net.provider_transition",
@@ -124,6 +125,13 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "net.no_session_state", 1),
     ("1.0 client (1269579)", "net.no_session_state", 1),
     ("1.0 client (26082781)", "net.no_session_state", 1),
+    // The provider's state with a session, which its join passes to the
+    // same transition; read in the decompiler on 26430625, found by the
+    // route on the other kept clients.
+    ("1.0 client (26430625)", "net.session_state", 2),
+    ("1.0 client (26320373)", "net.session_state", 2),
+    ("1.0 client (1269579)", "net.session_state", 2),
+    ("1.0 client (26082781)", "net.session_state", 2),
     // The predicate the client tick shows the cursor by in the world, from
     // the HUD screen byte; read in the decompiler on 26430625, found by the
     // route on the other kept clients.
