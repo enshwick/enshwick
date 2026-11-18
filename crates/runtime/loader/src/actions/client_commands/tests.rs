@@ -425,6 +425,17 @@ fn a_join_and_a_leave_report_a_phase_from_the_queue_on() {
 }
 
 #[test]
+fn the_stage_tells_once_when_play_starts_and_once_when_it_ends() {
+    let _menu = play::note_stage(2, 1);
+    assert_eq!(play::note_stage(0, 2), None, "a menu after a menu");
+    assert_eq!(play::note_stage(4, 3), Some(true), "play starts loading");
+    assert_eq!(play::note_stage(7, 4), None, "loading into the world");
+    assert_eq!(play::note_stage(7, 5), None, "still in the world");
+    assert_eq!(play::note_stage(2, 6), Some(false), "back at a menu");
+    assert_eq!(play::note_stage(2, 7), None, "the menu again");
+}
+
+#[test]
 fn a_leave_starts_only_in_play_and_only_one_at_a_time() {
     play::note_stage(2, 10);
     assert_eq!(

@@ -555,3 +555,45 @@ fn a_moved_terrain_id_is_told_in_the_reader_s_language_naming_who_hosts() {
         "Ores дає своєму ґрунту тут інший номер, ніж хост. Запустіть моди хоста в його версіях."
     );
 }
+
+#[test]
+fn a_host_s_table_goes_once_when_the_game_played_with_it_ends() {
+    let played = Played::new();
+    assert!(!played.changed(true, || false), "a game the client hosts");
+    assert!(!played.changed(false, || unreachable!()), "its end");
+    assert!(!played.changed(true, || true), "a joined game starts");
+    assert!(played.changed(false, || unreachable!()), "and ends");
+    assert!(
+        !played.changed(false, || unreachable!()),
+        "only once per game"
+    );
+}
+
+#[test]
+fn a_host_s_table_taken_while_still_in_a_game_stays_when_that_game_ends() {
+    let played = Played::new();
+    assert!(!played.changed(true, || true), "a joined game starts");
+    played.switched();
+    assert!(
+        !played.changed(false, || unreachable!()),
+        "the next host's table, taken in play, stays"
+    );
+}
+
+#[test]
+fn an_empty_table_changes_no_palette_world_effect_or_look() {
+    let types = (0..256).map(|n| Value::Uint(n % 7)).collect();
+    let effects = Value::Struct(vec![(MATERIAL_TYPE.into(), Value::List(types))]);
+    let data = (0..TERRAIN_IDS * LOOK_ENTRY)
+        .map(|n| Value::Uint(n as u64 % 251))
+        .collect();
+    let block = Value::Struct(vec![(DATA.into(), Value::List(data))]);
+    let blending = Value::Struct(vec![(BAKING_VOXEL_MATERIALS.into(), block)]);
+    let unchanged = |value: &Value, edit: fn(&mut Value, &[Material]) -> Option<()>| {
+        let mut edited = value.clone();
+        edit(&mut edited, &[]).is_some() && edited == *value
+    };
+    assert!(unchanged(&world(), name_in));
+    assert!(unchanged(&effects, copy_effects));
+    assert!(unchanged(&blending, copy_looks));
+}

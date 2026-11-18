@@ -16,6 +16,8 @@
 //! free id as a copy of the fallback, so its ground loads as the fallback,
 //! and is the mod's material again once the mod is back.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use enshwick_base::resources::Value;
 use enshwick_core::abi::TerrainMaterialAdd;
 use enshwick_core::content::Guid;
@@ -606,6 +608,45 @@ impl Session {
     /// they were built from another table.
     fn rebuilds_for(&self, next: &[Material]) -> bool {
         self.table().is_some_and(|now| now != next)
+    }
+}
+
+/// Whether the host's table served now is the one of a game the client
+/// plays or played: set when play starts with a host's table, cleared by
+/// every switch of the table, so a join taken while still in a game keeps
+/// the table it took when that game ends.
+#[derive(Debug)]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+struct Played(AtomicBool);
+
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "terrain is served only in the game")
+)]
+impl Played {
+    const fn new() -> Self {
+        Self(AtomicBool::new(false))
+    }
+
+    /// The served table changed.
+    fn switched(&self) {
+        self.0.store(false, Ordering::Release);
+    }
+
+    /// Play started (`playing`) or ended; `host` answers, only at a start,
+    /// whether the table served is a host's. Whether play ended in a game
+    /// played with a host's table, once per such game.
+    fn changed(&self, playing: bool, host: impl FnOnce() -> bool) -> bool {
+        if !playing {
+            return self.0.swap(false, Ordering::AcqRel);
+        }
+        if host() {
+            self.0.store(true, Ordering::Release);
+        }
+        false
     }
 }
 

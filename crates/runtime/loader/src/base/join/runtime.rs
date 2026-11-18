@@ -63,7 +63,14 @@ pub(crate) struct TerrainIds {
     pub(crate) adopt: fn(Option<&str>, crate::base::join::Host) -> Option<String>,
     /// Serves this side's own table again.
     pub(crate) own_again: fn(),
+    /// Play started (`true`) or ended: whether it ended in a game played
+    /// with a host's table, once per such game.
+    pub(crate) play_changed: fn(bool) -> bool,
 }
+
+/// Serving this side's own world again once a joined game ends: a panic
+/// there turns off only that, and the hosted start still does it.
+static LEFT_FUSE: Fuse = Fuse::new("own world after a joined game");
 
 /// Sets the terrain ids this side serves; the first call holds.
 pub(crate) fn set_terrain_ids(ids: TerrainIds) {
@@ -88,6 +95,23 @@ fn own_terrain_again() {
 pub(crate) fn hosting_starts() {
     crate::base::join::client::back_on();
     own_terrain_again();
+}
+
+/// The client's play started (`playing`) or ended, as the interface frame
+/// reads the app's stage: once a game played with a host's terrain ids
+/// ends, the client gets its own world back as before a game it hosts, so
+/// one whose hosted start the loader does not see still serves its own ids.
+/// The rebuild runs on a thread of its own, off the interface frame.
+pub(crate) fn play_changed(playing: bool) {
+    if !terrain_ids().is_some_and(|ids| (ids.play_changed)(playing)) {
+        return;
+    }
+    crate::engine::off_thread::start("own world", || {
+        let _ran = LEFT_FUSE.run("the client's own world", || {
+            crate::log!(INFO, "back from a joined game: own terrain ids again");
+            hosting_starts();
+        });
+    });
 }
 
 /// The count of joins the check refused so far.

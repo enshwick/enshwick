@@ -231,11 +231,14 @@ pub(crate) enum StartError {
     NotNow,
 }
 
-/// Notes the stage byte the interface read at `now`; one store.
-pub(crate) fn note_stage(byte: u8, now: u64) {
-    STATE
+/// Notes the stage byte the interface read at `now`; one swap.
+/// `Some(playing)` when play started or ended since the last read.
+pub(crate) fn note_stage(byte: u8, now: u64) -> Option<bool> {
+    let was = STATE
         .stage
-        .store(now << 8 | u64::from(byte), Ordering::Release);
+        .swap(now << 8 | u64::from(byte), Ordering::AcqRel);
+    let playing = Stage::of(byte).playing();
+    (Stage::of((was & 0xff) as u8).playing() != playing).then_some(playing)
 }
 
 /// The stage the interface last read, if at most [`FRESH_MS`] old at `now`.

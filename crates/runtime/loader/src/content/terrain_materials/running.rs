@@ -13,9 +13,9 @@ use enshwick_gamedata::reflect::fnv1a32;
 
 use super::table::{self, Adopted};
 use super::{
-    Host, Material, Palette, Session, TerrainMaterialError, add_rules, copy_effects, copy_looks,
-    held_of, held_text, moved_by, moved_text, name_in, orphans, pads, place, prefer, saves_folder,
-    serving, untaken_text,
+    Host, Material, Palette, Played, Session, TerrainMaterialError, add_rules, copy_effects,
+    copy_looks, held_of, held_text, moved_by, moved_text, name_in, orphans, pads, place, prefer,
+    saves_folder, serving, untaken_text,
 };
 use crate::content::served::{Builder, mod_on};
 use crate::engine::fuse::Fuse;
@@ -35,17 +35,24 @@ struct Terrain {
     own: OnceLock<Own>,
     /// The table the served terrain resources build from.
     session: Mutex<Session>,
+    /// Whether the host's table served is the one of a game played.
+    played: Played,
 }
 
-/// Taking a host's terrain ids at a join and this side's own back: a panic
-/// there turns off only that, so the join check and the lobby go on.
+/// Taking a host's terrain ids at a join: a panic there turns off only
+/// that, so the join check and the lobby go on.
 static HOST_IDS_FUSE: Fuse = Fuse::new("terrain ids from the host");
+/// Serving this side's own terrain ids again: apart from taking a host's,
+/// so a panic there leaves the way back on; while it is off, no host's
+/// table is taken, since none could be left.
+static OWN_IDS_FUSE: Fuse = Fuse::new("own terrain ids");
 
 static TERRAIN: Terrain = Terrain {
     materials: Registry::new(),
     palette: OnceLock::new(),
     own: OnceLock::new(),
     session: Mutex::new(Session::Unplaced),
+    played: Played::new(),
 };
 
 /// What this side serves of its own.
@@ -193,35 +200,52 @@ pub(crate) fn serve(
     let Some(archive) = crate::engine::archive::game() else {
         return Vec::new();
     };
-    let patch = |name: &'static str, edit: &Edit| {
+    // `always_edits`: the edit changes the resource even for an empty table.
+    let patch = |name: &'static str, edit: &Edit, always_edits: bool| {
         let edit = Arc::clone(edit);
         let codec: Codec<'static> = loader.reflection.registry();
-        Box::new(move |base: &[u8]| {
-            let mut value = codec.decode(name, base).ok()?;
-            edit(&mut value, &session())?;
-            codec.encode(name, &value, Some(base)).ok()
+        Box::new(move |base: Vec<u8>| {
+            let table = session();
+            // The codec writes a resource back to the bytes it read (every
+            // resource of client and server data 1287369), so an empty table
+            // builds the base: no decode for a client without terrain.
+            if table.is_empty() && !always_edits {
+                return Some(base);
+            }
+            let mut value = codec.decode(name, &base).ok()?;
+            edit(&mut value, &table)?;
+            codec.encode(name, &value, Some(&base)).ok()
         }) as Builder
     };
     let (world, _) = of::<VoxelWorldResource>();
     let names: Edit = Arc::new(name_in);
     let mut patches: Vec<(ResourceKey, Builder)> = worlds
         .iter()
-        .map(|key| (*key, patch(world, &names)))
+        .map(|key| (*key, patch(world, &names, false)))
         .collect();
     let free = palette.free();
-    let tables: [((&'static str, u32), Edit); 3] = [
+    let tables: [((&'static str, u32), Edit, bool); 3] = [
         (
             of::<TerraformingEfficiencyRegistryResource>(),
             Arc::new(move |rules: &mut Value, materials: &[Material]| {
                 add_rules(rules, &free, materials)
             }),
+            true,
         ),
-        (of::<VoxelMaterialVfxDataResource>(), Arc::new(copy_effects)),
-        (of::<WorldMaterialBlending2Resource>(), Arc::new(copy_looks)),
+        (
+            of::<VoxelMaterialVfxDataResource>(),
+            Arc::new(copy_effects),
+            false,
+        ),
+        (
+            of::<WorldMaterialBlending2Resource>(),
+            Arc::new(copy_looks),
+            false,
+        ),
     ];
-    for ((name, hash), edit) in &tables {
+    for ((name, hash), edit, always_edits) in &tables {
         for key in archive.keys_of(*hash) {
-            patches.push((key, patch(name, edit)));
+            patches.push((key, patch(name, edit, *always_edits)));
         }
     }
     let _first = TERRAIN.own.set(Own {
@@ -232,14 +256,21 @@ pub(crate) fn serve(
     });
     crate::base::join::set_terrain_ids(crate::base::join::TerrainIds {
         served: || served_text().unwrap_or_default(),
-        adopt: |table, host| match HOST_IDS_FUSE.run("the host's terrain ids", || adopt_host(table))
-        {
-            Some(mismatch) => mismatch.map(|m| m.text(host)),
-            // Off or panicked: whatever it served, it did not take the host's.
-            None => Some(untaken_text(host)),
+        adopt: |table, host| {
+            let adopted = (!OWN_IDS_FUSE.is_off())
+                .then(|| HOST_IDS_FUSE.run("the host's terrain ids", || adopt_host(table)))
+                .flatten();
+            match adopted {
+                Some(mismatch) => mismatch.map(|m| m.text(host)),
+                // Off or panicked: whatever it served, it did not take the host's.
+                None => Some(untaken_text(host)),
+            }
         },
-        own_again: || {
-            let _ran = HOST_IDS_FUSE.run("the client's own terrain ids", own_again);
+        own_again: own_again_fused,
+        play_changed: |playing| {
+            TERRAIN.played.changed(playing, || {
+                matches!(*TERRAIN.session.relock(), Session::Host(_))
+            })
         },
     });
     crate::engine::world::on_hosted_start(crate::base::join::hosting_starts);
@@ -289,6 +320,7 @@ fn switch(own: &Own, next: Session) -> bool {
         let rebuilds = next
             .table()
             .is_some_and(|table| session.rebuilds_for(table));
+        TERRAIN.played.switched();
         *session = next;
         rebuilds
     };
@@ -310,9 +342,16 @@ fn switch(own: &Own, next: Session) -> bool {
     took
 }
 
-/// Serves this side's own table again, before a game this client hosts
-/// starts or a join that brings no table: a host's table of a game it left
-/// goes. Before any build the first one places it.
+/// [`own_again`] under its own switch, on every path that serves this
+/// side's own table again, the join check's included.
+fn own_again_fused() {
+    let _ran = OWN_IDS_FUSE.run("the client's own terrain ids", own_again);
+}
+
+/// Serves this side's own table again, once a game played with a host's
+/// table ends, before a game this client hosts starts or a join that
+/// brings no table: a host's table of a game it left goes. Before any build
+/// the first one places it.
 fn own_again() {
     let Some(own) = TERRAIN.own.get() else {
         return;
@@ -365,13 +404,13 @@ impl Mismatch {
 fn adopt_host(host: Option<&str>) -> Option<Mismatch> {
     let own = TERRAIN.own.get()?;
     let Some(text) = host else {
-        own_again();
+        own_again_fused();
         return None;
     };
     let (palette, _) = palette(own.loader)?;
     let Some(entries) = table::parse(text, palette) else {
         crate::log!(WARN, "the host's terrain table does not read: {text}");
-        own_again();
+        own_again_fused();
         return Some(Mismatch::Untaken);
     };
     let Adopted { table, moved } = table::adopt(own.added, &entries, mod_on);

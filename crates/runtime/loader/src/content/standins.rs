@@ -70,9 +70,9 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
             let mut stand_in = NewItem::new(NAME, vanilla);
             stand_in.name = Some(NAME.guid());
             stand_in.description = Some(DESCRIPTION.guid());
-            let build: Builder = Box::new(move |base: &[u8]| {
+            let build: Builder = Box::new(move |base: Vec<u8>| {
                 let mut built = Vec::new();
-                clone_item(&layout, base, &stand_in, item, &mut built)?;
+                clone_item(&layout, &base, &stand_in, item, &mut built)?;
                 Some(built)
             });
             (
@@ -83,9 +83,9 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
         })
         .collect();
     let listed: Vec<Guid> = orphans.iter().map(|&(item, _)| item).collect();
-    let registry: Builder = Box::new(move |base: &[u8]| {
+    let registry: Builder = Box::new(move |base: Vec<u8>| {
         // Two buffers in turn: each listing builds from the last one's bytes.
-        let (mut registry, mut next) = (base.to_vec(), Vec::new());
+        let (mut registry, mut next) = (base, Vec::new());
         for &item in &listed {
             list_item(
                 &layout,
