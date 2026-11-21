@@ -15,10 +15,12 @@ const CODE: [u8; 34] = [
 ];
 
 fn steps(text: &[&str]) -> Vec<Step> {
-    let names = shape::ShapeNames::new();
-    text.iter()
-        .map(|s| Step::parse(s, &names).unwrap())
-        .collect()
+    shape::parse_shape(text, &shape::ShapeNames::new()).unwrap()
+}
+
+fn decode(bytes: &[u8]) -> Vec<Instruction> {
+    let mut decoder = Decoder::with_ip(64, bytes, 0x1000, DecoderOptions::NONE);
+    core::iter::from_fn(|| decoder.can_decode().then(|| decoder.decode())).collect()
 }
 
 fn first(text: &[&str], entry: &impl Fn(&str) -> Option<u64>) -> Option<shape::Match> {
@@ -31,10 +33,68 @@ fn first_in(
     entry: &impl Fn(&str) -> Option<u64>,
 ) -> Option<shape::Match> {
     let steps = steps(text);
-    let mut decoder = Decoder::with_ip(64, bytes, 0x1000, DecoderOptions::NONE);
-    let code: Vec<Instruction> =
-        core::iter::from_fn(|| decoder.can_decode().then(|| decoder.decode())).collect();
-    shape::matches(&steps, &code, entry).next()
+    let code = decode(bytes);
+    let targets = shape::branch_targets(&code);
+    shape::matches(&steps, &code, entry, &targets).next()
+}
+
+/// `mov edx,0x3; add rsp,0x20; pop rbx; pop rsi; jmp +0`, at 0x1000: an
+/// epilogue between a value and a tail jump to 0x1010.
+const EPILOGUE: [u8; 16] = [
+    0xba, 0x03, 0x00, 0x00, 0x00, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0x5e, 0xe9, 0x00, 0x00, 0x00, 0x00,
+];
+
+#[test]
+fn a_gap_skips_the_fewest_instructions_up_to_its_bound() {
+    let none = |_: &str| None;
+    let tail = |gap: &'static str| ["mov edx,*", gap, "jmp ?b"];
+    let found = first_in(&EPILOGUE, &tail("... 3"), &none).unwrap();
+    assert_eq!(
+        (found.start, found.end, found.lead, found.taken),
+        (0x1000, 0x1010, 0x1005, Some(3))
+    );
+    assert!(first_in(&EPILOGUE, &tail("... 2"), &none).is_none());
+    assert!(
+        first_in(&EPILOGUE, &["mov edx,*", "... 4", "pop ?r"], &none)
+            .is_some_and(|m| m.end == 0x100a),
+        "the first pop ends the run"
+    );
+}
+
+#[test]
+fn a_gap_never_skips_a_branch_or_a_branch_target() {
+    let none = |_: &str| None;
+    // mov edx,0x3; jmp +1; pop rbx; ret: the jump passes over the pop.
+    let jumping = [0xba, 0x03, 0x00, 0x00, 0x00, 0xeb, 0x01, 0x5b, 0xc3];
+    assert!(first_in(&jumping, &["mov edx,*", "... 4", "pop ?r"], &none).is_none());
+    // jmp +6; mov edx,0x3; pop rbx; pop rsi; ret: the jump lands on the
+    // second pop, in the gap.
+    let joined = [0xeb, 0x06, 0xba, 0x03, 0x00, 0x00, 0x00, 0x5b, 0x5e, 0xc3];
+    assert!(first_in(&joined, &["mov edx,*", "... 2", "ret"], &none).is_none());
+    assert!(
+        first_in(&joined, &["pop rsi", "ret"], &none).is_some(),
+        "a shape without a gap ignores branch targets"
+    );
+}
+
+#[test]
+fn a_gap_stands_between_two_instructions_with_a_bound_of_1_to_16() {
+    let names = shape::ShapeNames::new();
+    for bad in [
+        &["... 2", "ret"][..],
+        &["ret", "... 2"],
+        &["pop rbx", "... 2", "... 2", "ret"],
+        &["pop rbx", "... 0", "ret"],
+        &["pop rbx", "... 17", "ret"],
+        &["pop rbx", "...", "ret"],
+    ] {
+        assert!(shape::parse_shape(bad, &names).is_err(), "{bad:?}");
+    }
+    let steps = shape::parse_shape(&["pop rbx", "pop rsi", "... 16", "ret"], &names).unwrap();
+    assert_eq!(
+        (steps.len(), shape::lead(&steps), shape::reach(&steps)),
+        (3, 2, 19)
+    );
 }
 
 /// `mov [rcx+0x8],eax; mov [rcx+0x4],eax; mov [rcx],al`, then the same
