@@ -30,6 +30,7 @@ cli = [
     "dep:anyhow",
     "dep:clap",
     "dep:enshwick-abi",
+    "dep:enshwick-base",
     "dep:enshwick-core",
     "dep:enshwick-gamedata",
     "dep:iced-x86",
@@ -48,6 +49,7 @@ cli = [
 anyhow = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 enshwick-abi = { workspace = true, optional = true }
+enshwick-base = { workspace = true, optional = true }
 enshwick-core = { workspace = true, features = ["schema", "typed"], optional = true }
 enshwick-gamedata = { workspace = true, optional = true }
 iced-x86 = { workspace = true, optional = true }

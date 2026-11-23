@@ -8,26 +8,14 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use anyhow::bail;
+use enshwick_base::log_files::{
+    self, LOG_LEVEL_KEY, LOG_LEVELS_KEY, READY, SETTINGS_FILE, WORLD_SETTINGS,
+};
 use enshwick_core::abi::Level;
 
 use crate::install::{Built, SERVER_EXE};
 use crate::logs::{Entry, Follower, LOADER, LOGS};
 use crate::steam::{Found, SERVER_APP};
-
-/// How the loader's line opens once every mod's `ready` ran:
-/// `ready: <running> of <all> mods running`.
-const READY: &str = "ready: ";
-/// How the loader's line opens as a world loads, with its key or without
-/// one, before its mods read their settings.
-const WORLD_LOADED: &str = "world settings: ";
-/// The loader's settings in the server's folder, which set the log levels
-/// its files keep.
-const SETTINGS_FILE: &str = "enshwick.toml";
-/// How the line opens that a mod's log gets when the loader turns it off.
-const OFF: &str = "off: ";
-/// How the loader's line ends for a mod whose `init` passed, after its id
-/// and version.
-const INITIALISED: &str = " initialised";
 
 /// What `cargo enshwick run` was asked for.
 #[derive(Debug, clap::Args)]
@@ -109,13 +97,9 @@ impl Start {
         if entry.source == LOADER {
             if entry.message.starts_with(READY) {
                 self.ready = Some(entry.message.clone());
-            } else if entry.message.starts_with(WORLD_LOADED) {
+            } else if entry.message.starts_with(WORLD_SETTINGS) {
                 self.world = true;
-            } else if let Some(mod_and_version) = entry.message.strip_suffix(INITIALISED)
-                && let Some((id, version)) = mod_and_version.split_once(' ')
-                && !id.is_empty()
-                && !version.contains(' ')
-            {
+            } else if let Some((id, version)) = log_files::initialised_mod(&entry.message) {
                 self.mods
                     .insert(id.to_owned(), State::Running(Some(version.to_owned())));
             }
@@ -125,7 +109,7 @@ impl Start {
         if !entry.source.contains('.') {
             return;
         }
-        if let Some(reason) = entry.message.strip_prefix(OFF) {
+        if let Some(reason) = log_files::off_reason(&entry.message) {
             self.mods
                 .insert(entry.source.clone(), State::Off(reason.to_owned()));
         } else {
@@ -189,28 +173,31 @@ impl Start {
     }
 }
 
-/// The log levels the server's `enshwick.toml` sets, as far as a run reads
-/// them.
-#[derive(Debug, Default, serde::Deserialize)]
-struct Kept {
-    log_level: Option<Level>,
-    #[serde(default)]
-    log_levels: BTreeMap<String, Level>,
-}
-
 /// Lines saying where the server's `enshwick.toml` keeps fewer lines than the
 /// run needs: the loader's `info` lines, which tell when the world has
 /// loaded, and the mod `id`'s lines up to `level`.
 fn level_notes(server: &Path, id: &str, level: Level) -> Vec<String> {
-    let kept: Kept = std::fs::read_to_string(server.join(SETTINGS_FILE))
+    let kept: toml::Table = std::fs::read_to_string(server.join(SETTINGS_FILE))
         .ok()
         .and_then(|text| toml::from_str(&text).ok())
         .unwrap_or_default();
+    let level_in = |value: &toml::Value| value.as_str()?.parse::<Level>().ok();
+    // The loader reads each key whole: one bad entry drops the whole table.
+    let levels: Option<Vec<(&str, Level)>> = kept
+        .get(LOG_LEVELS_KEY)
+        .and_then(toml::Value::as_table)
+        .and_then(|table| {
+            table
+                .iter()
+                .map(|(source, value)| Some((source.as_str(), level_in(value)?)))
+                .collect()
+        });
     let of = |source: &str| {
-        kept.log_levels
-            .get(source)
-            .copied()
-            .or(kept.log_level)
+        levels
+            .iter()
+            .flatten()
+            .find_map(|&(s, level)| (s == source).then_some(level))
+            .or_else(|| kept.get(LOG_LEVEL_KEY).and_then(level_in))
             .unwrap_or_default()
     };
     let mut notes = Vec::new();
@@ -222,7 +209,7 @@ fn level_notes(server: &Path, id: &str, level: Level) -> Vec<String> {
     }
     if of(id) < level {
         notes.push(format!(
-            "note: {SETTINGS_FILE} keeps {id}'s lines up to {kept}; add log_levels = {{ \"{id}\" = \"{wanted}\" }} to it to see {wanted} lines",
+            "note: {SETTINGS_FILE} keeps {id}'s lines up to {kept}; add {LOG_LEVELS_KEY} = {{ \"{id}\" = \"{wanted}\" }} to it to see {wanted} lines",
             kept = of(id).name(),
             wanted = level.name()
         ));

@@ -54,6 +54,8 @@ pub mod i18n;
 pub mod load;
 #[doc(hidden)]
 pub mod locks;
+#[doc(hidden)]
+pub mod log_files;
 pub mod mods;
 #[doc(hidden)]
 pub mod near;

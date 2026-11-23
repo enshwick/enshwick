@@ -163,6 +163,7 @@ dependencies = [
  "clap",
  "enshwick",
  "enshwick-abi",
+ "enshwick-base",
  "enshwick-core",
  "enshwick-gamedata",
  "iced-x86",

@@ -10,7 +10,7 @@ use enshwick_core::config::Config as _;
 pub use enshwick_core::mods::LOADER_ID;
 
 /// The settings file's name in the game's folder.
-pub const FILE: &str = "enshwick.toml";
+pub use enshwick_base::log_files::SETTINGS_FILE as FILE;
 
 /// Enshwick loader settings, read once at start.
 #[enshwick_core::config(crate = "::enshwick_core")]
@@ -275,10 +275,12 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_level_overrides_the_default() {
-        let settings: Settings =
-            toml::from_str("log_level = \"warn\"\nlog_levels = { \"you.my-mod\" = \"debug\" }\n")
-                .unwrap();
+    fn a_mod_level_overrides_the_default_under_the_keys_cargo_enshwick_reads() {
+        use enshwick_base::log_files::{LOG_LEVEL_KEY, LOG_LEVELS_KEY};
+        let settings: Settings = toml::from_str(&format!(
+            "{LOG_LEVEL_KEY} = \"warn\"\n{LOG_LEVELS_KEY} = {{ \"you.my-mod\" = \"debug\" }}\n"
+        ))
+        .unwrap();
         assert_eq!(settings.level("you.my-mod"), Level::DEBUG);
         assert_eq!(settings.level(LOADER_ID), Level::WARN);
     }
@@ -328,6 +330,17 @@ mod tests {
         assert_eq!(settings.log_level, Level::DEBUG);
         assert!(!problems.unread);
         assert!(problems.lines[0].starts_with("motd: "), "{problems:?}");
+    }
+
+    #[test]
+    fn one_bad_entry_in_log_levels_drops_the_whole_table() {
+        let (settings, problems) =
+            Settings::parse("log_levels = { \"a.b\" = \"loud\", \"you.mod\" = \"debug\" }\n");
+        assert!(settings.log_levels.is_empty());
+        assert!(
+            problems.lines[0].starts_with("log_levels: "),
+            "{problems:?}"
+        );
     }
 
     #[test]

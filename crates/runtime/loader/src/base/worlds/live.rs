@@ -193,17 +193,14 @@ fn load_rules(key: &str) {
 /// and every mod reads them.
 pub(crate) fn load(loader: &Loader) {
     let Some(key) = crate::base::saves::world_key(loader).map(str::to_owned) else {
-        crate::log!(
-            WARN,
-            "world settings: the world has no key yet; mods run on their defaults"
-        );
+        crate::log!(WARN, "{}", enshwick_base::log_files::NO_WORLD_KEY);
         return;
     };
     load_rules(&key);
     for record in &loader.mods {
         prepare(&record.id, &record.version, files(record), &key);
     }
-    crate::log!(INFO, "world settings: world {key}");
+    crate::log!(INFO, "{}", enshwick_base::log_files::world_settings(&key));
     set_current(Some(key));
     crate::content::recipes::world_changed(loader);
     loader.emit(Event::SETTINGS_REPLACED, None, core::ptr::null());

@@ -120,7 +120,10 @@ mod tests {
             [(
                 ModHandle(1),
                 Level::ERROR,
-                "off: init panicked: a panic without a message".to_owned()
+                format!(
+                    "off: init panicked: a panic without a message ({})",
+                    enshwick::__private::MOD_OFF
+                )
             )]
         );
     }

@@ -7,18 +7,15 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context as _, bail};
+use enshwick_base::log_files::{self, Line, run_file};
 use enshwick_core::abi::Level;
 
-/// The folder beside the game's executable that holds every log.
-pub(crate) const LOGS: &str = "logs";
 /// The loader's source, the name its run files start with.
-pub(crate) const LOADER: &str = "enshwick";
-/// How the loader's last line in a file that reached its size cap opens,
-/// before the name of the file the run goes on in.
-pub(crate) const ROLLED: &str = "this file reached its cap; the run goes on in ";
-/// The length of a run file's stamp, `2026-11-03_10-00-00`.
-const STAMP_LEN: usize = 19;
-/// The bytes at the end of a loader file read for its [`ROLLED`] line.
+pub(crate) use enshwick_base::mods::LOADER_ID as LOADER;
+pub(crate) use log_files::LOGS;
+
+/// The bytes at the end of a loader file read for its
+/// [`log_files::rolled`] line.
 const TAIL: u64 = 512;
 /// The least drop in the time of day, in milliseconds, between two lines of
 /// one file that is a new day: a smaller one is lines stamped on other
@@ -26,20 +23,6 @@ const TAIL: u64 = 512;
 const NEXT_DAY_DROP: u32 = 60 * 60 * 1000;
 /// How often a followed log is read again.
 pub(crate) const POLL: Duration = Duration::from_millis(250);
-
-/// The source and stamp of a file the loader writes for one source and run,
-/// `<source>_<stamp>.log`; `None` for any other file.
-pub(crate) fn run_file(name: &str) -> Option<(&str, &str)> {
-    let base = name.strip_suffix(".log")?;
-    let (source, stamp) = base.split_at_checked(base.len().checked_sub(STAMP_LEN)?)?;
-    let source = source.strip_suffix('_')?;
-    let shaped = stamp.bytes().enumerate().all(|(i, b)| match i {
-        4 | 7 | 13 | 16 => b == b'-',
-        10 => b == b'_',
-        _ => b.is_ascii_digit(),
-    });
-    (shaped && !source.is_empty()).then_some((source, stamp))
-}
 
 /// The day and the milliseconds into it of a run file's stamp, which the
 /// loader writes in UTC, as it does its lines' times.
@@ -62,19 +45,7 @@ fn civil_day(year: u32, month: u32, day: u32) -> Option<u32> {
     )
 }
 
-/// The milliseconds into the day of a line's time, `HH:MM:SS.mmmZ`.
-fn time_of_day(time: &str) -> Option<u32> {
-    let (clock, millis) = time.strip_suffix('Z')?.split_once('.')?;
-    if clock.len() != 8 || millis.len() != 3 {
-        return None;
-    }
-    let mut parts = clock.splitn(3, ':').map(|part| part.parse::<u32>().ok());
-    let (hours, minutes, seconds) = (parts.next()??, parts.next()??, parts.next()??);
-    Some(((hours * 60 + minutes) * 60 + seconds) * 1000 + millis.parse::<u32>().ok()?)
-}
-
-/// One entry of a run file: a line `HH:MM:SS.mmmZ <level> [<source>] <message>`
-/// with the lines that continue it.
+/// One entry of a run file: a [`Line`] with the lines that continue it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Entry {
     /// The day, counted from the file's stamp, and the milliseconds into it,
@@ -93,16 +64,12 @@ impl Entry {
     /// The entry `line` opens, on day 0 until its file counts the day;
     /// `None` for a line that continues the one before.
     fn parse(line: &str) -> Option<Self> {
-        let (time, rest) = line.split_once(' ')?;
-        let time = time_of_day(time)?;
-        let (name, rest) = rest.trim_start().split_once(' ')?;
-        let level = name.parse().ok()?;
-        let (source, message) = rest.trim_start().strip_prefix('[')?.split_once("] ")?;
+        let parsed = Line::parse(line)?;
         Some(Self {
-            at: (0, time),
-            level: Some(level),
-            source: source.to_owned(),
-            message: message.to_owned(),
+            at: (0, parsed.millis),
+            level: Some(parsed.level),
+            source: parsed.source.to_owned(),
+            message: parsed.message.to_owned(),
             text: line.to_owned(),
         })
     }
@@ -266,9 +233,7 @@ fn rolled_into(path: &Path) -> Option<String> {
         .ok()?;
     let mut tail = Vec::new();
     file.read_to_end(&mut tail).ok()?;
-    let tail = String::from_utf8_lossy(&tail);
-    let (_, next) = tail.rsplit_once(ROLLED)?;
-    Some(next.lines().next()?.trim_end().to_owned())
+    log_files::rolled_into(&String::from_utf8_lossy(&tail)).map(str::to_owned)
 }
 
 /// Moves the whole lines of `followed` into entries. The loader writes an
@@ -398,9 +363,16 @@ pub(crate) fn show(
 pub(crate) mod tests {
     use super::*;
 
-    /// A line as the loader writes it.
+    /// A line as the loader writes it at `time`, `HH:MM:SS.mmm`.
     pub(crate) fn line(time: &str, level: Level, source: &str, message: &str) -> String {
-        format!("{time}Z {:<5} [{source}] {message}\n", level.name())
+        let (clock, millis) = time.split_once('.').unwrap();
+        let seconds = clock
+            .split(':')
+            .fold(0, |sum, part| sum * 60 + part.parse::<u64>().unwrap());
+        let mut text = String::new();
+        let at = seconds * 1000 + millis.parse::<u64>().unwrap();
+        log_files::write_line(&mut text, at, level, source, message);
+        text
     }
 
     fn append(path: &Path, text: &str) {
@@ -411,35 +383,6 @@ pub(crate) mod tests {
             .open(path)
             .unwrap();
         file.write_all(text.as_bytes()).unwrap();
-    }
-
-    #[test]
-    fn a_run_file_names_its_source_and_stamp() {
-        assert_eq!(
-            run_file("you.my-mod_2026-11-03_10-00-00.log"),
-            Some(("you.my-mod", "2026-11-03_10-00-00"))
-        );
-        assert_eq!(run_file("start.log"), None);
-        assert_eq!(run_file("_2026-11-03_10-00-00.log"), None);
-        assert_eq!(run_file("enshwick_2026x11-03_10-00-00.log"), None);
-    }
-
-    #[test]
-    fn a_line_reads_as_its_time_level_source_and_message() {
-        let text = line(
-            "00:42:35.449",
-            Level::ERROR,
-            "you.pack",
-            "off: init returned 3",
-        );
-        let entry = Entry::parse(text.trim_end()).unwrap();
-        assert_eq!(entry.at, (0, (42 * 60 + 35) * 1000 + 449));
-        assert_eq!(entry.level, Some(Level::ERROR));
-        assert_eq!(entry.source, "you.pack");
-        assert_eq!(entry.message, "off: init returned 3");
-        assert_eq!(Entry::parse("  at the second line"), None);
-        assert_eq!(Entry::parse("00:42:35.449Z loud  [you.pack] hi"), None);
-        assert_eq!(Entry::parse("99999999999:00:00.000Z info  [a] b"), None);
     }
 
     #[test]
@@ -511,7 +454,7 @@ pub(crate) mod tests {
                 "12:00:00.000",
                 Level::INFO,
                 LOADER,
-                &format!("{ROLLED}enshwick_2026-11-03_12-00-01.log"),
+                &log_files::rolled("enshwick_2026-11-03_12-00-01.log"),
             ),
         );
         append(

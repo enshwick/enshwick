@@ -603,7 +603,7 @@ impl Loader {
         crate::engine::log::write(
             Level::ERROR,
             &record.id,
-            &format!("off: {shown} ({})", crate::engine::errors::MOD_OFF),
+            &enshwick_base::log_files::off(&shown, crate::engine::errors::MOD_OFF),
         );
         if record.pack {
             crate::packs::data_packs::forget(&record.id);

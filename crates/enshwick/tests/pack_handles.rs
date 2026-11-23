@@ -500,7 +500,10 @@ mod tests {
             [(
                 ModHandle(2),
                 Level::ERROR,
-                "off: panic in an event handler: the pack's".to_owned()
+                format!(
+                    "off: panic in an event handler: the pack's ({})",
+                    enshwick::__private::MOD_OFF
+                )
             )]
         );
     }

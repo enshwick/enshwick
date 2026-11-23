@@ -208,7 +208,7 @@ fn outcomes(
         lines
             .iter()
             .filter(|(_, source, _)| source == id)
-            .find_map(|(_, _, text)| text.strip_prefix("off: "))
+            .find_map(|(_, _, text)| enshwick_base::log_files::off_reason(text))
             .unwrap_or_default()
             .to_owned()
     };

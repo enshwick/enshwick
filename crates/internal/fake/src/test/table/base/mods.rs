@@ -174,7 +174,7 @@ pub(crate) fn refuses_developer(
 
 /// The line the loader logs when it turns a mod off for `reason`.
 fn off_line(reason: &str) -> String {
-    format!("off: {reason} ({})", enshwick_core::__fake::MOD_OFF)
+    enshwick_base::log_files::off(reason, enshwick_core::__fake::MOD_OFF)
 }
 
 /// Turns `owner` off for `reason` as the loader does on its own: the fault
@@ -192,7 +192,7 @@ pub(crate) fn loader_turns_off(owner: ModHandle, reason: String) {
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) -> Status {
     let reason = text(reason);
     // The loader logs every turn-off with its reason.
-    let line = format!("off: {}", reason.replace('\t', " "));
+    let line = off_line(&reason.replace('\t', " "));
     with((), |s| {
         s.base.faults.push(reason);
         s.base.sent.push((me, Level::ERROR, line.clone()));

@@ -87,6 +87,11 @@ was turned off. A turned-off mod's log has a line `off: <reason>` at `error`. Wh
 returned `Err(Off)` from `init`, the line before it carries the mod's own
 reason. That line is at `warn`.
 
+The loader's log names every mod that is off as well. After the line
+`ready: <n> of <m> mods running`, it has one line at `warn` per mod that is
+off. That line reads `<mod id> <version> off: <reason> (E2003)`, with the
+first line of the reason in the mod's own file.
+
 ### Nothing loads at all
 
 | Message in the loader's log                                                                         | What it means                                                                         |
