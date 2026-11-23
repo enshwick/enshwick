@@ -7247,8 +7247,10 @@ typedef struct EnshwickHostApi {
   // patch that serves `key` with the data of the resource `from`, a
   // re-key: inside `patch`, a `resource_served`
   // read of `from` builds it without its own re-keys, so the re-keys of
-  // every mod apply as one permutation, and keys re-keyed in a ring
-  // rotate. Allowed during `enshwick_mod_init` only. ABI 12.19.
+  // every mod apply at once, each key taking the data its `from` has
+  // before any re-key, and keys re-keyed in a ring rotate.
+  // `EnshwickStatus_BAD_ARGS` when `from` is `key` or of another type.
+  // Allowed during `enshwick_mod_init` only. ABI 12.19.
   EnshwickStatus (*rekey_resource)(EnshwickModHandle me,
                                    const struct EnshwickResourceKey *key,
                                    const struct EnshwickResourceKey *from,

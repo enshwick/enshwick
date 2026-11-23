@@ -222,7 +222,7 @@ impl LoadMethods for crate::BaseLoad {
         // Served from `old` itself, so other mods' patches of it chain and a
         // failed build keeps the vanilla item rather than none; as a re-key,
         // `new` reads as served with every mod's patches of it but its own
-        // re-keys, so all re-keys apply as one permutation.
+        // re-keys, so all re-keys apply at once.
         crate::resources::rekey_value(host, key, new_key, move |item| {
             let served = match host.read_resource(host.api().resource_served, new_key) {
                 // `new`'s own build runs further up this thread and a patch

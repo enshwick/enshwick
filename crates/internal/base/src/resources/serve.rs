@@ -463,8 +463,8 @@ fn register(
 ///
 /// - `base` is null or readable for `base_len` bytes that stay unchanged for
 ///   the call.
-/// - `user` is null or the `Box<Builder>` that [`serve`] handed over, which
-///   the loader keeps for the process.
+/// - `user` is null or the `Box<Builder>` that [`register`] handed over for
+///   [`serve`] or [`rekey`], which the loader keeps for the process.
 /// - `out` and `out_len` are null or writable for one value each.
 unsafe extern "system" fn build(
     base: *const u8,
@@ -477,7 +477,7 @@ unsafe extern "system" fn build(
         return Status::BAD_ARGS;
     }
     // SAFETY: `user` is not null, as the early return ensures, and the caller
-    // guarantees it is the boxed `Builder` that `serve` leaked for the process,
+    // guarantees it is the boxed `Builder` that `register` leaked for the process,
     // so it is aligned, alive and only read through shared references.
     let builder = unsafe { &*user.cast::<Builder>() };
     let base = if base.is_null() || base_len == 0 {

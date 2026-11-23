@@ -78,12 +78,12 @@ impl Load<'_> {
     /// vanilla without the mod. `old` takes `new` as the game reads it, with
     /// every mod's changes of `new` but its re-keys, and follows each rebuild
     /// of `new`, such as a world's changed values, while the data still fits
-    /// the bytes the game holds for `old`. So every mod's re-keys apply as
-    /// one permutation: two items re-keyed to each other swap, a ring of
-    /// items rotates, and in a chain each item takes the data its new item
-    /// has without the chain. Mods that serve `old` chain in load order, and
-    /// the last re-key's data wins; a build that fails keeps `old` as it
-    /// was.
+    /// the bytes the game holds for `old`. So every mod's re-keys apply at
+    /// once, each from the data its new item has before any re-key: two
+    /// items re-keyed to each other swap, a ring of items rotates, and in a
+    /// chain each item takes its new item's own data. Mods that serve `old`
+    /// chain in load order, and the last re-key's data wins; a build that
+    /// fails keeps `old` as it was.
     ///
     /// # Errors
     ///

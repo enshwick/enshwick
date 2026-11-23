@@ -64,7 +64,7 @@ pub enum Build {
     Scratch,
     /// A re-key's served read of the key it takes the data of: as
     /// [`Build::Scratch`], without that key's own re-keys, so the re-keys of
-    /// every mod apply as one permutation.
+    /// every mod apply at once.
     Unkeyed,
 }
 
@@ -171,13 +171,8 @@ pub unsafe trait Patches {
     /// Whether `patch` is still on and its mod too.
     fn on(&self, patch: &Self::Patch) -> bool;
 
-    /// Whether `patch` is a re-key, which serves its key with the data of
-    /// another.
-    fn rekeys(&self, patch: &Self::Patch) -> bool;
-
-    /// The key whose data the re-key patch running innermost on this thread
-    /// takes; `None` when the patch running there is no re-key.
-    fn rekeying(&self) -> Option<ResourceKey>;
+    /// The key whose data `patch` serves its key with, when it is a re-key.
+    fn rekey(&self, patch: &Self::Patch) -> Option<ResourceKey>;
 
     /// Begins a `build` of `key` on this thread; a served read inside a
     /// [`Build::Game`] build makes `key` a reader of the key read.
@@ -308,6 +303,35 @@ impl KeepBase {
     }
 }
 
+/// Whether a re-key of `key` to `new` can take effect, as both sides check
+/// it: `new` is another resource of `key`'s type.
+#[must_use]
+pub fn rekeys_another(key: &ResourceKey, new: &ResourceKey) -> bool {
+    key != new && key.type_hash == new.type_hash
+}
+
+std::thread_local! {
+    /// The key whose data the re-key patch running innermost on this thread
+    /// takes; `None` when the patch running there is no re-key.
+    static REKEYING: core::cell::Cell<Option<ResourceKey>> = const { core::cell::Cell::new(None) };
+}
+
+/// Marks the patch running on this thread as a re-key, or as none, while it
+/// lives, holding the mark of the patch around it to put back.
+struct Rekeying(Option<ResourceKey>);
+
+impl Rekeying {
+    fn start(rekey: Option<ResourceKey>) -> Self {
+        Self(REKEYING.replace(rekey))
+    }
+}
+
+impl Drop for Rekeying {
+    fn drop(&mut self) {
+        REKEYING.set(self.0);
+    }
+}
+
 /// Builds `key` for `kind` from the `base` bytes, where they lie and how
 /// many, each patch on the output of the one before.
 ///
@@ -347,15 +371,18 @@ pub unsafe fn build<T: Patches>(
     let mut by = Vec::new();
     for patch in table.patches(key) {
         let owner = table.owner(&patch);
+        let rekey = table.rekey(&patch);
         if !patch_runs(only, &owner, || table.on(&patch))
-            || (kind == Build::Unkeyed && table.rekeys(&patch))
+            || (kind == Build::Unkeyed && rekey.is_some())
         {
             continue;
         }
+        let running = Rekeying::start(rekey);
         // SAFETY: `current` is the base, readable for the call as the caller
         // guarantees, or an output `apply` answered in this build, readable
         // until `leave` as `Patches` guarantees.
         let (status, output) = unsafe { table.apply(&patch, current, rebuild) };
+        drop(running);
         if status == Status::FAULTED {
             table.failed(key, &patch, PatchFailure::Panicked);
         } else if let (true, Some(output)) = (status == Status::OK, output) {
@@ -541,7 +568,7 @@ pub fn read_served<T: ServedTable>(
         return Err(BuildResourceError::Building);
     }
     let base = archived(table, &table.keys(served).1)?;
-    let kind = if table.rekeying() == Some(*key) {
+    let kind = if REKEYING.get() == Some(*key) {
         Build::Unkeyed
     } else {
         Build::Scratch

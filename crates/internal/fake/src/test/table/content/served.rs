@@ -69,6 +69,10 @@ unsafe fn serve(
         return Status::BAD_ARGS;
     };
     with_open(|s| {
+        // As the loader: a re-key's arguments are checked once it is open.
+        if rekey.is_some_and(|new| !enshwick_base::__internal::rekeys_another(&key, &new)) {
+            return Status::BAD_ARGS;
+        }
         if !super::declared_resource(s, me, &key, &base) {
             return Status::REFUSED;
         }
@@ -255,8 +259,6 @@ struct Frame {
     /// Whether a patch read another served key as served.
     reads: bool,
     buffers: Vec<Box<[u8]>>,
-    /// The key whose data the re-key patch running in this build takes.
-    rekey: Option<ResourceKey>,
 }
 
 thread_local! {
@@ -486,7 +488,6 @@ impl Building {
                 notes,
                 reads: false,
                 buffers: Vec::new(),
-                rekey: None,
             });
         });
         Self
@@ -523,15 +524,6 @@ struct Patch {
     at: usize,
     registered: Registered<ResourcePatchFn>,
     rekey: Option<ResourceKey>,
-}
-
-/// Notes `rekey` as the re-key patch running in the innermost build.
-fn running(rekey: Option<ResourceKey>) {
-    BUILDING.with_borrow_mut(|frames| {
-        if let Some(frame) = frames.last_mut() {
-            frame.rekey = rekey;
-        }
-    });
 }
 
 // SAFETY: `apply` answers an output only when `lent` finds it in a buffer of
@@ -576,12 +568,8 @@ unsafe impl Patches for Table {
         })
     }
 
-    fn rekeys(&self, patch: &Patch) -> bool {
-        patch.rekey.is_some()
-    }
-
-    fn rekeying(&self) -> Option<ResourceKey> {
-        BUILDING.with_borrow(|frames| frames.last().and_then(|frame| frame.rekey))
+    fn rekey(&self, patch: &Patch) -> Option<ResourceKey> {
+        patch.rekey
     }
 
     fn enter(&self, key: ResourceKey, build: Build) -> Building {
@@ -597,13 +585,11 @@ unsafe impl Patches for Table {
         let call = |apply: ResourcePatchFn, user| unsafe {
             apply(base, input.len, user, &raw mut out, &raw mut out_len)
         };
-        running(patch.rekey);
         let status = if rebuild {
             patch.registered.run_even_off(call)
         } else {
             patch.registered.run(call)
         };
-        running(None);
         let output = View {
             at: out.expose_provenance(),
             len: out_len,

@@ -6,8 +6,8 @@ use super::*;
 type At = usize;
 
 /// A build running: its key, whether a served read, whether it read another
-/// served key, the buffers it lent and the key its running re-key reads.
-type Frame = (At, bool, bool, Vec<Box<[u8]>>, Option<ResourceKey>);
+/// served key, and the buffers it lent.
+type Frame = (At, bool, bool, Vec<Box<[u8]>>);
 
 /// What the game holds of a key: the base kept, the bytes and who built them.
 type HeldBytes = (Option<Vec<u8>>, Vec<u8>, Vec<u8>);
@@ -95,13 +95,6 @@ impl Table {
         }
     }
 
-    /// Notes the key the re-key running in the innermost build reads.
-    fn running(&self, new: Option<ResourceKey>) {
-        if let Some(frame) = self.frames.borrow_mut().last_mut() {
-            frame.4 = new;
-        }
-    }
-
     fn bytes(view: View) -> Vec<u8> {
         let at = core::ptr::with_exposed_provenance::<u8>(view.at);
         // SAFETY: every view the tests make lies in a live buffer or base.
@@ -134,18 +127,17 @@ unsafe impl Patches for Table {
         patch.on
     }
 
-    fn rekeys(&self, patch: &Patch) -> bool {
-        matches!(patch.does, Does::Rekey(_))
-    }
-
-    fn rekeying(&self) -> Option<ResourceKey> {
-        self.frames.borrow().last().and_then(|frame| frame.4)
+    fn rekey(&self, patch: &Patch) -> Option<ResourceKey> {
+        match patch.does {
+            Does::Rekey(new) => Some(self.entries.borrow()[new].key),
+            _ => None,
+        }
     }
 
     fn enter(&self, key: At, build: Build) {
         self.frames
             .borrow_mut()
-            .push((key, build != Build::Game, false, Vec::new(), None));
+            .push((key, build != Build::Game, false, Vec::new()));
     }
 
     unsafe fn apply(&self, patch: &Patch, input: View, _rebuild: bool) -> (Status, Option<View>) {
@@ -156,16 +148,9 @@ unsafe impl Patches for Table {
             }
             Does::Answer(status) => (status, None),
             Does::Stray => (Status::OK, None),
-            Does::Read(other) => {
+            Does::Read(other) | Does::Rekey(other) => {
                 let other = self.entries.borrow()[other].key;
                 let read = read_served(self, &other);
-                (Status::OK, read.ok().map(|bytes| self.lend(bytes)))
-            }
-            Does::Rekey(new) => {
-                let new = self.entries.borrow()[new].key;
-                self.running(Some(new));
-                let read = read_served(self, &new);
-                self.running(None);
                 (Status::OK, read.ok().map(|bytes| self.lend(bytes)))
             }
         }
@@ -588,7 +573,7 @@ fn rekeys_in_a_ring_rotate_and_keep_every_other_patch_of_the_key_they_read() {
 }
 
 #[test]
-fn a_read_left_without_rekeys_fails_no_patch_and_reads_as_a_served_read() {
+fn a_build_without_rekeys_leaves_them_out_and_fails_no_patch() {
     let table = table(vec![entry(
         1,
         &[(1, Does::Answer(Status::REFUSED)), (2, Does::Rekey(0))],
@@ -603,11 +588,4 @@ fn a_read_left_without_rekeys_fails_no_patch_and_reads_as_a_served_read() {
         table.failed.take().is_empty(),
         "skipped as in a served read"
     );
-    table.enter(0, Build::Unkeyed);
-    table.note_read(0);
-    assert!(
-        table.entries.borrow()[0].read_by.is_empty(),
-        "no game build reads"
-    );
-    drop(table.leave((), None));
 }

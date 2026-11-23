@@ -1,9 +1,10 @@
-//! Re-keys of several mods apply as one permutation: a ring of three items
-//! rotates, and a chain gives each item the data its new item had.
+//! Re-keys of several mods apply at once: a ring of three items rotates, a
+//! chain gives each item the data its new item had, and a re-key to itself
+//! or to another type is refused.
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{ModHandle, Status};
+    use enshwick::abi::{ModHandle, ResourceKey, Status};
     use enshwick::content::{Guid, types};
     use enshwick::resources::{Registry, Value};
     use enshwick::test::{FakeHost, Installed, LOOT_ITEM, OTHER_ITEM, SPARE_ITEM};
@@ -121,5 +122,50 @@ mod tests {
     fn a_chain_of_rekeys_gives_each_item_the_data_its_new_item_had() {
         let loader = start(false);
         takes(&loader, &[(SPARE_ITEM, LOOT_ITEM), (LOOT_ITEM, OTHER_ITEM)]);
+    }
+
+    /// A patch that builds nothing.
+    unsafe extern "system" fn unbuilt(
+        _base: *const u8,
+        _base_len: u32,
+        _user: *mut core::ffi::c_void,
+        _out: *mut *mut u8,
+        _out_len: *mut u32,
+    ) -> Status {
+        Status::REFUSED
+    }
+
+    #[test]
+    fn a_rekey_to_itself_or_to_another_type_is_a_bad_argument() {
+        let loader = FakeHost::new().items().removal().install();
+        let mut answers = Vec::new();
+        // SAFETY: the fake host's table lives for the process.
+        let status = unsafe {
+            enshwick::__private::init_pack(
+                loader.api(),
+                ModHandle(6),
+                enshwick::abi::Side::SERVER,
+                |_| {
+                    let api = enshwick::host().ok_or_else(|| Off::new("no host"))?.api();
+                    let key = types::ITEM_INFO.key(SPARE_ITEM)?;
+                    let other_type = ResourceKey {
+                        type_hash: key.type_hash ^ 1,
+                        ..key
+                    };
+                    for from in [key, other_type, types::ITEM_INFO.key(LOOT_ITEM)?] {
+                        answers.push((api.rekey_resource)(
+                            ModHandle(6),
+                            &raw const key,
+                            &raw const from,
+                            Some(unbuilt),
+                            core::ptr::null_mut(),
+                        ));
+                    }
+                    Ok(())
+                },
+            )
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(answers, [Status::BAD_ARGS, Status::BAD_ARGS, Status::OK]);
     }
 }

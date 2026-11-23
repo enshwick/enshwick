@@ -31,6 +31,9 @@ entries! {
         user: *mut core::ffi::c_void,
     ) -> Status {
         open(crate::content::served::is_sealed())?;
+        if !enshwick_base::__internal::rekeys_another(&key, &from) {
+            return Err(Status::BAD_ARGS.into());
+        }
         Ok(crate::content::served::register(me.index, key, key, Some(from), patch, user)?)
     }
 

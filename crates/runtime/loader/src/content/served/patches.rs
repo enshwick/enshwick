@@ -437,17 +437,6 @@ struct Frame {
     reads: bool,
     /// The buffers the build's patches took for their outputs.
     buffers: Vec<Buffer>,
-    /// The key whose data the re-key patch running in this build takes.
-    rekey: Option<ResourceKey>,
-}
-
-/// Notes `rekey` as the re-key patch running in the innermost build.
-fn running(rekey: Option<ResourceKey>) {
-    BUILDING.with_borrow_mut(|frames| {
-        if let Some(frame) = frames.last_mut() {
-            frame.rekey = rekey;
-        }
-    });
 }
 
 thread_local! {
@@ -541,7 +530,6 @@ impl Building {
                 build,
                 reads: false,
                 buffers: Vec::new(),
-                rekey: None,
             });
         });
         Self
@@ -681,12 +669,8 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
         patch.runs(self.on)
     }
 
-    fn rekeys(&self, patch: &&'a Patch) -> bool {
-        patch.rekey.is_some()
-    }
-
-    fn rekeying(&self) -> Option<ResourceKey> {
-        BUILDING.with_borrow(|frames| frames.last().and_then(|frame| frame.rekey))
+    fn rekey(&self, patch: &&'a Patch) -> Option<ResourceKey> {
+        patch.rekey
     }
 
     fn enter(&self, key: &'a Served, build: Build) -> Building {
@@ -713,7 +697,6 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
                 &raw mut built_len,
             )
         };
-        running(patch.rekey);
         let status = if patch.owner == ModIndex::LOADER {
             apply()
         } else {
@@ -723,7 +706,6 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
                 apply,
             )
         };
-        running(None);
         // An output outside the buffers this build lent, null included,
         // could be neither freed nor kept.
         let at = built.expose_provenance();

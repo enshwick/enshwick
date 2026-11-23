@@ -533,7 +533,7 @@ pub fn serve_value(
 /// Serves the vanilla resource `key` from itself through `patch` on its
 /// value, as [`serve_value`] does, as a re-key of `key` to the resource
 /// `new`: a served read of `new` inside `patch` leaves out `new`'s own
-/// re-keys, so every mod's re-keys apply as one permutation.
+/// re-keys, so every mod's re-keys apply at once.
 ///
 /// # Errors
 ///
