@@ -817,6 +817,7 @@ dependencies = [
  "enshwick-ui",
  "enshwick-values",
  "enshwick-world",
+ "proptest",
  "rustc-hash",
  "schemars",
  "serde",

@@ -164,20 +164,16 @@ impl LoadMethods for crate::BaseLoad {
             for take in change::named_sounds(&change) {
                 super::known_sound(host, SoundId::from_guid(take)).map_err(fail)?;
             }
-            Some(super::entry_type(self).map_err(fail)?)
+            let entry_type = super::entry_type(self).map_err(fail)?;
+            // Found before any id is declared, so a game without one leaves none.
+            recording::base(self).map_err(fail)?;
+            Some(entry_type)
         } else {
             None
         };
         let container = self.declare(id)?;
         let sound = SoundId::from_guid(self.declare(sound_id)?);
-        recording::serve(
-            self,
-            types::SOUND_RESOURCE.key(sound.guid())?,
-            recording,
-            false,
-            id.to_string(),
-        )
-        .map_err(fail)?;
+        recording::serve(self, sound, recording, false, id.to_string()).map_err(fail)?;
         if let Some(entry_type) = entry_type {
             let value = container_value(sound, &entry_type, &change).map_err(fail)?;
             crate::resources::serve_new(

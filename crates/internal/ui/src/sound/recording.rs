@@ -168,7 +168,7 @@ pub(super) fn count(load: &mut crate::BaseLoad, recording: &Recording) {
 
 /// The game's streamed uncompressed sound a mod's recordings build from, and
 /// its streamed data, found once per mod.
-fn base(load: &mut crate::BaseLoad) -> Result<(ResourceKey, Value), Off> {
+pub(super) fn base(load: &mut crate::BaseLoad) -> Result<(ResourceKey, Value), Off> {
     if let Some(base) = load.slot::<Budget>().as_ref().and_then(|b| b.base.clone()) {
         return Ok(base);
     }
@@ -193,10 +193,11 @@ fn base(load: &mut crate::BaseLoad) -> Result<(ResourceKey, Value), Off> {
     Ok(found)
 }
 
-/// Serves `recording` on a client as the game's sound `key`: a new one
+/// Serves `recording` on a client as the game's sound `sound`: a new one
 /// (`replace` false) built from a vanilla uncompressed sound, or a vanilla
 /// one replaced in place after the patches of earlier mods, under the debug
-/// name `name`. A server serves nothing; either side counts the bytes.
+/// name `name`. A server, which has no sound type, serves nothing; either
+/// side counts the bytes.
 ///
 /// # Errors
 ///
@@ -204,7 +205,7 @@ fn base(load: &mut crate::BaseLoad) -> Result<(ResourceKey, Value), Off> {
 /// build from, and when the loader refuses the content or the resource.
 pub(super) fn serve(
     load: &mut crate::BaseLoad,
-    key: ResourceKey,
+    sound: SoundId,
     recording: Recording,
     replace: bool,
     name: String,
@@ -213,6 +214,7 @@ pub(super) fn serve(
         count(load, &recording);
         return Ok(());
     }
+    let key = types::SOUND_RESOURCE.key(sound.guid())?;
     let (base_key, streamed) = base(load)?;
     let host = load.host();
     let hash = host.serve_content(&recording.pcm.bytes)?;
@@ -222,7 +224,6 @@ pub(super) fn serve(
         pcm: Pcm { stereo, frames, .. },
         ..
     } = recording;
-    let sound = SoundId::from_guid(key.guid);
     let made = Made {
         stereo,
         frames,
@@ -340,13 +341,17 @@ impl LoadMethods for crate::BaseLoad {
         if !self.joins() {
             return Err(fail(Off::new("a mod with sounds runs on both sides")));
         }
-        let key = types::SOUND_RESOURCE.key(guid)?;
         let recording = read(self, file).map_err(fail)?;
-        if self.host().build().side == Side::CLIENT && self.host().game_resource(key).is_none() {
+        if self.host().build().side == Side::CLIENT
+            && self
+                .host()
+                .game_resource(types::SOUND_RESOURCE.key(guid)?)
+                .is_none()
+        {
             return Err(fail(Off::new("the game holds no such recording")));
         }
         let name = replaced_name(self, file);
-        serve(self, key, recording, true, name).map_err(fail)
+        serve(self, sound, recording, true, name).map_err(fail)
     }
 }
 

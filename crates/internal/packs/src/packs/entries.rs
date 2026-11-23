@@ -398,6 +398,8 @@ pub fn schemas() -> Vec<(&'static str, String)> {
     #[expect(dead_code, reason = "only its schema is read")]
     struct Sounds {
         sound: Option<Vec<super::sounds::SoundEntry>>,
+        change: Option<Vec<super::sounds::ChangeEntry>>,
+        replace: Option<Vec<super::sounds::ReplaceEntry>>,
     }
     let json = |mut schema: schemars::Schema| {
         if let Some(map) = schema.as_object_mut() {

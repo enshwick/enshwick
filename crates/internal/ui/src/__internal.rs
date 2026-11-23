@@ -12,3 +12,13 @@ pub use crate::ui::script::ScriptPlacement;
 /// What a script's item tooltip handler gets, which core's `Load` hands it.
 #[cfg(feature = "unstable")]
 pub use crate::ui::script::ScriptTooltipLines;
+
+/// Why `change` would be refused, so a pack names it at its line before
+/// init: the bounds live once, in the sound module.
+///
+/// # Errors
+///
+/// The reason, as the sound module words it.
+pub fn check_sound_change(change: &crate::sound::SoundChange) -> Result<(), String> {
+    change.fields().map(drop).map_err(|why| why.to_string())
+}

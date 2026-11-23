@@ -384,7 +384,7 @@ impl Fields {
 impl SoundChange {
     /// The values to write over the container, by their reflected names,
     /// without its takes.
-    pub(super) fn fields(&self) -> Result<Vec<(String, Value)>, ChangeSoundError> {
+    pub(crate) fn fields(&self) -> Result<Vec<(String, Value)>, ChangeSoundError> {
         let mut fields = Fields::default();
         fields.float(VOLUME, self.volume, 0.0..=MAX_VOLUME)?;
         fields.float(VOLUME_RANDOMNESS, self.volume_randomness, 0.0..=MAX_VOLUME)?;
