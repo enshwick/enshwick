@@ -76,6 +76,7 @@ Load::add_journal_page unstable
 Load::add_knowledge unstable
 Load::add_loot
 Load::add_loot_affixes unstable
+Load::add_music unstable
 Load::add_pack
 Load::add_perk unstable
 Load::add_prop
@@ -92,6 +93,7 @@ Load::add_template
 Load::add_terrain_material unstable
 Load::add_text
 Load::add_texts
+Load::add_voiceover unstable
 Load::add_weather_phenomenon unstable
 Load::add_workshop
 Load::affixes
@@ -110,6 +112,7 @@ Load::change_recipes
 Load::change_sound
 Load::change_spawner unstable
 Load::change_template
+Load::change_voiceover unstable
 Load::change_weather_phenomenon unstable
 Load::channel
 Load::clock
@@ -6777,6 +6780,7 @@ sound::Channels::Stereo unstable
 sound::Channels::TY unstable
 sound::Channels::from_value unstable
 sound::Channels::into_value unstable
+sound::DAY unstable
 sound::GAIN_DB
 sound::INLINE_FRAMES unstable
 sound::MAX_COUNT
@@ -6790,6 +6794,26 @@ sound::MAX_STARTS
 sound::MAX_TAKE
 sound::MAX_TAKES
 sound::MAX_VOLUME
+sound::MUSIC_VOLUME unstable
+sound::NewMusic unstable
+sound::NewMusic::TY unstable
+sound::NewMusic::channels unstable
+sound::NewMusic::end_time unstable
+sound::NewMusic::environment unstable
+sound::NewMusic::files unstable
+sound::NewMusic::from_value unstable
+sound::NewMusic::gain_db unstable
+sound::NewMusic::id unstable
+sound::NewMusic::in_battle unstable
+sound::NewMusic::in_fog unstable
+sound::NewMusic::indoors unstable
+sound::NewMusic::into_value unstable
+sound::NewMusic::new unstable
+sound::NewMusic::sleep unstable
+sound::NewMusic::sleep_randomness unstable
+sound::NewMusic::start_time unstable
+sound::NewMusic::trim unstable
+sound::NewMusic::volume unstable
 sound::NewSound unstable
 sound::NewSound::TY unstable
 sound::NewSound::channels unstable
@@ -6808,6 +6832,18 @@ sound::NewTake::file unstable
 sound::NewTake::from_value unstable
 sound::NewTake::into_value unstable
 sound::NewTake::new unstable
+sound::NewVoiceover unstable
+sound::NewVoiceover::TY unstable
+sound::NewVoiceover::channels unstable
+sound::NewVoiceover::container unstable
+sound::NewVoiceover::fallback unstable
+sound::NewVoiceover::from_value unstable
+sound::NewVoiceover::gain_db unstable
+sound::NewVoiceover::id unstable
+sound::NewVoiceover::into_value unstable
+sound::NewVoiceover::lines unstable
+sound::NewVoiceover::new unstable
+sound::NewVoiceover::trim unstable
 sound::PITCH
 sound::Place
 sound::Place::At
@@ -6936,6 +6972,19 @@ sound::Trim::from unstable
 sound::Trim::from_value unstable
 sound::Trim::into_value unstable
 sound::Trim::to unstable
+sound::VoiceLine unstable
+sound::VoiceLine::TY unstable
+sound::VoiceLine::from_value unstable
+sound::VoiceLine::into_value unstable
+sound::VoiceLine::language unstable
+sound::VoiceLine::new unstable
+sound::VoiceLine::takes unstable
+sound::VoiceoverId unstable
+sound::VoiceoverId::TY unstable
+sound::VoiceoverId::from_guid unstable
+sound::VoiceoverId::from_value unstable
+sound::VoiceoverId::guid unstable
+sound::VoiceoverId::into_value unstable
 sound::play
 sound::stop_all
 state

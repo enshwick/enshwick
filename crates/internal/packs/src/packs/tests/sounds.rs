@@ -192,11 +192,8 @@ fn a_voiced_line_and_music_take_the_pack_s_namespace_and_name_their_problems() {
         panic!("one music");
     };
     assert_eq!(night.id, "you.horns:night");
-    assert_eq!(night.start, Some(std::time::Duration::from_secs(22 * 3600)));
-    assert_eq!(
-        night.end,
-        Some(std::time::Duration::from_secs(6 * 3600 + 1800))
-    );
+    assert_eq!(night.start, Some(std::time::Duration::from_hours(22)));
+    assert_eq!(night.end, Some(std::time::Duration::from_mins(390)));
     assert_eq!(night.sleep, std::time::Duration::from_secs(30));
     assert!(pack.reaches_players());
     let lines = problems(

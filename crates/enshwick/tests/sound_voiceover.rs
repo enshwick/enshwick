@@ -41,7 +41,7 @@ mod tests {
             )
         };
         let f = Field::new;
-        vec![
+        let mut types = vec![
             scalar("demo::bool", Kind::Bool, 1),
             scalar("demo::uint8", Kind::Uint8, 1),
             scalar("demo::uint16", Kind::Uint16, 2),
@@ -116,6 +116,15 @@ mod tests {
                 f("priority", 28, "demo::uint32"),
                 f("entries", 32, "demo::Entries"),
             ]),
+        ];
+        types.extend(voice_and_ambience_types());
+        types
+    }
+
+    /// The types of voiced lines and of the ambience's music.
+    fn voice_and_ambience_types() -> Vec<Type<'static>> {
+        let f = Field::new;
+        vec![
             Type::new(LANGUAGES, Kind::Struct, 48, 4).with_fields(vec![
                 f("english", 0, "demo::Guid"),
                 f("german", 16, "demo::Guid"),

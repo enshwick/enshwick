@@ -270,20 +270,29 @@ impl Slots {
         })
     }
 
-    /// `made` put in their slots, and the fallback's in each slot left
-    /// empty.
-    fn with(mut self, made: &[(usize, Guid, u64)], fallback: Option<usize>) -> Self {
-        for &(slot, container, length) in made {
-            self.containers[slot] = container;
-            self.lengths[slot] = length;
+    /// Empty slots for `lines.count` languages.
+    fn empty(lines: &Lines) -> Self {
+        Self {
+            containers: vec![Guid::NIL; lines.count],
+            lengths: vec![0; lines.count],
         }
-        if let Some((_, container, length)) =
-            fallback.and_then(|slot| made.iter().find(|(at, ..)| *at == slot))
-        {
+    }
+
+    /// `lines` put in their slots, and the fallback's in each slot left
+    /// empty.
+    fn with(mut self, lines: &Lines) -> Self {
+        for made in &lines.made {
+            self.containers[made.slot] = made.container;
+            self.lengths[made.slot] = made.length;
+        }
+        let fallback = lines
+            .fallback
+            .and_then(|slot| lines.made.iter().find(|made| made.slot == slot));
+        if let Some(fallback) = fallback {
             for slot in 0..self.containers.len() {
                 if self.containers[slot] == Guid::NIL {
-                    self.containers[slot] = *container;
-                    self.lengths[slot] = *length;
+                    self.containers[slot] = fallback.container;
+                    self.lengths[slot] = fallback.length;
                 }
             }
         }
@@ -310,12 +319,25 @@ fn line_id(id: Id, language: &str) -> Result<Id, Off> {
     Id::try_new(name).ok_or_else(|| Off::new(format!("{name} is no content id")))
 }
 
-/// Adds each line of `new` as a sound and returns its slot, container and
-/// length, with the fallback's slot and the game's language count.
-fn add_lines(
-    load: &mut crate::BaseLoad,
-    new: NewVoiceover,
-) -> Result<(Vec<(usize, Guid, u64)>, Option<usize>, usize), Off> {
+/// One language's sound of a voiced line: its slot, container and length.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Made {
+    slot: usize,
+    container: Guid,
+    length: u64,
+}
+
+/// The sounds of a voiced line's languages, the fallback's slot and the
+/// count of the game's languages.
+#[derive(Clone, Debug, PartialEq)]
+struct Lines {
+    made: Vec<Made>,
+    fallback: Option<usize>,
+    count: usize,
+}
+
+/// Adds each line of `new` as a sound.
+fn add_lines(load: &mut crate::BaseLoad, new: NewVoiceover) -> Result<Lines, Off> {
     let NewVoiceover {
         id,
         lines,
@@ -338,9 +360,17 @@ fn add_lines(
             container: container.clone(),
         };
         let (added, frames) = add::added(load, sound)?;
-        made.push((slot, added.container.guid(), units(frames)));
+        made.push(Made {
+            slot,
+            container: added.container.guid(),
+            length: units(frames),
+        });
     }
-    Ok((made, fallback, languages.len()))
+    Ok(Lines {
+        made,
+        fallback,
+        count: languages.len(),
+    })
 }
 
 /// `Load`'s methods of this module on the base handle, which core's
@@ -360,16 +390,12 @@ impl LoadMethods for crate::BaseLoad {
     fn add_voiceover(&mut self, new: NewVoiceover) -> Result<VoiceoverId, Off> {
         let id = new.id;
         let fail = |why: Off| Off::new(format!("voiced line {id}: {why}"));
-        let (made, fallback, count) = add_lines(self, new).map_err(fail)?;
+        let lines = add_lines(self, new).map_err(fail)?;
         let guid = self.declare(id)?;
         if self.host().build().side == Side::CLIENT {
-            let empty = Slots {
-                containers: vec![Guid::NIL; count],
-                lengths: vec![0; count],
-            };
             let key = guid.key_by_hash(self.hash(crate::engine_ids::VOICEOVER)?);
-            crate::resources::serve_new(self.host(), key, &empty.with(&made, fallback).value())
-                .map_err(fail)?;
+            let value = Slots::empty(&lines).with(&lines).value();
+            crate::resources::serve_new(self.host(), key, &value).map_err(fail)?;
         }
         Ok(VoiceoverId::from_guid(guid))
     }
@@ -387,14 +413,14 @@ impl LoadMethods for crate::BaseLoad {
         } else {
             None
         };
-        let (made, fallback, count) = add_lines(self, new).map_err(fail)?;
+        let lines = add_lines(self, new).map_err(fail)?;
         let Some(key) = key else {
             return Ok(());
         };
         crate::resources::serve_value(host, key, key, move |held| {
-            Ok(Slots::held(&held, count)
+            Ok(Slots::held(&held, lines.count)
                 .map_err(fail)?
-                .with(&made, fallback)
+                .with(&lines)
                 .value())
         })
     }
@@ -457,18 +483,29 @@ mod tests {
     #[test]
     fn a_fallback_fills_only_the_slots_left_empty() {
         let (a, b, c) = (Guid([1; 16]), Guid([2; 16]), Guid([3; 16]));
+        let made = |slot, container, length| Made {
+            slot,
+            container,
+            length,
+        };
         let held = Slots {
             containers: vec![c, Guid::NIL, Guid::NIL],
             lengths: vec![9, 0, 0],
         };
-        let filled = held.with(&[(1, a, 5), (2, b, 7)], Some(2));
+        let changed = Lines {
+            made: vec![made(1, a, 5), made(2, b, 7)],
+            fallback: Some(2),
+            count: 3,
+        };
+        let filled = held.with(&changed);
         assert_eq!(filled.containers, [c, a, b]);
         assert_eq!(filled.lengths, [9, 5, 7]);
-        let empty = Slots {
-            containers: vec![Guid::NIL; 3],
-            lengths: vec![0; 3],
+        let added = Lines {
+            made: vec![made(0, a, 5)],
+            fallback: Some(0),
+            count: 3,
         };
-        let filled = empty.with(&[(0, a, 5)], Some(0));
+        let filled = Slots::empty(&added).with(&added);
         assert_eq!(filled.containers, [a, a, a]);
         assert_eq!(filled.lengths, [5, 5, 5]);
     }

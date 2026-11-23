@@ -68,6 +68,7 @@ change in any release, a patch included.
 | Containers of a mod and their rules, what a move carries, and pickup messages. `inventory::containers`, `Load::add_container`, `Load::container_rule`. `Interaction::moved`, `Interaction::transfer`, `Interaction::with_moved`, `interactions::Move`, `Move::new`, `interactions::Transfer`, `interactions::InventoryActionType`. `Inventories::show_pickup`, `Batch::hide_in_ui`. | the slot put, the kinds of move and the pickup message are read from the game's code only, not yet seen in the game |
 | `Load::on_client_raw_game_event` and `Load::on_every_client_raw_game_event`. Also `EventType::on_client`. | that the client moves its own world's events as the server does is read from its code only, not yet seen in the game |
 | `Load::add_sound`, `Load::replace_sound`. `sound::NewSound`, `sound::NewTake`, `sound::AddedSound`, `sound::Channels`, `sound::Trim`, `sound::SAMPLE_RATE`, `sound::INLINE_FRAMES`, `sound::MAX_FILE_BYTES`, `sound::MAX_MOD_BYTES`. | whether a client plays a sound a mod added is not yet seen in the game |
+| `Load::add_voiceover`, `Load::change_voiceover`, `Load::add_music`. `sound::NewVoiceover`, `sound::VoiceLine`, `sound::VoiceoverId`, `sound::NewMusic`, `sound::MUSIC_VOLUME`, `sound::DAY`. | the voice language slots and the music rows are read from the client's code and archive, not yet seen in the game |
 
 Turn the feature on in the mod's `Cargo.toml`:
 

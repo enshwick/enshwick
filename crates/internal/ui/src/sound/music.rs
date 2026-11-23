@@ -15,7 +15,7 @@ use enshwick_content::__load::*;
 /// The volume of most of the game's music away from battle.
 pub const MUSIC_VOLUME: f32 = 0.2;
 /// The length of the game's day, the bound of a time of day.
-pub const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+pub const DAY: Duration = Duration::from_hours(24);
 
 const MUSIC: &str = "music";
 const SOUNDS: &str = "sounds";
@@ -51,8 +51,8 @@ const SOUND_COUNT: &str = "soundCount";
 /// let night = NewMusic {
 ///     environment: Some("Grassland".into()),
 ///     in_battle: Some(false),
-///     start_time: Some(std::time::Duration::from_secs(22 * 3600)),
-///     end_time: Some(std::time::Duration::from_secs(6 * 3600)),
+///     start_time: Some(std::time::Duration::from_hours(22)),
+///     end_time: Some(std::time::Duration::from_hours(6)),
 ///     channels: Channels::Stereo,
 ///     ..NewMusic::new(id!("night"), vec!["music/night1.ogg".into(), "music/night2.ogg".into()])
 /// };
@@ -268,7 +268,11 @@ fn check_environment(load: &crate::BaseLoad, environment: &str) -> Result<(), Of
     if ty.constants().iter().any(|c| c.name() == environment) {
         return Ok(());
     }
-    let names: Vec<&str> = ty.constants().iter().map(|c| c.name()).collect();
+    let names: Vec<&str> = ty
+        .constants()
+        .iter()
+        .map(crate::resources::Constant::name)
+        .collect();
     Err(Off::new(format!(
         "no environment {environment}: the game's are {}",
         names.join(", ")
@@ -374,8 +378,8 @@ mod tests {
             environment: Some("Grassland".into()),
             in_fog: Some(true),
             in_battle: Some(true),
-            start_time: Some(Duration::from_secs(22 * 3600)),
-            end_time: Some(Duration::from_secs(6 * 3600)),
+            start_time: Some(Duration::from_hours(22)),
+            end_time: Some(Duration::from_hours(6)),
             volume: Some(0.5),
             ..NewMusic::new(Id::new("you.tunes:night"), vec!["a.wav".into()])
         };

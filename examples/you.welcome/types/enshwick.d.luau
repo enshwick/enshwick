@@ -1864,6 +1864,38 @@ export type NewKnowledge = {
 	experience: number?,
 }
 
+--- Music for `Load.add_music`: audio files in the mod's folder, read as `Load.add_sound` reads them, and where and when the client's ambience plays them as music, picking one at a time.
+export type NewMusic = {
+	--- The music's content id; its recordings are `<id>.sound` on.
+	id: string,
+	--- Its files, 1 to `MAX_NEW_TAKES`; the client plays one at a time and not the one it played last.
+	files: {string},
+	--- Which channels its recordings keep.
+	channels: Channels?,
+	--- A gain in decibels on every file, within `GAIN_DB`.
+	gain_db: number?,
+	--- The part of each file it plays.
+	trim: Trim?,
+	--- Where it plays: one of the game's `AmbientEnvironment` names, such as `Grassland` or `Capital`; nil for everywhere.
+	environment: string?,
+	--- Whether it plays only in the fog (`true`) or only out of it; nil for both.
+	in_fog: boolean?,
+	--- Whether it plays only indoors or only outdoors; nil for both.
+	indoors: boolean?,
+	--- Whether it plays only in battle or only out of it; nil for both.
+	in_battle: boolean?,
+	--- The time of day it starts playing, at most `DAY`; nil for midnight.
+	start_time: number?,
+	--- The time of day it stops, at most `DAY`, earlier than the start for a span over midnight; nil for the end of the day.
+	end_time: number?,
+	--- Its volume, from 0 to 1; nil for `MUSIC_VOLUME`.
+	volume: number?,
+	--- The pause after each file, at most `MAX_SLEEP`.
+	sleep: number?,
+	--- The random spread of that pause, at most `MAX_SLEEP`.
+	sleep_randomness: number?,
+}
+
 --- A new perk for `Load.add_perk`: a copy of the vanilla perk `like` with its own texts.
 export type NewPerk = {
 	--- Its content id, its GUID the perk's.
@@ -2010,6 +2042,24 @@ export type NewTerrainMaterial = {
 	health_points: number?,
 	--- Whether a player's tool can flatten it.
 	can_be_flattened: boolean?,
+}
+
+--- A voiced line for `Load.add_voiceover` and `Load.change_voiceover`: audio files per voice language, read as `Load.add_sound` reads them.
+export type NewVoiceover = {
+	--- The line's content id; each language's container is `<id>.<language>` and its recordings `<id>.<language>.sound` on.
+	id: string,
+	--- One recording per language, each language at most once.
+	lines: {VoiceLine},
+	--- The language whose recording also speaks in every language the line leaves empty; nil leaves them silent, as the game does.
+	fallback: string?,
+	--- Which channels the recordings keep.
+	channels: Channels?,
+	--- A gain in decibels on every take, within `GAIN_DB`.
+	gain_db: number?,
+	--- The part of each take's file it plays.
+	trim: Trim?,
+	--- Each language's container values where they differ from those of a mod's new sound; a lore reading plays well as `has_position` `false`.
+	container: SoundChange?,
 }
 
 --- A new workshop for `Load.add_workshop`, named by one id. The station item is `id`; the station's other ids derive from it with `Id.part`: its template `<id>.template`, its workshop `<id>.workshop`, its recipe `<id>.recipe`, and the tags of its name and description, `<id>.name` and `<id>.description`. So `id` is a plain id, never one derived with `Id.part`, even when the same id written in full would fit. Every id is the mod's own and never changes: saves keep the template GUID of each placed station and the item id of each stack.
@@ -3435,6 +3485,14 @@ export type Vitals = {
 	mana: Meter?,
 }
 
+--- One voice language's recording of a `NewVoiceover`: the language, by the game's name for its slot in snake case (`english`, `simplified_chinese`), and the takes its container picks among.
+export type VoiceLine = {
+	--- The language: a field of the game's `Voiceover` in snake case; the game's voice language setting picks one, and a language without a slot of its own speaks the first.
+	language: string,
+	--- Its takes, 1 to `MAX_NEW_TAKES`.
+	takes: {NewTake},
+}
+
 --- One voxel: what it is made of and how full it is.
 export type Voxel = {
 	--- Its material.
@@ -4815,5 +4873,14 @@ declare enshwick: {
 		--- Unstable: needs the `unstable` feature and may change in any release. Replaces the game's recording `sound` with the mod's `file`, read as `Load.add_sound` reads one, wherever any container plays it, on the client as it reads the game's archive; nothing is written to the archive or a save. Mods that replace one recording apply in load order: the last one's file plays, and the log names the one it replaced. A server checks the file and serves nothing.
 		--- Only while the mod starts, at the top level of main.luau.
 		replace: (sound: string, file: string) -> (),
+		--- Unstable: needs the `unstable` feature and may change in any release. Adds the voiced line `new.id`, which dialogue lines, lore readings and journal entries name through the resource values: each of `new.lines` becomes a sound, as `Load.add_sound` makes one, under `<id>.<language>`, in its language's slot with its length, and the fallback's sound fills the slots the line leaves empty. The game's voice language setting picks the slot; a language without a slot of its own speaks the first, and an empty slot is silent. A server checks the files and serves nothing.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_voiceover: (new: NewVoiceover) -> string,
+		--- Unstable: needs the `unstable` feature and may change in any release. Replaces the recordings of the game's voiced line `voiceover` in the languages of `new.lines`, each added as `Load.add_voiceover` adds one under `new.id`, and keeps its other languages; the fallback fills only the slots the game's line leaves empty. Mods that change one line apply in load order. A server checks the files and serves nothing.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_voiceover: (voiceover: string, new: NewVoiceover) -> (),
+		--- Unstable: needs the `unstable` feature and may change in any release. Adds `new.files` as recordings, as `Load.add_sound` reads them, and a music row of the client's ambience that plays them where and when `new` says, among the game's own music; rows of several mods add up in load order. Returns the recordings. A server checks the files and serves nothing.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_music: (new: NewMusic) -> {string},
 	},
 }

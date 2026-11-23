@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: A mod plays sound containers on a client, changes their values and takes, replaces the game's recordings, and adds its own sounds from audio files.
+description: A mod plays and changes sound containers, replaces the game's recordings, and adds its own sounds, voiced lines and music from audio files.
 -->
 
 # Sounds
@@ -359,3 +359,106 @@ local ok, added = pcall(enshwick.sound.add, {
 
 A sound that misleads players in a fight, such as an attack that does not
 happen, does not belong in a mod.
+
+## Add a voiced line
+
+With the `unstable` feature, `load.add_voiceover(new)` adds a voiced line.
+It holds one sound per voice language, read as `add_sound` reads its files.
+The game holds a slot per voice language. A language goes by the name of
+its field of `Voiceover`, in snake case.
+
+| Slot | Language |
+| --- | --- |
+| 1 | `english` |
+| 2 | `german` |
+| 3 | `french` |
+| 4 | `spanish` |
+| 5 | `simplified_chinese` |
+
+The voice language setting picks the slot. Any other
+setting speaks the first slot. An empty slot is silent, as most of the
+game's French and Spanish lines are. A `fallback` language fills the slots
+the line leaves empty.
+
+Each language's container is `<id>.<language>`, such as
+`you.lore:welcome.english`. The line records each language's length for
+the game's lore queue. Dialogue lines, lore readings and journal entries
+name a line by its GUID. Point one at yours through the
+[resource values](resource-values.md): a dialogue line's `voiceovers`, a lore
+reading's or a journal entry's `voiceover`.
+
+`load.change_voiceover(line, new)` gives a game line new recordings in the
+languages of `new` and keeps the others. Mods that change one line apply
+in load order.
+
+```rust
+use enshwick::content::{Guid, id};
+use enshwick::sound::{NewVoiceover, SoundChange, VoiceLine, VoiceoverId};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let welcome = NewVoiceover {
+        fallback: Some("english".into()),
+        container: SoundChange { has_position: Some(false), ..SoundChange::default() },
+        ..NewVoiceover::new(
+            id!("welcome"),
+            vec![VoiceLine::new("english", "voice/en/welcome.ogg"), VoiceLine::new("german", "voice/de/welcome.ogg")],
+        )
+    };
+    let _line = load.feature("welcome", |load| load.add_voiceover(welcome));
+    let reading = VoiceoverId::from_guid(Guid::parse("3a7b1c90-5e2d-4f68-9c41-0d8e6b2f7a15"));
+    let german = NewVoiceover::new(id!("reading"), vec![VoiceLine::new("german", "voice/de/reading.ogg")]);
+    let _changed = load.feature("reading", |load| load.change_voiceover(reading, german));
+    Ok(())
+}
+```
+
+```luau
+local ok, line = pcall(enshwick.sound.add_voiceover, {
+    id = "you.lore:welcome",
+    lines = { { language = "english", takes = { { file = "voice/en/welcome.ogg" } } } },
+    fallback = "english",
+})
+```
+
+## Add music to a place
+
+With the `unstable` feature, `load.add_music(new)` adds audio files as
+recordings and a music row of the client's ambience. The ambience plays
+the row among the game's own music where and when it fits. It plays one
+file at a time, and not the one it played last.
+
+| `NewMusic` | Plays |
+| --- | --- |
+| `environment` | in one place of the game's `AmbientEnvironment`, such as Grassland or Cave; everywhere without one |
+| `in_fog`, `indoors`, `in_battle` | only when it holds with `true`, only when not with `false`; both without one |
+| `start_time`, `end_time` | from and to a time of day; a start after the end spans midnight |
+| `volume` | from 0 to 1; 0.2, as most of the game's music away from battle |
+| `sleep`, `sleep_randomness` | a pause after each file, at most 10 minutes |
+
+Rows of several mods add up in load order. The returned recordings let
+other containers play the files too.
+
+```rust
+use std::time::Duration;
+
+use enshwick::content::id;
+use enshwick::sound::NewMusic;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let night = NewMusic {
+        environment: Some("Grassland".into()),
+        in_battle: Some(false),
+        start_time: Some(Duration::from_hours(22)),
+        end_time: Some(Duration::from_hours(6)),
+        sleep: Duration::from_secs(30),
+        ..NewMusic::new(id!("night"), vec!["music/night1.ogg".into(), "music/night2.ogg".into()])
+    };
+    let _music = load.feature("night", |load| load.add_music(night));
+    Ok(())
+}
+```
+
+A boss's music is its template's `ecs::BossMusicTag`, whose `boss_music`
+names a container. Give a boss another one as any other
+[component value](game-types.md#read-and-write-a-component). Its container
+plays in scene `Music`, such as one from `add_sound`.
