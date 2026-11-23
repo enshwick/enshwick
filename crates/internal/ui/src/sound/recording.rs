@@ -1,5 +1,5 @@
 //! A mod's recordings: a file in its folder, read and checked against the
-//! mod's bounds at init, encoded as FramelessQOA on background threads, and
+//! mod's bounds at init, encoded as `FramelessQOA` on background threads, and
 //! served as one of the game's sounds, new or in place of a vanilla one.
 
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
@@ -50,7 +50,7 @@ const DEBUG_NAME: &str = "debugName";
 /// replacement names the earlier one.
 const REPLACED: &str = "replaced by ";
 
-/// The game's FramelessQOA sounds a mod's recordings build from: one held
+/// The game's `FramelessQOA` sounds a mod's recordings build from: one held
 /// inline and one streamed, each with its streamed data, found once.
 #[derive(Clone, Debug)]
 pub(super) struct Bases {
@@ -260,7 +260,7 @@ fn streamed_size(value: &Value) -> u64 {
     }
 }
 
-/// The game's FramelessQOA sounds a mod's recordings build from, found
+/// The game's `FramelessQOA` sounds a mod's recordings build from, found
 /// once per mod.
 pub(super) fn bases(load: &mut crate::BaseLoad) -> Result<Bases, Off> {
     if let Some(bases) = load.slot::<Budget>().as_ref().and_then(|b| b.bases.clone()) {
@@ -307,7 +307,7 @@ fn count(load: &mut crate::BaseLoad, bytes: u64) {
 }
 
 /// Serves `recording` on a client as the game's sound `sound`: a new one
-/// (`replace` false) built from a vanilla FramelessQOA sound, or a vanilla
+/// (`replace` false) built from a vanilla `FramelessQOA` sound, or a vanilla
 /// one replaced in place after the patches of earlier mods, under the debug
 /// name `name`. Its encoding starts now on a background thread; the game's
 /// first read of the sound waits for it. A server, which has no sound type,
@@ -315,7 +315,7 @@ fn count(load: &mut crate::BaseLoad, bytes: u64) {
 ///
 /// # Errors
 ///
-/// [`Off`] on a client whose game holds no FramelessQOA sounds to build
+/// [`Off`] on a client whose game holds no `FramelessQOA` sounds to build
 /// from, and when the loader refuses the resource.
 pub(super) fn serve(
     load: &mut crate::BaseLoad,

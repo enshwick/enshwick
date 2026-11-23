@@ -1,4 +1,4 @@
-//! What encoding a mod's recording as FramelessQOA costs a background
+//! What encoding a mod's recording as `FramelessQOA` costs a background
 //! thread at load: one minute of stereo at the game's rate.
 
 use std::hint::black_box;
@@ -9,7 +9,8 @@ use enshwick::sound::SAMPLE_RATE;
 /// One minute of a stereo chord, as a mod's music file holds it.
 #[expect(
     clippy::cast_possible_truncation,
-    reason = "within half of the i16 range"
+    clippy::cast_precision_loss,
+    reason = "a frame index well within f64, and samples within half of the i16 range"
 )]
 fn minute() -> Vec<i16> {
     let frames = SAMPLE_RATE as usize * 60;

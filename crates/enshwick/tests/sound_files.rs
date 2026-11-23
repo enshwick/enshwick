@@ -44,7 +44,7 @@ mod tests {
                 let added = load.add_sound(NewSound::new(name, file));
                 if let Ok(added) = &added {
                     assert_eq!(added.container.guid(), name.guid());
-                    let sound = name.try_part("sound").map(|part| part.guid());
+                    let sound = name.try_part("sound").map(enshwick::content::Id::guid);
                     assert_eq!(added.takes.first().map(|t| t.guid()), sound);
                 }
                 RESULTS

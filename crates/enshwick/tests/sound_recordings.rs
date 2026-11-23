@@ -1,4 +1,4 @@
-//! A mod's recordings on a client whose game holds FramelessQOA sounds to
+//! A mod's recordings on a client whose game holds `FramelessQOA` sounds to
 //! build from: a replaced vanilla recording holds or streams the mod's
 //! encoded samples, two mods replacing one apply in load order with the log
 //! naming both, and a sound whose container fails after its recording keeps

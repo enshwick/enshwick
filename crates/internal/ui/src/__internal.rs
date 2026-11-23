@@ -26,7 +26,7 @@ pub fn check_sound_change(change: &crate::sound::SoundChange) -> Result<(), Chan
 /// Why a sound change is refused, which a pack names at its line.
 pub use crate::sound::change::ChangeSoundError;
 
-/// The FramelessQOA encoding of `samples`, `channels` interleaved, for the
+/// The `FramelessQOA` encoding of `samples`, `channels` interleaved, for the
 /// encoder's benchmark.
 #[cfg(feature = "unstable")]
 #[must_use]

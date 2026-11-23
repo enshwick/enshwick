@@ -583,6 +583,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(clippy::too_many_lines, reason = "one refused change per field")]
     fn values_outside_their_bounds_are_refused() {
         let take = Take::new(SoundId::from_guid(Guid::named("you.a:b")));
         for change in [

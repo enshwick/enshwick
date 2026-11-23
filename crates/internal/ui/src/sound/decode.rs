@@ -128,6 +128,11 @@ pub(crate) enum DecodeError {
 
 /// The most samples a file of `channels` channels at `rate` gives before
 /// its trim: [`MAX_TAKE`] past the trim's start.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a positive count of frames, at most ten minutes at 384 kHz"
+)]
 fn most_samples(channels: usize, rate: u32, trim: Trim) -> usize {
     let seconds = (trim.start + MAX_TAKE).as_secs_f64();
     // At most 10 minutes past a start inside a file at 384 kHz, so it fits.
@@ -194,10 +199,15 @@ fn bounded<E>(
 }
 
 /// The scale of an integer sample of `bits` bits.
+#[expect(clippy::cast_precision_loss, reason = "a power of two, exact in f32")]
 fn scale(bits: u32) -> f32 {
     1.0 / (1u64 << bits.clamp(1, 32).saturating_sub(1)) as f32
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a sample to float, as audio is mixed"
+)]
 fn wav(bytes: &[u8], trim: Trim) -> Result<Read, DecodeError> {
     let fail = malformed("WAV");
     let reader = hound::WavReader::new(Cursor::new(bytes)).map_err(|e| fail(&e))?;
@@ -228,6 +238,10 @@ fn wav(bytes: &[u8], trim: Trim) -> Result<Read, DecodeError> {
     })
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a sample to float, as audio is mixed"
+)]
 fn flac(bytes: &[u8], trim: Trim) -> Result<Read, DecodeError> {
     let fail = malformed("FLAC");
     let mut reader = claxon::FlacReader::new(Cursor::new(bytes)).map_err(|e| fail(&e))?;
@@ -295,6 +309,11 @@ fn mp3(bytes: &[u8], trim: Trim) -> Result<Read, DecodeError> {
 }
 
 /// The frame of `rate` at `time`, at most `frames`.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a rounded, positive frame number, clamped to the file"
+)]
 fn frame_at(time: Duration, rate: u32, frames: usize) -> usize {
     let at = (time.as_secs_f64() * f64::from(rate)).round();
     // Not negative, and anything past `frames` clamps to it.
@@ -303,6 +322,11 @@ fn frame_at(time: Duration, rate: u32, frames: usize) -> usize {
 
 /// `read` trimmed, its channels mapped, resampled to [`SAMPLE_RATE`] and
 /// scaled by the gain, as the game's samples.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "frame counts within ten minutes, and samples clamped into the i16 range"
+)]
 pub(crate) fn shape(read: Read, shape: Shape) -> Result<Samples, DecodeError> {
     if !GAIN_DB.contains(&shape.gain_db) {
         return Err(DecodeError::Gain(shape.gain_db));
@@ -340,6 +364,7 @@ pub(crate) fn shape(read: Read, shape: Shape) -> Result<Samples, DecodeError> {
 }
 
 /// `samples` of `channels` channels as `to` maps them, and their count.
+#[expect(clippy::cast_precision_loss, reason = "1 to 8 channels")]
 fn map_channels(
     samples: &[f32],
     channels: usize,
@@ -392,6 +417,11 @@ mod tests {
     use super::*;
 
     /// A WAV file of `samples`, written by hound.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "test samples within half of full scale"
+    )]
     fn wav_file(
         channels: u16,
         rate: u32,
@@ -420,6 +450,10 @@ mod tests {
         out.into_inner()
     }
 
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "test frame counts well within f32"
+    )]
     fn sine(frames: usize, rate: u32, hz: f32) -> Vec<f32> {
         (0..frames)
             .map(|i| (i as f32 * core::f32::consts::TAU * hz / rate as f32).sin() * 0.5)

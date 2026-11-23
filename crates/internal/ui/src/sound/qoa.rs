@@ -1,4 +1,4 @@
-//! FramelessQOA, the game's compressed sound format: the Quite OK Audio
+//! `FramelessQOA`, the game's compressed sound format: the Quite OK Audio
 //! codec without its file and frame headers, so a channel's predictor runs
 //! from the first sample to the last.
 //!
@@ -103,7 +103,7 @@ pub(crate) const fn encoded_len(frames: usize, channels: usize) -> usize {
     frames.div_ceil(SLICE) * channels * 8
 }
 
-/// `samples`, `channels` interleaved per frame, encoded as FramelessQOA.
+/// `samples`, `channels` interleaved per frame, encoded as `FramelessQOA`.
 ///
 /// # Panics
 ///
