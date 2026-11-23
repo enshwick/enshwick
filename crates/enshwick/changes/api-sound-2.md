@@ -46,4 +46,6 @@
 - A joined client reads a server mod's settings again: the stat values of
   the Character screen and the settings snapshot shared one control
   number, so the client read every snapshot as stat values and its Mods
-  screen showed no server settings.
+  screen showed no server settings. The control messages move to version
+  4, so a loader of an earlier release reads none of them and a join with
+  mods of side both gets the line naming what the player needs.

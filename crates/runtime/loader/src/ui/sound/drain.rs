@@ -449,7 +449,7 @@ impl Drain {
 /// playing: `live` sounds of one mod already play, and each run queues
 /// `starts` more, which the frame starts, then stops them again so the next
 /// run starts from the same state.
-#[cfg(feature = "test")]
+#[cfg(all(windows, feature = "test"))]
 #[doc(hidden)]
 pub fn bench_sound_frame(live: usize, starts: usize) -> impl FnMut() {
     struct Silent(u32);

@@ -53,6 +53,10 @@ struct Sent {
     /// The step of the last sound and how many went in it.
     step: (u64, u32),
     /// The clients each recent sound went to.
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only the Windows relay steers a sent sound")
+    )]
     to: Recent<Box<[u64]>>,
 }
 

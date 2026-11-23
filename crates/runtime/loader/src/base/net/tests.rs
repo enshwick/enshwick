@@ -279,6 +279,9 @@ fn a_settings_snapshot_from_the_server_is_never_read_as_stat_values() {
         STATE.own_stats.load().is_none(),
         "the snapshot reached the own stats"
     );
+    // The welcome made the server ready; the next test sharing the net's
+    // state starts without a link.
+    link_lost();
 }
 
 #[test]

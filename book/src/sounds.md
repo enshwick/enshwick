@@ -511,7 +511,26 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-A boss's music is its template's `ecs::BossMusicTag`, whose `boss_music`
+A boss's music is its template's `ecs::BossMusicTag`, whose `bossMusic`
 names a container. Give a boss another one as any other
-[component value](game-types.md#read-and-write-a-component). Its container
-plays in scene `Music`, such as one from `add_sound`.
+[template change](content/templates.md#what-a-change-does). Its container
+plays in scene `Music`, such as one from `add_sound`. Only the client holds
+this component, so the typed API has no type for it. The change names its
+field as the game does:
+
+```rust
+use enshwick::content::Guid;
+use enshwick::content::templates::ComponentChange;
+use enshwick::resources::Value;
+use enshwick::sound::SoundContainerId;
+
+fn init(load: &mut enshwick::Load<'_>, boss: Guid, theme: SoundContainerId) -> Result<(), enshwick::Off> {
+    let theme = theme.guid();
+    let music = ComponentChange::edit_value("ecs::BossMusicTag", move |tag| {
+        if let Some(container) = tag.field_mut("bossMusic") {
+            *container = Value::Guid(theme);
+        }
+    });
+    load.change_template(boss, vec![music])
+}
+```

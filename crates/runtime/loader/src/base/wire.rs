@@ -30,7 +30,7 @@ use crate::base::admission::Hello;
 use crate::base::remote::Message;
 
 /// The version of the control messages, their second byte.
-pub const PROTOCOL: u8 = 3;
+pub const PROTOCOL: u8 = 4;
 pub use enshwick_core::net::MAX_MESSAGE;
 /// The longest control message, in bytes, with its kind and version.
 pub const MAX_CONTROL: usize = MAX_PAYLOAD;
