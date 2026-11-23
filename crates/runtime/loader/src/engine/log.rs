@@ -11,7 +11,6 @@
 //! running for weeks never fills its disk. Deleting any file by hand is safe.
 
 use std::collections::VecDeque;
-use std::fmt::Write as _;
 use std::io::Write as _;
 use std::ops::Range;
 use std::path::{Path, PathBuf};

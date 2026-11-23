@@ -127,17 +127,12 @@ fn fake_server(name: &str, exits: bool) -> (PathBuf, Stub, Args) {
                 "10:00:00.200",
                 Level::INFO,
                 LOADER,
-                "you.hello 0.1.0 initialised",
+                &log_files::initialised("you.hello", "0.1.0"),
             ),
         ),
         (
             LOADER,
-            line(
-                "10:00:00.300",
-                Level::INFO,
-                LOADER,
-                "ready: 1 of 1 mods running",
-            ),
+            line("10:00:00.300", Level::INFO, LOADER, &log_files::ready(1, 1)),
         ),
         (
             LOADER,
@@ -145,7 +140,7 @@ fn fake_server(name: &str, exits: bool) -> (PathBuf, Stub, Args) {
                 "10:00:10.000",
                 Level::INFO,
                 LOADER,
-                "world settings: world w",
+                &log_files::world_settings("w"),
             ),
         ),
         (
@@ -325,12 +320,8 @@ fn a_crash_fails_the_run_and_under_watch_the_next_change_that_builds_starts_it_a
 #[test]
 fn a_world_without_a_key_counts_as_loaded() {
     let mut start = Start::default();
-    start.see(&entry(Level::INFO, LOADER, "ready: 0 of 0 mods running"));
-    start.see(&entry(
-        Level::WARN,
-        LOADER,
-        "world settings: the world has no key yet; mods run on their defaults",
-    ));
+    start.see(&entry(Level::INFO, LOADER, &log_files::ready(0, 0)));
+    start.see(&entry(Level::WARN, LOADER, log_files::NO_WORLD_KEY));
     assert_eq!(
         start.report().unwrap(),
         ["world loaded; ready: 0 of 0 mods running"]
@@ -363,28 +354,35 @@ fn the_state_of_each_mod_is_reported_once_the_world_has_loaded() {
     start.see(&entry(
         Level::INFO,
         LOADER,
-        "you.hello-rust 0.1.0 initialised",
+        &log_files::initialised("you.hello-rust", "0.1.0"),
     ));
     start.see(&entry(Level::INFO, "you.hello-rust", "Hello, world"));
     start.see(&entry(Level::INFO, "you.hello-pack", "data pack: 0 ids"));
     start.see(&entry(
         Level::ERROR,
         "you.hello-pack",
-        "off: init returned 3 (E2003, see https://enshwick.com/errors/e2003/)",
+        &log_files::off(
+            "init returned 3",
+            "E2003, see https://enshwick.com/errors/e2003/",
+        ),
     ));
     start.see(&entry(
         Level::INFO,
         LOADER,
         "item drops ready: the pickup read",
     ));
-    start.see(&entry(Level::ERROR, "enshwick-crash", "off: not a mod"));
+    start.see(&entry(
+        Level::ERROR,
+        "enshwick-crash",
+        &log_files::off("not a mod", "E2003"),
+    ));
     assert_eq!(start.report(), None, "not ready");
-    start.see(&entry(Level::INFO, LOADER, "ready: 1 of 2 mods running"));
+    start.see(&entry(Level::INFO, LOADER, &log_files::ready(1, 2)));
     assert_eq!(start.report(), None, "no world yet");
     start.see(&entry(
         Level::INFO,
         LOADER,
-        "world settings: world D:/s/world0",
+        &log_files::world_settings("D:/s/world0"),
     ));
     assert_eq!(
         start.report().unwrap(),
@@ -409,24 +407,6 @@ fn the_loader_says_less_once_the_world_has_loaded_and_the_mod_says_what_its_leve
     assert!(!start.shown(&other_info, "you.mod", Level::DEBUG));
     start.reported = true;
     assert!(!start.shown(&loader_info, "you.mod", Level::INFO));
-}
-
-/// The lines `run` waits for are the ones the loader writes.
-#[test]
-fn the_markers_match_the_loader_s_lines() {
-    let loader = Path::new(env!("CARGO_MANIFEST_DIR")).join("../runtime/loader/src");
-    let read = |file: &str| std::fs::read_to_string(loader.join(file)).unwrap();
-    let start = read("start.rs");
-    assert!(start.contains(&format!("\"{READY}{{running}} of {{}} mods running\"")));
-    assert!(start.contains(&format!("\"{{}} {{}}{INITIALISED}\"")));
-    let live = read("base/worlds/live.rs");
-    assert!(live.contains(&format!("\"{WORLD_LOADED}world {{key}}\"")));
-    assert!(live.contains(&format!("\"{WORLD_LOADED}the world has no key yet")));
-    assert!(read("engine/loader.rs").contains(&format!("\"{OFF}{{shown}} ({{}})\"")));
-    let log = read("engine/log.rs");
-    assert!(log.contains("\"{source}_{stamp}.log\""));
-    assert!(log.contains(&format!("\"{}{{name}}\"", crate::logs::ROLLED)));
-    assert!(read("engine/settings.rs").contains(&format!("FILE: &str = \"{SETTINGS_FILE}\"")));
 }
 
 #[test]

@@ -241,7 +241,7 @@ mod tests {
             initialised_mod(&initialised("you.hello", "0.1.0")),
             Some(("you.hello", "0.1.0"))
         );
-        assert_eq!(initialised_mod("3 mods initialised"), None);
+        assert_eq!(initialised_mod("everything initialised"), None);
         assert_eq!(initialised_mod(" 0.1.0 initialised"), None);
         assert_eq!(
             off_reason(&off("init returned 3", "E2003")),
