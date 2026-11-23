@@ -27,7 +27,9 @@ pub(crate) struct Slot {
 impl Slot {
     /// The slot an id names; `None` for an id no slot could have given.
     pub(crate) fn of(id: u64) -> Option<Self> {
-        let index = usize::try_from(id & u64::from(u32::MAX)).ok()?.checked_sub(1)?;
+        let index = usize::try_from(id & u64::from(u32::MAX))
+            .ok()?
+            .checked_sub(1)?;
         let generation = u32::try_from(id >> 32).ok()?;
         (index < MAX_SOUNDS && generation != 0).then_some(Self { index, generation })
     }
@@ -71,7 +73,11 @@ fn unpack(word: u64) -> (u32, u32, u32) {
         clippy::cast_possible_truncation,
         reason = "each part is masked or shifted to its width first"
     )]
-    let parts = ((word >> 32) as u32, (word & 0xff) as u32, ((word >> 8) & 0xff) as u32);
+    let parts = (
+        (word >> 32) as u32,
+        (word & 0xff) as u32,
+        ((word >> 8) & 0xff) as u32,
+    );
     parts
 }
 
@@ -259,7 +265,10 @@ mod tests {
         let slot = sounds.start(SoundPlay::EMPTY).unwrap();
         assert!(sounds.settle(slot, SoundInfo::FAILED, SoundInfo::NO_SCENE));
         let info = sounds.info(slot.id());
-        assert_eq!((info.state, info.reason), (SoundInfo::FAILED, SoundInfo::NO_SCENE));
+        assert_eq!(
+            (info.state, info.reason),
+            (SoundInfo::FAILED, SoundInfo::NO_SCENE)
+        );
         assert!(!sounds.open(slot));
     }
 

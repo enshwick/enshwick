@@ -2265,6 +2265,27 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::SoundContainerResourceSoundEntry"),
     ),
     (
+        ids::SOUND_SCENE_MUSIC,
+        Fact::Constant {
+            ty: "keen::SoundSceneType",
+            name: "Music",
+        },
+    ),
+    (
+        ids::SOUND_SCENE_UI,
+        Fact::Constant {
+            ty: "keen::SoundSceneType",
+            name: "Ui",
+        },
+    ),
+    (
+        ids::SOUND_SCENE_GAME,
+        Fact::Constant {
+            ty: "keen::SoundSceneType",
+            name: "Game",
+        },
+    ),
+    (
         ids::MAP_MARKER_TYPE_TYPE_NAME,
         offset("keen::MapMarkerType", "typeName", LOCA_TAG_REFERENCE),
     ),

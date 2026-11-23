@@ -349,6 +349,21 @@ impl Refusal for crate::actions::client_commands::CommandError {
     }
 }
 
+/// A mod's sound call refused: unavailable off a client and while the
+/// sounds are off, a bad argument out of bounds, missing for an unknown
+/// container, busy past the frame's starts or with the mod's queue full.
+impl Refusal for crate::ui::sound::SoundError {
+    fn status(&self) -> Status {
+        use crate::ui::sound::SoundError;
+        match self {
+            SoundError::NotClient | SoundError::Off => Status::UNAVAILABLE,
+            SoundError::BadArgs => Status::BAD_ARGS,
+            SoundError::Missing => Status::MISSING,
+            SoundError::Full => Status::BUSY,
+        }
+    }
+}
+
 /// An item rolled anew: unavailable while affixes are not open, a bad argument
 /// without an item, refused when no roll fits or the stats did not encode.
 impl Refusal for crate::inventory::stats::RollAffixesError {

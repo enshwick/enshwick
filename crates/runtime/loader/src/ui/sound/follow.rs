@@ -49,7 +49,9 @@ impl Followed {
 
     /// Whether any entity is wanted: a step with none reads nothing.
     pub(crate) fn any(&self) -> bool {
-        self.wanted.iter().any(|cell| cell.load(Ordering::Relaxed) != 0)
+        self.wanted
+            .iter()
+            .any(|cell| cell.load(Ordering::Relaxed) != 0)
     }
 
     /// Runs on the client's step: reads where each wanted entity stands
@@ -84,7 +86,11 @@ impl Followed {
                     reason = "the fixed-point coordinates travel as their bits"
                 )]
                 let at = [x as i64, y as i64, z as i64];
-                if present == 1 { Seen::At(at) } else { Seen::Gone }
+                if present == 1 {
+                    Seen::At(at)
+                } else {
+                    Seen::Gone
+                }
             })
     }
 

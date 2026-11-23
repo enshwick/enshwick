@@ -6,6 +6,8 @@ pub mod listing;
 pub mod mods_screen;
 #[cfg(any(windows, test))]
 pub(crate) mod place;
+#[cfg(any(windows, test))]
+pub(crate) mod sound;
 pub mod widget_checks;
 #[cfg(any(windows, test))]
 pub(crate) mod window_node;
@@ -25,6 +27,11 @@ pub(crate) static PARTS: &[&Part] = &[
             interface::forget(loader);
         }),
         ..part!("ui", interface)
+    },
+    &Part {
+        table_ids: sound::TABLE_IDS,
+        link: Some(sound::link),
+        ..part!("sound", sound)
     },
     &Part {
         seal: Some(|_| {

@@ -643,6 +643,11 @@ ids! {
     SOUND = "sound";
     /// The id of a sound container's entry that plays one sound.
     SOUND_CONTAINER_SOUND_ENTRY = "sound_container_sound_entry";
+    /// The ids of the client's sound scenes a mod's sound plays in, each
+    /// the index of its scene id in the client's array of them.
+    SOUND_SCENE_MUSIC = "sound_scene_type.music";
+    SOUND_SCENE_UI = "sound_scene_type.ui";
+    SOUND_SCENE_GAME = "sound_scene_type.game";
     /// The id of a marker type's name text tag, a GUID.
     MAP_MARKER_TYPE_TYPE_NAME = "map_marker_type.type_name";
     /// The id of a marker type's sorting, a byte of [`MARKER_TYPE_SORTING`].

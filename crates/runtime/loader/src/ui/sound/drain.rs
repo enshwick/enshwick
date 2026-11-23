@@ -39,8 +39,13 @@ pub(crate) trait Mixer {
     fn reaches(&self, scene: Scene) -> bool;
     /// Starts `container` in `scene` at `volume`, placed at `at` or from no
     /// place; its id, `None` when the game did not start it.
-    fn start(&mut self, scene: Scene, container: [u8; 16], at: Option<[i64; 3]>, volume: f32)
-    -> Option<u32>;
+    fn start(
+        &mut self,
+        scene: Scene,
+        container: [u8; 16],
+        at: Option<[i64; 3]>,
+        volume: f32,
+    ) -> Option<u32>;
     /// Stops `id` over `fade_ms`.
     fn stop(&mut self, id: u32, fade_ms: u32);
     /// Changes `id`'s volume over `fade_ms`.
@@ -222,7 +227,11 @@ impl Drain {
             sounds.settle(slot, SoundInfo::FAILED, SoundInfo::NO_SCENE);
             return;
         }
-        let silent = if play.fade_in_ms > 0 { 0.0 } else { play.volume };
+        let silent = if play.fade_in_ms > 0 {
+            0.0
+        } else {
+            play.volume
+        };
         let Some(game) = mixer.start(scene, play.container.0, at, silent) else {
             sounds.settle(slot, SoundInfo::FAILED, SoundInfo::GAME_REFUSED);
             return;
@@ -309,7 +318,12 @@ impl Drain {
 
     /// Starts the waiting sounds whose entity a step read, and fails those
     /// that waited too long.
-    fn wait<M: Mixer>(&mut self, frame: &Frame<'_>, mut mixer: Option<&mut M>, followed: &Followed) {
+    fn wait<M: Mixer>(
+        &mut self,
+        frame: &Frame<'_>,
+        mut mixer: Option<&mut M>,
+        followed: &Followed,
+    ) {
         let waiting = core::mem::take(&mut self.waiting);
         for mut waits in waiting {
             let Some(Some(sounds)) = frame.mods.get(waits.owner) else {

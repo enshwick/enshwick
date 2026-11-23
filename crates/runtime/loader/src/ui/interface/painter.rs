@@ -419,7 +419,7 @@ pub(super) fn draw(
             Ok(())
         }
         UiWidget::SOUND => {
-            if !holds_sound(raw.sound.0) {
+            if !crate::ui::sound::holds_sound(raw.sound.0) {
                 return Err(WidgetError::Unavailable);
             }
             // SAFETY: `widget` found this thread's `DRAWING`, set only while
@@ -516,22 +516,6 @@ fn input_hint(engine: &Engine, action: &[u8], raw: &mut UiWidget) -> Result<(), 
         }
         None => Err(WidgetError::Unavailable),
     }
-}
-
-/// Whether the client's archive or a mod holds a sound container with GUID
-/// `guid`, so a mod's typo never reaches the game's sound system.
-fn holds_sound(guid: [u8; 16]) -> bool {
-    use enshwick_gamedata::catalogue;
-    let Some(type_hash) = catalogue::type_hash(catalogue::ids::SOUND_CONTAINER) else {
-        return false;
-    };
-    let key = enshwick_core::abi::ResourceKey {
-        guid: enshwick_core::content::Guid(guid),
-        type_hash,
-        part: 0,
-    };
-    crate::engine::archive::game().is_some_and(|archive| archive.contains(&key))
-        || crate::content::served::mods_serve(&key)
 }
 
 /// Draws a settings row, writing back the player's change.

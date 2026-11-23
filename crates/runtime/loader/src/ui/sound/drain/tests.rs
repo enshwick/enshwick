@@ -25,7 +25,13 @@ impl Mixer for Recorder {
         !self.missing.contains(&scene)
     }
 
-    fn start(&mut self, scene: Scene, _: [u8; 16], at: Option<[i64; 3]>, volume: f32) -> Option<u32> {
+    fn start(
+        &mut self,
+        scene: Scene,
+        _: [u8; 16],
+        at: Option<[i64; 3]>,
+        volume: f32,
+    ) -> Option<u32> {
         if self.refuse {
             return None;
         }
@@ -57,7 +63,11 @@ fn play(place: u32) -> SoundPlay {
     SoundPlay {
         container: BELL,
         place,
-        entity: if place == SoundPlay::ON { Entity(9) } else { Entity::NONE },
+        entity: if place == SoundPlay::ON {
+            Entity(9)
+        } else {
+            Entity::NONE
+        },
         ..SoundPlay::EMPTY
     }
 }
@@ -91,8 +101,12 @@ fn state(sounds: &ModSounds, slot: Slot) -> (u32, u32) {
 
 #[test]
 fn a_started_sound_plays_until_the_game_ends_it() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let slot = sounds.start(play(SoundPlay::SCREEN)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     assert_eq!(state(&sounds, slot).0, SoundInfo::PLAYING);
@@ -111,7 +125,10 @@ fn a_start_fails_with_its_reason_when_the_scene_the_game_or_the_playback_is_miss
     };
     let music = sounds.start(play(SoundPlay::MUSIC)).unwrap();
     run(&mut drain, &mut unreached, &[&sounds], &followed);
-    assert_eq!(state(&sounds, music), (SoundInfo::FAILED, SoundInfo::NO_SCENE));
+    assert_eq!(
+        state(&sounds, music),
+        (SoundInfo::FAILED, SoundInfo::NO_SCENE)
+    );
 
     let mut refusing = Recorder {
         refuse: true,
@@ -119,7 +136,10 @@ fn a_start_fails_with_its_reason_when_the_scene_the_game_or_the_playback_is_miss
     };
     let refused = sounds.start(play(SoundPlay::SCREEN)).unwrap();
     run(&mut drain, &mut refusing, &[&sounds], &followed);
-    assert_eq!(state(&sounds, refused), (SoundInfo::FAILED, SoundInfo::GAME_REFUSED));
+    assert_eq!(
+        state(&sounds, refused),
+        (SoundInfo::FAILED, SoundInfo::GAME_REFUSED)
+    );
 
     let off = sounds.start(play(SoundPlay::SCREEN)).unwrap();
     run_with(&mut drain, None, &[&sounds], &followed, &|_| false, 1);
@@ -128,8 +148,12 @@ fn a_start_fails_with_its_reason_when_the_scene_the_game_or_the_playback_is_miss
 
 #[test]
 fn a_place_in_the_world_reaches_the_game_in_fixed_point() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let _at = sounds
         .start(SoundPlay {
             at: [1.5, -2.0, 0.0],
@@ -143,8 +167,12 @@ fn a_place_in_the_world_reaches_the_game_in_fixed_point() {
 
 #[test]
 fn a_fade_in_starts_silent_and_rises_to_its_volume() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let _faded = sounds
         .start(SoundPlay {
             volume: 0.5,
@@ -173,19 +201,36 @@ fn stop_all_reaches_only_the_calling_mod_s_sounds() {
 
 #[test]
 fn a_stale_id_changes_nothing_of_the_sound_that_took_its_slot() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let old = sounds.start(play(SoundPlay::SCREEN)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     sounds
-        .queue(Op::Steer(old, SoundSteer { fade_ms: 0, ..SoundSteer::EMPTY }))
+        .queue(Op::Steer(
+            old,
+            SoundSteer {
+                fade_ms: 0,
+                ..SoundSteer::EMPTY
+            },
+        ))
         .unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     let new = sounds.start(play(SoundPlay::SCREEN)).unwrap();
     assert_eq!(new.index, old.index);
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     sounds
-        .queue(Op::Steer(old, SoundSteer { kind: SoundSteer::VOLUME, volume: 0.1, ..SoundSteer::EMPTY }))
+        .queue(Op::Steer(
+            old,
+            SoundSteer {
+                kind: SoundSteer::VOLUME,
+                volume: 0.1,
+                ..SoundSteer::EMPTY
+            },
+        ))
         .unwrap();
     sounds.queue(Op::Steer(old, SoundSteer::EMPTY)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
@@ -196,13 +241,24 @@ fn a_stale_id_changes_nothing_of_the_sound_that_took_its_slot() {
 
 #[test]
 fn a_mod_turned_off_ends_every_sound_it_plays_music_and_interface_included() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let screen = sounds.start(play(SoundPlay::SCREEN)).unwrap();
     let music = sounds.start(play(SoundPlay::MUSIC)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     let queued = sounds.start(play(SoundPlay::SCREEN)).unwrap();
-    run_with(&mut drain, Some(&mut mixer), &[&sounds], &followed, &|_| true, 1);
+    run_with(
+        &mut drain,
+        Some(&mut mixer),
+        &[&sounds],
+        &followed,
+        &|_| true,
+        1,
+    );
     for slot in [screen, music, queued] {
         assert_eq!(state(&sounds, slot).0, SoundInfo::ENDED);
     }
@@ -211,13 +267,24 @@ fn a_mod_turned_off_ends_every_sound_it_plays_music_and_interface_included() {
 
 #[test]
 fn a_new_world_ends_the_sounds_of_the_old_one_but_not_music_or_interface_sounds() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let world = sounds.start(play(SoundPlay::AT)).unwrap();
     let screen = sounds.start(play(SoundPlay::SCREEN)).unwrap();
     let music = sounds.start(play(SoundPlay::MUSIC)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
-    run_with(&mut drain, Some(&mut mixer), &[&sounds], &followed, &|_| false, 2);
+    run_with(
+        &mut drain,
+        Some(&mut mixer),
+        &[&sounds],
+        &followed,
+        &|_| false,
+        2,
+    );
     assert_eq!(state(&sounds, world).0, SoundInfo::ENDED);
     assert_eq!(state(&sounds, screen).0, SoundInfo::PLAYING);
     assert_eq!(state(&sounds, music).0, SoundInfo::PLAYING);
@@ -240,8 +307,12 @@ fn a_mod_s_new_music_fades_out_its_earlier_music_and_no_other_mod_s() {
 
 #[test]
 fn a_sound_on_an_entity_waits_for_its_read_follows_it_and_ends_when_it_is_gone() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let on = sounds.start(play(SoundPlay::ON)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     assert_eq!(state(&sounds, on).0, SoundInfo::PENDING);
@@ -260,19 +331,30 @@ fn a_sound_on_an_entity_waits_for_its_read_follows_it_and_ends_when_it_is_gone()
 
 #[test]
 fn a_sound_on_an_entity_no_step_reads_fails_after_its_wait() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let on = sounds.start(play(SoundPlay::ON)).unwrap();
     for _ in 0..=FOLLOW_WAIT_FRAMES + 1 {
         run(&mut drain, &mut mixer, &[&sounds], &followed);
     }
-    assert_eq!(state(&sounds, on), (SoundInfo::FAILED, SoundInfo::NO_ENTITY));
+    assert_eq!(
+        state(&sounds, on),
+        (SoundInfo::FAILED, SoundInfo::NO_ENTITY)
+    );
 }
 
 #[test]
 fn moving_a_following_sound_stops_the_following() {
-    let (mut drain, mut mixer, followed, sounds) =
-        (Drain::default(), Recorder::default(), Followed::new(), ModSounds::new());
+    let (mut drain, mut mixer, followed, sounds) = (
+        Drain::default(),
+        Recorder::default(),
+        Followed::new(),
+        ModSounds::new(),
+    );
     let on = sounds.start(play(SoundPlay::ON)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     followed.step(|_| Some([1, 2, 3]));
