@@ -12,8 +12,10 @@ and plays it, changes it or adds its own.
 
 ## Play a container on a client
 
-`sound::play(Play::new(id, place))` starts a container on the client that
-runs the mod. Only that client hears it. The place is one of four:
+With the `unstable` feature, `sound::play(Play::new(id, place))` starts a
+container on the client that runs the mod. Only that client hears it. It
+may change in any release: no client has yet been seen playing it. The
+place is one of four:
 
 | Place | Where it plays |
 | --- | --- |
@@ -75,8 +77,10 @@ widgets.
 
 ## Play a sound on players' clients from the server
 
-`sound::play_for(audience, play)` plays a container on clients from a
-mod's server part. Each client that runs Enshwick and the mod plays it as
+With the `unstable` feature, `sound::play_for(audience, play)` plays a
+container on clients from a mod's server part. It may change in any
+release: a server copy sends it, but no client has yet been seen playing
+it. Each client that runs Enshwick and the mod plays it as
 the mod's own `sound::play` would. A client without Enshwick hears
 nothing; for a sound every client hears, raise a notifier
 ([Raise a notifier at a place](#raise-a-notifier-at-a-place)). The mod
@@ -411,7 +415,7 @@ happen, does not belong in a mod.
 ## Add a voiced line
 
 With the `unstable` feature, `load.add_voiceover(new)` adds a voiced line.
-It holds one sound per voice language, read as `add_sound` reads its files.
+No client has yet been heard playing one. It holds one sound per voice language, read as `add_sound` reads its files.
 The game holds a slot per voice language. A language goes by the name of
 its field of `Voiceover`, in snake case.
 
@@ -473,7 +477,8 @@ local ok, line = pcall(enshwick.sound.add_voiceover, {
 With the `unstable` feature, `load.add_music(new)` adds audio files as
 recordings and a music row of the client's ambience. The ambience plays
 the row among the game's own music where and when it fits. It plays one
-file at a time, and not the one it played last.
+file at a time, and not the one it played last. No client has yet been
+heard playing a mod's music row.
 
 | `NewMusic` | Plays |
 | --- | --- |

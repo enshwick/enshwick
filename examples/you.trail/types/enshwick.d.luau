@@ -4878,11 +4878,11 @@ declare enshwick: {
 	},
 	--- The game's sounds: playing them on a client, changing containers and hearing notifiers.
 	sound: {
-		--- Starts `sound` on this client: the next frame plays it, and its handle steers it. As `play`.
+		--- Unstable: needs the `unstable` feature and may change in any release, since its play on a client is not yet seen in the running game. Starts `sound` on this client: the next frame plays it, and its handle steers it. As `play`.
 		play: (sound: Play) -> SoundHandle,
-		--- Stops every sound this mod plays, fading each out over `fade`. As `stop_all`.
+		--- Unstable: needs the `unstable` feature and may change in any release, since its play on a client is not yet seen in the running game. Stops every sound this mod plays, fading each out over `fade`. As `stop_all`.
 		stop_all: (fade: number) -> (),
-		--- Plays `sound` on the clients of `audience` from the server. As `play_for`.
+		--- Unstable: needs the `unstable` feature and may change in any release, since its play on a client is not yet seen in the running game. Plays `sound` on the clients of `audience` from the server. As `play_for`.
 		play_for: (audience: Audience, sound: Play) -> RemoteSound,
 		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.
 		--- Only while the mod starts, at the top level of main.luau.
@@ -4896,13 +4896,13 @@ declare enshwick: {
 		--- Unstable: needs the `unstable` feature and may change in any release. Replaces the game's recording `sound` with the mod's `file`, read as `Load.add_sound` reads one, wherever any container plays it, on the client as it reads the game's archive; nothing is written to the archive or a save. Mods that replace one recording apply in load order: the last one's file plays, and the log names the one it replaced. A server checks the file and serves nothing.
 		--- Only while the mod starts, at the top level of main.luau.
 		replace: (sound: string, file: string) -> (),
-		--- Unstable: needs the `unstable` feature and may change in any release. Adds the voiced line `new.id`, which dialogue lines, lore readings and journal entries name through the resource values: each of `new.lines` becomes a sound, as `Load.add_sound` makes one, under `<id>.<language>`, in its language's slot with its length, and the fallback's sound fills the slots the line leaves empty. The game's voice language setting picks the slot; a language without a slot of its own speaks the first, and an empty slot is silent. A server checks the files and serves nothing.
+		--- Unstable: needs the `unstable` feature and may change in any release, since the client playing it is not yet heard in the running game. Adds the voiced line `new.id`, which dialogue lines, lore readings and journal entries name through the resource values: each of `new.lines` becomes a sound, as `Load.add_sound` makes one, under `<id>.<language>`, in its language's slot with its length, and the fallback's sound fills the slots the line leaves empty. The game's voice language setting picks the slot; a language without a slot of its own speaks the first, and an empty slot is silent. A server checks the files and serves nothing.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_voiceover: (new: NewVoiceover) -> string,
-		--- Unstable: needs the `unstable` feature and may change in any release. Replaces the recordings of the game's voiced line `voiceover` in the languages of `new.lines`, each added as `Load.add_voiceover` adds one under `new.id`, and keeps its other languages; the fallback fills only the slots the game's line leaves empty. Mods that change one line apply in load order. A server checks the files and serves nothing.
+		--- Unstable: needs the `unstable` feature and may change in any release, since the client playing it is not yet heard in the running game. Replaces the recordings of the game's voiced line `voiceover` in the languages of `new.lines`, each added as `Load.add_voiceover` adds one under `new.id`, and keeps its other languages; the fallback fills only the slots the game's line leaves empty. Mods that change one line apply in load order. A server checks the files and serves nothing.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_voiceover: (voiceover: string, new: NewVoiceover) -> (),
-		--- Unstable: needs the `unstable` feature and may change in any release. Adds `new.files` as recordings, as `Load.add_sound` reads them, and a music row of the client's ambience that plays them where and when `new` says, among the game's own music; rows of several mods add up in load order. Returns the recordings. A server checks the files and serves nothing.
+		--- Unstable: needs the `unstable` feature and may change in any release, since the client playing it is not yet heard in the running game. Adds `new.files` as recordings, as `Load.add_sound` reads them, and a music row of the client's ambience that plays them where and when `new` says, among the game's own music; rows of several mods add up in load order. Returns the recordings. A server checks the files and serves nothing.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_music: (new: NewMusic) -> {string},
 	},
