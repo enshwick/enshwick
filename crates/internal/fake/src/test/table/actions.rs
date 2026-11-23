@@ -37,6 +37,8 @@ pub(crate) struct ActionsState {
     pub(crate) commands: commands::FakeCommands,
     /// The answer `run_console` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
+    /// The client's keyboard and mouse bindings of the game's controls.
+    pub(crate) bindings: GameBindings,
 }
 
 #[cfg(feature = "unstable")]
@@ -213,4 +215,119 @@ pub(crate) extern "system" fn control(
         Some(_) => Status::UNAVAILABLE,
         None => Status::BAD_ARGS,
     }
+}
+
+/// The client's keyboard and mouse bindings of the game's own controls on
+/// the fake build, each key in the ABI's form.
+#[derive(Debug, Default)]
+pub(crate) struct GameBindings {
+    /// Each game action the build names, by its reflected name, with the
+    /// two keys the player bound to it.
+    pub(crate) player: Vec<(String, [u32; 2])>,
+    /// The mods' rebinds, each action's first key; the last one wins.
+    pub(crate) rebinds: Vec<(String, u32)>,
+    /// What the interface read at its last step, rebinds written in;
+    /// `None` before a step ran, as before the loader's first frame.
+    read: Option<Vec<(String, [u32; 2])>>,
+}
+
+impl GameBindings {
+    /// The keys `action` holds with the rebinds written in; `None` for an
+    /// action the build does not name.
+    pub(crate) fn keys(&self, action: &str) -> Option<[u32; 2]> {
+        let &(_, [first, second]) = self.player.iter().find(|(name, _)| name == action)?;
+        let first = self
+            .rebinds
+            .iter()
+            .find(|(name, _)| name == action)
+            .map_or(first, |&(_, key)| key);
+        Some([first, second])
+    }
+
+    /// An interface step: the loader writes the rebinds into the game's
+    /// bindings and reads them back.
+    pub(crate) fn step(&mut self) {
+        let read = self
+            .player
+            .iter()
+            .filter_map(|(name, _)| Some((name.clone(), self.keys(name)?)))
+            .collect();
+        self.read = Some(read);
+    }
+}
+
+/// The keys of the game action `action` as the interface last read them;
+/// as the loader: unavailable on a server and before the interface's first
+/// step, missing for an action the build does not name.
+pub(crate) extern "system" fn game_binding(
+    _me: ModHandle,
+    action: Str,
+    out: *mut enshwick_core::abi::GameBinding,
+) -> Status {
+    use enshwick_core::abi::GameBinding;
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let action = text(action);
+    with(Status::MISSING, |s| {
+        if s.host.base.side == enshwick_core::abi::Side::SERVER {
+            return Status::UNAVAILABLE;
+        }
+        let bindings = &s.actions.bindings;
+        if bindings.keys(&action).is_none() {
+            return Status::MISSING;
+        }
+        let Some(read) = &bindings.read else {
+            return Status::UNAVAILABLE;
+        };
+        let [first, second] = read
+            .iter()
+            .find(|(name, _)| *name == action)
+            .map_or([0, 0], |&(_, keys)| keys);
+        super::put_headed(
+            out,
+            GameBinding {
+                first,
+                second,
+                ..GameBinding::EMPTY
+            },
+        )
+    })
+}
+
+/// Rebinds the first key of the game action `action`, or with 0 gives it
+/// back, as the loader: unavailable on a server, missing for an action the
+/// build does not name, a bad argument for a key a mod control may not
+/// take. The interface's next step writes it.
+pub(crate) extern "system" fn game_rebind(_me: ModHandle, action: Str, key: u32) -> Status {
+    let action = text(action);
+    with(Status::MISSING, |s| {
+        if s.host.base.side == enshwick_core::abi::Side::SERVER {
+            return Status::UNAVAILABLE;
+        }
+        let bindings = &mut s.actions.bindings;
+        if bindings.keys(&action).is_none() {
+            return Status::MISSING;
+        }
+        if key != 0 && !bindable(key) {
+            return Status::BAD_ARGS;
+        }
+        bindings.rebinds.retain(|(name, _)| *name != action);
+        if key != 0 {
+            bindings.rebinds.push((action, key));
+        }
+        Status::OK
+    })
+}
+
+/// Whether `key` is one a mod control may take, as the loader checks it.
+#[cfg(feature = "unstable")]
+fn bindable(key: u32) -> bool {
+    enshwick_core::controls::Key::from_bits(key).is_some()
+}
+
+/// Without `unstable` no mod reaches a rebind, so every key passes.
+#[cfg(not(feature = "unstable"))]
+const fn bindable(_key: u32) -> bool {
+    true
 }

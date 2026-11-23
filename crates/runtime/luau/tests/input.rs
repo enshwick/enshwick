@@ -36,6 +36,34 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_a_game_binding_and_rebinds_it_by_the_action_s_name() {
+        use enshwick::abi::Side;
+        use enshwick::controls::Key;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            enshwick.on_tick(0.1, function()
+                local jump = enshwick.input.binding("Jump")
+                enshwick.log.info(`jump {jump.first} {jump.second == nil}`)
+                enshwick.input.rebind("Jump", "Shift+J")
+                local ok, why = pcall(enshwick.input.binding, "Sneak")
+                enshwick.log.info(`sneak {ok} {why}`)
+            end)
+            "#,
+        );
+        loader.bind_game_action("Jump", Some(Key::parse("Space").unwrap()), None);
+        let _drawn = loader.draw_frame();
+        let _ran = loader.tick(Duration::from_millis(100));
+        assert!(logged(&loader, "jump Space true"), "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "sneak false") && logged(&loader, "no action Sneak"),
+            "{:?}",
+            loader.logs()
+        );
+        assert_eq!(loader.game_rebind("Jump"), Key::parse("Shift+J").ok());
+    }
+
+    #[test]
     fn a_namespace_whose_open_costs_nothing_opens_though_no_script_names_it() {
         let loader = run(
             FakeHost::new().world(),

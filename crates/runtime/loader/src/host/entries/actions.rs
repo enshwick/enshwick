@@ -6,7 +6,7 @@ use enshwick_core::abi::{ChatFilterFn, Level, Status, Str};
 
 use crate::engine::conflicts::Mode;
 use crate::host::layer::guards::{in_init, on_client};
-use crate::host::layer::{Callback, Caller, Headed, Mod, Out, Text, entries};
+use crate::host::layer::{Callback, Caller, Headed, HeadedOut, Mod, Out, Text, entries};
 use crate::host::memory::text;
 
 pub(crate) mod commands;
@@ -128,5 +128,20 @@ entries! {
             // The text stays in this thread's buffer until its next call.
             out.put(Str::new(kept))
         })
+    }
+
+    fn game_binding(loader as Caller, action as Text, out as HeadedOut<api_frame::GameBinding>) -> Status {
+        on_client(loader)?;
+        let [first, second] = crate::actions::game_bindings::binding(action)?;
+        out.put(api_frame::GameBinding {
+            first,
+            second,
+            ..api_frame::GameBinding::EMPTY
+        })
+    }
+
+    fn game_rebind(loader as Caller, action as Text, key: u32) -> Status {
+        on_client(loader)?;
+        Ok(crate::actions::game_bindings::rebind(action, key)?)
     }
 }

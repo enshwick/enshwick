@@ -192,6 +192,17 @@ fn control(
         let line = texts::fill("controls.clash", &[("controls", &others.join(", "))]);
         paint.label(line.as_bytes(), UiWidget::STYLE_WARNING, true, false);
     }
+    let mut game: Vec<&str> = row
+        .keys
+        .iter()
+        .flat_map(|&key| crate::actions::game_bindings::sharing(key))
+        .collect();
+    game.sort_unstable();
+    game.dedup();
+    if !game.is_empty() {
+        let line = texts::fill("controls.game-clash", &[("actions", &game.join(", "))]);
+        paint.label(line.as_bytes(), UiWidget::STYLE_WARNING, true, false);
+    }
 }
 
 /// One look of the capture: a key binds, Escape or a lost focus cancels.

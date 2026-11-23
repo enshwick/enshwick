@@ -65,6 +65,7 @@ typed = [
     "enshwick-content/typed",
     "enshwick-world/typed",
     "enshwick-knowledge/typed",
+    "enshwick-actions/typed",
     "enshwick-ui/typed",
 ]
 

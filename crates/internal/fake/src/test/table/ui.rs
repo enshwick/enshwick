@@ -70,9 +70,6 @@ pub(crate) struct UiState {
     /// The host's template and fixed-point position as the client's last
     /// step read them, `None` before one did.
     pub(crate) screen_host_read: Option<(enshwick_core::content::Guid, [i64; 3])>,
-    /// The game actions the fake build names, each with whether a key is
-    /// bound to it.
-    pub(crate) game_actions: Vec<(String, bool)>,
     /// The local player's held controls.
     pub(crate) local_held: Held,
     pub(crate) local_input_info: enshwick_core::abi::LocalInputInfo,
@@ -123,7 +120,6 @@ impl Default for UiState {
             prompt: None,
             screen_host: 0,
             screen_host_read: None,
-            game_actions: Vec::new(),
             local_held: Held::default(),
             local_input_info: enshwick_core::abi::LocalInputInfo::EMPTY,
             client_snapshot: enshwick_core::abi::ClientSnapshot::EMPTY,
@@ -244,7 +240,8 @@ pub(crate) fn slider(
 /// Draws the key hint of the game action `action` as the loader does;
 /// `None` for an action the fake build does not name.
 fn input_hint(s: &State, w: &mut UiWidget, action: String) -> Option<crate::test::Drawn> {
-    let &(_, bound) = s.ui.game_actions.iter().find(|(name, _)| *name == action)?;
+    // The glyph draws from the game's runtime bindings, rebinds included.
+    let bound = s.actions.bindings.keys(&action)? != [0, 0];
     w.result = u32::from(bound);
     Some(crate::test::Drawn::InputHint {
         action,

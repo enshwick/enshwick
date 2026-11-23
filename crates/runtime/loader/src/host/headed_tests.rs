@@ -76,6 +76,7 @@ macro_rules! headed {
             ClientCommand,
             ClientCommandStatus,
             LocalInputInfo,
+            GameBinding,
             ClientSnapshot,
             LoopWaitData,
             MapFrameInfo,

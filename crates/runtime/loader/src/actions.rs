@@ -22,6 +22,7 @@ pub mod commands;
 pub mod console;
 #[cfg(windows)]
 pub(crate) mod controls;
+pub mod game_bindings;
 #[cfg(windows)]
 pub(crate) mod interaction_prompts;
 #[cfg(windows)]
@@ -110,6 +111,11 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: local_held::TABLE_IDS,
         link: Some(local_held::link),
         ..part!("local_held", local_held)
+    },
+    &Part {
+        table_ids: game_bindings::TABLE_IDS,
+        link: Some(game_bindings::link),
+        ..part!("game_bindings", game_bindings)
     },
     &Part {
         table_ids: client_control::TABLE_IDS,

@@ -250,4 +250,6 @@ pub(crate) static API: HostApi = HostApi {
     sound_play_for,
     sound_steer_for,
     rekey_resource,
+    game_binding,
+    game_rebind,
 };

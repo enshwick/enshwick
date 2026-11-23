@@ -99,11 +99,68 @@ impl FakeHost {
     }
 }
 
+/// Names the game action `action` on the fake build with the player's
+/// `keys`, in the ABI's key form.
+pub(crate) fn set_player_keys(s: &mut table::State, action: &str, keys: [u32; 2]) {
+    let player = &mut s.actions.bindings.player;
+    player.retain(|(name, _)| name != action);
+    player.push((action.to_owned(), keys));
+}
+
 #[expect(
     clippy::unused_self,
     reason = "the fake's state is process-wide; `self` proves it is installed"
 )]
 impl Installed {
+    /// Names the game action `action`, its reflected name, on the fake
+    /// build, with the `first` and `second` key the player bound to it in
+    /// the keyboard and mouse bindings; what `Input::binding` reads from
+    /// the next draw on, and the input hints draw. An action never named is
+    /// one the build lacks, which the loader refuses.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    /// use enshwick::controls::Key;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.bind_game_action("ContextualAction", Some(Key::parse("E")?), None);
+    /// assert_eq!(loader.game_rebind("ContextualAction"), None);
+    /// # Ok::<(), enshwick::controls::ParseKeyError>(())
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn bind_game_action(
+        &self,
+        action: &str,
+        first: Option<enshwick_core::controls::Key>,
+        second: Option<enshwick_core::controls::Key>,
+    ) {
+        let bits = |key: Option<enshwick_core::controls::Key>| key.map_or(0, |k| k.bits());
+        table::with((), |s| {
+            set_player_keys(s, action, [bits(first), bits(second)]);
+        });
+    }
+
+    /// The first key a mod's rebind of the game action `action` holds,
+    /// `None` while no mod rebinds it.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::bind_game_action`].
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn game_rebind(&self, action: &str) -> Option<enshwick_core::controls::Key> {
+        table::with(None, |s| {
+            s.actions
+                .bindings
+                .rebinds
+                .iter()
+                .find(|(name, _)| name == action)
+                .and_then(|&(_, key)| enshwick_core::controls::Key::from_bits(key))
+        })
+    }
+
     /// Asks the mod's interaction filters about `call` as the loader would;
     /// whether every one allows it.
     ///

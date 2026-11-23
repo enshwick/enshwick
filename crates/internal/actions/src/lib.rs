@@ -35,6 +35,9 @@ pub use enshwick_content::{content, rates};
 pub use enshwick_inventory::inventory;
 #[doc(hidden)]
 pub use enshwick_world::WorldError;
+#[cfg(feature = "typed")]
+#[doc(hidden)]
+pub use enshwick_world::typed;
 #[cfg(feature = "unstable")]
 #[doc(hidden)]
 pub use enshwick_world::world;
