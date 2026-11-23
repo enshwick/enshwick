@@ -2,12 +2,13 @@
 //! a mod's, by its [`SoundContainerId`], and a mod changes how a container
 //! plays and which recordings ([`SoundId`]) it picks from.
 //!
-//! A client mod starts a sound with [`play`], in 2D, at a place, on an
-//! entity or as music, heard only on that client, and steers it through
-//! its [`SoundHandle`]; inside a frame of the interface
-//! [`Frame::play`](crate::ui::Frame::play) plays one from no place. A mod's
-//! server part plays one on modded clients with [`play_for`], for a player,
-//! near a place or for everyone, and steers it through its [`RemoteSound`].
+//! Inside a frame of the interface [`Frame::play`](crate::ui::Frame::play)
+//! plays a sound from no place.
+#![cfg_attr(
+    feature = "unstable",
+    doc = "With the `unstable` feature, a client mod starts a sound with [`play`], in 2D, at a place, on an entity or as music, heard only on that client, and steers it through its [`SoundHandle`]; a mod's server part plays one on modded clients with [`play_for`], for a player, near a place or for everyone, and steers it through its [`RemoteSound`]."
+)]
+//!
 //! The server also places sounds through
 //! notifiers: a mod hears each one the game raises in
 //! [`Load::on_notify`](../struct.Load.html#method.on_notify) and raises one
@@ -43,11 +44,13 @@ pub(crate) mod change;
 mod decode;
 #[cfg(feature = "unstable")]
 pub(crate) mod music;
+#[cfg(feature = "unstable")]
 mod play;
 #[cfg(feature = "unstable")]
 pub(crate) mod qoa;
 #[cfg(feature = "unstable")]
 pub(crate) mod recording;
+#[cfg(feature = "unstable")]
 mod remote;
 pub(crate) mod script;
 #[cfg(feature = "unstable")]
@@ -71,9 +74,11 @@ pub use change::{
 pub use decode::{Channels, Trim};
 #[cfg(feature = "unstable")]
 pub use music::{DAY, MUSIC_VOLUME, NewMusic};
+#[cfg(feature = "unstable")]
 pub use play::{
     MAX_FADE, MAX_STARTS, Place, Play, PlayFailure, SoundHandle, SoundState, Sounds, play, stop_all,
 };
+#[cfg(feature = "unstable")]
 pub use remote::{Audience, MAX_PLAYS, MAX_RADIUS, RemoteSound, play_for};
 #[cfg(feature = "unstable")]
 pub use voiceover::{NewVoiceover, VoiceLine, VoiceoverId};

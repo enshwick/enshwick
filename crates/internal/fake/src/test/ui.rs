@@ -6,6 +6,7 @@ mod sound;
 
 use super::table;
 use super::{FakeHost, Installed};
+#[cfg(feature = "unstable")]
 pub use sound::FakeSound;
 
 /// What the fake's interface answers, as the test set it.

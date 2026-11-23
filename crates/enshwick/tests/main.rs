@@ -263,8 +263,10 @@ mod skills;
 mod sound_changes;
 #[cfg(feature = "unstable")]
 mod sound_files;
+#[cfg(feature = "unstable")]
 mod sound_for;
 mod sound_made;
+#[cfg(feature = "unstable")]
 mod sound_play;
 #[cfg(feature = "unstable")]
 mod sound_recordings;

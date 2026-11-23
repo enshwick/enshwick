@@ -84,7 +84,8 @@ impl Load<'_> {
     #[script(name = "replace")]
     pub fn replace_sound(&mut self, sound: SoundId, file: &str) -> Result<(), Off>;
 
-    /// Unstable: needs the `unstable` feature and may change in any release.
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since the client playing it is not yet heard in the running game.
     ///
     /// Adds the voiced line `new.id`, which dialogue lines, lore readings
     /// and journal entries name through the resource values: each of
@@ -119,7 +120,8 @@ impl Load<'_> {
     #[script(name = "add_voiceover")]
     pub fn add_voiceover(&mut self, new: NewVoiceover) -> Result<VoiceoverId, Off>;
 
-    /// Unstable: needs the `unstable` feature and may change in any release.
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since the client playing it is not yet heard in the running game.
     ///
     /// Replaces the recordings of the game's voiced line `voiceover` in the
     /// languages of `new.lines`, each added as [`Load::add_voiceover`] adds
@@ -153,7 +155,8 @@ impl Load<'_> {
         new: NewVoiceover,
     ) -> Result<(), Off>;
 
-    /// Unstable: needs the `unstable` feature and may change in any release.
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since the client playing it is not yet heard in the running game.
     ///
     /// Adds `new.files` as recordings, as [`Load::add_sound`] reads them,
     /// and a music row of the client's ambience that plays them where and

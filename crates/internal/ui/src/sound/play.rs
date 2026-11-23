@@ -347,6 +347,9 @@ pub(super) fn loader() -> Result<Host, Off> {
     crate::host().ok_or_else(|| Off::new("no loader runs this mod"))
 }
 
+/// Unstable: needs the `unstable` feature and may change in any release,
+/// since its play on a client is not yet seen in the running game.
+///
 /// Starts `play` on this client, from any thread, inside a frame or not:
 /// the client's game thread starts it in its next frame. Client only.
 ///
@@ -380,6 +383,9 @@ pub fn play(play: Play) -> Result<SoundHandle, Off> {
     })
 }
 
+/// Unstable: needs the `unstable` feature and may change in any release,
+/// since its play on a client is not yet seen in the running game.
+///
 /// Stops every sound this mod plays, fading each out over `fade`.
 ///
 /// # Errors
@@ -435,6 +441,9 @@ impl crate::script::Bound for Sounds {
     reason = "a script calls these through the namespace's handle, which holds nothing"
 )]
 impl Sounds {
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since its play on a client is not yet seen in the running game.
+    ///
     /// Starts `sound` on this client: the next frame plays it, and its
     /// handle steers it. As [`play`].
     ///
@@ -450,6 +459,9 @@ impl Sounds {
         play(sound)
     }
 
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since its play on a client is not yet seen in the running game.
+    ///
     /// Stops every sound this mod plays, fading each out over `fade`. As
     /// [`stop_all`].
     ///

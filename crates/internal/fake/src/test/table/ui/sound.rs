@@ -33,6 +33,10 @@ pub(crate) struct SoundState {
 /// play as they get it, changed by the steers that followed.
 #[derive(Clone, Debug)]
 pub(crate) struct Sent {
+    #[cfg_attr(
+        not(feature = "unstable"),
+        expect(dead_code, reason = "only the unstable test readers read it")
+    )]
     pub(crate) to: Vec<PlayerKey>,
     pub(crate) kept: Kept,
 }
@@ -119,6 +123,10 @@ fn start(s: &mut State, spec: SoundPlay) -> Result<u64, Status> {
 /// Takes a sound the mod's server part sent this client, as the loader
 /// does: queued as the mod's own start, or dropped for a container the
 /// client lacks, a play out of bounds or a full frame. Whether it queued.
+#[cfg_attr(
+    not(feature = "unstable"),
+    expect(dead_code, reason = "only the unstable test readers hear a sent sound")
+)]
 pub(crate) fn hear(spec: SoundPlay) -> bool {
     with(false, |s| start(s, spec).is_ok())
 }

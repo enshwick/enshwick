@@ -1,12 +1,18 @@
 //! The sounds a mod started, as a test reads them.
 
+#[cfg(feature = "unstable")]
 use enshwick_core::abi::{SoundInfo, SoundPlay};
+#[cfg(feature = "unstable")]
 use enshwick_core::content::Guid;
+#[cfg(feature = "unstable")]
 use enshwick_core::sound::Place;
 
-use super::super::{Installed, table};
+#[cfg(feature = "unstable")]
+use super::super::Installed;
+use super::super::table;
 
 /// One sound the mod started, as the fake loader keeps it.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct FakeSound {
@@ -20,6 +26,7 @@ pub struct FakeSound {
     pub playing: bool,
 }
 
+#[cfg(feature = "unstable")]
 impl FakeSound {
     /// The sound the loader keeps as `play` in state `state`.
     fn of(play: &SoundPlay, state: u32) -> Self {
@@ -43,6 +50,7 @@ pub(super) fn frame() {
     table::with((), |s| s.ui.sound.frame());
 }
 
+#[cfg(feature = "unstable")]
 #[expect(
     clippy::unused_self,
     reason = "the fake's state is process-wide; `self` proves it is installed"

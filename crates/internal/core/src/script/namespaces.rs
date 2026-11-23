@@ -176,6 +176,7 @@ impl Namespace {
     /// [`Namespace::of`] whose namespace also holds the
     /// [`Load`](crate::Load) methods of `init`, callable while the mod
     /// starts.
+    #[cfg(feature = "unstable")]
     const fn of_starting<T: Bound>(init: &'static [&'static [InitFunction]]) -> Self {
         Self {
             init,

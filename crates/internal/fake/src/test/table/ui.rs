@@ -10,9 +10,9 @@ use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
     UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
-pub(crate) use sound::{
-    hear, sound_play, sound_play_for, sound_state, sound_steer, sound_steer_for,
-};
+#[cfg(feature = "unstable")]
+pub(crate) use sound::hear;
+pub(crate) use sound::{sound_play, sound_play_for, sound_state, sound_steer, sound_steer_for};
 
 /// Where an extension's panel sits, as its spec asks.
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -165,6 +165,9 @@ impl RemoteSound {
     }
 }
 
+/// Unstable: needs the `unstable` feature and may change in any release,
+/// since its play on a client is not yet seen in the running game.
+///
 /// Plays `play` from the server on the clients of `audience` that run
 /// Enshwick and the mod.
 ///
@@ -222,6 +225,9 @@ pub fn play_for(audience: Audience, play: Play) -> Result<RemoteSound, Off> {
     reason = "a script calls these through the namespace's handle, which holds nothing"
 )]
 impl Sounds {
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since its play on a client is not yet seen in the running game.
+    ///
     /// Plays `sound` on the clients of `audience` from the server. As
     /// [`play_for`].
     ///

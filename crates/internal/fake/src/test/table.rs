@@ -35,6 +35,7 @@ use base::{BaseState, build::*, hooks::*, host::*, mods::*, net::*, pacing::*, s
 use content::*;
 use inventory::*;
 use knowledge::*;
+#[cfg(feature = "unstable")]
 pub(crate) use ui::hear;
 use ui::*;
 use world::{altars::*, buffs::*, environment::*, saves::*, transactions::*, *};
