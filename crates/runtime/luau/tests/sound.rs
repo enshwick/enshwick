@@ -61,7 +61,7 @@ mod tests {
         enshwick.sound.change(chest, { volume = 0.5, looped = true })
         local loud = pcall(enshwick.sound.change, chest, { volume = 9 })
         enshwick.log.info(`loud refused {not loud}`)
-        local ok, why = pcall(enshwick.sound.add, { id = "you.horns:horn", file = "../horn.wav" })
+        local ok, why = pcall(enshwick.sound.add, { id = "you.horns:horn", takes = { { file = "../horn.wav" } } })
         enshwick.log.info(`outside refused {not ok}: {why}`)
         enshwick.sound.change(chest, {
             sleep = 0.25,

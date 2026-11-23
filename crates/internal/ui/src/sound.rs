@@ -36,6 +36,8 @@
 pub(crate) mod add;
 mod change;
 #[cfg(feature = "unstable")]
+mod decode;
+#[cfg(feature = "unstable")]
 mod qoa;
 #[cfg(feature = "unstable")]
 pub(crate) mod recording;
@@ -48,11 +50,16 @@ use crate::game_events::{NotifyEvent, NotifyEventType};
 use crate::resources::{Registry, Value};
 
 #[cfg(feature = "unstable")]
-pub use add::{AddedSound, MAX_FILE_BYTES, MAX_MOD_BYTES, NewSound, SAMPLE_RATE};
+pub use add::{
+    AddedSound, INLINE_FRAMES, MAX_FILE_BYTES, MAX_MOD_BYTES, MAX_NEW_TAKES, NewSound, NewTake,
+    SAMPLE_RATE,
+};
 pub use change::{
     MAX_COUNT, MAX_DISTANCE, MAX_SLEEP, MAX_TAKES, MAX_VOLUME, PITCH, RandomPosition, SoundChange,
     SoundContainerScene, SoundContainerStealingMode, Take, Takes,
 };
+#[cfg(feature = "unstable")]
+pub use decode::{Channels, GAIN_DB, MAX_TAKE, Trim};
 
 /// A sound container by its GUID: the sounds one event of the game plays,
 /// and how it plays them.

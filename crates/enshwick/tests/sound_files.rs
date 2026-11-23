@@ -101,10 +101,10 @@ mod tests {
         assert_eq!(status, Status::OK);
         let results = RESULTS.lock().unwrap().clone();
         assert_eq!(results[0], Ok(()));
-        for (result, why) in
-            results[1..4]
-                .iter()
-                .zip(["48000 Hz", "inside the mod's folder", "gone.wav"])
+        assert_eq!(results[1], Ok(()), "a 44.1 kHz file is resampled");
+        for (result, why) in results[2..4]
+            .iter()
+            .zip(["inside the mod's folder", "gone.wav"])
         {
             let refused = result.as_ref().unwrap_err();
             assert!(refused.contains(why), "{refused}");

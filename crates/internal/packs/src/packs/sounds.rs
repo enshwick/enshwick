@@ -78,13 +78,10 @@ macro_rules! container_entry {
             pub(super) gamepad_speaker: Option<f32>,
             /// The strength of a gamepad's vibration with it, from 0 (off) to 1.
             pub(super) gamepad_vibration: Option<f32>,
-            /// Which recordings it plays: `{ add = [...] }` after those it holds, or `{ replace = [...] }` instead of them.
-            pub(super) takes: Option<TakesEntry>,
         }
 
         impl $name {
-            /// The container values this entry gives, its takes left for
-            /// [`resolve_takes`].
+            /// The container values this entry gives, without takes.
             fn values(&self) -> SoundChange {
                 let seconds = |s: Option<f32>| s.map(|s| Duration::try_from_secs_f32(s).unwrap_or(Duration::MAX));
                 SoundChange {
@@ -119,15 +116,26 @@ macro_rules! container_entry {
 }
 
 container_entry! {
-    /// One sound of the pack and the container that plays it.
+    /// One sound of the pack and the container that picks among its takes.
     SoundEntry {
         /// Its name in the pack; its container's content id is
-        /// `<pack>:<id>`, which other mods play, and its recording's
-        /// `<pack>:<id>.sound`.
+        /// `<pack>:<id>`, which other mods play, and its takes' recordings
+        /// `<pack>:<id>.sound`, `<pack>:<id>.sound2` and on.
         id: String,
-        /// The WAV file, relative to the pack's folder: 16-bit PCM, mono or
-        /// stereo, at 48000 Hz, at most 16 MiB.
-        file: String,
+        /// Its one audio file, relative to the pack's folder: WAV, FLAC,
+        /// Ogg Vorbis or MP3, at most 16 MiB; or `takes` for several.
+        file: Option<String>,
+        /// Its audio files, 1 to 32, each `{ file = "...", chance = <0 to 1> }`;
+        /// the container picks one at random by their chances.
+        takes: Option<Vec<NewTakeEntry>>,
+        /// Which channels the recordings keep: `keep` when left out, `mono`
+        /// (which suits a sound placed in the world) or `stereo`.
+        channels: Option<ChannelsEntry>,
+        /// A gain in decibels on every take, from -60 to 24.
+        gain_db: Option<f32>,
+        /// The part of each file it plays: `{ start = <seconds>, end = <seconds> }`,
+        /// each left out for the file's own.
+        trim: Option<TrimEntry>,
     }
 }
 
@@ -138,6 +146,9 @@ container_entry! {
         /// The container: a GUID, `<alias>:<name>` of a required mod, or the
         /// id of one of the pack's sounds.
         sound: String,
+        /// Which recordings it plays: `{ add = [...] }` after those it holds,
+        /// or `{ replace = [...] }` instead of them.
+        takes: Option<TakesEntry>,
     }
 }
 
@@ -148,8 +159,43 @@ container_entry! {
 pub(super) struct ReplaceEntry {
     /// The game's recording, by its GUID.
     pub(super) sound: String,
-    /// The WAV file, relative to the pack's folder, as a sound's.
+    /// The audio file, relative to the pack's folder, as a sound's.
     pub(super) file: String,
+}
+
+/// One audio file of a pack's sound.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct NewTakeEntry {
+    /// The file, relative to the pack's folder.
+    pub(super) file: String,
+    /// Its chance among the sound's takes, from 0 to 1; 1 when left out.
+    pub(super) chance: Option<f32>,
+}
+
+/// Which channels a pack's sound keeps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub(super) enum ChannelsEntry {
+    /// The file's own.
+    Keep,
+    /// One.
+    Mono,
+    /// Two.
+    Stereo,
+}
+
+/// The part of each file a pack's sound plays, in seconds.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct TrimEntry {
+    /// Where it starts.
+    pub(super) start: Option<f32>,
+    /// Where it ends.
+    pub(super) end: Option<f32>,
 }
 
 /// A sound container's scene.
@@ -235,11 +281,15 @@ pub(super) struct TakeEntry {
     pub(super) chance: Option<f32>,
 }
 
-/// A pack's sound, checked: its full content id, file and container values.
+/// A pack's sound, checked: its full content id, its takes' files and
+/// chances, how they become recordings, and its container values.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct PackSound {
     pub(super) id: String,
-    pub(super) file: String,
+    pub(super) takes: Vec<(String, Option<f32>)>,
+    pub(super) channels: Option<ChannelsEntry>,
+    pub(super) gain_db: f32,
+    pub(super) trim: (Duration, Option<Duration>),
     pub(super) container: SoundChange,
 }
 
@@ -344,6 +394,66 @@ fn check_file(reader: &mut Reader<'_>, text: &str, at: usize, what: &str, file: 
     }
 }
 
+/// The sound `e` checked, its problems at `at`; `None` when its takes or
+/// trim do not read.
+fn new_sound(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    what: &str,
+    e: &SoundEntry,
+) -> Option<PackSound> {
+    let problem = |reader: &mut Reader<'_>, why: String| {
+        reader.error(SOUNDS_FILE, text, at, format!("{what}: {why}"));
+    };
+    let takes: Vec<(String, Option<f32>)> = match (&e.file, &e.takes) {
+        (Some(file), None) => vec![(file.clone(), None)],
+        (None, Some(takes)) => takes.iter().map(|t| (t.file.clone(), t.chance)).collect(),
+        _ => {
+            problem(reader, "give either `file` or `takes`".to_owned());
+            return None;
+        }
+    };
+    if !(1..=MAX_NEW_TAKES).contains(&takes.len()) {
+        problem(
+            reader,
+            format!("{} takes: a sound has 1 to {MAX_NEW_TAKES}", takes.len()),
+        );
+    }
+    for (file, chance) in &takes {
+        check_file(reader, text, at, what, file);
+        if let Some(chance) = chance.filter(|c| !(0.0..=1.0).contains(c)) {
+            problem(reader, format!("{file}: chance {chance} is outside 0 to 1"));
+        }
+    }
+    let gain_db = e.gain_db.unwrap_or(0.0);
+    if !GAIN_DB.contains(&gain_db) {
+        problem(reader, format!("gain {gain_db} dB is outside {GAIN_DB:?}"));
+    }
+    let trim = e.trim.unwrap_or(TrimEntry {
+        start: None,
+        end: None,
+    });
+    let seconds = |s: Option<f32>| s.map(Duration::try_from_secs_f32).transpose().ok();
+    let (Some(start), Some(end)) = (seconds(trim.start), seconds(trim.end)) else {
+        problem(reader, "a trim is seconds from the file's start".to_owned());
+        return None;
+    };
+    let start = start.unwrap_or_default();
+    if end.is_some_and(|end| end <= start) {
+        problem(reader, "the trim ends before it starts".to_owned());
+    }
+    let container = checked(reader, text, at, what, e.values(), None);
+    Some(PackSound {
+        id: reader.own(&e.id),
+        takes,
+        channels: e.channels,
+        gain_db,
+        trim: (start, end),
+        container,
+    })
+}
+
 /// The checked sounds, changes and replacements of the pack's
 /// `sounds.toml`.
 pub(super) fn sounds(reader: &mut Reader<'_>) -> PackSounds {
@@ -363,13 +473,9 @@ pub(super) fn sounds(reader: &mut Reader<'_>) -> PackSounds {
         let at = entry.span().start;
         let e = entry.get_ref();
         let what = format!("sound {}", e.id);
-        check_file(reader, text, at, &what, &e.file);
-        let container = checked(reader, text, at, &what, e.values(), e.takes.as_ref());
-        out.sounds.push(PackSound {
-            id: reader.own(&e.id),
-            file: e.file.clone(),
-            container,
-        });
+        if let Some(sound) = new_sound(reader, text, at, &what, e) {
+            out.sounds.push(sound);
+        }
     }
     for entry in &file.change {
         let at = entry.span().start;

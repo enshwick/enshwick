@@ -1,27 +1,44 @@
 //! A mod's recordings: a file in its folder, read and checked against the
-//! mod's bounds, and served as one of the game's sounds, new or in place of
-//! a vanilla one.
+//! mod's bounds at init, encoded as FramelessQOA on background threads, and
+//! served as one of the game's sounds, new or in place of a vanilla one.
+
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
+use std::time::{Duration, Instant};
 
 use super::SoundId;
+use super::decode::{self, Samples, Shape};
+use super::qoa;
 use crate::Off;
 use crate::abi::{Level, ResourceKey, Side};
 use crate::content::types;
+use crate::locks::Relock as _;
 use crate::resources::Value;
 
-/// The rate of every sound the game plays, and of a WAV file a mod adds,
-/// in frames per second.
+/// The rate of every sound the game plays, and of every recording a mod
+/// adds, in frames per second.
 pub const SAMPLE_RATE: u32 = 48_000;
-/// The largest WAV file a mod adds as a sound, in bytes.
+/// The largest file a mod adds as a recording, in bytes.
 pub const MAX_FILE_BYTES: u64 = 16 << 20;
-/// The most bytes of WAV files one mod adds as sounds.
+/// The most bytes one mod's recordings hold in the client, encoded: about
+/// 46 minutes of mono, 23 of stereo.
 pub const MAX_MOD_BYTES: u64 = 64 << 20;
+/// The longest recording held inline, which plays at once on its first
+/// play; a longer one streams as content.
+pub const INLINE_FRAMES: usize = 48_000;
 
 const FORMAT: &str = "format";
-const UNCOMPRESSED: &str = "Uncompressed";
+const QOA: &str = "FramelessQOA";
 const CHANNELS: &str = "channelConfiguration";
-const MONO: &str = "Mono";
-const STEREO: &str = "Stereo";
+/// The game's `SoundChannelConfiguration` for 1, 2, 4, 6 and 8 channels.
+const CHANNEL_NAMES: [(usize, &str); 5] = [
+    (1, "Mono"),
+    (2, "Stereo"),
+    (4, "Quadrophonic"),
+    (6, "FiveDotOne"),
+    (8, "SevenDotOne"),
+];
 const FRAME_COUNT: &str = "frameCount";
+const FRAMES_PER_SECOND: &str = "framesPerSecond";
 const DURATION: &str = "duration";
 const TIME_VALUE: &str = "value";
 const DATA: &str = "data";
@@ -33,85 +50,121 @@ const DEBUG_NAME: &str = "debugName";
 /// replacement names the earlier one.
 const REPLACED: &str = "replaced by ";
 
-/// Why a WAV file is not a sound a mod adds.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum ReadWavError {
-    /// The bytes are no WAV file the reader takes.
-    #[error("not a WAV file: {0}")]
-    Malformed(String),
-    /// The samples are of another format.
-    #[error(
-        "{bits}-bit samples in {channels} channels at {rate} Hz: a sound is 16-bit PCM, \
-         mono or stereo, at {SAMPLE_RATE} Hz"
-    )]
-    Format {
-        /// Bits per sample.
-        bits: u16,
-        /// Channels.
-        channels: u16,
-        /// Frames per second.
-        rate: u32,
-    },
-    /// The file holds no samples.
-    #[error("no samples")]
-    Empty,
+/// The game's FramelessQOA sounds a mod's recordings build from: one held
+/// inline and one streamed, each with its streamed data, found once.
+#[derive(Clone, Debug)]
+pub(super) struct Bases {
+    inline: (ResourceKey, Value),
+    streamed: (ResourceKey, Value),
 }
 
-/// What a mod's sounds hold while it initialises: the bytes of its files so
-/// far, and the game's streamed uncompressed sound they build from, once
-/// one was found.
-#[derive(Clone, Debug, Default)]
+/// What a mod's sounds hold while it initialises: the encoded bytes of its
+/// recordings so far, the game's sounds they build from, and the threads
+/// that encode them.
+#[derive(Default)]
 struct Budget {
     bytes: u64,
-    base: Option<(ResourceKey, Value)>,
+    bases: Option<Bases>,
+    encoder: Option<Arc<Encoder>>,
 }
 
-/// A sound's samples as the game stores an uncompressed one: 16-bit
-/// little-endian, the channels of each frame side by side.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Pcm {
-    pub(crate) stereo: bool,
-    pub(crate) frames: u32,
-    pub(crate) bytes: Vec<u8>,
+/// A mod's background encoding: at most as many recordings at once as the
+/// machine has cores, and the time they took, logged when none is left.
+struct Encoder {
+    free: Mutex<usize>,
+    freed: Condvar,
+    work: Mutex<(usize, usize, Duration)>,
+    host: crate::Host,
 }
 
-/// Reads `wav` as a sound a mod adds.
-pub(crate) fn read_wav(wav: &[u8]) -> Result<Pcm, ReadWavError> {
-    let reader = hound::WavReader::new(std::io::Cursor::new(wav))
-        .map_err(|error| ReadWavError::Malformed(error.to_string()))?;
-    let spec = reader.spec();
-    if spec.sample_format != hound::SampleFormat::Int
-        || spec.bits_per_sample != 16
-        || !matches!(spec.channels, 1 | 2)
-        || spec.sample_rate != SAMPLE_RATE
-    {
-        return Err(ReadWavError::Format {
-            bits: spec.bits_per_sample,
-            channels: spec.channels,
-            rate: spec.sample_rate,
-        });
+impl Encoder {
+    fn new(host: crate::Host) -> Self {
+        let cores = std::thread::available_parallelism().map_or(1, usize::from);
+        Self {
+            free: Mutex::new(cores),
+            freed: Condvar::new(),
+            work: Mutex::new((0, 0, Duration::ZERO)),
+            host,
+        }
     }
-    let frames = reader.duration();
-    if frames == 0 {
-        return Err(ReadWavError::Empty);
+
+    /// Encodes `job` on a thread of its own once a core is free; when no
+    /// thread starts, the first read encodes it.
+    fn start(self: &Arc<Self>, job: &Arc<Job>) {
+        self.work.relock().0 += 1;
+        let (encoder, job) = (Arc::clone(self), Arc::clone(job));
+        let spawned = std::thread::Builder::new()
+            .name("enshwick sound encoding".to_owned())
+            .spawn(move || {
+                let mut free = encoder.free.relock();
+                while *free == 0 {
+                    free = encoder
+                        .freed
+                        .wait(free)
+                        .unwrap_or_else(PoisonError::into_inner);
+                }
+                *free -= 1;
+                drop(free);
+                let started = Instant::now();
+                let _encoded = job.data();
+                *encoder.free.relock() += 1;
+                encoder.freed.notify_one();
+                encoder.done(started.elapsed());
+            });
+        if spawned.is_err() {
+            self.work.relock().0 -= 1;
+        }
     }
-    // The header's length is a claim: past the file's bytes it would size
-    // the buffer, and the game would read the sound past its end.
-    if u64::from(reader.len()) * 2 > u64::try_from(wav.len()).unwrap_or(u64::MAX) {
-        return Err(ReadWavError::Malformed(
-            "its header claims more samples than the file holds".to_owned(),
-        ));
+
+    /// Counts one finished recording, and logs the mod's encoding once its
+    /// last one so far is done.
+    fn done(&self, took: Duration) {
+        let mut work = self.work.relock();
+        work.1 += 1;
+        work.2 += took;
+        if work.1 == work.0 {
+            self.host.log(
+                Level::INFO,
+                &format!(
+                    "encoded {} recordings in {} ms of work",
+                    work.1,
+                    work.2.as_millis()
+                ),
+            );
+        }
     }
-    let mut bytes = Vec::with_capacity(usize::try_from(reader.len()).unwrap_or(0) * 2);
-    for sample in reader.into_samples::<i16>() {
-        let sample = sample.map_err(|error| ReadWavError::Malformed(error.to_string()))?;
-        bytes.extend_from_slice(&sample.to_le_bytes());
+}
+
+/// One recording's encoding: its samples until encoded, then its bytes,
+/// and the hash they were served under once streamed.
+struct Job {
+    samples: Mutex<Option<Vec<i16>>>,
+    channels: usize,
+    data: OnceLock<Result<Vec<u8>, String>>,
+    served: OnceLock<[u32; 4]>,
+}
+
+impl Job {
+    fn new(samples: Samples) -> Self {
+        Self {
+            channels: samples.channels,
+            samples: Mutex::new(Some(samples.samples)),
+            data: OnceLock::new(),
+            served: OnceLock::new(),
+        }
     }
-    Ok(Pcm {
-        stereo: spec.channels == 2,
-        frames,
-        bytes,
-    })
+
+    /// The encoded bytes, encoding them here when no thread has yet; a
+    /// call while a thread encodes waits for it.
+    fn data(&self) -> Result<&[u8], Off> {
+        self.data
+            .get_or_init(|| match self.samples.relock().take() {
+                Some(samples) => Ok(qoa::encode(&samples, self.channels)),
+                None => Err("its encoding stopped".to_owned()),
+            })
+            .as_deref()
+            .map_err(|why| Off::new(why.clone()))
+    }
 }
 
 /// A path that leaves the mod's folder.
@@ -129,80 +182,143 @@ fn file_in(dir: &std::path::Path, file: &str) -> Result<std::path::PathBuf, Outs
 
 /// A mod's file read as a recording, its bytes not yet counted.
 pub(super) struct Recording {
-    pcm: Pcm,
-    size: u64,
+    samples: Samples,
+    bytes: u64,
 }
 
-/// Reads the mod's `file` as a recording within the mod's bounds.
+/// Reads the mod's `file` as a recording of `shape`, within the mod's
+/// bounds and what the mod's recordings already hold, `pending` bytes of
+/// this call's earlier takes included.
 ///
 /// # Errors
 ///
 /// [`Off`] naming `file` for a path outside the mod's folder, a file past
-/// [`MAX_FILE_BYTES`] or past the mod's [`MAX_MOD_BYTES`], and one that is
-/// no sound a mod adds.
-pub(super) fn read(load: &mut crate::BaseLoad, file: &str) -> Result<Recording, Off> {
+/// [`MAX_FILE_BYTES`], one that is no recording a mod adds, and a recording
+/// that would pass the mod's [`MAX_MOD_BYTES`].
+pub(super) fn read(
+    load: &mut crate::BaseLoad,
+    file: &str,
+    shape: Shape,
+    pending: u64,
+) -> Result<Recording, Off> {
     let fail = |why: &dyn core::fmt::Display| Off::new(format!("{file}: {why}"));
     let path = file_in(&load.mod_dir()?, file).map_err(|why| Off::new(why.to_string()))?;
     let size = std::fs::metadata(&path).map_err(|e| fail(&e))?.len();
     if size > MAX_FILE_BYTES {
         return Err(fail(&format!("{size} bytes, past {MAX_FILE_BYTES}")));
     }
+    let bytes = std::fs::read(&path).map_err(|e| fail(&e))?;
+    let read = decode::read(&bytes, shape.trim).map_err(|e| fail(&e))?;
+    drop(bytes);
+    let samples = decode::shape(read, shape).map_err(|e| fail(&e))?;
+    let encoded =
+        u64::try_from(qoa::encoded_len(samples.frames(), samples.channels)).unwrap_or(u64::MAX);
     let held = load
         .slot::<Budget>()
         .as_ref()
         .map_or(0, |budget| budget.bytes);
-    if held + size > MAX_MOD_BYTES {
+    if held + pending + encoded > MAX_MOD_BYTES {
         return Err(fail(&format!(
-            "the mod's sounds would pass {MAX_MOD_BYTES} bytes"
+            "the mod's recordings would pass {MAX_MOD_BYTES} bytes"
         )));
     }
-    let wav = std::fs::read(&path).map_err(|e| fail(&e))?;
-    let pcm = read_wav(&wav).map_err(|e| fail(&e))?;
-    Ok(Recording { pcm, size })
+    Ok(Recording {
+        samples,
+        bytes: encoded,
+    })
 }
 
-/// Counts a recording's bytes against the mod's bound.
-pub(super) fn count(load: &mut crate::BaseLoad, recording: &Recording) {
-    load.slot::<Budget>().get_or_insert_default().bytes += recording.size;
+impl Recording {
+    /// Its encoded size, which counts against the mod's bound.
+    pub(super) const fn bytes(&self) -> u64 {
+        self.bytes
+    }
 }
 
-/// The game's streamed uncompressed sound a mod's recordings build from, and
-/// its streamed data, found once per mod.
-pub(super) fn base(load: &mut crate::BaseLoad) -> Result<(ResourceKey, Value), Off> {
-    if let Some(base) = load.slot::<Budget>().as_ref().and_then(|b| b.base.clone()) {
-        return Ok(base);
+/// The value of a streamed data reference with `hash` over `streamed`.
+fn with_hash(mut streamed: Value, hash: [u32; 4]) -> Result<Value, Off> {
+    *streamed
+        .field_mut(CONTENT_HASH)
+        .ok_or_else(|| Off::new(format!("the game's sound has no {STREAMED}.{CONTENT_HASH}")))? =
+        Value::Struct(
+            CONTENT_HASH_PARTS
+                .iter()
+                .zip(hash)
+                .map(|(part, word)| ((*part).to_owned(), Value::Uint(u64::from(word))))
+                .collect(),
+        );
+    Ok(streamed)
+}
+
+/// The size of the content `value`, a sound, streams; 0 for none.
+fn streamed_size(value: &Value) -> u64 {
+    match value
+        .field(STREAMED)
+        .and_then(|streamed| streamed.field(CONTENT_HASH))
+        .and_then(|hash| hash.field(CONTENT_HASH_PARTS[0]))
+    {
+        Some(Value::Uint(size)) => *size,
+        _ => 0,
+    }
+}
+
+/// The game's FramelessQOA sounds a mod's recordings build from, found
+/// once per mod.
+pub(super) fn bases(load: &mut crate::BaseLoad) -> Result<Bases, Off> {
+    if let Some(bases) = load.slot::<Budget>().as_ref().and_then(|b| b.bases.clone()) {
+        return Ok(bases);
     }
     let host = load.host();
     let sound_type = crate::resources::Registry::game()?
         .hashed(types::SOUND_RESOURCE.hash()?)
         .ok_or_else(|| Off::new("this game has no sound type"))?;
-    // One of the game's few uncompressed sounds, all streamed, carries the
-    // content category a served sound needs.
-    let found = host
-        .resource_keys(Some(sound_type))?
-        .into_iter()
-        .find_map(|key| {
-            let value = host.game_value(key).ok()?;
-            is_streamed_uncompressed(&value)
-                .then(|| value.field(STREAMED).cloned())
-                .flatten()
-                .map(|streamed| (key, streamed))
-        })
-        .ok_or_else(|| Off::new("the game holds no streamed uncompressed sound to build from"))?;
-    load.slot::<Budget>().get_or_insert_default().base = Some(found.clone());
-    Ok(found)
+    let (mut inline, mut streamed) = (None, None);
+    for key in host.resource_keys(Some(sound_type))? {
+        let Ok(value) = host.game_value(key) else {
+            continue;
+        };
+        if value.field(FORMAT) != Some(&Value::Name(QOA.to_owned())) {
+            continue;
+        }
+        let Some(reference) = value.field(STREAMED).cloned() else {
+            continue;
+        };
+        let slot = if streamed_size(&value) > 0 {
+            &mut streamed
+        } else {
+            &mut inline
+        };
+        slot.get_or_insert((key, reference));
+        if inline.is_some() && streamed.is_some() {
+            break;
+        }
+    }
+    let (Some(inline), Some(streamed)) = (inline, streamed) else {
+        return Err(Off::new(
+            "the game holds no inline and streamed FramelessQOA sounds to build from",
+        ));
+    };
+    let bases = Bases { inline, streamed };
+    load.slot::<Budget>().get_or_insert_default().bases = Some(bases.clone());
+    Ok(bases)
+}
+
+/// Counts a recording's bytes against the mod's bound.
+fn count(load: &mut crate::BaseLoad, bytes: u64) {
+    load.slot::<Budget>().get_or_insert_default().bytes += bytes;
 }
 
 /// Serves `recording` on a client as the game's sound `sound`: a new one
-/// (`replace` false) built from a vanilla uncompressed sound, or a vanilla
+/// (`replace` false) built from a vanilla FramelessQOA sound, or a vanilla
 /// one replaced in place after the patches of earlier mods, under the debug
-/// name `name`. A server, which has no sound type, serves nothing; either
-/// side counts the bytes.
+/// name `name`. Its encoding starts now on a background thread; the game's
+/// first read of the sound waits for it. A server, which has no sound type,
+/// serves nothing; either side counts the bytes.
 ///
 /// # Errors
 ///
-/// [`Off`] on a client whose game holds no streamed uncompressed sound to
-/// build from, and when the loader refuses the content or the resource.
+/// [`Off`] on a client whose game holds no FramelessQOA sounds to build
+/// from, and when the loader refuses the resource.
 pub(super) fn serve(
     load: &mut crate::BaseLoad,
     sound: SoundId,
@@ -210,47 +326,48 @@ pub(super) fn serve(
     replace: bool,
     name: String,
 ) -> Result<(), Off> {
+    count(load, recording.bytes);
     if load.host().build().side != Side::CLIENT {
-        count(load, &recording);
         return Ok(());
     }
     let key = types::SOUND_RESOURCE.key(sound.guid())?;
-    let (base_key, streamed) = base(load)?;
+    let bases = bases(load)?;
     let host = load.host();
-    let hash = host.serve_content(&recording.pcm.bytes)?;
-    // Served bytes stay held whatever fails after them.
-    count(load, &recording);
-    let Recording {
-        pcm: Pcm { stereo, frames, .. },
-        ..
-    } = recording;
+    let frames = recording.samples.frames();
+    let channels = recording.samples.channels;
+    let inline = frames <= INLINE_FRAMES;
+    let (base, streamed) = if inline { bases.inline } else { bases.streamed };
+    let job = Arc::new(Job::new(recording.samples));
+    let encoder = Arc::clone(
+        load.slot::<Budget>()
+            .get_or_insert_default()
+            .encoder
+            .get_or_insert_with(|| Arc::new(Encoder::new(host))),
+    );
+    encoder.start(&job);
     let made = Made {
-        stereo,
         frames,
-        hash,
+        channels,
         streamed,
         name,
+        job,
+        inline,
     };
-    crate::resources::serve_value(
-        host,
-        key,
-        if replace { key } else { base_key },
-        move |held| {
-            if let Some(Value::Text(earlier)) = held.field(DEBUG_NAME)
-                && let Some(earlier) = earlier.strip_prefix(REPLACED)
-            {
-                host.log(
-                    Level::WARN,
-                    &format!(
-                        "sound {}: {} replaces the recording {earlier} gave it",
-                        sound.guid(),
-                        made.name
-                    ),
-                );
-            }
-            made.over(held)
-        },
-    )
+    crate::resources::serve_value(host, key, if replace { key } else { base }, move |held| {
+        if let Some(Value::Text(earlier)) = held.field(DEBUG_NAME)
+            && let Some(earlier) = earlier.strip_prefix(REPLACED)
+        {
+            host.log(
+                Level::WARN,
+                &format!(
+                    "sound {}: {} replaces the recording {earlier} gave it",
+                    sound.guid(),
+                    made.name
+                ),
+            );
+        }
+        made.over(held, |data| host.serve_content(data))
+    })
 }
 
 /// The debug name of a vanilla recording the mod's `file` replaces.
@@ -265,31 +382,55 @@ pub(super) fn replaced_name(load: &crate::BaseLoad, file: &str) -> String {
 
 /// What a served recording writes over the sound it is built on.
 struct Made {
-    stereo: bool,
-    frames: u32,
-    hash: [u32; 4],
+    frames: usize,
+    channels: usize,
     streamed: Value,
     name: String,
+    job: Arc<Job>,
+    inline: bool,
 }
 
 impl Made {
-    /// `base`, a sound of the game's layout, made to hold these frames
-    /// streamed as their content; [`Off`] when it lacks a field the frames
-    /// need, so a renamed field serves nothing rather than the base's
-    /// layout over the mod's frames.
-    fn over(&self, mut base: Value) -> Result<Value, Off> {
-        let nanos = i64::try_from(u64::from(self.frames) * 1_000_000_000 / u64::from(SAMPLE_RATE))
-            .unwrap_or(i64::MAX);
-        let mut streamed = self.streamed.clone();
-        *streamed.field_mut(CONTENT_HASH).ok_or_else(|| {
-            Off::new(format!("the game's sound has no {STREAMED}.{CONTENT_HASH}"))
-        })? = Value::Struct(
-            CONTENT_HASH_PARTS
-                .iter()
-                .zip(self.hash)
-                .map(|(part, word)| ((*part).to_owned(), Value::Uint(u64::from(word))))
-                .collect(),
-        );
+    /// `base`, a sound of the game's layout, made to hold this recording,
+    /// its bytes served through `serve` when it streams; [`Off`] when it
+    /// lacks a field the recording needs, so a renamed field serves nothing
+    /// rather than the base's layout over the mod's samples.
+    fn over(
+        &self,
+        base: Value,
+        serve: impl FnOnce(&[u8]) -> Result<[u32; 4], Off>,
+    ) -> Result<Value, Off> {
+        let data = self.job.data()?;
+        let (inline_data, streamed) = if self.inline {
+            (
+                data.iter()
+                    .map(|&byte| Value::Uint(u64::from(byte)))
+                    .collect(),
+                self.streamed.clone(),
+            )
+        } else {
+            // The loader answers the same bytes with the same hash, so two
+            // first reads at once serve them twice at no cost.
+            let hash = if let Some(hash) = self.job.served.get() {
+                *hash
+            } else {
+                let hash = serve(data)?;
+                *self.job.served.get_or_init(|| hash)
+            };
+            (Vec::new(), with_hash(self.streamed.clone(), hash)?)
+        };
+        self.write(base, Value::List(inline_data), streamed)
+    }
+
+    fn write(&self, mut base: Value, data: Value, streamed: Value) -> Result<Value, Off> {
+        let frames = u64::try_from(self.frames).unwrap_or(u64::MAX);
+        let nanos =
+            i64::try_from(frames * 1_000_000_000 / u64::from(SAMPLE_RATE)).unwrap_or(i64::MAX);
+        let channels = CHANNEL_NAMES
+            .iter()
+            .find(|(count, _)| *count == self.channels)
+            .map(|(_, name)| *name)
+            .ok_or_else(|| Off::new(format!("{} channels", self.channels)))?;
         let mut set = |field: &str, value: Value| {
             let slot = base
                 .field_mut(field)
@@ -297,32 +438,19 @@ impl Made {
             *slot = value;
             Ok::<_, Off>(())
         };
-        set(FORMAT, Value::Name(UNCOMPRESSED.to_owned()))?;
-        set(
-            CHANNELS,
-            Value::Name(if self.stereo { STEREO } else { MONO }.to_owned()),
-        )?;
-        set(FRAME_COUNT, Value::Uint(u64::from(self.frames)))?;
+        set(FORMAT, Value::Name(QOA.to_owned()))?;
+        set(CHANNELS, Value::Name(channels.to_owned()))?;
+        set(FRAMES_PER_SECOND, Value::Uint(u64::from(SAMPLE_RATE)))?;
+        set(FRAME_COUNT, Value::Uint(frames))?;
         set(
             DURATION,
             Value::Struct(vec![(TIME_VALUE.to_owned(), Value::Int(nanos))]),
         )?;
+        set(DATA, data)?;
         set(STREAMED, streamed)?;
-        // A replaced vanilla sound may hold its samples inline.
-        let _cleared = set(DATA, Value::List(Vec::new()));
         let _named = set(DEBUG_NAME, Value::Text(self.name.clone()));
         Ok(base)
     }
-}
-
-/// Whether `value` is an uncompressed sound whose samples stream as content.
-fn is_streamed_uncompressed(value: &Value) -> bool {
-    let size = value
-        .field(STREAMED)
-        .and_then(|streamed| streamed.field(CONTENT_HASH))
-        .and_then(|hash| hash.field(CONTENT_HASH_PARTS[0]));
-    value.field(FORMAT) == Some(&Value::Name(UNCOMPRESSED.to_owned()))
-        && matches!(size, Some(Value::Uint(size)) if *size > 0)
 }
 
 /// `Load`'s methods of this module on the base handle, which core's
@@ -341,7 +469,7 @@ impl LoadMethods for crate::BaseLoad {
         if !self.joins() {
             return Err(fail(Off::new("a mod with sounds runs on both sides")));
         }
-        let recording = read(self, file).map_err(fail)?;
+        let recording = read(self, file, Shape::default(), 0).map_err(fail)?;
         if self.host().build().side == Side::CLIENT
             && self
                 .host()
@@ -357,69 +485,7 @@ impl LoadMethods for crate::BaseLoad {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
-
-    fn wav(channels: u16, rate: u32, bits: u16, samples: &[i16]) -> Vec<u8> {
-        let spec = hound::WavSpec {
-            channels,
-            sample_rate: rate,
-            bits_per_sample: bits,
-            sample_format: hound::SampleFormat::Int,
-        };
-        let mut out = std::io::Cursor::new(Vec::new());
-        let mut writer = hound::WavWriter::new(&mut out, spec).unwrap();
-        for &sample in samples {
-            if bits == 16 {
-                writer.write_sample(sample).unwrap();
-            } else {
-                writer.write_sample(i32::from(sample)).unwrap();
-            }
-        }
-        writer.finalize().unwrap();
-        out.into_inner()
-    }
-
-    #[test]
-    fn a_wav_of_another_format_is_refused_naming_it() {
-        for (channels, rate, bits) in [(1, 44_100, 16), (3, SAMPLE_RATE, 16), (1, SAMPLE_RATE, 24)]
-        {
-            assert_eq!(
-                read_wav(&wav(channels, rate, bits, &[1, 2, 3])),
-                Err(ReadWavError::Format {
-                    bits,
-                    channels,
-                    rate
-                })
-            );
-        }
-        assert_eq!(
-            read_wav(&wav(1, SAMPLE_RATE, 16, &[])),
-            Err(ReadWavError::Empty)
-        );
-        assert!(matches!(read_wav(b"RIFF"), Err(ReadWavError::Malformed(_))));
-    }
-
-    #[test]
-    fn a_header_that_claims_more_samples_than_the_file_holds_is_refused() {
-        let mut lying = wav(1, SAMPLE_RATE, 16, &[1, 2, 3]);
-        let data = lying.len() - 6 - 4;
-        // Whole samples, so only the length check refuses it.
-        lying[data..data + 4].copy_from_slice(&0x7fff_fffe_u32.to_le_bytes());
-        assert!(
-            matches!(&read_wav(&lying), Err(ReadWavError::Malformed(why)) if why.contains("claims more samples")),
-            "{:?}",
-            read_wav(&lying)
-        );
-        // Exactly as many samples as the file holds pass.
-        let whole = wav(2, SAMPLE_RATE, 16, &[1, 2, 3, 4]);
-        assert_eq!(read_wav(&whole).map(|p| p.frames), Ok(2));
-        assert_eq!(
-            read_wav(&wav(1, SAMPLE_RATE, 16, &[1, 2, 3])).map(|p| p.frames),
-            Ok(3)
-        );
-    }
 
     #[test]
     fn a_path_must_stay_inside_the_mod_s_folder() {
@@ -453,102 +519,94 @@ mod tests {
         ])
     }
 
-    fn sound(format: &str, streamed_size: u64) -> Value {
+    fn sound(size: u64) -> Value {
         Value::Struct(vec![
-            (FORMAT.into(), Value::Name(format.into())),
-            (CHANNELS.into(), Value::Name(MONO.into())),
+            (FORMAT.into(), Value::Name(QOA.into())),
+            (CHANNELS.into(), Value::Name("Mono".into())),
+            (FRAMES_PER_SECOND.into(), Value::Uint(48_000)),
             (FRAME_COUNT.into(), Value::Uint(1)),
             (
                 DURATION.into(),
                 Value::Struct(vec![(TIME_VALUE.into(), Value::Int(1))]),
             ),
             (DATA.into(), Value::List(vec![Value::Uint(7)])),
-            (STREAMED.into(), streamed(streamed_size)),
+            (STREAMED.into(), streamed(size)),
             (DEBUG_NAME.into(), Value::Text("waterfall".into())),
         ])
     }
 
-    fn made() -> Made {
+    fn made(frames: usize, channels: usize, inline: bool) -> Made {
+        let samples = Samples {
+            samples: vec![100; frames * channels],
+            channels,
+        };
         Made {
-            stereo: true,
-            frames: SAMPLE_RATE * 2,
-            hash: [192_000, 1, 2, 3],
-            streamed: streamed(5),
+            frames,
+            channels,
+            streamed: streamed(0),
             name: "you.horns:horn".into(),
+            job: Arc::new(Job::new(samples)),
+            inline,
         }
     }
 
     #[test]
-    fn a_new_sound_takes_its_frames_channels_and_content_over_the_base() {
-        let base = sound(UNCOMPRESSED, 2);
-        assert!(is_streamed_uncompressed(&base));
-        let Value::Struct(fields) = &base else {
+    fn an_inline_recording_holds_its_encoded_bytes_and_streams_nothing() {
+        let built = made(30, 2, true)
+            .over(sound(5), |_| unreachable!("inline"))
+            .unwrap();
+        assert_eq!(built.field(CHANNELS), Some(&Value::Name("Stereo".into())));
+        assert_eq!(built.field(FRAME_COUNT), Some(&Value::Uint(30)));
+        let Some(Value::List(data)) = built.field(DATA) else {
+            panic!("no data");
+        };
+        assert_eq!(data.len(), qoa::encoded_len(30, 2));
+        assert_eq!(streamed_size(&built), 0);
+        assert_eq!(
+            built.field(DURATION).and_then(|d| d.field(TIME_VALUE)),
+            Some(&Value::Int(625_000))
+        );
+        let Value::Struct(fields) = sound(5) else {
             unreachable!("built as a struct")
         };
         let renamed = fields
-            .iter()
+            .into_iter()
             .map(|(name, value)| {
-                let name = if name == FRAME_COUNT {
-                    "frames"
-                } else {
-                    name.as_str()
-                };
-                (name.to_owned(), value.clone())
+                (
+                    if name == FRAME_COUNT {
+                        "frames".into()
+                    } else {
+                        name
+                    },
+                    value,
+                )
             })
             .collect();
         assert!(
-            made().over(Value::Struct(renamed)).is_err(),
-            "a base without a field the frames need serves nothing"
-        );
-        let built = made().over(base).unwrap();
-        assert!(is_streamed_uncompressed(&built));
-        assert_eq!(built.field(CHANNELS), Some(&Value::Name(STEREO.into())));
-        assert_eq!(
-            built.field(DURATION).and_then(|d| d.field(TIME_VALUE)),
-            Some(&Value::Int(2_000_000_000))
-        );
-        let streamed = built.field(STREAMED).unwrap();
-        assert_eq!(streamed.field("category"), Some(&Value::Uint(9)), "kept");
-        assert_eq!(
-            streamed
-                .field(CONTENT_HASH)
-                .and_then(|h| h.field(CONTENT_HASH_PARTS[3])),
-            Some(&Value::Uint(3))
+            made(30, 1, true)
+                .over(Value::Struct(renamed), |_| unreachable!("inline"))
+                .is_err(),
+            "a base without a field the recording needs serves nothing"
         );
     }
 
     #[test]
-    fn a_replaced_inline_sound_streams_the_mod_s_frames_and_holds_no_samples_of_its_own() {
-        let built = made().over(sound("FramelessQOA", 0)).unwrap();
-        assert!(is_streamed_uncompressed(&built));
-        assert_eq!(built.field(DATA), Some(&Value::List(Vec::new())));
-        assert_eq!(
-            built.field(DEBUG_NAME),
-            Some(&Value::Text("you.horns:horn".into()))
+    fn a_recording_of_a_channel_count_the_game_lacks_serves_nothing() {
+        assert!(
+            made(30, 3, true)
+                .over(sound(5), |_| unreachable!("inline"))
+                .is_err()
         );
     }
 
-    proptest! {
-        #[test]
-        fn every_16_bit_wav_at_the_game_s_rate_reads_back_its_samples(
-            stereo in any::<bool>(),
-            frames in prop::collection::vec(any::<i16>(), 1..512),
-        ) {
-            let channels: u16 = if stereo { 2 } else { 1 };
-            let samples: Vec<i16> = frames
-                .iter()
-                .flat_map(|&s| std::iter::repeat_n(s, usize::from(channels)))
-                .collect();
-            let pcm = read_wav(&wav(channels, SAMPLE_RATE, 16, &samples)).unwrap();
-            prop_assert_eq!(pcm.stereo, stereo);
-            prop_assert_eq!(pcm.frames as usize, frames.len());
-            let expected: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
-            prop_assert_eq!(pcm.bytes, expected);
-        }
-
-        #[test]
-        fn any_bytes_read_as_a_sound_or_an_error_without_panicking(bytes in prop::collection::vec(any::<u8>(), 0..256)) {
-            let _read = read_wav(&bytes);
-        }
+    #[test]
+    fn a_job_encodes_once_whoever_asks_first() {
+        let job = Job::new(Samples {
+            samples: vec![1; 40],
+            channels: 1,
+        });
+        let first = job.data().unwrap().to_vec();
+        assert_eq!(first.len(), 16);
+        assert_eq!(job.data().unwrap(), first.as_slice());
     }
 }

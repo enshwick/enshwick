@@ -20,6 +20,7 @@ mod tests {
         let uint = |name| Type::new(name, Kind::Uint32, 4, 4);
         vec![
             Type::new("demo::uint8", Kind::Uint8, 1, 1),
+            Type::new("demo::uint16", Kind::Uint16, 2, 2),
             uint("demo::uint32"),
             Type::new("demo::sint64", Kind::Sint64, 8, 8),
             Type::new("demo::BlobString", Kind::BlobString, 8, 4),
@@ -48,6 +49,7 @@ mod tests {
             Type::new(SOUND, Kind::Struct, 56, 8).with_fields(vec![
                 Field::new("format", 0, "demo::SoundDataFormat"),
                 Field::new("channelConfiguration", 1, "demo::SoundChannelConfiguration"),
+                Field::new("framesPerSecond", 2, "demo::uint16"),
                 Field::new("frameCount", 4, "demo::uint32"),
                 Field::new("duration", 8, "demo::Time"),
                 Field::new("data", 16, "demo::BlobArray<uint8>"),
@@ -62,6 +64,7 @@ mod tests {
         Value::Struct(vec![
             ("format".into(), Value::Name(format.into())),
             ("channelConfiguration".into(), Value::Name("Mono".into())),
+            word("framesPerSecond", u64::from(SAMPLE_RATE)),
             word("frameCount", frames),
             (
                 "duration".into(),
@@ -115,7 +118,7 @@ mod tests {
     fn client(files: &[(&str, Vec<u8>)]) -> Installed {
         let registry = Registry::new(types());
         let encode = |value: &Value| registry.encode(SOUND, value, None).unwrap();
-        let waterfall = sound("Uncompressed", 9, Vec::new(), 18, 0xb3c9_d834);
+        let waterfall = sound("FramelessQOA", 9, Vec::new(), 24, 0xb3c9_d834);
         let creak = sound("FramelessQOA", 2, vec![Value::Uint(7); 8], 0, 0);
         let mut host = FakeHost::new()
             .side(Side::CLIENT)
@@ -157,12 +160,20 @@ mod tests {
 
     #[test]
     fn two_mods_replacing_one_recording_apply_in_load_order_and_the_log_names_both() {
-        let loader = client(&[("creak.wav", wav(30)), ("slam.wav", wav(70))]);
+        // Past one second, so it streams.
+        const LONG: u32 = 48_100;
+        let loader = client(&[("creak.wav", wav(30)), ("slam.wav", wav(LONG))]);
         let creak = SoundId::from_guid(CREAK);
-        for (me, file) in [(1, "creak.wav"), (2, "slam.wav")] {
-            let status = run(&loader, me, |load| load.replace_sound(creak, file));
-            assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        }
+        let status = run(&loader, 1, |load| load.replace_sound(creak, "creak.wav"));
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let inline = built_creak(&loader);
+        assert_eq!(inline.field("frameCount"), Some(&Value::Uint(30)));
+        let Some(Value::List(data)) = inline.field("data") else {
+            panic!("no data");
+        };
+        assert_eq!(data.len(), 16, "two slices of 30 frames, held inline");
+        let status = run(&loader, 2, |load| load.replace_sound(creak, "slam.wav"));
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let refused = run(&loader, 3, |load| {
             load.replace_sound(SoundId::from_guid(Guid([9; 16])), "creak.wav")
         });
@@ -170,11 +181,11 @@ mod tests {
         let built = built_creak(&loader);
         assert_eq!(
             built.field("format"),
-            Some(&Value::Name("Uncompressed".into()))
+            Some(&Value::Name("FramelessQOA".into()))
         );
         assert_eq!(
             built.field("frameCount"),
-            Some(&Value::Uint(70)),
+            Some(&Value::Uint(u64::from(LONG))),
             "the later file"
         );
         assert_eq!(built.field("data"), Some(&Value::List(Vec::new())));
@@ -185,7 +196,16 @@ mod tests {
             "the waterfall's category, which the inline creak lacks"
         );
         let size = streamed.field("hash").and_then(|h| h.field("size"));
-        assert_eq!(size, Some(&Value::Uint(140)), "70 frames of 2 bytes");
+        let slices = u64::from(LONG.div_ceil(20));
+        assert_eq!(size, Some(&Value::Uint(slices * 8)), "a u64 per 20 frames");
+        assert!(
+            loader
+                .served_content()
+                .iter()
+                .any(|(hash, bytes)| u64::from(hash[0]) == slices * 8
+                    && bytes.len() as u64 == slices * 8),
+            "the encoded bytes were served as content"
+        );
         assert!(
             loader
                 .logs()
