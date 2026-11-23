@@ -3624,8 +3624,7 @@ typedef struct EnshwickSoundAudience {
   // Who hears it: `EnshwickSoundAudience_PLAYER` and the other kind constants.
   uint32_t kind;
   // For `EnshwickSoundAudience_NEAR`, how far from `at` a player's character
-  // stands at most, in metres, up to `EnshwickSoundAudience_MAX_RADIUS`; 0 for
-  // `EnshwickSoundAudience_MAX_RADIUS`.
+  // stands at most, in metres, up to `EnshwickSoundAudience_MAX_RADIUS`.
   float radius;
   // The player, for `EnshwickSoundAudience_PLAYER`.
   EnshwickPlayerKey player;

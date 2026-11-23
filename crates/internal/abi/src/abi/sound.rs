@@ -193,8 +193,7 @@ pub struct SoundAudience {
     /// Who hears it: [`SoundAudience::PLAYER`] and the other kind constants.
     pub kind: u32,
     /// For [`SoundAudience::NEAR`], how far from `at` a player's character
-    /// stands at most, in metres, up to [`SoundAudience::MAX_RADIUS`]; 0 for
-    /// [`SoundAudience::MAX_RADIUS`].
+    /// stands at most, in metres, up to [`SoundAudience::MAX_RADIUS`].
     pub radius: f32,
     /// The player, for [`SoundAudience::PLAYER`].
     pub player: PlayerKey,
@@ -271,11 +270,7 @@ impl SoundAudience {
             Self::PLAYER => key == self.player,
             Self::EVERYONE => true,
             Self::NEAR => at.is_some_and(|at| {
-                let reach = f64::from(if self.radius == 0.0 {
-                    Self::MAX_RADIUS
-                } else {
-                    self.radius
-                });
+                let reach = f64::from(self.radius);
                 let squared: f64 = at.iter().zip(self.at).map(|(a, c)| (a - c) * (a - c)).sum();
                 squared <= reach * reach
             }),
