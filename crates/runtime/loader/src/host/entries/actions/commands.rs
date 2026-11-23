@@ -50,7 +50,7 @@ entries! {
         if !crate::actions::player_actions::declaring(me.loader).contains(&me.index) {
             return Err(Status::MISSING.into());
         }
-        crate::actions::controls::rules_changed();
+        crate::actions::controls::rules_changed(me.index);
         Ok(())
     }
 

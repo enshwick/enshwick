@@ -319,9 +319,15 @@ pub(crate) extern "system" fn command_list(
     count: *mut u32,
 ) -> Status {
     let infos = with(Vec::new(), |s| {
-        s.actions.commands.listed = sets_now(s)
-            .0
+        let own_off = s
+            .base
+            .features
+            .iter()
+            .any(|(name, off)| name == enshwick_core::command_names::FEATURE && off.is_some());
+        let (sets, id) = sets_now(s);
+        s.actions.commands.listed = sets
             .into_iter()
+            .filter(|set| !own_off || set.id != id)
             .map(|set| {
                 [set.set.name, set.set.alias.unwrap_or_default(), set.id]
                     .map(String::into_boxed_str)

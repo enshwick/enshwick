@@ -25,8 +25,8 @@ thread_local! {
 }
 
 /// Runs a typed line for `player`, from chat, the console or a remote
-/// caller: a panic in a handler turns off only the mod's typed lines, with a
-/// warning, and every later one is refused saying so.
+/// caller: a panic in a handler turns off only the mod's typed lines, which
+/// the loader is told, and every later one is refused saying so.
 fn run_command(
     registry: &Registry,
     player: &Player,
@@ -50,10 +50,26 @@ fn run_command(
     }
     let run = || registry.run_from_console(player, language, typed);
     crate::host::caught(run).unwrap_or_else(|panicked| {
-        registry.commands_off.store(true, Ordering::Release);
-        crate::warn!("commands off: a handler panicked: {}", panicked.text());
+        if !registry.commands_off.swap(true, Ordering::AcqRel) {
+            report_commands_off(panicked.text());
+        }
         Outcome::refused("")
     })
+}
+
+/// Reports the mod's typed lines off to the loader, which logs it, names it
+/// on the Mods screen and lists the mod's commands no more.
+#[cold]
+fn report_commands_off(panic: &str) {
+    let Some(host) = crate::host() else {
+        return;
+    };
+    let reason = format!("a handler panicked: {panic}");
+    let _reported = (host.api().feature)(
+        host.handle(),
+        Str::new(crate::command_names::FEATURE),
+        Str::new(&reason),
+    );
 }
 
 /// Tells the mod's own function of a run the loader refused before asking

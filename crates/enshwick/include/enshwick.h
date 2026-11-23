@@ -5327,7 +5327,9 @@ typedef struct EnshwickHostApi {
   // Reports whether the mod's feature `name` runs on this game build:
   // off for the reason `off`, or on when `off` is empty. The loader
   // logs it and shows it in the status summary and on the Mods screen; a
-  // later report of the same name replaces the earlier one.
+  // later report of the same name replaces the earlier one. The name
+  // `commands` is the mod's typed lines: while it is off,
+  // `command_list` leaves the mod's commands out.
   // `EnshwickStatus_BAD_ARGS` for an empty name. Both strings are borrowed for
   // the call. Any thread.
   EnshwickStatus (*feature)(EnshwickModHandle me, struct EnshwickStr name, struct EnshwickStr off);
@@ -6792,8 +6794,10 @@ typedef struct EnshwickHostApi {
                                 uint32_t permissions,
                                 struct EnshwickActionReply *out);
   // Up to `capacity` command sets of the running mods, in load order, and
-  // how many there are. Entries are `entry_size` bytes apart, the
-  // caller's `sizeof(EnshwickCommandInfo)`; the loader fills what both sides
+  // how many there are; a mod that reported its feature `commands` off
+  // (`feature`) has none. Entries are `entry_size`
+  // bytes apart, the caller's `sizeof(EnshwickCommandInfo)`; the loader
+  // fills what both sides
   // know of each and its own `EnshwickHeader`. The strings stay valid until the
   // next call on this thread. `EnshwickStatus_BAD_ARGS` for a non-null `out`
   // whose entries are shorter than a header. Any thread.

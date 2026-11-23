@@ -1,5 +1,6 @@
 //! Which carried controls each player gets: only those whose action the
-//! player may run, sent again when the server changes their permissions.
+//! player may run, sent again when the server changes their permissions or
+//! a mod says who may run its actions changed.
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -24,13 +25,15 @@ pub(crate) fn hello(key: u64) -> bool {
     if declared.iter().all(|d| d.action.is_empty()) {
         return true;
     }
+    with_rights(|rights| rights.hello(key));
     let player = crate::actions::player_actions::player(loader, key);
-    send_carried(loader, declared, key, player.as_ref())
+    send_carried(loader, declared, key, player.as_ref(), &Resend::All)
 }
 
-/// Sends again the carried controls of each player whose permissions
-/// changed since their client got them, at most once per [`EVERY_MS`], on the
-/// server's game thread after its step.
+/// Sends again the carried controls each client is due, at most once per
+/// [`EVERY_MS`], on the server's game thread after its step: every mod's to
+/// a player whose permissions changed since their client got them, else
+/// those of the mods whose rules changed.
 pub(crate) fn resend_on_rights(loader: &Loader) {
     if !due(&STATE.next_look, super::now_ms()) {
         return;
@@ -48,15 +51,19 @@ pub(crate) fn resend_on_rights(loader: &Loader) {
     let Ok(players) = crate::engine::world::players(loader) else {
         return;
     };
-    for player in with_rights(|rights| rights.changed(&players)) {
-        let _sent = send_carried(loader, declared, player.key.get(), Some(&player));
+    for (player, resend) in with_rights(|rights| rights.due(&players)) {
+        let key = player.key.get();
+        if !send_carried(loader, declared, key, Some(&player), &resend) {
+            with_rights(|rights| rights.unsent(key, &resend));
+        }
     }
 }
 
-/// A mod said who may run its actions changed: the next look sends every
-/// client its carried controls again, until a send to it goes through.
-pub(crate) fn rules_changed() {
-    with_rights(Rights::stale);
+/// Mod `owner` said who may run its actions changed: the next look sends
+/// every client that mod's carried controls again, until a send to it goes
+/// through.
+pub(crate) fn rules_changed(owner: ModIndex) {
+    with_rights(|rights| rights.stale(owner));
 }
 
 /// Forgets what client `key` got, when its player leaves the server.
@@ -70,19 +77,21 @@ fn with_rights<R>(f: impl FnOnce(&mut Rights) -> R) -> R {
     f(STATE.rights.relock().get_or_insert_with(Rights::default))
 }
 
-/// Sends client `key` the carried controls `player` may run, none while its
-/// player is not in the world, and notes the permissions they went for;
-/// false when its link had no room.
+/// Sends client `key` the carried controls `player` may run of the mods
+/// `resend` covers, none while its player is not in the world, and after a
+/// full send notes the permissions they went for; false when its link had
+/// no room.
 fn send_carried(
     loader: &Loader,
     declared: &[Declared],
     key: u64,
     player: Option<&PlayerInfo>,
+    resend: &Resend,
 ) -> bool {
     // A client that just said hello holds nothing to take back.
     let sent = player.is_none()
         || crate::engine::texts::for_player(key, || {
-            carried_messages(loader, declared, |owner| {
+            carried_messages(loader, declared, resend, |owner| {
                 player
                     .and_then(|p| crate::actions::player_actions::allowed(loader, owner, p))
                     .unwrap_or_default()
@@ -90,24 +99,26 @@ fn send_carried(
             .iter()
             .all(|message| crate::base::net::to_player(key, message))
         });
-    if sent {
+    if sent && *resend == Resend::All {
         with_rights(|rights| rights.sent(key, player.map(|p| p.permissions)));
     }
     sent
 }
 
 /// One [`Message::Controls`] per mod of side server with controls that run
-/// an action, its texts in the reader's language: those of the actions
-/// `allowed` names for the mod, none for a mod that is off or to take back
-/// what a client got before.
+/// an action and that `resend` covers, its texts in the reader's language:
+/// those of the actions `allowed` names for the mod, none for a mod that is
+/// off or to take back what a client got before.
 fn carried_messages(
     loader: &Loader,
     declared: &[Declared],
+    resend: &Resend,
     mut allowed: impl FnMut(ModIndex) -> Vec<String>,
 ) -> Vec<Message> {
     let mut messages = Vec::new();
     for (index, record) in loader.mods.iter().enumerate() {
         if record.manifest.side != Side::SERVER
+            || !resend.covers(ModIndex::new(index))
             || !declared
                 .iter()
                 .any(|d| d.owner.get() == index && !d.action.is_empty())
@@ -149,17 +160,60 @@ fn due(next: &AtomicU64, now: u64) -> bool {
     true
 }
 
-/// The permissions each client's carried controls were sent for, by account
-/// key; `None` while its player was not in the world yet.
+/// Which mods' carried controls go to a client.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Resend {
+    /// Every mod's: the client is new or its player's permissions changed.
+    All,
+    /// Only those of these mods, whose rules changed.
+    Mods(Vec<ModIndex>),
+}
+
+impl Resend {
+    /// Whether the controls of mod `owner` go.
+    fn covers(&self, owner: ModIndex) -> bool {
+        match self {
+            Self::All => true,
+            Self::Mods(mods) => mods.contains(&owner),
+        }
+    }
+}
+
+/// What one client got: the permissions its carried controls were sent for,
+/// `None` while its player was not in the world yet, and the mods whose
+/// rules changed since.
+#[derive(Debug, Default)]
+struct Sent {
+    permissions: Option<u32>,
+    stale: Vec<ModIndex>,
+}
+
+impl Sent {
+    /// The controls of mod `owner` go again at the next look.
+    fn mark(&mut self, owner: ModIndex) {
+        if !self.stale.contains(&owner) {
+            self.stale.push(owner);
+        }
+    }
+}
+
+/// What each client's carried controls were sent for, by account key.
 #[derive(Debug, Default)]
 pub(super) struct Rights {
-    sent: FxHashMap<u64, Option<u32>>,
+    sent: FxHashMap<u64, Sent>,
 }
 
 impl Rights {
-    /// Client `key` got the controls its player's `permissions` allow.
+    /// Client `key` said hello: noted before its first send, so a rules
+    /// change during that send marks it too.
+    pub(super) fn hello(&mut self, key: u64) {
+        self.sent.entry(key).or_default();
+    }
+
+    /// Client `key` got every mod's controls its player's `permissions`
+    /// allow; a rule that changed during the send stays due.
     pub(super) fn sent(&mut self, key: u64, permissions: Option<u32>) {
-        self.sent.insert(key, permissions);
+        self.sent.entry(key).or_default().permissions = permissions;
     }
 
     /// Client `key` left, whether or not its player reached the world.
@@ -167,27 +221,45 @@ impl Rights {
         self.sent.remove(&key);
     }
 
-    /// Every client's controls go again at the next look, as when a mod's
-    /// rules changed; each stays due until a send to it goes through.
-    pub(super) fn stale(&mut self) {
-        self.sent.values_mut().for_each(|sent| *sent = None);
+    /// The rules of mod `owner` changed: its controls go again to every
+    /// client at the next look.
+    pub(super) fn stale(&mut self, owner: ModIndex) {
+        for sent in self.sent.values_mut() {
+            sent.mark(owner);
+        }
     }
 
-    /// The players among `players` whose client got controls and whose
-    /// permissions differ from those they were sent for; a client whose
-    /// player left is forgotten.
-    pub(super) fn changed(&mut self, players: &[PlayerInfo]) -> Vec<PlayerInfo> {
+    /// The send of `resend` to client `key` found no room: what it carried
+    /// goes again at the next look. A full send needs nothing, since the
+    /// permissions it was for were never noted.
+    pub(super) fn unsent(&mut self, key: u64, resend: &Resend) {
+        let (Resend::Mods(mods), Some(sent)) = (resend, self.sent.get_mut(&key)) else {
+            return;
+        };
+        for &owner in mods {
+            sent.mark(owner);
+        }
+    }
+
+    /// The players among `players` whose client got controls and is due
+    /// some again, with what goes: all of them when the player's
+    /// permissions differ from those they were sent for, else those of the
+    /// mods whose rules changed, taken now so a change during the send is
+    /// not lost. A client whose player left is forgotten.
+    pub(super) fn due(&mut self, players: &[PlayerInfo]) -> Vec<(PlayerInfo, Resend)> {
         let here = |key: u64| players.iter().any(|p| p.key == PlayerKey::new(key));
         self.sent
-            .retain(|&key, permissions| permissions.is_none() || here(key));
+            .retain(|&key, sent| sent.permissions.is_none() || here(key));
         players
             .iter()
-            .filter(|p| {
-                self.sent
-                    .get(&p.key.get())
-                    .is_some_and(|sent| *sent != Some(p.permissions))
+            .filter_map(|p| {
+                let sent = self.sent.get_mut(&p.key.get())?;
+                let stale = core::mem::take(&mut sent.stale);
+                if sent.permissions != Some(p.permissions) {
+                    return Some((*p, Resend::All));
+                }
+                (!stale.is_empty()).then_some((*p, Resend::Mods(stale)))
             })
-            .copied()
             .collect()
     }
 }
@@ -267,39 +339,93 @@ mod tests {
         let mut rights = Rights::default();
         rights.sent(7, Some(0));
         rights.sent(8, None);
-        let keys = |changed: Vec<PlayerInfo>| -> Vec<u64> {
-            changed.iter().map(|p| p.key.get()).collect()
+        let keys = |due: Vec<(PlayerInfo, Resend)>| -> Vec<u64> {
+            due.iter().map(|(p, _)| p.key.get()).collect()
         };
         // 8 said hello before its player was in the world; 9 never did.
         let here = [player(7, 0), player(8, 0), player(9, 1)];
-        assert_eq!(keys(rights.changed(&here)), [8]);
+        assert_eq!(keys(rights.due(&here)), [8]);
         rights.sent(8, Some(0));
-        assert_eq!(keys(rights.changed(&here)), Vec::<u64>::new());
-        assert_eq!(keys(rights.changed(&[player(7, 1), player(8, 0)])), [7]);
+        assert_eq!(keys(rights.due(&here)), Vec::<u64>::new());
+        assert_eq!(keys(rights.due(&[player(7, 1), player(8, 0)])), [7]);
         // 7 left: a later player with its key starts without controls.
-        assert_eq!(keys(rights.changed(&[player(8, 0)])), Vec::<u64>::new());
-        assert_eq!(keys(rights.changed(&[player(7, 1)])), Vec::<u64>::new());
+        assert_eq!(keys(rights.due(&[player(8, 0)])), Vec::<u64>::new());
+        assert_eq!(keys(rights.due(&[player(7, 1)])), Vec::<u64>::new());
         // 10 said hello and left before its player was in the world.
         rights.sent(10, None);
         rights.left(10);
-        assert_eq!(keys(rights.changed(&[player(10, 0)])), Vec::<u64>::new());
+        assert_eq!(keys(rights.due(&[player(10, 0)])), Vec::<u64>::new());
     }
 
     #[test]
-    fn controls_go_again_to_every_client_when_a_mod_s_rules_change() {
+    fn only_the_mod_whose_rules_changed_goes_again_to_every_client() {
         let mut rights = Rights::default();
         rights.sent(7, Some(0));
         rights.sent(8, Some(1));
         let here = [player(7, 0), player(8, 1), player(9, 0)];
-        let keys = |changed: Vec<PlayerInfo>| -> Vec<u64> {
-            changed.iter().map(|p| p.key.get()).collect()
+        let due = |rights: &mut Rights| -> Vec<(u64, Resend)> {
+            rights
+                .due(&here)
+                .into_iter()
+                .map(|(p, resend)| (p.key.get(), resend))
+                .collect()
         };
-        assert_eq!(keys(rights.changed(&here)), Vec::<u64>::new());
-        rights.stale();
-        assert_eq!(keys(rights.changed(&here)), [7, 8], "9 never said hello");
-        // Only 7's send got through: 8 is picked again at the next look.
+        assert_eq!(due(&mut rights), []);
+        rights.stale(ModIndex::new(2));
+        rights.stale(ModIndex::new(2));
+        let mod_2 = || Resend::Mods(vec![ModIndex::new(2)]);
+        assert_eq!(
+            due(&mut rights),
+            [(7, mod_2()), (8, mod_2())],
+            "9 never said hello"
+        );
+        assert_eq!(due(&mut rights), [], "a look takes what it sends");
+        // 8's send found no room: it goes again at the next look.
+        rights.unsent(8, &mod_2());
+        assert_eq!(due(&mut rights), [(8, mod_2())]);
+    }
+
+    #[test]
+    fn a_rules_change_during_a_send_goes_at_the_next_look() {
+        let mut rights = Rights::default();
         rights.sent(7, Some(0));
-        assert_eq!(keys(rights.changed(&here)), [8]);
+        rights.stale(ModIndex::new(1));
+        let here = [player(7, 1)];
+        let resends = |rights: &mut Rights| -> Vec<Resend> {
+            rights.due(&here).into_iter().map(|(_, r)| r).collect()
+        };
+        assert_eq!(
+            resends(&mut rights),
+            [Resend::All],
+            "its permissions changed"
+        );
+        // Mod 3 changed its rules while the full send was on its way.
+        rights.stale(ModIndex::new(3));
+        rights.sent(7, Some(1));
+        assert_eq!(resends(&mut rights), [Resend::Mods(vec![ModIndex::new(3)])]);
+    }
+
+    #[test]
+    fn a_rules_change_during_a_new_client_s_first_send_goes_at_the_next_look() {
+        let mut rights = Rights::default();
+        rights.hello(7);
+        // Mod 2 changed its rules while the hello send was on its way.
+        rights.stale(ModIndex::new(2));
+        rights.sent(7, Some(0));
+        let resends: Vec<Resend> = rights
+            .due(&[player(7, 0)])
+            .into_iter()
+            .map(|(_, r)| r)
+            .collect();
+        assert_eq!(resends, [Resend::Mods(vec![ModIndex::new(2)])]);
+    }
+
+    #[test]
+    fn a_resend_covers_all_mods_or_those_it_names() {
+        assert!(Resend::All.covers(ModIndex::new(4)));
+        let some = Resend::Mods(vec![ModIndex::new(1), ModIndex::new(3)]);
+        assert!(some.covers(ModIndex::new(3)));
+        assert!(!some.covers(ModIndex::new(2)));
     }
 
     #[test]

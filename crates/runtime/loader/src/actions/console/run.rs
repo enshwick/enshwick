@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::PlayerInfo;
 
 use crate::engine::loader::Loader;
+use crate::engine::mod_index::ModIndex;
 use crate::engine::texts;
 use enshwick_base::Relock;
 
@@ -98,9 +99,7 @@ pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, ConsoleError> {
             let index = loader
                 .find_mod(&id.to_ascii_lowercase())
                 .map(|(index, _)| index)
-                .or_else(|| {
-                    crate::actions::commands::find(id).map(crate::engine::mod_index::ModIndex::get)
-                })
+                .or_else(|| crate::actions::commands::find(id).map(ModIndex::get))
                 .ok_or(ConsoleError::Unknown)?;
             crate::log!(DEBUG, "the console runs {id} {rest}");
             crate::actions::player_actions::console(
@@ -208,10 +207,7 @@ fn about(record: &crate::engine::loader::ModRecord) -> String {
 /// console runs.
 fn help(loader: &Loader) -> String {
     let mut lines = vec![texts::fill("enshwick.help", &[])];
-    let with: Vec<&str> = crate::actions::player_actions::declaring(loader)
-        .into_iter()
-        .filter_map(|index| loader.mods.get(index.get()).map(|m| m.id.as_str()))
-        .collect();
+    let with = console_runs(loader, crate::actions::player_actions::declaring(loader));
     lines.push(if with.is_empty() {
         texts::fill("enshwick.actions.none", &[])
     } else {
@@ -223,6 +219,17 @@ fn help(loader: &Loader) -> String {
             .map(|(n, id)| format!("{}: {id}", n.words())),
     );
     lines.join("\n")
+}
+
+/// The ids of the mods among `declaring` whose lines the console runs: a
+/// mod whose commands are off refuses every typed line.
+fn console_runs(loader: &Loader, declaring: Vec<ModIndex>) -> Vec<&str> {
+    declaring
+        .into_iter()
+        .filter_map(|index| loader.mods.get(index.get()))
+        .filter(|record| crate::actions::commands::listed(record))
+        .map(|record| record.id.as_str())
+        .collect()
 }
 
 /// `enshwick log [mod] [level] [n]`: the latest `n` lines the loader kept,
@@ -308,5 +315,25 @@ fn ui_demo(loader: &Loader, name: &str) -> String {
     ) {
         Ok(()) => texts::fill("ui-demo.opening", &[("name", name)]),
         Err(_) => texts::fill("ui-demo.no-client", &[("name", name)]),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn help_leaves_out_a_mod_whose_commands_are_off() {
+        let loader = crate::start::tests::loader_running(&["you.admin-tools", "you.lamps"]);
+        let both = || vec![ModIndex::new(0), ModIndex::new(1)];
+        assert_eq!(
+            console_runs(&loader, both()),
+            ["you.admin-tools", "you.lamps"]
+        );
+        loader.mods[0].report_feature(
+            enshwick_core::command_names::FEATURE,
+            Some("a handler panicked"),
+        );
+        assert_eq!(console_runs(&loader, both()), ["you.lamps"]);
     }
 }

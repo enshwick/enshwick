@@ -584,10 +584,25 @@ mod tests {
     fn a_handler_that_panics_in_a_command_turns_off_only_the_mod_s_commands() {
         let ann = player(3, 7, "Ann", 0);
         let loader = start(enshwick::test::FakeHost::new().player(ann));
+        let listed = || {
+            commands::list()
+                .iter()
+                .any(|set| set.mod_id == "you.admin-tools")
+        };
+        assert!(listed());
         assert_eq!(
             loader.type_in_chat(&ann, 0, "/adm boom").as_deref(),
             Some("0")
         );
+        assert_eq!(
+            loader.features(),
+            [(
+                "commands".to_owned(),
+                Some("a handler panicked: a handler that panics in a typed line".to_owned())
+            )],
+            "the loader names it on the Mods screen"
+        );
+        assert!(!listed(), "the loader lists the commands no more");
         assert_eq!(
             loader.type_in_chat(&ann, 0, "/adm online").as_deref(),
             Some("0This mod's commands are off after an error."),
@@ -604,14 +619,6 @@ mod tests {
             .ask_actions(ActionCall::RUN, &ann, 0, "boom", "")
             .unwrap();
         assert_eq!(reply, "1fine", "the action keeps its other paths");
-        assert!(
-            loader
-                .logs()
-                .iter()
-                .any(|(_, line)| line.contains("commands off")),
-            "{:?}",
-            loader.logs()
-        );
     }
 
     #[test]

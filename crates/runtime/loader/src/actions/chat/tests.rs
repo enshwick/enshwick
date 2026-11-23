@@ -39,6 +39,17 @@ fn a_panic_in_the_line_handling_leaves_the_post_linked_and_its_type_check_on() {
 }
 
 #[test]
+fn while_the_line_handling_is_off_a_typed_line_naming_commands_still_leaves_the_chat() {
+    assert_eq!(unhandled(true, TYPED, || true), Verdict::Drop);
+    assert_eq!(unhandled(true, TYPED, || false), Verdict::Pass);
+    assert_eq!(unhandled(true, 2, || false), Verdict::Drop);
+    assert_eq!(
+        unhandled(false, TYPED, || panic!("a server's own line is not read")),
+        Verdict::Pass
+    );
+}
+
+#[test]
 fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
     let one = OneLine {
         handle_slot: 0x7f,
