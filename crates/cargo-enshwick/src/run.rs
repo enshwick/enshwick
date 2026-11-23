@@ -221,7 +221,11 @@ pub(crate) fn run(args: &Args, out: &mut impl Write) -> anyhow::Result<String> {
             built.version,
             folder.display()
         )?;
-        match follow(&server, &built.id, args, out)? {
+        let host = Host {
+            start: process::Server::start,
+            stopping: process::stopping,
+        };
+        match follow(&server, &built.id, args, out, host)? {
             End::Stopped(said) | End::Exited(said) => return Ok(said),
             End::Changed(next) => built = next,
         }
@@ -239,10 +243,33 @@ enum End {
     Changed(Built),
 }
 
+/// A server process `follow` watches: the one this tool started, or a
+/// test's stand-in.
+trait Process {
+    fn id(&self) -> u32;
+    /// How it exited, once it has.
+    fn exited(&mut self) -> anyhow::Result<Option<String>>;
+    /// Stops it; how that went.
+    fn stop(&mut self) -> anyhow::Result<String>;
+}
+
+/// What `follow` takes from around it: how the server starts from its
+/// executable, and whether Ctrl-C asked the run to stop.
+struct Host<S, C> {
+    start: S,
+    stopping: C,
+}
+
 /// Starts the server in `server` and follows its logs until it ends.
-fn follow(server: &Path, id: &str, args: &Args, out: &mut impl Write) -> anyhow::Result<End> {
+fn follow<P: Process>(
+    server: &Path,
+    id: &str,
+    args: &Args,
+    out: &mut impl Write,
+    host: Host<impl FnOnce(&Path) -> anyhow::Result<P>, impl Fn() -> bool>,
+) -> anyhow::Result<End> {
     let mut logs = crate::logs::Follower::new_run(&server.join(LOGS));
-    let mut child = process::Server::start(&server.join(SERVER_EXE))?;
+    let mut child = (host.start)(&server.join(SERVER_EXE))?;
     writeln!(
         out,
         "started {SERVER_EXE} (process {}); Ctrl-C stops it",
@@ -265,7 +292,7 @@ fn follow(server: &Path, id: &str, args: &Args, out: &mut impl Write) -> anyhow:
         if let Some(status) = exited {
             return Ok(End::Exited(format!("{SERVER_EXE} exited: {status}")));
         }
-        if process::stopping() {
+        if (host.stopping)() {
             writeln!(out, "stopping {SERVER_EXE} (process {})", child.id())?;
             let how = child.stop()?;
             return Ok(End::Stopped(format!("{SERVER_EXE} stopped: {how}")));
@@ -368,20 +395,21 @@ mod process {
             let job = job_of(&child);
             Ok(Self { child, _job: job })
         }
+    }
 
-        pub(super) fn id(&self) -> u32 {
+    impl super::Process for Server {
+        fn id(&self) -> u32 {
             self.child.id()
         }
 
-        /// The exit status once the server has exited.
-        pub(super) fn exited(&mut self) -> anyhow::Result<Option<ExitStatus>> {
-            Ok(self.child.try_wait()?)
+        fn exited(&mut self) -> anyhow::Result<Option<String>> {
+            Ok(self.child.try_wait()?.as_ref().map(ExitStatus::to_string))
         }
 
         /// Asks the server to stop with Ctrl-Break, sent to its process group
         /// alone, and ends it by its handle when it has not exited within
-        /// [`GRACE`]; how it went.
-        pub(super) fn stop(&mut self) -> anyhow::Result<String> {
+        /// [`GRACE`].
+        fn stop(&mut self) -> anyhow::Result<String> {
             if let Some(status) = self.child.try_wait()? {
                 return Ok(format!("it had exited: {status}"));
             }
@@ -447,7 +475,6 @@ mod process {
 #[cfg(not(windows))]
 mod process {
     use std::path::Path;
-    use std::process::ExitStatus;
 
     /// Nothing to take: no server is ever started.
     #[expect(clippy::unnecessary_wraps, reason = "the Windows one can fail")]
@@ -467,16 +494,18 @@ mod process {
         pub(super) fn start(exe: &Path) -> anyhow::Result<Self> {
             anyhow::bail!("{} runs on Windows only", exe.display())
         }
+    }
 
-        pub(super) fn id(&self) -> u32 {
+    impl super::Process for Server {
+        fn id(&self) -> u32 {
             match *self {}
         }
 
-        pub(super) fn exited(&mut self) -> anyhow::Result<Option<ExitStatus>> {
+        fn exited(&mut self) -> anyhow::Result<Option<String>> {
             match *self {}
         }
 
-        pub(super) fn stop(&mut self) -> anyhow::Result<String> {
+        fn stop(&mut self) -> anyhow::Result<String> {
             match *self {}
         }
     }
@@ -495,6 +524,176 @@ mod tests {
             message: message.to_owned(),
             text: line("10:00:00.000", level, source, message),
         }
+    }
+
+    /// A stand-in server: each look at it writes its next log line into the
+    /// server folder, as the loader would, and once they are out it exits
+    /// when `exits`, else runs until stopped.
+    struct Stub {
+        logs: PathBuf,
+        lines: std::collections::VecDeque<(&'static str, String)>,
+        exits: bool,
+        stopped: std::rc::Rc<std::cell::Cell<bool>>,
+    }
+
+    impl Process for Stub {
+        fn id(&self) -> u32 {
+            7
+        }
+
+        fn exited(&mut self) -> anyhow::Result<Option<String>> {
+            use std::io::Write as _;
+            if let Some((source, text)) = self.lines.pop_front() {
+                let path = self.logs.join(format!("{source}_2026-11-23_10-00-00.log"));
+                let mut file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)?;
+                file.write_all(text.as_bytes())?;
+                return Ok(None);
+            }
+            Ok(self.exits.then(|| "exit code: 0".to_owned()))
+        }
+
+        fn stop(&mut self) -> anyhow::Result<String> {
+            self.stopped.set(true);
+            Ok("exited on Ctrl-Break".to_owned())
+        }
+    }
+
+    /// A server folder with a loader that starts `you.hello` and loads a
+    /// world, the stub that writes its logs and the run's options.
+    fn fake_server(name: &str, exits: bool) -> (PathBuf, Stub, Args) {
+        let server = crate::scratch(name);
+        let logs = server.join(LOGS);
+        std::fs::create_dir_all(&logs).unwrap();
+        std::fs::write(
+            logs.join("enshwick_2026-11-22_10-00-00.log"),
+            "an old run\n",
+        )
+        .unwrap();
+        let lines = [
+            (
+                LOADER,
+                line("10:00:00.000", Level::INFO, LOADER, "starting"),
+            ),
+            (
+                "you.hello",
+                line("10:00:00.100", Level::INFO, "you.hello", "Hello, world"),
+            ),
+            (
+                "you.hello",
+                line("10:00:00.110", Level::DEBUG, "you.hello", "detail"),
+            ),
+            (
+                LOADER,
+                line(
+                    "10:00:00.200",
+                    Level::INFO,
+                    LOADER,
+                    "you.hello 0.1.0 initialised",
+                ),
+            ),
+            (
+                LOADER,
+                line(
+                    "10:00:00.300",
+                    Level::INFO,
+                    LOADER,
+                    "ready: 1 of 1 mods running",
+                ),
+            ),
+            (
+                LOADER,
+                line(
+                    "10:00:10.000",
+                    Level::INFO,
+                    LOADER,
+                    "world settings: world w",
+                ),
+            ),
+            (
+                LOADER,
+                line("10:00:11.000", Level::INFO, LOADER, "after the world"),
+            ),
+        ];
+        let stub = Stub {
+            logs,
+            lines: lines.into_iter().collect(),
+            exits,
+            stopped: std::rc::Rc::default(),
+        };
+        let args = Args {
+            dir: server.clone(),
+            game: None,
+            package: None,
+            with_loader: false,
+            watch: false,
+            level: Level::INFO,
+        };
+        (server, stub, args)
+    }
+
+    #[test]
+    fn a_run_prints_the_start_and_a_line_per_mod_until_the_server_exits() {
+        let (server, stub, args) = fake_server("exits", true);
+        let mut out = Vec::new();
+        let host = Host {
+            start: |exe: &Path| {
+                assert_eq!(exe, server.join(SERVER_EXE));
+                Ok(stub)
+            },
+            stopping: || false,
+        };
+        let end = follow(&server, "you.hello", &args, &mut out, host).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            matches!(&end, End::Exited(said) if said.ends_with("exit code: 0")),
+            "{end:?}"
+        );
+        assert!(
+            out.starts_with("started enshrouded_server.exe (process 7)"),
+            "{out}"
+        );
+        assert!(out.contains("[you.hello] Hello, world"), "{out}");
+        assert!(
+            out.contains("world loaded; ready: 1 of 1 mods running\n  you.hello 0.1.0: running\n"),
+            "{out}"
+        );
+        assert!(!out.contains("an old run"), "{out}");
+        assert!(!out.contains("detail"), "{out}");
+        assert!(
+            !out.contains("after the world"),
+            "the loader says only warnings then: {out}"
+        );
+        let _gone = std::fs::remove_dir_all(&server);
+    }
+
+    #[test]
+    fn ctrl_c_stops_the_server_the_run_started() {
+        let (server, stub, args) = fake_server("stops", false);
+        let stopped = std::rc::Rc::clone(&stub.stopped);
+        let looks = std::cell::Cell::new(0);
+        let host = Host {
+            start: |_: &Path| Ok(stub),
+            stopping: || {
+                looks.set(looks.get() + 1);
+                looks.get() > 8
+            },
+        };
+        let mut out = Vec::new();
+        let end = follow(&server, "you.hello", &args, &mut out, host).unwrap();
+        assert!(stopped.get());
+        assert!(
+            matches!(&end, End::Stopped(said) if said.ends_with("exited on Ctrl-Break")),
+            "{end:?}"
+        );
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            out.contains("stopping enshrouded_server.exe (process 7)"),
+            "{out}"
+        );
+        let _gone = std::fs::remove_dir_all(&server);
     }
 
     #[test]

@@ -139,7 +139,12 @@ fn schema(out: &Path) -> anyhow::Result<String> {
 /// Builds or checks the mod in `dir` and writes its release archive; what it
 /// found and the archive's path and SHA-256.
 fn zip(dir: &Path, package: Option<&str>, out: Option<&Path>) -> anyhow::Result<String> {
-    let built = crate::install::build(dir, package)?;
+    archive(&crate::install::build(dir, package)?, out)
+}
+
+/// Writes the release archive of `built`, a crate's only once its DLL's
+/// manifest matches the crate where it can be read.
+fn archive(built: &crate::install::Built, out: Option<&Path>) -> anyhow::Result<String> {
     let mut said = vec![built.summary.clone()];
     if let Some((dll, side)) = &built.dll {
         let expected = crate::manifest::Expected {
@@ -273,18 +278,38 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_crate_s_archive_holds_its_dll_in_the_folder_of_its_id() {
+    fn a_crate_s_archive_holds_its_dll_in_the_folder_of_its_id_once_its_manifest_is_checked() {
         let dir = crate::scratch("crate-zip");
+        let dll = dir.join("stalls.dll");
+        std::fs::write(&dll, b"MZ").unwrap();
+        let built = crate::install::Built {
+            id: "you.stalls".to_owned(),
+            version: "0.2.0".to_owned(),
+            summary: format!("built {}", dll.display()),
+            files: vec![("stalls.dll".to_owned(), b"MZ".to_vec())],
+            dll: Some((dll, Some("both".to_owned()))),
+        };
         let out = dir.join("you.stalls-0.2.0.zip");
-        let dll: &[u8] = b"MZ";
-        write_zip(&out, [("mods/you.stalls/stalls.dll".to_owned(), dll)]).unwrap();
+        let said = archive(&built, Some(&out));
+        if cfg!(windows) {
+            // A DLL whose manifest does not read is never archived.
+            assert!(said.unwrap_err().to_string().contains("stalls.dll"));
+            assert!(!out.exists());
+            write_zip(
+                &out,
+                [("mods/you.stalls/stalls.dll".to_owned(), &b"MZ"[..])],
+            )
+            .unwrap();
+        } else {
+            assert!(said.unwrap().contains("read on Windows only"));
+        }
         ::zip::ZipArchive::new(std::fs::File::open(&out).unwrap())
             .unwrap()
-            .extract(&dir)
+            .extract(dir.join("game"))
             .unwrap();
         assert_eq!(
-            std::fs::read(dir.join("mods/you.stalls/stalls.dll")).unwrap(),
-            dll
+            std::fs::read(dir.join("game/mods/you.stalls/stalls.dll")).unwrap(),
+            b"MZ"
         );
         let _gone = std::fs::remove_dir_all(&dir);
     }
