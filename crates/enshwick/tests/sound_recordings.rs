@@ -1,6 +1,8 @@
-//! A mod's recordings on a client whose game holds an uncompressed sound to
-//! build from: a replaced vanilla recording streams the mod's samples, and
-//! two mods replacing one apply in load order with the log naming both.
+//! A mod's recordings on a client whose game holds FramelessQOA sounds to
+//! build from: a replaced vanilla recording holds or streams the mod's
+//! encoded samples, two mods replacing one apply in load order with the log
+//! naming both, and a sound whose container fails after its recording keeps
+//! its ids taken.
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +13,9 @@ mod tests {
     use enshwick::test::{FakeHost, Installed};
 
     const SOUND: &str = "demo::SoundResource";
-    /// The game's one streamed uncompressed sound, which mods build from.
+    const CONTAINER: &str = "demo::SoundContainerResource";
+    const ENTRY: &str = "demo::SoundContainerResourceSoundEntry";
+    /// The game's one streamed sound, which mods build from.
     const WATERFALL: Guid = Guid([1; 16]);
     /// A vanilla recording held inline, which mods replace.
     const CREAK: Guid = Guid([2; 16]);
@@ -46,6 +50,12 @@ mod tests {
                 Field::new("hash", 0, "demo::ContentHash"),
                 Field::new("category", 16, "demo::uint32"),
             ]),
+            Type::new(ENTRY, Kind::Struct, 4, 4),
+            Type::new(CONTAINER, Kind::Struct, 4, 4).with_fields(vec![Field::new(
+                "priority",
+                0,
+                "demo::uint32",
+            )]),
             Type::new(SOUND, Kind::Struct, 56, 8).with_fields(vec![
                 Field::new("format", 0, "demo::SoundDataFormat"),
                 Field::new("channelConfiguration", 1, "demo::SoundChannelConfiguration"),
@@ -124,6 +134,11 @@ mod tests {
             .side(Side::CLIENT)
             .types(types())
             .type_hash(types::SOUND_RESOURCE.id(), sound_hash())
+            .type_hash(
+                types::SOUND_CONTAINER_RESOURCE.id(),
+                fnv1a32(CONTAINER.as_bytes()),
+            )
+            .type_hash("sound_container_sound_entry", fnv1a32(ENTRY.as_bytes()))
             .resource(WATERFALL.key_by_hash(sound_hash()), encode(&waterfall))
             .resource(CREAK.key_by_hash(sound_hash()), encode(&creak));
         for (name, bytes) in files {
@@ -215,6 +230,36 @@ mod tests {
                     && line.contains("/creak.wav")),
             "{:?}",
             loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_sound_whose_container_fails_after_its_recording_keeps_its_ids_and_may_retry() {
+        // The archive holds no container to build a new one from, so the
+        // container fails after the recording was counted and served.
+        let loader = client(&[("horn.wav", wav(30))]);
+        let horn = enshwick::content::Id::new("you.first:horn");
+        let status = run(&loader, 1, |load| {
+            for attempt in 0..2 {
+                let failed = load
+                    .add_sound(enshwick::sound::NewSound::new(horn, "horn.wav"))
+                    .unwrap_err();
+                assert!(
+                    failed.to_string().contains("to build a new one from"),
+                    "attempt {attempt}, not refused as a taken id: {failed}"
+                );
+            }
+            Ok(())
+        });
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let declared = loader.content_ids();
+        for id in ["you.first:horn", "you.first:horn.sound"] {
+            assert!(declared.iter().any(|d| d == id), "{id}: {declared:?}");
+        }
+        assert_eq!(
+            loader.resources().len(),
+            1,
+            "the recording stays served under its id, each attempt patching it"
         );
     }
 }

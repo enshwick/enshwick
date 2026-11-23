@@ -38,7 +38,7 @@ mod change;
 #[cfg(feature = "unstable")]
 mod decode;
 #[cfg(feature = "unstable")]
-mod qoa;
+pub(crate) mod qoa;
 #[cfg(feature = "unstable")]
 pub(crate) mod recording;
 pub(crate) mod script;
@@ -51,15 +51,21 @@ use crate::resources::{Registry, Value};
 
 #[cfg(feature = "unstable")]
 pub use add::{
-    AddedSound, INLINE_FRAMES, MAX_FILE_BYTES, MAX_MOD_BYTES, MAX_NEW_TAKES, NewSound, NewTake,
-    SAMPLE_RATE,
+    AddedSound, INLINE_FRAMES, MAX_FILE_BYTES, MAX_MOD_BYTES, NewSound, NewTake, SAMPLE_RATE,
 };
 pub use change::{
     MAX_COUNT, MAX_DISTANCE, MAX_SLEEP, MAX_TAKES, MAX_VOLUME, PITCH, RandomPosition, SoundChange,
     SoundContainerScene, SoundContainerStealingMode, Take, Takes,
 };
 #[cfg(feature = "unstable")]
-pub use decode::{Channels, GAIN_DB, MAX_TAKE, Trim};
+pub use decode::{Channels, Trim};
+
+/// The longest take a mod adds, after its trim.
+pub const MAX_TAKE: core::time::Duration = core::time::Duration::from_secs(600);
+/// The gains in decibels a mod's sound takes.
+pub const GAIN_DB: core::ops::RangeInclusive<f32> = -60.0..=24.0;
+/// The most takes a mod's new sound holds.
+pub const MAX_NEW_TAKES: usize = 32;
 
 /// A sound container by its GUID: the sounds one event of the game plays,
 /// and how it plays them.

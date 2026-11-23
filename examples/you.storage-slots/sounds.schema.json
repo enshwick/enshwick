@@ -3,6 +3,24 @@
   "title": "Sounds",
   "type": "object",
   "properties": {
+    "change": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ChangeEntry"
+      }
+    },
+    "replace": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ReplaceEntry"
+      }
+    },
     "sound": {
       "type": [
         "array",
@@ -15,6 +33,284 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "ChangeEntry": {
+      "description": "A change to a sound container: the game's, another mod's or the\npack's own.",
+      "type": "object",
+      "properties": {
+        "avoid_repeating_last": {
+          "description": "How many of the takes played last are not picked again, at most 64.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "gamepad_speaker": {
+          "description": "Its volume on a gamepad's speaker, from 0 (off) to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "gamepad_vibration": {
+          "description": "The strength of a gamepad's vibration with it, from 0 (off) to 1.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "has_position": {
+          "description": "Whether it plays at a place in the world.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "loop": {
+          "description": "Whether it plays again from the start when it ends.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "loop_same_take": {
+          "description": "Whether a looped sound plays the same take each time round.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "max_count": {
+          "description": "The most plays at once, at most 8192; 0 for no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "max_distance": {
+          "description": "The greatest distance a placed sound is heard at, from 0 to 500 metres.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "min_distance": {
+          "description": "The least distance a placed sound is heard at in full, from 0 to 500 metres.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "mute_on_main": {
+          "description": "The game's `muteOnMain` flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pitch": {
+          "description": "Its pitch, from 0.25 to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "pitch_randomness": {
+          "description": "The random spread of its pitch, from 0 to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "priority": {
+          "description": "Its priority among sounds playing at once.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "random_position": {
+          "description": "How far each play moves at random, in metres, at most 500 each way.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RandomPositionEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scene": {
+          "description": "What it plays as: `sfx`, `music`, `ui` or `voice`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sleep": {
+          "description": "The pause between two plays of a looped sound, in seconds, at most 600.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "sleep_randomness": {
+          "description": "The random spread of that pause, in seconds, at most 600.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "sound": {
+          "description": "The container: a GUID, `<alias>:<name>` of a required mod, or the\nid of one of the pack's sounds.",
+          "type": "string"
+        },
+        "stealing_mode": {
+          "description": "Which play a new one stops at the limit: `oldest`, `furthest` or `ignore` (the new one does not start).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StealingModeEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "takes": {
+          "description": "Which recordings it plays: `{ add = [...] }` after those it holds,\nor `{ replace = [...] }` instead of them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TakesEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume": {
+          "description": "Its volume, from 0 to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "volume_randomness": {
+          "description": "The random spread of its volume, from 0 to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sound"
+      ]
+    },
+    "ChannelsEntry": {
+      "description": "Which channels a pack's sound keeps.",
+      "oneOf": [
+        {
+          "description": "The file's own.",
+          "type": "string",
+          "const": "keep"
+        },
+        {
+          "description": "One.",
+          "type": "string",
+          "const": "mono"
+        },
+        {
+          "description": "Two.",
+          "type": "string",
+          "const": "stereo"
+        }
+      ]
+    },
+    "NewTakeEntry": {
+      "description": "One audio file of a pack's sound.",
+      "type": "object",
+      "properties": {
+        "chance": {
+          "description": "Its chance among the sound's takes, from 0 to 1; 1 when left out.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "file": {
+          "description": "The file, relative to the pack's folder.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ]
+    },
+    "RandomPositionEntry": {
+      "description": "How far each play moves at random, in metres; a side left out is 0.",
+      "type": "object",
+      "properties": {
+        "front_back": {
+          "description": "Forwards and back.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "left_right": {
+          "description": "To either side.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReplaceEntry": {
+      "description": "A recording of the game the pack replaces wherever it plays.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "The audio file, relative to the pack's folder, as a sound's.",
+          "type": "string"
+        },
+        "sound": {
+          "description": "The game's recording, by its GUID.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sound",
+        "file"
+      ]
+    },
     "SceneEntry": {
       "description": "A sound container's scene.",
       "oneOf": [
@@ -41,19 +337,156 @@
       ]
     },
     "SoundEntry": {
-      "description": "One sound.",
+      "description": "One sound of the pack and the container that picks among its takes.",
       "type": "object",
       "properties": {
+        "avoid_repeating_last": {
+          "description": "How many of the takes played last are not picked again, at most 64.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "channels": {
+          "description": "Which channels the recordings keep: `keep` when left out, `mono`\n(which suits a sound placed in the world) or `stereo`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelsEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "file": {
-          "description": "The WAV file, relative to the pack's folder: 16-bit PCM, mono or\nstereo, at 48000 Hz, at most 16 MiB.",
-          "type": "string"
+          "description": "Its one audio file, relative to the pack's folder: WAV, FLAC,\nOgg Vorbis or MP3, at most 16 MiB; or `takes` for several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gain_db": {
+          "description": "A gain in decibels on every take, from -60 to 24.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "gamepad_speaker": {
+          "description": "Its volume on a gamepad's speaker, from 0 (off) to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "gamepad_vibration": {
+          "description": "The strength of a gamepad's vibration with it, from 0 (off) to 1.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "has_position": {
+          "description": "Whether it plays at a place in the world.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "id": {
-          "description": "Its name in the pack; its container's content id is\n`<pack>:<id>`, which other mods play.",
+          "description": "Its name in the pack; its container's content id is\n`<pack>:<id>`, which other mods play, and its takes' recordings\n`<pack>:<id>.sound`, `<pack>:<id>.sound2` and on.",
           "type": "string"
         },
+        "loop": {
+          "description": "Whether it plays again from the start when it ends.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "loop_same_take": {
+          "description": "Whether a looped sound plays the same take each time round.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "max_count": {
+          "description": "The most plays at once, at most 8192; 0 for no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "max_distance": {
+          "description": "The greatest distance a placed sound is heard at, from 0 to 500 metres.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "min_distance": {
+          "description": "The least distance a placed sound is heard at in full, from 0 to 500 metres.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "mute_on_main": {
+          "description": "The game's `muteOnMain` flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pitch": {
+          "description": "Its pitch, from 0.25 to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "pitch_randomness": {
+          "description": "The random spread of its pitch, from 0 to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "priority": {
+          "description": "Its priority among sounds playing at once.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "random_position": {
+          "description": "How far each play moves at random, in metres, at most 500 each way.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RandomPositionEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "scene": {
-          "description": "What it plays as: `sfx` when left out, `music`, `ui` or `voice`.",
+          "description": "What it plays as: `sfx`, `music`, `ui` or `voice`.",
           "anyOf": [
             {
               "$ref": "#/$defs/SceneEntry"
@@ -63,8 +496,64 @@
             }
           ]
         },
+        "sleep": {
+          "description": "The pause between two plays of a looped sound, in seconds, at most 600.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "sleep_randomness": {
+          "description": "The random spread of that pause, in seconds, at most 600.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "stealing_mode": {
+          "description": "Which play a new one stops at the limit: `oldest`, `furthest` or `ignore` (the new one does not start).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StealingModeEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "takes": {
+          "description": "Its audio files, 1 to 32, each `{ file = \"...\", chance = <0 to 1> }`;\nthe container picks one at random by their chances.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/NewTakeEntry"
+          }
+        },
+        "trim": {
+          "description": "The part of each file it plays: `{ start = <seconds>, end = <seconds> }`,\neach left out for the file's own.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrimEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "volume": {
-          "description": "Its volume, from 0 to 4; 1 when left out.",
+          "description": "Its volume, from 0 to 4.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "volume_randomness": {
+          "description": "The random spread of its volume, from 0 to 4.",
           "type": [
             "number",
             "null"
@@ -74,9 +563,110 @@
       },
       "additionalProperties": false,
       "required": [
-        "id",
-        "file"
+        "id"
       ]
+    },
+    "StealingModeEntry": {
+      "description": "Which play of a container a new one stops at its limit.",
+      "oneOf": [
+        {
+          "description": "The play that started first.",
+          "type": "string",
+          "const": "oldest"
+        },
+        {
+          "description": "The play farthest from the listener.",
+          "type": "string",
+          "const": "furthest"
+        },
+        {
+          "description": "None: the new play does not start.",
+          "type": "string",
+          "const": "ignore"
+        }
+      ]
+    },
+    "TakeEntry": {
+      "description": "One recording a container may play.",
+      "type": "object",
+      "properties": {
+        "chance": {
+          "description": "Its weight among the container's takes, from 0 to 1; 1 when left out.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "sound": {
+          "description": "The recording: a GUID, `<alias>:<name>.sound` of a required mod's\nsound, or the id of one of the pack's sounds.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sound"
+      ]
+    },
+    "TakesEntry": {
+      "description": "Which recordings a container plays.",
+      "oneOf": [
+        {
+          "description": "These after those it holds.",
+          "type": "object",
+          "properties": {
+            "add": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TakeEntry"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "add"
+          ]
+        },
+        {
+          "description": "These instead of those it holds.",
+          "type": "object",
+          "properties": {
+            "replace": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TakeEntry"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "replace"
+          ]
+        }
+      ]
+    },
+    "TrimEntry": {
+      "description": "The part of each file a pack's sound plays, in seconds.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "description": "Where it ends.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "start": {
+          "description": "Where it starts.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

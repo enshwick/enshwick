@@ -6,11 +6,8 @@ use core::time::Duration;
 use std::io::Cursor;
 
 use super::recording::SAMPLE_RATE;
+use super::{GAIN_DB, MAX_TAKE};
 
-/// The longest take a mod adds, after its trim.
-pub const MAX_TAKE: Duration = Duration::from_secs(600);
-/// The gains in decibels a sound takes.
-pub const GAIN_DB: core::ops::RangeInclusive<f32> = -60.0..=24.0;
 /// The channel counts the game plays: mono, stereo, quadrophonic, 5.1 and
 /// 7.1, its `SoundChannelConfiguration`.
 const GAME_CHANNELS: [usize; 5] = [1, 2, 4, 6, 8];

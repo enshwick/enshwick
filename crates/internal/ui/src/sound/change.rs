@@ -23,6 +23,7 @@ const MAX_TAKES_U32: u32 = 64;
 /// game scene's pool of sound instances (client 26430625).
 pub const MAX_COUNT: u32 = 8_192;
 
+#[cfg(feature = "unstable")]
 pub(super) const MODE: &str = "mode";
 pub(super) const SCENE: &str = "scene";
 pub(super) const LOOP: &str = "loop";

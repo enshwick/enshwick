@@ -6,7 +6,10 @@ use super::change::{
     SCENE, SPEAKER_VOLUME, VIBRATION_INTENSITY, VOLUME,
 };
 use super::decode::{Channels, Shape, Trim};
-use super::{SoundChange, SoundContainerId, SoundContainerScene, SoundId, Take, Takes, recording};
+use super::{
+    MAX_NEW_TAKES, SoundChange, SoundContainerId, SoundContainerScene, SoundId, Take, Takes,
+    recording,
+};
 use crate::Off;
 use crate::abi::Side;
 use crate::content::{Id, types};
@@ -16,10 +19,8 @@ use enshwick_content::__load::*;
 pub use super::recording::{INLINE_FRAMES, MAX_FILE_BYTES, MAX_MOD_BYTES, SAMPLE_RATE};
 
 const RANDOM: &str = "Random";
-/// The most takes a new sound holds.
-pub const MAX_NEW_TAKES: usize = TAKE_PARTS.len();
 /// The content id part of each take's recording, in take order.
-const TAKE_PARTS: [&str; 32] = [
+const TAKE_PARTS: [&str; MAX_NEW_TAKES] = [
     "sound", "sound2", "sound3", "sound4", "sound5", "sound6", "sound7", "sound8", "sound9",
     "sound10", "sound11", "sound12", "sound13", "sound14", "sound15", "sound16", "sound17",
     "sound18", "sound19", "sound20", "sound21", "sound22", "sound23", "sound24", "sound25",

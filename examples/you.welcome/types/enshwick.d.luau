@@ -486,6 +486,9 @@ export type Channel = {
 	is_ready: (self: Channel, peer: Peer) -> boolean,
 }
 
+--- Which channels a sound keeps.
+export type Channels = "Keep" | "Mono" | "Stereo"
+
 --- What a chat line is.
 export type ChatKind = "Player" | "Emote" | "Notice"
 
@@ -1957,14 +1960,28 @@ export type NewSkillNode = {
 	kind: typed_SkillNodeType?,
 }
 
---- A sound for `Load.add_sound`: a WAV file in the mod's folder and the values of the sound container that plays it.
+--- A sound for `Load.add_sound`: audio files in the mod's folder, how they become recordings, and the values of the sound container that picks among them.
 export type NewSound = {
 	--- The sound's content id; its container's GUID is the id's.
 	id: string,
-	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES`.
-	file: string,
-	--- The container's values where they differ from those of a vanilla effect: scene `Sfx`, volume and pitch 1, heard from 1 to 35 metres, priority 50. Its takes follow the recording.
+	--- Its takes, 1 to `MAX_NEW_TAKES`; the container picks one at random by their weights each time it plays.
+	takes: {NewTake},
+	--- Which channels its recordings keep; mono suits a sound placed in the world.
+	channels: Channels?,
+	--- A gain in decibels on every take, within `GAIN_DB`.
+	gain_db: number?,
+	--- The part of each take's file it plays.
+	trim: Trim?,
+	--- The container's values where they differ from those of a vanilla effect: scene `Sfx`, volume and pitch 1, heard from 1 to 35 metres, priority 50. Its `takes` may only add to the sound's own.
 	container: SoundChange?,
+}
+
+--- One take of a `NewSound`: an audio file in the mod's folder and its weight among the sound's takes.
+export type NewTake = {
+	--- The file, relative to the mod's folder: WAV (8, 16, 24 or 32-bit, or float), FLAC, Ogg Vorbis or MP3, at any rate, at most `MAX_FILE_BYTES`.
+	file: string,
+	--- Its weight among the sound's takes, from 0 to 1; nil for 1.
+	chance: number?,
 }
 
 --- A new entity template for `Load.add_template`: a copy of the vanilla template `like` under the mod's content id `id`, with `changes` applied in order. `id` is the mod's own and never changes: saves keep the template GUID of every placed object and creature made from it.
@@ -3322,6 +3339,14 @@ export type TransactionStatus = "Pending" | "Applied" | "Undoing" | "Undone" | {
 
 --- The kind of move a player makes; the names are enshwick's, after the buttons and gestures the game offers. Unstable: needs the `unstable` feature and may change in any release.
 export type Transfer = "Slot" | "TakeAll" | "DepositAll" | "DepositStacks" | "RefillStacks" | "Gift" | "ToActionbar" | "ToBackpack"
+
+--- The part of each file a sound plays.
+export type Trim = {
+	--- Where it starts in the file.
+	start: number,
+	--- Where it ends in the file; nil for the file's end.
+	["end"]: number?,
+}
 
 --- A skill node a character unlocked, from `World.skills`. The name is enshwick's: one entry of the game's unlocked skill nodes and their levels.
 export type UnlockedSkill = {

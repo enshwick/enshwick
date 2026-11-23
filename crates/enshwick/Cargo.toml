@@ -153,6 +153,11 @@ harness = false
 required-features = ["test", "typed"]
 
 [[bench]]
+name = "sound_encode"
+harness = false
+required-features = ["unstable"]
+
+[[bench]]
 name = "served_read"
 harness = false
 required-features = ["test"]

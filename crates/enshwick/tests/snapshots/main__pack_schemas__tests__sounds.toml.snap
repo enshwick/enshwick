@@ -4,6 +4,248 @@ expression: shape
 ---
 {
   "$defs": {
+    "ChangeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "avoid_repeating_last": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gamepad_speaker": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gamepad_vibration": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "has_position": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "loop": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "loop_same_take": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "max_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_distance": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min_distance": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mute_on_main": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pitch": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pitch_randomness": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "priority": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "random_position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RandomPositionEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scene": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sleep": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sleep_randomness": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sound": {
+          "type": "string"
+        },
+        "stealing_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StealingModeEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "takes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TakesEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "volume_randomness": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sound"
+      ],
+      "type": "object"
+    },
+    "ChannelsEntry": {
+      "oneOf": [
+        {
+          "const": "keep",
+          "type": "string"
+        },
+        {
+          "const": "mono",
+          "type": "string"
+        },
+        {
+          "const": "stereo",
+          "type": "string"
+        }
+      ]
+    },
+    "NewTakeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "chance": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "type": "object"
+    },
+    "RandomPositionEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "front_back": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "left_right": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ReplaceEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "sound": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sound",
+        "file"
+      ],
+      "type": "object"
+    },
     "SceneEntry": {
       "oneOf": [
         {
@@ -27,16 +269,180 @@ expression: shape
     "SoundEntry": {
       "additionalProperties": false,
       "properties": {
+        "avoid_repeating_last": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "channels": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelsEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "file": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gain_db": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gamepad_speaker": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gamepad_vibration": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "has_position": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "id": {
           "type": "string"
+        },
+        "loop": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "loop_same_take": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "max_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_distance": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min_distance": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mute_on_main": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pitch": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pitch_randomness": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "priority": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "random_position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RandomPositionEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "scene": {
           "anyOf": [
             {
               "$ref": "#/$defs/SceneEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sleep": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sleep_randomness": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stealing_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StealingModeEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "takes": {
+          "items": {
+            "$ref": "#/$defs/NewTakeEntry"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trim": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrimEntry"
             },
             {
               "type": "null"
@@ -49,18 +455,131 @@ expression: shape
             "number",
             "null"
           ]
+        },
+        "volume_randomness": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
         }
       },
       "required": [
-        "id",
-        "file"
+        "id"
       ],
+      "type": "object"
+    },
+    "StealingModeEntry": {
+      "oneOf": [
+        {
+          "const": "oldest",
+          "type": "string"
+        },
+        {
+          "const": "furthest",
+          "type": "string"
+        },
+        {
+          "const": "ignore",
+          "type": "string"
+        }
+      ]
+    },
+    "TakeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "chance": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sound": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sound"
+      ],
+      "type": "object"
+    },
+    "TakesEntry": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "add": {
+              "items": {
+                "$ref": "#/$defs/TakeEntry"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "add"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "replace": {
+              "items": {
+                "$ref": "#/$defs/TakeEntry"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "replace"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "TrimEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "start": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "change": {
+      "items": {
+        "$ref": "#/$defs/ChangeEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "replace": {
+      "items": {
+        "$ref": "#/$defs/ReplaceEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "sound": {
       "items": {
         "$ref": "#/$defs/SoundEntry"

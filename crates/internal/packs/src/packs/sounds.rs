@@ -11,8 +11,8 @@ use super::SOUNDS_FILE;
 use super::reader::Reader;
 use crate::content::Guid;
 use crate::sound::{
-    RandomPosition, SoundChange, SoundContainerScene, SoundContainerStealingMode, SoundId, Take,
-    Takes,
+    GAIN_DB, MAX_NEW_TAKES, RandomPosition, SoundChange, SoundContainerScene,
+    SoundContainerStealingMode, SoundId, Take, Takes,
 };
 
 /// `sounds.toml`.
@@ -291,6 +291,36 @@ pub(super) struct PackSound {
     pub(super) gain_db: f32,
     pub(super) trim: (Duration, Option<Duration>),
     pub(super) container: SoundChange,
+}
+
+#[cfg(feature = "unstable")]
+impl PackSound {
+    /// The sound to add with [`Load::add_sound`](../struct.Load.html#method.add_sound) under `id`.
+    pub(super) fn new_sound(&self, id: crate::content::Id) -> crate::sound::NewSound {
+        use crate::sound::{Channels, NewSound, NewTake, Trim};
+        NewSound {
+            id,
+            takes: self
+                .takes
+                .iter()
+                .map(|(file, chance)| NewTake {
+                    chance: *chance,
+                    ..NewTake::new(file.clone())
+                })
+                .collect(),
+            channels: match self.channels {
+                None | Some(ChannelsEntry::Keep) => Channels::Keep,
+                Some(ChannelsEntry::Mono) => Channels::Mono,
+                Some(ChannelsEntry::Stereo) => Channels::Stereo,
+            },
+            gain_db: self.gain_db,
+            trim: Trim {
+                start: self.trim.0,
+                end: self.trim.1,
+            },
+            container: self.container.clone(),
+        }
+    }
 }
 
 /// A pack's change of a container, checked.

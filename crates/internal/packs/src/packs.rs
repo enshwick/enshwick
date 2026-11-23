@@ -247,10 +247,7 @@ impl LoadHelpers for crate::BaseLoad {
         #[cfg(feature = "unstable")]
         for sound in &pack.sounds.sounds {
             // A sound whose file does not read turns off alone.
-            let new = crate::sound::NewSound {
-                container: sound.container.clone(),
-                ..crate::sound::NewSound::new(id(&sound.id)?, sound.file.clone())
-            };
+            let new = sound.new_sound(id(&sound.id)?);
             let _added = self.feature(&format!("sound {}", sound.id), |load| load.add_sound(new));
         }
         #[cfg(feature = "unstable")]

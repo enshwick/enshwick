@@ -57,6 +57,57 @@ fn a_sound_takes_the_pack_s_namespace_and_its_problems_their_line() {
 }
 
 #[test]
+fn a_sound_of_several_takes_keeps_their_chances_channels_gain_and_trim() {
+    let files = PackFiles::new().with(
+        SOUNDS_FILE,
+        "[[sound]]\nid = \"steps\"\ntakes = [{ file = \"a.ogg\" }, { file = \"b.flac\", chance = 0.5 }]\nchannels = \"mono\"\ngain_db = -6.0\ntrim = { start = 0.5, end = 2.0 }\n",
+    );
+    let pack = Pack::parse("you.horns", &files).unwrap();
+    let [sound] = pack.sounds.sounds.as_slice() else {
+        panic!("one sound");
+    };
+    assert_eq!(
+        sound.takes,
+        vec![("a.ogg".to_owned(), None), ("b.flac".to_owned(), Some(0.5))]
+    );
+    assert_eq!(
+        sound.channels,
+        Some(super::super::sounds::ChannelsEntry::Mono)
+    );
+    assert!((sound.gain_db + 6.0).abs() < f32::EPSILON);
+    assert_eq!(
+        sound.trim,
+        (
+            std::time::Duration::from_millis(500),
+            Some(std::time::Duration::from_secs(2))
+        )
+    );
+    let lines = problems(
+        "[[sound]]\nid = \"a\"\nfile = \"a.wav\"\ntakes = [{ file = \"b.wav\" }]\n\n\
+         [[sound]]\nid = \"b\"\nfile = \"b.wav\"\ngain_db = 30.0\ntrim = { start = 2.0, end = 1.0 }\n\n\
+         [[sound]]\nid = \"c\"\ntakes = []\n\n\
+         [[sound]]\nid = \"d\"\ntakes = [{ file = \"d.wav\", chance = 2.0 }]\n",
+    );
+    has(
+        &lines,
+        "sounds.toml:1:1: sound a: give either `file` or `takes`",
+    );
+    has(&lines, "sounds.toml:6:1: sound b: gain 30 dB is outside");
+    has(
+        &lines,
+        "sounds.toml:6:1: sound b: the trim ends before it starts",
+    );
+    has(
+        &lines,
+        "sounds.toml:12:1: sound c: 0 takes: a sound has 1 to 32",
+    );
+    has(
+        &lines,
+        "sounds.toml:16:1: sound d: d.wav: chance 2 is outside 0 to 1",
+    );
+}
+
+#[test]
 fn a_change_names_any_container_and_takes_the_pack_s_own_recordings() {
     let files = PackFiles::new().with(
         SOUNDS_FILE,

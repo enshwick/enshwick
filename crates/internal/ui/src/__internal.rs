@@ -22,3 +22,11 @@ pub use crate::ui::script::ScriptTooltipLines;
 pub fn check_sound_change(change: &crate::sound::SoundChange) -> Result<(), String> {
     change.fields().map(drop).map_err(|why| why.to_string())
 }
+
+/// The FramelessQOA encoding of `samples`, `channels` interleaved, for the
+/// encoder's benchmark.
+#[cfg(feature = "unstable")]
+#[must_use]
+pub fn encode_qoa(samples: &[i16], channels: usize) -> Vec<u8> {
+    crate::sound::qoa::encode(samples, channels)
+}
