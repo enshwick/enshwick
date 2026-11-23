@@ -388,6 +388,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     buff_type_add,
     damage_causes_off,
     waypoint: waypoints::waypoint,
+    sound_play,
+    sound_steer,
+    sound_state,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

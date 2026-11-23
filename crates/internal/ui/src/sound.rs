@@ -37,6 +37,7 @@ pub(crate) mod add;
 pub(crate) mod change;
 #[cfg(feature = "unstable")]
 mod decode;
+mod play;
 #[cfg(feature = "unstable")]
 pub(crate) mod qoa;
 #[cfg(feature = "unstable")]
@@ -59,6 +60,9 @@ pub use change::{
 };
 #[cfg(feature = "unstable")]
 pub use decode::{Channels, Trim};
+pub use play::{
+    MAX_FADE, MAX_STARTS, Place, Play, PlayFailure, SoundHandle, SoundState, Sounds, play, stop_all,
+};
 
 /// The longest take a mod adds, after its trim.
 pub const MAX_TAKE: core::time::Duration = core::time::Duration::from_secs(600);

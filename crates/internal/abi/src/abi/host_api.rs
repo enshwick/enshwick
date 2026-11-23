@@ -18,12 +18,12 @@ use crate::abi::{
     ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
     PointSpec, PointVerdict, PropPlacementInfo, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn,
     ResourceKey, ResourcePatchFn, RespawnPointInfo, SaveInfo, ServerWaitFn, ServiceFound,
-    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef,
-    StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo,
-    TickHandle, TransactionInfo, TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn,
-    UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel, WaypointData,
-    WeatherFront, WeatherSample,
+    ServiceSpec, SkillCheckFn, SoundInfo, SoundPlay, SoundSteer, SpawnRequest, StatChangeFn,
+    StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd,
+    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TransactionSettledFn,
+    TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget,
+    Voxel, WaypointData, WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2362,6 +2362,31 @@ pub struct HostApi {
     /// build whose reflection lacks the waypoint. ABI 12.16.
     pub waypoint:
         extern "system" fn(me: ModHandle, entity: Entity, out: *mut WaypointData) -> Status,
+    /// Queues `spec`, a headed [`SoundPlay`], and writes the sound's id to
+    /// `id`: the client's game thread starts it in its next interface frame,
+    /// and [`HostApi::sound_state`] tells what came of it. Any thread, also
+    /// outside a frame. [`Status::MISSING`] for a container neither the
+    /// game's archive nor a mod holds; [`Status::BAD_ARGS`] for an unknown
+    /// place, a volume outside 0 to 1, a fade past
+    /// [`SoundPlay::MAX_FADE_MS`], a non-finite position or entity 0 on
+    /// [`SoundPlay::ON`] ([`SoundPlay::in_bounds`]); [`Status::BUSY`] past
+    /// [`SoundPlay::MAX_STARTS`] starts of the mod waiting for one frame;
+    /// [`Status::UNAVAILABLE`] on a server and on a build where the
+    /// loader's playback is off. ABI 12.17.
+    pub sound_play:
+        extern "system" fn(me: ModHandle, spec: *const SoundPlay, id: *mut u64) -> Status,
+    /// Queues `steer`, a headed [`SoundSteer`], for the mod's sound `id`, or
+    /// for all of the mod's sounds with [`SoundSteer::STOP_ALL`]. An id that
+    /// names no sound of the mod still playing, ended or never this mod's,
+    /// changes nothing. Any thread. [`Status::BAD_ARGS`] as for
+    /// [`HostApi::sound_play`]; [`Status::BUSY`] when the mod's queue is
+    /// full; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
+    pub sound_steer: extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
+    /// Writes to `out`, a headed [`SoundInfo`], where the mod's sound `id`
+    /// stands; an id the loader no longer keeps, or another mod's, reads as
+    /// [`SoundInfo::ENDED`]. Any thread. [`Status::BAD_ARGS`] for a null or
+    /// smaller `out`; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
+    pub sound_state: extern "system" fn(me: ModHandle, id: u64, out: *mut SoundInfo) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2592,5 +2617,8 @@ const _: () = {
     assert!(offset_of!(HostApi, buff_type_add) == 24 + 217 * 8);
     assert!(offset_of!(HostApi, damage_causes_off) == 24 + 218 * 8);
     assert!(offset_of!(HostApi, waypoint) == 24 + 219 * 8);
-    assert!(size_of::<HostApi>() == 24 + 220 * 8);
+    assert!(offset_of!(HostApi, sound_play) == 24 + 220 * 8);
+    assert!(offset_of!(HostApi, sound_steer) == 24 + 221 * 8);
+    assert!(offset_of!(HostApi, sound_state) == 24 + 222 * 8);
+    assert!(size_of::<HostApi>() == 24 + 223 * 8);
 };

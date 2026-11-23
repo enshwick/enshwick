@@ -1,0 +1,226 @@
+//! Sounds a client mod plays through the game's sound system and steers
+//! after they start.
+
+use crate::abi::{Entity, Header, Metres};
+use crate::content::Guid;
+
+/// A sound a client mod starts, which [`HostApi::sound_play`] queues for the
+/// client's game thread. ABI 12.17.
+///
+/// [`HostApi::sound_play`]: crate::abi::HostApi::sound_play
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Entity, Header, SoundPlay};
+/// use enshwick::content::Guid;
+///
+/// let play = SoundPlay {
+///     container: Guid::named("you.bells:bell"),
+///     place: SoundPlay::AT,
+///     at: [10.0, 0.0, 0.0],
+///     ..SoundPlay::EMPTY
+/// };
+/// assert_eq!((play.volume, play.entity), (1.0, Entity::NONE));
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct SoundPlay {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The sound container, the game's or a mod's.
+    pub container: Guid,
+    /// Where it plays: [`SoundPlay::SCREEN`] and the other place constants.
+    pub place: u32,
+    /// The entity of the client's world it follows, for [`SoundPlay::ON`].
+    pub entity: Entity,
+    /// Where it plays in the world, for [`SoundPlay::AT`].
+    pub at: Metres,
+    /// Its volume, 0 to 1, which the game multiplies by the container's.
+    pub volume: f32,
+    /// How long it fades in, in milliseconds, at most
+    /// [`SoundPlay::MAX_FADE_MS`].
+    pub fade_in_ms: u32,
+}
+
+impl_headed!(SoundPlay);
+
+impl SoundPlay {
+    /// From no place, as an interface sound: the game's `Ui` scene.
+    pub const SCREEN: u32 = 0;
+    /// At [`at`](Self::at) in the world: the game's `Game` scene.
+    pub const AT: u32 = 1;
+    /// On [`entity`](Self::entity), following it: the game's `Game` scene.
+    pub const ON: u32 = 2;
+    /// As music: the game's `Music` scene.
+    pub const MUSIC: u32 = 3;
+    /// The longest fade a play or a steer takes, in milliseconds.
+    pub const MAX_FADE_MS: u32 = 60_000;
+    /// The most sounds one mod starts in one frame of the client.
+    pub const MAX_STARTS: u32 = 64;
+    /// Its header set, no container, on the screen at full volume.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        container: Guid::NIL,
+        place: Self::SCREEN,
+        entity: Entity::NONE,
+        at: [0.0; 3],
+        volume: 1.0,
+        fade_in_ms: 0,
+    };
+
+    /// Whether the loader takes this play: a known place, a volume of 0 to
+    /// 1, a fade of at most [`SoundPlay::MAX_FADE_MS`], a finite position
+    /// for [`SoundPlay::AT`] and an entity for [`SoundPlay::ON`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::SoundPlay;
+    ///
+    /// assert!(SoundPlay::EMPTY.in_bounds());
+    /// assert!(!SoundPlay { volume: 1.5, ..SoundPlay::EMPTY }.in_bounds());
+    /// assert!(!SoundPlay { place: SoundPlay::ON, ..SoundPlay::EMPTY }.in_bounds());
+    /// ```
+    #[must_use]
+    pub fn in_bounds(&self) -> bool {
+        let placed = match self.place {
+            Self::SCREEN | Self::MUSIC => true,
+            Self::AT => self.at.iter().all(|axis| axis.is_finite()),
+            Self::ON => self.entity != Entity::NONE,
+            _ => false,
+        };
+        placed && (0.0..=1.0).contains(&self.volume) && self.fade_in_ms <= Self::MAX_FADE_MS
+    }
+}
+
+/// A change to a sound a client mod started, which [`HostApi::sound_steer`]
+/// queues. ABI 12.17.
+///
+/// [`HostApi::sound_steer`]: crate::abi::HostApi::sound_steer
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::SoundSteer;
+///
+/// let fade_out = SoundSteer { kind: SoundSteer::STOP, fade_ms: 500, ..SoundSteer::EMPTY };
+/// assert_eq!(fade_out.volume, 0.0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct SoundSteer {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// What changes: [`SoundSteer::STOP`] and the other kind constants.
+    pub kind: u32,
+    /// The new volume, 0 to 1, for [`SoundSteer::VOLUME`].
+    pub volume: f32,
+    /// How long the stop or the volume change fades, in milliseconds, at
+    /// most [`SoundPlay::MAX_FADE_MS`].
+    pub fade_ms: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// The new place in the world, for [`SoundSteer::POSITION`].
+    pub at: Metres,
+}
+
+impl_headed!(SoundSteer);
+
+impl SoundSteer {
+    /// Stops the sound, fading it out over `fade_ms`.
+    pub const STOP: u32 = 0;
+    /// Changes its volume over `fade_ms`.
+    pub const VOLUME: u32 = 1;
+    /// Moves it to `at`; a sound that followed an entity follows it no more.
+    pub const POSITION: u32 = 2;
+    /// Stops every sound of the mod, fading each out over `fade_ms`; the id
+    /// is not read.
+    pub const STOP_ALL: u32 = 3;
+    /// Its header set, a stop without a fade.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        kind: Self::STOP,
+        volume: 0.0,
+        fade_ms: 0,
+        reserved: 0,
+        at: [0.0; 3],
+    };
+
+    /// Whether the loader takes this steer: a known kind, a volume of 0 to
+    /// 1 for [`SoundSteer::VOLUME`], a finite position for
+    /// [`SoundSteer::POSITION`] and a fade of at most
+    /// [`SoundPlay::MAX_FADE_MS`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::SoundSteer;
+    ///
+    /// assert!(SoundSteer::EMPTY.in_bounds());
+    /// assert!(!SoundSteer { kind: SoundSteer::POSITION, at: [f64::NAN; 3], ..SoundSteer::EMPTY }.in_bounds());
+    /// ```
+    #[must_use]
+    pub fn in_bounds(&self) -> bool {
+        let kind = match self.kind {
+            Self::STOP | Self::STOP_ALL => true,
+            Self::VOLUME => (0.0..=1.0).contains(&self.volume),
+            Self::POSITION => self.at.iter().all(|axis| axis.is_finite()),
+            _ => false,
+        };
+        kind && self.fade_ms <= SoundPlay::MAX_FADE_MS
+    }
+}
+
+/// Where a sound a client mod started stands, which
+/// [`HostApi::sound_state`] writes. ABI 12.17.
+///
+/// [`HostApi::sound_state`]: crate::abi::HostApi::sound_state
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::SoundInfo;
+///
+/// assert_eq!(SoundInfo::EMPTY.state, SoundInfo::PENDING);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct SoundInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// [`SoundInfo::PENDING`] and the other state constants.
+    pub state: u32,
+    /// Why it failed, for [`SoundInfo::FAILED`]: [`SoundInfo::GAME_REFUSED`]
+    /// and the other reason constants; 0 otherwise.
+    pub reason: u32,
+}
+
+impl_headed!(SoundInfo);
+
+impl SoundInfo {
+    /// Queued: the client's game thread has not started it yet.
+    pub const PENDING: u32 = 0;
+    /// Playing, or fading in or out.
+    pub const PLAYING: u32 = 1;
+    /// Ended: played out, stopped, its entity gone, its world ended or its
+    /// mod turned off. An id the loader no longer keeps reads as ended.
+    pub const ENDED: u32 = 2;
+    /// Never started: [`reason`](Self::reason) says why.
+    pub const FAILED: u32 = 3;
+    /// The game did not start it: its sound pool is full, or it found no
+    /// recording of the container.
+    pub const GAME_REFUSED: u32 = 1;
+    /// The place's game scene is not reached on this build.
+    pub const NO_SCENE: u32 = 2;
+    /// The loader's sound playback is off on this build or after a fault.
+    pub const OFF: u32 = 3;
+    /// The entity it was to follow is not in the client's world.
+    pub const NO_ENTITY: u32 = 4;
+    /// Its header set, pending.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        state: Self::PENDING,
+        reason: 0,
+    };
+}

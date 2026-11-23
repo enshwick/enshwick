@@ -20,6 +20,7 @@ doc = false
 [dependencies]
 arc-swap.workspace = true
 bytemuck.workspace = true
+crossbeam-queue.workspace = true
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-core = { workspace = true, features = ["unstable"] }

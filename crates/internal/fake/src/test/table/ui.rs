@@ -2,12 +2,15 @@
 
 use core::ffi::c_void;
 
+mod sound;
+
 use crate::test::table::{Registered, State, text, with};
 use enshwick_core::__fake::SCREENS;
 use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
     UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
+pub(crate) use sound::{sound_play, sound_state, sound_steer};
 
 /// Where an extension's panel sits, as its spec asks.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -101,6 +104,8 @@ pub(crate) struct UiState {
     /// Whether the player pressed Back over a window under the dialog this
     /// frame, which closes the dialog once the frame's windows drew.
     pub(crate) dialog_backed: bool,
+    /// The sounds the mod started and the starts waiting for a frame.
+    pub(crate) sound: sound::SoundState,
 }
 
 impl Default for UiState {
@@ -131,6 +136,7 @@ impl Default for UiState {
             inputs: Vec::new(),
             dialogs: Vec::new(),
             dialog_backed: false,
+            sound: sound::SoundState::default(),
         }
     }
 }
