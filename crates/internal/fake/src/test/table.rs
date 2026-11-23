@@ -395,6 +395,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     sound_state,
     sound_play_for,
     sound_steer_for,
+    rekey_resource,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

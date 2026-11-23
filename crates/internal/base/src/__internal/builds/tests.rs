@@ -5,9 +5,9 @@ use super::*;
 /// A key of the table: its index.
 type At = usize;
 
-/// A build running: its key, whether scratch, whether it read another
-/// served key, and the buffers it lent.
-type Frame = (At, bool, bool, Vec<Box<[u8]>>);
+/// A build running: its key, whether a served read, whether it read another
+/// served key, the buffers it lent and the key its running re-key reads.
+type Frame = (At, bool, bool, Vec<Box<[u8]>>, Option<ResourceKey>);
 
 /// What the game holds of a key: the base kept, the bytes and who built them.
 type HeldBytes = (Option<Vec<u8>>, Vec<u8>, Vec<u8>);
@@ -23,6 +23,8 @@ enum Does {
     Stray,
     /// Reads the served key at this index.
     Read(At),
+    /// Re-keys to the served key at this index: answers it as served.
+    Rekey(At),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -93,6 +95,13 @@ impl Table {
         }
     }
 
+    /// Notes the key the re-key running in the innermost build reads.
+    fn running(&self, new: Option<ResourceKey>) {
+        if let Some(frame) = self.frames.borrow_mut().last_mut() {
+            frame.4 = new;
+        }
+    }
+
     fn bytes(view: View) -> Vec<u8> {
         let at = core::ptr::with_exposed_provenance::<u8>(view.at);
         // SAFETY: every view the tests make lies in a live buffer or base.
@@ -125,10 +134,18 @@ unsafe impl Patches for Table {
         patch.on
     }
 
+    fn rekeys(&self, patch: &Patch) -> bool {
+        matches!(patch.does, Does::Rekey(_))
+    }
+
+    fn rekeying(&self) -> Option<ResourceKey> {
+        self.frames.borrow().last().and_then(|frame| frame.4)
+    }
+
     fn enter(&self, key: At, build: Build) {
         self.frames
             .borrow_mut()
-            .push((key, build == Build::Scratch, false, Vec::new()));
+            .push((key, build != Build::Game, false, Vec::new(), None));
     }
 
     unsafe fn apply(&self, patch: &Patch, input: View, _rebuild: bool) -> (Status, Option<View>) {
@@ -142,6 +159,13 @@ unsafe impl Patches for Table {
             Does::Read(other) => {
                 let other = self.entries.borrow()[other].key;
                 let read = read_served(self, &other);
+                (Status::OK, read.ok().map(|bytes| self.lend(bytes)))
+            }
+            Does::Rekey(new) => {
+                let new = self.entries.borrow()[new].key;
+                self.running(Some(new));
+                let read = read_served(self, &new);
+                self.running(None);
                 (Status::OK, read.ok().map(|bytes| self.lend(bytes)))
             }
         }
@@ -539,4 +563,51 @@ fn a_served_read_builds_falls_back_to_the_archive_and_refuses_before_the_seal() 
         read_served(&table, &key(1)),
         Err(BuildResourceError::Unsealed)
     );
+}
+
+#[test]
+fn rekeys_in_a_ring_rotate_and_keep_every_other_patch_of_the_key_they_read() {
+    let mut table = table(vec![
+        entry(1, &[(1, Does::Rekey(1))]),
+        entry(2, &[(2, Does::Rekey(2)), (4, Does::Add)]),
+        entry(3, &[(3, Does::Rekey(0))]),
+    ]);
+    table.archive = vec![(key(1), vec![10]), (key(2), vec![20]), (key(3), vec![30])];
+    assert_eq!(
+        read_served(&table, &key(1)),
+        Ok(vec![21]),
+        "the second without its re-key"
+    );
+    assert_eq!(
+        read_served(&table, &key(2)),
+        Ok(vec![31]),
+        "the third, then its own change"
+    );
+    assert_eq!(read_served(&table, &key(3)), Ok(vec![10]));
+    assert!(table.failed.take().is_empty());
+}
+
+#[test]
+fn a_read_left_without_rekeys_fails_no_patch_and_reads_as_a_served_read() {
+    let table = table(vec![entry(
+        1,
+        &[(1, Does::Answer(Status::REFUSED)), (2, Does::Rekey(0))],
+    )]);
+    let built = build(&table, 0, view(&[7]), Build::Unkeyed, None);
+    assert_eq!(
+        built.err(),
+        Some(BuildResourceError::NotBuilt),
+        "the re-key left out"
+    );
+    assert!(
+        table.failed.take().is_empty(),
+        "skipped as in a served read"
+    );
+    table.enter(0, Build::Unkeyed);
+    table.note_read(0);
+    assert!(
+        table.entries.borrow()[0].read_by.is_empty(),
+        "no game build reads"
+    );
+    drop(table.leave((), None));
 }

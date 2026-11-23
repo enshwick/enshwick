@@ -2421,6 +2421,19 @@ pub struct HostApi {
     /// runs in the process. ABI 12.18.
     pub sound_steer_for:
         extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
+    /// As [`serve_resource`](Self::serve_resource) from `key` itself, for a
+    /// patch that serves `key` with the data of the resource `new`, a
+    /// re-key: inside `patch`, a [`resource_served`](Self::resource_served)
+    /// read of `new` builds it without its own re-keys, so the re-keys of
+    /// every mod apply as one permutation, and keys re-keyed in a ring
+    /// rotate. Allowed during `enshwick_mod_init` only. ABI 12.19.
+    pub rekey_resource: extern "system" fn(
+        me: ModHandle,
+        key: *const ResourceKey,
+        new: *const ResourceKey,
+        patch: Option<ResourcePatchFn>,
+        user: *mut c_void,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2656,5 +2669,6 @@ const _: () = {
     assert!(offset_of!(HostApi, sound_state) == 24 + 222 * 8);
     assert!(offset_of!(HostApi, sound_play_for) == 24 + 223 * 8);
     assert!(offset_of!(HostApi, sound_steer_for) == 24 + 224 * 8);
-    assert!(size_of::<HostApi>() == 24 + 225 * 8);
+    assert!(offset_of!(HostApi, rekey_resource) == 24 + 225 * 8);
+    assert!(size_of::<HostApi>() == 24 + 226 * 8);
 };

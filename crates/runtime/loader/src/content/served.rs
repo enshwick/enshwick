@@ -74,6 +74,9 @@ struct Patch {
     /// builder having panicked: later builds of the key run without it,
     /// and its mod and the mod's other patches stay on.
     on: AtomicBool,
+    /// The key whose data the patch serves its key with, when it is a
+    /// re-key: its served read of that key leaves out that key's re-keys.
+    rekey: Option<ResourceKey>,
 }
 
 impl Patch {
@@ -83,6 +86,7 @@ impl Patch {
             apply,
             user,
             on: AtomicBool::new(true),
+            rekey: None,
         }
     }
 
@@ -197,7 +201,7 @@ pub(crate) fn is_sealed() -> bool {
     RESOURCES.is_sealed()
 }
 
-/// Adds mod `owner`'s patch of `key`.
+/// Adds mod `owner`'s patch of `key`, a re-key of it to `rekey` when given.
 ///
 /// # Errors
 ///
@@ -207,10 +211,14 @@ pub(crate) fn register(
     owner: ModIndex,
     key: ResourceKey,
     base: ResourceKey,
+    rekey: Option<ResourceKey>,
     patch: ResourcePatchFn,
     user: *mut c_void,
 ) -> Result<(), ServeResourceError> {
-    let patch = Patch::new(owner, patch, user.expose_provenance());
+    let patch = Patch {
+        rekey,
+        ..Patch::new(owner, patch, user.expose_provenance())
+    };
     RESOURCES.edit(|pending| add(pending, key, base, patch))?
 }
 

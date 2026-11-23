@@ -18,15 +18,53 @@ pub(crate) extern "system" fn serve_resource(
     patch: Option<ResourcePatchFn>,
     user: *mut c_void,
 ) -> Status {
+    // SAFETY: the safe layer passes `key` and `base` null or pointing at
+    // keys valid for the call.
+    unsafe { serve(me, key, base, None, patch, user) }
+}
+
+pub(crate) extern "system" fn rekey_resource(
+    me: ModHandle,
+    key: *const ResourceKey,
+    new: *const ResourceKey,
+    patch: Option<ResourcePatchFn>,
+    user: *mut c_void,
+) -> Status {
+    // SAFETY: the safe layer passes `new` null or pointing at a key valid
+    // for the call; `as_ref` turns away null.
+    let Some(new) = (unsafe { new.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    // SAFETY: the safe layer passes `key` null or pointing at a key valid
+    // for the call, which serves as its own base.
+    unsafe { serve(me, key, key, Some(new), patch, user) }
+}
+
+/// Adds mod `me`'s `patch` of the key at `key` from the key at `base`; with
+/// `rekey`, a re-key whose served read of that key leaves out its re-keys.
+///
+/// # Safety
+///
+/// - `key` and `base` are null or point at a `ResourceKey` readable for the
+///   call.
+unsafe fn serve(
+    me: ModHandle,
+    key: *const ResourceKey,
+    base: *const ResourceKey,
+    rekey: Option<ResourceKey>,
+    patch: Option<ResourcePatchFn>,
+    user: *mut c_void,
+) -> Status {
     let Some(patch) = patch else {
         return Status::BAD_ARGS;
     };
-    // SAFETY: the safe layer passes valid keys for the call; `as_ref` turns away null.
+    // SAFETY: the caller guarantees `key` null or readable; `as_ref` turns
+    // away null.
     let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
-    // SAFETY: the safe layer passes `base` null or pointing at a key valid
-    // for the call; `as_ref` turns away null.
+    // SAFETY: the caller guarantees `base` null or readable; `as_ref` turns
+    // away null.
     let Some(base) = (unsafe { base.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
@@ -37,6 +75,7 @@ pub(crate) extern "system" fn serve_resource(
         let entry = (
             ServedResource { key, base },
             Registered::new(patch, user, me),
+            rekey,
         );
         // As the loader: a change chains onto the key's maker, which goes
         // first whenever it comes.
@@ -216,6 +255,8 @@ struct Frame {
     /// Whether a patch read another served key as served.
     reads: bool,
     buffers: Vec<Box<[u8]>>,
+    /// The key whose data the re-key patch running in this build takes.
+    rekey: Option<ResourceKey>,
 }
 
 thread_local! {
@@ -445,6 +486,7 @@ impl Building {
                 notes,
                 reads: false,
                 buffers: Vec::new(),
+                rekey: None,
             });
         });
         Self
@@ -474,11 +516,22 @@ impl Table {
     }
 }
 
-/// One patch of a served key: where it sits in the fake's list.
+/// One patch of a served key: where it sits in the fake's list, and the key
+/// whose data it takes when it is a re-key.
 #[derive(Clone, Copy)]
 struct Patch {
     at: usize,
     registered: Registered<ResourcePatchFn>,
+    rekey: Option<ResourceKey>,
+}
+
+/// Notes `rekey` as the re-key patch running in the innermost build.
+fn running(rekey: Option<ResourceKey>) {
+    BUILDING.with_borrow_mut(|frames| {
+        if let Some(frame) = frames.last_mut() {
+            frame.rekey = rekey;
+        }
+    });
 }
 
 // SAFETY: `apply` answers an output only when `lent` finds it in a buffer of
@@ -504,6 +557,7 @@ unsafe impl Patches for Table {
                 .map(|(at, served)| Patch {
                     at,
                     registered: served.1,
+                    rekey: served.2,
                 })
                 .collect()
         });
@@ -522,6 +576,14 @@ unsafe impl Patches for Table {
         })
     }
 
+    fn rekeys(&self, patch: &Patch) -> bool {
+        patch.rekey.is_some()
+    }
+
+    fn rekeying(&self) -> Option<ResourceKey> {
+        BUILDING.with_borrow(|frames| frames.last().and_then(|frame| frame.rekey))
+    }
+
     fn enter(&self, key: ResourceKey, build: Build) -> Building {
         Building::enter(key, build == Build::Game)
     }
@@ -535,11 +597,13 @@ unsafe impl Patches for Table {
         let call = |apply: ResourcePatchFn, user| unsafe {
             apply(base, input.len, user, &raw mut out, &raw mut out_len)
         };
+        running(patch.rekey);
         let status = if rebuild {
             patch.registered.run_even_off(call)
         } else {
             patch.registered.run(call)
         };
+        running(None);
         let output = View {
             at: out.expose_provenance(),
             len: out_len,

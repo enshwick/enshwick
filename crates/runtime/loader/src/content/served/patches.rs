@@ -159,7 +159,7 @@ fn read_served(
         archive: move |key: &ResourceKey| archive(key).ok(),
         on: mod_on,
     };
-    builds::read_built(&table, entry, base)
+    builds::read_built(&table, entry, base, Build::Scratch)
 }
 
 /// The game archive's resource `key`.
@@ -261,7 +261,7 @@ fn building(key: &ResourceKey) -> bool {
 /// the game: the loader's own patches then log nothing, as the game's
 /// build logs once.
 pub(crate) fn scratch() -> bool {
-    BUILDING.with_borrow(|frames| frames.iter().any(|f| f.build == Build::Scratch))
+    BUILDING.with_borrow(|frames| frames.iter().any(|f| f.build != Build::Game))
 }
 
 /// `len` zeroed bytes for the output of the patch running on this thread,
@@ -437,6 +437,17 @@ struct Frame {
     reads: bool,
     /// The buffers the build's patches took for their outputs.
     buffers: Vec<Buffer>,
+    /// The key whose data the re-key patch running in this build takes.
+    rekey: Option<ResourceKey>,
+}
+
+/// Notes `rekey` as the re-key patch running in the innermost build.
+fn running(rekey: Option<ResourceKey>) {
+    BUILDING.with_borrow_mut(|frames| {
+        if let Some(frame) = frames.last_mut() {
+            frame.rekey = rekey;
+        }
+    });
 }
 
 thread_local! {
@@ -530,6 +541,7 @@ impl Building {
                 build,
                 reads: false,
                 buffers: Vec::new(),
+                rekey: None,
             });
         });
         Self
@@ -669,6 +681,14 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
         patch.runs(self.on)
     }
 
+    fn rekeys(&self, patch: &&'a Patch) -> bool {
+        patch.rekey.is_some()
+    }
+
+    fn rekeying(&self) -> Option<ResourceKey> {
+        BUILDING.with_borrow(|frames| frames.last().and_then(|frame| frame.rekey))
+    }
+
     fn enter(&self, key: &'a Served, build: Build) -> Building {
         Building::enter(key.key, build)
     }
@@ -693,6 +713,7 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
                 &raw mut built_len,
             )
         };
+        running(patch.rekey);
         let status = if patch.owner == ModIndex::LOADER {
             apply()
         } else {
@@ -702,6 +723,7 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
                 apply,
             )
         };
+        running(None);
         // An output outside the buffers this build lent, null included,
         // could be neither freed nor kept.
         let at = built.expose_provenance();

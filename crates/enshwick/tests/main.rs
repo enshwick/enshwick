@@ -230,6 +230,8 @@ mod recipe_rules;
 #[cfg(feature = "unstable")]
 mod refused_runs;
 #[cfg(feature = "typed")]
+mod rekey_ring;
+#[cfg(feature = "typed")]
 mod rekey_served;
 #[cfg(feature = "typed")]
 mod removal;

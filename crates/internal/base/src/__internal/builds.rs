@@ -62,6 +62,10 @@ pub enum Build {
     /// A mod's served read, kept nowhere: a patch that fails is skipped with
     /// its mod left on.
     Scratch,
+    /// A re-key's served read of the key it takes the data of: as
+    /// [`Build::Scratch`], without that key's own re-keys, so the re-keys of
+    /// every mod apply as one permutation.
+    Unkeyed,
 }
 
 /// Bytes a build reads: where they lie and how many.
@@ -166,6 +170,14 @@ pub unsafe trait Patches {
 
     /// Whether `patch` is still on and its mod too.
     fn on(&self, patch: &Self::Patch) -> bool;
+
+    /// Whether `patch` is a re-key, which serves its key with the data of
+    /// another.
+    fn rekeys(&self, patch: &Self::Patch) -> bool;
+
+    /// The key whose data the re-key patch running innermost on this thread
+    /// takes; `None` when the patch running there is no re-key.
+    fn rekeying(&self) -> Option<ResourceKey>;
 
     /// Begins a `build` of `key` on this thread; a served read inside a
     /// [`Build::Game`] build makes `key` a reader of the key read.
@@ -301,7 +313,8 @@ impl KeepBase {
 ///
 /// The patches still on of the mods still on run; for a rebuild, which
 /// `only` names the mods that built the bytes the game holds, each patch of
-/// those mods runs, on or off, since the game holds what each added. A
+/// those mods runs, on or off, since the game holds what each added; a
+/// [`Build::Unkeyed`] build leaves out the key's re-keys. A
 /// panicked patch is reported in every build; one that refuses or hands back
 /// bytes it was not lent fails in a build the game holds and is skipped in a
 /// scratch one. The game's first build runs even while `key`'s patches run
@@ -334,7 +347,9 @@ pub unsafe fn build<T: Patches>(
     let mut by = Vec::new();
     for patch in table.patches(key) {
         let owner = table.owner(&patch);
-        if !patch_runs(only, &owner, || table.on(&patch)) {
+        if !patch_runs(only, &owner, || table.on(&patch))
+            || (kind == Build::Unkeyed && table.rekeys(&patch))
+        {
             continue;
         }
         // SAFETY: `current` is the base, readable for the call as the caller
@@ -346,7 +361,7 @@ pub unsafe fn build<T: Patches>(
         } else if let (true, Some(output)) = (status == Status::OK, output) {
             current = output;
             by.push(owner);
-        } else if kind != Build::Scratch {
+        } else if kind == Build::Game {
             let status = if status == Status::OK {
                 Status::BAD_ARGS
             } else {
@@ -501,8 +516,9 @@ pub fn rebuild_readers<T: ServedTable>(table: &T, key: T::Key, done: &mut Vec<Re
 /// Resource `key` as the game's first read would build it now, kept nowhere.
 ///
 /// A served key builds from its base in the archive with the patches still
-/// on; any other key reads as the archive has the key [`ServedTable::find`]
-/// names.
+/// on, but its own re-keys when a re-key of `key` reads it
+/// ([`Build::Unkeyed`]); any other key reads as the archive has the key
+/// [`ServedTable::find`] names.
 ///
 /// # Errors
 ///
@@ -525,10 +541,16 @@ pub fn read_served<T: ServedTable>(
         return Err(BuildResourceError::Building);
     }
     let base = archived(table, &table.keys(served).1)?;
-    read_built(table, served, base)
+    let kind = if table.rekeying() == Some(*key) {
+        Build::Unkeyed
+    } else {
+        Build::Scratch
+    };
+    read_built(table, served, base, kind)
 }
 
-/// `key` built for a mod's served read from `base`, its base's bytes.
+/// `key` built for a mod's served read from `base`, its base's bytes, as
+/// `kind`, [`Build::Scratch`] or [`Build::Unkeyed`], says.
 ///
 /// When no patch built, it is `base` itself for a key patched in place and
 /// the archive's bytes for a new one. The game's builds running on this
@@ -542,11 +564,12 @@ pub fn read_built<T: ServedTable>(
     table: &T,
     key: T::Key,
     base: Vec<u8>,
+    kind: Build,
 ) -> Result<Vec<u8>, BuildResourceError> {
     table.note_read(key);
     let view = (base.as_ptr().expose_provenance(), base.len());
     // SAFETY: `base` is owned here and unchanged until the build ends.
-    match unsafe { build(table, key, view, Build::Scratch, None) } {
+    match unsafe { build(table, key, view, kind, None) } {
         Ok(built) => Ok(table.to_vec(built)),
         Err(BuildResourceError::NotBuilt) => {
             let (served, from) = table.keys(key);
