@@ -3,17 +3,18 @@
 //! domains above build on, such as a data pack's rewards.
 
 /// Starts counting the objectives of the quest steps the mod added since
-/// the last call, which `Load::add_quest` calls once the content domain has
-/// given each its counters.
+/// the last call, as `Load::add_quest` asks.
 ///
-/// # Errors
-///
-/// [`Off`](crate::Off) when an event the objectives count cannot be
-/// subscribed to.
+/// The content domain has given each step its counters and the quest is in
+/// the journal by then, so a kind of objective that cannot count is logged,
+/// and only it is off.
 #[cfg(feature = "typed")]
-pub fn count_objectives(load: &mut crate::BaseLoad) -> Result<(), crate::Off> {
+pub fn count_objectives(load: &mut crate::BaseLoad) {
     let steps = enshwick_content::__internal::take_counted_steps(load);
-    crate::quests::objectives::count(load, steps)
+    let quest = steps.first().map(|step| step.quest);
+    if let (Err(off), Some(quest)) = (crate::quests::objectives::count(load, steps), quest) {
+        crate::warn!("quest {quest}: some objectives do not count: {off}");
+    }
 }
 
 /// The per-event check of quest objectives, for the benchmark.

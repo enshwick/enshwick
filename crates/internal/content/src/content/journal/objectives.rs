@@ -112,7 +112,8 @@ pub enum KillTarget {
 pub enum CraftTarget {
     /// This recipe.
     Recipe(RecipeId),
-    /// Any recipe that makes this item.
+    /// Any vanilla recipe that makes this item; a mod's own recipe counts
+    /// as [`CraftTarget::Recipe`].
     Item(ItemId),
 }
 

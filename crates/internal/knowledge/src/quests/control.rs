@@ -283,7 +283,11 @@ impl Quests {
     /// Finishes the step `holder` stands at in `quest` and shows the next,
     /// granting what each asks; returns the step the holder stands at once
     /// the grants apply at the next step of the world. A quest whose last
-    /// step is done stays as it is.
+    /// step is done stays as it is. Until those grants apply, a second call
+    /// that moves the quest for the holder reads the steps as they were
+    /// and grants the same step again, so a mod moves a quest once per
+    /// holder and step of the world, and finishes it with
+    /// [`Quests::complete`].
     ///
     /// # Errors
     ///
@@ -322,7 +326,9 @@ impl Quests {
     /// it stands at to the last asks. The game then pays each player for
     /// whom the last step holds and the quest's bool is unset, once, as for
     /// a quest played through; experience, item notices and the journal's
-    /// mark are the game's.
+    /// mark are the game's. As with [`Quests::advance`], a call that moves
+    /// the quest for the holder in the same step of the world reads the
+    /// steps from before this one's grants.
     ///
     /// # Errors
     ///

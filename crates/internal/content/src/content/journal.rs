@@ -749,30 +749,38 @@ impl LoadMethods for crate::BaseLoad {
         if new.steps.is_empty() {
             return Err(Off::new(format!("quest {}: no steps", new.id)));
         }
-        for step in &new.steps {
-            for query in step.shown_when.iter().chain(&step.done_when) {
-                query.to_value()?;
-            }
-        }
         self.knowledge_without(new.id)?;
         let (id, scope) = (new.id, owned_scope(&new.kind));
-        let mut own = |part: &'static str, kind: KnowledgeType| {
-            let owned = id.try_part(part).ok_or_else(|| {
-                Off::new(format!("quest {id}: no room for part {part} in its id"))
-            })?;
+        let part = |part: &'static str| {
+            id.try_part(part)
+                .ok_or_else(|| Off::new(format!("quest {id}: no room for part {part} in its id")))
+        };
+        // Every check runs on a copy first, so a refused quest declares and serves nothing.
+        let mut checked = new.clone();
+        let mut check = |name: &'static str| {
+            let owned = part(name)?;
             self.knowledge_without(owned)?;
+            Ok(KnowledgeId::from_guid(owned.guid()))
+        };
+        #[cfg(feature = "typed")]
+        count_objectives(&mut checked, scope, |name, _| check(name))?;
+        fill_owned(&mut checked, |name| {
+            check(name).map(|known| KnowledgeQuery::is_set(known, scope))
+        })?;
+        for (step, id) in checked.steps.iter().zip(step_ids(id, checked.steps.len())) {
+            step.to_value(id)?;
+        }
+        let key = self.journal_key()?;
+        let mut own = |name: &'static str, kind: KnowledgeType| {
+            let owned = part(name)?;
             self.declare(owned)?;
             self.serve_knowledge(NewKnowledge::new(owned, scope, kind))
         };
         #[cfg(feature = "typed")]
         let counted = count_objectives(&mut new, scope, &mut own)?;
-        fill_owned(&mut new, |part| {
-            own(part, KnowledgeType::Bool).map(|known| KnowledgeQuery::is_set(known, scope))
+        fill_owned(&mut new, |name| {
+            own(name, KnowledgeType::Bool).map(|known| KnowledgeQuery::is_set(known, scope))
         })?;
-        for (step, id) in new.steps.iter().zip(step_ids(new.id, new.steps.len())) {
-            step.to_value(id)?;
-        }
-        let key = self.journal_key()?;
         self.declare(new.id)?;
         let quest = self.serve_knowledge(NewKnowledge::new(
             new.id,

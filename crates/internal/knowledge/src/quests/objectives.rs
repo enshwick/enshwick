@@ -2,7 +2,8 @@
 //! subscription per kind of event, never per objective, and a lookup that
 //! leaves at once for an event no objective counts.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
 use rustc_hash::FxHashMap;
@@ -12,6 +13,7 @@ use crate::content::journal::{CountedStep, CraftTarget, KillTarget, Objective};
 use crate::events::BuildingPlaced;
 use crate::game_events::EntityDiedEvent;
 use crate::knowledge::{Grant, Scope};
+use crate::locks::Relock as _;
 use crate::typed::FactionType;
 use crate::{Entity, ItemId, Off, RecipeId};
 
@@ -59,11 +61,14 @@ pub(crate) struct Table {
     reach: Vec<Entry>,
     /// The items each crafted item objective counts the recipes of.
     craft_items: Vec<(ItemId, Entry)>,
+    /// Whether a step ends on its own done bool, which a tick sets.
+    own_done: bool,
 }
 
 impl Table {
     /// Adds `step`'s objectives.
     pub(crate) fn add(&mut self, step: CountedStep) {
+        self.own_done |= step.done_bool.is_some();
         let step = Arc::new(step);
         for (at, (objective, _)) in step.objectives.iter().enumerate() {
             let entry = Entry {
@@ -136,20 +141,28 @@ pub(crate) fn credit(
         return None;
     }
     let done = step.done_bool.is_some()
-        && step
-            .objectives
-            .iter()
-            .enumerate()
-            .all(|(i, (objective, _))| {
-                let value = if i == at {
-                    after
-                } else {
-                    held.get(i).copied().unwrap_or(0)
-                };
-                value >= objective.count()
-            });
+        && reached(step, |i| {
+            if i == at {
+                after
+            } else {
+                held.get(i).copied().unwrap_or(0)
+            }
+        });
     Some((after - current, done))
 }
+
+/// Whether every counter of `step`, at the value `held` gives it by place,
+/// reaches its count.
+fn reached(step: &CountedStep, held: impl Fn(usize) -> u32) -> bool {
+    step.objectives
+        .iter()
+        .enumerate()
+        .all(|(i, (objective, _))| held(i) >= objective.count())
+}
+
+/// How many steps a mod's counting keeps waiting for their done bool at
+/// once; each holds a holder and a step, and a full list drops new ones.
+const WAITING_MAX: usize = 256;
 
 /// The objectives a mod counts and the quests they read, shared by its
 /// handlers.
@@ -159,9 +172,17 @@ pub(crate) struct Counting {
     /// Written only while the mod loads, swapped whole, so an event reads
     /// it without a lock.
     table: ArcSwap<Table>,
-    /// The recipes each crafted item objective counts, read on the first
-    /// craft once the game's recipes read.
+    /// The recipes each crafted item objective counts, once the game's
+    /// recipes read.
     craft_recipes: OnceLock<Vec<(RecipeId, Entry)>>,
+    /// The kinds of event subscribed so far, so a failed subscription is
+    /// tried again by the next quest that needs it.
+    subscribed: AtomicU8,
+    /// Steps of their own done bool whose last counter reached its count,
+    /// for the holder: a grant applies only at the next step of the world,
+    /// so two counters raised in one step each read the other's old value,
+    /// and a tick sets the bool once both read reached.
+    waiting: Mutex<Vec<(Holder, Arc<CountedStep>)>>,
 }
 
 impl Counting {
@@ -182,39 +203,32 @@ impl Counting {
     /// step shows and is not done.
     pub(crate) fn credit(&self, holder: Holder, entry: &Entry, to: Count) {
         let step = &entry.step;
-        let reader = match holder {
-            Holder::World => None,
-            Holder::Player(player) => Some(player),
-        };
-        let open = self.quests.holds(reader, step.shown_when) == Some(true)
-            && self.quests.holds(reader, step.done_when) == Some(false);
-        if !open {
+        if !self.open(holder, step) {
             return;
         }
         let knowledge = self.quests.knowledge;
-        let held: Vec<u32> = step
-            .objectives
-            .iter()
-            .map(|(_, counter)| {
-                self.quests
-                    .known(holder, *counter)
-                    .map_or(0, |known| known.value)
-            })
-            .collect();
+        let held = self.held(holder, step);
         let Some((add, done)) = credit(step, entry.at, &held, to) else {
             return;
         };
-        let counter = step.objectives[entry.at].1;
-        if let Err(error) = knowledge.grant(holder.entity(), counter, Grant::Add(add)) {
+        let (objective, counter) = &step.objectives[entry.at];
+        if let Err(error) = knowledge.grant(holder.entity(), *counter, Grant::Add(add)) {
             crate::warn_every!(
                 core::time::Duration::from_secs(60),
                 "quests: objective counter {counter} not raised: {error}"
             );
             return;
         }
-        if let (true, Some(bool)) = (done, step.done_bool)
-            && let Err(error) = knowledge.grant(holder.entity(), bool, Grant::Set)
-        {
+        let Some(bool) = step.done_bool else {
+            return;
+        };
+        if !done {
+            if held[entry.at].saturating_add(add) >= objective.count() {
+                self.wait(holder, step);
+            }
+            return;
+        }
+        if let Err(error) = knowledge.grant(holder.entity(), bool, Grant::Set) {
             crate::warn_every!(
                 core::time::Duration::from_secs(60),
                 "quests: step bool {bool} not set: {error}"
@@ -222,40 +236,157 @@ impl Counting {
         }
     }
 
+    /// Whether `step` shows and is not done for `holder`.
+    fn open(&self, holder: Holder, step: &CountedStep) -> bool {
+        let reader = match holder {
+            Holder::World => None,
+            Holder::Player(player) => Some(player),
+        };
+        self.quests.holds(reader, step.shown_when) == Some(true)
+            && self.quests.holds(reader, step.done_when) == Some(false)
+    }
+
+    /// The values of `step`'s counters for `holder`, 0 for one that does
+    /// not read.
+    fn held(&self, holder: Holder, step: &CountedStep) -> Vec<u32> {
+        step.objectives
+            .iter()
+            .map(|(_, counter)| {
+                self.quests
+                    .known(holder, *counter)
+                    .map_or(0, |known| known.value)
+            })
+            .collect()
+    }
+
+    /// Keeps `step` waiting for its done bool for `holder`, once.
+    fn wait(&self, holder: Holder, step: &Arc<CountedStep>) {
+        let mut waiting = self.waiting.relock();
+        if waiting
+            .iter()
+            .any(|(at, held)| *at == holder && Arc::ptr_eq(held, step))
+        {
+            return;
+        }
+        if waiting.len() >= WAITING_MAX {
+            crate::warn_every!(
+                core::time::Duration::from_secs(60),
+                "quests: {WAITING_MAX} steps wait for their done bool; one more waits for its next event"
+            );
+            return;
+        }
+        waiting.push((holder, Arc::clone(step)));
+    }
+
+    /// Sets the done bool of each waiting step whose counters all read
+    /// reached, and stops waiting on a step that closed.
+    fn settle(&self) {
+        let waiting = core::mem::take(&mut *self.waiting.relock());
+        if waiting.is_empty() {
+            return;
+        }
+        let left: Vec<_> = waiting
+            .into_iter()
+            .filter(|(holder, step)| !self.settled(*holder, step))
+            .collect();
+        self.waiting.relock().extend(left);
+    }
+
+    /// Sets `step`'s done bool for `holder` once its counters read reached;
+    /// whether the step waits no more.
+    fn settled(&self, holder: Holder, step: &CountedStep) -> bool {
+        let Some(bool) = step.done_bool else {
+            return true;
+        };
+        if !self.open(holder, step) {
+            return true;
+        }
+        let held = self.held(holder, step);
+        if !reached(step, |i| held.get(i).copied().unwrap_or(0)) {
+            return false;
+        }
+        match self
+            .quests
+            .knowledge
+            .grant(holder.entity(), bool, Grant::Set)
+        {
+            Ok(()) => true,
+            Err(error) => {
+                crate::warn_every!(
+                    core::time::Duration::from_secs(60),
+                    "quests: step bool {bool} not set: {error}"
+                );
+                false
+            }
+        }
+    }
+
+    /// The recipes each crafted item objective counts, read from the
+    /// game's vanilla recipes once they read; `None` until then.
+    fn craft_recipes(&self) -> Option<&[(RecipeId, Entry)]> {
+        if let Some(recipes) = self.craft_recipes.get() {
+            return Some(recipes);
+        }
+        let recipes = match crate::content::vanilla::recipes() {
+            Ok(recipes) => recipes,
+            Err(off) => {
+                crate::warn_every!(
+                    core::time::Duration::from_secs(60),
+                    "quests: crafted item objectives wait for the game's recipes: {off}"
+                );
+                return None;
+            }
+        };
+        let table = self.table.load();
+        let found = table
+            .craft_items
+            .iter()
+            .flat_map(|(item, entry)| {
+                recipes
+                    .iter()
+                    .filter(|r| r.output.is_some_and(|out| ItemId::from_guid(out) == *item))
+                    .map(|r| (RecipeId::from_guid(r.guid), entry.clone()))
+            })
+            .collect();
+        Some(self.craft_recipes.get_or_init(|| found))
+    }
+
+    /// Whether an objective counts a craft of `recipe`, without
+    /// allocating: the check a craft request passes before it is queued.
+    fn counts_craft(&self, recipe: RecipeId) -> bool {
+        let table = self.table.load();
+        !table.entries(&Key::Recipe(recipe)).is_empty()
+            || (!table.craft_items.is_empty()
+                && self
+                    .craft_recipes()
+                    .is_some_and(|items| items.iter().any(|(r, _)| *r == recipe)))
+    }
+
     /// The objectives that count a craft of `recipe`: those of the recipe
     /// and those of the vanilla item it makes.
     fn crafted(&self, recipe: RecipeId) -> Vec<Entry> {
         let mut entries = self.table.load().entries(&Key::Recipe(recipe)).to_vec();
-        let items = self.craft_recipes.get_or_init(|| {
-            let table = self.table.load();
-            let recipes = crate::content::vanilla::recipes().unwrap_or_default();
-            table
-                .craft_items
-                .iter()
-                .flat_map(|(item, entry)| {
-                    recipes
-                        .iter()
-                        .filter(|r| r.output.is_some_and(|out| ItemId::from_guid(out) == *item))
-                        .map(|r| (RecipeId::from_guid(r.guid), entry.clone()))
-                })
-                .collect()
-        });
-        entries.extend(
-            items
-                .iter()
-                .filter(|(r, _)| *r == recipe)
-                .map(|(_, e)| e.clone()),
-        );
+        if let Some(items) = self.craft_recipes() {
+            entries.extend(
+                items
+                    .iter()
+                    .filter(|(r, _)| *r == recipe)
+                    .map(|(_, e)| e.clone()),
+            );
+        }
         entries
     }
 }
 
 /// Starts counting `steps` for the mod: the first step of a kind of event
-/// subscribes to it, once per mod.
+/// subscribes to it, once per mod, and a kind whose subscription failed is
+/// tried again by the next.
 ///
 /// # Errors
 ///
-/// [`Off`] when a subscription fails, as on a build without the event.
+/// [`Off`] when a subscription fails, as on a build without the event, or
+/// when a kill objective by faction cannot read a dying entity's faction;
+/// the steps count on every other kind.
 pub(crate) fn count(load: &mut crate::BaseLoad, steps: Vec<CountedStep>) -> Result<(), Off> {
     if steps.is_empty() {
         return Ok(());
@@ -266,10 +397,22 @@ pub(crate) fn count(load: &mut crate::BaseLoad, steps: Vec<CountedStep>) -> Resu
             quests,
             table: ArcSwap::default(),
             craft_recipes: OnceLock::new(),
+            subscribed: AtomicU8::new(0),
+            waiting: Mutex::default(),
         }))
     });
+    let by_faction = steps.iter().any(|step| {
+        step.objectives.iter().any(|(objective, _)| {
+            matches!(
+                objective,
+                Objective::Kill {
+                    target: KillTarget::Faction(_),
+                    ..
+                }
+            )
+        })
+    });
     let mut table = Table::clone(&counting.table.load());
-    let before = Kinds::of(&table);
     for step in steps {
         table.add(step);
     }
@@ -283,7 +426,15 @@ pub(crate) fn count(load: &mut crate::BaseLoad, steps: Vec<CountedStep>) -> Resu
         })
         .collect();
     counting.table.store(Arc::new(table));
-    subscribe(load, counting, before, after, &items)
+    subscribe(load, counting, after, &items)?;
+    if by_faction {
+        crate::typed::ComponentType::<crate::typed::ecs::Faction>::resolve(load).map_err(|off| {
+            Off::new(format!(
+                "kill objectives by faction do not count, a dying entity's faction does not read: {off}"
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 /// Which kinds of event a table counts.
@@ -294,18 +445,19 @@ impl Kinds {
     const CRAFT: u8 = 1;
     const KILL: u8 = 2;
     const BUILD: u8 = 4;
-    const REACH: u8 = 8;
+    /// A tick: reach objectives and steps of their own done bool.
+    const TICK: u8 = 8;
 
     fn of(table: &Table) -> Self {
         let craft = !table.craft_items.is_empty() || table.counts(|k| matches!(k, Key::Recipe(_)));
         let kill = table.counts(|k| matches!(k, Key::Template(_) | Key::Faction(_)));
         let build = table.counts(|k| matches!(k, Key::Build(_)));
-        let reach = !table.reach.is_empty();
+        let tick = !table.reach.is_empty() || table.own_done;
         let kinds = [
             (craft, Self::CRAFT),
             (kill, Self::KILL),
             (build, Self::BUILD),
-            (reach, Self::REACH),
+            (tick, Self::TICK),
         ];
         Self(
             kinds
@@ -321,28 +473,41 @@ impl Kinds {
     }
 }
 
-/// Subscribes to each kind `after` counts and `before` did not, and to the
-/// pickups of each item in `items` not yet followed.
+impl Counting {
+    /// Whether the table `after` counts the kind `kind` and no handler of
+    /// it is subscribed yet.
+    fn needs(&self, after: Kinds, kind: u8) -> bool {
+        Kinds(self.subscribed.load(Ordering::Relaxed)).gains(after, kind)
+    }
+
+    /// Records the kind `kind` as subscribed.
+    fn subscribed(&self, kind: u8) {
+        self.subscribed.fetch_or(kind, Ordering::Relaxed);
+    }
+}
+
+/// Subscribes to each kind `after` counts that has no handler yet, and to
+/// the pickups of each item in `items` not yet followed.
 fn subscribe(
     load: &mut crate::BaseLoad,
     counting: &'static Counting,
-    before: Kinds,
     after: Kinds,
     items: &[ItemId],
 ) -> Result<(), Off> {
     use enshwick_inventory::__load::*;
     use enshwick_world::__load::*;
-    if before.gains(after, Kinds::CRAFT) {
+    if counting.needs(after, Kinds::CRAFT) {
         crate::rewards::on_crafted(
             load,
-            |_| true,
+            |recipe| counting.counts_craft(recipe),
             move |player, recipe| {
                 let entries = counting.crafted(recipe);
                 counting.count(player, &entries, |_| Count::Add(1));
             },
         )?;
+        counting.subscribed(Kinds::CRAFT);
     }
-    if before.gains(after, Kinds::KILL) {
+    if counting.needs(after, Kinds::KILL) {
         let world = load.world()?;
         let faction = crate::typed::ComponentType::<crate::typed::ecs::Faction>::resolve(load).ok();
         load.on::<EntityDiedEvent>(move |died| {
@@ -361,8 +526,9 @@ fn subscribe(
                 counting.count(player, table.entries(&key), |_| Count::Add(1));
             }
         })?;
+        counting.subscribed(Kinds::KILL);
     }
-    if before.gains(after, Kinds::BUILD) {
+    if counting.needs(after, Kinds::BUILD) {
         load.on::<BuildingPlaced>(move |placed| {
             if placed.kind != crate::abi::BuildingData::PLACED || placed.replay != 0 {
                 return;
@@ -371,6 +537,7 @@ fn subscribe(
             let entries = table.entries(&Key::Build(placed.item));
             counting.count(placed.character, entries, |_| Count::Add(1));
         })?;
+        counting.subscribed(Kinds::BUILD);
     }
     let followed = load
         .slot::<FollowedItems>()
@@ -392,10 +559,14 @@ fn subscribe(
             .0
             .push(item);
     }
-    if before.gains(after, Kinds::REACH) {
+    if counting.needs(after, Kinds::TICK) {
         let world = load.world()?;
         load.on_tick(core::time::Duration::from_secs(1), move |_| {
+            counting.settle();
             let table = counting.table.load();
+            if table.reach.is_empty() {
+                return;
+            }
             for player in world.players() {
                 let Some(at) = world.position(player.entity) else {
                     continue;
@@ -416,6 +587,7 @@ fn subscribe(
                 counting.count(player.entity, &near, |_| Count::Add(1));
             }
         })?;
+        counting.subscribed(Kinds::TICK);
     }
     Ok(())
 }
@@ -567,6 +739,34 @@ mod tests {
         assert_eq!(table.entries(&Key::Build(ItemId::new(4))).len(), 1);
         assert!(table.entries(&Key::Recipe(RecipeId::new(8))).is_empty());
         let kinds = Kinds::of(&table);
-        assert_eq!(kinds, Kinds(Kinds::CRAFT | Kinds::BUILD));
+        assert_eq!(
+            kinds,
+            Kinds(Kinds::CRAFT | Kinds::BUILD | Kinds::TICK),
+            "a step of its own done bool settles on a tick"
+        );
+    }
+
+    #[test]
+    fn two_counters_raised_in_one_world_step_each_miss_the_bool_and_a_tick_settles_it() {
+        let two = step(
+            vec![
+                craft(1),
+                Objective::Custom {
+                    signal: crate::content::Id::new("you.q:s"),
+                    count: 1,
+                },
+            ],
+            true,
+        );
+        // Both events read the counters before either grant applies.
+        assert_eq!(credit(&two, 0, &[0, 0], Count::Add(1)), Some((1, false)));
+        assert_eq!(credit(&two, 1, &[0, 0], Count::Add(1)), Some((1, false)));
+        assert_eq!(
+            credit(&two, 0, &[1, 1], Count::Add(1)),
+            None,
+            "no later event of a reached counter sets it"
+        );
+        assert!(reached(&two, |i| [1, 1][i]), "what the tick reads");
+        assert!(!reached(&two, |i| [1, 0][i]), "a grant not yet applied");
     }
 }

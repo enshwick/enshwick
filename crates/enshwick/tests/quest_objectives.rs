@@ -5,23 +5,30 @@
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
+    use std::time::Duration;
 
     use enshwick::abi::{BuildingData, Header, KnowledgeInfo, PlayerInfo, Status};
-    use enshwick::content::journal::{NewQuest, Objective, QuestStep};
-    use enshwick::content::knowledge::KnowledgeQuery;
-    use enshwick::content::{Guid, Id};
+    use enshwick::content::journal::{KillTarget, NewQuest, Objective, QuestStep};
+    use enshwick::content::knowledge::{GAME_KNOWLEDGE, KnowledgeQuery};
+    use enshwick::content::{EngineFacts, Guid, Id};
     use enshwick::events::BuildingPlaced;
     use enshwick::knowledge::{KnowledgeId, Scope};
     use enshwick::quests::{Holder, Quests};
     use enshwick::test::FakeHost;
+    use enshwick::typed::FactionType;
     use enshwick::{Entity, ItemId, Load, Mod, Off, PlayerKey};
 
     const BEACONS: Id = Id::new("you.beacon:beacons");
+    /// A quest refused for its second step's count of 0.
+    const BROKEN: Id = Id::new("you.beacon:broken");
+    /// A quest whose kills by faction this fake cannot count.
+    const HUNTED: Id = Id::new("you.beacon:hunted");
     const SIGNAL: Id = Id::new("you.beacon:lit");
     const WALL: ItemId = ItemId::new(0x0000_0a11);
     const PLAYER: Entity = Entity(4096);
 
     static QUESTS: OnceLock<Quests> = OnceLock::new();
+    static BROKEN_REFUSED: OnceLock<bool> = OnceLock::new();
 
     fn tag(name: &str) -> Guid {
         Guid::named(&format!("you.beacon:{name}"))
@@ -60,6 +67,30 @@ mod tests {
                         ..QuestStep::owned(tag("2"), tag("2.text"))
                     },
                 ],
+            ))?;
+            let custom = |count| QuestStep {
+                objectives: vec![Objective::Custom {
+                    signal: SIGNAL,
+                    count,
+                }],
+                ..QuestStep::owned(tag("b"), tag("b.text"))
+            };
+            let broken = load.add_quest(NewQuest::new(
+                BROKEN,
+                tag("broken"),
+                vec![custom(1), custom(0)],
+            ));
+            let _ = BROKEN_REFUSED.set(broken.is_err());
+            load.add_quest(NewQuest::new(
+                HUNTED,
+                tag("hunted"),
+                vec![QuestStep {
+                    objectives: vec![Objective::Kill {
+                        target: KillTarget::Faction(FactionType::Vukah),
+                        count: 1,
+                    }],
+                    ..QuestStep::owned(tag("h"), tag("h.text"))
+                }],
             ))?;
             let _ = QUESTS.set(load.quests());
             Ok(Self)
@@ -107,6 +138,13 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        loader.set_knowledge(&values(set), &[]);
+        (loader, QUESTS.get().unwrap())
+    }
+
+    /// The player's entries of the quest, each at the value `set` gives it,
+    /// else 0.
+    fn values(set: &[(&'static str, u32)]) -> Vec<(Option<Entity>, KnowledgeInfo)> {
         let value = |part| set.iter().find(|(p, _)| *p == part).map_or(0, |(_, v)| *v);
         let mut values = vec![info(
             KnowledgeId::from_guid(BEACONS.guid()),
@@ -119,8 +157,7 @@ mod tests {
         for part in ["step-0.obj-0", "step-1.obj-0", "step-1.obj-1"] {
             values.push(info(owned(part), KnowledgeInfo::COUNTER, value(part)));
         }
-        loader.set_knowledge(&values, &[]);
-        (loader, QUESTS.get().unwrap())
+        values
     }
 
     fn added(id: KnowledgeId, amount: u32) -> (Option<Entity>, KnowledgeId, u32, u32) {
@@ -217,5 +254,80 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn two_counters_raised_in_one_world_step_set_the_step_s_bool_on_the_next_tick() {
+        let (loader, quests) = start(&[("started", 1), ("step-0.obj-0", 3), ("step-1.obj-0", 1)]);
+        assert_eq!(loader.raise::<BuildingPlaced>(&placed(WALL)), 1);
+        quests.signal(Holder::Player(PLAYER), SIGNAL, 1);
+        assert_eq!(
+            loader.grants(),
+            [
+                added(owned("step-1.obj-0"), 1),
+                added(owned("step-1.obj-1"), 1)
+            ],
+            "each read the other's counter before its grant applied"
+        );
+        let _ran = loader.tick(Duration::from_secs(1));
+        assert_eq!(loader.grants().len(), 2, "the grants have not applied yet");
+        let applied = values(&[
+            ("started", 1),
+            ("step-0.obj-0", 3),
+            ("step-1.obj-0", 2),
+            ("step-1.obj-1", 1),
+        ]);
+        loader.set_knowledge(&applied, &[]);
+        let _ran = loader.tick(Duration::from_secs(1));
+        assert_eq!(
+            loader.grants().last(),
+            Some(&(
+                Some(PLAYER),
+                owned("step-1.done"),
+                u32::from(KnowledgeInfo::BOOL),
+                0
+            )),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_kind_of_objective_the_build_cannot_count_is_logged_and_the_quest_stays() {
+        let (loader, quests) = start(&[]);
+        assert!(
+            quests
+                .quest(KnowledgeId::from_guid(HUNTED.guid()))
+                .is_some()
+        );
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("some objectives do not count")),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_refused_quest_serves_no_knowledge_of_its_own() {
+        let (loader, _quests) = start(&[]);
+        assert_eq!(BROKEN_REFUSED.get(), Some(&true));
+        let host = enshwick::host().unwrap();
+        let key = GAME_KNOWLEDGE.key_by_hash(host.hash("GameKnowledgeResource").unwrap());
+        let base = host.game_resource(key).unwrap();
+        let built = loader.build_resource(&key, &base).unwrap();
+        let holds = |id: Id, part| {
+            let key = KnowledgeId::from_guid(id.part(part).guid()).get();
+            built.windows(4).any(|bytes| bytes == key.to_le_bytes())
+        };
+        assert!(
+            holds(BEACONS, "step-0.obj-0"),
+            "the search finds a served one"
+        );
+        for part in ["started", "step-0.obj-0", "step-1.obj-0"] {
+            assert!(!holds(BROKEN, part), "{part} left behind");
+        }
     }
 }

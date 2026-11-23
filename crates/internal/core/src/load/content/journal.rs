@@ -11,21 +11,29 @@ impl Load<'_> {
     /// Adds a quest to the journal beside the game's, on the server and the
     /// client alike, and returns its quest id: a player's bool the game
     /// sets when it pays the quest, as for its own. Each step shows while
-    /// its `shown_when` holds and is done once its `done_when` holds. When
+    /// its `shown_when` holds and is done once its `done_when` holds; a
+    /// query left `None` gets knowledge of the loader's, which
+    /// [`Quests`](crate::quests::Quests) moves on, and each objective of a
+    /// step a counter the loader raises on its events. When
     /// the last step is done the game gives the experience of the rewards
     /// and raises [`QuestCompleted`](crate::events::QuestCompleted); it
     /// draws an item reward and never gives it, so the mod gives its items
     /// in a handler of that event
     /// ([`give_what_fits`](crate::inventory::Inventories::give_what_fits)).
-    /// A mod moves the quest on by granting the knowledge its steps ask for.
+    /// A mod moves the quest on with [`Quests`](crate::quests::Quests) or by
+    /// granting the knowledge its steps ask for.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a quest without steps, a count query from 0, an id the
-    /// game's knowledge holds, or an id the loader refuses (see
-    /// [`Load::declare`]). An id the journal already
-    /// holds is logged when the game first reads it, and the quest is left
-    /// out.
+    /// [`Off`] for a quest without steps, a count query from 0, an
+    /// objective counting from 0 or a reach objective without finite
+    /// coordinates and a radius above 0, an id too long to name the loader's parts in, an id
+    /// the game's knowledge holds, or an id the loader refuses (see
+    /// [`Load::declare`]); a refused quest declares nothing. An id the
+    /// journal already holds is logged when the game first reads it, and
+    /// the quest is left out. A kind of objective the build cannot count,
+    /// such as a kill on a build without the event, is logged and only it
+    /// stays at 0.
     ///
     /// # Examples
     ///
@@ -34,7 +42,7 @@ impl Load<'_> {
     pub fn add_quest(&mut self, new: NewQuest) -> Result<KnowledgeId, Off> {
         let quest = self.base.add_quest(new)?;
         #[cfg(feature = "typed")]
-        enshwick_knowledge::__internal::count_objectives(&mut self.base)?;
+        enshwick_knowledge::__internal::count_objectives(&mut self.base);
         Ok(quest)
     }
 

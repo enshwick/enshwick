@@ -321,7 +321,11 @@ each objective a counter of its own. It adds the count to the step's
 
 A step of one objective and no `done_when` is done once the count is
 reached. A step of several gets a bool of its own instead. The loader sets
-that bool once every count is reached.
+that bool once every count is reached. When the last two counts are reached
+in the same step of the world, it sets the bool within a second.
+
+A kind of objective the running build cannot count is logged when the
+quest is added, and only that kind stays at 0.
 
 A counter rises only while its step shows and is not done. A player's quest
 counts that player's actions. A world quest counts every player's.
