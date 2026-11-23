@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use enshwick_base::log_files;
 use enshwick_core::abi::Side;
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{
@@ -389,7 +390,11 @@ fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Wat
             w.check(&record.id, library.range, Stage::Init);
         }
         if status.is_ok() {
-            crate::log!(INFO, "{} {} initialised", record.id, record.version);
+            crate::log!(
+                INFO,
+                "{}",
+                log_files::initialised(&record.id, &record.version)
+            );
         } else {
             loader.turn_off(ModIndex::new(index), &format!("init returned {}", status.0));
         }
@@ -418,19 +423,37 @@ fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching
             }
         }
     }
-    let running = loader
-        .mods
-        .iter()
-        .filter(|m| !m.off.load(Ordering::Acquire))
-        .count();
-    crate::log!(
-        INFO,
-        "ready: {running} of {} mods running",
-        loader.mods.len()
-    );
+    log_ready(loader);
     // Mods read vanilla resources at init; the chunks unpacked for them
     // are not needed after.
     crate::engine::archive::trim_game();
+}
+
+/// Logs how many mods run, then a warning per mod that does not, with the
+/// first line of its reason as its own log has it, so the loader's log
+/// alone names every mod that did not start.
+fn log_ready(loader: &Loader) {
+    let off: Vec<&ModRecord> = loader
+        .mods
+        .iter()
+        .filter(|m| m.off.load(Ordering::Acquire))
+        .collect();
+    crate::log!(
+        INFO,
+        "{}",
+        log_files::ready(loader.mods.len() - off.len(), loader.mods.len())
+    );
+    for record in off {
+        let reason = record.off_reason_shown().unwrap_or_default();
+        let first = reason.lines().next().unwrap_or_default();
+        crate::log!(
+            WARN,
+            "{} {} {}",
+            record.id,
+            record.version,
+            log_files::off(first, crate::engine::errors::MOD_OFF)
+        );
+    }
 }
 
 /// The caller frame the frame slot holds now.

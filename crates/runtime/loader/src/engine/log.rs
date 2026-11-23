@@ -25,9 +25,10 @@ use enshwick_core::abi::Level;
 
 use crate::engine::settings::{LOADER_ID, Settings};
 use enshwick_base::Relock;
+use enshwick_base::log_files;
 
 /// The folder beside the game's executable that holds every log.
-pub const LOGS: &str = "logs";
+pub use log_files::LOGS;
 /// The file in [`LOGS`] that keeps the lines written before the log opens.
 ///
 /// The stub's lines are among them; the log takes them into the loader's
@@ -58,19 +59,8 @@ struct Line {
 
 impl Line {
     fn new(millis: u64, level: Level, source: &str, message: &str) -> Self {
-        let secs = millis / 1000;
-        let (h, m, s) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-        let name = level.name();
         let mut text = String::with_capacity(32 + source.len() + message.len());
-        let _time = write!(
-            text,
-            "{h:02}:{m:02}:{s:02}.{:03}Z {name:<5} [",
-            millis % 1000
-        );
-        let start = text.len();
-        text.push_str(source);
-        let source = start..text.len();
-        let _message = writeln!(text, "] {message}");
+        let source = log_files::write_line(&mut text, millis, level, source, message);
         Self {
             level,
             text,
@@ -213,26 +203,9 @@ fn take_start_lines(dir: &Path, file: &mut Capped) {
     }
 }
 
-/// `<source>_<stamp>.log` in `dir`.
+/// `source`'s file of the run stamped `stamp` in `dir`.
 fn run_path(dir: &Path, source: &str, stamp: &str) -> PathBuf {
-    dir.join(format!("{source}_{stamp}.log"))
-}
-
-/// The length of a file's stamp, `2026-11-03_10-00-00`.
-const STAMP_LEN: usize = 19;
-
-/// The source a file of the writer belongs to: `you.my-mod` for
-/// `you.my-mod_2026-11-03_10-00-00.log`; `None` for any other file.
-fn source_of(name: &str) -> Option<&str> {
-    let base = name.strip_suffix(".log")?;
-    let (source, stamp) = base.split_at_checked(base.len().checked_sub(STAMP_LEN)?)?;
-    let source = source.strip_suffix('_')?;
-    let shaped = stamp.bytes().enumerate().all(|(i, b)| match i {
-        4 | 7 | 13 | 16 => b == b'-',
-        10 => b == b'_',
-        _ => b.is_ascii_digit(),
-    });
-    (shaped && !source.is_empty()).then_some(source)
+    dir.join(log_files::run_file_name(source, stamp))
 }
 
 /// Deletes the oldest files of `source` in `dir` so that `keep` remain;
@@ -245,7 +218,9 @@ pub(crate) fn prune(dir: &Path, source: &str, keep: usize) {
         .filter_map(|entry| {
             let path = entry.ok()?.path();
             let name = path.file_name()?.to_str()?;
-            (source_of(name) == Some(source)).then(|| path.clone())
+            log_files::run_file(name)
+                .is_some_and(|(of, _)| of == source)
+                .then(|| path.clone())
         })
         .collect();
     runs.sort();
@@ -314,12 +289,7 @@ impl Capped {
         let name = next
             .file_name()
             .map_or_default(|n| n.to_string_lossy().into_owned());
-        let note = Line::new(
-            now(),
-            Level::INFO,
-            LOADER_ID,
-            &format!("this file reached its cap; the run goes on in {name}"),
-        );
+        let note = Line::new(now(), Level::INFO, LOADER_ID, &log_files::rolled(&name));
         if let Some(file) = &mut self.file {
             let _noted = file.write_all(note.text.as_bytes());
         }
@@ -683,31 +653,17 @@ mod tests {
     }
 
     #[test]
-    fn a_file_names_its_source_and_its_run() {
+    fn a_file_names_its_source_and_its_run_as_cargo_enshwick_reads_them() {
+        let stamp = crate::engine::early::log_stamp(1_793_286_189);
+        let path = run_path(Path::new("logs"), "enshwick", &stamp);
         assert_eq!(
-            source_of("you.my-mod_2026-11-03_10-00-00.log"),
-            Some("you.my-mod")
-        );
-        assert_eq!(
-            source_of("enshwick_2026-11-03_10-00-00.log"),
-            Some("enshwick")
-        );
-        assert_eq!(
-            source_of("enshwick-crash_2026-11-03_10-00-00.log"),
-            Some("enshwick-crash")
-        );
-        assert_eq!(source_of("start.log"), None);
-        assert_eq!(source_of("enshwick_2026-11-03.log"), None);
-        assert_eq!(source_of("_2026-11-03_10-00-00.log"), None);
-        assert_eq!(source_of("enshwick_2026-11-03_10-00-00.txt"), None);
-        assert_eq!(source_of("enshwick_2026x11-03_10-00-00.log"), None);
-        assert_eq!(
-            run_path(
-                Path::new("logs"),
-                "enshwick",
-                &crate::engine::early::log_stamp(1_793_286_189)
-            ),
+            path,
             Path::new("logs").join("enshwick_2026-10-29_15-03-09.log")
+        );
+        let name = path.file_name().unwrap().to_str().unwrap();
+        assert_eq!(
+            log_files::run_file(name),
+            Some(("enshwick", stamp.as_str()))
         );
     }
 

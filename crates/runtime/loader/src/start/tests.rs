@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::path::PathBuf;
 
-use enshwick_core::abi::{Header, HostApi, Manifest, ManifestFlags, ModHandle, Status, Str};
+use enshwick_core::abi::{Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Status, Str};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use super::library::InitFn;
@@ -393,6 +393,39 @@ fn a_mod_whose_init_fails_is_off() {
     assert_eq!(
         broken.off_reason.relock().as_deref(),
         Some(format!("init returned {}", Status::FAULTED.0).as_str())
+    );
+}
+
+#[test]
+fn the_ready_line_is_followed_by_a_warning_naming_each_mod_off_and_its_reason() {
+    let failing = TestMod {
+        init: failing_init,
+        ..TestMod::plain("you.broken")
+    };
+    let (loader, order) = loader(&[TestMod::plain("you.lanterns"), failing], false);
+    let order: Vec<&Library> = order.iter().collect();
+    let _turn = crate::engine::log::capture_turn();
+    initialise(&loader, &order, None);
+    ready(&loader, &order, None);
+    let loader_lines: Vec<(Level, String)> = crate::engine::log::captured()
+        .into_iter()
+        .filter(|(_, source, _)| source == crate::engine::settings::LOADER_ID)
+        .map(|(level, _, message)| (level, message))
+        .collect();
+    let at = loader_lines
+        .iter()
+        .position(|(_, message)| *message == log_files::ready(1, 2))
+        .unwrap();
+    assert_eq!(
+        loader_lines[at + 1..],
+        [(
+            Level::WARN,
+            format!(
+                "you.broken 1.0.0 off: init returned {} ({})",
+                Status::FAULTED.0,
+                crate::engine::errors::MOD_OFF
+            )
+        )]
     );
 }
 
