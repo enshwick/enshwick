@@ -10,6 +10,7 @@ mod delivery;
 mod envelope;
 mod link;
 mod peer;
+mod sound;
 
 pub use delivery::{Drops, Outbox, strays};
 pub use envelope::{
@@ -21,6 +22,7 @@ pub use link::{
     ReadPacketError, SILENCE, WINDOW,
 };
 pub use peer::{DATA_AGAIN, Peer};
+pub use sound::{MAX_SOUND, SoundMessage, SoundOp, read_sound, sound};
 
 use enshwick_core::i18n::Language;
 
@@ -62,6 +64,9 @@ pub const STAT_VALUES: u8 = 8;
 /// The most stat values one message carries: what fits a control message
 /// after its kind and version.
 pub const MAX_STAT_VALUES: usize = (MAX_CONTROL - 2) / 8;
+/// A control message from the server: a mod's sound to start or change
+/// (see [`sound`]); past the settings messages' kinds, 6 to 19.
+pub const SOUND: u8 = 20;
 pub use enshwick_base::peer::MESSAGE_RATE;
 
 /// Bit of a hello's flags: the mod list is whole.

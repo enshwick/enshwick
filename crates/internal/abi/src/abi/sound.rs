@@ -1,7 +1,7 @@
 //! Sounds a client mod plays through the game's sound system and steers
 //! after they start.
 
-use crate::abi::{Entity, Header, Metres};
+use crate::abi::{Entity, Header, Metres, PlayerKey};
 use crate::content::Guid;
 
 /// A sound a client mod starts, which [`HostApi::sound_play`] queues for the
@@ -169,6 +169,118 @@ impl SoundSteer {
             _ => false,
         };
         kind && self.fade_ms <= SoundPlay::MAX_FADE_MS
+    }
+}
+
+/// The clients a server mod's sound plays on, which
+/// [`HostApi::sound_play_for`] reads. ABI 12.18.
+///
+/// [`HostApi::sound_play_for`]: crate::abi::HostApi::sound_play_for
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::SoundAudience;
+///
+/// let near = SoundAudience { kind: SoundAudience::NEAR, at: [5.0, 0.0, 5.0], radius: 40.0, ..SoundAudience::EMPTY };
+/// assert!(near.in_bounds());
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct SoundAudience {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Who hears it: [`SoundAudience::PLAYER`] and the other kind constants.
+    pub kind: u32,
+    /// For [`SoundAudience::NEAR`], how far from `at` a player's character
+    /// stands at most, in metres, up to [`SoundAudience::MAX_RADIUS`]; 0 for
+    /// [`SoundAudience::MAX_RADIUS`].
+    pub radius: f32,
+    /// The player, for [`SoundAudience::PLAYER`].
+    pub player: PlayerKey,
+    /// The centre, for [`SoundAudience::NEAR`].
+    pub at: Metres,
+}
+
+impl_headed!(SoundAudience);
+
+impl SoundAudience {
+    /// The client of [`player`](Self::player).
+    pub const PLAYER: u32 = 0;
+    /// Every client.
+    pub const EVERYONE: u32 = 1;
+    /// The clients whose player's character stands within
+    /// [`radius`](Self::radius) of [`at`](Self::at) when the sound starts.
+    pub const NEAR: u32 = 2;
+    /// The widest radius, in metres: no sound container carries farther.
+    pub const MAX_RADIUS: f32 = 500.0;
+    /// The most sounds one mod sends clients in one server step.
+    pub const MAX_PLAYS: u32 = 32;
+    /// Its header set, every client.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        kind: Self::EVERYONE,
+        radius: 0.0,
+        player: PlayerKey(0),
+        at: [0.0; 3],
+    };
+
+    /// Whether the loader takes this audience: a known kind, a player for
+    /// [`SoundAudience::PLAYER`], a finite centre and a radius of 0 to
+    /// [`SoundAudience::MAX_RADIUS`] for [`SoundAudience::NEAR`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::SoundAudience;
+    ///
+    /// assert!(SoundAudience::EMPTY.in_bounds());
+    /// assert!(!SoundAudience { kind: SoundAudience::PLAYER, ..SoundAudience::EMPTY }.in_bounds());
+    /// assert!(!SoundAudience { kind: SoundAudience::NEAR, radius: 900.0, ..SoundAudience::EMPTY }.in_bounds());
+    /// ```
+    #[must_use]
+    pub fn in_bounds(&self) -> bool {
+        match self.kind {
+            Self::PLAYER => self.player.0 != 0,
+            Self::EVERYONE => true,
+            Self::NEAR => {
+                self.at.iter().all(|axis| axis.is_finite())
+                    && (0.0..=Self::MAX_RADIUS).contains(&self.radius)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the player `key`, whose character stands `at` (`None`
+    /// without one), is of this audience.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::PlayerKey;
+    /// use enshwick::abi::SoundAudience;
+    ///
+    /// let near = SoundAudience { kind: SoundAudience::NEAR, radius: 10.0, ..SoundAudience::EMPTY };
+    /// assert!(near.hears(PlayerKey::new(7), Some([6.0, 0.0, 8.0])));
+    /// assert!(!near.hears(PlayerKey::new(7), Some([6.0, 0.0, 8.1])));
+    /// assert!(!near.hears(PlayerKey::new(7), None));
+    /// ```
+    #[must_use]
+    pub fn hears(&self, key: PlayerKey, at: Option<Metres>) -> bool {
+        match self.kind {
+            Self::PLAYER => key == self.player,
+            Self::EVERYONE => true,
+            Self::NEAR => at.is_some_and(|at| {
+                let reach = f64::from(if self.radius == 0.0 {
+                    Self::MAX_RADIUS
+                } else {
+                    self.radius
+                });
+                let squared: f64 = at.iter().zip(self.at).map(|(a, c)| (a - c) * (a - c)).sum();
+                squared <= reach * reach
+            }),
+            _ => false,
+        }
     }
 }
 

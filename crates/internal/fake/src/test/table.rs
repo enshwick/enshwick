@@ -35,6 +35,7 @@ use base::{BaseState, build::*, hooks::*, host::*, mods::*, net::*, pacing::*, s
 use content::*;
 use inventory::*;
 use knowledge::*;
+pub(crate) use ui::hear;
 use ui::*;
 use world::{altars::*, buffs::*, environment::*, saves::*, transactions::*, *};
 
@@ -391,6 +392,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     sound_play,
     sound_steer,
     sound_state,
+    sound_play_for,
+    sound_steer_for,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

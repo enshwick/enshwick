@@ -811,6 +811,7 @@ const _: () = {
     assert!(size_of::<SoundPlay>() == 8 + 16 + 4 + 4 + 24 + 4 + 4);
     assert!(size_of::<SoundSteer>() == 8 + 4 + 4 + 4 + 4 + 24);
     assert!(size_of::<SoundInfo>() == 8 + 4 + 4);
+    assert!(size_of::<SoundAudience>() == 8 + 4 + 4 + 8 + 24);
     assert!(size_of::<QuestData>() == 8 + 8);
     // Headed: written at the entry size the caller states.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);

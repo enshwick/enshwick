@@ -69,4 +69,51 @@ impl Installed {
                 .collect()
         })
     }
+
+    /// Every sound the mod's server part sent clients with
+    /// `sound::play_for`, in order: the players whose client got it, and
+    /// the sound as they play it, changed by the mod's steers since.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.sent_sounds().is_empty());
+    /// ```
+    #[must_use]
+    pub fn sent_sounds(&self) -> Vec<(Vec<enshwick_core::PlayerKey>, FakeSound)> {
+        table::with(Vec::new(), |s| {
+            s.ui.sound
+                .sent
+                .iter()
+                .map(|sent| {
+                    (
+                        sent.to.clone(),
+                        FakeSound::of(&sent.kept.play, sent.kept.info.state),
+                    )
+                })
+                .collect()
+        })
+    }
+
+    /// Takes `play` as this client gets a sound the mod's server part sent
+    /// it: queued as the mod's own start, which [`Installed::sounds`] then
+    /// lists, or dropped, as the loader drops it, for a container the client
+    /// lacks, a play out of bounds or a full frame. Whether it queued.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Side, SoundPlay};
+    /// use enshwick::content::Guid;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// let unknown = SoundPlay { container: Guid::named("you.bells:none"), ..SoundPlay::EMPTY };
+    /// assert!(!loader.hear_sound(unknown));
+    /// assert!(loader.sounds().is_empty());
+    /// ```
+    #[must_use = "the answer says whether the client plays it"]
+    pub fn hear_sound(&self, play: SoundPlay) -> bool {
+        table::hear(play)
+    }
 }
