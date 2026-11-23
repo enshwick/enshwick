@@ -239,6 +239,17 @@ export type AttackChange = {
 	max_range: number?,
 }
 
+--- The clients a server mod's sound plays on: only clients that run Enshwick and the mod hear it.
+export type Audience = { Player: string } | "Everyone" | { Near: AudienceNear }
+
+--- The clients whose player's character stands within `radius` metres of `at` when the sound starts.
+export type AudienceNear = {
+	--- The centre, in metres.
+	at: vector,
+	--- How far, up to `MAX_RADIUS`; nil for `MAX_RADIUS`, as far as any sound carries.
+	radius: number?,
+}
+
 --- A value with its maximum on an item's own entity, as the item's slot shows it: its durability, or its meter (see `FuelSetup`). The name is enshwick's: the game's durability or fuel value with its maximum.
 export type Bar = {
 	--- What is left.
@@ -2627,6 +2638,16 @@ export type Refused = {
 --- Why the platform refused a run of an action before its handler.
 export type RefusedReason = "UnknownAction" | "NoRight" | "Usage" | "UnknownPlayer" | "SeveralPlayers" | "PlayerGone" | "TooLong" | "UnknownItem" | "SeveralItems" | "CommandsOff" | "Rate" | "Bounds" | "Busy" | "OutOfReach" | "UnknownTemplate" | "SeveralTemplates"
 
+--- A sound the mod's server part sent clients, which it steers on each of them.
+export type RemoteSound = {
+	--- Stops the sound on its clients, fading it out over `fade`.
+	stop: (self: RemoteSound, fade: number) -> (),
+	--- Changes the sound's volume on its clients to `volume`, 0 to 1, over `fade`.
+	set_volume: (self: RemoteSound, volume: number, fade: number) -> (),
+	--- Moves the sound on its clients to `at`, in metres.
+	set_position: (self: RemoteSound, at: vector) -> (),
+}
+
 --- A player's rename of an entity, for `Load.on_rename`.
 export type Rename = {
 	--- The entity being renamed.
@@ -4861,6 +4882,8 @@ declare enshwick: {
 		play: (sound: Play) -> SoundHandle,
 		--- Stops every sound this mod plays, fading each out over `fade`. As `stop_all`.
 		stop_all: (fade: number) -> (),
+		--- Plays `sound` on the clients of `audience` from the server. As `play_for`.
+		play_for: (audience: Audience, sound: Play) -> RemoteSound,
 		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		change: (sound: string, change: SoundChange) -> (),

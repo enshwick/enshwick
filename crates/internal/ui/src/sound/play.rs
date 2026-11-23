@@ -101,7 +101,7 @@ impl Play {
     }
 
     /// The play as the loader takes it.
-    fn raw(&self) -> SoundPlay {
+    pub(super) fn raw(&self) -> SoundPlay {
         let (place, entity, at) = match self.place {
             Place::Screen => (SoundPlay::SCREEN, Entity::NONE, [0.0; 3]),
             Place::At(at) => (SoundPlay::AT, Entity::NONE, at),
@@ -128,7 +128,7 @@ pub const MAX_FADE: Duration = Duration::from_millis(SoundPlay::MAX_FADE_MS as u
 pub const MAX_STARTS: u32 = SoundPlay::MAX_STARTS;
 
 /// `fade` in whole milliseconds, past [`MAX_FADE`] when it does not fit.
-fn millis(fade: Duration) -> u32 {
+pub(super) fn millis(fade: Duration) -> u32 {
     u32::try_from(fade.as_millis()).unwrap_or(u32::MAX)
 }
 
@@ -343,7 +343,7 @@ fn steer_raw(id: u64, steer: SoundSteer) -> Result<(), Off> {
 }
 
 /// The loader, or why not.
-fn loader() -> Result<Host, Off> {
+pub(super) fn loader() -> Result<Host, Off> {
     crate::host().ok_or_else(|| Off::new("no loader runs this mod"))
 }
 
@@ -421,7 +421,8 @@ impl crate::script::Bound for Sounds {
     const NAME: &'static str = "sound";
     const DOC: &'static str =
         "The game's sounds: playing them on a client, changing containers and hearing notifiers.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_PLAYBACK];
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_PLAYBACK, Self::SCRIPT_REMOTE];
 
     fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self(()))
