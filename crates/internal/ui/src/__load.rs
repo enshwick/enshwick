@@ -4,6 +4,8 @@
 pub use crate::sound::LoadMethods as _;
 #[cfg(feature = "unstable")]
 pub use crate::sound::add::LoadMethods as _;
+#[cfg(feature = "unstable")]
+pub use crate::sound::recording::LoadMethods as _;
 pub use crate::sound::script::LoadMethods as _;
 pub use crate::ui::LoadMethods as _;
 #[cfg(feature = "unstable")]
