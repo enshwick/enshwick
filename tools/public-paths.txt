@@ -6790,13 +6790,13 @@ sound::AddedSound::container unstable
 sound::AddedSound::from_value unstable
 sound::AddedSound::into_value unstable
 sound::AddedSound::takes unstable
-sound::Audience
-sound::Audience::Everyone
-sound::Audience::Near
-sound::Audience::Player
-sound::Audience::TY
-sound::Audience::from_value
-sound::Audience::into_value
+sound::Audience unstable
+sound::Audience::Everyone unstable
+sound::Audience::Near unstable
+sound::Audience::Player unstable
+sound::Audience::TY unstable
+sound::Audience::from_value unstable
+sound::Audience::into_value unstable
 sound::Channels unstable
 sound::Channels::Keep unstable
 sound::Channels::Mono unstable
@@ -6809,14 +6809,14 @@ sound::GAIN_DB
 sound::INLINE_FRAMES unstable
 sound::MAX_COUNT
 sound::MAX_DISTANCE
-sound::MAX_FADE
+sound::MAX_FADE unstable
 sound::MAX_FILE_BYTES unstable
 sound::MAX_MOD_BYTES unstable
 sound::MAX_NEW_TAKES
-sound::MAX_PLAYS
-sound::MAX_RADIUS
+sound::MAX_PLAYS unstable
+sound::MAX_RADIUS unstable
 sound::MAX_SLEEP
-sound::MAX_STARTS
+sound::MAX_STARTS unstable
 sound::MAX_TAKE
 sound::MAX_TAKES
 sound::MAX_VOLUME
@@ -6871,43 +6871,43 @@ sound::NewVoiceover::lines unstable
 sound::NewVoiceover::new unstable
 sound::NewVoiceover::trim unstable
 sound::PITCH
-sound::Place
-sound::Place::At
-sound::Place::Music
-sound::Place::On
-sound::Place::Screen
-sound::Place::TY
-sound::Place::from_value
-sound::Place::into_value
-sound::Play
-sound::Play::TY
-sound::Play::container
-sound::Play::fade_in
-sound::Play::from_value
-sound::Play::into_value
-sound::Play::new
-sound::Play::place
-sound::Play::volume
-sound::PlayFailure
-sound::PlayFailure::GameRefused
-sound::PlayFailure::NoEntity
-sound::PlayFailure::NoScene
-sound::PlayFailure::Off
-sound::PlayFailure::TY
-sound::PlayFailure::from_value
-sound::PlayFailure::into_value
+sound::Place unstable
+sound::Place::At unstable
+sound::Place::Music unstable
+sound::Place::On unstable
+sound::Place::Screen unstable
+sound::Place::TY unstable
+sound::Place::from_value unstable
+sound::Place::into_value unstable
+sound::Play unstable
+sound::Play::TY unstable
+sound::Play::container unstable
+sound::Play::fade_in unstable
+sound::Play::from_value unstable
+sound::Play::into_value unstable
+sound::Play::new unstable
+sound::Play::place unstable
+sound::Play::volume unstable
+sound::PlayFailure unstable
+sound::PlayFailure::GameRefused unstable
+sound::PlayFailure::NoEntity unstable
+sound::PlayFailure::NoScene unstable
+sound::PlayFailure::Off unstable
+sound::PlayFailure::TY unstable
+sound::PlayFailure::from_value unstable
+sound::PlayFailure::into_value unstable
 sound::RandomPosition
 sound::RandomPosition::TY
 sound::RandomPosition::from_value
 sound::RandomPosition::front_back
 sound::RandomPosition::into_value
 sound::RandomPosition::left_right
-sound::RemoteSound
-sound::RemoteSound::CLASS
-sound::RemoteSound::PARTS
-sound::RemoteSound::set_position
-sound::RemoteSound::set_volume
-sound::RemoteSound::stop
+sound::RemoteSound unstable
+sound::RemoteSound::CLASS unstable
+sound::RemoteSound::PARTS unstable
+sound::RemoteSound::set_position unstable
+sound::RemoteSound::set_volume unstable
+sound::RemoteSound::stop unstable
 sound::SAMPLE_RATE unstable
 sound::SoundChange
 sound::SoundChange::TY
@@ -6955,37 +6955,37 @@ sound::SoundContainerStealingMode::Oldest
 sound::SoundContainerStealingMode::TY
 sound::SoundContainerStealingMode::from_value
 sound::SoundContainerStealingMode::into_value
-sound::SoundHandle
-sound::SoundHandle::CLASS
-sound::SoundHandle::PARTS
-sound::SoundHandle::is_playing
-sound::SoundHandle::set_position
-sound::SoundHandle::set_volume
-sound::SoundHandle::state
-sound::SoundHandle::stop
+sound::SoundHandle unstable
+sound::SoundHandle::CLASS unstable
+sound::SoundHandle::PARTS unstable
+sound::SoundHandle::is_playing unstable
+sound::SoundHandle::set_position unstable
+sound::SoundHandle::set_volume unstable
+sound::SoundHandle::state unstable
+sound::SoundHandle::stop unstable
 sound::SoundId
 sound::SoundId::TY
 sound::SoundId::from_guid
 sound::SoundId::from_value
 sound::SoundId::guid
 sound::SoundId::into_value
-sound::SoundState
-sound::SoundState::Ended
-sound::SoundState::Failed
-sound::SoundState::Pending
-sound::SoundState::Playing
-sound::SoundState::TY
-sound::SoundState::from_value
-sound::SoundState::into_value
-sound::Sounds
-sound::Sounds::DOC
-sound::Sounds::NAME
-sound::Sounds::PARTS
-sound::Sounds::functions
-sound::Sounds::play
-sound::Sounds::play_for
-sound::Sounds::resolve
-sound::Sounds::stop_all
+sound::SoundState unstable
+sound::SoundState::Ended unstable
+sound::SoundState::Failed unstable
+sound::SoundState::Pending unstable
+sound::SoundState::Playing unstable
+sound::SoundState::TY unstable
+sound::SoundState::from_value unstable
+sound::SoundState::into_value unstable
+sound::Sounds unstable
+sound::Sounds::DOC unstable
+sound::Sounds::NAME unstable
+sound::Sounds::PARTS unstable
+sound::Sounds::functions unstable
+sound::Sounds::play unstable
+sound::Sounds::play_for unstable
+sound::Sounds::resolve unstable
+sound::Sounds::stop_all unstable
 sound::Take
 sound::Take::TY
 sound::Take::chance
@@ -7018,9 +7018,9 @@ sound::VoiceoverId::from_guid unstable
 sound::VoiceoverId::from_value unstable
 sound::VoiceoverId::guid unstable
 sound::VoiceoverId::into_value unstable
-sound::play
-sound::play_for
-sound::stop_all
+sound::play unstable
+sound::play_for unstable
+sound::stop_all unstable
 state
 state::HOLD_FILE
 state::Hold
