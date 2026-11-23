@@ -511,6 +511,7 @@ entries = [
   "skill.fly_mode_gate_return",
   "skill.node_unlocked",
   "skill.points_per_level",
+  "sound.*",
   "survivors.assign_bed",
   "survivors.assign_context",
   "survivors.assign_return_a",

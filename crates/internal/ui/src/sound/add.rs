@@ -225,86 +225,130 @@ pub trait LoadMethods {
 
 impl LoadMethods for crate::BaseLoad {
     fn add_sound(&mut self, new: NewSound) -> Result<AddedSound, Off> {
-        let NewSound {
-            id,
-            takes,
-            channels,
-            gain_db,
-            trim,
-            container: change,
-        } = new;
-        let fail = |why: Off| Off::new(format!("sound {id}: {why}"));
-        if !self.joins() {
-            return Err(fail(Off::new("a mod with sounds runs on both sides")));
-        }
-        if takes.is_empty() || takes.len() > MAX_NEW_TAKES {
-            return Err(fail(Off::new(format!(
-                "{} takes: a sound has 1 to {MAX_NEW_TAKES}",
-                takes.len()
-            ))));
-        }
-        check_container(takes.len(), &change).map_err(fail)?;
-        let parts = TAKE_PARTS
-            .iter()
-            .take(takes.len())
-            .map(|part| id.try_part(part))
-            .collect::<Option<Vec<Id>>>()
-            .ok_or_else(|| fail(Off::new("the id has no room for its takes' parts")))?;
-        let shape = Shape {
-            channels,
-            gain_db,
-            trim,
-        };
-        let mut recordings = Vec::with_capacity(takes.len());
-        let mut pending = 0;
-        for take in &takes {
-            if !(0.0..=1.0).contains(&take.chance()) {
-                return Err(fail(Off::new(format!(
-                    "{}: chance {} is outside 0 to 1",
-                    take.file,
-                    take.chance()
-                ))));
-            }
-            let recording = recording::read(self, &take.file, shape, pending).map_err(fail)?;
-            pending += recording.bytes();
-            recordings.push(recording);
-        }
-        let client = self.host().build().side == Side::CLIENT;
-        let host = self.host();
-        let entry_type = if client {
-            for take in change::named_sounds(&change) {
-                super::known_sound(host, SoundId::from_guid(take)).map_err(fail)?;
-            }
-            let entry_type = super::entry_type(self).map_err(fail)?;
-            // Found before any id is declared, so a game without them leaves none.
-            recording::bases(self).map_err(fail)?;
-            Some(entry_type)
-        } else {
-            None
-        };
-        let container = self.declare(id)?;
-        let mut own = Vec::with_capacity(takes.len());
-        for ((take, recording), sound_id) in takes.iter().zip(recordings).zip(parts) {
-            let sound = SoundId::from_guid(self.declare(sound_id)?);
-            recording::serve(self, sound, recording, false, sound_id.to_string()).map_err(fail)?;
-            own.push(Take {
-                chance: take.chance(),
-                ..Take::new(sound)
-            });
-        }
-        if let Some(entry_type) = entry_type {
-            let value = container_value(&own, &entry_type, &change).map_err(fail)?;
-            crate::resources::serve_new(
-                self.host(),
-                types::SOUND_CONTAINER_RESOURCE.key(container)?,
-                &value,
-            )?;
-        }
-        Ok(AddedSound {
-            container: SoundContainerId::from_guid(container),
-            takes: own.into_iter().map(|take| take.sound).collect(),
-        })
+        added(self, new).map(|(added, _)| added)
     }
+}
+
+/// Reads `new.takes` as recordings within the mod's bounds, checked alike
+/// on every side.
+pub(super) fn recordings(
+    load: &mut crate::BaseLoad,
+    takes: &[NewTake],
+    shape: Shape,
+) -> Result<Vec<recording::Recording>, Off> {
+    if takes.is_empty() || takes.len() > MAX_NEW_TAKES {
+        return Err(Off::new(format!(
+            "{} takes: a sound has 1 to {MAX_NEW_TAKES}",
+            takes.len()
+        )));
+    }
+    let mut recordings = Vec::with_capacity(takes.len());
+    let mut pending = 0;
+    for take in takes {
+        if !(0.0..=1.0).contains(&take.chance()) {
+            return Err(Off::new(format!(
+                "{}: chance {} is outside 0 to 1",
+                take.file,
+                take.chance()
+            )));
+        }
+        let recording = recording::read(load, &take.file, shape, pending)?;
+        pending += recording.bytes();
+        recordings.push(recording);
+    }
+    Ok(recordings)
+}
+
+/// The ids `<id>.sound` to `<id>.soundN` of `count` takes' recordings.
+pub(super) fn take_ids(id: Id, count: usize) -> Result<Vec<Id>, Off> {
+    TAKE_PARTS
+        .iter()
+        .take(count)
+        .map(|part| id.try_part(part))
+        .collect::<Option<Vec<Id>>>()
+        .ok_or_else(|| Off::new("the id has no room for its takes' parts"))
+}
+
+/// Declares and serves `recordings` under `ids`, from [`take_ids`].
+pub(super) fn serve_recordings(
+    load: &mut crate::BaseLoad,
+    ids: Vec<Id>,
+    recordings: Vec<recording::Recording>,
+) -> Result<Vec<SoundId>, Off> {
+    let mut sounds = Vec::with_capacity(recordings.len());
+    for (recording, sound_id) in recordings.into_iter().zip(ids) {
+        let sound = SoundId::from_guid(load.declare(sound_id)?);
+        recording::serve(load, sound, recording, false, sound_id.to_string())?;
+        sounds.push(sound);
+    }
+    Ok(sounds)
+}
+
+/// [`LoadMethods::add_sound`], with the length of its longest take in
+/// frames.
+pub(super) fn added(load: &mut crate::BaseLoad, new: NewSound) -> Result<(AddedSound, usize), Off> {
+    let NewSound {
+        id,
+        takes,
+        channels,
+        gain_db,
+        trim,
+        container: change,
+    } = new;
+    let fail = |why: Off| Off::new(format!("sound {id}: {why}"));
+    if !load.joins() {
+        return Err(fail(Off::new("a mod with sounds runs on both sides")));
+    }
+    check_container(takes.len(), &change).map_err(fail)?;
+    let ids = take_ids(id, takes.len()).map_err(fail)?;
+    let shape = Shape {
+        channels,
+        gain_db,
+        trim,
+    };
+    let recordings = recordings(load, &takes, shape).map_err(fail)?;
+    let longest = recordings
+        .iter()
+        .map(recording::Recording::frames)
+        .max()
+        .unwrap_or(0);
+    let host = load.host();
+    let entry_type = if host.build().side == Side::CLIENT {
+        for take in change::named_sounds(&change) {
+            super::known_sound(host, SoundId::from_guid(take)).map_err(fail)?;
+        }
+        let entry_type = super::entry_type(load).map_err(fail)?;
+        // Found before any id is declared, so a game without them leaves none.
+        recording::bases(load).map_err(fail)?;
+        Some(entry_type)
+    } else {
+        None
+    };
+    let container = load.declare(id)?;
+    let sounds = serve_recordings(load, ids, recordings).map_err(fail)?;
+    let own: Vec<Take> = takes
+        .iter()
+        .zip(&sounds)
+        .map(|(take, sound)| Take {
+            chance: take.chance(),
+            ..Take::new(*sound)
+        })
+        .collect();
+    if let Some(entry_type) = entry_type {
+        let value = container_value(&own, &entry_type, &change).map_err(fail)?;
+        crate::resources::serve_new(
+            load.host(),
+            types::SOUND_CONTAINER_RESOURCE.key(container)?,
+            &value,
+        )?;
+    }
+    Ok((
+        AddedSound {
+            container: SoundContainerId::from_guid(container),
+            takes: sounds,
+        },
+        longest,
+    ))
 }
 
 #[cfg(test)]

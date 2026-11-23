@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: A mod plays sound containers on a client, changes their values and takes, replaces the game's recordings, and adds its own sounds from audio files.
+description: A mod plays and changes sound containers, replaces the game's recordings, and adds its own sounds, voiced lines and music from audio files.
 -->
 
 # Sounds
@@ -12,9 +12,118 @@ and plays it, changes it or adds its own.
 
 ## Play a container on a client
 
-Inside a frame of the interface, `frame.play(id)` plays a container as an
-interface sound. Only that client hears it, and it comes from no place in
-the world. The [interface chapter](interface.md) lists it with the widgets.
+With the `unstable` feature, `sound::play(Play::new(id, place))` starts a
+container on the client that runs the mod. Only that client hears it. It
+may change in any release: no client has yet been seen playing it. The
+place is one of four:
+
+| Place | Where it plays |
+| --- | --- |
+| `Place::Screen` | From no place, as the game's interface sounds |
+| `Place::At(position)` | At a point in the world, in metres; it pans and fades as the camera moves |
+| `Place::On(entity)` | On an entity of the client's world, following it; it ends with a short fade once the entity is gone. The client follows at most 64 entities, every mod's together; past that a sound on a new entity fails with `FollowFull` |
+| `Place::Music` | As music; a new music sound of the same mod fades out its earlier one |
+
+`.volume(v)` sets a volume from 0 to 1, which the game multiplies by the
+container's own. `.fade_in(duration)` fades it in, for at most 60 seconds.
+
+The call works from any thread, in a frame or not. It queues the sound,
+and the client's next frame starts it, so a handle reads `Pending` until
+then. One mod starts at most 64 sounds a frame. A container that neither
+the game's archive nor a mod holds is refused at once. On a server the call
+fails.
+
+The `SoundHandle` it returns steers that sound:
+
+| Call | Does |
+| --- | --- |
+| `stop(fade)` | stops it, fading out |
+| `set_volume(v, fade)` | changes its volume, fading |
+| `set_position(at)` | moves a sound in the world; a sound on an entity no longer follows it, and a screen or music sound does not move |
+| `is_playing()`, `state()` | tell where it stands |
+
+Once the sound ended, every call on its handle changes nothing.
+`sound::stop_all(fade)` stops every sound of the mod.
+
+A mod's sounds end when the mod is turned off. Its sounds at a place or on
+an entity also end when the client's world ends. Its interface sounds and
+music keep playing then.
+
+```rust
+use core::time::Duration;
+use enshwick::content::Guid;
+use enshwick::sound::{self, Place, Play, SoundContainerId, SoundHandle};
+
+const BELL: SoundContainerId = SoundContainerId::from_guid(Guid::named("you.bells:bell"));
+
+fn ring(at: [f64; 3]) -> Result<SoundHandle, enshwick::Off> {
+    sound::play(Play::new(BELL, Place::At(at)).volume(0.6).fade_in(Duration::from_millis(200)))
+}
+```
+
+```luau
+local BELL = "8a5c1d07-3c3e-5f0b-9a8e-0c41e3f9d2a7"
+local bell = enshwick.sound.play({ container = BELL, place = { At = vector.create(10, 0, 0) }, volume = 0.6 })
+bell:stop(2)
+```
+
+A sound that misleads players in a fight, such as the steps of an enemy
+that is not there, changes how the fight plays. Say so in the mod's
+description.
+
+Inside a frame of the interface, `frame.play(id)` also plays a container as
+an interface sound. The [interface chapter](interface.md) lists it with the
+widgets.
+
+## Play a sound on players' clients from the server
+
+With the `unstable` feature, `sound::play_for(audience, play)` plays a
+container on clients from a mod's server part. It may change in any
+release: a server copy sends it, but no client has yet been seen playing
+it. Each client that runs Enshwick and the mod plays it as
+the mod's own `sound::play` would. A client without Enshwick hears
+nothing; for a sound every client hears, raise a notifier
+([Raise a notifier at a place](#raise-a-notifier-at-a-place)). The mod
+runs on both sides.
+
+| Audience | Who hears it |
+| --- | --- |
+| `Audience::Player(key)` | The client of one player |
+| `Audience::Everyone` | Every client |
+| `Audience::Near { at, radius }` | The clients whose character stands within the radius of the place when it starts; no radius means 500 metres, as far as any sound carries |
+
+The server's entity ids name no entity of a client's world. So
+`Place::On(entity)` plays where the entity stands when the sound starts,
+and does not follow it. A near audience and `Place::On` read where things
+stand, so they work only on the server's game thread, as in a step or an
+event. The other calls work from any thread. One mod sends at most 32
+sounds in one server step. The server does not know which containers a
+client holds: a client that lacks the container drops the sound and logs
+it once.
+
+In a game a client hosts, the host's own player hears the sound too.
+
+The `RemoteSound` it returns steers the sound on the clients it went to.
+It stops, fades and moves the sound as a `SoundHandle` does. Clients send
+nothing back, so it has no state to read. A change reaches only the
+mod's 256 newest sounds.
+
+```rust
+use enshwick::content::Guid;
+use enshwick::sound::{self, Audience, Place, Play, RemoteSound, SoundContainerId};
+
+const HORN: SoundContainerId = SoundContainerId::from_guid(Guid::named("you.horns:horn"));
+
+fn sound_the_horn(at: [f64; 3]) -> Result<RemoteSound, enshwick::Off> {
+    sound::play_for(Audience::Near { at, radius: Some(80.0) }, Play::new(HORN, Place::At(at)))
+}
+```
+
+```luau
+local HORN = "8a5c1d07-3c3e-5f0b-9a8e-0c41e3f9d2a7"
+local horn = enshwick.sound.play_for({ Near = { at = vector.create(0, 0, 0), radius = 80 } }, { container = HORN, place = { At = vector.create(0, 0, 0) } })
+horn:stop(2)
+```
 
 ## Change a vanilla sound
 
@@ -302,3 +411,126 @@ local ok, added = pcall(enshwick.sound.add, {
 
 A sound that misleads players in a fight, such as an attack that does not
 happen, does not belong in a mod.
+
+## Add a voiced line
+
+With the `unstable` feature, `load.add_voiceover(new)` adds a voiced line.
+No client has yet been heard playing one. It holds one sound per voice language, read as `add_sound` reads its files.
+The game holds a slot per voice language. A language goes by the name of
+its field of `Voiceover`, in snake case.
+
+| Slot | Language |
+| --- | --- |
+| 1 | `english` |
+| 2 | `german` |
+| 3 | `french` |
+| 4 | `spanish` |
+| 5 | `simplified_chinese` |
+
+The voice language setting picks the slot. Any other
+setting speaks the first slot. An empty slot is silent, as most of the
+game's French and Spanish lines are. A `fallback` language fills the slots
+the line leaves empty.
+
+Each language's container is `<id>.<language>`, such as
+`you.lore:welcome.english`. The line records each language's length for
+the game's lore queue. Dialogue lines, lore readings and journal entries
+name a line by its GUID. Point one at yours through the
+[resource values](resource-values.md): a dialogue line's `voiceovers`, a lore
+reading's or a journal entry's `voiceover`.
+
+`load.change_voiceover(line, new)` gives a game line new recordings in the
+languages of `new` and keeps the others. Mods that change one line apply
+in load order.
+
+```rust
+use enshwick::content::{Guid, id};
+use enshwick::sound::{NewVoiceover, SoundChange, VoiceLine, VoiceoverId};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let welcome = NewVoiceover {
+        fallback: Some("english".into()),
+        container: SoundChange { has_position: Some(false), ..SoundChange::default() },
+        ..NewVoiceover::new(
+            id!("welcome"),
+            vec![VoiceLine::new("english", "voice/en/welcome.ogg"), VoiceLine::new("german", "voice/de/welcome.ogg")],
+        )
+    };
+    let _line = load.feature("welcome", |load| load.add_voiceover(welcome));
+    let reading = VoiceoverId::from_guid(Guid::parse("3a7b1c90-5e2d-4f68-9c41-0d8e6b2f7a15"));
+    let german = NewVoiceover::new(id!("reading"), vec![VoiceLine::new("german", "voice/de/reading.ogg")]);
+    let _changed = load.feature("reading", |load| load.change_voiceover(reading, german));
+    Ok(())
+}
+```
+
+```luau
+local ok, line = pcall(enshwick.sound.add_voiceover, {
+    id = "you.lore:welcome",
+    lines = { { language = "english", takes = { { file = "voice/en/welcome.ogg" } } } },
+    fallback = "english",
+})
+```
+
+## Add music to a place
+
+With the `unstable` feature, `load.add_music(new)` adds audio files as
+recordings and a music row of the client's ambience. The ambience plays
+the row among the game's own music where and when it fits. It plays one
+file at a time, and not the one it played last. No client has yet been
+heard playing a mod's music row.
+
+| `NewMusic` | Plays |
+| --- | --- |
+| `environment` | in one place of the game's `AmbientEnvironment`, such as Grassland or Cave; everywhere without one |
+| `in_fog`, `indoors`, `in_battle` | only when it holds with `true`, only when not with `false`; both without one |
+| `start_time`, `end_time` | from and to a time of day; a start after the end spans midnight |
+| `volume` | from 0 to 1; 0.2, as most of the game's music away from battle |
+| `sleep`, `sleep_randomness` | a pause after each file, at most 10 minutes |
+
+Rows of several mods add up in load order. The returned recordings let
+other containers play the files too.
+
+```rust
+use std::time::Duration;
+
+use enshwick::content::id;
+use enshwick::sound::NewMusic;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let night = NewMusic {
+        environment: Some("Grassland".into()),
+        in_battle: Some(false),
+        start_time: Some(Duration::from_hours(22)),
+        end_time: Some(Duration::from_hours(6)),
+        sleep: Duration::from_secs(30),
+        ..NewMusic::new(id!("night"), vec!["music/night1.ogg".into(), "music/night2.ogg".into()])
+    };
+    let _music = load.feature("night", |load| load.add_music(night));
+    Ok(())
+}
+```
+
+A boss's music is its template's `ecs::BossMusicTag`, whose `bossMusic`
+names a container. Give a boss another one as any other
+[template change](content/templates.md#what-a-change-does). Its container
+plays in scene `Music`, such as one from `add_sound`. Only the client holds
+this component, so the typed API has no type for it. The change names its
+field as the game does:
+
+```rust
+use enshwick::content::Guid;
+use enshwick::content::templates::ComponentChange;
+use enshwick::resources::Value;
+use enshwick::sound::SoundContainerId;
+
+fn init(load: &mut enshwick::Load<'_>, boss: Guid, theme: SoundContainerId) -> Result<(), enshwick::Off> {
+    let theme = theme.guid();
+    let music = ComponentChange::edit_value("ecs::BossMusicTag", move |tag| {
+        if let Some(container) = tag.field_mut("bossMusic") {
+            *container = Value::Guid(theme);
+        }
+    });
+    load.change_template(boss, vec![music])
+}
+```

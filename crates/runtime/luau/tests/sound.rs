@@ -56,6 +56,80 @@ mod tests {
         assert!(logged(&loader, "GenericSfx 0 9"), "{:?}", loader.logs());
     }
 
+    #[test]
+    fn a_script_plays_a_sound_and_steers_it_through_its_handle() {
+        use enshwick::content::{Guid, types};
+        let bell = Guid::named("you.bells:bell");
+        let fake = FakeHost::new()
+            .side(Side::CLIENT)
+            .type_hash(types::SOUND_CONTAINER_RESOURCE.id(), 0xf257_640c)
+            .resource(bell.key_by_hash(0xf257_640c), Vec::new());
+        let loader = run(
+            fake,
+            &format!(
+                r#"
+                local bell = enshwick.sound.play({{ container = "{bell}", place = {{ At = vector.create(10, 0, 0) }}, volume = 0.5, fade_in = 0.3 }})
+                enshwick.log.info(`queued {{bell:state()}} {{bell:is_playing()}}`)
+                bell:set_volume(0.2, 1)
+                bell:stop(0.5)
+                enshwick.log.info(`stopped {{bell:state()}}`)
+                local typo = pcall(enshwick.sound.play, {{ container = "07070707-0707-0707-0707-070707070707" }})
+                enshwick.log.info(`typo refused {{not typo}}`)
+                enshwick.sound.stop_all(0)
+                "#
+            ),
+        );
+        for line in ["queued Pending true", "stopped Ended", "typo refused true"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+        let [played] = loader.sounds()[..] else {
+            panic!("one sound was started: {:?}", loader.logs());
+        };
+        assert_eq!((played.volume, played.playing), (0.2, false));
+    }
+
+    #[test]
+    fn a_script_plays_a_sound_on_a_player_s_client_and_steers_it() {
+        use enshwick::content::Guid;
+        use enshwick::net::Peer;
+        use enshwick::{Entity, PlayerKey};
+        let horn = Guid::named("you.horns:horn");
+        let fake = FakeHost::new()
+            .side(Side::SERVER)
+            .player(enshwick::abi::PlayerInfo {
+                header: enshwick::abi::Header::of::<enshwick::abi::PlayerInfo>(),
+                slot: 0,
+                entity: Entity(10),
+                key: PlayerKey::new(7),
+                permissions: 0,
+                name_len: 0,
+                name: [0; 128],
+            })
+            .net_peer(Peer::Player(PlayerKey::new(7)));
+        let loader = run(
+            fake,
+            &format!(
+                r#"
+                local horn = enshwick.sound.play_for({{ Player = "7" }}, {{ container = "{horn}" }})
+                horn:set_volume(0.5, 0)
+                horn:stop(0.2)
+                local wide = pcall(enshwick.sound.play_for, {{ Near = {{ at = vector.create(0, 0, 0), radius = 900 }} }}, {{ container = "{horn}" }})
+                enshwick.log.info(`too wide refused {{not wide}}`)
+                "#
+            ),
+        );
+        assert!(
+            logged(&loader, "too wide refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        let [(to, played)] = &loader.sent_sounds()[..] else {
+            panic!("one sound went: {:?}", loader.logs());
+        };
+        assert_eq!(to.as_slice(), [PlayerKey::new(7)]);
+        assert_eq!((played.volume, played.playing), (0.5, false));
+    }
+
     const MAIN: &str = r#"
         local chest = "6943053a-32c1-4718-ae22-e61427ddf54d"
         enshwick.sound.change(chest, { volume = 0.5, looped = true })

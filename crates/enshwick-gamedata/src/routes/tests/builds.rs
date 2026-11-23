@@ -628,6 +628,50 @@ const ITEM_UI_READS: [(&str, u64); 20] = [
     ("ui.attribute_row_size", 0x2a0),
 ];
 
+/// The sound system's start, stop and instance calls a client mod's sounds
+/// go through (`sound.rs` of the loader's ui layer; read in the decompiler
+/// on client 26430625, 2026-11-23; on the older clients the routes find
+/// one match each whose prologue holds its check).
+const SOUND_SYMBOLS: &[(&str, &str, u64)] = &[
+    ("1.0 client (26430625)", "sound.start", 0x106_ee50),
+    ("1.0 client (26430625)", "sound.stop", 0x106_fc50),
+    ("1.0 client (26430625)", "sound.set_volume", 0x106_9c10),
+    ("1.0 client (26430625)", "sound.set_position", 0x106_9ba0),
+    ("1.0 client (26430625)", "sound.is_playing", 0x105_e8e0),
+    ("1.0 client (26320373)", "sound.start", 0x106_fba0),
+    ("1.0 client (26320373)", "sound.stop", 0x107_09a0),
+    ("1.0 client (26320373)", "sound.set_volume", 0x106_a960),
+    ("1.0 client (26320373)", "sound.set_position", 0x106_a8f0),
+    ("1.0 client (26320373)", "sound.is_playing", 0x105_eb30),
+    ("1.0 client (26082781)", "sound.start", 0x105_46a0),
+    ("1.0 client (26082781)", "sound.stop", 0x105_54a0),
+    ("1.0 client (26082781)", "sound.set_volume", 0x104_f680),
+    ("1.0 client (26082781)", "sound.set_position", 0x104_f610),
+    ("1.0 client (26082781)", "sound.is_playing", 0x104_4460),
+    ("1.0 client (1269579)", "sound.start", 0x105_1a40),
+    ("1.0 client (1269579)", "sound.stop", 0x105_2840),
+    ("1.0 client (1269579)", "sound.set_volume", 0x104_ca20),
+    ("1.0 client (1269579)", "sound.set_position", 0x104_c9b0),
+    ("1.0 client (1269579)", "sound.is_playing", 0x104_1800),
+];
+
+/// The reads that reach the sound system and its scenes from the
+/// interface's context: the sound object at 0x10 of the context, its
+/// system at 0x60 and `Ui` scene at 0x68; the client object's link at 0x730,
+/// which the `GameUi` keeps at 0x58, and the `Ui` scene at 0x69c, which it
+/// keeps at 0x78 (`0xa4f310`, the client set-up `0x8520a0` and the `GameUi`
+/// constructor `0xa44070` in the decompiler on client 26430625,
+/// 2026-11-23).
+const SOUND_READS: [(&str, u64); 7] = [
+    ("sound.ui_object", 0x10),
+    ("sound.ui_system", 0x60),
+    ("sound.ui_scene", 0x68),
+    ("sound.client_link", 0x730),
+    ("sound.client_ui_scene", 0x69c),
+    ("sound.gameui_link", 0x58),
+    ("sound.gameui_ui_scene", 0x78),
+];
+
 /// The kept client tables, by name.
 const CLIENT_TABLES: [&str; 4] = [
     "1.0 client (1269579)",
@@ -643,6 +687,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
     ROUTED_ONLY
         .iter()
         .chain(ITEM_UI_SYMBOLS)
+        .chain(SOUND_SYMBOLS)
         .chain(attributes::ATTRIBUTE_SYMBOLS)
         .copied()
         .chain(CLIENT_TABLES.into_iter().flat_map(|table| {
@@ -651,6 +696,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
                 .chain(CLIENT_CONTROL_READS)
                 .chain(WIDGET_READS)
                 .chain(ITEM_UI_READS)
+                .chain(SOUND_READS)
                 .chain(attributes::ATTRIBUTE_ROW_READS)
                 .chain(attributes::ATTRIBUTE_TEXT_READS)
                 .map(move |(id, value)| (table, id, value))

@@ -39,6 +39,31 @@ entries! {
         out.put(status)
     }
 
+    fn sound_play(me as Mod, spec as Headed<api_frame::SoundPlay>, id as Out<u64>) -> Status {
+        id.put(crate::ui::sound::play(me.loader, me.index, &spec)?)
+    }
+
+    fn sound_steer(me as Mod, id: u64, steer as Headed<api_frame::SoundSteer>) -> Status {
+        Ok(crate::ui::sound::steer(me.loader, me.index, id, &steer)?)
+    }
+
+    fn sound_state(me as Mod, id: u64, out as HeadedOut<api_frame::SoundInfo>) -> Status {
+        out.put(crate::ui::sound::state(me.loader, me.index, id)?)
+    }
+
+    fn sound_play_for(
+        me as Mod,
+        audience as Headed<api_frame::SoundAudience>,
+        spec as Headed<api_frame::SoundPlay>,
+        id as Out<u64>,
+    ) -> Status {
+        id.put(crate::ui::sound::play_for(me.loader, me.index, &audience, &spec)?)
+    }
+
+    fn sound_steer_for(me as Mod, id: u64, steer as Headed<api_frame::SoundSteer>) -> Status {
+        Ok(crate::ui::sound::steer_for(me.loader, me.index, id, &steer)?)
+    }
+
     fn local_held(loader as Caller, out as Out<u64>) -> Status {
         on_client(loader)?;
         out.put(crate::actions::local_held::held()?)

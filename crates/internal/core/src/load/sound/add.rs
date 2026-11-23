@@ -1,6 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::sound::{AddedSound, NewSound, SoundId};
+use crate::sound::{AddedSound, NewMusic, NewSound, NewVoiceover, SoundId, VoiceoverId};
 use crate::{Load, Off};
 use enshwick_ui::__load::*;
 
@@ -83,4 +83,111 @@ impl Load<'_> {
     /// ```
     #[script(name = "replace")]
     pub fn replace_sound(&mut self, sound: SoundId, file: &str) -> Result<(), Off>;
+
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since the client playing it is not yet heard in the running game.
+    ///
+    /// Adds the voiced line `new.id`, which dialogue lines, lore readings
+    /// and journal entries name through the resource values: each of
+    /// `new.lines` becomes a sound, as [`Load::add_sound`] makes one, under
+    /// `<id>.<language>`, in its language's slot with its length, and the
+    /// fallback's sound fills the slots the line leaves empty. The game's
+    /// voice language setting picks the slot; a language without a slot of
+    /// its own speaks the first, and an empty slot is silent. A server
+    /// checks the files and serves nothing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::add_sound`] for each line, and for no line, a language
+    /// the game does not voice or given twice, and a fallback that is none
+    /// of the line's languages.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    /// use enshwick::sound::{NewVoiceover, VoiceLine};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let welcome = NewVoiceover {
+    ///         fallback: Some("english".into()),
+    ///         ..NewVoiceover::new(id!("welcome"), vec![VoiceLine::new("english", "voice/en/welcome.ogg")])
+    ///     };
+    ///     let _line = load.feature("welcome", |load| load.add_voiceover(welcome));
+    ///     Ok(())
+    /// }
+    /// ```
+    #[script(name = "add_voiceover")]
+    pub fn add_voiceover(&mut self, new: NewVoiceover) -> Result<VoiceoverId, Off>;
+
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since the client playing it is not yet heard in the running game.
+    ///
+    /// Replaces the recordings of the game's voiced line `voiceover` in the
+    /// languages of `new.lines`, each added as [`Load::add_voiceover`] adds
+    /// one under `new.id`, and keeps its other languages; the fallback
+    /// fills only the slots the game's line leaves empty. Mods that change
+    /// one line apply in load order. A server checks the files and serves
+    /// nothing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::add_voiceover`], and on a client whose game holds no line
+    /// `voiceover`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::{Guid, id};
+    /// use enshwick::sound::{NewVoiceover, VoiceLine, VoiceoverId};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let reading = VoiceoverId::from_guid(Guid::parse("3a7b1c90-5e2d-4f68-9c41-0d8e6b2f7a15"));
+    ///     let german = NewVoiceover::new(id!("reading"), vec![VoiceLine::new("german", "voice/de/reading.ogg")]);
+    ///     let _changed = load.feature("reading", |load| load.change_voiceover(reading, german));
+    ///     Ok(())
+    /// }
+    /// ```
+    #[script(name = "change_voiceover")]
+    pub fn change_voiceover(
+        &mut self,
+        voiceover: VoiceoverId,
+        new: NewVoiceover,
+    ) -> Result<(), Off>;
+
+    /// Unstable: needs the `unstable` feature and may change in any release,
+    /// since the client playing it is not yet heard in the running game.
+    ///
+    /// Adds `new.files` as recordings, as [`Load::add_sound`] reads them,
+    /// and a music row of the client's ambience that plays them where and
+    /// when `new` says, among the game's own music; rows of several mods
+    /// add up in load order. Returns the recordings. A server checks the
+    /// files and serves nothing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::add_sound`] for the files, and for an environment the
+    /// game does not name, a volume outside 0 to 1, a time of day past
+    /// [`DAY`](crate::sound::DAY), a pause past
+    /// [`MAX_SLEEP`](crate::sound::MAX_SLEEP), and on a client whose game
+    /// holds not one ambient collection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    /// use enshwick::sound::NewMusic;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let desert = NewMusic {
+    ///         environment: Some("Desert".into()),
+    ///         in_battle: Some(false),
+    ///         ..NewMusic::new(id!("desert"), vec!["music/desert.ogg".into()])
+    ///     };
+    ///     let _music = load.feature("desert", |load| load.add_music(desert));
+    ///     Ok(())
+    /// }
+    /// ```
+    #[script(name = "add_music")]
+    pub fn add_music(&mut self, new: NewMusic) -> Result<Vec<SoundId>, Off>;
 }

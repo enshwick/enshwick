@@ -315,6 +315,7 @@ mod points;
 mod rates;
 mod script;
 mod services;
+mod sound;
 mod stats;
 mod survivors;
 mod terrain;
@@ -356,6 +357,7 @@ pub use pacing::*;
 pub use points::*;
 pub use rates::*;
 pub use services::*;
+pub use sound::*;
 pub use stats::*;
 pub use survivors::*;
 pub use terrain::*;
@@ -806,6 +808,10 @@ const _: () = {
     assert!(size_of::<KnowledgeData>() == 8 + 12);
     assert!(size_of::<PlayerDeathData>() == 8 + 4 + 4 + 8 + 24 + 16 + 4 + 4);
     assert!(size_of::<WaypointData>() == 8 + 8 + 8 + 24 + 4 + 4);
+    assert!(size_of::<SoundPlay>() == 8 + 16 + 4 + 4 + 24 + 4 + 4);
+    assert!(size_of::<SoundSteer>() == 8 + 4 + 4 + 4 + 4 + 24);
+    assert!(size_of::<SoundInfo>() == 8 + 4 + 4);
+    assert!(size_of::<SoundAudience>() == 8 + 4 + 4 + 8 + 24);
     assert!(size_of::<QuestData>() == 8 + 8);
     // Headed: written at the entry size the caller states.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);

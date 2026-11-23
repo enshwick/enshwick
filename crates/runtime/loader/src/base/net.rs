@@ -27,8 +27,8 @@ use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
 use crate::base::wire::{
-    CONTROL, ITEM_DATA, NOTICE, Peer, STAT_VALUES, UI_DEMO, WELCOME, control, demo_position, hello,
-    read_notice, read_stat_values, remote_message,
+    CONTROL, ITEM_DATA, NOTICE, Peer, SOUND, STAT_VALUES, UI_DEMO, WELCOME, control, demo_position,
+    hello, read_notice, read_stat_values, remote_message,
 };
 pub(crate) use crate::base::wire::{MAX_CONTROL, MAX_MESSAGE};
 use crate::engine::loader::{Loader, Registered};
@@ -95,6 +95,9 @@ struct State {
     /// On a client: the stat values its server last sent for its player's
     /// own character, by stat key.
     own_stats: arc_swap::ArcSwapOption<FxHashMap<u32, f32>>,
+    /// On a client: what takes the mods' sounds the server sends, set by
+    /// the sounds' link, a layer above.
+    sounds: std::sync::OnceLock<fn(&Loader, &[u8])>,
 }
 
 impl State {
@@ -105,6 +108,7 @@ impl State {
             answered: AtomicBool::new(false),
             dropped: AtomicU64::new(0),
             own_stats: arc_swap::ArcSwapOption::const_empty(),
+            sounds: std::sync::OnceLock::new(),
         }
     }
 
@@ -428,6 +432,19 @@ pub(crate) fn stat_values(key: u64, values: &[(u32, f32)]) -> bool {
     post_one(key, CONTROL, &crate::base::wire::stat_values(values)) == Some(true)
 }
 
+/// Names `take` as what takes the mods' sounds the server sends this
+/// client, after their control kind; the first one named stays.
+pub(crate) fn on_sounds(take: fn(&Loader, &[u8])) {
+    let _first = STATE.sounds.set(take);
+}
+
+/// Sends a mod's sound message `data` to the clients `keys` from the
+/// server; a client whose link or outbox is full misses it, counted as
+/// dropped.
+pub(crate) fn sound(keys: &[u64], data: &[u8]) {
+    let _sent = post(keys, CONTROL, data, |_, _| {});
+}
+
 /// Sends the client of the player with account key `key`, whose hello named
 /// other mods, `mods`, the server's mods of side both, so it lists the
 /// difference once it is back in its menu. A link with no room drops it:
@@ -514,6 +531,10 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
         crate::inventory::item_data::received(records);
     } else if let Some(values) = data.strip_prefix(control(STAT_VALUES).as_slice()) {
         own_stats::received(read_stat_values(values));
+    } else if let Some(rest) = data.strip_prefix(control(SOUND).as_slice()) {
+        if let (Some(take), Some(loader)) = (STATE.sounds.get(), crate::engine::loader::loader()) {
+            take(loader, rest);
+        }
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())
         && let Some((entity, text)) = read_notice(rest)
     {

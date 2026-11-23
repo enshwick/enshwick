@@ -159,6 +159,21 @@ struct State {
     host: HostRead,
     /// When a step last wrote `host`, as `read_ms` counts.
     host_ms: AtomicU64,
+    /// A higher layer's read of where entities stand, which each step runs
+    /// while it asks: whether it asks, and the read.
+    positions: OnceLock<Positions>,
+}
+
+/// Whether a higher layer wants where entities stand, and its read, which
+/// gets the step's read of one entity's fixed-point position.
+type Positions = (fn() -> bool, fn(&dyn Fn(u32) -> Option<[i64; 3]>));
+
+/// Hands each step from now on `read`, run while `wants` answers yes, with
+/// where an entity of the client's world stands: its `CurrentTransform`'s
+/// 32.32 metres, `None` for one the world lacks. On a build without the
+/// host reads' layout no step runs it.
+pub(crate) fn read_positions(wants: fn() -> bool, read: fn(&dyn Fn(u32) -> Option<[i64; 3]>)) {
+    let _first = STATE.positions.set((wants, read));
 }
 
 static STATE: State = State {
@@ -175,6 +190,7 @@ static STATE: State = State {
     host_wanted: AtomicU32::new(0),
     host: HostRead::new(),
     host_ms: AtomicU64::new(0),
+    positions: OnceLock::new(),
 };
 static FUSE: Fuse = Fuse::new(FEATURE);
 static HOST_FUSE: Fuse = Fuse::new(HOST_FEATURE);
@@ -477,6 +493,21 @@ crate::engine::chains::chain_detour! {
             // SAFETY: `ctx` is non-null by the check before it and is the
             // system's own context, at its entry on its thread.
             let _read = HOST_FUSE.run(HOST_FEATURE, || unsafe { read_host(ctx, at, host) });
+        }
+        if let Some((wants, read)) = STATE.positions.get()
+            && wants()
+            && let Some(at) = STATE.host_layout.get()
+            && !ctx.is_null()
+        {
+            read(&|entity| {
+                // SAFETY: `ctx` is non-null by the check before it and is the
+                // system's own context, at its entry on its thread.
+                let transform = unsafe { at.components.component(ctx, entity, at.transform) }?;
+                // SAFETY: `transform` is the entity's live `CurrentTransform`,
+                // whose position, three fixed-point `i64`, sits at the
+                // reflected offset `at.position`.
+                Some(unsafe { enshwick_core::raw::read_at::<[i64; 3]>(transform, at.position) })
+            });
         }
         if STATE.asked.load(Ordering::Relaxed)
             && let Some(layout) = STATE.layout.get()

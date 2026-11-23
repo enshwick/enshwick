@@ -263,10 +263,16 @@ mod skills;
 mod sound_changes;
 #[cfg(feature = "unstable")]
 mod sound_files;
+#[cfg(feature = "unstable")]
+mod sound_for;
 mod sound_made;
+#[cfg(feature = "unstable")]
+mod sound_play;
 #[cfg(feature = "unstable")]
 mod sound_recordings;
 mod sound_takes;
+#[cfg(feature = "unstable")]
+mod sound_voiceover;
 mod sounds;
 #[cfg(feature = "typed")]
 mod spawns;

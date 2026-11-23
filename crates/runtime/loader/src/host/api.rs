@@ -244,4 +244,9 @@ pub(crate) static API: HostApi = HostApi {
     buff_type_add,
     damage_causes_off,
     waypoint,
+    sound_play,
+    sound_steer,
+    sound_state,
+    sound_play_for,
+    sound_steer_for,
 };

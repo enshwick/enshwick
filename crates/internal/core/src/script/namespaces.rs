@@ -173,6 +173,17 @@ impl Namespace {
         self.request.as_ref().map(|request| (request.open)(load))
     }
 
+    /// [`Namespace::of`] whose namespace also holds the
+    /// [`Load`](crate::Load) methods of `init`, callable while the mod
+    /// starts.
+    #[cfg(feature = "unstable")]
+    const fn of_starting<T: Bound>(init: &'static [&'static [InitFunction]]) -> Self {
+        Self {
+            init,
+            ..Self::of::<T>()
+        }
+    }
+
     /// The [`Load`](crate::Load) methods of `init` as the namespace `name`,
     /// callable while the mod starts.
     const fn starting(

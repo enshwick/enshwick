@@ -13,14 +13,16 @@ pub(super) const NAMESPACES: &[Namespace] = &[
             crate::Load::SCRIPT_UI_EXTENSION,
         ],
     ),
+    #[cfg(feature = "unstable")]
+    Namespace::of_starting::<crate::sound::Sounds>(&[
+        crate::Load::SCRIPT_SOUND,
+        crate::Load::SCRIPT_SOUND_EVENTS,
+        crate::Load::SCRIPT_SOUND_ADD,
+    ]),
+    #[cfg(not(feature = "unstable"))]
     Namespace::starting(
         "sound",
         "",
-        &[
-            crate::Load::SCRIPT_SOUND,
-            crate::Load::SCRIPT_SOUND_EVENTS,
-            #[cfg(feature = "unstable")]
-            crate::Load::SCRIPT_SOUND_ADD,
-        ],
+        &[crate::Load::SCRIPT_SOUND, crate::Load::SCRIPT_SOUND_EVENTS],
     ),
 ];

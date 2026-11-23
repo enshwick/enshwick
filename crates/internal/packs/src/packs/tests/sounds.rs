@@ -170,6 +170,49 @@ fn a_change_of_an_unknown_sound_or_a_take_past_its_bound_is_named() {
     );
 }
 
+#[test]
+fn a_voiced_line_and_music_take_the_pack_s_namespace_and_name_their_problems() {
+    let good = PackFiles::new().with(
+        SOUNDS_FILE,
+        format!(
+            "[[voiceover]]\nid = \"welcome\"\nlines = [{{ language = \"english\", file = \"en.ogg\" }}]\nfallback = \"english\"\nhas_position = false\n\n[[voiceover]]\nid = \"reading\"\nvoiceover = \"{CREAK}\"\nlines = [{{ language = \"german\", file = \"de.ogg\" }}]\n\n[[music]]\nid = \"night\"\nfiles = [\"a.ogg\", \"b.ogg\"]\nenvironment = \"Grassland\"\nstart_hour = 22.0\nend_hour = 6.5\nsleep = 30.0\n"
+        ),
+    );
+    let pack = Pack::parse("you.horns", &good).unwrap();
+    let [welcome, reading] = pack.sounds.voiceovers.as_slice() else {
+        panic!("two lines");
+    };
+    assert_eq!(welcome.id, "you.horns:welcome");
+    assert_eq!(welcome.voiceover, None);
+    assert_eq!(
+        reading.voiceover.map(|g| g.to_string()).as_deref(),
+        Some(CREAK)
+    );
+    let [night] = pack.sounds.music.as_slice() else {
+        panic!("one music");
+    };
+    assert_eq!(night.id, "you.horns:night");
+    assert_eq!(night.start, Some(std::time::Duration::from_hours(22)));
+    assert_eq!(night.end, Some(std::time::Duration::from_mins(390)));
+    assert_eq!(night.sleep, std::time::Duration::from_secs(30));
+    assert!(pack.reaches_players());
+    let lines = problems(
+        "[[voiceover]]\nid = \"a\"\nvoiceover = \"bell\"\nlines = [{ language = \"english\", file = \"../a.ogg\" }]\n\n[[voiceover]]\nid = \"b\"\nlines = []\n\n[[music]]\nid = \"c\"\nfiles = []\nend_hour = 25.0\nvolume = 2.0\n",
+    );
+    has(
+        &lines,
+        "sounds.toml:1:1: voiceover a: \"../a.ogg\" is no path inside",
+    );
+    has(&lines, "sounds.toml:1:1: voiceover a: \"bell\" is no GUID");
+    has(
+        &lines,
+        "sounds.toml:6:1: voiceover b: give a file for a language",
+    );
+    has(&lines, "sounds.toml:10:1: music c: 0 files");
+    has(&lines, "sounds.toml:10:1: music c: volume 2 is outside");
+    has(&lines, "sounds.toml:10:1: music c: end_hour 25 is outside");
+}
+
 proptest! {
     /// Any volume, sleep and count read as a change or name their bound,
     /// as the sound module's own check words it.

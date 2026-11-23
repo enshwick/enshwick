@@ -18,12 +18,12 @@ use crate::abi::{
     ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
     PointSpec, PointVerdict, PropPlacementInfo, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn,
     ResourceKey, ResourcePatchFn, RespawnPointInfo, SaveInfo, ServerWaitFn, ServiceFound,
-    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef,
-    StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo,
-    TickHandle, TransactionInfo, TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn,
-    UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel, WaypointData,
-    WeatherFront, WeatherSample,
+    ServiceSpec, SkillCheckFn, SoundAudience, SoundInfo, SoundPlay, SoundSteer, SpawnRequest,
+    StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str,
+    SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
+    TransactionSettledFn, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker,
+    UiTooltipFn, UiWidget, Voxel, WaypointData, WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2362,6 +2362,65 @@ pub struct HostApi {
     /// build whose reflection lacks the waypoint. ABI 12.16.
     pub waypoint:
         extern "system" fn(me: ModHandle, entity: Entity, out: *mut WaypointData) -> Status,
+    /// Queues `spec`, a headed [`SoundPlay`], and writes the sound's id to
+    /// `id`: the client's game thread starts it in its next interface frame,
+    /// and [`HostApi::sound_state`] tells what came of it. Any thread, also
+    /// outside a frame. [`Status::MISSING`] for a container neither the
+    /// game's archive nor a mod holds; [`Status::BAD_ARGS`] for an unknown
+    /// place, a volume outside 0 to 1, a fade past
+    /// [`SoundPlay::MAX_FADE_MS`], a non-finite position or entity 0 on
+    /// [`SoundPlay::ON`]; [`Status::BUSY`] past
+    /// [`SoundPlay::MAX_STARTS`] starts of the mod waiting for one frame;
+    /// [`Status::UNAVAILABLE`] on a server and on a build where the
+    /// loader's playback is off. ABI 12.17.
+    pub sound_play:
+        extern "system" fn(me: ModHandle, spec: *const SoundPlay, id: *mut u64) -> Status,
+    /// Queues `steer`, a headed [`SoundSteer`], for the mod's sound `id`, or
+    /// for all of the mod's sounds with [`SoundSteer::STOP_ALL`]. An id of a
+    /// sound that ended changes nothing; ids count per mod, so another
+    /// mod's id names at most one of this mod's own sounds. Any thread. [`Status::BAD_ARGS`] as for
+    /// [`HostApi::sound_play`]; [`Status::BUSY`] when the mod's queue is
+    /// full; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
+    pub sound_steer: extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
+    /// Writes to `out`, a headed [`SoundInfo`], where the mod's sound `id`
+    /// stands; an id the loader no longer keeps reads as
+    /// [`SoundInfo::ENDED`], and another mod's id at most one of this mod's
+    /// own sounds, since ids count per mod. Any thread. [`Status::BAD_ARGS`] for a null or
+    /// smaller `out`; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
+    pub sound_state: extern "system" fn(me: ModHandle, id: u64, out: *mut SoundInfo) -> Status,
+    /// Sends `play`, a headed [`SoundPlay`], from the server to the clients
+    /// of `audience`, a headed [`SoundAudience`], that run Enshwick and the
+    /// mod, and writes the sound's id to `id`; each client plays it as the
+    /// mod's client part's own [`HostApi::sound_play`] would, so a vanilla
+    /// client hears nothing. A hosting client's own player plays it in
+    /// process. The mod runs on both sides. Entity ids are the server
+    /// world's, which name no client entity, so [`SoundPlay::ON`] plays
+    /// where the entity stands when it is sent, without following it.
+    /// Clients send nothing back, so the id only steers
+    /// ([`HostApi::sound_steer_for`]). Any thread; a
+    /// [`SoundAudience::NEAR`] audience or [`SoundPlay::ON`] on the
+    /// server's game thread, where it reads where entities stand.
+    /// [`Status::BAD_ARGS`] for an audience or play out of bounds;
+    /// [`Status::MISSING`] for an entity of [`SoundPlay::ON`] not in the
+    /// world; [`Status::BUSY`] past [`SoundAudience::MAX_PLAYS`] sounds of
+    /// the mod in one server step; [`Status::WRONG_THREAD`] off the game
+    /// thread where it must read; [`Status::REFUSED`] for a mod that does
+    /// not run on both sides; [`Status::UNAVAILABLE`] where no server runs
+    /// in the process. ABI 12.18.
+    pub sound_play_for: extern "system" fn(
+        me: ModHandle,
+        audience: *const SoundAudience,
+        play: *const SoundPlay,
+        id: *mut u64,
+    ) -> Status,
+    /// Sends `steer`, a headed [`SoundSteer`], for the mod's sound `id` from
+    /// [`HostApi::sound_play_for`] to the clients that got it. An id of no
+    /// such sound changes nothing. [`SoundSteer::STOP_ALL`] is not taken.
+    /// Any thread. [`Status::BAD_ARGS`] out of bounds and for
+    /// [`SoundSteer::STOP_ALL`]; [`Status::UNAVAILABLE`] where no server
+    /// runs in the process. ABI 12.18.
+    pub sound_steer_for:
+        extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2592,5 +2651,10 @@ const _: () = {
     assert!(offset_of!(HostApi, buff_type_add) == 24 + 217 * 8);
     assert!(offset_of!(HostApi, damage_causes_off) == 24 + 218 * 8);
     assert!(offset_of!(HostApi, waypoint) == 24 + 219 * 8);
-    assert!(size_of::<HostApi>() == 24 + 220 * 8);
+    assert!(offset_of!(HostApi, sound_play) == 24 + 220 * 8);
+    assert!(offset_of!(HostApi, sound_steer) == 24 + 221 * 8);
+    assert!(offset_of!(HostApi, sound_state) == 24 + 222 * 8);
+    assert!(offset_of!(HostApi, sound_play_for) == 24 + 223 * 8);
+    assert!(offset_of!(HostApi, sound_steer_for) == 24 + 224 * 8);
+    assert!(size_of::<HostApi>() == 24 + 225 * 8);
 };

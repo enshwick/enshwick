@@ -41,6 +41,7 @@ pub(crate) mod server;
 pub(crate) mod session;
 pub(crate) mod settings;
 pub(crate) mod skill;
+pub(crate) mod sound;
 pub(crate) mod survivors;
 pub(crate) mod terrain;
 pub(crate) mod text;

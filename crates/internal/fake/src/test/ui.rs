@@ -2,8 +2,12 @@
 
 use enshwick_core::abi::Header;
 
+mod sound;
+
 use super::table;
 use super::{FakeHost, Installed};
+#[cfg(feature = "unstable")]
+pub use sound::FakeSound;
 
 /// What the fake's interface answers, as the test set it.
 #[derive(Clone, Debug, Default)]
@@ -31,6 +35,7 @@ fn step() {
         s.ui.local_held.stepped |= s.ui.local_held.asked;
         s.ui.snapshot_reads.1 |= s.ui.snapshot_reads.0;
     });
+    sound::frame();
 }
 
 fn reads() -> Reads {

@@ -6743,6 +6743,119 @@ loads = [
 check = ["mov rax,rsp", "mov [rax+0x10],rdi", "mov [rax+0x18],r14"]
 
 [[route]]
+id = "sound.start"
+sides = ["client"]
+in = "ui.sound"
+shape = ["mov r8d,[rcx+?]", "mov rcx,[rcx+?]", "mov [rsp+0x20],rax", "call *"]
+take = "address"
+check = ["mov [rsp+0x18],r8d", "push rbp", "push rdi", "push r14"]
+
+[[route]]
+id = "sound.stop"
+sides = ["client"]
+in = "ui.sound"
+shape = ["xor r8d,r8d", "mov edx,?r", "mov rcx,[rcx+?]", "call *"]
+take = "address"
+check = ["mov [rsp+0x20],rsi", "push rbp", "push rdi", "push r14"]
+
+[[route]]
+id = "sound.ui_object"
+sides = ["client"]
+in = "ui.sound"
+shape = ["mov rdi,[rcx+*]", "mov r14,rdx", "mov r15,rcx", "cmp dword [rdi+?],0x0"]
+take = "value"
+range = [8, 0x40]
+
+[[route]]
+id = "sound.ui_system"
+sides = ["client"]
+in = "ui.sound"
+shape = ["mov r8d,[rcx+?]", "mov rcx,[rcx+*]", "mov [rsp+0x20],rax", "call {sound.start}"]
+take = "value"
+range = [0x30, 0xc0]
+
+[[route]]
+id = "sound.ui_scene"
+sides = ["client"]
+in = "ui.sound"
+shape = ["mov r8d,[rcx+*]", "mov rcx,[rcx+?]", "mov [rsp+0x20],rax", "call {sound.start}"]
+take = "value"
+range = [0x34, 0xd0]
+
+[[route]]
+id = "~fn:sound.fx_update"
+sides = ["client"]
+callers = "sound.stop"
+shape = ["mov rcx,[?+?]", "mov edx,[?+?]", "call ?", "cmp ?m,?r", "jne ?", "mov edx,[?+?]", "mov rcx,[?+?]", "call ?", "test al,al"]
+
+[[route]]
+id = "sound.set_position"
+sides = ["client"]
+in = "~fn:sound.fx_update"
+shape = ["lea r8,[?+?]", "mov rcx,[?+?]", "call *", "and ?m,?i", "movzx ecx,byte [?+?]", "mov eax,0x1", "shl al,cl", "test ?r,al", "je ?", "movss xmm2,?m", "mov r9,?r", "mov rcx,[?+?]", "mov edx,[?+?]", "call {sound.set_volume}"]
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "push rdi", "sub rsp,0x20", "mov rsi,r8"]
+
+[[route]]
+id = "sound.set_volume"
+sides = ["client"]
+in = "~fn:sound.fx_update"
+shape = ["mov r9,?r", "mov rcx,[?+?]", "mov edx,[?+?]", "call *"]
+take = "address"
+check = ["push rbx", "sub rsp,0x20", "mov r11,r9", "mov rbx,rcx", "call ?"]
+
+[[route]]
+id = "sound.is_playing"
+sides = ["client"]
+in = "~fn:sound.fx_update"
+shape = ["call {sound.set_volume}", "cmp ?m,?r", "jne ?", "mov edx,[?+?]", "mov rcx,[?+?]", "call *", "test al,al"]
+take = "address"
+check = ["sub rsp,0x28", "call ?", "test rax,rax", "setne al"]
+
+[[route]]
+id = "~fn:sound.client_setup"
+sides = ["client"]
+loads = ["[app] Could not create GameUiSystem"]
+
+[[route]]
+id = "sound.client_link"
+sides = ["client"]
+in = "~fn:sound.client_setup"
+shape = ["lea rax,[?+*]", "mov [?+?],rax", "mov eax,[?+?]", "mov [?+?],eax", "mov eax,[?+?]", "mov [?+?],eax"]
+take = "value"
+range = [0x398, 0xe60]
+
+[[route]]
+id = "sound.client_ui_scene"
+sides = ["client"]
+in = "~fn:sound.client_setup"
+shape = ["lea rax,[?+?]", "mov [?+?],rax", "mov eax,[?+*]", "mov [?+?],eax", "mov eax,[?+?]", "mov [?+?],eax"]
+take = "value"
+range = [0x34e, 0xd38]
+
+[[route]]
+id = "~fn:sound.gameui_create"
+sides = ["client"]
+callees = "~fn:sound.client_setup"
+shape = ["movups xmm0,[?+?]", "mov rcx,[?+?]", "lea rdx,[rsp+?]", "movups [?+?],xmm0", "mov rax,[?+?]", "mov [?+?],rax"]
+
+[[route]]
+id = "sound.gameui_link"
+sides = ["client"]
+in = "~fn:sound.gameui_create"
+shape = ["movups xmm0,[?+?]", "mov rcx,[?+?]", "lea rdx,[rsp+?]", "movups [?+*],xmm0", "mov rax,[?+?]", "mov [?+?],rax"]
+take = "value"
+range = [0x2c, 0xb0]
+
+[[route]]
+id = "sound.gameui_ui_scene"
+sides = ["client"]
+in = "~fn:sound.gameui_create"
+shape = ["mov rax,[?+?]", "mov [?+?],rax", "mov eax,[?+?]", "mov [?+*],eax", "mov eax,[?+?]", "mov [?+?],eax"]
+take = "value"
+range = [0x3c, 0xf0]
+
+[[route]]
 id = "ui.state_screen"
 sides = ["client"]
 in = "~fn:ui.context_state"

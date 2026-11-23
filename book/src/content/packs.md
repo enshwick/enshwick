@@ -604,6 +604,40 @@ A change's take names a recording in `sound` and gives its chance. The
 recording is a GUID, a required mod's `<alias>:<name>.sound`, or a sound of
 the pack by its id.
 
+A pack adds [voiced lines and music](../sounds.md#add-a-voiced-line) too.
+These need Enshwick's `unstable` feature.
+
+```toml
+[[voiceover]]
+id = "welcome"
+lines = [{ language = "english", file = "voice/en/welcome.ogg" }, { language = "german", file = "voice/de/welcome.ogg" }]
+fallback = "english"
+has_position = false
+
+[[voiceover]]
+id = "reading"
+voiceover = "3a7b1c90-5e2d-4f68-9c41-0d8e6b2f7a15"
+lines = [{ language = "german", file = "voice/de/reading.ogg" }]
+
+[[music]]
+id = "night"
+files = ["music/night1.ogg", "music/night2.ogg"]
+environment = "Grassland"
+in_battle = false
+start_hour = 22.0
+end_hour = 6.0
+```
+
+A voiced line without `voiceover` is the pack's own, `<pack>:<id>`. With a
+GUID in `voiceover`, it gives the game's line its files in those languages.
+`channels` and `gain_db` work as a sound's. `has_position = false` plays the
+line with no place, as a lore reading.
+
+A music entry plays its `files` in one `environment`, or everywhere without
+one. Fog, indoors and battle each limit it to `true` or `false`.
+`start_hour` and `end_hour` run from 0 to 24. `volume` runs from 0 to 1.
+`sleep` and `sleep_randomness` are seconds, at most 600.
+
 ## Let an admin tune a pack per world
 
 Some values may name a setting of `pack.toml` in place of a number, as
