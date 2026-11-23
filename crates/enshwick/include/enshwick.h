@@ -7158,7 +7158,7 @@ typedef struct EnshwickHostApi {
   // game's archive nor a mod holds; `EnshwickStatus_BAD_ARGS` for an unknown
   // place, a volume outside 0 to 1, a fade past
   // `EnshwickSoundPlay_MAX_FADE_MS`, a non-finite position or entity 0 on
-  // `EnshwickSoundPlay_ON` (`SoundPlay::in_bounds`); `EnshwickStatus_BUSY` past
+  // `EnshwickSoundPlay_ON`; `EnshwickStatus_BUSY` past
   // `EnshwickSoundPlay_MAX_STARTS` starts of the mod waiting for one frame;
   // `EnshwickStatus_UNAVAILABLE` on a server and on a build where the
   // loader's playback is off. ABI 12.17.

@@ -40,11 +40,10 @@ impl Followed {
     /// Asks the steps to read `entities`, at most [`MAX_FOLLOWED`] of them;
     /// the rest read as [`Seen::Unread`].
     pub(crate) fn want(&self, entities: impl IntoIterator<Item = u32>) {
-        let mut cells = self.wanted.iter();
-        for (cell, entity) in cells.by_ref().zip(entities) {
-            cell.store(entity, Ordering::Relaxed);
+        let mut entities = entities.into_iter();
+        for cell in &self.wanted {
+            cell.store(entities.next().unwrap_or(0), Ordering::Relaxed);
         }
-        cells.for_each(|cell| cell.store(0, Ordering::Relaxed));
     }
 
     /// Whether any entity is wanted: a step with none reads nothing.

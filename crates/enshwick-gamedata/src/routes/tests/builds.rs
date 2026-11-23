@@ -658,9 +658,9 @@ const SOUND_SYMBOLS: &[(&str, &str, u64)] = &[
 
 /// The reads that reach the sound system and its scenes from the
 /// interface's context: the sound object at 0x10 of the context, its
-/// system at 0x60 and Ui scene at 0x68; the client object's link at 0x730,
-/// which the GameUi keeps at 0x58, and the Ui scene at 0x69c, which it
-/// keeps at 0x78 (`0xa4f310`, the client set-up `0x8520a0` and the GameUi
+/// system at 0x60 and `Ui` scene at 0x68; the client object's link at 0x730,
+/// which the `GameUi` keeps at 0x58, and the `Ui` scene at 0x69c, which it
+/// keeps at 0x78 (`0xa4f310`, the client set-up `0x8520a0` and the `GameUi`
 /// constructor `0xa44070` in the decompiler on client 26430625,
 /// 2026-11-23).
 const SOUND_READS: [(&str, u64); 7] = [

@@ -2173,6 +2173,9 @@ export type PhenomenonChange = {
 --- Where an `Icon`'s pixels come from.
 export type Pixels = { Tint: Tint } | { Png: buffer }
 
+--- Where a sound plays.
+export type Place = "Screen" | { At: vector } | { On: number } | "Music"
+
 --- An entity with a place in the world, from `World.entities` and `World.near`.
 export type Placed = {
 	--- The entity.
@@ -2192,6 +2195,21 @@ export type Placement = {
 	--- The building player's account, which stays the same when the player gets a new character, so a filter judges the player without a world read; nil where the loader cannot tell: in the prediction of a client that joined a server, in a hosting client's own prediction until its server half finds the host's account, and on the server for a character made in the step under way, until the next step.
 	account: string?,
 }
+
+--- A sound to start: which container, where, how loud and how it fades in.
+export type Play = {
+	--- The container, the game's or a mod's.
+	container: string,
+	--- Where it plays.
+	place: Place?,
+	--- Its volume, 0 to 1, which the game multiplies by the container's; nil plays at full volume.
+	volume: number?,
+	--- How long it fades in, at most `MAX_FADE`.
+	fade_in: number?,
+}
+
+--- Why the client did not start a sound.
+export type PlayFailure = "GameRefused" | "NoScene" | "Off" | "NoEntity"
 
 --- A connected player, as the server sees them.
 export type Player = {
@@ -2927,6 +2945,23 @@ export type SoundContainerScene = "Sfx" | "Music" | "Ui" | "Voice"
 
 --- The game's `SoundContainerStealingMode`: which play of a container a new one stops once `SoundChange.max_count` of them play.
 export type SoundContainerStealingMode = "Oldest" | "Furthest" | "Ignore"
+
+--- A sound the mod started, which it steers while it plays.
+export type SoundHandle = {
+	--- Stops the sound, fading it out over `fade`.
+	stop: (self: SoundHandle, fade: number) -> (),
+	--- Changes the sound's volume to `volume`, 0 to 1, over `fade`.
+	set_volume: (self: SoundHandle, volume: number, fade: number) -> (),
+	--- Moves the sound to `at`, in metres; a sound that followed an entity stays at `at` from then on.
+	set_position: (self: SoundHandle, at: vector) -> (),
+	--- Whether the sound is queued or playing.
+	is_playing: (self: SoundHandle) -> boolean,
+	--- Where the sound stands; `SoundState.Ended` where no loader answers.
+	state: (self: SoundHandle) -> SoundState,
+}
+
+--- Where a sound stands.
+export type SoundState = "Pending" | "Playing" | "Ended" | { Failed: PlayFailure }
 
 --- One modifier that counts toward a stat, with its origin.
 export type Source = {
@@ -4766,7 +4801,12 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		extend_item_tooltip: (handler: (arg1: ItemInstance, arg2: TooltipLines) -> ()) -> (),
 	},
+	--- The game's sounds: playing them on a client, changing containers and hearing notifiers.
 	sound: {
+		--- Starts `sound` on this client: the next frame plays it, and its handle steers it. As `play`.
+		play: (sound: Play) -> SoundHandle,
+		--- Stops every sound this mod plays, fading each out over `fade`. As `stop_all`.
+		stop_all: (fade: number) -> (),
 		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		change: (sound: string, change: SoundChange) -> (),

@@ -245,7 +245,7 @@ mod windows {
                     session: crate::actions::client_snapshot::session(),
                 };
                 DRAIN.with_borrow_mut(|drain| {
-                    drain.frame(Some(&mut mixer), &frame, &STATE.followed)
+                    drain.frame(Some(&mut mixer), &frame, &STATE.followed);
                 });
             });
         });

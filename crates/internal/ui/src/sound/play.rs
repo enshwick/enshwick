@@ -241,7 +241,7 @@ impl SoundHandle {
     ///
     /// See [`SoundHandle`].
     #[script]
-    pub fn stop(&self, fade: Duration) -> Result<(), Off> {
+    pub fn stop(self, fade: Duration) -> Result<(), Off> {
         self.steer(SoundSteer {
             kind: SoundSteer::STOP,
             fade_ms: millis(fade),
@@ -260,7 +260,7 @@ impl SoundHandle {
     ///
     /// See [`SoundHandle`].
     #[script]
-    pub fn set_volume(&self, volume: f32, fade: Duration) -> Result<(), Off> {
+    pub fn set_volume(self, volume: f32, fade: Duration) -> Result<(), Off> {
         self.steer(SoundSteer {
             kind: SoundSteer::VOLUME,
             volume,
@@ -285,7 +285,7 @@ impl SoundHandle {
     /// }
     /// ```
     #[script]
-    pub fn set_position(&self, at: [f64; 3]) -> Result<(), Off> {
+    pub fn set_position(self, at: [f64; 3]) -> Result<(), Off> {
         self.steer(SoundSteer {
             kind: SoundSteer::POSITION,
             at,
@@ -300,7 +300,7 @@ impl SoundHandle {
     /// See [`SoundHandle`].
     #[must_use]
     #[script]
-    pub fn is_playing(&self) -> bool {
+    pub fn is_playing(self) -> bool {
         matches!(self.state(), SoundState::Pending | SoundState::Playing)
     }
 
@@ -311,7 +311,7 @@ impl SoundHandle {
     /// See [`SoundState`].
     #[must_use]
     #[script]
-    pub fn state(&self) -> SoundState {
+    pub fn state(self) -> SoundState {
         let Some(host) = crate::host() else {
             return SoundState::Ended;
         };
@@ -429,8 +429,13 @@ impl crate::script::Bound for Sounds {
 }
 
 #[crate::script(playback)]
+#[expect(
+    clippy::unused_self,
+    reason = "a script calls these through the namespace's handle, which holds nothing"
+)]
 impl Sounds {
-    /// As [`play`].
+    /// Starts `sound` on this client: the next frame plays it, and its
+    /// handle steers it. As [`play`].
     ///
     /// # Errors
     ///
@@ -440,11 +445,12 @@ impl Sounds {
     ///
     /// See [`play`].
     #[script]
-    pub fn play(&self, sound: Play) -> Result<SoundHandle, Off> {
+    pub fn play(self, sound: Play) -> Result<SoundHandle, Off> {
         play(sound)
     }
 
-    /// As [`stop_all`].
+    /// Stops every sound this mod plays, fading each out over `fade`. As
+    /// [`stop_all`].
     ///
     /// # Errors
     ///
@@ -454,7 +460,7 @@ impl Sounds {
     ///
     /// See [`stop_all`].
     #[script]
-    pub fn stop_all(&self, fade: Duration) -> Result<(), Off> {
+    pub fn stop_all(self, fade: Duration) -> Result<(), Off> {
         stop_all(fade)
     }
 }

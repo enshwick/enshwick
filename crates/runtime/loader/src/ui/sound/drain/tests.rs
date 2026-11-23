@@ -161,7 +161,8 @@ fn a_place_in_the_world_reaches_the_game_in_fixed_point() {
         })
         .unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
-    let expected = [3 << 31, -(2_i64 << 32), 0];
+    // The game truncates after adding 0.5, so -2 m lands one step above.
+    let expected = [3 << 31, -(2_i64 << 32) + 1, 0];
     assert_eq!(mixer.started, [(1, Scene::Game, Some(expected), 1.0)]);
 }
 

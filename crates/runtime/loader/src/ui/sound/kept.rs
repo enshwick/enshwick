@@ -69,16 +69,11 @@ fn word(generation: u32, state: u32, reason: u32) -> u64 {
 
 /// The generation, state and reason a word holds.
 fn unpack(word: u64) -> (u32, u32, u32) {
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "each part is masked or shifted to its width first"
-    )]
-    let parts = (
+    (
         (word >> 32) as u32,
         (word & 0xff) as u32,
         ((word >> 8) & 0xff) as u32,
-    );
-    parts
+    )
 }
 
 /// Whether a slot in `word` may take a new sound: never taken, or its sound
@@ -230,7 +225,7 @@ mod tests {
         };
         assert_eq!(Slot::of(slot.id()), Some(slot));
         assert_eq!(Slot::of(0), None);
-        assert_eq!(Slot::of(MAX_SOUNDS as u64 + 1 | 1 << 32), None);
+        assert_eq!(Slot::of((MAX_SOUNDS as u64 + 1) | (1 << 32)), None);
         assert_eq!(Slot::of(1), None, "generation 0 is a slot never taken");
     }
 

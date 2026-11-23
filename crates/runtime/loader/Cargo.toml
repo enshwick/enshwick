@@ -20,7 +20,6 @@ doc = false
 [dependencies]
 arc-swap.workspace = true
 bytemuck.workspace = true
-crossbeam-queue.workspace = true
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-core = { workspace = true, features = ["unstable"] }
@@ -36,6 +35,7 @@ toml_edit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 arrayvec.workspace = true
+crossbeam-queue.workspace = true
 enshwick-loader-start.workspace = true
 enshwick-luau.workspace = true
 iced-x86.workspace = true
@@ -71,6 +71,7 @@ test = []
 
 [dev-dependencies]
 criterion.workspace = true
+crossbeam-queue.workspace = true
 # The discovery tests build mods against `crates/enshwick` by path.
 enshwick.workspace = true
 enshwick-core = { workspace = true, features = ["unstable", "test"] }

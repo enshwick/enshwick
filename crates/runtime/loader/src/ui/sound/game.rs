@@ -3,7 +3,7 @@
 //!
 //! The interface's context holds the sound object `ui.sound` plays
 //! through: the sound system and the `Ui` scene (client 26430625). The
-//! GameUi that holds that object also keeps a pointer into the client
+//! `GameUi` that holds that object also keeps a pointer into the client
 //! object, beside which the client keeps every scene's id in an array by
 //! `SoundSceneType`, made once at the client's start. The loader reads the
 //! other scenes there once, and takes them only when the `Ui` scene it
@@ -114,19 +114,27 @@ impl Calls {
         let link = (offset(pinned::sound::GAMEUI_LINK)? + ui_scene)
             .checked_sub(offset(pinned::sound::GAMEUI_UI_SCENE)?)
             .ok_or(pinned::sound::GAMEUI_LINK.id())?;
-        // SAFETY: each address is the build's routed function of that
-        // name, whose route checked its first instructions on this
-        // executable (`anchors/routes.toml`), with the signature the
-        // decompiler gives on client 26430625.
-        let (start, stop, volume, position, playing) = unsafe {
-            (
-                core::mem::transmute::<usize, StartFn>(at(pinned::sound::START)?),
-                core::mem::transmute::<usize, StopFn>(at(pinned::sound::STOP)?),
-                core::mem::transmute::<usize, VolumeFn>(at(pinned::sound::SET_VOLUME)?),
-                core::mem::transmute::<usize, PositionFn>(at(pinned::sound::SET_POSITION)?),
-                core::mem::transmute::<usize, PlayingFn>(at(pinned::sound::IS_PLAYING)?),
-            )
-        };
+        let start = at(pinned::sound::START)?;
+        let stop = at(pinned::sound::STOP)?;
+        let volume = at(pinned::sound::SET_VOLUME)?;
+        let position = at(pinned::sound::SET_POSITION)?;
+        let playing = at(pinned::sound::IS_PLAYING)?;
+        // SAFETY: the routed `sound.start`, whose route checked its first
+        // instructions on this executable (`anchors/routes.toml`), with the
+        // signature the decompiler gives on client 26430625.
+        let start = unsafe { core::mem::transmute::<usize, StartFn>(start) };
+        // SAFETY: the routed `sound.stop`, checked by its route, with the
+        // decompiler's signature on client 26430625.
+        let stop = unsafe { core::mem::transmute::<usize, StopFn>(stop) };
+        // SAFETY: the routed `sound.set_volume`, checked by its route, with
+        // the decompiler's signature on client 26430625.
+        let volume = unsafe { core::mem::transmute::<usize, VolumeFn>(volume) };
+        // SAFETY: the routed `sound.set_position`, checked by its route,
+        // with the decompiler's signature on client 26430625.
+        let position = unsafe { core::mem::transmute::<usize, PositionFn>(position) };
+        // SAFETY: the routed `sound.is_playing`, checked by its route, with
+        // the decompiler's signature on client 26430625.
+        let playing = unsafe { core::mem::transmute::<usize, PlayingFn>(playing) };
         Ok(Self {
             start,
             stop,
@@ -196,13 +204,11 @@ impl<'a> GameMixer<'a> {
             return None;
         }
         // SAFETY: `object` is the context's non-null sound object, whose
-        // system and `Ui` scene sit at the routed offsets `ui.sound` reads.
-        let (system, ui) = unsafe {
-            (
-                crate::engine::memory::read::<usize>(object, calls.ui_system),
-                crate::engine::memory::read::<u32>(object, calls.ui_scene),
-            )
-        };
+        // system sits at the routed offset `ui.sound` reads it at.
+        let system = unsafe { crate::engine::memory::read::<usize>(object, calls.ui_system) };
+        // SAFETY: the same sound object, whose `Ui` scene sits at the routed
+        // offset `ui.sound` reads it at.
+        let ui = unsafe { crate::engine::memory::read::<u32>(object, calls.ui_scene) };
         if system == 0 || ui == 0 {
             return None;
         }

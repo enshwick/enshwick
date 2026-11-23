@@ -2369,7 +2369,7 @@ pub struct HostApi {
     /// game's archive nor a mod holds; [`Status::BAD_ARGS`] for an unknown
     /// place, a volume outside 0 to 1, a fade past
     /// [`SoundPlay::MAX_FADE_MS`], a non-finite position or entity 0 on
-    /// [`SoundPlay::ON`] ([`SoundPlay::in_bounds`]); [`Status::BUSY`] past
+    /// [`SoundPlay::ON`]; [`Status::BUSY`] past
     /// [`SoundPlay::MAX_STARTS`] starts of the mod waiting for one frame;
     /// [`Status::UNAVAILABLE`] on a server and on a build where the
     /// loader's playback is off. ABI 12.17.
