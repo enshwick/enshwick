@@ -11,7 +11,7 @@ use super::SOUNDS_FILE;
 use super::reader::Reader;
 use crate::content::Guid;
 use crate::sound::{
-    GAIN_DB, MAX_NEW_TAKES, RandomPosition, SoundChange, SoundContainerScene,
+    GAIN_DB, MAX_NEW_TAKES, MAX_SLEEP, RandomPosition, SoundChange, SoundContainerScene,
     SoundContainerStealingMode, SoundId, Take, Takes,
 };
 
@@ -25,6 +25,84 @@ pub(super) struct SoundsFile {
     pub(super) change: Vec<Spanned<ChangeEntry>>,
     #[serde(default)]
     pub(super) replace: Vec<Spanned<ReplaceEntry>>,
+    #[serde(default)]
+    pub(super) voiceover: Vec<Spanned<VoiceoverEntry>>,
+    #[serde(default)]
+    pub(super) music: Vec<Spanned<MusicEntry>>,
+}
+
+/// A voiced line of the pack, or new recordings for one of the game's.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct VoiceoverEntry {
+    /// Its name in the pack: the line `<pack>:<id>`, each language's
+    /// container `<pack>:<id>.<language>`.
+    pub(super) id: String,
+    /// The game's voiced line it gives these languages, by its GUID; left
+    /// out for a line of the pack's own.
+    pub(super) voiceover: Option<String>,
+    /// One audio file per voice language, each
+    /// `{ language = "english", file = "..." }`; the languages are the
+    /// game's, in snake case.
+    pub(super) lines: Vec<LineEntry>,
+    /// The language whose file also speaks in every language left empty.
+    pub(super) fallback: Option<String>,
+    /// Which channels the recordings keep, as a sound's.
+    pub(super) channels: Option<ChannelsEntry>,
+    /// A gain in decibels on every file, from -60 to 24.
+    pub(super) gain_db: Option<f32>,
+    /// Whether the line plays at the speaker's place; `true` when left out,
+    /// `false` suits a lore reading.
+    pub(super) has_position: Option<bool>,
+}
+
+/// One voice language's file of a voiced line.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct LineEntry {
+    /// The language, such as `english` or `simplified_chinese`.
+    pub(super) language: String,
+    /// The file, relative to the pack's folder, as a sound's.
+    pub(super) file: String,
+}
+
+/// Music of the pack, which the client's ambience plays where and when the
+/// entry says.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct MusicEntry {
+    /// Its name in the pack; its recordings are `<pack>:<id>.sound` on.
+    pub(super) id: String,
+    /// Its audio files, 1 to 32, as a sound's; one plays at a time.
+    pub(super) files: Vec<String>,
+    /// Which channels the recordings keep, as a sound's.
+    pub(super) channels: Option<ChannelsEntry>,
+    /// A gain in decibels on every file, from -60 to 24.
+    pub(super) gain_db: Option<f32>,
+    /// Where it plays: one of the game's environments, such as `Grassland`;
+    /// everywhere when left out.
+    pub(super) environment: Option<String>,
+    /// Only in the fog (`true`) or only out of it; both when left out.
+    pub(super) in_fog: Option<bool>,
+    /// Only indoors or only outdoors; both when left out.
+    pub(super) indoors: Option<bool>,
+    /// Only in battle or only out of it; both when left out.
+    pub(super) in_battle: Option<bool>,
+    /// The hour of the day it starts, from 0 to 24; 0 when left out.
+    pub(super) start_hour: Option<f32>,
+    /// The hour it stops, from 0 to 24, before the start for a span over
+    /// midnight; 24 when left out.
+    pub(super) end_hour: Option<f32>,
+    /// Its volume, from 0 to 1; 0.2, as most of the game's music, when left
+    /// out.
+    pub(super) volume: Option<f32>,
+    /// The pause after each file, in seconds, at most 600.
+    pub(super) sleep: Option<f32>,
+    /// The random spread of that pause, in seconds, at most 600.
+    pub(super) sleep_randomness: Option<f32>,
 }
 
 /// Declares a table of `sounds.toml` that takes its own fields and every
@@ -297,7 +375,7 @@ pub(super) struct PackSound {
 impl PackSound {
     /// The sound to add with [`Load::add_sound`](../struct.Load.html#method.add_sound) under `id`.
     pub(super) fn new_sound(&self, id: crate::content::Id) -> crate::sound::NewSound {
-        use crate::sound::{Channels, NewSound, NewTake, Trim};
+        use crate::sound::{NewSound, NewTake, Trim};
         NewSound {
             id,
             takes: self
@@ -308,11 +386,7 @@ impl PackSound {
                     ..NewTake::new(file.clone())
                 })
                 .collect(),
-            channels: match self.channels {
-                None | Some(ChannelsEntry::Keep) => Channels::Keep,
-                Some(ChannelsEntry::Mono) => Channels::Mono,
-                Some(ChannelsEntry::Stereo) => Channels::Stereo,
-            },
+            channels: channels(self.channels),
             gain_db: self.gain_db,
             trim: Trim {
                 from: self.trim.0,
@@ -337,6 +411,85 @@ pub(super) struct PackReplace {
     pub(super) file: String,
 }
 
+/// A pack's voiced line, checked: its full content id, the game's line it
+/// changes, if any, and its entry.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct PackVoiceover {
+    pub(super) id: String,
+    pub(super) voiceover: Option<Guid>,
+    pub(super) entry: VoiceoverEntry,
+}
+
+/// A pack's music, checked: its full content id, its entry and its times.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct PackMusic {
+    pub(super) id: String,
+    pub(super) entry: MusicEntry,
+    pub(super) start: Option<Duration>,
+    pub(super) end: Option<Duration>,
+    pub(super) sleep: Duration,
+    pub(super) sleep_randomness: Duration,
+}
+
+/// The channels `entry` names, [`Channels::Keep`](crate::sound::Channels)
+/// when left out.
+#[cfg(feature = "unstable")]
+fn channels(entry: Option<ChannelsEntry>) -> crate::sound::Channels {
+    use crate::sound::Channels;
+    match entry {
+        None | Some(ChannelsEntry::Keep) => Channels::Keep,
+        Some(ChannelsEntry::Mono) => Channels::Mono,
+        Some(ChannelsEntry::Stereo) => Channels::Stereo,
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl PackVoiceover {
+    /// The line to add or change under `id`.
+    pub(super) fn new_voiceover(&self, id: crate::content::Id) -> crate::sound::NewVoiceover {
+        use crate::sound::{NewVoiceover, VoiceLine};
+        let e = &self.entry;
+        NewVoiceover {
+            fallback: e.fallback.clone(),
+            channels: channels(e.channels),
+            gain_db: e.gain_db.unwrap_or(0.0),
+            container: SoundChange {
+                has_position: e.has_position,
+                ..SoundChange::default()
+            },
+            ..NewVoiceover::new(
+                id,
+                e.lines
+                    .iter()
+                    .map(|l| VoiceLine::new(l.language.clone(), l.file.clone()))
+                    .collect(),
+            )
+        }
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl PackMusic {
+    /// The music to add under `id`.
+    pub(super) fn new_music(&self, id: crate::content::Id) -> crate::sound::NewMusic {
+        let e = &self.entry;
+        crate::sound::NewMusic {
+            channels: channels(e.channels),
+            gain_db: e.gain_db.unwrap_or(0.0),
+            environment: e.environment.clone(),
+            in_fog: e.in_fog,
+            indoors: e.indoors,
+            in_battle: e.in_battle,
+            start_time: self.start,
+            end_time: self.end,
+            volume: e.volume,
+            sleep: self.sleep,
+            sleep_randomness: self.sleep_randomness,
+            ..crate::sound::NewMusic::new(id, e.files.clone())
+        }
+    }
+}
+
 /// The checked sounds, changes and replacements of the pack's
 /// `sounds.toml`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -344,12 +497,134 @@ pub(super) struct PackSounds {
     pub(super) sounds: Vec<PackSound>,
     pub(super) changes: Vec<PackSoundChange>,
     pub(super) replaces: Vec<PackReplace>,
+    pub(super) voiceovers: Vec<PackVoiceover>,
+    pub(super) music: Vec<PackMusic>,
 }
 
 impl PackSounds {
     pub(super) fn is_empty(&self) -> bool {
-        self.sounds.is_empty() && self.changes.is_empty() && self.replaces.is_empty()
+        self.sounds.is_empty()
+            && self.changes.is_empty()
+            && self.replaces.is_empty()
+            && self.voiceovers.is_empty()
+            && self.music.is_empty()
     }
+
+    /// Whether the pack adds recordings of its own, which need the
+    /// `unstable` feature.
+    #[cfg(not(feature = "unstable"))]
+    pub(super) fn records(&self) -> bool {
+        !self.sounds.is_empty()
+            || !self.replaces.is_empty()
+            || !self.voiceovers.is_empty()
+            || !self.music.is_empty()
+    }
+}
+
+/// Checks a gain in decibels, an error at `at` outside [`GAIN_DB`].
+fn check_gain(reader: &mut Reader<'_>, text: &str, at: usize, what: &str, gain: Option<f32>) {
+    if let Some(gain) = gain.filter(|g| !GAIN_DB.contains(g)) {
+        reader.error(
+            SOUNDS_FILE,
+            text,
+            at,
+            format!("{what}: gain {gain} dB is outside {GAIN_DB:?}"),
+        );
+    }
+}
+
+/// The voiced line `e` checked, its problems at `at`.
+fn voiceover(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    e: &VoiceoverEntry,
+) -> Option<PackVoiceover> {
+    let what = format!("voiceover {}", e.id);
+    if e.lines.is_empty() {
+        reader.error(
+            SOUNDS_FILE,
+            text,
+            at,
+            format!("{what}: give a file for a language in `lines`"),
+        );
+    }
+    for line in &e.lines {
+        check_file(reader, text, at, &what, &line.file);
+    }
+    check_gain(reader, text, at, &what, e.gain_db);
+    let voiceover = match e.voiceover.as_deref().map(|g| (g, Guid::try_parse(g))) {
+        Some((_, Some(guid))) => Some(guid),
+        Some((text_guid, None)) => {
+            reader.error(
+                SOUNDS_FILE,
+                text,
+                at,
+                format!("{what}: {text_guid:?} is no GUID of a game's voiced line"),
+            );
+            return None;
+        }
+        None => None,
+    };
+    Some(PackVoiceover {
+        id: reader.own(&e.id),
+        voiceover,
+        entry: e.clone(),
+    })
+}
+
+/// The music `e` checked, its problems at `at`.
+fn music(reader: &mut Reader<'_>, text: &str, at: usize, e: &MusicEntry) -> Option<PackMusic> {
+    let what = format!("music {}", e.id);
+    let mut fine = true;
+    let mut problem = |reader: &mut Reader<'_>, why: String| {
+        fine = false;
+        reader.error(SOUNDS_FILE, text, at, format!("{what}: {why}"));
+    };
+    if !(1..=MAX_NEW_TAKES).contains(&e.files.len()) {
+        problem(
+            reader,
+            format!("{} files: music has 1 to {MAX_NEW_TAKES}", e.files.len()),
+        );
+    }
+    for file in &e.files {
+        check_file(reader, text, at, &what, file);
+    }
+    check_gain(reader, text, at, &what, e.gain_db);
+    if let Some(volume) = e.volume.filter(|v| !(0.0..=1.0).contains(v)) {
+        problem(reader, format!("volume {volume} is outside 0 to 1"));
+    }
+    let mut hour = |reader: &mut Reader<'_>, name: &str, hour: Option<f32>| match hour {
+        Some(h) if (0.0..=24.0).contains(&h) => Some(Duration::from_secs_f32(h * 3600.0)),
+        Some(h) => {
+            problem(reader, format!("{name} {h} is outside 0 to 24"));
+            None
+        }
+        None => None,
+    };
+    let start = hour(reader, "start_hour", e.start_hour);
+    let end = hour(reader, "end_hour", e.end_hour);
+    let mut seconds = |reader: &mut Reader<'_>, name: &str, s: Option<f32>| match s {
+        Some(s) if (0.0..=MAX_SLEEP.as_secs_f32()).contains(&s) => Duration::from_secs_f32(s),
+        Some(s) => {
+            problem(
+                reader,
+                format!("{name} {s} is outside 0 to {}", MAX_SLEEP.as_secs()),
+            );
+            Duration::ZERO
+        }
+        None => Duration::ZERO,
+    };
+    let sleep = seconds(reader, "sleep", e.sleep);
+    let sleep_randomness = seconds(reader, "sleep_randomness", e.sleep_randomness);
+    fine.then(|| PackMusic {
+        id: reader.own(&e.id),
+        entry: e.clone(),
+        start,
+        end,
+        sleep,
+        sleep_randomness,
+    })
 }
 
 /// The GUID `reference` names among sounds: a GUID, `<alias>:<name>`, or a
@@ -534,6 +809,18 @@ pub(super) fn sounds(reader: &mut Reader<'_>) -> PackSounds {
                 format!("{what}: a replaced recording is the game's, named by its GUID"),
             ),
         }
+    }
+    for entry in &file.voiceover {
+        let at = entry.span().start;
+        let e = entry.get_ref();
+        reader.define(SOUNDS_FILE, text, at, &e.id, "voiceover");
+        out.voiceovers.extend(voiceover(reader, text, at, e));
+    }
+    for entry in &file.music {
+        let at = entry.span().start;
+        let e = entry.get_ref();
+        reader.define(SOUNDS_FILE, text, at, &e.id, "music");
+        out.music.extend(music(reader, text, at, e));
     }
     out
 }

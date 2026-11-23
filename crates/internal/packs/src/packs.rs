@@ -256,8 +256,25 @@ impl LoadHelpers for crate::BaseLoad {
                 load.replace_sound(replace.sound, &replace.file)
             });
         }
+        #[cfg(feature = "unstable")]
+        for line in &pack.sounds.voiceovers {
+            let new = line.new_voiceover(id(&line.id)?);
+            let _voiced = self.feature(&format!("voiceover {}", line.id), |load| {
+                match line.voiceover {
+                    Some(game) => {
+                        load.change_voiceover(crate::sound::VoiceoverId::from_guid(game), new)
+                    }
+                    None => load.add_voiceover(new).map(|_| ()),
+                }
+            });
+        }
+        #[cfg(feature = "unstable")]
+        for music in &pack.sounds.music {
+            let new = music.new_music(id(&music.id)?);
+            let _played = self.feature(&format!("music {}", music.id), |load| load.add_music(new));
+        }
         #[cfg(not(feature = "unstable"))]
-        if !pack.sounds.sounds.is_empty() || !pack.sounds.replaces.is_empty() {
+        if pack.sounds.records() {
             return Err(Off::new(format!(
                 "{SOUNDS_FILE}: a pack's own recordings need enshwick's `unstable` feature"
             )));
