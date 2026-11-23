@@ -31,7 +31,12 @@ impl Load<'_> {
     ///
     /// See the [module](crate::content::journal).
     #[script]
-    pub fn add_quest(&mut self, new: NewQuest) -> Result<KnowledgeId, Off>;
+    pub fn add_quest(&mut self, new: NewQuest) -> Result<KnowledgeId, Off> {
+        let quest = self.base.add_quest(new)?;
+        #[cfg(feature = "typed")]
+        enshwick_knowledge::__internal::count_objectives(&mut self.base)?;
+        Ok(quest)
+    }
 
     /// Adds a lore page to the journal, on the server and the client alike:
     /// its entries show once their knowledge holds, on the card of its

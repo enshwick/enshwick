@@ -51,6 +51,8 @@ pub use enshwick_base::{
 
 /// The base handle's helpers at the path the code here names them by.
 pub(crate) mod load {
+    #[cfg(feature = "typed")]
+    pub(crate) use enshwick_base::__off_from as off_from;
     pub(crate) use enshwick_base::load::hand_over;
 }
 

@@ -28,9 +28,18 @@ quest, as for its own quests; [Knowledge](../knowledge.md) reads it.
 | `rewards` | the items by GUID and experience values the journal shows as its reward |
 
 Each `QuestStep` shows while `shown_when` holds. It is done once `done_when`
-holds. Its `progress` lists parts the journal counts. A mod moves the quest on by
-granting the knowledge its steps ask for. Texts come from the mod's texts, in
-every language it gives (see [Texts](texts.md)).
+holds. Its `progress` lists parts the journal counts. A query left `None`, as
+`QuestStep::owned(name, text)` leaves both, is the loader's:
+
+- a step without `done_when` gets a bool of its own;
+- a step without `shown_when` shows once the step before it is done;
+- the first step without `shown_when` shows once a bool of its own is set.
+
+These bools are each player's for a player's quest and the world's for a
+world quest. A mod moves the quest on with the calls of
+[Moving a quest on](#moving-a-quest-on), or by granting the knowledge its
+steps ask for. Texts come from the mod's texts, in every language it gives
+(see [Texts](texts.md)).
 
 ```rust
 use enshwick::content::{Guid, id};
@@ -240,6 +249,131 @@ local function report(player: number)
 end
 ```
 
+## Moving a quest on
+
+`Quests` moves a quest on for a `Holder`. A holder is
+`Holder::Player(player)` or `Holder::World`. Each call grants or revokes the knowledge the steps test,
+vanilla quests and mods' alike. The game's knowledge is the quest's only
+state, so a save, a rejoin and a vanilla client agree with it.
+
+| Call | What it does |
+| --- | --- |
+| `step(holder, id)` | the step the holder stands at: the first not done, or the number of steps once all are |
+| `start(holder, id)` | grants what the first step's `shown_when` asks, so the journal lists the quest |
+| `advance(holder, id)` | finishes the step the holder stands at and shows the next; returns the next step |
+| `complete(holder, id)` | finishes every step left |
+| `reset(holder, id)` | clears the holder's entries the steps test and, for a player, the quest's bool |
+
+A grant goes the game's way and applies at the next step of the world. One
+call grants each entry once, even when two steps test it. A step on a game
+query, `KnowledgeTest::Holds` or `Fails`, is refused. The error is
+`MoveQuestError::Unwritable`, since the game computes that query from its
+parts. The mod grants those parts itself. A test no grant reaches, such as a count
+below a value, is refused the same way.
+
+The game pays a quest itself. Its server checks each player's quests in
+turn, at most 50 a run. It pays the experience of a quest whose last step
+holds and whose bool is unset, then sets the bool. So a completed quest
+pays once, and a reset quest pays again on its next completion. This is
+read in the code of server 26430253 and not yet seen in the game. What the
+grants brought, such as experience, stays after a reset. A reset clears an
+entry for everything that tests it, such as another quest or a recipe.
+
+```rust
+use enshwick::quests::{Holder, MoveQuestError, Quests};
+
+fn finish(quests: &Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) {
+    match quests.complete(Holder::Player(player), quest) {
+        Ok(()) => enshwick::info!("quest {quest} completes at the next step"),
+        Err(MoveQuestError::Unwritable { step, .. }) => {
+            enshwick::warn!("step {step} moves only through its game query");
+        }
+        Err(other) => enshwick::warn!("quest {quest}: {other}"),
+    }
+}
+```
+
+```luau
+local function finish(player: number, quest: number)
+    local ok, err = pcall(enshwick.quests.complete, { Player = player }, quest)
+    if not ok then
+        enshwick.log.warn(`quest {quest}: {err}`)
+    end
+end
+```
+
+These calls need the `typed` feature, as the journal reads do.
+
+## Objectives the journal counts
+
+A step's `objectives` list what the journal counts on it. The loader gives
+each objective a counter of its own. It adds the count to the step's
+`progress`, so the journal shows how far the player is.
+
+| Objective | What counts one |
+| --- | --- |
+| `Collect { item, count }` | a pickup of the item, up to what the inventory then holds |
+| `Kill { target, count }` | a kill of the template or faction, by the player the game credits |
+| `Craft { target, count }` | a unit of the recipe, as a craft reward counts it |
+| `Build { item, count }` | the item placed, undo and redo left out |
+| `Reach { at, radius }` | the player within the radius, checked once a second |
+| `Custom { signal, count }` | the amount `quests.signal(holder, signal, amount)` sends |
+
+A step of one objective and no `done_when` is done once the count is
+reached. A step of several gets a bool of its own instead. The loader sets
+that bool once every count is reached.
+
+A counter rises only while its step shows and is not done. A player's quest
+counts that player's actions. A world quest counts every player's.
+`CraftTarget::Item` counts the vanilla recipes that make the item; a mod's
+own recipe counts through `CraftTarget::Recipe`.
+
+The loader subscribes once per kind of event, not per objective. An event
+first looks its target up in one table: about 4 ns with 100 objectives on a
+desktop of 2026.
+
+```rust
+use enshwick::content::id;
+use enshwick::content::journal::{NewQuest, Objective, QuestStep};
+use enshwick::quests::{Holder, Quests};
+
+fn init(load: &mut enshwick::Load<'_>, wall: enshwick::ItemId) -> Result<(), enshwick::Off> {
+    let step = QuestStep {
+        objectives: vec![
+            Objective::Build { item: wall, count: 4 },
+            Objective::Custom { signal: id!("beacon-lit"), count: 1 },
+        ],
+        ..QuestStep::owned(id!("fort.build").guid(), id!("fort.build.text").guid())
+    };
+    load.add_quest(NewQuest::new(id!("fort"), id!("fort.name").guid(), vec![step]))?;
+    Ok(())
+}
+
+fn lit(quests: &Quests, player: enshwick::Entity) {
+    quests.signal(Holder::Player(player), id!("beacon-lit"), 1);
+}
+```
+
+```luau
+local step = {
+    name = enshwick.content.guid("you.fort:fort.build"),
+    text = enshwick.content.guid("you.fort:fort.build.text"),
+    objectives = {
+        { Build = { item = 2577, count = 4 } },
+        { Custom = { signal = "you.fort:beacon-lit", count = 1 } },
+    },
+}
+enshwick.content.add_quest({
+    id = "you.fort:fort",
+    name = enshwick.content.guid("you.fort:fort.name"),
+    source = "None",
+    kind = "PlayerQuest",
+    steps = { step },
+})
+```
+
+Objectives need the `typed` feature.
+
 ## From Luau
 
 Three of the same calls run at the top level of `main.luau`:
@@ -256,8 +390,10 @@ Two more run while the world runs:
 - `enshwick.knowledge.quest_progression(player)`
 - `set_quest_progression(player, personal)`
 
-The journal reads run under `enshwick.quests`, with the names of the Rust
-calls.
+The journal reads and the calls that move a quest on run under
+`enshwick.quests`, with the names of the Rust calls. A holder is
+`"World"` or `{ Player = player }`. A step's `shown_when` and `done_when`
+are optional, as in Rust.
 
 ```luau
 local given = enshwick.content.add_knowledge({ id = "you.trail:given", scope = "Player", kind = "Bool" })

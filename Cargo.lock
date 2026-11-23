@@ -781,6 +781,7 @@ dependencies = [
 name = "enshwick-knowledge"
 version = "1.0.0-alpha.17"
 dependencies = [
+ "criterion",
  "enshwick",
  "enshwick-abi",
  "enshwick-base",
@@ -791,7 +792,9 @@ dependencies = [
  "enshwick-values",
  "enshwick-world",
  "fastrand",
+ "rustc-hash",
  "serde",
+ "thiserror",
 ]
 
 [[package]]

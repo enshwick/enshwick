@@ -60,6 +60,17 @@ pub fn push_recipe(load: &mut impl Loading, recipe: NewRecipe) -> Result<(), Off
     load.base_mut().push_recipe(recipe)
 }
 
+/// Takes the quest steps with objectives the mod added since the last call,
+/// which the knowledge domain counts.
+#[cfg(feature = "typed")]
+#[must_use]
+pub fn take_counted_steps(load: &mut impl Loading) -> Vec<crate::content::journal::CountedStep> {
+    load.base_mut()
+        .slot::<crate::content::journal::objectives::Counted>()
+        .take()
+        .map_or_default(|counted| counted.0)
+}
+
 /// The ABI value of `format`.
 #[must_use]
 pub const fn stat_format(format: StatFormat) -> u8 {
