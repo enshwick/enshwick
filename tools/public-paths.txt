@@ -982,6 +982,13 @@ abi::FogInfo::uncovered_pixels
 abi::FogInfo::uncovered_size
 abi::FogInfo::version
 abi::FogInfo::width
+abi::GameBinding
+abi::GameBinding::BORN
+abi::GameBinding::EMPTY
+abi::GameBinding::OTHER
+abi::GameBinding::first
+abi::GameBinding::header
+abi::GameBinding::second
 abi::GameEventData
 abi::GameEventData::BORN
 abi::GameEventData::data
@@ -1106,7 +1113,9 @@ abi::HostApi::field_offset
 abi::HostApi::find_call
 abi::HostApi::fog_read
 abi::HostApi::fog_uncover
+abi::HostApi::game_binding
 abi::HostApi::game_query
+abi::HostApi::game_rebind
 abi::HostApi::game_settings
 abi::HostApi::game_text
 abi::HostApi::game_version
@@ -5109,6 +5118,24 @@ info
 info_every
 info_once
 input unstable
+input::Binding unstable
+input::Binding::TY unstable
+input::Binding::first unstable
+input::Binding::from_value unstable
+input::Binding::into_value unstable
+input::Binding::second unstable
+input::BindingError unstable
+input::BindingError::NoAction unstable
+input::BindingError::Refused unstable
+input::BindingError::Unavailable unstable
+input::BoundKey unstable
+input::BoundKey::Key unstable
+input::BoundKey::Other unstable
+input::BoundKey::Reserved unstable
+input::BoundKey::TY unstable
+input::BoundKey::fmt unstable
+input::BoundKey::from_value unstable
+input::BoundKey::into_value unstable
 input::CancelReason unstable
 input::CancelReason::ByMod unstable
 input::CancelReason::InputBlocked unstable
@@ -5171,6 +5198,7 @@ input::Input unstable
 input::Input::DOC unstable
 input::Input::NAME unstable
 input::Input::PARTS unstable
+input::Input::binding unstable
 input::Input::cancel_command unstable
 input::Input::client_command unstable
 input::Input::client_snapshot unstable
@@ -5179,6 +5207,8 @@ input::Input::functions unstable
 input::Input::held unstable
 input::Input::local_held unstable
 input::Input::local_status unstable
+input::Input::rebind unstable
+input::Input::reset_binding unstable
 input::Input::resolve unstable
 input::InputMask unstable
 input::InputMask::TY unstable

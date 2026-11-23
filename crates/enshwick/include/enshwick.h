@@ -1887,7 +1887,7 @@ typedef struct EnshwickFogInfo {
 } EnshwickFogInfo;
 
 // The keys a game control holds in the client's keyboard and mouse
-// bindings, as `HostApi::game_binding`
+// bindings, as `EnshwickHostApi.game_binding`
 // writes them. ABI 12.20.
 //
 // Each key is in the form of `EnshwickControlSpec.key`, 0 for none. A key a
@@ -7300,7 +7300,7 @@ typedef struct EnshwickHostApi {
   // after each change the player applies, which the game rebuilds its
   // bindings from, so the rebind holds until it is given back; the
   // game's Controls page never shows it. The last rebind of an action
-  // wins. `EnshwickStatus_UNAVAILABLE` as for `HostApi::game_binding`;
+  // wins. `EnshwickStatus_UNAVAILABLE` as for `EnshwickHostApi.game_binding`;
   // `EnshwickStatus_MISSING` for an action the build does not name;
   // `EnshwickStatus_BAD_ARGS` for a key a mod control may not take, or a
   // modifier the game's bindings do not list. Any thread. ABI 12.20.
@@ -8002,6 +8002,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_state) == 1800, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play_for) == 1808, "offset of HostApi.sound_play_for");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer_for) == 1816, "offset of HostApi.sound_steer_for");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rekey_resource) == 1824, "offset of HostApi.rekey_resource");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_binding) == 1832, "offset of HostApi.game_binding");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1840, "offset of HostApi.game_rebind");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

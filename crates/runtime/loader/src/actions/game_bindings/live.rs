@@ -411,6 +411,10 @@ pub(crate) fn rebind(action: &str, key: u32) -> Result<(), BindingError> {
         }
     }
     let mut wanted = STATE.wanted.relock();
+    let held = wanted.iter().find(|&&(a, _)| a == number).map(|&(_, k)| k);
+    if held.unwrap_or(0) == key {
+        return Ok(());
+    }
     wanted.retain(|&(a, _)| a != number);
     if key != 0 {
         wanted.push((number, key));
