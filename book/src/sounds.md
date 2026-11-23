@@ -231,31 +231,74 @@ end)
 ## Add a sound of your own
 
 With the `unstable` feature, `load.add_sound(NewSound::new(id!("horn"),
-"sounds/horn.wav"))` adds that WAV file of the mod's folder and a
-container that plays it. It returns both: the container in `container`,
-and the recording in `takes`, which other containers' takes name. The
-container's GUID is the [content id](concepts/ids.md)'s, so other mods
-play it by `you.horns:horn`; the recording's is `you.horns:horn.sound`'s.
-The container's values follow a `SoundChange` in `container`; its `takes`
-may only add to the recording. A data pack lists its sounds, changes and
-replaced recordings in [`sounds.toml`](content/packs.md#soundstoml).
+"sounds/horn.wav"))` adds that audio file of the mod's folder as a
+recording, and a container that plays it. A `NewSound` holds up to 32
+`takes`, each a file and its chance; the container picks one at random by
+their chances each time it plays. `add_sound` returns the container in
+`container` and the recordings in `takes`, in take order, which other
+containers' takes name. The container's GUID is the
+[content id](concepts/ids.md)'s, so other mods play it by
+`you.horns:horn`. The recordings' are `you.horns:horn.sound`'s,
+`you.horns:horn.sound2`'s and on. The container's values follow a
+`SoundChange` in `container`; its `takes` may only add to the files'. A
+data pack lists its sounds, changes and replaced recordings in
+[`sounds.toml`](content/packs.md#soundstoml).
 
-The client holds the sound as the game holds its own uncompressed sounds,
-streamed from memory. A server checks the file and holds nothing.
+Every file of a sound goes through the same steps at init:
 
-| A WAV file | |
+1. It is read: WAV (8, 16, 24 or 32-bit, or 32-bit float), FLAC, Ogg Vorbis
+   or MP3, at any rate up to 384 kHz, with 1 to 8 channels.
+2. `trim` keeps the part from its `start` to its `end` in the file.
+3. `channels` keeps the file's channels (`Keep`, which the game plays for
+   1, 2, 4, 6 and 8), mixes them to one (`Mono`), or takes two (`Stereo`).
+   A sound placed in the world wants mono: the game plays every channel
+   from the same point.
+4. It is resampled to 48000 Hz, the rate of every sound the game plays.
+5. `gain_db` scales it, from -60 to 24 decibels.
+
+The client then encodes each recording into the game's own format,
+FramelessQOA, on background threads: about 100 ms for a minute of stereo
+on one core. The first time the game reads the sound it waits for that
+encoding. A recording of one second or less (48000 frames) is held inline,
+so its first play starts at once. A longer one streams from memory, as the
+game's long sounds do. A server checks every file and holds nothing.
+
+| Bound | |
 | --- | --- |
-| Samples | 16-bit PCM |
-| Channels | mono or stereo |
-| Rate | 48000 Hz, the rate of every sound the game plays |
-| Size | at most 16 MiB a file and 64 MiB a mod |
-| Length | what 16 MiB holds: about 87 seconds of stereo, 174 of mono |
+| A file | at most 16 MiB on disk |
+| A take | at most 10 minutes after its trim |
+| A mod | at most 64 MiB of encoded recordings: about 46 minutes of mono, 23 of stereo |
 
 A mod with sounds runs on both sides (`side = "both"`), so a client without
 it cannot join. A file past a bound, of another format or outside the
 mod's folder refuses the call. Wrapped in `load.feature("horn", ...)`, it
 turns off that sound alone. The reason shows in the log and on the Mods
-screen.
+screen. When a later step fails after a file was read, its recording stays
+served and counted against the mod's bound, and its id stays taken by the
+mod, which may try the same id again.
+
+```rust
+use enshwick::content::id;
+use enshwick::sound::{Channels, NewSound, NewTake};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let steps = NewSound {
+        takes: vec![NewTake::new("steps/1.ogg"), NewTake { chance: Some(0.5), ..NewTake::new("steps/2.flac") }],
+        channels: Channels::Mono,
+        ..NewSound::new(id!("steps"), "steps/1.ogg")
+    };
+    let _added = load.feature("steps", |load| load.add_sound(steps));
+    Ok(())
+}
+```
+
+```luau
+local ok, added = pcall(enshwick.sound.add, {
+    id = "you.steps:steps",
+    takes = { { file = "steps/1.ogg" }, { file = "steps/2.flac", chance = 0.5 } },
+    channels = "Mono",
+})
+```
 
 A sound that misleads players in a fight, such as an attack that does not
 happen, does not belong in a mod.

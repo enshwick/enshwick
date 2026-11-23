@@ -549,6 +549,13 @@ file = "sounds/horn.wav"
 scene = "sfx"
 volume = 0.8
 
+[[sound]]
+id = "steps"
+takes = [{ file = "steps/1.ogg" }, { file = "steps/2.flac", chance = 0.5 }]
+channels = "mono"
+gain_db = -3.0
+trim = { start = 0.1 }
+
 [[change]]
 sound = "4f1d6a3e-90b2-4c7e-8d15-2a6f0c93b7e1"
 volume = 0.5
@@ -561,9 +568,14 @@ file = "sounds/creak.wav"
 ```
 
 In `[[sound]]`, `id` is the sound's name in the pack; other mods play its
-container as `<pack>:<id>` and name its recording as `<pack>:<id>.sound`.
-`file` is relative to the pack's folder and stays inside it. A file that
-does not read turns off that sound alone.
+container as `<pack>:<id>` and name its recordings as `<pack>:<id>.sound`,
+`<pack>:<id>.sound2` and on. It takes either one `file` or up to 32
+`takes`, each a `file` and its `chance` from 0 to 1. A file is WAV, FLAC,
+Ogg Vorbis or MP3, relative to the pack's folder and inside it, and is read
+as [a mod's sound](../sounds.md#add-a-sound-of-your-own) is: `channels`
+(`keep`, `mono` or `stereo`), `gain_db` (-60 to 24) and `trim` (`start` and
+`end` in seconds) apply to every take. A file that does not read turns off
+that sound alone.
 
 `[[change]]` changes the container `sound`: a GUID, a required mod's
 `<alias>:<name>`, or one of the pack's sounds by its `id`. `[[replace]]`
