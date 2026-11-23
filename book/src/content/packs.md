@@ -567,40 +567,42 @@ sound = "9b2e5c71-3d48-4a06-b1f7-6e0c2d9a8f35"
 file = "sounds/creak.wav"
 ```
 
-In `[[sound]]`, `id` is the sound's name in the pack; other mods play its
-container as `<pack>:<id>` and name its recordings as `<pack>:<id>.sound`,
-`<pack>:<id>.sound2` and on. It takes either one `file` or up to 32
-`takes`, each a `file` and its `chance` from 0 to 1. A file is WAV, FLAC,
-Ogg Vorbis or MP3, relative to the pack's folder and inside it, and is read
-as [a mod's sound](../sounds.md#add-a-sound-of-your-own) is: `channels`
-(`keep`, `mono` or `stereo`), `gain_db` (-60 to 24) and `trim` (`start` and
-`end` in seconds) apply to every take. A file that does not read turns off
-that sound alone.
+A sound's `id` is its name in the pack. Other mods play its container as
+`<pack>:<id>`. Its recordings are `<pack>:<id>.sound`, then `.sound2` and
+on. A sound takes one `file`, or up to 32 `takes`. Each take is a file and
+its chance from 0 to 1. A file is WAV, FLAC, Ogg Vorbis or MP3, inside the
+pack's folder. It is read as [a mod's sound](../sounds.md#add-a-sound-of-your-own)
+is. Its `channels` are keep, mono or stereo. Its `gain_db` runs from -60
+to 24. Its trim gives a start and an end in seconds. These apply to every
+take. A file that does not read turns off that sound alone.
 
-`[[change]]` changes the container `sound`: a GUID, a required mod's
-`<alias>:<name>`, or one of the pack's sounds by its `id`. `[[replace]]`
-plays the pack's `file` wherever the game's recording `sound`, named by its
-GUID, plays.
+A change names its container in `sound`. That is a GUID, a required mod's
+`<alias>:<name>`, or a sound of the pack by its id. A replacement plays the
+pack's file wherever the game's recording, named by its GUID, plays.
 
-`[[sound]]` and `[[change]]` take every value of the container, each left
-out to keep it. The bounds are those of
+Sounds and changes take every value of the container, each left out to
+keep it. The bounds are those of
 [`load.change_sound`](../sounds.md#change-a-vanilla-sound).
 
 | Value | Takes |
 | --- | --- |
-| `volume`, `volume_randomness`, `pitch`, `pitch_randomness` | numbers |
+| `volume`, `volume_randomness` | numbers |
+| `pitch`, `pitch_randomness` | numbers |
 | `min_distance`, `max_distance` | metres |
-| `loop`, `has_position`, `loop_same_take`, `mute_on_main` | `true` or `false` |
-| `priority`, `avoid_repeating_last`, `max_count` | whole numbers; `max_count = 0` for no limit |
-| `scene` | `sfx`, `music`, `ui` or `voice` |
+| `loop`, `has_position` | true or false |
+| `loop_same_take`, `mute_on_main` | true or false |
+| `priority`, `avoid_repeating_last` | whole numbers |
+| `max_count` | a whole number; 0 for no limit |
+| `scene` | sfx, music, ui or voice |
 | `sleep`, `sleep_randomness` | seconds |
-| `stealing_mode` | `oldest`, `furthest` or `ignore` |
-| `random_position` | `{ left_right = <metres>, front_back = <metres> }` |
+| `stealing_mode` | oldest, furthest or ignore |
+| `random_position` | metres in `left_right` and `front_back` |
 | `gamepad_speaker`, `gamepad_vibration` | numbers; 0 turns it off |
-| `takes` | `{ add = [...] }` or `{ replace = [...] }`, each take `{ sound = "<recording>", chance = <0 to 1> }` |
+| `takes` | a change's only: `add` or `replace`, each a list of takes |
 
-A take's `sound` is a GUID, a required mod's `<alias>:<name>.sound`, or one
-of the pack's sounds by its `id`.
+A change's take names a recording in `sound` and gives its chance. The
+recording is a GUID, a required mod's `<alias>:<name>.sound`, or a sound of
+the pack by its id.
 
 ## Let an admin tune a pack per world
 
