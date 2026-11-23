@@ -73,6 +73,54 @@ Inside a frame of the interface, `frame.play(id)` also plays a container as
 an interface sound. The [interface chapter](interface.md) lists it with the
 widgets.
 
+## Play a sound on players' clients from the server
+
+`sound::play_for(audience, play)` plays a container on clients from a
+mod's server part. Each client that runs Enshwick and the mod plays it as
+the mod's own `sound::play` would. A client without Enshwick hears
+nothing; for a sound every client hears, raise a notifier
+([Raise a notifier at a place](#raise-a-notifier-at-a-place)). The mod
+runs on both sides.
+
+| Audience | Who hears it |
+| --- | --- |
+| `Audience::Player(key)` | The client of one player |
+| `Audience::Everyone` | Every client |
+| `Audience::Near { at, radius }` | The clients whose character stands within `radius` metres of `at` when it starts; `None` is 500 metres, as far as any sound carries |
+
+The server's entity ids name no entity of a client's world, so
+`Place::On(entity)` plays where the entity stands when the sound starts and
+does not follow it. A near audience and `Place::On` read where things
+stand, so they work only on the server's game thread, as in a step or an
+event. The other calls work from any thread. One mod sends at most 32
+sounds in one server step. The server does not know which containers a
+client holds: a client that lacks the container drops the sound and logs
+it once.
+
+In a game a client hosts, the host's own player hears the sound too.
+
+The `RemoteSound` it returns steers the sound on the clients it went to,
+with `stop(fade)`, `set_volume(v, fade)` and `set_position(at)`. Clients
+send nothing back, so it has no state to read. A change reaches only the
+mod's 256 newest sounds.
+
+```rust
+use enshwick::content::Guid;
+use enshwick::sound::{self, Audience, Place, Play, RemoteSound, SoundContainerId};
+
+const HORN: SoundContainerId = SoundContainerId::from_guid(Guid::named("you.horns:horn"));
+
+fn sound_the_horn(at: [f64; 3]) -> Result<RemoteSound, enshwick::Off> {
+    sound::play_for(Audience::Near { at, radius: Some(80.0) }, Play::new(HORN, Place::At(at)))
+}
+```
+
+```luau
+local HORN = "8a5c1d07-3c3e-5f0b-9a8e-0c41e3f9d2a7"
+local horn = enshwick.sound.play_for({ Near = { at = vector.create(0, 0, 0), radius = 80 } }, { container = HORN, place = { At = vector.create(0, 0, 0) } })
+horn:stop(2)
+```
+
 ## Change a vanilla sound
 
 `load.change_sound(id, change)` sets the values a

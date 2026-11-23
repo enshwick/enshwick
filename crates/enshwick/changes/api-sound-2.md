@@ -24,3 +24,15 @@
   with its volume and pause; rows of several mods add up in load order.
   `NewMusic`, `MUSIC_VOLUME`, `DAY`. Luau `enshwick.sound.add_music`.
 - Data packs: `[[voiceover]]` and `[[music]]` tables in `sounds.toml`.
+- `sound::play_for` plays a sound container from a mod's server part on
+  the clients that run Enshwick and the mod: for one player, for everyone
+  or near a place, at most 32 per mod in one server step; a hosting
+  client's own player hears it too. The `RemoteSound` it returns stops,
+  fades and moves the sound on those clients. Luau
+  `enshwick.sound.play_for`.
+- ABI 12.18: `SoundAudience` and the `sound_play_for` and
+  `sound_steer_for` host functions; `SoundAudience::in_bounds` and
+  `SoundAudience::hears` hold the audience's rules for the loader and the
+  fake host alike.
+- Fake host: `Installed::sent_sounds` lists the sounds a mod sent clients
+  and to whom; `Installed::hear_sound` takes one as a client does.
