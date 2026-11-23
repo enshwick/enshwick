@@ -534,7 +534,7 @@
           }
         },
         "trim": {
-          "description": "The part of each file it plays: `{ start = <seconds>, end = <seconds> }`,\neach left out for the file's own.",
+          "description": "The part of each file it plays: `{ from = <seconds>, to = <seconds> }`,\neach left out for the file's own.",
           "anyOf": [
             {
               "$ref": "#/$defs/TrimEntry"
@@ -649,16 +649,16 @@
       "description": "The part of each file a pack's sound plays, in seconds.",
       "type": "object",
       "properties": {
-        "end": {
-          "description": "Where it ends.",
+        "from": {
+          "description": "Where it starts.",
           "type": [
             "number",
             "null"
           ],
           "format": "float"
         },
-        "start": {
-          "description": "Where it starts.",
+        "to": {
+          "description": "Where it ends.",
           "type": [
             "number",
             "null"

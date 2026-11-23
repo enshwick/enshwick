@@ -3343,9 +3343,9 @@ export type Transfer = "Slot" | "TakeAll" | "DepositAll" | "DepositStacks" | "Re
 --- The part of each file a sound plays.
 export type Trim = {
 	--- Where it starts in the file.
-	start: number,
+	from: number,
 	--- Where it ends in the file; nil for the file's end.
-	["end"]: number?,
+	to: number?,
 }
 
 --- A skill node a character unlocked, from `World.skills`. The name is enshwick's: one entry of the game's unlocked skill nodes and their levels.

@@ -133,7 +133,7 @@ container_entry! {
         channels: Option<ChannelsEntry>,
         /// A gain in decibels on every take, from -60 to 24.
         gain_db: Option<f32>,
-        /// The part of each file it plays: `{ start = <seconds>, end = <seconds> }`,
+        /// The part of each file it plays: `{ from = <seconds>, to = <seconds> }`,
         /// each left out for the file's own.
         trim: Option<TrimEntry>,
     }
@@ -193,9 +193,9 @@ pub(super) enum ChannelsEntry {
 #[serde(deny_unknown_fields)]
 pub(super) struct TrimEntry {
     /// Where it starts.
-    pub(super) start: Option<f32>,
+    pub(super) from: Option<f32>,
     /// Where it ends.
-    pub(super) end: Option<f32>,
+    pub(super) to: Option<f32>,
 }
 
 /// A sound container's scene.
@@ -315,8 +315,8 @@ impl PackSound {
             },
             gain_db: self.gain_db,
             trim: Trim {
-                start: self.trim.0,
-                end: self.trim.1,
+                from: self.trim.0,
+                to: self.trim.1,
             },
             container: self.container.clone(),
         }
@@ -461,11 +461,11 @@ fn new_sound(
         problem(reader, format!("gain {gain_db} dB is outside {GAIN_DB:?}"));
     }
     let trim = e.trim.unwrap_or(TrimEntry {
-        start: None,
-        end: None,
+        from: None,
+        to: None,
     });
     let seconds = |s: Option<f32>| s.map(Duration::try_from_secs_f32).transpose().ok();
-    let (Some(start), Some(end)) = (seconds(trim.start), seconds(trim.end)) else {
+    let (Some(start), Some(end)) = (seconds(trim.from), seconds(trim.to)) else {
         problem(reader, "a trim is seconds from the file's start".to_owned());
         return None;
     };

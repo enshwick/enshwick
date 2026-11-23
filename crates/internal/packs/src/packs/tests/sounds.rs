@@ -60,7 +60,7 @@ fn a_sound_takes_the_pack_s_namespace_and_its_problems_their_line() {
 fn a_sound_of_several_takes_keeps_their_chances_channels_gain_and_trim() {
     let files = PackFiles::new().with(
         SOUNDS_FILE,
-        "[[sound]]\nid = \"steps\"\ntakes = [{ file = \"a.ogg\" }, { file = \"b.flac\", chance = 0.5 }]\nchannels = \"mono\"\ngain_db = -6.0\ntrim = { start = 0.5, end = 2.0 }\n",
+        "[[sound]]\nid = \"steps\"\ntakes = [{ file = \"a.ogg\" }, { file = \"b.flac\", chance = 0.5 }]\nchannels = \"mono\"\ngain_db = -6.0\ntrim = { from = 0.5, to = 2.0 }\n",
     );
     let pack = Pack::parse("you.horns", &files).unwrap();
     let [sound] = pack.sounds.sounds.as_slice() else {
@@ -84,7 +84,7 @@ fn a_sound_of_several_takes_keeps_their_chances_channels_gain_and_trim() {
     );
     let lines = problems(
         "[[sound]]\nid = \"a\"\nfile = \"a.wav\"\ntakes = [{ file = \"b.wav\" }]\n\n\
-         [[sound]]\nid = \"b\"\nfile = \"b.wav\"\ngain_db = 30.0\ntrim = { start = 2.0, end = 1.0 }\n\n\
+         [[sound]]\nid = \"b\"\nfile = \"b.wav\"\ngain_db = 30.0\ntrim = { from = 2.0, to = 1.0 }\n\n\
          [[sound]]\nid = \"c\"\ntakes = []\n\n\
          [[sound]]\nid = \"d\"\ntakes = [{ file = \"d.wav\", chance = 2.0 }]\n",
     );

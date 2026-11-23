@@ -541,14 +541,14 @@ expression: shape
     "TrimEntry": {
       "additionalProperties": false,
       "properties": {
-        "end": {
+        "from": {
           "format": "float",
           "type": [
             "number",
             "null"
           ]
         },
-        "start": {
+        "to": {
           "format": "float",
           "type": [
             "number",

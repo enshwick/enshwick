@@ -554,7 +554,7 @@ id = "steps"
 takes = [{ file = "steps/1.ogg" }, { file = "steps/2.flac", chance = 0.5 }]
 channels = "mono"
 gain_db = -3.0
-trim = { start = 0.1 }
+trim = { from = 0.1 }
 
 [[change]]
 sound = "4f1d6a3e-90b2-4c7e-8d15-2a6f0c93b7e1"
@@ -573,7 +573,7 @@ on. A sound takes one `file`, or up to 32 `takes`. Each take is a file and
 its chance from 0 to 1. A file is WAV, FLAC, Ogg Vorbis or MP3, inside the
 pack's folder. It is read as [a mod's sound](../sounds.md#add-a-sound-of-your-own)
 is. Its `channels` are keep, mono or stereo. Its `gain_db` runs from -60
-to 24. Its trim gives a start and an end in seconds. These apply to every
+to 24. Its trim gives `from` and `to` in seconds. These apply to every
 take. A file that does not read turns off that sound alone.
 
 A change names its container in `sound`. That is a GUID, a required mod's

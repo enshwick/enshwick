@@ -46,15 +46,15 @@ pub enum Channels {
 /// use std::time::Duration;
 /// use enshwick::sound::Trim;
 ///
-/// let middle = Trim { start: Duration::from_millis(250), end: Some(Duration::from_secs(2)) };
-/// assert!(middle.end > Some(middle.start));
+/// let middle = Trim { from: Duration::from_millis(250), to: Some(Duration::from_secs(2)) };
+/// assert!(middle.to > Some(middle.from));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 pub struct Trim {
     /// Where it starts in the file.
-    pub start: Duration,
+    pub from: Duration,
     /// Where it ends in the file; `None` for the file's end.
-    pub end: Option<Duration>,
+    pub to: Option<Duration>,
 }
 
 /// How a file becomes a recording: its channels, gain and trim.
@@ -134,7 +134,7 @@ pub(crate) enum DecodeError {
     reason = "a positive count of frames, at most ten minutes at 384 kHz"
 )]
 fn most_samples(channels: usize, rate: u32, trim: Trim) -> usize {
-    let seconds = (trim.start + MAX_TAKE).as_secs_f64();
+    let seconds = (trim.from + MAX_TAKE).as_secs_f64();
     // At most 10 minutes past a start inside a file at 384 kHz, so it fits.
     let frames = (seconds * f64::from(rate)).ceil() as usize;
     frames.saturating_mul(channels)
@@ -337,10 +337,10 @@ pub(crate) fn shape(read: Read, shape: Shape) -> Result<Samples, DecodeError> {
         rate,
     } = read;
     let frames = samples.len() / channels;
-    let start = frame_at(shape.trim.start, rate, frames);
+    let start = frame_at(shape.trim.from, rate, frames);
     let end = shape
         .trim
-        .end
+        .to
         .map_or(frames, |end| frame_at(end, rate, frames));
     if end <= start {
         return Err(DecodeError::Empty);
@@ -525,8 +525,8 @@ mod tests {
         let long = wav_file(1, 1, hound::SampleFormat::Int, 16, &[0.0; 602]);
         assert_eq!(read(&long, Trim::default()), Err(DecodeError::TooLong));
         let trimmed = Trim {
-            start: Duration::from_secs(2),
-            end: None,
+            from: Duration::from_secs(2),
+            to: None,
         };
         let read = read(&long, trimmed).unwrap();
         assert_eq!(
@@ -553,8 +553,8 @@ mod tests {
                 channels: Channels::Stereo,
                 gain_db: -6.0,
                 trim: Trim {
-                    start: Duration::from_millis(500),
-                    end: None,
+                    from: Duration::from_millis(500),
+                    to: None,
                 },
             },
         )
@@ -599,8 +599,8 @@ mod tests {
             rate: SAMPLE_RATE,
         };
         let late = Trim {
-            start: Duration::from_secs(1),
-            end: None,
+            from: Duration::from_secs(1),
+            to: None,
         };
         assert_eq!(
             shape(
