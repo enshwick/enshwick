@@ -1,15 +1,17 @@
 //! What a call costs between Luau and the API, in time and in heap
 //! allocations, the VM's own included: one hit through a damage filter that
-//! reads and scales it, and a call into the API with each kind of argument.
+//! reads and scales it, a call into the API with each kind of argument, and
+//! one hit through the same filter written in Rust and in Luau.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::fmt::Write as _;
 use std::hint::black_box;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick::abi::{DamageCheck, Header, Status};
+use enshwick::damage::DamageCause;
 use enshwick::test::{FakeHost, Installed};
 use enshwick::{Load, Mod, Off};
 use enshwick_luau::{Limits, Scripts};
@@ -95,10 +97,51 @@ const MAIN: &str = r#"
     end)
 "#;
 
+/// The Luau filters of the `handler` group, each a bench name and the
+/// function: the rule the Rust filter also runs, where a fall hurts half as
+/// much, then the parts of its cost one at a time: the call with an empty
+/// body, a method looked up, and a method called.
+const LUAU: [(&str, &str); 4] = [
+    (
+        "luau",
+        r#"function(damage)
+            if damage:cause() == "FallDamage" then
+                damage:scale(0.5)
+            end
+        end"#,
+    ),
+    ("luau_empty", "function(damage) end"),
+    ("luau_lookup", "function(damage) local _ = damage.cause end"),
+    ("luau_method", "function(damage) damage:cause() end"),
+];
+
+/// What the bench mod's init subscribes: [`script`]'s filter at
+/// [`CALLS_MODE`], the Rust filter at [`RUST_MODE`], else the filter of
+/// [`LUAU`] at this place past [`RUST_MODE`]. A `static`, since
+/// [`Mod::init`] takes nothing a bench could pass it in.
+static MODE: AtomicU8 = AtomicU8::new(CALLS_MODE);
+const CALLS_MODE: u8 = 0;
+const RUST_MODE: u8 = 1;
+
 struct Bench;
 
 impl Mod for Bench {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        let main = match MODE.load(Ordering::Relaxed) {
+            CALLS_MODE => script(),
+            RUST_MODE => {
+                load.on_damage(|damage| {
+                    if damage.cause() == DamageCause::FallDamage {
+                        damage.scale(0.5);
+                    }
+                })?;
+                return Ok(Self);
+            }
+            luau => {
+                let (_, filter) = LUAU[usize::from(luau - RUST_MODE - 1)];
+                format!("enshwick.damage.on_damage({filter})")
+            }
+        };
         // The bench runs far more hits a second than a game's budget allows.
         let limits = Limits::default()
             .with_call(Duration::from_secs(1))
@@ -106,7 +149,7 @@ impl Mod for Bench {
         let _runtime = enshwick_luau::start(
             load,
             "enshwick.bench",
-            Scripts::new().with("main.luau", script()),
+            Scripts::new().with("main.luau", main),
             None,
             limits,
         )?;
@@ -150,15 +193,50 @@ fn allocations(loader: &Installed, total: f32, hits: u32) -> u64 {
     ALLOCATIONS.load(Ordering::Relaxed) - before
 }
 
+/// A fake loader running the bench mod in `mode`.
+fn started(mode: u8) -> Installed {
+    MODE.store(mode, Ordering::Relaxed);
+    let loader = FakeHost::new().install();
+    // SAFETY: all three functions are the exports of this file's `declare_mod!(Bench)`.
+    let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+    assert_eq!(status, Status::OK, "{:?}", loader.logs());
+    loader
+}
+
+#[expect(
+    clippy::print_stdout,
+    reason = "the bench reports its counts beside criterion's times"
+)]
+fn handler(c: &mut Criterion) {
+    let mut group = c.benchmark_group("handler");
+    let luau = (RUST_MODE + 1..)
+        .zip(LUAU)
+        .map(|(mode, (name, _))| (name, mode));
+    for (name, mode) in [("rust", RUST_MODE)].into_iter().chain(luau) {
+        let loader = started(mode);
+        let fall = loader.damage(hit(40.0), &mut []);
+        let scales = matches!(name, "rust" | "luau");
+        let expected = if scales { 20.0 } else { 40.0 };
+        assert!(
+            (fall.total - expected).abs() < 1e-6,
+            "{name}: {:?}",
+            loader.logs()
+        );
+        let made = allocations(&loader, 40.0, HITS);
+        println!("handler {name}: {made} allocations in {HITS} hits");
+        group.bench_function(name, |b| {
+            b.iter(|| loader.damage(black_box(hit(40.0)), &mut []));
+        });
+    }
+    group.finish();
+}
+
 #[expect(
     clippy::print_stdout,
     reason = "the bench reports its counts beside criterion's times"
 )]
 fn calls(c: &mut Criterion) {
-    let loader = FakeHost::new().install();
-    // SAFETY: both functions are the exports of this file's `declare_mod!(Bench)`.
-    let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
-    assert_eq!(status, Status::OK, "{:?}", loader.logs());
+    let loader = started(CALLS_MODE);
     let warm = loader.damage(hit(40.0), &mut []);
     assert!((warm.total - 20.0).abs() < 1e-6, "{:?}", loader.logs());
 
@@ -186,5 +264,5 @@ fn calls(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, calls);
+criterion_group!(benches, calls, handler);
 criterion_main!(benches);

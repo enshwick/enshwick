@@ -1,13 +1,16 @@
 //! Values between Luau and the API, shaped by the script [`Ty`] of each.
 
+mod objects;
+
 use std::fmt::Display;
 use std::hash::Hash;
-use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::script::{Callback, Choice, Class, Error, Handle, Signature, Ty, Union, Value};
+use enshwick_core::script::{Callback, Choice, Error, Signature, Ty, Union, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
 use rustc_hash::FxHashMap;
+
+pub(crate) use objects::Lent;
+use objects::{Object, object_from_lua};
 
 use crate::run::Scope;
 
@@ -79,11 +82,7 @@ pub(crate) fn to_lua(
             LuaValue::Table(table)
         }
         (Value::Bytes(bytes), _) => LuaValue::Buffer(lua.create_buffer(bytes)?),
-        (Value::Object(handle), _) => LuaValue::UserData(lua.create_userdata(Object {
-            handle,
-            scope: scope.clone(),
-            ended: false,
-        })?),
+        (Value::Object(handle), _) => LuaValue::UserData(Object::create(lua, handle, scope, None)?),
         (Value::Map(fields), Ty::Union(union)) => {
             let table = lua.create_table_with_capacity(0, 1)?;
             for (name, value) in fields {
@@ -294,83 +293,6 @@ fn union_from_lua(
     }
 }
 
-/// The API value of `value`, an object of `class`.
-fn object_from_lua(value: &LuaValue, class: &'static Class) -> Result<Value, Error> {
-    let LuaValue::UserData(object) = value else {
-        return Err(expected(class.name(), value));
-    };
-    match object.borrow::<Object>() {
-        // A class is a `const`, whose address differs between uses; the
-        // name picks it, and `FromScript` checks the Rust type.
-        Ok(object) if !object.ended && object.handle.class().name() == class.name() => {
-            Ok(Value::Object(object.handle.clone()))
-        }
-        _ => Err(expected(class.name(), value)),
-    }
-}
-
-/// The script object one argument of a script's function gets when its class
-/// is [lent](Class::lent): kept from call to call, so a filter on a hot path
-/// makes no object per call.
-#[derive(Default)]
-pub(crate) struct Lent {
-    object: OnceLock<mlua::AnyUserData>,
-    /// Whether a call holds the kept object now.
-    busy: AtomicBool,
-}
-
-impl Lent {
-    /// The script object holding `handle`, and whether it is the kept one,
-    /// which [`Lent::give_back`] returns once the call ends; a call inside
-    /// the one that holds it gets an object of its own.
-    pub(crate) fn lend(
-        &self,
-        lua: &Lua,
-        scope: &Scope,
-        handle: Handle,
-    ) -> mlua::Result<(LuaValue, bool)> {
-        if self.busy.swap(true, Ordering::Acquire) {
-            let object = lua.create_userdata(Object {
-                handle,
-                scope: scope.clone(),
-                ended: false,
-            })?;
-            return Ok((LuaValue::UserData(object), false));
-        }
-        let kept = match self.object.get() {
-            Some(kept) => kept
-                .borrow_mut::<Object>()
-                .map(|mut object| {
-                    object.handle = handle;
-                    object.ended = false;
-                })
-                .map(|()| kept.clone()),
-            None => lua
-                .create_userdata(Object {
-                    handle,
-                    scope: scope.clone(),
-                    ended: false,
-                })
-                .map(|made| self.object.get_or_init(|| made).clone()),
-        };
-        kept.map(|kept| (LuaValue::UserData(kept), true))
-            .inspect_err(|_| self.give_back())
-    }
-
-    /// Ends the call that holds the kept object, which refuses use until the
-    /// next call lends it again; run under the VM's lock, as `lend` is.
-    pub(crate) fn give_back(&self) {
-        if let Some(mut object) = self
-            .object
-            .get()
-            .and_then(|o| o.borrow_mut::<Object>().ok())
-        {
-            object.ended = true;
-        }
-        self.busy.store(false, Ordering::Release);
-    }
-}
-
 /// What a VM keeps of the API's own names, so a hot call pushes no text:
 /// under a memory limit mlua pushes text in protected mode, which on Luau
 /// leaves a closure behind on every push.
@@ -385,6 +307,9 @@ struct Interned {
     /// Each choice's table from a variant's script string to its place, by
     /// where its variants live, since two choices may share a name.
     choices: FxHashMap<usize, mlua::Table>,
+    /// Each live script object's table of method functions, its keys weak,
+    /// which `__index` reads in Luau.
+    objects: Option<mlua::Table>,
 }
 
 impl Interned {
@@ -421,6 +346,27 @@ impl Interned {
         Self::get(lua, class, |i| &mut i.methods, || lua.create_table())
     }
 
+    /// The table from each script object to its class's
+    /// [`methods`](Interned::methods), which holds no object alive.
+    fn objects(lua: &Lua) -> mlua::Result<mlua::Table> {
+        if let Some(interned) = lua.app_data_ref::<Self>()
+            && let Some(objects) = &interned.objects
+        {
+            return Ok(objects.clone());
+        }
+        let objects = lua.create_table()?;
+        let weak = lua.create_table_with_capacity(0, 1)?;
+        weak.raw_set("__mode", "k")?;
+        objects.set_metatable(Some(weak))?;
+        if lua.app_data_ref::<Self>().is_none() {
+            let _none = lua.set_app_data(Self::default());
+        }
+        if let Some(mut interned) = lua.app_data_mut::<Self>() {
+            interned.objects = Some(objects.clone());
+        }
+        Ok(objects)
+    }
+
     /// The variant of `choice` the script string `text` names, read without
     /// borrowing its bytes: borrowing a fresh string's bytes allocates.
     fn variant(lua: &Lua, choice: &Choice, text: &mlua::LuaString) -> Option<&'static str> {
@@ -439,65 +385,6 @@ impl Interned {
         .ok()?;
         let at = table.raw_get::<Option<usize>>(text).ok()??;
         choice.names().nth(at)
-    }
-}
-
-/// An [`Object`](enshwick_core::script::Object) as a script holds it: its
-/// class's methods, called as `object:method()`.
-struct Object {
-    handle: Handle,
-    scope: Scope,
-    /// A kept [`Lent`] object between its calls: a script that kept it gets
-    /// an error, never the next call's value.
-    ended: bool,
-}
-
-impl mlua::UserData for Object {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Index,
-            |lua, this, key: mlua::LuaString| {
-                let class = this.handle.class();
-                // One function per class and method in a VM, made on first use:
-                // a filter on a hot path indexes methods on every hit.
-                let cached = Interned::methods(lua, class.name())?;
-                if let Some(function) = cached.raw_get::<Option<mlua::Function>>(&key)? {
-                    return Ok(LuaValue::Function(function));
-                }
-                let key = key.to_str()?.to_owned();
-                let Some(method) = class.methods().into_iter().find(|m| m.name() == key) else {
-                    return Ok(LuaValue::Nil);
-                };
-                let scope = this.scope.clone();
-                let what = format!("{}:{key}", class.name());
-                let function = lua.create_function(
-                    move |lua, (object, args): (mlua::AnyUserData, LuaArgs)| {
-                        let this = object.borrow::<Self>()?;
-                        if this.ended {
-                            return Err(failed(&what, "the object was lent to a call that ended"));
-                        }
-                        let handle = this.handle.clone();
-                        drop(this);
-                        // A method indexes its own class's list: `a.m(b)` must not
-                        // run b's method at m's place.
-                        if handle.class().name() != class.name() {
-                            return Err(failed(
-                                &what,
-                                format_args!("called on a {}", handle.class().name()),
-                            ));
-                        }
-                        call(lua, &scope, args, method.signature(), &what, |slots| {
-                            handle.call(&method, slots)
-                        })
-                    },
-                )?;
-                cached.raw_set(key, &function)?;
-                Ok(LuaValue::Function(function))
-            },
-        );
-        methods.add_meta_method(mlua::MetaMethod::ToString, |_, this, ()| {
-            Ok(this.handle.class().name())
-        });
     }
 }
 
