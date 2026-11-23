@@ -142,6 +142,39 @@ mod tests {
     }
 
     #[test]
+    fn a_change_from_a_mod_not_on_both_sides_is_refused() {
+        let loader = server();
+        // SAFETY: the fake's table lives for the process.
+        let api = unsafe { &*loader.api() };
+        let stop = enshwick::abi::SoundSteer::EMPTY;
+        let one_sided = enshwick::abi::ModHandle(99);
+        assert_eq!(
+            (api.sound_steer_for)(one_sided, 1, &raw const stop),
+            Status::REFUSED
+        );
+    }
+
+    #[test]
+    fn a_client_that_hosts_nothing_refuses_a_sound_for_clients_before_its_bounds() {
+        let loader = installed(FakeHost::new().side(Side::CLIENT));
+        // SAFETY: the fake's table lives for the process.
+        let api = unsafe { &*loader.api() };
+        let beyond = enshwick::abi::SoundAudience {
+            kind: enshwick::abi::SoundAudience::NEAR,
+            radius: f32::MAX,
+            ..enshwick::abi::SoundAudience::EMPTY
+        };
+        let (play, mut id) = (SoundPlay::EMPTY, 0);
+        let status = (api.sound_play_for)(
+            loader.handle(),
+            &raw const beyond,
+            &raw const play,
+            &raw mut id,
+        );
+        assert_eq!(status, Status::UNAVAILABLE);
+    }
+
+    #[test]
     fn a_client_that_hosts_nothing_sends_no_sound_to_clients() {
         let loader = installed(FakeHost::new().side(Side::CLIENT));
         let sent = sound::play_for(Audience::Everyone, Play::new(HORN, Place::Screen));

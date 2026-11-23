@@ -132,7 +132,8 @@ impl SoundSteer {
     pub const STOP: u32 = 0;
     /// Changes its volume over `fade_ms`.
     pub const VOLUME: u32 = 1;
-    /// Moves it to `at`; a sound that followed an entity follows it no more.
+    /// Moves it to `at`; a sound that followed an entity follows it no more,
+    /// and one on the screen or of music has no place and stays.
     pub const POSITION: u32 = 2;
     /// Stops every sound of the mod, fading each out over `fade_ms`; the id
     /// is not read.
@@ -324,6 +325,9 @@ impl SoundInfo {
     pub const OFF: u32 = 3;
     /// The entity it was to follow is not in the client's world.
     pub const NO_ENTITY: u32 = 4;
+    /// The client's sounds already follow the most entities they follow at
+    /// once, 64 over every mod, and this one is not among them.
+    pub const FOLLOW_FULL: u32 = 5;
     /// Its header set, pending.
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),

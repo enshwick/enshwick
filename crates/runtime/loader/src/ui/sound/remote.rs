@@ -35,6 +35,15 @@ impl<T> Recent<T> {
         self.0.push_back((id, value));
     }
 
+    /// Forgets what `id` keeps.
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only the Windows relay forgets a heard sound")
+    )]
+    fn forget(&mut self, id: u64) {
+        self.0.retain(|(kept, _)| *kept != id);
+    }
+
     /// What `id` keeps, while it is among the newest.
     fn get(&self, id: u64) -> Option<&T> {
         self.0
@@ -305,6 +314,21 @@ mod windows {
             .and_then(|heard| heard.get(&owner)?.get(id).copied())
     }
 
+    /// Keeps the client's own sound `local` for mod `owner`'s server sound
+    /// `id`; `None`, for a start the client dropped, forgets an older sound
+    /// of the same id, as from an earlier server.
+    pub(super) fn hear(owner: ModIndex, id: u64, local: Option<u64>) {
+        let mut heard = STATE.heard.relock();
+        let recent = heard
+            .get_or_insert_with(FxHashMap::default)
+            .entry(owner.get())
+            .or_default();
+        match local {
+            Some(local) => recent.keep(id, local),
+            None => recent.forget(id),
+        }
+    }
+
     /// Plays or steers `message` through the mod's own sounds.
     fn take(loader: &Loader, message: SoundMessage) {
         let Some(owner) = loader
@@ -317,21 +341,17 @@ mod windows {
             return;
         };
         match message.op {
-            SoundOp::Play(play) => match crate::ui::sound::play(loader, owner, &play) {
-                Ok(local) => STATE
-                    .heard
-                    .relock()
-                    .get_or_insert_with(FxHashMap::default)
-                    .entry(owner.get())
-                    .or_default()
-                    .keep(message.id, local),
-                Err(crate::ui::sound::SoundError::Missing) => crate::log_once!(
-                    WARN,
-                    "server sounds: a sound container this client lacks is dropped ({})",
-                    play.container
-                ),
-                Err(_) => {}
-            },
+            SoundOp::Play(play) => {
+                let started = crate::ui::sound::play(loader, owner, &play);
+                if started == Err(crate::ui::sound::SoundError::Missing) {
+                    crate::log_once!(
+                        WARN,
+                        "server sounds: a sound container this client lacks is dropped ({})",
+                        play.container
+                    );
+                }
+                hear(owner, message.id, started.ok());
+            }
             SoundOp::Steer(steer) => {
                 let local = STATE
                     .heard
@@ -362,12 +382,13 @@ mod tests {
         assert_eq!(sent.admit(5), Some(u64::from(SoundAudience::MAX_PLAYS) + 1));
     }
 
+    /// A client running mods `ids`, the loader this test's thread answers.
     #[cfg(windows)]
-    fn client(ids: &[&'static str]) -> crate::engine::loader::Loader {
-        crate::engine::loader::Loader {
+    fn client(ids: &[&'static str]) -> &'static crate::engine::loader::Loader {
+        crate::engine::loader::install_for_test(crate::engine::loader::Loader {
             side: enshwick_core::abi::Side::CLIENT,
             ..crate::start::tests::loader_running(ids)
-        }
+        })
     }
 
     #[cfg(windows)]
@@ -387,16 +408,27 @@ mod tests {
     #[test]
     fn a_client_drops_a_sound_whose_container_it_lacks() {
         let loader = client(&["you.bells"]);
-        received(&loader, &start_of("you.bells", [7; 16])[2..]);
+        received(loader, &start_of("you.bells", [7; 16])[2..]);
         assert_eq!(heard(0, 1), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_dropped_start_forgets_an_earlier_server_s_sound_of_the_same_id() {
+        // The second mod, so no other test's sounds share its ids.
+        let loader = client(&["you.anvils", "you.bells"]);
+        let bells = crate::engine::mod_index::ModIndex::new(1);
+        hear(bells, 1, Some(0x5_0000_0003));
+        received(loader, &start_of("you.bells", [7; 16])[2..]);
+        assert_eq!(heard(1, 1), None);
     }
 
     #[cfg(windows)]
     #[test]
     fn a_client_drops_a_sound_of_a_mod_it_does_not_run_and_one_that_does_not_read() {
         let loader = client(&["you.bells"]);
-        received(&loader, &start_of("you.horns", [7; 16])[2..]);
-        received(&loader, &[1, 2, 3]);
+        received(loader, &start_of("you.horns", [7; 16])[2..]);
+        received(loader, &[1, 2, 3]);
         assert_eq!(heard(0, 1), None);
     }
 
@@ -406,9 +438,9 @@ mod tests {
         use enshwick_core::abi::{SoundPlay, SoundSteer};
         let loader = client(&["you.bells"]);
         let owner = crate::engine::mod_index::ModIndex::new(0);
-        let play = play_for(&loader, owner, &SoundAudience::EMPTY, &SoundPlay::EMPTY);
+        let play = play_for(loader, owner, &SoundAudience::EMPTY, &SoundPlay::EMPTY);
         assert_eq!(play, Err(RelayError::NotServing));
-        let steer = steer_for(&loader, owner, 1, &SoundSteer::EMPTY);
+        let steer = steer_for(loader, owner, 1, &SoundSteer::EMPTY);
         assert_eq!(steer, Err(RelayError::NotServing));
     }
 

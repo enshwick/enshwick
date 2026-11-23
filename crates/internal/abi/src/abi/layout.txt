@@ -1644,6 +1644,7 @@ const SoundAudience::NEAR = 2
 const SoundAudience::PLAYER = 0
 const SoundInfo::ENDED = 2
 const SoundInfo::FAILED = 3
+const SoundInfo::FOLLOW_FULL = 5
 const SoundInfo::GAME_REFUSED = 1
 const SoundInfo::NO_ENTITY = 4
 const SoundInfo::NO_SCENE = 2

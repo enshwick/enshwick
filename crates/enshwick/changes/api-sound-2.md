@@ -4,7 +4,9 @@
   a sound container on a client in 2D, at a place,
   on an entity it follows or as music, from any thread, and returns a
   `SoundHandle` that stops it, fades its volume, moves it and reads its
-  `SoundState`; `sound::stop_all` stops every sound of the mod. A mod's
+  `SoundState`; `sound::stop_all` stops every sound of the mod. The
+  client's sounds follow at most 64 entities, every mod's together; past
+  that a sound on a new entity fails with `PlayFailure::FollowFull`. A mod's
   sounds end when it is turned off, and its world sounds when the
   client's world ends. Luau `enshwick.sound.play{...}` and
   `enshwick.sound.stop_all`.

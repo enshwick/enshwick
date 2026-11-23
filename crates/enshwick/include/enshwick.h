@@ -3580,7 +3580,8 @@ typedef struct EnshwickSoundSteer {
 #define EnshwickSoundSteer_STOP 0
 // Changes its volume over `fade_ms`.
 #define EnshwickSoundSteer_VOLUME 1
-// Moves it to `at`; a sound that followed an entity follows it no more.
+// Moves it to `at`; a sound that followed an entity follows it no more,
+// and one on the screen or of music has no place and stays.
 #define EnshwickSoundSteer_POSITION 2
 // Stops every sound of the mod, fading each out over `fade_ms`; the id
 // is not read.
@@ -3615,6 +3616,9 @@ typedef struct EnshwickSoundInfo {
 #define EnshwickSoundInfo_OFF 3
 // The entity it was to follow is not in the client's world.
 #define EnshwickSoundInfo_NO_ENTITY 4
+// The client's sounds already follow the most entities they follow at
+// once, 64 over every mod, and this one is not among them.
+#define EnshwickSoundInfo_FOLLOW_FULL 5
 
 // The clients a server mod's sound plays on, which
 // `EnshwickHostApi.sound_play_for` reads. ABI 12.18.
@@ -7193,17 +7197,18 @@ typedef struct EnshwickHostApi {
                                const struct EnshwickSoundPlay *spec,
                                uint64_t *id);
   // Queues `steer`, a headed `EnshwickSoundSteer`, for the mod's sound `id`, or
-  // for all of the mod's sounds with `EnshwickSoundSteer_STOP_ALL`. An id that
-  // names no sound of the mod still playing, ended or never this mod's,
-  // changes nothing. Any thread. `EnshwickStatus_BAD_ARGS` as for
+  // for all of the mod's sounds with `EnshwickSoundSteer_STOP_ALL`. An id of a
+  // sound that ended changes nothing; ids count per mod, so another
+  // mod's id names at most one of this mod's own sounds. Any thread. `EnshwickStatus_BAD_ARGS` as for
   // `EnshwickHostApi.sound_play`; `EnshwickStatus_BUSY` when the mod's queue is
   // full; `EnshwickStatus_UNAVAILABLE` on a server. ABI 12.17.
   EnshwickStatus (*sound_steer)(EnshwickModHandle me,
                                 uint64_t id,
                                 const struct EnshwickSoundSteer *steer);
   // Writes to `out`, a headed `EnshwickSoundInfo`, where the mod's sound `id`
-  // stands; an id the loader no longer keeps, or another mod's, reads as
-  // `EnshwickSoundInfo_ENDED`. Any thread. `EnshwickStatus_BAD_ARGS` for a null or
+  // stands; an id the loader no longer keeps reads as
+  // `EnshwickSoundInfo_ENDED`, and another mod's id at most one of this mod's
+  // own sounds, since ids count per mod. Any thread. `EnshwickStatus_BAD_ARGS` for a null or
   // smaller `out`; `EnshwickStatus_UNAVAILABLE` on a server. ABI 12.17.
   EnshwickStatus (*sound_state)(EnshwickModHandle me, uint64_t id, struct EnshwickSoundInfo *out);
   // Sends `play`, a headed `EnshwickSoundPlay`, from the server to the clients

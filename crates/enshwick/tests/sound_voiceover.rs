@@ -30,7 +30,8 @@ mod tests {
     const AMBIENCE: Guid = Guid([7; 16]);
     const TUNE: [Guid; 2] = [Guid([8; 16]), Guid([9; 16])];
 
-    fn types() -> Vec<Type<'static>> {
+    /// The types of sounds and their containers, which both sides reflect.
+    fn sound_types() -> Vec<Type<'static>> {
         let scalar = |name, kind, size: u16| Type::new(name, kind, size.into(), size);
         let enumeration = |name, names: &[&'static str]| {
             Type::new(name, Kind::Enum, 1, 1).with_constants(
@@ -41,7 +42,7 @@ mod tests {
             )
         };
         let f = Field::new;
-        let mut types = vec![
+        vec![
             scalar("demo::bool", Kind::Bool, 1),
             scalar("demo::uint8", Kind::Uint8, 1),
             scalar("demo::uint16", Kind::Uint16, 2),
@@ -116,7 +117,12 @@ mod tests {
                 f("priority", 28, "demo::uint32"),
                 f("entries", 32, "demo::Entries"),
             ]),
-        ];
+        ]
+    }
+
+    /// The client's types: sounds, voiced lines and the ambience's music.
+    fn types() -> Vec<Type<'static>> {
+        let mut types = sound_types();
         types.extend(voice_and_ambience_types());
         types
     }
@@ -393,6 +399,29 @@ mod tests {
             slots([READING_EN, german, Guid::NIL], [100, 10, 0]),
             "Chinese stays silent without a fallback"
         );
+    }
+
+    #[test]
+    fn a_server_without_the_voice_and_ambience_types_still_checks_lines_and_music() {
+        let loader = FakeHost::new()
+            .side(Side::SERVER)
+            .types(sound_types())
+            .type_hash(types::SOUND_RESOURCE.id(), hash(SOUND))
+            .type_hash(types::SOUND_CONTAINER_RESOURCE.id(), hash(CONTAINER))
+            .mod_file("short.wav", wav(2_400))
+            .install();
+        let status = run(&loader, 1, |load| {
+            load.add_voiceover(NewVoiceover::new(
+                Id::new("you.first:welcome"),
+                vec![VoiceLine::new("english", "short.wav")],
+            ))?;
+            let night = NewMusic {
+                environment: Some("Grassland".into()),
+                ..NewMusic::new(Id::new("you.first:night"), vec!["short.wav".into()])
+            };
+            load.add_music(night).map(|_| ())
+        });
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
     }
 
     #[test]

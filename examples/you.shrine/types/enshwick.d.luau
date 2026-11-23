@@ -2266,7 +2266,7 @@ export type Play = {
 }
 
 --- Why the client did not start a sound.
-export type PlayFailure = "GameRefused" | "NoScene" | "Off" | "NoEntity"
+export type PlayFailure = "GameRefused" | "NoScene" | "Off" | "NoEntity" | "FollowFull"
 
 --- A connected player, as the server sees them.
 export type Player = {
@@ -3019,7 +3019,7 @@ export type SoundHandle = {
 	stop: (self: SoundHandle, fade: number) -> (),
 	--- Changes the sound's volume to `volume`, 0 to 1, over `fade`.
 	set_volume: (self: SoundHandle, volume: number, fade: number) -> (),
-	--- Moves the sound to `at`, in metres; a sound that followed an entity stays at `at` from then on.
+	--- Moves a sound in the world to `at`, in metres; a sound that followed an entity stays at `at` from then on, and a `Place.Screen` or `Place.Music` sound has no place and does not move.
 	set_position: (self: SoundHandle, at: vector) -> (),
 	--- Whether the sound is queued or playing.
 	is_playing: (self: SoundHandle) -> boolean,

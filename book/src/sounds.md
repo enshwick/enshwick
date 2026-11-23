@@ -21,7 +21,7 @@ place is one of four:
 | --- | --- |
 | `Place::Screen` | From no place, as the game's interface sounds |
 | `Place::At(position)` | At a point in the world, in metres; it pans and fades as the camera moves |
-| `Place::On(entity)` | On an entity of the client's world, following it; it ends with a short fade once the entity is gone |
+| `Place::On(entity)` | On an entity of the client's world, following it; it ends with a short fade once the entity is gone. The client follows at most 64 entities, every mod's together; past that a sound on a new entity fails with `FollowFull` |
 | `Place::Music` | As music; a new music sound of the same mod fades out its earlier one |
 
 `.volume(v)` sets a volume from 0 to 1, which the game multiplies by the
@@ -39,7 +39,7 @@ The `SoundHandle` it returns steers that sound:
 | --- | --- |
 | `stop(fade)` | stops it, fading out |
 | `set_volume(v, fade)` | changes its volume, fading |
-| `set_position(at)` | moves it; a sound on an entity no longer follows it |
+| `set_position(at)` | moves a sound in the world; a sound on an entity no longer follows it, and a screen or music sound does not move |
 | `is_playing()`, `state()` | tell where it stands |
 
 Once the sound ended, every call on its handle changes nothing.

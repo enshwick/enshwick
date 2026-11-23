@@ -131,15 +131,17 @@ pub(crate) fn hear(spec: SoundPlay) -> bool {
     with(false, |s| start(s, spec).is_ok())
 }
 
-/// Changes `kept` by `steer`, a stop, a volume or a position.
+/// Changes `kept` by `steer`, a stop, a volume or a position; a sound on
+/// the screen or of music has no place to move.
 fn apply(kept: &mut Kept, steer: &SoundSteer) {
     match steer.kind {
         SoundSteer::STOP => end(kept),
         SoundSteer::VOLUME => kept.play.volume = steer.volume,
-        _ => {
+        SoundSteer::POSITION if matches!(kept.play.place, SoundPlay::AT | SoundPlay::ON) => {
             kept.play.place = SoundPlay::AT;
             kept.play.at = steer.at;
         }
+        _ => {}
     }
 }
 
@@ -157,12 +159,8 @@ pub(crate) extern "system" fn sound_play_for(
     let (Some(audience), Some(spec)) = (get_headed(audience), get_headed(spec)) else {
         return Status::BAD_ARGS;
     };
-    if id.is_null() || !audience.in_bounds() || !spec.in_bounds() {
+    if id.is_null() {
         return Status::BAD_ARGS;
-    }
-    let reads = audience.kind == SoundAudience::NEAR || spec.place == SoundPlay::ON;
-    if reads && !on_game_thread() {
-        return Status::WRONG_THREAD;
     }
     with(Status::MISSING, |s| match send(s, me, &audience, spec) {
         Ok(sent) => {
@@ -184,19 +182,33 @@ fn position(s: &State, entity: enshwick_core::Entity) -> Option<[f64; 3]> {
         .map(|(_, place)| place.position)
 }
 
-/// [`sound_play_for`] past its argument checks; the sound's id.
-fn send(
-    s: &mut State,
-    me: ModHandle,
-    audience: &SoundAudience,
-    mut spec: SoundPlay,
-) -> Result<u64, Status> {
+/// Refuses a server sound call as the loader does, in its order: where no
+/// server runs, then for a mod not on both sides.
+fn serving(s: &State, me: ModHandle) -> Result<(), Status> {
     let base = &s.host.base;
     if base.side == Side::CLIENT && !base.hosting {
         return Err(Status::UNAVAILABLE);
     }
     if !super::super::base::mods::joins(s, me) {
         return Err(Status::REFUSED);
+    }
+    Ok(())
+}
+
+/// [`sound_play_for`] past its pointer checks; the sound's id.
+fn send(
+    s: &mut State,
+    me: ModHandle,
+    audience: &SoundAudience,
+    mut spec: SoundPlay,
+) -> Result<u64, Status> {
+    serving(s, me)?;
+    if !audience.in_bounds() || !spec.in_bounds() {
+        return Err(Status::BAD_ARGS);
+    }
+    let reads = audience.kind == SoundAudience::NEAR || spec.place == SoundPlay::ON;
+    if reads && !on_game_thread() {
+        return Err(Status::WRONG_THREAD);
     }
     if spec.place == SoundPlay::ON {
         spec.at = position(s, spec.entity).ok_or(Status::MISSING)?;
@@ -236,20 +248,19 @@ fn send(
 /// Changes a sound the mod sent clients, as the loader does; an id of no
 /// such sound changes nothing.
 pub(crate) extern "system" fn sound_steer_for(
-    _me: ModHandle,
+    me: ModHandle,
     id: u64,
     steer: *const SoundSteer,
 ) -> Status {
     let Some(steer) = get_headed(steer) else {
         return Status::BAD_ARGS;
     };
-    if !steer.in_bounds() || steer.kind == SoundSteer::STOP_ALL {
-        return Status::BAD_ARGS;
-    }
     with(Status::MISSING, |s| {
-        let base = &s.host.base;
-        if base.side == Side::CLIENT && !base.hosting {
-            return Status::UNAVAILABLE;
+        if let Err(status) = serving(s, me) {
+            return status;
+        }
+        if !steer.in_bounds() || steer.kind == SoundSteer::STOP_ALL {
+            return Status::BAD_ARGS;
         }
         let sent = usize::try_from(id)
             .ok()

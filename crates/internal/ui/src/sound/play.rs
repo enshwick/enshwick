@@ -151,6 +151,9 @@ pub enum PlayFailure {
     Off,
     /// The entity it was to follow is not in the client's world.
     NoEntity,
+    /// The client's sounds already follow 64 entities, every mod's
+    /// together, and this sound's entity is not among them.
+    FollowFull,
 }
 
 /// Where a sound stands.
@@ -191,6 +194,7 @@ impl SoundState {
             (SoundInfo::FAILED, SoundInfo::GAME_REFUSED) => Self::Failed(PlayFailure::GameRefused),
             (SoundInfo::FAILED, SoundInfo::NO_SCENE) => Self::Failed(PlayFailure::NoScene),
             (SoundInfo::FAILED, SoundInfo::NO_ENTITY) => Self::Failed(PlayFailure::NoEntity),
+            (SoundInfo::FAILED, SoundInfo::FOLLOW_FULL) => Self::Failed(PlayFailure::FollowFull),
             (SoundInfo::FAILED, _) => Self::Failed(PlayFailure::Off),
             _ => Self::Ended,
         }
@@ -269,8 +273,9 @@ impl SoundHandle {
         })
     }
 
-    /// Moves the sound to `at`, in metres; a sound that followed an entity
-    /// stays at `at` from then on.
+    /// Moves a sound in the world to `at`, in metres; a sound that followed
+    /// an entity stays at `at` from then on, and a [`Place::Screen`] or
+    /// [`Place::Music`] sound has no place and does not move.
     ///
     /// # Errors
     ///
@@ -518,6 +523,10 @@ mod tests {
         assert_eq!(
             SoundState::from_raw(failed(SoundInfo::NO_ENTITY)),
             SoundState::Failed(PlayFailure::NoEntity)
+        );
+        assert_eq!(
+            SoundState::from_raw(failed(SoundInfo::FOLLOW_FULL)),
+            SoundState::Failed(PlayFailure::FollowFull)
         );
         let unknown = SoundInfo {
             state: 9,

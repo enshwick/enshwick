@@ -68,7 +68,7 @@ pub(crate) struct Calls {
     music: usize,
     ui: usize,
     game: usize,
-    /// The scenes the client made at its start, read at the first frame:
+    /// The scenes the client made at its start, kept by [`Calls::scenes`]:
     /// the music's and the world's, 0 for one not reached.
     scenes: OnceLock<(u32, u32)>,
 }
@@ -154,9 +154,21 @@ impl Calls {
         })
     }
 
+    /// The music's and the world's scenes, 0 for one not reached: kept once
+    /// a read finds them or finds the client's `Ui` scene another, and read
+    /// again at the next frame while the client has not made them yet.
+    fn scenes(&self, object: usize, ui: u32) -> (u32, u32) {
+        if let Some(&scenes) = self.scenes.get() {
+            return scenes;
+        }
+        self.client_scenes(object, ui)
+            .map_or((0, 0), |scenes| *self.scenes.get_or_init(|| scenes))
+    }
+
     /// The scenes past `Ui` the client object holds, read with checked
-    /// reads from the sound object at `object` whose `Ui` scene is `ui`;
-    /// `None` when a read fails or the client's `Ui` scene is not `ui`.
+    /// reads from the sound object at `object` whose `Ui` scene is `ui`:
+    /// `None` while a read fails or the client's `Ui` scene is still 0, and
+    /// none reached when it is another scene.
     fn client_scenes(&self, object: usize, ui: u32) -> Option<(u32, u32)> {
         let link =
             usize::from_le_bytes(crate::engine::pages::read(object.checked_add(self.link)?)?);
@@ -168,12 +180,15 @@ impl Calls {
             crate::engine::pages::read(base.checked_add(index * 4)?).map(u32::from_le_bytes)
         };
         let client_ui = read(self.ui)?;
+        if client_ui == 0 {
+            return None;
+        }
         if client_ui != ui {
             crate::log!(
                 WARN,
                 "sound: the client's Ui scene {client_ui:#x} is not the interface's {ui:#x}; music and world sounds are off"
             );
-            return None;
+            return Some((0, 0));
         }
         let (music, game) = (read(self.music)?, read(self.game)?);
         crate::log!(
@@ -217,9 +232,7 @@ impl<'a> GameMixer<'a> {
         if system == 0 || ui == 0 {
             return None;
         }
-        let &(music, game) = calls
-            .scenes
-            .get_or_init(|| calls.client_scenes(object, ui).unwrap_or_default());
+        let (music, game) = calls.scenes(object, ui);
         Some(Self {
             calls,
             system,
@@ -300,5 +313,80 @@ impl Mixer for GameMixer<'_> {
     fn playing(&mut self, id: u32) -> bool {
         // SAFETY: as `stop`; the call only looks the id up.
         unsafe { (self.calls.playing)(self.system, id) != 0 }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    use super::*;
+
+    unsafe extern "system" fn start(
+        _: usize,
+        _: usize,
+        _: u32,
+        _: *const [u8; 16],
+        _: *const PlayParams,
+    ) -> u32 {
+        0
+    }
+    unsafe extern "system" fn stop(_: usize, _: u32, _: i64) {}
+    unsafe extern "system" fn volume(_: usize, _: u32, _: f32, _: i64) {}
+    unsafe extern "system" fn position(_: usize, _: u32, _: *const [i64; 3]) {}
+    unsafe extern "system" fn playing(_: usize, _: u32) -> u8 {
+        0
+    }
+
+    /// Calls whose sound object links its client at its second word, and
+    /// whose client keeps the Music, Ui and Game scenes in its first three.
+    fn calls() -> Calls {
+        Calls {
+            start,
+            stop,
+            volume,
+            position,
+            playing,
+            ui_object: 0,
+            ui_system: 0,
+            ui_scene: 0,
+            link: size_of::<usize>(),
+            client_link: 0,
+            client_ui_scene: 4,
+            music: 0,
+            ui: 1,
+            game: 2,
+            scenes: OnceLock::new(),
+        }
+    }
+
+    const UI: u32 = 7;
+
+    /// Reads the scenes of `client` through a sound object that links it.
+    fn scenes(calls: &Calls, client: &[AtomicU32; 3]) -> (u32, u32) {
+        let object = [0, client.as_ptr().expose_provenance()];
+        calls.scenes(object.as_ptr().expose_provenance(), UI)
+    }
+
+    #[test]
+    fn the_scenes_are_read_again_until_the_client_made_them_and_then_kept() {
+        let calls = calls();
+        let client = [const { AtomicU32::new(0) }; 3];
+        assert_eq!(scenes(&calls, &client), (0, 0));
+        for (cell, scene) in client.iter().zip([5, UI, 9]) {
+            cell.store(scene, Ordering::Relaxed);
+        }
+        assert_eq!(scenes(&calls, &client), (5, 9));
+        client[2].store(11, Ordering::Relaxed);
+        assert_eq!(scenes(&calls, &client), (5, 9), "kept from the first read");
+    }
+
+    #[test]
+    fn a_client_ui_scene_that_is_not_the_interface_s_reaches_no_scene_for_good() {
+        let calls = calls();
+        let client = [5, UI + 1, 9].map(AtomicU32::new);
+        assert_eq!(scenes(&calls, &client), (0, 0));
+        client[1].store(UI, Ordering::Relaxed);
+        assert_eq!(scenes(&calls, &client), (0, 0));
     }
 }

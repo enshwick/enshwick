@@ -1943,6 +1943,7 @@ abi::SoundInfo::BORN
 abi::SoundInfo::EMPTY
 abi::SoundInfo::ENDED
 abi::SoundInfo::FAILED
+abi::SoundInfo::FOLLOW_FULL
 abi::SoundInfo::GAME_REFUSED
 abi::SoundInfo::NO_ENTITY
 abi::SoundInfo::NO_SCENE
@@ -6889,6 +6890,7 @@ sound::Play::new unstable
 sound::Play::place unstable
 sound::Play::volume unstable
 sound::PlayFailure unstable
+sound::PlayFailure::FollowFull unstable
 sound::PlayFailure::GameRefused unstable
 sound::PlayFailure::NoEntity unstable
 sound::PlayFailure::NoScene unstable

@@ -133,14 +133,21 @@ impl ModSounds {
         self.queue.push(op).map_err(|_| QueueError::Full)
     }
 
-    /// The next start or change, oldest first; once the queue is empty the
-    /// starts count again from 0.
+    /// The next start or change, oldest first; a start taken frees its
+    /// place among the starts waiting.
     pub(crate) fn next(&self) -> Option<Op> {
         let op = self.queue.pop();
-        if op.is_none() {
-            self.starts.store(0, Ordering::Release);
+        if let Some(Op::Start(..)) = op {
+            self.starts.fetch_sub(1, Ordering::AcqRel);
         }
         op
+    }
+
+    /// The starts and changes queued when a frame asks, oldest first; those
+    /// queued meanwhile wait for the next frame, so a mod that keeps
+    /// queueing cannot hold the frame.
+    pub(crate) fn batch(&self) -> impl Iterator<Item = Op> + '_ {
+        (0..self.queue.len()).map_while(|_| self.next())
     }
 
     /// Takes the first free slot under its next generation, pending.

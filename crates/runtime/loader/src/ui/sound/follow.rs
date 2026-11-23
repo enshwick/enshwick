@@ -20,6 +20,23 @@ pub(crate) enum Seen {
     Gone,
 }
 
+/// The first [`MAX_FOLLOWED`] distinct entities of `entities` but 0, and
+/// how many there are.
+fn distinct(entities: impl IntoIterator<Item = u32>) -> ([u32; MAX_FOLLOWED], usize) {
+    let mut taken = [0; MAX_FOLLOWED];
+    let mut count = 0;
+    for entity in entities {
+        if count == MAX_FOLLOWED {
+            break;
+        }
+        if entity != 0 && !taken[..count].contains(&entity) {
+            taken[count] = entity;
+            count += 1;
+        }
+    }
+    (taken, count)
+}
+
 /// The entities wanted and what the steps read of them.
 pub(crate) struct Followed {
     wanted: [AtomicU32; MAX_FOLLOWED],
@@ -37,13 +54,39 @@ impl Followed {
         }
     }
 
-    /// Asks the steps to read `entities`, at most [`MAX_FOLLOWED`] of them;
-    /// the rest read as [`Seen::Unread`].
+    /// Asks the steps to read `entities`, each once and at most
+    /// [`MAX_FOLLOWED`] of them, the rest reading as [`Seen::Unread`]. An
+    /// entity wanted before keeps its cell and its read; a cell given up
+    /// forgets its read.
     pub(crate) fn want(&self, entities: impl IntoIterator<Item = u32>) {
-        let mut entities = entities.into_iter();
-        for cell in &self.wanted {
-            cell.store(entities.next().unwrap_or(0), Ordering::Relaxed);
+        let (fresh, count) = distinct(entities);
+        let fresh = &fresh[..count];
+        let mut next = [0; MAX_FOLLOWED];
+        for (cell, kept) in self.wanted.iter().zip(&mut next) {
+            let entity = cell.load(Ordering::Relaxed);
+            if fresh.contains(&entity) {
+                *kept = entity;
+            }
         }
+        for &entity in fresh {
+            if !next.contains(&entity)
+                && let Some(free) = next.iter_mut().find(|cell| **cell == 0)
+            {
+                *free = entity;
+            }
+        }
+        for ((cell, read), entity) in self.wanted.iter().zip(&self.read).zip(next) {
+            if cell.swap(entity, Ordering::Relaxed) != entity {
+                read.write([0; 5]);
+            }
+        }
+    }
+
+    /// Whether `entity` gets a cell beside the followed `entities`: it is
+    /// one of them, or they leave a cell free.
+    pub(crate) fn fits(entity: u32, entities: impl IntoIterator<Item = u32>) -> bool {
+        let (taken, count) = distinct(entities);
+        count < MAX_FOLLOWED || taken.contains(&entity)
     }
 
     /// Whether any entity is wanted: a step with none reads nothing.
@@ -73,12 +116,17 @@ impl Followed {
         }
     }
 
-    /// Where `entity` stood at the last step's read.
+    /// Where `entity` stood at the last step's read of the cell it is
+    /// wanted in.
     pub(crate) fn seen(&self, entity: u32) -> Seen {
-        self.read
+        if entity == 0 {
+            return Seen::Unread;
+        }
+        self.wanted
             .iter()
-            .filter_map(Copied::load)
-            .find(|words| words[0] == u64::from(entity) && entity != 0)
+            .position(|cell| cell.load(Ordering::Relaxed) == entity)
+            .and_then(|cell| self.read[cell].load())
+            .filter(|words| words[0] == u64::from(entity))
             .map_or(Seen::Unread, |[_, present, x, y, z]| {
                 #[expect(
                     clippy::cast_possible_wrap,
@@ -116,6 +164,31 @@ mod tests {
         assert_eq!(followed.seen(5), Seen::At([1, -2, 3]));
         assert_eq!(followed.seen(6), Seen::Gone);
         assert_eq!(followed.seen(7), Seen::Unread);
+    }
+
+    #[test]
+    fn an_entity_given_up_forgets_its_read_and_one_still_wanted_keeps_it() {
+        let followed = Followed::new();
+        followed.want([5, 6]);
+        followed.step(|entity| (entity == 6).then_some([1, 2, 3]));
+        followed.want([6]);
+        assert_eq!(followed.seen(5), Seen::Unread, "not Gone from its old read");
+        assert_eq!(followed.seen(6), Seen::At([1, 2, 3]));
+        followed.want([7, 6]);
+        assert_eq!(followed.seen(7), Seen::Unread, "not 5's old read");
+        assert_eq!(followed.seen(6), Seen::At([1, 2, 3]));
+    }
+
+    #[test]
+    fn an_entity_wanted_twice_takes_one_cell() {
+        let most = u32::try_from(MAX_FOLLOWED).unwrap();
+        let followed = Followed::new();
+        followed.want((1..=most).flat_map(|entity| [entity, entity]));
+        followed.step(|_| Some([0; 3]));
+        assert_eq!(followed.seen(most), Seen::At([0; 3]));
+        assert!(!Followed::fits(99, 1..=most));
+        assert!(Followed::fits(1, 1..=most));
+        assert!(Followed::fits(99, 2..=most));
     }
 
     #[test]

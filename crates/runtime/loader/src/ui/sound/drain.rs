@@ -111,7 +111,20 @@ pub(crate) struct Frame<'a> {
 pub(crate) struct Drain {
     live: Vec<Live>,
     waiting: Vec<Waiting>,
+    /// The waiting list's other buffer, so a frame keeps both capacities.
+    spare: Vec<Waiting>,
     session: u64,
+    closed: bool,
+}
+
+/// Settles each start in `sounds`' queue as `state` for `reason`, and drops
+/// its changes.
+fn settle_queued(sounds: &ModSounds, state: u32, reason: u32) {
+    for op in sounds.batch() {
+        if let Op::Start(slot, _) = op {
+            sounds.settle(slot, state, reason);
+        }
+    }
 }
 
 impl Drain {
@@ -124,11 +137,15 @@ impl Drain {
         followed: &Followed,
     ) {
         if frame.session != self.session {
+            // The first session counted is the client's first world, no change.
+            let changed = self.session != 0;
             self.session = frame.session;
-            followed.clear();
-            self.end_where(frame, mixer.as_deref_mut(), |place| {
-                matches!(place, SoundPlay::AT | SoundPlay::ON)
-            });
+            if changed {
+                followed.clear();
+                self.end_where(frame, mixer.as_deref_mut(), |place| {
+                    matches!(place, SoundPlay::AT | SoundPlay::ON)
+                });
+            }
         }
         for (owner, sounds) in frame.mods.iter().enumerate() {
             let Some(sounds) = sounds else {
@@ -136,27 +153,51 @@ impl Drain {
             };
             if (frame.off)(owner) {
                 self.end_owner(owner, sounds, mixer.as_deref_mut());
-                while let Some(op) = sounds.next() {
-                    if let Op::Start(slot, _) = op {
-                        sounds.settle(slot, SoundInfo::ENDED, 0);
-                    }
-                }
+                settle_queued(sounds, SoundInfo::ENDED, 0);
                 continue;
             }
-            while let Some(op) = sounds.next() {
+            for op in sounds.batch() {
                 self.run(owner, sounds, op, mixer.as_deref_mut(), followed);
             }
         }
         self.wait(frame, mixer.as_deref_mut(), followed);
         self.follow(frame, mixer.as_deref_mut(), followed);
         self.reap(frame, mixer);
-        followed.want(
-            self.live
-                .iter()
-                .map(|live| live.follows)
-                .chain(self.waiting.iter().map(|waiting| waiting.play.entity.0))
-                .filter(|&entity| entity != 0),
-        );
+        followed.want(self.followed());
+    }
+
+    /// Ends every sound once a fault turned the mods' sounds off: stops
+    /// what the game plays and ends its handle, and fails each start still
+    /// queued or waiting; later calls do nothing.
+    pub(crate) fn close<M: Mixer>(&mut self, mut mixer: Option<&mut M>, frame: &Frame<'_>) {
+        if self.closed {
+            return;
+        }
+        self.closed = true;
+        for waits in self.waiting.drain(..) {
+            if let Some(Some(sounds)) = frame.mods.get(waits.owner) {
+                sounds.settle(waits.slot, SoundInfo::FAILED, SoundInfo::OFF);
+            }
+        }
+        for (owner, sounds) in frame.mods.iter().enumerate() {
+            if let Some(sounds) = sounds {
+                self.end_owner(owner, sounds, mixer.as_deref_mut());
+                settle_queued(sounds, SoundInfo::FAILED, SoundInfo::OFF);
+            }
+        }
+    }
+
+    /// Whether [`Drain::close`] ran.
+    pub(crate) fn closed(&self) -> bool {
+        self.closed
+    }
+
+    /// The entities the live and waiting sounds follow, 0 for none.
+    fn followed(&self) -> impl Iterator<Item = u32> + '_ {
+        self.live
+            .iter()
+            .map(|live| live.follows)
+            .chain(self.waiting.iter().map(|waiting| waiting.play.entity.0))
     }
 
     /// Runs `op` of the mod at `owner`.
@@ -180,6 +221,9 @@ impl Drain {
                     Seen::At(at) => self.start(owner, sounds, slot, play, Some(at), mixer),
                     Seen::Gone => {
                         sounds.settle(slot, SoundInfo::FAILED, SoundInfo::NO_ENTITY);
+                    }
+                    Seen::Unread if !Followed::fits(play.entity.0, self.followed()) => {
+                        sounds.settle(slot, SoundInfo::FAILED, SoundInfo::FOLLOW_FULL);
                     }
                     Seen::Unread => self.waiting.push(Waiting {
                         owner,
@@ -286,9 +330,20 @@ impl Drain {
             .iter()
             .position(|waiting| waiting.owner == owner && waiting.slot == slot)
         {
-            if steer.kind == SoundSteer::STOP {
-                self.waiting.swap_remove(at);
-                sounds.settle(slot, SoundInfo::ENDED, 0);
+            match steer.kind {
+                SoundSteer::STOP => {
+                    self.waiting.swap_remove(at);
+                    sounds.settle(slot, SoundInfo::ENDED, 0);
+                }
+                SoundSteer::VOLUME => self.waiting[at].play.volume = steer.volume,
+                // Placed before its entity was read: it starts there and
+                // follows nothing.
+                _ => {
+                    let mut play = self.waiting.swap_remove(at).play;
+                    play.place = SoundPlay::AT;
+                    play.at = steer.at;
+                    self.start(owner, sounds, slot, play, Some(fixed(steer.at)), mixer);
+                }
             }
             return;
         }
@@ -308,11 +363,13 @@ impl Drain {
                 self.live.swap_remove(at);
             }
             SoundSteer::VOLUME => mixer.volume(live.game, steer.volume, steer.fade_ms),
-            _ => {
+            // A sound on the screen or of music has no place to move.
+            SoundSteer::POSITION if matches!(live.place, SoundPlay::AT | SoundPlay::ON) => {
                 live.follows = 0;
                 live.at = fixed(steer.at);
                 mixer.position(live.game, live.at);
             }
+            _ => {}
         }
     }
 
@@ -324,8 +381,9 @@ impl Drain {
         mut mixer: Option<&mut M>,
         followed: &Followed,
     ) {
-        let waiting = core::mem::take(&mut self.waiting);
-        for mut waits in waiting {
+        let spare = core::mem::take(&mut self.spare);
+        let mut waiting = core::mem::replace(&mut self.waiting, spare);
+        for mut waits in waiting.drain(..) {
             let Some(Some(sounds)) = frame.mods.get(waits.owner) else {
                 continue;
             };
@@ -348,6 +406,7 @@ impl Drain {
                 }
             }
         }
+        self.spare = waiting;
     }
 
     /// Moves each following sound to where its entity stands, and ends one

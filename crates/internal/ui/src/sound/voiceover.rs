@@ -347,8 +347,15 @@ fn add_lines(load: &mut crate::BaseLoad, new: NewVoiceover) -> Result<Lines, Off
         trim,
         container,
     } = new;
-    let languages = languages(load)?;
-    let (taken, fallback) = slots(&lines, fallback.as_deref(), &languages)?;
+    // A server plays no line and may not reflect the voice languages, so
+    // only a client maps the lines to the game's slots.
+    let (languages, (taken, fallback)) = if load.host().build().side == Side::CLIENT {
+        let languages = languages(load)?;
+        let slots = slots(&lines, fallback.as_deref(), &languages)?;
+        (languages, slots)
+    } else {
+        (Vec::new(), (vec![0; lines.len()], None))
+    };
     let mut made = Vec::with_capacity(lines.len());
     for (line, slot) in lines.into_iter().zip(taken) {
         let sound = NewSound {

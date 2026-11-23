@@ -99,6 +99,18 @@ mod tests {
     }
 
     #[test]
+    fn a_sound_on_the_screen_or_of_music_stays_there_when_moved() {
+        let loader = client();
+        let bell = sound::play(Play::new(BELL, Place::Screen)).unwrap();
+        let tune = sound::play(Play::new(BELL, Place::Music)).unwrap();
+        let _drawn = loader.draw_frame();
+        bell.set_position([1.0, 2.0, 3.0]).unwrap();
+        tune.set_position([1.0, 2.0, 3.0]).unwrap();
+        let places: Vec<Place> = loader.sounds().iter().map(|sound| sound.place).collect();
+        assert_eq!(places, [Place::Screen, Place::Music]);
+    }
+
+    #[test]
     fn a_stopped_handle_reads_ended_and_changes_nothing_after() {
         let loader = client();
         let bell = sound::play(Play::new(BELL, Place::Screen)).unwrap();

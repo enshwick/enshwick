@@ -146,13 +146,17 @@ pub fn read_sound(bytes: &[u8]) -> Option<SoundMessage> {
             fade_in_ms: u32::from_le_bytes(take(body, 33)),
             ..SoundPlay::EMPTY
         }),
-        STEER if body.len() == STEER_BODY => SoundOp::Steer(SoundSteer {
-            kind: u32::from(body[0]),
-            volume: f32::from_le_bytes(take(body, 1)),
-            fade_ms: u32::from_le_bytes(take(body, 5)),
-            at: position(body, 9),
-            ..SoundSteer::EMPTY
-        }),
+        // A server changes only the one sound it names, never the client
+        // part's own sounds.
+        STEER if body.len() == STEER_BODY && u32::from(body[0]) != SoundSteer::STOP_ALL => {
+            SoundOp::Steer(SoundSteer {
+                kind: u32::from(body[0]),
+                volume: f32::from_le_bytes(take(body, 1)),
+                fade_ms: u32::from_le_bytes(take(body, 5)),
+                at: position(body, 9),
+                ..SoundSteer::EMPTY
+            })
+        }
         _ => return None,
     };
     Some(SoundMessage { owner, id, op })
@@ -230,6 +234,19 @@ mod tests {
             panic!("a start")
         };
         assert!(!got.in_bounds());
+    }
+
+    #[test]
+    fn a_change_that_stops_every_sound_of_the_mod_is_not_read() {
+        let data = sound(&SoundMessage {
+            owner: 1,
+            id: 1,
+            op: SoundOp::Steer(SoundSteer {
+                kind: SoundSteer::STOP_ALL,
+                ..SoundSteer::EMPTY
+            }),
+        });
+        assert!(read_sound(&data[2..]).is_none());
     }
 
     #[test]

@@ -44,6 +44,8 @@ mod windows {
     pub(crate) static FUSE: Fuse = Fuse::new("mods' sounds");
     /// The reads of where followed entities stand, in the client's step.
     pub(crate) static FOLLOW_FUSE: Fuse = Fuse::new("sounds following entities");
+    /// The one pass that stops the mods' sounds once [`FUSE`] is off.
+    static CLOSE_FUSE: Fuse = Fuse::new("stopping the mods' sounds after a fault");
 
     /// What the mods' sounds keep while the game runs.
     struct State {
@@ -234,7 +236,17 @@ mod windows {
         if context == 0 {
             return;
         }
-        let _ran = FUSE.run("the mods' sounds", || {
+        // After a fault one pass stops what the mods' sounds still play.
+        let closing = FUSE.is_off();
+        if closing && DRAIN.with_borrow(Drain::closed) {
+            return;
+        }
+        let (fuse, site) = if closing {
+            (&CLOSE_FUSE, "stopping the mods' sounds")
+        } else {
+            (&FUSE, "the mods' sounds")
+        };
+        let _ran = fuse.run(site, || {
             // SAFETY: the caller's frame on the interface thread, with its
             // live, non-zero context.
             let Some(mut mixer) = (unsafe { GameMixer::of(calls, context) }) else {
@@ -251,7 +263,11 @@ mod windows {
                     session: crate::actions::client_snapshot::session(),
                 };
                 DRAIN.with_borrow_mut(|drain| {
-                    drain.frame(Some(&mut mixer), &frame, &STATE.followed);
+                    if closing {
+                        drain.close(Some(&mut mixer), &frame);
+                    } else {
+                        drain.frame(Some(&mut mixer), &frame, &STATE.followed);
+                    }
                 });
             });
         });

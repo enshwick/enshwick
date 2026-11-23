@@ -2376,15 +2376,16 @@ pub struct HostApi {
     pub sound_play:
         extern "system" fn(me: ModHandle, spec: *const SoundPlay, id: *mut u64) -> Status,
     /// Queues `steer`, a headed [`SoundSteer`], for the mod's sound `id`, or
-    /// for all of the mod's sounds with [`SoundSteer::STOP_ALL`]. An id that
-    /// names no sound of the mod still playing, ended or never this mod's,
-    /// changes nothing. Any thread. [`Status::BAD_ARGS`] as for
+    /// for all of the mod's sounds with [`SoundSteer::STOP_ALL`]. An id of a
+    /// sound that ended changes nothing; ids count per mod, so another
+    /// mod's id names at most one of this mod's own sounds. Any thread. [`Status::BAD_ARGS`] as for
     /// [`HostApi::sound_play`]; [`Status::BUSY`] when the mod's queue is
     /// full; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
     pub sound_steer: extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
     /// Writes to `out`, a headed [`SoundInfo`], where the mod's sound `id`
-    /// stands; an id the loader no longer keeps, or another mod's, reads as
-    /// [`SoundInfo::ENDED`]. Any thread. [`Status::BAD_ARGS`] for a null or
+    /// stands; an id the loader no longer keeps reads as
+    /// [`SoundInfo::ENDED`], and another mod's id at most one of this mod's
+    /// own sounds, since ids count per mod. Any thread. [`Status::BAD_ARGS`] for a null or
     /// smaller `out`; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
     pub sound_state: extern "system" fn(me: ModHandle, id: u64, out: *mut SoundInfo) -> Status,
     /// Sends `play`, a headed [`SoundPlay`], from the server to the clients

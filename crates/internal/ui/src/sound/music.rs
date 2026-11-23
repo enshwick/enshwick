@@ -312,7 +312,9 @@ impl LoadMethods for crate::BaseLoad {
             return Err(fail(Off::new("a mod with music runs on both sides")));
         }
         let row = Row::of(&new).map_err(fail)?;
-        if let Some(environment) = &row.environment {
+        let client = self.host().build().side == Side::CLIENT;
+        // A server plays no music and may not reflect the environments.
+        if let (true, Some(environment)) = (client, &row.environment) {
             check_environment(self, environment).map_err(fail)?;
         }
         let ids = add::take_ids(id, new.files.len()).map_err(fail)?;
@@ -323,7 +325,7 @@ impl LoadMethods for crate::BaseLoad {
             trim: new.trim,
         };
         let recordings = add::recordings(self, &takes, shape).map_err(fail)?;
-        let key = if self.host().build().side == Side::CLIENT {
+        let key = if client {
             let key = collection(self).map_err(fail)?;
             // Found before any id is declared, so a game without them leaves none.
             super::recording::bases(self).map_err(fail)?;

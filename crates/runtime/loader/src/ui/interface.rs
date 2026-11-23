@@ -440,10 +440,10 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
             crate::engine::retry::after_step(loader, std::time::Instant::now());
         });
     }
-    // SAFETY: inside the frame on the interface thread, with the frame's
-    // own context or 0.
-    unsafe { crate::ui::sound::frame(context) };
     if context == 0 || state.is_null() {
+        // SAFETY: inside the frame on the interface thread, with the frame's
+        // own context or 0.
+        unsafe { crate::ui::sound::frame(context) };
         crate::engine::screens::note_window(false);
         return;
     }
@@ -459,6 +459,11 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     // SAFETY: inside the frame on the interface thread, `context` non-zero
     // by the guard before it.
     unsafe { snapshot::note(engine, context) };
+    // After the session's count for this frame, so a sound started in a
+    // world that just changed is not ended with the old world's.
+    // SAFETY: inside the frame on the interface thread, with the frame's
+    // own non-zero context.
+    unsafe { crate::ui::sound::frame(context) };
     engine.restore_nav(context, nav);
     // SAFETY: `state` is non-null, checked by the guard before it, and is the
     // popup state the game passed to `ui.popup`; its active byte sits at the

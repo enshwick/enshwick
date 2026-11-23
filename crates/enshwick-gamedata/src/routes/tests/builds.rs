@@ -628,7 +628,6 @@ const ITEM_UI_READS: [(&str, u64); 20] = [
     ("ui.attribute_row_size", 0x2a0),
 ];
 
-/// The kept client tables, by name.
 /// The sound system's start, stop and instance calls a client mod's sounds
 /// go through (`sound.rs` of the loader's ui layer; read in the decompiler
 /// on client 26430625, 2026-11-23; on the older clients the routes find
@@ -673,6 +672,7 @@ const SOUND_READS: [(&str, u64); 7] = [
     ("sound.gameui_ui_scene", 0x78),
 ];
 
+/// The kept client tables, by name.
 const CLIENT_TABLES: [&str; 4] = [
     "1.0 client (1269579)",
     "1.0 client (26082781)",
