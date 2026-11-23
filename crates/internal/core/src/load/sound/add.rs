@@ -9,26 +9,31 @@ use enshwick_ui::__load::*;
 impl Load<'_> {
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
-    /// Adds the sound in `new.file` and a container that plays it, under
-    /// `new.id`, and returns both: the container, which
+    /// Adds a recording for each of `new.takes` and a container that picks
+    /// among them, under `new.id`, and returns both: the container, which
     /// [`Frame::play`](crate::ui::Frame::play), [`Load::change_sound`] and
-    /// other mods use, and the recording, which other containers' takes
-    /// name. The client holds it as the game holds its own uncompressed
-    /// sounds, built from one of them, streamed from memory; nothing is
-    /// written to the archive or a save. A server checks the file and
-    /// serves nothing. Wrap the call in [`Load::feature`] so a bad file
-    /// turns off that sound alone, with the reason on the Mods screen.
+    /// other mods use, and the recordings, which other containers' takes
+    /// name. The client holds each as the game holds its own `FramelessQOA`
+    /// sounds at [`SAMPLE_RATE`](crate::sound::SAMPLE_RATE), inline up to
+    /// [`INLINE_FRAMES`](crate::sound::INLINE_FRAMES) and streamed past it;
+    /// nothing is written to the archive or a save. A server checks the
+    /// files and serves nothing. Wrap the call in [`Load::feature`] so a bad
+    /// file turns off that sound alone, with the reason on the Mods screen.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a mod not of side both, a path outside the mod's folder,
-    /// a file past [`MAX_FILE_BYTES`](crate::sound::MAX_FILE_BYTES) or past
-    /// the mod's [`MAX_MOD_BYTES`](crate::sound::MAX_MOD_BYTES), one that is
-    /// not 16-bit PCM WAV at [`SAMPLE_RATE`](crate::sound::SAMPLE_RATE), a
-    /// container value outside its bound, takes that replace the recording,
-    /// an added take whose recording is neither the game's nor a mod's
-    /// loaded before, an id another content id holds, after init, and on a
-    /// client whose game holds no streamed uncompressed sound to build from.
+    /// [`Off`] for a mod not of side both, no takes or more than
+    /// [`MAX_NEW_TAKES`](crate::sound::MAX_NEW_TAKES), a take's chance
+    /// outside 0 to 1, a path outside the mod's folder, a file past
+    /// [`MAX_FILE_BYTES`](crate::sound::MAX_FILE_BYTES), longer than
+    /// [`MAX_TAKE`](crate::sound::MAX_TAKE) or past the mod's
+    /// [`MAX_MOD_BYTES`](crate::sound::MAX_MOD_BYTES), one that is not WAV,
+    /// FLAC, Ogg Vorbis or MP3, a gain outside
+    /// [`GAIN_DB`](crate::sound::GAIN_DB), a container value outside its
+    /// bound, takes that replace the recordings, an added take whose
+    /// recording is neither the game's nor a mod's loaded before, an id
+    /// another content id holds, after init, and on a client whose game
+    /// holds no `FramelessQOA` sounds to build from.
     ///
     /// # Examples
     ///
