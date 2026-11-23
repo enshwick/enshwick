@@ -342,7 +342,9 @@ and `save()` is refused meanwhile. Each mod holds its own. The log names each mo
 that holds or lets go. A mod that turns off lets go, and every hold ends
 with its hosted game. Once saves stay held for 10 minutes, the log warns and each
 administrator online gets a notice, again every 10 minutes while they stay
-held.
+held. In a fake host test, `loader.set_saves_refused(true)` refuses the saves
+as another mod's hold does, so a test reaches the mod's answer to a refused
+`save()`.
 
 When a dedicated server or a hosted game shuts down, every hold lets go and
 the final save runs. The log names each mod that held saves and for how

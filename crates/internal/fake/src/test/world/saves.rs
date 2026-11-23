@@ -60,6 +60,23 @@ impl Installed {
         })
     }
 
+    /// Refuses the world's saves from outside the mod, as another mod's hold
+    /// or the game's own block does, so a test reaches the mod's answer to a
+    /// refused `World::save`; `false` lets them go. The shutdown lets go of
+    /// it, as the loader lets go of every mod's hold.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world().install();
+    /// loader.set_saves_refused(true);
+    /// assert!(!loader.saves_held(), "the mod itself holds nothing");
+    /// loader.set_saves_refused(false);
+    /// ```
+    pub fn set_saves_refused(&self, refused: bool) {
+        table::with((), |s| s.world.save.refused = refused);
+    }
+
     /// Whether the mod holds the world's saves.
     ///
     /// # Examples

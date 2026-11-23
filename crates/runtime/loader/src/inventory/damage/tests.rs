@@ -254,21 +254,28 @@ fn without_a_filter_every_cause_is_off_but_the_hits_stats_arm() {
     assert!(off_of(true, false).is_empty(), "nothing faulted");
 }
 
+// The sealed filters and the end of arming are process-wide, and the start
+// tests seal and settle them too, so these tests read the answer apart from
+// them.
 #[test]
 fn nothing_answers_before_the_filters_are_sealed() {
-    assert_eq!(causes_off(), None);
+    assert_eq!(answer(true, None, false), None);
+    assert_eq!(answer(true, None, true), None);
 }
 
 #[test]
 fn nothing_answers_between_the_link_and_the_end_of_arming() {
-    seal();
-    link_in(&crate::start::tests::bare_loader(), &[], false);
-    assert_eq!(causes_off(), None, "a switch may still go off while arming");
-    settle();
     assert_eq!(
-        causes_off().map(|off| off.len()),
+        answer(false, Some(false), false),
+        None,
+        "a switch may still go off while arming"
+    );
+    assert_eq!(answer(false, Some(true), true), None);
+    assert_eq!(
+        answer(true, Some(false), false).map(|off| off.len()),
         Some(DamageCause::NAMED.len())
     );
+    assert_eq!(answer(true, Some(true), false), Some(Vec::new()));
 }
 
 /// `rflags` after `comiss` of a survivable fall (above) and a lethal

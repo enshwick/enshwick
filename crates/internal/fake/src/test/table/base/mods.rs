@@ -473,19 +473,13 @@ pub(crate) fn for_reader<R>(language: Option<u32>, f: impl FnOnce() -> R) -> R {
 }
 
 /// The language the game of the player whose character is `entity`
-/// named, as the loader scopes a building event: `0`, the fallback, for a
-/// player whose game named none; `None` for no player's character.
+/// named, or the game's own for the hosting client's own player, as the
+/// loader scopes a building event: `0`, the fallback, for a player whose
+/// game named none; `None` for no player's character.
 pub(crate) fn language_of_character(entity: enshwick_core::Entity) -> Option<u32> {
     with(None, |s| {
         let key = s.host.base.players.iter().find(|p| p.entity == entity)?.key;
-        Some(
-            s.host
-                .base
-                .player_languages
-                .get(&key.get())
-                .copied()
-                .unwrap_or(0),
-        )
+        Some(s.host.base.language_of(key))
     })
 }
 

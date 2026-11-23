@@ -133,6 +133,16 @@ impl BasePresets {
     pub(crate) fn own_key(&self) -> Option<enshwick_core::PlayerKey> {
         self.host_key.filter(|_| self.hosting)
     }
+
+    /// The language the player of account `key` reads, as the ABI numbers
+    /// it: the game's own for the hosting client's own player, else the one
+    /// its game named when it joined, else 0, the fallback.
+    pub(crate) fn language_of(&self, key: enshwick_core::PlayerKey) -> u32 {
+        if self.own_key() == Some(key) {
+            return self.language;
+        }
+        self.player_languages.get(&key.get()).copied().unwrap_or(0)
+    }
 }
 
 impl FakeHost {

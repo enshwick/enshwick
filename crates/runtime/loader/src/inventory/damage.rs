@@ -278,14 +278,20 @@ pub(crate) fn settle() {
 /// switched off; `None` until arming is over, since a switch may still go
 /// off while the parts link and arm. Read outside every hit.
 pub(crate) fn causes_off() -> Option<Vec<u32>> {
-    if !STATE.settled.load(Ordering::Acquire) {
+    answer(
+        STATE.settled.load(Ordering::Acquire),
+        FILTERS.sealed().map(|filters| !filters.is_empty()),
+        crate::inventory::stats::wanted(),
+    )
+}
+
+/// [`causes_off`] from its inputs: `None` until arming is `settled` and the
+/// filters are sealed (`filtering` is `Some`), then [`off_of`].
+fn answer(settled: bool, filtering: Option<bool>, stats: bool) -> Option<Vec<u32>> {
+    if !settled {
         return None;
     }
-    let filters = FILTERS.sealed()?;
-    Some(off_of(
-        !filters.is_empty(),
-        crate::inventory::stats::wanted(),
-    ))
+    Some(off_of(filtering?, stats))
 }
 
 /// [`causes_off`] once arming is over, `filtering` when a mod filters

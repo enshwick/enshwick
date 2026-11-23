@@ -151,8 +151,10 @@ status of bad arguments. Its `chat_all` entry sends to every player.
 ### A text in each player's language
 
 `world.language_of(player.key)` gives the language a player reads the game in,
-as their game named it when they joined. The fallback is for a player whose
-game runs no Enshwick, and on a client. Fill a mod's own text with it for a
+as their game named it when they joined. In a game hosted from a client, the
+host's own player reads the game's language. The fallback is for a player
+whose game runs no Enshwick, and on a client that joined a server. Fill a
+mod's own text with it for a
 notice outside an action's request, such as a warning to every player:
 
 ```rust

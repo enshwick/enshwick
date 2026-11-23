@@ -10,6 +10,9 @@ pub(crate) struct Saves {
     pub(crate) info: Option<SaveInfo>,
     /// Whether the mod holds the world's saves.
     pub(crate) held: bool,
+    /// Whether something outside the mod refuses the world's saves: another
+    /// mod's hold or the game's own block.
+    pub(crate) refused: bool,
     /// Whether the mod heard the shutdown begin: a hold asked for since is
     /// not taken, as the loader does.
     pub(crate) shut: bool,
@@ -75,10 +78,11 @@ pub(crate) extern "system" fn save_info(_me: ModHandle, out: *mut SaveInfo) -> S
     crate::test::table::put_headed(out, info)
 }
 
-/// Lets go of the world's save hold, as the loader does when a hosted game
+/// Lets go of the world's save holds, as the loader does when a hosted game
 /// ends or shuts down: no mod holds saves, and the shutdown is still to come.
 pub(crate) const fn end_saves(s: &mut crate::test::table::State) {
     s.world.save.held = false;
+    s.world.save.refused = false;
     s.world.save.shut = false;
 }
 
