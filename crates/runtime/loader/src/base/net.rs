@@ -27,8 +27,8 @@ use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
 use crate::base::wire::{
-    CONTROL, ITEM_DATA, NOTICE, Peer, STAT_VALUES, UI_DEMO, WELCOME, control, demo_position, hello,
-    read_notice, read_stat_values, remote_message,
+    CONTROL, ITEM_DATA, NOTICE, Peer, SOUND, STAT_VALUES, UI_DEMO, WELCOME, control, demo_position,
+    hello, read_notice, read_stat_values, remote_message,
 };
 pub(crate) use crate::base::wire::{MAX_CONTROL, MAX_MESSAGE};
 use crate::engine::loader::{Loader, Registered};
@@ -428,6 +428,13 @@ pub(crate) fn stat_values(key: u64, values: &[(u32, f32)]) -> bool {
     post_one(key, CONTROL, &crate::base::wire::stat_values(values)) == Some(true)
 }
 
+/// Sends a mod's sound message `data` to the clients `keys` from the
+/// server; a client whose link or outbox is full misses it, counted as
+/// dropped.
+pub(crate) fn sound(keys: &[u64], data: &[u8]) {
+    let _sent = post(keys, CONTROL, data, |_, _| {});
+}
+
 /// Sends the client of the player with account key `key`, whose hello named
 /// other mods, `mods`, the server's mods of side both, so it lists the
 /// difference once it is back in its menu. A link with no room drops it:
@@ -514,6 +521,10 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
         crate::inventory::item_data::received(records);
     } else if let Some(values) = data.strip_prefix(control(STAT_VALUES).as_slice()) {
         own_stats::received(read_stat_values(values));
+    } else if let Some(rest) = data.strip_prefix(control(SOUND).as_slice()) {
+        if let Some(loader) = crate::engine::loader::loader() {
+            crate::ui::sound::received(loader, rest);
+        }
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())
         && let Some((entity, text)) = read_notice(rest)
     {

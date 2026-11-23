@@ -263,3 +263,5 @@ names every entry of the golden layout once, in that order.
 | `sound_play` | game | — | client |
 | `sound_steer` | game | — | client |
 | `sound_state` | loader | — | client |
+| `sound_play_for` | game | — | client |
+| `sound_steer_for` | game | — | client |

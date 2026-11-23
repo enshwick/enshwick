@@ -103,6 +103,7 @@ macro_rules! headed {
             ServiceFound,
             ServiceSpec,
             SkillCheck,
+            SoundAudience,
             SoundInfo,
             SoundPlay,
             SoundSteer,

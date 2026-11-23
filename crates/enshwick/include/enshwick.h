@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 17
+#define ENSHWICK_ABI_MINOR 18
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -3616,6 +3616,34 @@ typedef struct EnshwickSoundInfo {
 // The entity it was to follow is not in the client's world.
 #define EnshwickSoundInfo_NO_ENTITY 4
 
+// The clients a server mod's sound plays on, which
+// `EnshwickHostApi.sound_play_for` reads. ABI 12.18.
+typedef struct EnshwickSoundAudience {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Who hears it: `EnshwickSoundAudience_PLAYER` and the other kind constants.
+  uint32_t kind;
+  // For `EnshwickSoundAudience_NEAR`, how far from `at` a player's character
+  // stands at most, in metres, up to `EnshwickSoundAudience_MAX_RADIUS`; 0 for
+  // `EnshwickSoundAudience_MAX_RADIUS`.
+  float radius;
+  // The player, for `EnshwickSoundAudience_PLAYER`.
+  EnshwickPlayerKey player;
+  // The centre, for `EnshwickSoundAudience_NEAR`.
+  EnshwickMetres at;
+} EnshwickSoundAudience;
+// The client of `player`.
+#define EnshwickSoundAudience_PLAYER 0
+// Every client.
+#define EnshwickSoundAudience_EVERYONE 1
+// The clients whose player's character stands within
+// `radius` of `at` when the sound starts.
+#define EnshwickSoundAudience_NEAR 2
+// The widest radius, in metres: no sound container carries farther.
+#define EnshwickSoundAudience_MAX_RADIUS 500.0
+// The most sounds one mod sends clients in one server step.
+#define EnshwickSoundAudience_MAX_PLAYS 32
+
 
 // A player about to interact with an entity, as
 // `EnshwickHostApi.interaction_filter` hands it
@@ -7179,6 +7207,38 @@ typedef struct EnshwickHostApi {
   // `EnshwickSoundInfo_ENDED`. Any thread. `EnshwickStatus_BAD_ARGS` for a null or
   // smaller `out`; `EnshwickStatus_UNAVAILABLE` on a server. ABI 12.17.
   EnshwickStatus (*sound_state)(EnshwickModHandle me, uint64_t id, struct EnshwickSoundInfo *out);
+  // Sends `play`, a headed `EnshwickSoundPlay`, from the server to the clients
+  // of `audience`, a headed `EnshwickSoundAudience`, that run Enshwick and the
+  // mod, and writes the sound's id to `id`; each client plays it as the
+  // mod's client part's own `EnshwickHostApi.sound_play` would, so a vanilla
+  // client hears nothing. A hosting client's own player plays it in
+  // process. The mod runs on both sides. Entity ids are the server
+  // world's, which name no client entity, so `EnshwickSoundPlay_ON` plays
+  // where the entity stands when it is sent, without following it.
+  // Clients send nothing back, so the id only steers
+  // (`EnshwickHostApi.sound_steer_for`). Any thread; a
+  // `EnshwickSoundAudience_NEAR` audience or `EnshwickSoundPlay_ON` on the
+  // server's game thread, where it reads where entities stand.
+  // `EnshwickStatus_BAD_ARGS` for an audience or play out of bounds;
+  // `EnshwickStatus_MISSING` for an entity of `EnshwickSoundPlay_ON` not in the
+  // world; `EnshwickStatus_BUSY` past `EnshwickSoundAudience_MAX_PLAYS` sounds of
+  // the mod in one server step; `EnshwickStatus_WRONG_THREAD` off the game
+  // thread where it must read; `EnshwickStatus_REFUSED` for a mod that does
+  // not run on both sides; `EnshwickStatus_UNAVAILABLE` where no server runs
+  // in the process. ABI 12.18.
+  EnshwickStatus (*sound_play_for)(EnshwickModHandle me,
+                                   const struct EnshwickSoundAudience *audience,
+                                   const struct EnshwickSoundPlay *play,
+                                   uint64_t *id);
+  // Sends `steer`, a headed `EnshwickSoundSteer`, for the mod's sound `id` from
+  // `EnshwickHostApi.sound_play_for` to the clients that got it. An id of no
+  // such sound changes nothing. `EnshwickSoundSteer_STOP_ALL` is not taken.
+  // Any thread. `EnshwickStatus_BAD_ARGS` out of bounds and for
+  // `EnshwickSoundSteer_STOP_ALL`; `EnshwickStatus_UNAVAILABLE` where no server
+  // runs in the process. ABI 12.18.
+  EnshwickStatus (*sound_steer_for)(EnshwickModHandle me,
+                                    uint64_t id,
+                                    const struct EnshwickSoundSteer *steer);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7641,7 +7701,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1808, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1824, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7868,6 +7928,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, waypoint) == 1776, "offset of H
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play) == 1784, "offset of HostApi.sound_play");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer) == 1792, "offset of HostApi.sound_steer");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_state) == 1800, "offset of HostApi.sound_state");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play_for) == 1808, "offset of HostApi.sound_play_for");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer_for) == 1816, "offset of HostApi.sound_steer_for");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -8275,6 +8337,13 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSkillCheck, unlocked) == 16, "offset of 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSkillCheck, reserved) == 17, "offset of SkillCheck.reserved");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickSkillNode) == 4, "size of SkillNode");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickSkillNode) == 4, "alignment of SkillNode");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickSoundAudience) == 48, "size of SoundAudience");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickSoundAudience) == 8, "alignment of SoundAudience");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSoundAudience, header) == 0, "offset of SoundAudience.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSoundAudience, kind) == 8, "offset of SoundAudience.kind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSoundAudience, radius) == 12, "offset of SoundAudience.radius");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSoundAudience, player) == 16, "offset of SoundAudience.player");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSoundAudience, at) == 24, "offset of SoundAudience.at");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickSoundInfo) == 16, "size of SoundInfo");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickSoundInfo) == 4, "alignment of SoundInfo");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickSoundInfo, header) == 0, "offset of SoundInfo.header");

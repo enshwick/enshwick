@@ -13,9 +13,12 @@ mod follow;
 #[cfg(windows)]
 mod game;
 mod kept;
+mod remote;
 
 #[cfg(feature = "test")]
 pub use drain::bench_sound_frame;
+#[cfg(windows)]
+pub(crate) use remote::{RelayError, play_for, received, steer_for};
 #[cfg(windows)]
 pub(crate) use windows::*;
 

@@ -37,7 +37,11 @@ impl<T> Recent<T> {
 
     /// What `id` keeps, while it is among the newest.
     fn get(&self, id: u64) -> Option<&T> {
-        self.0.iter().rev().find(|(kept, _)| *kept == id).map(|(_, value)| value)
+        self.0
+            .iter()
+            .rev()
+            .find(|(kept, _)| *kept == id)
+            .map(|(_, value)| value)
     }
 }
 
@@ -151,10 +155,7 @@ mod windows {
     }
 
     /// The account keys of the clients `audience` names that run Enshwick.
-    fn audience_keys(
-        loader: &Loader,
-        audience: &SoundAudience,
-    ) -> Result<Vec<u64>, RelayError> {
+    fn audience_keys(loader: &Loader, audience: &SoundAudience) -> Result<Vec<u64>, RelayError> {
         let mut positions = FxHashMap::default();
         if audience.kind == SoundAudience::NEAR {
             for player in crate::engine::world::players(loader)? {
@@ -230,7 +231,12 @@ mod windows {
             op: SoundOp::Play(play),
         };
         send(loader, &keys, &message);
-        if let Some(sent) = STATE.sent.relock().as_mut().and_then(|s| s.get_mut(&owner.get())) {
+        if let Some(sent) = STATE
+            .sent
+            .relock()
+            .as_mut()
+            .and_then(|s| s.get_mut(&owner.get()))
+        {
             sent.to.keep(id, keys.into_boxed_slice());
         }
         Ok(id)
@@ -254,9 +260,11 @@ mod windows {
         if !steer.in_bounds() || steer.kind == SoundSteer::STOP_ALL {
             return Err(RelayError::BadArgs);
         }
-        let keys: Option<Vec<u64>> = STATE.sent.relock().as_ref().and_then(|sent| {
-            Some(sent.get(&owner.get())?.to.get(id)?.to_vec())
-        });
+        let keys: Option<Vec<u64>> = STATE
+            .sent
+            .relock()
+            .as_ref()
+            .and_then(|sent| Some(sent.get(&owner.get())?.to.get(id)?.to_vec()));
         if let Some(keys) = keys {
             let message = SoundMessage {
                 owner: hash,
@@ -275,8 +283,21 @@ mod windows {
     pub(crate) fn received(loader: &Loader, bytes: &[u8]) {
         match crate::base::wire::read_sound(bytes) {
             Some(message) => take(loader, message),
-            None => crate::log_once!(WARN, "server sounds: a message that does not read is dropped"),
+            None => crate::log_once!(
+                WARN,
+                "server sounds: a message that does not read is dropped"
+            ),
         }
+    }
+
+    /// The client's own id for mod `owner`'s server sound `id`, for a test.
+    #[cfg(test)]
+    pub(super) fn heard(owner: usize, id: u64) -> Option<u64> {
+        STATE
+            .heard
+            .relock()
+            .as_ref()
+            .and_then(|heard| heard.get(&owner)?.get(id).copied())
     }
 
     /// Plays or steers `message` through the mod's own sounds.
@@ -327,11 +348,63 @@ mod tests {
     #[test]
     fn ids_count_from_one_and_stop_at_the_step_bound() {
         let mut sent = Sent::default();
-        let ids: Vec<u64> = (0..SoundAudience::MAX_PLAYS).filter_map(|_| sent.admit(4)).collect();
+        let ids: Vec<u64> = (0..SoundAudience::MAX_PLAYS)
+            .filter_map(|_| sent.admit(4))
+            .collect();
         assert_eq!(ids.first(), Some(&1));
         assert_eq!(ids.len(), SoundAudience::MAX_PLAYS as usize);
         assert_eq!(sent.admit(4), None);
         assert_eq!(sent.admit(5), Some(u64::from(SoundAudience::MAX_PLAYS) + 1));
+    }
+
+    #[cfg(windows)]
+    fn client(ids: &[&'static str]) -> crate::engine::loader::Loader {
+        crate::engine::loader::Loader {
+            side: enshwick_core::abi::Side::CLIENT,
+            ..crate::start::tests::loader_running(ids)
+        }
+    }
+
+    #[cfg(windows)]
+    fn start_of(owner: &str, container: [u8; 16]) -> Vec<u8> {
+        use enshwick_core::abi::SoundPlay;
+        crate::base::wire::sound(&crate::base::wire::SoundMessage {
+            owner: enshwick_gamedata::reflect::fnv1a32(owner.as_bytes()),
+            id: 1,
+            op: crate::base::wire::SoundOp::Play(SoundPlay {
+                container: enshwick_core::content::Guid(container),
+                ..SoundPlay::EMPTY
+            }),
+        })
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_client_drops_a_sound_whose_container_it_lacks() {
+        let loader = client(&["you.bells"]);
+        received(&loader, &start_of("you.bells", [7; 16])[2..]);
+        assert_eq!(heard(0, 1), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_client_drops_a_sound_of_a_mod_it_does_not_run_and_one_that_does_not_read() {
+        let loader = client(&["you.bells"]);
+        received(&loader, &start_of("you.horns", [7; 16])[2..]);
+        received(&loader, &[1, 2, 3]);
+        assert_eq!(heard(0, 1), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_mod_sends_clients_no_sound_where_no_server_runs() {
+        use enshwick_core::abi::{SoundPlay, SoundSteer};
+        let loader = client(&["you.bells"]);
+        let owner = crate::engine::mod_index::ModIndex::new(0);
+        let play = play_for(&loader, owner, &SoundAudience::EMPTY, &SoundPlay::EMPTY);
+        assert_eq!(play, Err(RelayError::NotServing));
+        let steer = steer_for(&loader, owner, 1, &SoundSteer::EMPTY);
+        assert_eq!(steer, Err(RelayError::NotServing));
     }
 
     #[test]
@@ -342,6 +415,9 @@ mod tests {
         }
         assert_eq!(recent.get(1), None);
         assert_eq!(recent.get(2), Some(&20));
-        assert_eq!(recent.get(MAX_STEERED as u64 + 1), Some(&(MAX_STEERED as u64 * 10 + 10)));
+        assert_eq!(
+            recent.get(MAX_STEERED as u64 + 1),
+            Some(&(MAX_STEERED as u64 * 10 + 10))
+        );
     }
 }
