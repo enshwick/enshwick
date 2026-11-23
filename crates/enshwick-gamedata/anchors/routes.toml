@@ -173,7 +173,7 @@ slot = 17
 id = "net.session_state"
 sides = ["client"]
 in = "net.join_game"
-shape = ["mov edx,*", "add rsp,?i", "pop ?r", "pop ?r", "pop ?r", "pop ?r", "jmp {net.provider_transition}"]
+shape = ["mov edx,*", "... 8", "jmp {net.provider_transition}"]
 take = "value"
 range = [1, 16]
 

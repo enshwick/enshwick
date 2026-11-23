@@ -1,6 +1,6 @@
 //! The `check` shapes of the engine routes, refreshed for a new build: each
-//! route that finds a symbol, but for a start shape of two steps or more
-//! over eight bytes, keeps a check that
+//! route that finds a symbol, but for a start shape whose steps before its
+//! first gap, two or more, cover eight bytes, keeps a check that
 //! still holds at the symbol on every build, or takes one made from their
 //! code, so a hook needs no table row on the new build either.
 

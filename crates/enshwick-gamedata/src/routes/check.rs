@@ -5,7 +5,7 @@
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
-use super::shape::{Run, ShapeNames, Step};
+use super::shape::{self, Run, ShapeNames, Step};
 use crate::reflect::Image;
 
 /// The bytes a check covers past its last jump, as a `<id>.bytes` check does.
@@ -61,13 +61,9 @@ pub(crate) fn runs(steps: &[Step], image: &Image<'_>, rva: u64) -> bool {
     matched && (covered >= COVER || ended)
 }
 
-fn parse(names: &ShapeNames, steps: &[String]) -> Option<Vec<Step>> {
-    steps.iter().map(|s| Step::parse(s, names).ok()).collect()
-}
-
 /// Whether the code at `rva` in `image` runs as the check shape `check`
 /// says, as a route's `check` row reads; false for a step that does not
-/// parse.
+/// parse and for a gap, which a check has none of.
 ///
 /// # Examples
 ///
@@ -85,13 +81,17 @@ fn parse(names: &ShapeNames, steps: &[String]) -> Option<Vec<Step>> {
 /// ```
 #[must_use]
 pub fn check_holds(names: &ShapeNames, check: &[String], image: &Image<'_>, rva: u64) -> bool {
-    parse(names, check).is_some_and(|steps| runs(&steps, image, rva))
+    shape::parse_shape(check, names)
+        .is_ok_and(|steps| !steps.iter().any(Step::follows_gap) && runs(&steps, image, rva))
 }
 
 /// Whether a route's start shape checks the code at `rva` as a hook needs:
-/// two steps or more, matching there one after the other, over eight bytes.
+/// its steps before the first gap, two or more, match there one after the
+/// other over eight bytes.
 ///
-/// A step naming another entry does not match here, where no entry is known.
+/// A step naming another entry does not match here, where no entry is
+/// known; nor is what follows a gap, which needs the function's branch
+/// targets, so the loader may still refuse the whole shape.
 ///
 /// # Examples
 ///
@@ -110,20 +110,21 @@ pub fn check_holds(names: &ShapeNames, check: &[String], image: &Image<'_>, rva:
 /// ```
 #[must_use]
 pub fn shape_checks(names: &ShapeNames, shape: &[String], image: &Image<'_>, rva: u64) -> bool {
-    let Some(steps) = parse(names, shape) else {
+    let Ok(steps) = shape::parse_shape(shape, names) else {
         return false;
     };
+    let lead = &steps[..shape::lead(&steps)];
     let start = image.base().saturating_add(rva);
     let mut va = start;
     let mut run = Run::default();
-    let matched = steps.iter().all(|step| {
+    let matched = lead.iter().all(|step| {
         let Some(ins) = one_at(image, va) else {
             return false;
         };
         va = ins.next_ip();
         step.matches(&ins, &|_: &str| None, &mut run)
     });
-    matched && match_checks(steps.len(), start, va)
+    matched && match_checks(lead.len(), start, va)
 }
 
 /// Whether a start shape's match from `start` to `end` checks the code at

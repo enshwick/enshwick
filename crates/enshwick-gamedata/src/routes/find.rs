@@ -43,6 +43,10 @@ pub(super) struct Finder<'f, 'i, 'a> {
     /// The ECS system records the reflection skips, once a route needs them.
     records: Option<FxHashMap<String, u32>>,
     decoded: FxHashMap<u32, Vec<Vec<Instruction>>>,
+    /// Where each function's direct branches land, once a gap asks.
+    targets: FxHashMap<u32, FxHashSet<u64>>,
+    /// The targets of a shape without a gap, which asks for none.
+    no_targets: FxHashSet<u64>,
 }
 
 impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
@@ -67,6 +71,8 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             helpers: None,
             records: None,
             decoded: FxHashMap::default(),
+            targets: FxHashMap::default(),
+            no_targets: FxHashSet::default(),
         }
     }
 
@@ -243,22 +249,21 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
     ) -> Option<shape::Match> {
         let entries = self.entries(after.iter().chain(steps))?;
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
-        let parts = self.parts(function);
+        let (parts, targets) = self.code_of(function, after.iter().chain(steps));
         let mut runs: Vec<shape::Match> = if after.is_empty() {
             parts
                 .iter()
-                .flat_map(|part| shape::matches(steps, part, &entry))
+                .flat_map(|part| shape::matches(steps, part, &entry, targets))
                 .collect()
         } else {
-            let mut anchors = parts
-                .iter()
-                .enumerate()
-                .flat_map(|(i, part)| shape::matches(after, part, &entry).map(move |m| (i, m)));
+            let mut anchors = parts.iter().enumerate().flat_map(|(i, part)| {
+                shape::matches(after, part, &entry, targets).map(move |m| (i, m))
+            });
             let (part, anchor) = anchors.next()?;
             if anchors.next().is_some() {
                 return None;
             }
-            shape::matches(steps, &parts[part], &entry)
+            shape::matches(steps, &parts[part], &entry, targets)
                 .filter(|run| run.start >= anchor.end)
                 .collect()
         };
@@ -272,10 +277,30 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
 
     /// The decoded parts of `function`'s code, decoded once.
     fn parts(&mut self, function: u32) -> &[Vec<Instruction>] {
+        self.code_of(function, core::iter::empty()).0
+    }
+
+    /// The decoded parts of `function`'s code and where its direct branches
+    /// land, each made once; the targets only when one of `steps` follows a
+    /// gap, since only a gap asks.
+    fn code_of<'s>(
+        &mut self,
+        function: u32,
+        mut steps: impl Iterator<Item = &'s Step>,
+    ) -> (&[Vec<Instruction>], &FxHashSet<u64>) {
         let code = self.code;
-        self.decoded
+        let parts = self
+            .decoded
             .entry(function)
-            .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect())
+            .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect());
+        let targets = if steps.any(Step::follows_gap) {
+            self.targets
+                .entry(function)
+                .or_insert_with(|| shape::branch_targets(parts.iter().flatten()))
+        } else {
+            &self.no_targets
+        };
+        (parts, targets)
     }
 
     /// The value of each entry `steps` name, by id: a constant's value, else
@@ -389,10 +414,10 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
         let mut found = None;
         for function in functions {
-            let parts = self.parts(function);
+            let (parts, targets) = self.code_of(function, steps.iter());
             for one in parts
                 .iter()
-                .flat_map(|part| shape::matches(steps, part, &entry))
+                .flat_map(|part| shape::matches(steps, part, &entry, targets))
             {
                 if found.replace((function, one)).is_some() {
                     return Err(Ambiguous);
@@ -427,7 +452,7 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             v.checked_add_signed(route.plus).map(Routed::Constant)
         };
         match route.take {
-            Take::Start if check::match_checks(steps.len(), one.start, one.end) => {
+            Take::Start if check::match_checks(shape::lead(steps), one.start, one.lead) => {
                 rva(one.start).map(Routed::Symbol)
             }
             Take::Start => rva(one.start).map(Routed::Reached),

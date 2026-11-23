@@ -269,7 +269,9 @@ fn a_builder_route_matches_its_text_read_but_no_stack_read() {
             panic!("{builder} is no `callees` route");
         };
         let entry = |id: &str| (id == text).then_some(disp);
-        let matches = |code: &[Instruction]| shape::matches(steps, code, &entry).count();
+        let matches = |code: &[Instruction]| {
+            shape::matches(steps, code, &entry, &FxHashSet::default()).count()
+        };
         assert_eq!(matches(&read(&[0x87], disp)), 1, "{builder} through rdi");
         assert_eq!(
             matches(&read(&[0x84, 0x24], disp)),
