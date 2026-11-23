@@ -20,7 +20,21 @@ entries! {
     ) -> Status {
         open(crate::content::served::is_sealed())?;
         declared_resource(&me, &key, &base)?;
-        Ok(crate::content::served::register(me.index, key, base, patch, user)?)
+        Ok(crate::content::served::register(me.index, key, base, None, patch, user)?)
+    }
+
+    fn rekey_resource(
+        me as Mod,
+        key as In<ResourceKey>,
+        from as In<ResourceKey>,
+        patch as Callback<api_frame::ResourcePatchFn>,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        open(crate::content::served::is_sealed())?;
+        if !enshwick_base::__internal::rekeys_another(&key, &from) {
+            return Err(Status::BAD_ARGS.into());
+        }
+        Ok(crate::content::served::register(me.index, key, key, Some(from), patch, user)?)
     }
 
     fn rebuild_resource(me as Mod, key as In<ResourceKey>) -> Status {

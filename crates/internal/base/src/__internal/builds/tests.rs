@@ -5,7 +5,7 @@ use super::*;
 /// A key of the table: its index.
 type At = usize;
 
-/// A build running: its key, whether scratch, whether it read another
+/// A build running: its key, whether a served read, whether it read another
 /// served key, and the buffers it lent.
 type Frame = (At, bool, bool, Vec<Box<[u8]>>);
 
@@ -23,6 +23,8 @@ enum Does {
     Stray,
     /// Reads the served key at this index.
     Read(At),
+    /// Re-keys to the served key at this index: answers it as served.
+    Rekey(At),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -125,10 +127,17 @@ unsafe impl Patches for Table {
         patch.on
     }
 
+    fn rekey(&self, patch: &Patch) -> Option<ResourceKey> {
+        match patch.does {
+            Does::Rekey(new) => Some(self.entries.borrow()[new].key),
+            _ => None,
+        }
+    }
+
     fn enter(&self, key: At, build: Build) {
         self.frames
             .borrow_mut()
-            .push((key, build == Build::Scratch, false, Vec::new()));
+            .push((key, build != Build::Game, false, Vec::new()));
     }
 
     unsafe fn apply(&self, patch: &Patch, input: View, _rebuild: bool) -> (Status, Option<View>) {
@@ -139,7 +148,7 @@ unsafe impl Patches for Table {
             }
             Does::Answer(status) => (status, None),
             Does::Stray => (Status::OK, None),
-            Does::Read(other) => {
+            Does::Read(other) | Does::Rekey(other) => {
                 let other = self.entries.borrow()[other].key;
                 let read = read_served(self, &other);
                 (Status::OK, read.ok().map(|bytes| self.lend(bytes)))
@@ -538,5 +547,45 @@ fn a_served_read_builds_falls_back_to_the_archive_and_refuses_before_the_seal() 
     assert_eq!(
         read_served(&table, &key(1)),
         Err(BuildResourceError::Unsealed)
+    );
+}
+
+#[test]
+fn rekeys_in_a_ring_rotate_and_keep_every_other_patch_of_the_key_they_read() {
+    let mut table = table(vec![
+        entry(1, &[(1, Does::Rekey(1))]),
+        entry(2, &[(2, Does::Rekey(2)), (4, Does::Add)]),
+        entry(3, &[(3, Does::Rekey(0))]),
+    ]);
+    table.archive = vec![(key(1), vec![10]), (key(2), vec![20]), (key(3), vec![30])];
+    assert_eq!(
+        read_served(&table, &key(1)),
+        Ok(vec![21]),
+        "the second without its re-key"
+    );
+    assert_eq!(
+        read_served(&table, &key(2)),
+        Ok(vec![31]),
+        "the third, then its own change"
+    );
+    assert_eq!(read_served(&table, &key(3)), Ok(vec![10]));
+    assert!(table.failed.take().is_empty());
+}
+
+#[test]
+fn a_build_without_rekeys_leaves_them_out_and_fails_no_patch() {
+    let table = table(vec![entry(
+        1,
+        &[(1, Does::Answer(Status::REFUSED)), (2, Does::Rekey(0))],
+    )]);
+    let built = build(&table, 0, view(&[7]), Build::Unkeyed, None);
+    assert_eq!(
+        built.err(),
+        Some(BuildResourceError::NotBuilt),
+        "the re-key left out"
+    );
+    assert!(
+        table.failed.take().is_empty(),
+        "skipped as in a served read"
     );
 }

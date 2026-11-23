@@ -159,7 +159,7 @@ fn read_served(
         archive: move |key: &ResourceKey| archive(key).ok(),
         on: mod_on,
     };
-    builds::read_built(&table, entry, base)
+    builds::read_built(&table, entry, base, Build::Scratch)
 }
 
 /// The game archive's resource `key`.
@@ -261,7 +261,7 @@ fn building(key: &ResourceKey) -> bool {
 /// the game: the loader's own patches then log nothing, as the game's
 /// build logs once.
 pub(crate) fn scratch() -> bool {
-    BUILDING.with_borrow(|frames| frames.iter().any(|f| f.build == Build::Scratch))
+    BUILDING.with_borrow(|frames| frames.iter().any(|f| f.build != Build::Game))
 }
 
 /// `len` zeroed bytes for the output of the patch running on this thread,
@@ -667,6 +667,10 @@ unsafe impl<'a, A> builds::Patches for Table<'a, A> {
 
     fn on(&self, patch: &&'a Patch) -> bool {
         patch.runs(self.on)
+    }
+
+    fn rekey(&self, patch: &&'a Patch) -> Option<ResourceKey> {
+        patch.rekey
     }
 
     fn enter(&self, key: &'a Served, build: Build) -> Building {

@@ -526,12 +526,48 @@ pub fn serve_value(
     base: crate::abi::ResourceKey,
     patch: impl Fn(super::Value) -> Result<super::Value, Off> + Send + Sync + 'static,
 ) -> Result<(), Off> {
+    let builder = value_builder(host, key, base, patch)?;
+    crate::resources::serve(host, key, base, builder)
+}
+
+/// Serves the vanilla resource `key` from itself through `patch` on its
+/// value, as [`serve_value`] does, as a re-key of `key` to the resource
+/// `new`: a served read of `new` inside `patch` leaves out `new`'s own
+/// re-keys, so every mod's re-keys apply at once.
+///
+/// # Errors
+///
+/// As [`serve_value`].
+#[doc(hidden)]
+pub fn rekey_value(
+    host: Host,
+    key: crate::abi::ResourceKey,
+    new: crate::abi::ResourceKey,
+    patch: impl Fn(super::Value) -> Result<super::Value, Off> + Send + Sync + 'static,
+) -> Result<(), Off> {
+    let builder = value_builder(host, key, key, patch)?;
+    crate::resources::rekey(host, key, new, builder)
+}
+
+/// The builder that serves `key` from `base` through `patch` on the base's
+/// value, as [`serve_value`] describes.
+///
+/// # Errors
+///
+/// [`Off`] when the game's types do not read or the base's type is not one
+/// of this build.
+fn value_builder(
+    host: Host,
+    key: crate::abi::ResourceKey,
+    base: crate::abi::ResourceKey,
+    patch: impl Fn(super::Value) -> Result<super::Value, Off> + Send + Sync + 'static,
+) -> Result<impl Fn(&[u8], &mut super::Output<'_>) -> Option<()> + Send + Sync + 'static, Off> {
     let registry = Registry::game()?;
     let name = registry
         .hashed(base.type_hash)
         .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
         .qualified_name();
-    crate::resources::serve(host, key, base, move |bytes, out| {
+    Ok(move |bytes: &[u8], out: &mut super::Output<'_>| {
         let keep = |error: &dyn std::fmt::Display, out: &mut super::Output<'_>| {
             host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
             fallback(key, base, bytes, out)

@@ -412,23 +412,49 @@ pub fn serve(
     base: ResourceKey,
     builder: impl Fn(&[u8], &mut Output<'_>) -> Option<()> + Send + Sync + 'static,
 ) -> Result<(), Off> {
-    let api = host.api();
+    let serve_resource = host.api().serve_resource;
+    register(builder, "serve resource", |patch, user| {
+        serve_resource(host.handle(), &raw const key, &raw const base, patch, user)
+    })
+}
+
+/// Serves `key` from itself through `builder`, a re-key of `key` to `new`,
+/// whose served read of `new` inside `builder` leaves out `new`'s own
+/// re-keys, as `Load::rekey_item` does.
+///
+/// # Errors
+///
+/// [`Off`] when the loader refuses it, such as after init.
+#[doc(hidden)]
+pub fn rekey(
+    host: crate::Host,
+    key: ResourceKey,
+    new: ResourceKey,
+    builder: impl Fn(&[u8], &mut Output<'_>) -> Option<()> + Send + Sync + 'static,
+) -> Result<(), Off> {
+    let rekey_resource = host.api().rekey_resource;
+    register(builder, "re-key resource", |patch, user| {
+        rekey_resource(host.handle(), &raw const key, &raw const new, patch, user)
+    })
+}
+
+/// Hands `builder` to the loader through `call`, as [`build`]'s user
+/// pointer, which the loader keeps for the process unless it refuses it.
+fn register(
+    builder: impl Fn(&[u8], &mut Output<'_>) -> Option<()> + Send + Sync + 'static,
+    what: &str,
+    call: impl FnOnce(Option<ResourcePatchFn>, *mut c_void) -> Status,
+) -> Result<(), Off> {
     let builder: Box<Builder> = Box::new(Box::new(builder));
     let user = Box::into_raw(builder);
     let patch: ResourcePatchFn = build;
-    let status = (api.serve_resource)(
-        host.handle(),
-        &raw const key,
-        &raw const base,
-        Some(patch),
-        user.cast(),
-    );
+    let status = call(Some(patch), user.cast());
     if !status.is_ok() {
         // SAFETY: `user` came from this function's `Box::into_raw`, and the loader
         // refused it, so it keeps no copy and this is the only owner.
         drop(unsafe { Box::from_raw(user) });
     }
-    crate::load::ok(status, (), || "serve resource".to_owned())
+    crate::load::ok(status, (), || what.to_owned())
 }
 
 /// Builds a served resource from its base for the loader.
@@ -437,8 +463,8 @@ pub fn serve(
 ///
 /// - `base` is null or readable for `base_len` bytes that stay unchanged for
 ///   the call.
-/// - `user` is null or the `Box<Builder>` that [`serve`] handed over, which
-///   the loader keeps for the process.
+/// - `user` is null or the `Box<Builder>` that [`register`] handed over for
+///   [`serve`] or [`rekey`], which the loader keeps for the process.
 /// - `out` and `out_len` are null or writable for one value each.
 unsafe extern "system" fn build(
     base: *const u8,
@@ -451,7 +477,7 @@ unsafe extern "system" fn build(
         return Status::BAD_ARGS;
     }
     // SAFETY: `user` is not null, as the early return ensures, and the caller
-    // guarantees it is the boxed `Builder` that `serve` leaked for the process,
+    // guarantees it is the boxed `Builder` that `register` leaked for the process,
     // so it is aligned, alive and only read through shared references.
     let builder = unsafe { &*user.cast::<Builder>() };
     let base = if base.is_null() || base_len == 0 {

@@ -102,7 +102,7 @@ mod served {
             .unwrap_or(s.content.served.len());
         s.content
             .served
-            .insert(at, (ServedResource { key, base: key }, patch));
+            .insert(at, (ServedResource { key, base: key }, patch, None));
     }
 
     /// The types served now: those of mods still on, each naming its icon
@@ -113,7 +113,7 @@ mod served {
                 && s.content
                     .served
                     .iter()
-                    .any(|(served, _)| served.key.guid == icon)
+                    .any(|(served, ..)| served.key.guid == icon)
         };
         s.world
             .buff_types_added

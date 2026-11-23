@@ -69,14 +69,16 @@ size 500 and category ammunition, and every held stack of logs stayed.
   item's stack size and saves the cut.
 - Saves keep `old`'s id and GUID, so a world opens as vanilla without the
   mod.
-- `old` takes the data of `new` as the game reads it. Other mods' changes
-  of that item reach `old`, and so does a rebuild of `new`, such as a
-  world's changed stack size at world load. A rebuild keeps the length of
-  the bytes the game holds. When the rebuilt data no longer fits, `old`
-  keeps its data and the log says why. Two items that mods re-key to each
-  other swap.
-  A ring of three or more re-keys does not rotate: each item takes the data
-  of the item two steps on.
+- `old` takes the data of `new` as the game reads it, but without that
+  item's own re-keys. Other mods' changes of that item reach `old`, and so
+  does a rebuild of `new`, such as a world's changed stack size at world
+  load. A rebuild keeps the length of the bytes the game holds. When the
+  rebuilt data no longer fits, `old` keeps its data and the log says why.
+- The re-keys of every mod apply at once: each `old` takes the data its
+  `new` has before any re-key. Two items that mods re-key to each other
+  swap, and a ring of three or more items rotates. In a chain, where one
+  mod re-keys A to B and another B to C, A takes B's data and B takes
+  C's.
 - Mods that re-key or serve `old` chain in load order, and the last
   re-key's data wins. A build that fails keeps `old` as it was.
 - An item with an entity of its own (`ItemFlag::HasPIDE`) re-keys only to

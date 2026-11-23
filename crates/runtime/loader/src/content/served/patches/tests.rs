@@ -681,3 +681,17 @@ fn a_loader_patch_that_panics_turns_its_feature_off_and_refuses_from_then_on() {
         "{listed:?}"
     );
 }
+
+#[test]
+fn a_build_without_rekeys_leaves_out_the_rekey_patches_and_runs_the_rest() {
+    let rekey = Patch {
+        rekey: Some(ResourceKey { part: 1, ..KEY }),
+        ..by_loader(grow)
+    };
+    let entry = Served::new(KEY, KEY, vec![rekey, by_loader(grow)], false);
+    let base = [1u8; 4];
+    let at = base.as_ptr().expose_provenance();
+    let len = |kind| run_patches(&entry, at, base.len(), None, kind).map(|built| built.len);
+    assert_eq!(len(Build::Scratch), Some(6), "a served read runs both");
+    assert_eq!(len(Build::Unkeyed), Some(5), "the re-key left out");
+}

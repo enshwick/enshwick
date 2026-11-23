@@ -220,12 +220,13 @@ impl LoadMethods for crate::BaseLoad {
         rekeyed(&host.game_value(key)?, &data)
             .map_err(|off| Off::new(format!("re-key {old} to {new}: {off}")))?;
         // Served from `old` itself, so other mods' patches of it chain and a
-        // failed build keeps the vanilla item rather than none; `new` reads
-        // as served, with every mod's patches of it.
-        crate::resources::serve_value(host, key, key, move |item| {
+        // failed build keeps the vanilla item rather than none; as a re-key,
+        // `new` reads as served with every mod's patches of it but its own
+        // re-keys, so all re-keys apply at once.
+        crate::resources::rekey_value(host, key, new_key, move |item| {
             let served = match host.read_resource(host.api().resource_served, new_key) {
-                // Inside a build of `old`, which `new` re-keys back to: `old`
-                // stays, so two items re-keyed to each other swap.
+                // `new`'s own build runs further up this thread and a patch
+                // of it reads `old`: `old` stays.
                 Err(Status::BUILDING) => return Ok(Value::Nil),
                 read => read.map_err(|status| {
                     crate::load::off_status(&format!("re-key {old} to {new}"), status)

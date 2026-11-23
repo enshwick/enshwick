@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 18
+#define ENSHWICK_ABI_MINOR 19
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -7243,6 +7243,19 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*sound_steer_for)(EnshwickModHandle me,
                                     uint64_t id,
                                     const struct EnshwickSoundSteer *steer);
+  // As `serve_resource` from `key` itself, for a
+  // patch that serves `key` with the data of the resource `from`, a
+  // re-key: inside `patch`, a `resource_served`
+  // read of `from` builds it without its own re-keys, so the re-keys of
+  // every mod apply at once, each key taking the data its `from` has
+  // before any re-key, and keys re-keyed in a ring rotate.
+  // `EnshwickStatus_BAD_ARGS` when `from` is `key` or of another type.
+  // Allowed during `enshwick_mod_init` only. ABI 12.19.
+  EnshwickStatus (*rekey_resource)(EnshwickModHandle me,
+                                   const struct EnshwickResourceKey *key,
+                                   const struct EnshwickResourceKey *from,
+                                   EnshwickResourcePatchFn patch,
+                                   void *user);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7705,7 +7718,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1824, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1832, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7934,6 +7947,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer) == 1792, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_state) == 1800, "offset of HostApi.sound_state");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play_for) == 1808, "offset of HostApi.sound_play_for");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer_for) == 1816, "offset of HostApi.sound_steer_for");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rekey_resource) == 1824, "offset of HostApi.rekey_resource");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

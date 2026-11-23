@@ -12,9 +12,12 @@ pub(crate) use served::*;
 /// What the installed fake's content answers and has recorded.
 #[derive(Default)]
 pub(crate) struct ContentState {
+    /// Each patch of a served resource, in build order, with the key whose
+    /// data it takes when it is a re-key.
     pub(crate) served: Vec<(
         crate::test::content::ServedResource,
         crate::test::table::Registered<enshwick_core::abi::ResourcePatchFn>,
+        Option<ResourceKey>,
     )>,
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
@@ -165,10 +168,10 @@ fn claim(s: &mut crate::test::table::State, me: ModHandle, guid: enshwick_core::
         .content
         .served
         .iter()
-        .filter(|(served, _)| served.key.guid == guid && served.base.guid != guid)
-        .map(|(served, _)| served.key)
+        .filter(|(served, ..)| served.key.guid == guid && served.base.guid != guid)
+        .map(|(served, ..)| served.key)
         .collect();
-    s.content.served.retain(|(served, patch)| {
+    s.content.served.retain(|(served, patch, _)| {
         !made.contains(&served.key) || !patch.owner().is_some_and(|owner| losers.contains(&owner))
     });
 }
