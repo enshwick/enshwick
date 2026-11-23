@@ -13,6 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
+arc-swap = { workspace = true, optional = true }
 enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.17" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
@@ -21,7 +22,9 @@ enshwick-inventory = { workspace = true, optional = true }
 enshwick-values.workspace = true
 enshwick-world.workspace = true
 fastrand.workspace = true
+rustc-hash.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 # The examples name the API as a mod does, through the facade, so they build
@@ -30,6 +33,12 @@ serde.workspace = true
 enshwick = { path = "../../enshwick", features = ["test"] }
 # The quest tests write a reflected value out whole, which only its crate can.
 enshwick-typed.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "objectives"
+harness = false
+required-features = ["typed"]
 
 # The features of `enshwick-core`, which turns each of them on here.
 [features]
@@ -41,7 +50,7 @@ unstable = [
     "dep:enshwick-inventory",
     "enshwick-inventory/unstable",
 ]
-typed = ["unstable", "enshwick-content/typed", "enshwick-world/typed"]
+typed = ["unstable", "dep:arc-swap", "enshwick-content/typed", "enshwick-world/typed"]
 
 [lints]
 workspace = true

@@ -711,6 +711,9 @@ export type CraftRecipeSuccessEvent = {
 	recipe_id: number,
 }
 
+--- What a `Objective.Craft` counts. The name is enshwick's, not the game's.
+export type CraftTarget = { Recipe: number } | { Item: number }
+
 --- A crafting prop: placed in a base, it lets the base's workshops make the recipes that require it.
 export type CraftingPropSetup = {
 	--- The recipes, vanilla or added before `Load.add_prop`, that require the prop besides the props they require already.
@@ -1118,6 +1121,9 @@ export type Hold = {
 	set_text: (self: Hold, reason: string, key: string, args: {{string}}) -> (),
 }
 
+--- Whose progress in a quest a call reads or moves: the world's, which every player shares, or one player's. The name is enshwick's, not the game's.
+export type Holder = "World" | { Player: number }
+
 --- The HUD of one frame: what it draws shows this frame only, during its callback.
 export type Hud = {
 	--- Draws a line of text at `anchor`, as `Hud.text` does.
@@ -1338,6 +1344,9 @@ export type Join = {
 	--- The account's key, the one its player and the server's ban list carry; nil for an account the game gives no key.
 	player: string?,
 }
+
+--- What a `Objective.Kill` counts. The name is enshwick's, not the game's.
+export type KillTarget = { Template: string } | { Faction: typed_FactionType }
 
 --- What a player does with an item; the names are the game's.
 export type Kind = "Consume" | "Trash" | "Equip" | "Unequip" | "Pickup" | "Place" | "Consumed"
@@ -2132,6 +2141,57 @@ export type ObjectPrompt = {
 	replace_action: boolean?,
 }
 
+--- What a player does that an `Objective` counts, for each `QuestStep` that lists it. The name is enshwick's, not the game's.
+export type Objective = { Collect: ObjectiveCollect } | { Kill: ObjectiveKill } | { Craft: ObjectiveCraft } | { Build: ObjectiveBuild } | { Reach: ObjectiveReach } | { Custom: ObjectiveCustom }
+
+--- Places `count` of the item as a building or a prop.
+export type ObjectiveBuild = {
+	--- The item placed.
+	item: number,
+	--- How many, from 1.
+	count: number,
+}
+
+--- Holds `count` of the item, counted from the inventory each time the player picks one up.
+export type ObjectiveCollect = {
+	--- The item.
+	item: number,
+	--- How many, from 1.
+	count: number,
+}
+
+--- Crafts `count` of the target, credited as a reward for crafting is.
+export type ObjectiveCraft = {
+	--- What it crafts.
+	target: CraftTarget,
+	--- How many, from 1.
+	count: number,
+}
+
+--- Gets `count` from the mod's own signal `signal`, which `Quests.signal` sends.
+export type ObjectiveCustom = {
+	--- The signal's content id.
+	signal: string,
+	--- How many, from 1.
+	count: number,
+}
+
+--- Kills `count` enemies of the target, credited to the player the game gives the kill's experience.
+export type ObjectiveKill = {
+	--- What it kills.
+	target: KillTarget,
+	--- How many, from 1.
+	count: number,
+}
+
+--- Comes within `radius` metres of `at`.
+export type ObjectiveReach = {
+	--- The place, in metres.
+	at: vector,
+	--- How near, in metres, above 0.
+	radius: number,
+}
+
 --- How a modifier acts on a stat. Modifiers apply in this order: every `Add` to the default, then every `Multiply`, then the greatest `Max` as a floor; an `Override` replaces the result, the last one in source order winning. The kind's range applies last.
 export type Op = "Add" | "Multiply" | "Max" | "Override"
 
@@ -2532,22 +2592,24 @@ export type QuestState = {
 	rewarded: boolean,
 }
 
---- One step of a quest: its title and text, shown while `shown_when` holds, done once `done_when` holds. The name is enshwick's; the game's is `JournalEntryResource`.
+--- One step of a quest: its title and text, shown while `shown_when` holds, done once `done_when` holds. A query left nil is the loader's: a step without `done_when` gets a bool of its own, and one without `shown_when` shows once the step before it is done (the first, once a bool of its own is set), each the player's for a player's quest and the world's for a world quest, so `Quests` moves the quest exactly. The name is enshwick's; the game's is `JournalEntryResource`.
 export type QuestStep = {
 	--- Its title's text tag; give it text with `Load.add_text`.
 	name: string,
 	--- Its text's tag.
 	text: string,
-	--- When the journal shows it.
-	shown_when: KnowledgeQuery,
-	--- When it is done.
-	done_when: KnowledgeQuery,
+	--- When the journal shows it; nil for the loader's.
+	shown_when: KnowledgeQuery?,
+	--- When it is done; nil for the loader's.
+	done_when: KnowledgeQuery?,
 	--- Parts the journal counts as it moves on, each done when it holds.
 	progress: {KnowledgeQuery}?,
 	--- The item whose icon it shows.
 	icon: number?,
 	--- The level it suits; 0 for none.
 	level: number?,
+	--- What the journal counts on it, each on a counter of the loader's that its `progress` shows; a step without `done_when` is done once every count is reached.
+	objectives: {Objective}?,
 }
 
 --- How far from its place each play of a placed container is moved at random, in metres; both 0 turns the spread off.
@@ -4128,7 +4190,7 @@ declare enshwick: {
 		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain. One patch of the balancing table serves all of a mod's values; it adds none when another mod's value there has the id of one of them.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_experience: (new: NewExperience) -> number,
-		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds. When the last step is done the game gives the experience of the rewards and raises `QuestCompleted`; it draws an item reward and never gives it, so the mod gives its items in a handler of that event (`give_what_fits`). A mod moves the quest on by granting the knowledge its steps ask for.
+		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; a query left nil gets knowledge of the loader's, which `Quests` moves on, and each objective of a step a counter the loader raises on its events. When the last step is done the game gives the experience of the rewards and raises `QuestCompleted`; it draws an item reward and never gives it, so the mod gives its items in a handler of that event (`give_what_fits`). A mod moves the quest on with `Quests` or by granting the knowledge its steps ask for.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_quest: (new: NewQuest) -> number,
 		--- Adds a lore page to the journal, on the server and the client alike: its entries show once their knowledge holds, on the card of its category on the journal's world information screen. The card counts the page from the start and lists it once one entry shows.
@@ -4744,6 +4806,18 @@ declare enshwick: {
 		state: (player: number, quest: number) -> QuestState?,
 		--- Where the world stands in `quest`, from the world's entries alone: a step that asks a player's entry reads as not held. `rewarded` is a player's and reads `false`.
 		world_state: (quest: number) -> QuestState?,
+		--- The step `holder` stands at in `quest`, from 0: the first step not done, or the number of steps once every one is; a step whose state is not known counts as not done. nil for no quest of the journal.
+		step: (holder: Holder, quest: number) -> number?,
+		--- Starts `quest` for `holder`: grants what its first step's `shown_when` asks, so the journal lists it. Grants go the game's way and apply at the next step of the world, so the quest reads as before until then.
+		start: (holder: Holder, quest: number) -> (),
+		--- Finishes the step `holder` stands at in `quest` and shows the next, granting what each asks; returns the step the holder stands at once the grants apply at the next step of the world. A quest whose last step is done stays as it is. Until those grants apply, a second call that moves the quest for the holder reads the steps as they were and grants the same step again, so a mod moves a quest once per holder and step of the world, and finishes it with `Quests.complete`.
+		advance: (holder: Holder, quest: number) -> number,
+		--- Completes `quest` for `holder`: grants what every step from the one it stands at to the last asks. The game then pays each player for whom the last step holds and the quest's bool is unset, once, as for a quest played through; experience, item notices and the journal's mark are the game's. As with `Quests.advance`, a call that moves the quest for the holder in the same step of the world reads the steps from before this one's grants.
+		complete: (holder: Holder, quest: number) -> (),
+		--- Takes `quest` back for `holder`: clears every entry of the holder's that its steps test (shown, done and counted parts) and, for a player, the quest's own bool, so it leaves the journal and the game pays it again when it is completed again. An entry another quest, recipe or page tests too is cleared for that as well, and what the grants brought, such as experience, stays; entries of the other scope, such as the world's for a player, are left alone. A step on a game query is left as the game computes it.
+		reset: (holder: Holder, quest: number) -> (),
+		--- Sends the mod's signal `signal` for `holder`: each open step of the mod's quests with an `Objective.Custom` of that signal counts `amount` towards it, a player's quest for a player and a world quest for the world. A signal no objective of the mod counts does nothing.
+		signal: (holder: Holder, signal: string, amount: number) -> (),
 	},
 	--- Player actions: what a player asks a mod to do, declared once and run from its controls, panels or the console.
 	actions: {

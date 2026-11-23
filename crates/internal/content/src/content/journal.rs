@@ -53,6 +53,14 @@ use super::{EngineFacts, Guid, Id};
 
 #[cfg(feature = "unstable")]
 pub mod lore_category;
+#[cfg(feature = "typed")]
+pub(crate) mod objectives;
+
+#[cfg(feature = "typed")]
+#[doc(hidden)]
+pub use objectives::CountedStep;
+#[cfg(feature = "typed")]
+pub use objectives::{CraftTarget, KillTarget, Objective};
 
 /// The game's journal: every quest, lore page and item set (server 387 and
 /// 399, `JournalRegistryResource`).
@@ -113,21 +121,27 @@ impl QuestReward {
 /// One step of a quest: its title and text, shown while `shown_when` holds,
 /// done once `done_when` holds.
 ///
+/// A query left `None` is the loader's: a step without `done_when` gets a
+/// bool of its own, and one without `shown_when` shows once the step before
+/// it is done (the first, once a bool of its own is set), each the player's
+/// for a player's quest and the world's for a world quest, so
+/// [`Quests`](../../quests/struct.Quests.html) moves the quest exactly.
+///
 /// The name is enshwick's; the game's is `JournalEntryResource`.
 ///
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 pub struct QuestStep {
     /// Its title's text tag; give it text with [`Load::add_text`](../../struct.Load.html#method.add_text).
     pub name: Guid,
     /// Its text's tag.
     pub text: Guid,
-    /// When the journal shows it.
-    pub shown_when: KnowledgeQuery,
-    /// When it is done.
-    pub done_when: KnowledgeQuery,
+    /// When the journal shows it; `None` for the loader's.
+    pub shown_when: Option<KnowledgeQuery>,
+    /// When it is done; `None` for the loader's.
+    pub done_when: Option<KnowledgeQuery>,
     /// Parts the journal counts as it moves on, each done when it holds.
     #[script(default)]
     pub progress: Vec<KnowledgeQuery>,
@@ -136,6 +150,12 @@ pub struct QuestStep {
     /// The level it suits; 0 for none.
     #[script(default)]
     pub level: u8,
+    /// What the journal counts on it, each on a counter of the loader's
+    /// that its `progress` shows; a step without `done_when` is done once
+    /// every count is reached.
+    #[cfg(feature = "typed")]
+    #[script(default)]
+    pub objectives: Vec<Objective>,
 }
 
 impl QuestStep {
@@ -155,28 +175,69 @@ impl QuestStep {
         Self {
             name,
             text,
-            shown_when,
-            done_when,
+            shown_when: Some(shown_when),
+            done_when: Some(done_when),
             progress: Vec::new(),
             icon: None,
             level: 0,
+            #[cfg(feature = "typed")]
+            objectives: Vec::new(),
         }
     }
 
-    /// The game's journal entry of the step with entry id `entry`.
+    /// A step of `name` and `text` on the loader's knowledge, which
+    /// [`Quests`](../../quests/struct.Quests.html) moves on.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    /// use enshwick::content::journal::{NewQuest, QuestStep};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let steps = vec![
+    ///         QuestStep::owned(id!("hunt.find").guid(), id!("hunt.find.text").guid()),
+    ///         QuestStep::owned(id!("hunt.kill").guid(), id!("hunt.kill.text").guid()),
+    ///     ];
+    ///     load.add_quest(NewQuest::new(id!("hunt"), id!("hunt.name").guid(), steps))?;
+    ///     Ok(())
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn owned(name: Guid, text: Guid) -> Self {
+        Self {
+            name,
+            text,
+            shown_when: None,
+            done_when: None,
+            progress: Vec::new(),
+            icon: None,
+            level: 0,
+            #[cfg(feature = "typed")]
+            objectives: Vec::new(),
+        }
+    }
+
+    /// The game's journal entry of the step with entry id `entry`, whose
+    /// queries the loader has filled.
     fn to_value(&self, entry: u32) -> Result<Value, Off> {
         let progress = self
             .progress
             .iter()
             .map(|query| query.to_value())
             .collect::<Result<_, _>>()?;
+        let query = |query: Option<KnowledgeQuery>| {
+            query
+                .ok_or_else(|| Off::new("quest step: a query the loader did not fill"))?
+                .to_value()
+        };
         Ok(Value::Struct(vec![
             (ENTRY_ID.into(), hash_key(entry)),
             ("name".into(), hash_key(self.name.fnv1a())),
             ("text".into(), hash_key(self.text.fnv1a())),
             ("mapMarkerReference".into(), hash_key(0)),
-            (SHOWN.into(), self.shown_when.to_value()?),
-            (DONE.into(), self.done_when.to_value()?),
+            (SHOWN.into(), query(self.shown_when)?),
+            (DONE.into(), query(self.done_when)?),
             (PROGRESS.into(), Value::List(progress)),
             ("voiceover".into(), Value::Guid(Guid([0; 16]))),
             (
@@ -193,7 +254,7 @@ impl QuestStep {
 /// # Examples
 ///
 /// See the [module](self).
-#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 pub struct NewQuest {
     /// Its content id; its quest id is the id's [`KnowledgeId::from_guid`].
     pub id: Id,
@@ -394,6 +455,78 @@ fn add_quest_to(registry: &mut Value, new: &NewQuest) -> Result<(), Off> {
     let quest = quest_value(new, document(registry))?;
     list_mut(registry, QUESTS)?.push(quest);
     Ok(())
+}
+
+/// Fills the queries `new`'s steps leave to the loader: a step's missing
+/// `done_when` is `own`'s bool of the part `step-<n>.done`, a missing
+/// `shown_when` the step before's `done_when`, or the bool of the part
+/// `started` for the first step.
+fn fill_owned(
+    new: &mut NewQuest,
+    mut own: impl FnMut(&'static str) -> Result<KnowledgeQuery, Off>,
+) -> Result<(), Off> {
+    let mut before: Option<KnowledgeQuery> = None;
+    for (at, step) in new.steps.iter_mut().enumerate() {
+        if step.shown_when.is_none() {
+            step.shown_when = Some(match before {
+                Some(done) => done,
+                None => own("started")?,
+            });
+        }
+        if step.done_when.is_none() {
+            // shortcut: a step's part name lives for the process; a mod adds few quests, once, during init.
+            let part: &'static str = Box::leak(format!("step-{at}.done").into_boxed_str());
+            step.done_when = Some(own(part)?);
+        }
+        before = step.done_when;
+    }
+    Ok(())
+}
+
+/// Gives each objective of `new`'s steps an `own` counter of the part
+/// `step-<n>.obj-<m>` and its count in the step's `progress`; a step of one
+/// objective and no `done_when` is done on that count. Returns, per step
+/// with objectives, its index, its counters and whether the loader's own
+/// done bool (filled later) completes it.
+#[cfg(feature = "typed")]
+fn count_objectives(
+    new: &mut NewQuest,
+    scope: Scope,
+    mut own: impl FnMut(&'static str, KnowledgeType) -> Result<KnowledgeId, Off>,
+) -> Result<Vec<(u32, Vec<KnowledgeId>, bool)>, Off> {
+    let mut steps = Vec::new();
+    for (at, step) in new.steps.iter_mut().enumerate() {
+        if step.objectives.is_empty() {
+            continue;
+        }
+        objectives::check(new.id, at, &step.objectives)?;
+        let mut counters = Vec::with_capacity(step.objectives.len());
+        for (m, objective) in step.objectives.iter().enumerate() {
+            // shortcut: a counter's part name lives for the process; a mod adds few quests, once, during init.
+            let part: &'static str = Box::leak(format!("step-{at}.obj-{m}").into_boxed_str());
+            let counter = own(part, KnowledgeType::Counter)?;
+            step.progress
+                .push(KnowledgeQuery::at_least(counter, scope, objective.count()));
+            counters.push(counter);
+        }
+        let own_done = step.done_when.is_none() && counters.len() > 1;
+        if step.done_when.is_none() && counters.len() == 1 {
+            step.done_when = step.progress.last().copied();
+        }
+        let at = u32::try_from(at).map_err(|_| Off::new("quest: too many steps"))?;
+        steps.push((at, counters, own_done));
+    }
+    Ok(steps)
+}
+
+/// The scope of the knowledge the loader gives a quest of `kind`: the
+/// world's for a world quest, else each player's.
+fn owned_scope(kind: &QuestType) -> Scope {
+    if *kind == QuestType::WorldQuest {
+        Scope::World
+    } else {
+        Scope::Player
+    }
 }
 
 /// The game's journal quest of `new`, naming the journal's `document`.
@@ -612,21 +745,69 @@ pub trait LoadMethods {
 }
 
 impl LoadMethods for crate::BaseLoad {
-    fn add_quest(&mut self, new: NewQuest) -> Result<KnowledgeId, Off> {
+    fn add_quest(&mut self, mut new: NewQuest) -> Result<KnowledgeId, Off> {
         if new.steps.is_empty() {
             return Err(Off::new(format!("quest {}: no steps", new.id)));
         }
-        for (step, id) in new.steps.iter().zip(step_ids(new.id, new.steps.len())) {
+        self.knowledge_without(new.id)?;
+        let (id, scope) = (new.id, owned_scope(&new.kind));
+        let part = |part: &'static str| {
+            id.try_part(part)
+                .ok_or_else(|| Off::new(format!("quest {id}: no room for part {part} in its id")))
+        };
+        // Every check runs on a copy first, so a refused quest declares and serves nothing.
+        let mut checked = new.clone();
+        let mut check = |name: &'static str| {
+            let owned = part(name)?;
+            self.knowledge_without(owned)?;
+            Ok(KnowledgeId::from_guid(owned.guid()))
+        };
+        #[cfg(feature = "typed")]
+        count_objectives(&mut checked, scope, |name, _| check(name))?;
+        fill_owned(&mut checked, |name| {
+            check(name).map(|known| KnowledgeQuery::is_set(known, scope))
+        })?;
+        for (step, id) in checked.steps.iter().zip(step_ids(id, checked.steps.len())) {
             step.to_value(id)?;
         }
-        self.knowledge_without(new.id)?;
         let key = self.journal_key()?;
+        let mut own = |name: &'static str, kind: KnowledgeType| {
+            let owned = part(name)?;
+            self.declare(owned)?;
+            self.serve_knowledge(NewKnowledge::new(owned, scope, kind))
+        };
+        #[cfg(feature = "typed")]
+        let counted = count_objectives(&mut new, scope, &mut own)?;
+        fill_owned(&mut new, |name| {
+            own(name, KnowledgeType::Bool).map(|known| KnowledgeQuery::is_set(known, scope))
+        })?;
         self.declare(new.id)?;
         let quest = self.serve_knowledge(NewKnowledge::new(
             new.id,
             Scope::Player,
             KnowledgeType::Bool,
         ))?;
+        #[cfg(feature = "typed")]
+        self.slot::<objectives::Counted>()
+            .get_or_insert_with(Default::default)
+            .0
+            .extend(
+                counted
+                    .into_iter()
+                    .filter_map(|(step, counters, own_done)| {
+                        let at = new.steps.get(step as usize)?;
+                        let (shown_when, done_when) = (at.shown_when?, at.done_when?);
+                        Some(CountedStep {
+                            quest,
+                            step,
+                            scope,
+                            shown_when,
+                            done_when,
+                            done_bool: own_done.then_some(done_when.id),
+                            objectives: at.objectives.iter().cloned().zip(counters).collect(),
+                        })
+                    }),
+            );
         self.edit_journal(key, Edit::Quest(new))?;
         Ok(quest)
     }
@@ -679,214 +860,4 @@ impl LoadHelpers for crate::BaseLoad {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The category of the game's one page in [`registry`].
-    const CATEGORY: Guid = Guid([14; 16]);
-
-    fn query(id: u32) -> KnowledgeQuery {
-        KnowledgeQuery::is_set(KnowledgeId::new(id), Scope::Player)
-    }
-
-    fn registry() -> Value {
-        let mut vanilla = NewQuest::new(
-            Id::new("demo.vanilla:q"),
-            Guid([1; 16]),
-            vec![QuestStep::new(
-                Guid([2; 16]),
-                Guid([3; 16]),
-                query(1),
-                query(2),
-            )],
-        );
-        vanilla.rewards = vec![QuestReward::Item(Guid([4; 16]))];
-        let page = header(7, CATEGORY.fnv1a(), Guid([8; 16]), hash_key(0), Vec::new());
-        let tutorial = header(9, 0, Guid([8; 16]), hash_key(0), Vec::new());
-        let empty = Value::Struct(vec![
-            (QUESTS.into(), Value::List(Vec::new())),
-            (
-                COLLECTIONS.into(),
-                Value::List(vec![Value::Struct(page), Value::Struct(tutorial)]),
-            ),
-        ]);
-        let mut held = empty;
-        add_quest_to(&mut held, &vanilla).unwrap();
-        if let Some(Value::List(quests)) = held.field_mut(QUESTS)
-            && let Some(document) = quests[0].field_mut(DOCUMENT)
-        {
-            *document = hash_key(1_768_495_365);
-        }
-        held
-    }
-
-    fn quests(registry: &Value) -> &[Value] {
-        match registry.field(QUESTS) {
-            Some(Value::List(quests)) => quests,
-            _ => &[],
-        }
-    }
-
-    #[test]
-    fn a_quest_joins_the_journal_with_its_steps_rewards_and_the_game_s_document() {
-        let new = NewQuest {
-            rewards: vec![QuestReward::Experience(ExperienceValue::new(9))],
-            ..NewQuest::new(
-                Id::new("you.trail:trail"),
-                Guid([5; 16]),
-                vec![
-                    QuestStep::new(Guid([6; 16]), Guid([7; 16]), query(3), query(4)),
-                    QuestStep::new(Guid([8; 16]), Guid([9; 16]), query(4), query(5)),
-                ],
-            )
-        };
-        let mut added = registry();
-        add_quest_to(&mut added, &new).unwrap();
-        let quest = &quests(&added)[1];
-        assert_eq!(
-            entry_id(quest),
-            Some(KnowledgeId::from_guid(new.id.guid()).get())
-        );
-        assert_eq!(quest.field(DOCUMENT), Some(&hash_key(1_768_495_365)));
-        let Some(Value::List(steps)) = quest.field(ENTRIES) else {
-            panic!("{quest:?}")
-        };
-        assert_eq!(steps.len(), 2);
-        assert_ne!(entry_id(&steps[0]), entry_id(&steps[1]));
-        assert_eq!(steps[1].field(SHOWN), Some(&query(4).to_value().unwrap()));
-        let before = added.clone();
-        assert!(add_quest_to(&mut added, &new).is_err(), "twice");
-        assert_eq!(added, before, "left as it was");
-    }
-
-    #[cfg(feature = "unstable")]
-    #[test]
-    fn a_page_s_entries_show_on_knowledge_and_never_complete() {
-        let page = NewJournalPage {
-            id: Id::new("you.trail:lore"),
-            category: CATEGORY,
-            name: Guid([11; 16]),
-            entries: vec![PageEntry {
-                name: Guid([12; 16]),
-                text: Guid([13; 16]),
-                shown_when: query(6),
-            }],
-        };
-        let mut added = registry();
-        add_page_to(&mut added, &page).unwrap();
-        let Some(Value::List(pages)) = added.field(COLLECTIONS) else {
-            panic!("{added:?}")
-        };
-        let last = pages.last().unwrap();
-        assert_eq!(last.field(LORE_CATEGORY), Some(&hash_key(CATEGORY.fnv1a())));
-        let Some(Value::List(entries)) = last.field(ENTRIES) else {
-            panic!("{last:?}")
-        };
-        assert_eq!(entries[0].field(SHOWN), Some(&query(6).to_value().unwrap()));
-        assert_eq!(
-            entries[0].field(DONE).and_then(|done| done.field("type")),
-            Some(&Value::Name("Extern".into()))
-        );
-    }
-
-    #[cfg(feature = "unstable")]
-    #[test]
-    fn a_page_of_a_category_no_game_page_has_is_refused_with_the_game_s() {
-        let page = |category| NewJournalPage {
-            id: Id::new("you.trail:lore"),
-            category,
-            name: Guid([11; 16]),
-            entries: vec![PageEntry {
-                name: Guid([12; 16]),
-                text: Guid([13; 16]),
-                shown_when: query(6),
-            }],
-        };
-        let mut before = registry();
-        let general = header(
-            10,
-            lore_category::GENERAL.fnv1a(),
-            Guid([8; 16]),
-            hash_key(0),
-            Vec::new(),
-        );
-        list_mut(&mut before, COLLECTIONS)
-            .unwrap()
-            .push(Value::Struct(general));
-        let mut added = before.clone();
-        let own = Guid([10; 16]);
-        let off = add_page_to(&mut added, &page(own)).unwrap_err().to_string();
-        assert!(off.contains(&own.to_string()), "{off}");
-        assert!(
-            off.contains(&lore_category::GENERAL.to_string()),
-            "a category enshwick names reads as the tag a mod passes: {off}"
-        );
-        assert!(
-            off.contains(&format!("key {}", CATEGORY.fnv1a())),
-            "one it does not name reads as its key: {off}"
-        );
-        assert_eq!(added, before, "left as it was");
-        add_page_to(&mut added, &page(lore_category::GENERAL)).unwrap();
-    }
-
-    #[cfg(feature = "unstable")]
-    #[test]
-    fn the_tutorial_pages_category_0_is_no_category_a_page_may_take() {
-        assert_eq!(held_categories(&registry()), [CATEGORY.fnv1a()]);
-    }
-
-    #[test]
-    fn two_changes_of_a_vanilla_quest_chain_and_a_step_past_its_own_is_refused() {
-        let vanilla = KnowledgeId::from_guid(Id::new("demo.vanilla:q").guid());
-        let first = QuestChange {
-            rewards: Some(Vec::new()),
-            for_all_players: Some(true),
-            ..QuestChange::default()
-        };
-        let second = QuestChange {
-            add_rewards: vec![QuestReward::Item(Guid([14; 16]))],
-            steps: vec![StepChange {
-                step: 0,
-                shown_when: None,
-                done_when: Some(query(7)),
-            }],
-            ..QuestChange::default()
-        };
-        let mut twice = registry();
-        change_quest_in(&mut twice, vanilla, &first).unwrap();
-        change_quest_in(&mut twice, vanilla, &second).unwrap();
-        let quest = &quests(&twice)[0];
-        assert_eq!(
-            quest.field(REWARDS),
-            Some(&Value::List(vec![
-                QuestReward::Item(Guid([14; 16])).to_value()
-            ]))
-        );
-        assert_eq!(quest.field(FOR_ALL), Some(&Value::Bool(true)));
-        let Some(Value::List(steps)) = quest.field(ENTRIES) else {
-            panic!("{quest:?}")
-        };
-        assert_eq!(steps[0].field(DONE), Some(&query(7).to_value().unwrap()));
-        assert_eq!(
-            steps[0].field(SHOWN),
-            Some(&query(1).to_value().unwrap()),
-            "kept"
-        );
-        let past = QuestChange {
-            steps: vec![StepChange {
-                step: 1,
-                shown_when: Some(query(1)),
-                done_when: None,
-            }],
-            ..QuestChange::default()
-        };
-        let mut held = registry();
-        let past = QuestChange {
-            rewards: Some(Vec::new()),
-            ..past
-        };
-        assert!(change_quest_in(&mut held, vanilla, &past).is_err());
-        assert_eq!(held, registry(), "the rewards are kept when a step is past");
-        assert!(change_quest_in(&mut held, KnowledgeId::new(5), &first).is_err());
-    }
-}
+mod tests;

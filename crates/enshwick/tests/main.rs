@@ -204,7 +204,13 @@ mod props;
 mod props_server;
 mod published_texts;
 #[cfg(feature = "typed")]
+mod quest_objective_kinds;
+#[cfg(feature = "typed")]
+mod quest_objectives;
+#[cfg(feature = "typed")]
 mod quest_rewards;
+#[cfg(feature = "typed")]
+mod quests_control;
 #[cfg(feature = "typed")]
 mod quests_read;
 #[cfg(feature = "unstable")]

@@ -37,6 +37,11 @@ use crate::{Entity, ItemId, Off};
 use crate::__load::*;
 use crate::knowledge::{Knowledge, KnowledgeId, Scope};
 
+mod control;
+pub(crate) mod objectives;
+
+pub use control::{Holder, MoveQuestError};
+
 /// The key of a text the journal names, the FNV-1a of its text tag's GUID.
 ///
 /// # Examples
@@ -379,12 +384,18 @@ pub struct Quests {
     knowledge: Knowledge,
     /// The journal once read; one per mod, for the life of the process.
     journal: &'static Mutex<Read>,
+    /// The objectives the mod counts, once it adds a step with one.
+    counting: &'static std::sync::OnceLock<&'static objectives::Counting>,
 }
 
 impl crate::script::Bound for Quests {
     const NAME: &'static str = "quests";
     const DOC: &'static str = "The journal's quests and lore pages, mods' included, and where each player stands in them.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_QUESTS];
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
+        Self::SCRIPT_QUESTS,
+        Self::SCRIPT_CONTROL,
+        Self::SCRIPT_OBJECTIVES,
+    ];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(load.base_mut().quests())
@@ -576,6 +587,7 @@ impl LoadMethods for crate::BaseLoad {
         let quests = Quests {
             knowledge: self.knowledge(),
             journal: Box::leak(Box::default()),
+            counting: Box::leak(Box::default()),
         };
         *self.slot() = Some(quests);
         quests
@@ -769,8 +781,8 @@ mod tests {
         assert_eq!(quest.rewards, new.rewards);
         assert_eq!(quest.steps.len(), 1);
         let step = &quest.steps[0];
-        assert_eq!(step.shown_when, Some(new.steps[0].shown_when));
-        assert_eq!(step.done_when, Some(new.steps[0].done_when));
+        assert_eq!(step.shown_when, new.steps[0].shown_when);
+        assert_eq!(step.done_when, new.steps[0].done_when);
         assert_eq!(step.marker, None);
     }
 }

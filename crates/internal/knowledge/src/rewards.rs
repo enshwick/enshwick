@@ -24,7 +24,7 @@
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::__load::*;
@@ -297,11 +297,6 @@ struct Shared {
     knowledge: crate::knowledge::Knowledge,
     scheduler: crate::schedule::Scheduler,
     experience: Pending,
-    /// The last server step, which numbers the game events delivered at the
-    /// start of the next one; kept once a craft reward needs it.
-    step: AtomicU64,
-    /// Whether a handler keeps [`step`](Self::step).
-    stepping: AtomicBool,
 }
 
 /// Each player's experience still to add, in slots a worker thread takes
@@ -442,8 +437,6 @@ fn make_shared(load: &mut crate::BaseLoad) -> Result<&'static Shared, Off> {
         knowledge: load.knowledge(),
         store: load.world_store("rewards")?,
         experience: Pending::new(),
-        step: AtomicU64::new(0),
-        stepping: AtomicBool::new(false),
     };
     let shared: &'static Shared = Box::leak(Box::new(made));
     load.on_experience(move |rows, _levels| {
@@ -598,6 +591,70 @@ fn crafted_by(asked: &mut Asked, step: u64) -> Option<Entity> {
     Some(*player)
 }
 
+/// The last server step, which numbers the game events delivered at the
+/// start of the next one: one clock per mod, kept once a craft needs it.
+struct StepClock(&'static AtomicU64);
+
+/// Starts the mod's step clock.
+fn start_clock(load: &mut crate::BaseLoad) -> Result<&'static AtomicU64, Off> {
+    let clock: &'static AtomicU64 = Box::leak(Box::default());
+    load.on_every_step(move |tick| clock.store(tick.step, Ordering::Relaxed))?;
+    *load.slot() = Some(StepClock(clock));
+    Ok(clock)
+}
+
+/// Calls `credit` with the player and the recipe for each unit a player's
+/// own request makes of a recipe `wanted` takes, as [`Action::Craft`]
+/// credits it: rewards and quest objectives share this one rule.
+pub(crate) fn on_crafted(
+    load: &mut crate::BaseLoad,
+    wanted: impl Fn(RecipeId) -> bool + Send + Sync + 'static,
+    credit: impl Fn(Entity, RecipeId) + Send + Sync + 'static,
+) -> Result<(), Off> {
+    let held = load.slot::<StepClock>().as_ref().map(|clock| clock.0);
+    let step = held.map_or_else(|| start_clock(load), Ok)?;
+    let wanted = Arc::new(wanted);
+    let asked: Arc<Mutex<Vec<(RecipeId, Asked)>>> = Arc::default();
+    let (pending, asking) = (Arc::clone(&asked), Arc::clone(&wanted));
+    load.on::<CraftRecipeEvent>(move |request| {
+        if !asking(request.recipe_id) || request.crafting_operator_id.is_none() {
+            return;
+        }
+        let mut pending = pending.relock();
+        let at = pending
+            .iter()
+            .position(|(recipe, _)| *recipe == request.recipe_id)
+            .unwrap_or_else(|| {
+                pending.push((request.recipe_id, Asked::new()));
+                pending.len() - 1
+            });
+        let Some((_, queue)) = pending.get_mut(at) else {
+            return;
+        };
+        if queue.len() >= 64 {
+            queue.pop_front();
+        }
+        queue.push_back((
+            request.crafting_operator_id,
+            step.load(Ordering::Relaxed),
+            request.recipe_amount.max(1),
+        ));
+    })?;
+    load.on::<CraftRecipeSuccessEvent>(move |made| {
+        if !wanted(made.recipe_id) {
+            return;
+        }
+        let player = asked
+            .relock()
+            .iter_mut()
+            .find(|(recipe, _)| *recipe == made.recipe_id)
+            .and_then(|(_, queue)| crafted_by(queue, step.load(Ordering::Relaxed)));
+        if let Some(player) = player {
+            credit(player, made.recipe_id);
+        }
+    })
+}
+
 /// Gives the reward named `name` to `player` on the game thread's next
 /// pass, from any thread.
 fn grant_later(shared: &'static Shared, name: &str, player: Entity) {
@@ -741,36 +798,12 @@ impl LoadMethods for crate::BaseLoad {
         let name = reward.name.clone();
         let registered = match reward.on {
             Action::Craft(recipe) => {
-                if !shared.stepping.load(Ordering::Relaxed) {
-                    self.on_every_step(move |tick| {
-                        shared.step.store(tick.step, Ordering::Relaxed);
-                    })?;
-                    shared.stepping.store(true, Ordering::Relaxed);
-                }
-                let asked: Arc<Mutex<Asked>> = Arc::default();
-                let pending = Arc::clone(&asked);
-                self.on::<CraftRecipeEvent>(move |request| {
-                    if request.recipe_id == recipe && !request.crafting_operator_id.is_none() {
-                        let mut pending = pending.relock();
-                        if pending.len() >= 64 {
-                            pending.pop_front();
-                        }
-                        pending.push_back((
-                            request.crafting_operator_id,
-                            shared.step.load(Ordering::Relaxed),
-                            request.recipe_amount.max(1),
-                        ));
-                    }
-                })?;
                 let reward = name.clone();
-                self.on::<CraftRecipeSuccessEvent>(move |made| {
-                    let step = shared.step.load(Ordering::Relaxed);
-                    if made.recipe_id == recipe
-                        && let Some(player) = crafted_by(&mut asked.relock(), step)
-                    {
-                        grant_later(shared, &reward, player);
-                    }
-                })
+                on_crafted(
+                    self,
+                    move |made| made == recipe,
+                    move |player, _| grant_later(shared, &reward, player),
+                )
             }
             Action::LevelUp(level) => self.on::<LevelUpEvent>(move |up| {
                 if level == 0 || up.level == level {
