@@ -264,6 +264,7 @@ mod sound_changes;
 #[cfg(feature = "unstable")]
 mod sound_files;
 mod sound_made;
+#[cfg(feature = "unstable")]
 mod sound_recordings;
 mod sound_takes;
 mod sounds;

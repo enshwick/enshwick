@@ -6833,10 +6833,10 @@ sound::Takes::from_value
 sound::Takes::into_value
 sound::Trim unstable
 sound::Trim::TY unstable
-sound::Trim::end unstable
+sound::Trim::from unstable
 sound::Trim::from_value unstable
 sound::Trim::into_value unstable
-sound::Trim::start unstable
+sound::Trim::to unstable
 state
 state::HOLD_FILE
 state::Hold
