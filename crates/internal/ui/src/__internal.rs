@@ -18,10 +18,13 @@ pub use crate::ui::script::ScriptTooltipLines;
 ///
 /// # Errors
 ///
-/// The reason, as the sound module words it.
-pub fn check_sound_change(change: &crate::sound::SoundChange) -> Result<(), String> {
-    change.fields().map(drop).map_err(|why| why.to_string())
+/// The value out of its bound, as the sound module words it.
+pub fn check_sound_change(change: &crate::sound::SoundChange) -> Result<(), ChangeSoundError> {
+    change.fields().map(drop)
 }
+
+/// Why a sound change is refused, which a pack names at its line.
+pub use crate::sound::change::ChangeSoundError;
 
 /// The FramelessQOA encoding of `samples`, `channels` interleaved, for the
 /// encoder's benchmark.

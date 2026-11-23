@@ -34,7 +34,7 @@
 
 #[cfg(feature = "unstable")]
 pub(crate) mod add;
-mod change;
+pub(crate) mod change;
 #[cfg(feature = "unstable")]
 mod decode;
 #[cfg(feature = "unstable")]

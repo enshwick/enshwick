@@ -219,6 +219,7 @@ Load::remove_item unstable
 Load::remove_loot_table unstable
 Load::remove_workshop unstable
 Load::rename_content
+Load::replace_sound unstable
 Load::request_base_limits unstable
 Load::rewards unstable
 Load::scheduler
@@ -6715,31 +6716,79 @@ shape::ShapeHasher::offset
 shape::ShapeHasher::text
 shape::ShapeHasher::value
 sound
+sound::AddedSound unstable
+sound::AddedSound::TY unstable
+sound::AddedSound::container unstable
+sound::AddedSound::from_value unstable
+sound::AddedSound::into_value unstable
+sound::AddedSound::takes unstable
+sound::Channels unstable
+sound::Channels::Keep unstable
+sound::Channels::Mono unstable
+sound::Channels::Stereo unstable
+sound::Channels::TY unstable
+sound::Channels::from_value unstable
+sound::Channels::into_value unstable
+sound::GAIN_DB
+sound::INLINE_FRAMES unstable
+sound::MAX_COUNT
 sound::MAX_DISTANCE
 sound::MAX_FILE_BYTES unstable
 sound::MAX_MOD_BYTES unstable
+sound::MAX_NEW_TAKES
+sound::MAX_SLEEP
+sound::MAX_TAKE
+sound::MAX_TAKES
 sound::MAX_VOLUME
 sound::NewSound unstable
 sound::NewSound::TY unstable
+sound::NewSound::channels unstable
 sound::NewSound::container unstable
-sound::NewSound::file unstable
 sound::NewSound::from_value unstable
+sound::NewSound::gain_db unstable
 sound::NewSound::id unstable
 sound::NewSound::into_value unstable
 sound::NewSound::new unstable
-sound::NewSound::scene unstable
+sound::NewSound::takes unstable
+sound::NewSound::trim unstable
+sound::NewTake unstable
+sound::NewTake::TY unstable
+sound::NewTake::chance unstable
+sound::NewTake::file unstable
+sound::NewTake::from_value unstable
+sound::NewTake::into_value unstable
+sound::NewTake::new unstable
 sound::PITCH
+sound::RandomPosition
+sound::RandomPosition::TY
+sound::RandomPosition::from_value
+sound::RandomPosition::front_back
+sound::RandomPosition::into_value
+sound::RandomPosition::left_right
 sound::SAMPLE_RATE unstable
 sound::SoundChange
 sound::SoundChange::TY
+sound::SoundChange::avoid_repeating_last
 sound::SoundChange::from_value
+sound::SoundChange::gamepad_speaker
+sound::SoundChange::gamepad_vibration
+sound::SoundChange::has_position
 sound::SoundChange::into_value
+sound::SoundChange::loop_same_take
 sound::SoundChange::looped
+sound::SoundChange::max_count
 sound::SoundChange::max_distance
 sound::SoundChange::min_distance
+sound::SoundChange::mute_on_main
 sound::SoundChange::pitch
 sound::SoundChange::pitch_randomness
 sound::SoundChange::priority
+sound::SoundChange::random_position
+sound::SoundChange::scene
+sound::SoundChange::sleep
+sound::SoundChange::sleep_randomness
+sound::SoundChange::stealing_mode
+sound::SoundChange::takes
 sound::SoundChange::volume
 sound::SoundChange::volume_randomness
 sound::SoundContainerId
@@ -6748,14 +6797,46 @@ sound::SoundContainerId::from_guid
 sound::SoundContainerId::from_value
 sound::SoundContainerId::guid
 sound::SoundContainerId::into_value
-sound::SoundContainerScene unstable
-sound::SoundContainerScene::Music unstable
-sound::SoundContainerScene::Sfx unstable
-sound::SoundContainerScene::TY unstable
-sound::SoundContainerScene::Ui unstable
-sound::SoundContainerScene::Voice unstable
-sound::SoundContainerScene::from_value unstable
-sound::SoundContainerScene::into_value unstable
+sound::SoundContainerScene
+sound::SoundContainerScene::Music
+sound::SoundContainerScene::Sfx
+sound::SoundContainerScene::TY
+sound::SoundContainerScene::Ui
+sound::SoundContainerScene::Voice
+sound::SoundContainerScene::from_value
+sound::SoundContainerScene::into_value
+sound::SoundContainerStealingMode
+sound::SoundContainerStealingMode::Furthest
+sound::SoundContainerStealingMode::Ignore
+sound::SoundContainerStealingMode::Oldest
+sound::SoundContainerStealingMode::TY
+sound::SoundContainerStealingMode::from_value
+sound::SoundContainerStealingMode::into_value
+sound::SoundId
+sound::SoundId::TY
+sound::SoundId::from_guid
+sound::SoundId::from_value
+sound::SoundId::guid
+sound::SoundId::into_value
+sound::Take
+sound::Take::TY
+sound::Take::chance
+sound::Take::from_value
+sound::Take::into_value
+sound::Take::new
+sound::Take::sound
+sound::Takes
+sound::Takes::Add
+sound::Takes::Replace
+sound::Takes::TY
+sound::Takes::from_value
+sound::Takes::into_value
+sound::Trim unstable
+sound::Trim::TY unstable
+sound::Trim::end unstable
+sound::Trim::from_value unstable
+sound::Trim::into_value unstable
+sound::Trim::start unstable
 state
 state::HOLD_FILE
 state::Hold

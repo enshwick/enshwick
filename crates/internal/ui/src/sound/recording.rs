@@ -2,7 +2,7 @@
 //! mod's bounds at init, encoded as FramelessQOA on background threads, and
 //! served as one of the game's sounds, new or in place of a vanilla one.
 
-use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use super::SoundId;
@@ -11,7 +11,7 @@ use super::qoa;
 use crate::Off;
 use crate::abi::{Level, ResourceKey, Side};
 use crate::content::types;
-use crate::locks::Relock as _;
+use crate::locks::{Relock as _, RelockWait as _};
 use crate::resources::Value;
 
 /// The rate of every sound the game plays, and of every recording a mod
@@ -96,13 +96,9 @@ impl Encoder {
         let spawned = std::thread::Builder::new()
             .name("enshwick sound encoding".to_owned())
             .spawn(move || {
-                let mut free = encoder.free.relock();
-                while *free == 0 {
-                    free = encoder
-                        .freed
-                        .wait(free)
-                        .unwrap_or_else(PoisonError::into_inner);
-                }
+                let mut free = encoder
+                    .freed
+                    .relock_wait_while(encoder.free.relock(), |free| *free == 0);
                 *free -= 1;
                 drop(free);
                 let started = Instant::now();
@@ -140,7 +136,9 @@ impl Encoder {
 struct Job {
     samples: Mutex<Option<Vec<i16>>>,
     channels: usize,
-    data: OnceLock<Result<Vec<u8>, String>>,
+    /// The encoded bytes; `None` when the encoding stopped, its samples
+    /// gone with a thread that panicked.
+    data: OnceLock<Option<Vec<u8>>>,
     served: OnceLock<[u32; 4]>,
 }
 
@@ -158,12 +156,12 @@ impl Job {
     /// call while a thread encodes waits for it.
     fn data(&self) -> Result<&[u8], Off> {
         self.data
-            .get_or_init(|| match self.samples.relock().take() {
-                Some(samples) => Ok(qoa::encode(&samples, self.channels)),
-                None => Err("its encoding stopped".to_owned()),
+            .get_or_init(|| {
+                let samples = self.samples.relock().take()?;
+                Some(qoa::encode(&samples, self.channels))
             })
             .as_deref()
-            .map_err(|why| Off::new(why.clone()))
+            .ok_or_else(|| Off::new("its encoding stopped"))
     }
 }
 
