@@ -10,18 +10,19 @@ use std::time::SystemTime;
 use anyhow::bail;
 use enshwick_core::abi::Level;
 
-use crate::install::Built;
-use crate::logs::{Entry, LOADER, LOGS};
+use crate::install::{Built, SERVER_EXE};
+use crate::logs::{Entry, Follower, LOADER, LOGS};
 use crate::steam::{Found, SERVER_APP};
 
-/// The dedicated server's executable, which `run` starts.
-const SERVER_EXE: &str = "enshrouded_server.exe";
 /// How the loader's line opens once every mod's `ready` ran:
 /// `ready: <running> of <all> mods running`.
 const READY: &str = "ready: ";
-/// How the loader's line opens as a world loads, before its mods read their
-/// settings.
-const WORLD_LOADED: &str = "world settings: world ";
+/// How the loader's line opens as a world loads, with its key or without
+/// one, before its mods read their settings.
+const WORLD_LOADED: &str = "world settings: ";
+/// The loader's settings in the server's folder, which set the log levels
+/// its files keep.
+const SETTINGS_FILE: &str = "enshwick.toml";
 /// How the line opens that a mod's log gets when the loader turns it off.
 const OFF: &str = "off: ";
 /// How the loader's line ends for a mod whose `init` passed, after its id
@@ -51,8 +52,9 @@ pub(crate) struct Args {
     #[arg(long)]
     watch: bool,
     /// The most detailed of the mod's own lines shown: error, warn, info or
-    /// debug.
-    #[arg(long, default_value = "info", value_parser = crate::logs::level)]
+    /// debug. The server's `enshwick.toml` decides which lines reach the
+    /// files; the run says when it keeps fewer.
+    #[arg(long, default_value = "info")]
     level: Level,
 }
 
@@ -163,11 +165,78 @@ impl Start {
         };
         entry.level.is_none_or(|l| l <= most)
     }
+
+    /// Writes the entries `logs` gained that the run shows for the mod `id`
+    /// up to `level`, and the start report once it is due.
+    fn show_new(
+        &mut self,
+        logs: &mut Follower,
+        id: &str,
+        level: Level,
+        out: &mut impl Write,
+    ) -> anyhow::Result<()> {
+        for entry in logs.poll()? {
+            self.see(&entry);
+            if self.shown(&entry, id, level) {
+                writeln!(out, "{}", entry.text)?;
+            }
+            for line in self.report().into_iter().flatten() {
+                writeln!(out, "{line}")?;
+            }
+        }
+        out.flush()?;
+        Ok(())
+    }
 }
 
-/// The files under a mod's folder with their sizes and times, build output
-/// and hidden folders left out: what `--watch` compares.
-fn fingerprint(dir: &Path) -> Vec<(PathBuf, u64, Option<SystemTime>)> {
+/// The log levels the server's `enshwick.toml` sets, as far as a run reads
+/// them.
+#[derive(Debug, Default, serde::Deserialize)]
+struct Kept {
+    log_level: Option<Level>,
+    #[serde(default)]
+    log_levels: BTreeMap<String, Level>,
+}
+
+/// Lines saying where the server's `enshwick.toml` keeps fewer lines than the
+/// run needs: the loader's `info` lines, which tell when the world has
+/// loaded, and the mod `id`'s lines up to `level`.
+fn level_notes(server: &Path, id: &str, level: Level) -> Vec<String> {
+    let kept: Kept = std::fs::read_to_string(server.join(SETTINGS_FILE))
+        .ok()
+        .and_then(|text| toml::from_str(&text).ok())
+        .unwrap_or_default();
+    let of = |source: &str| {
+        kept.log_levels
+            .get(source)
+            .copied()
+            .or(kept.log_level)
+            .unwrap_or_default()
+    };
+    let mut notes = Vec::new();
+    if of(LOADER) < Level::INFO {
+        notes.push(format!(
+            "note: {SETTINGS_FILE} keeps the loader's lines up to {}, so the run cannot tell when the world has loaded",
+            of(LOADER).name()
+        ));
+    }
+    if of(id) < level {
+        notes.push(format!(
+            "note: {SETTINGS_FILE} keeps {id}'s lines up to {kept}; add log_levels = {{ \"{id}\" = \"{wanted}\" }} to it to see {wanted} lines",
+            kept = of(id).name(),
+            wanted = level.name()
+        ));
+    }
+    notes
+}
+
+/// The files under a mod's folder with their sizes and times, as `--watch`
+/// compares them.
+type Fingerprint = Vec<(PathBuf, u64, Option<SystemTime>)>;
+
+/// The fingerprint of the files under the mod's folder `dir`, build output
+/// and hidden folders left out.
+fn fingerprint(dir: &Path) -> Fingerprint {
     let mut found = Vec::new();
     let mut folders = vec![dir.to_owned()];
     while let Some(folder) = folders.pop() {
@@ -209,7 +278,13 @@ pub(crate) fn run(args: &Args, out: &mut impl Write) -> anyhow::Result<String> {
         }
         writeln!(out, "{line}")?;
     }
+    // Taken before each build, so a change saved while the mod builds or the
+    // server restarts builds next.
+    let mut sources = args.watch.then(|| fingerprint(&args.dir));
     let mut built = crate::install::build(&args.dir, args.package.as_deref())?;
+    for note in level_notes(&server, &built.id, args.level) {
+        writeln!(out, "{note}")?;
+    }
     process::listen()?;
     loop {
         let folder = built.place(&server)?;
@@ -225,11 +300,75 @@ pub(crate) fn run(args: &Args, out: &mut impl Write) -> anyhow::Result<String> {
             start: process::Server::start,
             stopping: process::stopping,
         };
-        match follow(&server, &built.id, args, out, host)? {
-            End::Stopped(said) | End::Exited(said) => return Ok(said),
-            End::Changed(next) => built = next,
+        built = match follow(&server, &built.id, args, &mut sources, out, host)? {
+            End::Stopped(said) => return Ok(said),
+            End::Changed(next) => next,
+            End::Exited(exited) => {
+                let Some(seen) = &mut sources else {
+                    return ended(&exited);
+                };
+                writeln!(
+                    out,
+                    "{SERVER_EXE} exited: {}; it starts again after the next change that builds",
+                    exited.status
+                )?;
+                match rebuilt(args, seen, out, process::stopping)? {
+                    Some(next) => next,
+                    None => return Ok(format!("{SERVER_EXE} not started again")),
+                }
+            }
+        };
+    }
+}
+
+/// What a run says when the server exited on its own: a failure for a
+/// failing exit status, such as a crash's.
+fn ended(exited: &Exited) -> anyhow::Result<String> {
+    let said = format!("{SERVER_EXE} exited: {}", exited.status);
+    if !exited.success {
+        bail!("{said}");
+    }
+    Ok(said)
+}
+
+/// The mod built again once its folder differs from `seen`, which then
+/// takes the change in; `None` when nothing changed or the build failed,
+/// which it says.
+fn changed(
+    args: &Args,
+    seen: &mut Fingerprint,
+    out: &mut impl Write,
+) -> anyhow::Result<Option<Built>> {
+    let now = fingerprint(&args.dir);
+    if now == *seen {
+        return Ok(None);
+    }
+    *seen = now;
+    writeln!(out, "{} changed: building it again", args.dir.display())?;
+    match crate::install::build(&args.dir, args.package.as_deref()) {
+        Ok(next) => Ok(Some(next)),
+        Err(error) => {
+            writeln!(out, "error: {error:#}\nit builds again on the next change")?;
+            Ok(None)
         }
     }
+}
+
+/// Waits for a change under the mod's folder that builds; `None` once
+/// `stopping` says Ctrl-C came first.
+fn rebuilt(
+    args: &Args,
+    seen: &mut Fingerprint,
+    out: &mut impl Write,
+    stopping: impl Fn() -> bool,
+) -> anyhow::Result<Option<Built>> {
+    while !stopping() {
+        if let Some(next) = changed(args, seen, out)? {
+            return Ok(Some(next));
+        }
+        std::thread::sleep(crate::logs::POLL);
+    }
+    Ok(None)
 }
 
 /// How a run of the server ended.
@@ -238,17 +377,28 @@ enum End {
     /// Ctrl-C stopped it.
     Stopped(String),
     /// It exited on its own.
-    Exited(String),
+    Exited(Exited),
     /// The mod changed and built again, to install before the next start.
     Changed(Built),
+}
+
+/// How the server exited.
+#[derive(Debug)]
+struct Exited {
+    /// The exit status as Windows gives it.
+    status: String,
+    /// Whether the status is a success.
+    success: bool,
 }
 
 /// A server process `follow` watches: the one this tool started, or a
 /// test's stand-in.
 trait Process {
     fn id(&self) -> u32;
+    /// Whether it ends when this tool does.
+    fn bound(&self) -> bool;
     /// How it exited, once it has.
-    fn exited(&mut self) -> anyhow::Result<Option<String>>;
+    fn exited(&mut self) -> anyhow::Result<Option<Exited>>;
     /// Stops it; how that went.
     fn stop(&mut self) -> anyhow::Result<String>;
 }
@@ -260,64 +410,61 @@ struct Host<S, C> {
     stopping: C,
 }
 
-/// Starts the server in `server` and follows its logs until it ends.
+/// Starts the server in `server` and follows its logs until it ends, with
+/// `sources` the fingerprint a `--watch` change is seen against. On an error
+/// here the server still gets its Ctrl-Break, so it saves before it exits.
 fn follow<P: Process>(
     server: &Path,
     id: &str,
     args: &Args,
+    sources: &mut Option<Fingerprint>,
     out: &mut impl Write,
     host: Host<impl FnOnce(&Path) -> anyhow::Result<P>, impl Fn() -> bool>,
 ) -> anyhow::Result<End> {
-    let mut logs = crate::logs::Follower::new_run(&server.join(LOGS));
+    let mut logs = Follower::new_run(&server.join(LOGS));
     let mut child = (host.start)(&server.join(SERVER_EXE))?;
-    writeln!(
-        out,
-        "started {SERVER_EXE} (process {}); Ctrl-C stops it",
-        child.id()
-    )?;
     let mut start = Start::default();
-    let mut sources = args.watch.then(|| fingerprint(&args.dir));
-    loop {
-        let exited = child.exited()?;
-        for entry in logs.poll()? {
-            start.see(&entry);
-            if start.shown(&entry, id, args.level) {
-                writeln!(out, "{}", entry.text)?;
+    let mut followed = || -> anyhow::Result<End> {
+        writeln!(
+            out,
+            "started {SERVER_EXE} (process {}); Ctrl-C stops it",
+            child.id()
+        )?;
+        if !child.bound() {
+            writeln!(
+                out,
+                "warning: Windows gave {SERVER_EXE} no job object, so it outlives this tool if the tool is killed; stop it with Ctrl-C"
+            )?;
+        }
+        loop {
+            let exited = child.exited()?;
+            start.show_new(&mut logs, id, args.level, out)?;
+            if let Some(exited) = exited {
+                return Ok(End::Exited(exited));
             }
-            for line in start.report().into_iter().flatten() {
-                writeln!(out, "{line}")?;
+            if (host.stopping)() {
+                writeln!(out, "stopping {SERVER_EXE} (process {})", child.id())?;
+                let how = child.stop()?;
+                start.show_new(&mut logs, id, args.level, out)?;
+                return Ok(End::Stopped(format!("{SERVER_EXE} stopped: {how}")));
             }
-        }
-        out.flush()?;
-        if let Some(status) = exited {
-            return Ok(End::Exited(format!("{SERVER_EXE} exited: {status}")));
-        }
-        if (host.stopping)() {
-            writeln!(out, "stopping {SERVER_EXE} (process {})", child.id())?;
-            let how = child.stop()?;
-            return Ok(End::Stopped(format!("{SERVER_EXE} stopped: {how}")));
-        }
-        if let Some(seen) = &mut sources {
-            let now = fingerprint(&args.dir);
-            if now != *seen {
-                *seen = now;
-                writeln!(out, "{} changed: building it again", args.dir.display())?;
-                match crate::install::build(&args.dir, args.package.as_deref()) {
-                    Ok(next) => {
-                        writeln!(out, "restarting {SERVER_EXE}")?;
-                        let how = child.stop()?;
-                        writeln!(out, "{SERVER_EXE} stopped: {how}")?;
-                        return Ok(End::Changed(next));
-                    }
-                    Err(error) => writeln!(
-                        out,
-                        "error: {error:#}\nthe server runs on with the mod installed before"
-                    )?,
-                }
+            if let Some(seen) = sources.as_mut()
+                && let Some(next) = changed(args, seen, out)?
+            {
+                writeln!(out, "restarting {SERVER_EXE}")?;
+                let how = child.stop()?;
+                start.show_new(&mut logs, id, args.level, out)?;
+                writeln!(out, "{SERVER_EXE} stopped: {how}")?;
+                return Ok(End::Changed(next));
             }
+            std::thread::sleep(crate::logs::POLL);
         }
-        std::thread::sleep(crate::logs::POLL);
+    };
+    let ended = followed();
+    if ended.is_err() {
+        let _stopped = child.stop();
     }
+    ended
 }
 
 /// The server process: started in a process group of its own, so Ctrl-C
@@ -334,7 +481,8 @@ mod process {
     use anyhow::Context as _;
     use windows_sys::Win32::Foundation::TRUE;
     use windows_sys::Win32::System::Console::{
-        CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent, SetConsoleCtrlHandler,
+        CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT,
+        GenerateConsoleCtrlEvent, SetConsoleCtrlHandler,
     };
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
@@ -347,19 +495,43 @@ mod process {
     /// is ended.
     const GRACE: Duration = Duration::from_secs(30);
 
+    /// How long the handler holds a console close, logoff or shutdown event,
+    /// so the main loop stops the server meanwhile: Windows ends a process
+    /// as soon as its handler returns from one, and after the hung-app
+    /// time-out, 5 seconds by default, in any case.
+    const CLOSE_HOLD: Duration = Duration::from_secs(5);
+
     /// Whether Ctrl-C or Ctrl-Break reached this tool.
     static STOPPING: AtomicBool = AtomicBool::new(false);
 
-    /// Takes Ctrl-C and Ctrl-Break from now on, so the run stops the server
-    /// it started before it exits.
-    pub(super) fn listen() -> anyhow::Result<()> {
-        extern "system" fn on_ctrl(_kind: u32) -> windows_sys::core::BOOL {
-            STOPPING.store(true, Ordering::Release);
-            TRUE
+    /// How long [`on_ctrl`] holds the console event `kind` before it returns.
+    fn hold(kind: u32) -> Duration {
+        if matches!(
+            kind,
+            CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT | CTRL_SHUTDOWN_EVENT
+        ) {
+            CLOSE_HOLD
+        } else {
+            Duration::ZERO
         }
+    }
+
+    /// Asks the run to stop; for an event that ends this tool once it
+    /// returns, it first gives the run the time to stop the server, and
+    /// the process ends as soon as the run has.
+    extern "system" fn on_ctrl(kind: u32) -> windows_sys::core::BOOL {
+        STOPPING.store(true, Ordering::Release);
+        std::thread::sleep(hold(kind));
+        TRUE
+    }
+
+    /// Takes Ctrl-C, Ctrl-Break and closing the console from now on, so the
+    /// run stops the server it started before it exits.
+    pub(super) fn listen() -> anyhow::Result<()> {
         // SAFETY: `on_ctrl` is an `extern "system"` handler of the signature
-        // `PHANDLER_ROUTINE` names, which only stores to an atomic and lives
-        // for the process.
+        // `PHANDLER_ROUTINE` names, which only stores to an atomic and
+        // sleeps on the thread Windows makes for it, and lives for the
+        // process.
         if unsafe { SetConsoleCtrlHandler(Some(on_ctrl), TRUE) } == 0 {
             return Err(std::io::Error::last_os_error()).context("taking Ctrl-C");
         }
@@ -376,7 +548,7 @@ mod process {
     pub(super) struct Server {
         child: Child,
         /// Kept open while the server runs: closing it ends the server.
-        _job: Option<OwnedHandle>,
+        job: Option<OwnedHandle>,
     }
 
     impl Server {
@@ -393,7 +565,7 @@ mod process {
                 .spawn()
                 .with_context(|| exe.display().to_string())?;
             let job = job_of(&child);
-            Ok(Self { child, _job: job })
+            Ok(Self { child, job })
         }
     }
 
@@ -402,8 +574,18 @@ mod process {
             self.child.id()
         }
 
-        fn exited(&mut self) -> anyhow::Result<Option<String>> {
-            Ok(self.child.try_wait()?.as_ref().map(ExitStatus::to_string))
+        fn bound(&self) -> bool {
+            self.job.is_some()
+        }
+
+        fn exited(&mut self) -> anyhow::Result<Option<super::Exited>> {
+            Ok(self
+                .child
+                .try_wait()?
+                .map(|status: ExitStatus| super::Exited {
+                    status: status.to_string(),
+                    success: status.success(),
+                }))
         }
 
         /// Asks the server to stop with Ctrl-Break, sent to its process group
@@ -468,6 +650,21 @@ mod process {
             && unsafe { AssignProcessToJobObject(job.as_raw_handle(), child.as_raw_handle()) } != 0;
         assigned.then_some(job)
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_console_close_is_held_for_the_server_to_stop_and_ctrl_c_is_not() {
+            use windows_sys::Win32::System::Console::CTRL_C_EVENT;
+            assert_eq!(hold(CTRL_C_EVENT), Duration::ZERO);
+            assert_eq!(hold(CTRL_BREAK_EVENT), Duration::ZERO);
+            for kind in [CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT] {
+                assert_eq!(hold(kind), CLOSE_HOLD);
+            }
+        }
+    }
 }
 
 /// Off Windows, where the dedicated server does not run: the start fails,
@@ -501,7 +698,11 @@ mod process {
             match *self {}
         }
 
-        fn exited(&mut self) -> anyhow::Result<Option<String>> {
+        fn bound(&self) -> bool {
+            match *self {}
+        }
+
+        fn exited(&mut self) -> anyhow::Result<Option<super::Exited>> {
             match *self {}
         }
 
@@ -512,302 +713,4 @@ mod process {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::logs::tests::line;
-
-    fn entry(level: Level, source: &str, message: &str) -> Entry {
-        Entry {
-            at: (0, "10:00:00.000Z".to_owned()),
-            level: Some(level),
-            source: source.to_owned(),
-            message: message.to_owned(),
-            text: line("10:00:00.000", level, source, message),
-        }
-    }
-
-    /// A stand-in server: each look at it writes its next log line into the
-    /// server folder, as the loader would, and once they are out it exits
-    /// when `exits`, else runs until stopped.
-    struct Stub {
-        logs: PathBuf,
-        lines: std::collections::VecDeque<(&'static str, String)>,
-        exits: bool,
-        stopped: std::rc::Rc<std::cell::Cell<bool>>,
-    }
-
-    impl Process for Stub {
-        fn id(&self) -> u32 {
-            7
-        }
-
-        fn exited(&mut self) -> anyhow::Result<Option<String>> {
-            use std::io::Write as _;
-            if let Some((source, text)) = self.lines.pop_front() {
-                let path = self.logs.join(format!("{source}_2026-11-23_10-00-00.log"));
-                let mut file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(path)?;
-                file.write_all(text.as_bytes())?;
-                return Ok(None);
-            }
-            Ok(self.exits.then(|| "exit code: 0".to_owned()))
-        }
-
-        fn stop(&mut self) -> anyhow::Result<String> {
-            self.stopped.set(true);
-            Ok("exited on Ctrl-Break".to_owned())
-        }
-    }
-
-    /// A server folder with a loader that starts `you.hello` and loads a
-    /// world, the stub that writes its logs and the run's options.
-    fn fake_server(name: &str, exits: bool) -> (PathBuf, Stub, Args) {
-        let server = crate::scratch(name);
-        let logs = server.join(LOGS);
-        std::fs::create_dir_all(&logs).unwrap();
-        std::fs::write(
-            logs.join("enshwick_2026-11-22_10-00-00.log"),
-            "an old run\n",
-        )
-        .unwrap();
-        let lines = [
-            (
-                LOADER,
-                line("10:00:00.000", Level::INFO, LOADER, "starting"),
-            ),
-            (
-                "you.hello",
-                line("10:00:00.100", Level::INFO, "you.hello", "Hello, world"),
-            ),
-            (
-                "you.hello",
-                line("10:00:00.110", Level::DEBUG, "you.hello", "detail"),
-            ),
-            (
-                LOADER,
-                line(
-                    "10:00:00.200",
-                    Level::INFO,
-                    LOADER,
-                    "you.hello 0.1.0 initialised",
-                ),
-            ),
-            (
-                LOADER,
-                line(
-                    "10:00:00.300",
-                    Level::INFO,
-                    LOADER,
-                    "ready: 1 of 1 mods running",
-                ),
-            ),
-            (
-                LOADER,
-                line(
-                    "10:00:10.000",
-                    Level::INFO,
-                    LOADER,
-                    "world settings: world w",
-                ),
-            ),
-            (
-                LOADER,
-                line("10:00:11.000", Level::INFO, LOADER, "after the world"),
-            ),
-        ];
-        let stub = Stub {
-            logs,
-            lines: lines.into_iter().collect(),
-            exits,
-            stopped: std::rc::Rc::default(),
-        };
-        let args = Args {
-            dir: server.clone(),
-            game: None,
-            package: None,
-            with_loader: false,
-            watch: false,
-            level: Level::INFO,
-        };
-        (server, stub, args)
-    }
-
-    #[test]
-    fn a_run_prints_the_start_and_a_line_per_mod_until_the_server_exits() {
-        let (server, stub, args) = fake_server("exits", true);
-        let mut out = Vec::new();
-        let host = Host {
-            start: |exe: &Path| {
-                assert_eq!(exe, server.join(SERVER_EXE));
-                Ok(stub)
-            },
-            stopping: || false,
-        };
-        let end = follow(&server, "you.hello", &args, &mut out, host).unwrap();
-        let out = String::from_utf8(out).unwrap();
-        assert!(
-            matches!(&end, End::Exited(said) if said.ends_with("exit code: 0")),
-            "{end:?}"
-        );
-        assert!(
-            out.starts_with("started enshrouded_server.exe (process 7)"),
-            "{out}"
-        );
-        assert!(out.contains("[you.hello] Hello, world"), "{out}");
-        assert!(
-            out.contains("world loaded; ready: 1 of 1 mods running\n  you.hello 0.1.0: running\n"),
-            "{out}"
-        );
-        assert!(!out.contains("an old run"), "{out}");
-        assert!(!out.contains("detail"), "{out}");
-        assert!(
-            !out.contains("after the world"),
-            "the loader says only warnings then: {out}"
-        );
-        let _gone = std::fs::remove_dir_all(&server);
-    }
-
-    #[test]
-    fn ctrl_c_stops_the_server_the_run_started() {
-        let (server, stub, args) = fake_server("stops", false);
-        let stopped = std::rc::Rc::clone(&stub.stopped);
-        let looks = std::cell::Cell::new(0);
-        let host = Host {
-            start: |_: &Path| Ok(stub),
-            stopping: || {
-                looks.set(looks.get() + 1);
-                looks.get() > 8
-            },
-        };
-        let mut out = Vec::new();
-        let end = follow(&server, "you.hello", &args, &mut out, host).unwrap();
-        assert!(stopped.get());
-        assert!(
-            matches!(&end, End::Stopped(said) if said.ends_with("exited on Ctrl-Break")),
-            "{end:?}"
-        );
-        let out = String::from_utf8(out).unwrap();
-        assert!(
-            out.contains("stopping enshrouded_server.exe (process 7)"),
-            "{out}"
-        );
-        let _gone = std::fs::remove_dir_all(&server);
-    }
-
-    #[test]
-    fn the_state_of_each_mod_is_reported_once_the_world_has_loaded() {
-        let mut start = Start::default();
-        start.see(&entry(
-            Level::INFO,
-            LOADER,
-            "you.hello-rust 0.1.0 initialised",
-        ));
-        start.see(&entry(Level::INFO, "you.hello-rust", "Hello, world"));
-        start.see(&entry(Level::INFO, "you.hello-pack", "data pack: 0 ids"));
-        start.see(&entry(
-            Level::ERROR,
-            "you.hello-pack",
-            "off: init returned 3 (E2003, see https://enshwick.com/errors/e2003/)",
-        ));
-        start.see(&entry(
-            Level::INFO,
-            LOADER,
-            "item drops ready: the pickup read",
-        ));
-        start.see(&entry(Level::ERROR, "enshwick-crash", "off: not a mod"));
-        assert_eq!(start.report(), None, "not ready");
-        start.see(&entry(Level::INFO, LOADER, "ready: 1 of 2 mods running"));
-        assert_eq!(start.report(), None, "no world yet");
-        start.see(&entry(
-            Level::INFO,
-            LOADER,
-            "world settings: world D:/s/world0",
-        ));
-        assert_eq!(
-            start.report().unwrap(),
-            [
-                "world loaded; ready: 1 of 2 mods running",
-                "  you.hello-pack: off: init returned 3 (E2003, see https://enshwick.com/errors/e2003/)",
-                "  you.hello-rust 0.1.0: running",
-            ]
-        );
-        assert_eq!(start.report(), None, "once");
-    }
-
-    #[test]
-    fn the_loader_says_less_once_the_world_has_loaded_and_the_mod_says_what_its_level_allows() {
-        let mut start = Start::default();
-        let loader_info = entry(Level::INFO, LOADER, "18 hook targets armed");
-        let mine_debug = entry(Level::DEBUG, "you.mod", "detail");
-        let other_info = entry(Level::INFO, "you.other", "hello");
-        assert!(start.shown(&loader_info, "you.mod", Level::INFO));
-        assert!(!start.shown(&mine_debug, "you.mod", Level::INFO));
-        assert!(start.shown(&mine_debug, "you.mod", Level::DEBUG));
-        assert!(!start.shown(&other_info, "you.mod", Level::DEBUG));
-        start.reported = true;
-        assert!(!start.shown(&loader_info, "you.mod", Level::INFO));
-    }
-
-    /// The lines `run` waits for are the ones the loader writes.
-    #[test]
-    fn the_markers_match_the_loader_s_lines() {
-        let loader = Path::new(env!("CARGO_MANIFEST_DIR")).join("../runtime/loader/src");
-        let read = |file: &str| std::fs::read_to_string(loader.join(file)).unwrap();
-        let start = read("start.rs");
-        assert!(start.contains(&format!("\"{READY}{{running}} of {{}} mods running\"")));
-        assert!(start.contains(&format!("\"{{}} {{}}{INITIALISED}\"")));
-        assert!(read("base/worlds/live.rs").contains(&format!("\"{WORLD_LOADED}{{key}}\"")));
-        assert!(read("engine/loader.rs").contains(&format!("\"{OFF}{{shown}} ({{}})\"")));
-        assert!(read("engine/log.rs").contains("\"{source}_{stamp}.log\""));
-    }
-
-    #[test]
-    fn a_change_under_the_mod_s_folder_shows_and_build_output_does_not() {
-        let dir = crate::scratch("watch");
-        std::fs::create_dir_all(dir.join("src")).unwrap();
-        std::fs::create_dir_all(dir.join("target")).unwrap();
-        std::fs::write(dir.join("src/lib.rs"), "a").unwrap();
-        let before = fingerprint(&dir);
-        std::fs::write(dir.join("target/out.dll"), "b").unwrap();
-        assert_eq!(fingerprint(&dir), before);
-        std::fs::write(dir.join("src/lib.rs"), "ab").unwrap();
-        assert_ne!(fingerprint(&dir), before);
-        let _gone = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn the_server_folder_is_steam_s_dedicated_server_and_never_the_game() {
-        let game = crate::scratch("client");
-        std::fs::write(game.join("enshrouded.exe"), "").unwrap();
-        let refused = server_folder(Some(&game), Vec::new)
-            .unwrap_err()
-            .to_string();
-        assert!(refused.contains("never the game"), "{refused}");
-        let server = crate::scratch("server");
-        std::fs::write(server.join(SERVER_EXE), "").unwrap();
-        let found = |folder: &Path, app| Found {
-            folder: folder.to_owned(),
-            app,
-        };
-        let only_game = server_folder(None, || vec![found(&game, crate::steam::GAME_APP)]);
-        assert!(
-            only_game
-                .unwrap_err()
-                .to_string()
-                .contains("no Enshrouded dedicated server")
-        );
-        let (taken, _) = server_folder(None, || {
-            vec![
-                found(&game, crate::steam::GAME_APP),
-                found(&server, SERVER_APP),
-            ]
-        })
-        .unwrap();
-        assert_eq!(taken, server);
-        for dir in [game, server] {
-            let _gone = std::fs::remove_dir_all(dir);
-        }
-    }
-}
+mod tests;

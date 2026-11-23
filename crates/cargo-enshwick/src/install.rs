@@ -8,7 +8,9 @@ use anyhow::{Context as _, anyhow, bail};
 use enshwick_core::packs::{MANIFEST_FILE, PackFiles};
 
 /// The game's executables, one per side, as a game folder holds them.
-pub(crate) const GAME_EXECUTABLES: [&str; 2] = ["enshrouded_server.exe", "enshrouded.exe"];
+pub(crate) const GAME_EXECUTABLES: [&str; 2] = [SERVER_EXE, "enshrouded.exe"];
+/// The dedicated server's executable, which `cargo enshwick run` starts.
+pub(crate) const SERVER_EXE: &str = "enshrouded_server.exe";
 
 /// What `cargo metadata` says about the workspace, as far as installing goes.
 #[derive(Debug, serde::Deserialize)]
@@ -69,19 +71,35 @@ pub(crate) struct Built {
 impl Built {
     /// Writes the files into `<game>/mods/<id>/`; for a pack, also removes
     /// the pack files an earlier install left there that it no longer has,
-    /// as the loader would read them. Other files, such as a hold the
-    /// loader keeps there, stay.
+    /// as the loader would read them, with the folders that leaves empty.
+    /// Other files, such as a hold the loader keeps there, stay.
+    ///
+    /// # Errors
+    ///
+    /// When a file cannot be written or removed, or the files an earlier
+    /// install left do not read as a pack.
     pub(crate) fn place(&self, game: &Path) -> anyhow::Result<PathBuf> {
         let folder = game.join("mods").join(&self.id);
-        if self.dll.is_none()
-            && let Ok(old) = PackFiles::read_dir(&folder)
-        {
+        if self.dll.is_none() && folder.is_dir() {
+            let old = PackFiles::read_dir(&folder).with_context(|| {
+                format!(
+                    "{}: the files an earlier install left do not read as a pack; remove the folder and install again",
+                    folder.display()
+                )
+            })?;
             for stale in old
                 .names()
                 .filter(|name| self.files.iter().all(|(file, _)| file != name))
             {
                 let path = folder.join(stale);
                 std::fs::remove_file(&path).with_context(|| path.display().to_string())?;
+                let mut parent = path.parent();
+                while let Some(dir) = parent
+                    && dir != folder
+                    && std::fs::remove_dir(dir).is_ok()
+                {
+                    parent = dir.parent();
+                }
             }
         }
         for (name, bytes) in &self.files {
@@ -549,5 +567,35 @@ mod tests {
         let metadata: Metadata = serde_json::from_str(json).unwrap();
         let folders: Vec<&str> = metadata.packages.iter().map(Package::folder).collect();
         assert_eq!(folders, ["you.trading-post", "stalls", "other"]);
+    }
+
+    #[test]
+    fn a_pack_install_drops_old_files_with_their_folders_and_refuses_old_files_that_do_not_read() {
+        let game = crate::scratch("place");
+        let built = Built {
+            id: "you.pack".to_owned(),
+            version: "1.0.0".to_owned(),
+            summary: String::new(),
+            files: vec![("main.luau".to_owned(), b"print()".to_vec())],
+            dll: None,
+        };
+        let folder = game.join("mods/you.pack");
+        assert_eq!(built.place(&game).unwrap(), folder, "a first install");
+        std::fs::create_dir_all(folder.join("lib")).unwrap();
+        std::fs::write(folder.join("lib/old.luau"), "").unwrap();
+        std::fs::write(folder.join("notes.txt"), "kept").unwrap();
+        built.place(&game).unwrap();
+        assert!(!folder.join("lib").exists());
+        assert!(folder.join("notes.txt").is_file());
+        assert!(folder.join("main.luau").is_file());
+        let too_large = usize::try_from(enshwick_core::packs::MAX_FILE).unwrap() + 1;
+        std::fs::write(folder.join("items.toml"), vec![b' '; too_large]).unwrap();
+        let refused = built.place(&game).unwrap_err();
+        assert!(
+            refused.to_string().contains("do not read as a pack"),
+            "{refused:#}"
+        );
+        assert!(format!("{refused:#}").contains("items.toml"), "{refused:#}");
+        let _gone = std::fs::remove_dir_all(&game);
     }
 }

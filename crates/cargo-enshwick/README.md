@@ -77,7 +77,11 @@ is out, at most once a day; without a network it says nothing, and `CI` or
   then its end by its handle after 30 seconds. The server runs in a job
   object, so it ends with the tool. `--watch` builds the mod again on a change
   in its folder, and when the build passes, installs it and restarts the
-  server. `--level` sets the most detailed of the mod's lines shown.
+  server; a server that exits starts again after the next change that
+  builds. Without `--watch`, a crash makes the tool fail. `--level` sets the
+  most detailed of the mod's lines shown. The server's `enshwick.toml`
+  (`log_level`, `log_levels`) decides which lines reach the files, and the
+  tool says when it keeps fewer than the run needs.
 - `logs [-f] [--mod <id>] [--level <level>]` prints the newest run's log
   lines in the game or server folder, the loader's and every mod's merged by
   time. `-f` goes on with new lines until Ctrl-C.

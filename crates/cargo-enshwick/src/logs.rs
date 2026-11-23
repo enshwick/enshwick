@@ -2,7 +2,7 @@
 //! whole or followed as the loader writes them, merged by time.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{Read as _, Seek as _, SeekFrom, Write};
+use std::io::{ErrorKind, Read as _, Seek as _, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -13,10 +13,17 @@ use enshwick_core::abi::Level;
 pub(crate) const LOGS: &str = "logs";
 /// The loader's source, the name its run files start with.
 pub(crate) const LOADER: &str = "enshwick";
+/// How the loader's last line in a file that reached its size cap opens,
+/// before the name of the file the run goes on in.
+pub(crate) const ROLLED: &str = "this file reached its cap; the run goes on in ";
 /// The length of a run file's stamp, `2026-11-03_10-00-00`.
 const STAMP_LEN: usize = 19;
-/// The levels, most severe first, as log lines spell them.
-const LEVELS: [Level; 4] = [Level::ERROR, Level::WARN, Level::INFO, Level::DEBUG];
+/// The bytes at the end of a loader file read for its [`ROLLED`] line.
+const TAIL: u64 = 512;
+/// The least drop in the time of day, in milliseconds, between two lines of
+/// one file that is a new day: a smaller one is lines stamped on other
+/// threads and written a little out of order.
+const NEXT_DAY_DROP: u32 = 60 * 60 * 1000;
 /// How often a followed log is read again.
 pub(crate) const POLL: Duration = Duration::from_millis(250);
 
@@ -34,24 +41,45 @@ pub(crate) fn run_file(name: &str) -> Option<(&str, &str)> {
     (shaped && !source.is_empty()).then_some((source, stamp))
 }
 
-/// A level by the name log lines and settings give it.
-pub(crate) fn level(name: &str) -> Result<Level, String> {
-    LEVELS
-        .into_iter()
-        .find(|level| level.name() == name)
-        .ok_or_else(|| {
-            let names: Vec<&str> = LEVELS.iter().map(|level| level.name()).collect();
-            format!("{name:?} is no level; one of {}", names.join(", "))
-        })
+/// The day and the milliseconds into it of a run file's stamp, which the
+/// loader writes in UTC, as it does its lines' times.
+fn stamp_at(stamp: &str) -> Option<(u32, u32)> {
+    let part = |range: std::ops::Range<usize>| stamp.get(range)?.parse::<u32>().ok();
+    let day = civil_day(part(0..4)?, part(5..7)?, part(8..10)?)?;
+    let seconds = (part(11..13)? * 60 + part(14..16)?) * 60 + part(17..19)?;
+    Some((day, seconds * 1000))
+}
+
+/// A count of days that orders proleptic Gregorian dates, from 0000-03-01
+/// (Howard Hinnant's `days_from_civil`).
+fn civil_day(year: u32, month: u32, day: u32) -> Option<u32> {
+    let year = year.checked_sub(u32::from(month <= 2))?;
+    let year_of_era = year % 400;
+    let day_of_year = (153 * ((month + 9) % 12) + 2) / 5 + day.checked_sub(1)?;
+    Some(
+        year / 400 * 146_097 + year_of_era * 365 + year_of_era / 4 - year_of_era / 100
+            + day_of_year,
+    )
+}
+
+/// The milliseconds into the day of a line's time, `HH:MM:SS.mmmZ`.
+fn time_of_day(time: &str) -> Option<u32> {
+    let (clock, millis) = time.strip_suffix('Z')?.split_once('.')?;
+    if clock.len() != 8 || millis.len() != 3 {
+        return None;
+    }
+    let mut parts = clock.splitn(3, ':').map(|part| part.parse::<u32>().ok());
+    let (hours, minutes, seconds) = (parts.next()??, parts.next()??, parts.next()??);
+    Some(((hours * 60 + minutes) * 60 + seconds) * 1000 + millis.parse::<u32>().ok()?)
 }
 
 /// One entry of a run file: a line `HH:MM:SS.mmmZ <level> [<source>] <message>`
 /// with the lines that continue it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Entry {
-    /// The day of the run, counted in its file, and the time of day: what
-    /// entries of several files sort by.
-    pub(crate) at: (u32, String),
+    /// The day, counted from the file's stamp, and the milliseconds into it,
+    /// both UTC: what entries of several files sort by.
+    pub(crate) at: (u32, u32),
     /// `None` for lines before the first entry, such as the stub's.
     pub(crate) level: Option<Level>,
     pub(crate) source: String,
@@ -62,18 +90,16 @@ pub(crate) struct Entry {
 }
 
 impl Entry {
-    /// The entry `line` opens; `None` for a line that continues the one
-    /// before.
-    fn parse(line: &str, day: u32) -> Option<Self> {
+    /// The entry `line` opens, on day 0 until its file counts the day;
+    /// `None` for a line that continues the one before.
+    fn parse(line: &str) -> Option<Self> {
         let (time, rest) = line.split_once(' ')?;
-        if !time.ends_with('Z') {
-            return None;
-        }
+        let time = time_of_day(time)?;
         let (name, rest) = rest.trim_start().split_once(' ')?;
-        let level = level(name).ok()?;
+        let level = name.parse().ok()?;
         let (source, message) = rest.trim_start().strip_prefix('[')?.split_once("] ")?;
         Some(Self {
-            at: (day, time.to_owned()),
+            at: (0, time),
             level: Some(level),
             source: source.to_owned(),
             message: message.to_owned(),
@@ -96,7 +122,7 @@ pub(crate) struct Filter {
 }
 
 /// A followed file: the bytes read and what the last read left.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Followed {
     read: u64,
     /// The end of a line the loader has not finished writing.
@@ -104,8 +130,20 @@ struct Followed {
     /// The entry given last, whose day, time, level and source a line that
     /// continues it in a later read takes.
     last: Option<Entry>,
-    /// Days the time of day went back in this file.
-    day: u32,
+    /// The day and time the file's lines have reached, from its stamp on.
+    at: (u32, u32),
+}
+
+impl Followed {
+    /// A file not read yet, whose run or roll-over opened it at `stamp`.
+    fn new(stamp: &str) -> Self {
+        Self {
+            read: 0,
+            partial: Vec::new(),
+            last: None,
+            at: stamp_at(stamp).unwrap_or_default(),
+        }
+    }
 }
 
 /// The run files of a log folder, read as they grow.
@@ -131,17 +169,27 @@ impl Follower {
         }
     }
 
-    /// Follows the newest run in `dir`, from the loader's newest file on.
+    /// Follows the newest run in `dir`, from the stamp every source's first
+    /// file of it shares on: the loader's newest file that no other one
+    /// names as where the run went on after its size cap.
     ///
     /// # Errors
     ///
     /// When `dir` holds no file of the loader.
     pub(crate) fn newest_run(dir: &Path) -> anyhow::Result<Self> {
-        let newest = names(dir)
+        let loader: Vec<String> = names(dir)
+            .into_iter()
+            .filter(|name| run_file(name).is_some_and(|(source, _)| source == LOADER))
+            .collect();
+        let rolled: BTreeSet<String> = loader
             .iter()
-            .filter_map(|name| run_file(name))
-            .filter(|(source, _)| *source == LOADER)
-            .map(|(_, stamp)| stamp.to_owned())
+            .filter_map(|name| rolled_into(&dir.join(name)))
+            .collect();
+        // shortcut: a run that rolled its loader file more than the loader keeps has lost its first file, so its sources' first files are left out; upgrade when runs that long need the merged view.
+        let newest = loader
+            .iter()
+            .filter(|name| !rolled.contains(*name))
+            .filter_map(|name| run_file(name).map(|(_, stamp)| stamp.to_owned()))
             .max();
         let Some(from) = newest else {
             bail!(
@@ -161,7 +209,7 @@ impl Follower {
     ///
     /// # Errors
     ///
-    /// When a followed file cannot be read.
+    /// When a followed file that is still there cannot be read.
     pub(crate) fn poll(&mut self) -> anyhow::Result<Vec<Entry>> {
         for name in names(&self.dir) {
             let Some((_, stamp)) = run_file(&name) else {
@@ -170,30 +218,57 @@ impl Follower {
             let ours =
                 !self.old.contains(&name) && self.from.as_deref().is_none_or(|from| stamp >= from);
             if ours && !self.files.contains_key(&name) {
-                self.files.insert(name, Followed::default());
+                let followed = Followed::new(stamp);
+                self.files.insert(name, followed);
             }
         }
         let mut entries = Vec::new();
+        let mut gone = Vec::new();
         for (name, followed) in &mut self.files {
             let path = self.dir.join(name);
-            let mut file =
-                std::fs::File::open(&path).with_context(|| path.display().to_string())?;
+            let (source, stamp) = run_file(name).unwrap_or_default();
+            let mut file = match std::fs::File::open(&path) {
+                Ok(file) => file,
+                // The loader deletes a source's oldest files as it rolls
+                // over, and deleting one by hand is safe.
+                Err(e) if e.kind() == ErrorKind::NotFound => {
+                    gone.push(name.clone());
+                    continue;
+                }
+                Err(e) => return Err(e).with_context(|| path.display().to_string()),
+            };
             let length = file.metadata().map_or(0, |m| m.len());
             if length < followed.read {
                 // Deleted and made again by hand: read it from the start.
-                *followed = Followed::default();
+                *followed = Followed::new(stamp);
             }
             let taken = file
                 .seek(SeekFrom::Start(followed.read))
                 .and_then(|_| file.read_to_end(&mut followed.partial))
                 .with_context(|| path.display().to_string())?;
             followed.read += taken as u64;
-            let source = run_file(name).map_or("", |(source, _)| source);
             take_lines(followed, source, &mut entries);
         }
-        entries.sort_by(|a, b| a.at.cmp(&b.at));
+        for name in gone {
+            self.files.remove(&name);
+        }
+        entries.sort_by_key(|entry| entry.at);
         Ok(entries)
     }
+}
+
+/// The file the loader's file at `path` says its run went on in once it
+/// reached its size cap; `None` for a file that did not.
+fn rolled_into(path: &Path) -> Option<String> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let length = file.metadata().ok()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(TAIL)))
+        .ok()?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail).ok()?;
+    let tail = String::from_utf8_lossy(&tail);
+    let (_, next) = tail.rsplit_once(ROLLED)?;
+    Some(next.lines().next()?.trim_end().to_owned())
 }
 
 /// Moves the whole lines of `followed` into entries. The loader writes an
@@ -208,23 +283,14 @@ fn take_lines(followed: &mut Followed, source: &str, entries: &mut Vec<Entry>) {
     let mut open: Option<Entry> = None;
     for line in String::from_utf8_lossy(&whole).lines() {
         let line = line.trim_end_matches('\r');
-        let before = open.as_ref().or(followed.last.as_ref());
-        let last_time = before.map(|entry| entry.at.1.clone());
-        let continued = before.map(|entry| Entry {
-            message: line.to_owned(),
-            text: line.to_owned(),
-            ..entry.clone()
-        });
-        // shortcut: a file rolled over at its size cap starts its day count again, so its lines after a midnight sort before the old file's; upgrade when runs that long need the merged view.
-        let entry = Entry::parse(line, followed.day).map(|mut entry| {
-            if last_time.is_some_and(|last| entry.at.1 < last) {
-                followed.day += 1;
-                entry.at.0 = followed.day;
+        match (Entry::parse(line), &mut open) {
+            (Some(mut entry), open) => {
+                // shortcut: a file silent for nearly a day reads its next line as the same day; upgrade when gaps that long need the merged view.
+                let (day, time) = followed.at;
+                entry.at.0 = day + u32::from(time > entry.at.1 + NEXT_DAY_DROP);
+                followed.at = entry.at;
+                entries.extend(open.replace(entry));
             }
-            entry
-        });
-        match (entry, &mut open) {
-            (Some(entry), open) => entries.extend(open.replace(entry)),
             (None, Some(open)) => {
                 open.text.push('\n');
                 open.text.push_str(line);
@@ -232,13 +298,20 @@ fn take_lines(followed: &mut Followed, source: &str, entries: &mut Vec<Entry>) {
                 open.message.push_str(line);
             }
             (None, None) => {
-                open = Some(continued.unwrap_or_else(|| Entry {
-                    at: (0, String::new()),
-                    level: None,
-                    source: source.to_owned(),
-                    message: line.to_owned(),
-                    text: line.to_owned(),
-                }));
+                open = Some(match &followed.last {
+                    Some(before) => Entry {
+                        message: line.to_owned(),
+                        text: line.to_owned(),
+                        ..before.clone()
+                    },
+                    None => Entry {
+                        at: followed.at,
+                        level: None,
+                        source: source.to_owned(),
+                        message: line.to_owned(),
+                        text: line.to_owned(),
+                    },
+                });
             }
         }
     }
@@ -270,8 +343,9 @@ pub(crate) struct Args {
     /// Prints only this mod's lines, by its id.
     #[arg(long = "mod", value_name = "ID")]
     mod_id: Option<String>,
-    /// The most detailed lines printed: error, warn, info or debug.
-    #[arg(long, default_value = "debug", value_parser = level)]
+    /// The most detailed lines printed: error, warn, info or debug. The
+    /// server's `enshwick.toml` decides which lines reach the files.
+    #[arg(long, default_value = "debug")]
     level: Level,
 }
 
@@ -358,17 +432,118 @@ pub(crate) mod tests {
             "you.pack",
             "off: init returned 3",
         );
-        let entry = Entry::parse(text.trim_end(), 0).unwrap();
-        assert_eq!(entry.at, (0, "00:42:35.449Z".to_owned()));
+        let entry = Entry::parse(text.trim_end()).unwrap();
+        assert_eq!(entry.at, (0, (42 * 60 + 35) * 1000 + 449));
         assert_eq!(entry.level, Some(Level::ERROR));
         assert_eq!(entry.source, "you.pack");
         assert_eq!(entry.message, "off: init returned 3");
-        assert_eq!(Entry::parse("  at the second line", 0), None);
-        assert!(
-            level("loud")
-                .unwrap_err()
-                .contains("error, warn, info, debug")
+        assert_eq!(Entry::parse("  at the second line"), None);
+        assert_eq!(Entry::parse("00:42:35.449Z loud  [you.pack] hi"), None);
+        assert_eq!(Entry::parse("99999999999:00:00.000Z info  [a] b"), None);
+    }
+
+    #[test]
+    fn a_stamp_reads_as_a_day_that_orders_dates_and_its_time() {
+        let at = |stamp| stamp_at(stamp).unwrap();
+        assert_eq!(at("2026-11-03_10-00-00").1, 36_000_000);
+        assert_eq!(at("2026-11-04_00-00-00").0, at("2026-11-03_23-59-59").0 + 1);
+        assert_eq!(at("2026-03-01_00-00-00").0, at("2026-02-28_00-00-00").0 + 1);
+        assert_eq!(at("2028-03-01_00-00-00").0, at("2028-02-28_00-00-00").0 + 2);
+        assert_eq!(at("2027-01-01_00-00-00").0, at("2026-12-31_00-00-00").0 + 1);
+        assert_eq!(stamp_at("2026-11-03"), None);
+    }
+
+    #[test]
+    fn lines_a_little_out_of_order_keep_their_day_and_a_late_first_line_takes_the_next() {
+        let dir = crate::scratch("days");
+        let loader = dir.join("enshwick_2026-11-03_23-50-00.log");
+        append(&loader, &line("23:55:00.101", Level::INFO, LOADER, "a"));
+        append(
+            &loader,
+            &line(
+                "23:55:00.100",
+                Level::WARN,
+                LOADER,
+                "3 log lines were dropped",
+            ),
         );
+        append(&loader, &line("23:56:00.000", Level::INFO, LOADER, "b"));
+        append(
+            &dir.join("you.mod_2026-11-03_23-50-00.log"),
+            &line(
+                "00:05:00.000",
+                Level::INFO,
+                "you.mod",
+                "first, after midnight",
+            ),
+        );
+        let entries = Follower::newest_run(&dir).unwrap().poll().unwrap();
+        let messages: Vec<&str> = entries.iter().map(|e| e.message.as_str()).collect();
+        assert_eq!(
+            messages,
+            [
+                "3 log lines were dropped",
+                "a",
+                "b",
+                "first, after midnight"
+            ]
+        );
+        assert_eq!(entries[0].at.0, entries[2].at.0, "{entries:?}");
+        assert_eq!(entries[3].at.0, entries[2].at.0 + 1, "{entries:?}");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_run_whose_loader_file_rolled_over_keeps_every_source_s_lines() {
+        let dir = crate::scratch("rolled");
+        append(
+            &dir.join("enshwick_2026-11-02_10-00-00.log"),
+            &line("10:00:00.000", Level::INFO, LOADER, "old run"),
+        );
+        let first = dir.join("enshwick_2026-11-03_10-00-00.log");
+        append(
+            &first,
+            &line("10:00:00.000", Level::INFO, LOADER, "starting"),
+        );
+        append(
+            &first,
+            &line(
+                "12:00:00.000",
+                Level::INFO,
+                LOADER,
+                &format!("{ROLLED}enshwick_2026-11-03_12-00-01.log"),
+            ),
+        );
+        append(
+            &dir.join("enshwick_2026-11-03_12-00-01.log"),
+            &line("12:00:00.500", Level::INFO, LOADER, "went on"),
+        );
+        append(
+            &dir.join("you.mod_2026-11-03_10-00-00.log"),
+            &line("10:30:00.000", Level::INFO, "you.mod", "hello"),
+        );
+        let entries = Follower::newest_run(&dir).unwrap().poll().unwrap();
+        let messages: Vec<&str> = entries.iter().map(|e| e.message.as_str()).collect();
+        assert_eq!(messages[..2], ["starting", "hello"]);
+        assert_eq!(messages[3], "went on");
+        assert!(!messages.contains(&"old run"), "{messages:?}");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_followed_file_that_is_deleted_is_left_and_the_rest_go_on() {
+        let dir = crate::scratch("deleted");
+        let mut follower = Follower::new_run(&dir);
+        let gone = dir.join("you.mod_2026-11-03_10-00-00.log");
+        let loader = dir.join("enshwick_2026-11-03_10-00-00.log");
+        append(&gone, &line("10:00:00.000", Level::INFO, "you.mod", "a"));
+        assert_eq!(follower.poll().unwrap().len(), 1);
+        std::fs::remove_file(&gone).unwrap();
+        append(&loader, &line("10:00:01.000", Level::INFO, LOADER, "b"));
+        let entries = follower.poll().unwrap();
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        assert_eq!(entries[0].message, "b");
+        let _gone = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -455,7 +630,7 @@ pub(crate) mod tests {
         let second = follower.poll().unwrap();
         assert_eq!(second.len(), 1, "{second:?}");
         assert_eq!(second[0].message, "later\n  where it went on");
-        assert_eq!(second[0].at.0, 1, "after midnight");
+        assert_eq!(second[0].at.0, first[0].at.0 + 1, "after midnight");
         append(&loader, "  in a later write\n");
         let third = follower.poll().unwrap();
         assert_eq!(third[0].message, "  in a later write");

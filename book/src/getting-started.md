@@ -267,7 +267,13 @@ world loaded; ready: 1 of 1 mods running
 A mod the loader turned off shows `off:` and the loader's reason. After that
 the tool prints the mod's lines and every warning. `--watch` rebuilds the mod
 when a file in its folder changes, then installs it and restarts the server.
-A failed build leaves the running server as it is.
+A failed build leaves the running server as it is. When the server exits under
+`--watch`, the next change that builds starts it again. Without `--watch`, a
+crash makes the tool fail.
+
+`--level debug` shows the mod's debug lines once the server keeps them. The
+server's `enshwick.toml` decides which lines reach the files, as
+[Logging](logging.md) shows, and the tool says when it keeps fewer.
 
 Ctrl-C stops the server the tool started, and no other process. The server
 shuts down in order. When it is still running after 30 seconds, the tool
