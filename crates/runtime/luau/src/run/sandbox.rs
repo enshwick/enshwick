@@ -104,7 +104,7 @@ impl Inner {
         let started = vm.lua.scope(|scope| {
             self.init_functions(&vm, &api, scope, &load)?;
             vm.lua.sandbox(true)?;
-            let started = self.enter(&vm.lua, self.limits.start, || {
+            let started = self.enter(&vm.lua, Instant::now(), self.limits.start, || {
                 vm.lua
                     .load(&main[..])
                     .set_name(format!("@{MAIN}"))
@@ -132,13 +132,19 @@ impl Inner {
         }
     }
 
-    /// Runs `body` as a call into the scripts of `lua`, under `budget`
-    /// unless an outer call on this thread set an earlier end; `Err` when it
-    /// panicked.
-    fn enter<R>(&self, lua: &Lua, budget: Duration, body: impl FnOnce() -> R) -> Result<R, ()> {
+    /// Runs `body` as a call into the scripts of `lua` that began at
+    /// `began`, under `budget` unless an outer call on this thread set an
+    /// earlier end; `Err` when it panicked.
+    fn enter<R>(
+        &self,
+        lua: &Lua,
+        began: Instant,
+        budget: Duration,
+        body: impl FnOnce() -> R,
+    ) -> Result<R, ()> {
         let outer = DEADLINE.get();
         let outer_expired = EXPIRED.get();
-        let deadline = Instant::now().checked_add(budget);
+        let deadline = began.checked_add(budget);
         let mine = match (outer, deadline) {
             (Some(outer), Some(deadline)) => Some(outer.min(deadline)),
             (outer, deadline) => outer.or(deadline),
@@ -166,7 +172,7 @@ impl Inner {
         // A call inside another call counts in the outer one's time.
         let outermost = DEADLINE.get().is_none();
         let began = Instant::now();
-        match self.enter(&vm.lua, self.limits.call, || body(vm)) {
+        match self.enter(&vm.lua, began, self.limits.call, || body(vm)) {
             Ok(Ok(value)) => {
                 if outermost {
                     self.charge(began, what);

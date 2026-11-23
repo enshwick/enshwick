@@ -29,6 +29,11 @@ A Luau mod runs in a virtual machine of its own, through Luau's interpreter.
 An interpreter does more work per call than native code, so a script runs
 slower than the same logic in a native mod.
 
+Most of a Luau handler's time goes to crossing between the game's code and the
+virtual machine. Entering a handler costs about 0.3 µs, and each method it calls
+on an object, such as `damage:cause()`, about 0.25 µs. The same damage filter
+costs about 34 ns in Rust and about 0.8 µs in Luau.
+
 A handler that runs once per event or step costs little either way. A function
 that runs on every hit or every frame is best written in Rust, C or C++. The
 budgets each Luau mod has are in [Luau mods](../luau.md#the-sandbox).
@@ -42,13 +47,15 @@ game, and the rows come from different setups, so do not compare them.
 | --- | --- | --- |
 | A mid-function hook, per pass, with an empty handler | about 5 to 22 ns, by the code path the processor takes; one handler adds about 4 ns | a release test on an AMD Ryzen 9 9950X3D that runs every path ([Mid-function hooks](../mid-function-hooks.md)) |
 | One event handler call | about 1 µs, mostly the processor fetching the mod's code and data | a server copy of game build 399 with 11 mods ([Events and the scheduler](../events.md)) |
-| One Luau damage filter call that reads the hit's total and cause, then scales it | about 1.7 to 2.2 µs, 0 allocations in 10,000 warm calls | `cargo bench -p enshwick-luau --bench calls` on the fake host, release build, AMD Ryzen 9 9950X3D, two runs on 2026-11-13 while other builds ran on the machine |
-| A Luau call into the API with number arguments | about 0.19 µs, no allocation | the same bench and runs |
-| A Luau call into the API with a string | about 0.3 to 0.35 µs, 1 allocation | the same bench and runs |
-| A Luau call into the API with a buffer | about 0.22 to 0.27 µs, 1 allocation | the same bench and runs |
-| A Luau call into the API with a list | about 0.4 to 0.5 µs, 2 allocations | the same bench and runs |
-| A Luau call into the API with a function it calls back once | about 0.65 to 0.7 µs, 1 allocation | the same bench and runs |
-| A Luau call into the API with a record of two numbers and a [content id](ids.md) | about 1.1 to 1.4 µs, 3 allocations | the same bench and runs |
+| A damage filter that halves a fall, written in Rust | about 34 ns, 0 allocations in 10,000 warm calls | `cargo bench -p enshwick-luau --bench calls`, case `handler/rust`, on the fake host, release build, AMD Ryzen 9 9950X3D, one run on 2026-11-23 |
+| The same damage filter written in Luau | about 0.8 µs, 0 allocations in 10,000 warm calls | the same bench and run, case `handler/luau`; the other `handler` cases measure its parts |
+| One Luau damage filter call that reads the hit's total and cause, then scales it | about 1.0 µs, 0 allocations in 10,000 warm calls | the same bench and run |
+| A Luau call into the API with number arguments | about 0.13 µs, no allocation | the same bench and run |
+| A Luau call into the API with a string | about 0.25 µs, 1 allocation | the same bench and run |
+| A Luau call into the API with a buffer | about 0.18 µs, 1 allocation | the same bench and run |
+| A Luau call into the API with a list | about 0.33 µs, 2 allocations | the same bench and run |
+| A Luau call into the API with a function it calls back once | about 0.3 µs, 1 allocation | the same bench and run |
+| A Luau call into the API with a record of two numbers and a [content id](ids.md) | about 1.0 µs, 3 allocations | the same bench and run |
 | A log line above the mod's level | one atomic load | [Logging and diagnostics](../logging.md) |
 | Timing a callback, with `diagnostics = true` | about 14 ns | [Logging and diagnostics](../logging.md#per-mod-costs) |
 
