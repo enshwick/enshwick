@@ -443,8 +443,12 @@ fn log_ready(loader: &Loader) {
         "{}",
         log_files::ready(loader.mods.len() - off.len(), loader.mods.len())
     );
-    for record in off {
-        let reason = record.off_reason_shown().unwrap_or_default();
+    // A mod turned off on another thread just now has its flag before its
+    // reason; its own off line follows in its log.
+    for (record, reason) in off
+        .into_iter()
+        .filter_map(|record| Some((record, record.off_reason_shown()?)))
+    {
         let first = reason.lines().next().unwrap_or_default();
         crate::log!(
             WARN,

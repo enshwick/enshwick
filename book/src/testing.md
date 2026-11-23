@@ -164,7 +164,12 @@ let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwi
 assert_eq!(status, Status::REFUSED);
 assert_eq!(
     loader.logs(),
-    [(Level::ERROR, "off: symbol quest.reward: missing on this game build".to_owned())]
+    [(
+        Level::ERROR,
+        "off: symbol quest.reward: missing on this game build \
+         (E2003, see https://enshwick.com/errors/e2003/)"
+            .to_owned()
+    )]
 );
 ```
 

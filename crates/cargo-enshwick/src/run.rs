@@ -182,10 +182,21 @@ fn level_notes(server: &Path, id: &str, level: Level) -> Vec<String> {
         .and_then(|text| toml::from_str(&text).ok())
         .unwrap_or_default();
     let level_in = |value: &toml::Value| value.as_str()?.parse::<Level>().ok();
+    // The loader reads each key whole: one bad entry drops the whole table.
+    let levels: Option<Vec<(&str, Level)>> = kept
+        .get(LOG_LEVELS_KEY)
+        .and_then(toml::Value::as_table)
+        .and_then(|table| {
+            table
+                .iter()
+                .map(|(source, value)| Some((source.as_str(), level_in(value)?)))
+                .collect()
+        });
     let of = |source: &str| {
-        kept.get(LOG_LEVELS_KEY)
-            .and_then(|levels| levels.get(source))
-            .and_then(level_in)
+        levels
+            .iter()
+            .flatten()
+            .find_map(|&(s, level)| (s == source).then_some(level))
             .or_else(|| kept.get(LOG_LEVEL_KEY).and_then(level_in))
             .unwrap_or_default()
     };
@@ -198,7 +209,7 @@ fn level_notes(server: &Path, id: &str, level: Level) -> Vec<String> {
     }
     if of(id) < level {
         notes.push(format!(
-            "note: {SETTINGS_FILE} keeps {id}'s lines up to {kept}; add log_levels = {{ \"{id}\" = \"{wanted}\" }} to it to see {wanted} lines",
+            "note: {SETTINGS_FILE} keeps {id}'s lines up to {kept}; add {LOG_LEVELS_KEY} = {{ \"{id}\" = \"{wanted}\" }} to it to see {wanted} lines",
             kept = of(id).name(),
             wanted = level.name()
         ));

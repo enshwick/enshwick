@@ -349,6 +349,20 @@ fn the_run_says_when_enshwick_toml_keeps_fewer_lines_than_it_needs() {
 }
 
 #[test]
+fn one_bad_entry_in_log_levels_drops_the_whole_table_as_the_loader_does() {
+    let server = crate::scratch("levels-bad");
+    std::fs::write(
+        server.join(SETTINGS_FILE),
+        "log_levels = { \"a.b\" = \"loud\", \"you.mod\" = \"debug\" }\n",
+    )
+    .unwrap();
+    let notes = level_notes(&server, "you.mod", Level::DEBUG);
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].contains("you.mod's lines up to info"), "{notes:?}");
+    let _gone = std::fs::remove_dir_all(&server);
+}
+
+#[test]
 fn the_state_of_each_mod_is_reported_once_the_world_has_loaded() {
     let mut start = Start::default();
     start.see(&entry(

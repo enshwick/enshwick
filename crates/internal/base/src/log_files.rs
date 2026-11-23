@@ -26,12 +26,32 @@ pub const STAMP_LEN: usize = 19;
 
 /// The name of `source`'s file of the run stamped `stamp`:
 /// `<source>_<stamp>.log`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::run_file_name;
+///
+/// assert_eq!(run_file_name("enshwick", "2026-11-03_10-00-00"), "enshwick_2026-11-03_10-00-00.log");
+/// ```
 #[must_use]
 pub fn run_file_name(source: &str, stamp: &str) -> String {
     format!("{source}_{stamp}.log")
 }
 
 /// The source and stamp of a run file's `name`; `None` for any other file.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::run_file;
+///
+/// assert_eq!(
+///     run_file("you.my-mod_2026-11-03_10-00-00.log"),
+///     Some(("you.my-mod", "2026-11-03_10-00-00"))
+/// );
+/// assert_eq!(run_file("start.log"), None);
+/// ```
 #[must_use]
 pub fn run_file(name: &str) -> Option<(&str, &str)> {
     let base = name.strip_suffix(".log")?;
@@ -48,6 +68,18 @@ pub fn run_file(name: &str) -> Option<(&str, &str)> {
 /// Appends the line `HH:MM:SS.mmmZ <level> [<source>] <message>` and its
 /// newline to `out`, at `millis` since the Unix epoch, and gives where the
 /// source sits in `out`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::abi::Level;
+/// use enshwick_base::log_files::write_line;
+///
+/// let mut out = String::new();
+/// let source = write_line(&mut out, 449, Level::INFO, "enshwick", "hi");
+/// assert_eq!(out, "00:00:00.449Z info  [enshwick] hi\n");
+/// assert_eq!(&out[source], "enshwick");
+/// ```
 pub fn write_line(
     out: &mut String,
     millis: u64,
@@ -86,6 +118,17 @@ pub struct Line<'a> {
 impl<'a> Line<'a> {
     /// The line `text` opens, without its newline; `None` for one that
     /// continues the line before, or any other text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_base::abi::Level;
+    /// use enshwick_base::log_files::Line;
+    ///
+    /// let line = Line::parse("00:00:01.000Z warn  [you.mod] slow");
+    /// assert_eq!(line.map(|l| (l.millis, l.level, l.source)), Some((1000, Level::WARN, "you.mod")));
+    /// assert_eq!(Line::parse("  continued"), None);
+    /// ```
     #[must_use]
     pub fn parse(text: &'a str) -> Option<Self> {
         let (time, rest) = text.split_once(' ')?;
@@ -117,6 +160,14 @@ fn time_of_day(time: &str) -> Option<u32> {
 pub const READY: &str = "ready: ";
 
 /// The loader's line once every mod's `ready` ran.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::ready;
+///
+/// assert_eq!(ready(2, 3), "ready: 2 of 3 mods running");
+/// ```
 #[must_use]
 pub fn ready(running: usize, all: usize) -> String {
     format!("{READY}{running} of {all} mods running")
@@ -133,6 +184,14 @@ pub const NO_WORLD_KEY: &str = const_format::concatcp!(
 );
 
 /// The loader's line as the world `key` loads.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::world_settings;
+///
+/// assert_eq!(world_settings("D:/saves/world0"), "world settings: world D:/saves/world0");
+/// ```
 #[must_use]
 pub fn world_settings(key: &str) -> String {
     format!("{WORLD_SETTINGS}world {key}")
@@ -142,6 +201,14 @@ pub fn world_settings(key: &str) -> String {
 const INITIALISED: &str = " initialised";
 
 /// The loader's line for the mod `id` at `version` whose `init` passed.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::initialised;
+///
+/// assert_eq!(initialised("you.hello", "0.1.0"), "you.hello 0.1.0 initialised");
+/// ```
 #[must_use]
 pub fn initialised(id: &str, version: &str) -> String {
     format!("{id} {version}{INITIALISED}")
@@ -149,6 +216,15 @@ pub fn initialised(id: &str, version: &str) -> String {
 
 /// The id and version an [`initialised`] line names; `None` for any other
 /// line.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::initialised_mod;
+///
+/// assert_eq!(initialised_mod("you.hello 0.1.0 initialised"), Some(("you.hello", "0.1.0")));
+/// assert_eq!(initialised_mod("ready: 1 of 1 mods running"), None);
+/// ```
 #[must_use]
 pub fn initialised_mod(message: &str) -> Option<(&str, &str)> {
     let (id, version) = message.strip_suffix(INITIALISED)?.split_once(' ')?;
@@ -160,12 +236,29 @@ const OFF: &str = "off: ";
 
 /// The line a mod's log gets when the loader turns it off for `reason`,
 /// with the error `code`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::off;
+///
+/// assert_eq!(off("init returned 3", "E2003"), "off: init returned 3 (E2003)");
+/// ```
 #[must_use]
 pub fn off(reason: &str, code: impl Display) -> String {
     format!("{OFF}{reason} ({code})")
 }
 
 /// The reason and code an [`off`] line gives; `None` for any other line.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::off_reason;
+///
+/// assert_eq!(off_reason("off: init returned 3 (E2003)"), Some("init returned 3 (E2003)"));
+/// assert_eq!(off_reason("you.hello 0.1.0 initialised"), None);
+/// ```
 #[must_use]
 pub fn off_reason(message: &str) -> Option<&str> {
     message.strip_prefix(OFF)
@@ -177,6 +270,14 @@ const ROLLED: &str = "this file reached its cap; the run goes on in ";
 
 /// The loader's last line in a file that reached its size cap, naming the
 /// file `next` the run goes on in.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::rolled;
+///
+/// assert_eq!(rolled("b.log"), "this file reached its cap; the run goes on in b.log");
+/// ```
 #[must_use]
 pub fn rolled(next: &str) -> String {
     format!("{ROLLED}{next}")
@@ -184,6 +285,16 @@ pub fn rolled(next: &str) -> String {
 
 /// The file the last [`rolled`] line in `text` names; `None` when it holds
 /// none.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_base::log_files::{rolled, rolled_into};
+///
+/// let text = format!("00:00:00.000Z info  [enshwick] {}\n", rolled("b.log"));
+/// assert_eq!(rolled_into(&text), Some("b.log"));
+/// assert_eq!(rolled_into("no roll"), None);
+/// ```
 #[must_use]
 pub fn rolled_into(text: &str) -> Option<&str> {
     let (_, next) = text.rsplit_once(ROLLED)?;

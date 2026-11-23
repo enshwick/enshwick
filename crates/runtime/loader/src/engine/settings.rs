@@ -333,6 +333,17 @@ mod tests {
     }
 
     #[test]
+    fn one_bad_entry_in_log_levels_drops_the_whole_table() {
+        let (settings, problems) =
+            Settings::parse("log_levels = { \"a.b\" = \"loud\", \"you.mod\" = \"debug\" }\n");
+        assert!(settings.log_levels.is_empty());
+        assert!(
+            problems.lines[0].starts_with("log_levels: "),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
     fn a_file_that_does_not_parse_names_where_and_reads_as_the_defaults() {
         let (settings, problems) = Settings::parse("log_level = \"debug\"\n[[[\n");
         assert_eq!(settings, Settings::default());

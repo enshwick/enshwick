@@ -430,6 +430,24 @@ fn the_ready_line_is_followed_by_a_warning_naming_each_mod_off_and_its_reason() 
 }
 
 #[test]
+fn a_mod_flagged_off_before_its_reason_is_stored_gets_no_empty_warning() {
+    let (loader, order) = loader(&[TestMod::plain("you.lanterns")], false);
+    let order: Vec<&Library> = order.iter().collect();
+    initialise(&loader, &order, None);
+    loader.mods[0].off.store(true, Ordering::Release);
+    let _turn = crate::engine::log::capture_turn();
+    log_ready(&loader);
+    let warnings: Vec<String> = crate::engine::log::captured()
+        .into_iter()
+        .filter(|(level, source, _)| {
+            *level == Level::WARN && source == crate::engine::settings::LOADER_ID
+        })
+        .map(|(_, _, message)| message)
+        .collect();
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
 fn ready_skips_the_mods_that_are_off() {
     let (loader, order) = loader(
         &[TestMod::plain("you.lanterns"), TestMod::plain("you.stalls")],
