@@ -39,12 +39,16 @@ pub(crate) mod add;
 pub(crate) mod change;
 #[cfg(feature = "unstable")]
 mod decode;
+#[cfg(feature = "unstable")]
+pub(crate) mod music;
 mod play;
 #[cfg(feature = "unstable")]
 pub(crate) mod qoa;
 #[cfg(feature = "unstable")]
 pub(crate) mod recording;
 pub(crate) mod script;
+#[cfg(feature = "unstable")]
+pub(crate) mod voiceover;
 
 use crate::Off;
 use crate::abi::{Side, Str};
@@ -62,9 +66,13 @@ pub use change::{
 };
 #[cfg(feature = "unstable")]
 pub use decode::{Channels, Trim};
+#[cfg(feature = "unstable")]
+pub use music::{DAY, MUSIC_VOLUME, NewMusic};
 pub use play::{
     MAX_FADE, MAX_STARTS, Place, Play, PlayFailure, SoundHandle, SoundState, Sounds, play, stop_all,
 };
+#[cfg(feature = "unstable")]
+pub use voiceover::{NewVoiceover, VoiceLine, VoiceoverId};
 
 /// The longest take a mod adds, after its trim.
 pub const MAX_TAKE: core::time::Duration = core::time::Duration::from_secs(600);

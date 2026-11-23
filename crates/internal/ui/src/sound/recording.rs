@@ -298,6 +298,11 @@ impl Recording {
     pub(super) const fn bytes(&self) -> u64 {
         self.bytes
     }
+
+    /// Its length in frames at [`SAMPLE_RATE`].
+    pub(super) fn frames(&self) -> usize {
+        self.samples.frames()
+    }
 }
 
 /// The value of a streamed data reference with `hash` over `streamed`.

@@ -2285,6 +2285,16 @@ pub const FACTS: &[(&str, Fact)] = &[
             name: "Game",
         },
     ),
+    (ids::VOICEOVER, Fact::Type("keen::VoiceoverResource")),
+    (ids::VOICEOVER_LANGUAGES, Fact::Type("keen::Voiceover")),
+    (
+        ids::AMBIENT_SFX_COLLECTION,
+        Fact::Type("keen::AmbientSfxCollectionResource"),
+    ),
+    (
+        ids::AMBIENT_ENVIRONMENT,
+        Fact::Type("keen::AmbientEnvironment"),
+    ),
     (
         ids::MAP_MARKER_TYPE_TYPE_NAME,
         offset("keen::MapMarkerType", "typeName", LOCA_TAG_REFERENCE),
