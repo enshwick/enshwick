@@ -43,7 +43,6 @@ use crate::locks::Relock as _;
 use enshwick_content::__load::*;
 #[cfg(feature = "unstable")]
 use enshwick_knowledge::__load::*;
-#[cfg(feature = "unstable")]
 use enshwick_ui::__load::*;
 
 /// The manifest file of a pack folder.

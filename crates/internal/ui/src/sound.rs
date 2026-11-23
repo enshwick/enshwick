@@ -36,6 +36,8 @@
 pub(crate) mod add;
 mod change;
 #[cfg(feature = "unstable")]
+mod qoa;
+#[cfg(feature = "unstable")]
 pub(crate) mod recording;
 pub(crate) mod script;
 
