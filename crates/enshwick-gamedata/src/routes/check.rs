@@ -5,8 +5,6 @@
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
-use rustc_hash::FxHashSet;
-
 use super::shape::{self, Run, ShapeNames, Step};
 use crate::reflect::Image;
 
@@ -63,13 +61,9 @@ pub(crate) fn runs(steps: &[Step], image: &Image<'_>, rva: u64) -> bool {
     matched && (covered >= COVER || ended)
 }
 
-fn parse(names: &ShapeNames, steps: &[String]) -> Option<Vec<Step>> {
-    steps.iter().map(|s| Step::parse(s, names).ok()).collect()
-}
-
 /// Whether the code at `rva` in `image` runs as the check shape `check`
 /// says, as a route's `check` row reads; false for a step that does not
-/// parse.
+/// parse and for a gap, which a check has none of.
 ///
 /// # Examples
 ///
@@ -87,14 +81,17 @@ fn parse(names: &ShapeNames, steps: &[String]) -> Option<Vec<Step>> {
 /// ```
 #[must_use]
 pub fn check_holds(names: &ShapeNames, check: &[String], image: &Image<'_>, rva: u64) -> bool {
-    parse(names, check).is_some_and(|steps| runs(&steps, image, rva))
+    shape::parse_shape(check, names)
+        .is_ok_and(|steps| !steps.iter().any(Step::follows_gap) && runs(&steps, image, rva))
 }
 
 /// Whether a route's start shape checks the code at `rva` as a hook needs:
-/// the shape matches there, and its steps before the first gap, two or
-/// more, cover eight bytes.
+/// its steps before the first gap, two or more, match there one after the
+/// other over eight bytes.
 ///
-/// A step naming another entry does not match here, where no entry is known.
+/// A step naming another entry does not match here, where no entry is
+/// known; nor is what follows a gap, which needs the function's branch
+/// targets, so the loader may still refuse the whole shape.
 ///
 /// # Examples
 ///
@@ -116,18 +113,18 @@ pub fn shape_checks(names: &ShapeNames, shape: &[String], image: &Image<'_>, rva
     let Ok(steps) = shape::parse_shape(shape, names) else {
         return false;
     };
-    let most = shape::reach(&steps);
-    let mut code = Vec::with_capacity(most);
-    let mut va = image.base().saturating_add(rva);
-    while code.len() < most
-        && let Some(ins) = one_at(image, va)
-    {
+    let lead = &steps[..shape::lead(&steps)];
+    let start = image.base().saturating_add(rva);
+    let mut va = start;
+    let mut run = Run::default();
+    let matched = lead.iter().all(|step| {
+        let Some(ins) = one_at(image, va) else {
+            return false;
+        };
         va = ins.next_ip();
-        code.push(ins);
-    }
-    // No function is known here, so a gap is checked without branch targets.
-    shape::match_at(&steps, &code, &|_: &str| None, &FxHashSet::default())
-        .is_some_and(|one| match_checks(shape::lead(&steps), one.start, one.lead))
+        step.matches(&ins, &|_: &str| None, &mut run)
+    });
+    matched && match_checks(lead.len(), start, va)
 }
 
 /// Whether a start shape's match from `start` to `end` checks the code at

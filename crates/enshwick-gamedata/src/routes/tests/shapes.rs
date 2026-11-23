@@ -87,14 +87,51 @@ fn a_gap_stands_between_two_instructions_with_a_bound_of_1_to_16() {
         &["pop rbx", "... 0", "ret"],
         &["pop rbx", "... 17", "ret"],
         &["pop rbx", "...", "ret"],
+        &[
+            "pop rbx", "... 1", "pop rsi", "... 1", "pop rdi", "... 1", "ret",
+        ],
     ] {
         assert!(shape::parse_shape(bad, &names).is_err(), "{bad:?}");
     }
     let steps = shape::parse_shape(&["pop rbx", "pop rsi", "... 16", "ret"], &names).unwrap();
-    assert_eq!(
-        (steps.len(), shape::lead(&steps), shape::reach(&steps)),
-        (3, 2, 19)
+    assert_eq!((steps.len(), shape::lead(&steps)), (3, 2));
+    let two = ["pop rbx", "... 1", "pop rsi", "... 1", "ret"];
+    assert!(shape::parse_shape(&two, &names).is_ok(), "two gaps");
+}
+
+#[test]
+fn a_gap_never_skips_a_write_to_a_register_its_steps_hold() {
+    let none = |_: &str| None;
+    // mov edx,0x3; xor edx,edx; pop rbx; jmp +0: the state is 0, not 3.
+    let cleared = [
+        0xba, 0x03, 0x00, 0x00, 0x00, 0x31, 0xd2, 0x5b, 0xe9, 0, 0, 0, 0,
+    ];
+    assert!(first_in(&cleared, &["mov edx,*", "... 8", "jmp ?b"], &none).is_none());
+    // mov rbx,rcx; mov ebx,0x1; mov eax,[rbx+0x10]: the gap writes ?1.
+    let rebound = [0x48, 0x8b, 0xd9, 0xbb, 1, 0, 0, 0, 0x8b, 0x43, 0x10];
+    assert!(first_in(&rebound, &["mov ?1,rcx", "... 2", "mov eax,[?1+*]"], &none).is_none());
+    assert!(
+        first_in(&EPILOGUE, &["mov edx,*", "... 8", "jmp ?b"], &none).is_some(),
+        "pops write rsp and saved registers, which the run does not hold"
     );
+}
+
+#[test]
+fn a_gap_never_follows_a_step_that_leaves() {
+    let none = |_: &str| None;
+    // ret; push rbx; push rsi: the pushes start another function.
+    let next = [0xc3, 0x53, 0x56];
+    assert!(first_in(&next, &["ret", "... 1", "push rsi"], &none).is_none());
+    assert!(first_in(&next, &["ret", "push rbx"], &none).is_some());
+}
+
+#[test]
+fn a_gap_that_skips_nothing_ignores_branch_targets() {
+    let none = |_: &str| None;
+    // jmp +5; mov edx,0x3; jmp +0: the first jump lands on the tail jump.
+    let shared = [0xeb, 0x05, 0xba, 0x03, 0x00, 0x00, 0x00, 0xe9, 0, 0, 0, 0];
+    let found = first_in(&shared, &["mov edx,*", "... 2", "jmp ?b"], &none);
+    assert_eq!(found.map(|m| m.taken), Some(Some(3)));
 }
 
 /// `mov [rcx+0x8],eax; mov [rcx+0x4],eax; mov [rcx],al`, then the same

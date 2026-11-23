@@ -43,6 +43,10 @@ pub(super) struct Finder<'f, 'i, 'a> {
     /// The ECS system records the reflection skips, once a route needs them.
     records: Option<FxHashMap<String, u32>>,
     decoded: FxHashMap<u32, Vec<Vec<Instruction>>>,
+    /// Where each function's direct branches land, once a gap asks.
+    targets: FxHashMap<u32, FxHashSet<u64>>,
+    /// The targets of a shape without a gap, which asks for none.
+    no_targets: FxHashSet<u64>,
 }
 
 impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
@@ -67,6 +71,8 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             helpers: None,
             records: None,
             decoded: FxHashMap::default(),
+            targets: FxHashMap::default(),
+            no_targets: FxHashSet::default(),
         }
     }
 
@@ -243,22 +249,21 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
     ) -> Option<shape::Match> {
         let entries = self.entries(after.iter().chain(steps))?;
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
-        let targets = self.targets(function, after.iter().chain(steps));
-        let parts = self.parts(function);
+        let (parts, targets) = self.code_of(function, after.iter().chain(steps));
         let mut runs: Vec<shape::Match> = if after.is_empty() {
             parts
                 .iter()
-                .flat_map(|part| shape::matches(steps, part, &entry, &targets))
+                .flat_map(|part| shape::matches(steps, part, &entry, targets))
                 .collect()
         } else {
             let mut anchors = parts.iter().enumerate().flat_map(|(i, part)| {
-                shape::matches(after, part, &entry, &targets).map(move |m| (i, m))
+                shape::matches(after, part, &entry, targets).map(move |m| (i, m))
             });
             let (part, anchor) = anchors.next()?;
             if anchors.next().is_some() {
                 return None;
             }
-            shape::matches(steps, &parts[part], &entry, &targets)
+            shape::matches(steps, &parts[part], &entry, targets)
                 .filter(|run| run.start >= anchor.end)
                 .collect()
         };
@@ -272,23 +277,30 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
 
     /// The decoded parts of `function`'s code, decoded once.
     fn parts(&mut self, function: u32) -> &[Vec<Instruction>] {
-        let code = self.code;
-        self.decoded
-            .entry(function)
-            .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect())
+        self.code_of(function, core::iter::empty()).0
     }
 
-    /// Where the direct branches of `function`'s code land, when one of
-    /// `steps` follows a gap; none otherwise, since only a gap asks.
-    fn targets<'s>(
+    /// The decoded parts of `function`'s code and where its direct branches
+    /// land, each made once; the targets only when one of `steps` follows a
+    /// gap, since only a gap asks.
+    fn code_of<'s>(
         &mut self,
         function: u32,
         mut steps: impl Iterator<Item = &'s Step>,
-    ) -> FxHashSet<u64> {
-        if !steps.any(Step::follows_gap) {
-            return FxHashSet::default();
-        }
-        shape::branch_targets(self.parts(function).iter().flatten())
+    ) -> (&[Vec<Instruction>], &FxHashSet<u64>) {
+        let code = self.code;
+        let parts = self
+            .decoded
+            .entry(function)
+            .or_insert_with(|| code.parts_of(function).map(|p| code.decode(p)).collect());
+        let targets = if steps.any(Step::follows_gap) {
+            self.targets
+                .entry(function)
+                .or_insert_with(|| shape::branch_targets(parts.iter().flatten()))
+        } else {
+            &self.no_targets
+        };
+        (parts, targets)
     }
 
     /// The value of each entry `steps` name, by id: a constant's value, else
@@ -402,11 +414,10 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         let entry = |id: &str| entries.iter().find(|(e, _)| *e == id).map(|&(_, va)| va);
         let mut found = None;
         for function in functions {
-            let targets = self.targets(function, steps.iter());
-            let parts = self.parts(function);
+            let (parts, targets) = self.code_of(function, steps.iter());
             for one in parts
                 .iter()
-                .flat_map(|part| shape::matches(steps, part, &entry, &targets))
+                .flat_map(|part| shape::matches(steps, part, &entry, targets))
             {
                 if found.replace((function, one)).is_some() {
                     return Err(Ambiguous);
