@@ -265,6 +265,66 @@ fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
 }
 
 #[test]
+fn a_settings_snapshot_from_the_server_is_never_read_as_stat_values() {
+    let _link = crate::base::carrier::tests::alone();
+    client_carried(CONTROL, &control(WELCOME));
+    let snapshot = crate::base::remote::Message::Snapshot {
+        id: String::new(),
+        admin: false,
+        schema: String::new(),
+        text: "you.bells@1.0.0 a long enough list of mods".to_owned(),
+    };
+    client_carried(CONTROL, &remote_data(&snapshot).expect("a short snapshot"));
+    assert!(
+        STATE.own_stats.load().is_none(),
+        "the snapshot reached the own stats"
+    );
+}
+
+#[test]
+fn each_side_reads_every_control_kind_by_one_number() {
+    use crate::base::remote as r;
+    use crate::base::wire as w;
+    let client_reads = [
+        WELCOME,
+        NOTICE,
+        ITEM_DATA,
+        UI_DEMO,
+        w::PROBE,
+        w::MODS,
+        STAT_VALUES,
+        SOUND,
+        r::SYNC,
+        r::SNAPSHOT,
+        r::RESULT,
+        r::RECIPES,
+        r::CONTROLS,
+        r::WINDOW,
+        r::WINDOW_CLOSE,
+        r::FOG_UNCOVER,
+    ];
+    let server_reads = [
+        w::HELLO,
+        w::PROBE,
+        r::QUERY,
+        r::EDIT,
+        r::ACTIONS_LANGUAGE,
+        r::ACTION_RUN,
+        r::WINDOW_CLOSE,
+    ];
+    for kinds in [&client_reads[..], &server_reads[..]] {
+        let mut sorted = kinds.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(
+            sorted.len(),
+            kinds.len(),
+            "a kind number used twice: {kinds:?}"
+        );
+    }
+}
+
+#[test]
 fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no_rate() {
     // The server's peer in the net's state, and whether a send goes, are
     // shared with the carrier's tests.

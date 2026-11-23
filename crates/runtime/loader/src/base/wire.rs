@@ -48,7 +48,7 @@ pub const ITEM_DATA: u8 = 4;
 pub const UI_DEMO: u8 = 5;
 /// A control message of the developer tools' channel check: a numbered
 /// payload with its hash, sent [`PROBES`] times each way.
-pub const PROBE: u8 = 6;
+pub const PROBE: u8 = 22;
 /// Probes each side sends.
 pub const PROBES: u8 = 100;
 /// The bytes of one probe message, more than one chat line ever held.
@@ -60,12 +60,13 @@ const PROBE_HEAD: usize = 2 + 1 + 8;
 pub const MODS: u8 = 7;
 /// A control message from the server: the values of the stat kinds the
 /// Character screen shows, for the player's own character.
-pub const STAT_VALUES: u8 = 8;
+pub const STAT_VALUES: u8 = 21;
 /// The most stat values one message carries: what fits a control message
 /// after its kind and version.
 pub const MAX_STAT_VALUES: usize = (MAX_CONTROL - 2) / 8;
 /// A control message from the server: a mod's sound to start or change
-/// (see [`sound`]); past the settings messages' kinds, 6 to 19.
+/// (see [`sound`]). Kinds 6 to 19 are the settings messages' (see the
+/// remote module), and each side reads every kind by one number.
 pub const SOUND: u8 = 20;
 pub use enshwick_base::peer::MESSAGE_RATE;
 

@@ -36,3 +36,10 @@
   fake host alike.
 - Fake host: `Installed::sent_sounds` lists the sounds a mod sent clients
   and to whom; `Installed::hear_sound` takes one as a client does.
+
+### Fixed
+
+- A joined client reads a server mod's settings again: the stat values of
+  the Character screen and the settings snapshot shared one control
+  number, so the client read every snapshot as stat values and its Mods
+  screen showed no server settings.
