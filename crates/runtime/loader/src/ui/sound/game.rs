@@ -175,7 +175,12 @@ impl Calls {
             );
             return None;
         }
-        Some((read(self.music)?, read(self.game)?))
+        let (music, game) = (read(self.music)?, read(self.game)?);
+        crate::log!(
+            INFO,
+            "sound: scenes Ui {ui:#x}, Music {music:#x}, Game {game:#x} reached"
+        );
+        Some((music, game))
     }
 }
 
