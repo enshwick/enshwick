@@ -72,6 +72,7 @@ pub mod bench {
         content::textures::bench_texture_request,
         engine::world::accounts::bench_accounts,
         ui::interface::tooltips::bench_tooltip_lines,
+        ui::sound::bench_sound_frame,
         world::waypoints::bench_waypoint_idle_step,
     };
 

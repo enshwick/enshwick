@@ -445,5 +445,55 @@ impl Drain {
     }
 }
 
+/// A frame of the drain over a mixer that starts every sound and keeps it
+/// playing: `live` sounds of one mod already play, and each run queues
+/// `starts` more, which the frame starts, then stops them again so the next
+/// run starts from the same state.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_sound_frame(live: usize, starts: usize) -> impl FnMut() {
+    struct Silent(u32);
+    impl Mixer for Silent {
+        fn reaches(&self, _: Scene) -> bool {
+            true
+        }
+        fn start(&mut self, _: Scene, _: [u8; 16], _: Option<[i64; 3]>, _: f32) -> Option<u32> {
+            self.0 += 1;
+            Some(self.0)
+        }
+        fn stop(&mut self, _: u32, _: u32) {}
+        fn volume(&mut self, _: u32, _: f32, _: u32) {}
+        fn position(&mut self, _: u32, _: [i64; 3]) {}
+        fn playing(&mut self, id: u32) -> bool {
+            core::hint::black_box(id) != 0
+        }
+    }
+    let sounds: &'static ModSounds = Box::leak(Box::new(ModSounds::new()));
+    let followed: &'static Followed = Box::leak(Box::new(Followed::new()));
+    let (mut drain, mut mixer) = (Drain::default(), Silent(0));
+    let run = move |drain: &mut Drain, mixer: &mut Silent| {
+        let frame = Frame {
+            mods: &[Some(sounds)],
+            off: &|_| false,
+            session: 1,
+        };
+        drain.frame(Some(mixer), &frame, followed);
+    };
+    for _ in 0..live {
+        let _taken = sounds.start(SoundPlay::EMPTY);
+    }
+    run(&mut drain, &mut mixer);
+    move || {
+        let slots: Vec<Slot> = (0..starts)
+            .filter_map(|_| sounds.start(SoundPlay::EMPTY).ok())
+            .collect();
+        run(&mut drain, &mut mixer);
+        for slot in slots {
+            let _queued = sounds.queue(Op::Steer(slot, SoundSteer::EMPTY));
+        }
+        run(&mut drain, &mut mixer);
+    }
+}
+
 #[cfg(test)]
 mod tests;

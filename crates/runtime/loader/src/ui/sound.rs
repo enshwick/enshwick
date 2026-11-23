@@ -14,6 +14,8 @@ mod follow;
 mod game;
 mod kept;
 
+#[cfg(feature = "test")]
+pub use drain::bench_sound_frame;
 #[cfg(windows)]
 pub(crate) use windows::*;
 

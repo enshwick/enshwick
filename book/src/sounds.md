@@ -12,9 +12,66 @@ and plays it, changes it or adds its own.
 
 ## Play a container on a client
 
-Inside a frame of the interface, `frame.play(id)` plays a container as an
-interface sound. Only that client hears it, and it comes from no place in
-the world. The [interface chapter](interface.md) lists it with the widgets.
+`sound::play(Play::new(id, place))` starts a container on the client that
+runs the mod. Only that client hears it. The place is one of four:
+
+| Place | Where it plays |
+| --- | --- |
+| `Place::Screen` | From no place, as the game's interface sounds |
+| `Place::At(position)` | At a point in the world, in metres; it pans and fades as the camera moves |
+| `Place::On(entity)` | On an entity of the client's world, following it; it ends with a short fade once the entity is gone |
+| `Place::Music` | As music; a new music sound of the same mod fades out its earlier one |
+
+`.volume(v)` sets a volume from 0 to 1, which the game multiplies by the
+container's own. `.fade_in(duration)` fades it in, for at most 60 seconds.
+
+The call works from any thread, in a frame or not. It queues the sound,
+and the client's next frame starts it, so a handle reads `Pending` until
+then. One mod starts at most 64 sounds a frame. A container that neither
+the game's archive nor a mod holds is refused at once. On a server the call
+fails.
+
+The `SoundHandle` it returns steers that sound:
+
+| Call | Does |
+| --- | --- |
+| `stop(fade)` | stops it, fading out |
+| `set_volume(v, fade)` | changes its volume, fading |
+| `set_position(at)` | moves it; a sound on an entity no longer follows it |
+| `is_playing()`, `state()` | tell where it stands |
+
+Once the sound ended, every call on its handle changes nothing.
+`sound::stop_all(fade)` stops every sound of the mod.
+
+A mod's sounds end when the mod is turned off. Its sounds at a place or on
+an entity also end when the client's world ends. Its interface sounds and
+music keep playing then.
+
+```rust
+use core::time::Duration;
+use enshwick::content::Guid;
+use enshwick::sound::{self, Place, Play, SoundContainerId, SoundHandle};
+
+const BELL: SoundContainerId = SoundContainerId::from_guid(Guid::named("you.bells:bell"));
+
+fn ring(at: [f64; 3]) -> Result<SoundHandle, enshwick::Off> {
+    sound::play(Play::new(BELL, Place::At(at)).volume(0.6).fade_in(Duration::from_millis(200)))
+}
+```
+
+```luau
+local BELL = "8a5c1d07-3c3e-5f0b-9a8e-0c41e3f9d2a7"
+local bell = enshwick.sound.play({ container = BELL, place = { At = vector.create(10, 0, 0) }, volume = 0.6 })
+bell:stop(2)
+```
+
+A sound that misleads players in a fight, such as the steps of an enemy
+that is not there, changes how the fight plays. Say so in the mod's
+description.
+
+Inside a frame of the interface, `frame.play(id)` also plays a container as
+an interface sound. The [interface chapter](interface.md) lists it with the
+widgets.
 
 ## Change a vanilla sound
 

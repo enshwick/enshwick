@@ -169,3 +169,8 @@ required-features = ["test"]
 name = "accounts"
 harness = false
 required-features = ["test"]
+
+[[bench]]
+name = "sound_frame"
+harness = false
+required-features = ["test"]

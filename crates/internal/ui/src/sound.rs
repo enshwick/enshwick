@@ -2,9 +2,11 @@
 //! a mod's, by its [`SoundContainerId`], and a mod changes how a container
 //! plays and which recordings ([`SoundId`]) it picks from.
 //!
-//! A sound plays inside a frame of the interface with
-//! [`Frame::play`](crate::ui::Frame::play), heard only on the client that
-//! plays it and from no place in the world. The server places sounds through
+//! A client mod starts a sound with [`play`], in 2D, at a place, on an
+//! entity or as music, heard only on that client, and steers it through
+//! its [`SoundHandle`]; inside a frame of the interface
+//! [`Frame::play`](crate::ui::Frame::play) plays one from no place. The
+//! server places sounds through
 //! notifiers: a mod hears each one the game raises in
 //! [`Load::on_notify`](../struct.Load.html#method.on_notify) and raises one
 //! of its own, which every client in range plays, with `Effects::notify`.
