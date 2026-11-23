@@ -2,8 +2,9 @@
 //! subscription per kind of event, never per objective, and a lookup that
 //! leaves at once for an event no objective counts.
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 
+use arc_swap::ArcSwap;
 use rustc_hash::FxHashMap;
 
 use crate::content::Guid;
@@ -11,7 +12,6 @@ use crate::content::journal::{CountedStep, CraftTarget, KillTarget, Objective};
 use crate::events::BuildingPlaced;
 use crate::game_events::EntityDiedEvent;
 use crate::knowledge::{Grant, Scope};
-use crate::locks::Relock as _;
 use crate::typed::FactionType;
 use crate::{Entity, ItemId, Off, RecipeId};
 
@@ -52,7 +52,7 @@ pub(crate) enum Count {
 }
 
 /// The objectives of a mod, by what they count.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Table {
     by: FxHashMap<Key, Vec<Entry>>,
     /// The reach objectives, checked on a tick while any is open.
@@ -156,7 +156,9 @@ pub(crate) fn credit(
 #[derive(Debug)]
 pub(crate) struct Counting {
     quests: Quests,
-    table: Mutex<Table>,
+    /// Written only while the mod loads, swapped whole, so an event reads
+    /// it without a lock.
+    table: ArcSwap<Table>,
     /// The recipes each crafted item objective counts, read on the first
     /// craft once the game's recipes read.
     craft_recipes: OnceLock<Vec<(RecipeId, Entry)>>,
@@ -223,9 +225,9 @@ impl Counting {
     /// The objectives that count a craft of `recipe`: those of the recipe
     /// and those of the vanilla item it makes.
     fn crafted(&self, recipe: RecipeId) -> Vec<Entry> {
-        let mut entries = self.table.relock().entries(&Key::Recipe(recipe)).to_vec();
+        let mut entries = self.table.load().entries(&Key::Recipe(recipe)).to_vec();
         let items = self.craft_recipes.get_or_init(|| {
-            let table = self.table.relock();
+            let table = self.table.load();
             let recipes = crate::content::vanilla::recipes().unwrap_or_default();
             table
                 .craft_items
@@ -262,15 +264,15 @@ pub(crate) fn count(load: &mut crate::BaseLoad, steps: Vec<CountedStep>) -> Resu
     let counting = *quests.counting.get_or_init(|| {
         Box::leak(Box::new(Counting {
             quests,
-            table: Mutex::default(),
+            table: ArcSwap::default(),
             craft_recipes: OnceLock::new(),
         }))
     });
-    let before = Kinds::of(&counting.table.relock());
+    let mut table = Table::clone(&counting.table.load());
+    let before = Kinds::of(&table);
     for step in steps {
-        counting.table.relock().add(step);
+        table.add(step);
     }
-    let table = counting.table.relock();
     let after = Kinds::of(&table);
     let items: Vec<ItemId> = table
         .by
@@ -280,7 +282,7 @@ pub(crate) fn count(load: &mut crate::BaseLoad, steps: Vec<CountedStep>) -> Resu
             _ => None,
         })
         .collect();
-    drop(table);
+    counting.table.store(Arc::new(table));
     subscribe(load, counting, before, after, &items)
 }
 
@@ -354,9 +356,9 @@ fn subscribe(
             if let Some(Ok(Some(of))) = faction.map(|ty| ty.read(world, died.dead_entity_id)) {
                 keys.push(Key::Faction(of.faction));
             }
+            let table = counting.table.load();
             for key in keys {
-                let entries = counting.table.relock().entries(&key).to_vec();
-                counting.count(player, &entries, |_| Count::Add(1));
+                counting.count(player, table.entries(&key), |_| Count::Add(1));
             }
         })?;
     }
@@ -365,12 +367,9 @@ fn subscribe(
             if placed.kind != crate::abi::BuildingData::PLACED || placed.replay != 0 {
                 return;
             }
-            let entries = counting
-                .table
-                .relock()
-                .entries(&Key::Build(placed.item))
-                .to_vec();
-            counting.count(placed.character, &entries, |_| Count::Add(1));
+            let table = counting.table.load();
+            let entries = table.entries(&Key::Build(placed.item));
+            counting.count(placed.character, entries, |_| Count::Add(1));
         })?;
     }
     let followed = load
@@ -382,13 +381,10 @@ fn subscribe(
         // Resolved only for a collect objective, which needs a build with inventories.
         let inventories = load.inventories()?;
         load.on_item(item, crate::items::Kind::Pickup, move |picked| {
-            let entries = counting
-                .table
-                .relock()
-                .entries(&Key::Collect(item))
-                .to_vec();
+            let table = counting.table.load();
             let holds = inventories.count(picked.player, item);
-            counting.count(picked.player, &entries, |_| Count::UpTo(holds));
+            let entries = table.entries(&Key::Collect(item));
+            counting.count(picked.player, entries, |_| Count::UpTo(holds));
             true
         })?;
         load.slot::<FollowedItems>()
@@ -399,12 +395,13 @@ fn subscribe(
     if before.gains(after, Kinds::REACH) {
         let world = load.world()?;
         load.on_tick(core::time::Duration::from_secs(1), move |_| {
-            let reach = counting.table.relock().reach.clone();
+            let table = counting.table.load();
             for player in world.players() {
                 let Some(at) = world.position(player.entity) else {
                     continue;
                 };
-                let near: Vec<Entry> = reach
+                let near: Vec<Entry> = table
+                    .reach
                     .iter()
                     .filter(|entry| match entry.step.objectives[entry.at].0 {
                         Objective::Reach { at: place, radius } => {
@@ -450,7 +447,8 @@ pub(crate) fn lookup(objectives: u32) -> impl Fn(ItemId) -> usize {
             )],
         });
     }
-    move |item| table.entries(&Key::Build(item)).len()
+    let table = ArcSwap::from_pointee(table);
+    move |item| table.load().entries(&Key::Build(item)).len()
 }
 
 /// The items whose pickups the mod's counting follows.
@@ -479,13 +477,10 @@ impl Quests {
         let Some(counting) = self.counting.get() else {
             return;
         };
-        let entries = counting
-            .table
-            .relock()
-            .entries(&Key::Signal(signal.guid()))
-            .to_vec();
+        let table = counting.table.load();
         let world = holder == Holder::World;
-        for entry in entries
+        for entry in table
+            .entries(&Key::Signal(signal.guid()))
             .iter()
             .filter(|e| (e.step.scope == Scope::World) == world)
         {

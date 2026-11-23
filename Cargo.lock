@@ -781,6 +781,7 @@ dependencies = [
 name = "enshwick-knowledge"
 version = "1.0.0-alpha.17"
 dependencies = [
+ "arc-swap",
  "criterion",
  "enshwick",
  "enshwick-abi",

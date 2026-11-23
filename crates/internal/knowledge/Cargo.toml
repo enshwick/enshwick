@@ -13,6 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
+arc-swap.workspace = true
 enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.17" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
