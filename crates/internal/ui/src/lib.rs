@@ -22,7 +22,6 @@ struct MergedExamples;
 extern crate self as enshwick;
 
 // The lower crates' modules at the paths the code here names them by.
-#[cfg(feature = "unstable")]
 pub(crate) use enshwick_base::engine_ids;
 pub(crate) use enshwick_base::load::BaseLoad;
 pub(crate) use enshwick_base::locks;

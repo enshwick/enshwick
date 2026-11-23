@@ -43,7 +43,6 @@ use crate::locks::Relock as _;
 use enshwick_content::__load::*;
 #[cfg(feature = "unstable")]
 use enshwick_knowledge::__load::*;
-#[cfg(feature = "unstable")]
 use enshwick_ui::__load::*;
 
 /// The manifest file of a pack folder.
@@ -246,25 +245,29 @@ impl LoadHelpers for crate::BaseLoad {
             )));
         }
         #[cfg(feature = "unstable")]
-        for sound in &pack.sounds {
+        for sound in &pack.sounds.sounds {
             // A sound whose file does not read turns off alone.
-            let new = crate::sound::NewSound {
-                scene: sound
-                    .scene
-                    .map_or_else(Default::default, sounds::SceneEntry::scene),
-                container: crate::sound::SoundChange {
-                    volume: sound.volume,
-                    ..crate::sound::SoundChange::default()
-                },
-                ..crate::sound::NewSound::new(id(&sound.id)?, sound.file.clone())
-            };
+            let new = sound.new_sound(id(&sound.id)?);
             let _added = self.feature(&format!("sound {}", sound.id), |load| load.add_sound(new));
         }
+        #[cfg(feature = "unstable")]
+        for replace in &pack.sounds.replaces {
+            let _replaced = self.feature(&format!("sound {}", replace.sound.guid()), |load| {
+                load.replace_sound(replace.sound, &replace.file)
+            });
+        }
         #[cfg(not(feature = "unstable"))]
-        if !pack.sounds.is_empty() {
+        if !pack.sounds.sounds.is_empty() || !pack.sounds.replaces.is_empty() {
             return Err(Off::new(format!(
-                "{SOUNDS_FILE}: sounds need enshwick's `unstable` feature"
+                "{SOUNDS_FILE}: a pack's own recordings need enshwick's `unstable` feature"
             )));
+        }
+        for change in &pack.sounds.changes {
+            // A change whose take is off or unknown turns off alone.
+            let container = crate::sound::SoundContainerId::from_guid(change.container);
+            let _changed = self.feature(&format!("sound change {}", change.container), |load| {
+                load.change_sound(container, change.change.clone())
+            });
         }
         self.follow_pack_settings(pack)
     }

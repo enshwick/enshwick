@@ -61,8 +61,19 @@ mod tests {
         enshwick.sound.change(chest, { volume = 0.5, looped = true })
         local loud = pcall(enshwick.sound.change, chest, { volume = 9 })
         enshwick.log.info(`loud refused {not loud}`)
-        local ok, why = pcall(enshwick.sound.add, { id = "you.horns:horn", file = "../horn.wav" })
+        local ok, why = pcall(enshwick.sound.add, { id = "you.horns:horn", takes = { { file = "../horn.wav" } } })
         enshwick.log.info(`outside refused {not ok}: {why}`)
+        enshwick.sound.change(chest, {
+            sleep = 0.25,
+            max_count = 3,
+            stealing_mode = "Furthest",
+            random_position = { left_right = 2, front_back = 0 },
+            takes = { Add = { { sound = chest, chance = 0.5 } } },
+        })
+        local none = pcall(enshwick.sound.change, chest, { takes = { Replace = {} } })
+        enshwick.log.info(`no takes refused {not none}`)
+        local away = pcall(enshwick.sound.replace, chest, "../creak.wav")
+        enshwick.log.info(`replace outside refused {not away}`)
     "#;
 
     #[test]
@@ -74,5 +85,8 @@ mod tests {
             "{:?}",
             loader.logs()
         );
+        for refused in ["no takes refused true", "replace outside refused true"] {
+            assert!(logged(&loader, refused), "{refused}: {:?}", loader.logs());
+        }
     }
 }

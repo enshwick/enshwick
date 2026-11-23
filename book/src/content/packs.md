@@ -537,9 +537,10 @@ language, `en` the fallback.
 
 ## `sounds.toml`
 
-The pack's own [sounds](../sounds.md), each a WAV file in the pack's folder.
-It needs Enshwick's `unstable` feature, and a pack with sounds runs on both
-sides.
+The pack's [sounds](../sounds.md): its own, each a WAV file in the pack's
+folder, changes to any sound container, and the game's recordings it
+replaces. A pack with sounds runs on both sides. Its own sounds and
+replaced recordings need Enshwick's `unstable` feature.
 
 ```toml
 [[sound]]
@@ -547,19 +548,61 @@ id = "horn"
 file = "sounds/horn.wav"
 scene = "sfx"
 volume = 0.8
+
+[[sound]]
+id = "steps"
+takes = [{ file = "steps/1.ogg" }, { file = "steps/2.flac", chance = 0.5 }]
+channels = "mono"
+gain_db = -3.0
+trim = { from = 0.1 }
+
+[[change]]
+sound = "4f1d6a3e-90b2-4c7e-8d15-2a6f0c93b7e1"
+volume = 0.5
+max_count = 2
+takes = { add = [{ sound = "horn", chance = 0.5 }] }
+
+[[replace]]
+sound = "9b2e5c71-3d48-4a06-b1f7-6e0c2d9a8f35"
+file = "sounds/creak.wav"
 ```
 
-`id` is the sound's name in the pack; other mods play it as
-`<pack>:<id>`. `file` is relative to the pack's folder and stays inside it.
-`scene` takes one of these values, `sfx` when left out:
+A sound's `id` is its name in the pack. Other mods play its container as
+`<pack>:<id>`. Its recordings are `<pack>:<id>.sound`, then `.sound2` and
+on. A sound takes one `file`, or up to 32 `takes`. Each take is a file and
+its chance from 0 to 1. A file is WAV, FLAC, Ogg Vorbis or MP3, inside the
+pack's folder. It is read as [a mod's sound](../sounds.md#add-a-sound-of-your-own)
+is. Its `channels` are keep, mono or stereo. Its `gain_db` runs from -60
+to 24. Its trim gives `from` and `to` in seconds. These apply to every
+take. A file that does not read turns off that sound alone.
 
-- `sfx`
-- `music`
-- `ui`
-- `voice`
+A change names its container in `sound`. That is a GUID, a required mod's
+`<alias>:<name>`, or a sound of the pack by its id. A replacement plays the
+pack's file wherever the game's recording, named by its GUID, plays.
 
-`volume` is 0 to 4, 1 when left out. A file that does not read turns off that sound
-alone.
+Sounds and changes take every value of the container, each left out to
+keep it. The bounds are those of
+[`load.change_sound`](../sounds.md#change-a-vanilla-sound).
+
+| Value | Takes |
+| --- | --- |
+| `volume`, `volume_randomness` | numbers |
+| `pitch`, `pitch_randomness` | numbers |
+| `min_distance`, `max_distance` | metres |
+| `loop`, `has_position` | true or false |
+| `loop_same_take`, `mute_on_main` | true or false |
+| `priority`, `avoid_repeating_last` | whole numbers |
+| `max_count` | a whole number; 0 for no limit |
+| `scene` | sfx, music, ui or voice |
+| `sleep`, `sleep_randomness` | seconds |
+| `stealing_mode` | oldest, furthest or ignore |
+| `random_position` | metres in `left_right` and `front_back` |
+| `gamepad_speaker`, `gamepad_vibration` | numbers; 0 turns it off |
+| `takes` | a change's only: `add` or `replace`, each a list of takes |
+
+A change's take names a recording in `sound` and gives its chance. The
+recording is a GUID, a required mod's `<alias>:<name>.sound`, or a sound of
+the pack by its id.
 
 ## Let an admin tune a pack per world
 

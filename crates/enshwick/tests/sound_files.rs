@@ -8,7 +8,7 @@ mod tests {
 
     use enshwick::abi::{Side, Status};
     use enshwick::content::id;
-    use enshwick::sound::{NewSound, SAMPLE_RATE};
+    use enshwick::sound::{NewSound, SAMPLE_RATE, SoundChange, SoundId, Take, Takes};
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
 
@@ -42,8 +42,10 @@ mod tests {
                 (id!("gone"), "gone.wav"),
             ] {
                 let added = load.add_sound(NewSound::new(name, file));
-                if let Ok(container) = added {
-                    assert_eq!(container.guid(), name.guid());
+                if let Ok(added) = &added {
+                    assert_eq!(added.container.guid(), name.guid());
+                    let sound = name.try_part("sound").map(enshwick::content::Id::guid);
+                    assert_eq!(added.takes.first().map(|t| t.guid()), sound);
                 }
                 RESULTS
                     .lock()
@@ -53,6 +55,26 @@ mod tests {
             let (first, second) = clashing();
             for name in [first, second] {
                 let added = load.add_sound(NewSound::new(name, "horn.wav"));
+                RESULTS
+                    .lock()
+                    .unwrap()
+                    .push(added.map(|_| ()).map_err(|off| off.to_string()));
+            }
+            let horn = SoundId::from_guid(id!("horn").guid());
+            for container in [
+                SoundChange {
+                    takes: Some(Takes::Replace(vec![Take::new(horn)])),
+                    ..SoundChange::default()
+                },
+                SoundChange {
+                    min_distance: Some(50.0),
+                    ..SoundChange::default()
+                },
+            ] {
+                let added = load.add_sound(NewSound {
+                    container,
+                    ..NewSound::new(id!("odd"), "horn.wav")
+                });
                 RESULTS
                     .lock()
                     .unwrap()
@@ -99,10 +121,10 @@ mod tests {
         assert_eq!(status, Status::OK);
         let results = RESULTS.lock().unwrap().clone();
         assert_eq!(results[0], Ok(()));
-        for (result, why) in
-            results[1..4]
-                .iter()
-                .zip(["48000 Hz", "inside the mod's folder", "gone.wav"])
+        assert_eq!(results[1], Ok(()), "a 44.1 kHz file is resampled");
+        for (result, why) in results[2..4]
+            .iter()
+            .zip(["inside the mod's folder", "gone.wav"])
         {
             let refused = result.as_ref().unwrap_err();
             assert!(refused.contains(why), "{refused}");
@@ -112,6 +134,13 @@ mod tests {
             results[5].is_err(),
             "an id whose game id another holds is refused"
         );
+        for (result, why) in results[6..8].iter().zip([
+            "takes are its files",
+            "least distance 50 is past the greatest 35",
+        ]) {
+            let refused = result.as_ref().unwrap_err();
+            assert!(refused.contains(why), "refused as on a client: {refused}");
+        }
         assert!(loader.resources().is_empty(), "a server plays no sound");
     }
 

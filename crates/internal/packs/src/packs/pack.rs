@@ -111,7 +111,7 @@ pub struct Pack {
     /// Each drop's chance, which may follow a setting.
     pub(super) drop_chances: Vec<super::values::Number<f64>>,
     pub(super) rewards: Vec<super::rewards::PackReward>,
-    pub(super) sounds: Vec<super::sounds::PackSound>,
+    pub(super) sounds: super::sounds::PackSounds,
     /// The `[[setting]]` tables of `pack.toml`.
     pub(super) settings: Vec<super::manifest::PackSetting>,
     /// Their schema, the mod's settings.
@@ -233,7 +233,7 @@ impl Pack {
             drops: Vec::new(),
             drop_chances: Vec::new(),
             rewards: Vec::new(),
-            sounds: Vec::new(),
+            sounds: super::sounds::PackSounds::default(),
             settings: Vec::new(),
             settings_schema: None,
             changes: Vec::new(),

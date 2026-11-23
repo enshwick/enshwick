@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: A mod plays the game's sound containers on a client, changes their volume, pitch and distances, and adds its own sounds from WAV files in its folder.
+description: A mod plays sound containers on a client, changes their values and takes, replaces the game's recordings, and adds its own sounds from audio files.
 -->
 
 # Sounds
@@ -31,8 +31,17 @@ since servers play no sound.
 | `pitch` | 0.25 to 4 |
 | `pitch_randomness` | 0 to 4 |
 | `min_distance`, `max_distance` | 0 to 500 metres, the least not past the greatest |
-| `looped` | true or false |
+| `looped`, `has_position`, `loop_same_take`, `mute_on_main` | true or false |
 | `priority` | 0 to 65535 |
+| `scene` | Sfx, Music, Ui or Voice |
+| `sleep`, `sleep_randomness` | 0 to 10 minutes, the pause between two plays of a looped container |
+| `avoid_repeating_last` | 0 to 64 takes |
+| `max_count` | 0 to 8192 plays at once, 0 for no limit |
+| `stealing_mode` | which play a new one stops at the limit: Oldest, Furthest, or Ignore the new one |
+| `random_position` | 0 to 500 metres to either side and forwards; both 0 turn the spread off |
+| `gamepad_speaker` | 0 (off) to 4 |
+| `gamepad_vibration` | 0 (off) to 1 |
+| `takes` | see the next section |
 
 ```rust
 use enshwick::content::Guid;
@@ -46,6 +55,64 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ```luau
 enshwick.sound.change("<container GUID>", { volume = 0.2 })
+```
+
+## Change which recordings a container plays
+
+A container picks one of its takes at random each time it plays. A take is
+a recording, a [`SoundId`](https://github.com/enshwick/enshwick/blob/main/crates/internal/ui/src/sound.rs),
+and its weight among the other takes, 0 to 1. A change's takes either
+replace every take the container holds (`Takes::Replace`) or follow them
+(`Takes::Add`). Each mod's takes apply in load order, so an addition
+follows the takes of the mods before it. A container holds at most 64
+takes.
+
+A take names one of the game's recordings by its GUID, or one a mod loaded
+before declared, such as the recording `add_sound` returns. The client
+refuses any other GUID at init, naming it in the log.
+
+```rust
+use enshwick::content::Guid;
+use enshwick::sound::{SoundChange, SoundContainerId, SoundId, Take, Takes};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let chest = SoundContainerId::from_guid(Guid::named("you.bells:chest"));
+    let creak = SoundId::from_guid(Guid::named("you.bells:creak.sound"));
+    let change = SoundChange {
+        takes: Some(Takes::Add(vec![Take { chance: 0.5, ..Take::new(creak) }])),
+        ..SoundChange::default()
+    };
+    load.change_sound(chest, change)
+}
+```
+
+```luau
+enshwick.sound.change("<container GUID>", {
+    takes = { Add = { { sound = "<recording GUID>", chance = 0.5 } } },
+})
+```
+
+## Replace a vanilla recording
+
+With the `unstable` feature, `load.replace_sound(id, file)` plays the
+mod's file wherever a container plays the game's recording. The file follows the rules of [`add_sound`](#add-a-sound-of-your-own).
+Mods that replace one recording apply in load order: the last one's file
+plays, and the log names the one it replaced. A server checks the file and
+holds nothing.
+
+```rust
+use enshwick::content::Guid;
+use enshwick::sound::SoundId;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let creak = SoundId::from_guid(Guid::parse("4f1d6a3e-90b2-4c7e-8d15-2a6f0c93b7e1"));
+    let _replaced = load.feature("creak", |load| load.replace_sound(creak, "sounds/creak.wav"));
+    Ok(())
+}
+```
+
+```luau
+enshwick.sound.replace("<recording GUID>", "sounds/creak.wav")
 ```
 
 ## Hear the sounds the server places
@@ -162,28 +229,76 @@ end)
 
 ## Add a sound of your own
 
-With the `unstable` feature, `load.add_sound(NewSound::new(id!("horn"),
-"sounds/horn.wav"))` adds that WAV file of the mod's folder and a
-container that plays it. It returns the container. Its GUID is the
-[content id](concepts/ids.md)'s, so other mods play it by `you.horns:horn`. A data pack lists
-its sounds in [`sounds.toml`](content/packs.md#soundstoml).
+With the `unstable` feature, `load.add_sound(new)` adds audio files of the
+mod's folder as recordings, and a container that plays them. A `NewSound`
+holds up to 32 takes, each a file and its chance. The container picks one
+take at random by their chances each time it plays.
 
-The client holds the sound as the game holds its own uncompressed sounds,
-streamed from memory. A server checks the file and holds nothing.
+`add_sound` returns the container and the recordings, in take order. Other
+containers' takes name the recordings. The container's GUID is the
+[content id](concepts/ids.md)'s, so other mods play it by
+`you.horns:horn`. The recordings are `you.horns:horn.sound`,
+`you.horns:horn.sound2` and on. The new container's values follow its
+`SoundChange`, whose takes may only add to the files'. A data pack lists
+its sounds, changes and replaced recordings in
+[`sounds.toml`](content/packs.md#soundstoml).
 
-| A WAV file | |
+Every file of a sound goes through the same steps at init:
+
+1. It is read: WAV (8 to 32-bit, or float), FLAC, Ogg Vorbis or MP3, at
+   8 to 384 kHz, with 1 to 8 channels. Reading stops at the trim's end.
+2. The trim keeps the part from its start to its end in the file.
+3. The channels setting keeps the file's channels (`Keep`) or mixes them
+   to one (`Mono`). `Stereo` takes two. The game plays 1, 2, 4, 6 and 8
+   channels. An Ogg Vorbis file's channels are put in the order WAV and
+   FLAC files keep them. A sound placed in the world wants mono: the game
+   plays every channel from the same point.
+4. It is resampled to 48000 Hz, the rate of every sound the game plays.
+5. The gain scales it, from -60 to 24 decibels.
+
+The client then encodes each recording into the game's own format,
+FramelessQOA, on background threads. A minute of stereo takes about
+100 ms on one core. The first time the game reads the sound it waits for
+that encoding. A recording of one second or less (48000 frames) is held inline,
+so its first play starts at once. A longer one streams from memory, as the
+game's long sounds do. A server checks every file and holds nothing.
+
+| Bound | |
 | --- | --- |
-| Samples | 16-bit PCM |
-| Channels | mono or stereo |
-| Rate | 48000 Hz, the rate of every sound the game plays |
-| Size | at most 16 MiB a file and 64 MiB a mod |
-| Length | what 16 MiB holds: about 87 seconds of stereo, 174 of mono |
+| A file | at most 16 MiB on disk |
+| A take | at most 10 minutes after its trim |
+| A mod | at most 64 MiB of encoded recordings: about 46 minutes of mono, 23 of stereo |
 
 A mod with sounds runs on both sides (`side = "both"`), so a client without
 it cannot join. A file past a bound, of another format or outside the
 mod's folder refuses the call. Wrapped in `load.feature("horn", ...)`, it
 turns off that sound alone. The reason shows in the log and on the Mods
-screen.
+screen. A step can fail after the files were read. Then their recordings
+stay served and count against the mod's bound. The id stays the mod's,
+which may try it again.
+
+```rust
+use enshwick::content::id;
+use enshwick::sound::{Channels, NewSound, NewTake};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let steps = NewSound {
+        takes: vec![NewTake::new("steps/1.ogg"), NewTake { chance: Some(0.5), ..NewTake::new("steps/2.flac") }],
+        channels: Channels::Mono,
+        ..NewSound::new(id!("steps"), "steps/1.ogg")
+    };
+    let _added = load.feature("steps", |load| load.add_sound(steps));
+    Ok(())
+}
+```
+
+```luau
+local ok, added = pcall(enshwick.sound.add, {
+    id = "you.steps:steps",
+    takes = { { file = "steps/1.ogg" }, { file = "steps/2.flac", chance = 0.5 } },
+    channels = "Mono",
+})
+```
 
 A sound that misleads players in a fight, such as an attack that does not
 happen, does not belong in a mod.

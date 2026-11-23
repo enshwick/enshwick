@@ -1,109 +1,114 @@
-//! A mod's own sounds: a WAV file in its folder, served as the game serves
-//! its uncompressed sounds, and a container that plays it.
+//! A mod's own sounds: recordings from audio files in its folder and a
+//! container that picks among them.
 
+use super::change::{
+    self, ENTRIES, HAS_POSITION, MAX_DISTANCE_FIELD, MIN_DISTANCE, MODE, PITCH_FIELD, PRIORITY,
+    SCENE, SPEAKER_VOLUME, VIBRATION_INTENSITY, VOLUME,
+};
+use super::decode::{Channels, Shape, Trim};
 use super::{
-    MAX_DISTANCE_FIELD, MIN_DISTANCE, PITCH_FIELD, PRIORITY, SoundChange, SoundContainerId, VOLUME,
+    MAX_NEW_TAKES, SoundChange, SoundContainerId, SoundContainerScene, SoundId, TAKE_PARTS, Take,
+    Takes, recording,
 };
 use crate::Off;
 use crate::abi::Side;
-use crate::content::{EngineFacts, Guid, Id, types};
-use crate::resources::{Registry, Value, Variant};
+use crate::content::{Id, types};
+use crate::resources::Value;
 use enshwick_content::__load::*;
 
-/// The rate of every sound the game plays, and of a WAV file a mod adds,
-/// in frames per second.
-pub const SAMPLE_RATE: u32 = 48_000;
-/// The largest WAV file a mod adds as a sound, in bytes.
-pub const MAX_FILE_BYTES: u64 = 16 << 20;
-/// The most bytes of WAV files one mod adds as sounds.
-pub const MAX_MOD_BYTES: u64 = 64 << 20;
+pub use super::recording::{INLINE_FRAMES, MAX_FILE_BYTES, MAX_MOD_BYTES, SAMPLE_RATE};
 
-const FORMAT: &str = "format";
-const UNCOMPRESSED: &str = "Uncompressed";
-const CHANNELS: &str = "channelConfiguration";
-const MONO: &str = "Mono";
-const STEREO: &str = "Stereo";
-const FRAME_COUNT: &str = "frameCount";
-const DURATION: &str = "duration";
-const TIME_VALUE: &str = "value";
-const STREAMED: &str = "streamedData";
-const CONTENT_HASH: &str = "hash";
-const CONTENT_HASH_PARTS: [&str; 4] = ["size", "hash0", "hash1", "hash2"];
-const DEBUG_NAME: &str = "debugName";
-const MODE: &str = "mode";
 const RANDOM: &str = "Random";
-const SCENE: &str = "scene";
-const HAS_POSITION: &str = "hasPosition";
-const SPEAKER_VOLUME: &str = "gamepadSpeakerVolume";
-const VIBRATION: &str = "gamepadVibrationIntensity";
-const ENTRIES: &str = "entries";
-const ENTRY_CHANCE: &str = "chance";
-const ENTRY_SOUND: &str = "sound";
 
-/// The game's scene of a sound container, `SoundContainerScene`.
+/// One take of a [`NewSound`]: an audio file in the mod's folder and its
+/// weight among the sound's takes.
 ///
 /// # Examples
 ///
 /// See [`NewSound`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
-#[non_exhaustive]
-pub enum SoundContainerScene {
-    /// A sound effect.
-    #[default]
-    Sfx,
-    /// Music.
-    Music,
-    /// An interface sound, heard from no place in the world.
-    Ui,
-    /// A voice.
-    Voice,
+#[derive(Clone, Debug, PartialEq, crate::Script)]
+pub struct NewTake {
+    /// The file, relative to the mod's folder: WAV (8, 16, 24 or 32-bit,
+    /// or float), FLAC, Ogg Vorbis or MP3, at 8 to 384 kHz, at most
+    /// [`MAX_FILE_BYTES`].
+    pub file: String,
+    /// Its weight among the sound's takes, from 0 to 1; `None` for 1.
+    #[script(default)]
+    pub chance: Option<f32>,
 }
 
-impl SoundContainerScene {
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Sfx => "Sfx",
-            Self::Music => "Music",
-            Self::Ui => "Ui",
-            Self::Voice => "Voice",
+impl NewTake {
+    /// The take of `file` at weight 1.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewSound`].
+    #[must_use]
+    pub fn new(file: impl Into<String>) -> Self {
+        Self {
+            file: file.into(),
+            chance: None,
         }
+    }
+
+    fn chance(&self) -> f32 {
+        self.chance.unwrap_or(1.0)
     }
 }
 
-/// A sound for [`Load::add_sound`](../struct.Load.html#method.add_sound): a WAV file in the mod's folder and the
-/// values of the sound container that plays it.
+/// A sound for [`Load::add_sound`](../struct.Load.html#method.add_sound):
+/// audio files in the mod's folder, how they become recordings, and the
+/// values of the sound container that picks among them.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::content::id;
-/// use enshwick::sound::{NewSound, SoundChange, SoundContainerScene};
+/// use enshwick::sound::{Channels, NewSound, NewTake, SoundChange, SoundContainerScene};
 ///
-/// let horn = NewSound {
-///     scene: SoundContainerScene::Ui,
+/// let steps = NewSound {
+///     takes: vec![NewTake::new("steps/1.ogg"), NewTake::new("steps/2.ogg"), NewTake::new("steps/3.flac")],
+///     channels: Channels::Mono,
+///     gain_db: -3.0,
 ///     container: SoundChange { volume: Some(0.5), ..SoundChange::default() },
+///     ..NewSound::new(id!("steps"), "steps/1.ogg")
+/// };
+/// assert_eq!(steps.takes.len(), 3);
+/// let ui = NewSound {
+///     container: SoundChange { scene: Some(SoundContainerScene::Ui), ..SoundChange::default() },
 ///     ..NewSound::new(id!("horn"), "sounds/horn.wav")
 /// };
-/// assert_eq!(horn.file, "sounds/horn.wav");
+/// assert_eq!(ui.takes[0].file, "sounds/horn.wav");
 /// ```
 #[derive(Clone, Debug, crate::Script)]
 pub struct NewSound {
     /// The sound's content id; its container's GUID is the id's.
     pub id: Id,
-    /// The WAV file, relative to the mod's folder: 16-bit PCM, mono or
-    /// stereo, at [`SAMPLE_RATE`], at most [`MAX_FILE_BYTES`].
-    pub file: String,
-    /// The container's scene.
+    /// Its takes, 1 to [`MAX_NEW_TAKES`]; the container picks one at random
+    /// by their weights each time it plays.
+    pub takes: Vec<NewTake>,
+    /// Which channels its recordings keep; mono suits a sound placed in the
+    /// world.
     #[script(default)]
-    pub scene: SoundContainerScene,
+    pub channels: Channels,
+    /// A gain in decibels on every take, within
+    /// [`GAIN_DB`](super::GAIN_DB).
+    #[script(default)]
+    pub gain_db: f32,
+    /// The part of each take's file it plays.
+    #[script(default)]
+    pub trim: Trim,
     /// The container's values where they differ from those of a vanilla
-    /// effect: volume and pitch 1, heard from 1 to 35 metres, priority 50.
+    /// effect: scene [`Sfx`](SoundContainerScene::Sfx), volume and pitch 1,
+    /// heard from 1 to 35 metres, priority 50. Its `takes` may only add to
+    /// the sound's own.
     #[script(default)]
     pub container: SoundChange,
 }
 
 impl NewSound {
-    /// The sound `id` from `file`, an effect with the default values.
+    /// The sound `id` of the one take `file`, an effect with the default
+    /// values.
     ///
     /// # Examples
     ///
@@ -112,120 +117,72 @@ impl NewSound {
     pub fn new(id: Id, file: impl Into<String>) -> Self {
         Self {
             id,
-            file: file.into(),
-            scene: SoundContainerScene::default(),
+            takes: vec![NewTake::new(file)],
+            channels: Channels::default(),
+            gain_db: 0.0,
+            trim: Trim::default(),
             container: SoundChange::default(),
         }
     }
 }
 
-/// Why a WAV file is not a sound a mod adds.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum ReadWavError {
-    /// The bytes are no WAV file the reader takes.
-    #[error("not a WAV file: {0}")]
-    Malformed(String),
-    /// The samples are of another format.
-    #[error(
-        "{bits}-bit samples in {channels} channels at {rate} Hz: a sound is 16-bit PCM, \
-         mono or stereo, at {SAMPLE_RATE} Hz"
-    )]
-    Format {
-        /// Bits per sample.
-        bits: u16,
-        /// Channels.
-        channels: u16,
-        /// Frames per second.
-        rate: u32,
-    },
-    /// The file holds no samples.
-    #[error("no samples")]
-    Empty,
+/// What [`Load::add_sound`](../struct.Load.html#method.add_sound) made: the
+/// container, which plays, and its recordings, which other containers'
+/// [`Take`]s name.
+///
+/// # Examples
+///
+/// See [`Load::add_sound`](../struct.Load.html#method.add_sound).
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct AddedSound {
+    /// The container.
+    pub container: SoundContainerId,
+    /// Its recordings, in the order of its takes.
+    pub takes: Vec<SoundId>,
 }
 
-/// What a mod's sounds hold while it initialises: the bytes of its files so
-/// far, and the game's streamed uncompressed sound they build from, once
-/// one was found.
-#[derive(Clone, Copy, Debug, Default)]
-struct Budget {
-    bytes: u64,
-    base: Option<crate::abi::ResourceKey>,
+/// The least distance of a new container that `SoundChange` leaves unset,
+/// in metres.
+const DEFAULT_MIN_DISTANCE: f32 = 1.0;
+/// Its greatest distance, in metres.
+const DEFAULT_MAX_DISTANCE: f32 = 35.0;
+
+/// Checks, on every side and before any file is read, what a new container
+/// of `files` takes may not hold: takes that replace its files, more than
+/// [`MAX_TAKES`](super::MAX_TAKES) in all, a least distance past the greatest
+/// with the defaults counted.
+fn check_container(files: usize, change: &SoundChange) -> Result<(), Off> {
+    change.fields().map_err(|why| Off::new(why.to_string()))?;
+    let added = match &change.takes {
+        Some(Takes::Replace(_)) => {
+            return Err(Off::new("a new sound's takes are its files: add to them"));
+        }
+        Some(Takes::Add(more)) => more.len(),
+        None => 0,
+    };
+    if files + added > super::MAX_TAKES {
+        return Err(Off::new(format!(
+            "{} takes, past {}",
+            files + added,
+            super::MAX_TAKES
+        )));
+    }
+    change::check_distances(
+        change,
+        Some(DEFAULT_MIN_DISTANCE),
+        Some(DEFAULT_MAX_DISTANCE),
+    )
+    .map_err(|why| Off::new(why.to_string()))
 }
 
-/// A sound's samples as the game stores an uncompressed one: 16-bit
-/// little-endian, the channels of each frame side by side.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Pcm {
-    pub(crate) stereo: bool,
-    pub(crate) frames: u32,
-    pub(crate) bytes: Vec<u8>,
-}
-
-/// Reads `wav` as a sound a mod adds.
-pub(crate) fn read_wav(wav: &[u8]) -> Result<Pcm, ReadWavError> {
-    let reader = hound::WavReader::new(std::io::Cursor::new(wav))
-        .map_err(|error| ReadWavError::Malformed(error.to_string()))?;
-    let spec = reader.spec();
-    if spec.sample_format != hound::SampleFormat::Int
-        || spec.bits_per_sample != 16
-        || !matches!(spec.channels, 1 | 2)
-        || spec.sample_rate != SAMPLE_RATE
-    {
-        return Err(ReadWavError::Format {
-            bits: spec.bits_per_sample,
-            channels: spec.channels,
-            rate: spec.sample_rate,
-        });
-    }
-    let frames = reader.duration();
-    if frames == 0 {
-        return Err(ReadWavError::Empty);
-    }
-    // The header's length is a claim: past the file's bytes it would size
-    // the buffer, and the game would read the sound past its end.
-    if u64::from(reader.len()) * 2 > u64::try_from(wav.len()).unwrap_or(u64::MAX) {
-        return Err(ReadWavError::Malformed(
-            "its header claims more samples than the file holds".to_owned(),
-        ));
-    }
-    let mut bytes = Vec::with_capacity(usize::try_from(reader.len()).unwrap_or(0) * 2);
-    for sample in reader.into_samples::<i16>() {
-        let sample = sample.map_err(|error| ReadWavError::Malformed(error.to_string()))?;
-        bytes.extend_from_slice(&sample.to_le_bytes());
-    }
-    Ok(Pcm {
-        stereo: spec.channels == 2,
-        frames,
-        bytes,
-    })
-}
-
-/// A path that leaves the mod's folder.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("{0:?} is no path inside the mod's folder")]
-pub(crate) struct OutsideFolderError(String);
-
-/// The file `file` names inside `dir`: a relative path that stays inside it.
-fn file_in(dir: &std::path::Path, file: &str) -> Result<std::path::PathBuf, OutsideFolderError> {
-    if file.is_empty() || !crate::mods::stays_inside(file) {
-        return Err(OutsideFolderError(file.to_owned()));
-    }
-    Ok(dir.join(file))
-}
-
-/// The value of a container that plays `sound` in `scene` with the values
-/// of a vanilla effect, `fields` written over them.
-fn container_value(
-    sound: Guid,
-    scene: SoundContainerScene,
-    entry_type: &str,
-    fields: Vec<(String, Value)>,
-) -> Value {
+/// The value of a container that plays `own`, then the takes `change`
+/// adds, with the values of a vanilla effect and `change`'s over them;
+/// `change` passed [`check_container`].
+fn container_value(own: &[Take], entry_type: &str, change: &SoundChange) -> Result<Value, Off> {
+    let fields = change.fields().map_err(|why| Off::new(why.to_string()))?;
     let float = |name: &str, value: f64| (name.to_owned(), Value::Float(value));
-    let entry = Value::Struct(vec![
-        float(ENTRY_CHANCE, 1.0),
-        (ENTRY_SOUND.to_owned(), Value::Guid(sound)),
-    ]);
+    let scene = change.scene.unwrap_or_default();
     let mut values = vec![
         (MODE.to_owned(), Value::Name(RANDOM.to_owned())),
         (SCENE.to_owned(), Value::Name(scene.name().to_owned())),
@@ -235,18 +192,11 @@ fn container_value(
             HAS_POSITION.to_owned(),
             Value::Bool(scene != SoundContainerScene::Ui),
         ),
-        float(MIN_DISTANCE, 1.0),
-        float(MAX_DISTANCE_FIELD, 35.0),
+        float(MIN_DISTANCE, f64::from(DEFAULT_MIN_DISTANCE)),
+        float(MAX_DISTANCE_FIELD, f64::from(DEFAULT_MAX_DISTANCE)),
         float(SPEAKER_VOLUME, 1.0),
-        float(VIBRATION, 1.0),
+        float(VIBRATION_INTENSITY, 1.0),
         (PRIORITY.to_owned(), Value::Uint(50)),
-        (
-            ENTRIES.to_owned(),
-            Value::List(vec![Value::Variant(Box::new(Variant::new(
-                entry_type.to_owned(),
-                entry,
-            )))]),
-        ),
     ];
     for (name, value) in fields {
         match values.iter_mut().find(|(held, _)| *held == name) {
@@ -254,61 +204,14 @@ fn container_value(
             None => values.push((name, value)),
         }
     }
-    Value::Struct(values)
-}
-
-/// `base`, a vanilla uncompressed sound streamed as content, made to hold
-/// `frames` frames served as content `hash` under `name`; [`Off`] when the
-/// base lacks a field the frames need, so a renamed field serves nothing
-/// rather than the base's layout over the mod's frames.
-fn sound_value(
-    mut base: Value,
-    stereo: bool,
-    frames: u32,
-    hash: [u32; 4],
-    name: &str,
-) -> Result<Value, Off> {
-    let nanos = i64::try_from(u64::from(frames) * 1_000_000_000 / u64::from(SAMPLE_RATE))
-        .unwrap_or(i64::MAX);
-    let mut set = |field: &str, value: Value| {
-        let slot = base
-            .field_mut(field)
-            .ok_or_else(|| Off::new(format!("the game's sound has no {field}")))?;
-        *slot = value;
-        Ok::<_, Off>(())
-    };
-    set(
-        CHANNELS,
-        Value::Name(if stereo { STEREO } else { MONO }.to_owned()),
-    )?;
-    set(FRAME_COUNT, Value::Uint(u64::from(frames)))?;
-    set(
-        DURATION,
-        Value::Struct(vec![(TIME_VALUE.to_owned(), Value::Int(nanos))]),
-    )?;
-    let _named = set(DEBUG_NAME, Value::Text(name.to_owned()));
-    let content = base
-        .field_mut(STREAMED)
-        .and_then(|streamed| streamed.field_mut(CONTENT_HASH))
-        .ok_or_else(|| Off::new(format!("the game's sound has no {STREAMED}.{CONTENT_HASH}")))?;
-    *content = Value::Struct(
-        CONTENT_HASH_PARTS
-            .iter()
-            .zip(hash)
-            .map(|(part, word)| ((*part).to_owned(), Value::Uint(u64::from(word))))
-            .collect(),
-    );
-    Ok(base)
-}
-
-/// Whether `value` is an uncompressed sound whose samples stream as content.
-fn is_streamed_uncompressed(value: &Value) -> bool {
-    let size = value
-        .field(STREAMED)
-        .and_then(|streamed| streamed.field(CONTENT_HASH))
-        .and_then(|hash| hash.field(CONTENT_HASH_PARTS[0]));
-    value.field(FORMAT) == Some(&Value::Name(UNCOMPRESSED.to_owned()))
-        && matches!(size, Some(Value::Uint(size)) if *size > 0)
+    let mut takes = own.to_vec();
+    if let Some(Takes::Add(more)) = &change.takes {
+        takes.extend_from_slice(more);
+    }
+    let entries = change::merged_entries(None, &Takes::Replace(takes), entry_type)
+        .map_err(|why| Off::new(why.to_string()))?;
+    values.push((ENTRIES.to_owned(), entries));
+    Ok(Value::Struct(values))
 }
 
 /// `Load`'s methods of this module on the base handle, which core's
@@ -317,295 +220,175 @@ fn is_streamed_uncompressed(value: &Value) -> bool {
 pub trait LoadMethods {
     /// As `Load::add_sound`.
     #[doc(hidden)]
-    fn add_sound(&mut self, new: NewSound) -> Result<SoundContainerId, Off>;
+    fn add_sound(&mut self, new: NewSound) -> Result<AddedSound, Off>;
 }
 
 impl LoadMethods for crate::BaseLoad {
-    fn add_sound(&mut self, new: NewSound) -> Result<SoundContainerId, Off> {
+    fn add_sound(&mut self, new: NewSound) -> Result<AddedSound, Off> {
         let NewSound {
             id,
-            file,
-            scene,
+            takes,
+            channels,
+            gain_db,
+            trim,
             container: change,
         } = new;
-        let fail = |why: String| Off::new(format!("sound {id}: {why}"));
+        let fail = |why: Off| Off::new(format!("sound {id}: {why}"));
         if !self.joins() {
-            return Err(fail("a mod with sounds runs on both sides".to_owned()));
+            return Err(fail(Off::new("a mod with sounds runs on both sides")));
         }
-        let fields = change.fields().map_err(|why| fail(why.to_string()))?;
-        let sound_id = id
-            .try_part(ENTRY_SOUND)
-            .ok_or_else(|| fail("the id has no room for its sound's part".to_owned()))?;
-        let path = file_in(&self.mod_dir()?, &file).map_err(|why| fail(why.to_string()))?;
-        let size = std::fs::metadata(&path)
-            .map_err(|error| fail(format!("{file}: {error}")))?
-            .len();
-        if size > MAX_FILE_BYTES {
-            return Err(fail(format!("{file}: {size} bytes, past {MAX_FILE_BYTES}")));
+        if takes.is_empty() || takes.len() > MAX_NEW_TAKES {
+            return Err(fail(Off::new(format!(
+                "{} takes: a sound has 1 to {MAX_NEW_TAKES}",
+                takes.len()
+            ))));
         }
-        let mut budget = self.slot::<Budget>().unwrap_or_default();
-        if budget.bytes + size > MAX_MOD_BYTES {
-            return Err(fail(format!(
-                "{file}: the mod's sounds would pass {MAX_MOD_BYTES} bytes"
-            )));
-        }
-        let wav = std::fs::read(&path).map_err(|error| fail(format!("{file}: {error}")))?;
-        let pcm = read_wav(&wav).map_err(|error| fail(format!("{file}: {error}")))?;
-        drop(wav);
-        if self.host().build().side != Side::CLIENT {
-            let container = self.declare(id)?;
-            self.declare(sound_id)?;
-            budget.bytes += size;
-            *self.slot() = Some(budget);
-            return Ok(SoundContainerId::from_guid(container));
-        }
-        let host = self.host();
-        let registry = Registry::game()?;
-        let sound_type = registry
-            .hashed(types::SOUND_RESOURCE.hash()?)
-            .ok_or_else(|| fail("this game has no sound type".to_owned()))?;
-        let entry_type = registry
-            .hashed(self.hash(crate::engine_ids::SOUND_CONTAINER_SOUND_ENTRY)?)
-            .ok_or_else(|| fail("this game has no sound container entry".to_owned()))?
-            .qualified_name()
-            .to_owned();
-        let base = match budget.base {
-            Some(base) => base,
-            // One of the game's few uncompressed sounds, all streamed, carries
-            // the content category a served sound needs.
-            None => host
-                .resource_keys(Some(sound_type))?
-                .into_iter()
-                .find(|key| {
-                    host.game_value(*key)
-                        .is_ok_and(|value| is_streamed_uncompressed(&value))
-                })
-                .ok_or_else(|| {
-                    fail("the game holds no streamed uncompressed sound to build from".to_owned())
-                })?,
+        check_container(takes.len(), &change).map_err(fail)?;
+        let parts = TAKE_PARTS
+            .iter()
+            .take(takes.len())
+            .map(|part| id.try_part(part))
+            .collect::<Option<Vec<Id>>>()
+            .ok_or_else(|| fail(Off::new("the id has no room for its takes' parts")))?;
+        let shape = Shape {
+            channels,
+            gain_db,
+            trim,
         };
-        budget.base = Some(base);
-        let container = self.declare(id)?;
-        let sound = self.declare(sound_id)?;
+        let mut recordings = Vec::with_capacity(takes.len());
+        let mut pending = 0;
+        for take in &takes {
+            if !(0.0..=1.0).contains(&take.chance()) {
+                return Err(fail(Off::new(format!(
+                    "{}: chance {} is outside 0 to 1",
+                    take.file,
+                    take.chance()
+                ))));
+            }
+            let recording = recording::read(self, &take.file, shape, pending).map_err(fail)?;
+            pending += recording.bytes();
+            recordings.push(recording);
+        }
+        let client = self.host().build().side == Side::CLIENT;
         let host = self.host();
-        let hash = host.serve_content(&pcm.bytes)?;
-        // Served bytes stay held whatever fails after them.
-        budget.bytes += size;
-        *self.slot() = Some(budget);
-        let (stereo, frames, name) = (pcm.stereo, pcm.frames, id.to_string());
-        drop(pcm);
-        crate::resources::serve_value(
-            host,
-            types::SOUND_RESOURCE.key(sound)?,
-            base,
-            move |value| sound_value(value, stereo, frames, hash, &name),
-        )?;
-        let value = container_value(sound, scene, &entry_type, fields);
-        crate::resources::serve_new(
-            host,
-            types::SOUND_CONTAINER_RESOURCE.key(container)?,
-            &value,
-        )?;
-        Ok(SoundContainerId::from_guid(container))
+        let entry_type = if client {
+            for take in change::named_sounds(&change) {
+                super::known_sound(host, SoundId::from_guid(take)).map_err(fail)?;
+            }
+            let entry_type = super::entry_type(self).map_err(fail)?;
+            // Found before any id is declared, so a game without them leaves none.
+            recording::bases(self).map_err(fail)?;
+            Some(entry_type)
+        } else {
+            None
+        };
+        let container = self.declare(id)?;
+        let mut own = Vec::with_capacity(takes.len());
+        for ((take, recording), sound_id) in takes.iter().zip(recordings).zip(parts) {
+            let sound = SoundId::from_guid(self.declare(sound_id)?);
+            recording::serve(self, sound, recording, false, sound_id.to_string()).map_err(fail)?;
+            own.push(Take {
+                chance: take.chance(),
+                ..Take::new(sound)
+            });
+        }
+        if let Some(entry_type) = entry_type {
+            let value = container_value(&own, &entry_type, &change).map_err(fail)?;
+            crate::resources::serve_new(
+                self.host(),
+                types::SOUND_CONTAINER_RESOURCE.key(container)?,
+                &value,
+            )?;
+        }
+        Ok(AddedSound {
+            container: SoundContainerId::from_guid(container),
+            takes: own.into_iter().map(|take| take.sound).collect(),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
+    use crate::content::Guid;
 
-    fn wav(channels: u16, rate: u32, bits: u16, samples: &[i16]) -> Vec<u8> {
-        let spec = hound::WavSpec {
-            channels,
-            sample_rate: rate,
-            bits_per_sample: bits,
-            sample_format: hound::SampleFormat::Int,
+    #[test]
+    fn a_container_plays_its_takes_with_the_given_values_over_the_defaults() {
+        let sound = SoundId::from_guid(Guid::named("you.horns:horn.sound"));
+        let other = SoundId::from_guid(Guid::named("you.horns:horn.sound2"));
+        let own = [
+            Take::new(sound),
+            Take {
+                chance: 0.25,
+                ..Take::new(other)
+            },
+        ];
+        let change = SoundChange {
+            scene: Some(SoundContainerScene::Ui),
+            volume: Some(0.5),
+            ..SoundChange::default()
         };
-        let mut out = std::io::Cursor::new(Vec::new());
-        let mut writer = hound::WavWriter::new(&mut out, spec).unwrap();
-        for &sample in samples {
-            if bits == 16 {
-                writer.write_sample(sample).unwrap();
-            } else {
-                writer.write_sample(i32::from(sample)).unwrap();
-            }
-        }
-        writer.finalize().unwrap();
-        out.into_inner()
-    }
-
-    #[test]
-    fn a_wav_of_another_format_is_refused_naming_it() {
-        for (channels, rate, bits) in [(1, 44_100, 16), (3, SAMPLE_RATE, 16), (1, SAMPLE_RATE, 24)]
-        {
-            assert_eq!(
-                read_wav(&wav(channels, rate, bits, &[1, 2, 3])),
-                Err(ReadWavError::Format {
-                    bits,
-                    channels,
-                    rate
-                })
-            );
-        }
-        assert_eq!(
-            read_wav(&wav(1, SAMPLE_RATE, 16, &[])),
-            Err(ReadWavError::Empty)
-        );
-        assert!(matches!(read_wav(b"RIFF"), Err(ReadWavError::Malformed(_))));
-    }
-
-    #[test]
-    fn a_header_that_claims_more_samples_than_the_file_holds_is_refused() {
-        let mut lying = wav(1, SAMPLE_RATE, 16, &[1, 2, 3]);
-        let data = lying.len() - 6 - 4;
-        // Whole samples, so only the length check refuses it.
-        lying[data..data + 4].copy_from_slice(&0x7fff_fffe_u32.to_le_bytes());
-        assert!(
-            matches!(&read_wav(&lying), Err(ReadWavError::Malformed(why)) if why.contains("claims more samples")),
-            "{:?}",
-            read_wav(&lying)
-        );
-        // Exactly as many samples as the file holds pass.
-        let whole = wav(2, SAMPLE_RATE, 16, &[1, 2, 3, 4]);
-        assert_eq!(read_wav(&whole).map(|p| p.frames), Ok(2));
-        assert_eq!(
-            read_wav(&wav(1, SAMPLE_RATE, 16, &[1, 2, 3])).map(|p| p.frames),
-            Ok(3)
-        );
-    }
-
-    #[test]
-    fn a_path_must_stay_inside_the_mod_s_folder() {
-        let dir = std::path::Path::new("mods/you.horns");
-        assert_eq!(
-            file_in(dir, "sounds/horn.wav"),
-            Ok(dir.join("sounds/horn.wav"))
-        );
-        assert_eq!(file_in(dir, "./horn.wav"), Ok(dir.join("./horn.wav")));
-        for bad in [
-            "",
-            "../other/horn.wav",
-            "/horn.wav",
-            "sounds/../../horn.wav",
-        ] {
-            assert!(file_in(dir, bad).is_err(), "{bad}");
-        }
-        // Elsewhere a drive letter is an ordinary folder name inside the mod's.
-        if cfg!(windows) {
-            assert!(file_in(dir, "C:/horn.wav").is_err());
-        }
-    }
-
-    #[test]
-    fn a_new_sound_takes_its_frames_channels_and_content_over_the_base() {
-        let base = Value::Struct(vec![
-            (FORMAT.into(), Value::Name(UNCOMPRESSED.into())),
-            (CHANNELS.into(), Value::Name(MONO.into())),
-            (FRAME_COUNT.into(), Value::Uint(1)),
-            (
-                DURATION.into(),
-                Value::Struct(vec![(TIME_VALUE.into(), Value::Int(1))]),
-            ),
-            (
-                STREAMED.into(),
-                Value::Struct(vec![
-                    (
-                        CONTENT_HASH.into(),
-                        Value::Struct(vec![(CONTENT_HASH_PARTS[0].into(), Value::Uint(2))]),
-                    ),
-                    ("category".into(), Value::Uint(9)),
-                ]),
-            ),
-            (DEBUG_NAME.into(), Value::Text("waterfall".into())),
-        ]);
-        assert!(is_streamed_uncompressed(&base));
-        let over_base = |base: Value| {
-            sound_value(
-                base,
-                true,
-                SAMPLE_RATE * 2,
-                [192_000, 1, 2, 3],
-                "you.horns:horn",
-            )
-        };
-        let Value::Struct(fields) = &base else {
-            unreachable!("built as a struct")
-        };
-        let renamed = fields
-            .iter()
-            .map(|(name, value)| {
-                let name = if name == FRAME_COUNT {
-                    "frames"
-                } else {
-                    name.as_str()
-                };
-                (name.to_owned(), value.clone())
-            })
-            .collect();
-        assert!(
-            over_base(Value::Struct(renamed)).is_err(),
-            "a base without a field the frames need serves nothing"
-        );
-        let built = over_base(base).unwrap();
-        assert!(is_streamed_uncompressed(&built));
-        assert_eq!(built.field(CHANNELS), Some(&Value::Name(STEREO.into())));
-        assert_eq!(
-            built.field(DURATION).and_then(|d| d.field(TIME_VALUE)),
-            Some(&Value::Int(2_000_000_000))
-        );
-        let streamed = built.field(STREAMED).unwrap();
-        assert_eq!(streamed.field("category"), Some(&Value::Uint(9)), "kept");
-        assert_eq!(
-            streamed
-                .field(CONTENT_HASH)
-                .and_then(|h| h.field(CONTENT_HASH_PARTS[3])),
-            Some(&Value::Uint(3))
-        );
-    }
-
-    #[test]
-    fn a_container_plays_its_one_sound_with_the_given_values_over_the_defaults() {
-        let sound = Guid::named("you.horns:horn.sound");
-        let fields = vec![(VOLUME.to_owned(), Value::Float(0.5))];
-        let value = container_value(sound, SoundContainerScene::Ui, "demo::Entry", fields);
+        let value = container_value(&own, "demo::Entry", &change).unwrap();
         assert_eq!(value.field(VOLUME), Some(&Value::Float(0.5)));
         assert_eq!(value.field(SCENE), Some(&Value::Name("Ui".into())));
         assert_eq!(value.field(HAS_POSITION), Some(&Value::Bool(false)));
-        let effect = container_value(sound, SoundContainerScene::Sfx, "demo::Entry", Vec::new());
+        let effect = container_value(&own, "demo::Entry", &SoundChange::default()).unwrap();
         assert_eq!(effect.field(HAS_POSITION), Some(&Value::Bool(true)));
-        let Some(Value::List(entries)) = value.field(ENTRIES) else {
-            panic!("no entries");
-        };
-        let [Value::Variant(entry)] = entries.as_slice() else {
-            panic!("one entry");
-        };
-        assert_eq!(entry.type_name(), "demo::Entry");
-        assert_eq!(entry.value().field(ENTRY_SOUND), Some(&Value::Guid(sound)));
+        assert_eq!(
+            value.field(ENTRIES),
+            Some(&Value::List(
+                own.iter()
+                    .map(|t| change::entry("demo::Entry", *t))
+                    .collect()
+            ))
+        );
     }
 
-    proptest! {
-        #[test]
-        fn every_16_bit_wav_at_the_game_s_rate_reads_back_its_samples(
-            stereo in any::<bool>(),
-            frames in prop::collection::vec(any::<i16>(), 1..512),
-        ) {
-            let channels: u16 = if stereo { 2 } else { 1 };
-            let samples: Vec<i16> = frames
-                .iter()
-                .flat_map(|&s| std::iter::repeat_n(s, usize::from(channels)))
-                .collect();
-            let pcm = read_wav(&wav(channels, SAMPLE_RATE, 16, &samples)).unwrap();
-            prop_assert_eq!(pcm.stereo, stereo);
-            prop_assert_eq!(pcm.frames as usize, frames.len());
-            let expected: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
-            prop_assert_eq!(pcm.bytes, expected);
-        }
+    #[test]
+    fn a_new_container_adds_given_takes_after_its_own_and_refuses_to_replace_them() {
+        let sound = SoundId::from_guid(Guid([1; 16]));
+        let other = SoundId::from_guid(Guid([2; 16]));
+        let more = SoundChange {
+            takes: Some(Takes::Add(vec![Take::new(other)])),
+            ..SoundChange::default()
+        };
+        let value = container_value(&[Take::new(sound)], "demo::Entry", &more).unwrap();
+        assert_eq!(
+            value.field(ENTRIES),
+            Some(&Value::List(vec![
+                change::entry("demo::Entry", Take::new(sound)),
+                change::entry("demo::Entry", Take::new(other)),
+            ]))
+        );
+        let replaced = SoundChange {
+            takes: Some(Takes::Replace(vec![Take::new(other)])),
+            ..SoundChange::default()
+        };
+        assert!(check_container(1, &replaced).is_err());
+        assert!(check_container(1, &more).is_ok());
+        assert!(check_container(super::super::MAX_TAKES, &more).is_err());
+    }
 
-        #[test]
-        fn any_bytes_read_as_a_sound_or_an_error_without_panicking(bytes in prop::collection::vec(any::<u8>(), 0..256)) {
-            let _read = read_wav(&bytes);
-        }
+    #[test]
+    fn a_new_container_s_least_distance_may_not_pass_the_greatest_default_included() {
+        let at = |min, max| SoundChange {
+            min_distance: min,
+            max_distance: max,
+            ..SoundChange::default()
+        };
+        assert!(check_container(1, &at(Some(35.0), None)).is_ok());
+        assert!(check_container(1, &at(Some(50.0), None)).is_err());
+        assert!(check_container(1, &at(None, Some(0.5))).is_err());
+        assert!(check_container(1, &at(Some(50.0), Some(60.0))).is_ok());
+    }
+
+    #[test]
+    fn every_take_has_a_part_that_fits_an_id() {
+        let id = Id::new("you.horns:horn");
+        let parts: Vec<_> = TAKE_PARTS.iter().map(|part| id.try_part(part)).collect();
+        assert!(parts.iter().all(Option::is_some));
+        let mut guids: Vec<_> = parts.iter().flatten().map(|id| id.guid()).collect();
+        guids.dedup();
+        assert_eq!(guids.len(), MAX_NEW_TAKES);
     }
 }

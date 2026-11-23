@@ -21,6 +21,10 @@ enshwick-values.workspace = true
 enshwick-inventory = { workspace = true, optional = true }
 enshwick-world = { workspace = true, optional = true }
 hound = { workspace = true, optional = true }
+claxon = { workspace = true, optional = true }
+lewton = { workspace = true, optional = true }
+nanomp3 = { workspace = true, optional = true }
+rubato = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [dev-dependencies]
@@ -35,6 +39,10 @@ proptest.workspace = true
 fake = []
 unstable = [
     "dep:hound",
+    "dep:claxon",
+    "dep:lewton",
+    "dep:nanomp3",
+    "dep:rubato",
     "enshwick-base/unstable",
     "enshwick-content/unstable",
     "dep:enshwick-inventory",

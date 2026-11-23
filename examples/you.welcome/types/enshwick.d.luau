@@ -81,6 +81,14 @@ export type Actions = {
 	on_refused: (self: Actions, refused: (arg1: Refused) -> ()) -> (),
 }
 
+--- What `Load.add_sound` made: the container, which plays, and its recordings, which other containers' `Take`s name.
+export type AddedSound = {
+	--- The container.
+	container: string,
+	--- Its recordings, in the order of its takes.
+	takes: {string},
+}
+
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
 export type AffixCraft = {
 	--- The chance each fitting crafted item rolls at all, from 0 to 1.
@@ -477,6 +485,9 @@ export type Channel = {
 	--- Whether `peer` takes messages now, as `Channel.is_ready` says.
 	is_ready: (self: Channel, peer: Peer) -> boolean,
 }
+
+--- Which channels a sound keeps.
+export type Channels = "Keep" | "Mono" | "Stereo"
 
 --- What a chat line is.
 export type ChatKind = "Player" | "Emote" | "Notice"
@@ -1949,16 +1960,28 @@ export type NewSkillNode = {
 	kind: typed_SkillNodeType?,
 }
 
---- A sound for `Load.add_sound`: a WAV file in the mod's folder and the values of the sound container that plays it.
+--- A sound for `Load.add_sound`: audio files in the mod's folder, how they become recordings, and the values of the sound container that picks among them.
 export type NewSound = {
 	--- The sound's content id; its container's GUID is the id's.
 	id: string,
-	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES`.
-	file: string,
-	--- The container's scene.
-	scene: SoundContainerScene?,
-	--- The container's values where they differ from those of a vanilla effect: volume and pitch 1, heard from 1 to 35 metres, priority 50.
+	--- Its takes, 1 to `MAX_NEW_TAKES`; the container picks one at random by their weights each time it plays.
+	takes: {NewTake},
+	--- Which channels its recordings keep; mono suits a sound placed in the world.
+	channels: Channels?,
+	--- A gain in decibels on every take, within `GAIN_DB`.
+	gain_db: number?,
+	--- The part of each take's file it plays.
+	trim: Trim?,
+	--- The container's values where they differ from those of a vanilla effect: scene `Sfx`, volume and pitch 1, heard from 1 to 35 metres, priority 50. Its `takes` may only add to the sound's own.
 	container: SoundChange?,
+}
+
+--- One take of a `NewSound`: an audio file in the mod's folder and its weight among the sound's takes.
+export type NewTake = {
+	--- The file, relative to the mod's folder: WAV (8, 16, 24 or 32-bit, or float), FLAC, Ogg Vorbis or MP3, at 8 to 384 kHz, at most `MAX_FILE_BYTES`.
+	file: string,
+	--- Its weight among the sound's takes, from 0 to 1; nil for 1.
+	chance: number?,
 }
 
 --- A new entity template for `Load.add_template`: a copy of the vanilla template `like` under the mod's content id `id`, with `changes` applied in order. `id` is the mod's own and never changes: saves keep the template GUID of every placed object and creature made from it.
@@ -2448,6 +2471,14 @@ export type QuestStep = {
 	level: number?,
 }
 
+--- How far from its place each play of a placed container is moved at random, in metres; both 0 turns the spread off.
+export type RandomPosition = {
+	--- The spread to either side, from 0 to `MAX_DISTANCE`.
+	left_right: number,
+	--- The spread forwards and back, from 0 to `MAX_DISTANCE`.
+	front_back: number,
+}
+
 --- How many enemies random spawners bring. The loader reads the game's value of each variant by its constant's name.
 export type RandomSpawnerAmount = "Few" | "Normal" | "Many" | "Extreme" | "Automatic" | { Other: number }
 
@@ -2841,7 +2872,7 @@ export type SlotInput = {
 --- One of the game's interface sounds.
 export type Sound = "Click" | "Confirm" | "Back" | "Error"
 
---- New values for a sound container, each nil to keep the one it has: the game's, or the last earlier mod's.
+--- New values for a sound container, each nil to keep the one it has: the game's, or the last earlier mod's. Where one value turns a feature on (a spread, a limit, a gamepad output), 0 turns it off.
 export type SoundChange = {
 	--- The game's volume factor, from 0 (silent) to `MAX_VOLUME`.
 	volume: number?,
@@ -2859,10 +2890,39 @@ export type SoundChange = {
 	looped: boolean?,
 	--- The game's priority of the container among sounds playing at once.
 	priority: number?,
+	--- The scene it plays in, which sets the volume slider that governs it.
+	scene: SoundContainerScene?,
+	--- Whether it plays at a place in the world rather than in the listener's head.
+	has_position: boolean?,
+	--- The pause between two plays of a looped container, at most `MAX_SLEEP`.
+	sleep: number?,
+	--- The random spread of that pause, at most `MAX_SLEEP`.
+	sleep_randomness: number?,
+	--- How many of the takes played last the game avoids picking again, at most `MAX_TAKES`.
+	avoid_repeating_last: number?,
+	--- Whether a looped container plays the same take each time round.
+	loop_same_take: boolean?,
+	--- The most plays of the container at once, at most `MAX_COUNT`; 0 for no limit.
+	max_count: number?,
+	--- Which play a new one stops at `max_count`.
+	stealing_mode: SoundContainerStealingMode?,
+	--- How far each play of a placed container moves at random.
+	random_position: RandomPosition?,
+	--- The game's `muteOnMain` flag.
+	mute_on_main: boolean?,
+	--- The volume it plays at on a gamepad's speaker, from 0 (off) to `MAX_VOLUME`.
+	gamepad_speaker: number?,
+	--- The strength of a gamepad's vibration with it, from 0 (off) to 1.
+	gamepad_vibration: number?,
+	--- Which recordings it plays.
+	takes: Takes?,
 }
 
 --- The game's scene of a sound container, `SoundContainerScene`.
 export type SoundContainerScene = "Sfx" | "Music" | "Ui" | "Voice"
+
+--- The game's `SoundContainerStealingMode`: which play of a container a new one stops once `SoundChange.max_count` of them play.
+export type SoundContainerStealingMode = "Oldest" | "Furthest" | "Ignore"
 
 --- One modifier that counts toward a stat, with its origin.
 export type Source = {
@@ -3090,6 +3150,17 @@ export type Summon = {
 --- What a summon filter makes of a staff's use, from `Load.on_summon`. The name is enshwick's, not the game's.
 export type SummonVerdict = "Allow" | "Take" | "Refuse"
 
+--- One recording a container may play, and how often against its other takes. "Take" is enshwick's word for the game's container entry.
+export type Take = {
+	--- The recording: the game's, or one a mod added or replaced.
+	sound: string,
+	--- Its weight among the container's takes, from 0 to 1; the game picks a take at random by these weights.
+	chance: number,
+}
+
+--- Which recordings a container plays, as a change gives them.
+export type Takes = { Replace: {Take} } | { Add: {Take} }
+
 --- What startling a tamed animal costs its taming. The loader reads the game's value of each variant by its constant's name.
 export type TamingStartleRepercussion = "KeepProgress" | "LoseSomeProgress" | "LoseAllProgress" | { Other: number }
 
@@ -3268,6 +3339,14 @@ export type TransactionStatus = "Pending" | "Applied" | "Undoing" | "Undone" | {
 
 --- The kind of move a player makes; the names are enshwick's, after the buttons and gestures the game offers. Unstable: needs the `unstable` feature and may change in any release.
 export type Transfer = "Slot" | "TakeAll" | "DepositAll" | "DepositStacks" | "RefillStacks" | "Gift" | "ToActionbar" | "ToBackpack"
+
+--- The part of each file a sound plays.
+export type Trim = {
+	--- Where it starts in the file.
+	from: number,
+	--- Where it ends in the file; nil for the file's end.
+	to: number?,
+}
 
 --- A skill node a character unlocked, from `World.skills`. The name is enshwick's: one entry of the game's unlocked skill nodes and their levels.
 export type UnlockedSkill = {
@@ -4690,8 +4769,11 @@ declare enshwick: {
 		--- Calls `handler` on the server's game thread for each notifier and sound the server places in the world, the game's own and those a mod raises with `Effects.notify`: every event but the visual effects, type `Vfx`, so a type this build names but the crate does not reaches it too. On a client it hears only a game that client hosts.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_notify: (handler: (arg1: NotifyEvent) -> ()) -> (),
-		--- Unstable: needs the `unstable` feature and may change in any release. Adds the sound in `new.file` and a container that plays it, under `new.id`, and returns the container, which `Frame.play`, `Load.change_sound` and other mods use. The client holds it as the game holds its own uncompressed sounds, built from one of them, streamed from memory; nothing is written to the archive or a save. A server checks the file and serves nothing. Wrap the call in `Load.feature` so a bad file turns off that sound alone, with the reason on the Mods screen.
+		--- Unstable: needs the `unstable` feature and may change in any release. Adds a recording for each of `new.takes` and a container that picks among them, under `new.id`, and returns both: the container, which `Frame.play`, `Load.change_sound` and other mods use, and the recordings, which other containers' takes name. The client holds each as the game holds its own `FramelessQOA` sounds at `SAMPLE_RATE`, inline up to `INLINE_FRAMES` and streamed past it; nothing is written to the archive or a save. A server checks the files and serves nothing. Wrap the call in `Load.feature` so a bad file turns off that sound alone, with the reason on the Mods screen.
 		--- Only while the mod starts, at the top level of main.luau.
-		add: (new: NewSound) -> string,
+		add: (new: NewSound) -> AddedSound,
+		--- Unstable: needs the `unstable` feature and may change in any release. Replaces the game's recording `sound` with the mod's `file`, read as `Load.add_sound` reads one, wherever any container plays it, on the client as it reads the game's archive; nothing is written to the archive or a save. Mods that replace one recording apply in load order: the last one's file plays, and the log names the one it replaced. A server checks the file and serves nothing.
+		--- Only while the mod starts, at the top level of main.luau.
+		replace: (sound: string, file: string) -> (),
 	},
 }
