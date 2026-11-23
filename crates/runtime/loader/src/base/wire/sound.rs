@@ -83,9 +83,9 @@ pub fn sound(message: &SoundMessage) -> Vec<u8> {
     data.extend_from_slice(&message.owner.to_le_bytes());
     data.extend_from_slice(&message.id.to_le_bytes());
     let put_at = |data: &mut Vec<u8>, at: [f64; 3]| {
-        narrow(at)
-            .iter()
-            .for_each(|axis| data.extend_from_slice(&axis.to_le_bytes()));
+        for axis in narrow(at) {
+            data.extend_from_slice(&axis.to_le_bytes());
+        }
     };
     match message.op {
         SoundOp::Play(play) => {

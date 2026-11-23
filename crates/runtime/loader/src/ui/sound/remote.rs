@@ -281,12 +281,13 @@ mod windows {
     /// start the client's sounds refuse are dropped, a container it lacks
     /// with one log line.
     pub(crate) fn received(loader: &Loader, bytes: &[u8]) {
-        match crate::base::wire::read_sound(bytes) {
-            Some(message) => take(loader, message),
-            None => crate::log_once!(
+        if let Some(message) = crate::base::wire::read_sound(bytes) {
+            take(loader, message);
+        } else {
+            crate::log_once!(
                 WARN,
                 "server sounds: a message that does not read is dropped"
-            ),
+            );
         }
     }
 

@@ -1202,8 +1202,10 @@ abi::HostApi::settings
 abi::HostApi::show_pickup
 abi::HostApi::skill_override
 abi::HostApi::sound_play
+abi::HostApi::sound_play_for
 abi::HostApi::sound_state
 abi::HostApi::sound_steer
+abi::HostApi::sound_steer_for
 abi::HostApi::spawn
 abi::HostApi::stat_buff
 abi::HostApi::stat_info
@@ -1921,6 +1923,21 @@ abi::SkillNode::from_value
 abi::SkillNode::get
 abi::SkillNode::into_value
 abi::SkillNode::new
+abi::SoundAudience
+abi::SoundAudience::BORN
+abi::SoundAudience::EMPTY
+abi::SoundAudience::EVERYONE
+abi::SoundAudience::MAX_PLAYS
+abi::SoundAudience::MAX_RADIUS
+abi::SoundAudience::NEAR
+abi::SoundAudience::PLAYER
+abi::SoundAudience::at
+abi::SoundAudience::header
+abi::SoundAudience::hears
+abi::SoundAudience::in_bounds
+abi::SoundAudience::kind
+abi::SoundAudience::player
+abi::SoundAudience::radius
 abi::SoundInfo
 abi::SoundInfo::BORN
 abi::SoundInfo::EMPTY
@@ -6773,6 +6790,13 @@ sound::AddedSound::container unstable
 sound::AddedSound::from_value unstable
 sound::AddedSound::into_value unstable
 sound::AddedSound::takes unstable
+sound::Audience
+sound::Audience::Everyone
+sound::Audience::Near
+sound::Audience::Player
+sound::Audience::TY
+sound::Audience::from_value
+sound::Audience::into_value
 sound::Channels unstable
 sound::Channels::Keep unstable
 sound::Channels::Mono unstable
@@ -6789,6 +6813,8 @@ sound::MAX_FADE
 sound::MAX_FILE_BYTES unstable
 sound::MAX_MOD_BYTES unstable
 sound::MAX_NEW_TAKES
+sound::MAX_PLAYS
+sound::MAX_RADIUS
 sound::MAX_SLEEP
 sound::MAX_STARTS
 sound::MAX_TAKE
@@ -6876,6 +6902,12 @@ sound::RandomPosition::from_value
 sound::RandomPosition::front_back
 sound::RandomPosition::into_value
 sound::RandomPosition::left_right
+sound::RemoteSound
+sound::RemoteSound::CLASS
+sound::RemoteSound::PARTS
+sound::RemoteSound::set_position
+sound::RemoteSound::set_volume
+sound::RemoteSound::stop
 sound::SAMPLE_RATE unstable
 sound::SoundChange
 sound::SoundChange::TY
@@ -6951,6 +6983,7 @@ sound::Sounds::NAME
 sound::Sounds::PARTS
 sound::Sounds::functions
 sound::Sounds::play
+sound::Sounds::play_for
 sound::Sounds::resolve
 sound::Sounds::stop_all
 sound::Take
@@ -6986,6 +7019,7 @@ sound::VoiceoverId::from_value unstable
 sound::VoiceoverId::guid unstable
 sound::VoiceoverId::into_value unstable
 sound::play
+sound::play_for
 sound::stop_all
 state
 state::HOLD_FILE

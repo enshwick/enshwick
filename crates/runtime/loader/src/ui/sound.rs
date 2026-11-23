@@ -100,6 +100,7 @@ mod windows {
         if loader.side != Side::CLIENT {
             return;
         }
+        crate::base::net::on_sounds(super::received);
         match Calls::resolve(loader) {
             Ok(calls) => {
                 let _first = STATE.calls.set(calls);

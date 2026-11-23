@@ -86,11 +86,11 @@ runs on both sides.
 | --- | --- |
 | `Audience::Player(key)` | The client of one player |
 | `Audience::Everyone` | Every client |
-| `Audience::Near { at, radius }` | The clients whose character stands within `radius` metres of `at` when it starts; `None` is 500 metres, as far as any sound carries |
+| `Audience::Near { at, radius }` | The clients whose character stands within the radius of the place when it starts; no radius means 500 metres, as far as any sound carries |
 
-The server's entity ids name no entity of a client's world, so
-`Place::On(entity)` plays where the entity stands when the sound starts and
-does not follow it. A near audience and `Place::On` read where things
+The server's entity ids name no entity of a client's world. So
+`Place::On(entity)` plays where the entity stands when the sound starts,
+and does not follow it. A near audience and `Place::On` read where things
 stand, so they work only on the server's game thread, as in a step or an
 event. The other calls work from any thread. One mod sends at most 32
 sounds in one server step. The server does not know which containers a
@@ -99,9 +99,9 @@ it once.
 
 In a game a client hosts, the host's own player hears the sound too.
 
-The `RemoteSound` it returns steers the sound on the clients it went to,
-with `stop(fade)`, `set_volume(v, fade)` and `set_position(at)`. Clients
-send nothing back, so it has no state to read. A change reaches only the
+The `RemoteSound` it returns steers the sound on the clients it went to.
+It stops, fades and moves the sound as a `SoundHandle` does. Clients send
+nothing back, so it has no state to read. A change reaches only the
 mod's 256 newest sounds.
 
 ```rust

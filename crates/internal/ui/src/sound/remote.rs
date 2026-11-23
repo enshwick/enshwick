@@ -165,8 +165,10 @@ impl RemoteSound {
     }
 }
 
-/// Plays `play` on the clients of `audience` from the server: each client
-/// that runs Enshwick and the mod plays it as the mod's client part's own
+/// Plays `play` from the server on the clients of `audience` that run
+/// Enshwick and the mod.
+///
+/// Each such client plays it as the mod's client part's own
 /// [`play`](super::play) would; a vanilla client hears nothing. A hosting
 /// client's own player hears it too. From any thread; an
 /// [`Audience::Near`] or a [`Place::On`](super::Place::On) on the server's
