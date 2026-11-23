@@ -596,12 +596,19 @@ pub(crate) fn forget_peer(key: u64) {
 
 /// The language the player of client `key` reads the game in, as its hello
 /// said, or the game's own for the player of this client while it hosts the
-/// game; `None` before a hello or for a game without Enshwick.
+/// game; `None` before a hello, for a game without Enshwick or for a game
+/// language the ABI does not list.
 pub(crate) fn language_of(key: u64) -> Option<Language> {
     if crate::base::carrier::is_host(key) {
-        return Some(crate::content::served::language());
+        return known(crate::content::served::language());
     }
     state(|s| language_in(s, key))
+}
+
+/// `language` if the ABI lists it; a number read from the game or a peer
+/// that it does not list reads as unknown.
+fn known(language: Language) -> Option<Language> {
+    Language::ALL.contains(&language).then_some(language)
 }
 
 /// The language the player of client `key` reads, as the ABI numbers it:
@@ -615,10 +622,9 @@ pub(crate) fn language_number(key: u64) -> u32 {
 /// every reader of [`language_of`] sees the one the actions use. A number
 /// the game does not know is dropped, as the hello's is.
 pub(crate) fn language_named(key: u64, language: u32) {
-    let language = Language(language);
-    if !Language::ALL.contains(&language) {
+    let Some(language) = known(Language(language)) else {
         return;
-    }
+    };
     state(|s| {
         if let Some(peer) = s.peers.get_mut(&key) {
             peer.language.get_or_insert(language);

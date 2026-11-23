@@ -285,8 +285,8 @@ pub(crate) fn causes_off() -> Option<Vec<u32>> {
     )
 }
 
-/// [`causes_off`] once arming is `settled` and the filters are sealed,
-/// `filtering` when a mod filters damage; `None` before either.
+/// [`causes_off`] from its inputs: `None` until arming is `settled` and the
+/// filters are sealed (`filtering` is `Some`), then [`off_of`].
 fn answer(settled: bool, filtering: Option<bool>, stats: bool) -> Option<Vec<u32>> {
     if !settled {
         return None;
