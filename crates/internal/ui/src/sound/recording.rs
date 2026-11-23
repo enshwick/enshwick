@@ -2,7 +2,8 @@
 //! mod's bounds at init, encoded as `FramelessQOA` on background threads, and
 //! served as one of the game's sounds, new or in place of a vanilla one.
 
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use super::SoundId;
@@ -11,7 +12,7 @@ use super::qoa;
 use crate::Off;
 use crate::abi::{Level, ResourceKey, Side};
 use crate::content::types;
-use crate::locks::{Relock as _, RelockWait as _};
+use crate::locks::Relock as _;
 use crate::resources::Value;
 
 /// The rate of every sound the game plays, and of every recording a mod
@@ -60,7 +61,7 @@ pub(super) struct Bases {
 
 /// What a mod's sounds hold while it initialises: the encoded bytes of its
 /// recordings so far, the game's sounds they build from, and the threads
-/// that encode them.
+/// that encode them; it drops when the mod's init ends.
 #[derive(Default)]
 struct Budget {
     bytes: u64,
@@ -68,100 +69,172 @@ struct Budget {
     encoder: Option<Arc<Encoder>>,
 }
 
-/// A mod's background encoding: at most as many recordings at once as the
-/// machine has cores, and the time they took, logged when none is left.
+impl Drop for Budget {
+    fn drop(&mut self) {
+        if let Some(encoder) = &self.encoder {
+            let mut queue = encoder.queue.relock();
+            queue.ended = true;
+            encoder.log_when_done(&mut queue);
+        }
+    }
+}
+
+/// A mod's background encoding: up to one thread per core, each taking the
+/// mod's waiting recordings in turn.
 struct Encoder {
-    free: Mutex<usize>,
-    freed: Condvar,
-    work: Mutex<(usize, usize, Duration)>,
+    queue: Mutex<Queue>,
     host: crate::Host,
+}
+
+/// The recordings waiting for an encoding thread, and the count and time
+/// of those done, logged once.
+#[derive(Default)]
+struct Queue {
+    waiting: VecDeque<Arc<Job>>,
+    threads: usize,
+    started: usize,
+    done: usize,
+    took: Duration,
+    /// Whether the mod's init has ended, so no recording joins.
+    ended: bool,
+    logged: bool,
+}
+
+impl Queue {
+    /// The one line that sums the mod's encoding, once its init has ended
+    /// and none is left; `None` before and after.
+    fn summary(&mut self) -> Option<String> {
+        if !self.ended || self.logged || self.done < self.started {
+            return None;
+        }
+        self.logged = true;
+        Some(format!(
+            "encoded {} recordings in {} ms of work",
+            self.done,
+            self.took.as_millis()
+        ))
+    }
 }
 
 impl Encoder {
     fn new(host: crate::Host) -> Self {
-        let cores = std::thread::available_parallelism().map_or(1, usize::from);
         Self {
-            free: Mutex::new(cores),
-            freed: Condvar::new(),
-            work: Mutex::new((0, 0, Duration::ZERO)),
+            queue: Mutex::default(),
             host,
         }
     }
 
-    /// Encodes `job` on a thread of its own once a core is free; when no
-    /// thread starts, the first read encodes it.
+    /// Queues `job`, and starts a thread for it while fewer than the
+    /// machine's cores run; one no thread takes is encoded by its first read.
     fn start(self: &Arc<Self>, job: &Arc<Job>) {
-        self.work.relock().0 += 1;
-        let (encoder, job) = (Arc::clone(self), Arc::clone(job));
+        let mut queue = self.queue.relock();
+        queue.waiting.push_back(Arc::clone(job));
+        queue.started += 1;
+        let cores = std::thread::available_parallelism().map_or(1, usize::from);
+        if queue.threads >= cores {
+            return;
+        }
+        let encoder = Arc::clone(self);
         let spawned = std::thread::Builder::new()
             .name("enshwick sound encoding".to_owned())
-            .spawn(move || {
-                let mut free = encoder
-                    .freed
-                    .relock_wait_while(encoder.free.relock(), |free| *free == 0);
-                *free -= 1;
-                drop(free);
-                let started = Instant::now();
-                let _encoded = job.data();
-                *encoder.free.relock() += 1;
-                encoder.freed.notify_one();
-                encoder.done(started.elapsed());
-            });
-        if spawned.is_err() {
-            self.work.relock().0 -= 1;
+            .spawn(move || encoder.work());
+        if spawned.is_ok() {
+            queue.threads += 1;
+        } else if queue.threads == 0 {
+            queue.waiting.pop_back();
+            queue.started -= 1;
         }
     }
 
-    /// Counts one finished recording, and logs the mod's encoding once its
-    /// last one so far is done.
-    fn done(&self, took: Duration) {
-        let mut work = self.work.relock();
-        work.1 += 1;
-        work.2 += took;
-        if work.1 == work.0 {
-            self.host.log(
-                Level::INFO,
-                &format!(
-                    "encoded {} recordings in {} ms of work",
-                    work.1,
-                    work.2.as_millis()
-                ),
-            );
+    /// Encodes the waiting recordings until none is left; a panic stops
+    /// only its recording, whose reads then say so.
+    fn work(&self) {
+        while let Some(job) = self.next() {
+            let started = Instant::now();
+            let _encoded = enshwick_base::host::caught(|| drop(job.encoded()));
+            let mut queue = self.queue.relock();
+            queue.done += 1;
+            queue.took += started.elapsed();
+            self.log_when_done(&mut queue);
+        }
+    }
+
+    /// The next waiting recording; `None` ends the thread.
+    fn next(&self) -> Option<Arc<Job>> {
+        let mut queue = self.queue.relock();
+        let job = queue.waiting.pop_front();
+        if job.is_none() {
+            queue.threads -= 1;
+        }
+        job
+    }
+
+    fn log_when_done(&self, queue: &mut Queue) {
+        if let Some(line) = queue.summary() {
+            self.host.log(Level::INFO, &line);
         }
     }
 }
 
 /// One recording's encoding: its samples until encoded, then its bytes,
-/// and the hash they were served under once streamed.
+/// and once they stream, only the hash the loader holds them under.
 struct Job {
-    samples: Mutex<Option<Vec<i16>>>,
+    state: Mutex<JobState>,
     channels: usize,
-    /// The encoded bytes; `None` when the encoding stopped, its samples
-    /// gone with a thread that panicked.
-    data: OnceLock<Option<Vec<u8>>>,
-    served: OnceLock<[u32; 4]>,
+}
+
+enum JobState {
+    Samples(Vec<i16>),
+    Encoded(Arc<[u8]>),
+    Served([u32; 4]),
+    /// The encoding panicked.
+    Stopped,
 }
 
 impl Job {
     fn new(samples: Samples) -> Self {
         Self {
             channels: samples.channels,
-            samples: Mutex::new(Some(samples.samples)),
-            data: OnceLock::new(),
-            served: OnceLock::new(),
+            state: Mutex::new(JobState::Samples(samples.samples)),
         }
     }
 
-    /// The encoded bytes, encoding them here when no thread has yet; a
+    /// Its state with the samples encoded, here when no thread has yet; a
     /// call while a thread encodes waits for it.
-    fn data(&self) -> Result<&[u8], Off> {
-        self.data
-            .get_or_init(|| {
-                let samples = self.samples.relock().take()?;
-                Some(qoa::encode(&samples, self.channels))
-            })
-            .as_deref()
-            .ok_or_else(|| Off::new("its encoding stopped"))
+    fn encoded(&self) -> MutexGuard<'_, JobState> {
+        let mut state = self.state.relock();
+        if matches!(*state, JobState::Samples(_)) {
+            // Stopped until encoded, so a panic leaves it stopped.
+            let taken = core::mem::replace(&mut *state, JobState::Stopped);
+            if let JobState::Samples(samples) = taken {
+                *state = JobState::Encoded(qoa::encode(&samples, self.channels).into());
+            }
+        }
+        state
+    }
+
+    /// The encoded bytes of an inline recording.
+    fn bytes(&self) -> Result<Arc<[u8]>, Off> {
+        match &*self.encoded() {
+            JobState::Encoded(bytes) => Ok(Arc::clone(bytes)),
+            _ => Err(Off::new("its encoding stopped")),
+        }
+    }
+
+    /// The hash a streamed recording's bytes are served under: served
+    /// through `serve` by the first call, which then drops them, since the
+    /// loader keeps its own copy.
+    fn served(&self, serve: impl FnOnce(&[u8]) -> Result<[u32; 4], Off>) -> Result<[u32; 4], Off> {
+        let mut state = self.encoded();
+        let hash = match &*state {
+            JobState::Served(hash) => return Ok(*hash),
+            JobState::Encoded(bytes) => serve(bytes)?,
+            JobState::Samples(_) | JobState::Stopped => {
+                return Err(Off::new("its encoding stopped"));
+            }
+        };
+        *state = JobState::Served(hash);
+        Ok(hash)
     }
 }
 
@@ -206,20 +279,14 @@ pub(super) fn read(
         return Err(fail(&format!("{size} bytes, past {MAX_FILE_BYTES}")));
     }
     let bytes = std::fs::read(&path).map_err(|e| fail(&e))?;
-    let read = decode::read(&bytes, shape.trim).map_err(|e| fail(&e))?;
-    drop(bytes);
-    let samples = decode::shape(read, shape).map_err(|e| fail(&e))?;
-    let encoded =
-        u64::try_from(qoa::encoded_len(samples.frames(), samples.channels)).unwrap_or(u64::MAX);
     let held = load
         .slot::<Budget>()
         .as_ref()
         .map_or(0, |budget| budget.bytes);
-    if held + pending + encoded > MAX_MOD_BYTES {
-        return Err(fail(&format!(
-            "the mod's recordings would pass {MAX_MOD_BYTES} bytes"
-        )));
-    }
+    let bounds = decode::Bounds::left(held.saturating_add(pending));
+    let samples = decode::recording(&bytes, shape, bounds).map_err(|e| fail(&e))?;
+    let encoded =
+        u64::try_from(qoa::encoded_len(samples.frames(), samples.channels)).unwrap_or(u64::MAX);
     Ok(Recording {
         samples,
         bytes: encoded,
@@ -398,23 +465,17 @@ impl Made {
         base: Value,
         serve: impl FnOnce(&[u8]) -> Result<[u32; 4], Off>,
     ) -> Result<Value, Off> {
-        let data = self.job.data()?;
         let (inline_data, streamed) = if self.inline {
             (
-                data.iter()
+                self.job
+                    .bytes()?
+                    .iter()
                     .map(|&byte| Value::Uint(u64::from(byte)))
                     .collect(),
                 self.streamed.clone(),
             )
         } else {
-            // The loader answers the same bytes with the same hash, so two
-            // first reads at once serve them twice at no cost.
-            let hash = if let Some(hash) = self.job.served.get() {
-                *hash
-            } else {
-                let hash = serve(data)?;
-                *self.job.served.get_or_init(|| hash)
-            };
+            let hash = self.job.served(serve)?;
             (Vec::new(), with_hash(self.streamed.clone(), hash)?)
         };
         self.write(base, Value::List(inline_data), streamed)
@@ -603,8 +664,50 @@ mod tests {
             samples: vec![1; 40],
             channels: 1,
         });
-        let first = job.data().unwrap().to_vec();
+        let first = job.bytes().unwrap();
         assert_eq!(first.len(), 16);
-        assert_eq!(job.data().unwrap(), first.as_slice());
+        assert!(Arc::ptr_eq(&job.bytes().unwrap(), &first), "encoded once");
+    }
+
+    #[test]
+    fn a_streamed_job_serves_its_bytes_once_and_drops_them() {
+        let job = Job::new(Samples {
+            samples: vec![1; 40],
+            channels: 1,
+        });
+        assert_eq!(job.served(|_| Ok([7, 0, 0, 0])).unwrap()[0], 7);
+        let again = job.served(|_| unreachable!("served once")).unwrap();
+        assert_eq!(again[0], 7);
+        assert!(job.bytes().is_err(), "the loader holds the only copy");
+    }
+
+    #[test]
+    fn a_job_whose_encoding_panicked_says_so_and_serves_nothing() {
+        let job = Job {
+            state: Mutex::new(JobState::Stopped),
+            channels: 1,
+        };
+        assert!(job.bytes().is_err());
+        assert!(job.served(|_| unreachable!("stopped")).is_err());
+    }
+
+    #[test]
+    fn the_encoding_is_summed_once_when_init_has_ended_and_none_is_left() {
+        let mut queue = Queue {
+            started: 2,
+            done: 2,
+            ..Queue::default()
+        };
+        assert_eq!(queue.summary(), None, "init still adds recordings");
+        queue.ended = true;
+        queue.started = 3;
+        assert_eq!(queue.summary(), None, "one is left");
+        queue.done = 3;
+        assert!(
+            queue
+                .summary()
+                .is_some_and(|line| line.starts_with("encoded 3 recordings"))
+        );
+        assert_eq!(queue.summary(), None, "once");
     }
 }

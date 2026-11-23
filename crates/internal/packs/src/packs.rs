@@ -263,8 +263,11 @@ impl LoadHelpers for crate::BaseLoad {
             )));
         }
         for change in &pack.sounds.changes {
+            // A change whose take is off or unknown turns off alone.
             let container = crate::sound::SoundContainerId::from_guid(change.container);
-            self.change_sound(container, change.change.clone())?;
+            let _changed = self.feature(&format!("sound change {}", change.container), |load| {
+                load.change_sound(container, change.change.clone())
+            });
         }
         self.follow_pack_settings(pack)
     }

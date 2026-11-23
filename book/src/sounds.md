@@ -245,13 +245,14 @@ its sounds, changes and replaced recordings in
 
 Every file of a sound goes through the same steps at init:
 
-1. It is read: WAV (8 to 32-bit, or float), FLAC, Ogg Vorbis or MP3, up
-   to 384 kHz, with 1 to 8 channels.
+1. It is read: WAV (8 to 32-bit, or float), FLAC, Ogg Vorbis or MP3, at
+   8 to 384 kHz, with 1 to 8 channels. Reading stops at the trim's end.
 2. The trim keeps the part from its start to its end in the file.
 3. The channels setting keeps the file's channels (`Keep`) or mixes them
    to one (`Mono`). `Stereo` takes two. The game plays 1, 2, 4, 6 and 8
-   channels. A sound placed in the world wants mono: the game plays every
-   channel from the same point.
+   channels. An Ogg Vorbis file's channels are put in the order WAV and
+   FLAC files keep them. A sound placed in the world wants mono: the game
+   plays every channel from the same point.
 4. It is resampled to 48000 Hz, the rate of every sound the game plays.
 5. The gain scales it, from -60 to 24 decibels.
 

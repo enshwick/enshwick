@@ -148,4 +148,64 @@ mod tests {
             "the first mod's take replaced the game's; the second's follow it"
         );
     }
+
+    #[test]
+    fn a_pack_s_change_whose_take_is_unknown_turns_off_alone() {
+        use enshwick::packs::{Pack, PackFiles};
+
+        let other = Guid([5; 16]);
+        let files = PackFiles::new().with(
+            "sounds.toml",
+            format!(
+                "[[change]]\nsound = \"{CHEST}\"\ntakes = {{ add = [{{ sound = \"{UNKNOWN}\" }}] }}\n\n\
+                 [[change]]\nsound = \"{other}\"\nvolume = 0.5\n"
+            ),
+        );
+        let loader = host().install();
+        let status = run(&loader, 1, |load| {
+            load.add_pack(&Pack::parse("you.first", &files)?)
+        });
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let reason = |container: Guid| {
+            let name = format!("sound change {container}");
+            loader
+                .features()
+                .into_iter()
+                .find(|(feature, _)| *feature == name)
+                .map(|(_, reason)| reason)
+        };
+        assert!(
+            reason(CHEST)
+                .flatten()
+                .is_some_and(|why| why.contains(&UNKNOWN.to_string())),
+            "{:?}",
+            loader.features()
+        );
+        assert_eq!(reason(other), Some(None), "{:?}", loader.features());
+    }
+
+    #[test]
+    fn a_take_naming_a_mod_s_content_that_is_no_recording_is_refused() {
+        const HORN: Id = Id::new("you.first:horn");
+        let loader = host().install();
+        let first = run(&loader, 1, |load| load.declare(HORN).map(|_| ()));
+        assert_eq!(first, Status::OK, "{:?}", loader.logs());
+        let second = run(&loader, 2, |load| {
+            let horn = SoundChange {
+                takes: Some(Takes::Add(vec![take(HORN.guid(), 1.0)])),
+                ..SoundChange::default()
+            };
+            let refused = load
+                .change_sound(SoundContainerId::from_guid(CHEST), horn)
+                .unwrap_err();
+            assert!(
+                refused
+                    .to_string()
+                    .contains("you.first:horn is no recording"),
+                "{refused}"
+            );
+            Ok(())
+        });
+        assert_eq!(second, Status::OK, "{:?}", loader.logs());
+    }
 }

@@ -66,6 +66,14 @@ pub const MAX_TAKE: core::time::Duration = core::time::Duration::from_secs(600);
 pub const GAIN_DB: core::ops::RangeInclusive<f32> = -60.0..=24.0;
 /// The most takes a mod's new sound holds.
 pub const MAX_NEW_TAKES: usize = 32;
+/// The content id part of each take's recording of a mod's new sound, in
+/// take order.
+const TAKE_PARTS: [&str; MAX_NEW_TAKES] = [
+    "sound", "sound2", "sound3", "sound4", "sound5", "sound6", "sound7", "sound8", "sound9",
+    "sound10", "sound11", "sound12", "sound13", "sound14", "sound15", "sound16", "sound17",
+    "sound18", "sound19", "sound20", "sound21", "sound22", "sound23", "sound24", "sound25",
+    "sound26", "sound27", "sound28", "sound29", "sound30", "sound31", "sound32",
+];
 
 /// A sound container by its GUID: the sounds one event of the game plays,
 /// and how it plays them.
@@ -155,7 +163,9 @@ fn entry_type(load: &crate::BaseLoad) -> Result<String, Off> {
 }
 
 /// Checks that `sound` names a recording this mod may play: one of the
-/// game's, or one a mod loaded before it declared and lets it name.
+/// game's, or one a mod loaded before it added and lets it name. A mod's
+/// recordings are the only content named `<sound>.sound` to
+/// `<sound>.sound32`, so another id, a container's or an item's, is none.
 fn known_sound(host: crate::Host, sound: SoundId) -> Result<(), Off> {
     let guid = sound.guid();
     if host
@@ -169,6 +179,12 @@ fn known_sound(host: crate::Host, sound: SoundId) -> Result<(), Off> {
             "sound {guid} is neither the game's nor a mod's loaded before"
         ))
     })?;
+    let recording = name
+        .rsplit_once('.')
+        .is_some_and(|(_, part)| TAKE_PARTS.contains(&part));
+    if !recording {
+        return Err(Off::new(format!("sound {name} is no recording")));
+    }
     let status = (host.api().use_content)(host.handle(), Str::new(&name));
     crate::load::ok(status, (), || format!("sound {name}"))
 }
@@ -213,12 +229,19 @@ impl LoadMethods for crate::BaseLoad {
         for take in change::named_sounds(&change) {
             known_sound(host, SoundId::from_guid(take)).map_err(|why| fail(&why))?;
         }
+        let distances = SoundChange {
+            min_distance: change.min_distance,
+            max_distance: change.max_distance,
+            ..SoundChange::default()
+        };
         let takes = match change.takes {
             Some(takes) => Some((takes, entry_type(self)?)),
             None => None,
         };
         let key = types::SOUND_CONTAINER_RESOURCE.key(container)?;
         crate::resources::serve_value(host, key, key, move |held| {
+            let (min, max) = change::held_distances(&held);
+            change::check_distances(&distances, min, max).map_err(|why| fail(&why))?;
             let mut fields = fields.clone();
             if let Some((takes, entry_type)) = &takes {
                 let entries =

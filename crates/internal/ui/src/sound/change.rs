@@ -258,8 +258,7 @@ pub struct SoundChange {
     pub stealing_mode: Option<SoundContainerStealingMode>,
     /// How far each play of a placed container moves at random.
     pub random_position: Option<RandomPosition>,
-    /// The game's `muteOnMain` flag; what the game mutes it in is not read
-    /// yet.
+    /// The game's `muteOnMain` flag.
     pub mute_on_main: Option<bool>,
     /// The volume it plays at on a gamepad's speaker, from 0 (off) to
     /// [`MAX_VOLUME`].
@@ -394,11 +393,7 @@ impl SoundChange {
         fields.float(PITCH_RANDOMNESS, self.pitch_randomness, 0.0..=*PITCH.end())?;
         fields.float(MIN_DISTANCE, self.min_distance, 0.0..=MAX_DISTANCE)?;
         fields.float(MAX_DISTANCE_FIELD, self.max_distance, 0.0..=MAX_DISTANCE)?;
-        if let (Some(min), Some(max)) = (self.min_distance, self.max_distance)
-            && min > max
-        {
-            return Err(ChangeSoundError::Reversed { min, max });
-        }
+        check_distances(self, None, None)?;
         fields.flag(LOOP, self.looped);
         if let Some(priority) = self.priority {
             fields.set(PRIORITY, Value::Uint(u64::from(priority)));
@@ -500,6 +495,33 @@ pub(super) fn merged_entries(
 }
 
 /// The GUIDs of the recordings `change` names.
+/// Checks that the least distance `change` gives, else `min`, is not past
+/// the greatest it gives, else `max`: the container's own where it gives
+/// one alone.
+pub(super) fn check_distances(
+    change: &SoundChange,
+    min: Option<f32>,
+    max: Option<f32>,
+) -> Result<(), ChangeSoundError> {
+    match (change.min_distance.or(min), change.max_distance.or(max)) {
+        (Some(min), Some(max)) if min > max => Err(ChangeSoundError::Reversed { min, max }),
+        _ => Ok(()),
+    }
+}
+
+/// The least and greatest distance `held` keeps.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "a distance the game keeps as a float32"
+)]
+pub(super) fn held_distances(held: &Value) -> (Option<f32>, Option<f32>) {
+    let float = |name| match held.field(name) {
+        Some(Value::Float(value)) => Some(*value as f32),
+        _ => None,
+    };
+    (float(MIN_DISTANCE), float(MAX_DISTANCE_FIELD))
+}
+
 pub(super) fn named_sounds(change: &SoundChange) -> impl Iterator<Item = Guid> + '_ {
     change
         .takes
@@ -749,5 +771,31 @@ mod tests {
         ));
         resource.push(("extraRumble".to_owned(), Value::Nil));
         assert!(SoundContainerResource::from_value(&Value::Struct(resource)).is_ok());
+    }
+
+    #[test]
+    fn a_distance_given_alone_is_checked_against_the_container_s_other() {
+        let held = Value::Struct(vec![
+            (MIN_DISTANCE.to_owned(), Value::Float(2.0)),
+            (MAX_DISTANCE_FIELD.to_owned(), Value::Float(30.0)),
+        ]);
+        let (min, max) = held_distances(&held);
+        assert_eq!((min, max), (Some(2.0), Some(30.0)));
+        let at = |min_distance, max_distance| SoundChange {
+            min_distance,
+            max_distance,
+            ..SoundChange::default()
+        };
+        assert!(check_distances(&at(Some(30.0), None), min, max).is_ok());
+        assert_eq!(
+            check_distances(&at(Some(50.0), None), min, max),
+            Err(ChangeSoundError::Reversed {
+                min: 50.0,
+                max: 30.0
+            })
+        );
+        assert!(check_distances(&at(None, Some(1.0)), min, max).is_err());
+        assert!(check_distances(&at(Some(50.0), Some(60.0)), min, max).is_ok());
+        assert!(check_distances(&at(Some(50.0), None), None, None).is_ok());
     }
 }

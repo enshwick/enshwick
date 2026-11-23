@@ -1978,7 +1978,7 @@ export type NewSound = {
 
 --- One take of a `NewSound`: an audio file in the mod's folder and its weight among the sound's takes.
 export type NewTake = {
-	--- The file, relative to the mod's folder: WAV (8, 16, 24 or 32-bit, or float), FLAC, Ogg Vorbis or MP3, at any rate, at most `MAX_FILE_BYTES`.
+	--- The file, relative to the mod's folder: WAV (8, 16, 24 or 32-bit, or float), FLAC, Ogg Vorbis or MP3, at 8 to 384 kHz, at most `MAX_FILE_BYTES`.
 	file: string,
 	--- Its weight among the sound's takes, from 0 to 1; nil for 1.
 	chance: number?,
@@ -2908,7 +2908,7 @@ export type SoundChange = {
 	stealing_mode: SoundContainerStealingMode?,
 	--- How far each play of a placed container moves at random.
 	random_position: RandomPosition?,
-	--- The game's `muteOnMain` flag; what the game mutes it in is not read yet.
+	--- The game's `muteOnMain` flag.
 	mute_on_main: boolean?,
 	--- The volume it plays at on a gamepad's speaker, from 0 (off) to `MAX_VOLUME`.
 	gamepad_speaker: number?,

@@ -7,8 +7,8 @@ use super::change::{
 };
 use super::decode::{Channels, Shape, Trim};
 use super::{
-    MAX_NEW_TAKES, SoundChange, SoundContainerId, SoundContainerScene, SoundId, Take, Takes,
-    recording,
+    MAX_NEW_TAKES, SoundChange, SoundContainerId, SoundContainerScene, SoundId, TAKE_PARTS, Take,
+    Takes, recording,
 };
 use crate::Off;
 use crate::abi::Side;
@@ -19,13 +19,6 @@ use enshwick_content::__load::*;
 pub use super::recording::{INLINE_FRAMES, MAX_FILE_BYTES, MAX_MOD_BYTES, SAMPLE_RATE};
 
 const RANDOM: &str = "Random";
-/// The content id part of each take's recording, in take order.
-const TAKE_PARTS: [&str; MAX_NEW_TAKES] = [
-    "sound", "sound2", "sound3", "sound4", "sound5", "sound6", "sound7", "sound8", "sound9",
-    "sound10", "sound11", "sound12", "sound13", "sound14", "sound15", "sound16", "sound17",
-    "sound18", "sound19", "sound20", "sound21", "sound22", "sound23", "sound24", "sound25",
-    "sound26", "sound27", "sound28", "sound29", "sound30", "sound31", "sound32",
-];
 
 /// One take of a [`NewSound`]: an audio file in the mod's folder and its
 /// weight among the sound's takes.
@@ -36,7 +29,7 @@ const TAKE_PARTS: [&str; MAX_NEW_TAKES] = [
 #[derive(Clone, Debug, PartialEq, crate::Script)]
 pub struct NewTake {
     /// The file, relative to the mod's folder: WAV (8, 16, 24 or 32-bit,
-    /// or float), FLAC, Ogg Vorbis or MP3, at any rate, at most
+    /// or float), FLAC, Ogg Vorbis or MP3, at 8 to 384 kHz, at most
     /// [`MAX_FILE_BYTES`].
     pub file: String,
     /// Its weight among the sound's takes, from 0 to 1; `None` for 1.
@@ -149,8 +142,43 @@ pub struct AddedSound {
     pub takes: Vec<SoundId>,
 }
 
+/// The least distance of a new container that `SoundChange` leaves unset,
+/// in metres.
+const DEFAULT_MIN_DISTANCE: f32 = 1.0;
+/// Its greatest distance, in metres.
+const DEFAULT_MAX_DISTANCE: f32 = 35.0;
+
+/// Checks, on every side and before any file is read, what a new container
+/// of `files` takes may not hold: takes that replace its files, more than
+/// [`MAX_TAKES`](super::MAX_TAKES) in all, a least distance past the greatest
+/// with the defaults counted.
+fn check_container(files: usize, change: &SoundChange) -> Result<(), Off> {
+    change.fields().map_err(|why| Off::new(why.to_string()))?;
+    let added = match &change.takes {
+        Some(Takes::Replace(_)) => {
+            return Err(Off::new("a new sound's takes are its files: add to them"));
+        }
+        Some(Takes::Add(more)) => more.len(),
+        None => 0,
+    };
+    if files + added > super::MAX_TAKES {
+        return Err(Off::new(format!(
+            "{} takes, past {}",
+            files + added,
+            super::MAX_TAKES
+        )));
+    }
+    change::check_distances(
+        change,
+        Some(DEFAULT_MIN_DISTANCE),
+        Some(DEFAULT_MAX_DISTANCE),
+    )
+    .map_err(|why| Off::new(why.to_string()))
+}
+
 /// The value of a container that plays `own`, then the takes `change`
-/// adds, with the values of a vanilla effect and `change`'s over them.
+/// adds, with the values of a vanilla effect and `change`'s over them;
+/// `change` passed [`check_container`].
 fn container_value(own: &[Take], entry_type: &str, change: &SoundChange) -> Result<Value, Off> {
     let fields = change.fields().map_err(|why| Off::new(why.to_string()))?;
     let float = |name: &str, value: f64| (name.to_owned(), Value::Float(value));
@@ -164,8 +192,8 @@ fn container_value(own: &[Take], entry_type: &str, change: &SoundChange) -> Resu
             HAS_POSITION.to_owned(),
             Value::Bool(scene != SoundContainerScene::Ui),
         ),
-        float(MIN_DISTANCE, 1.0),
-        float(MAX_DISTANCE_FIELD, 35.0),
+        float(MIN_DISTANCE, f64::from(DEFAULT_MIN_DISTANCE)),
+        float(MAX_DISTANCE_FIELD, f64::from(DEFAULT_MAX_DISTANCE)),
         float(SPEAKER_VOLUME, 1.0),
         float(VIBRATION_INTENSITY, 1.0),
         (PRIORITY.to_owned(), Value::Uint(50)),
@@ -177,12 +205,8 @@ fn container_value(own: &[Take], entry_type: &str, change: &SoundChange) -> Resu
         }
     }
     let mut takes = own.to_vec();
-    match &change.takes {
-        Some(Takes::Replace(_)) => {
-            return Err(Off::new("a new sound's takes are its files: add to them"));
-        }
-        Some(Takes::Add(more)) => takes.extend_from_slice(more),
-        None => {}
+    if let Some(Takes::Add(more)) = &change.takes {
+        takes.extend_from_slice(more);
     }
     let entries = change::merged_entries(None, &Takes::Replace(takes), entry_type)
         .map_err(|why| Off::new(why.to_string()))?;
@@ -219,9 +243,13 @@ impl LoadMethods for crate::BaseLoad {
                 takes.len()
             ))));
         }
-        change
-            .fields()
-            .map_err(|why| fail(Off::new(why.to_string())))?;
+        check_container(takes.len(), &change).map_err(fail)?;
+        let parts = TAKE_PARTS
+            .iter()
+            .take(takes.len())
+            .map(|part| id.try_part(part))
+            .collect::<Option<Vec<Id>>>()
+            .ok_or_else(|| fail(Off::new("the id has no room for its takes' parts")))?;
         let shape = Shape {
             channels,
             gain_db,
@@ -256,10 +284,7 @@ impl LoadMethods for crate::BaseLoad {
         };
         let container = self.declare(id)?;
         let mut own = Vec::with_capacity(takes.len());
-        for ((take, recording), part) in takes.iter().zip(recordings).zip(TAKE_PARTS) {
-            let sound_id = id
-                .try_part(part)
-                .ok_or_else(|| fail(Off::new("the id has no room for its takes' parts")))?;
+        for ((take, recording), sound_id) in takes.iter().zip(recordings).zip(parts) {
             let sound = SoundId::from_guid(self.declare(sound_id)?);
             recording::serve(self, sound, recording, false, sound_id.to_string()).map_err(fail)?;
             own.push(Take {
@@ -339,7 +364,22 @@ mod tests {
             takes: Some(Takes::Replace(vec![Take::new(other)])),
             ..SoundChange::default()
         };
-        assert!(container_value(&[Take::new(sound)], "demo::Entry", &replaced).is_err());
+        assert!(check_container(1, &replaced).is_err());
+        assert!(check_container(1, &more).is_ok());
+        assert!(check_container(super::super::MAX_TAKES, &more).is_err());
+    }
+
+    #[test]
+    fn a_new_container_s_least_distance_may_not_pass_the_greatest_default_included() {
+        let at = |min, max| SoundChange {
+            min_distance: min,
+            max_distance: max,
+            ..SoundChange::default()
+        };
+        assert!(check_container(1, &at(Some(35.0), None)).is_ok());
+        assert!(check_container(1, &at(Some(50.0), None)).is_err());
+        assert!(check_container(1, &at(None, Some(0.5))).is_err());
+        assert!(check_container(1, &at(Some(50.0), Some(60.0))).is_ok());
     }
 
     #[test]

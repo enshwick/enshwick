@@ -279,8 +279,9 @@ mod tests {
 
     #[test]
     fn the_encoder_writes_the_research_re_encoder_s_bytes() {
-        // FNV-1a 64 of the bytes `research/tools/qoa-check`'s encoder writes
-        // for these signals without the weights penalty.
+        // FNV-1a 64 of the bytes the reference encoder that re-encodes the
+        // game's own sounds writes for these signals, without the weights
+        // penalty.
         for (channels, frames, period, expected) in REFERENCE {
             let data = encode(&tone(frames, channels, period), channels);
             assert_eq!(
