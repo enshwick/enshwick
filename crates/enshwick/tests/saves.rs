@@ -109,6 +109,33 @@ mod tests {
     }
 
     #[test]
+    fn a_save_is_refused_while_something_outside_the_mod_refuses_saves_until_it_lets_go() {
+        let loader = enshwick::test::FakeHost::new().world().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = WORLD.get().unwrap();
+
+        loader.set_saves_refused(true);
+        assert_eq!(world.save(), Err(enshwick::WorldError::Refused));
+        assert!(!loader.saves_held(), "the mod holds nothing itself");
+        world.hold_saves(true).unwrap();
+        world.hold_saves(false).unwrap();
+        assert_eq!(
+            world.save(),
+            Err(enshwick::WorldError::Refused),
+            "the mod letting go of its own hold leaves the other"
+        );
+        loader.set_saves_refused(false);
+        world.save().unwrap();
+
+        loader.set_saves_refused(true);
+        loader.end_game();
+        world.save().unwrap();
+    }
+
+    #[test]
     fn a_mod_stops_a_dedicated_server_once_and_a_second_stop_is_refused() {
         let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.

@@ -75,6 +75,23 @@ fn a_language_named_after_the_hello_fills_only_a_peer_whose_hello_named_none() {
 }
 
 #[test]
+fn the_hosting_client_s_own_player_reads_the_game_s_language_before_any_hello() {
+    let _alone = crate::base::carrier::tests::alone();
+    let (host, guest) = (0x1a96_0011, 0x1a96_0012);
+    crate::base::carrier::host_for_test(host);
+    let game = crate::content::served::language();
+    assert_eq!(language_of(host), Some(game));
+    assert_eq!(language_number(host), game.0);
+    assert_eq!(
+        language_of(guest),
+        None,
+        "another player waits for its hello"
+    );
+    crate::base::carrier::unhost_for_test();
+    assert_eq!(language_of(host), None, "a client that stopped hosting");
+}
+
+#[test]
 fn owed_data_stops_after_a_few_tries() {
     let mut state = Links::default();
     let now = Instant::now();

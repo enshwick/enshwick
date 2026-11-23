@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{BuildingData, Header, PlayerInfo, Status};
+    use enshwick::abi::{BuildingData, Header, PlayerInfo, Side, Status};
     use enshwick::events::{BuildingPlaced, BuildingRemoved};
     use enshwick::i18n::{Language, language};
     use enshwick::{Entity, ItemId, Load, Mod, Off, PlayerKey};
@@ -97,5 +97,27 @@ mod tests {
             "the builder's, the fallback for a game without Enshwick, the host's for no player"
         );
         assert_eq!(language(), host, "the host's after the events");
+    }
+
+    #[test]
+    fn the_host_of_a_game_hosted_from_a_client_builds_in_the_game_s_own_language() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .hosting(true)
+            .host_key(PlayerKey::new(7))
+            .language(Language::UK_UA)
+            .player(character(2, 7))
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+
+        assert_eq!(
+            loader.raise::<BuildingPlaced>(&built(2, BuildingData::PLACED)),
+            1
+        );
+
+        assert_eq!(*READ.lock().unwrap(), [Language::UK_UA]);
     }
 }

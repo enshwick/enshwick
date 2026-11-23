@@ -4263,7 +4263,7 @@ declare enshwick: {
 		set_label: (entity: number, text: string) -> boolean,
 		--- Sends `text` to every player's chat, after the next step; callable from any thread. Each line becomes a message of its own.
 		broadcast: (text: string) -> (),
-		--- The language the player of account `key` reads the game in, as their game named it when they joined, for a mod's own texts in a notice or line to that player outside an action's request. The fallback for a player whose game runs no Enshwick, for a key no connected player holds and on a client. Any thread.
+		--- The language the player of account `key` reads the game in, as their game named it when they joined, for a mod's own texts in a notice or line to that player outside an action's request. In a game hosted from a client, the host's own player reads the game's language. The fallback for a player whose game runs no Enshwick, for a key no connected player holds and on a client that joined a server. Any thread.
 		language_of: (key: string) -> string,
 		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread. The console and a remote caller have no account, so a line for them goes to no player, with a log line: answer them in the action's outcome.
 		tell: (player: Player, text: string) -> (),

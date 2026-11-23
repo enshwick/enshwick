@@ -595,8 +595,12 @@ pub(crate) fn forget_peer(key: u64) {
 }
 
 /// The language the player of client `key` reads the game in, as its hello
-/// said; `None` before a hello or for a game without Enshwick.
+/// said, or the game's own for the player of this client while it hosts the
+/// game; `None` before a hello or for a game without Enshwick.
 pub(crate) fn language_of(key: u64) -> Option<Language> {
+    if crate::base::carrier::is_host(key) {
+        return Some(crate::content::served::language());
+    }
     state(|s| language_in(s, key))
 }
 

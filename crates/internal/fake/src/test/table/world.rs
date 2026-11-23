@@ -355,7 +355,7 @@ pub(crate) extern "system" fn destroy(_me: ModHandle, entity: enshwick_core::Ent
 
 pub(crate) extern "system" fn save_world(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
-        if s.world.save.held {
+        if s.world.save.held || s.world.save.refused {
             return Status::REFUSED;
         }
         s.world.saves += 1;
@@ -436,14 +436,7 @@ pub(crate) extern "system" fn language_of(
     key: enshwick_core::PlayerKey,
     out: *mut u32,
 ) -> Status {
-    let language = with(0, |s| {
-        s.host
-            .base
-            .player_languages
-            .get(&key.get())
-            .copied()
-            .unwrap_or(0)
-    });
+    let language = with(0, |s| s.host.base.language_of(key));
     put(out, language)
 }
 

@@ -160,9 +160,11 @@ impl World {
 
     /// The language the player of account `key` reads the game in, as their
     /// game named it when they joined, for a mod's own texts in a notice or
-    /// line to that player outside an action's request. The fallback for a
-    /// player whose game runs no Enshwick, for a key no connected player
-    /// holds and on a client. Any thread.
+    /// line to that player outside an action's request. In a game hosted
+    /// from a client, the host's own player reads the game's language. The
+    /// fallback for a player whose game runs no Enshwick, for a key no
+    /// connected player holds and on a client that joined a server. Any
+    /// thread.
     ///
     /// # Examples
     ///
