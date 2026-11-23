@@ -75,7 +75,7 @@ size 500 and category ammunition, and every held stack of logs stayed.
   the bytes the game holds. When the rebuilt data no longer fits, `old`
   keeps its data and the log says why.
 - The re-keys of every mod apply together, as one permutation: `old` takes
-  `new` without the re-keys of `new`. Two items that mods re-key to each
+  the data of `new` without that item's own re-keys. Two items that mods re-key to each
   other swap, and a ring of three or more items rotates. In a chain, where
   one mod re-keys A to B and another B to C, A takes B's data and B takes
   C's.

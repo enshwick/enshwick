@@ -1158,6 +1158,7 @@ abi::HostApi::rebuild_resource
 abi::HostApi::recipe_disabled
 abi::HostApi::recipe_kind
 abi::HostApi::recipe_rule
+abi::HostApi::rekey_resource
 abi::HostApi::remove_buff
 abi::HostApi::rename_content
 abi::HostApi::rename_filter
