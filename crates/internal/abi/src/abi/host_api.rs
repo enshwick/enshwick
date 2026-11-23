@@ -2422,15 +2422,15 @@ pub struct HostApi {
     pub sound_steer_for:
         extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
     /// As [`serve_resource`](Self::serve_resource) from `key` itself, for a
-    /// patch that serves `key` with the data of the resource `new`, a
+    /// patch that serves `key` with the data of the resource `from`, a
     /// re-key: inside `patch`, a [`resource_served`](Self::resource_served)
-    /// read of `new` builds it without its own re-keys, so the re-keys of
+    /// read of `from` builds it without its own re-keys, so the re-keys of
     /// every mod apply as one permutation, and keys re-keyed in a ring
     /// rotate. Allowed during `enshwick_mod_init` only. ABI 12.19.
     pub rekey_resource: extern "system" fn(
         me: ModHandle,
         key: *const ResourceKey,
-        new: *const ResourceKey,
+        from: *const ResourceKey,
         patch: Option<ResourcePatchFn>,
         user: *mut c_void,
     ) -> Status,

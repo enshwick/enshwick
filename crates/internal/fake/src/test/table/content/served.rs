@@ -26,18 +26,18 @@ pub(crate) extern "system" fn serve_resource(
 pub(crate) extern "system" fn rekey_resource(
     me: ModHandle,
     key: *const ResourceKey,
-    new: *const ResourceKey,
+    from: *const ResourceKey,
     patch: Option<ResourcePatchFn>,
     user: *mut c_void,
 ) -> Status {
-    // SAFETY: the safe layer passes `new` null or pointing at a key valid
+    // SAFETY: the safe layer passes `from` null or pointing at a key valid
     // for the call; `as_ref` turns away null.
-    let Some(new) = (unsafe { new.as_ref() }).copied() else {
+    let Some(from) = (unsafe { from.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
     // SAFETY: the safe layer passes `key` null or pointing at a key valid
     // for the call, which serves as its own base.
-    unsafe { serve(me, key, key, Some(new), patch, user) }
+    unsafe { serve(me, key, key, Some(from), patch, user) }
 }
 
 /// Adds mod `me`'s `patch` of the key at `key` from the key at `base`; with

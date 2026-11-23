@@ -26,12 +26,12 @@ entries! {
     fn rekey_resource(
         me as Mod,
         key as In<ResourceKey>,
-        new as In<ResourceKey>,
+        from as In<ResourceKey>,
         patch as Callback<api_frame::ResourcePatchFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
         open(crate::content::served::is_sealed())?;
-        Ok(crate::content::served::register(me.index, key, key, Some(new), patch, user)?)
+        Ok(crate::content::served::register(me.index, key, key, Some(from), patch, user)?)
     }
 
     fn rebuild_resource(me as Mod, key as In<ResourceKey>) -> Status {
