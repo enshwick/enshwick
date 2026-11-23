@@ -1,12 +1,16 @@
-//! `cargo enshwick install`: build the mod in release and copy it into the game.
+//! `cargo enshwick install`: build a mod crate in release, or check a pack
+//! folder, and copy it into the game.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context as _, anyhow, bail};
+use enshwick_core::packs::{MANIFEST_FILE, PackFiles};
 
 /// The game's executables, one per side, as a game folder holds them.
-pub(crate) const GAME_EXECUTABLES: [&str; 2] = ["enshrouded_server.exe", "enshrouded.exe"];
+pub(crate) const GAME_EXECUTABLES: [&str; 2] = [SERVER_EXE, "enshrouded.exe"];
+/// The dedicated server's executable, which `cargo enshwick run` starts.
+pub(crate) const SERVER_EXE: &str = "enshrouded_server.exe";
 
 /// What `cargo metadata` says about the workspace, as far as installing goes.
 #[derive(Debug, serde::Deserialize)]
@@ -17,6 +21,8 @@ struct Metadata {
 #[derive(Debug, serde::Deserialize)]
 struct Package {
     name: String,
+    #[serde(default)]
+    version: String,
     manifest_path: PathBuf,
     targets: Vec<Target>,
     #[serde(default)]
@@ -24,13 +30,15 @@ struct Package {
 }
 
 impl Package {
+    /// `[package.metadata.enshwick]`, when the package has it.
+    fn enshwick(&self) -> Option<&ModMetadata> {
+        self.metadata.as_ref().and_then(|m| m.enshwick.as_ref())
+    }
+
     /// The mod's folder in `mods/`: its id from `[package.metadata.enshwick]`,
     /// else the package name, since the loader reads any folder name.
     fn folder(&self) -> &str {
-        self.metadata
-            .as_ref()
-            .and_then(|m| m.enshwick.as_ref())
-            .map_or(&self.name, |e| &e.id)
+        self.enshwick().map_or(&self.name, |e| &e.id)
     }
 }
 
@@ -44,42 +52,107 @@ struct PackageMetadata {
 #[derive(Debug, serde::Deserialize)]
 struct ModMetadata {
     id: String,
+    side: Option<String>,
 }
 
-#[derive(Debug, serde::Deserialize)]
-struct Target {
-    name: String,
-    crate_types: Vec<String>,
+/// A mod built or checked, with the files of its folder in `mods/`.
+#[derive(Debug)]
+pub(crate) struct Built {
+    pub(crate) id: String,
+    pub(crate) version: String,
+    /// What the build or check found, a line or more.
+    pub(crate) summary: String,
+    /// The folder's files by their path in it, sorted.
+    pub(crate) files: Vec<(String, Vec<u8>)>,
+    /// The DLL of a mod crate, with the side `Cargo.toml` names.
+    pub(crate) dll: Option<(PathBuf, Option<String>)>,
 }
 
-/// Builds the chosen mod and copies it to `<game>/mods/<id>/<package>.dll`,
-/// `game` found through Steam when not given; with `with_loader`, then puts
-/// the loader of this tool's release in.
-pub(crate) fn install(
-    game: Option<&Path>,
-    package: Option<&str>,
-    with_loader: bool,
-) -> anyhow::Result<String> {
-    let (game, chosen) = game_folder(game, || crate::steam::find(&crate::steam::steam_folders()))?;
-    let game = game.as_path();
-    if !GAME_EXECUTABLES.iter().any(|exe| game.join(exe).is_file()) {
-        bail!(
-            "{} holds none of {}",
-            game.display(),
-            GAME_EXECUTABLES.join(", ")
-        );
+impl Built {
+    /// Writes the files into `<game>/mods/<id>/`; for a pack, also removes
+    /// the pack files an earlier install left there that it no longer has,
+    /// as the loader would read them, with the folders that leaves empty.
+    /// Other files, such as a hold the loader keeps there, stay.
+    ///
+    /// # Errors
+    ///
+    /// When a file cannot be written or removed, or the files an earlier
+    /// install left do not read as a pack.
+    pub(crate) fn place(&self, game: &Path) -> anyhow::Result<PathBuf> {
+        let folder = game.join("mods").join(&self.id);
+        if self.dll.is_none() && folder.is_dir() {
+            let old = PackFiles::read_dir(&folder).with_context(|| {
+                format!(
+                    "{}: the files an earlier install left do not read as a pack; remove the folder and install again",
+                    folder.display()
+                )
+            })?;
+            for stale in old
+                .names()
+                .filter(|name| self.files.iter().all(|(file, _)| file != name))
+            {
+                let path = folder.join(stale);
+                std::fs::remove_file(&path).with_context(|| path.display().to_string())?;
+                let mut parent = path.parent();
+                while let Some(dir) = parent
+                    && dir != folder
+                    && std::fs::remove_dir(dir).is_ok()
+                {
+                    parent = dir.parent();
+                }
+            }
+        }
+        for (name, bytes) in &self.files {
+            let path = folder.join(name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).with_context(|| parent.display().to_string())?;
+            }
+            std::fs::write(&path, bytes).with_context(|| path.display().to_string())?;
+        }
+        Ok(folder)
     }
-    let mut said: Vec<String> = chosen.into_iter().collect();
+}
+
+/// Builds the mod crate in `dir`, `package` in a workspace, in release for
+/// Windows; or, when `dir` holds a `pack.toml`, checks the data pack or Luau
+/// mod there as the loader reads it.
+pub(crate) fn build(dir: &Path, package: Option<&str>) -> anyhow::Result<Built> {
+    if dir.join(MANIFEST_FILE).is_file() {
+        if package.is_some() {
+            bail!(
+                "{} is a pack folder: --package names a crate",
+                dir.display()
+            );
+        }
+        let (summary, manifest, pack) = crate::pack::check(dir, None)?;
+        let mut files: Vec<(String, Vec<u8>)> = pack
+            .names()
+            .map(|name| (name.to_owned(), pack.get(name).unwrap_or_default().to_vec()))
+            .collect();
+        files.sort();
+        return Ok(Built {
+            id: manifest.id,
+            version: manifest.version,
+            summary,
+            files,
+            dll: None,
+        });
+    }
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let output = Command::new(&cargo)
+        .current_dir(dir)
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .output()
         .context("cargo metadata")?;
     if !output.status.success() {
-        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+        bail!(
+            "{} holds neither {MANIFEST_FILE} nor a mod crate: {}",
+            dir.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
     }
     let metadata: Metadata = serde_json::from_slice(&output.stdout).context("cargo metadata")?;
-    let here = std::env::current_dir().context("the current folder")?;
+    let here = std::path::absolute(dir).context("the mod's folder")?;
     let (package, library) = choose(&metadata.packages, package, &here)?;
     let windows = cfg!(windows);
     preflight(
@@ -93,6 +166,7 @@ pub(crate) fn install(
         || windows_target_installed(&here),
     )?;
     let built = Command::new(&cargo)
+        .current_dir(dir)
         .args(build_args(windows, &package.name))
         .stderr(std::process::Stdio::inherit())
         .output()
@@ -113,23 +187,65 @@ pub(crate) fn install(
         library,
         &package.name,
     )?;
-    let mods = game.join("mods");
-    let folder = mods.join(package.folder());
-    std::fs::create_dir_all(&folder).with_context(|| folder.display().to_string())?;
-    let to = folder.join(format!("{}.dll", package.name));
-    std::fs::copy(&from, &to).with_context(|| format!("{} -> {}", from.display(), to.display()))?;
-    said.push(format!("installed {}", to.display()));
-    if with_loader {
-        said.push(crate::loader::put_in(game)?);
-    } else if !crate::loader::is_installed(game) {
-        said.push(crate::loader::missing_note(game));
+    let bytes = std::fs::read(&from).with_context(|| from.display().to_string())?;
+    Ok(Built {
+        id: package.folder().to_owned(),
+        version: package.version.clone(),
+        summary: format!("built {}", from.display()),
+        files: vec![(format!("{}.dll", package.name), bytes)],
+        dll: Some((from, package.enshwick().and_then(|e| e.side.clone()))),
+    })
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Target {
+    name: String,
+    crate_types: Vec<String>,
+}
+
+/// Builds the mod in the current folder, or checks its pack, and copies it
+/// to `<game>/mods/<id>/`, `game` found through Steam when not given; with
+/// `with_loader`, then puts the loader of this tool's release in.
+pub(crate) fn install(
+    game: Option<&Path>,
+    package: Option<&str>,
+    with_loader: bool,
+) -> anyhow::Result<String> {
+    let (game, chosen) = game_folder(game, || crate::steam::find(&crate::steam::steam_folders()))?;
+    let game = game.as_path();
+    if !GAME_EXECUTABLES.iter().any(|exe| game.join(exe).is_file()) {
+        bail!(
+            "{} holds none of {}",
+            game.display(),
+            GAME_EXECUTABLES.join(", ")
+        );
     }
+    let mut said: Vec<String> = chosen.into_iter().collect();
+    let built = build(Path::new("."), package)?;
+    let folder = built.place(game)?;
+    said.push(format!(
+        "installed {} {} in {}",
+        built.id,
+        built.version,
+        folder.display()
+    ));
+    said.extend(loader_line(game, with_loader)?);
     Ok(said.join("\n"))
+}
+
+/// With `with_loader`, puts the loader of this tool's release in `game` and
+/// says so; else a note when `game` has none.
+pub(crate) fn loader_line(game: &Path, with_loader: bool) -> anyhow::Result<Option<String>> {
+    Ok(if with_loader {
+        Some(crate::loader::put_in(game)?)
+    } else {
+        (!crate::loader::is_installed(game)).then(|| crate::loader::missing_note(game))
+    })
 }
 
 /// The game folder, `given` or else the first install `find` reports, with
 /// a line naming the one taken and the others.
-fn game_folder(
+pub(crate) fn game_folder(
     given: Option<&Path>,
     find: impl FnOnce() -> Vec<crate::steam::Found>,
 ) -> anyhow::Result<(PathBuf, Option<String>)> {
@@ -361,6 +477,7 @@ mod tests {
     fn package(name: &str, dir: &str, kinds: &[&str]) -> Package {
         Package {
             name: name.into(),
+            version: "0.1.0".into(),
             manifest_path: Path::new(dir).join("Cargo.toml"),
             targets: vec![Target {
                 name: name.replace('-', "_"),
@@ -450,5 +567,35 @@ mod tests {
         let metadata: Metadata = serde_json::from_str(json).unwrap();
         let folders: Vec<&str> = metadata.packages.iter().map(Package::folder).collect();
         assert_eq!(folders, ["you.trading-post", "stalls", "other"]);
+    }
+
+    #[test]
+    fn a_pack_install_drops_old_files_with_their_folders_and_refuses_old_files_that_do_not_read() {
+        let game = crate::scratch("place");
+        let built = Built {
+            id: "you.pack".to_owned(),
+            version: "1.0.0".to_owned(),
+            summary: String::new(),
+            files: vec![("main.luau".to_owned(), b"print()".to_vec())],
+            dll: None,
+        };
+        let folder = game.join("mods/you.pack");
+        assert_eq!(built.place(&game).unwrap(), folder, "a first install");
+        std::fs::create_dir_all(folder.join("lib")).unwrap();
+        std::fs::write(folder.join("lib/old.luau"), "").unwrap();
+        std::fs::write(folder.join("notes.txt"), "kept").unwrap();
+        built.place(&game).unwrap();
+        assert!(!folder.join("lib").exists());
+        assert!(folder.join("notes.txt").is_file());
+        assert!(folder.join("main.luau").is_file());
+        let too_large = usize::try_from(enshwick_core::packs::MAX_FILE).unwrap() + 1;
+        std::fs::write(folder.join("items.toml"), vec![b' '; too_large]).unwrap();
+        let refused = built.place(&game).unwrap_err();
+        assert!(
+            refused.to_string().contains("do not read as a pack"),
+            "{refused:#}"
+        );
+        assert!(format!("{refused:#}").contains("items.toml"), "{refused:#}");
+        let _gone = std::fs::remove_dir_all(&game);
     }
 }

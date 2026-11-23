@@ -15,9 +15,11 @@ mod check;
 mod deps;
 mod install;
 mod loader;
+mod logs;
 mod manifest;
 mod new;
 mod pack;
+mod run;
 mod steam;
 mod types;
 mod update;
@@ -96,7 +98,16 @@ enum Command {
         #[arg(long)]
         expect_version: Option<String>,
     },
-    /// Builds the mod in release and copies its DLL into the game's `mods/`.
+    /// Installs the mod into a dedicated server, starts it and prints the
+    /// loader's and the mod's log lines until a world has loaded, then a
+    /// line per mod; follows the mod's lines until Ctrl-C, which stops the
+    /// server this run started.
+    Run(run::Args),
+    /// Prints the newest run's log lines in a game or server folder, the
+    /// loader's and every mod's merged by time.
+    Logs(logs::Args),
+    /// Builds the mod in release, or checks its pack folder, and copies it
+    /// into the game's `mods/`.
     Install {
         /// The folder holding `enshrouded.exe` or `enshrouded_server.exe`;
         /// `ENSHROUDED_DIR` when omitted, else Steam's game, else Steam's
@@ -311,10 +322,14 @@ fn run(args: Args) -> ExitCode {
             package,
             with_loader,
         } => install::install(game.as_deref(), package.as_deref(), with_loader),
+        Command::Run(args) => run::run(&args, &mut std::io::stdout().lock()),
+        Command::Logs(args) => {
+            logs::run(&args, &mut std::io::stdout().lock()).map(|()| String::new())
+        }
         Command::Manifest {
             dll,
             expect_version,
-        } => manifest::show(&dll, expect_version.as_deref()).map_err(anyhow::Error::msg),
+        } => manifest::run(&dll, expect_version.as_deref()),
         Command::Id { names } => ids(&names),
         Command::Deps {
             alias,
@@ -342,6 +357,7 @@ fn run(args: Args) -> ExitCode {
             .and_then(|from| generate::run(&root, &data, from.as_deref(), check)),
     };
     match outcome {
+        Ok(done) if done.is_empty() => ExitCode::SUCCESS,
         Ok(done) => {
             let _shown = writeln!(std::io::stdout(), "{done}");
             ExitCode::SUCCESS

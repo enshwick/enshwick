@@ -300,7 +300,10 @@ answer `Status::MISSING` and are not recorded.
 
 The fake answers what you tell it; only the game says whether an engine
 fact holds on the running build. Run a dedicated server of your own, never
-one people play on, with a copy of a world:
+one people play on, with a copy of a world.
+[`cargo enshwick run`](getting-started.md#run-a-mod-on-a-server-of-your-own)
+installs the mod there, starts the server and prints the logs until a world
+has loaded:
 
 - the server's [console window](chat.md#the-servers-console-window) runs
   each line typed into it, so a mod's actions run without anyone joining;

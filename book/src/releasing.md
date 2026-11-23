@@ -14,6 +14,20 @@ A player installs a mod by copying its folder into `mods/`, as `mods/<id>/`,
 by hand or through a mod manager. A release archive holds that folder. How server admins put the release into a container image is in
 [Run a server in Docker or Kubernetes](https://enshwick.com/guides/run-a-server-in-docker/).
 
+`cargo enshwick pack zip` writes the archive in the current folder:
+
+```bash
+cargo enshwick pack zip
+```
+
+It works in a mod crate, a data pack or a Luau mod folder. For a crate it
+builds the release DLL for Windows. On Windows it then checks that the DLL's
+id, version and side match `Cargo.toml`. For a pack it checks the pack as the
+loader reads it. The archive is `<id>-<version>.zip`, with the mod's files
+under `mods/<id>/`. The tool prints the archive's SHA-256 for the release
+page. The same files always give the same archive, byte for byte. In a
+workspace with several mods, `-p` names one.
+
 ## Versions
 
 The platform's crates carry versions of their own:

@@ -31,12 +31,20 @@ pub(crate) enum Command {
         #[arg(default_value = ".")]
         out: PathBuf,
     },
-    /// Zips a pack folder for a release, its files under `mods/<id>/`, as
-    /// players unpack them into the game's folder.
+    /// Zips a mod for a release, its files under `mods/<id>/`, as players
+    /// unpack them into the game's folder: a mod crate built in release for
+    /// Windows, its manifest checked against `Cargo.toml`, or a pack folder
+    /// checked as the loader reads it. Prints the archive's SHA-256.
     Zip {
-        /// The pack folder, holding `pack.toml`.
+        /// The mod's folder: a crate, or a data pack or Luau mod holding
+        /// `pack.toml`.
+        #[arg(default_value = ".")]
         dir: PathBuf,
-        /// The archive; `<id>.zip` in the current folder when left out.
+        /// The package to zip, when the workspace has several mods.
+        #[arg(long, short)]
+        package: Option<String>,
+        /// The archive; `<id>-<version>.zip` in the current folder when left
+        /// out.
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -50,7 +58,7 @@ pub(crate) fn run(command: &Command) -> anyhow::Result<String> {
             check(dir, vanilla.as_ref()).map(|(summary, _, _)| summary)
         }
         Command::Schema { out } => schema(out),
-        Command::Zip { dir, out } => zip(dir, out.as_deref()),
+        Command::Zip { dir, package, out } => zip(dir, package.as_deref(), out.as_deref()),
     }
 }
 
@@ -128,31 +136,77 @@ fn schema(out: &Path) -> anyhow::Result<String> {
     ))
 }
 
-fn zip(dir: &Path, out: Option<&Path>) -> anyhow::Result<String> {
-    let (summary, manifest, files) = check(dir, None)?;
+/// Builds or checks the mod in `dir` and writes its release archive; what it
+/// found and the archive's path and SHA-256.
+fn zip(dir: &Path, package: Option<&str>, out: Option<&Path>) -> anyhow::Result<String> {
+    archive(&crate::install::build(dir, package)?, out)
+}
+
+/// Writes the release archive of `built`, a crate's only once its DLL's
+/// manifest matches the crate where it can be read.
+fn archive(built: &crate::install::Built, out: Option<&Path>) -> anyhow::Result<String> {
+    let mut said = vec![built.summary.clone()];
+    if let Some((dll, side)) = &built.dll {
+        let expected = crate::manifest::Expected {
+            id: Some(&built.id),
+            version: Some(&built.version),
+            side: side.as_deref(),
+        };
+        if cfg!(windows) {
+            crate::manifest::show(dll, &expected).map_err(anyhow::Error::msg)?;
+            said.push(format!(
+                "its manifest says {} {}, as Cargo.toml does",
+                built.id, built.version
+            ));
+        } else {
+            said.push(
+                "warning: the DLL's manifest is read on Windows only; check it there with `cargo enshwick manifest --expect-version`"
+                    .to_owned(),
+            );
+        }
+    }
     let out = out.map_or_else(
-        || PathBuf::from(format!("{}.zip", manifest.id)),
+        || PathBuf::from(format!("{}-{}.zip", built.id, built.version)),
         Path::to_path_buf,
     );
-    let file = std::fs::File::create(&out).with_context(|| out.display().to_string())?;
-    let mut archive = ::zip::ZipWriter::new(file);
+    let entries = built
+        .files
+        .iter()
+        .map(|(name, bytes)| (format!("mods/{}/{name}", built.id), bytes.as_slice()));
+    let sha = write_zip(&out, entries)?;
+    said.push(format!("wrote {}\nSHA-256 {sha}", out.display()));
+    Ok(said.join("\n"))
+}
+
+/// Writes `entries`, by their path in the archive, to the zip `out` so that
+/// the same entries always give the same bytes: sorted, dated 1980-01-01,
+/// one mode and one compression; the archive's SHA-256 in hex.
+pub(crate) fn write_zip<'a>(
+    out: &Path,
+    entries: impl IntoIterator<Item = (String, &'a [u8])>,
+) -> anyhow::Result<String> {
+    use sha2::Digest as _;
+
+    let mut entries: Vec<(String, &[u8])> = entries.into_iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
     let options = ::zip::write::SimpleFileOptions::default()
-        .compression_method(::zip::CompressionMethod::Deflated);
-    for name in files.names() {
-        let entry = format!("mods/{}/{name}", manifest.id);
+        .compression_method(::zip::CompressionMethod::Deflated)
+        .compression_level(Some(6))
+        .last_modified_time(::zip::DateTime::default())
+        .unix_permissions(0o644);
+    let mut archive = ::zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, bytes) in entries {
         archive
-            .start_file(entry.as_str(), options)
-            .and_then(|()| {
-                archive
-                    .write_all(files.get(name).unwrap_or_default())
-                    .map_err(Into::into)
-            })
-            .with_context(|| entry.clone())?;
+            .start_file(name.as_str(), options)
+            .and_then(|()| archive.write_all(bytes).map_err(Into::into))
+            .with_context(|| name.clone())?;
     }
-    archive
+    let bytes = archive
         .finish()
-        .with_context(|| out.display().to_string())?;
-    Ok(format!("{summary}\nwrote {}", out.display()))
+        .with_context(|| out.display().to_string())?
+        .into_inner();
+    std::fs::write(out, &bytes).with_context(|| out.display().to_string())?;
+    Ok(crate::loader::hex(&sha2::Sha256::digest(&bytes)))
 }
 
 #[cfg(test)]
@@ -185,7 +239,28 @@ pub(crate) mod tests {
             "{summary}"
         );
         let out = dir.join("out.zip");
-        zip(&dir, Some(&out)).unwrap();
+        let said = zip(&dir, None, Some(&out)).unwrap();
+        let again = dir.join("again.zip");
+        let said_again = zip(&dir, None, Some(&again)).unwrap();
+        assert_eq!(
+            said.lines().last(),
+            said_again.lines().last(),
+            "same SHA-256"
+        );
+        assert_eq!(std::fs::read(&out).unwrap(), std::fs::read(&again).unwrap());
+        assert!(
+            zip(&dir, Some("lanterns"), None)
+                .unwrap_err()
+                .to_string()
+                .contains("--package names a crate")
+        );
+        let unpacked = dir.join("game");
+        ::zip::ZipArchive::new(std::fs::File::open(&out).unwrap())
+            .unwrap()
+            .extract(&unpacked)
+            .unwrap();
+        let read = PackFiles::read_dir(&unpacked.join("mods/you.lanterns")).unwrap();
+        assert_eq!(read.hash(), PackFiles::read_dir(&dir).unwrap().hash());
         let archive = ::zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
         let mut names: Vec<String> = archive
             .file_names()
@@ -198,6 +273,43 @@ pub(crate) mod tests {
                 "mods/you.lanterns/items.toml",
                 "mods/you.lanterns/pack.toml"
             ]
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_crate_s_archive_holds_its_dll_in_the_folder_of_its_id_once_its_manifest_is_checked() {
+        let dir = crate::scratch("crate-zip");
+        let dll = dir.join("stalls.dll");
+        std::fs::write(&dll, b"MZ").unwrap();
+        let built = crate::install::Built {
+            id: "you.stalls".to_owned(),
+            version: "0.2.0".to_owned(),
+            summary: format!("built {}", dll.display()),
+            files: vec![("stalls.dll".to_owned(), b"MZ".to_vec())],
+            dll: Some((dll, Some("both".to_owned()))),
+        };
+        let out = dir.join("you.stalls-0.2.0.zip");
+        let said = archive(&built, Some(&out));
+        if cfg!(windows) {
+            // A DLL whose manifest does not read is never archived.
+            assert!(said.unwrap_err().to_string().contains("stalls.dll"));
+            assert!(!out.exists());
+            write_zip(
+                &out,
+                [("mods/you.stalls/stalls.dll".to_owned(), &b"MZ"[..])],
+            )
+            .unwrap();
+        } else {
+            assert!(said.unwrap().contains("read on Windows only"));
+        }
+        ::zip::ZipArchive::new(std::fs::File::open(&out).unwrap())
+            .unwrap()
+            .extract(dir.join("game"))
+            .unwrap();
+        assert_eq!(
+            std::fs::read(dir.join("game/mods/you.stalls/stalls.dll")).unwrap(),
+            b"MZ"
         );
         let _gone = std::fs::remove_dir_all(&dir);
     }
