@@ -36,8 +36,8 @@ pub(crate) enum NameCommandsError {
 mod run;
 #[cfg(windows)]
 pub(crate) use run::{
-    RunCommandError, after_step, any, find, forget, list, queue, register, run_remote, running,
-    seal,
+    RunCommandError, after_step, any, find, forget, leaves_chat, list, listed, queue, register,
+    run_remote, running, seal,
 };
 
 pub use enshwick_core::commands::MAX_LINE;
@@ -88,6 +88,16 @@ pub fn typed<'a>(named: &[Named], text: &'a str, running: impl Fn(ModIndex) -> b
         Some((owner, rest)) if running(owner) => Typed::Run(owner, rest),
         Some((owner, _)) => Typed::Off(owner),
     }
+}
+
+/// Whether the line `text` leaves the chat when the commands could not
+/// check it: a `/` and a name or alias in `named` first.
+///
+/// Their switch is off or panicked, so nothing runs the line, but the words
+/// typed for a mod, a password among them, reach no other player.
+#[must_use]
+pub fn unchecked_leaves(named: &[Named], text: &str) -> bool {
+    typed(named, text, |_| false) != Typed::Chat
 }
 
 /// The remote caller `label` with the game's permission bits
@@ -143,6 +153,19 @@ mod tests {
         );
         assert_eq!(typed(&all, "adm online", running), Typed::Chat);
         assert_eq!(typed(&all, "/me waves", running), Typed::Chat);
+    }
+
+    #[test]
+    fn a_line_that_names_commands_leaves_the_chat_even_unchecked() {
+        let all = [named(3, "admin-tools", "adm")];
+        assert!(unchecked_leaves(&all, "/adm password hunter2"));
+        assert!(unchecked_leaves(&all, "/ADMIN-TOOLS"));
+        assert!(!unchecked_leaves(&all, "adm password hunter2"), "no slash");
+        assert!(!unchecked_leaves(&all, "/me waves"));
+        assert!(
+            !unchecked_leaves(&[], "/adm online"),
+            "no mod named commands"
+        );
     }
 
     #[test]

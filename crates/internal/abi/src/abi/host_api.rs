@@ -420,7 +420,9 @@ pub struct HostApi {
     /// Reports whether the mod's feature `name` runs on this game build:
     /// off for the reason `off`, or on when `off` is empty. The loader
     /// logs it and shows it in the status summary and on the Mods screen; a
-    /// later report of the same name replaces the earlier one.
+    /// later report of the same name replaces the earlier one. The name
+    /// `commands` is the mod's typed lines: while it is off,
+    /// [`command_list`](Self::command_list) leaves the mod's commands out.
     /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
     /// the call. Any thread.
     pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
@@ -1966,8 +1968,10 @@ pub struct HostApi {
         out: *mut ActionReply,
     ) -> Status,
     /// Up to `capacity` command sets of the running mods, in load order, and
-    /// how many there are. Entries are `entry_size` bytes apart, the
-    /// caller's `size_of::<CommandInfo>()`; the loader fills what both sides
+    /// how many there are; a mod that reported its feature `commands` off
+    /// ([`feature`](Self::feature)) has none. Entries are `entry_size`
+    /// bytes apart, the caller's `size_of::<CommandInfo>()`; the loader
+    /// fills what both sides
     /// know of each and its own [`Header`]. The strings stay valid until the
     /// next call on this thread. [`Status::BAD_ARGS`] for a non-null `out`
     /// whose entries are shorter than a header. Any thread.

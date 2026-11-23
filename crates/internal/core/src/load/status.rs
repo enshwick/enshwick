@@ -37,7 +37,9 @@ impl Load<'_> {
     /// running either way.
     ///
     /// Everything registered before `init` fails stays, so `init` looks up
-    /// what the part needs before it links hooks or adds content.
+    /// what the part needs before it links hooks or adds content. The name
+    /// `commands` is the mod's typed lines, which a handler's panic turns
+    /// off: off, the loader lists none of the mod's commands.
     ///
     /// # Examples
     ///

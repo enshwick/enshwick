@@ -9,6 +9,11 @@ pub const MAX_LINE: usize = 1024;
 /// the mod's own and may be longer.
 pub const MAX_NAME: usize = 32;
 
+/// The feature a mod reports off through `HostApi::feature` when its typed
+/// lines stop running: the loader names it on the Mods screen and lists none
+/// of the mod's commands from then on.
+pub const FEATURE: &str = "commands";
+
 /// Words no mod's commands may take: the loader's own and the help word.
 const RESERVED: [&str; 2] = ["enshwick", "help"];
 

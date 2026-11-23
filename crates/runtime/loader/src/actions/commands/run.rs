@@ -5,14 +5,15 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick_core::abi::{CommandInfo, Header, Str};
 
-use enshwick_core::command_names::{alias_asked, check};
+use enshwick_base::Relock;
+use enshwick_core::command_names::{FEATURE, alias_asked, check};
 
 use super::{
     MAX_LINE, NameCommandsError, Named, Refusal, Typed, parse, remote_caller, typed, word,
 };
 use crate::actions::admission::{self, Path, Verdict};
 use crate::engine::fuse::{Fuse, Off};
-use crate::engine::loader::Loader;
+use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pending::Pending;
 use crate::engine::registry::Registry;
@@ -150,6 +151,15 @@ pub(crate) fn any() -> bool {
 /// The mod whose command name or alias is `word`, a leading `/` allowed.
 pub(crate) fn find(word: &str) -> Option<ModIndex> {
     parse(NAMED.sealed()?, word).map(|(owner, _)| owner)
+}
+
+/// Whether the line `text` leaves the chat though the commands could not
+/// check it, as [`unchecked_leaves`](super::unchecked_leaves) says for the
+/// sealed names.
+pub(crate) fn leaves_chat(text: &str) -> bool {
+    NAMED
+        .sealed()
+        .is_some_and(|named| super::unchecked_leaves(named, text))
 }
 
 /// Whether mod `owner` runs.
@@ -307,7 +317,8 @@ pub(crate) fn run_remote(
         .ok_or(RunCommandError::Unknown)
 }
 
-/// The running mods' command sets with their mod ids, in load order.
+/// The command sets of the running mods whose commands are on, with their
+/// mod ids, in load order.
 pub(crate) fn running(loader: &Loader) -> Vec<(&'static Named, &str)> {
     let mut named: Vec<&'static Named> = NAMED.sealed().unwrap_or_default().iter().collect();
     named.sort_by_key(|n| n.owner.get());
@@ -315,9 +326,20 @@ pub(crate) fn running(loader: &Loader) -> Vec<(&'static Named, &str)> {
         .into_iter()
         .filter_map(|n| {
             let record = loader.mods.get(n.owner.get())?;
-            (!record.off.load(Ordering::Acquire)).then_some((n, record.id.as_str()))
+            listed(record).then_some((n, record.id.as_str()))
         })
         .collect()
+}
+
+/// Whether the lists name the commands of the mod `record`: it runs, and it
+/// did not report them off as its feature [`FEATURE`].
+pub(crate) fn listed(record: &ModRecord) -> bool {
+    !record.off.load(Ordering::Acquire)
+        && !record
+            .features
+            .relock()
+            .iter()
+            .any(|f| f.name == FEATURE && f.off.is_some())
 }
 
 /// The running mods' command sets, in load order, as the ABI lists them;
@@ -359,6 +381,19 @@ mod tests {
         let listed = crate::engine::diag::parts_off();
         let off = listed.iter().find(|p| p.part == "test alias /lamp");
         assert_eq!(off.map(|p| p.reason.as_str()), Some("/lamp is taken"));
+    }
+
+    #[test]
+    fn the_lists_leave_out_a_mod_that_reported_its_commands_off_or_is_off() {
+        let loader = crate::start::tests::loader_running(&["you.admin-tools", "you.lamps"]);
+        let (tools, lamps) = (&loader.mods[0], &loader.mods[1]);
+        assert!(listed(tools) && listed(lamps));
+        tools.report_feature("glow", Some("missing"));
+        assert!(listed(tools), "another feature off");
+        tools.report_feature(FEATURE, Some("a handler panicked: no oil"));
+        assert!(!listed(tools), "its commands off");
+        lamps.off.store(true, Ordering::Release);
+        assert!(!listed(lamps), "the mod off");
     }
 
     #[test]

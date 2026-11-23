@@ -109,8 +109,12 @@ Any other line posts as it would without the loader. A player runs at most
 eight commands a second, and the server drops a flood beyond that.
 
 A handler that panics during a command or a console line turns off only the
-mod's typed lines, with a warning in its log. Each later one is refused
-with a line saying so. Its actions keep their other paths.
+mod's typed lines. The log and the Mods screen name its `commands` off.
+`commands::list` and `enshwick help` leave them out. Each later line is
+refused with a line saying so. Its actions keep their other paths. While
+the chat commands are off after a fault, a line starting with `/` and a
+mod's command name still leaves the chat. It does not run
+and gets no reply, and the Mods screen says the chat commands are off.
 
 The handler reads where a run came from in `request.via`. Commands typed in
 chat arrive as `Via::Chat`, and those another mod runs as `Via::Remote`.

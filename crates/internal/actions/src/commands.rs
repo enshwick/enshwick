@@ -13,7 +13,10 @@
 //! The words after the action's id are its values, as on the console. The
 //! server checks the caller's rights as for any run, and the reply goes to
 //! the caller alone. A command is never the only way to an action: players
-//! reach every action through the game's interface too.
+//! reach every action through the game's interface too. A handler that
+//! panics in a typed line turns off only the mod's commands: the Mods screen
+//! names them off, [`list`] leaves them out, and each later line is refused
+//! saying so.
 //!
 //! [`run`] runs any mod's command line for a [`Caller`] the calling mod
 //! names, such as a remote console's client, and [`list`] names the mods'
@@ -236,9 +239,9 @@ pub struct CommandSet {
     pub mod_id: String,
 }
 
-/// The command names of the running mods, in load order, so a remote
-/// console can answer `help` across mods: each mod's `/<alias> help` then
-/// lists what a caller may run.
+/// The command names of the running mods whose commands are on, in load
+/// order, so a remote console can answer `help` across mods: each mod's
+/// `/<alias> help` then lists what a caller may run.
 ///
 /// # Examples
 ///

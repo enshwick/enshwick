@@ -14,6 +14,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+mod commands;
 mod said;
 
 pub(crate) use said::{register, seal};
@@ -431,30 +432,6 @@ static CHAT_FUSE: Fuse = Fuse::new("chat lines");
 static HANDLING_FUSE: Fuse = Fuse::new("chat line handling");
 /// The switch of the chat lines mods filter and hear, apart from the mute.
 static MODS_FUSE: Fuse = Fuse::new("chat lines for mods");
-/// The switch of the mods' commands typed in chat.
-static COMMANDS_FUSE: Fuse = Fuse::new("chat commands");
-
-/// Takes a line the player of account `key` typed out of the chat when it
-/// is a mod's command, queued to run after the step; false for any other
-/// line. Reads the text only when it starts with `/`.
-///
-/// # Safety
-///
-/// - `text` is null or the game's span of pointer and byte length, its bytes
-///   readable and unchanged for the call.
-unsafe fn command(loader: &'static Loader, text: *const [usize; 2], key: u64) -> bool {
-    let Some((_, layout)) = linked() else {
-        return false;
-    };
-    let mut first = [0u8; 1];
-    // SAFETY: the caller guarantees `text` null or readable for the call.
-    if unsafe { read_start(text, &mut first) } != Some(1) || first != *b"/" {
-        return false;
-    }
-    // SAFETY: the caller guarantees `text` null or readable for the call.
-    let line = unsafe { read_text(text, layout.max_text) };
-    crate::actions::commands::queue(loader, key, &line)
-}
 
 /// Copies the first bytes of the game's span `text` into `start`, at most
 /// its length; how many, or `None` for a null span.
@@ -500,10 +477,12 @@ fn next() -> Option<PostFn> {
 ///
 /// Written by hand, not with `chain_detour!`: a line a chat filter rewrote
 /// goes on with a new text. Its handling runs under [`HANDLING_FUSE`], with
-/// the commands and the lines for mods under fuses of their own inside it;
-/// once the handling is off or panicked, the type check alone runs under
-/// [`CHAT_FUSE`], the link's own, so the post stays linked and a client's
-/// line of a type no client sends is still dropped.
+/// the [commands](commands::taken) and the lines for mods under fuses of
+/// their own inside it; once the handling is off or panicked, the type
+/// check and the [command words check](commands::kept_out) alone run under
+/// [`CHAT_FUSE`], the link's own, so the post stays linked, a client's line
+/// of a type no client sends is still dropped, and a line naming a mod's
+/// commands still leaves the chat.
 ///
 /// # Safety
 ///
@@ -533,14 +512,9 @@ unsafe extern "system" fn post(
         // the game's calling thread, by this function's `# Safety`.
         let typed = unsafe { typed_line(out) };
         if let Some(loader) = typed.filter(|_| crate::actions::commands::any()) {
-            let taken = COMMANDS_FUSE
-                .run("the chat command check", || {
-                    // SAFETY: `text` is the game's own argument at the entry
-                    // of `chat.post`, by this function's `# Safety`.
-                    unsafe { command(loader, text, hash) }
-                })
-                .unwrap_or(false);
-            if taken {
+            // SAFETY: `text` is the game's own argument at the entry of
+            // `chat.post`, by this function's `# Safety`.
+            if unsafe { commands::taken(loader, text, hash) } {
                 // SAFETY: `typed` is set only for a non-null `out`, a result
                 // record of at least 8 writable bytes by this function's
                 // `# Safety`.
@@ -618,7 +592,12 @@ unsafe extern "system" fn post(
         // SAFETY: this is the entry of the loader's link on `chat.post`, on
         // the game's calling thread, by this function's `# Safety`.
         let typed = unsafe { typed_line(out) }.is_some();
-        if verdict(typed, kind, false, false) == Verdict::Drop {
+        let names_commands = || {
+            // SAFETY: `text` is the game's own argument at the entry of
+            // `chat.post`, by this function's `# Safety`.
+            crate::actions::commands::any() && unsafe { commands::kept_out(text) }
+        };
+        if unhandled(typed, kind, names_commands) == Verdict::Drop {
             // SAFETY: a line is judged a player's only for a non-null `out`,
             // a result record of at least 8 writable bytes by this
             // function's `# Safety`.
@@ -806,6 +785,17 @@ fn verdict(typed: bool, kind: u8, muted: bool, old_frame: bool) -> Verdict {
     } else {
         Verdict::Pass
     }
+}
+
+/// The verdict on a line of chat type `kind` while the line handling is
+/// off: [`verdict`] with no mute or old frame known, and a line a player's
+/// client sent (`typed`) dropped too when `names_commands`, so the words
+/// typed for a mod reach no other player.
+fn unhandled(typed: bool, kind: u8, names_commands: impl FnOnce() -> bool) -> Verdict {
+    if typed && names_commands() {
+        return Verdict::Drop;
+    }
+    verdict(typed, kind, false, false)
 }
 
 /// Whether a client sends lines of chat type `kind` for its player: typed
