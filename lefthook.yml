@@ -16,7 +16,7 @@ pre-commit:
     # zizmor offline: its online audits need a GitHub token and the network.
     workflows:
       glob: '.github/**'
-      run: actionlint && zizmor --offline --quiet .
+      run: actionlint && zizmor --offline --quiet . && shellcheck .github/scripts/*.sh && bash .github/scripts/jira-test.sh
 
 # Nothing that compiles: the hook stays under ten seconds. The compiling
 # checks are `cargo xtask check` (what the branch touches) and
@@ -47,4 +47,4 @@ pre-push:
       run: cargo deny check bans licenses sources
     workflows:
       glob: '.github/**'
-      run: actionlint && zizmor --offline --quiet .
+      run: actionlint && zizmor --offline --quiet . && shellcheck .github/scripts/*.sh && bash .github/scripts/jira-test.sh

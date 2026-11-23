@@ -8,8 +8,9 @@ Enshwick is a Rust workspace. You need Rust (`rust-toolchain.toml` installs the
 pinned version through rustup), [lefthook](https://lefthook.dev),
 [rumdl](https://github.com/rvben/rumdl),
 [typos](https://github.com/crate-ci/typos), cargo-deny,
-[actionlint](https://github.com/rhysd/actionlint) and
-[zizmor](https://docs.zizmor.sh) for the git hooks,
+[actionlint](https://github.com/rhysd/actionlint),
+[zizmor](https://docs.zizmor.sh),
+[ShellCheck](https://www.shellcheck.net) and jq for the git hooks,
 [ast-grep](https://ast-grep.github.io) and
 [cargo-machete](https://github.com/bnjbvr/cargo-machete) for
 `cargo xtask check`, and on Windows the MSVC build tools, whose Windows SDK
@@ -23,8 +24,9 @@ cargo nextest run --workspace
 ```
 
 The hooks check formatting, spelling and Markdown before a commit, and again
-before a push, with cargo-deny when a manifest changed and actionlint and
-zizmor when a workflow changed; none of them compiles, so they take seconds.
+before a push, with cargo-deny when a manifest changed and actionlint, zizmor,
+ShellCheck and a dry run of the Jira script when a workflow changed; none of
+them compiles, so they take seconds.
 Before asking for review, run `cargo xtask check`: the crate rules (a crate
 whose package has no unsafe code declares `#![forbid(unsafe_code)]`, only a
 dev-dependency turns on a crate's `test` feature, a package that builds a DLL
