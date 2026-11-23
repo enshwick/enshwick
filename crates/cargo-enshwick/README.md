@@ -55,7 +55,10 @@ is out, at most once a day; without a network it says nothing, and `CI` or
   when the DLL reports another version, which release pipelines can check.
 - `install` builds the mod in release as a Windows DLL, through
   [cargo-xwin](https://github.com/rust-cross/cargo-xwin) off Windows, and
-  copies it to `<game>/mods/<id>/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`,
+  copies it to `<game>/mods/<id>/<package>.dll`. In a data pack or Luau mod
+  folder it checks the pack and copies its files to `<game>/mods/<id>/`,
+  removing the pack files an earlier install left there that the pack no
+  longer has. The game folder is `--game` or `ENSHROUDED_DIR`,
   else the one Steam installed: the game (app 1203620) when it is
   installed, else the dedicated server (app 2278520); the others are listed. In a
   workspace with several mods, `--package` names one. `--with-loader` then puts
@@ -63,6 +66,21 @@ is out, at most once a day; without a network it says nothing, and `CI` or
   release's `enshwick.zip` from GitHub, checked against its `SHA256SUMS` once
   and kept in the tool's cache folder. A loader of another release is named
   and left as it is.
+- `run [dir]` installs the mod in `dir`, the current folder by default, into
+  a dedicated server and starts `enshrouded_server.exe`. The server folder
+  is `--game` or `ENSHROUDED_DIR`, else Steam's dedicated server (app
+  2278520); a folder without `enshrouded_server.exe` is refused. It prints the
+  loader's and the mod's log lines until the loader is ready and a world has
+  loaded, then a line per mod, running or off with the loader's reason, and
+  then the mod's lines and every warning. Ctrl-C stops the server: Ctrl-Break
+  to its process group alone, which the server takes as an orderly shutdown,
+  then its end by its handle after 30 seconds. The server runs in a job
+  object, so it ends with the tool. `--watch` builds the mod again on a change
+  in its folder, and when the build passes, installs it and restarts the
+  server. `--level` sets the most detailed of the mod's lines shown.
+- `logs [-f] [--mod <id>] [--level <level>]` prints the newest run's log
+  lines in the game or server folder, the loader's and every mod's merged by
+  time. `-f` goes on with new lines until Ctrl-C.
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md), as `Guid::named`
   derives them: `cargo enshwick id you.lanterns:lantern`.
@@ -83,8 +101,12 @@ is out, at most once a day; without a network it says nothing, and `CI` or
 - `pack check <dir>` checks a [data pack](https://github.com/enshwick/enshwick/blob/main/book/src/content/packs.md)
   folder as the loader reads it, every problem with its file and line;
   `pack schema [dir]` writes the JSON Schema of each pack file for editors;
-  `pack zip <dir> [--out <file>]` checks the pack and zips it for a release,
-  its files under `mods/<id>/`.
+  `pack zip [dir] [--package <name>] [--out <file>]` writes a mod's release
+  archive, `<id>-<version>.zip`, its files under `mods/<id>/`, and prints its
+  SHA-256. In a pack folder it checks the pack first. In a mod crate it
+  builds the release DLL for Windows and, on Windows, checks that the DLL's
+  id, version and side are the ones `Cargo.toml` names. The same files always
+  give the same archive: entries sorted, dated 1980-01-01, one mode.
 - `pin --old <exe> --new <exe>` ports a mod's own build rows to a new game
   build. See [below](#porting-build-rows-pin).
 

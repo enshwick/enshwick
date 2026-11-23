@@ -228,7 +228,8 @@ and the static C runtime there.
 
 `cargo enshwick install` builds the mod in release for the Windows target,
 through `cargo xwin` off Windows. It copies the DLL to
-`<game>/mods/<id>/`. The game folder is `--game` or the `ENSHROUDED_DIR`
+`<game>/mods/<id>/`. In a data pack or Luau mod folder, it checks the pack
+and copies its files there. The game folder is `--game` or the `ENSHROUDED_DIR`
 environment variable. Without either, the tool reads Steam's libraries and
 takes the game when it is installed, else the dedicated server. When Steam
 has several, the tool lists the others, and `--game` picks one. In a
@@ -243,6 +244,38 @@ Remove that loader first to put this one in.
 `cargo enshwick manifest <dll>` prints what a built DLL says about itself:
 id, version, side, join check and dependencies. It loads the DLL, so it
 runs on Windows only.
+
+## Run a mod on a server of your own
+
+`cargo enshwick run` installs the mod into a dedicated server, starts it and
+prints the logs. It works in a crate, a data pack or a Luau mod folder. The
+server is Steam's Enshrouded Dedicated Server, or the folder `--game` names.
+
+```bash
+cd hello-rust
+cargo enshwick run --with-loader --watch
+```
+
+The tool prints the loader's lines and the mod's own lines as the server
+starts. Once a world has loaded, it prints one line per mod:
+
+```text
+world loaded; ready: 1 of 1 mods running
+  you.hello-rust 0.1.0: running
+```
+
+A mod the loader turned off shows `off:` and the loader's reason. After that
+the tool prints the mod's lines and every warning. `--watch` rebuilds the mod
+when a file in its folder changes, then installs it and restarts the server.
+A failed build leaves the running server as it is.
+
+Ctrl-C stops the server the tool started, and no other process. The server
+shuts down in order. When it is still running after 30 seconds, the tool
+ends it.
+
+`cargo enshwick logs` prints the newest run's lines from the game or server
+folder, every source merged by time. `-f` follows new lines. `--mod <id>`
+keeps one mod's lines, and `--level warn` keeps warnings and errors.
 
 ## Where the logs are
 

@@ -63,7 +63,7 @@ sha2 = { workspace = true, optional = true }
 zip = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { optional = true, workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Registry"] }
+windows-sys = { optional = true, workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Threading"] }
 
 [dev-dependencies]
 # The tests compile what the tool writes for mods, which name `enshwick`.

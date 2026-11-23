@@ -4,29 +4,74 @@ use std::path::Path;
 
 use enshwick_core::abi::{Manifest, Relation, Side, Str};
 
-/// Describes the mod in `dll`; an error when its version is not `expected`.
-pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
+/// What a mod DLL must say of itself, each part when given: what a release
+/// takes from the crate's `Cargo.toml`.
+#[derive(Debug, Default)]
+pub(crate) struct Expected<'a> {
+    pub(crate) id: Option<&'a str>,
+    pub(crate) version: Option<&'a str>,
+    /// `server` or `both`, as `[package.metadata.enshwick]` spells it.
+    pub(crate) side: Option<&'a str>,
+}
+
+/// `cargo enshwick manifest`: describes the mod in `dll`; an error when its
+/// version is not `version`.
+pub(crate) fn run(dll: &Path, version: Option<&str>) -> anyhow::Result<String> {
+    let expected = Expected {
+        version,
+        ..Expected::default()
+    };
+    show(dll, &expected).map_err(anyhow::Error::msg)
+}
+
+/// Describes the mod in `dll`; an error naming each part that is not what
+/// `expected` says.
+pub(crate) fn show(dll: &Path, expected: &Expected<'_>) -> Result<String, String> {
     let manifest = query(dll)?;
     // SAFETY: `query` copied the manifest out of a DLL it never unloads and
     // never shuts down, so the strings and lists `enshwick_mod_query`
     // returned stay valid and unwritten (`abi::exports::QUERY`).
     let text = unsafe { describe(&manifest) };
-    // SAFETY: `query` copied the manifest out of a DLL it never unloads and
-    // never shuts down, so its strings stay valid.
-    let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
     if let Err(why) = declarations(dll) {
         return Err(format!(
             "{} stays off: its declarations do not read: {why}\n{text}",
             dll.display()
         ));
     }
-    match expected {
-        Some(expected) if expected != version => Err(format!(
-            "{} is version {version}, expected {expected}\n{text}",
-            dll.display()
-        )),
-        _ => Ok(text),
+    // SAFETY: `query` copied the manifest out of a DLL it never unloads and
+    // never shuts down, so its strings stay valid.
+    let id = unsafe { manifest.id.as_str() }.unwrap_or_default();
+    // SAFETY: `query` copied the manifest out of a DLL it never unloads and
+    // never shuts down, so its strings stay valid.
+    let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
+    let wrong = mismatches(id, version, manifest.side, expected);
+    if wrong.is_empty() {
+        Ok(text)
+    } else {
+        Err(format!("{}: {}\n{text}", dll.display(), wrong.join("; ")))
     }
+}
+
+/// What differs between the manifest's `id`, `version` and `side` and
+/// `expected`, a phrase each.
+fn mismatches(id: &str, version: &str, side: Side, expected: &Expected<'_>) -> Vec<String> {
+    let side = match side {
+        Side::SERVER => "server",
+        Side::BOTH => "both",
+        _ => "unknown",
+    };
+    [
+        ("id", id, expected.id),
+        ("version", version, expected.version),
+        ("side", side, expected.side),
+    ]
+    .into_iter()
+    .filter_map(|(what, is, wanted)| {
+        wanted
+            .filter(|wanted| *wanted != is)
+            .map(|wanted| format!("{what} is {is}, expected {wanted}"))
+    })
+    .collect()
 }
 
 /// Reads the declarations in the `.enshpt` section of `dll` as the loader
@@ -257,6 +302,25 @@ mod tests {
                 .unwrap_err()
                 .to_string()
         );
+    }
+
+    #[test]
+    fn each_part_unlike_the_crate_is_named() {
+        let all = Expected {
+            id: Some("you.stalls"),
+            version: Some("0.2.0"),
+            side: Some("both"),
+        };
+        assert!(mismatches("you.stalls", "0.2.0", Side::BOTH, &all).is_empty());
+        assert_eq!(
+            mismatches("you.other", "0.1.0", Side::SERVER, &all),
+            [
+                "id is you.other, expected you.stalls",
+                "version is 0.1.0, expected 0.2.0",
+                "side is server, expected both"
+            ]
+        );
+        assert!(mismatches("you.other", "0.1.0", Side::SERVER, &Expected::default()).is_empty());
     }
 
     #[test]
