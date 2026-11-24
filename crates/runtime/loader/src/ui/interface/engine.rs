@@ -517,6 +517,9 @@ pub(super) struct Window {
     place: Option<Place>,
     /// The interface update ([`super::tick`]) the window last began in.
     began: Option<u64>,
+    /// A panel beside a screen gives the focus to no member until the
+    /// player moves between its members ([`Window::hold_focus`]).
+    held: bool,
 }
 
 /// Whether interface update `at` is `now` or the one before.
@@ -539,6 +542,7 @@ impl Window {
             gap: 30.0,
             place: None,
             began: None,
+            held: false,
         }
     }
 
@@ -567,6 +571,18 @@ impl Window {
     /// Moves the window to `layer` from its next start.
     pub(super) const fn set_layer(&mut self, layer: u32) {
         self.layer = layer;
+    }
+
+    /// Holds a panel's focus back from now until the player moves between
+    /// its members, so the screen it opens beside keeps the one focused
+    /// slot; a window over the screen takes the focus, as the game's popups.
+    pub(super) const fn hold_focus(&mut self) {
+        self.held = self.place.is_some();
+    }
+
+    #[cfg(test)]
+    pub(super) const fn held(&self) -> bool {
+        self.held
     }
 
     /// A full screen of the loader's own on `layer`, its rows `gap` apart.

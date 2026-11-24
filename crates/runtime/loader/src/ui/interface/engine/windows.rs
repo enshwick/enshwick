@@ -35,15 +35,24 @@ impl Window {
         if self.place().is_some() { 0 } else { MODAL }
     }
 
-    /// Whether the window's navigation gives the focus to no member in
-    /// interface update `now`: a panel beside a screen in the update it
-    /// opens in, so the screen keeps the one focused slot and the panel's
-    /// members take the focus only from the cursor, a move or a click. On a
-    /// new group's first frame `ui.nav_end` focuses its first member while
-    /// the config's focus byte is set, later only a moved selection (client
-    /// 26430625, decompiler).
-    const fn holds_focus(&self, now: u64) -> bool {
-        self.place.is_some() && !self.drawn_lately(now)
+    /// Begins the window in interface update `now`, holding a panel's focus
+    /// back when it opens after a gap. While the config's focus byte is set,
+    /// `ui.nav_end` focuses a new group's first member and gives a focus
+    /// nobody holds to the remembered one (client 26430625, decompiler), so
+    /// the hold lasts until [`Window::nav_moved`].
+    const fn begin_at(&mut self, now: u64) {
+        if !self.drawn_lately(now) {
+            self.hold_focus();
+        }
+        self.began = Some(now);
+    }
+
+    /// Notes `ui.nav_end`'s `moved` byte: a move between the members ends
+    /// the held focus.
+    const fn nav_moved(&mut self, moved: u8) {
+        if moved != 0 {
+            self.held = false;
+        }
     }
 
     /// The layer the window starts on: one under the popup's while a loader
@@ -156,9 +165,7 @@ impl Engine {
         if window.place().is_none() {
             crate::ui::interface::window_drawn();
         }
-        let now = crate::ui::interface::tick();
-        let holds_focus = window.holds_focus(now);
-        window.began = Some(now);
+        window.begin_at(crate::ui::interface::tick());
         window.saved_nav = self.nav(context);
         super::widgets::twins_window(name.hash);
         let short;
@@ -255,7 +262,7 @@ impl Engine {
             // the panel frame opened above is the window `title` asks for.
             unsafe { self.title(context, title) };
         }
-        let mut nav = self.nav_config(NAV_WINDOW, holds_focus);
+        let mut nav = self.nav_config(NAV_WINDOW, window.held);
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's
         // `ui.nav_extent` bytes and `nav` its `ui.nav_config_size`
@@ -313,6 +320,7 @@ impl Engine {
             // pushed in this frame, unmoved by this function's `# Safety`.
             let moved = unsafe { (self.nav_end)(window.nav.ptr(), 0) };
             text_field::nav_ended(moved);
+            window.nav_moved(moved);
         }
         // SAFETY: `self.nav_drop` is the game's `ui.nav_drop`, its entry bytes
         // checked in `Engine::resolve`, on the group `window_begin` pushed in
@@ -350,20 +358,26 @@ mod tests {
     }
 
     #[test]
-    fn a_panel_beside_a_screen_takes_no_focus_as_it_opens_and_a_window_does() {
+    fn a_panel_beside_a_screen_holds_its_focus_until_the_player_moves_and_a_window_never() {
         let mut panel = Window::extension(Place::edge(UiExtension::RIGHT), 0xa);
-        assert!(panel.holds_focus(5), "the update the panel opens in");
-        panel.began = Some(5);
-        assert!(
-            !panel.holds_focus(6),
-            "a move between its members takes the focus from then on"
-        );
-        assert!(panel.holds_focus(8), "opened again after its screen closed");
-        assert!(
-            !Window::new().holds_focus(5),
-            "a popup takes the focus, as the game's"
-        );
-        assert!(!Window::screen(0x1b, 30.0).holds_focus(5));
+        panel.begin_at(5);
+        assert!(panel.held, "the update the panel opens in");
+        panel.nav_moved(0);
+        panel.begin_at(6);
+        assert!(panel.held, "the updates after, until a move");
+        panel.nav_moved(1);
+        panel.begin_at(7);
+        assert!(!panel.held, "a move between its members takes the focus");
+        panel.begin_at(9);
+        assert!(panel.held, "opened again after its screen closed");
+        panel.nav_moved(1);
+        panel.hold_focus();
+        assert!(panel.held, "held again for another screen");
+        for mut window in [Window::new(), Window::screen(0x1b, 30.0)] {
+            window.begin_at(5);
+            window.hold_focus();
+            assert!(!window.held, "a popup takes the focus, as the game's");
+        }
     }
 
     #[test]

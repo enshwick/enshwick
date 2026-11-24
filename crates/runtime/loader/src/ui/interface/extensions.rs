@@ -177,6 +177,21 @@ struct Placed {
     window: Window,
     name: Box<[u8]>,
     panels: Box<[usize]>,
+    /// The screen the window last drew beside: one window serves a place on
+    /// every screen.
+    shown: Option<u8>,
+}
+
+impl Placed {
+    /// Moves the window beside screen `shown` on `layer`, holding its focus
+    /// back when the screen changed, as when it opens.
+    const fn beside(&mut self, shown: u8, layer: u32) {
+        self.window.set_layer(layer);
+        if !matches!(self.shown, Some(was) if was == shown) {
+            self.shown = Some(shown);
+            self.window.hold_focus();
+        }
+    }
 }
 
 /// One place's window among the extensions' windows, in drawing order.
@@ -619,6 +634,7 @@ fn placed(extensions: &[Extension], layer: u32) -> Vec<Placed> {
             window: Window::extension(place, layer),
             name: format!("{NAME_PREFIX}{index}").into_bytes().into(),
             panels: at_place(extensions, place, |e| e.place),
+            shown: None,
         })
         .collect()
 }
@@ -654,7 +670,7 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, reads: FrameReads) {
             *windows = placed(extensions, on);
         }
         for placed in windows.iter_mut() {
-            placed.window.set_layer(on);
+            placed.beside(shown, on);
         }
         windows.len()
     });
@@ -786,6 +802,24 @@ mod tests {
                 .borrow_mut()
                 .push((fuse.feature(), id.to_owned(), reason.to_owned()));
         }
+    }
+
+    #[test]
+    fn a_place_s_window_holds_its_focus_again_when_another_screen_shows() {
+        let mut placed = Placed {
+            window: Window::extension(Place::edge(UiExtension::RIGHT), 0xa),
+            name: Box::default(),
+            panels: Box::default(),
+            shown: Some(3),
+        };
+        placed.beside(3, 0xa);
+        assert!(
+            !placed.window.held(),
+            "the same screen keeps the focus as it is"
+        );
+        placed.beside(4, 0xa);
+        assert!(placed.window.held(), "the next screen's panel opens held");
+        assert_eq!(placed.shown, Some(4));
     }
 
     #[test]
