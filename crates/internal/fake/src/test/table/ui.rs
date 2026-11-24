@@ -12,7 +12,6 @@ use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
     UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
-use enshwick_core::controls::GameAction;
 #[cfg(feature = "unstable")]
 pub(crate) use sound::hear;
 pub(crate) use sound::{sound_play, sound_play_for, sound_state, sound_steer, sound_steer_for};
@@ -773,7 +772,12 @@ entries! {
                 .unwrap_or_default()
                 .to_owned();
             if spec.kind == Spec::PRESS {
-                if !GameAction::ALL.iter().any(|action| action.name() == target) {
+                // `GameAction` comes with `unstable`, as the press API does.
+                #[cfg(feature = "unstable")]
+                if !enshwick_core::controls::GameAction::ALL
+                    .iter()
+                    .any(|action| action.name() == target)
+                {
                     return Status::BAD_ARGS;
                 }
                 if !reflects_action(&s.host, &target) {

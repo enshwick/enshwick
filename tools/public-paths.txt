@@ -661,8 +661,10 @@ abi::ClientCommand::LOOK
 abi::ClientCommand::MAX_HOLD_MS
 abi::ClientCommand::MAX_LOOK
 abi::ClientCommand::MAX_PASSWORD
+abi::ClientCommand::MAX_PRESS_MS
 abi::ClientCommand::MOVE
 abi::ClientCommand::OPEN_SCREEN
+abi::ClientCommand::PRESS
 abi::ClientCommand::cancels
 abi::ClientCommand::direction
 abi::ClientCommand::expected_screen
@@ -5176,6 +5178,7 @@ input::CommandAction::Leave unstable
 input::CommandAction::Look unstable
 input::CommandAction::Move unstable
 input::CommandAction::OpenScreen unstable
+input::CommandAction::Press unstable
 input::CommandId unstable
 input::CommandId::TY unstable
 input::CommandId::from_value unstable

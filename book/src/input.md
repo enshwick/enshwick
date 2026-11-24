@@ -457,15 +457,17 @@ the hold. A hold of 1 ms holds it for one step, a tap.
 | `Press` | a `GameAction` the running build names; 1 to 2000 ms | the first step holds the bit | the hold ran out |
 
 The game acts on the form of an action its key sets, and the loader sets
-only the action a press names. For an action with `Tap`, `Hold` or
-`Release` forms, press the form the key gives (client 26430625, seen on a
-hosted world and on a client joined to a server):
+only the action a press names. Some actions have tap, hold and release
+forms. For those, press the form the key gives. These were seen on client
+26430625, on a hosted world and on a client joined to a server:
 
 | To do this | Press |
 | --- | --- |
 | interact with the prompt's target | `ContextualActionTap` |
 | attack, mine or use the held item | `MainhandActionTap` and `MainhandActionRelease` |
-| jump, sprint, block, use a quick-use slot | the action itself, such as `Jump`, `Sprint`, `Block` or `QuickUse0` |
+| jump | `Jump` |
+| sprint | `Sprint` |
+| use the first quick-use slot | `QuickUse0` |
 
 A press of `MainhandAction` alone does nothing: that bit is the key held,
 and the game attacks on its tap.
