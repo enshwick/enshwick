@@ -33,6 +33,7 @@ pub mod config;
 pub use enshwick_values::content;
 #[doc(hidden)]
 pub mod declare;
+pub mod dialog;
 pub mod ecs;
 #[doc(hidden)]
 pub mod engine_enum;

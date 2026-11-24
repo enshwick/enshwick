@@ -139,6 +139,15 @@ pub struct ClientSnapshot {
     pub loader_screen: u32,
     /// Zero.
     pub reserved2: u32,
+    /// The mod whose dialog shows, by its id, empty for the loader's own;
+    /// group [`ClientSnapshot::DIALOG`]. ABI 12.25.
+    pub dialog_mod: Str,
+    /// The buttons of the dialog that shows, a bit per answer as
+    /// [`UiDialog::buttons`](super::UiDialog::buttons) holds them, 0 while
+    /// none shows; group [`ClientSnapshot::DIALOG`]. ABI 12.25.
+    pub dialog_buttons: u32,
+    /// Zero.
+    pub reserved3: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -166,6 +175,10 @@ impl ClientSnapshot {
     /// [`loader_screen`](Self::loader_screen) and
     /// [`loader_screen_mod`](Self::loader_screen_mod). ABI 12.23.
     pub const LOADER_SCREEN: u32 = 32;
+    /// [`dialog_mod`](Self::dialog_mod) and
+    /// [`dialog_buttons`](Self::dialog_buttons): the loader's dialogs show
+    /// in game on this build. ABI 12.25.
+    pub const DIALOG: u32 = 64;
     /// The loader's Mods screen does not show. ABI 12.23.
     pub const NO_LOADER_SCREEN: u32 = 0;
     /// The list of mods shows. ABI 12.23.
@@ -203,6 +216,9 @@ impl ClientSnapshot {
         loader_screen_mod: Str::EMPTY,
         loader_screen: Self::NO_LOADER_SCREEN,
         reserved2: 0,
+        dialog_mod: Str::EMPTY,
+        dialog_buttons: 0,
+        reserved3: 0,
     };
 }
 
@@ -234,7 +250,7 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::WINDOW_TEXT`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::ANSWER_DIALOG`].
     pub kind: u32,
     /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`];
     /// a press's, 1 to [`ClientCommand::MAX_PRESS_MS`].
@@ -297,6 +313,12 @@ pub struct ClientCommand {
     /// most [`ClientCommand::MAX_TEXT`] bytes; borrowed for the call.
     /// ABI 12.24.
     pub text: Str,
+    /// The answer [`ClientCommand::ANSWER_DIALOG`] gives, such as
+    /// [`UiDialog::OK`](super::UiDialog::OK): a button of the dialog that
+    /// shows. ABI 12.25.
+    pub answer: u32,
+    /// Zero.
+    pub reserved2: u32,
 }
 
 impl_headed!(ClientCommand, born = 88);
@@ -355,6 +377,9 @@ impl ClientCommand {
     /// Sets the text of `item`'s text field in the carried window `target`
     /// to `text`, as typing would. ABI 12.24.
     pub const WINDOW_TEXT: u32 = 20;
+    /// Answers the loader's dialog that shows with `answer`, as its button
+    /// would. ABI 12.25.
+    pub const ANSWER_DIALOG: u32 = 21;
     /// The longest text, in bytes, a window's field takes. ABI 12.24.
     pub const MAX_TEXT: usize = 255;
     /// How many worlds and characters the main menu lists at most.
@@ -388,6 +413,8 @@ impl ClientCommand {
         online: 0,
         item: Str::EMPTY,
         text: Str::EMPTY,
+        answer: 0,
+        reserved2: 0,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
@@ -396,7 +423,8 @@ impl ClientCommand {
     /// to [`ClientCommand::MAX_PRESS_MS`] ms, a non-zero recipe, a position to
     /// mark whose metres are finite and below 2^31 (2,147,483,648) on each
     /// axis, the range of the engine's 32.32 fixed point, a host's world and
-    /// character below [`ClientCommand::MAX_SLOTS`].
+    /// character below [`ClientCommand::MAX_SLOTS`], an answer a dialog's
+    /// button can give.
     ///
     /// # Examples
     ///
@@ -435,6 +463,9 @@ impl ClientCommand {
                     && self.online <= 1
             }
             Self::JOIN => self.session == 0 && self.password.len() <= Self::MAX_PASSWORD,
+            Self::ANSWER_DIALOG => 1u32
+                .checked_shl(self.answer)
+                .is_some_and(|bit| bit & super::UiDialog::BUTTONS != 0),
             Self::WINDOW_PRESS | Self::WINDOW_PICK | Self::WINDOW_TEXT => {
                 self.text.len() <= Self::MAX_TEXT
             }

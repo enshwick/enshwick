@@ -4,89 +4,7 @@ use core::ffi::c_void;
 
 use crate::abi::{Header, Str, UiDialog};
 
-/// An answer the player gives a dialog; each has a button labelled by the
-/// game in the player's language.
-///
-/// # Examples
-///
-/// See [`Dialog`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
-#[non_exhaustive]
-pub enum Response {
-    /// "Retry".
-    Retry,
-    /// "Disable".
-    Disable,
-    /// "Erase".
-    Erase,
-    /// "Reset".
-    Reset,
-    /// "Overwrite".
-    Overwrite,
-    /// "Cancel".
-    Cancel,
-    /// "OK".
-    Ok,
-    /// "Ignore".
-    Ignore,
-}
-
-impl Response {
-    /// The loader's raw answer for this response, such as [`UiDialog::OK`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::abi::UiDialog;
-    /// use enshwick::ui::Response;
-    ///
-    /// assert_eq!(Response::Cancel.to_raw(), UiDialog::CANCEL);
-    /// ```
-    #[must_use]
-    pub fn to_raw(self) -> u32 {
-        self.bit()
-    }
-
-    pub(super) fn bit(self) -> u32 {
-        match self {
-            Self::Retry => UiDialog::RETRY,
-            Self::Disable => UiDialog::DISABLE,
-            Self::Erase => UiDialog::ERASE,
-            Self::Reset => UiDialog::RESET,
-            Self::Overwrite => UiDialog::OVERWRITE,
-            Self::Cancel => UiDialog::CANCEL,
-            Self::Ok => UiDialog::OK,
-            Self::Ignore => UiDialog::IGNORE,
-        }
-    }
-
-    /// The response for the loader's answer `raw`; `None` for
-    /// [`UiDialog::CLOSED`] or an answer this crate does not know.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::abi::UiDialog;
-    /// use enshwick::ui::Response;
-    ///
-    /// assert_eq!(Response::from_raw(UiDialog::OK), Some(Response::Ok));
-    /// assert_eq!(Response::from_raw(UiDialog::CLOSED), None);
-    /// ```
-    #[must_use]
-    pub fn from_raw(raw: u32) -> Option<Self> {
-        Some(match raw {
-            UiDialog::RETRY => Self::Retry,
-            UiDialog::DISABLE => Self::Disable,
-            UiDialog::ERASE => Self::Erase,
-            UiDialog::RESET => Self::Reset,
-            UiDialog::OVERWRITE => Self::Overwrite,
-            UiDialog::CANCEL => Self::Cancel,
-            UiDialog::OK => Self::Ok,
-            UiDialog::IGNORE => Self::Ignore,
-            _ => return None,
-        })
-    }
-}
+pub use enshwick_base::dialog::Response;
 
 /// A dialog in the game's own style: a title, a message, smaller detail text
 /// and buttons the game labels in the player's language.
@@ -144,7 +62,7 @@ impl<'a> Dialog<'a> {
     /// See [`Dialog`].
     #[must_use]
     pub fn buttons(mut self, buttons: &[Response]) -> Self {
-        let bits = buttons.iter().fold(0, |bits, r| bits | 1 << r.bit());
+        let bits = buttons.iter().fold(0, |bits, r| bits | 1 << r.to_raw());
         if bits != 0 {
             self.buttons = bits;
         }
