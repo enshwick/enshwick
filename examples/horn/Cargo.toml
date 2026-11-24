@@ -1,7 +1,7 @@
 [package]
 name = "enshwick-example-horn"
 version = "0.0.0-dev"
-description = "Example: a mod whose control on G honks through the server, and a control that follows the game's interact key"
+description = "Example: a mod whose control on G honks through the server, a control that follows the game's interact key, and the game's jump moved to J"
 keywords = ["enshrouded", "mod", "example"]
 categories = ["game-development"]
 readme = "../README.md"
@@ -20,10 +20,10 @@ side = "both"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick = { workspace = true, features = ["unstable"] }
+enshwick = { workspace = true, features = ["typed"] }
 
 [dev-dependencies]
-enshwick = { workspace = true, features = ["test", "unstable"] }
+enshwick = { workspace = true, features = ["test", "typed"] }
 
 [lints]
 workspace = true

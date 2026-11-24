@@ -136,7 +136,9 @@ impl Installed {
         first: Option<enshwick_core::controls::Key>,
         second: Option<enshwick_core::controls::Key>,
     ) {
-        let bits = |key: Option<enshwick_core::controls::Key>| key.map_or(0, |k| k.bits());
+        let bits = |key: Option<enshwick_core::controls::Key>| {
+            key.map_or(0, enshwick_core::controls::Key::bits)
+        };
         table::with((), |s| {
             set_player_keys(s, action, [bits(first), bits(second)]);
         });
