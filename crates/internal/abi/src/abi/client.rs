@@ -135,20 +135,6 @@ pub struct ClientSnapshot {
     pub loader_screen: u32,
     /// Zero.
     pub reserved2: u32,
-    /// The entity of the client's world that the shown interaction prompt
-    /// names, such as a storage chest, or 0 while none shows; group
-    /// [`ClientSnapshot::PROMPT`]. ABI 12.24.
-    pub prompt_target: Entity,
-    /// The game's `LocaTagId` of the shown prompt's verb, such as the one
-    /// for "Open", or 0 while none shows; group [`ClientSnapshot::PROMPT`].
-    /// ABI 12.24.
-    pub prompt_verb: u32,
-    /// The character the main menu has selected, as its place in the
-    /// menu's list from 0, or [`ClientSnapshot::NO_CHARACTER`]; group
-    /// [`ClientSnapshot::CHARACTER`]. ABI 12.24.
-    pub selected_character: u32,
-    /// Zero.
-    pub reserved3: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -193,13 +179,6 @@ impl ClientSnapshot {
     /// The mods that differ from a server that refused this client show.
     /// ABI 12.23.
     pub const MOD_MISMATCH: u32 = 6;
-    /// [`prompt_target`](Self::prompt_target) and
-    /// [`prompt_verb`](Self::prompt_verb). ABI 12.24.
-    pub const PROMPT: u32 = 64;
-    /// [`selected_character`](Self::selected_character). ABI 12.24.
-    pub const CHARACTER: u32 = 128;
-    /// No character selected, or not at the main menu. ABI 12.24.
-    pub const NO_CHARACTER: u32 = u32::MAX;
     /// Nothing read, its header set.
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
@@ -220,10 +199,6 @@ impl ClientSnapshot {
         loader_screen_mod: Str::EMPTY,
         loader_screen: Self::NO_LOADER_SCREEN,
         reserved2: 0,
-        prompt_target: Entity(0),
-        prompt_verb: 0,
-        selected_character: Self::NO_CHARACTER,
-        reserved3: 0,
     };
 }
 

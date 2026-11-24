@@ -236,7 +236,7 @@ ClientCommandStatus size 40 align 8 born 32
     age_ms at 24 size 8 type u64
     phase at 32 size 4 type u32
     failure at 36 size 4 type u32
-ClientSnapshot size 176 align 8 born 120
+ClientSnapshot size 160 align 8 born 120
     header at 0 size 8 type Header
     state at 8 size 4 type u32
     available at 12 size 4 type u32
@@ -255,10 +255,6 @@ ClientSnapshot size 176 align 8 born 120
     loader_screen_mod at 136 size 16 type Str
     loader_screen at 152 size 4 type u32
     reserved2 at 156 size 4 type u32
-    prompt_target at 160 size 4 type Entity
-    prompt_verb at 164 size 4 type u32
-    selected_character at 168 size 4 type u32
-    reserved3 at 172 size 4 type u32
 ClientWindowItem size 88 align 8 born 88
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -1475,7 +1471,6 @@ const ClientCommandStatus::UNKNOWN = 9
 const ClientCommandStatus::UNREACHABLE = 8
 const ClientCommandStatus::VERSION_MISMATCH = 5
 const ClientCommandStatus::WRONG_PASSWORD = 1
-const ClientSnapshot::CHARACTER = 128
 const ClientSnapshot::FRESH = 3
 const ClientSnapshot::HELD = 4
 const ClientSnapshot::LOADER_SCREEN = 32
@@ -1486,11 +1481,9 @@ const ClientSnapshot::MOD_MISMATCH = 6
 const ClientSnapshot::MOD_PAGE = 2
 const ClientSnapshot::MOD_SERVER_SETTINGS = 3
 const ClientSnapshot::NEVER = 0
-const ClientSnapshot::NO_CHARACTER = 4294967295
 const ClientSnapshot::NO_LOADER_SCREEN = 0
 const ClientSnapshot::OFF = 1
 const ClientSnapshot::PLAYER = 8
-const ClientSnapshot::PROMPT = 64
 const ClientSnapshot::RECIPE = 16
 const ClientSnapshot::SCREENS = 1
 const ClientSnapshot::SERVER_MOD_LIST = 4

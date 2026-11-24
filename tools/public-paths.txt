@@ -751,7 +751,6 @@ abi::ClientCommandStatus::reserved
 abi::ClientCommandStatus::state
 abi::ClientSnapshot
 abi::ClientSnapshot::BORN
-abi::ClientSnapshot::CHARACTER
 abi::ClientSnapshot::EMPTY
 abi::ClientSnapshot::FRESH
 abi::ClientSnapshot::HELD
@@ -763,11 +762,9 @@ abi::ClientSnapshot::MOD_MISMATCH
 abi::ClientSnapshot::MOD_PAGE
 abi::ClientSnapshot::MOD_SERVER_SETTINGS
 abi::ClientSnapshot::NEVER
-abi::ClientSnapshot::NO_CHARACTER
 abi::ClientSnapshot::NO_LOADER_SCREEN
 abi::ClientSnapshot::OFF
 abi::ClientSnapshot::PLAYER
-abi::ClientSnapshot::PROMPT
 abi::ClientSnapshot::RECIPE
 abi::ClientSnapshot::SCREENS
 abi::ClientSnapshot::SERVER_MOD_LIST
@@ -783,14 +780,10 @@ abi::ClientSnapshot::loader_screen
 abi::ClientSnapshot::loader_screen_mod
 abi::ClientSnapshot::menu_tab
 abi::ClientSnapshot::player
-abi::ClientSnapshot::prompt_target
-abi::ClientSnapshot::prompt_verb
 abi::ClientSnapshot::reserved
 abi::ClientSnapshot::reserved2
-abi::ClientSnapshot::reserved3
 abi::ClientSnapshot::return_screen
 abi::ClientSnapshot::scene
-abi::ClientSnapshot::selected_character
 abi::ClientSnapshot::server
 abi::ClientSnapshot::session
 abi::ClientSnapshot::state

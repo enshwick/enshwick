@@ -1341,20 +1341,6 @@ typedef struct EnshwickClientSnapshot {
   uint32_t loader_screen;
   // Zero.
   uint32_t reserved2;
-  // The entity of the client's world that the shown interaction prompt
-  // names, such as a storage chest, or 0 while none shows; group
-  // `EnshwickClientSnapshot_PROMPT`. ABI 12.24.
-  EnshwickEntity prompt_target;
-  // The game's `LocaTagId` of the shown prompt's verb, such as the one
-  // for "Open", or 0 while none shows; group `EnshwickClientSnapshot_PROMPT`.
-  // ABI 12.24.
-  uint32_t prompt_verb;
-  // The character the main menu has selected, as its place in the
-  // menu's list from 0, or `EnshwickClientSnapshot_NO_CHARACTER`; group
-  // `EnshwickClientSnapshot_CHARACTER`. ABI 12.24.
-  uint32_t selected_character;
-  // Zero.
-  uint32_t reserved3;
 } EnshwickClientSnapshot;
 // No interface read yet.
 #define EnshwickClientSnapshot_NEVER 0
@@ -1395,13 +1381,6 @@ typedef struct EnshwickClientSnapshot {
 // The mods that differ from a server that refused this client show.
 // ABI 12.23.
 #define EnshwickClientSnapshot_MOD_MISMATCH 6
-// `prompt_target` and
-// `prompt_verb`. ABI 12.24.
-#define EnshwickClientSnapshot_PROMPT 64
-// `selected_character`. ABI 12.24.
-#define EnshwickClientSnapshot_CHARACTER 128
-// No character selected, or not at the main menu. ABI 12.24.
-#define EnshwickClientSnapshot_NO_CHARACTER UINT32_MAX
 
 // An item of a window the server's mods show this client, one entry of
 // `EnshwickHostApi.client_windows`, which a
@@ -7917,7 +7896,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reserved) == 20, "o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, age_ms) == 24, "offset of ClientCommandStatus.age_ms");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, phase) == 32, "offset of ClientCommandStatus.phase");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, failure) == 36, "offset of ClientCommandStatus.failure");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 176, "size of ClientSnapshot");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 160, "size of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSnapshot) == 8, "alignment of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, header) == 0, "offset of ClientSnapshot.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, state) == 8, "offset of ClientSnapshot.state");
@@ -7937,10 +7916,6 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, server) == 120, "offset 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen_mod) == 136, "offset of ClientSnapshot.loader_screen_mod");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen) == 152, "offset of ClientSnapshot.loader_screen");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved2) == 156, "offset of ClientSnapshot.reserved2");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_target) == 160, "offset of ClientSnapshot.prompt_target");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_verb) == 164, "offset of ClientSnapshot.prompt_verb");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, selected_character) == 168, "offset of ClientSnapshot.selected_character");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved3) == 172, "offset of ClientSnapshot.reserved3");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");
