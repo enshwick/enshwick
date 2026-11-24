@@ -166,11 +166,12 @@ debug = "line-tables-only"
 debug = false
 opt-level = 2
 
-# Fat LTO reaches only targets whose every crate type can take it: the
-# loader's library is a cdylib and an rlib, so its DLL ships without
-# cross-crate LTO, while the stub DLL, a cdylib alone, gets it. One
-# codegen unit stays: 16 for the generated types alone made a loader hot path
-# 7% slower (2026-11-24).
+# Fat LTO reaches only units whose every crate type can take it, and the
+# loader's library is a cdylib and an rlib, so `cargo xtask dist` builds each
+# shipped DLL with `cargo rustc --lib --crate-type cdylib`, and the DLL links
+# with fat LTO; a plain `cargo build --release` gives a loader DLL without it.
+# One codegen unit stays: 16 for the generated types alone made a loader hot
+# path 7% slower (2026-11-24).
 [profile.release]
 opt-level = 3
 lto = "fat"
@@ -180,15 +181,11 @@ panic = "unwind"
 debug = "line-tables-only"
 strip = "none"
 
-# Every bench of the workspace builds as the loader and mod DLLs ship, without
-# cross-crate LTO, so their numbers are the shipped code's; a fat-LTO link per
-# bench took about 190 s of a 340 s build (2026-11-24). Code that also ships in
-# a fat-LTO binary (enshwick-gamedata in cargo-enshwick) runs faster there than
-# its bench shows. Once the DLLs ship with fat LTO, this goes back.
-# Build one bench at a time with `cargo xtask bench <name>`, which compares
-# with main's kept executable instead of building main again.
-[profile.bench]
-lto = false
+# Benches inherit the release profile's fat LTO, as the shipped DLLs have it,
+# so their numbers are the shipped code's; the fat-LTO link takes about 190 s
+# of a bench's build (2026-11-24). Build one bench at a time with
+# `cargo xtask bench <name>`, which compares with main's kept executable
+# instead of building main again.
 
 [profile.profiling]
 inherits = "release"

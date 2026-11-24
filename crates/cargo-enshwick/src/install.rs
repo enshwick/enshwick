@@ -280,19 +280,25 @@ pub(crate) fn game_folder(
 pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 
 /// The cargo arguments that build `package` as a Windows DLL: plain cargo on
-/// Windows, `cargo xwin` with the Windows SDK it fetches elsewhere.
+/// Windows, `cargo xwin` with the Windows SDK it fetches elsewhere. The
+/// library builds as a cdylib alone, since cargo runs the release profile's
+/// LTO only on a unit whose every crate type can take it, and a mod's rlib
+/// for its tests cannot.
 fn build_args(windows_host: bool, package: &str) -> Vec<&str> {
     let xwin: &[&str] = if windows_host { &[] } else { &["xwin"] };
     xwin.iter()
         .copied()
         .chain([
-            "build",
+            "rustc",
             "--release",
             "--target",
             WINDOWS_TARGET,
             "--message-format=json-render-diagnostics",
             "--package",
             package,
+            "--lib",
+            "--crate-type",
+            "cdylib",
         ])
         .collect()
 }
@@ -443,9 +449,14 @@ mod tests {
     fn the_build_targets_windows_on_every_host() {
         let on_windows = build_args(true, "market-stalls");
         let elsewhere = build_args(false, "market-stalls");
-        assert_eq!(on_windows[0], "build");
-        assert_eq!(&elsewhere[..2], ["xwin", "build"]);
+        assert_eq!(on_windows[0], "rustc");
+        assert_eq!(&elsewhere[..2], ["xwin", "rustc"]);
         for args in [&on_windows, &elsewhere] {
+            assert!(
+                args.windows(3)
+                    .any(|args| args == ["--lib", "--crate-type", "cdylib"]),
+                "fat LTO needs the cdylib alone: {args:?}"
+            );
             assert!(
                 args.windows(2)
                     .any(|pair| pair == ["--target", WINDOWS_TARGET])

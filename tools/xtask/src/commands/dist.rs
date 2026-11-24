@@ -134,39 +134,47 @@ fn workspace_libraries() -> Result<BTreeMap<String, String>, String> {
 /// Builds the stub and the loader in release for Windows; the folder that
 /// holds the DLLs.
 fn build() -> Result<PathBuf, String> {
-    let mut args: Vec<String> = if cfg!(windows) {
-        vec!["build".to_owned()]
-    } else {
-        vec!["xwin".to_owned(), "build".to_owned()]
-    };
     // CI's builds embed the dependency tree in each DLL, for
     // `cargo audit bin` and other scanners.
-    if std::env::var_os("ENSHWICK_AUDITABLE").is_some_and(|value| value == "1") {
-        args.insert(0, "auditable".to_owned());
+    let auditable = std::env::var_os("ENSHWICK_AUDITABLE").is_some_and(|value| value == "1");
+    for package in [STUB.0, LOADER.0] {
+        let args = build_args(cfg!(windows), auditable, package);
+        say(&format!("> cargo {}", args.join(" ")));
+        let status = Command::new(cargo())
+            .args(&args)
+            .status()
+            .map_err(|error| format!("running cargo: {error}"))?;
+        if !status.success() {
+            return Err(format!("the build of {package} failed"));
+        }
     }
-    args.extend(
-        [
+    Ok(Path::new("target").join(WINDOWS_TARGET).join("release"))
+}
+
+/// The cargo arguments that build `package`'s library in release as a
+/// Windows DLL. It builds as a cdylib alone, since cargo runs the release
+/// profile's LTO only on a unit whose every crate type can take it, and the
+/// loader's rlib for its tests and benches cannot.
+fn build_args(windows_host: bool, auditable: bool, package: &str) -> Vec<&str> {
+    let auditable: &[&str] = if auditable { &["auditable"] } else { &[] };
+    let xwin: &[&str] = if windows_host { &[] } else { &["xwin"] };
+    [
+        auditable,
+        xwin,
+        &[
+            "rustc",
             "--release",
             "--locked",
             "--target",
             WINDOWS_TARGET,
             "--package",
-            STUB.0,
-            "--package",
-            LOADER.0,
-        ]
-        .iter()
-        .map(|a| (*a).to_owned()),
-    );
-    say(&format!("> cargo {}", args.join(" ")));
-    let status = Command::new(cargo())
-        .args(&args)
-        .status()
-        .map_err(|error| format!("running cargo: {error}"))?;
-    if !status.success() {
-        return Err("the build failed".to_owned());
-    }
-    Ok(Path::new("target").join(WINDOWS_TARGET).join("release"))
+            package,
+            "--lib",
+            "--crate-type",
+            "cdylib",
+        ],
+    ]
+    .concat()
 }
 
 fn read(path: &Path) -> Result<Vec<u8>, String> {
@@ -196,6 +204,29 @@ fn zip(entries: &BTreeMap<String, Vec<u8>>) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_dll_builds_as_a_cdylib_alone_so_fat_lto_reaches_it() {
+        assert_eq!(
+            build_args(true, false, LOADER.0),
+            [
+                "rustc",
+                "--release",
+                "--locked",
+                "--target",
+                WINDOWS_TARGET,
+                "--package",
+                LOADER.0,
+                "--lib",
+                "--crate-type",
+                "cdylib"
+            ]
+        );
+        assert_eq!(
+            build_args(false, true, STUB.0)[..3],
+            ["auditable", "xwin", "rustc"]
+        );
+    }
 
     fn unsigned() -> BTreeMap<String, Vec<u8>> {
         contents(b"stub".to_vec(), b"loader".to_vec(), b"MIT".to_vec(), None).unwrap()
