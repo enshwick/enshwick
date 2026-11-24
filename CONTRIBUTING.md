@@ -52,7 +52,13 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   dispatch and pattern scans, `-p enshwick-gamedata` for reflection and the
   archive; benchmarks that read the game set
   `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` to its executables and are skipped
-  without them;
+  without them. `cargo xtask bench <name>` runs one benchmark: on a clean
+  checkout of a `main` commit it keeps the bench executable under the
+  commit's id; elsewhere it runs the newest kept `main` executable before
+  the branch and then the branch's, back to back under the same load, so
+  `main` needs no second build. The executables live in the clone's
+  `target/kept-benches`, which its worktrees share, or in the folder
+  `ENSH_KEPT_BENCHES` names;
 - branch from `main` as `<type>/<slug>`, `<type>` a conventional commit
   type such as `feat`, `fix` or `chore`, and open a pull request into
   `main`; its title is a conventional commit, `<type>(<scope>): <subject>`,
