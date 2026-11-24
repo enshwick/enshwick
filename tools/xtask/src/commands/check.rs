@@ -6,7 +6,8 @@
 //! rustdoc over the workspace, where unchanged packages are already fresh,
 //! and nextest and the doctests run for the changed packages and every
 //! package that depends on them, after clippy of each checked package with
-//! none and each one of its features ([`features`], a part of its own in CI); a local check leaves the widest part of
+//! none and each one of its features ([`features`], a part of its own in CI;
+//! locally only the features the change reaches); a local check leaves the widest part of
 //! that to CI ([`affected::Lane`]) and runs the tests a wide change only
 //! reaches one process per binary ([`in_process`]). Off Windows the workspace is also
 //! linted for Windows through `cargo xwin`, beside the host checks, and
@@ -214,7 +215,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             format!("the trybuild test is out of scope: the change does not reach {FACADE}")
         });
     }
-    let checked = check(&scope, &packages, args.all, &parts)
+    let checked = check(&scope, &packages, args.all, &parts, changed.as_deref())
         && (!parts.contains(&Part::Semver) || semver(&args.semver));
     if !(checked && parts.contains(&Part::WindowsTests)) {
         return Ok(checked);
@@ -231,6 +232,26 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
 fn listed_parts(parts: &[Part], scope: &Scope, packages: &[Package], root: &Path) -> Vec<String> {
     let windows_features = windows_features_due(scope, packages, windows_code(root));
     due_parts(parts, scope, windows_features)
+}
+
+/// The features the feature lints build alone: in a local check of some
+/// packages, those the `changed` files under `root` reach
+/// ([`features::Alone::of`]), leaving the rest to CI and the merge queue,
+/// which lint every one; otherwise every one.
+fn feature_lints(
+    scope: &Scope,
+    changed: Option<&[String]>,
+    packages: &[Package],
+    root: &Path,
+) -> features::Alone {
+    match (scope, changed) {
+        (Scope::Some { .. }, Some(files)) if Lane::current() == Lane::Local => {
+            features::Alone::of(files, packages, |file| {
+                std::fs::read_to_string(root.join(file)).ok()
+            })
+        }
+        _ => features::Alone::Every,
+    }
 }
 
 /// Whether a package under `root` has Windows code ([`features::windows_code`]),
@@ -745,12 +766,19 @@ fn host_steps(
 /// changed packages and their dependents. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
 /// them.
-fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
+fn check(
+    scope: &Scope,
+    packages: &[Package],
+    full: bool,
+    parts: &[Part],
+    changed: Option<&[String]>,
+) -> bool {
     // The source checks read every file in about a second without compiling,
     // so they run whatever changed: a change to a rule alone touches no package.
     if parts.contains(&Part::Host) && !source_checks() {
         return false;
     }
+    let alone = &feature_lints(scope, changed, packages, &workspace_root());
     let on_windows = cfg!(windows);
     let host_ok =
         |name: &String| on_windows || packages.iter().any(|p| &p.name == name && !p.windows_only);
@@ -810,7 +838,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     // The feature lints go first: they are cheap, and the first failing
     // step ends the host checks.
     let mut host_run = if parts.contains(&Part::Features) {
-        features::steps(scope, packages, |p| host_ok(&p.name), &["clippy"])
+        features::steps(scope, packages, |p| host_ok(&p.name), &["clippy"], alone)
     } else {
         Vec::new()
     };
@@ -832,7 +860,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     ));
     let windows = if !on_windows && flags.0 {
         let root = workspace_root();
-        windows_lint::steps(scope, packages, parts, windows_code(&root))
+        windows_lint::steps(scope, packages, parts, windows_code(&root), alone)
     } else {
         Vec::new()
     };

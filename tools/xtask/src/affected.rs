@@ -261,7 +261,7 @@ fn bump(texts: &dyn Texts, path: &str, only_versions: fn(&str, &str) -> bool) ->
 }
 
 /// The package whose directory holds `file`, the innermost one.
-fn owner<'a>(file: &str, packages: &'a [Package]) -> Option<&'a Package> {
+pub(crate) fn owner<'a>(file: &str, packages: &'a [Package]) -> Option<&'a Package> {
     packages
         .iter()
         .filter(|package| file.starts_with(&format!("{}/", package.dir)))

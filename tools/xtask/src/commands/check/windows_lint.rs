@@ -14,6 +14,7 @@ pub(super) fn steps(
     packages: &[Package],
     parts: &[Part],
     windows_code: impl Fn(&Package) -> bool,
+    alone: &features::Alone,
 ) -> Vec<Step> {
     let xwin = ["xwin", "clippy", "--target", WINDOWS_TARGET];
     let mut steps = Vec::new();
@@ -25,7 +26,7 @@ pub(super) fn steps(
         );
     }
     if parts.contains(&Part::WindowsFeatures) {
-        steps.extend(features::steps(scope, packages, windows_code, &xwin));
+        steps.extend(features::steps(scope, packages, windows_code, &xwin, alone));
     }
     steps
 }

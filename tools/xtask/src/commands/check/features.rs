@@ -7,16 +7,107 @@
 //! the features back on and hide the gap, and the workspace's clippy lints
 //! those targets. Off Windows the Windows part of them runs them again for
 //! the Windows target, where code gated on the target platform differs, for
-//! the packages with such code ([`windows_code`]).
+//! the packages with such code ([`windows_code`]). A local check lints each
+//! feature alone only where the change can break it ([`Alone`]); CI and the
+//! merge queue lint every one.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 
 use super::Step;
-use crate::affected::{Package, Scope};
+use crate::affected::{self, Package, Scope};
 use crate::check::rust_files;
+
+/// Which features [`steps`] lints alone; the run without features is always
+/// there.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Alone {
+    /// Every feature: CI, the merge queue, a whole-workspace check, or a
+    /// change to a shared build file.
+    Every,
+    /// In a local check, per package whose files changed, the features its
+    /// changed source gates, or `None` for every feature; a package left out,
+    /// such as a dependent, lints none alone.
+    Touched(BTreeMap<String, Option<BTreeSet<String>>>),
+}
+
+/// Shared files whose change reaches the features of every package.
+const SHARED_BUILD: [&str; 2] = ["Cargo.toml", "Cargo.lock"];
+/// A package's files that wire or build its features.
+const FEATURE_BUILD: [&str; 2] = ["Cargo.toml", "build.rs"];
+/// Package folders of targets the feature lints do not build.
+const UNLINTED_DIRS: [&str; 3] = ["tests/", "benches/", "examples/"];
+/// A package's source folder, the one the feature lints build.
+const SOURCE_DIR: &str = "src/";
+
+impl Alone {
+    /// The features the changed `files` (relative to the root, `/`
+    /// separators) of `packages` reach, `read` giving a file's text now
+    /// (`None` when it is gone). The manifest, the build script and Rust
+    /// outside `src/` and the test, bench and example targets reach every
+    /// feature, as does a source file that is gone or does not lex; a Rust
+    /// file under `src/` reaches the features its `cfg` predicates name
+    /// ([`gated_features`]), a test module none. Any other file (data a
+    /// source file includes, a snapshot, a header, docs) reaches none: it
+    /// moves no `cfg` gate, and the run without features and the
+    /// workspace's clippy build what reads it.
+    pub(super) fn of(
+        files: &[String],
+        packages: &[Package],
+        read: impl Fn(&str) -> Option<String>,
+    ) -> Self {
+        let mut touched: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
+        for file in files {
+            let Some(package) = affected::owner(file, packages) else {
+                if SHARED_BUILD.contains(&file.as_str()) {
+                    return Self::Every;
+                }
+                continue;
+            };
+            let own = &file[package.dir.len() + 1..];
+            let rust = Path::new(own).extension().is_some_and(|ext| ext == "rs");
+            let gated = match own.strip_prefix(SOURCE_DIR) {
+                _ if FEATURE_BUILD.contains(&own) => None,
+                Some(path) if rust && !is_test_module(path) => {
+                    read(file).and_then(|text| gated_features(&text))
+                }
+                None if rust && !UNLINTED_DIRS.iter().any(|dir| own.starts_with(dir)) => None,
+                _ => continue,
+            };
+            let entry = touched
+                .entry(package.name.clone())
+                .or_insert_with(|| Some(BTreeSet::new()));
+            match (entry.as_mut(), gated) {
+                (Some(features), Some(gated)) => features.extend(gated),
+                (_, None) => *entry = None,
+                (None, Some(_)) => {}
+            }
+        }
+        Self::Touched(touched)
+    }
+
+    /// Whether `feature` of `package` is linted alone.
+    fn lints(&self, package: &Package, feature: &str) -> bool {
+        match self {
+            Self::Every => true,
+            Self::Touched(touched) => touched
+                .get(&package.name)
+                .is_some_and(|gated| gated.as_ref().is_none_or(|gated| gated.contains(feature))),
+        }
+    }
+}
+
+/// Whether `path`, under a package's `src/`, is a `tests` module's file or
+/// folder, which only test builds compile.
+fn is_test_module(path: &str) -> bool {
+    Path::new(path)
+        .with_extension("")
+        .components()
+        .any(|part| part.as_os_str() == "tests")
+}
 
 /// The packages `scope` checks in full that have features and that `keep`
 /// keeps, the ones [`steps`] lints.
@@ -36,16 +127,22 @@ pub(super) fn linted<'a>(
 
 /// The runs of `clippy` (its cargo words, such as `["clippy"]` or the
 /// cross-compiling `["xwin", "clippy", "--target", ..]`) over the packages
-/// [`linted`] gives: one without any feature, then one for each feature alone.
+/// [`linted`] gives: one without any feature, then one for each feature
+/// `alone` names.
 pub(super) fn steps(
     scope: &Scope,
     packages: &[Package],
     keep: impl Fn(&Package) -> bool,
     clippy: &[&str],
+    alone: &Alone,
 ) -> Vec<Step> {
     linted(scope, packages, keep)
         .flat_map(|package| {
-            let alone = package.features.iter().map(Some);
+            let alone = package
+                .features
+                .iter()
+                .filter(|feature| alone.lints(package, feature))
+                .map(Some);
             std::iter::once(None).chain(alone).map(|feature| {
                 let mut step =
                     Step::new(clippy).then(&["--package", &package.name, "--no-default-features"]);
@@ -74,12 +171,8 @@ pub(super) fn windows_code(root: &Path, package: &Package) -> bool {
         || files
             .iter()
             .filter(|file| {
-                file.strip_prefix(&src).map_or(true, |path| {
-                    !path
-                        .with_extension("")
-                        .components()
-                        .any(|part| part.as_os_str() == "tests")
-                })
+                file.strip_prefix(&src)
+                    .map_or(true, |path| !is_test_module(&path.to_string_lossy()))
             })
             .any(|file| fs::read_to_string(file).map_or(true, |text| gates_target(&text)))
 }
@@ -100,9 +193,46 @@ const TARGET_OPTIONS: [&str; 5] = [
 /// `#[cfg(test)]` names nothing, and text that does not lex counts as one
 /// that does.
 pub(super) fn gates_target(text: &str) -> bool {
-    let Ok(tokens) = text.parse::<TokenStream>() else {
-        return true;
-    };
+    cfg_predicates(text).is_none_or(|predicates| predicates.into_iter().any(names_target))
+}
+
+/// The features the `cfg(..)`, `cfg!(..)` and `cfg_attr(..)` predicates in
+/// `text` name (`feature = "fake"`), as [`gates_target`] reads them; `None`
+/// when the text does not lex.
+pub(super) fn gated_features(text: &str) -> Option<BTreeSet<String>> {
+    let mut features = BTreeSet::new();
+    for predicate in cfg_predicates(text)? {
+        named_features(predicate, &mut features);
+    }
+    Some(features)
+}
+
+/// Adds the features `predicate` names to `out`.
+fn named_features(predicate: TokenStream, out: &mut BTreeSet<String>) {
+    let mut tokens = predicate.into_iter().peekable();
+    while let Some(token) = tokens.next() {
+        match token {
+            TokenTree::Ident(ident) if ident == "feature" => {
+                if matches!(tokens.peek(), Some(TokenTree::Punct(punct)) if punct.as_char() == '=')
+                {
+                    tokens.next();
+                    if let Some(TokenTree::Literal(name)) = tokens.next() {
+                        out.insert(name.to_string().trim_matches('"').to_owned());
+                    }
+                }
+            }
+            TokenTree::Group(group) => named_features(group.stream(), out),
+            TokenTree::Ident(_) | TokenTree::Punct(_) | TokenTree::Literal(_) => {}
+        }
+    }
+}
+
+/// The predicates of the `cfg(..)`, `cfg!(..)` and `cfg_attr(..)` in `text`
+/// outside items under `#[cfg(test)]`, comments and strings; `None` when the
+/// text does not lex.
+fn cfg_predicates(text: &str) -> Option<Vec<TokenStream>> {
+    let tokens = text.parse::<TokenStream>().ok()?;
+    let mut predicates = Vec::new();
     let mut streams = vec![tokens];
     while let Some(stream) = streams.pop() {
         let mut after_cfg = false;
@@ -122,11 +252,8 @@ pub(super) fn gates_target(text: &str) -> bool {
                     after_cfg = false;
                 }
                 TokenTree::Group(group) => {
-                    if after_cfg
-                        && group.delimiter() == Delimiter::Parenthesis
-                        && names_target(group.stream())
-                    {
-                        return true;
+                    if after_cfg && group.delimiter() == Delimiter::Parenthesis {
+                        predicates.push(group.stream());
                     }
                     streams.push(group.stream());
                     after_cfg = false;
@@ -135,7 +262,7 @@ pub(super) fn gates_target(text: &str) -> bool {
             }
         }
     }
-    false
+    Some(predicates)
 }
 
 /// Whether `group` is the `[cfg(test)]` of an attribute.
