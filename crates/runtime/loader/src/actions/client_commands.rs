@@ -710,9 +710,15 @@ fn runs(kind: Kind) -> bool {
         Kind::Host(_) => play::hosts_run(),
         // The screen draws only while its menu shows: an ask no menu takes
         // times out.
-        Kind::Mods(_) => STATE.mods_screen.get().is_some_and(|opens| opens()),
+        Kind::Mods(_) => mods_screen_opens(),
         Kind::Mark(_) => client_input::marks_run(),
     }
+}
+
+/// Whether the loader's Mods screen can open now, as its interface
+/// registered; never before it did.
+fn mods_screen_opens() -> bool {
+    STATE.mods_screen.get().is_some_and(|opens| opens())
 }
 
 /// Registers whether the loader's Mods screen can open for a command, from

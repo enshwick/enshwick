@@ -671,16 +671,17 @@ fn no_kind_runs_while_the_screen_reads_are_off() {
 
 #[test]
 fn a_mods_screen_command_runs_only_while_the_registered_screen_can_open() {
+    // The registered check alone: other tests of one process turn the
+    // commands' fuses off, which `runs` reads first.
     static OPENS: AtomicBool = AtomicBool::new(true);
-    let mods = Kind::Mods(ModsAsk {
-        mod_index: None,
-        gear: false,
-    });
-    assert!(!runs(mods), "no interface registered a screen");
+    assert!(!mods_screen_opens(), "no interface registered a screen");
     register_mods_screen(|| OPENS.load(Ordering::Relaxed));
-    assert!(runs(mods));
+    assert!(mods_screen_opens());
     OPENS.store(false, Ordering::Relaxed);
-    assert!(!runs(mods), "queued as unavailable, not left to time out");
+    assert!(
+        !mods_screen_opens(),
+        "queued as unavailable, not left to time out"
+    );
 }
 
 #[test]
