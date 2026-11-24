@@ -325,40 +325,6 @@ fn retire(retired: &mut VecDeque<(u64, Arc<Sets>)>, now: u64) {
     }
 }
 
-/// The interface's play data, from the interface context `context`: its G38
-/// state at `context_state`, whose first word is the play state, which
-/// holds the play data at `state_play_data`; 0 while any of them is null.
-///
-/// # Safety
-///
-/// - `context` is the live interface context of the frame being drawn, on
-///   the interface thread.
-/// - `context_state` and `state_play_data` are the build table's
-///   `map.context_state` and `map.state_play_data`.
-pub(crate) unsafe fn play_data(
-    context: usize,
-    context_state: usize,
-    state_play_data: usize,
-) -> usize {
-    // SAFETY: the caller passes the live interface context, which keeps its
-    // G38 state pointer at `map.context_state`.
-    let state = unsafe { crate::engine::memory::read_ptr::<u8>(context, context_state) };
-    if state.is_null() {
-        return 0;
-    }
-    // SAFETY: `state` is the context's non-null G38 state (checked before
-    // it), whose first word is the play state pointer or null (clients 410,
-    // 426 and 520).
-    let play = unsafe { crate::engine::memory::read_ptr::<u8>(state.expose_provenance(), 0) };
-    if play.is_null() {
-        return 0;
-    }
-    // SAFETY: `play` is the non-null play state (checked before it), which
-    // holds its play data pointer at `map.state_play_data`.
-    unsafe { crate::engine::memory::read_ptr::<u8>(play.expose_provenance(), state_play_data) }
-        .expose_provenance()
-}
-
 /// Notes the play data of the interface context `context`, for the
 /// system's thread.
 pub(super) fn note(context: usize) {
@@ -370,7 +336,9 @@ pub(super) fn note(context: usize) {
     }
     // SAFETY: the one caller passes the live interface context of the frame
     // it draws, on the interface thread; the offsets are the build table's.
-    let data = unsafe { play_data(context, layout.context_state, layout.state_play_data) };
+    let data = unsafe {
+        crate::engine::screens::play_data(context, layout.context_state, layout.state_play_data)
+    };
     MARKERS.play_data.store(data, Ordering::Release);
     // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
     MARKERS

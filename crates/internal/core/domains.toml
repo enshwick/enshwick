@@ -72,7 +72,4 @@ joins = ["events", "host", "parts", "start"]
 entries = "host/entries"
 # The edges up the layers still in the code, as `from -> to` between
 # modules; a new one fails, and so does one that is gone.
-upward = [
-    "actions::controls -> ui::interface",
-    "content::served -> ui::interface",
-]
+upward = []

@@ -30,6 +30,8 @@ pub(crate) static PARTS: &[&Part] = &[
                     interface::show(title, message, detail, buttons, on_answer);
                 },
                 mismatch_screen_on: interface::mismatch_screen_on,
+                window_shown: interface::window_shown,
+                text: interface::text,
             });
             crate::base::net::on_control(crate::base::wire::UI_DEMO, |_, rest| {
                 interface::open_demo(crate::base::wire::demo_position(rest));

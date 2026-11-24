@@ -393,8 +393,9 @@ unsafe fn play(engine: &Engine, context: usize, linked: &Linked) -> Option<usize
         // SAFETY: the caller passes the frame's live interface context on
         // the interface thread, non-zero by the check before it; the offsets
         // are the table's `map.context_state` and `map.state_play_data`.
-        let data =
-            unsafe { super::play_data(context, linked.context_state, linked.state_play_data) };
+        let data = unsafe {
+            crate::engine::screens::play_data(context, linked.context_state, linked.state_play_data)
+        };
         (data != 0).then_some(data)
     })
 }

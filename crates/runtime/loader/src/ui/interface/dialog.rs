@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use enshwick_core::abi::{Side, UiAnswerFn, UiDialog};
 
+use crate::base::dialogs::{KEPT, TAGS, tag_id};
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
@@ -26,9 +27,6 @@ use super::engine::{self, Buf, DialogLayout, Engine, PopupFn};
 
 /// Dialogs waiting at most.
 const MAX_WAITING: usize = 16;
-/// Dialogs whose texts stay readable after they showed, so a text the game
-/// still draws is never freed under it.
-const KEPT: usize = 4;
 /// The longest title, message or detail, in bytes.
 const MAX_TEXT: usize = 4096;
 
@@ -317,31 +315,6 @@ pub(super) unsafe fn back_over(engine: &Engine, window: &engine::Window) -> bool
         let pressed = unsafe { engine.back_pressed(node) };
         pressed == Some(true)
     }) && !showing()
-}
-
-/// The GUIDs of the loader's dialog text tags: title and message per slot.
-#[expect(clippy::cast_possible_truncation, reason = "the index fits a byte")]
-const TAGS: [[u8; 16]; 2 * KEPT] = {
-    let mut tags = [[0u8; 16]; 2 * KEPT];
-    let mut i = 0;
-    while i < 2 * KEPT {
-        // `e5c8a7d2-6b1f-4f0e-9c3a-0e57<index>`, beside the notices' range.
-        tags[i] = [
-            0xe5, 0xc8, 0xa7, 0xd2, 0x6b, 0x1f, 0x4f, 0x0e, 0x9c, 0x3a, 0x0e, 0x57, 0x4e, 0x0c,
-            0x12, i as u8,
-        ];
-        i += 1;
-    }
-    tags
-};
-
-fn tag_id(index: usize) -> u32 {
-    enshwick_gamedata::reflect::fnv1a32(&TAGS[index])
-}
-
-/// The ids of the dialog text tags.
-pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
-    (0..TAGS.len()).map(tag_id)
 }
 
 /// The text of a dialog text tag, by its id, while its dialog is kept.
