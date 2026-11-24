@@ -96,40 +96,49 @@ pub fn snapshot_path(table_file: &str) -> Option<std::path::PathBuf> {
     crate::data_dir().map(|dir| snapshot_in(&dir, table_file))
 }
 
-/// The first line of a snapshot that records its build's Steam build.
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Header {
-    steam_build: crate::SteamBuild,
+/// The key of a snapshot's first type that records its build's Steam build.
+const STEAM_BUILD_KEY: &str = "steam_build";
+
+/// The Steam build a snapshot's first type records, a key [`Ty`] ignores.
+#[derive(Deserialize)]
+struct Stamp {
+    #[serde(default)]
+    steam_build: Option<crate::SteamBuild>,
 }
 
-/// The Steam build the snapshot file `path` records in its first line, as
-/// [`Catalogue::snapshot_for`] writes it; `None` for one that records none.
+/// The Steam build the snapshot file `path` records on its first type, as
+/// [`Catalogue::snapshot_for`] writes it; `None` for one that records none
+/// or whose first line is no text.
 ///
 /// # Errors
 ///
-/// When the file does not read.
+/// When the file does not open or read.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick_gamedata::{SteamBuild, typed::{Catalogue, snapshot_steam_build}};
+///
 /// let path = std::env::temp_dir().join(format!("steam-build-doc-{}.jsonl", std::process::id()));
-/// let snapshot = enshwick_gamedata::typed::Catalogue::default()
-///     .snapshot_for(Some(enshwick_gamedata::SteamBuild::new(7)));
-/// std::fs::write(&path, snapshot)?;
-/// let steam = enshwick_gamedata::typed::snapshot_steam_build(&path)?;
+/// let catalogue = Catalogue::from_snapshot(r#"{"name":"demo::Id","kind":17,"size":4,"align":4}"#)?;
+/// std::fs::write(&path, catalogue.snapshot_for(Some(SteamBuild::new(7))))?;
+/// let steam = snapshot_steam_build(&path)?;
 /// std::fs::remove_file(&path)?;
-/// assert_eq!(steam, Some(enshwick_gamedata::SteamBuild::new(7)));
-/// # Ok::<(), std::io::Error>(())
+/// assert_eq!(steam, Some(SteamBuild::new(7)));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn snapshot_steam_build(path: &std::path::Path) -> std::io::Result<Option<crate::SteamBuild>> {
     use std::io::BufRead as _;
 
     let mut first = String::new();
-    std::io::BufReader::new(std::fs::File::open(path)?).read_line(&mut first)?;
-    Ok(serde_json::from_str::<Header>(&first)
+    match std::io::BufReader::new(std::fs::File::open(path)?).read_line(&mut first) {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => return Ok(None),
+        Err(e) => return Err(e),
+    }
+    Ok(serde_json::from_str::<Stamp>(&first)
         .ok()
-        .map(|h| h.steam_build))
+        .and_then(|s| s.steam_build))
 }
 
 /// The newest snapshot of a side in a game data folder, as
@@ -185,7 +194,7 @@ impl NewestSnapshot {
 /// A build no table is kept for is newer than every kept one, since the
 /// tables are frozen, and such builds rank by the Steam build their
 /// snapshot records; one that records none ranks below every one that does,
-/// by file name among its like. The linker age in a file name ranks
+/// by write time among its like. The linker age in a file name ranks
 /// nothing: it starts over with each new GUID.
 ///
 /// # Errors
@@ -195,11 +204,27 @@ impl NewestSnapshot {
 /// # Examples
 ///
 /// ```
-/// use enshwick_gamedata::{Side, typed::newest_snapshot};
+/// use enshwick_gamedata::{Fingerprint, Side, SteamBuild, file_name};
+/// use enshwick_gamedata::typed::{Catalogue, newest_snapshot, snapshot_in};
 ///
-/// let none = newest_snapshot(std::path::Path::new("no-such-folder"), &[], Side::Server)?;
-/// assert!(none.is_none());
-/// # Ok::<(), std::io::Error>(())
+/// let dir = std::env::temp_dir().join(format!("newest-snapshot-doc-{}", std::process::id()));
+/// assert!(newest_snapshot(&dir, &[], Side::Server)?.is_none());
+/// let catalogue = Catalogue::from_snapshot(r#"{"name":"demo::Id","kind":17,"size":4,"align":4}"#)?;
+/// let snapshot = |byte, steam: Option<u64>| -> std::io::Result<_> {
+///     let path = snapshot_in(&dir, &file_name(Side::Server, Fingerprint::new([byte; 16], 1)));
+///     std::fs::create_dir_all(path.parent().unwrap_or(&dir))?;
+///     std::fs::write(&path, catalogue.snapshot_for(steam.map(SteamBuild::new)))?;
+///     Ok(path)
+/// };
+/// let newer = snapshot(1, Some(20))?;
+/// snapshot(2, Some(10))?;
+/// let unranked = snapshot(3, None)?;
+/// let newest = newest_snapshot(&dir, &[], Side::Server)?.ok_or("no snapshot")?;
+/// std::fs::remove_dir_all(&dir)?;
+/// assert_eq!(newest.path(), newer);
+/// assert_eq!(newest.steam_build(), Some(SteamBuild::new(20)));
+/// assert_eq!(newest.unranked(), [unranked]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn newest_snapshot(
     dir: &std::path::Path,
@@ -227,18 +252,23 @@ pub fn newest_snapshot(
             kept.push(table);
             continue;
         }
-        untabled.push((snapshot_steam_build(&entry.path())?, entry.path()));
+        let written = entry.metadata()?.modified()?;
+        untabled.push((snapshot_steam_build(&entry.path())?, written, entry.path()));
     }
     let unranked = untabled
         .iter()
-        .filter(|(steam, _)| steam.is_none())
-        .map(|(_, path)| path.clone())
+        .filter(|(steam, ..)| steam.is_none())
+        .map(|(.., path)| path.clone())
         .collect();
-    let newest = untabled.into_iter().max().or_else(|| {
-        kept.into_iter()
-            .max_by_key(|t| crate::resolve::rank(t))
-            .map(|t| (None, snapshot_in(dir, &t.file_name())))
-    });
+    let newest = untabled
+        .into_iter()
+        .max()
+        .map(|(steam, _, path)| (steam, path))
+        .or_else(|| {
+            kept.into_iter()
+                .max_by_key(|t| crate::resolve::rank(t))
+                .map(|t| (None, snapshot_in(dir, &t.file_name())))
+        });
     Ok(newest.map(|(steam, path)| NewestSnapshot {
         path,
         steam,
@@ -788,27 +818,29 @@ impl Catalogue {
         out
     }
 
-    /// The catalogue as the snapshot of a build, which records the build's
-    /// Steam build in a first line, when known, so [`newest_snapshot`] can
-    /// rank it.
+    /// The catalogue as the snapshot of a build, its first type recording
+    /// the build's Steam build when known, so [`newest_snapshot`] can rank
+    /// it; a catalogue without types records none.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick_gamedata::{SteamBuild, typed::Catalogue};
     ///
-    /// let snapshot = Catalogue::default().snapshot_for(Some(SteamBuild::new(7)));
-    /// assert_eq!(snapshot, "{\"steam_build\":7}\n");
-    /// assert_eq!(Catalogue::from_snapshot(&snapshot)?, Catalogue::default());
+    /// let catalogue = Catalogue::from_snapshot(r#"{"name":"demo::Id","kind":17,"size":4,"align":4}"#)?;
+    /// let snapshot = catalogue.snapshot_for(Some(SteamBuild::new(7)));
+    /// assert!(snapshot.starts_with(r#"{"steam_build":7,"name":"demo::Id""#));
+    /// assert_eq!(Catalogue::from_snapshot(&snapshot)?, catalogue);
     /// # Ok::<(), enshwick_gamedata::typed::SnapshotError>(())
     /// ```
     #[must_use]
     pub fn snapshot_for(&self, steam: Option<crate::SteamBuild>) -> String {
-        let header = steam.map(|steam_build| {
-            // A struct of one number always serializes.
-            serde_json::to_string(&Header { steam_build }).unwrap_or_default() + "\n"
-        });
-        header.unwrap_or_default() + &self.snapshot()
+        let snapshot = self.snapshot();
+        // A key on a type, not a line of its own, so an older tree reading the shared snapshot skips it.
+        match (steam, snapshot.strip_prefix('{')) {
+            (Some(steam), Some(rest)) => format!("{{\"{STEAM_BUILD_KEY}\":{steam},{rest}"),
+            _ => snapshot,
+        }
     }
 
     /// The catalogue `snapshot` holds, as [`Catalogue::snapshot`] or
@@ -824,9 +856,7 @@ impl Catalogue {
     pub fn from_snapshot(snapshot: &str) -> Result<Self, SnapshotError> {
         let mut types = BTreeMap::new();
         for (index, line) in snapshot.lines().enumerate() {
-            if line.trim().is_empty()
-                || (index == 0 && serde_json::from_str::<Header>(line).is_ok())
-            {
+            if line.trim().is_empty() {
                 continue;
             }
             let ty: Ty = serde_json::from_str(line).map_err(|source| SnapshotError {

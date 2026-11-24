@@ -154,12 +154,40 @@ pub fn write_snapshot(
     Ok(path)
 }
 
+/// The Steam build of `side`'s executable `exe` to record in its snapshot.
+///
+/// It is `given`, else its kept `table`'s, which matches its fingerprint,
+/// else the one Steam's appmanifest beside it names; `None` only for a kept
+/// build whose table names none, as its table ranks it.
+///
+/// # Errors
+///
+/// For a build without a kept table whose Steam build none of them names,
+/// since its snapshot would rank below every older one that records one.
+pub fn steam_build_of(
+    exe: &Path,
+    side: Side,
+    given: Option<SteamBuild>,
+    table: Option<&Table>,
+) -> anyhow::Result<Option<SteamBuild>> {
+    let steam = given
+        .or_else(|| table?.steam_build())
+        .or_else(|| SteamBuild::installed(exe.parent()?, side));
+    if steam.is_none() && table.is_none() {
+        bail!(
+            "{}: its Steam build is unknown, with no kept table and no Steam appmanifest beside it; pass --steam-build",
+            exe.display()
+        );
+    }
+    Ok(steam)
+}
+
 /// Snapshots the executable `from` into the game data folder `data` when
 /// given, then writes the typed API from [`newest_snapshot`]'s pick.
 ///
-/// The snapshot records the Steam build `steam`, else the one Steam's
-/// appmanifest names beside the executable, else its kept table's. With
-/// `check` it writes nothing and fails when the committed files differ.
+/// The snapshot records the Steam build [`steam_build_of`] names, `steam`
+/// first. With `check` it writes nothing and fails when the committed files
+/// differ.
 ///
 /// # Errors
 ///
@@ -196,10 +224,8 @@ pub fn run(
                     exe.display()
                 )
             })?;
+        let steam = steam_build_of(exe, side, steam, exact(&tables, side, fingerprint))?;
         let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
-        let steam = steam
-            .or_else(|| SteamBuild::installed(exe.parent()?, side))
-            .or_else(|| exact(&tables, side, fingerprint)?.steam_build());
         let path = write_snapshot(data, &catalogue, side, fingerprint, steam)?;
         done.push(match steam {
             Some(steam) => format!("snapshot {} of Steam build {steam}", path.display()),
@@ -240,7 +266,8 @@ pub fn run(
                 differ.join("\n")
             );
         }
-        return Ok(format!("the typed API matches {build}"));
+        done.push(format!("the typed API matches {build}"));
+        return Ok(done.join("\n"));
     }
     let written = write_api(root, &catalogue, &build)?;
     done.push(format!(
@@ -287,6 +314,38 @@ mod tests {
         let path = root.join(RELEVANCE);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+    }
+
+    /// The given Steam build wins, then the kept table's, which matches the
+    /// executable exactly, then Steam's appmanifest; a build without a table
+    /// whose Steam build is unknown is refused.
+    #[test]
+    fn a_snapshot_s_steam_build_is_given_else_its_table_s_else_steam_s_and_never_unknown() {
+        let root = repo("steam-of");
+        let exe = root.join("enshrouded_server.exe");
+        let table = Table::parse(TABLE).unwrap();
+        let unnamed = Table::parse(&TABLE.replace("steam_build = 3\n", "")).unwrap();
+        let of = |given: Option<u64>, table| {
+            steam_build_of(&exe, Side::Server, given.map(SteamBuild::new), table)
+                .map_err(|e| e.to_string())
+        };
+        let error = of(None, None).unwrap_err();
+        assert!(error.contains("pass --steam-build"), "{error}");
+        assert_eq!(of(None, Some(&unnamed)), Ok(None));
+        std::fs::create_dir_all(root.join("steamapps")).unwrap();
+        std::fs::write(
+            root.join("steamapps").join("appmanifest_2278520.acf"),
+            "\"buildid\"\t\t\"9\"\n",
+        )
+        .unwrap();
+        let found = (
+            of(Some(5), Some(&table)),
+            of(None, Some(&table)),
+            of(None, None),
+        );
+        drop(std::fs::remove_dir_all(&root));
+        let steam = |n| Ok(Some(SteamBuild::new(n)));
+        assert_eq!(found, (steam(5), steam(3), steam(9)));
     }
 
     #[test]

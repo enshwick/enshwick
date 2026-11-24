@@ -12,9 +12,7 @@
 /// assert!(SteamBuild::new(26_083_076) > SteamBuild::new(26_082_781));
 /// assert_eq!(SteamBuild::new(26_083_076).to_string(), "26083076");
 /// ```
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize)]
 #[serde(transparent)]
 pub struct SteamBuild(pub(crate) u64);
 
@@ -126,6 +124,15 @@ mod tests {
     /// The Steam build is the appmanifest's `buildid`, beside a Steam library
     /// (two folders up) or inside a `SteamCMD` install, also one at a drive's
     /// root.
+    /// Removes its folder when dropped, so a failed assertion leaves none behind.
+    struct Removed(std::path::PathBuf);
+
+    impl Drop for Removed {
+        fn drop(&mut self) {
+            drop(std::fs::remove_dir_all(&self.0));
+        }
+    }
+
     #[test]
     fn the_steam_build_comes_from_the_appmanifest_where_steam_keeps_it() {
         let manifest =
@@ -135,6 +142,7 @@ mod tests {
         assert_eq!(SteamBuild::from_manifest("\"buildid\"\t\"next\"\n"), None);
         let root =
             std::env::temp_dir().join(format!("gamedata-appmanifest-{}", std::process::id()));
+        let _root = Removed(root.clone());
         let library = root.join("steamapps");
         let client = library.join("common").join("Enshrouded");
         let server = root.join("server");
@@ -148,6 +156,7 @@ mod tests {
         .unwrap();
         // A one-component path has no library two folders up.
         let shallow = std::path::PathBuf::from(format!("gamedata-shallow-{}", std::process::id()));
+        let _shallow = Removed(shallow.clone());
         std::fs::create_dir_all(shallow.join("steamapps")).unwrap();
         std::fs::write(
             shallow.join("steamapps").join("appmanifest_2278520.acf"),
@@ -160,8 +169,6 @@ mod tests {
             SteamBuild::installed(&server, Side::Client),
             SteamBuild::installed(&shallow, Side::Server),
         );
-        std::fs::remove_dir_all(&root).unwrap();
-        std::fs::remove_dir_all(&shallow).unwrap();
         assert_eq!(found, (build, build, None, build));
     }
 }

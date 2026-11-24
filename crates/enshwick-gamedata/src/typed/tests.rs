@@ -617,16 +617,33 @@ fn untabled_snapshots_rank_by_their_steam_build_and_one_without_ranks_last() {
     assert_eq!(
         Catalogue::from_snapshot(&std::fs::read_to_string(&newer).unwrap()).unwrap(),
         fixture(),
-        "the header line is no type"
+        "the Steam build is a key every type reader, an older tree's too, skips"
     );
     drop(std::fs::remove_dir_all(&dir));
-    let alone = snapshot("ff", 7, None, 9);
+    // Among snapshots without a Steam build the one written last wins, not the last name.
+    let last = snapshot("aa", 7, None, 9);
+    snapshot("ff", 8, None, 2);
+    let unreadable = dir
+        .join(SNAPSHOTS)
+        .join(format!("server-{}-3.jsonl", "cc".repeat(16)));
+    std::fs::write(&unreadable, [0xff, 0xfe, b'\n']).unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&unreadable)
+        .unwrap()
+        .set_modified(start)
+        .unwrap();
     let newest = newest_snapshot(&dir, &[], crate::Side::Server)
         .unwrap()
         .unwrap();
     assert_eq!(
         (newest.path(), newest.steam_build()),
-        (alone.as_path(), None)
+        (last.as_path(), None)
+    );
+    assert_eq!(
+        newest.unranked().len(),
+        3,
+        "a first line that is no text records no build"
     );
     drop(std::fs::remove_dir_all(&dir));
     // A snapshot folder that is a file, not a folder, does not read.

@@ -1,8 +1,9 @@
 ### Added
 
 - `cargo enshwick generate --from` records the executable's Steam build in
-  its snapshot, from `--steam-build`, else from Steam's appmanifest beside
-  it, else from its kept table.
+  its snapshot, from `--steam-build`, else from its kept table, else from
+  Steam's appmanifest beside it, and refuses a build without a kept table
+  whose Steam build none of them names.
 
 ### Fixed
 

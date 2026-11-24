@@ -58,7 +58,8 @@ pub(crate) struct Args {
     #[arg(long, env = enshwick_gamedata::DATA_VAR)]
     data: Option<PathBuf>,
     /// The new build's Steam build id, for the report's name of the ported
-    /// table.
+    /// table and, with `--write`, its typed snapshot, which otherwise takes
+    /// it from Steam's appmanifest beside the new executable.
     #[arg(long)]
     steam_build: Option<u64>,
     /// The game's own version number on the new build, for the report's
@@ -191,7 +192,8 @@ fn typed(
 /// the renames its diff found in the rename table and, for a server build,
 /// the typed API regenerated.
 fn write_typed(args: &Args, data: &Path, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
-    let steam = args.steam_build.map(enshwick_gamedata::SteamBuild::new);
+    let given = args.steam_build.map(enshwick_gamedata::SteamBuild::new);
+    let steam = generate::steam_build_of(&args.new, typed.side, given, None)?;
     generate::write_snapshot(data, &typed.reflected, typed.side, new_fp, steam)?;
     let renames = args.repo.join(enshwick_gamedata::typed::RENAMES);
     if typed.renames != generate::renames(&args.repo)? {
@@ -199,9 +201,7 @@ fn write_typed(args: &Args, data: &Path, typed: &Typed, new_fp: Fingerprint) -> 
         fs::write(&renames, text).with_context(|| renames.display().to_string())?;
     }
     if typed.side == enshwick_gamedata::Side::Server {
-        let steam = args
-            .steam_build
-            .map_or_else(String::new, |steam| format!(" (Steam {steam})"));
+        let steam = steam.map_or_else(String::new, |steam| format!(" (Steam {steam})"));
         let build = format!("server build {}{steam}", new_fp.age());
         generate::write_api(&args.repo, &typed.after, &build)?;
     }
