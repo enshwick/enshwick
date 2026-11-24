@@ -291,9 +291,8 @@ takes the same fields:
 
 `load.remove_quest(quest)` removes a vanilla quest with its steps. Its
 knowledge stays, so a save with its progress still opens. The loader logs
-and skips a removal while a step of another mod's quest asks for the quest's id
-or the id of one of its steps.
-A step that asks through a game query that reads such an id holds the quest too.
+and skips a removal while another mod's quest asks for it or one of its steps.
+A step asks by the id or through a game query that reads it.
 
 Lore pages need the `unstable` feature:
 
