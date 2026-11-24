@@ -52,6 +52,7 @@ use enshwick_world::__internal::world_status;
 mod bindings;
 mod commands;
 mod snapshot;
+mod windows;
 
 #[cfg(feature = "typed")]
 pub use bindings::{Binding, BindingError, BoundKey};
@@ -60,6 +61,7 @@ pub use commands::{
     JoinFailure, JoinPhase, Password,
 };
 pub use snapshot::{ClientSnapshot, LoaderPage, SnapshotPart, SnapshotState};
+pub use windows::{WindowItem, WindowItemKind};
 
 /// The bits of the game's `PlayerDigitalInput`, a `Bitmask64`.
 const BITS: usize = 64;
@@ -81,6 +83,7 @@ impl crate::script::Bound for Input {
         Self::SCRIPT_LOCAL_STATUS,
         Self::SCRIPT_CLIENT_SNAPSHOT,
         Self::SCRIPT_CLIENT_COMMANDS,
+        Self::SCRIPT_CLIENT_WINDOWS,
         #[cfg(feature = "typed")]
         Self::SCRIPT_BINDINGS,
     ];

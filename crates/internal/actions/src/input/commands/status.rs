@@ -30,13 +30,16 @@ pub enum CancelReason {
     InputBlocked,
     /// The mod or the feature turned off.
     ModOff,
+    /// The window draws the item off, as a Run button while a field is
+    /// empty, or the item takes no such option or text.
+    ItemOff,
     /// A reason a newer loader gives that this build of the API does not
     /// name, as its raw value.
     Other(u32),
 }
 
 impl CancelReason {
-    const ALL: [(u32, Self, &'static str); 7] = [
+    const ALL: [(u32, Self, &'static str); 8] = [
         (
             Raw::SESSION_CHANGED,
             Self::SessionChanged,
@@ -48,6 +51,7 @@ impl CancelReason {
         (Raw::TIMED_OUT, Self::TimedOut, "timed_out"),
         (Raw::INPUT_BLOCKED, Self::InputBlocked, "input_blocked"),
         (Raw::MOD_OFF, Self::ModOff, "mod_off"),
+        (Raw::ITEM_OFF, Self::ItemOff, "item_off"),
     ];
 
     pub(super) fn from_raw(reason: u32) -> Self {

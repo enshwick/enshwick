@@ -676,4 +676,93 @@ side = "both""#
         let clear = ClientCommand::new(CommandAction::ClearWaypoint, 1);
         assert!(input.client_command(&clear).is_ok());
     }
+
+    fn press_item(window: &str, item: &str) -> ClientCommand {
+        let action = CommandAction::PressWindowItem {
+            window: window.to_owned(),
+            item: item.to_owned(),
+        };
+        ClientCommand::new(action, 1)
+    }
+
+    #[test]
+    fn a_window_command_names_its_window_and_item_and_ends_as_the_window_shows() {
+        let (loader, input) = input(Side::CLIENT);
+        let id = input
+            .client_command(&press_item("you.admin:panel", "ban#0"))
+            .unwrap();
+        assert_eq!(
+            loader.client_commands(),
+            [(1, Raw::WINDOW_PRESS, "you.admin:panel".to_owned())]
+        );
+        loader.set_command_status(1, Status::CANCELLED, Status::ITEM_OFF);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Cancelled(CancelReason::ItemOff)
+        );
+        let typed = CommandAction::SetWindowText {
+            window: "you.admin:panel".to_owned(),
+            item: "say/0".to_owned(),
+            text: "Restart soon".to_owned(),
+        };
+        assert!(input.client_command(&ClientCommand::new(typed, 1)).is_ok());
+    }
+
+    #[test]
+    fn a_window_command_with_ids_no_window_holds_is_refused_as_the_loader_refuses_it() {
+        let (_loader, input) = input(Side::CLIENT);
+        for (window, item) in [
+            ("panel", "ban#0"),
+            ("you.admin:panel", "Ban"),
+            ("you.admin:panel", "ban/x"),
+        ] {
+            assert!(
+                matches!(
+                    input.client_command(&press_item(window, item)),
+                    Err(WorldError::Refused)
+                ),
+                "{window} {item}"
+            );
+        }
+        let no_option = CommandAction::PickWindowItem {
+            window: "you.admin:panel".to_owned(),
+            item: "ban/0".to_owned(),
+            option: String::new(),
+        };
+        assert!(matches!(
+            input.client_command(&ClientCommand::new(no_option, 1)),
+            Err(WorldError::Refused)
+        ));
+    }
+
+    #[test]
+    fn the_client_lists_its_windows_items_by_the_ids_commands_name_them() {
+        use enshwick::abi::{ClientWindowItem, Str};
+        use enshwick::input::WindowItemKind;
+        let (loader, input) = input(Side::CLIENT);
+        assert_eq!(input.client_windows().unwrap(), []);
+        loader.set_client_windows(vec![ClientWindowItem {
+            kind: ClientWindowItem::FIELD,
+            field: ClientWindowItem::TEXT,
+            flags: ClientWindowItem::SHOWN,
+            window: Str::new("you.admin:panel"),
+            item: Str::new("say/0"),
+            label: Str::new("Message"),
+            line: Str::new("Announce"),
+            ..ClientWindowItem::EMPTY
+        }]);
+        let items = input.client_windows().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            (items[0].item.as_str(), items[0].kind),
+            ("say/0", WindowItemKind::TextField)
+        );
+        assert!(items[0].shown);
+        drop(loader);
+        let (_server, server_input) = super::tests::input(Side::SERVER);
+        assert!(matches!(
+            server_input.client_windows(),
+            Err(WorldError::Unavailable)
+        ));
+    }
 }

@@ -119,6 +119,41 @@ pub enum CommandAction {
     /// screen, opening the screen first: its page, or the joined server's
     /// settings of a mod with nothing to set here.
     OpenModSettings(String),
+    /// Presses `item` of the window `window` that a server's mod shows, as
+    /// a click would: a button, a list's switch, or an on-or-off field,
+    /// which it flips. Both ids are as [`Input::client_windows`] lists
+    /// them; only the newest window takes it. Observed in the frame the
+    /// press clicks; [`CancelReason::ItemOff`] when the window draws the
+    /// item off, such as a Run whose fields are not all set.
+    PressWindowItem {
+        /// The window, as `mod:window`.
+        window: String,
+        /// The item's id in it.
+        item: String,
+    },
+    /// Picks `option`, by the name the window shows, in the list of `item`
+    /// of the window `window`: a choice, a player, or one of the game's
+    /// items or templates whatever its search shows.
+    PickWindowItem {
+        /// The window, as `mod:window`.
+        window: String,
+        /// The item's id in it.
+        item: String,
+        /// The option's name, as the window shows it.
+        option: String,
+    },
+    /// Sets the text of `item`'s text field in the window `window` to
+    /// `text`, at most 255 bytes, as typing would: a text's field, a
+    /// player's name or an item's search. Observed once the field reads
+    /// `text`.
+    SetWindowText {
+        /// The window, as `mod:window`.
+        window: String,
+        /// The item's id in it.
+        item: String,
+        /// The text.
+        text: String,
+    },
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -273,6 +308,27 @@ impl ClientCommand {
                 raw.kind = RawCommand::OPEN_MOD_SETTINGS;
                 raw.target = Str::new(id);
             }
+            CommandAction::PressWindowItem { window, item } => {
+                raw.kind = RawCommand::WINDOW_PRESS;
+                raw.target = Str::new(window);
+                raw.item = Str::new(item);
+            }
+            CommandAction::PickWindowItem {
+                window,
+                item,
+                option,
+            } => {
+                raw.kind = RawCommand::WINDOW_PICK;
+                raw.target = Str::new(window);
+                raw.item = Str::new(item);
+                raw.text = Str::new(option);
+            }
+            CommandAction::SetWindowText { window, item, text } => {
+                raw.kind = RawCommand::WINDOW_TEXT;
+                raw.target = Str::new(window);
+                raw.item = Str::new(item);
+                raw.text = Str::new(text);
+            }
         }
         raw
     }
@@ -325,7 +381,8 @@ struct LuauCommand {
     /// `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`,
     /// `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`,
     /// `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`,
-    /// `"open_mods"`, `"open_mod"` or `"open_mod_settings"`.
+    /// `"open_mods"`, `"open_mod"`, `"open_mod_settings"`,
+    /// `"press_window_item"`, `"pick_window_item"` or `"set_window_text"`.
     pub kind: String,
     /// The session, as `client_snapshot().session` gives it.
     pub session: u64,
@@ -356,6 +413,12 @@ struct LuauCommand {
     pub character: Option<u16>,
     /// Whether a host opens its world online; offline without it.
     pub online: Option<bool>,
+    /// A window command's window, as `mod:window`.
+    pub window: Option<String>,
+    /// A window command's item, by its id in the window.
+    pub item: Option<String>,
+    /// The option a pick picks or the text a window's field takes.
+    pub text: Option<String>,
 }
 
 impl core::fmt::Debug for LuauCommand {
@@ -375,6 +438,9 @@ impl core::fmt::Debug for LuauCommand {
             .field("world", &self.world)
             .field("character", &self.character)
             .field("online", &self.online)
+            .field("window", &self.window)
+            .field("item", &self.item)
+            .field("text", &self.text)
             .finish()
     }
 }
@@ -437,6 +503,20 @@ impl TryFrom<LuauCommand> for ClientCommand {
                 world: luau.world.ok_or_else(|| missing("a world"))?,
                 character: luau.character.ok_or_else(|| missing("a character"))?,
                 online: luau.online.unwrap_or(false),
+            },
+            "press_window_item" => CommandAction::PressWindowItem {
+                window: luau.window.clone().ok_or_else(|| missing("a window"))?,
+                item: luau.item.clone().ok_or_else(|| missing("an item"))?,
+            },
+            "pick_window_item" => CommandAction::PickWindowItem {
+                window: luau.window.clone().ok_or_else(|| missing("a window"))?,
+                item: luau.item.clone().ok_or_else(|| missing("an item"))?,
+                option: luau.text.clone().ok_or_else(|| missing("a text"))?,
+            },
+            "set_window_text" => CommandAction::SetWindowText {
+                window: luau.window.clone().ok_or_else(|| missing("a window"))?,
+                item: luau.item.clone().ok_or_else(|| missing("an item"))?,
+                text: luau.text.clone().ok_or_else(|| missing("a text"))?,
             },
             other => {
                 return Err(crate::script::Error::new(format!(
@@ -595,6 +675,9 @@ mod tests {
             world: None,
             character: None,
             online: None,
+            window: None,
+            item: None,
+            text: None,
         };
         assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
@@ -640,6 +723,9 @@ mod tests {
             world: None,
             character: None,
             online: None,
+            window: None,
+            item: None,
+            text: None,
         };
         assert!(
             ClientCommand::try_from(luau(Some("MainhandAction_Tap"), Some(16))).is_ok_and(|c| {
@@ -686,6 +772,9 @@ mod tests {
             world: None,
             character: None,
             online: None,
+            window: None,
+            item: None,
+            text: None,
         };
         let shown = format!("{luau:?}");
         assert!(!shown.contains("hunter2"), "{shown}");

@@ -425,6 +425,31 @@ impl Installed {
         table::with((), |s| s.ui.client_snapshot = snapshot);
     }
 
+    /// Sets the items of the carried windows the client holds, as the
+    /// loader lists them, each a
+    /// [`ClientWindowItem`](enshwick_core::abi::ClientWindowItem) whose
+    /// strings live as long as the test; a server still answers
+    /// unavailable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{ClientWindowItem, Side, Str};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.set_client_windows(vec![ClientWindowItem {
+    ///     kind: ClientWindowItem::BUTTON,
+    ///     flags: ClientWindowItem::SHOWN,
+    ///     window: Str::new("you.admin:panel"),
+    ///     item: Str::new("@close"),
+    ///     label: Str::new("Close"),
+    ///     ..ClientWindowItem::EMPTY
+    /// }]);
+    /// ```
+    pub fn set_client_windows(&self, items: Vec<enshwick_core::abi::ClientWindowItem>) {
+        table::with((), |s| s.ui.client_windows = items);
+    }
+
     /// The client commands mods queued, in order: each id, raw kind (such
     /// as [`ClientCommand::OPEN_SCREEN`](enshwick_core::abi::ClientCommand))
     /// and target.
