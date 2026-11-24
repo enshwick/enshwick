@@ -848,6 +848,7 @@ unsafe extern "system" fn host_of(_registers: *mut Registers, _user: *mut c_void
 
 #[test]
 fn a_data_pack_s_handler_runs_as_the_pack_found_at_arming() {
+    crate::engine::profile::on_host(&crate::host::API);
     let pack = ModIndex::new(4);
     let mut mids = Mids::default();
     assert_eq!(mids.add(0x10, link(pack, host_of, 0)), Ok(()));

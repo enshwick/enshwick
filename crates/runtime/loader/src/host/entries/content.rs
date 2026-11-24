@@ -1,15 +1,16 @@
-//! Host functions for the content domain: recipes, data changes, texts, item
-//! data, content ids, rates and the game's memory pages.
+//! Host functions for the content domain: recipes, data changes, texts,
+//! content ids and their renames, rate factors and the game's memory pages.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{RateId, Status, Str};
+use enshwick_core::abi::{ContentRename, RateId, Status, Str};
 use enshwick_core::content::changes::{Change, Field, ItemsChange, RecipesChange, Value};
 
 use crate::host::entries::base::services::exported;
-use crate::host::layer::guards::{before_delivery, declared_content};
+use crate::host::layer::guards::{
+    before_delivery, declared_content, declared_or_game, not_another_mods,
+};
 use crate::host::layer::{
-    BytesOut, Caller, HeadedSince, In, List, MaybeOut, Mod, Out, Refused, RuleOff, Slot, Text,
-    YesNo, entries,
+    Caller, HeadedSince, In, List, MaybeOut, Mod, Out, Refused, RuleOff, Slot, Text, YesNo, entries,
 };
 use crate::host::memory::text;
 
@@ -100,41 +101,6 @@ entries! {
         Ok(crate::content::served::add_text(id, language, text)?)
     }
 
-    fn define_item_data(me as Mod, id as Text, out as Out<u32>) -> Status {
-        out.put(crate::inventory::item_data::open(me.loader, me.index, id)?)
-    }
-
-    fn define_entity_data(
-        me as Mod,
-        id as Text,
-        flags: api_frame::EntityDataFlags,
-        out as Out<u32>,
-    ) -> Status {
-        let sent = flags.0 & api_frame::EntityDataFlags::SENT.0 != 0;
-        out.put(crate::inventory::item_data::open_entity(me.loader, me.index, id, sent)?)
-    }
-
-    fn item_data_get(
-        _loader as Caller,
-        kind: u32,
-        pide: enshwick_core::Entity,
-        item: enshwick_core::ItemId,
-        [out, capacity, len] as BytesOut,
-    ) -> Status {
-        out.put(&crate::inventory::item_data::get(kind, pide.0, item.get())?)
-    }
-
-    fn set_item_data(
-        _loader as Caller,
-        kind: u32,
-        pide: enshwick_core::Entity,
-        item: enshwick_core::ItemId,
-        [data, len] as List<u8>,
-    ) -> Status {
-        crate::inventory::item_data::set(kind, pide.0, item.get(), data)?;
-        Ok(())
-    }
-
     fn game_text(_loader as Caller, id: u32, language: u32, out as Out<Str>) -> Status {
         let text = crate::engine::game_texts::text(id, language).ok_or(Status::MISSING)?;
         out.put(Str::new(text))
@@ -156,20 +122,6 @@ entries! {
         out.put(Str::new(version))
     }
 
-    fn rate(me as Mod, rate: RateId) -> Status {
-        let links = crate::content::rates::links(rate);
-        let available = links.iter().all(|&symbol| me.loader.address(symbol).is_some())
-            // The loot rate reads stack sizes from the item registry, which
-            // the inventory link finds.
-            && (rate != RateId::LOOT || crate::inventory::transactions::open(me.loader).is_ok());
-        Ok(crate::content::rates::RATES.declare(
-            me.index,
-            rate,
-            available,
-            me.record.joins_when_on(),
-        )?)
-    }
-
     fn set_rate(me as Mod, rate: RateId, factor: f32) -> Status {
         let recipes = crate::content::rates::is_recipe_output(rate);
         let before = recipes.then(|| crate::content::rate_links::factor(rate).to_bits());
@@ -187,6 +139,18 @@ entries! {
         };
         let run = crate::engine::pages::read_only(address, max as usize);
         out.put(u32::try_from(run).unwrap_or(max))
+    }
+
+    fn rename_content(me as Mod, [renames, count] as List<ContentRename>) -> Status {
+        before_delivery(me.loader)?;
+        for rename in renames {
+            not_another_mods(me.record, rename.from)?;
+        }
+        // Only the end of each chain is new; `declare` refuses a cycle, which has none.
+        for rename in renames.iter().filter(|r| !renames.iter().any(|on| on.from == r.to)) {
+            declared_or_game(me.record, rename.to)?;
+        }
+        Ok(crate::content::content_renames::declare(me.index, renames)?)
     }
 
     fn declare_content(me as Mod, id as Text, out as Out<enshwick_core::content::Guid>) -> Status {

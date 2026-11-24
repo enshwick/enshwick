@@ -226,7 +226,7 @@ fn pickup(layout: &Layout, request: &DropRequest) -> Option<Vec<u8>> {
     let rarity = u8::try_from(request.rarity)
         .ok()
         .filter(|&r| ItemRarity::from_raw(r).is_some())?;
-    Some(crate::inventory::spawns::bytes(
+    Some(crate::world::spawns::bytes(
         layout.size,
         &[
             (layout.item, &request.item.get().to_le_bytes()),
@@ -249,13 +249,13 @@ pub(crate) enum DropError {
     /// The item's data did not read: the game has no such item, or the
     /// build, the registry or the world to read it is missing.
     #[error(transparent)]
-    Item(#[from] crate::inventory::transactions::ItemInfoError),
+    Item(#[from] crate::content::item_info::ItemInfoError),
     /// The server's world, unreadable now.
     #[error(transparent)]
     World(#[from] crate::engine::world::WorldError),
     /// The pickup's spawn.
     #[error(transparent)]
-    Spawn(#[from] crate::inventory::spawns::SpawnError),
+    Spawn(#[from] crate::world::spawns::SpawnError),
 }
 
 /// Drops the stack `request` asks for; the pickup's entity.
@@ -275,7 +275,7 @@ pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Resu
         lifetime_ns: 0,
         flags: 0,
     };
-    Ok(crate::inventory::spawns::spawn_with(
+    Ok(crate::world::spawns::spawn_with(
         loader,
         &spawn,
         vec![(layout.hash, bytes)],
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn a_drop_keeps_why_its_item_did_not_read() {
-        use crate::inventory::transactions::ItemInfoError;
+        use crate::content::item_info::ItemInfoError;
         let all = [
             ItemInfoError::Unread,
             ItemInfoError::NoRegistry,

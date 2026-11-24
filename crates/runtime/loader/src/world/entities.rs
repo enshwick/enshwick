@@ -318,7 +318,7 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), EntityError
     if queued == 0 {
         return Err(EntityError::Refused);
     }
-    crate::inventory::spawns::destroyed(entity);
+    crate::world::spawns::destroyed(entity);
     Ok(())
 }
 
@@ -334,11 +334,11 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
     let saving = saving(loader).ok_or(EntityError::Unavailable)?;
     let world = entity_world()?;
     let template = crate::engine::world::template(loader, entity)?;
-    if crate::inventory::spawns::spawned(entity) != Some(template) {
+    if crate::world::spawns::spawned(entity) != Some(template) {
         return Err(EntityError::NotSpawned);
     }
     let live = crate::engine::world::component(loader, entity, saving.hash).is_err();
-    if !crate::inventory::spawns::needs_saved(entity, saved, live) {
+    if !crate::world::spawns::needs_saved(entity, saved, live) {
         return Ok(());
     }
     if saved {
@@ -363,7 +363,7 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
         // in the header before the data.
         unsafe { enshwick_core::raw::write_at(command, add.size_at, add.component) };
     }
-    crate::inventory::spawns::asked_saved(entity, saved);
+    crate::world::spawns::asked_saved(entity, saved);
     Ok(())
 }
 

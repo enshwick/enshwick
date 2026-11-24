@@ -1,14 +1,15 @@
-//! Host functions for the inventory domain: inventory requests, items,
-//! survivors, stats, affixes, damage, drops, spawns and teleports.
+//! Host functions for the inventory domain: inventory requests, items, item
+//! data, the rates mods declare, survivors, stats, affixes, damage, drops,
+//! spawns and teleports.
 
-use enshwick_core::abi::{DropRequest, ItemFilterFn, Status, Str};
+use enshwick_core::abi::{DropRequest, ItemFilterFn, RateId, Status, Str};
 use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::conflicts::Mode;
 use crate::host::entries::base::services::exported;
 use crate::host::layer::{
-    AnyMod, Asker, Callback, Caller, Headed, HeadedOut, HeadedSince, List, ListOut, MaybeHeaded,
-    Mod, Out, Text, entries,
+    AnyMod, Asker, BytesOut, Callback, Caller, Headed, HeadedOut, HeadedSince, List, ListOut,
+    MaybeHeaded, Mod, Out, Text, entries,
 };
 
 /// Where every inventory request's required fields end: its op count.
@@ -249,11 +250,61 @@ entries! {
         Ok(())
     }
 
-    fn spawn(
-        loader as Caller,
-        request as Headed<enshwick_core::abi::SpawnRequest>,
-        out as Out<Entity>,
+
+    fn define_item_data(me as Mod, id as Text, out as Out<u32>) -> Status {
+        out.put(crate::inventory::item_data::open(me.loader, me.index, id)?)
+    }
+
+    fn define_entity_data(
+        me as Mod,
+        id as Text,
+        flags: api_frame::EntityDataFlags,
+        out as Out<u32>,
     ) -> Status {
-        out.put(Entity(crate::inventory::spawns::spawn(loader, &request)?))
+        let sent = flags.0 & api_frame::EntityDataFlags::SENT.0 != 0;
+        out.put(crate::inventory::item_data::open_entity(me.loader, me.index, id, sent)?)
+    }
+
+    fn item_data_get(
+        _loader as Caller,
+        kind: u32,
+        pide: Entity,
+        item: enshwick_core::ItemId,
+        [out, capacity, len] as BytesOut,
+    ) -> Status {
+        out.put(&crate::inventory::item_data::get(kind, pide.0, item.get())?)
+    }
+
+    fn set_item_data(
+        _loader as Caller,
+        kind: u32,
+        pide: Entity,
+        item: enshwick_core::ItemId,
+        [data, len] as List<u8>,
+    ) -> Status {
+        crate::inventory::item_data::set(kind, pide.0, item.get(), data)?;
+        Ok(())
+    }
+
+    fn rate(me as Mod, rate: RateId) -> Status {
+        let links = crate::content::rates::links(rate);
+        let available = links.iter().all(|&symbol| me.loader.address(symbol).is_some())
+            // The loot rate reads stack sizes from the item registry, which
+            // the inventory link finds.
+            && (rate != RateId::LOOT || crate::inventory::transactions::open(me.loader).is_ok());
+        Ok(crate::content::rates::RATES.declare(
+            me.index,
+            rate,
+            available,
+            me.record.joins_when_on(),
+        )?)
+    }
+
+    fn item_info(
+        loader as Caller,
+        item: enshwick_core::ItemId,
+        out as HeadedOut<api_frame::ItemTypeInfo>,
+    ) -> Status {
+        out.put(crate::inventory::transactions::item_info(loader, item.get())?)
     }
 }

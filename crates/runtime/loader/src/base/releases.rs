@@ -83,6 +83,18 @@ pub fn running_with_abi() -> String {
     enshwick_gamedata::releases::version_line(&running(), ABI_MAJOR, ABI_MINOR)
 }
 
+/// A newer Enshwick release, once the release check found one: a fact of
+/// the loader, which the start makes empty.
+#[cfg(windows)]
+#[derive(Debug, Default)]
+pub(crate) struct NewerRelease(std::sync::OnceLock<Release>);
+
+/// The newer Enshwick release the check found; `None` before or without.
+#[cfg(windows)]
+pub(crate) fn newer_release(loader: &crate::engine::loader::Loader) -> Option<&Release> {
+    loader.fact::<NewerRelease>()?.0.get()
+}
+
 /// Asks GitHub for the releases on a thread of its own and keeps a newer one
 /// in `loader` for the Mods screen; the answer, or why there is none, is
 /// logged once.
@@ -99,7 +111,9 @@ pub(crate) fn start(loader: &'static crate::engine::loader::Loader) {
                         release.version(),
                         release.page()
                     );
-                    let _first = loader.newer_release.set(release);
+                    if let Some(NewerRelease(newer)) = loader.fact() {
+                        let _first = newer.set(release);
+                    }
                 }
                 Ok(None) => crate::log!(INFO, "Enshwick {running} is the newest release"),
                 Err(e) => {

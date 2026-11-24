@@ -54,6 +54,8 @@ pub(crate) mod rights;
 pub(crate) mod scene;
 pub mod scene_markers;
 #[cfg(windows)]
+pub(crate) mod spawns;
+#[cfg(windows)]
 pub(crate) mod terrain;
 pub mod terrain_pages;
 #[cfg_attr(
@@ -76,7 +78,7 @@ pub(crate) mod writes;
 #[cfg(windows)]
 use crate::base::remote::Message;
 #[cfg(windows)]
-use crate::engine::parts::{Part, fused, part, step};
+use crate::engine::parts::{Part, Patches, fused, part, step};
 
 /// The world domain's parts, in the order the joins call each of their
 /// phases.
@@ -158,6 +160,10 @@ pub(crate) static PARTS: &[&Part] = &[
         seal: Some(|_| bases::seal()),
         link: Some(bases::link),
         forget: Some(|_| bases::forget()),
+        patches: Some(Patches {
+            arming: bases::arming,
+            disarm: bases::disarm,
+        }),
         ..part!("bases", bases)
     },
     &Part {
@@ -212,6 +218,13 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: entities::TABLE_IDS,
         ..part!("entities", entities)
+    },
+    &Part {
+        table_ids: spawns::TABLE_IDS,
+        forget: Some(|_| {
+            spawns::forget();
+        }),
+        ..part!("spawns", spawns)
     },
     &Part {
         table_ids: rights::TABLE_IDS,

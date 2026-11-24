@@ -7,9 +7,11 @@ use std::time::Instant;
 
 use enshwick_core::abi::{Event, PlayerData};
 
+use crate::engine::code::{CodePatch, Verdict};
 use crate::engine::diag::Summary;
+use crate::engine::facts::{Fact, Facts};
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::Loader;
+use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::part_order;
 
@@ -79,6 +81,14 @@ pub(crate) struct Part {
     /// said hello, the part's join data; false when some of it did not fit
     /// the link, so the whole goes again.
     pub(crate) handover: Option<fn(u64) -> bool>,
+    /// What the part keeps of each mod, made with the mod's record at the
+    /// start and read through [`ModRecord::fact`].
+    pub(crate) facts: Option<MakeFact>,
+    /// A mod turned off (`true`) or back on (`false`): the part follows
+    /// what it keeps of it.
+    pub(crate) turned: Option<fn(&Loader, &ModRecord, bool)>,
+    /// What the part rests on code patches for, settled at each arming.
+    pub(crate) patches: Option<Patches>,
     /// The part as a whole, named after it: its hosting, end and forget run
     /// under it, and once a panic in one of them turns it off, the part's
     /// steps, joins, leaves, hellos and world events stop too, since they
@@ -112,6 +122,9 @@ impl Part {
             shared: None,
             server_link: None,
             handover: None,
+            facts: None,
+            turned: None,
+            patches: None,
             fuse,
         }
     }
@@ -178,6 +191,21 @@ impl<F: Copy> Fused<F> {
     pub(crate) fn call<R>(&self, site: &str, call: impl FnOnce(F) -> R) -> Option<R> {
         self.fuse.run(site, || call(self.run))
     }
+}
+
+/// Makes what a part keeps of one mod from its record.
+pub(crate) type MakeFact = fn(&ModRecord) -> Box<dyn Fact>;
+
+/// What a part settles of the code patches it rests on, as
+/// [`crate::engine::code::arming`] and [`crate::engine::code::disarm`] do.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Patches {
+    /// Settles, before arming writes anything, whether the part's features
+    /// run: the patches, their verdicts and the targets hooked.
+    pub(crate) arming: fn(&[CodePatch], &[Verdict], &[u64]),
+    /// Turns the part's patch features off with plain stores, while the
+    /// other threads stand still.
+    pub(crate) disarm: fn(),
 }
 
 /// A call at a player's join or leave.
@@ -503,6 +531,46 @@ impl Parts {
         }
     }
 
+    /// What every part keeps of the mod `record` is for, made as its record
+    /// is.
+    pub(crate) fn facts(&self, record: &ModRecord) -> Facts {
+        Facts::new(
+            self.iter()
+                .filter_map(|part| part.facts)
+                .map(|make| make(record))
+                .collect(),
+        )
+    }
+
+    /// Tells every part that `record`'s mod turned `off` or back on, lowest
+    /// layer first, each under the part's fuse and still once it is off, as
+    /// [`Part::clearing`] runs it: an off mod's runtime and links go even
+    /// when its part panicked before.
+    pub(crate) fn turned(&self, loader: &Loader, record: &ModRecord, off: bool) {
+        for part in self.iter() {
+            if let Some(turned) = part.turned {
+                part.clearing("a mod turned off or on", || turned(loader, record, off));
+            }
+        }
+    }
+
+    /// Lets every part that rests on code patches settle its features
+    /// before arming writes anything.
+    pub(crate) fn arming(&self, patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]) {
+        for settle in self.iter().filter_map(|part| part.patches) {
+            (settle.arming)(patches, verdicts, hooked);
+        }
+    }
+
+    /// Turns off every part's patch features with plain stores: it neither
+    /// allocates, locks nor logs, so it runs while the other threads stand
+    /// still.
+    pub(crate) fn disarm(&self) {
+        for settle in self.iter().filter_map(|part| part.patches) {
+            (settle.disarm)();
+        }
+    }
+
     /// Each part that names build table ids, with them, by name: the
     /// loader's feature table.
     pub(crate) fn table_ids(&self) -> &[(&'static str, &'static [&'static str])] {
@@ -769,6 +837,35 @@ mod tests {
             0,
             "an answer is no drop, so the off part does not hear it"
         );
+    }
+
+    #[test]
+    fn a_part_hears_each_turn_off_and_on_with_its_direction_even_after_it_panicked() {
+        use std::sync::Mutex;
+
+        use enshwick_base::Relock as _;
+
+        static HEARD: Mutex<Vec<bool>> = Mutex::new(Vec::new());
+        static TURNS: &[&Part] = &[&Part {
+            turned: Some(|_, _, off| {
+                let first = {
+                    let mut heard = HEARD.relock();
+                    heard.push(off);
+                    heard.len() == 1
+                };
+                assert!(!first, "broken once");
+            }),
+            ..part!("turns", turns)
+        }];
+        static WITH_TURNS: &[(&str, &[&Part])] = &[("turns", TURNS)];
+        let mut loader = crate::start::tests::loader_running(&["you.lanterns"]);
+        loader.parts = Box::leak(Box::new(Parts::new(WITH_TURNS)));
+        let index = ModIndex::new(0);
+        loader.turn_off(index, "turned off by the test");
+        assert!(!TURNS[0].runs(), "its first call panicked");
+        loader.turn_back_on(index);
+        loader.turn_off(index, "turned off again");
+        assert_eq!(*HEARD.relock(), [true, false, true]);
     }
 
     #[test]

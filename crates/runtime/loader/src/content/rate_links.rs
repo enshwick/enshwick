@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 use enshwick_core::abi::{Event, HookFlags, RateId, Status};
 use enshwick_core::content::recipes::RecipeLayout;
 
+use crate::content::loot_slot::SlotFields;
 use crate::content::rates::{
     LINKS, RATES, experience_rates, scale_points, scale_stack, scale_whole, workshop_duration,
 };
@@ -16,7 +17,6 @@ use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned::{self, Symbol};
-use crate::inventory::loot_slot::SlotFields;
 
 /// The build table ids this part of the loader names; the comfort rate
 /// shares the comfort link of [`crate::knowledge::progress`].
@@ -264,7 +264,7 @@ unsafe fn scale_slot(slot: *mut u8, rate: f32) {
     // reflected `stackSize`, which `SlotFields::checked` keeps inside the
     // slot.
     let count: u16 = unsafe { crate::engine::memory::read(slot, fields.count) };
-    let Ok(info) = crate::inventory::transactions::item_info(loader, item) else {
+    let Ok(info) = crate::content::item_info::item_info(loader, item) else {
         return;
     };
     // SAFETY: the caller's slot is writable at the reflected `stackSize`, a

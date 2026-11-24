@@ -7,7 +7,6 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use arc_swap::ArcSwapOption;
 use enshwick_core::abi::{HookFlags, Interaction, InteractionFilterFn, Side};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
@@ -109,15 +108,12 @@ struct State {
     /// reads the players' input for the controls that follow game actions;
     /// a fact of the process, which a hosted game's end keeps.
     reads_inputs: AtomicBool,
-    /// The players' character entities, read on the game thread now and then.
-    players: ArcSwapOption<Vec<u32>>,
 }
 
 impl State {
     const fn new() -> Self {
         Self {
             reads_inputs: AtomicBool::new(false),
-            players: ArcSwapOption::const_empty(),
         }
     }
 
@@ -125,11 +121,6 @@ impl State {
     /// its `fuse` still on.
     fn reads_inputs(&self, fuse: &Fuse) -> bool {
         still_linked(self.reads_inputs.load(Ordering::Acquire), fuse)
-    }
-
-    /// Forgets the players of a hosted game that ended.
-    fn forget(&self) {
-        self.players.store(None);
     }
 }
 
@@ -361,7 +352,7 @@ pub(crate) fn filter_off() -> bool {
 
 pub(crate) fn after_step(loader: &Loader, step: u64) {
     crate::world::transactions::holds().after_step(step);
-    if read_due(step, STATE.players.load().is_some()) {
+    if read_due(step, players().is_some()) {
         read_players(loader);
     }
 }
@@ -383,22 +374,21 @@ fn read_players(loader: &Loader) {
         return;
     }
     if let Ok(entities) = crate::engine::world::player_entities(loader)
-        && STATE.players.load().as_deref().map(Vec::as_slice) != Some(entities.as_slice())
+        && players().as_deref().map(Vec::as_slice) != Some(entities.as_slice())
     {
-        STATE
-            .players
-            .store(Some(std::sync::Arc::new(entities.to_vec())));
+        crate::inventory::item_actions::keep_players(Some(std::sync::Arc::new(entities.to_vec())));
     }
 }
 
 /// The players' character entities as last read on the game thread, for
 /// the systems that act on each player's input.
-pub(crate) fn players() -> arc_swap::Guard<Option<std::sync::Arc<Vec<u32>>>> {
-    STATE.players.load()
+fn players() -> arc_swap::Guard<Option<std::sync::Arc<Vec<u32>>>> {
+    crate::inventory::item_actions::players()
 }
 
+/// Forgets the players of a hosted game that ended.
 pub(crate) fn forget() {
-    STATE.forget();
+    crate::inventory::item_actions::keep_players(None);
 }
 
 fn allowed(call: &Interaction) -> bool {
@@ -820,7 +810,7 @@ unsafe fn player_inputs(ctx: *mut u64) {
     if !unsafe { server_world(loader, engine, ctx) } {
         return;
     }
-    let players = STATE.players.load();
+    let players = players();
     let players = players.as_deref().map_or(&[][..], Vec::as_slice);
     let input = |player: enshwick_core::Entity| {
         // SAFETY: the caller guarantees the system's live context, at its
@@ -850,7 +840,7 @@ unsafe fn refuse_pending(ctx: *mut u64) {
     if !unsafe { server_world(loader, engine, ctx) } {
         return;
     }
-    let players = STATE.players.load();
+    let players = players();
     let Some(players) = players.as_deref() else {
         return;
     };

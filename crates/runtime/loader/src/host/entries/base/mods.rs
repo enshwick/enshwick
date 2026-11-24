@@ -4,15 +4,13 @@ use std::sync::atomic::Ordering;
 
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{
-    ContentRename, Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
-};
+use enshwick_core::abi::{Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str};
 use enshwick_core::mods::LOADER_FILE;
 
 use crate::engine::loader::{ModRecord, loader};
 use crate::host::LOADER_HANDLE;
-use crate::host::layer::guards::{before_delivery, declared_or_game, in_init, not_another_mods};
-use crate::host::layer::{AnyMod, Callback, List, Mod, Out, SizedListOut, Text, entries};
+use crate::host::layer::guards::in_init;
+use crate::host::layer::{AnyMod, Callback, Mod, Out, SizedListOut, Text, entries};
 use crate::host::memory::text;
 
 /// The listing entry of the loader itself.
@@ -85,29 +83,12 @@ entries! {
     }
 
     fn settings(me as AnyMod, file as Text, out as Out<Str>) -> Status {
-        if !me
-            .record
-            .settings_files
-            .relock()
-            .iter()
-            .any(|f| f.file == file)
-        {
+        let settings = crate::base::worlds::settings_of(me.record).ok_or(Status::UNAVAILABLE)?;
+        if !settings.files.relock().iter().any(|f| f.file == file) {
             return Err(Status::MISSING.into());
         }
         let content = crate::base::worlds::file_text(me.record, file);
-        out.put(Str::new(me.record.settings.relock().keep(&content).unwrap_or_default()))
-    }
-
-    fn rename_content(me as Mod, [renames, count] as List<ContentRename>) -> Status {
-        before_delivery(me.loader)?;
-        for rename in renames {
-            not_another_mods(me.record, rename.from)?;
-        }
-        // Only the end of each chain is new; `declare` refuses a cycle, which has none.
-        for rename in renames.iter().filter(|r| !renames.iter().any(|on| on.from == r.to)) {
-            declared_or_game(me.record, rename.to)?;
-        }
-        Ok(crate::content::content_renames::declare(me.index, renames)?)
+        out.put(Str::new(settings.settings.relock().keep(&content).unwrap_or_default()))
     }
 
     fn mods(me as AnyMod, [out, entry_size, capacity, count] as SizedListOut<ModInfo>) -> Status {
@@ -150,7 +131,8 @@ entries! {
         if !enshwick_core::config::__file_name(file) {
             return Err(Status::BAD_ARGS.into());
         }
-        let mut files = me.record.settings_files.relock();
+        let settings = crate::base::worlds::settings_of(me.record).ok_or(Status::UNAVAILABLE)?;
+        let mut files = settings.files.relock();
         if let Some(known) = files.iter().find(|f| f.file == file) {
             return if known.schema == parsed {
                 Ok(())
@@ -173,7 +155,8 @@ entries! {
         user: *mut core::ffi::c_void,
     ) -> Status {
         in_init(me.index)?;
-        let mut checks = me.record.checks.relock();
+        let settings = crate::base::worlds::settings_of(me.record).ok_or(Status::UNAVAILABLE)?;
+        let mut checks = settings.checks.relock();
         if checks.iter().any(|(known, _, _)| known == file) {
             return Err(Status::REFUSED.into());
         }

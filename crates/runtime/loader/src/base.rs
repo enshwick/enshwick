@@ -97,8 +97,25 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("services", services)
     },
     &Part {
+        facts: Some(manifest::fact),
+        ..part!("manifest", manifest)
+    },
+    &Part {
+        facts: Some(worlds::fact),
+        ..part!("worlds", worlds)
+    },
+    &Part {
         seal: Some(points::seal),
+        turned: Some(|loader, _, _| points::rearm(|owner| loader.passed(owner, false))),
         ..part!("points", points)
+    },
+    &Part {
+        turned: Some(|_, record, off| {
+            if off && record.joins_when_on() {
+                advertise::wake();
+            }
+        }),
+        ..part!("advertise", advertise)
     },
     &Part {
         seal: Some(calls::seal),

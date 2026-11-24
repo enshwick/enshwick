@@ -124,12 +124,11 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
-        newer_release: OnceLock::new(),
         unofficial: AtomicBool::new(false),
         offs: AtomicU64::new(0),
         retry: crate::engine::retry::Retry::default(),
-        skipped,
         parts: crate::parts::parts(),
+        facts: loader_facts(skipped),
     };
     (loader, order)
 }
@@ -137,6 +136,13 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
 /// A server's loader with no game and no mods, for the tests of other parts.
 pub(crate) fn bare_loader() -> Loader {
     loader(&[], false).0
+}
+
+/// Adds `skipped` to the mods `loader` did not load, as the start finds them.
+pub(crate) fn add_skipped(loader: &mut Loader, skipped: resolve::Skipped) {
+    let mut all = resolve::skipped(loader).to_vec();
+    all.push(skipped);
+    loader.facts = loader_facts(all);
 }
 
 /// A server's loader with no game running the plain mods `ids`, in that
@@ -175,8 +181,8 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
         1,
         "only the copy that loads has a record"
     );
-    let [skipped] = loader.skipped.as_slice() else {
-        panic!("{:?}", loader.skipped);
+    let [skipped] = resolve::skipped(&loader) else {
+        panic!("{:?}", resolve::skipped(&loader));
     };
     assert_eq!(
         (
@@ -242,13 +248,16 @@ fn the_off_names_and_count_follow_a_mod_that_turns_off() {
     let names = crate::base::off_line::names(&loader);
     assert_eq!(names.first().map(String::as_str), Some("you.altars"));
     let mut loader = loader;
-    loader.skipped.push(resolve::Skipped {
-        id: "you.map".into(),
-        version: Some("1.0.0".into()),
-        label: "Map".into(),
-        file: "you.map/you.map.dll".into(),
-        reason: resolve::Skip::Missing { id: "you.x".into() },
-    });
+    add_skipped(
+        &mut loader,
+        resolve::Skipped {
+            id: "you.map".into(),
+            version: Some("1.0.0".into()),
+            label: "Map".into(),
+            file: "you.map/you.map.dll".into(),
+            reason: resolve::Skip::Missing { id: "you.x".into() },
+        },
+    );
     assert_eq!(
         crate::base::off_line::mods_off(&loader),
         ["you.altars", "Map"]
@@ -318,6 +327,7 @@ fn a_found_pack_counts_its_files_in_the_join_version_after_it_turns_off_too() {
         format!("id = \"{id}\"\nversion = \"1.0.0\"\n"),
     )
     .unwrap();
+    crate::base::join::client::on_pack_hash(crate::packs::data_packs::hash_of);
     let found = crate::packs::data_packs::discover(&mods);
     std::fs::remove_dir_all(&mods).unwrap();
     assert_eq!(
@@ -326,7 +336,7 @@ fn a_found_pack_counts_its_files_in_the_join_version_after_it_turns_off_too() {
     );
     let (mut loader, _) = loader(&[TestMod::plain(id)], false);
     loader.mods[0].pack = true;
-    let version = loader.mods[0].join_version();
+    let version = crate::base::join::client::join_version(&loader.mods[0]);
     assert!(
         version
             .strip_prefix("1.0.0+")
@@ -335,7 +345,7 @@ fn a_found_pack_counts_its_files_in_the_join_version_after_it_turns_off_too() {
     );
     loader.turn_off(ModIndex::new(0), "turned off by the test");
     assert_eq!(
-        loader.mods[0].join_version(),
+        crate::base::join::client::join_version(&loader.mods[0]),
         version,
         "an off pack keeps its files' hash, so a refusal tells a restart from other files"
     );
@@ -353,6 +363,13 @@ fn a_developer_mod_is_off_before_its_init_without_developer_tools() {
         probe.off_reason.relock().as_deref(),
         Some(crate::base::developer_tools::off_reason())
     );
+}
+
+#[test]
+fn every_initialise_names_the_host_table_packs_run_on_so_a_dry_run_runs_packs_as_themselves() {
+    let (loader, order) = loader(&[TestMod::plain("you.lanterns")], false);
+    initialise(&loader, &order.iter().collect::<Vec<_>>(), None);
+    assert!(crate::engine::profile::host_named());
 }
 
 #[test]

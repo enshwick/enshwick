@@ -20,7 +20,25 @@ use crate::engine::registry::{JoinFeatureError, Registry};
 /// A mod's actions callback.
 type Registered = crate::engine::loader::Registered<ActionFn>;
 
-static REGISTERED: Registry<Registered> = Registry::new();
+/// What the players' actions keep for the process.
+struct State {
+    /// The mods' actions callbacks.
+    registered: Registry<Registered>,
+    /// What follows an action a player ran, named by the windows when they
+    /// seal: the windows of the action's mod shown to that player update.
+    ran: std::sync::OnceLock<fn(ModIndex, u64)>,
+}
+
+static STATE: State = State {
+    registered: Registry::new(),
+    ran: std::sync::OnceLock::new(),
+};
+
+/// Names `ran`, which follows each action a player ran, with the action's
+/// mod and the player's account key; the first one named stays.
+pub(crate) fn on_ran(ran: fn(ModIndex, u64)) {
+    let _first = STATE.ran.set(ran);
+}
 
 /// Registers mod `owner`'s actions callback.
 ///
@@ -33,7 +51,7 @@ pub(crate) fn register(
     callback: ActionFn,
     user: *mut core::ffi::c_void,
 ) -> Result<(), JoinFeatureError> {
-    REGISTERED.edit(|registered| {
+    STATE.registered.edit(|registered| {
         if registered.iter().any(|r| r.owner == owner) {
             return Err(JoinFeatureError::Taken);
         }
@@ -44,12 +62,12 @@ pub(crate) fn register(
 
 /// Seals the actions callbacks once every mod's init ran.
 pub(crate) fn seal() {
-    let _registered = REGISTERED.seal();
+    let _registered = STATE.registered.seal();
 }
 
 /// The registered mods that are running.
 fn running(loader: &Loader) -> impl Iterator<Item = Registered> {
-    running_in(&REGISTERED, loader).into_iter()
+    running_in(&STATE.registered, loader).into_iter()
 }
 
 /// The mods among `registered` that are running, before the seal too, since
@@ -408,7 +426,9 @@ fn admitted_run(
         target,
     )
     .ok_or(Refusal::Unavailable)?;
-    crate::ui::windows::ran(registered.owner, key);
+    if let Some(ran) = STATE.ran.get() {
+        ran(registered.owner, key);
+    }
     crate::log!(
         DEBUG,
         "{} ({key:016x}) ran {id}:{action}: {}",

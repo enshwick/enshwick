@@ -48,7 +48,7 @@ pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::{close_world_dialogs, show};
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
 pub(crate) use extensions::{ExtendScreenError, register as register_extension};
-pub(crate) use map::play_data;
+
 pub(crate) use map::{MarkersError, set as set_markers};
 pub(crate) use mods::mismatch_screen_on;
 
@@ -278,11 +278,6 @@ pub(crate) fn mod_dialog(
         dialog::Answerer::Mod(Registered::new(owner, callback, user)),
     );
     Ok(dialog::queue(dialog.of_world(loader, owner))?)
-}
-
-/// The ids of the dialogs' text tags, for the loader's text format.
-pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
-    dialog::tag_ids()
 }
 
 /// The text of a dialog's text tag, for the loader's text lookup.

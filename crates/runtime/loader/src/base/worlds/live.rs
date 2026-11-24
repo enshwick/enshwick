@@ -6,10 +6,9 @@ use enshwick_core::abi::{Event, Level, Side};
 
 use super::{DEFAULT_FILE, SettingsFile, current, set_current, world_file};
 use crate::engine::loader::{Loader, ModRecord};
-use enshwick_base::Relock;
 
 fn files(record: &ModRecord) -> Vec<SettingsFile> {
-    record.settings_files.relock().clone()
+    crate::base::worlds::settings_files(record)
 }
 
 /// The text of `path`; a file that does not read shows as absent.
@@ -33,7 +32,7 @@ pub(crate) fn write_target(path: &Path, text: &str) -> std::io::Result<()> {
 /// running world's file, or nothing while no world runs.
 pub(crate) fn file_text(record: &ModRecord, file: &str) -> String {
     let files = files(record);
-    if let Some(view) = record.server_values.relock().clone() {
+    if let Some(view) = crate::base::worlds::server_values(record) {
         let others: Vec<&str> = files
             .iter()
             .map(|f| f.file.as_str())

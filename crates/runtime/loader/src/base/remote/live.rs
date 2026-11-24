@@ -242,7 +242,7 @@ pub(crate) fn client(message: Message) {
 /// Takes a message a client sent, on the server's game thread; the
 /// answer is in the language the client's player reads.
 pub(crate) fn server(loader: &Loader, key: u64, message: Message) {
-    texts::for_player(key, || answer(loader, key, message));
+    crate::base::net::for_player(key, || answer(loader, key, message));
 }
 
 /// Answers a message the client `key` sent.
@@ -263,12 +263,12 @@ fn answer(loader: &Loader, key: u64, message: Message) {
             for record in loader
                 .mods
                 .iter()
-                .filter(|m| !m.settings_files.relock().is_empty())
+                .filter(|m| crate::base::worlds::has_settings(m))
                 .filter(|m| admin || m.joins())
             {
                 text.push_str(&record.id);
                 text.push('\t');
-                text.push_str(&record.label());
+                text.push_str(&crate::base::manifest::label(record));
                 text.push('\n');
             }
             crate::base::net::to_player(
@@ -324,7 +324,7 @@ fn snapshot(loader: &Loader, key: u64, id: &str, admin: bool) {
     let Some((_, record)) = loader.find_mod(id) else {
         return;
     };
-    let Some(schema) = record.settings_schema() else {
+    let Some(schema) = crate::base::worlds::schema_of(record) else {
         return;
     };
     let text = redacted(&schema, &crate::base::worlds::show_text(record));
@@ -375,8 +375,7 @@ fn edit(
     let (index, record) = loader
         .find_mod(id)
         .ok_or_else(|| EditSettingError::UnknownMod { id: id.to_owned() })?;
-    let schema = record
-        .settings_schema()
+    let schema = crate::base::worlds::schema_of(record)
         .ok_or_else(|| EditSettingError::NoSchema { id: id.to_owned() })?;
     let now = Instant::now();
     admit(

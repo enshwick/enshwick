@@ -233,7 +233,7 @@ pub(crate) fn init(loader: &'static Loader) {
     // Without the lookup or the menus' question, each of which turns itself
     // off where players and admins see it, disabled recipes stay in the
     // crafting menus and the rest of them holds.
-    let _linked = crate::engine::code::link_recipe_lookup(loader);
+    let _linked = crate::engine::code::link_recipe_lookup(loader, filter);
     if loader.side == Side::CLIENT {
         let at = Target::Pinned(pinned::recipe::MENU_KNOWN);
         let _linked = loader.link_feature(&MENU_FUSE, at, &KNOWN_NEXT, menu_known, HookFlags::NONE);

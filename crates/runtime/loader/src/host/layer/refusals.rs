@@ -466,7 +466,7 @@ impl Refusal for crate::inventory::transactions::SubmitInventoryError {
 
 /// An item the game does not have is missing; a build, registry or world
 /// without the item lookup unavailable.
-impl Refusal for crate::inventory::transactions::ItemInfoError {
+impl Refusal for crate::content::item_info::ItemInfoError {
     fn status(&self) -> Status {
         match self {
             Self::NoItem => Status::MISSING,
@@ -477,7 +477,7 @@ impl Refusal for crate::inventory::transactions::ItemInfoError {
 
 /// A spawn the build or the world cannot take is unavailable, a malformed one a
 /// bad argument, one the engine refuses refused.
-impl Refusal for crate::inventory::spawns::SpawnError {
+impl Refusal for crate::world::spawns::SpawnError {
     fn status(&self) -> Status {
         match self {
             Self::Unread | Self::NoWorld => Status::UNAVAILABLE,

@@ -67,6 +67,9 @@ struct State {
     /// The pickup event's layout, resolved once for the screen and the
     /// pickups the loader raises alike.
     pickup: OnceLock<Option<Heard>>,
+    /// The players' character entities, which the interactions read on the
+    /// game thread now and then.
+    players: arc_swap::ArcSwapOption<Vec<u32>>,
 }
 
 impl State {
@@ -75,11 +78,24 @@ impl State {
             own_pickups: std::sync::Mutex::new(Vec::new()),
             own_waiting: std::sync::atomic::AtomicUsize::new(0),
             pickup: OnceLock::new(),
+            players: arc_swap::ArcSwapOption::const_empty(),
         }
     }
 }
 
 static STATE: State = State::new();
+
+/// The players' character entities as the interactions last read them;
+/// `None` before a read and after a hosted game ended.
+pub(crate) fn players() -> arc_swap::Guard<Option<std::sync::Arc<Vec<u32>>>> {
+    STATE.players.load()
+}
+
+/// Keeps `players`, the players' character entities the interactions read,
+/// or forgets them with `None`.
+pub(crate) fn keep_players(players: Option<std::sync::Arc<Vec<u32>>>) {
+    STATE.players.store(players);
+}
 
 /// The switch of the item filters.
 static ITEMS_FUSE: Fuse = Fuse::new("item filters");
@@ -454,7 +470,7 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             let _heard = ask(&consumed, false);
         }
     }
-    let players = crate::actions::interactions::players();
+    let players = players();
     for &player in players.as_deref().map_or(&[][..], Vec::as_slice) {
         // SAFETY: the caller guarantees the system's live context, at its
         // entry on its thread.

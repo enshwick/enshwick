@@ -1,9 +1,9 @@
-//! Host functions for mods' commands and action windows.
+//! Host functions for mods' commands and actions.
 
 use enshwick_core::abi::{ActionReply, CommandInfo, Header, Level, Status, Str};
 
 use crate::host::layer::guards::in_init;
-use crate::host::layer::{Caller, HeadedOut, List, Mod, SizedListOut, Text, entries};
+use crate::host::layer::{Caller, HeadedOut, Mod, SizedListOut, Text, entries};
 
 thread_local! {
     /// The text `run_command` last handed out on this thread.
@@ -52,17 +52,5 @@ entries! {
         }
         crate::actions::controls::rules_changed(me.index);
         Ok(())
-    }
-
-    fn action_window(
-        me as Mod,
-        id as Text,
-        [players, count] as List<enshwick_core::PlayerKey>,
-        change: u32,
-    ) -> Status {
-        if players.len() > crate::ui::windows::MAX_PLAYERS {
-            return Err(Status::BAD_ARGS.into());
-        }
-        Ok(crate::ui::windows::show(me.loader, me.index, id, players, change)?)
     }
 }

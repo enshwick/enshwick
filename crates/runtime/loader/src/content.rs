@@ -22,7 +22,14 @@ pub(crate) mod content_renames;
 )]
 pub(crate) mod crafting_props;
 pub mod data_changes;
+#[cfg(windows)]
+pub(crate) mod item_info;
 pub mod item_kinds;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build links the loot rate")
+)]
+pub(crate) mod loot_slot;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the client's interface lists named content")

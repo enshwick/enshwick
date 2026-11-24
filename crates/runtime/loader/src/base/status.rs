@@ -122,9 +122,9 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             let running = !record.off.load(Ordering::Acquire);
             ModStatus {
                 id: record.id.clone(),
-                name: record.name(),
+                name: crate::base::manifest::name(record),
                 version: record.version.clone(),
-                credits: record.meta.credits(),
+                credits: crate::base::manifest::shown(record).credits(),
                 features: {
                     let features = record.features.relock().clone();
                     crate::engine::features::shown(&features, record.texts.relock().as_ref())
@@ -176,8 +176,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         last_crash: crate::engine::crash::last().map(str::to_owned),
         at: crate::engine::diag::now(),
         mods,
-        skipped: loader
-            .skipped
+        skipped: crate::base::resolve::skipped(loader)
             .iter()
             .map(|s| crate::engine::diag::SkippedMod {
                 id: s.id.clone(),

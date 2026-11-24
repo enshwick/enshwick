@@ -68,7 +68,7 @@ pub(crate) fn takers() -> Vec<String> {
 #[must_use]
 pub(crate) fn mods_off(loader: &crate::engine::loader::Loader) -> Vec<String> {
     off_records(loader)
-        .map(crate::engine::loader::ModRecord::label)
+        .map(crate::base::manifest::label)
         .chain(skipped_off(loader).map(|skipped| skipped.label.clone()))
         .collect()
 }
@@ -107,8 +107,7 @@ fn off_records(
 pub(crate) fn skipped_off(
     loader: &crate::engine::loader::Loader,
 ) -> impl Iterator<Item = &crate::base::resolve::Skipped> + '_ {
-    loader
-        .skipped
+    crate::base::resolve::skipped(loader)
         .iter()
         .filter(|skipped| counts_off(loader, skipped))
 }
@@ -145,7 +144,7 @@ pub(crate) fn names(loader: &crate::engine::loader::Loader) -> Vec<String> {
             features
                 .iter()
                 .filter(|f| f.off.is_some())
-                .map(|f| format!("{}: {}", record.label(), f.name)),
+                .map(|f| format!("{}: {}", crate::base::manifest::label(record), f.name)),
         );
     }
     names.extend(crate::engine::diag::parts_off().into_iter().map(|p| p.part));

@@ -549,7 +549,7 @@ pub(crate) fn frame(context: usize) {
     let _ran = KEYS_FUSE.run("the mod control keys", || {
         // SAFETY: the one caller passes the frame's live interface context,
         // on the interface thread.
-        let open = unsafe { in_game(context, gate) } && !crate::ui::interface::window_shown();
+        let open = unsafe { in_game(context, gate) } && !crate::base::dialogs::window_shown();
         let window = if open { input::focused_thread() } else { None };
         let now = now_ms();
         let hosting = crate::engine::world::hosting();
@@ -631,7 +631,7 @@ unsafe fn in_game(context: usize, gate: &Gate) -> bool {
     // thread; the offsets are the table's `map.context_state` and
     // `map.state_play_data`.
     let data = unsafe {
-        crate::ui::interface::play_data(context, gate.context_state, gate.state_play_data)
+        crate::engine::screens::play_data(context, gate.context_state, gate.state_play_data)
     };
     if data == 0 {
         return false;
@@ -759,7 +759,7 @@ pub(crate) fn rows() -> Vec<Row> {
             Row {
                 index,
                 mod_id: d.mod_id().to_owned(),
-                mod_name: record.map_or_default(crate::engine::loader::ModRecord::label),
+                mod_name: record.map_or_default(crate::base::manifest::label),
                 label: record.map_or_else(|| d.label.clone(), |r| label_of(r, &d.label)),
                 keys: *k,
             }

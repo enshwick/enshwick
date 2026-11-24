@@ -29,6 +29,11 @@ pub mod early;
 #[cfg(windows)]
 pub(crate) mod ecs;
 pub mod errors;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build loads mods")
+)]
+pub(crate) mod facts;
 pub mod features;
 #[cfg(windows)]
 pub(crate) mod filters;

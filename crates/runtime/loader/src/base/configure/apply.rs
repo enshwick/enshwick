@@ -149,7 +149,7 @@ fn write(
 ) -> Result<Change, ApplySettingError> {
     let record = loader.mods.get(index).ok_or(ApplySettingError::NoMod)?;
     let id = record.id.as_str();
-    let files = record.settings_files.relock().clone();
+    let files = crate::base::worlds::settings_files(record);
     if files.is_empty() {
         return Err(ApplySettingError::NoSchema { id: id.to_owned() });
     }
@@ -285,7 +285,10 @@ pub(crate) fn check_settings(
     else {
         return Ok(());
     };
-    let found = record
+    let Some(settings) = crate::base::worlds::settings_of(record) else {
+        return Ok(());
+    };
+    let found = settings
         .checks
         .relock()
         .iter()

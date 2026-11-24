@@ -16,6 +16,7 @@ use crate::base::resolve::{self, Candidate};
 use crate::engine::chains::Chains;
 use crate::engine::code::Watching;
 use crate::engine::code_watch::Stage;
+use crate::engine::facts::Facts;
 use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::parts::{Part, part};
@@ -146,12 +147,11 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems,
-        newer_release: OnceLock::new(),
         unofficial: AtomicBool::new(false),
         offs: AtomicU64::new(0),
         retry: crate::engine::retry::Retry::default(),
-        skipped: skipped(&libraries, &candidates, &plan, found.refused),
         parts: crate::parts::parts(),
+        facts: loader_facts(skipped(&libraries, &candidates, &plan, found.refused)),
     };
     let Some(loader) = crate::engine::loader::install(loader) else {
         crate::engine::shipped::release();
@@ -286,28 +286,33 @@ fn records(
 ) -> Vec<ModRecord> {
     plan.order
         .iter()
-        .map(|&i| ModRecord {
-            id: candidates[i].id.clone(),
-            version: candidates[i].version.to_string(),
-            file: format!("mods/{}", libraries[i].file),
-            manifest: libraries[i].manifest,
-            // SAFETY: the manifest is the copy `manifest::read` made for the
-            // process or a pack's manifest built for the process, its
-            // strings and lists readable and never written; a string `read`
-            // left in the DLL is read while the planned mod's DLL is loaded.
-            meta: unsafe { crate::base::manifest::meta(libraries[i].manifest) },
-            off: AtomicBool::new(false),
-            off_reason: Mutex::new(None),
-            waiting: AtomicBool::new(false),
-            settings: Mutex::new(crate::engine::kept_text::KeptText::new(usize::MAX)),
-            server_values: Mutex::new(None),
-            settings_files: Mutex::new(Vec::new()),
-            checks: Mutex::new(Vec::new()),
-            texts: Mutex::new(None),
-            pack: libraries[i].pack,
-            features: Mutex::new(Vec::new()),
+        .map(|&i| {
+            let mut record = ModRecord {
+                id: candidates[i].id.clone(),
+                version: candidates[i].version.to_string(),
+                file: format!("mods/{}", libraries[i].file),
+                manifest: libraries[i].manifest,
+                off: AtomicBool::new(false),
+                off_reason: Mutex::new(None),
+                waiting: AtomicBool::new(false),
+                texts: Mutex::new(None),
+                pack: libraries[i].pack,
+                features: Mutex::new(Vec::new()),
+                facts: Facts::default(),
+            };
+            record.facts = crate::parts::parts().facts(&record);
+            record
         })
         .collect()
+}
+
+/// What the layers keep of the whole run: the mods that did not load and,
+/// once the release check finds one, a newer release.
+fn loader_facts(skipped: Vec<resolve::Skipped>) -> Facts {
+    Facts::new(vec![
+        Box::new(resolve::SkippedMods(skipped)),
+        Box::new(crate::base::releases::NewerRelease::default()),
+    ])
 }
 
 /// Names the mod or the loader in the crash report when a fault involves its
@@ -366,6 +371,8 @@ fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut 
 /// Calls the `init` of every mod still on in load order, putting game code each one
 /// changes outside the API down to it.
 fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
+    // A dry run initialises too, so the host is named here, not in `start` alone.
+    crate::engine::profile::on_host(&host::API);
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
         if record.off.load(Ordering::Acquire) {

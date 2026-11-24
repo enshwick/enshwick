@@ -1,8 +1,8 @@
 //! The mods a server's join needs, the client's mods a world does not run,
 //! and the settings a server sends a client.
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi::{Event, Level};
 
@@ -10,7 +10,7 @@ use super::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
 use super::{Difference, Row};
 use crate::base::wire::Drops;
 use crate::engine::kept_text::{KeptText, keep};
-use crate::engine::loader::loader;
+use crate::engine::loader::{ModRecord, loader};
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
 
@@ -37,6 +37,9 @@ struct Joins {
     /// The server-advertised strings the host table has handed out, kept
     /// for the process since mods may hold them.
     advertised: Mutex<KeptText>,
+    /// The hash of a data pack's files by its id, named by the packs when
+    /// they seal.
+    pack_hash: OnceLock<fn(&str) -> Option<String>>,
 }
 
 static STATE: Joins = Joins {
@@ -46,7 +49,28 @@ static STATE: Joins = Joins {
     kicks: Drops::new(),
     pending: AtomicBool::new(false),
     advertised: Mutex::new(KeptText::new(ADVERTISED_BYTES)),
+    pack_hash: OnceLock::new(),
 };
+
+/// Names `hash`, which gives a data pack's files hash by its id, for the
+/// join versions; the first one named stays.
+pub(crate) fn on_pack_hash(hash: fn(&str) -> Option<String>) {
+    let _first = STATE.pack_hash.set(hash);
+}
+
+/// The version of `record`'s mod the join check compares: a pack's carries
+/// the hash of its files, so other files of one version differ.
+pub(crate) fn join_version(record: &ModRecord) -> String {
+    let hash = STATE
+        .pack_hash
+        .get()
+        .filter(|_| record.pack)
+        .and_then(|hash| hash(&record.id));
+    match hash {
+        Some(hash) => format!("{}+{hash}", record.version),
+        None => record.version.clone(),
+    }
+}
 
 /// The running mods of side both as the join check counts them,
 /// `(id, version)`: read each time, since a mod may turn off while the game
@@ -57,7 +81,7 @@ pub(crate) fn join_mods() -> Vec<(String, String)> {
             .mods
             .iter()
             .filter(|m| m.joins())
-            .map(|m| (m.id.clone(), m.join_version()))
+            .map(|m| (m.id.clone(), join_version(m)))
             .collect()
     })
 }
@@ -78,7 +102,7 @@ pub(crate) fn join_mods_off() -> Vec<(String, String)> {
                 && m.off.load(Ordering::Acquire)
                 && !for_world.contains(&ModIndex::new(*index))
         })
-        .map(|(_, m)| (m.id.clone(), m.join_version()))
+        .map(|(_, m)| (m.id.clone(), join_version(m)))
         .collect()
 }
 
@@ -189,8 +213,11 @@ pub(crate) fn apply_server_value(id: &str, values: &str) {
     else {
         return;
     };
+    let Some(settings) = crate::base::worlds::settings_of(record) else {
+        return;
+    };
     let first = {
-        let mut held = record.server_values.relock();
+        let mut held = settings.server_values.relock();
         if held.as_deref() == Some(values) {
             return;
         }
@@ -216,7 +243,9 @@ pub(crate) fn forget_server_values() {
         return;
     };
     for (index, record) in loader.mods.iter().enumerate() {
-        if record.server_values.relock().take().is_some() {
+        let taken = crate::base::worlds::settings_of(record)
+            .and_then(|settings| settings.server_values.relock().take());
+        if taken.is_some() {
             crate::engine::log::write(
                 Level::INFO,
                 &record.id,

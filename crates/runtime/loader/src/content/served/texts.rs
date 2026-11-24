@@ -57,7 +57,7 @@ pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
     if let Some(text) = crate::base::notices::text(id) {
         return Some(text);
     }
-    if let Some(text) = crate::ui::interface::text(id) {
+    if let Some(text) = crate::base::dialogs::text(id) {
         return Some(Handed::of(text));
     }
     mod_text(id, language).map(Handed::of)
@@ -188,7 +188,7 @@ fn ours(texts: &FxHashMap<u32, Vec<(u32, &'static str)>>) -> FxHashSet<u32> {
         .keys()
         .copied()
         .chain(crate::base::notices::tag_ids())
-        .chain(crate::ui::interface::tag_ids())
+        .chain(crate::base::dialogs::tag_ids())
         .collect()
 }
 
@@ -326,7 +326,7 @@ mod tests {
         let answered = ours(&texts);
         assert!(
             crate::base::notices::tag_ids()
-                .chain(crate::ui::interface::tag_ids())
+                .chain(crate::base::dialogs::tag_ids())
                 .all(|id| answered.contains(&id))
                 && answered.len() > 1 + crate::base::notices::tag_ids().count(),
             "every notice and dialog tag is answered"
@@ -356,7 +356,7 @@ mod tests {
         unsafe { format(&raw mut out, 8) };
         assert_eq!(out, [0, 0, 8], "a game tag goes to the game");
 
-        let dialog = crate::ui::interface::tag_ids().next().unwrap();
+        let dialog = crate::base::dialogs::tag_ids().next().unwrap();
         // SAFETY: `out` is a writable local record of three `u64`, and the
         // slot holds `passed`, which writes only that record.
         unsafe { format(&raw mut out, dialog) };

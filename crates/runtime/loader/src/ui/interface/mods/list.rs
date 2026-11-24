@@ -61,7 +61,7 @@ const fn clicked(details: bool, gear: bool, index: usize) -> Option<Listed> {
 fn about(paint: &Painter<'_>, record: &crate::engine::loader::ModRecord) {
     let off = record.off.load(Ordering::Acquire);
     let waiting = !off && record.waiting.load(Ordering::Acquire);
-    let name = record.label();
+    let name = crate::base::manifest::label(record);
     let why = if off {
         record.off_reason_shown()
     } else {
@@ -70,10 +70,13 @@ fn about(paint: &Painter<'_>, record: &crate::engine::loader::ModRecord) {
     heading(
         paint,
         &name,
-        &metadata(Some(&record.version), &record.meta.authors),
+        &metadata(
+            Some(&record.version),
+            &crate::base::manifest::shown(record).authors,
+        ),
         state_text(off, waiting).map(|state| (state, record.version.as_str(), why)),
     );
-    let description = record.description();
+    let description = crate::base::manifest::description(record);
     if !description.is_empty() {
         paint.label(description.as_bytes(), UiWidget::STYLE_BODY, true, false);
     }
@@ -156,12 +159,13 @@ fn state(paint: &Painter<'_>, record: &crate::engine::loader::ModRecord) {
     let features = crate::engine::features::shown(&features, record.texts.relock().as_ref());
     for feature in features {
         if let Some(reason) = &feature.off {
-            let line = store_off(&record.label(), &feature.name, reason).unwrap_or_else(|| {
-                texts::fill(
-                    "mods.feature.off",
-                    &[("feature", &feature.name), ("reason", reason)],
-                )
-            });
+            let line = store_off(&crate::base::manifest::label(record), &feature.name, reason)
+                .unwrap_or_else(|| {
+                    texts::fill(
+                        "mods.feature.off",
+                        &[("feature", &feature.name), ("reason", reason)],
+                    )
+                });
             paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
         }
     }
@@ -175,7 +179,7 @@ fn detail_lines(
     index: usize,
     record: &crate::engine::loader::ModRecord,
 ) -> Vec<String> {
-    let meta = &record.meta;
+    let meta = crate::base::manifest::shown(record);
     let (defines, extends) = crate::base::points::screen(index, loader);
     [
         ("mods.license", "license", meta.license.clone()),
@@ -195,7 +199,10 @@ pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
     let Some(record) = loader.mods.get(index) else {
         return;
     };
-    let credits = metadata(Some(&record.version), &record.meta.authors);
+    let credits = metadata(
+        Some(&record.version),
+        &crate::base::manifest::shown(record).authors,
+    );
     for line in core::iter::once(credits).chain(detail_lines(loader, index, record)) {
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
@@ -263,7 +270,7 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
             false,
         );
     }
-    if let Some(release) = loader.newer_release.get() {
+    if let Some(release) = crate::base::releases::newer_release(loader) {
         let line = texts::fill(
             "mods.newer",
             &[
@@ -307,8 +314,10 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     let mut done = Listed::Nothing;
     loader_notes(loader, paint);
     let world = crate::base::worlds::running();
-    let away = mods.iter().any(|m| m.server_values.relock().is_some());
-    if !world && !away && mods.iter().any(|m| !m.settings_files.relock().is_empty()) {
+    let away = mods
+        .iter()
+        .any(|m| crate::base::worlds::server_values(m).is_some());
+    if !world && !away && mods.iter().any(crate::base::worlds::has_settings) {
         paint.label(
             texts::text("mods.settings.in-world").as_bytes(),
             UiWidget::STYLE_SECONDARY,
@@ -316,7 +325,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             false,
         );
     }
-    let count = mods.len() + loader.skipped.len();
+    let count = mods.len() + crate::base::resolve::skipped(loader).len();
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, count);
     let shown = listing.shown(*first, count);
@@ -328,8 +337,8 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         if index > shown.start {
             paint.separator();
         }
-        let sent = record.server_values.relock().is_some();
-        let settings = shows_settings(record.settings_schema().as_ref(), sent);
+        let sent = crate::base::worlds::server_values(record).is_some();
+        let settings = shows_settings(crate::base::worlds::schema_of(record).as_ref(), sent);
         let here = mods_screen::gear(world, sent);
         let opens = has_gear(
             settings,
@@ -356,7 +365,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             done = clicked;
         }
     }
-    for (index, skipped) in (mods.len()..).zip(&loader.skipped) {
+    for (index, skipped) in (mods.len()..).zip(crate::base::resolve::skipped(loader)) {
         if shown.contains(&index) {
             if index > shown.start {
                 paint.separator();

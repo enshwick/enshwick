@@ -90,7 +90,7 @@ fn send_carried(
 ) -> bool {
     // A client that just said hello holds nothing to take back.
     let sent = player.is_none()
-        || crate::engine::texts::for_player(key, || {
+        || crate::base::net::for_player(key, || {
             carried_messages(loader, declared, resend, |owner| {
                 player
                     .and_then(|p| crate::actions::player_actions::allowed(loader, owner, p))
@@ -139,7 +139,7 @@ fn carried_messages(
             .collect();
         messages.push(Message::Controls {
             id: record.id.clone(),
-            name: cut(&record.label(), MAX_CARRIED_TEXT).to_owned(),
+            name: cut(&crate::base::manifest::label(record), MAX_CARRIED_TEXT).to_owned(),
             controls,
         });
     }

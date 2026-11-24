@@ -23,7 +23,7 @@ pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
-    let Some(schema) = record.settings_schema() else {
+    let Some(schema) = crate::base::worlds::schema_of(record) else {
         return Vec::new();
     };
     let texts = record.texts.relock().clone();
@@ -34,10 +34,7 @@ pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place
     if !place.away {
         return rows::rows(&schema, &crate::base::worlds::show_text(record), words);
     }
-    record
-        .server_values
-        .relock()
-        .clone()
+    crate::base::worlds::server_values(record)
         .map_or_default(|values| mods_screen::server_rows(schema, &values, words))
 }
 
@@ -62,7 +59,7 @@ pub(super) fn settings(
             false,
         );
     }
-    let schema = record.settings_schema()?;
+    let schema = crate::base::worlds::schema_of(record)?;
     if world {
         paint.label(
             texts::text("mods.settings.world").as_bytes(),
@@ -119,7 +116,11 @@ pub(super) fn draw_row(
             .map_or_else(
                 || format!("{id}/settings.toml"),
                 |(_, record)| {
-                    crate::base::worlds::shown_file(id, &record.settings_files.relock(), &row.key)
+                    crate::base::worlds::shown_file(
+                        id,
+                        &crate::base::worlds::settings_files(record),
+                        &row.key,
+                    )
                 },
             )
     };

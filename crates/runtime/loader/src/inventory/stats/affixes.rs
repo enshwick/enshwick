@@ -98,7 +98,7 @@ pub(crate) enum RollAffixesError {
     World(#[from] crate::engine::world::WorldError),
     /// The item's static data, unreadable now.
     #[error(transparent)]
-    Item(#[from] crate::inventory::transactions::ItemInfoError),
+    Item(#[from] crate::content::item_info::ItemInfoError),
 }
 
 /// Rolls an item anew and keeps the result as its item stats; how many

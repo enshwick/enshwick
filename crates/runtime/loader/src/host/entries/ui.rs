@@ -5,8 +5,8 @@ use enshwick_core::abi::Status;
 
 use crate::host::layer::guards::on_client;
 use crate::host::layer::{
-    Callback, Caller, Headed, HeadedInOut, HeadedList, HeadedOut, MaybeBuffer, Mod, Out,
-    SizedListOut, entries,
+    Callback, Caller, Headed, HeadedInOut, HeadedList, HeadedOut, List, MaybeBuffer, Mod, Out,
+    SizedListOut, Text, entries,
 };
 
 entries! {
@@ -165,5 +165,17 @@ entries! {
         let read = crate::world::fog::read(me.index, &mut found, [x, y], [width, height], out)?;
         info.put(found)?;
         Ok(read?)
+    }
+
+    fn action_window(
+        me as Mod,
+        id as Text,
+        [players, count] as List<enshwick_core::PlayerKey>,
+        change: u32,
+    ) -> Status {
+        if players.len() > crate::ui::windows::MAX_PLAYERS {
+            return Err(Status::BAD_ARGS.into());
+        }
+        Ok(crate::ui::windows::show(me.loader, me.index, id, players, change)?)
     }
 }
