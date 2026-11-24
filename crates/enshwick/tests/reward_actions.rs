@@ -5,8 +5,9 @@
 mod tests {
     use enshwick::__private::ids;
     use enshwick::abi::{Header, ItemAction, PlayerInfo, Status, TickData};
-    use enshwick::events::{Ticked, WorldLoaded};
+    use enshwick::events::{QuestCompleted, Ticked, WorldLoaded};
     use enshwick::items::Kind;
+    use enshwick::knowledge::KnowledgeId;
     use enshwick::progress::Experience;
     use enshwick::rewards::{Action, Give, Reward, Rewards};
     use enshwick::test::{FakeHost, Installed};
@@ -21,6 +22,7 @@ mod tests {
     const CRAFTED: u32 = 0x53;
     const LOOT: u32 = 0x54;
     const RECIPE: u32 = 77;
+    const QUEST: KnowledgeId = KnowledgeId::new(0x51);
 
     static REWARDS: std::sync::OnceLock<Rewards> = std::sync::OnceLock::new();
 
@@ -34,6 +36,7 @@ mod tests {
                 ("smith", Action::Craft(RecipeId::new(RECIPE)), 100),
                 ("looter", Action::Loot, 1000),
                 ("drinker", Action::Consume(tonic()), 3),
+                ("one-quest", Action::Quest(QUEST), 30),
             ] {
                 load.add_reward(Reward::new(name, on).with(Give::Experience(amount)))?;
             }
@@ -148,6 +151,22 @@ mod tests {
             "the mod's and its rewards'"
         );
         loader
+    }
+
+    #[test]
+    fn a_reward_of_one_quest_follows_only_that_quest() {
+        let data = std::env::temp_dir().join(format!("enshwick-one-quest-{}", std::process::id()));
+        let loader = installed(&data);
+        let completed = |quest| enshwick::abi::QuestData {
+            header: Header::of::<enshwick::abi::QuestData>(),
+            entity: Entity(2),
+            quest,
+        };
+        let _heard = loader.raise::<QuestCompleted>(&completed(KnowledgeId::new(0x52)));
+        assert_eq!(gained(&loader, 2), 0, "another quest");
+        let _heard = loader.raise::<QuestCompleted>(&completed(QUEST));
+        assert_eq!(gained(&loader, 2), 30, "{:?}", loader.logs());
+        let _gone = std::fs::remove_dir_all(&data);
     }
 
     #[test]

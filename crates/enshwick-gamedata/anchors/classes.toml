@@ -379,6 +379,7 @@ entries = [
   "knowledge.object",
   "knowledge.player_value",
   "knowledge.push",
+  "knowledge.quest_pay",
   "knowledge.queue",
   "knowledge.record_active",
   "knowledge.record_changes",

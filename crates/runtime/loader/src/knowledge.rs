@@ -3,6 +3,10 @@
 #[cfg(windows)]
 pub(crate) mod progress;
 #[cfg(windows)]
+pub(crate) mod quest_events;
+#[cfg(windows)]
+pub(crate) mod quest_pay;
+#[cfg(windows)]
 pub(crate) mod store;
 
 #[cfg(windows)]
@@ -16,9 +20,12 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: store::TABLE_IDS,
         seal: Some(|_| store::guard::seal()),
         link: Some(store::guard::link),
-        steps: &[step!(Follow, "knowledge steps", |s| store::after_step(
-            s.loader
-        ))],
+        steps: &[
+            step!(Follow, "knowledge steps", |s| store::after_step(s.loader)),
+            step!(Follow, "quest event queries", |s| quest_events::after_step(
+                s.loader
+            )),
+        ],
         forget: Some(|_| {
             store::forget();
         }),
@@ -35,6 +42,12 @@ pub(crate) static PARTS: &[&Part] = &[
             progress::game_ended(loader);
         }),
         ..part!("progress", progress)
+    },
+    &Part {
+        table_ids: quest_pay::TABLE_IDS,
+        seal: Some(|_| quest_pay::seal()),
+        link: Some(quest_pay::link),
+        ..part!("quest rewards", quest_pay)
     },
     &Part {
         steps: &[step!(Follow, "knowledge change steps", |s| {

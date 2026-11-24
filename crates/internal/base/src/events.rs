@@ -22,7 +22,7 @@ use core::time::Duration;
 use crate::abi::PlayerDeathData;
 use crate::abi::{
     BuildingData, ChunkData, Event, KnowledgeData, PlayerData, ProgressWriteData, QuestData,
-    TerrainPageData, TickData, TickHandle,
+    QuestProgressData, QuestStepData, TerrainPageData, TickData, TickHandle,
 };
 
 pub(crate) mod sealed {
@@ -265,6 +265,14 @@ with_data! {
     KnowledgeChanged = KNOWLEDGE_CHANGED: KnowledgeData, size_of::<KnowledgeData>();
     /// [`Event::QUEST_COMPLETED`].
     QuestCompleted = QUEST_COMPLETED: QuestData, size_of::<QuestData>();
+    /// [`Event::QUEST_STARTED`]; `quests::Quests`, with the `typed` feature,
+    /// reads the quest's steps.
+    QuestStarted = QUEST_STARTED: QuestData, size_of::<QuestData>();
+    /// [`Event::QUEST_STEP_DONE`].
+    QuestStepDone = QUEST_STEP_DONE: QuestStepData, size_of::<QuestStepData>();
+    /// [`Event::QUEST_PROGRESSED`], for each change of a counted part's
+    /// counter, a mod's objectives included.
+    QuestProgressed = QUEST_PROGRESSED: QuestProgressData, size_of::<QuestProgressData>();
     /// [`Event::CHUNK_LOADED`], for a chunk of the world's entities.
     ///
     /// An entity chunk loads only as players come near, so a server with no

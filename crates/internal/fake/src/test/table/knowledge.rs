@@ -7,14 +7,15 @@ use core::ffi::c_void;
 
 use crate::test::table::{Registered, State, with};
 use enshwick_core::abi::{
-    ComfortFilterFn, ExperienceFilterFn, KnowledgeInfo, KnowledgeInputFilterFn, SkillCheckFn,
-    Status,
+    ComfortFilterFn, ExperienceFilterFn, KnowledgeInfo, KnowledgeInputFilterFn,
+    QuestRewardFilterFn, SkillCheckFn, Status,
 };
 
 /// What the installed fake's knowledge answers and has recorded.
 #[derive(Default)]
 pub(crate) struct KnowledgeState {
     pub(crate) knowledge_input_filters: Vec<Registered<KnowledgeInputFilterFn>>,
+    pub(crate) quest_reward_filters: Vec<Registered<QuestRewardFilterFn>>,
     /// Knowledge values by `(character or 0, id)`.
     pub(crate) values: Vec<(Option<enshwick_core::Entity>, KnowledgeInfo)>,
     /// Whether each game query holds, by `(character or 0, query)`.
@@ -32,6 +33,13 @@ pub(crate) struct KnowledgeState {
         enshwick_core::abi::KnowledgeId,
         u32,
         u32,
+    )>,
+    /// The exact sets the mod asked for: character, id, value, notice.
+    pub(crate) sets: Vec<(
+        Option<enshwick_core::Entity>,
+        enshwick_core::abi::KnowledgeId,
+        u32,
+        u8,
     )>,
     /// The changes the mod asked for accounts: key, id, kind, value,
     /// whether a revoke.
@@ -192,6 +200,22 @@ entries! {
         })
     }
 
+    pub(crate) fn quest_reward_filter(
+        me as Mod,
+        callback: Option<QuestRewardFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            s.knowledge
+                .quest_reward_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
     pub(crate) fn knowledge(
         me as Caller,
         entity: enshwick_core::Entity,
@@ -281,6 +305,46 @@ entries! {
             (_, enshwick_core::Entity(0)) => for_account(change.account, id, kind, value, revoking),
             _ => Status::BAD_ARGS,
         }
+    }
+
+    /// As the loader's `knowledge_set`: an exact value of a character's or
+    /// the world's knowledge, refused where the loader refuses it.
+    pub(crate) fn knowledge_set(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        id: enshwick_core::abi::KnowledgeId,
+        value: u32,
+        notice: u8,
+    ) -> Status {
+        use enshwick_core::abi::KnowledgeChange;
+        if notice != KnowledgeChange::QUIET && notice != KnowledgeChange::SHOWN {
+            return Status::BAD_ARGS;
+        }
+        with(Status::MISSING, |s| {
+            let Some((_, known)) = s.knowledge.values.iter().find(|(_, k)| k.id == id) else {
+                return Status::BAD_ARGS;
+            };
+            if names_the_world(known.scope, entity) {
+                return Status::REFUSED;
+            }
+            let current = s
+                .knowledge
+                .values
+                .iter()
+                .find(|(e, k)| k.id == id && (k.scope == KnowledgeInfo::WORLD || *e == Some(entity)))
+                .map_or(0, |(_, k)| k.value);
+            let gained_unexpected = known.kind == KnowledgeInfo::FLAGS
+                && known.flags != 0
+                && value & !current & !known.flags != 0;
+            if (known.kind == KnowledgeInfo::BOOL && value > 1)
+                || (notice == KnowledgeChange::SHOWN && gained_unexpected)
+            {
+                return Status::BAD_ARGS;
+            }
+            let holder = (known.scope == KnowledgeInfo::PLAYER).then_some(entity);
+            s.knowledge.sets.push((holder, id, value, notice));
+            Status::OK
+        })
     }
 }
 

@@ -605,6 +605,13 @@ impl KnowledgeChange {
     pub const GRANT: u8 = 0;
     /// Takes the value back.
     pub const REVOKE: u8 = 1;
+    /// A notice of [`HostApi::knowledge_set`](super::HostApi::knowledge_set):
+    /// the value written with every bit marked seen, as a save loads it.
+    pub const QUIET: u8 = 0;
+    /// A notice of [`HostApi::knowledge_set`](super::HostApi::knowledge_set):
+    /// what the value gains granted as the game grants it, what it loses
+    /// written with the mark of flags kept and none for a bool or a counter.
+    pub const SHOWN: u8 = 1;
 }
 
 /// A front of weather in the server's world: the current phenomenon of one

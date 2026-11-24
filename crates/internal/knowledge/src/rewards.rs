@@ -59,8 +59,10 @@ pub enum Action {
     Join,
     /// Loots a container.
     Loot,
-    /// Completes a quest.
-    Quest,
+    /// Completes any quest.
+    AnyQuest,
+    /// Completes the quest of this id.
+    Quest(KnowledgeId),
     /// Eats, drinks or uses the item, once every item filter allowed the use
     /// and the game took the item
     /// ([`Kind::Consumed`](crate::items::Kind::Consumed)).
@@ -816,8 +818,13 @@ impl LoadMethods for crate::BaseLoad {
             Action::Loot => self.on::<LootInteractionEvent>(move |looted| {
                 grant_later(shared, &name, looted.guest_id);
             }),
-            Action::Quest => self.on::<crate::events::QuestCompleted>(move |quest| {
-                grant_later(shared, &name, quest.entity);
+            Action::AnyQuest => self.on::<crate::events::QuestCompleted>(move |done| {
+                grant_later(shared, &name, done.entity);
+            }),
+            Action::Quest(quest) => self.on::<crate::events::QuestCompleted>(move |done| {
+                if done.quest == quest {
+                    grant_later(shared, &name, done.entity);
+                }
             }),
             Action::Consume(item) => {
                 self.on_item(item, crate::items::Kind::Consumed, move |used| {
@@ -860,7 +867,7 @@ mod tests {
         let daily = Reward::new("daily", Action::Loot)
             .with(Give::Experience(1))
             .with_limit(Limit::Daily);
-        let world = Reward::new("world", Action::Quest)
+        let world = Reward::new("world", Action::AnyQuest)
             .with(Give::Experience(1))
             .with_limit(Limit::World);
         let mut given = Given::default();

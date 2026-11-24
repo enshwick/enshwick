@@ -10,6 +10,7 @@ use crate::test::{Installed, table};
 pub(crate) mod item_sets;
 #[cfg(feature = "typed")]
 pub(crate) mod queries;
+mod quest_rewards;
 #[cfg(feature = "typed")]
 pub(crate) mod rules;
 #[cfg(feature = "typed")]
@@ -133,6 +134,22 @@ impl Installed {
     #[must_use]
     pub fn revokes(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u32)> {
         table::with(Vec::new(), |s| s.knowledge.revokes.clone())
+    }
+
+    /// The exact knowledge sets the mod asked for: the character (`None`
+    /// for the world's knowledge), id, value and notice
+    /// ([`KnowledgeChange::QUIET`](enshwick_core::abi::KnowledgeChange::QUIET)
+    /// or [`KnowledgeChange::SHOWN`](enshwick_core::abi::KnowledgeChange::SHOWN)).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.knowledge_sets().is_empty());
+    /// ```
+    #[must_use]
+    pub fn knowledge_sets(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u8)> {
+        table::with(Vec::new(), |s| s.knowledge.sets.clone())
     }
 
     /// The knowledge changes the mod asked for accounts: the account's key,

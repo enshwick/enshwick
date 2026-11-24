@@ -20,6 +20,14 @@ pub mod rules {
     pub use crate::rates::may_declare_rate;
 }
 
+/// What the loader reads of the journal through the domains, as the mods
+/// read it: the quests, the knowledge their queries read, and the tests.
+#[cfg(feature = "typed")]
+pub mod quests {
+    pub use enshwick_content::__internal::{game_query_knowledge, passes};
+    pub use enshwick_knowledge::__internal::journal_quests;
+}
+
 /// `id`, a dependency's content id, once the loader lets this mod name
 /// it, for `deps!`.
 ///

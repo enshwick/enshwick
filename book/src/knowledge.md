@@ -72,8 +72,9 @@ its own table, built from the game's data.
 
 `grant(player, id, grant)` and `grant_world(id, grant)` grant knowledge as the
 game does. The next step applies it with everything that follows, such as
-experience, unlocks chained on it, the clients and the save. The grant must
-fit the id's kind:
+experience, unlocks chained on it, the clients and the save. A grant made
+before `WorldLoaded` waits in the game's queue until the world has loaded.
+The grant must fit the id's kind:
 
 - `Grant::Set` for a bool
 - `Grant::Add(n)` for a counter
@@ -112,6 +113,51 @@ again: the world's to every client, a player's to that player.
 unlocks chained on it, skill points already spent. A quest's id taken back
 while its steps still hold is rewarded again. A revoke fails as a grant
 does, and for a player whose save has not loaded yet.
+
+## Setting an exact value
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
+`set(player, id, value, notice)` and `set_world(id, value, notice)` set a
+value exactly: 0 or 1 for a bool, any count or bits otherwise. Beside each
+value the game marks what the player has seen: a bit per flag, one mark for
+a bool or a counter. A character's save loads with every
+mark set, and a grant clears the mark of what it sets. The `notice` says
+which way the value goes:
+
+| Notice | What it does |
+| --- | --- |
+| `KnowledgeNotice::Quiet` | writes the value at once with every mark set, as a save loads it; nothing a grant brings follows |
+| `KnowledgeNotice::Shown` | grants what the value gains, as `grant` does, and writes what it loses at once, as `revoke` does |
+
+What is written reaches the clients and the next save as a revoke does.
+A rejoin loads the character's save again, so every mark is set once more,
+whichever notice the set chose.
+Which notice the client shows for a value whose mark is clear is not yet
+seen in the game. A shown counter gains the difference from the value it
+reads now. So another grant before the next step adds to the count, the
+game's or a second set's; a quiet set is exact. A set fails as a grant
+does, and for a bool above 1. A shown set also fails for a gained bit the
+game does not expect. When the game's queue fills, a shown set keeps what
+it wrote and granted before.
+
+```rust
+use enshwick::knowledge::KnowledgeNotice;
+
+fn learned_quietly(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: enshwick::RecipeId) {
+    // Seen and crafted, without the game's notice.
+    if let Err(why) = knowledge.set(player, recipe.into(), 0b11, KnowledgeNotice::Quiet) {
+        enshwick::warn!("not set: {why}");
+    }
+}
+```
+
+```luau
+local function learned_quietly(player: number, recipe: number)
+    enshwick.knowledge.set(player, recipe, 3, "Quiet")
+end
+```
 
 ## Players not in the game
 

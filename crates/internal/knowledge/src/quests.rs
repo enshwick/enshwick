@@ -41,10 +41,12 @@ use crate::knowledge::{Knowledge, KnowledgeId, Scope};
 mod control;
 mod item_sets;
 pub(crate) mod objectives;
+pub(crate) mod payment;
 
 pub use crate::content::journal::EntryId;
 pub use control::{Holder, MoveQuestError};
 pub use item_sets::{ItemSetEntryInfo, ItemSetHintInfo, ItemSetInfo};
+pub use payment::{QuestPay, QuestPayment};
 
 /// The key of a text the journal names, the FNV-1a of its text tag's GUID.
 ///
@@ -346,6 +348,21 @@ const COLLECTIONS: &str = "collections";
 const ITEM_SETS: &str = "itemSetCategories";
 const ITEM_SET_REWARDS: &str = "itemSetRewards";
 
+/// The journal the game serves now, mods' changes in, with the reason its
+/// item sets did not read.
+fn read_journal(host: crate::Host) -> Result<(Journal, Option<Off>), Off> {
+    host.hash(JournalRegistryResource::ID)
+        .map(|hash| JOURNAL_REGISTRY.key_by_hash(hash))
+        .and_then(|key| host.served_value(key))
+        .and_then(|registry| Journal::of(&registry))
+}
+
+/// The quests of the journal the game serves now, as [`Quests::all`] lists
+/// them, read anew on each call.
+pub(crate) fn journal_quests(host: crate::Host) -> Result<Vec<QuestInfo>, Off> {
+    read_journal(host).map(|(journal, _)| journal.quests)
+}
+
 /// The journal a [`Quests`] read, kept once a read succeeds.
 #[derive(Debug, Default)]
 struct Read {
@@ -406,12 +423,7 @@ impl Quests {
         }
         let host = self.knowledge.host;
         let start = std::time::Instant::now();
-        let read = host
-            .hash(JournalRegistryResource::ID)
-            .map(|hash| JOURNAL_REGISTRY.key_by_hash(hash))
-            .and_then(|key| host.served_value(key))
-            .and_then(|registry| Journal::of(&registry));
-        match read {
+        match read_journal(host) {
             Ok((journal, failed)) => {
                 if let Some(off) = failed {
                     host.log(

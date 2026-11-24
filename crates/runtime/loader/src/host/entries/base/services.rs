@@ -329,7 +329,7 @@ entries! {
         callback as Callback<EventFn>,
         user: *mut core::ffi::c_void,
     ) -> Status {
-        if !(Event::SETTINGS_CHANGED.0..=Event::WAYPOINT_CHANGED.0).contains(&event.0) {
+        if !enshwick_core::__private::rules::is_loader_event(event) {
             return Err(Status::MISSING.into());
         }
         before_delivery(me.loader)?;

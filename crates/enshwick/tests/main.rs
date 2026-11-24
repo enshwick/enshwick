@@ -156,6 +156,8 @@ mod knowledge_revokes;
 #[cfg(feature = "typed")]
 mod knowledge_rules;
 #[cfg(feature = "unstable")]
+mod knowledge_set;
+#[cfg(feature = "unstable")]
 mod labels_and_renames;
 mod language;
 #[cfg(feature = "unstable")]
@@ -220,6 +222,8 @@ mod props_server;
 mod published_texts;
 #[cfg(feature = "typed")]
 mod query_names;
+#[cfg(feature = "typed")]
+mod quest_events;
 #[cfg(feature = "typed")]
 mod quest_objective_kinds;
 #[cfg(feature = "typed")]

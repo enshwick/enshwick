@@ -42,6 +42,7 @@ change in any release, a patch included.
 | `actions` and `console`. Also `commands` and `controls`. `Load::actions`, `Load::control`. | young |
 | `items`. Its `Load::on_item` and `Load::on_item_action`. Also the `on` table of `items.toml`. | which input or event each item action raises is known from reflection only, not yet seen in the game |
 | `rewards` and `rewards.toml`. `Load::rewards`, `Load::add_reward`, `Load::on_reward`. | young; a reward's experience and a craft's pairing with its request are not yet seen in the game |
+| `Load::on_quest_reward`, with the typed feature. Also `quests::QuestPayment` and `quests::QuestPay`. | young; a changed payment is seen only on a server copy |
 | `script`. The `Script` derive and the `script` attribute. | the binding of Rust types to Luau, still growing with it |
 | Calls: the `call` attribute and `Load::serve_call`. `Load::caller`, `services::Call`, `services::Caller`, `services::CallError`. | young |
 | The described calls, events and points a script runtime uses. `services::DescribedCall`, `services::DescribedCaller`, `services::DescribedEvent`, `services::DescribedEmitter`, `points::DescribedPoint`, `points::DescribedOwnedPoint`, `points::DescribedVerdict`, `points::DescribedField`. `Load::serve_described_call`, `Load::described_caller`, `Load::on_described_mod_event`, `Load::define_described_event`, `Load::define_described_point`, `Load::extend_described_point`. | young |
@@ -52,6 +53,7 @@ change in any release, a patch included.
 | `Load::add_experience` | whether a player gets the gain of an experience value a mod added is not yet seen in the game |
 | `Load::add_journal_page` and `content::journal::lore_category`. `Load::change_journal_page` and `Load::remove_journal_page`. | which categories the client draws a page under is read from its code only, not yet seen in the game |
 | `Knowledge::revoke` and `Load::on_knowledge_input`. `Knowledge::revoke_world`, `Knowledge::revoke_account`, `knowledge::Revoke`, `knowledge::Refusal`, `knowledge::KnowledgeRequest`. | how a vanilla client takes a revoke, and what it asks for, is not yet seen |
+| `Knowledge::set` and `Knowledge::set_world`. `knowledge::KnowledgeNotice`. | which notice the client shows for an unmarked value, and for a quiet set, is not yet seen in the game |
 | `Load::request_base_limits` and `altars::set_base_limit` | young |
 | `Load::limit_altar_level` | young |
 | `item_data` and `entity_data`. `Stats::set_item`. Rolling affixes onto items with `Affixes::roll`. Also `Load::add_loot_affixes` and `Load::add_craft_affixes`. `Load::item_data`, `Load::entity_data`, `affixes::AffixLoot`, `affixes::AffixCraft`. | after a restart, a value on an item outside a placed container or a player's inventory stays aside |

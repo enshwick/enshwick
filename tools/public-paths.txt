@@ -199,6 +199,7 @@ Load::on_loot_pass
 Load::on_mod_event
 Load::on_notify
 Load::on_ping unstable
+Load::on_quest_reward unstable
 Load::on_raw_event
 Load::on_raw_game_event
 Load::on_rename
@@ -932,6 +933,9 @@ abi::Event::PLAYER_JOINED
 abi::Event::PLAYER_LEFT
 abi::Event::PROGRESS_WRITTEN
 abi::Event::QUEST_COMPLETED
+abi::Event::QUEST_PROGRESSED
+abi::Event::QUEST_STARTED
+abi::Event::QUEST_STEP_DONE
 abi::Event::SETTINGS_CHANGED
 abi::Event::SETTINGS_REPLACED
 abi::Event::SHUTDOWN_STARTED
@@ -1151,6 +1155,7 @@ abi::HostApi::join_missing
 abi::HostApi::join_rule
 abi::HostApi::knowledge
 abi::HostApi::knowledge_input_filter
+abi::HostApi::knowledge_set
 abi::HostApi::language
 abi::HostApi::language_of
 abi::HostApi::loader_off
@@ -1174,6 +1179,7 @@ abi::HostApi::players
 abi::HostApi::progress_write
 abi::HostApi::prop_placement_info
 abi::HostApi::publish
+abi::HostApi::quest_reward_filter
 abi::HostApi::quests
 abi::HostApi::rate
 abi::HostApi::read_only
@@ -1431,7 +1437,9 @@ abi::JoinRuleFn
 abi::KnowledgeChange
 abi::KnowledgeChange::BORN
 abi::KnowledgeChange::GRANT
+abi::KnowledgeChange::QUIET
 abi::KnowledgeChange::REVOKE
+abi::KnowledgeChange::SHOWN
 abi::KnowledgeChange::account
 abi::KnowledgeChange::entity
 abi::KnowledgeChange::header
@@ -1805,6 +1813,37 @@ abi::QuestData::entity
 abi::QuestData::header
 abi::QuestData::into_value
 abi::QuestData::quest
+abi::QuestPayment
+abi::QuestPayment::BORN
+abi::QuestPayment::MAX
+abi::QuestPayment::allowed
+abi::QuestPayment::count
+abi::QuestPayment::entity
+abi::QuestPayment::experience
+abi::QuestPayment::header
+abi::QuestPayment::limit
+abi::QuestPayment::quest
+abi::QuestPayment::reserved
+abi::QuestProgressData
+abi::QuestProgressData::BORN
+abi::QuestProgressData::TY
+abi::QuestProgressData::entity
+abi::QuestProgressData::header
+abi::QuestProgressData::into_value
+abi::QuestProgressData::part
+abi::QuestProgressData::quest
+abi::QuestProgressData::step
+abi::QuestProgressData::target
+abi::QuestProgressData::value
+abi::QuestRewardFilterFn
+abi::QuestStepData
+abi::QuestStepData::BORN
+abi::QuestStepData::TY
+abi::QuestStepData::entity
+abi::QuestStepData::header
+abi::QuestStepData::into_value
+abi::QuestStepData::quest
+abi::QuestStepData::step
 abi::RateId
 abi::RateId::COMFORT
 abi::RateId::EXPERIENCE_COMBAT
@@ -4702,6 +4741,18 @@ events::QuestCompleted
 events::QuestCompleted::EVENT
 events::QuestCompleted::data
 events::QuestCompleted::subscribe
+events::QuestProgressed
+events::QuestProgressed::EVENT
+events::QuestProgressed::data
+events::QuestProgressed::subscribe
+events::QuestStarted
+events::QuestStarted::EVENT
+events::QuestStarted::data
+events::QuestStarted::subscribe
+events::QuestStepDone
+events::QuestStepDone::EVENT
+events::QuestStepDone::data
+events::QuestStepDone::subscribe
 events::SettingsChanged
 events::SettingsChanged::EVENT
 events::SettingsChanged::data
@@ -5776,7 +5827,9 @@ knowledge::Knowledge::resolve
 knowledge::Knowledge::revoke unstable
 knowledge::Knowledge::revoke_account unstable
 knowledge::Knowledge::revoke_world unstable
+knowledge::Knowledge::set unstable
 knowledge::Knowledge::set_quest_progression unstable
+knowledge::Knowledge::set_world unstable
 knowledge::Knowledge::world
 knowledge::KnowledgeId
 knowledge::KnowledgeId::PADDING_FREE
@@ -5791,6 +5844,12 @@ knowledge::KnowledgeId::get
 knowledge::KnowledgeId::into_value
 knowledge::KnowledgeId::named
 knowledge::KnowledgeId::new
+knowledge::KnowledgeNotice unstable
+knowledge::KnowledgeNotice::Quiet unstable
+knowledge::KnowledgeNotice::Shown unstable
+knowledge::KnowledgeNotice::TY unstable
+knowledge::KnowledgeNotice::from_value unstable
+knowledge::KnowledgeNotice::into_value unstable
 knowledge::KnowledgeRequest unstable
 knowledge::KnowledgeRequest::TY unstable
 knowledge::KnowledgeRequest::allowed unstable
@@ -6517,6 +6576,22 @@ quests::QuestInfo::rewards unstable
 quests::QuestInfo::source unstable
 quests::QuestInfo::steps unstable
 quests::QuestInfo::tutorial unstable
+quests::QuestPay unstable
+quests::QuestPay::Allow unstable
+quests::QuestPay::Keep unstable
+quests::QuestPay::Pay unstable
+quests::QuestPay::Refuse unstable
+quests::QuestPay::TY unstable
+quests::QuestPay::from_answer unstable
+quests::QuestPayment unstable
+quests::QuestPayment::TY unstable
+quests::QuestPayment::allowed unstable
+quests::QuestPayment::experience unstable
+quests::QuestPayment::from_value unstable
+quests::QuestPayment::into_value unstable
+quests::QuestPayment::limit unstable
+quests::QuestPayment::player unstable
+quests::QuestPayment::quest unstable
 quests::QuestState unstable
 quests::QuestState::TY unstable
 quests::QuestState::done unstable
@@ -6795,6 +6870,7 @@ resources::crc64
 resources::fnv1a32
 rewards unstable
 rewards::Action unstable
+rewards::Action::AnyQuest unstable
 rewards::Action::Consume unstable
 rewards::Action::Craft unstable
 rewards::Action::Join unstable

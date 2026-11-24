@@ -16,7 +16,7 @@ export type AcceptOfferedInteractionEvent = {
 export type AccountAction = "Kick" | "Ban" | "Unban"
 
 --- What a player does that a reward follows.
-export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | "Quest" | { Consume: number } | { Pickup: number }
+export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | "AnyQuest" | { Quest: number } | { Consume: number } | { Pickup: number }
 
 --- How a request went, as a script's handler answers it: `Outcome`'s parts as a table.
 export type ActionOutcome = {
@@ -1477,6 +1477,9 @@ export type KnowledgeData = {
 	value: number,
 }
 
+--- Whether `Knowledge.set` lets the player see the change. The game keeps a mark beside each value, a bit per flag (all of them for a bool or a counter), set for what the player has seen: a save loads every value with all bits set, and the game's grant clears the bit it sets. Which notice the client shows for an unmarked bit, and when, is not yet seen in the game. The name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
+export type KnowledgeNotice = "Quiet" | "Shown"
+
 --- A test of one knowledge entry, vanilla or a mod's, as quests, journal pages and skill nodes ask for knowledge. The name is enshwick's; the game's is `KnowledgeQueryData`.
 export type KnowledgeQuery = {
 	--- The entry tested.
@@ -2736,9 +2739,9 @@ export type QuestChange = {
 	steps: {StepEdit}?,
 }
 
---- The data of the `QuestCompleted` event.
+--- The data of the `QuestCompleted` and `QuestStarted` events.
 export type QuestData = {
-	--- The player's character.
+	--- The player's character; 0 for a quest of the world's that started.
 	entity: number,
 	--- The quest's id, a player knowledge id.
 	quest: number,
@@ -2766,6 +2769,36 @@ export type QuestInfo = {
 	steps: {StepInfo},
 	--- What the journal shows as its reward, as `QuestReward` says the game gives it; a reward of the game's with an item and experience reads as two.
 	rewards: {QuestReward},
+}
+
+--- What the game pays a player for a quest, as the filters before left it. The game pays the quest's experience values and sets the quest's bool; the items its journal draws as rewards it never pays.
+export type QuestPayment = {
+	--- The player's character.
+	player: number,
+	--- The quest.
+	quest: number,
+	--- The experience values it pays, in order; one twice pays it twice.
+	experience: {number},
+	--- The most experience values the game pays on this build; the loader drops the rest with a warning.
+	limit: number,
+	--- Whether the game pays it so far: `false` once a filter before refused it.
+	allowed: boolean,
+}
+
+--- The data of the `QuestProgressed` event.
+export type QuestProgressData = {
+	--- The player's character, or 0 for the world's knowledge.
+	entity: number,
+	--- The quest's id.
+	quest: number,
+	--- The step's place among the quest's steps, from 0.
+	step: number,
+	--- The part's place among the step's progress parts, from 0.
+	part: number,
+	--- The counter's value now.
+	value: number,
+	--- The count the part asks for: it holds at this count, or above it for a part that asks for at least the count.
+	target: number,
 }
 
 --- What the journal shows as a quest's reward. The game gives the experience when the quest's last step completes and only draws the item: its own quests name an NPC, a station or a chest icon there (client 26430625). A mod hands the items of its own quest out on `QuestCompleted`. The name is enshwick's, not the game's.
@@ -2805,6 +2838,16 @@ export type QuestStep = {
 	voiceover: string?,
 	--- What the journal counts on it, each on a counter of the loader's that its `progress` shows; a step without `done_when` is done once every count is reached.
 	objectives: {Objective}?,
+}
+
+--- The data of the `QuestStepDone` event.
+export type QuestStepData = {
+	--- The player's character, or 0 for the world's knowledge.
+	entity: number,
+	--- The quest's id.
+	quest: number,
+	--- The step's place among the quest's steps, from 0, as the journal lists them.
+	step: number,
 }
 
 --- How far from its place each play of a placed container is moved at random, in metres; both 0 turns the spread off.
@@ -4076,6 +4119,9 @@ declare enshwick: {
 		& ((event: "BuildingPlaced", handler: (data: BuildingData) -> ()) -> ())
 		& ((event: "KnowledgeChanged", handler: (data: KnowledgeData) -> ()) -> ())
 		& ((event: "QuestCompleted", handler: (data: QuestData) -> ()) -> ())
+		& ((event: "QuestStarted", handler: (data: QuestData) -> ()) -> ())
+		& ((event: "QuestStepDone", handler: (data: QuestStepData) -> ()) -> ())
+		& ((event: "QuestProgressed", handler: (data: QuestProgressData) -> ()) -> ())
 		& ((event: "ChunkLoaded", handler: (data: ChunkData) -> ()) -> ())
 		& ((event: "ChunkUnloaded", handler: (data: ChunkData) -> ()) -> ())
 		& ((event: "BuildingRemoved", handler: (data: BuildingData) -> ()) -> ())
@@ -5070,7 +5116,7 @@ declare enshwick: {
 		get: (player: number, id: number) -> Known?,
 		--- Knowledge `id` of the world; nil for an id the game does not know, a player's id, or off the game thread.
 		world: (id: number) -> Known?,
-		--- Grants knowledge `id` to the player whose character is `player` (or to the world, for an id of the world's), as the game grants it: the next step applies it with what follows. A grant only adds: a bool set, a counter raised, a bit set.
+		--- Grants knowledge `id` to the player whose character is `player` (or to the world, for an id of the world's), as the game grants it: the next step applies it with what follows, or the first steps after `WorldLoaded` for a grant made before it. A grant only adds: a bool set, a counter raised, a bit set.
 		grant: (player: number, id: number, grant: Grant) -> (),
 		--- Grants knowledge `id` of the world's, as `Knowledge.grant` does.
 		grant_world: (id: number, grant: Grant) -> (),
@@ -5078,6 +5124,10 @@ declare enshwick: {
 		revoke: (player: number, id: number, revoke: Revoke) -> (),
 		--- Takes knowledge `id` of the world's back, as `Knowledge.revoke` does. Unstable: needs the `unstable` feature and may change in any release.
 		revoke_world: (id: number, revoke: Revoke) -> (),
+		--- Sets knowledge `id` of the player whose character is `player` (or of the world, for an id of the world's) to exactly `value`: 0 or 1 for a bool, any count or bits otherwise. `KnowledgeNotice.Quiet` writes it at once, marked seen, and the next save keeps it; `KnowledgeNotice.Shown` grants what it gains the game's way and writes what it loses at once. The clients get what is written as a revoke sends it. A shown counter gains the difference from the value it reads now, so another grant queued before the step applies it, the game's or a second set's, adds to the count; a quiet set is exact. `KnowledgeChanged` reports what it changed after the next step. Unstable: needs the `unstable` feature and may change in any release.
+		set: (player: number, id: number, value: number, notice: KnowledgeNotice) -> (),
+		--- Sets knowledge `id` of the world's to exactly `value`, as `Knowledge.set` does. Unstable: needs the `unstable` feature and may change in any release.
+		set_world: (id: number, value: number, notice: KnowledgeNotice) -> (),
 		--- Grants knowledge `id` of a player's to the account whose `Player.key` is `account`, as `Knowledge.grant` does: now when its character is in the game, else once its next character has loaded in this world. The loader keeps waiting changes with the world, so they outlast restarts.
 		grant_account: (account: string, id: number, grant: Grant) -> (),
 		--- Takes knowledge `id` of a player's back from the account whose `Player.key` is `account`, as `Knowledge.revoke` does, now or once its next character has loaded in this world, as `Knowledge.grant_account` waits. Unstable: needs the `unstable` feature and may change in any release.
@@ -5120,6 +5170,9 @@ declare enshwick: {
 		signal: (holder: Holder, signal: string, amount: number) -> (),
 		--- Every item set of the journal, the game's and mods', by category; empty until the journal reads, such as during init.
 		item_sets: () -> {ItemSetInfo},
+		--- Runs `filter` before the game pays a player for a quest, on the thread of the game's quest reward system, in load order after the filters of the mods before: it sees the quest's experience values as they left them, and keeps them, pays others or refuses, which pays nothing and still completes the quest. A payment the game puts off comes again, and the filter sees it again.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_quest_reward: (filter: (arg1: QuestPayment) -> any) -> (),
 	},
 	--- Player actions: what a player asks a mod to do, declared once and run from its controls, panels or the console.
 	actions: {

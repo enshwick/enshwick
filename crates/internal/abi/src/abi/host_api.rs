@@ -16,14 +16,15 @@ use crate::abi::{
     KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff, LocalInputInfo,
     LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
     ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, PropPlacementInfo, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn,
-    ResourceKey, ResourcePatchFn, RespawnPointInfo, SaveInfo, ServerWaitFn, ServiceFound,
-    ServiceSpec, SkillCheckFn, SoundAudience, SoundInfo, SoundPlay, SoundSteer, SpawnRequest,
-    StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str,
-    SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialAdd, TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp,
-    TransactionSettledFn, TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker,
-    UiTooltipFn, UiWidget, Voxel, WaypointData, WeatherFront, WeatherSample,
+    PointSpec, PointVerdict, PropPlacementInfo, QuestRewardFilterFn, RateId, RecipeKind,
+    RecipeRuleKind, RenameFilterFn, ResourceKey, ResourcePatchFn, RespawnPointInfo, SaveInfo,
+    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SoundAudience, SoundInfo, SoundPlay,
+    SoundSteer, SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef, StatSource,
+    StatSpec, Status, StatusFn, Str, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn,
+    TeleportRequest, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, TickHandle,
+    TransactionInfo, TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn, UiDialog,
+    UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel, WaypointData, WeatherFront,
+    WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2466,6 +2467,48 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for a key a mod control may not take, or a
     /// modifier the game's bindings do not list. Any thread. ABI 12.20.
     pub game_rebind: extern "system" fn(me: ModHandle, action: Str, key: u32) -> Status,
+    /// Registers a filter on what the game pays a player for a quest, the
+    /// quest's experience, before it pays it and sets the quest's bool.
+    /// Filters run in load order, each with the payment as the filters
+    /// before left it, on the thread of the game's quest reward system, in
+    /// the dedicated server or a hosting client. [`Status::UNAVAILABLE`] on
+    /// a build where the loader does not find the payment, or where its
+    /// code is not what the loader expects; [`Status::BAD_ARGS`] for a null
+    /// callback. Allowed during `enshwick_mod_init` only. ABI 12.22.
+    pub quest_reward_filter: extern "system" fn(
+        me: ModHandle,
+        callback: Option<QuestRewardFilterFn>,
+        user: *mut c_void,
+    ) -> Status,
+    /// Sets knowledge `id` of the player whose character is `entity`, or of
+    /// the world for 0 or an id of the world's, to exactly `value`: 0 or 1
+    /// for a [`KnowledgeInfo::BOOL`], any count or bits otherwise.
+    ///
+    /// The game keeps a mark beside each value, one bit per flag (all of
+    /// them for a bool or a counter), set for what the player has seen.
+    /// [`KnowledgeChange::QUIET`] writes the value at once with every bit
+    /// marked, as a save loads it, sends it to the clients again and is
+    /// saved with the next save; nothing a grant brings follows.
+    /// [`KnowledgeChange::SHOWN`] grants what the value gains as
+    /// [`HostApi::change_knowledge`] does (the next step applies it with
+    /// what follows) and writes what it loses at once, keeping the mark of
+    /// flags and no mark for a bool or a counter. A counter's gain is the
+    /// difference from the value it reads now, so another grant queued
+    /// before the step applies it adds to the count.
+    ///
+    /// [`Status::BAD_ARGS`] for an unknown id or `notice`, a bool above 1,
+    /// or, for `SHOWN`, a gained bit the game does not expect;
+    /// [`Status::BUSY`] when the game's queue fills while `SHOWN` grants,
+    /// with what it wrote and queued before kept;
+    /// [`Status::REFUSED`] as for [`HostApi::change_knowledge`]. On the
+    /// server's game thread only. ABI 12.22.
+    pub knowledge_set: extern "system" fn(
+        me: ModHandle,
+        entity: Entity,
+        id: KnowledgeId,
+        value: u32,
+        notice: u8,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2704,5 +2747,7 @@ const _: () = {
     assert!(offset_of!(HostApi, rekey_resource) == 24 + 225 * 8);
     assert!(offset_of!(HostApi, game_binding) == 24 + 226 * 8);
     assert!(offset_of!(HostApi, game_rebind) == 24 + 227 * 8);
-    assert!(size_of::<HostApi>() == 24 + 228 * 8);
+    assert!(offset_of!(HostApi, quest_reward_filter) == 24 + 228 * 8);
+    assert!(offset_of!(HostApi, knowledge_set) == 24 + 229 * 8);
+    assert!(size_of::<HostApi>() == 24 + 230 * 8);
 };
