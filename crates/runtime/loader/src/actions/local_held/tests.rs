@@ -72,11 +72,11 @@ fn cached_diagnostics_distinguish_never_read_stale_and_disabled_gates() {
 
 #[test]
 fn diagnostics_neither_request_sampling_nor_read_game_state() {
-    assert!(!STATE.asked.load(Ordering::Relaxed));
-    let info = status();
+    let state = State::new();
+    let info = state.status(true, true, 100);
     assert_eq!(info.flags, enshwick_core::abi::LocalInputInfo::READ_ENABLED);
     assert_eq!(info.age_ms, u64::MAX);
-    assert!(!STATE.asked.load(Ordering::Relaxed));
+    assert!(!state.asked.load(Ordering::Relaxed));
 }
 
 #[test]
@@ -203,12 +203,13 @@ fn the_held_read_s_iterator_layout_matches_player_ui_on_the_installed_client() {
 
 #[test]
 fn the_first_ask_starts_the_reads_and_answers_missing() {
+    let state = State::new();
     assert!(
-        !STATE.asked.load(Ordering::Relaxed),
+        !state.asked.load(Ordering::Relaxed),
         "the detour reads nothing"
     );
-    assert_eq!(held(), Err(HeldError));
-    assert!(STATE.asked.load(Ordering::Relaxed));
+    assert_eq!(state.held(false, 100), Err(HeldError));
+    assert!(state.asked.load(Ordering::Relaxed));
 }
 
 /// The raw state of a mask `bits` read at `read`, on and with no miss.
@@ -293,7 +294,7 @@ fn a_client_whose_shared_link_is_off_samples_off_not_never_read() {
     loader.side = Side::CLIENT;
     link(&loader);
     assert!(LINK_FUSE.is_off() && !FUSE.is_off());
-    assert_eq!(sample_at(super::raw(), now_ms()), Sample::Off);
+    assert_eq!(State::new().sample(off(), now_ms()), Sample::Off);
 }
 
 #[test]
@@ -320,16 +321,19 @@ fn a_host_read_comes_back_whole_and_only_for_its_own_entity() {
 
 #[test]
 fn the_interface_asks_for_its_host_and_gets_it_once_a_step_read_it() {
-    assert_eq!(screen_host(42), None);
-    assert_eq!(STATE.host_wanted.load(Ordering::Relaxed), 42);
-    STATE.host.write(42, [9; 16], [3, 4, 5]);
-    STATE.host_ms.store(now_ms(), Ordering::Release);
-    assert_eq!(screen_host(42), Some(([9; 16], [3, 4, 5])));
-    assert_eq!(screen_host(43), None, "another host's read");
-    STATE.host.write(43, [0; 16], [0; 3]);
-    assert_eq!(screen_host(43), None, "no template read");
-    assert_eq!(screen_host(0), None);
-    assert_eq!(STATE.host_wanted.load(Ordering::Relaxed), 0);
+    let state = State::new();
+    let ask = |host| state.screen_host(host, true, 150);
+    assert_eq!(ask(42), None);
+    assert_eq!(state.host_wanted.load(Ordering::Relaxed), 42);
+    state.host.write(42, [9; 16], [3, 4, 5]);
+    state.host_ms.store(100, Ordering::Release);
+    assert_eq!(ask(42), Some(([9; 16], [3, 4, 5])));
+    assert_eq!(state.screen_host(42, false, 150), None, "host reads off");
+    assert_eq!(ask(43), None, "another host's read");
+    state.host.write(43, [0; 16], [0; 3]);
+    assert_eq!(ask(43), None, "no template read");
+    assert_eq!(ask(0), None);
+    assert_eq!(state.host_wanted.load(Ordering::Relaxed), 0);
 }
 
 #[test]
@@ -344,17 +348,19 @@ fn a_host_read_no_step_renewed_is_no_answer() {
 
 #[test]
 fn the_player_s_keys_are_those_of_the_read_without_the_presses_bits() {
+    let state = State::new();
     let (block, jump) = (1 << 30, 1 << 32);
-    STATE.bits.store(block | jump, Ordering::Relaxed);
-    STATE.players.store(block, Ordering::Relaxed);
-    STATE.read_ms.store(now_ms().max(1), Ordering::Release);
+    state.bits.store(block | jump, Ordering::Relaxed);
+    state.players.store(block, Ordering::Relaxed);
+    state.read_ms.store(100, Ordering::Release);
     assert_eq!(
-        players_held(),
+        state.players_held(false, 150),
         Some(block),
         "the press's jump is not theirs"
     );
-    STATE.read_ms.store(0, Ordering::Release);
-    assert_eq!(players_held(), None, "no fresh read");
+    assert_eq!(state.players_held(true, 150), None, "the read turned off");
+    state.read_ms.store(0, Ordering::Release);
+    assert_eq!(state.players_held(false, 150), None, "no fresh read");
 }
 
 #[test]

@@ -15,9 +15,9 @@ std::thread_local! {
     /// What [`note_building`] saw, on the thread of the test that ran it.
     static SEEN_BUILDING: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
     static SEEN_SCRATCH: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    /// The byte [`value`] serves, on the thread of the test that set it.
+    static VALUE: core::cell::Cell<u8> = const { core::cell::Cell::new(1) };
 }
-/// The byte [`value`] serves.
-static VALUE: AtomicU8 = AtomicU8::new(1);
 
 /// Notes what the thread builds and hands its base out unchanged.
 unsafe extern "system" fn note_building(
@@ -143,7 +143,7 @@ unsafe extern "system" fn value(
     out_len: *mut u32,
 ) -> Status {
     // SAFETY: `run_patches` passes `out` and `out_len` writable for the call.
-    unsafe { hand_out(vec![VALUE.load(Ordering::Relaxed)], out, out_len) }
+    unsafe { hand_out(vec![VALUE.get()], out, out_len) }
 }
 
 /// Serves the served entry at `user` as a mod's served read finds it now.
@@ -381,7 +381,7 @@ fn a_rebuild_reaches_the_keys_whose_builds_read_the_rebuilt_one_and_theirs() {
     list[1].patches[0].user = (&raw const list[0]).expose_provenance();
     list[2].patches[0].user = (&raw const list[1]).expose_provenance();
     let list: &[Served; 3] = list;
-    VALUE.store(1, Ordering::Relaxed);
+    VALUE.set(1);
     build_each(list);
     assert!(
         list[1].state.relock().base.is_some(),
@@ -398,7 +398,7 @@ fn a_rebuild_reaches_the_keys_whose_builds_read_the_rebuilt_one_and_theirs() {
     // The reader and the read read each other, as two items re-keyed to each
     // other do.
     list[1].read_by.relock().push(read);
-    VALUE.store(2, Ordering::Relaxed);
+    VALUE.set(2);
     assert_eq!(rebuild_one(&list[0]), Ok(Some(1)));
     rebuild_readers(list, &list[0], &mut vec![list[0].key]);
     for entry in &list[1..] {
@@ -420,7 +420,7 @@ fn read_and_reader() -> &'static [Served; 2] {
         Served::new(reader, reader, vec![by_loader(read_other)], false),
     ]));
     list[1].patches[0].user = (&raw const list[0]).expose_provenance();
-    VALUE.store(1, Ordering::Relaxed);
+    VALUE.set(1);
     build_each(&list[1..]);
     list
 }
@@ -442,7 +442,7 @@ fn a_rebuild_of_a_key_the_game_never_built_still_rebuilds_the_keys_that_read_it(
         list[0].state.relock().built.is_none(),
         "only a served read built it"
     );
-    VALUE.store(2, Ordering::Relaxed);
+    VALUE.set(2);
     assert_eq!(rebuild_entry(list, &list[0]), Ok(()));
     assert_eq!(held(&list[1]), 2, "the reader takes the rebuilt value");
 }
@@ -454,7 +454,7 @@ fn a_rebuild_leaves_a_reader_whose_build_runs_on_this_thread() {
     // rebuilds the key it read.
     let _game = list[1].state.relock();
     let _building = Building::enter(list[1].key, Build::Game);
-    VALUE.store(2, Ordering::Relaxed);
+    VALUE.set(2);
     rebuild_readers(list, &list[0], &mut vec![list[0].key]);
 }
 

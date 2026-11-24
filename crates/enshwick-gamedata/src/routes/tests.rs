@@ -32,7 +32,9 @@ fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
         let Ok(snapshot) = std::fs::read_to_string(&file) else {
             continue;
         };
-        let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot).unwrap();
+        let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot)
+            .unwrap()
+            .covered(&crate::typed::Relevance::committed());
         for route in routes
             .routes
             .iter()

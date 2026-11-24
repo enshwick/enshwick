@@ -179,23 +179,84 @@ pub(crate) fn read_positions(wants: fn() -> bool, read: fn(&dyn Fn(u32) -> Optio
     let _first = STATE.positions.set((wants, read));
 }
 
-static STATE: State = State {
-    layout: OnceLock::new(),
-    asked: AtomicBool::new(false),
-    linked: AtomicBool::new(false),
-    start: OnceLock::new(),
-    bits: AtomicU64::new(0),
-    players: AtomicU64::new(0),
-    player: AtomicU32::new(0),
-    read_ms: AtomicU64::new(0),
-    miss: AtomicU8::new(0),
-    miss_ms: AtomicU64::new(0),
-    host_layout: OnceLock::new(),
-    host_wanted: AtomicU32::new(0),
-    host: HostRead::new(),
-    host_ms: AtomicU64::new(0),
-    positions: OnceLock::new(),
-};
+impl State {
+    /// The state before any link, ask or read.
+    const fn new() -> Self {
+        Self {
+            layout: OnceLock::new(),
+            asked: AtomicBool::new(false),
+            linked: AtomicBool::new(false),
+            start: OnceLock::new(),
+            bits: AtomicU64::new(0),
+            players: AtomicU64::new(0),
+            player: AtomicU32::new(0),
+            read_ms: AtomicU64::new(0),
+            miss: AtomicU8::new(0),
+            miss_ms: AtomicU64::new(0),
+            host_layout: OnceLock::new(),
+            host_wanted: AtomicU32::new(0),
+            host: HostRead::new(),
+            host_ms: AtomicU64::new(0),
+            positions: OnceLock::new(),
+        }
+    }
+
+    /// The held mask's sample at `now`, with the reads turned `off` or not;
+    /// asking starts the reads.
+    fn sample(&self, off: bool, now: u64) -> Sample {
+        if !self.asked.load(Ordering::Relaxed) {
+            self.asked.store(true, Ordering::Relaxed);
+        }
+        sample_at(self.raw(off), now)
+    }
+
+    /// The reads' raw state, without asking.
+    fn raw(&self, off: bool) -> Raw {
+        Raw {
+            off,
+            read: self.read_ms.load(Ordering::Acquire),
+            bits: self.bits.load(Ordering::Relaxed),
+            miss: self.miss.load(Ordering::Relaxed),
+            miss_ms: self.miss_ms.load(Ordering::Relaxed),
+        }
+    }
+
+    /// [`held`] at `now`, with the reads turned `off` or not.
+    fn held(&self, off: bool, now: u64) -> Result<u64, HeldError> {
+        match self.sample(off, now) {
+            Sample::Fresh { bits, .. } => Ok(bits),
+            Sample::Never { .. } | Sample::Stale { .. } | Sample::Off => Err(HeldError),
+        }
+    }
+
+    /// [`players_held`] at `now`, with the reads turned `off` or not.
+    fn players_held(&self, off: bool, now: u64) -> Option<u64> {
+        matches!(self.sample(off, now), Sample::Fresh { .. })
+            .then(|| self.players.load(Ordering::Relaxed))
+    }
+
+    /// [`screen_host`] at `now`, with the host reads turned `on` or not.
+    fn screen_host(&self, host: u32, on: bool, now: u64) -> Option<([u8; 16], [i64; 3])> {
+        self.host_wanted.store(host, Ordering::Relaxed);
+        let live = on && fresh(self.host_ms.load(Ordering::Acquire), now);
+        answer(host, live, self.host.snapshot())
+    }
+
+    /// [`status`] at `now`, with the shared link and the read turned on or
+    /// not; never asks.
+    fn status(&self, link_on: bool, read_on: bool, now: u64) -> enshwick_core::abi::LocalInputInfo {
+        cached_status(
+            self.asked.load(Ordering::Relaxed),
+            self.layout.get().is_some(),
+            self.linked.load(Ordering::Acquire) && link_on,
+            read_on,
+            self.read_ms.load(Ordering::Acquire),
+            now,
+        )
+    }
+}
+
+static STATE: State = State::new();
 static FUSE: Fuse = Fuse::new(FEATURE);
 static HOST_FUSE: Fuse = Fuse::new(HOST_FEATURE);
 /// The switch of the link on [`SYSTEM`], which both reads share: each read
@@ -462,9 +523,7 @@ unsafe fn read_host(ctx: *mut u64, at: &HostLayout, host: u32) {
 /// `None` for no host, before a step read this one, when no step read for
 /// [`FRESH_MS`], and on a build without the reads.
 pub(crate) fn screen_host(host: u32) -> Option<([u8; 16], [i64; 3])> {
-    STATE.host_wanted.store(host, Ordering::Relaxed);
-    let live = !HOST_FUSE.is_off() && fresh(STATE.host_ms.load(Ordering::Acquire), now_ms());
-    answer(host, live, STATE.host.snapshot())
+    STATE.screen_host(host, !HOST_FUSE.is_off(), now_ms())
 }
 
 /// The answer for `host` from `read`, the last whole read, while the reads
@@ -615,21 +674,12 @@ fn sample_at(raw: Raw, now: u64) -> Sample {
 
 /// The held mask's sample now; asking starts the reads.
 pub(crate) fn sample() -> Sample {
-    if !STATE.asked.load(Ordering::Relaxed) {
-        STATE.asked.store(true, Ordering::Relaxed);
-    }
-    sample_at(raw(), now_ms())
+    STATE.sample(off(), now_ms())
 }
 
-/// The reads' raw state now, without asking.
-fn raw() -> Raw {
-    Raw {
-        off: FUSE.is_off() || LINK_FUSE.is_off(),
-        read: STATE.read_ms.load(Ordering::Acquire),
-        bits: STATE.bits.load(Ordering::Relaxed),
-        miss: STATE.miss.load(Ordering::Relaxed),
-        miss_ms: STATE.miss_ms.load(Ordering::Relaxed),
-    }
+/// Whether the held read, or the link it runs in, is turned off.
+fn off() -> bool {
+    FUSE.is_off() || LINK_FUSE.is_off()
 }
 
 /// The local player's held mask, zero bits when none is held, or
@@ -637,16 +687,13 @@ fn raw() -> Raw {
 /// reads, so it answers [`HeldError`]; a step that tries and finds no mask
 /// logs why, once per cause.
 pub(crate) fn held() -> Result<u64, HeldError> {
-    match sample() {
-        Sample::Fresh { bits, .. } => Ok(bits),
-        Sample::Never { .. } | Sample::Stale { .. } | Sample::Off => Err(HeldError),
-    }
+    STATE.held(off(), now_ms())
 }
 
 /// The keys the player holds in a fresh read: its mask without the bits the
 /// loader's own presses wrote into it; `None` while no fresh one is read.
 pub(crate) fn players_held() -> Option<u64> {
-    matches!(sample(), Sample::Fresh { .. }).then(|| STATE.players.load(Ordering::Relaxed))
+    STATE.players_held(off(), now_ms())
 }
 
 /// The local player's entity at the last mask read; `None` before one.
@@ -671,14 +718,7 @@ fn log_miss(miss: Miss) {
 
 /// Cached loader metadata only; never starts sampling or accesses a game object.
 pub(crate) fn status() -> enshwick_core::abi::LocalInputInfo {
-    cached_status(
-        STATE.asked.load(Ordering::Relaxed),
-        STATE.layout.get().is_some(),
-        STATE.linked.load(Ordering::Acquire) && !LINK_FUSE.is_off(),
-        !FUSE.is_off(),
-        STATE.read_ms.load(Ordering::Acquire),
-        now_ms(),
-    )
+    STATE.status(!LINK_FUSE.is_off(), !FUSE.is_off(), now_ms())
 }
 
 #[expect(

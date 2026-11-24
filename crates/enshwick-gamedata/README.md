@@ -15,9 +15,9 @@ The tables of the kept builds, one per build, named
 kept build pins, with its Steam build id (`steam_build`) and the game's own
 version number (`game_version`). They lie outside this repository, in
 `tables/` of the game data folder that `ENSH_GAMEDATA` names, beside the
-typed catalogues in `typed/`. The tests compare the routes and anchors with
-them and skip without them; the loader does not read them, and a new build
-gets none.
+snapshots of every reflected type in `reflection/`. The tests compare the
+routes and anchors with them and skip without them; the loader does not read
+them, and a new build gets none.
 
 The catalogue (`catalogue.rs`) maps the ids the API asks engine facts by,
 such as `item_info.name`, to the game's reflected types and fields, so a

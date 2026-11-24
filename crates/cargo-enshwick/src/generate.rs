@@ -1,9 +1,9 @@
 //! `cargo enshwick generate`: the typed API from a build's reflection. With
-//! an executable it snapshots the build's covered types in the game data
-//! folder, outside the repository; it then writes the API crate's `typed`
-//! modules and game screens and the loader's id table from the newest server
-//! build's snapshot there, or with `--check` fails when they differ from what
-//! is committed.
+//! an executable it snapshots every reflected type of the build in the game
+//! data folder, outside the repository; it then writes the API crate's
+//! `typed` modules and game screens and the loader's id table from the newest
+//! server build's snapshot there, covered by the repository's own rule, or
+//! with `--check` fails when they differ from what is committed.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, anyhow, bail};
 use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 use enshwick_gamedata::typed::{
-    Catalogue, RENAMES, Renames, newest_snapshot, snapshot_build, snapshot_in,
+    Catalogue, RELEVANCE, RENAMES, Relevance, Renames, SNAPSHOTS, newest_snapshot, snapshot_build,
+    snapshot_in,
 };
 use enshwick_gamedata::{Side, Table, exact, file_name, tables_in};
 
@@ -41,18 +42,33 @@ pub fn side_of(tables: &[Table], fingerprint: enshwick_gamedata::Fingerprint) ->
         .find(|side| exact(tables, *side, fingerprint).is_some())
 }
 
-/// The catalogue of the game executable `bytes` hold.
+/// Every reflected type of the game executable `bytes` hold, with no roles,
+/// as its snapshot keeps them.
 ///
 /// # Errors
 ///
 /// When they do not read or hold no reflection data.
 pub fn catalogue(bytes: &[u8]) -> anyhow::Result<Catalogue> {
     let image = Image::parse(bytes, Layout::File, None)?;
-    let catalogue = Catalogue::from_reflection(&Reflection::scan(&image));
+    let catalogue = Catalogue::all(&Reflection::scan(&image));
     if catalogue.snapshot().is_empty() {
         bail!("no reflection data");
     }
     Ok(catalogue)
+}
+
+/// The types of `all` the rule of the repository `root` covers, and every
+/// type they reach: a tree generates by its own `relevant.toml`, whichever
+/// tree built the tool.
+///
+/// # Errors
+///
+/// When the rule does not read.
+pub fn covered(root: &Path, all: Catalogue) -> anyhow::Result<Catalogue> {
+    let path = root.join(RELEVANCE);
+    let text = std::fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+    let rule = Relevance::parse(&text).with_context(|| path.display().to_string())?;
+    Ok(all.covered(&rule))
 }
 
 /// The repository's rename table; empty when there is none yet.
@@ -115,8 +131,9 @@ pub fn write_api(root: &Path, catalogue: &Catalogue, build: &str) -> anyhow::Res
     Ok(files.len())
 }
 
-/// Writes `catalogue` as the snapshot of `side`'s build `fingerprint` in
-/// the game data folder `data`.
+/// Writes `catalogue`, every reflected type of the build as [`catalogue`]
+/// reads them, as the snapshot of `side`'s build `fingerprint` in the game
+/// data folder `data`.
 ///
 /// # Errors
 ///
@@ -179,19 +196,20 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
     }
     let newest = || {
         newest_snapshot(data, &tables, Side::Server)
-            .with_context(|| data.join("typed").display().to_string())
+            .with_context(|| data.join(SNAPSHOTS).display().to_string())
     };
     let path = match snapshotted {
         Some(path) => path,
         None => newest()?.ok_or_else(|| {
             anyhow!(
                 "{}: no server build snapshot; run with --from the server's executable",
-                data.join("typed").display()
+                data.join(SNAPSHOTS).display()
             )
         })?,
     };
     let text = std::fs::read_to_string(&path).with_context(|| path.display().to_string())?;
-    let catalogue = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
+    let all = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
+    let catalogue = covered(root, all)?;
     let build = snapshot_build(&path, &tables);
     if check {
         let (files, stale) = generated(root, &catalogue, &build)?;
@@ -242,7 +260,41 @@ mod tests {
         .unwrap();
         std::fs::create_dir_all(root.join(TYPED)).unwrap();
         std::fs::write(root.join(RUNTIME), "// hand-written\n").unwrap();
+        rule(&root, DEMO_RULE);
         root
+    }
+
+    /// The fixture's roles as a rule: its demo roots and the resource suffix.
+    const DEMO_RULE: &str = "[roots]\ncomponent = \"demo::ecs::Component\"\nevent = \"demo::ecs::Event\"\n[suffixes]\nresource = [\"Resource\"]\n[left_out]\nnamespaces = []\nwords = []\nprefixes = []\n";
+
+    /// Writes `text` as the relevance rule of the repository `root`.
+    fn rule(root: &Path, text: &str) {
+        let path = root.join(RELEVANCE);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn the_api_follows_the_rule_of_the_repository_it_is_written_into() {
+        let root = repo("rule");
+        let data = data(&root);
+        let written = || -> String {
+            std::fs::read_dir(root.join(TYPED))
+                .unwrap()
+                .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+                .collect()
+        };
+        run(&root, &data, None, false).unwrap();
+        assert!(written().contains("LootResource"));
+        rule(&root, &DEMO_RULE.replace("[\"Resource\"]", "[]"));
+        run(&root, &data, None, false).unwrap();
+        let api = written();
+        assert!(!api.contains("LootResource"), "{api}");
+        assert!(api.contains("Fuel"), "the other roles stay");
+        std::fs::write(root.join(RELEVANCE), "roots = 1").unwrap();
+        let error = format!("{:#}", run(&root, &data, None, false).unwrap_err());
+        assert!(error.contains("relevant.toml"), "{error}");
+        drop(std::fs::remove_dir_all(&root));
     }
 
     fn data(root: &Path) -> PathBuf {
@@ -337,7 +389,7 @@ mod tests {
             file.set_modified(start + std::time::Duration::from_secs(hours * 3600))
                 .unwrap();
         }
-        std::fs::write(data.join("typed").join("notes.jsonl"), "").unwrap();
+        std::fs::write(data.join(SNAPSHOTS).join("notes.jsonl"), "").unwrap();
         let wrote = run(&root, &data, None, false).unwrap();
         assert!(wrote.ends_with("from server build 7"), "{wrote}");
         let header = std::fs::read_to_string(root.join(TYPED).join("ecs.rs")).unwrap();
@@ -354,11 +406,15 @@ mod tests {
             return;
         };
         let root = repo("from");
+        rule(
+            &root,
+            include_str!("../../enshwick-gamedata/src/typed/relevant.toml"),
+        );
         let data = root.join("tableless-data");
         let wrote = run(&root, &data, Some(&exe), false).unwrap();
         assert!(wrote.starts_with("snapshot "), "{wrote}");
         assert!(wrote.contains("wrote "), "{wrote}");
-        let snapshots = std::fs::read_dir(data.join("typed")).unwrap().count();
+        let snapshots = std::fs::read_dir(data.join(SNAPSHOTS)).unwrap().count();
         assert_eq!(snapshots, 1, "one snapshot, of the server");
         drop(std::fs::remove_dir_all(&root));
     }

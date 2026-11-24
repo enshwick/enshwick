@@ -362,8 +362,8 @@ pub fn reported(side: Side, fingerprint: Fingerprint) -> bool {
 /// data, which the tests that compare with it read and skip without.
 ///
 /// The folder lies outside this repository and holds what a developer's own
-/// game files give: the builds' tables in `tables/` and their typed
-/// catalogues in `typed/`.
+/// game files give: the builds' tables in `tables/` and their snapshots of
+/// every reflected type in `reflection/`.
 pub const DATA_VAR: &str = "ENSH_GAMEDATA";
 
 /// The folder [`DATA_VAR`] names; `None` when it is unset.
