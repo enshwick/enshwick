@@ -9,6 +9,7 @@
 //! 26430625, seen live on 2026-11-23); a slot that no longer holds what was
 //! written holds the game's own binding.
 
+use super::ActionNumber;
 use super::keys::{EncodeKeyError, Operation, operation};
 
 /// One action's first combination as the bindings hold it: its operation
@@ -18,15 +19,15 @@ pub type Combo = (Operation, u32);
 /// The first combinations of the game's bindings, by action number.
 pub trait Firsts {
     /// The combination `action` holds now.
-    fn read(&self, action: u8) -> Combo;
+    fn read(&self, action: ActionNumber) -> Combo;
     /// Writes `combo` as `action`'s.
-    fn write(&mut self, action: u8, combo: Combo);
+    fn write(&mut self, action: ActionNumber, combo: Combo);
 }
 
 /// What the interface wrote for one rebound action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Entry {
-    action: u8,
+    action: ActionNumber,
     /// The key form the rebind asked for.
     bits: u32,
     /// The combination written.
@@ -37,29 +38,30 @@ struct Entry {
 
 /// A rebind that does not go into the game's bindings: its action, key
 /// form and why.
-pub type Refused = (u8, u32, EncodeKeyError);
+pub type Refused = (ActionNumber, u32, EncodeKeyError);
 
 /// The rebinds in force in the game's bindings.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick_loader::actions::game_bindings::ActionNumber;
 /// use enshwick_loader::actions::game_bindings::written::{Combo, Firsts, Written};
 ///
 /// struct Table(Vec<Combo>);
 /// impl Firsts for Table {
-///     fn read(&self, action: u8) -> Combo {
-///         self.0[usize::from(action)]
+///     fn read(&self, action: ActionNumber) -> Combo {
+///         self.0[action.index()]
 ///     }
-///     fn write(&mut self, action: u8, combo: Combo) {
-///         self.0[usize::from(action)] = combo;
+///     fn write(&mut self, action: ActionNumber, combo: Combo) {
+///         self.0[action.index()] = combo;
 ///     }
 /// }
 ///
 /// let space = ([1, 0, 0x2c, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0);
 /// let mut table = Table(vec![space]);
 /// let mut written = Written::default();
-/// assert!(written.apply(&[(0, 0x24)], &[], &mut table).is_empty());
+/// assert!(written.apply(&[(ActionNumber::new(0), 0x24)], &[], &mut table).is_empty());
 /// assert_eq!(table.0[0].0[2], 0x0d, "J");
 /// assert!(written.apply(&[], &[], &mut table).is_empty());
 /// assert_eq!(table.0[0], space, "the game's Space is back");
@@ -77,9 +79,14 @@ impl Written {
     /// holds anything but what was written gets it written, what it held
     /// kept as the game's. The rebinds that do not encode come back and
     /// are dropped.
+    ///
+    /// A slot tells a rebuild only by its bytes: when the player's newly
+    /// applied key is the very key written, the slot still reads as the
+    /// rebind, so ending it gives back the key the rebind first wrote over
+    /// until the game's next rebuild.
     pub fn apply(
         &mut self,
-        wanted: &[(u8, u32)],
+        wanted: &[(ActionNumber, u32)],
         modifiers: &[Operation],
         table: &mut impl Firsts,
     ) -> Vec<Refused> {
@@ -147,12 +154,12 @@ mod tests {
     struct Table(Vec<Combo>);
 
     impl Firsts for Table {
-        fn read(&self, action: u8) -> Combo {
-            self.0[usize::from(action)]
+        fn read(&self, action: ActionNumber) -> Combo {
+            self.0[action.index()]
         }
 
-        fn write(&mut self, action: u8, combo: Combo) {
-            self.0[usize::from(action)] = combo;
+        fn write(&mut self, action: ActionNumber, combo: Combo) {
+            self.0[action.index()] = combo;
         }
     }
 
@@ -160,7 +167,10 @@ mod tests {
         ([1, 0, usage, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0)
     }
 
-    /// The set 1 codes of J, K and F9.
+    const FIRST: ActionNumber = ActionNumber::new(0);
+    const SECOND: ActionNumber = ActionNumber::new(1);
+
+    /// The set 1 codes of J and K.
     const J: u32 = 0x24;
     const K: u32 = 0x25;
 
@@ -168,11 +178,11 @@ mod tests {
     fn a_rebind_comes_back_after_the_game_rebuilds_and_gives_back_the_new_binding() {
         let mut table = Table(vec![key(0x2c)]);
         let mut written = Written::default();
-        written.apply(&[(0, J)], &[], &mut table);
+        written.apply(&[(FIRST, J)], &[], &mut table);
         assert_eq!(table.0[0], key(0x0d));
         // The player applies a change: the game writes its own key again.
         table.0[0] = key(0x0e);
-        written.apply(&[(0, J)], &[], &mut table);
+        written.apply(&[(FIRST, J)], &[], &mut table);
         assert_eq!(table.0[0], key(0x0d), "written again");
         written.apply(&[], &[], &mut table);
         assert_eq!(
@@ -187,8 +197,8 @@ mod tests {
     fn a_second_rebind_keeps_the_game_s_binding_it_first_wrote_over() {
         let mut table = Table(vec![key(0x2c)]);
         let mut written = Written::default();
-        written.apply(&[(0, J)], &[], &mut table);
-        written.apply(&[(0, K)], &[], &mut table);
+        written.apply(&[(FIRST, J)], &[], &mut table);
+        written.apply(&[(FIRST, K)], &[], &mut table);
         assert_eq!(table.0[0], key(0x0e));
         written.apply(&[], &[], &mut table);
         assert_eq!(table.0[0], key(0x2c));
@@ -198,7 +208,7 @@ mod tests {
     fn a_rebind_given_back_after_a_rebuild_leaves_the_game_s_binding() {
         let mut table = Table(vec![key(0x2c)]);
         let mut written = Written::default();
-        written.apply(&[(0, J)], &[], &mut table);
+        written.apply(&[(FIRST, J)], &[], &mut table);
         table.0[0] = key(0x42);
         written.apply(&[], &[], &mut table);
         assert_eq!(table.0[0], key(0x42));
@@ -208,11 +218,11 @@ mod tests {
     fn a_rebind_whose_modifier_is_not_listed_is_refused_and_undone() {
         let mut table = Table(vec![key(0x2c)]);
         let mut written = Written::default();
-        written.apply(&[(0, J)], &[], &mut table);
-        let refused = written.apply(&[(0, J | 1 << 16)], &[], &mut table);
+        written.apply(&[(FIRST, J)], &[], &mut table);
+        let refused = written.apply(&[(FIRST, J | 1 << 16)], &[], &mut table);
         assert_eq!(
             refused,
-            [(0, J | 1 << 16, EncodeKeyError::NoModifier("Shift"))]
+            [(FIRST, J | 1 << 16, EncodeKeyError::NoModifier("Shift"))]
         );
         assert_eq!(table.0[0], key(0x2c), "the game's binding is back");
         assert!(!written.any());
@@ -222,19 +232,19 @@ mod tests {
     fn a_slot_that_holds_the_rebind_is_left_alone() {
         struct Counted(Table, usize);
         impl Firsts for Counted {
-            fn read(&self, action: u8) -> Combo {
+            fn read(&self, action: ActionNumber) -> Combo {
                 self.0.read(action)
             }
-            fn write(&mut self, action: u8, combo: Combo) {
+            fn write(&mut self, action: ActionNumber, combo: Combo) {
                 self.1 += 1;
                 self.0.write(action, combo);
             }
         }
         let mut table = Counted(Table(vec![key(0x2c), key(0x08)]), 0);
         let mut written = Written::default();
-        written.apply(&[(1, J)], &[], &mut table);
-        written.apply(&[(1, J)], &[], &mut table);
-        written.apply(&[(1, J)], &[], &mut table);
+        written.apply(&[(SECOND, J)], &[], &mut table);
+        written.apply(&[(SECOND, J)], &[], &mut table);
+        written.apply(&[(SECOND, J)], &[], &mut table);
         assert_eq!(table.1, 1);
         assert_eq!(table.0.0[0], key(0x2c));
     }

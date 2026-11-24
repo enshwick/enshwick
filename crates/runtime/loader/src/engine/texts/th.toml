@@ -17,7 +17,6 @@
 "controls.press" = "กดปุ่มหรือปุ่มผสม กด Escape เพื่อยกเลิก"
 "controls.clear" = "เลิกผูกปุ่ม"
 "controls.clash" = "ปุ่มเดียวกันนี้ใช้กับ {controls} ด้วย"
-"controls.game-clash" = "เกมใช้ปุ่มนี้กับ {actions} ด้วย"
 "controls.game-keys" = "ปุ่มที่เกมใช้ด้วยจะทำทั้งสองอย่าง"
 "controls.off" = "ปุ่มของม็อดปิดอยู่ในบิลด์เกมนี้"
 "controls.saved" = "บันทึกแล้ว"

@@ -67,6 +67,6 @@ impl InputHints {
         // `resolve`; `action` is a number this build's reflection names, and
         // the wrapper refuses one past the count as well; the open node and
         // the label's life are this function's `# Safety`.
-        Some(unsafe { (self.call)(action, label) } != 0)
+        Some(unsafe { (self.call)(action.get(), label) } != 0)
     }
 }

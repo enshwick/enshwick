@@ -129,6 +129,10 @@ name = "linked_controls"
 harness = false
 
 [[bench]]
+name = "game_bindings"
+harness = false
+
+[[bench]]
 name = "terrain_pages"
 harness = false
 

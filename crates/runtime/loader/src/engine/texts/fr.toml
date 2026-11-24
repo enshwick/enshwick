@@ -17,7 +17,6 @@
 "controls.press" = "Appuie sur une touche ou une combinaison. Échap annule."
 "controls.clear" = "Retirer"
 "controls.clash" = "La même touche déclenche {controls}."
-"controls.game-clash" = "Le jeu utilise aussi cette touche pour {actions}."
 "controls.game-keys" = "Une touche que le jeu utilise aussi fait les deux."
 "controls.off" = "Les touches des mods sont désactivées sur cette version du jeu."
 "controls.saved" = "Enregistré."

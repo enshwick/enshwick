@@ -200,13 +200,14 @@ impl Input {
 
     /// Binds `key` as the first key of the game's control `action`, in the
     /// player's keyboard and mouse bindings, until [`Input::reset_binding`]
-    /// gives it back; the second key stays. The game's input and its key
-    /// glyphs follow at the interface's next frame, and the loader writes
-    /// the key again each time the game rebuilds its bindings from a change
-    /// the player applies, so the rebind holds. The game's Controls page
-    /// still shows the player's own key, and the game saves only that. The
-    /// last rebind of an action, of any mod, wins. Client only, on any
-    /// thread.
+    /// gives it back or the mod turns off; the second key stays. The game's
+    /// input and its key glyphs follow at the interface's next frame, and
+    /// the loader writes the key again each time the game rebuilds its
+    /// bindings from a change the player applies, so one call holds. The
+    /// game's Controls page still shows the player's own key, and the game
+    /// saves only that. Of the mods that rebind one action, the one that
+    /// rebound it last wins, and asking again for the same rebind keeps a
+    /// mod's place. Client only, on any thread.
     ///
     /// # Errors
     ///
@@ -217,13 +218,19 @@ impl Input {
     ///
     /// ```
     /// use enshwick::controls::Key;
+    /// use enshwick::input::BindingError;
     /// use enshwick::typed::input_mapping::runtime::GameplayAction;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let input = load.input()?;
     ///     let jump = Key::parse("J")?;
+    ///     let mut asked = false;
     ///     load.on_frame(move |_| {
-    ///         let _held = input.rebind(&GameplayAction::Jump, jump);
+    ///         if !asked {
+    ///             // Unavailable until the interface's first frame read them.
+    ///             let rebound = input.rebind(&GameplayAction::Jump, jump);
+    ///             asked = rebound != Err(BindingError::Unavailable);
+    ///         }
     ///     })
     /// }
     /// ```
@@ -232,9 +239,10 @@ impl Input {
         write(self.0.host, action, Some(key))
     }
 
-    /// Gives the game's control `action` back the first key the player's
-    /// own bindings hold, ending a mod's rebind of it; nothing for an
-    /// action no mod rebinds. Client only, on any thread.
+    /// Ends this mod's rebind of the game's control `action`, which then
+    /// takes another mod's rebind of it or else the first key the player's
+    /// own bindings hold; nothing for an action this mod does not rebind.
+    /// Client only, on any thread.
     ///
     /// # Errors
     ///

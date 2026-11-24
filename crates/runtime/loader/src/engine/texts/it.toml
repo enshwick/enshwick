@@ -17,7 +17,6 @@
 "controls.press" = "Premi un tasto o una combinazione. Esc annulla."
 "controls.clear" = "Rimuovi"
 "controls.clash" = "Lo stesso tasto attiva {controls}."
-"controls.game-clash" = "Il gioco usa questo tasto anche per {actions}."
 "controls.game-keys" = "Un tasto usato anche dal gioco fa entrambe le cose."
 "controls.off" = "I tasti delle mod sono disattivati in questa versione del gioco."
 "controls.saved" = "Salvato."

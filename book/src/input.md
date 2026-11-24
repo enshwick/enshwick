@@ -144,43 +144,64 @@ second key. Each is a `BoundKey`, or `None` for no key:
 | `Other` | input a `Key` does not name, such as the mouse wheel |
 
 These are the keys the game's input and its key glyphs use, the player's
-own changes included. The interface reads them every 16 frames, so a change
-the player applies shows within a quarter second.
+own changes included. The interface reads them at its first frame and every
+16 frames after, so a change the player applies shows within a quarter
+second.
 
 `input.rebind(&action, key)` binds `key` as the action's first key and
 leaves the second. The game's input and key glyphs follow at the next
 frame. Each time the player applies a change on the Controls page, the game
 rebuilds its bindings from the player's scheme. The loader then writes the
-rebind again at its next look. So the rebind holds until the mod calls
-`input.reset_binding(&action)`, which gives back the player's own first
-key. The Controls page always shows the player's own keys, and the game
-saves only those, so a rebind lasts while the mod runs. When two mods
-rebind one action, the last rebind wins.
+rebind again at its next look, so one call holds. The Controls page always
+shows the player's own keys, and the game saves only those.
+
+A rebind belongs to the mod that made it. It ends when that mod calls
+`input.reset_binding(&action)` or turns off. The action then takes another
+mod's rebind of it, or else the player's own first key. When two mods
+rebind one action, the one that rebound it last wins.
+
+Both calls answer `Unavailable` until the interface's first frame, so a mod
+makes them from a frame handler:
 
 ```rust
 use enshwick::controls::Key;
-use enshwick::input::BoundKey;
+use enshwick::input::{BindingError, BoundKey};
 use enshwick::typed::input_mapping::runtime::GameplayAction;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let input = load.input()?;
     let jump = Key::parse("J")?;
+    let mut done = false;
     load.on_frame(move |_| {
-        if let Ok(binding) = input.binding(&GameplayAction::ContextualAction)
-            && let Some(BoundKey::Key(key)) = binding.first
-        {
-            enshwick::info_once!("interact is {key}");
+        if done {
+            return;
         }
-        // The same rebind again costs nothing.
-        let _rebound = input.rebind(&GameplayAction::Jump, jump);
+        if let Ok(binding) = input.binding(&GameplayAction::ContextualAction) {
+            if let Some(BoundKey::Key(key)) = binding.first {
+                enshwick::info_once!("interact is {key}");
+            }
+            let rebound = input.rebind(&GameplayAction::Jump, jump);
+            done = rebound != Err(BindingError::Unavailable);
+        }
     })
 }
 ```
 
 ```luau
-local jump = enshwick.input.binding("Jump")
-enshwick.log.info(`jump is {jump.first}`)
-enshwick.input.rebind("Jump", "J")
+local done = false
+enshwick.ui.on_frame(function()
+    if done then
+        return
+    end
+    local read, jump = pcall(function()
+        return enshwick.input.binding("Jump")
+    end)
+    if read then
+        enshwick.log.info(`jump is {jump.first}`)
+        enshwick.input.rebind("Jump", "J")
+        done = true
+    end
+end)
 ```
 
 In Luau an action is the variant's name, such as `"ContextualAction"`. A key

@@ -144,8 +144,8 @@ impl Installed {
         });
     }
 
-    /// The first key a mod's rebind of the game action `action` holds,
-    /// `None` while no mod rebinds it.
+    /// The first key the newest mod rebind of the game action `action`
+    /// holds, `None` while no mod rebinds it.
     ///
     /// # Examples
     ///
@@ -156,10 +156,8 @@ impl Installed {
         table::with(None, |s| {
             s.actions
                 .bindings
-                .rebinds
-                .iter()
-                .find(|(name, _)| name == action)
-                .and_then(|&(_, key)| enshwick_core::controls::Key::from_bits(key))
+                .rebound(action)
+                .and_then(enshwick_core::controls::Key::from_bits)
         })
     }
 

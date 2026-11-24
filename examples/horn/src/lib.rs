@@ -8,6 +8,7 @@ use enshwick::abi::Side;
 use enshwick::actions::{Action, Outcome};
 use enshwick::controls::{Control, GameAction, Key};
 use enshwick::i18n::Texts;
+use enshwick::input::BindingError;
 use enshwick::typed::input_mapping::runtime::GameplayAction;
 use enshwick::{Load, Mod, Off};
 
@@ -56,15 +57,20 @@ impl Mod for Horn {
         if load.host().build().side == Side::CLIENT {
             let input = load.input()?;
             let jump = Key::parse("J")?;
+            let mut done = false;
             load.on_frame(move |_| {
-                if let Ok(binding) = input.binding(&GameplayAction::ContextualAction)
-                    && let Some(key) = binding.first
-                {
-                    enshwick::info_once!("interact is {key}");
+                // The bindings read from the interface's first frame; the
+                // loader keeps the rebind through the game's own rebuilds.
+                if done {
+                    return;
                 }
-                // The same rebind again costs nothing; the loader keeps it
-                // through the game's own rebuilds of its bindings.
-                let _rebound = input.rebind(&GameplayAction::Jump, jump);
+                if let Ok(binding) = input.binding(&GameplayAction::ContextualAction) {
+                    if let Some(key) = binding.first {
+                        enshwick::info_once!("interact is {key}");
+                    }
+                    let rebound = input.rebind(&GameplayAction::Jump, jump);
+                    done = rebound != Err(BindingError::Unavailable);
+                }
             })?;
         }
         Ok(Self)

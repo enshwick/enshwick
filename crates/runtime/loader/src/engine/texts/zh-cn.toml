@@ -17,7 +17,6 @@
 "controls.press" = "按下一个键或组合键。Esc 取消。"
 "controls.clear" = "解除绑定"
 "controls.clash" = "同一按键也会触发 {controls}。"
-"controls.game-clash" = "游戏也将此按键用于 {actions}。"
 "controls.game-keys" = "游戏也使用的按键会同时执行两者。"
 "controls.off" = "此游戏版本中模组按键已关闭。"
 "controls.saved" = "已保存。"

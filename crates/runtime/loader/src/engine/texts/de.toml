@@ -17,7 +17,6 @@
 "controls.press" = "Drücke eine Taste oder Kombination. Escape bricht ab."
 "controls.clear" = "Lösen"
 "controls.clash" = "Dieselbe Taste löst {controls} aus."
-"controls.game-clash" = "Das Spiel nutzt diese Taste auch für {actions}."
 "controls.game-keys" = "Eine Taste, die auch das Spiel nutzt, tut beides."
 "controls.off" = "Mod-Tasten sind in dieser Spielversion aus."
 "controls.saved" = "Gespeichert."

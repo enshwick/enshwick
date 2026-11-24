@@ -293,6 +293,30 @@ pub fn listed(modifiers: &[Operation]) -> u32 {
         .fold(0, |bits, bit| bits | bit)
 }
 
+/// Whether pressing the game's key form `game` fires the mod control on
+/// `control` too.
+///
+/// That is the same key with the control's modifiers all among the game's,
+/// since a control fires while more modifiers than its own are held.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::actions::game_bindings::keys::fires_with;
+///
+/// let (e, shift_e) = (0x12, 0x12 | 1 << 16);
+/// assert!(fires_with(e, shift_e));
+/// assert!(!fires_with(shift_e, e));
+/// ```
+#[must_use]
+pub fn fires_with(control: u32, game: u32) -> bool {
+    let modifiers = SHIFT | CTRL | ALT;
+    control != NONE
+        && game != OTHER
+        && control & CODE == game & CODE
+        && control & modifiers & !game == 0
+}
+
 /// The key's usage of a key operation.
 fn usage(operation: &Operation) -> u16 {
     u16::from_le_bytes([operation[KEY], operation[KEY + 1]])
@@ -403,6 +427,20 @@ mod tests {
             Err(EncodeKeyError::NoModifier("Ctrl"))
         );
         assert_eq!(listed(&list), SHIFT | ALT);
+    }
+
+    #[test]
+    fn a_control_clashes_with_a_game_key_that_holds_its_key_and_its_modifiers() {
+        let bits = |name: &str| Key::parse(name).unwrap().bits();
+        assert!(fires_with(bits("E"), bits("E")));
+        assert!(fires_with(bits("E"), bits("Shift+E")), "E fires on Shift+E");
+        assert!(fires_with(bits("Ctrl+E"), bits("Ctrl+Alt+E")));
+        assert!(!fires_with(bits("Shift+E"), bits("E")));
+        assert!(!fires_with(bits("Ctrl+E"), bits("Shift+E")));
+        assert!(!fires_with(bits("E"), bits("F")));
+        assert!(!fires_with(bits("Mouse1"), bits("Mouse2")));
+        assert!(!fires_with(NONE, NONE));
+        assert!(!fires_with(bits("E"), OTHER));
     }
 
     #[test]

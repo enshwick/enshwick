@@ -7295,12 +7295,14 @@ typedef struct EnshwickHostApi {
                                  struct EnshwickGameBinding *out);
   // Binds `key`, in the form of `EnshwickControlSpec.key`, as the first key of
   // the game action named `action` in the client's keyboard and mouse
-  // bindings, or with 0 gives the action back the key the game's
-  // bindings hold. The interface writes it at its next frame and again
-  // after each change the player applies, which the game rebuilds its
-  // bindings from, so the rebind holds until it is given back; the
-  // game's Controls page never shows it. The last rebind of an action
-  // wins. `EnshwickStatus_UNAVAILABLE` as for `EnshwickHostApi.game_binding`;
+  // bindings for the mod `me`, or with 0 ends `me`'s rebind of it. The
+  // interface writes it at its next frame and again after each change
+  // the player applies, which the game rebuilds its bindings from, so the
+  // rebind holds until the mod ends it or turns off; the game's Controls
+  // page never shows it. Of the mods that rebind an action, the one that
+  // rebound it last wins; asking again for the same rebind keeps a mod's
+  // place, and an action no mod rebinds holds the game's own key.
+  // `EnshwickStatus_UNAVAILABLE` as for `EnshwickHostApi.game_binding`;
   // `EnshwickStatus_MISSING` for an action the build does not name;
   // `EnshwickStatus_BAD_ARGS` for a key a mod control may not take, or a
   // modifier the game's bindings do not list. Any thread. ABI 12.20.

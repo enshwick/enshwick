@@ -19,7 +19,7 @@
 "controls.press" = "Press a key or a combination. Escape cancels."
 "controls.clear" = "Unbind"
 "controls.clash" = "The same key fires {controls}."
-"controls.game-clash" = "The game also uses this key for {actions}."
+"controls.game-clash" = "The game also uses this key."
 "controls.game-keys" = "A key the game also uses does both."
 "controls.off" = "Mod keys are off on this game build."
 "controls.saved" = "Saved."

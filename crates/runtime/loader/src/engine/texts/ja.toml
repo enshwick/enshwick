@@ -17,7 +17,6 @@
 "controls.press" = "キーまたは組み合わせを押してください。Escでキャンセル。"
 "controls.clear" = "解除"
 "controls.clash" = "同じキーで{controls}も発動します。"
-"controls.game-clash" = "ゲームもこのキーを{actions}に使います。"
 "controls.game-keys" = "ゲームも使うキーは両方の動作をします。"
 "controls.off" = "このゲームビルドではMODのキーはオフです。"
 "controls.saved" = "保存しました。"

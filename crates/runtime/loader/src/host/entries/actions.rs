@@ -140,8 +140,8 @@ entries! {
         })
     }
 
-    fn game_rebind(loader as Caller, action as Text, key: u32) -> Status {
-        on_client(loader)?;
-        Ok(crate::actions::game_bindings::rebind(action, key)?)
+    fn game_rebind(me as Mod, action as Text, key: u32) -> Status {
+        on_client(me.loader)?;
+        Ok(crate::actions::game_bindings::rebind(me.index, action, key)?)
     }
 }

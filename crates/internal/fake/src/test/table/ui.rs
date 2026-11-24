@@ -241,7 +241,7 @@ pub(crate) fn slider(
 /// `None` for an action the fake build does not name.
 fn input_hint(s: &State, w: &mut UiWidget, action: String) -> Option<crate::test::Drawn> {
     // The glyph draws from the game's runtime bindings, rebinds included.
-    let bound = s.actions.bindings.keys(&action)? != [0, 0];
+    let bound = s.actions.bindings.table(&action)? != [0, 0];
     w.result = u32::from(bound);
     Some(crate::test::Drawn::InputHint {
         action,
