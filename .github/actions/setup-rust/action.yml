@@ -123,11 +123,11 @@ runs:
     # Every version here must be in install-action's manifests at this SHA:
     # a version it lacks falls back to cargo-binstall.
     - if: inputs.cross == 'true'
-      uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+      uses: taiki-e/install-action@25f51f6b1bf4e18876107cece836f4f77ac17c8c # v2.90.7
       with:
         tool: cargo-xwin@0.23.1${{ inputs.tools != '' && format(',{0}', inputs.tools) || '' }}
     - if: inputs.cross != 'true' && inputs.tools != ''
-      uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+      uses: taiki-e/install-action@25f51f6b1bf4e18876107cece836f4f77ac17c8c # v2.90.7
       with:
         tool: ${{ inputs.tools }}
 
