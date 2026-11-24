@@ -1,13 +1,16 @@
-//! The look and the short move client commands ask for, written into the
-//! local player's input right after the game's own input builder, so the
-//! player's input reads first and wins.
+//! The look, the short move and the presses client commands ask for,
+//! written into the local player's input right after the game's own input
+//! builder, so the player's input reads first and wins.
 //!
-//! The builder runs per game step (mode 0, the stick) and per frame (mode
-//! 1, the look), on the interface's thread (client 26430625, seen live).
-//! While a loader window shows over the world, the player's input is held
-//! here first ([`crate::engine::screens::holds_world`]), as the game holds
-//! it while it blocks the input. Until a mod hands one over and with no
-//! window, its detour adds two atomic loads.
+//! The builder runs per game step (mode 0, the stick and the buttons) and
+//! per frame (mode 1, the look), on the interface's thread (client
+//! 26430625, seen live). While a loader window shows over the world, the
+//! player's input is held here first
+//! ([`crate::engine::screens::holds_world`]), as the game holds it while it
+//! blocks the input. Until a mod hands one over and with no window, its
+//! detour adds four atomic loads.
+
+mod presses;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
@@ -86,6 +89,14 @@ pub(crate) fn link(loader: &Loader) {
 pub(crate) fn runs() -> bool {
     GROUPS.input.get().is_some() && DRIVE.linked.load(Ordering::Acquire) && !FUSE.is_off()
 }
+
+/// Whether the build runs presses: looks and moves run, and the buttons
+/// group is linked and on.
+pub(crate) fn presses_run() -> bool {
+    runs() && GROUPS.buttons.get().is_some()
+}
+
+pub(crate) use presses::{hand as press, progress as press_progress, release as unpress, written};
 
 /// What a command hands the builder.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -261,7 +272,8 @@ crate::engine::chains::chain_detour! {
     /// settings, camera, mode, ..)`, twelve arguments and no answer (client
     /// 26430625). The game's pass runs first, then the hold while a loader
     /// window shows ([`crate::engine::screens::holds_world`]); a handed look
-    /// or move is written after both, so it still works under a window.
+    /// or move and the presses are written after both, so they still work
+    /// under a window.
     fn client_build(
         input: *mut u8,
         consumer: usize,
@@ -302,18 +314,29 @@ crate::engine::chains::chain_detour! {
             // right after its pass on its thread.
             unsafe { drive(layout, input, mapping, mode, handed) };
         }
+        if presses::pending()
+            && !input.is_null()
+            && !mapping.is_null()
+            && let Some(layout) = GROUPS.input.get()
+            && let Some(buttons) = GROUPS.buttons.get()
+        {
+            // SAFETY: the builder's own non-null input record and mapping,
+            // right after its pass on its thread.
+            unsafe { presses::drive(layout, buttons, input, mapping, mode) };
+        }
     }
 }
 
 /// Readies the builder's detour for its benchmark with a stand-in for the
 /// game's pass: the closure runs one step pass and answers the stick's
-/// forward bits, with nothing handed or with a move held.
+/// forward bits and the buttons, with nothing handed, a move held or a
+/// move and two presses held.
 #[cfg(any(test, feature = "test"))]
 #[doc(hidden)]
-pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
-    /// Stands in for the game's step pass: rewrites the stick as the
-    /// player's, zero, as the game does each step, so the detour sees no
-    /// input of the player's and its move holds.
+pub fn bench_client_build(moving: bool, pressing: bool) -> impl FnMut() -> (u32, u64) {
+    /// Stands in for the game's step pass: rewrites the stick and the
+    /// buttons as the player's, zero, as the game does each step, so the
+    /// detour sees no input of the player's and its move and presses hold.
     unsafe extern "system" fn game(
         input: *mut u8,
         _: usize,
@@ -331,6 +354,8 @@ pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
         let stick = crate::actions::client_control::BENCH_INPUT.stick_offset();
         // SAFETY: the benchmark's own record, of the stand-in layout's size.
         unsafe { enshwick_core::raw::write_at(input, stick, [0.0_f32; 2]) };
+        // SAFETY: the same record, which holds the stand-in's buttons.
+        unsafe { crate::actions::client_control::BENCH_BUTTONS.set_digital_input(input, 0) };
     }
     type Build = unsafe extern "system" fn(
         *mut u8,
@@ -358,6 +383,11 @@ pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
         DRIVE.until.store(u64::MAX, Ordering::Relaxed);
         let _moving = DRIVE.handoff.advance(1, stage::MOVE, stage::MOVING);
     }
+    if pressing {
+        // Jump and Sprint, held past the benchmark's run.
+        let _jump = press(2, ModIndex::LOADER, 32, u32::MAX);
+        let _sprint = press(3, ModIndex::LOADER, 53, u32::MAX);
+    }
     let mut input = vec![0u8; 0x600];
     let mapping = vec![0u8; 0xb000];
     move || {
@@ -366,11 +396,14 @@ pub fn bench_client_build(moving: bool) -> impl FnMut() -> u32 {
         // build's size and a mapping past its blocked byte.
         unsafe { client_build(record, 0, 0, 0, map, 0, 0, STEP, 0, 0, 0, 0) };
         let Some(layout) = GROUPS.input.get() else {
-            return 0;
+            return (0, 0);
         };
         // SAFETY: the same record, of the build's size.
         let [_, forward] = unsafe { layout.movement_stick(input.as_ptr()) };
-        forward.to_bits()
+        // SAFETY: the same record, which holds the stand-in's buttons.
+        let buttons =
+            unsafe { crate::actions::client_control::BENCH_BUTTONS.digital_input(input.as_ptr()) };
+        (forward.to_bits(), buttons)
     }
 }
 
@@ -389,9 +422,13 @@ mod tests {
 
     #[test]
     fn the_benchmark_s_move_holds_its_stick_through_every_pass_it_times() {
-        let mut moving = bench_client_build(true);
+        let mut moving = bench_client_build(true, true);
         for pass in 0..4 {
-            assert_eq!(moving(), 1.0_f32.to_bits(), "pass {pass}");
+            assert_eq!(
+                moving(),
+                (1.0_f32.to_bits(), 1 << 32 | 1 << 53),
+                "pass {pass}"
+            );
         }
     }
 
