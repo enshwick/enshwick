@@ -6,9 +6,8 @@
 //! The types the header declares are the types the golden file lists, so a
 //! new ABI type reaches the header without a change here.
 
-use std::ffi::OsStr;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::scratch::Scratch;
@@ -20,8 +19,11 @@ const ABI_SOURCE: &str = "crates/internal/abi/src/abi.rs";
 /// The ABI types the ABI module re-exports from the crate of the value
 /// types, which cbindgen parses beside it.
 const VALUES_ABI_SOURCE: &str = "crates/internal/values/src/abi.rs";
-/// The name of that file's copy beside the ABI module's.
-const VALUES_ABI_COPY: &str = "values_abi.rs";
+/// The ABI module's copy, the root of the crate cbindgen parses.
+const ABI_COPY: &str = "lib.rs";
+/// That file's copy, in a folder of its own so its submodules sit apart from
+/// the ABI module's.
+const VALUES_ABI_COPY: &str = "values/lib.rs";
 /// The golden layout file.
 pub(crate) const LAYOUT: &str = "crates/internal/abi/src/abi/layout.txt";
 /// cbindgen's settings.
@@ -107,7 +109,7 @@ fn generate(root: &Path) -> Result<String, String> {
     let mut builder = cbindgen::Builder::new()
         .with_config(config)
         .with_item_prefix(PREFIX)
-        .with_src(crate_root.join("lib.rs"))
+        .with_src(crate_root.join(ABI_COPY))
         .with_src(crate_root.join(VALUES_ABI_COPY));
     for shape in &shapes {
         builder = builder.include_item(&shape.name);
@@ -205,28 +207,90 @@ fn tidy(header: &str) -> String {
     text
 }
 
-/// The callback types of the ABI module, every `pub type <Name>Fn`.
-fn callback_types(root: &Path) -> Result<Vec<String>, String> {
-    let modules = root.join(ABI_SOURCE).with_extension("");
-    let entries =
-        std::fs::read_dir(&modules).map_err(|error| format!("{}: {error}", modules.display()))?;
-    let mut found = Vec::new();
-    for entry in entries {
-        let path = entry
-            .map_err(|error| format!("{}: {error}", modules.display()))?
-            .path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
+/// The files of the submodules of the module at `source`, parsed, a
+/// domain's folder (`events/knowledge.rs`) included: the modules rustc
+/// builds outside tests, which are the ones cbindgen reads.
+fn module_files(source: &Path) -> Result<Vec<(PathBuf, syn::File)>, String> {
+    let mut files = Vec::new();
+    submodules(
+        &parse_source(source)?,
+        &source.with_extension(""),
+        &mut files,
+    )?;
+    Ok(files)
+}
+
+/// Adds the files of the modules `file` declares, which sit in `dir`, and of
+/// theirs to `out`; a `#[cfg(test)]` module is left out, as cbindgen leaves
+/// it.
+fn submodules(
+    file: &syn::File,
+    dir: &Path,
+    out: &mut Vec<(PathBuf, syn::File)>,
+) -> Result<(), String> {
+    for item in &file.items {
+        let syn::Item::Mod(module) = item else {
+            continue;
+        };
+        if module.content.is_some() || is_test(&module.attrs) {
             continue;
         }
-        let text = std::fs::read_to_string(&path)
-            .map_err(|error| format!("{}: {error}", path.display()))?;
-        found.extend(text.lines().filter_map(|line| {
-            let name = line.strip_prefix("pub type ")?.split([' ', '=']).next()?;
-            name.ends_with("Fn").then(|| name.to_owned())
-        }));
+        let name = module.ident.to_string();
+        let path = dir.join(format!("{name}.rs"));
+        let parsed = parse_source(&path)?;
+        submodules(&parsed, &dir.join(name), out)?;
+        out.push((path, parsed));
+    }
+    Ok(())
+}
+
+/// The Rust file at `path`, parsed.
+fn parse_source(path: &Path) -> Result<syn::File, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    syn::parse_file(&text).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+/// Whether `attrs` hold `#[cfg(test)]`.
+fn is_test(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg")
+            && attr
+                .parse_args::<syn::Path>()
+                .is_ok_and(|path| path.is_ident("test"))
+    })
+}
+
+/// The callback types of the ABI module's submodules, every public
+/// `type <Name>Fn`.
+fn callback_types(root: &Path) -> Result<Vec<String>, String> {
+    let mut found = Vec::new();
+    for (_, file) in module_files(&root.join(ABI_SOURCE))? {
+        callbacks(&file.items, &mut found);
     }
     found.sort();
     Ok(found)
+}
+
+/// Adds the public `type <Name>Fn` items of `items` and of their inline
+/// modules but `#[cfg(test)]` ones to `out`.
+fn callbacks(items: &[syn::Item], out: &mut Vec<String>) {
+    for item in items {
+        match item {
+            syn::Item::Type(alias) if matches!(alias.vis, syn::Visibility::Public(_)) => {
+                let name = alias.ident.to_string();
+                if name.ends_with("Fn") {
+                    out.push(name);
+                }
+            }
+            syn::Item::Mod(module) if !is_test(&module.attrs) => {
+                if let Some((_, inner)) = &module.content {
+                    callbacks(inner, out);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// `header` with every `Option` of a callback type as the callback type
@@ -529,10 +593,6 @@ fn plain_links(line: &str) -> String {
     out
 }
 
-/// Copies the ABI module into `to` as a crate of its own, `abi.rs` as
-/// `lib.rs` beside its submodules and the value types' ABI file: cbindgen
-/// looks for the submodules of a single source file next to it, and the
-/// rest of the API crate stays out of the header.
 /// `source` with the brackets of its `cbindgen:` annotation lines
 /// unescaped: the source escapes them (`field-names=\[bytes\]`) so rustdoc
 /// reads no link.
@@ -549,24 +609,32 @@ fn cbindgen_annotations(source: &str) -> String {
         .collect()
 }
 
+/// Copies the ABI module into `to` as a crate of its own, `abi.rs` as
+/// [`ABI_COPY`] and the value types' ABI file as [`VALUES_ABI_COPY`], each
+/// with its submodules at their paths in its folder: cbindgen looks for the
+/// submodules of a source file next to it, and those of `events.rs` in
+/// `events/`, and the rest of the API crate stays out of the header.
 fn copy_abi(root: &Path, to: &Path) -> Result<(), String> {
-    let source = root.join(ABI_SOURCE);
-    let copy = |from: &Path, name: &OsStr| {
-        std::fs::read_to_string(from)
-            .and_then(|text| std::fs::write(to.join(name), cbindgen_annotations(&text)))
-            .map_err(|error| format!("{}: {error}", from.display()))
+    let copy = |from: &Path, name: &Path| {
+        let text = std::fs::read_to_string(from)
+            .map_err(|error| format!("{}: {error}", from.display()))?;
+        let into = to.join(name);
+        into.parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(&into, cbindgen_annotations(&text)))
+            .map_err(|error| format!("{}: {error}", into.display()))
     };
-    copy(&source, OsStr::new("lib.rs"))?;
-    copy(&root.join(VALUES_ABI_SOURCE), OsStr::new(VALUES_ABI_COPY))?;
-    let modules = source.with_extension("");
-    let entries =
-        std::fs::read_dir(&modules).map_err(|error| format!("{}: {error}", modules.display()))?;
-    for entry in entries {
-        let path = entry
-            .map_err(|error| format!("{}: {error}", modules.display()))?
-            .path();
-        if path.extension().is_some_and(|ext| ext == "rs") {
-            copy(&path, path.file_name().unwrap_or_default())?;
+    for (source, copied) in [(ABI_SOURCE, ABI_COPY), (VALUES_ABI_SOURCE, VALUES_ABI_COPY)] {
+        let source = root.join(source);
+        let copied = Path::new(copied);
+        copy(&source, copied)?;
+        let modules = source.with_extension("");
+        let folder = copied.parent().unwrap_or(Path::new(""));
+        for (path, _) in module_files(&source)? {
+            let name = path
+                .strip_prefix(&modules)
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+            copy(&path, &folder.join(name))?;
         }
     }
     Ok(())
