@@ -1,5 +1,5 @@
 ### Changed
 
-- `cargo enshwick generate --from` writes the typed API from the newest
-  server build's snapshot, also after it snapshots an older build, so
-  retaking an older build's snapshot leaves the API as it is.
+- `cargo enshwick generate --from` with a server build that has a kept
+  table writes the typed API from the newest server build's snapshot, so
+  retaking an older kept build's snapshot leaves the API as it is.

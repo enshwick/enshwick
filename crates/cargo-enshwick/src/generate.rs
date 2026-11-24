@@ -153,10 +153,11 @@ pub fn write_snapshot(
 }
 
 /// Snapshots the executable `from` into the game data folder `data` when
-/// given, then writes the typed API from the newest server build's snapshot.
+/// given, then writes the typed API.
 ///
-/// So retaking an older build's snapshot leaves the API as it is. With
-/// `check` it writes nothing and fails when the committed files differ.
+/// It writes from that snapshot when `from` is a server build no table is
+/// kept for, else from [`newest_snapshot`]'s pick. With `check` it writes
+/// nothing and fails when the committed files differ.
 ///
 /// # Errors
 ///
@@ -173,6 +174,7 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
     }
     let tables = tables_of(data)?;
     let mut done = Vec::new();
+    let mut snapshotted = None;
     if let Some(exe) = from {
         let bytes = std::fs::read(exe).with_context(|| exe.display().to_string())?;
         let fingerprint = Image::parse(&bytes, Layout::File, None)?
@@ -190,16 +192,22 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
         let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
         let path = write_snapshot(data, &catalogue, side, fingerprint)?;
         done.push(format!("snapshot {}", path.display()));
+        // A build without a table ranks only by write time, so pin it rather than trust the clock.
+        let untabled = side_of(&tables, fingerprint).is_none();
+        snapshotted = (side == Side::Server && untabled).then_some(path);
     }
     let snapshots = data.join(SNAPSHOTS);
-    let path = newest_snapshot(data, &tables, Side::Server)
-        .with_context(|| snapshots.display().to_string())?
-        .ok_or_else(|| {
-            anyhow!(
-                "{}: no server build snapshot; run with --from the server's executable",
-                snapshots.display()
-            )
-        })?;
+    let path = match snapshotted {
+        Some(path) => path,
+        None => newest_snapshot(data, &tables, Side::Server)
+            .with_context(|| snapshots.display().to_string())?
+            .ok_or_else(|| {
+                anyhow!(
+                    "{}: no server build snapshot; run with --from the server's executable",
+                    snapshots.display()
+                )
+            })?,
+    };
     let text = std::fs::read_to_string(&path).with_context(|| path.display().to_string())?;
     let all = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
     let catalogue = covered(root, all)?;
@@ -404,11 +412,28 @@ mod tests {
             include_str!("../../enshwick-gamedata/src/typed/relevant.toml"),
         );
         let data = root.join("tableless-data");
+        // Another untabled snapshot stamped in the future would win a pick by write time.
+        let later = enshwick_gamedata::Fingerprint::new([9; 16], 4_000_000_000);
+        let later = snapshot_in(&data, &file_name(Side::Server, later));
+        std::fs::create_dir_all(later.parent().unwrap()).unwrap();
+        std::fs::write(
+            &later,
+            include_str!("../../enshwick-gamedata/src/typed/fixture.jsonl"),
+        )
+        .unwrap();
+        let future = std::time::SystemTime::now() + std::time::Duration::from_secs(1 << 30);
+        std::fs::File::options()
+            .write(true)
+            .open(&later)
+            .unwrap()
+            .set_modified(future)
+            .unwrap();
         let wrote = run(&root, &data, Some(&exe), false).unwrap();
         assert!(wrote.starts_with("snapshot "), "{wrote}");
         assert!(wrote.contains("wrote "), "{wrote}");
+        assert!(!wrote.contains("4000000000"), "{wrote}");
         let snapshots = std::fs::read_dir(data.join(SNAPSHOTS)).unwrap().count();
-        assert_eq!(snapshots, 1, "one snapshot, of the server");
+        assert_eq!(snapshots, 2, "the server's snapshot beside the later one");
         drop(std::fs::remove_dir_all(&root));
     }
 
@@ -440,6 +465,8 @@ mod tests {
         let wrote = run(&root, &data, Some(&exe), false).unwrap();
         assert!(wrote.ends_with("from server build 2 (Steam 3)"), "{wrote}");
         assert!(snapshot_in(&data, &name).is_file(), "{wrote}");
+        let header = std::fs::read_to_string(root.join(TYPED).join("ecs.rs")).unwrap();
+        assert!(header.contains("server build 2 (Steam 3)"), "{header}");
         drop(std::fs::remove_dir_all(&root));
     }
 }
