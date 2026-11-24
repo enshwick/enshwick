@@ -88,7 +88,8 @@ fn the_end_of_a_hosted_game_forgets_its_server_s_recipes_and_applies_the_client_
 fn a_client_hosting_the_game_keeps_its_own_rules_when_its_list_comes_back_to_it() {
     let recipes = Recipes::new();
     recipes.dirty.store(false, Ordering::Relaxed);
-    recipes.received(true, true, true, &[]);
+    recipes.received(true, true, false, &[3]);
+    recipes.received(true, false, true, &[4]);
     recipes.live(|l| assert_eq!(l.server, None, "its own world's file and edits apply"));
     assert!(
         !recipes.dirty.load(Ordering::Acquire),
