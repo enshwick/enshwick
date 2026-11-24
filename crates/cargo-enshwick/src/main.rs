@@ -184,7 +184,7 @@ enum Command {
     /// Writes the typed API, `enshwick::typed`, from the newest server
     /// build's snapshot of the game's reflection in the game data folder;
     /// with `--from`, snapshots that executable's reflection there first and
-    /// writes from it when it is the server's.
+    /// writes from it when it is a server build no table is kept for.
     Generate {
         /// The game executable, or the game folder holding it, to snapshot.
         #[arg(long, conflicts_with = "check")]
