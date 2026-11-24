@@ -270,3 +270,4 @@ names every entry of the golden layout once, in that order.
 | `game_rebind` | game | — | client |
 | `quest_reward_filter` | game | — | with a player |
 | `knowledge_set` | game | — | with a player |
+| `client_windows` | game | — | client |

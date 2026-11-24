@@ -121,9 +121,12 @@ pub(super) fn window_ask(spec: &Spec, window: &str) -> Result<windows::Ask, Comm
         Spec::WINDOW_TEXT => windows::Act::Text,
         _ => windows::Act::Press,
     };
-    // SAFETY: the mod's spec, its texts borrowed for the call; the ask
-    // copies them.
-    let (item, text) = unsafe { (text(spec.item)?, text(spec.text)?) };
+    // SAFETY: the mod's spec, its item borrowed for the call; the ask
+    // copies it.
+    let item = unsafe { text(spec.item) }?;
+    // SAFETY: the mod's spec, its text borrowed for the call; the ask
+    // copies it.
+    let text = unsafe { text(spec.text) }?;
     if act == windows::Act::Pick && text.is_empty() {
         return Err(CommandError::BadArgs);
     }

@@ -79,15 +79,12 @@ fn view_items(view: &View, listed: &mut Vec<Listed>) {
             ItemView::Row { text, buttons } => {
                 for button in buttons {
                     let action = button.action.as_str();
-                    let n = match counted.iter_mut().find(|(a, _)| *a == action) {
-                        Some((_, n)) => {
-                            *n += 1;
-                            *n
-                        }
-                        None => {
-                            counted.push((action, 0));
-                            0
-                        }
+                    let n = if let Some((_, n)) = counted.iter_mut().find(|(a, _)| *a == action) {
+                        *n += 1;
+                        *n
+                    } else {
+                        counted.push((action, 0));
+                        0
                     };
                     let target = Target::RowButton(action.to_owned(), n);
                     listed.push(Listed::button(target, &button.label, text, false));

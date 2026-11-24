@@ -1382,12 +1382,12 @@ typedef struct EnshwickClientSnapshot {
 // ABI 12.23.
 #define EnshwickClientSnapshot_MOD_MISMATCH 6
 
-// An item of a window the server's mods show this client, one entry of
-// `EnshwickHostApi.client_windows`, which a
-// `EnshwickClientCommand_WINDOW_PRESS`, `EnshwickClientCommand_WINDOW_PICK` or
-// `EnshwickClientCommand_WINDOW_TEXT` names by `window` and `item`.
+// An item of a window a server's mod shows this client, as
+// `EnshwickHostApi.client_windows` lists it.
 //
-// The strings are borrowed for the call. ABI 12.24.
+// A `EnshwickClientCommand_WINDOW_PRESS`, `EnshwickClientCommand_WINDOW_PICK` or
+// `EnshwickClientCommand_WINDOW_TEXT` names it by `window` and `item`. The
+// strings are borrowed for the call. ABI 12.24.
 typedef struct EnshwickClientWindowItem {
   // Size and version of this struct.
   struct EnshwickHeader header;

@@ -784,8 +784,8 @@ fields, its Run and Cancel, and Close.
 A command is `Observed` once the window shows it: the press clicked, the
 option is picked, the field reads the text. An item the window that shows
 lacks is `Unavailable`. A command on an item the window draws off, such as
-a Run while a field is empty, is cancelled with `ItemOff`, and so is a
-pick of a name the list lacks. A number field takes no command.
+a Run while a field is empty, is cancelled with `ItemOff`. A pick of a name
+the list lacks is cancelled the same way. A number field takes no command.
 
 ```rust
 use enshwick::input::{ClientCommand, CommandAction, Input};

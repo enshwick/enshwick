@@ -191,8 +191,10 @@ fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
     let target = unsafe { spec.target.as_str() };
     // SAFETY: the mod's spec, its expected screen borrowed for the call.
     let expected = unsafe { spec.expected_screen.as_str() };
-    // SAFETY: the mod's spec, its item and text borrowed for the call.
-    let (item, text) = unsafe { (spec.item.as_str(), spec.text.as_str()) };
+    // SAFETY: the mod's spec, its item borrowed for the call.
+    let item = unsafe { spec.item.as_str() };
+    // SAFETY: the mod's spec, its text borrowed for the call.
+    let text = unsafe { spec.text.as_str() };
     let window_kind = matches!(
         spec.kind,
         enshwick_core::abi::ClientCommand::WINDOW_PRESS

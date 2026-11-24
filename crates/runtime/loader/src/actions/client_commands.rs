@@ -324,8 +324,7 @@ impl Command {
                 play::release(self.id, local_held::now_ms(), by_mod);
             }
             Kind::Mark(_) => client_input::unmark(self.id),
-            Kind::Window(_) => {}
-            Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) | Kind::Mods(_) => {}
+            Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) | Kind::Mods(_) | Kind::Window(_) => {}
         }
     }
 }

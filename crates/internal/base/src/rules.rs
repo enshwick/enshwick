@@ -170,9 +170,11 @@ pub const WINDOW_CANCEL: &str = "@cancel";
 pub const WINDOW_MAP: &str = "@map";
 
 /// An item of a carried window as its id names it, from the action ids
-/// its mod declared. Action ids hold only `[a-z0-9-]`, so the window's own
-/// buttons, which start with `@`, and the separators `/`, `@` and `#`
-/// never clash with one.
+/// its mod declared.
+///
+/// Action ids hold only `[a-z0-9-]`, so the window's own buttons, which
+/// start with `@`, and the separators `/`, `@` and `#` never clash with
+/// one.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WindowItem {
     /// `<action>`: the button that runs the action, drawn whole or in its

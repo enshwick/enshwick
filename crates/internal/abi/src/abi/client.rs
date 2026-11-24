@@ -564,12 +564,12 @@ impl ClientCommandStatus {
     };
 }
 
-/// An item of a window the server's mods show this client, one entry of
-/// [`HostApi::client_windows`](super::HostApi::client_windows), which a
-/// [`ClientCommand::WINDOW_PRESS`], [`ClientCommand::WINDOW_PICK`] or
-/// [`ClientCommand::WINDOW_TEXT`] names by `window` and `item`.
+/// An item of a window a server's mod shows this client, as
+/// [`HostApi::client_windows`](super::HostApi::client_windows) lists it.
 ///
-/// The strings are borrowed for the call. ABI 12.24.
+/// A [`ClientCommand::WINDOW_PRESS`], [`ClientCommand::WINDOW_PICK`] or
+/// [`ClientCommand::WINDOW_TEXT`] names it by `window` and `item`. The
+/// strings are borrowed for the call. ABI 12.24.
 ///
 /// # Examples
 ///
