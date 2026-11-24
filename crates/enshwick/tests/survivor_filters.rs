@@ -206,11 +206,19 @@ mod tests {
 
     #[test]
     fn every_mod_may_register_a_status_merge_and_register_its_own_again() {
-        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-        let other = abi::ModHandle(loader.handle().0 + 1);
+        let other = abi::ModHandle(2);
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .other_mod(other)
+            .install();
         assert_eq!(ask_merge(&loader, loader.handle()), Status::OK);
         assert_eq!(ask_merge(&loader, loader.handle()), Status::OK);
         assert_eq!(ask_merge(&loader, other), Status::OK);
+        assert_eq!(
+            ask_merge(&loader, abi::ModHandle(3)),
+            Status::BAD_ARGS,
+            "a handle the loader never gave out"
+        );
     }
 
     #[test]

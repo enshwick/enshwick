@@ -275,6 +275,7 @@ mod tests {
     fn client() -> Installed {
         FakeHost::new()
             .side(Side::CLIENT)
+            .pack(ModHandle(2), Side::BOTH)
             .types(types())
             .type_hash(types::SOUND_RESOURCE.id(), hash(SOUND))
             .type_hash(types::SOUND_CONTAINER_RESOURCE.id(), hash(CONTAINER))

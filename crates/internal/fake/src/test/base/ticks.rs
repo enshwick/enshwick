@@ -1,10 +1,12 @@
 //! The fake loader's steps: every-step and periodic tick handlers, delivered
 //! as the loader delivers them.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 use core::time::Duration;
 
-use enshwick_core::abi::{Event, EventFn, ModHandle, Status, TickData, TickHandle};
+use enshwick_core::abi::{Event, EventFn, Status, TickData, TickHandle};
 
 use crate::test::Installed;
 use crate::test::table::{Registered, put, with};
@@ -31,52 +33,54 @@ pub(crate) struct FakeTicks {
     asked: usize,
 }
 
-pub(crate) extern "system" fn subscribe_tick(
-    me: ModHandle,
-    every_ns: u64,
-    callback: Option<EventFn>,
-    user: *mut c_void,
-    out: *mut TickHandle,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    if out.is_null() {
-        return Status::BAD_ARGS;
+entries! {
+    pub(crate) fn subscribe_tick(
+        me as Mod,
+        every_ns: u64,
+        callback: Option<EventFn> as args::Callback,
+        user: *mut c_void,
+        out: *mut TickHandle as args::Out,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        crate::test::table::with_open(|s| {
+            let asked = s.base.ticks.asked;
+            s.base.ticks.asked += 1;
+            if s.host.base.refused_tick == Some(asked) {
+                return Status::REFUSED;
+            }
+            let Ok(handle) = u32::try_from(s.base.ticks.ticks.len()) else {
+                return Status::REFUSED;
+            };
+            s.base.ticks.ticks.push(FakeTick {
+                every: every_ns,
+                handler: Registered::new(callback, user, me),
+                last: None,
+            });
+            put(out, TickHandle(handle))
+        })
     }
-    crate::test::table::with_open(|s| {
-        let asked = s.base.ticks.asked;
-        s.base.ticks.asked += 1;
-        if s.host.base.refused_tick == Some(asked) {
-            return Status::REFUSED;
-        }
-        let Ok(handle) = u32::try_from(s.base.ticks.ticks.len()) else {
-            return Status::REFUSED;
-        };
-        s.base.ticks.ticks.push(FakeTick {
-            every: every_ns,
-            handler: Registered::new(callback, user, me),
-            last: None,
-        });
-        put(out, TickHandle(handle))
-    })
-}
 
-pub(crate) extern "system" fn set_tick_every(
-    me: ModHandle,
-    handle: TickHandle,
-    every_ns: u64,
-) -> Status {
-    with(Status::MISSING, |s| {
-        let Some(tick) = s.base.ticks.ticks.get_mut(handle.0 as usize) else {
-            return Status::MISSING;
-        };
-        if tick.handler.owner() != Some(me) {
-            return Status::REFUSED;
-        }
-        tick.every = every_ns;
-        Status::OK
-    })
+    pub(crate) fn set_tick_every(
+        me as Mod,
+        handle: TickHandle,
+        every_ns: u64,
+    ) -> Status {
+        with(Status::MISSING, |s| {
+            let Some(tick) = s.base.ticks.ticks.get_mut(handle.0 as usize) else {
+                return Status::MISSING;
+            };
+            if tick.handler.owner() != Some(me) {
+                return Status::REFUSED;
+            }
+            tick.every = every_ns;
+            Status::OK
+        })
+    }
 }
 
 /// Whether a handler last called at `last` is due at `now` on a period of

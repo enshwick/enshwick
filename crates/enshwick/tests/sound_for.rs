@@ -21,6 +21,8 @@ mod tests {
     const NEAR: PlayerKey = PlayerKey::new(1);
     const FAR: PlayerKey = PlayerKey::new(2);
     const VANILLA: PlayerKey = PlayerKey::new(3);
+    /// A data pack of side server beside the mod.
+    const ONE_SIDED: enshwick::abi::ModHandle = enshwick::abi::ModHandle(99);
 
     struct Horns;
 
@@ -66,6 +68,7 @@ mod tests {
         installed(
             FakeHost::new()
                 .side(Side::SERVER)
+                .pack(ONE_SIDED, Side::SERVER)
                 .player(player(NEAR, 10))
                 .player(player(FAR, 11))
                 .player(player(VANILLA, 12))
@@ -147,9 +150,8 @@ mod tests {
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
         let stop = enshwick::abi::SoundSteer::EMPTY;
-        let one_sided = enshwick::abi::ModHandle(99);
         assert_eq!(
-            (api.sound_steer_for)(one_sided, 1, &raw const stop),
+            (api.sound_steer_for)(ONE_SIDED, 1, &raw const stop),
             Status::REFUSED
         );
     }

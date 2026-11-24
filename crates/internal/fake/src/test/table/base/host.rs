@@ -1,6 +1,8 @@
 //! The fake's host entries: components and templates, whether a server
 //! runs, the mod's features and status, and game events.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use crate::test::table::{Registered, found, list, text, with};
@@ -8,84 +10,86 @@ use enshwick_core::abi::{
     EventTypeInfo, GameEventFn, Header, ModHandle, Side, Status, StatusFn, Str,
 };
 
-pub(crate) extern "system" fn component(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    type_hash: u32,
-    out: *mut *const c_void,
-) -> Status {
-    let address = with(None, |s| {
-        s.host
-            .base
-            .components
-            .get(&(entity.0, type_hash))
-            .map(|c| c.0)
-    });
-    found(address.map(core::ptr::with_exposed_provenance), out)
-}
-
-pub(crate) extern "system" fn hosting(_me: ModHandle, out: *mut u8) -> Status {
-    let hosting = with(0, |s| u8::from(s.host.base.serving()));
-    crate::test::table::put(out, hosting)
-}
-
-pub(crate) extern "system" fn server_world(_me: ModHandle, out: *mut u64) -> Status {
-    crate::test::table::put(out, with(0, |s| s.host.base.server_world))
-}
-
-pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> Status {
-    let name = text(name);
-    if name.is_empty() {
-        return Status::BAD_ARGS;
+entries! {
+    pub(crate) fn component(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        type_hash: u32,
+        out: *mut *const c_void as args::Out,
+    ) -> Status {
+        let address = with(None, |s| {
+            s.host
+                .base
+                .components
+                .get(&(entity.0, type_hash))
+                .map(|c| c.0)
+        });
+        found(address.map(core::ptr::with_exposed_provenance), out)
     }
-    let off = Some(text(off)).filter(|off| !off.is_empty());
-    with(Status::MISSING, |s| {
-        match s.base.features.iter_mut().find(|(have, _)| *have == name) {
-            Some(kept) => kept.1 = off,
-            None => s.base.features.push((name, off)),
+
+    pub(crate) fn hosting(me as Caller, out: *mut u8 as args::Out) -> Status {
+        let hosting = with(0, |s| u8::from(s.host.base.serving()));
+        crate::test::table::put(out, hosting)
+    }
+
+    pub(crate) fn server_world(me as Caller, out: *mut u64 as args::Out) -> Status {
+        crate::test::table::put(out, with(0, |s| s.host.base.server_world))
+    }
+
+    pub(crate) fn feature(me as Mod, name: Str as args::Text, off: Str as args::Text) -> Status {
+        let name = text(name);
+        if name.is_empty() {
+            return Status::BAD_ARGS;
         }
-        Status::OK
-    })
-}
+        let off = Some(text(off)).filter(|off| !off.is_empty());
+        with(Status::MISSING, |s| {
+            match s.base.features.iter_mut().find(|(have, _)| *have == name) {
+                Some(kept) => kept.1 = off,
+                None => s.base.features.push((name, off)),
+            }
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn status(
-    me: ModHandle,
-    callback: Option<StatusFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        s.base
-            .status_sources
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
+    pub(crate) fn status(
+        me as Mod,
+        callback: Option<StatusFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            s.base
+                .status_sources
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn subscribe_game_event(
-    me: ModHandle,
-    type_hash: u32,
-    callback: Option<GameEventFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    keep_game_event(me, type_hash, callback, user, false)
-}
+    pub(crate) fn subscribe_game_event(
+        me as Mod,
+        type_hash: u32,
+        callback: Option<GameEventFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        keep_game_event(me, type_hash, callback, user, false)
+    }
 
-pub(crate) extern "system" fn subscribe_client_game_event(
-    me: ModHandle,
-    type_hash: u32,
-    callback: Option<GameEventFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    keep_game_event(me, type_hash, callback, user, true)
+    pub(crate) fn subscribe_client_game_event(
+        me as Mod,
+        type_hash: u32,
+        callback: Option<GameEventFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        keep_game_event(me, type_hash, callback, user, true)
+    }
 }
 
 /// Keeps a game event handler as the loader does: only during init, 0 for
@@ -111,25 +115,24 @@ fn keep_game_event(
     })
 }
 
-pub(crate) extern "system" fn event_types(
-    _me: ModHandle,
-    out: *mut EventTypeInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let found: Vec<EventTypeInfo> = with(Vec::new(), |s| {
-        s.host
-            .base
-            .event_types
-            .iter()
-            .map(|&(name, hash, size)| EventTypeInfo {
-                header: Header::of::<EventTypeInfo>(),
-                name: Str::new(name),
-                hash,
-                size,
-            })
-            .collect()
-    });
-    list(&found, out, entry_size, capacity, count)
+entries! {
+    pub(crate) fn event_types(
+        me as Caller,
+        [out: *mut EventTypeInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let found: Vec<EventTypeInfo> = with(Vec::new(), |s| {
+            s.host
+                .base
+                .event_types
+                .iter()
+                .map(|&(name, hash, size)| EventTypeInfo {
+                    header: Header::of::<EventTypeInfo>(),
+                    name: Str::new(name),
+                    hash,
+                    size,
+                })
+                .collect()
+        });
+        list(&found, out, entry_size, capacity, count)
+    }
 }

@@ -2,9 +2,11 @@
 //! another mod would, and the calls the mod asks for, which a test serves
 //! as their server would.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
-use enshwick_core::abi::{CallFn, CallSpec, ModHandle, Status};
+use enshwick_core::abi::{CallFn, CallSpec, Status};
 #[cfg(feature = "unstable")]
 use enshwick_core::services::{Call, CallError};
 
@@ -85,115 +87,117 @@ fn declared(spec: *const CallSpec) -> Option<Declared> {
     })
 }
 
-pub(crate) extern "system" fn serve_call(
-    me: ModHandle,
-    spec: *const CallSpec,
-    callback: Option<CallFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    let Some(declared) = declared(spec) else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        let calls = &mut s.base.calls;
-        if calls
-            .served
-            .iter()
-            .any(|c| c.declared.name == declared.name && c.declared.major == declared.major)
-        {
-            return Status::REFUSED;
-        }
-        calls.served.push(Served {
-            declared,
-            handler: Registered::new(callback, user, me),
-        });
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn find_call(
-    _me: ModHandle,
-    spec: *const CallSpec,
-    out: *mut u32,
-) -> Status {
-    let Some(declared) = declared(spec) else {
-        return Status::BAD_ARGS;
-    };
-    if crate::test::table::late() {
-        return Status::TOO_LATE;
-    }
-    let id = with(None, |s| {
-        let required = s
-            .base
-            .manifest
-            .as_ref()
-            .is_some_and(|manifest| manifest.requires_owner_of(&declared.name));
-        let unexported = s.base.manifest.as_ref().is_some_and(|manifest| {
-            manifest.unexported(
-                enshwick_core::schema_section::Kind::Call,
-                &declared.name,
-                &s.host.base.exports,
-            )
-        });
-        if unexported || (required && !s.base.calls.others.iter().any(|o| o.declared == declared)) {
-            return None;
-        }
-        let wanted = &mut s.base.calls.wanted;
-        let index = match wanted
-            .iter()
-            .position(|w| w.name == declared.name && w.major == declared.major)
-        {
-            Some(index) if wanted[index] == declared => index,
-            Some(_) => return None,
-            None => {
-                wanted.push(declared);
-                wanted.len() - 1
-            }
+entries! {
+    pub(crate) fn serve_call(
+        me as Mod,
+        spec: *const CallSpec as args::Headed,
+        callback: Option<CallFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
         };
-        u32::try_from(index).ok()
-    });
-    match id {
-        Some(id) => put(out, id),
-        None => Status::REFUSED,
+        let Some(declared) = declared(spec) else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            let calls = &mut s.base.calls;
+            if calls
+                .served
+                .iter()
+                .any(|c| c.declared.name == declared.name && c.declared.major == declared.major)
+            {
+                return Status::REFUSED;
+            }
+            calls.served.push(Served {
+                declared,
+                handler: Registered::new(callback, user, me),
+            });
+            Status::OK
+        })
     }
-}
 
-pub(crate) extern "system" fn call(
-    _me: ModHandle,
-    id: u32,
-    input: *const c_void,
-    output: *mut c_void,
-) -> Status {
-    if input.is_null() || output.is_null() {
-        return Status::BAD_ARGS;
+    pub(crate) fn find_call(
+        me as Mod,
+        spec: *const CallSpec as args::Headed,
+        out: *mut u32 as args::Out,
+    ) -> Status {
+        let Some(declared) = declared(spec) else {
+            return Status::BAD_ARGS;
+        };
+        if crate::test::table::late() {
+            return Status::TOO_LATE;
+        }
+        let id = with(None, |s| {
+            let required = s
+                .base
+                .manifest
+                .as_ref()
+                .is_some_and(|manifest| manifest.requires_owner_of(&declared.name));
+            let unexported = s.base.manifest.as_ref().is_some_and(|manifest| {
+                manifest.unexported(
+                    enshwick_core::schema_section::Kind::Call,
+                    &declared.name,
+                    &s.host.base.exports,
+                )
+            });
+            if unexported || (required && !s.base.calls.others.iter().any(|o| o.declared == declared)) {
+                return None;
+            }
+            let wanted = &mut s.base.calls.wanted;
+            let index = match wanted
+                .iter()
+                .position(|w| w.name == declared.name && w.major == declared.major)
+            {
+                Some(index) if wanted[index] == declared => index,
+                Some(_) => return None,
+                None => {
+                    wanted.push(declared);
+                    wanted.len() - 1
+                }
+            };
+            u32::try_from(index).ok()
+        });
+        match id {
+            Some(id) => put(out, id),
+            None => Status::REFUSED,
+        }
     }
-    let server = with(Err(Status::MISSING), |s| {
-        let wanted = s
-            .base
-            .calls
-            .wanted
-            .get(id as usize)
-            .ok_or(Status::BAD_ARGS)?;
-        s.base
-            .calls
-            .others
-            .iter()
-            .find(|o| o.declared == *wanted)
-            .cloned()
-            .ok_or(Status::MISSING)
-    });
-    match server {
-        // SAFETY: the test served the handler for a declaration equal to the
-        // mod's field by field and in size, and the safe layer passes input
-        // and answer that large, live for the call; the state lock is not
-        // held, so the handler may call the fake.
-        Ok(server) => server
-            .handler
-            .run(|callback, user| unsafe { callback(input, output, user) }),
-        Err(status) => status,
+
+    pub(crate) fn call(
+        me as Mod,
+        id: u32,
+        input: *const c_void,
+        output: *mut c_void,
+    ) -> Status {
+        if input.is_null() || output.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let server = with(Err(Status::MISSING), |s| {
+            let wanted = s
+                .base
+                .calls
+                .wanted
+                .get(id as usize)
+                .ok_or(Status::BAD_ARGS)?;
+            s.base
+                .calls
+                .others
+                .iter()
+                .find(|o| o.declared == *wanted)
+                .cloned()
+                .ok_or(Status::MISSING)
+        });
+        match server {
+            // SAFETY: the test served the handler for a declaration equal to the
+            // mod's field by field and in size, and the safe layer passes input
+            // and answer that large, live for the call; the state lock is not
+            // held, so the handler may call the fake.
+            Ok(server) => server
+                .handler
+                .run(|callback, user| unsafe { callback(input, output, user) }),
+            Err(status) => status,
+        }
     }
 }
 

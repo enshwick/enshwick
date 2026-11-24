@@ -22,6 +22,10 @@ pub(crate) enum BaseCode {
 pub(crate) struct WorldPresets {
     pub(crate) no_entity_commands: bool,
     pub(crate) base_code: BaseCode,
+    /// The build lacks the code altars are read from.
+    pub(crate) no_altar_code: bool,
+    /// The game's level cap and need per level, once the test set them.
+    pub(crate) level_table: Option<super::progress::LevelTable>,
     pub(crate) placed: Vec<(u32, EntityPlace)>,
     pub(crate) map_markers: Vec<enshwick_core::abi::MapMarkerInfo>,
     pub(crate) map_frame: Option<enshwick_core::abi::MapFrameInfo>,

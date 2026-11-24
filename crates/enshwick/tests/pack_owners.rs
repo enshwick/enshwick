@@ -21,7 +21,7 @@ mod tests {
     /// The data pack's handle.
     const PACK: ModHandle = ModHandle(1);
     /// The loader's own handle, the host of the copy that runs packs.
-    const LOADER: ModHandle = ModHandle(9);
+    const LOADER: ModHandle = ModHandle::NONE;
     const SITE: u64 = 0x1_4009_0a6c;
 
     #[enshwick::point(name = "you.other:limit", mode = Override, output = u32)]

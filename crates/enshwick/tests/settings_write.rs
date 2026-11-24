@@ -4,10 +4,10 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Mutex, OnceLock};
 
-    use enshwick::abi::Status;
+    use enshwick::abi::{HostApi, ModHandle, Status, Str};
     use enshwick::config::{self, SetSettingError};
     use enshwick::{Load, Mod, Off, events};
 
@@ -29,6 +29,13 @@ mod tests {
             if self.limit == 9 && !CHECK_WROTE.swap(true, Ordering::Relaxed) {
                 note(config::set::<Remote>("password", "from the check"));
             }
+            if self.limit == 11
+                && let Some((api, me)) = RAW.get()
+            {
+                let answer =
+                    (api.set_config)(*me, Str::new("nowhere"), Str::new("limit"), Str::new("2"));
+                *UNKNOWN_FILE.lock().unwrap() = Some(answer);
+            }
             (self.limit != 13)
                 .then_some(())
                 .ok_or_else(|| "13 is unlucky".to_owned())
@@ -39,6 +46,10 @@ mod tests {
     /// What the writes from inside the check or a change handler answered.
     static NESTED: Mutex<Vec<Result<(), SetSettingError>>> = Mutex::new(Vec::new());
     static CHECK_WROTE: AtomicBool = AtomicBool::new(false);
+    /// The table and handle the check writes a file the mod lacks through.
+    static RAW: OnceLock<(&'static HostApi, ModHandle)> = OnceLock::new();
+    /// What that write answered.
+    static UNKNOWN_FILE: Mutex<Option<Status>> = Mutex::new(None);
 
     fn note(answer: Result<(), SetSettingError>) {
         NESTED.lock().unwrap().push(answer);
@@ -176,6 +187,40 @@ mod tests {
         assert_eq!(nested.len(), config::MAX_NESTED_WRITES, "{nested:?}");
         assert_eq!(nested[0], Err(SetSettingError::Refused));
         assert!(nested[1..].iter().all(Result::is_ok), "{nested:?}");
+    }
+
+    #[test]
+    fn a_file_the_mod_does_not_have_is_missing_even_inside_the_check() {
+        let loader = started();
+        // SAFETY: the fake's table is a static.
+        let _first = RAW.set((unsafe { &*loader.api() }, loader.handle()));
+        config::set::<Remote>("limit", 11).unwrap();
+        assert_eq!(*UNKNOWN_FILE.lock().unwrap(), Some(Status::MISSING));
+    }
+
+    #[test]
+    fn another_mod_has_none_of_the_mod_s_settings_files() {
+        let other = ModHandle(2);
+        let loader = enshwick::test::FakeHost::new()
+            .world_key("world0")
+            .settings("limit = 4\n")
+            .other_mod(other)
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Console)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        // SAFETY: the fake's table is a static.
+        let api = unsafe { &*loader.api() };
+        let answer = (api.set_config)(
+            other,
+            Str::new("settings"),
+            Str::new("limit"),
+            Str::new("5"),
+        );
+        assert_eq!(answer, Status::MISSING);
+        let text = loader.settings_text("settings").unwrap_or_default();
+        assert!(!text.contains("limit = 5"), "{text}");
     }
 
     #[test]

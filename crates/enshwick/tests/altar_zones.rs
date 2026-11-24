@@ -46,4 +46,19 @@ mod tests {
         sizes.changed().unwrap();
         assert_eq!(loader.zone_resizes(), 1);
     }
+
+    #[test]
+    fn a_build_without_the_altar_code_refuses_the_altars_and_the_zone_filter() {
+        let loader = enshwick::test::FakeHost::new()
+            .without_altar_code()
+            .install();
+        // SAFETY: the fake's table is a static.
+        let api = unsafe { &*loader.api() };
+        assert_eq!((api.request_altars)(loader.handle()), Status::UNAVAILABLE);
+        // SAFETY: the exports of `declare_mod!` above.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_ne!(status, Status::OK, "the filter is the mod's one feature");
+        assert_eq!(loader.altars_opened(), (false, false));
+    }
 }

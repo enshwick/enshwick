@@ -1,6 +1,8 @@
 //! The fake's inventory entries: requests, item filters, damage filters,
 //! survivors and effects (game events, teleports, spawns and drops).
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use enshwick_core::__fake::ids;
@@ -17,7 +19,7 @@ pub(crate) struct OpenRequest {
 }
 use enshwick_core::abi::{
     BedCheckFn, DamageCheck, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemFilterFn,
-    ModHandle, Side, SpawnRequest, Status, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn,
+    Side, SpawnRequest, Status, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn,
     TeleportRequest,
 };
 
@@ -41,157 +43,165 @@ pub(crate) struct InventoryState {
     pub(crate) containers: containers::Containers,
 }
 
-pub(crate) extern "system" fn item_filter(
-    me: ModHandle,
-    callback: Option<ItemFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        if s.host.inventory.no_item_filters {
-            return Status::UNAVAILABLE;
-        }
-        s.inventory
-            .item_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
+/// The fields an inventory request of every version holds, as the loader
+/// requires.
+const SUBMIT_REQUIRED: usize = core::mem::offset_of!(InventoryRequest, op_count) + 4;
 
-pub(crate) extern "system" fn drop_items(
-    _me: ModHandle,
-    request: *const enshwick_core::abi::DropRequest,
-    out: *mut enshwick_core::Entity,
-) -> Status {
-    let Some(request) = crate::test::table::get_headed(request) else {
-        return Status::BAD_ARGS;
-    };
-    if out.is_null() {
-        return Status::BAD_ARGS;
+entries! {
+    pub(crate) fn item_filter(
+        me as Mod,
+        callback: Option<ItemFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            if s.host.inventory.no_item_filters {
+                return Status::UNAVAILABLE;
+            }
+            s.inventory
+                .item_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
     }
-    let rarity = u8::try_from(request.rarity).ok();
-    if !(1..=u32::from(u16::MAX)).contains(&request.count)
-        || rarity
-            .and_then(enshwick_core::affixes::ItemRarity::from_raw)
-            .is_none()
-    {
-        return Status::BAD_ARGS;
-    }
-    let entity = with(None, |s| {
-        if !s.host.content.items.contains_key(&request.item.get()) {
-            return Some(Err(Status::MISSING));
-        }
-        // Above every spawn's id, so the two never share one.
-        let entity = crate::test::table::world::FIRST_SPAWNED
-            + 0x1_0000
-            + u32::try_from(s.world.drops.len()).unwrap_or(0);
-        s.world.drops.push((enshwick_core::Entity(entity), request));
-        Some(Ok(entity))
-    });
-    match entity {
-        Some(Ok(entity)) => crate::test::table::put(out, enshwick_core::Entity(entity)),
-        Some(Err(status)) => status,
-        None => Status::MISSING,
-    }
-}
 
-pub(crate) extern "system" fn emit(
-    me: ModHandle,
-    type_hash: u32,
-    data: *const u8,
-    size: u32,
-) -> Status {
-    if data.is_null() {
-        return Status::BAD_ARGS;
-    }
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    // SAFETY: the safe layer passes `size` bytes at `data` for the call.
-    let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
-    with(Status::MISSING, |s| {
-        if crate::test::table::world::no_world(s) {
-            return Status::UNAVAILABLE;
+    pub(crate) fn drop_items(
+        me as Caller,
+        request: *const enshwick_core::abi::DropRequest as args::Headed,
+        out: *mut enshwick_core::Entity as args::Out,
+    ) -> Status {
+        let Some(request) = crate::test::table::get_headed(request) else {
+            return Status::BAD_ARGS;
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
         }
-        let step = s.base.ticks.step;
-        let notify = s.host.base.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
-        if notify && !s.world.notified.0.has_room(me, step) {
-            return Status::REFUSED;
-        }
-        if notify {
-            s.world.notified.0.count(me, step);
-        }
-        s.world.emits.push((type_hash, bytes));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportRequest) -> Status {
-    let Some(request) = crate::test::table::get_headed(request) else {
-        return Status::BAD_ARGS;
-    };
-    with(Status::MISSING, |s| {
-        if crate::test::table::world::entity_calls_off(s) {
-            return Status::UNAVAILABLE;
-        }
-        if !s.host.content.templates.contains_key(&request.entity.0)
-            && !s
-                .host
-                .world
-                .placed
-                .iter()
-                .any(|(_, p)| p.entity == request.entity)
+        let rarity = u8::try_from(request.rarity).ok();
+        if !(1..=u32::from(u16::MAX)).contains(&request.count)
+            || rarity
+                .and_then(enshwick_core::affixes::ItemRarity::from_raw)
+                .is_none()
         {
-            return Status::MISSING;
+            return Status::BAD_ARGS;
         }
-        s.world.teleports.push(request);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn spawn(
-    _me: ModHandle,
-    request: *const SpawnRequest,
-    out: *mut enshwick_core::Entity,
-) -> Status {
-    let Some(request) = crate::test::table::get_headed(request) else {
-        return Status::BAD_ARGS;
-    };
-    if request.template == enshwick_core::content::Guid::NIL {
-        return Status::BAD_ARGS;
-    }
-    let entity = with(Err(Status::MISSING), |s| {
-        if crate::test::table::world::entity_calls_off(s) {
-            return Err(Status::UNAVAILABLE);
+        let entity = with(None, |s| {
+            if !s.host.content.items.contains_key(&request.item.get()) {
+                return Some(Err(Status::MISSING));
+            }
+            // Above every spawn's id, so the two never share one.
+            let entity = crate::test::table::world::FIRST_SPAWNED
+                + 0x1_0000
+                + u32::try_from(s.world.drops.len()).unwrap_or(0);
+            s.world.drops.push((enshwick_core::Entity(entity), request));
+            Some(Ok(entity))
+        });
+        match entity {
+            Some(Ok(entity)) => crate::test::table::put(out, enshwick_core::Entity(entity)),
+            Some(Err(status)) => status,
+            None => Status::MISSING,
         }
-        let entity = crate::test::table::world::FIRST_SPAWNED
-            + u32::try_from(s.world.spawns.len()).unwrap_or(0);
-        s.world.spawns.push((entity, request));
-        s.world.spawn_steps.push(s.base.ticks.step);
-        Ok(entity)
-    });
-    match entity {
-        Ok(entity) => crate::test::table::put(out, enshwick_core::Entity(entity)),
-        Err(status) => status,
     }
-}
 
-pub(crate) extern "system" fn damage_filter(
-    me: ModHandle,
-    callback: Option<DamageFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.inventory
-            .damage_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
+    pub(crate) fn emit(
+        me as Caller,
+        type_hash: u32,
+        [data: *const u8, size: u32] as args::List,
+    ) -> Status {
+        if data.is_null() {
+            return Status::BAD_ARGS;
+        }
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        // SAFETY: the safe layer passes `size` bytes at `data` for the call.
+        let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
+        with(Status::MISSING, |s| {
+            if crate::test::table::world::no_world(s) {
+                return Status::UNAVAILABLE;
+            }
+            let step = s.base.ticks.step;
+            let notify = s.host.base.type_hashes.get(ids::NOTIFY_EVENT) == Some(&type_hash);
+            if notify && !s.world.notified.0.has_room(me, step) {
+                return Status::REFUSED;
+            }
+            if notify {
+                s.world.notified.0.count(me, step);
+            }
+            s.world.emits.push((type_hash, bytes));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn teleport(
+        me as Caller,
+        request: *const TeleportRequest as args::Headed,
+    ) -> Status {
+        let Some(request) = crate::test::table::get_headed(request) else {
+            return Status::BAD_ARGS;
+        };
+        with(Status::MISSING, |s| {
+            if crate::test::table::world::entity_calls_off(s) {
+                return Status::UNAVAILABLE;
+            }
+            if !s.host.content.templates.contains_key(&request.entity.0)
+                && !s
+                    .host
+                    .world
+                    .placed
+                    .iter()
+                    .any(|(_, p)| p.entity == request.entity)
+            {
+                return Status::MISSING;
+            }
+            s.world.teleports.push(request);
+            Status::OK
+        })
+    }
+
+    pub(crate) fn spawn(
+        me as Caller,
+        request: *const SpawnRequest as args::Headed,
+        out: *mut enshwick_core::Entity as args::Out,
+    ) -> Status {
+        let Some(request) = crate::test::table::get_headed(request) else {
+            return Status::BAD_ARGS;
+        };
+        if request.template == enshwick_core::content::Guid::NIL {
+            return Status::BAD_ARGS;
+        }
+        let entity = with(Err(Status::MISSING), |s| {
+            if crate::test::table::world::entity_calls_off(s) {
+                return Err(Status::UNAVAILABLE);
+            }
+            let entity = crate::test::table::world::FIRST_SPAWNED
+                + u32::try_from(s.world.spawns.len()).unwrap_or(0);
+            s.world.spawns.push((entity, request));
+            s.world.spawn_steps.push(s.base.ticks.step);
+            Ok(entity)
+        });
+        match entity {
+            Ok(entity) => crate::test::table::put(out, enshwick_core::Entity(entity)),
+            Err(status) => status,
+        }
+    }
+
+    pub(crate) fn damage_filter(
+        me as Mod,
+        callback: Option<DamageFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.inventory
+                .damage_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
 }
 
 /// The damage causes the API names, by their ABI number, in the loader's
@@ -206,50 +216,50 @@ pub(crate) const CAUSE_GROUPS: [&[u32]; 6] = [
     &[DamageCheck::ADMIN_KILL],
 ];
 
-/// As the loader's: after init, the causes whose sites are not armed. A
-/// filter arms every group the build has whole; stats used in init arm the
-/// hits alone.
-pub(crate) extern "system" fn damage_causes_off(
-    _me: ModHandle,
-    out: *mut u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    with(Status::MISSING, |s| {
-        if !s.base.closed() {
-            return Status::UNAVAILABLE;
-        }
-        let filtering = !s.inventory.damage_filters.is_empty();
-        let stats = s.inventory.stats.wanted();
-        let missing = &s.host.inventory.missing_damage_sites;
-        let off: Vec<u32> = CAUSE_GROUPS
-            .iter()
-            .enumerate()
-            .filter(|&(index, group)| {
-                let linked = filtering || (stats && index == 0);
-                !linked || group.iter().any(|cause| missing.contains(cause))
-            })
-            .flat_map(|(_, group)| group.iter().copied())
-            .collect();
-        crate::test::table::put_list(&off, out, capacity, count)
-    })
-}
+entries! {
+    /// As the loader's: after init, the causes whose sites are not armed. A
+    /// filter arms every group the build has whole; stats used in init arm the
+    /// hits alone.
+    pub(crate) fn damage_causes_off(
+        me as AnyMod,
+        [out: *mut u32, capacity: u32, count: *mut u32] as args::ListOut,
+    ) -> Status {
+        with(Status::MISSING, |s| {
+            if !s.base.closed() {
+                return Status::UNAVAILABLE;
+            }
+            let filtering = !s.inventory.damage_filters.is_empty();
+            let stats = s.inventory.stats.wanted();
+            let missing = &s.host.inventory.missing_damage_sites;
+            let off: Vec<u32> = CAUSE_GROUPS
+                .iter()
+                .enumerate()
+                .filter(|&(index, group)| {
+                    let linked = filtering || (stats && index == 0);
+                    !linked || group.iter().any(|cause| missing.contains(cause))
+                })
+                .flat_map(|(_, group)| group.iter().copied())
+                .collect();
+            crate::test::table::put_list(&off, out, capacity, count)
+        })
+    }
 
-pub(crate) extern "system" fn survivor_lookup(
-    me: ModHandle,
-    callback: Option<SurvivorLookupFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        hold_each(
-            &mut s.inventory.survivor_lookup,
-            Registered::new(callback, user, me),
-        );
-        Status::OK
-    })
+    pub(crate) fn survivor_lookup(
+        me as Mod,
+        callback: Option<SurvivorLookupFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            hold_each(
+                &mut s.inventory.survivor_lookup,
+                Registered::new(callback, user, me),
+            );
+            Status::OK
+        })
+    }
 }
 
 /// As the loader: each mod holds one registration, in load order, and a
@@ -261,135 +271,137 @@ fn hold_each<F: Copy>(held: &mut Vec<Registered<F>>, registered: Registered<F>) 
     }
 }
 
-pub(crate) extern "system" fn survivor_bed_check(
-    me: ModHandle,
-    callback: Option<BedCheckFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.inventory
-            .bed_checks
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn summon_filter(
-    me: ModHandle,
-    callback: Option<SummonFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.inventory
-            .summons
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn summoned(
-    me: ModHandle,
-    callback: Option<SummonFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.inventory
-            .summoned
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn summon_item(
-    _me: ModHandle,
-    item: enshwick_core::ItemId,
-    survivor: enshwick_core::survivors::NpcId,
-) -> Status {
-    with_open(|s| {
-        s.inventory.summon_items.push((item, survivor));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn survivor_status(
-    me: ModHandle,
-    callback: Option<SurvivorStatusFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        if s.host.base.side != Side::CLIENT {
-            return Status::UNAVAILABLE;
-        }
-        hold_each(
-            &mut s.inventory.survivor_status,
-            Registered::new(callback, user, me),
-        );
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn request_inventory(_me: ModHandle) -> Status {
-    with_open(|s| {
-        if s.host.inventory.no_inventories {
-            Status::UNAVAILABLE
-        } else {
-            Status::OK
-        }
-    })
-}
-
-pub(crate) extern "system" fn inventory_submit(
-    me: ModHandle,
-    request: *const InventoryRequest,
-    done: Option<InventoryResultFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(done) = done else {
-        return Status::BAD_ARGS;
-    };
-    // The loader requires only the fields through `op_count`.
-    let required = core::mem::offset_of!(InventoryRequest, op_count) + size_of::<u32>();
-    // SAFETY: the safe layer passes null or its version of the request,
-    // readable for the size its header states, for the call.
-    let Some(request) = (unsafe { enshwick_core::abi::read_headed(request, required) }) else {
-        return Status::BAD_ARGS;
-    };
-    with(Status::MISSING, |s| {
-        if s.host.inventory.no_inventories || !s.host.base.serving() {
-            return Status::UNAVAILABLE;
-        }
-        // SAFETY: the request holds `op_count` operations, read during the
-        // call.
-        let Some(ops) = (unsafe {
-            enshwick_core::__fake::copy::list_in(request.ops, request.op_count as usize)
-        }) else {
+entries! {
+    pub(crate) fn survivor_bed_check(
+        me as Mod,
+        callback: Option<BedCheckFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
             return Status::BAD_ARGS;
         };
-        if enshwick_core::__fake::rules::inventory_checks::refused(ops) {
+        with_open(|s| {
+            s.inventory
+                .bed_checks
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn summon_filter(
+        me as Mod,
+        callback: Option<SummonFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
             return Status::BAD_ARGS;
-        }
-        s.inventory.inventory_requests.push(OpenRequest {
-            request: SubmittedRequest {
-                ops: ops.to_vec(),
-                flags: request.flags,
-                actor: request.actor.0,
-            },
-            done: Registered::new(done, user, me),
-        });
-        Status::OK
-    })
+        };
+        with_open(|s| {
+            s.inventory
+                .summons
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn summoned(
+        me as Mod,
+        callback: Option<SummonFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.inventory
+                .summoned
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn summon_item(
+        me as Mod,
+        item: enshwick_core::ItemId,
+        survivor: enshwick_core::survivors::NpcId,
+    ) -> Status {
+        with_open(|s| {
+            s.inventory.summon_items.push((item, survivor));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn survivor_status(
+        me as Mod,
+        callback: Option<SurvivorStatusFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            if s.host.base.side != Side::CLIENT {
+                return Status::UNAVAILABLE;
+            }
+            hold_each(
+                &mut s.inventory.survivor_status,
+                Registered::new(callback, user, me),
+            );
+            Status::OK
+        })
+    }
+
+    pub(crate) fn request_inventory(me as Caller) -> Status {
+        with_open(|s| {
+            if s.host.inventory.no_inventories {
+                Status::UNAVAILABLE
+            } else {
+                Status::OK
+            }
+        })
+    }
+
+    pub(crate) fn inventory_submit(
+        me as Mod,
+        request: *const InventoryRequest as args::HeadedSince<SUBMIT_REQUIRED>,
+        done: Option<InventoryResultFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(done) = done else {
+            return Status::BAD_ARGS;
+        };
+        // The loader requires only the fields through `op_count`.
+        let required = core::mem::offset_of!(InventoryRequest, op_count) + size_of::<u32>();
+        // SAFETY: the safe layer passes null or its version of the request,
+        // readable for the size its header states, for the call.
+        let Some(request) = (unsafe { enshwick_core::abi::read_headed(request, required) }) else {
+            return Status::BAD_ARGS;
+        };
+        with(Status::MISSING, |s| {
+            if s.host.inventory.no_inventories || !s.host.base.serving() {
+                return Status::UNAVAILABLE;
+            }
+            // SAFETY: the request holds `op_count` operations, read during the
+            // call.
+            let Some(ops) = (unsafe {
+                enshwick_core::__fake::copy::list_in(request.ops, request.op_count as usize)
+            }) else {
+                return Status::BAD_ARGS;
+            };
+            if enshwick_core::__fake::rules::inventory_checks::refused(ops) {
+                return Status::BAD_ARGS;
+            }
+            s.inventory.inventory_requests.push(OpenRequest {
+                request: SubmittedRequest {
+                    ops: ops.to_vec(),
+                    flags: request.flags,
+                    actor: request.actor.0,
+                },
+                done: Registered::new(done, user, me),
+            });
+            Status::OK
+        })
+    }
 }
 
 #[cfg(test)]
@@ -398,7 +410,7 @@ mod tests {
 
     use enshwick_core::abi::{
         DamageCheck, Header, InventoryOp, InventoryRequest, InventoryResult, ModHandle, Side,
-        Status,
+        StatSpec, Status, Str,
     };
 
     use crate::test::FakeHost;
@@ -469,11 +481,16 @@ mod tests {
 
     /// Reads a stat kind that does not exist, which still loads the stats.
     fn use_stats() {
+        let mut def = StatSpec {
+            header: Header::of::<StatSpec>(),
+            ..bytemuck::Zeroable::zeroed()
+        };
+        let mut id = Str::EMPTY;
         let status = crate::test::inventory::stats::stat_info(
             ModHandle(1),
             u32::MAX,
-            core::ptr::null_mut(),
-            core::ptr::null_mut(),
+            &raw mut def,
+            &raw mut id,
         );
         assert_eq!(status, Status::MISSING);
     }

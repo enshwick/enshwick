@@ -56,8 +56,11 @@ mod tests {
 
     extern "system" fn nothing(_: Event, _: *const core::ffi::c_void, _: *mut core::ffi::c_void) {}
 
+    /// A second mod the fake loads beside this file's.
+    const OTHER: ModHandle = ModHandle(2);
+
     fn started() -> Installed {
-        let loader = FakeHost::new().install();
+        let loader = FakeHost::new().other_mod(OTHER).install();
         CALLS.lock().unwrap().clear();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Ticking)`.
         let status =
@@ -126,14 +129,18 @@ mod tests {
     }
 
     #[test]
-    fn another_mod_s_handle_is_refused_and_an_unknown_one_missing() {
+    fn another_mod_s_tick_is_refused_an_unknown_one_missing_and_an_unknown_mod_a_bad_argument() {
         let loader = started();
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
-        let other = ModHandle(loader.handle().0 + 1);
         assert_eq!(
-            (api.set_tick_every)(other, TickHandle(0), 0),
+            (api.set_tick_every)(OTHER, TickHandle(0), 0),
             Status::REFUSED
+        );
+        assert_eq!(
+            (api.set_tick_every)(ModHandle(3), TickHandle(0), 0),
+            Status::BAD_ARGS,
+            "a handle the loader never gave out"
         );
         assert_eq!(
             (api.set_tick_every)(loader.handle(), TickHandle(99), 0),

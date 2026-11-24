@@ -3,6 +3,7 @@
 //! the server's next step; and a respawn that moves a player to a new
 //! character, which a mod that changes permissions must follow.
 
+use crate::test::table::entries;
 use enshwick_core::abi::{ModHandle, PlayerInfo, Status};
 use enshwick_core::{Entity, PlayerKey};
 
@@ -98,48 +99,50 @@ impl crate::test::Installed {
     }
 }
 
-pub(crate) extern "system" fn change_permissions(
-    me: ModHandle,
-    account: PlayerKey,
-    deny: u32,
-    grant: u32,
-) -> Status {
-    if account == PlayerKey::new(0) || (deny | grant) & !PlayerInfo::ALL_PERMISSIONS != 0 {
-        return Status::BAD_ARGS;
-    }
-    let ends = deny == 0 && grant == 0;
-    if !ends && !on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    with(Status::MISSING, |s| {
-        if !ends && (!s.host.base.serving() || s.host.base.world_key.is_none()) {
-            return Status::UNAVAILABLE;
+entries! {
+    pub(crate) fn change_permissions(
+        me as Mod,
+        account: PlayerKey,
+        deny: u32,
+        grant: u32,
+    ) -> Status {
+        if account == PlayerKey::new(0) || (deny | grant) & !PlayerInfo::ALL_PERMISSIONS != 0 {
+            return Status::BAD_ARGS;
         }
-        let Some(player) = s.host.base.players.iter_mut().find(|p| p.key == account) else {
-            // As the loader: ending a change needs no player in game.
-            if ends {
-                s.world.permission_changes.left_by(me, account);
-                return Status::OK;
+        let ends = deny == 0 && grant == 0;
+        if !ends && !on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        with(Status::MISSING, |s| {
+            if !ends && (!s.host.base.serving() || s.host.base.world_key.is_none()) {
+                return Status::UNAVAILABLE;
             }
-            return Status::REFUSED;
-        };
-        let changes = &mut s.world.permission_changes;
-        if !changes.groups.iter().any(|g| g.0 == account) {
-            changes.groups.push((account, player.permissions));
-        }
-        let group = changes
-            .groups
-            .iter()
-            .find_map(|g| (g.0 == account).then_some(g.1))
-            .unwrap_or(player.permissions);
-        changes.by_mod.retain(|c| (c.0, c.1) != (me, account));
-        if deny != 0 || grant != 0 {
-            changes.by_mod.push((me, account, deny, grant));
-        }
-        player.permissions = changes.held(account, group);
-        if !changes.by_mod.iter().any(|c| c.1 == account) {
-            changes.groups.retain(|g| g.0 != account);
-        }
-        Status::OK
-    })
+            let Some(player) = s.host.base.players.iter_mut().find(|p| p.key == account) else {
+                // As the loader: ending a change needs no player in game.
+                if ends {
+                    s.world.permission_changes.left_by(me, account);
+                    return Status::OK;
+                }
+                return Status::REFUSED;
+            };
+            let changes = &mut s.world.permission_changes;
+            if !changes.groups.iter().any(|g| g.0 == account) {
+                changes.groups.push((account, player.permissions));
+            }
+            let group = changes
+                .groups
+                .iter()
+                .find_map(|g| (g.0 == account).then_some(g.1))
+                .unwrap_or(player.permissions);
+            changes.by_mod.retain(|c| (c.0, c.1) != (me, account));
+            if deny != 0 || grant != 0 {
+                changes.by_mod.push((me, account, deny, grant));
+            }
+            player.permissions = changes.held(account, group);
+            if !changes.by_mod.iter().any(|c| c.1 == account) {
+                changes.groups.retain(|g| g.0 != account);
+            }
+            Status::OK
+        })
+    }
 }

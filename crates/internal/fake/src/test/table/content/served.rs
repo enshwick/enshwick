@@ -2,6 +2,8 @@
 //! routine the loader also runs, rebuilds, and the reads of archived and
 //! served bytes.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use crate::test::ServedResource;
@@ -11,33 +13,35 @@ use enshwick_base::__internal::{
 };
 use enshwick_core::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status};
 
-pub(crate) extern "system" fn serve_resource(
-    me: ModHandle,
-    key: *const ResourceKey,
-    base: *const ResourceKey,
-    patch: Option<ResourcePatchFn>,
-    user: *mut c_void,
-) -> Status {
-    // SAFETY: the safe layer passes `key` and `base` null or pointing at
-    // keys valid for the call.
-    unsafe { serve(me, key, base, None, patch, user) }
-}
+entries! {
+    pub(crate) fn serve_resource(
+        me as Mod,
+        key: *const ResourceKey as args::In,
+        base: *const ResourceKey as args::In,
+        patch: Option<ResourcePatchFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        // SAFETY: the safe layer passes `key` and `base` null or pointing at
+        // keys valid for the call.
+        unsafe { serve(me, key, base, None, patch, user) }
+    }
 
-pub(crate) extern "system" fn rekey_resource(
-    me: ModHandle,
-    key: *const ResourceKey,
-    from: *const ResourceKey,
-    patch: Option<ResourcePatchFn>,
-    user: *mut c_void,
-) -> Status {
-    // SAFETY: the safe layer passes `from` null or pointing at a key valid
-    // for the call; `as_ref` turns away null.
-    let Some(from) = (unsafe { from.as_ref() }).copied() else {
-        return Status::BAD_ARGS;
-    };
-    // SAFETY: the safe layer passes `key` null or pointing at a key valid
-    // for the call, which serves as its own base.
-    unsafe { serve(me, key, key, Some(from), patch, user) }
+    pub(crate) fn rekey_resource(
+        me as Mod,
+        key: *const ResourceKey as args::In,
+        from: *const ResourceKey as args::In,
+        patch: Option<ResourcePatchFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        // SAFETY: the safe layer passes `from` null or pointing at a key valid
+        // for the call; `as_ref` turns away null.
+        let Some(from) = (unsafe { from.as_ref() }).copied() else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the safe layer passes `key` null or pointing at a key valid
+        // for the call, which serves as its own base.
+        unsafe { serve(me, key, key, Some(from), patch, user) }
+    }
 }
 
 /// Adds mod `me`'s `patch` of the key at `key` from the key at `base`; with
@@ -101,29 +105,31 @@ unsafe fn serve(
     })
 }
 
-pub(crate) extern "system" fn rebuild_resource(me: ModHandle, key: *const ResourceKey) -> Status {
-    // SAFETY: the safe layer passes a valid key for the call; `as_ref` turns away null.
-    let Some(key) = (unsafe { key.as_ref() }).copied() else {
-        return Status::BAD_ARGS;
-    };
-    // As the loader's argument layer: a mod that is off is refused.
-    if crate::test::table::base::registered::is_off(me) {
-        return Status::FAULTED;
+entries! {
+    pub(crate) fn rebuild_resource(me as Mod, key: *const ResourceKey as args::In) -> Status {
+        // SAFETY: the safe layer passes a valid key for the call; `as_ref` turns away null.
+        let Some(key) = (unsafe { key.as_ref() }).copied() else {
+            return Status::BAD_ARGS;
+        };
+        // As the loader's argument layer: a mod that is off is refused.
+        if crate::test::table::base::registered::is_off(me) {
+            return Status::FAULTED;
+        }
+        let Some(table) = with(None, |s| Some(Table::new(s.base.closed()))) else {
+            return Status::MISSING;
+        };
+        // A rebuild the mod asked for once init ended that will build, noted
+        // before it does, so a rebuild its patches ask for comes after it.
+        let builds = table.sealed
+            && table
+                .served_by(Some(me), &key)
+                .is_some_and(|served| !building(&served));
+        if builds {
+            with((), |s| s.content.rebuilds.push(key));
+        }
+        let rebuilt = enshwick_base::__internal::rebuild(&table, Some(me), &key);
+        rebuilt.map_or_else(BuildResourceError::status, |()| Status::OK)
     }
-    let Some(table) = with(None, |s| Some(Table::new(s.base.closed()))) else {
-        return Status::MISSING;
-    };
-    // A rebuild the mod asked for once init ended that will build, noted
-    // before it does, so a rebuild its patches ask for comes after it.
-    let builds = table.sealed
-        && table
-            .served_by(Some(me), &key)
-            .is_some_and(|served| !building(&served));
-    if builds {
-        with((), |s| s.content.rebuilds.push(key));
-    }
-    let rebuilt = enshwick_base::__internal::rebuild(&table, Some(me), &key);
-    rebuilt.map_or_else(BuildResourceError::status, |()| Status::OK)
 }
 
 /// Notes that the game's builds running on this thread asked whether the
@@ -175,35 +181,33 @@ pub(crate) fn held(key: &ResourceKey) -> Option<Vec<u8>> {
     })
 }
 
-pub(crate) extern "system" fn resource_read(
-    _me: ModHandle,
-    key: *const ResourceKey,
-    out: *mut u8,
-    capacity: u32,
-    len: *mut u32,
-) -> Status {
-    // SAFETY: the safe layer's arguments meet `copy_resource`'s guarantees.
-    unsafe {
-        copy_resource(key, out, capacity, len, |key| {
-            archived(&key).ok_or(Status::MISSING)
-        })
+entries! {
+    pub(crate) fn resource_read(
+        me as Caller,
+        key: *const ResourceKey as args::In,
+        [out: *mut u8, capacity: u32, len: *mut u32] as args::BytesOut,
+    ) -> Status {
+        // SAFETY: the safe layer's arguments meet `copy_resource`'s guarantees.
+        unsafe {
+            copy_resource(key, out, capacity, len, |key| {
+                archived(&key).ok_or(Status::MISSING)
+            })
+        }
     }
-}
 
-pub(crate) extern "system" fn resource_served(
-    _me: ModHandle,
-    key: *const ResourceKey,
-    out: *mut u8,
-    capacity: u32,
-    len: *mut u32,
-) -> Status {
-    // SAFETY: the safe layer's arguments meet `copy_resource`'s guarantees.
-    unsafe {
-        copy_resource(key, out, capacity, len, |key| {
-            // As the loader: no read before every patch is in.
-            let table = Table::new(crate::test::table::late());
-            enshwick_base::__internal::read_served(&table, &key).map_err(BuildResourceError::status)
-        })
+    pub(crate) fn resource_served(
+        me as Caller,
+        key: *const ResourceKey as args::In,
+        [out: *mut u8, capacity: u32, len: *mut u32] as args::BytesOut,
+    ) -> Status {
+        // SAFETY: the safe layer's arguments meet `copy_resource`'s guarantees.
+        unsafe {
+            copy_resource(key, out, capacity, len, |key| {
+                // As the loader: no read before every patch is in.
+                let table = Table::new(crate::test::table::late());
+                enshwick_base::__internal::read_served(&table, &key).map_err(BuildResourceError::status)
+            })
+        }
     }
 }
 
@@ -306,32 +310,34 @@ fn note_read(key: ResourceKey) {
     });
 }
 
-pub(crate) extern "system" fn resource_buffer(
-    _me: ModHandle,
-    len: u32,
-    out: *mut *mut u8,
-) -> Status {
-    let Ok(len) = usize::try_from(len) else {
-        return Status::BAD_ARGS;
-    };
-    if out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    let lent = BUILDING.with_borrow_mut(|frames| {
-        let buffers = &mut frames.last_mut()?.buffers;
-        // As the loader: bytes that do not allocate refuse the call.
-        let mut buffer = Vec::new();
-        buffer.try_reserve_exact(len).ok()?;
-        buffer.resize(len, 0);
-        buffers.push(buffer.into_boxed_slice());
-        buffers.last_mut().map(|buffer| buffer.as_mut_ptr())
-    });
-    match lent {
-        Some(at) => {
-            with((), |s| s.content.lent_buffers += 1);
-            put(out, at)
+entries! {
+    pub(crate) fn resource_buffer(
+        me as Writer,
+        len: u32,
+        out: *mut *mut u8 as args::Out,
+    ) -> Status {
+        let Ok(len) = usize::try_from(len) else {
+            return Status::BAD_ARGS;
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
         }
-        None => Status::REFUSED,
+        let lent = BUILDING.with_borrow_mut(|frames| {
+            let buffers = &mut frames.last_mut()?.buffers;
+            // As the loader: bytes that do not allocate refuse the call.
+            let mut buffer = Vec::new();
+            buffer.try_reserve_exact(len).ok()?;
+            buffer.resize(len, 0);
+            buffers.push(buffer.into_boxed_slice());
+            buffers.last_mut().map(|buffer| buffer.as_mut_ptr())
+        });
+        match lent {
+            Some(at) => {
+                with((), |s| s.content.lent_buffers += 1);
+                put(out, at)
+            }
+            None => Status::REFUSED,
+        }
     }
 }
 

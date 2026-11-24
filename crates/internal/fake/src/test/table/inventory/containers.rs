@@ -1,9 +1,11 @@
 //! The fake's container rules and pickup messages: each mod's rule by the
 //! container item it names, and the messages mods show without a give.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
-use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, ModHandle, Status};
+use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, Status};
 use enshwick_core::{Entity, ItemId};
 
 use crate::test::table::{Registered, with, with_open};
@@ -21,58 +23,60 @@ pub(crate) struct Containers {
     shown: Vec<(Entity, ItemId, u32)>,
 }
 
-/// As the loader: a null callback or item 0 is a bad argument, then a call
-/// after init is too late.
-pub(crate) extern "system" fn container_rule(
-    me: ModHandle,
-    item: ItemId,
-    callback: Option<ContainerRuleFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    if item.get() == 0 {
-        return Status::BAD_ARGS;
-    }
-    with_open(|s| {
-        s.inventory
-            .containers
-            .rules
-            .push((item, Registered::new(callback, user, me)));
-        Status::OK
-    })
-}
-
-/// As the loader, in its order: a bad argument for item 0 or count 0, then
-/// unavailable outside a server, the wrong thread off the game thread, and
-/// a bad argument for an entity that is no player in game; the count held
-/// to the game's most.
-pub(crate) extern "system" fn show_pickup(
-    _me: ModHandle,
-    character: Entity,
-    item: ItemId,
-    count: u32,
-) -> Status {
-    if item.get() == 0 || count == 0 {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if !s.host.base.serving() {
-            return Status::UNAVAILABLE;
-        }
-        if !crate::test::table::on_game_thread() {
-            return Status::WRONG_THREAD;
-        }
-        if !s.host.base.players.iter().any(|p| p.entity == character) {
+entries! {
+    /// As the loader: a null callback or item 0 is a bad argument, then a call
+    /// after init is too late.
+    pub(crate) fn container_rule(
+        me as Mod,
+        item: ItemId,
+        callback: Option<ContainerRuleFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        if item.get() == 0 {
             return Status::BAD_ARGS;
         }
-        s.inventory
-            .containers
-            .shown
-            .push((character, item, count.min(MOST_SHOWN)));
-        Status::OK
-    })
+        with_open(|s| {
+            s.inventory
+                .containers
+                .rules
+                .push((item, Registered::new(callback, user, me)));
+            Status::OK
+        })
+    }
+
+    /// As the loader, in its order: a bad argument for item 0 or count 0, then
+    /// unavailable outside a server, the wrong thread off the game thread, and
+    /// a bad argument for an entity that is no player in game; the count held
+    /// to the game's most.
+    pub(crate) fn show_pickup(
+        me as Caller,
+        character: Entity,
+        item: ItemId,
+        count: u32,
+    ) -> Status {
+        if item.get() == 0 || count == 0 {
+            return Status::BAD_ARGS;
+        }
+        with(Status::MISSING, |s| {
+            if !s.host.base.serving() {
+                return Status::UNAVAILABLE;
+            }
+            if !crate::test::table::on_game_thread() {
+                return Status::WRONG_THREAD;
+            }
+            if !s.host.base.players.iter().any(|p| p.entity == character) {
+                return Status::BAD_ARGS;
+            }
+            s.inventory
+                .containers
+                .shown
+                .push((character, item, count.min(MOST_SHOWN)));
+            Status::OK
+        })
+    }
 }
 
 #[expect(

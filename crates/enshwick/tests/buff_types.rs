@@ -255,9 +255,9 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(
             *ANSWERS.lock().unwrap(),
-            [Status::REFUSED, Status::REFUSED, Status::BAD_ARGS],
+            [Status::REFUSED, Status::FAULTED, Status::FAULTED],
             "Lucky's id lies outside the earlier mod's namespace, so its \
-             declare counts for nothing"
+             declare turns it off and the loader answers its later calls so"
         );
         assert!(
             loader

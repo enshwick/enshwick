@@ -71,7 +71,7 @@ fn enforce_holds(loader: &Loader) {
 
 /// Seals the registries mods filled during init: the subscriptions, then
 /// each part's, in the order of the parts.
-fn seal(loader: &'static Loader) {
+pub(crate) fn seal(loader: &'static Loader) {
     loader.seal_subscriptions();
     for seal in loader.parts.iter().filter_map(|part| part.seal) {
         seal(loader);

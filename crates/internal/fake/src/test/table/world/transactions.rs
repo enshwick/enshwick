@@ -1,12 +1,14 @@
 //! The fake loader's transactions: commits, undos and statuses.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use crate::test::table::{Registered, put, with};
 use crate::test::{FakeChange, FakeTransaction};
 use enshwick_core::abi::{
-    BlockPlace, Header, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
-    TransactionOp, TransactionSettledFn, Voxel, VoxelRegion, VoxelWrite,
+    BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
+    TransactionSettledFn, Voxel, VoxelRegion, VoxelWrite,
 };
 
 /// The most changes the fake takes in one transaction, as the loader.
@@ -14,121 +16,120 @@ const OPS_MAX: u32 = 1024;
 /// The most bricks of undo data the fake keeps, as the loader.
 const BRICKS_MAX: u64 = 65_536;
 
-pub(crate) extern "system" fn transaction_commit(
-    me: ModHandle,
-    actor: enshwick_core::Entity,
-    ops: *const TransactionOp,
-    count: u32,
-    id: *mut u64,
-) -> Status {
-    if ops.is_null() || id.is_null() || count == 0 || count > OPS_MAX {
-        return Status::BAD_ARGS;
+entries! {
+    pub(crate) fn transaction_commit(
+        me as Mod,
+        actor: enshwick_core::Entity,
+        [ops: *const TransactionOp, count: u32] as args::UnalignedList,
+        id: *mut u64 as args::Out,
+    ) -> Status {
+        if ops.is_null() || id.is_null() || count == 0 || count > OPS_MAX {
+            return Status::BAD_ARGS;
+        }
+        let mut changes = Vec::new();
+        for i in 0..count as usize {
+            // SAFETY: `ops` is non-null, checked above, and `i` is below
+            // `count`; the safe layer passes `count` ops at `ops`, so the offset
+            // stays inside that array.
+            let slot = unsafe { ops.add(i) };
+            // SAFETY: `slot` is inside the `count` ops the safe layer passes,
+            // borrowed for the call; an unaligned read needs no alignment.
+            let op = unsafe { slot.read_unaligned() };
+            if op.reserved != 0 {
+                return Status::BAD_ARGS;
+            }
+            // SAFETY: the safe layer passes each op's `data` pointing at the
+            // record its kind names, with its header, borrowed for the call.
+            let Some(change) = (unsafe { change(&op) }) else {
+                return Status::BAD_ARGS;
+            };
+            changes.push(change);
+        }
+        with(Status::MISSING, |s| {
+            if s.world.terrain.is_none() {
+                return Status::UNAVAILABLE;
+            }
+            let host = &s.host;
+            for change in &changes {
+                if let FakeChange::PlaceProp(prop) = change {
+                    if host.world.no_prop_items.contains(&prop.item.get()) {
+                        return Status::NOT_A_PROP;
+                    }
+                    let places = host
+                        .content
+                        .items
+                        .get(&prop.item.get())
+                        .is_some_and(|item| item.placed_entity != enshwick_core::content::Guid::NIL);
+                    if !places {
+                        return Status::BAD_ARGS;
+                    }
+                }
+                if let FakeChange::Block(block) = change {
+                    let known = host.world.blueprints.contains_key(&block.shape.get())
+                        && host
+                            .world
+                            .building_materials
+                            .get(&block.material.get())
+                            .is_some_and(|&id| id >= 0x80);
+                    if !known {
+                        return Status::BAD_ARGS;
+                    }
+                }
+            }
+            let outside = changes.iter().any(|change| match change {
+                FakeChange::Terrain(edit) => crate::test::world::edit_outside(host.world.extent, edit),
+                FakeChange::Voxels { min, size, .. } | FakeChange::Erase { min, size } => {
+                    crate::test::world::outside(host.world.extent, *min, *size)
+                }
+                FakeChange::PlaceProp(prop) => host.world.extent.is_some_and(|end| {
+                    (0..3).any(|axis| prop.position[axis] * 2.0 >= f64::from(end[axis]))
+                }),
+                FakeChange::RemoveProp(_) => false,
+                FakeChange::Block(block) => host.world.extent.is_some_and(|end| {
+                    (0..3).any(|axis| block.position[axis] * 2.0 >= f64::from(end[axis]))
+                }),
+            });
+            if outside {
+                return Status::OUTSIDE_WORLD;
+            }
+            let bound: u64 = changes.iter().map(|change| change.bricks(host)).sum();
+            if bound > BRICKS_MAX {
+                return Status::BAD_ARGS;
+            }
+            if claimed(&s.world.edits.transactions, host) + bound > BRICKS_MAX {
+                return Status::REFUSED;
+            }
+            let next = s
+                .world
+                .edits
+                .transactions
+                .last()
+                .map_or(s.world.edits.forgotten, |last| last.id)
+                + 1;
+            let ops = u32::try_from(changes.len()).unwrap_or(u32::MAX);
+            s.world.edits.transactions.push(FakeTransaction {
+                id: next,
+                owner: me,
+                actor: actor.0,
+                changes,
+                created: Vec::new(),
+                removed: Vec::new(),
+                info: TransactionInfo {
+                    header: Header::of::<TransactionInfo>(),
+                    state: TransactionInfo::PENDING,
+                    reason: Status::OK,
+                    ops,
+                    applied: 0,
+                    bricks: 0,
+                    refusal: 0,
+                    reserved: 0,
+                    holds: 0,
+                    created: 0,
+                },
+            });
+            put(id, next)
+        })
     }
-    let mut changes = Vec::new();
-    for i in 0..count as usize {
-        // SAFETY: `ops` is non-null, checked above, and `i` is below
-        // `count`; the safe layer passes `count` ops at `ops`, so the offset
-        // stays inside that array.
-        let slot = unsafe { ops.add(i) };
-        // SAFETY: `slot` is inside the `count` ops the safe layer passes,
-        // borrowed for the call; an unaligned read needs no alignment.
-        // The fake host reads the mod's ops array, not game memory.
-        // ast-grep-ignore: game-memory-through-raw
-        let op = unsafe { slot.read_unaligned() };
-        if op.reserved != 0 {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: the safe layer passes each op's `data` pointing at the
-        // record its kind names, with its header, borrowed for the call.
-        let Some(change) = (unsafe { change(&op) }) else {
-            return Status::BAD_ARGS;
-        };
-        changes.push(change);
-    }
-    with(Status::MISSING, |s| {
-        if s.world.terrain.is_none() {
-            return Status::UNAVAILABLE;
-        }
-        let host = &s.host;
-        for change in &changes {
-            if let FakeChange::PlaceProp(prop) = change {
-                if host.world.no_prop_items.contains(&prop.item.get()) {
-                    return Status::NOT_A_PROP;
-                }
-                let places = host
-                    .content
-                    .items
-                    .get(&prop.item.get())
-                    .is_some_and(|item| item.placed_entity != enshwick_core::content::Guid::NIL);
-                if !places {
-                    return Status::BAD_ARGS;
-                }
-            }
-            if let FakeChange::Block(block) = change {
-                let known = host.world.blueprints.contains_key(&block.shape.get())
-                    && host
-                        .world
-                        .building_materials
-                        .get(&block.material.get())
-                        .is_some_and(|&id| id >= 0x80);
-                if !known {
-                    return Status::BAD_ARGS;
-                }
-            }
-        }
-        let outside = changes.iter().any(|change| match change {
-            FakeChange::Terrain(edit) => crate::test::world::edit_outside(host.world.extent, edit),
-            FakeChange::Voxels { min, size, .. } | FakeChange::Erase { min, size } => {
-                crate::test::world::outside(host.world.extent, *min, *size)
-            }
-            FakeChange::PlaceProp(prop) => host.world.extent.is_some_and(|end| {
-                (0..3).any(|axis| prop.position[axis] * 2.0 >= f64::from(end[axis]))
-            }),
-            FakeChange::RemoveProp(_) => false,
-            FakeChange::Block(block) => host.world.extent.is_some_and(|end| {
-                (0..3).any(|axis| block.position[axis] * 2.0 >= f64::from(end[axis]))
-            }),
-        });
-        if outside {
-            return Status::OUTSIDE_WORLD;
-        }
-        let bound: u64 = changes.iter().map(|change| change.bricks(host)).sum();
-        if bound > BRICKS_MAX {
-            return Status::BAD_ARGS;
-        }
-        if claimed(&s.world.edits.transactions, host) + bound > BRICKS_MAX {
-            return Status::REFUSED;
-        }
-        let next = s
-            .world
-            .edits
-            .transactions
-            .last()
-            .map_or(s.world.edits.forgotten, |last| last.id)
-            + 1;
-        let ops = u32::try_from(changes.len()).unwrap_or(u32::MAX);
-        s.world.edits.transactions.push(FakeTransaction {
-            id: next,
-            owner: me,
-            actor: actor.0,
-            changes,
-            created: Vec::new(),
-            removed: Vec::new(),
-            info: TransactionInfo {
-                header: Header::of::<TransactionInfo>(),
-                state: TransactionInfo::PENDING,
-                reason: Status::OK,
-                ops,
-                applied: 0,
-                bricks: 0,
-                refusal: 0,
-                reserved: 0,
-                holds: 0,
-                created: 0,
-            },
-        });
-        put(id, next)
-    })
 }
 
 /// The change `op` hands over, when the loader would take it: a known kind
@@ -273,83 +274,83 @@ fn claimed(transactions: &[FakeTransaction], host: &crate::test::FakeHost) -> u6
         .sum()
 }
 
-pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status {
-    with(Status::REFUSED, |s| {
-        let claimed = claimed(&s.world.edits.transactions, &s.host);
-        let Some(transaction) = s
-            .world
-            .edits
-            .transactions
-            .iter_mut()
-            .find(|t| t.id == id && t.owner == me)
-        else {
-            return Status::REFUSED;
-        };
-        let props = !transaction.created.is_empty() || !transaction.removed.is_empty();
-        let info = &mut transaction.info;
-        match info.state {
-            TransactionInfo::PENDING if info.applied == 0 => info.state = TransactionInfo::UNDONE,
-            TransactionInfo::UNDOING => {}
-            TransactionInfo::PENDING => info.state = TransactionInfo::UNDOING,
-            TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED | TransactionInfo::FAILED
-                if info.bricks > 0 || props =>
-            {
-                if claimed + info.bricks > BRICKS_MAX {
-                    return Status::REFUSED;
+entries! {
+    pub(crate) fn transaction_undo(me as Mod, id: u64) -> Status {
+        with(Status::REFUSED, |s| {
+            let claimed = claimed(&s.world.edits.transactions, &s.host);
+            let Some(transaction) = s
+                .world
+                .edits
+                .transactions
+                .iter_mut()
+                .find(|t| t.id == id && t.owner == me)
+            else {
+                return Status::REFUSED;
+            };
+            let props = !transaction.created.is_empty() || !transaction.removed.is_empty();
+            let info = &mut transaction.info;
+            match info.state {
+                TransactionInfo::PENDING if info.applied == 0 => info.state = TransactionInfo::UNDONE,
+                TransactionInfo::UNDOING => {}
+                TransactionInfo::PENDING => info.state = TransactionInfo::UNDOING,
+                TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED | TransactionInfo::FAILED
+                    if info.bricks > 0 || props =>
+                {
+                    if claimed + info.bricks > BRICKS_MAX {
+                        return Status::REFUSED;
+                    }
+                    info.state = TransactionInfo::UNDOING;
                 }
-                info.state = TransactionInfo::UNDOING;
+                _ => return Status::REFUSED,
             }
-            _ => return Status::REFUSED,
+            info.reason = Status::OK;
+            info.holds = 0;
+            Status::OK
+        })
+    }
+
+    pub(crate) fn transaction_entities(
+        me as Mod,
+        id: u64,
+        [out: *mut enshwick_core::Entity, capacity: u32, count: *mut u32] as args::ListOut,
+    ) -> Status {
+        let found = with(None, |s| {
+            s.world
+                .edits
+                .transactions
+                .iter()
+                .find(|t| t.id == id && t.owner == me)
+                .map(|t| t.created.clone())
+        });
+        let Some(created) = found else {
+            return Status::MISSING;
+        };
+        crate::test::table::put_list(&created, out, capacity, count)
+    }
+
+    pub(crate) fn transaction_status(
+        me as Mod,
+        id: u64,
+        out: *mut TransactionInfo as args::HeadedOut,
+    ) -> Status {
+        let found = with(None, |s| {
+            s.world
+                .edits
+                .transactions
+                .iter()
+                .find(|t| t.id == id && t.owner == me)
+                .map(|t| t.info)
+        });
+        let Some(info) = found else {
+            return Status::MISSING;
+        };
+        // SAFETY: the safe layer passes `out` null or pointing at a writable
+        // `TransactionInfo` whose header names its size.
+        if unsafe { enshwick_core::abi::write_headed(out, info) } {
+            Status::OK
+        } else {
+            Status::BAD_ARGS
         }
-        info.reason = Status::OK;
-        info.holds = 0;
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn transaction_entities(
-    me: ModHandle,
-    id: u64,
-    out: *mut enshwick_core::Entity,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let found = with(None, |s| {
-        s.world
-            .edits
-            .transactions
-            .iter()
-            .find(|t| t.id == id && t.owner == me)
-            .map(|t| t.created.clone())
-    });
-    let Some(created) = found else {
-        return Status::MISSING;
-    };
-    crate::test::table::put_list(&created, out, capacity, count)
-}
-
-pub(crate) extern "system" fn transaction_status(
-    me: ModHandle,
-    id: u64,
-    out: *mut TransactionInfo,
-) -> Status {
-    let found = with(None, |s| {
-        s.world
-            .edits
-            .transactions
-            .iter()
-            .find(|t| t.id == id && t.owner == me)
-            .map(|t| t.info)
-    });
-    let Some(info) = found else {
-        return Status::MISSING;
-    };
-    // SAFETY: the safe layer passes `out` null or pointing at a writable
-    // `TransactionInfo` whose header names its size.
-    if unsafe { enshwick_core::abi::write_headed(out, info) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
     }
 }
 
@@ -363,34 +364,36 @@ pub(crate) struct SettleWait {
     callback: Registered<TransactionSettledFn>,
 }
 
-pub(crate) extern "system" fn transaction_settled(
-    me: ModHandle,
-    id: u64,
-    within_ns: u64,
-    callback: Option<TransactionSettledFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with(Status::UNAVAILABLE, |s| {
-        if !s
-            .world
-            .edits
-            .transactions
-            .iter()
-            .any(|t| t.id == id && t.owner == me)
-        {
-            return Status::MISSING;
-        }
-        let until = s.base.ticks.nanos().saturating_add(within_ns);
-        s.world.settle_waits.push(SettleWait {
-            id,
-            until,
-            callback: Registered::new(callback, user, me),
-        });
-        Status::OK
-    })
+entries! {
+    pub(crate) fn transaction_settled(
+        me as Mod,
+        id: u64,
+        within_ns: u64,
+        callback: Option<TransactionSettledFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with(Status::UNAVAILABLE, |s| {
+            if !s
+                .world
+                .edits
+                .transactions
+                .iter()
+                .any(|t| t.id == id && t.owner == me)
+            {
+                return Status::MISSING;
+            }
+            let until = s.base.ticks.nanos().saturating_add(within_ns);
+            s.world.settle_waits.push(SettleWait {
+                id,
+                until,
+                callback: Registered::new(callback, user, me),
+            });
+            Status::OK
+        })
+    }
 }
 
 /// Runs, in the order asked, each wait whose transaction is no longer

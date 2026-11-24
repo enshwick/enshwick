@@ -1,5 +1,7 @@
 //! The fake's interface: frames, widgets, markers and dialogs.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 mod sound;
@@ -151,49 +153,51 @@ const OPEN: [&str; 7] = [
     "NoUi",
 ];
 
-/// table it sees for the process, so it is one static.
-pub(crate) extern "system" fn ui_frame(
-    me: ModHandle,
-    callback: Option<UiFrameFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        s.ui.frames.push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-/// The local player's held controls, as the test set them; the loader's
-/// answers: [`Status::UNAVAILABLE`] on a server, outside a game, and from
-/// the first ask, which starts the reads, until an interface step reads
-/// them.
-pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Status {
-    if out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        s.ui.local_held.asked = true;
-        match s
-            .ui
-            .local_held
-            .bits
-            .filter(|_| s.ui.local_held.stepped && s.host.base.side != Side::SERVER)
-        {
-            Some(bits) => {
-                // SAFETY: the safe layer passes a writable `u64` for the call,
-                // non-null by the check above.
-                unsafe { out.write(bits) };
-                Status::OK
+entries! {
+    /// table it sees for the process, so it is one static.
+    pub(crate) fn ui_frame(
+        me as Mod,
+        callback: Option<UiFrameFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
             }
-            None => Status::UNAVAILABLE,
+            s.ui.frames.push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    /// The local player's held controls, as the test set them; the loader's
+    /// answers: [`Status::UNAVAILABLE`] on a server, outside a game, and from
+    /// the first ask, which starts the reads, until an interface step reads
+    /// them.
+    pub(crate) fn local_held(me as Caller, out: *mut u64 as args::Out) -> Status {
+        if out.is_null() {
+            return Status::BAD_ARGS;
         }
-    })
+        with(Status::MISSING, |s| {
+            s.ui.local_held.asked = true;
+            match s
+                .ui
+                .local_held
+                .bits
+                .filter(|_| s.ui.local_held.stepped && s.host.base.side != Side::SERVER)
+            {
+                Some(bits) => {
+                    // SAFETY: the safe layer passes a writable `u64` for the call,
+                    // non-null by the check above.
+                    unsafe { out.write(bits) };
+                    Status::OK
+                }
+                None => Status::UNAVAILABLE,
+            }
+        })
+    }
 }
 
 /// The input waiting for the widget labelled `text`, taken.
@@ -314,41 +318,43 @@ fn item_slot(s: &mut State, w: &mut UiWidget) -> Result<crate::test::Drawn, Stat
     })
 }
 
-/// Registers an item tooltip callback, refusing what the loader refuses.
-pub(crate) extern "system" fn ui_item_tooltip(
-    me: ModHandle,
-    callback: Option<UiTooltipFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        s.ui.tooltips.push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn ui_widget(
-    me: ModHandle,
-    frame: u64,
-    widget: *mut UiWidget,
-) -> Status {
-    let Some(mut copy) = super::get_headed(widget.cast_const()) else {
-        return Status::BAD_ARGS;
-    };
-    // The loader refuses a widget outside a callback or from a handle not
-    // the drawing callback's.
-    if with(false, |s| s.ui.drawing != Some(me)) {
-        return Status::WRONG_THREAD;
+entries! {
+    /// Registers an item tooltip callback, refusing what the loader refuses.
+    pub(crate) fn ui_item_tooltip(
+        me as Mod,
+        callback: Option<UiTooltipFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            s.ui.tooltips.push(Registered::new(callback, user, me));
+            Status::OK
+        })
     }
-    let status = draw(frame, &mut copy);
-    match super::put_headed(widget, copy) {
-        Status::OK => status,
-        refused => refused,
+
+    pub(crate) fn ui_widget(
+        me as Mod,
+        frame: u64,
+        widget: *mut UiWidget as args::HeadedInOut,
+    ) -> Status {
+        let Some(mut copy) = super::get_headed(widget.cast_const()) else {
+            return Status::BAD_ARGS;
+        };
+        // The loader refuses a widget outside a callback or from a handle not
+        // the drawing callback's.
+        if with(false, |s| s.ui.drawing != Some(me)) {
+            return Status::WRONG_THREAD;
+        }
+        let status = draw(frame, &mut copy);
+        match super::put_headed(widget, copy) {
+            Status::OK => status,
+            refused => refused,
+        }
     }
 }
 
@@ -494,322 +500,319 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
     })
 }
 
-pub(crate) extern "system" fn ui_hud(
-    me: ModHandle,
-    callback: Option<UiFrameFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        s.ui.huds.push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-/// Records an extension of a game screen, refusing what the loader
-/// refuses, in its order: a server, a place it does not take or a screen where the
-/// player is in the world with no window open, a screen the game lacks.
-pub(crate) extern "system" fn ui_extension(
-    me: ModHandle,
-    spec: *const UiExtension,
-    callback: Option<UiFrameFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    let Some(spec) = super::get_headed(spec) else {
-        return Status::BAD_ARGS;
-    };
-    let screen = text(spec.screen);
-    // SAFETY: the safe layer passes `hosts` null or with `host_count` GUIDs
-    // for the call; they are copied here.
-    let Some(hosts) = (unsafe { spec.host_list() }).map(<[enshwick_core::content::Guid]>::to_vec)
-    else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        if !spec.placement_holds() || OPEN.contains(&screen.as_str()) {
+entries! {
+    pub(crate) fn ui_hud(
+        me as Mod,
+        callback: Option<UiFrameFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
             return Status::BAD_ARGS;
-        }
-        if !SCREENS.contains(&screen.as_str()) {
-            return Status::MISSING;
-        }
-        let place = Place {
-            edge: spec.edge,
-            align: spec.align,
-            shift: spec.shift,
-            inset: spec.inset,
         };
-        s.ui.extensions
-            .push((screen, place, Registered::new(callback, user, me), hosts));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn ui_markers(
-    _me: ModHandle,
-    markers: *const UiMarker,
-    count: u32,
-) -> Status {
-    if with(true, |s| s.host.base.side == Side::SERVER) {
-        return Status::UNAVAILABLE;
-    }
-    if count as usize > enshwick_core::__fake::MARKER_LIMIT {
-        return Status::BAD_ARGS;
-    }
-    let Some(given) = super::get_headed_list(markers, count) else {
-        return Status::BAD_ARGS;
-    };
-    let markers: Vec<crate::test::FakeMarker> = given
-        .iter()
-        .map(|m| crate::test::FakeMarker {
-            position: m.position,
-            label: text(m.label),
-            color: m.color,
-            marker_type: m.marker_type,
-        })
-        .collect();
-    with(Status::MISSING, |s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        for marker in markers.iter().filter(|m| m.marker_type != 0) {
-            let Some(types) = &s.host.ui.map_marker_types else {
+        crate::test::table::with_open(|s| {
+            if s.host.base.side == Side::SERVER {
                 return Status::UNAVAILABLE;
-            };
-            if !types.iter().any(|t| t.marker_id == marker.marker_type) {
+            }
+            s.ui.huds.push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    /// Records an extension of a game screen, refusing what the loader
+    /// refuses, in its order: a server, a place it does not take or a screen where the
+    /// player is in the world with no window open, a screen the game lacks.
+    pub(crate) fn ui_extension(
+        me as Mod,
+        spec: *const UiExtension as args::Headed,
+        callback: Option<UiFrameFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        let Some(spec) = super::get_headed(spec) else {
+            return Status::BAD_ARGS;
+        };
+        let screen = text(spec.screen);
+        // SAFETY: the safe layer passes `hosts` null or with `host_count` GUIDs
+        // for the call; they are copied here.
+        let Some(hosts) = (unsafe { spec.host_list() }).map(<[enshwick_core::content::Guid]>::to_vec)
+        else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            if !spec.placement_holds() || OPEN.contains(&screen.as_str()) {
                 return Status::BAD_ARGS;
             }
-        }
-        s.ui.markers = markers;
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn map_marker_types(
-    _me: ModHandle,
-    out: *mut MapMarkerTypeInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let Some(types) = with(None, |s| {
-        (s.host.base.side != Side::SERVER)
-            .then(|| s.host.ui.map_marker_types.clone())
-            .flatten()
-    }) else {
-        return Status::UNAVAILABLE;
-    };
-    crate::test::table::base::io::list(&types, out, entry_size, capacity, count)
-}
-
-pub(crate) extern "system" fn ui_dialog(
-    me: ModHandle,
-    dialog: *const UiDialog,
-    callback: Option<UiAnswerFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    let Some(d) = super::get_headed(dialog) else {
-        return Status::BAD_ARGS;
-    };
-    let shown = crate::test::ShownDialog {
-        title: text(d.title),
-        message: text(d.message),
-        detail: text(d.detail),
-        buttons: d.buttons,
-    };
-    with(Status::MISSING, |s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        if s.ui.dialogs.len() >= 16 {
-            return Status::REFUSED;
-        }
-        s.ui.dialogs
-            .push((shown, Registered::new(callback, user, me)));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn request_fog(_me: ModHandle) -> Status {
-    crate::test::table::with_open(|s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        s.ui.fog_opened = true;
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn fog_read(
-    _me: ModHandle,
-    info: *mut FogInfo,
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    out: *mut u8,
-    capacity: u32,
-) -> Status {
-    let wanted = width != 0 && height != 0;
-    if info.is_null() || (wanted && out.is_null()) {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if !s.ui.fog_opened {
-            return Status::REFUSED;
-        }
-        let Some((found, pixels)) = s.host.ui.fog.as_ref() else {
-            return Status::UNAVAILABLE;
-        };
-        let written = super::put_headed(info, *found);
-        if written != Status::OK {
-            return written;
-        }
-        if !wanted {
-            return Status::OK;
-        }
-        let inside = |start: u32, size: u32, limit: u32| {
-            start.checked_add(size).is_some_and(|end| end <= limit)
-        };
-        if !inside(x, width, found.width) || !inside(y, height, found.height) {
-            return Status::OUTSIDE_WORLD;
-        }
-        let (row, rows) = (width as usize, height as usize);
-        if (capacity as usize) < row * rows {
-            return Status::BAD_ARGS;
-        }
-        for r in 0..rows {
-            let start = (y as usize + r) * found.width as usize + x as usize;
-            let to = out.wrapping_add(r * row);
-            // SAFETY: the safe layer passes `capacity` writable bytes at
-            // `out`, at least `row * rows` (checked above), so `row` bytes
-            // at `to` lie inside them.
-            unsafe { core::ptr::copy_nonoverlapping(pixels[start..start + row].as_ptr(), to, row) };
-        }
-        Status::OK
-    })
-}
-
-/// A cached client sampler status supplied by the test, requested once a
-/// `local_held` ask started the reads; this getter requests nothing.
-pub(crate) extern "system" fn local_input_status(
-    _me: ModHandle,
-    out: *mut enshwick_core::abi::LocalInputInfo,
-) -> Status {
-    if out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        // As the loader: the first `local_held` ask started the reads.
-        let mut info = s.ui.local_input_info;
-        if s.ui.local_held.asked {
-            info.flags |= enshwick_core::abi::LocalInputInfo::REQUESTED;
-        }
-        super::put_headed(out, info)
-    })
-}
-
-/// Queues a client command as the loader does: unavailable on a server,
-/// a bad argument for an unknown kind, refused while one of its kind waits;
-/// the test drives its status.
-pub(crate) extern "system" fn client_command(
-    _me: ModHandle,
-    spec: *const enshwick_core::abi::ClientCommand,
-    id: *mut u64,
-) -> Status {
-    use enshwick_core::abi::{ClientCommand as Spec, ClientCommandStatus as Raw};
-    let Some(spec) = super::get_headed(spec) else {
-        return Status::BAD_ARGS;
-    };
-    if id.is_null() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        let open = |status: &Raw| status.state == Raw::PENDING || status.state == Raw::APPLIED;
-        if spec.kind == Spec::CANCEL {
-            if let Some((.., status)) =
-                s.ui.client_commands
-                    .iter_mut()
-                    .find(|(queued, .., status)| *queued == spec.cancels && open(status))
-            {
-                status.state = Raw::CANCELLED;
-                status.reason = Raw::BY_MOD;
+            if !SCREENS.contains(&screen.as_str()) {
+                return Status::MISSING;
             }
-            // SAFETY: the safe layer passes a writable `u64`, non-null above.
-            unsafe { id.write(spec.cancels) };
-            return Status::OK;
+            let place = Place {
+                edge: spec.edge,
+                align: spec.align,
+                shift: spec.shift,
+                inset: spec.inset,
+            };
+            s.ui.extensions
+                .push((screen, place, Registered::new(callback, user, me), hosts));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn ui_markers(
+        me as Mod,
+        [markers: *const UiMarker, count: u32] as args::HeadedList,
+    ) -> Status {
+        if with(true, |s| s.host.base.side == Side::SERVER) {
+            return Status::UNAVAILABLE;
         }
-        if !(Spec::OPEN_SCREEN..=Spec::LEAVE).contains(&spec.kind)
-            || !spec.in_bounds()
-            || !named_as_the_loader_takes(&spec)
-        {
+        if count as usize > enshwick_core::__fake::MARKER_LIMIT {
             return Status::BAD_ARGS;
         }
-        if s.ui
-            .client_commands
+        let Some(given) = super::get_headed_list(markers, count) else {
+            return Status::BAD_ARGS;
+        };
+        let markers: Vec<crate::test::FakeMarker> = given
             .iter()
-            .any(|(_, kind, _, status)| *kind == spec.kind && open(status))
-        {
-            return Status::REFUSED;
-        }
-        // One join or leave at a time; a join from the main menu, outside a
-        // world, which the snapshot's session names, and a leave inside one.
-        let plays = |kind: u32| kind == Spec::JOIN || kind == Spec::LEAVE;
-        if plays(spec.kind) {
-            let in_world = s.ui.client_snapshot.session != 0;
-            let running =
-                s.ui.client_commands
-                    .iter()
-                    .any(|(_, kind, _, status)| plays(*kind) && open(status));
-            if running || in_world == (spec.kind == Spec::JOIN) {
+            .map(|m| crate::test::FakeMarker {
+                position: m.position,
+                label: text(m.label),
+                color: m.color,
+                marker_type: m.marker_type,
+            })
+            .collect();
+        with(Status::MISSING, |s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            for marker in markers.iter().filter(|m| m.marker_type != 0) {
+                let Some(types) = &s.host.ui.map_marker_types else {
+                    return Status::UNAVAILABLE;
+                };
+                if !types.iter().any(|t| t.marker_id == marker.marker_type) {
+                    return Status::BAD_ARGS;
+                }
+            }
+            s.ui.markers = markers;
+            Status::OK
+        })
+    }
+
+    pub(crate) fn map_marker_types(
+        me as Mod,
+        [out: *mut MapMarkerTypeInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let Some(types) = with(None, |s| {
+            (s.host.base.side != Side::SERVER)
+                .then(|| s.host.ui.map_marker_types.clone())
+                .flatten()
+        }) else {
+            return Status::UNAVAILABLE;
+        };
+        crate::test::table::base::io::list(&types, out, entry_size, capacity, count)
+    }
+
+    pub(crate) fn ui_dialog(
+        me as Mod,
+        dialog: *const UiDialog as args::Headed,
+        callback: Option<UiAnswerFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        let Some(d) = super::get_headed(dialog) else {
+            return Status::BAD_ARGS;
+        };
+        let shown = crate::test::ShownDialog {
+            title: text(d.title),
+            message: text(d.message),
+            detail: text(d.detail),
+            buttons: d.buttons,
+        };
+        with(Status::MISSING, |s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            if s.ui.dialogs.len() >= 16 {
                 return Status::REFUSED;
             }
+            s.ui.dialogs
+                .push((shown, Registered::new(callback, user, me)));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn request_fog(me as Mod) -> Status {
+        crate::test::table::with_open(|s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            s.ui.fog_opened = true;
+            Status::OK
+        })
+    }
+
+    pub(crate) fn fog_read(
+        me as Mod,
+        info: *mut FogInfo as args::HeadedOut,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        [out: *mut u8, capacity: u32] as args::MaybeBuffer,
+    ) -> Status {
+        let wanted = width != 0 && height != 0;
+        if info.is_null() || (wanted && out.is_null()) {
+            return Status::BAD_ARGS;
         }
-        let next = s.ui.client_commands.len() as u64 + 1;
-        // SAFETY: the mod's spec, its target borrowed for the call; the
-        // password is never read, kept or returned.
-        let target = unsafe { spec.target.as_str() }
-            .unwrap_or_default()
-            .to_owned();
-        s.ui.client_commands.push((
-            next,
-            spec.kind,
-            target,
-            Raw {
-                kind: spec.kind,
-                // As the loader queues them: a join waits for its server's
-                // answer, a leave starts in the world.
-                phase: match spec.kind {
-                    Spec::JOIN => Raw::PHASE_QUEUED,
-                    Spec::LEAVE => Raw::PHASE_IN_WORLD,
-                    _ => 0,
+        with(Status::MISSING, |s| {
+            if !s.ui.fog_opened {
+                return Status::REFUSED;
+            }
+            let Some((found, pixels)) = s.host.ui.fog.as_ref() else {
+                return Status::UNAVAILABLE;
+            };
+            let written = super::put_headed(info, *found);
+            if written != Status::OK {
+                return written;
+            }
+            if !wanted {
+                return Status::OK;
+            }
+            let inside = |start: u32, size: u32, limit: u32| {
+                start.checked_add(size).is_some_and(|end| end <= limit)
+            };
+            if !inside(x, width, found.width) || !inside(y, height, found.height) {
+                return Status::OUTSIDE_WORLD;
+            }
+            let (row, rows) = (width as usize, height as usize);
+            if (capacity as usize) < row * rows {
+                return Status::BAD_ARGS;
+            }
+            for r in 0..rows {
+                let start = (y as usize + r) * found.width as usize + x as usize;
+                let to = out.wrapping_add(r * row);
+                // SAFETY: the safe layer passes `capacity` writable bytes at
+                // `out`, at least `row * rows` (checked above), so `row` bytes
+                // at `to` lie inside them.
+                unsafe { core::ptr::copy_nonoverlapping(pixels[start..start + row].as_ptr(), to, row) };
+            }
+            Status::OK
+        })
+    }
+
+    /// A cached client sampler status supplied by the test, requested once a
+    /// `local_held` ask started the reads; this getter requests nothing.
+    pub(crate) fn local_input_status(
+        me as Caller,
+        out: *mut enshwick_core::abi::LocalInputInfo as args::HeadedOut,
+    ) -> Status {
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        with(Status::MISSING, |s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            // As the loader: the first `local_held` ask started the reads.
+            let mut info = s.ui.local_input_info;
+            if s.ui.local_held.asked {
+                info.flags |= enshwick_core::abi::LocalInputInfo::REQUESTED;
+            }
+            super::put_headed(out, info)
+        })
+    }
+
+    /// Queues a client command as the loader does: unavailable on a server,
+    /// a bad argument for an unknown kind, refused while one of its kind waits;
+    /// the test drives its status.
+    pub(crate) fn client_command(
+        me as Mod,
+        spec: *const enshwick_core::abi::ClientCommand as args::Headed,
+        id: *mut u64 as args::Out,
+    ) -> Status {
+        use enshwick_core::abi::{ClientCommand as Spec, ClientCommandStatus as Raw};
+        let Some(spec) = super::get_headed(spec) else {
+            return Status::BAD_ARGS;
+        };
+        if id.is_null() {
+            return Status::BAD_ARGS;
+        }
+        with(Status::MISSING, |s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            let open = |status: &Raw| status.state == Raw::PENDING || status.state == Raw::APPLIED;
+            if spec.kind == Spec::CANCEL {
+                if let Some((.., status)) =
+                    s.ui.client_commands
+                        .iter_mut()
+                        .find(|(queued, .., status)| *queued == spec.cancels && open(status))
+                {
+                    status.state = Raw::CANCELLED;
+                    status.reason = Raw::BY_MOD;
+                }
+                // SAFETY: the safe layer passes a writable `u64`, non-null above.
+                unsafe { id.write(spec.cancels) };
+                return Status::OK;
+            }
+            if !(Spec::OPEN_SCREEN..=Spec::LEAVE).contains(&spec.kind)
+                || !spec.in_bounds()
+                || !named_as_the_loader_takes(&spec)
+            {
+                return Status::BAD_ARGS;
+            }
+            if s.ui
+                .client_commands
+                .iter()
+                .any(|(_, kind, _, status)| *kind == spec.kind && open(status))
+            {
+                return Status::REFUSED;
+            }
+            // One join or leave at a time; a join from the main menu, outside a
+            // world, which the snapshot's session names, and a leave inside one.
+            let plays = |kind: u32| kind == Spec::JOIN || kind == Spec::LEAVE;
+            if plays(spec.kind) {
+                let in_world = s.ui.client_snapshot.session != 0;
+                let running =
+                    s.ui.client_commands
+                        .iter()
+                        .any(|(_, kind, _, status)| plays(*kind) && open(status));
+                if running || in_world == (spec.kind == Spec::JOIN) {
+                    return Status::REFUSED;
+                }
+            }
+            let next = s.ui.client_commands.len() as u64 + 1;
+            // SAFETY: the mod's spec, its target borrowed for the call; the
+            // password is never read, kept or returned.
+            let target = unsafe { spec.target.as_str() }
+                .unwrap_or_default()
+                .to_owned();
+            s.ui.client_commands.push((
+                next,
+                spec.kind,
+                target,
+                Raw {
+                    kind: spec.kind,
+                    // As the loader queues them: a join waits for its server's
+                    // answer, a leave starts in the world.
+                    phase: match spec.kind {
+                        Spec::JOIN => Raw::PHASE_QUEUED,
+                        Spec::LEAVE => Raw::PHASE_IN_WORLD,
+                        _ => 0,
+                    },
+                    ..Raw::EMPTY
                 },
-                ..Raw::EMPTY
-            },
-        ));
-        // SAFETY: the safe layer passes a writable `u64`, non-null above.
-        unsafe { id.write(next) };
-        Status::OK
-    })
+            ));
+            // SAFETY: the safe layer passes a writable `u64`, non-null above.
+            unsafe { id.write(next) };
+            Status::OK
+        })
+    }
 }
 
 /// Whether `spec`'s target and expected screen are ones the loader takes:
@@ -825,50 +828,52 @@ fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
     })
 }
 
-/// Where a queued client command stands, as the test set it.
-pub(crate) extern "system" fn client_command_status(
-    _me: ModHandle,
-    id: u64,
-    out: *mut enshwick_core::abi::ClientCommandStatus,
-) -> Status {
-    if out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        match s
-            .ui
-            .client_commands
-            .iter()
-            .find(|(queued, ..)| *queued == id)
-        {
-            Some((.., status)) => super::put_headed(out, *status),
-            None => Status::UNAVAILABLE,
+entries! {
+    /// Where a queued client command stands, as the test set it.
+    pub(crate) fn client_command_status(
+        me as Mod,
+        id: u64,
+        out: *mut enshwick_core::abi::ClientCommandStatus as args::HeadedOut,
+    ) -> Status {
+        if out.is_null() {
+            return Status::BAD_ARGS;
         }
-    })
-}
+        with(Status::MISSING, |s| {
+            match s
+                .ui
+                .client_commands
+                .iter()
+                .find(|(queued, ..)| *queued == id)
+            {
+                Some((.., status)) => super::put_headed(out, *status),
+                None => Status::UNAVAILABLE,
+            }
+        })
+    }
 
-/// The client snapshot the test set; the loader's answers: unavailable on
-/// a server, and from the first ask, which starts the reads, until an
-/// interface step reads them, the empty snapshot, never read.
-pub(crate) extern "system" fn client_snapshot(
-    _me: ModHandle,
-    out: *mut enshwick_core::abi::ClientSnapshot,
-) -> Status {
-    if out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
+    /// The client snapshot the test set; the loader's answers: unavailable on
+    /// a server, and from the first ask, which starts the reads, until an
+    /// interface step reads them, the empty snapshot, never read.
+    pub(crate) fn client_snapshot(
+        me as Caller,
+        out: *mut enshwick_core::abi::ClientSnapshot as args::HeadedOut,
+    ) -> Status {
+        if out.is_null() {
+            return Status::BAD_ARGS;
         }
-        s.ui.snapshot_reads.0 = true;
-        let snapshot = if s.ui.snapshot_reads.1 {
-            s.ui.client_snapshot
-        } else {
-            enshwick_core::abi::ClientSnapshot::EMPTY
-        };
-        super::put_headed(out, snapshot)
-    })
+        with(Status::MISSING, |s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            s.ui.snapshot_reads.0 = true;
+            let snapshot = if s.ui.snapshot_reads.1 {
+                s.ui.client_snapshot
+            } else {
+                enshwick_core::abi::ClientSnapshot::EMPTY
+            };
+            super::put_headed(out, snapshot)
+        })
+    }
 }
 
 #[cfg(test)]

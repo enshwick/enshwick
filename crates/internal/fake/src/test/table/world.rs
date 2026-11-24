@@ -1,6 +1,8 @@
 //! The fake world's entries: players, entities, chat, saves, transactions,
 //! altars, buffs, its surroundings, the map and build rights.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use crate::test::table::{Registered, Registration, put, text, with, with_open};
@@ -51,8 +53,11 @@ pub(crate) struct WorldState {
     /// The level and experience writes the mod asked for: character, what
     /// and value; `None` until it asks for them in `init`.
     pub(crate) progress_writes: Option<Vec<(enshwick_core::Entity, u32, u32)>>,
-    /// The step each of `progress_writes` was asked in.
-    pub(crate) progress_steps: Vec<u64>,
+    /// The mods that asked for level and experience writes in `init`.
+    pub(crate) progress_writers: Vec<ModHandle>,
+    /// The writes that wait for the level step, and the progress of each
+    /// character written.
+    pub(crate) progress: crate::test::world::progress::ProgressState,
     /// The drops the mod asked for, with the ids handed out.
     pub(crate) drops: Vec<(enshwick_core::Entity, enshwick_core::abi::DropRequest)>,
     /// The server stops the mod asked for and the fake took: 0 or 1.
@@ -93,10 +98,10 @@ pub(crate) struct WorldState {
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
     pub(crate) altars: Vec<enshwick_core::abi::AltarInfo>,
-    /// Whether the mod opened altars.
-    pub(crate) altars_opened: bool,
-    /// Whether the mod sizes the altar zones.
-    pub(crate) zone_control: bool,
+    /// The mods that opened altars.
+    pub(crate) altar_openers: Vec<ModHandle>,
+    /// The mods that size the altar zones.
+    pub(crate) zone_controllers: Vec<ModHandle>,
     /// The mod's altar zone filters, and how often it asked for a new sizing.
     pub(crate) zone_sizing: altars::ZoneSizing,
     pub(crate) zone_filters: Vec<Registered<enshwick_core::abi::BuildingZoneFilterFn>>,
@@ -181,636 +186,632 @@ pub(crate) fn no_world(s: &crate::test::table::State) -> bool {
     s.base.registration == Registration::Init || s.world.edits.readying || s.world.edits.stopped
 }
 
-pub(crate) extern "system" fn player(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    out: *mut PlayerInfo,
-) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let player = with(Err(Status::MISSING), |s| {
-        if no_world(s) {
-            return Err(Status::UNAVAILABLE);
+entries! {
+    pub(crate) fn player(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        out: *mut PlayerInfo as args::HeadedOut,
+    ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
         }
-        Ok(s.host
-            .base
-            .players
-            .iter()
-            .find(|p| p.entity == entity)
-            .copied())
-    });
-    match player {
-        Ok(player) => super::found_headed(player, out),
-        Err(status) => status,
-    }
-}
-
-pub(crate) extern "system" fn players(
-    _me: ModHandle,
-    out: *mut PlayerInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let players = with(Err(Status::MISSING), |s| {
-        if no_world(s) {
-            return Err(Status::UNAVAILABLE);
+        let player = with(Err(Status::MISSING), |s| {
+            if no_world(s) {
+                return Err(Status::UNAVAILABLE);
+            }
+            Ok(s.host
+                .base
+                .players
+                .iter()
+                .find(|p| p.entity == entity)
+                .copied())
+        });
+        match player {
+            Ok(player) => super::found_headed(player, out),
+            Err(status) => status,
         }
-        Ok(s.host.base.players.clone())
-    });
-    match players {
-        Ok(players) => super::base::io::list(&players, out, entry_size, capacity, count),
-        Err(status) => status,
     }
-}
 
-pub(crate) extern "system" fn chat(
-    _me: ModHandle,
-    to: enshwick_core::PlayerKey,
-    value: Str,
-) -> Status {
-    if to.get() == 0 {
-        return Status::BAD_ARGS;
+    pub(crate) fn players(
+        me as Caller,
+        [out: *mut PlayerInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        let players = with(Err(Status::MISSING), |s| {
+            if no_world(s) {
+                return Err(Status::UNAVAILABLE);
+            }
+            Ok(s.host.base.players.clone())
+        });
+        match players {
+            Ok(players) => super::base::io::list(&players, out, entry_size, capacity, count),
+            Err(status) => status,
+        }
     }
-    let value = text(value);
-    with(Status::MISSING, |s| {
-        s.world.chat.push((to, value));
-        Status::OK
-    })
-}
 
-pub(crate) extern "system" fn chat_all(_me: ModHandle, value: Str) -> Status {
-    let value = text(value);
-    with(Status::MISSING, |s| {
-        s.world.chat.push((enshwick_core::PlayerKey::new(0), value));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn set_label(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    value: Str,
-) -> Status {
-    let value = text(value);
-    with(Status::MISSING, |s| {
-        s.world.labels.push((entity.0, value));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn rename_filter(
-    me: ModHandle,
-    callback: Option<RenameFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.world
-            .rename_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn join_rule(
-    me: ModHandle,
-    callback: Option<JoinRuleFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.world.join_rules.push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn entities(
-    _me: ModHandle,
-    type_hash: u32,
-    out: *mut EntityPlace,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    if with(true, |s| no_world(s)) {
-        return Status::UNAVAILABLE;
-    }
-    let found: Vec<EntityPlace> = with(Vec::new(), |s| {
-        s.host
-            .world
-            .placed
-            .iter()
-            .filter(|(ty, _)| *ty == type_hash)
-            .map(|(_, place)| *place)
-            .collect()
-    });
-    for (i, place) in found.iter().take(capacity as usize).enumerate() {
-        // SAFETY: the safe layer passes room for `capacity` entries.
-        unsafe { out.wrapping_add(i).write(*place) };
-    }
-    put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
-}
-
-pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    with(Status::MISSING, |s| {
-        if no_world(s) {
-            Status::UNAVAILABLE
-        } else {
+    pub(crate) fn chat(
+        me as Caller,
+        to: enshwick_core::PlayerKey,
+        value: Str as args::Text,
+    ) -> Status {
+        if to.get() == 0 {
+            return Status::BAD_ARGS;
+        }
+        let value = text(value);
+        with(Status::MISSING, |s| {
+            s.world.chat.push((to, value));
             Status::OK
-        }
-    })
-}
-
-pub(crate) extern "system" fn destroy(_me: ModHandle, entity: enshwick_core::Entity) -> Status {
-    with(Status::MISSING, |s| {
-        if entity_calls_off(s) {
-            return Status::UNAVAILABLE;
-        }
-        if s.host.base.players.iter().any(|p| p.entity == entity) {
-            return Status::REFUSED;
-        }
-        if !s.host.world.placed.iter().any(|(_, p)| p.entity == entity)
-            && !s.host.content.templates.contains_key(&entity.0)
-        {
-            return Status::MISSING;
-        }
-        s.world.destroyed.push(entity.0);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn save_world(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.world.save.held || s.world.save.refused {
-            return Status::REFUSED;
-        }
-        s.world.saves += 1;
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn world_key(_me: ModHandle, out: *mut Str) -> Status {
-    with(Status::MISSING, |s| {
-        let Some(key) = s.host.base.world_key.clone() else {
-            return Status::UNAVAILABLE;
-        };
-        let kept = s.world.world_key.insert(key.into_boxed_str());
-        put(out, Str::new(kept))
-    })
-}
-
-pub(crate) extern "system" fn component_write(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    type_hash: u32,
-    out: *mut *mut c_void,
-) -> Status {
-    let address = with(Err(Status::MISSING), |s| {
-        if entity_calls_off(s) {
-            return Err(Status::UNAVAILABLE);
-        }
-        if s.host.world.refused_writes.contains(&type_hash) {
-            return Err(Status::REFUSED);
-        }
-        if s.host.world.static_halves.contains(&type_hash) {
-            return Err(Status::STATIC_HALF);
-        }
-        let address = s
-            .host
-            .base
-            .components
-            .get(&(entity.0, type_hash))
-            .map(|c| c.0)
-            .ok_or(Status::MISSING)?;
-        s.world.writes.push((entity.0, type_hash));
-        Ok(address)
-    });
-    match address {
-        Ok(address) => put(out, core::ptr::with_exposed_provenance_mut(address)),
-        Err(status) => status,
+        })
     }
-}
 
-pub(crate) extern "system" fn item_info(
-    _me: ModHandle,
-    item: enshwick_core::ItemId,
-    out: *mut enshwick_core::abi::ItemTypeInfo,
-) -> Status {
-    crate::test::table::found_headed(
-        with(None, |s| s.host.content.items.get(&item.get()).copied()),
-        out,
-    )
-}
+    pub(crate) fn chat_all(me as Caller, value: Str as args::Text) -> Status {
+        let value = text(value);
+        with(Status::MISSING, |s| {
+            s.world.chat.push((enshwick_core::PlayerKey::new(0), value));
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn notify(
-    _me: ModHandle,
-    key: enshwick_core::PlayerKey,
-    value: Str,
-) -> Status {
-    let value = text(value);
-    with(Status::MISSING, |s| {
-        if !s.host.base.net_peers.contains(&key.get()) {
+    pub(crate) fn set_label(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        value: Str as args::Text,
+    ) -> Status {
+        let value = text(value);
+        with(Status::MISSING, |s| {
+            s.world.labels.push((entity.0, value));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn rename_filter(
+        me as Mod,
+        callback: Option<RenameFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.world
+                .rename_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn join_rule(
+        me as Mod,
+        callback: Option<JoinRuleFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.world.join_rules.push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn entities(
+        me as Caller,
+        type_hash: u32,
+        [out: *mut EntityPlace, capacity: u32, count: *mut u32] as args::ListOut,
+    ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        if with(true, |s| no_world(s)) {
             return Status::UNAVAILABLE;
         }
-        s.world.notices.push((key, value));
-        Status::OK
-    })
-}
+        let found: Vec<EntityPlace> = with(Vec::new(), |s| {
+            s.host
+                .world
+                .placed
+                .iter()
+                .filter(|(ty, _)| *ty == type_hash)
+                .map(|(_, place)| *place)
+                .collect()
+        });
+        for (i, place) in found.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the safe layer passes room for `capacity` entries.
+            unsafe { out.wrapping_add(i).write(*place) };
+        }
+        put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+    }
 
-pub(crate) extern "system" fn language_of(
-    _me: ModHandle,
-    key: enshwick_core::PlayerKey,
-    out: *mut u32,
-) -> Status {
-    let language = with(0, |s| s.host.base.language_of(key));
-    put(out, language)
+    pub(crate) fn world_quiet(me as Caller) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        with(Status::MISSING, |s| {
+            if no_world(s) {
+                Status::UNAVAILABLE
+            } else {
+                Status::OK
+            }
+        })
+    }
+
+    pub(crate) fn destroy(me as Caller, entity: enshwick_core::Entity) -> Status {
+        with(Status::MISSING, |s| {
+            if entity_calls_off(s) {
+                return Status::UNAVAILABLE;
+            }
+            if s.host.base.players.iter().any(|p| p.entity == entity) {
+                return Status::REFUSED;
+            }
+            if !s.host.world.placed.iter().any(|(_, p)| p.entity == entity)
+                && !s.host.content.templates.contains_key(&entity.0)
+            {
+                return Status::MISSING;
+            }
+            s.world.destroyed.push(entity.0);
+            Status::OK
+        })
+    }
+
+    pub(crate) fn save_world(me as Caller) -> Status {
+        with(Status::MISSING, |s| {
+            if s.world.save.held || s.world.save.refused {
+                return Status::REFUSED;
+            }
+            s.world.saves += 1;
+            Status::OK
+        })
+    }
+
+    pub(crate) fn world_key(me as Caller, out: *mut Str as args::Out) -> Status {
+        with(Status::MISSING, |s| {
+            let Some(key) = s.host.base.world_key.clone() else {
+                return Status::UNAVAILABLE;
+            };
+            let kept = s.world.world_key.insert(key.into_boxed_str());
+            put(out, Str::new(kept))
+        })
+    }
+
+    pub(crate) fn component_write(
+        me as Mod,
+        entity: enshwick_core::Entity,
+        type_hash: u32,
+        out: *mut *mut c_void as args::Out,
+    ) -> Status {
+        let address = with(Err(Status::MISSING), |s| {
+            if entity_calls_off(s) {
+                return Err(Status::UNAVAILABLE);
+            }
+            if s.host.world.refused_writes.contains(&type_hash) {
+                return Err(Status::REFUSED);
+            }
+            if s.host.world.static_halves.contains(&type_hash) {
+                return Err(Status::STATIC_HALF);
+            }
+            let address = s
+                .host
+                .base
+                .components
+                .get(&(entity.0, type_hash))
+                .map(|c| c.0)
+                .ok_or(Status::MISSING)?;
+            s.world.writes.push((entity.0, type_hash));
+            Ok(address)
+        });
+        match address {
+            Ok(address) => put(out, core::ptr::with_exposed_provenance_mut(address)),
+            Err(status) => status,
+        }
+    }
+
+    pub(crate) fn item_info(
+        me as Caller,
+        item: enshwick_core::ItemId,
+        out: *mut enshwick_core::abi::ItemTypeInfo as args::HeadedOut,
+    ) -> Status {
+        crate::test::table::found_headed(
+            with(None, |s| s.host.content.items.get(&item.get()).copied()),
+            out,
+        )
+    }
+
+    pub(crate) fn notify(
+        me as Caller,
+        key: enshwick_core::PlayerKey,
+        value: Str as args::Text,
+    ) -> Status {
+        let value = text(value);
+        with(Status::MISSING, |s| {
+            if !s.host.base.net_peers.contains(&key.get()) {
+                return Status::UNAVAILABLE;
+            }
+            s.world.notices.push((key, value));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn language_of(
+        me as Mod,
+        key: enshwick_core::PlayerKey,
+        out: *mut u32 as args::Out,
+    ) -> Status {
+        let language = with(0, |s| s.host.base.language_of(key));
+        put(out, language)
+    }
 }
 
 /// The first entity id the fake hands out for a spawn.
 pub(crate) const FIRST_SPAWNED: u32 = 0x10_0000;
 
-pub(crate) extern "system" fn progress_write(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    what: u32,
-    value: u32,
-) -> Status {
-    use enshwick_core::abi::{
-        PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL,
-    };
-    with(Status::MISSING, |s| {
-        if what == PROGRESS_OPEN {
-            if entity.0 != 0 {
+entries! {
+    pub(crate) fn progress_write(
+        me as Mod,
+        entity: enshwick_core::Entity,
+        what: u32,
+        value: u32,
+    ) -> Status {
+        use enshwick_core::abi::{
+            PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL,
+        };
+        with(Status::MISSING, |s| {
+            if what == PROGRESS_OPEN {
+                if entity.0 != 0 {
+                    return Status::BAD_ARGS;
+                }
+                if s.base.closed() {
+                    return Status::TOO_LATE;
+                }
+                s.world.progress_writes.get_or_insert_with(Vec::new);
+                if !s.world.progress_writers.contains(&me) {
+                    s.world.progress_writers.push(me);
+                }
+                return Status::OK;
+            }
+            if ![
+                PROGRESS_SET_LEVEL,
+                PROGRESS_SET_EXPERIENCE,
+                PROGRESS_ADD_EXPERIENCE,
+            ]
+            .contains(&what)
+            {
                 return Status::BAD_ARGS;
             }
-            if s.base.closed() {
-                return Status::TOO_LATE;
+            // The loader's level step links after `init`.
+            if !s.base.closed() {
+                return Status::UNAVAILABLE;
             }
-            s.world.progress_writes.get_or_insert_with(Vec::new);
-            return Status::OK;
-        }
-        if ![
-            PROGRESS_SET_LEVEL,
-            PROGRESS_SET_EXPERIENCE,
-            PROGRESS_ADD_EXPERIENCE,
-        ]
-        .contains(&what)
-        {
-            return Status::BAD_ARGS;
-        }
-        // The loader's level step links after `init`.
-        if !s.base.closed() {
-            return Status::UNAVAILABLE;
-        }
-        let in_game = s.host.base.players.iter().any(|p| p.entity == entity);
-        let step = s.base.ticks.step;
-        // The loader holds at most 256 writes for its next level step.
-        let waiting = s
-            .world
-            .progress_steps
-            .iter()
-            .filter(|&&at| at == step)
-            .count();
-        match s.world.progress_writes.as_mut() {
-            Some(writes) if in_game && waiting < 256 => {
-                writes.push((entity, what, value));
-                s.world.progress_steps.push(step);
-                Status::OK
+            if !s.world.progress_writers.contains(&me) {
+                return Status::REFUSED;
             }
-            _ => Status::REFUSED,
-        }
-    })
-}
-
-pub(crate) extern "system" fn server_stop(_me: ModHandle) -> Status {
-    with(Status::UNAVAILABLE, |s| {
-        if s.host.base.side != Side::SERVER || s.host.base.hosting {
-            return Status::UNAVAILABLE;
-        }
-        if s.world.stops > 0 {
-            return Status::REFUSED;
-        }
-        s.world.stops = 1;
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn fog_uncover(
-    _me: ModHandle,
-    player: enshwick_core::PlayerKey,
-    x: f32,
-    z: f32,
-    radius: f32,
-) -> Status {
-    with(Status::UNAVAILABLE, |s| {
-        if !s.host.base.serving() {
-            return Status::UNAVAILABLE;
-        }
-        if !(x.is_finite()
-            && z.is_finite()
-            && radius > 0.0
-            && radius <= enshwick_core::abi::MAX_UNCOVER_RADIUS)
-        {
-            return Status::BAD_ARGS;
-        }
-        // As the loader: a client that hosts uncovers its own player's fog
-        // itself; another player only when its client takes the messages.
-        let own = s.host.base.own_key() == Some(player);
-        if !own && !s.host.base.net_peers.contains(&player.get()) {
-            return Status::UNAVAILABLE;
-        }
-        s.world.uncovers.push((player, [x, z], radius));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn build_rights(
-    _me: ModHandle,
-    check: *mut enshwick_core::abi::BuildRights,
-) -> Status {
-    use enshwick_core::abi::BuildRights;
-    let Some(mut request) = super::get_headed::<BuildRights>(check.cast_const()) else {
-        return Status::BAD_ARGS;
-    };
-    let finite = request
-        .min
-        .iter()
-        .chain(&request.max)
-        .all(|v| v.is_finite());
-    if !finite || (0..3).any(|a| request.max[a] < request.min[a]) {
-        return Status::BAD_ARGS;
-    }
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let refusal = with(None, |s| {
-        let permissions = s
-            .host
-            .base
-            .players
-            .iter()
-            .find(|p| p.entity == request.character)
-            .map_or(0, |p| p.permissions);
-        Some(
-            s.host
-                .world
-                .zones
-                .refusal(permissions, request.min, request.max),
-        )
-    });
-    let Some(refusal) = refusal else {
-        return Status::UNAVAILABLE;
-    };
-    request.refusal = refusal;
-    // SAFETY: the safe layer passes `check` non-null (read above) and
-    // writable for the size its header states, untouched by other threads.
-    if unsafe { enshwick_core::abi::write_headed(check, request) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
-    }
-}
-
-pub(crate) extern "system" fn map_markers(
-    _me: ModHandle,
-    out: *mut enshwick_core::abi::MapMarkerInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    // With no world the loader answers before the scene's first read starts.
-    let Some(markers) = with(None, |s| {
-        if no_world(s) {
-            return None;
-        }
-        let first = s.world.edits.first_ask(SceneRead::Markers);
-        Some((!first && !s.world.edits.markers_pending).then(|| s.host.world.map_markers.clone()))
-    }) else {
-        return Status::UNAVAILABLE;
-    };
-    let Some(markers) = markers else {
-        return Status::NOT_LOADED;
-    };
-    crate::test::table::base::io::list(&markers, out, entry_size, capacity, count)
-}
-
-pub(crate) extern "system" fn map_frame(
-    _me: ModHandle,
-    out: *mut enshwick_core::abi::MapFrameInfo,
-) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let Some(frame) = with(None, |s| {
-        if no_world(s) {
-            return None;
-        }
-        let first = s.world.edits.first_ask(SceneRead::Frame);
-        Some((!first && !s.world.edits.markers_pending).then_some(s.host.world.map_frame))
-    }) else {
-        return Status::UNAVAILABLE;
-    };
-    let Some(frame) = frame else {
-        return Status::NOT_LOADED;
-    };
-    let Some(frame) = frame else {
-        return Status::UNAVAILABLE;
-    };
-    // SAFETY: the safe layer passes a headed struct for the call.
-    if unsafe { enshwick_core::abi::write_headed(out, frame) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
-    }
-}
-
-pub(crate) extern "system" fn world_persists(
-    _me: ModHandle,
-    min: *const [f64; 3],
-    max: *const [f64; 3],
-    kept: *mut u8,
-) -> Status {
-    if min.is_null() || max.is_null() || kept.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: the safe layer passes `min` pointing at three live `f64` for
-    // the call, non-null by the check before it.
-    // The fake host reads the mod's buffer, not game memory.
-    // ast-grep-ignore: game-memory-through-raw
-    let low = unsafe { min.read_unaligned() };
-    // SAFETY: the safe layer passes `max` pointing at three live `f64` for
-    // the call, non-null by the check before it.
-    // The fake host reads the mod's buffer, not game memory.
-    // ast-grep-ignore: game-memory-through-raw
-    let high = unsafe { max.read_unaligned() };
-    let finite = low.iter().chain(&high).all(|v| v.is_finite());
-    if !finite || (0..3).any(|a| high[a] < low[a]) {
-        return Status::BAD_ARGS;
-    }
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let saved = with(false, |s| s.host.world.zones.kept(low, high));
-    // SAFETY: the safe layer passes `kept` writable for one byte for the
-    // call, non-null by the check before it.
-    unsafe { kept.write(u8::from(saved)) };
-    Status::OK
-}
-
-pub(crate) extern "system" fn account_action(
-    _me: ModHandle,
-    action: AccountActionType,
-    account: enshwick_core::PlayerKey,
-) -> Status {
-    if account == enshwick_core::PlayerKey::new(0) || action.0 > AccountActionType::UNBAN.0 {
-        return Status::BAD_ARGS;
-    }
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    with(Status::MISSING, |s| {
-        if no_world(s) {
-            return Status::UNAVAILABLE;
-        }
-        let online = s.host.base.players.iter().position(|p| p.key == account);
-        let admin = s
-            .host
-            .base
-            .players
-            .iter()
-            .any(|p| p.key == account && p.is_admin());
-        match action {
-            AccountActionType::UNBAN => s.world.banned.retain(|&banned| banned != account),
-            _ if admin || s.host.base.host_key == Some(account) => return Status::REFUSED,
-            _ if online.is_none() => return Status::REFUSED,
-            _ => {
-                if action == AccountActionType::BAN && !s.world.banned.contains(&account) {
-                    s.world.banned.push(account);
-                }
-                if let Some(at) = online {
-                    s.host.base.players.remove(at);
-                    s.world.removed.push(account.get());
-                    s.world.permission_changes.left(account);
-                }
+            if !s.host.base.serving() || no_world(s) {
+                return Status::UNAVAILABLE;
             }
-        }
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn set_chat_mute(
-    _me: ModHandle,
-    account: enshwick_core::PlayerKey,
-    muted: u8,
-) -> Status {
-    if account == enshwick_core::PlayerKey::new(0) || muted > 1 {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if !s.host.base.serving() {
-            return Status::UNAVAILABLE;
-        }
-        // In the loader's order: the protected player, then the world.
-        let admin = s
-            .host
-            .base
-            .players
-            .iter()
-            .any(|p| p.key == account && p.is_admin());
-        if muted == 1 && (admin || s.host.base.host_key == Some(account)) {
-            return Status::REFUSED;
-        }
-        if s.host.base.world_key.is_none() {
-            return Status::UNAVAILABLE;
-        }
-        let at = s.world.muted.iter().position(|&k| k == account);
-        match (muted == 1, at) {
-            (true, None) => s.world.muted.push(account),
-            (false, Some(at)) => {
-                s.world.muted.remove(at);
+            let in_game = s.host.base.players.iter().any(|p| p.entity == entity);
+            let Some(writes) = s.world.progress_writes.as_mut() else {
+                return Status::REFUSED;
+            };
+            if entity.0 == 0 || !in_game {
+                return Status::REFUSED;
             }
-            _ => {}
-        }
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn chat_muted(
-    _me: ModHandle,
-    account: enshwick_core::PlayerKey,
-    muted: *mut u8,
-) -> Status {
-    if account == enshwick_core::PlayerKey::new(0) || muted.is_null() {
-        return Status::BAD_ARGS;
+            if !s.world.progress.push(me, (entity, what, value), s.base.ticks.step) {
+                return Status::BUSY;
+            }
+            writes.push((entity, what, value));
+            Status::OK
+        })
     }
-    let has = with(None, |s| {
-        s.host
-            .base
-            .serving()
-            .then(|| s.world.muted.contains(&account))
-    });
-    match has {
-        Some(has) => put(muted, u8::from(has)),
-        None => Status::UNAVAILABLE,
-    }
-}
 
-/// Copies the fake item's template and optional local corners without edits.
-pub(crate) extern "system" fn prop_placement_info(
-    _me: ModHandle,
-    item: enshwick_core::ItemId,
-    out: *mut enshwick_core::abi::PropPlacementInfo,
-) -> Status {
-    use enshwick_core::abi::{Header, PropPlacementInfo};
-    with(Status::UNAVAILABLE, |s| {
-        if no_world(s) || !(s.host.base.serving()) {
-            return Status::UNAVAILABLE;
-        }
-        let Some(info) = s.host.content.items.get(&item.get()) else {
+    pub(crate) fn server_stop(me as Mod) -> Status {
+        with(Status::UNAVAILABLE, |s| {
+            if s.host.base.side != Side::SERVER || s.host.base.hosting {
+                return Status::UNAVAILABLE;
+            }
+            if s.world.stops > 0 {
+                return Status::REFUSED;
+            }
+            s.world.stops = 1;
+            Status::OK
+        })
+    }
+
+    pub(crate) fn fog_uncover(
+        me as Caller,
+        player: enshwick_core::PlayerKey,
+        x: f32,
+        z: f32,
+        radius: f32,
+    ) -> Status {
+        with(Status::UNAVAILABLE, |s| {
+            if !s.host.base.serving() {
+                return Status::UNAVAILABLE;
+            }
+            if !(x.is_finite()
+                && z.is_finite()
+                && radius > 0.0
+                && radius <= enshwick_core::abi::MAX_UNCOVER_RADIUS)
+            {
+                return Status::BAD_ARGS;
+            }
+            // As the loader: a client that hosts uncovers its own player's fog
+            // itself; another player only when its client takes the messages.
+            let own = s.host.base.own_key() == Some(player);
+            if !own && !s.host.base.net_peers.contains(&player.get()) {
+                return Status::UNAVAILABLE;
+            }
+            s.world.uncovers.push((player, [x, z], radius));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn build_rights(
+        me as Caller,
+        check: *mut enshwick_core::abi::BuildRights as args::HeadedInOut,
+    ) -> Status {
+        use enshwick_core::abi::BuildRights;
+        let Some(mut request) = super::get_headed::<BuildRights>(check.cast_const()) else {
             return Status::BAD_ARGS;
         };
-        if s.host.world.no_prop_items.contains(&item.get()) {
-            return Status::NOT_A_PROP;
-        }
-        if info.placed_entity == enshwick_core::content::Guid::NIL {
+        let finite = request
+            .min
+            .iter()
+            .chain(&request.max)
+            .all(|v| v.is_finite());
+        if !finite || (0..3).any(|a| request.max[a] < request.min[a]) {
             return Status::BAD_ARGS;
         }
-        let bounds = s
-            .host
-            .world
-            .placement_boxes
-            .iter()
-            .find(|(id, ..)| *id == item.get())
-            .filter(|&&(_, min, max)| PropPlacementInfo::declares_box(min, max));
-        let (min, max, flags) = bounds.map_or(([0.0; 3], [0.0; 3], 0), |&(_, min, max)| {
-            (min, max, PropPlacementInfo::HAS_LOCAL_BOX)
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        let refusal = with(None, |s| {
+            let permissions = s
+                .host
+                .base
+                .players
+                .iter()
+                .find(|p| p.entity == request.character)
+                .map_or(0, |p| p.permissions);
+            Some(
+                s.host
+                    .world
+                    .zones
+                    .refusal(permissions, request.min, request.max),
+            )
         });
-        super::put_headed(
-            out,
-            PropPlacementInfo {
-                header: Header::of::<PropPlacementInfo>(),
-                template: info.placed_entity,
-                min,
-                max,
-                flags,
-            },
-        )
-    })
+        let Some(refusal) = refusal else {
+            return Status::UNAVAILABLE;
+        };
+        request.refusal = refusal;
+        // SAFETY: the safe layer passes `check` non-null (read above) and
+        // writable for the size its header states, untouched by other threads.
+        if unsafe { enshwick_core::abi::write_headed(check, request) } {
+            Status::OK
+        } else {
+            Status::BAD_ARGS
+        }
+    }
+
+    pub(crate) fn map_markers(
+        me as Caller,
+        [out: *mut enshwick_core::abi::MapMarkerInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        // With no world the loader answers before the scene's first read starts.
+        let Some(markers) = with(None, |s| {
+            if no_world(s) {
+                return None;
+            }
+            let first = s.world.edits.first_ask(SceneRead::Markers);
+            Some((!first && !s.world.edits.markers_pending).then(|| s.host.world.map_markers.clone()))
+        }) else {
+            return Status::UNAVAILABLE;
+        };
+        let Some(markers) = markers else {
+            return Status::NOT_LOADED;
+        };
+        crate::test::table::base::io::list(&markers, out, entry_size, capacity, count)
+    }
+
+    pub(crate) fn map_frame(
+        me as Caller,
+        out: *mut enshwick_core::abi::MapFrameInfo as args::HeadedOut,
+    ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        let Some(frame) = with(None, |s| {
+            if no_world(s) {
+                return None;
+            }
+            let first = s.world.edits.first_ask(SceneRead::Frame);
+            Some((!first && !s.world.edits.markers_pending).then_some(s.host.world.map_frame))
+        }) else {
+            return Status::UNAVAILABLE;
+        };
+        let Some(frame) = frame else {
+            return Status::NOT_LOADED;
+        };
+        let Some(frame) = frame else {
+            return Status::UNAVAILABLE;
+        };
+        // SAFETY: the safe layer passes a headed struct for the call.
+        if unsafe { enshwick_core::abi::write_headed(out, frame) } {
+            Status::OK
+        } else {
+            Status::BAD_ARGS
+        }
+    }
+
+    pub(crate) fn world_persists(
+        me as Caller,
+        min: *const [f64; 3] as args::In,
+        max: *const [f64; 3] as args::In,
+        kept: *mut u8 as args::Out,
+    ) -> Status {
+        if min.is_null() || max.is_null() || kept.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the safe layer passes `min` pointing at three live `f64` for
+        // the call, non-null by the check before it.
+        let low = unsafe { min.read_unaligned() };
+        // SAFETY: the safe layer passes `max` pointing at three live `f64` for
+        // the call, non-null by the check before it.
+        let high = unsafe { max.read_unaligned() };
+        let finite = low.iter().chain(&high).all(|v| v.is_finite());
+        if !finite || (0..3).any(|a| high[a] < low[a]) {
+            return Status::BAD_ARGS;
+        }
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        let saved = with(false, |s| s.host.world.zones.kept(low, high));
+        // SAFETY: the safe layer passes `kept` writable for one byte for the
+        // call, non-null by the check before it.
+        unsafe { kept.write(u8::from(saved)) };
+        Status::OK
+    }
+
+    pub(crate) fn account_action(
+        me as Caller,
+        action: AccountActionType,
+        account: enshwick_core::PlayerKey,
+    ) -> Status {
+        if account == enshwick_core::PlayerKey::new(0) || action.0 > AccountActionType::UNBAN.0 {
+            return Status::BAD_ARGS;
+        }
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        with(Status::MISSING, |s| {
+            if no_world(s) {
+                return Status::UNAVAILABLE;
+            }
+            let online = s.host.base.players.iter().position(|p| p.key == account);
+            let admin = s
+                .host
+                .base
+                .players
+                .iter()
+                .any(|p| p.key == account && p.is_admin());
+            match action {
+                AccountActionType::UNBAN => s.world.banned.retain(|&banned| banned != account),
+                _ if admin || s.host.base.host_key == Some(account) => return Status::REFUSED,
+                _ if online.is_none() => return Status::REFUSED,
+                _ => {
+                    if action == AccountActionType::BAN && !s.world.banned.contains(&account) {
+                        s.world.banned.push(account);
+                    }
+                    if let Some(at) = online {
+                        s.host.base.players.remove(at);
+                        s.world.removed.push(account.get());
+                        s.world.permission_changes.left(account);
+                    }
+                }
+            }
+            Status::OK
+        })
+    }
+
+    pub(crate) fn set_chat_mute(
+        me as Mod,
+        account: enshwick_core::PlayerKey,
+        muted: u8 as args::YesNo,
+    ) -> Status {
+        if account == enshwick_core::PlayerKey::new(0) || muted > 1 {
+            return Status::BAD_ARGS;
+        }
+        with(Status::MISSING, |s| {
+            if !s.host.base.serving() {
+                return Status::UNAVAILABLE;
+            }
+            // In the loader's order: the protected player, then the world.
+            let admin = s
+                .host
+                .base
+                .players
+                .iter()
+                .any(|p| p.key == account && p.is_admin());
+            if muted == 1 && (admin || s.host.base.host_key == Some(account)) {
+                return Status::REFUSED;
+            }
+            if s.host.base.world_key.is_none() {
+                return Status::UNAVAILABLE;
+            }
+            let at = s.world.muted.iter().position(|&k| k == account);
+            match (muted == 1, at) {
+                (true, None) => s.world.muted.push(account),
+                (false, Some(at)) => {
+                    s.world.muted.remove(at);
+                }
+                _ => {}
+            }
+            Status::OK
+        })
+    }
+
+    pub(crate) fn chat_muted(
+        me as Caller,
+        account: enshwick_core::PlayerKey,
+        muted: *mut u8 as args::Out,
+    ) -> Status {
+        if account == enshwick_core::PlayerKey::new(0) || muted.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let has = with(None, |s| {
+            s.host
+                .base
+                .serving()
+                .then(|| s.world.muted.contains(&account))
+        });
+        match has {
+            Some(has) => put(muted, u8::from(has)),
+            None => Status::UNAVAILABLE,
+        }
+    }
+
+    /// Copies the fake item's template and optional local corners without edits.
+    pub(crate) fn prop_placement_info(
+        me as Caller,
+        item: enshwick_core::ItemId,
+        out: *mut enshwick_core::abi::PropPlacementInfo as args::HeadedOut,
+    ) -> Status {
+        use enshwick_core::abi::{Header, PropPlacementInfo};
+        with(Status::UNAVAILABLE, |s| {
+            if no_world(s) || !(s.host.base.serving()) {
+                return Status::UNAVAILABLE;
+            }
+            let Some(info) = s.host.content.items.get(&item.get()) else {
+                return Status::BAD_ARGS;
+            };
+            if s.host.world.no_prop_items.contains(&item.get()) {
+                return Status::NOT_A_PROP;
+            }
+            if info.placed_entity == enshwick_core::content::Guid::NIL {
+                return Status::BAD_ARGS;
+            }
+            let bounds = s
+                .host
+                .world
+                .placement_boxes
+                .iter()
+                .find(|(id, ..)| *id == item.get())
+                .filter(|&&(_, min, max)| PropPlacementInfo::declares_box(min, max));
+            let (min, max, flags) = bounds.map_or(([0.0; 3], [0.0; 3], 0), |&(_, min, max)| {
+                (min, max, PropPlacementInfo::HAS_LOCAL_BOX)
+            });
+            super::put_headed(
+                out,
+                PropPlacementInfo {
+                    header: Header::of::<PropPlacementInfo>(),
+                    template: info.placed_entity,
+                    min,
+                    max,
+                    flags,
+                },
+            )
+        })
+    }
 }

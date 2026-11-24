@@ -608,7 +608,7 @@ impl Side {
 /// assert!(Level::ERROR.0 < Level::DEBUG.0);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, bytemuck::Zeroable)]
 pub struct Level(pub u8);
 
 impl Level {

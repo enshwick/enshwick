@@ -872,7 +872,7 @@ impl MapFrameInfo {
 /// assert_ne!(AccountActionType::BAN, AccountActionType::UNBAN);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct AccountActionType(pub u8);
 
 impl AccountActionType {

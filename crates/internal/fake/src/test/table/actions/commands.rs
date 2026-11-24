@@ -1,9 +1,11 @@
 //! The fake's mod commands: the names the mod takes, lines run for remote
 //! callers and the list of names, as the loader answers them.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use crate::test::table::{put_headed, text, with, with_open};
 use enshwick_core::abi::{
-    ActionCall, ActionReply, ActionTarget, CommandInfo, ModHandle, PlayerInfo, Status, Str,
+    ActionCall, ActionReply, ActionTarget, CommandInfo, PlayerInfo, Status, Str,
 };
 
 /// What the mod did with its commands.
@@ -90,48 +92,49 @@ fn is_window_id(id: &str) -> bool {
     (1..=32).contains(&id.len())
 }
 
-pub(crate) extern "system" fn action_window(
-    _me: ModHandle,
-    id: Str,
-    players: *const enshwick_core::PlayerKey,
-    count: u32,
-    change: u32,
-) -> Status {
-    // SAFETY: the caller keeps the id's bytes alive for the call.
-    let Some(id) = (unsafe { id.as_str() }).filter(|id| is_window_id(id)) else {
-        return Status::BAD_ARGS;
-    };
-    if count as usize > MAX_CALL_PLAYERS
-        || (players.is_null() && count != 0)
-        || change > enshwick_core::abi::WINDOW_UPDATE
-    {
-        return Status::BAD_ARGS;
-    }
-    let keys: Vec<u64> = if count == 0 {
-        Vec::new()
-    } else {
-        // SAFETY: the caller hands `count` keys at `players`, not null by
-        // the guard before it, alive for the call.
-        unsafe { core::slice::from_raw_parts(players, count as usize) }
-            .iter()
-            .map(|key| key.get())
-            .collect()
-    };
-    with(Status::MISSING, |s| {
-        if s.host.base.side == enshwick_core::abi::Side::CLIENT && !s.host.base.hosting {
-            return Status::UNAVAILABLE;
-        }
-        if s.actions.callback.is_none()
-            || s.actions.commands.windows.len() + keys.len() > MAX_WAITING
+entries! {
+    pub(crate) fn action_window(
+        me as Mod,
+        id: Str as args::Text,
+        [players: *const enshwick_core::PlayerKey, count: u32] as args::List,
+        change: u32,
+    ) -> Status {
+        // SAFETY: the caller keeps the id's bytes alive for the call.
+        let Some(id) = (unsafe { id.as_str() }).filter(|id| is_window_id(id)) else {
+            return Status::BAD_ARGS;
+        };
+        if count as usize > MAX_CALL_PLAYERS
+            || (players.is_null() && count != 0)
+            || change > enshwick_core::abi::WINDOW_UPDATE
         {
-            return Status::REFUSED;
+            return Status::BAD_ARGS;
         }
-        s.actions
-            .commands
-            .windows
-            .extend(keys.into_iter().map(|key| (key, id.to_owned(), change)));
-        Status::OK
-    })
+        let keys: Vec<u64> = if count == 0 {
+            Vec::new()
+        } else {
+            // SAFETY: the caller hands `count` keys at `players`, not null by
+            // the guard before it, alive for the call.
+            unsafe { core::slice::from_raw_parts(players, count as usize) }
+                .iter()
+                .map(|key| key.get())
+                .collect()
+        };
+        with(Status::MISSING, |s| {
+            if s.host.base.side == enshwick_core::abi::Side::CLIENT && !s.host.base.hosting {
+                return Status::UNAVAILABLE;
+            }
+            if s.actions.callback.is_none()
+                || s.actions.commands.windows.len() + keys.len() > MAX_WAITING
+            {
+                return Status::REFUSED;
+            }
+            s.actions
+                .commands
+                .windows
+                .extend(keys.into_iter().map(|key| (key, id.to_owned(), change)));
+            Status::OK
+        })
+    }
 }
 
 use enshwick_core::command_names::{MAX_LINE, Named, Refusal, check};
@@ -207,20 +210,22 @@ fn sets_now(s: &crate::test::table::State) -> (Vec<Granted>, String) {
     (sets, id)
 }
 
-pub(crate) extern "system" fn commands(_me: ModHandle, alias: Str) -> Status {
-    let alias = text(alias);
-    with_open(|s| {
-        let id = own_id(s);
-        let (_, answered) = granted((&id, Some(&alias)), &s.host.actions.other_commands);
-        match answered {
-            Some(Err(Refusal::Malformed)) | None => Status::BAD_ARGS,
-            Some(Ok(())) if s.actions.commands.asked.is_none() => {
-                s.actions.commands.asked = Some(alias);
-                Status::OK
+entries! {
+    pub(crate) fn commands(me as Mod, alias: Str as args::Text) -> Status {
+        let alias = text(alias);
+        with_open(|s| {
+            let id = own_id(s);
+            let (_, answered) = granted((&id, Some(&alias)), &s.host.actions.other_commands);
+            match answered {
+                Some(Err(Refusal::Malformed)) | None => Status::BAD_ARGS,
+                Some(Ok(())) if s.actions.commands.asked.is_none() => {
+                    s.actions.commands.asked = Some(alias);
+                    Status::OK
+                }
+                Some(_) => Status::REFUSED,
             }
-            Some(_) => Status::REFUSED,
-        }
-    })
+        })
+    }
 }
 
 /// Whether `word`, in any case, is the command name or the alias of the
@@ -284,76 +289,75 @@ fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
     )
 }
 
-pub(crate) extern "system" fn run_command(
-    _me: ModHandle,
-    line: Str,
-    label: Str,
-    permissions: u32,
-    out: *mut ActionReply,
-) -> Status {
-    let line = text(line);
-    if line.len() > MAX_LINE || line.trim().is_empty() {
-        return Status::BAD_ARGS;
-    }
-    let caller = remote_caller(&text(label), permissions);
-    let Some(reply) = answer(&line, ActionCall::REMOTE, &caller, 0) else {
-        return Status::MISSING;
-    };
-    let (done, text) = reply.split_at_checked(1).unwrap_or(("0", ""));
-    with(Status::MISSING, |s| {
-        let kept = s.actions.run_out.insert(text.into());
-        let reply = ActionReply {
-            header: enshwick_core::abi::Header::of::<ActionReply>(),
-            done: u8::from(done == "1"),
-            text: Str::new(kept),
-        };
-        put_headed(out, reply)
-    })
-}
-
-pub(crate) extern "system" fn command_list(
-    _me: ModHandle,
-    out: *mut CommandInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let infos = with(Vec::new(), |s| {
-        let own_off = s
-            .base
-            .features
-            .iter()
-            .any(|(name, off)| name == enshwick_core::command_names::FEATURE && off.is_some());
-        let (sets, id) = sets_now(s);
-        s.actions.commands.listed = sets
-            .into_iter()
-            .filter(|set| !own_off || set.id != id)
-            .map(|set| {
-                [set.set.name, set.set.alias.unwrap_or_default(), set.id]
-                    .map(String::into_boxed_str)
-            })
-            .collect();
-        s.actions
-            .commands
-            .listed
-            .iter()
-            .map(|[name, alias, id]| CommandInfo {
-                header: enshwick_core::abi::Header::of::<CommandInfo>(),
-                name: Str::new(name),
-                alias: Str::new(alias),
-                mod_id: Str::new(id),
-            })
-            .collect::<Vec<_>>()
-    });
-    crate::test::table::base::io::list(&infos, out, entry_size, capacity, count)
-}
-
-pub(crate) extern "system" fn actions_changed(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        if s.actions.callback.is_none() {
-            return Status::MISSING;
+entries! {
+    pub(crate) fn run_command(
+        me as Caller,
+        line: Str as args::Text,
+        label: Str as args::Text,
+        permissions: u32,
+        out: *mut ActionReply as args::HeadedOut,
+    ) -> Status {
+        let line = text(line);
+        if line.len() > MAX_LINE || line.trim().is_empty() {
+            return Status::BAD_ARGS;
         }
-        s.actions.commands.rules_changed += 1;
-        Status::OK
-    })
+        let caller = remote_caller(&text(label), permissions);
+        let Some(reply) = answer(&line, ActionCall::REMOTE, &caller, 0) else {
+            return Status::MISSING;
+        };
+        let (done, text) = reply.split_at_checked(1).unwrap_or(("0", ""));
+        with(Status::MISSING, |s| {
+            let kept = s.actions.run_out.insert(text.into());
+            let reply = ActionReply {
+                header: enshwick_core::abi::Header::of::<ActionReply>(),
+                done: u8::from(done == "1"),
+                text: Str::new(kept),
+            };
+            put_headed(out, reply)
+        })
+    }
+
+    pub(crate) fn command_list(
+        me as Caller,
+        [out: *mut CommandInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let infos = with(Vec::new(), |s| {
+            let own_off = s
+                .base
+                .features
+                .iter()
+                .any(|(name, off)| name == enshwick_core::command_names::FEATURE && off.is_some());
+            let (sets, id) = sets_now(s);
+            s.actions.commands.listed = sets
+                .into_iter()
+                .filter(|set| !own_off || set.id != id)
+                .map(|set| {
+                    [set.set.name, set.set.alias.unwrap_or_default(), set.id]
+                        .map(String::into_boxed_str)
+                })
+                .collect();
+            s.actions
+                .commands
+                .listed
+                .iter()
+                .map(|[name, alias, id]| CommandInfo {
+                    header: enshwick_core::abi::Header::of::<CommandInfo>(),
+                    name: Str::new(name),
+                    alias: Str::new(alias),
+                    mod_id: Str::new(id),
+                })
+                .collect::<Vec<_>>()
+        });
+        crate::test::table::base::io::list(&infos, out, entry_size, capacity, count)
+    }
+
+    pub(crate) fn actions_changed(me as Mod) -> Status {
+        with(Status::MISSING, |s| {
+            if s.actions.callback.is_none() {
+                return Status::MISSING;
+            }
+            s.actions.commands.rules_changed += 1;
+            Status::OK
+        })
+    }
 }

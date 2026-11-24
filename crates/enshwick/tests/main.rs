@@ -80,6 +80,7 @@ mod example_manifest;
 mod experience_content;
 mod export_dir;
 mod exports;
+mod fake_callers;
 mod fake_mod_off;
 mod fake_per_test;
 mod fake_reach;
@@ -231,6 +232,8 @@ mod recipe_menu;
 mod recipe_rules;
 #[cfg(feature = "unstable")]
 mod refused_runs;
+#[cfg(feature = "typed")]
+mod rekey_rebuild;
 #[cfg(feature = "typed")]
 mod rekey_ring;
 #[cfg(feature = "typed")]

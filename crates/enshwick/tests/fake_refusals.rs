@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bad_event_spec_after_init_comes_too_late_before_it_is_read() {
+    fn a_null_event_spec_after_init_is_a_bad_argument_read_before_the_lateness() {
         let loader = started();
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
@@ -324,10 +324,10 @@ mod tests {
             Some(on_mod_event),
             core::ptr::null_mut(),
         );
-        assert_eq!(subscribed, Status::TOO_LATE);
+        assert_eq!(subscribed, Status::BAD_ARGS);
         let mut id = 0;
         let defined = (api.define_event)(loader.handle(), core::ptr::null(), &raw mut id);
-        assert_eq!(defined, Status::TOO_LATE);
+        assert_eq!(defined, Status::BAD_ARGS);
     }
 
     #[cfg(feature = "unstable")]

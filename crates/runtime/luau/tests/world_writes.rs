@@ -5,9 +5,7 @@
 mod tests {
     use enshwick::abi::{
         Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, PlayerInfo,
-        ProgressWriteData,
     };
-    use enshwick::events::ProgressWritten;
     use enshwick::test::FakeHost;
     use enshwick::{Entity, ItemId};
 
@@ -98,28 +96,37 @@ mod tests {
     }
 
     #[test]
-    fn a_script_hears_what_became_of_its_level_write() {
+    fn a_script_hears_what_became_of_its_level_write_after_the_next_step() {
+        let player = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: 0,
+            entity: Entity(7),
+            key: enshwick::PlayerKey::new(7),
+            permissions: 0,
+            name_len: 0,
+            name: [0; PlayerInfo::NAME_MAX],
+        };
         let loader = run(
-            FakeHost::new().world(),
+            FakeHost::new().world().player(player),
             r#"
+            local wrote = false
             enshwick.on("ProgressWritten", function(written)
                 enshwick.log.info(`written {written.entity} {written.what} {written.value} {written.outcome} {written.level} {written.experience} {written.gained}`)
             end)
+            enshwick.on_tick(0.1, function()
+                if not wrote then
+                    wrote = true
+                    enshwick.world.set_level(7, 12)
+                end
+            end)
             "#,
         );
-        let applied = ProgressWriteData {
-            header: Header::of::<ProgressWriteData>(),
-            entity: Entity(7),
-            what: PROGRESS_SET_LEVEL,
-            value: 12,
-            outcome: ProgressWriteData::APPLIED,
-            level: 12,
-            experience: 0,
-            gained: 40,
-        };
-        assert_ne!(loader.raise::<ProgressWritten>(&applied), 0);
+        let step = std::time::Duration::from_millis(100);
+        let _ran = loader.tick(step);
+        assert!(!logged(&loader, "written"), "{:?}", loader.logs());
+        let _ran = loader.tick(step);
         assert!(
-            logged(&loader, "written 7 1 12 0 12 0 40"),
+            logged(&loader, "written 7 1 12 0 12 0 0"),
             "{:?}",
             loader.logs()
         );

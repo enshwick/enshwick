@@ -72,7 +72,7 @@ mod tests {
             .install();
         // SAFETY: the fake host's table lives for the process; the loader
         // makes its own handle the host of the copy that runs the packs.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         let declare = |me, side| {
             // SAFETY: the fake host's table lives for the process.
             unsafe {
@@ -98,7 +98,7 @@ mod tests {
         };
         let burn = Field::BurnTime.to_abi();
         assert_eq!(raw(3, burn), Status::REFUSED);
-        assert_eq!(raw(4, burn), Status::REFUSED);
+        assert_eq!(raw(4, burn), Status::BAD_ARGS, "a handle never given out");
         assert_eq!(raw(2, burn), Status::OK);
         assert_eq!(
             raw(3, Field::StackSize.to_abi()),

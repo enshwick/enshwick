@@ -1,6 +1,8 @@
 //! The fake's sound playback: the loader's refusals, a queue the next frame
 //! starts, and the handles' states.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use enshwick_core::PlayerKey;
 use enshwick_core::abi::{
     ModHandle, Side, SoundAudience, SoundInfo, SoundPlay, SoundSteer, Status,
@@ -73,28 +75,30 @@ fn end(kept: &mut Kept) {
     }
 }
 
-/// Queues a sound as the loader does: unavailable on a server, a bad
-/// argument out of bounds, missing for an unknown container, busy past the
-/// frame's starts.
-pub(crate) extern "system" fn sound_play(
-    _me: ModHandle,
-    spec: *const SoundPlay,
-    id: *mut u64,
-) -> Status {
-    let Some(spec) = get_headed(spec) else {
-        return Status::BAD_ARGS;
-    };
-    if id.is_null() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| match start(s, spec) {
-        Ok(started) => {
-            // SAFETY: the safe layer passes a writable `u64`, non-null above.
-            unsafe { id.write(started) };
-            Status::OK
+entries! {
+    /// Queues a sound as the loader does: unavailable on a server, a bad
+    /// argument out of bounds, missing for an unknown container, busy past the
+    /// frame's starts.
+    pub(crate) fn sound_play(
+        me as Mod,
+        spec: *const SoundPlay as args::Headed,
+        id: *mut u64 as args::Out,
+    ) -> Status {
+        let Some(spec) = get_headed(spec) else {
+            return Status::BAD_ARGS;
+        };
+        if id.is_null() {
+            return Status::BAD_ARGS;
         }
-        Err(status) => status,
-    })
+        with(Status::MISSING, |s| match start(s, spec) {
+            Ok(started) => {
+                // SAFETY: the safe layer passes a writable `u64`, non-null above.
+                unsafe { id.write(started) };
+                Status::OK
+            }
+            Err(status) => status,
+        })
+    }
 }
 
 /// Queues `spec` on the client as the loader's start does; its id.
@@ -145,31 +149,33 @@ fn apply(kept: &mut Kept, steer: &SoundSteer) {
     }
 }
 
-/// Sends a sound to clients as the loader does, refusing what it refuses
-/// in its order; the clients are the players whose client runs Enshwick
-/// ([`FakeHost::net_peer`](crate::test::FakeHost::net_peer)) or who host,
-/// picked by the audience from where their characters stand
-/// ([`FakeHost::placed`](crate::test::FakeHost::placed)).
-pub(crate) extern "system" fn sound_play_for(
-    me: ModHandle,
-    audience: *const SoundAudience,
-    spec: *const SoundPlay,
-    id: *mut u64,
-) -> Status {
-    let (Some(audience), Some(spec)) = (get_headed(audience), get_headed(spec)) else {
-        return Status::BAD_ARGS;
-    };
-    if id.is_null() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| match send(s, me, &audience, spec) {
-        Ok(sent) => {
-            // SAFETY: the safe layer passes a writable `u64`, non-null above.
-            unsafe { id.write(sent) };
-            Status::OK
+entries! {
+    /// Sends a sound to clients as the loader does, refusing what it refuses
+    /// in its order; the clients are the players whose client runs Enshwick
+    /// ([`FakeHost::net_peer`](crate::test::FakeHost::net_peer)) or who host,
+    /// picked by the audience from where their characters stand
+    /// ([`FakeHost::placed`](crate::test::FakeHost::placed)).
+    pub(crate) fn sound_play_for(
+        me as Mod,
+        audience: *const SoundAudience as args::Headed,
+        spec: *const SoundPlay as args::Headed,
+        id: *mut u64 as args::Out,
+    ) -> Status {
+        let (Some(audience), Some(spec)) = (get_headed(audience), get_headed(spec)) else {
+            return Status::BAD_ARGS;
+        };
+        if id.is_null() {
+            return Status::BAD_ARGS;
         }
-        Err(status) => status,
-    })
+        with(Status::MISSING, |s| match send(s, me, &audience, spec) {
+            Ok(sent) => {
+                // SAFETY: the safe layer passes a writable `u64`, non-null above.
+                unsafe { id.write(sent) };
+                Status::OK
+            }
+            Err(status) => status,
+        })
+    }
 }
 
 /// Where entity `entity` stands, as the test placed it.
@@ -245,95 +251,101 @@ fn send(
     Ok(sounds.sent.len() as u64)
 }
 
-/// Changes a sound the mod sent clients, as the loader does; an id of no
-/// such sound changes nothing.
-pub(crate) extern "system" fn sound_steer_for(
-    me: ModHandle,
-    id: u64,
-    steer: *const SoundSteer,
-) -> Status {
-    let Some(steer) = get_headed(steer) else {
-        return Status::BAD_ARGS;
-    };
-    with(Status::MISSING, |s| {
-        if let Err(status) = serving(s, me) {
-            return status;
-        }
-        if !steer.in_bounds() || steer.kind == SoundSteer::STOP_ALL {
+entries! {
+    /// Changes a sound the mod sent clients, as the loader does; an id of no
+    /// such sound changes nothing.
+    pub(crate) fn sound_steer_for(
+        me as Mod,
+        id: u64,
+        steer: *const SoundSteer as args::Headed,
+    ) -> Status {
+        let Some(steer) = get_headed(steer) else {
             return Status::BAD_ARGS;
-        }
-        let sent = usize::try_from(id)
-            .ok()
-            .and_then(|id| id.checked_sub(1))
-            .and_then(|at| s.ui.sound.sent.get_mut(at));
-        if let Some(sent) = sent {
-            apply(&mut sent.kept, &steer);
-        }
-        Status::OK
-    })
-}
-
-/// Changes the mod's sound `id`, or stops all of them, as the loader does;
-/// an id of no sound changes nothing.
-pub(crate) extern "system" fn sound_steer(
-    _me: ModHandle,
-    id: u64,
-    steer: *const SoundSteer,
-) -> Status {
-    let Some(steer) = get_headed(steer) else {
-        return Status::BAD_ARGS;
-    };
-    with(Status::MISSING, |s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        if !steer.in_bounds() {
-            return Status::BAD_ARGS;
-        }
-        let sounds = &mut s.ui.sound.sounds;
-        if steer.kind == SoundSteer::STOP_ALL {
-            sounds.iter_mut().for_each(end);
-            return Status::OK;
-        }
-        let kept = usize::try_from(id)
-            .ok()
-            .and_then(|id| id.checked_sub(1))
-            .and_then(|at| sounds.get_mut(at))
-            .filter(|kept| matches!(kept.info.state, SoundInfo::PENDING | SoundInfo::PLAYING));
-        if let Some(kept) = kept {
-            apply(kept, &steer);
-        }
-        Status::OK
-    })
-}
-
-/// Where the mod's sound `id` stands; an unknown id, and every sound of a
-/// mod turned off, reads as ended.
-pub(crate) extern "system" fn sound_state(me: ModHandle, id: u64, out: *mut SoundInfo) -> Status {
-    if out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    let off = registered::is_off(me);
-    with(Status::MISSING, |s| {
-        if s.host.base.side == Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        let kept = usize::try_from(id)
-            .ok()
-            .and_then(|id| id.checked_sub(1))
-            .and_then(|at| s.ui.sound.sounds.get_mut(at));
-        let info = match kept {
-            Some(kept) => {
-                if off {
-                    end(kept);
-                }
-                kept.info
-            }
-            None => SoundInfo {
-                state: SoundInfo::ENDED,
-                ..SoundInfo::EMPTY
-            },
         };
-        put_headed(out, info)
-    })
+        with(Status::MISSING, |s| {
+            if let Err(status) = serving(s, me) {
+                return status;
+            }
+            if !steer.in_bounds() || steer.kind == SoundSteer::STOP_ALL {
+                return Status::BAD_ARGS;
+            }
+            let sent = usize::try_from(id)
+                .ok()
+                .and_then(|id| id.checked_sub(1))
+                .and_then(|at| s.ui.sound.sent.get_mut(at));
+            if let Some(sent) = sent {
+                apply(&mut sent.kept, &steer);
+            }
+            Status::OK
+        })
+    }
+
+    /// Changes the mod's sound `id`, or stops all of them, as the loader does;
+    /// an id of no sound changes nothing.
+    pub(crate) fn sound_steer(
+        me as Mod,
+        id: u64,
+        steer: *const SoundSteer as args::Headed,
+    ) -> Status {
+        let Some(steer) = get_headed(steer) else {
+            return Status::BAD_ARGS;
+        };
+        with(Status::MISSING, |s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            if !steer.in_bounds() {
+                return Status::BAD_ARGS;
+            }
+            let sounds = &mut s.ui.sound.sounds;
+            if steer.kind == SoundSteer::STOP_ALL {
+                sounds.iter_mut().for_each(end);
+                return Status::OK;
+            }
+            let kept = usize::try_from(id)
+                .ok()
+                .and_then(|id| id.checked_sub(1))
+                .and_then(|at| sounds.get_mut(at))
+                .filter(|kept| matches!(kept.info.state, SoundInfo::PENDING | SoundInfo::PLAYING));
+            if let Some(kept) = kept {
+                apply(kept, &steer);
+            }
+            Status::OK
+        })
+    }
+
+    /// Where the mod's sound `id` stands; an unknown id, and every sound of a
+    /// mod turned off, reads as ended.
+    pub(crate) fn sound_state(
+        me as Mod,
+        id: u64,
+        out: *mut SoundInfo as args::HeadedOut,
+    ) -> Status {
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let off = registered::is_off(me);
+        with(Status::MISSING, |s| {
+            if s.host.base.side == Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            let kept = usize::try_from(id)
+                .ok()
+                .and_then(|id| id.checked_sub(1))
+                .and_then(|at| s.ui.sound.sounds.get_mut(at));
+            let info = match kept {
+                Some(kept) => {
+                    if off {
+                        end(kept);
+                    }
+                    kept.info
+                }
+                None => SoundInfo {
+                    state: SoundInfo::ENDED,
+                    ..SoundInfo::EMPTY
+                },
+            };
+            put_headed(out, info)
+        })
+    }
 }

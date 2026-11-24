@@ -42,6 +42,8 @@ pub(crate) struct BasePresets {
     pub(crate) pack_log_levels: Vec<(enshwick_core::abi::ModHandle, enshwick_core::abi::Level)>,
     /// The sides of data packs, by handle.
     pub(crate) pack_sides: Vec<(enshwick_core::abi::ModHandle, enshwick_core::abi::Side)>,
+    /// The handles of the other mods loaded beside the mod under test.
+    pub(crate) other_mods: Vec<enshwick_core::abi::ModHandle>,
     pub(crate) caller_frame: enshwick_core::abi::CallerFrame,
     pub(crate) components: FxHashMap<(u32, u32), (usize, usize)>,
     pub(crate) players: Vec<enshwick_core::abi::PlayerInfo>,
@@ -95,6 +97,7 @@ impl Default for BasePresets {
             log_level: enshwick_core::abi::Level::INFO,
             pack_log_levels: Vec::new(),
             pack_sides: Vec::new(),
+            other_mods: Vec::new(),
             caller_frame: enshwick_core::abi::CallerFrame::default(),
             components: FxHashMap::default(),
             players: Vec::new(),
@@ -122,6 +125,15 @@ impl Default for BasePresets {
 }
 
 impl BasePresets {
+    /// Whether the loader gave out `me`: the handle of the mod under test,
+    /// of a data pack or of another mod the test named.
+    pub(crate) fn loads(&self, me: enshwick_core::abi::ModHandle) -> bool {
+        me == self.handle
+            || self.pack_sides.iter().any(|(pack, _)| *pack == me)
+            || self.pack_log_levels.iter().any(|(pack, _)| *pack == me)
+            || self.other_mods.contains(&me)
+    }
+
     /// Whether the fake runs the server side of a game: a dedicated server or
     /// a client that hosts.
     pub(crate) fn serving(&self) -> bool {

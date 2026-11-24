@@ -10,6 +10,14 @@ mod tests {
     use enshwick::test::FakeHost;
     use enshwick::{Entity, PlayerKey};
 
+    /// A fake host that runs data packs 2 and 3 beside the mod's handle 1,
+    /// which these tests also run as a pack.
+    fn packs() -> FakeHost {
+        FakeHost::new()
+            .pack(ModHandle(2), enshwick::abi::Side::SERVER)
+            .pack(ModHandle(3), enshwick::abi::Side::SERVER)
+    }
+
     /// A pack whose `welcome` reward gives `bonus` experience, through a
     /// setting of that default when `setting`.
     fn pack(id: &str, bonus: u32, setting: bool) -> Pack {
@@ -40,7 +48,7 @@ mod tests {
         let data =
             std::env::temp_dir().join(format!("enshwick-pack-handles-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
-        let loader = FakeHost::new()
+        let loader = packs()
             .world()
             .player(PlayerInfo {
                 header: Header::of::<PlayerInfo>(),
@@ -111,10 +119,10 @@ mod tests {
 
     #[test]
     fn a_pack_s_init_and_later_calls_see_the_pack_as_their_host() {
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process; the loader
         // makes its own handle the host of the copy that runs the packs.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(
@@ -130,7 +138,7 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(
             handle(),
-            Some(ModHandle(9)),
+            Some(ModHandle::NONE),
             "the loader's again after init"
         );
         let nested = || {
@@ -143,14 +151,14 @@ mod tests {
         let inner =
             unsafe { enshwick_base::__internal::as_pack(loader.api(), ModHandle(2), nested) };
         assert_eq!(inner, (Some(ModHandle(2)), Some(ModHandle(3))));
-        assert_eq!(handle(), Some(ModHandle(9)));
+        assert_eq!(handle(), Some(ModHandle::NONE));
     }
 
     #[test]
     fn a_pack_s_panic_leaves_the_loader_as_the_host() {
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         let panicked = std::panic::catch_unwind(|| {
             // SAFETY: the fake host's table lives for the process.
             unsafe {
@@ -160,16 +168,16 @@ mod tests {
             }
         });
         assert!(panicked.is_err());
-        assert_eq!(handle(), Some(ModHandle(9)));
+        assert_eq!(handle(), Some(ModHandle::NONE));
     }
 
     #[test]
     fn a_pack_s_log_line_goes_out_under_the_pack_s_handle() {
         use enshwick::abi::Level;
 
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         unsafe {
             enshwick_base::__internal::as_pack(loader.api(), ModHandle(2), || {
@@ -181,7 +189,7 @@ mod tests {
             loader.sent(),
             [
                 (ModHandle(2), Level::WARN, "from the pack".to_owned()),
-                (ModHandle(9), Level::WARN, "from the loader".to_owned()),
+                (ModHandle::NONE, Level::WARN, "from the loader".to_owned()),
             ]
         );
     }
@@ -192,10 +200,10 @@ mod tests {
         use enshwick::test::Drawn;
         use enshwick::ui::Anchor;
 
-        let loader = FakeHost::new().side(Side::CLIENT).install();
+        let loader = packs().side(Side::CLIENT).install();
         // SAFETY: the fake host's table lives for the process; the loader
         // makes its own handle the host of the copy that runs the packs.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: `init_pack` needs a host table that lives for the process,
         // which the installed fake host's is.
         let status = unsafe {
@@ -229,9 +237,9 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         static SEEN: AtomicUsize = AtomicUsize::new(0);
-        let loader = FakeHost::new().side(Side::CLIENT).install();
+        let loader = packs().side(Side::CLIENT).install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(loader.api(), ModHandle(1), Side::SERVER, |load| {
@@ -248,11 +256,9 @@ mod tests {
     fn a_pack_s_debug_line_passes_at_the_pack_s_level_while_the_loader_keeps_info() {
         use enshwick::abi::Level;
 
-        let loader = FakeHost::new()
-            .pack_log_level(ModHandle(2), Level::DEBUG)
-            .install();
+        let loader = packs().pack_log_level(ModHandle(2), Level::DEBUG).install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         unsafe {
             enshwick_base::__internal::as_pack(loader.api(), ModHandle(2), || {
@@ -270,14 +276,14 @@ mod tests {
     fn a_pack_s_debug_line_is_dropped_at_the_pack_s_level_while_the_loader_keeps_debug() {
         use enshwick::abi::Level;
 
-        let loader = FakeHost::new()
+        let loader = packs()
             .log_level(Level::DEBUG)
             .pack_log_level(ModHandle(2), Level::DEBUG)
             .pack_log_level(ModHandle(2), Level::WARN)
             .pack_log_level(ModHandle(3), Level::DEBUG)
             .install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         unsafe {
             enshwick_base::__internal::as_pack(loader.api(), ModHandle(2), || {
@@ -287,7 +293,7 @@ mod tests {
         enshwick::debug!("from the loader");
         assert_eq!(
             loader.sent(),
-            [(ModHandle(9), Level::DEBUG, "from the loader".to_owned())]
+            [(ModHandle::NONE, Level::DEBUG, "from the loader".to_owned())]
         );
     }
 
@@ -296,11 +302,9 @@ mod tests {
         use enshwick::abi::Level;
         use enshwick::events::LoaderSettingsChanged;
 
-        let loader = FakeHost::new()
-            .pack_log_level(ModHandle(2), Level::WARN)
-            .install();
+        let loader = packs().pack_log_level(ModHandle(2), Level::WARN).install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(
@@ -340,11 +344,9 @@ mod tests {
         use enshwick::abi::Level;
         use enshwick::events::LoaderSettingsChanged;
 
-        let loader = FakeHost::new()
-            .pack_log_level(ModHandle(2), Level::INFO)
-            .install();
+        let loader = packs().pack_log_level(ModHandle(2), Level::INFO).install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         let as_loader_in_pack = |line: &'static str| {
             // SAFETY: the fake host's table lives for the process.
             unsafe {
@@ -359,7 +361,7 @@ mod tests {
         as_loader_in_pack("at debug");
         assert_eq!(
             loader.sent(),
-            [(ModHandle(9), Level::DEBUG, "at debug".to_owned())]
+            [(ModHandle::NONE, Level::DEBUG, "at debug".to_owned())]
         );
     }
 
@@ -372,9 +374,9 @@ mod tests {
         use enshwick::abi::Level;
 
         static SUNK: AtomicBool = AtomicBool::new(false);
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         enshwick_base::__internal::report_poison_to(|_| SUNK.store(true, Ordering::Relaxed));
         let lock = Mutex::new(0);
         let _panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -400,11 +402,9 @@ mod tests {
         use enshwick::abi::Level;
 
         let debug_in = |level: Level| {
-            let loader = FakeHost::new()
-                .pack_log_level(ModHandle(2), level)
-                .install();
+            let loader = packs().pack_log_level(ModHandle(2), level).install();
             // SAFETY: the fake host's table lives for the process.
-            unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+            unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
             // SAFETY: the fake host's table lives for the process.
             unsafe {
                 enshwick_base::__internal::as_pack(loader.api(), ModHandle(2), || {
@@ -426,9 +426,9 @@ mod tests {
             enshwick::warn_every!(Duration::from_secs(3600), "now and then");
         }
 
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         for pack in [ModHandle(2), ModHandle(2), ModHandle(3)] {
             // SAFETY: the fake host's table lives for the process.
             unsafe { enshwick_base::__internal::as_pack(loader.api(), pack, sites) };
@@ -443,8 +443,8 @@ mod tests {
                 ModHandle(2),
                 ModHandle(3),
                 ModHandle(3),
-                ModHandle(9),
-                ModHandle(9),
+                ModHandle::NONE,
+                ModHandle::NONE,
             ],
             "each pack and the loader once per site: {:?}",
             loader.sent()
@@ -456,9 +456,9 @@ mod tests {
         use enshwick::abi::Side;
         use std::time::Duration;
 
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(loader.api(), ModHandle(1), Side::SERVER, |load| {
@@ -470,16 +470,20 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
         assert_eq!(loader.tick(Duration::from_millis(50)), 1);
-        assert_eq!(handle(), Some(ModHandle(9)), "the loader's after the calls");
+        assert_eq!(
+            handle(),
+            Some(ModHandle::NONE),
+            "the loader's after the calls"
+        );
     }
 
     #[test]
     fn a_pack_s_panicking_handler_faults_the_pack_and_not_the_loader() {
         use enshwick::abi::Level;
 
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(
@@ -510,9 +514,9 @@ mod tests {
 
     #[test]
     fn a_thread_spawned_in_a_pack_s_scope_runs_as_the_pack() {
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         let (sender, seen) = std::sync::mpsc::channel();
         // SAFETY: the fake host's table lives for the process.
         let spawned = unsafe {
@@ -543,9 +547,9 @@ mod tests {
 
         static BROKEN: Refused = Refused;
         static SITE: Once = Once::new();
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         let panicked = std::panic::catch_unwind(|| {
             // SAFETY: the fake host's table lives for the process.
             unsafe {
@@ -596,9 +600,9 @@ mod tests {
         use enshwick_core::__fake::for_pack;
 
         static OUTER: Reentering = Reentering;
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         let outer = unsafe {
             enshwick_base::__internal::as_pack(loader.api(), ModHandle(3), || for_pack(&OUTER))
@@ -623,9 +627,9 @@ mod tests {
         use enshwick::state::ModLocal;
 
         static LIMIT: ModLocal<u32> = ModLocal::new();
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         let as_pack = |me, limit| {
             // SAFETY: the fake host's table lives for the process.
             unsafe {
@@ -644,9 +648,9 @@ mod tests {
     fn each_pack_s_effects_act_under_its_own_handle() {
         use enshwick::abi::Side;
 
-        let loader = FakeHost::new().install();
+        let loader = packs().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         for me in [ModHandle(1), ModHandle(2)] {
             // SAFETY: the fake host's table lives for the process.
             let status = unsafe {

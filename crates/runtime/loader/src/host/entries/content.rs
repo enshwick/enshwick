@@ -2,7 +2,7 @@
 //! data, content ids, rates and the game's memory pages.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{ModHandle, RateId, Status, Str};
+use enshwick_core::abi::{RateId, Status, Str};
 use enshwick_core::content::changes::{Change, Field, ItemsChange, RecipesChange, Value};
 
 use crate::host::entries::base::services::exported;
@@ -180,7 +180,7 @@ entries! {
         Ok(())
     }
 
-    fn read_only(_me: ModHandle, address: u64, max: u32, out as Out<u32>) -> Status {
+    fn read_only(_loader as Caller, address: u64, max: u32, out as Out<u32>) -> Status {
         // An address past `usize` lies in no region, and a run never passes `max`.
         let Ok(address) = usize::try_from(address) else {
             return out.put(0);

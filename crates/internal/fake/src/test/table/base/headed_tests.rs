@@ -114,8 +114,12 @@ fn every_fake_entry_point_takes_a_mod_s_headed_struct_through_its_header() {
                 let Some((name, ty)) = param.split_once(": ") else {
                     continue;
                 };
-                let name = name.rsplit(['(', ' ', '\n']).next().unwrap_or_default();
-                let ty = ty.split(')').next().unwrap_or_default().trim();
+                let name = name
+                    .rsplit(['(', '[', ' ', '\n'])
+                    .next()
+                    .unwrap_or_default();
+                let ty = ty.split([')', ']']).next().unwrap_or_default();
+                let ty = ty.split(" as ").next().unwrap_or_default().trim();
                 let pointee = ty
                     .strip_prefix("*const ")
                     .or_else(|| ty.strip_prefix("*mut "))

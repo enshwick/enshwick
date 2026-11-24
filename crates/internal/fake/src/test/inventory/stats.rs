@@ -1,12 +1,14 @@
 //! The fake loader's stats: kinds, modifiers on entities and buffs, the
 //! items each entity wears, and values worked out on every read.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 use std::collections::{BTreeMap, BTreeSet};
 
 use enshwick_core::abi::{
-    AffixRoll, AffixSpec, Header, ItemLine, ModHandle, StatChange, StatChangeFn, StatModifier,
-    StatModify, StatRef, StatSource, StatSpec, Status, Str,
+    AffixRoll, AffixSpec, Header, ItemLine, StatChange, StatChangeFn, StatModifier, StatModify,
+    StatRef, StatSource, StatSpec, Status, Str,
 };
 use enshwick_core::affixes::{
     AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll,
@@ -118,104 +120,106 @@ fn state_stats(s: &mut crate::test::table::State) -> &mut FakeStats {
     &mut s.inventory.stats
 }
 
-pub(crate) extern "system" fn define_stat(
-    _me: ModHandle,
-    id: Str,
-    def: *const StatSpec,
-    out: *mut StatRef,
-) -> Status {
-    // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
-    // not outlive it.
-    let Some(id) = unsafe { id.as_str() }.and_then(full) else {
-        return Status::BAD_ARGS;
-    };
-    let def = if def.is_null() {
-        None
-    } else {
-        // A definition short of what every writer knows is malformed, as the
-        // loader has it, not absent.
-        let Some(def) = crate::test::table::get_headed(def) else {
+entries! {
+    pub(crate) fn define_stat(
+        me as Mod,
+        id: Str as args::Text,
+        def: *const StatSpec as args::MaybeHeaded,
+        out: *mut StatRef as args::Out,
+    ) -> Status {
+        // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
+        // not outlive it.
+        let Some(id) = unsafe { id.as_str() }.and_then(full) else {
             return Status::BAD_ARGS;
         };
-        Some(def)
-    };
-    let parsed = match &def {
-        Some(data) => match StatDef::from_data(data) {
-            Some(def) => Some(def),
-            None => return Status::BAD_ARGS,
-        },
-        None => None,
-    };
-    if crate::test::table::late() {
-        return Status::TOO_LATE;
-    }
-    let opened = with(Err(Status::MISSING), |s| {
-        let unexported = parsed.is_none()
-            && s.base.manifest.as_ref().is_some_and(|manifest| {
-                manifest.unexported(
+        let def = if def.is_null() {
+            None
+        } else {
+            // A definition short of what every writer knows is malformed, as the
+            // loader has it, not absent.
+            let Some(def) = crate::test::table::get_headed(def) else {
+                return Status::BAD_ARGS;
+            };
+            Some(def)
+        };
+        let parsed = match &def {
+            Some(data) => match StatDef::from_data(data) {
+                Some(def) => Some(def),
+                None => return Status::BAD_ARGS,
+            },
+            None => None,
+        };
+        if crate::test::table::late() {
+            return Status::TOO_LATE;
+        }
+        let opened = with(Err(Status::MISSING), |s| {
+            let unexported = parsed.is_none()
+                && s.base.manifest.as_ref().is_some_and(|manifest| {
+                    manifest.unexported(
+                        enshwick_core::schema_section::Kind::Stat,
+                        &id,
+                        &s.host.base.exports,
+                    )
+                });
+            if unexported {
+                crate::test::table::base::mods::warn_unexported(
+                    s,
                     enshwick_core::schema_section::Kind::Stat,
                     &id,
-                    &s.host.base.exports,
-                )
-            });
-        if unexported {
-            crate::test::table::base::mods::warn_unexported(
-                s,
-                enshwick_core::schema_section::Kind::Stat,
-                &id,
-            );
-            return Err(Status::REFUSED);
-        }
-        let own = is_own(s, &id);
-        let stats = state_stats(s);
-        let index = index_of(stats, &id);
-        if let Some(def) = parsed {
-            let kind = &mut stats.kinds[index as usize];
-            if kind.def.is_some() || !own {
+                );
                 return Err(Status::REFUSED);
             }
-            kind.def = Some((def, text_of(&id)));
-        }
-        Ok(index)
-    });
-    match opened {
-        Ok(index) if !out.is_null() => {
-            // SAFETY: the match guard refused null; the safe layer passes an
-            // aligned `StatRef` it owns.
-            unsafe {
-                out.write(StatRef {
-                    index,
-                    key: key_of(&id).0,
-                });
+            let own = is_own(s, &id);
+            let stats = state_stats(s);
+            let index = index_of(stats, &id);
+            if let Some(def) = parsed {
+                let kind = &mut stats.kinds[index as usize];
+                if kind.def.is_some() || !own {
+                    return Err(Status::REFUSED);
+                }
+                kind.def = Some((def, text_of(&id)));
             }
-            Status::OK
+            Ok(index)
+        });
+        match opened {
+            Ok(index) if !out.is_null() => {
+                // SAFETY: the match guard refused null; the safe layer passes an
+                // aligned `StatRef` it owns.
+                unsafe {
+                    out.write(StatRef {
+                        index,
+                        key: key_of(&id).0,
+                    });
+                }
+                Status::OK
+            }
+            Ok(_) => Status::BAD_ARGS,
+            Err(status) => status,
         }
-        Ok(_) => Status::BAD_ARGS,
-        Err(status) => status,
     }
-}
 
-pub(crate) extern "system" fn stat_info(
-    _me: ModHandle,
-    stat: u32,
-    def: *mut StatSpec,
-    id: *mut Str,
-) -> Status {
-    let found = with(None, |s| {
-        let kind = state_stats(s).kinds.get(stat as usize)?;
-        let (def, _) = kind.def.as_ref()?;
-        // The fake keeps the id while installed, as the loader keeps it for
-        // the process.
-        Some((def.to_data(), Str::new(&kind.id)))
-    });
-    let Some((data, name)) = found else {
-        return Status::MISSING;
-    };
-    let written = crate::test::table::put_headed(def, data);
-    if written != Status::OK {
-        return written;
+    pub(crate) fn stat_info(
+        me as Caller,
+        stat: u32,
+        def: *mut StatSpec as args::HeadedOut,
+        id: *mut Str as args::Out,
+    ) -> Status {
+        let found = with(None, |s| {
+            let kind = state_stats(s).kinds.get(stat as usize)?;
+            let (def, _) = kind.def.as_ref()?;
+            // The fake keeps the id while installed, as the loader keeps it for
+            // the process.
+            Some((def.to_data(), Str::new(&kind.id)))
+        });
+        let Some((data, name)) = found else {
+            return Status::MISSING;
+        };
+        let written = crate::test::table::put_headed(def, data);
+        if written != Status::OK {
+            return written;
+        }
+        crate::test::table::put(id, name)
     }
-    crate::test::table::put(id, name)
 }
 
 /// Every modifier toward `stat` (all for `u32::MAX`) on `entity`, in
@@ -300,122 +304,129 @@ fn value(s: &mut crate::test::table::State, entity: u32, stat: u32) -> Option<f3
     ))
 }
 
-pub(crate) extern "system" fn stat_value(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    stat: u32,
-    out: *mut f32,
-) -> Status {
-    match with(None, |s| value(s, entity.0, stat)) {
-        Some(v) if !out.is_null() => {
-            // SAFETY: the match guard refused null; the safe layer passes an
-            // aligned `f32` it owns.
-            unsafe { out.write(v) };
+entries! {
+    pub(crate) fn stat_value(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        stat: u32,
+        out: *mut f32 as args::Out,
+    ) -> Status {
+        match with(None, |s| value(s, entity.0, stat)) {
+            Some(v) if !out.is_null() => {
+                // SAFETY: the match guard refused null; the safe layer passes an
+                // aligned `f32` it owns.
+                unsafe { out.write(v) };
+                Status::OK
+            }
+            Some(_) => Status::BAD_ARGS,
+            None => Status::MISSING,
+        }
+    }
+
+    pub(crate) fn stat_modify(me as Mod, request: *const StatModify as args::Headed) -> Status {
+        let Some(request) = crate::test::table::get_headed(request) else {
+            return Status::BAD_ARGS;
+        };
+        with(Status::MISSING, |s| {
+            let saved = request.flags & StatModify::SAVED != 0;
+            if saved
+                && !s
+                    .host
+                    .base
+                    .players
+                    .iter()
+                    .any(|p| p.entity == request.entity)
+            {
+                return Status::REFUSED;
+            }
+            let stats = state_stats(s);
+            let at = (request.entity.0, request.key, request.modifier.stat);
+            if request.flags & StatModify::REMOVE != 0 {
+                stats.modifiers.remove(&at);
+            } else {
+                let m = request.modifier;
+                stats
+                    .modifiers
+                    .insert(at, (m.op, m.value, request.flags, request.duration_ms));
+            }
+            stats.watched.insert(request.entity.0);
             Status::OK
-        }
-        Some(_) => Status::BAD_ARGS,
-        None => Status::MISSING,
+        })
     }
-}
 
-pub(crate) extern "system" fn stat_modify(_me: ModHandle, request: *const StatModify) -> Status {
-    let Some(request) = crate::test::table::get_headed(request) else {
-        return Status::BAD_ARGS;
-    };
-    with(Status::MISSING, |s| {
-        let saved = request.flags & StatModify::SAVED != 0;
-        if saved
-            && !s
-                .host
-                .base
-                .players
-                .iter()
-                .any(|p| p.entity == request.entity)
-        {
-            return Status::REFUSED;
+    pub(crate) fn stat_buff(
+        me as Caller,
+        buff: u32,
+        [modifiers: *const StatModifier, count: u32] as args::List,
+    ) -> Status {
+        if modifiers.is_null() && count != 0 {
+            return Status::BAD_ARGS;
         }
-        let stats = state_stats(s);
-        let at = (request.entity.0, request.key, request.modifier.stat);
-        if request.flags & StatModify::REMOVE != 0 {
-            stats.modifiers.remove(&at);
+        let list = if count == 0 {
+            Vec::new()
         } else {
-            let m = request.modifier;
-            stats
-                .modifiers
-                .insert(at, (m.op, m.value, request.flags, request.duration_ms));
-        }
-        stats.watched.insert(request.entity.0);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn stat_buff(
-    _me: ModHandle,
-    buff: u32,
-    modifiers: *const StatModifier,
-    count: u32,
-) -> Status {
-    if modifiers.is_null() && count != 0 {
-        return Status::BAD_ARGS;
+            // SAFETY: the check before refused null with a nonzero `count`; the
+            // safe layer passes `count` aligned modifiers alive for the call.
+            unsafe { core::slice::from_raw_parts(modifiers, count as usize) }.to_vec()
+        };
+        crate::test::table::with_open(|s| {
+            state_stats(s)
+                .buffs
+                .extend(list.into_iter().map(|m| (buff, m)));
+            Status::OK
+        })
     }
-    let list = if count == 0 {
-        Vec::new()
-    } else {
-        // SAFETY: the check before refused null with a nonzero `count`; the
-        // safe layer passes `count` aligned modifiers alive for the call.
-        unsafe { core::slice::from_raw_parts(modifiers, count as usize) }.to_vec()
-    };
-    crate::test::table::with_open(|s| {
-        state_stats(s)
-            .buffs
-            .extend(list.into_iter().map(|m| (buff, m)));
-        Status::OK
-    })
-}
 
-pub(crate) extern "system" fn stats_changed(
-    me: ModHandle,
-    callback: Option<StatChangeFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        state_stats(s)
-            .handlers
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
+    pub(crate) fn stats_changed(
+        me as Mod,
+        callback: Option<StatChangeFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            state_stats(s)
+                .handlers
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn stat_sources(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    stat: u32,
-    out: *mut StatSource,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let list = with(Vec::new(), |s| sources(s, entity.0, stat));
-    crate::test::table::put_list(&list, out, capacity, count)
-}
+    pub(crate) fn stat_sources(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        stat: u32,
+        [out: *mut StatSource, capacity: u32, count: *mut u32] as args::ListOut,
+    ) -> Status {
+        let list = with(Vec::new(), |s| sources(s, entity.0, stat));
+        crate::test::table::put_list(&list, out, capacity, count)
+    }
 
-pub(crate) extern "system" fn stat_watch(
-    me: ModHandle,
-    entity: enshwick_core::Entity,
-    watch: u8,
-) -> Status {
-    with(Status::MISSING, |s| {
-        let stats = state_stats(s);
-        let ask = (entity.0, me.0);
-        if watch == 0 {
-            stats.asked.remove(&ask);
-        } else {
-            stats.asked.insert(ask);
-        }
-        Status::OK
-    })
+    pub(crate) fn stat_watch(
+        me as Mod,
+        entity: enshwick_core::Entity,
+        watch: u8,
+    ) -> Status {
+        with(Status::MISSING, |s| {
+            // As the loader: nothing to watch before the stats are sealed
+            // or for no entity, and only a game's server watches.
+            if !s.base.closed() || entity.0 == 0 {
+                return Status::BAD_ARGS;
+            }
+            if !s.host.base.serving() {
+                return Status::UNAVAILABLE;
+            }
+            let stats = state_stats(s);
+            let ask = (entity.0, me.0);
+            if watch == 0 {
+                stats.asked.remove(&ask);
+            } else {
+                stats.asked.insert(ask);
+            }
+            Status::OK
+        })
+    }
 }
 
 /// Works out every watched entity's values and raises the handlers for each
@@ -525,158 +536,158 @@ fn item_lines_of(s: &crate::test::table::State, record: &ItemStats) -> Vec<ItemL
     lines_of(record, &pool(&s.inventory.stats), stat)
 }
 
-pub(crate) extern "system" fn define_affix(
-    _me: ModHandle,
-    id: Str,
-    def: *const AffixSpec,
-    out: *mut StatRef,
-) -> Status {
-    // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
-    // not outlive it.
-    let Some(id) = unsafe { id.as_str() }.and_then(full) else {
-        return Status::BAD_ARGS;
-    };
-    let Some(data) = crate::test::table::get_headed(def) else {
-        return Status::BAD_ARGS;
-    };
-    // shortcut: the loader reads the definition before the phase, so a malformed one after init answers BAD_ARGS there; match it when a test needs that order.
-    if crate::test::table::late() {
-        return Status::TOO_LATE;
-    }
-    let opened = with(Err(Status::MISSING), |s| {
-        let own = is_own(s, &id);
-        let stats = state_stats(s);
-        let stat = |index: u32| {
-            let kind = stats.kinds.get(index as usize)?;
-            Some(Stat::from_ref(StatRef {
-                index,
-                key: key_of(&kind.id).0,
-            }))
+entries! {
+    pub(crate) fn define_affix(
+        me as Mod,
+        id: Str as args::Text,
+        def: *const AffixSpec as args::Headed,
+        out: *mut StatRef as args::Out,
+    ) -> Status {
+        // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
+        // not outlive it.
+        let Some(id) = unsafe { id.as_str() }.and_then(full) else {
+            return Status::BAD_ARGS;
         };
-        // SAFETY: the ABI lends the definition's group and ranges for the
-        // call.
-        let Some(parsed) = (unsafe { AffixDef::from_data(&data, stat) }) else {
-            return Err(Status::BAD_ARGS);
+        let Some(data) = crate::test::table::get_headed(def) else {
+            return Status::BAD_ARGS;
         };
-        if !own || stats.affixes.iter().any(|(known, _, _)| **known == *id) {
-            return Err(Status::REFUSED);
+        // shortcut: the loader reads the definition before the phase, so a malformed one after init answers BAD_ARGS there; match it when a test needs that order.
+        if crate::test::table::late() {
+            return Status::TOO_LATE;
         }
-        stats
-            .affixes
-            .push((id.clone().into_boxed_str(), parsed, text_of(&id)));
-        u32::try_from(stats.affixes.len() - 1).map_err(|_| Status::REFUSED)
-    });
-    match opened {
-        Ok(index) => crate::test::table::put(
-            out,
-            StatRef {
-                index,
-                key: AffixKey::of(&id).0,
-            },
-        ),
-        Err(status) => status,
+        let opened = with(Err(Status::MISSING), |s| {
+            let own = is_own(s, &id);
+            let stats = state_stats(s);
+            let stat = |index: u32| {
+                let kind = stats.kinds.get(index as usize)?;
+                Some(Stat::from_ref(StatRef {
+                    index,
+                    key: key_of(&kind.id).0,
+                }))
+            };
+            // SAFETY: the ABI lends the definition's group and ranges for the
+            // call.
+            let Some(parsed) = (unsafe { AffixDef::from_data(&data, stat) }) else {
+                return Err(Status::BAD_ARGS);
+            };
+            if !own || stats.affixes.iter().any(|(known, _, _)| **known == *id) {
+                return Err(Status::REFUSED);
+            }
+            stats
+                .affixes
+                .push((id.clone().into_boxed_str(), parsed, text_of(&id)));
+            u32::try_from(stats.affixes.len() - 1).map_err(|_| Status::REFUSED)
+        });
+        match opened {
+            Ok(index) => crate::test::table::put(
+                out,
+                StatRef {
+                    index,
+                    key: AffixKey::of(&id).0,
+                },
+            ),
+            Err(status) => status,
+        }
     }
-}
 
-pub(crate) extern "system" fn affix_roll(
-    _me: ModHandle,
-    roll: *const AffixRoll,
-    count: *mut u32,
-) -> Status {
-    let Some(roll) = crate::test::table::get_headed(roll) else {
-        return Status::BAD_ARGS;
-    };
-    let item = ItemInstance {
-        pide: roll.pide,
-        item: roll.item,
-    };
-    let next = with(Err(Status::MISSING), |s| {
-        let category = s
-            .host
-            .content
-            .items
-            .get(&roll.item.get())
-            .map_or(0, |i| i.category);
-        let rules = RollRules::new(roll.min, roll.max)
-            .max_rarity(ItemRarity::from_raw(roll.max_rarity).unwrap_or(ItemRarity::Legendary));
-        let current = record(s, item);
-        let once = roll.flags & AffixRoll::ONCE != 0;
-        reroll(
-            &current,
-            &pool(state_stats(s)),
-            category,
-            rules,
-            roll.seed,
-            once,
-        )
-        .ok_or(Status::REFUSED)
-    });
-    let next = match next {
-        Ok(next) => next,
-        Err(status) => return status,
-    };
-    let rolled = u32::try_from(next.affixes.len()).unwrap_or(0);
-    let Ok(bytes) = postcard::to_allocvec(&next) else {
-        return Status::REFUSED;
-    };
-    let stored = with(None, |s| {
-        let at = s
-            .content
-            .item_kinds
-            .iter()
-            .position(|k| k == enshwick_core::stats::ITEM_KIND)
-            .unwrap_or_else(|| {
-                s.content
-                    .item_kinds
-                    .push(enshwick_core::stats::ITEM_KIND.to_owned());
-                s.content.item_kinds.len() - 1
-            });
-        s.content.item_values.insert(
-            (u32::try_from(at).ok()?, roll.pide.0),
-            (roll.item.get(), bytes),
-        );
-        Some(())
-    });
-    if stored.is_none() {
-        return Status::MISSING;
+    pub(crate) fn affix_roll(
+        me as Caller,
+        roll: *const AffixRoll as args::Headed,
+        count: *mut u32 as args::Out,
+    ) -> Status {
+        let Some(roll) = crate::test::table::get_headed(roll) else {
+            return Status::BAD_ARGS;
+        };
+        let item = ItemInstance {
+            pide: roll.pide,
+            item: roll.item,
+        };
+        let next = with(Err(Status::MISSING), |s| {
+            let category = s
+                .host
+                .content
+                .items
+                .get(&roll.item.get())
+                .map_or(0, |i| i.category);
+            let rules = RollRules::new(roll.min, roll.max)
+                .max_rarity(ItemRarity::from_raw(roll.max_rarity).unwrap_or(ItemRarity::Legendary));
+            let current = record(s, item);
+            let once = roll.flags & AffixRoll::ONCE != 0;
+            reroll(
+                &current,
+                &pool(state_stats(s)),
+                category,
+                rules,
+                roll.seed,
+                once,
+            )
+            .ok_or(Status::REFUSED)
+        });
+        let next = match next {
+            Ok(next) => next,
+            Err(status) => return status,
+        };
+        let rolled = u32::try_from(next.affixes.len()).unwrap_or(0);
+        let Ok(bytes) = postcard::to_allocvec(&next) else {
+            return Status::REFUSED;
+        };
+        let stored = with(None, |s| {
+            let at = s
+                .content
+                .item_kinds
+                .iter()
+                .position(|k| k == enshwick_core::stats::ITEM_KIND)
+                .unwrap_or_else(|| {
+                    s.content
+                        .item_kinds
+                        .push(enshwick_core::stats::ITEM_KIND.to_owned());
+                    s.content.item_kinds.len() - 1
+                });
+            s.content.item_values.insert(
+                (u32::try_from(at).ok()?, roll.pide.0),
+                (roll.item.get(), bytes),
+            );
+            Some(())
+        });
+        if stored.is_none() {
+            return Status::MISSING;
+        }
+        crate::test::table::put(count, rolled)
     }
-    crate::test::table::put(count, rolled)
-}
 
-pub(crate) extern "system" fn item_lines(
-    _me: ModHandle,
-    pide: enshwick_core::Entity,
-    item: enshwick_core::ItemId,
-    out: *mut ItemLine,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let lines = with(Vec::new(), |s| {
-        let item = ItemInstance { pide, item };
-        let record = record(s, item);
-        item_lines_of(s, &record)
-    });
-    crate::test::table::put_list(&lines, out, capacity, count)
-}
+    pub(crate) fn item_lines(
+        me as Caller,
+        pide: enshwick_core::Entity,
+        item: enshwick_core::ItemId,
+        [out: *mut ItemLine, capacity: u32, count: *mut u32] as args::ListOut,
+    ) -> Status {
+        let lines = with(Vec::new(), |s| {
+            let item = ItemInstance { pide, item };
+            let record = record(s, item);
+            item_lines_of(s, &record)
+        });
+        crate::test::table::put_list(&lines, out, capacity, count)
+    }
 
-pub(crate) extern "system" fn affix_info(
-    _me: ModHandle,
-    affix: u32,
-    text: *mut Str,
-    rarity: *mut u8,
-) -> Status {
-    let found = with(None, |s| {
-        let (_, def, text) = s.inventory.stats.affixes.get(affix as usize)?;
-        // The fake keeps its affixes while installed.
-        Some((Str::new(text), def.rarity.to_raw()))
-    });
-    let Some((name, rare)) = found else {
-        return Status::MISSING;
-    };
-    let status = crate::test::table::put(text, name);
-    if status.is_ok() {
-        crate::test::table::put(rarity, rare)
-    } else {
-        status
+    pub(crate) fn affix_info(
+        me as Caller,
+        affix: u32,
+        text: *mut Str as args::Out,
+        rarity: *mut u8 as args::Out,
+    ) -> Status {
+        let found = with(None, |s| {
+            let (_, def, text) = s.inventory.stats.affixes.get(affix as usize)?;
+            // The fake keeps its affixes while installed.
+            Some((Str::new(text), def.rarity.to_raw()))
+        });
+        let Some((name, rare)) = found else {
+            return Status::MISSING;
+        };
+        let status = crate::test::table::put(text, name);
+        if status.is_ok() {
+            crate::test::table::put(rarity, rare)
+        } else {
+            status
+        }
     }
 }

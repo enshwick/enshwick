@@ -18,13 +18,25 @@ mod tests {
 
     static WORLD: OnceLock<(World, Effects)> = OnceLock::new();
     static HEARD: Mutex<Vec<ProgressWriteData>> = Mutex::new(Vec::new());
+    /// While set, the mod writes again each write it hears as dropped, and
+    /// keeps what the retry answered.
+    static RETRIED: Mutex<Option<Vec<Result<(), WorldError>>>> = Mutex::new(None);
 
     struct Writes;
 
     impl Mod for Writes {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set((load.world()?, load.effects()));
-            load.on::<ProgressWritten>(|written| HEARD.lock().unwrap().push(*written))?;
+            load.on::<ProgressWritten>(|written| {
+                HEARD.lock().unwrap().push(*written);
+                if written.outcome != ProgressWriteData::NO_LEVEL_STEP {
+                    return;
+                }
+                if let Some(retried) = RETRIED.lock().unwrap().as_mut() {
+                    let (world, _) = WORLD.get().unwrap();
+                    retried.push(world.add_experience(written.entity, written.value));
+                }
+            })?;
             Ok(Self)
         }
     }
@@ -62,6 +74,15 @@ mod tests {
 
     /// The fake with the stat reads' facts, started with this file's mod.
     fn started(host: FakeHost) -> (Installed, World, Effects) {
+        started_after(host, |_| {})
+    }
+
+    /// [`started`], with `before` run on the installed fake before the
+    /// mod starts.
+    fn started_after(
+        host: FakeHost,
+        before: impl FnOnce(&Installed),
+    ) -> (Installed, World, Effects) {
         let loader = host
             .world()
             .type_hash("attribute_set.health", 1)
@@ -82,6 +103,7 @@ mod tests {
             .constant("attribute.experience", 50)
             .constant("attribute.experience_needed_slot", 2)
             .install();
+        before(&loader);
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Writes)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -111,14 +133,16 @@ mod tests {
         }
         assert_eq!(
             world.add_experience(Entity(7), 1),
-            Err(WorldError::Refused),
+            Err(WorldError::Busy),
             "256 writes wait for the step"
         );
         let _handled = loader.tick(std::time::Duration::from_millis(50));
         assert_eq!(world.add_experience(Entity(7), 1), Ok(()), "a new step");
     }
 
-    fn written(what: u32, value: u32, outcome: u32, level: u32) -> ProgressWriteData {
+    /// What the mod hears of `what` `value` on `Entity(7)`.
+    fn written(what: u32, value: u32, outcome: u32, left: [u32; 3]) -> ProgressWriteData {
+        let [level, experience, gained] = left;
         ProgressWriteData {
             header: Header::of::<ProgressWriteData>(),
             entity: Entity(7),
@@ -126,27 +150,177 @@ mod tests {
             value,
             outcome,
             level,
-            experience: 0,
-            gained: 0,
+            experience,
+            gained,
         }
     }
 
+    fn step(loader: &Installed) {
+        let _handled = loader.tick(std::time::Duration::from_millis(50));
+    }
+
     #[test]
-    fn a_mod_hears_what_became_of_each_level_or_experience_write() {
+    fn a_mod_hears_each_write_the_level_step_applied_after_the_tick() {
+        let (loader, world, _) = started(
+            FakeHost::new()
+                .player(player(7))
+                .level_table(25, |level| level * 100),
+        );
+        HEARD.lock().unwrap().clear();
+        assert_eq!(world.set_level(Entity(7), 30), Ok(()));
+        assert_eq!(world.set_experience(Entity(7), 9_999), Ok(()));
+        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        assert!(HEARD.lock().unwrap().is_empty(), "nothing before the step");
+        step(&loader);
+        let applied = ProgressWriteData::APPLIED;
+        assert_eq!(
+            *HEARD.lock().unwrap(),
+            [
+                written(PROGRESS_SET_LEVEL, 30, applied, [25, 0, 0]),
+                written(PROGRESS_SET_EXPERIENCE, 9_999, applied, [25, 2_499, 0]),
+                written(PROGRESS_ADD_EXPERIENCE, 500, applied, [25, 2_499, 500]),
+            ],
+            "the level at the cap, the experience below its need, the gain added"
+        );
+    }
+
+    #[test]
+    fn only_the_mod_that_wrote_hears_what_became_of_its_write() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        use enshwick::abi::{Event, ModHandle};
+
+        static OTHER_HEARD: AtomicU32 = AtomicU32::new(0);
+        unsafe extern "system" fn other(
+            _event: Event,
+            _data: *const core::ffi::c_void,
+            _user: *mut core::ffi::c_void,
+        ) {
+            OTHER_HEARD.fetch_add(1, Ordering::Relaxed);
+        }
+        let second = ModHandle(2);
+        let host = FakeHost::new().player(player(7)).other_mod(second);
+        let (loader, world, _) = started_after(host, |loader| {
+            // SAFETY: the fake's table is a static.
+            let api = unsafe { &*loader.api() };
+            let subscribed = (api.subscribe)(
+                second,
+                Event::PROGRESS_WRITTEN,
+                Some(other),
+                core::ptr::null_mut(),
+            );
+            assert_eq!(subscribed, Status::OK);
+        });
+        HEARD.lock().unwrap().clear();
+        assert_eq!(world.set_level(Entity(7), 3), Ok(()));
+        step(&loader);
+        assert_eq!(HEARD.lock().unwrap().len(), 1);
+        assert_eq!(OTHER_HEARD.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn a_mod_that_did_not_ask_for_the_writes_is_refused_beside_one_that_did() {
+        use enshwick::abi::ModHandle;
+
+        let second = ModHandle(2);
+        let (loader, _, _) = started(FakeHost::new().player(player(7)).other_mod(second));
+        // SAFETY: the fake's table is a static.
+        let api = unsafe { &*loader.api() };
+        assert_eq!(
+            (api.progress_write)(second, Entity(7), PROGRESS_SET_LEVEL, 5),
+            Status::REFUSED
+        );
+        assert_eq!(
+            (api.progress_write)(loader.handle(), Entity(7), PROGRESS_SET_LEVEL, 5),
+            Status::OK
+        );
+    }
+
+    #[test]
+    fn a_write_with_no_world_served_is_unavailable() {
+        let (loader, world, _) = started(FakeHost::new().player(player(7)));
+        loader.stop_world();
+        assert_eq!(world.set_level(Entity(7), 3), Err(WorldError::Unavailable));
+    }
+
+    #[test]
+    fn a_gain_is_heard_in_its_own_step_and_the_next_step_starts_without_it() {
+        let (loader, world, _) = started(FakeHost::new().player(player(7)));
+        HEARD.lock().unwrap().clear();
+        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        step(&loader);
+        assert_eq!(world.add_experience(Entity(7), 100), Ok(()));
+        step(&loader);
+        let applied = ProgressWriteData::APPLIED;
+        assert_eq!(
+            *HEARD.lock().unwrap(),
+            [
+                written(PROGRESS_ADD_EXPERIENCE, 500, applied, [1, 0, 500]),
+                written(PROGRESS_ADD_EXPERIENCE, 100, applied, [1, 0, 100]),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_next_game_s_character_starts_afresh() {
         let (loader, world, _) = started(FakeHost::new().player(player(7)));
         assert_eq!(world.set_level(Entity(7), 10), Ok(()));
-        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        step(&loader);
+        loader.end_game();
+        HEARD.lock().unwrap().clear();
+        step(&loader);
+        assert_eq!(world.add_experience(Entity(7), 5), Ok(()));
+        step(&loader);
+        assert_eq!(
+            *HEARD.lock().unwrap(),
+            [written(
+                PROGRESS_ADD_EXPERIENCE,
+                5,
+                ProgressWriteData::APPLIED,
+                [1, 0, 5]
+            )]
+        );
+    }
 
-        let applied = written(PROGRESS_SET_LEVEL, 10, ProgressWriteData::APPLIED, 10);
+    #[test]
+    fn a_write_a_handler_asks_for_as_the_game_ends_goes_with_the_game() {
+        let (loader, world, _) = started(FakeHost::new().player(player(7)));
+        HEARD.lock().unwrap().clear();
+        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        *RETRIED.lock().unwrap() = Some(Vec::new());
+        loader.end_game();
+        let retried = RETRIED.lock().unwrap().take();
+        assert_eq!(retried, Some(vec![Ok(())]), "the handler wrote again");
         let dropped = written(
             PROGRESS_ADD_EXPERIENCE,
             500,
             ProgressWriteData::NO_LEVEL_STEP,
-            0,
+            [0; 3],
         );
-        assert_eq!(loader.raise::<ProgressWritten>(&applied), 1);
-        assert_eq!(loader.raise::<ProgressWritten>(&dropped), 1);
-        assert_eq!(*HEARD.lock().unwrap(), [applied, dropped]);
+        step(&loader);
+        step(&loader);
+        assert_eq!(*HEARD.lock().unwrap(), [dropped], "nothing of the retry");
+    }
+
+    #[cfg(feature = "unstable")]
+    #[test]
+    fn a_write_for_a_character_that_left_is_heard_as_dropped_at_the_second_step() {
+        let (loader, world, _) = started(FakeHost::new().player(player(7)));
+        HEARD.lock().unwrap().clear();
+        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        loader.player_left(enshwick::PlayerKey::new(7));
+        step(&loader);
+        assert!(HEARD.lock().unwrap().is_empty(), "it waits one step");
+        step(&loader);
+        assert_eq!(
+            *HEARD.lock().unwrap(),
+            [written(
+                PROGRESS_ADD_EXPERIENCE,
+                500,
+                ProgressWriteData::NO_LEVEL_STEP,
+                [0; 3],
+            )]
+        );
     }
 
     #[test]

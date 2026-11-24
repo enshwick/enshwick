@@ -1,6 +1,8 @@
 //! The fake's action entries: chat filters, controls, commands, and the
 //! filters on interactions, crafting and building.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use crate::test::table::{Registered, put, text, with, with_open};
@@ -44,176 +46,182 @@ pub(crate) struct ActionsState {
 #[cfg(feature = "unstable")]
 pub(crate) use crate::test::actions::controls::{control, run_action};
 
-pub(crate) extern "system" fn actions(
-    me: ModHandle,
-    callback: Option<enshwick_core::abi::ActionFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        if s.actions.callback.is_some() {
-            return Status::REFUSED;
-        }
-        s.actions.callback = Some(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut Str) -> Status {
-    let line = text(line);
-    let (word, rest) = line.split_once(' ').unwrap_or((&line, ""));
-    let (word, rest) = (word.to_owned(), rest.trim().to_owned());
-    with((), |s| s.actions.console.push(line.clone()));
-    let answer = match with(None, |s| s.host.actions.console_answers.get(&word).cloned()) {
-        Some(answer) => answer,
-        // The mod's own actions, asked with the table unlocked: they may call
-        // back.
-        None => match with(None, |s| s.actions.callback) {
-            Some(actions) => {
-                let reply = crate::test::ask(
-                    actions,
-                    enshwick_core::abi::ActionCall::CONSOLE,
-                    &crate::test::console(),
-                    0,
-                    &rest,
-                    &word.to_lowercase(),
-                    ActionTarget::NONE,
-                );
-                reply.get(1..).unwrap_or_default().to_owned()
+entries! {
+    pub(crate) fn actions(
+        me as Mod,
+        callback: Option<enshwick_core::abi::ActionFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            if s.actions.callback.is_some() {
+                return Status::REFUSED;
             }
-            None => return Status::MISSING,
-        },
-    };
-    with(Status::MISSING, |s| {
-        let kept = s.actions.run_out.insert(answer.into_boxed_str());
-        put(out, Str::new(kept))
-    })
-}
+            s.actions.callback = Some(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn chat_filter(
-    me: ModHandle,
-    callback: Option<ChatFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.actions
-            .chat_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
+    pub(crate) fn run_console(
+        me as Caller,
+        line: Str as args::Text,
+        out: *mut Str as args::Out,
+    ) -> Status {
+        let line = text(line);
+        let (word, rest) = line.split_once(' ').unwrap_or((&line, ""));
+        let (word, rest) = (word.to_owned(), rest.trim().to_owned());
+        with((), |s| s.actions.console.push(line.clone()));
+        let answer = match with(None, |s| s.host.actions.console_answers.get(&word).cloned()) {
+            Some(answer) => answer,
+            // The mod's own actions, asked with the table unlocked: they may call
+            // back.
+            None => match with(None, |s| s.actions.callback) {
+                Some(actions) => {
+                    let reply = crate::test::ask(
+                        actions,
+                        enshwick_core::abi::ActionCall::CONSOLE,
+                        &crate::test::console(),
+                        0,
+                        &rest,
+                        &word.to_lowercase(),
+                        ActionTarget::NONE,
+                    );
+                    reply.get(1..).unwrap_or_default().to_owned()
+                }
+                None => return Status::MISSING,
+            },
+        };
+        with(Status::MISSING, |s| {
+            let kept = s.actions.run_out.insert(answer.into_boxed_str());
+            put(out, Str::new(kept))
+        })
+    }
 
-pub(crate) extern "system" fn interaction_filter(
-    me: ModHandle,
-    callback: Option<InteractionFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.actions
-            .interaction_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
+    pub(crate) fn chat_filter(
+        me as Mod,
+        callback: Option<ChatFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.actions
+                .chat_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
 
-/// As the loader: an unreadable spec is a bad argument, then a call after
-/// init is too late, then a malformed spec is a bad argument, and a second
-/// prompt on an item is refused whichever mod asks.
-pub(crate) extern "system" fn interaction_prompt(
-    _me: ModHandle,
-    spec: *const InteractionPrompt,
-) -> Status {
-    // SAFETY: the safe layer passes null or a live `InteractionPrompt` for
-    // the call, readable for the size its header states.
-    let Some(spec) =
-        (unsafe { enshwick_core::abi::read_headed(spec, size_of::<InteractionPrompt>()) })
-    else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        if !spec.is_valid() {
+    pub(crate) fn interaction_filter(
+        me as Mod,
+        callback: Option<InteractionFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.actions
+                .interaction_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    /// As the loader: an unreadable spec is a bad argument, then a call after
+    /// init is too late, then a malformed spec is a bad argument, and a second
+    /// prompt on an item is refused whichever mod asks.
+    pub(crate) fn interaction_prompt(
+        me as Mod,
+        spec: *const InteractionPrompt as args::Headed,
+    ) -> Status {
+        // SAFETY: the safe layer passes null or a live `InteractionPrompt` for
+        // the call, readable for the size its header states.
+        let Some(spec) =
+            (unsafe { enshwick_core::abi::read_headed(spec, size_of::<InteractionPrompt>()) })
+        else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            if !spec.is_valid() {
+                return Status::BAD_ARGS;
+            }
+            if s.actions
+                .interaction_prompts
+                .iter()
+                .any(|p| p.item == spec.item)
+            {
+                return Status::REFUSED;
+            }
+            s.actions.interaction_prompts.push(spec);
+            Status::OK
+        })
+    }
+
+    pub(crate) fn craft_filter(
+        me as Mod,
+        callback: Option<CraftFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.actions
+                .craft_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn build_filter(
+        me as Mod,
+        callback: Option<BuildFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        with_open(|s| {
+            s.actions
+                .build_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    /// Without the `unstable` feature the fake runs no actions.
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) fn run_action(
+        me as Mod,
+        _action: Str as args::Text,
+        _args: Str as args::Text,
+        target: *const ActionTarget,
+    ) -> Status {
+        // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
+        let _read = unsafe { enshwick_core::abi::read_headed(target, size_of::<ActionTarget>()) };
+        Status::UNAVAILABLE
+    }
+
+    /// Without the `unstable` feature the fake has no controls.
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) fn control(
+        me as Mod,
+        spec: *const ControlSpec as args::Headed,
+        callback: Option<ControlFn> as args::Callback,
+        _user: *mut c_void,
+    ) -> Status {
+        if callback.is_none() {
             return Status::BAD_ARGS;
         }
-        if s.actions
-            .interaction_prompts
-            .iter()
-            .any(|p| p.item == spec.item)
-        {
-            return Status::REFUSED;
+        // SAFETY: the safe layer passes a live `ControlSpec` for the call.
+        match unsafe { enshwick_core::abi::read_headed(spec, size_of::<ControlSpec>()) } {
+            Some(_) => Status::UNAVAILABLE,
+            None => Status::BAD_ARGS,
         }
-        s.actions.interaction_prompts.push(spec);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn craft_filter(
-    me: ModHandle,
-    callback: Option<CraftFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.actions
-            .craft_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn build_filter(
-    me: ModHandle,
-    callback: Option<BuildFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    with_open(|s| {
-        s.actions
-            .build_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-/// Without the `unstable` feature the fake runs no actions.
-#[cfg(not(feature = "unstable"))]
-pub(crate) extern "system" fn run_action(
-    _me: ModHandle,
-    _action: Str,
-    _args: Str,
-    target: *const ActionTarget,
-) -> Status {
-    // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
-    let _read = unsafe { enshwick_core::abi::read_headed(target, size_of::<ActionTarget>()) };
-    Status::UNAVAILABLE
-}
-
-/// Without the `unstable` feature the fake has no controls.
-#[cfg(not(feature = "unstable"))]
-pub(crate) extern "system" fn control(
-    _me: ModHandle,
-    spec: *const ControlSpec,
-    callback: Option<ControlFn>,
-    _user: *mut c_void,
-) -> Status {
-    if callback.is_none() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: the safe layer passes a live `ControlSpec` for the call.
-    match unsafe { enshwick_core::abi::read_headed(spec, size_of::<ControlSpec>()) } {
-        Some(_) => Status::UNAVAILABLE,
-        None => Status::BAD_ARGS,
     }
 }
 
@@ -338,50 +346,51 @@ impl GameBindings {
     }
 }
 
-/// The keys of the game action `action` as the interface last read them;
-/// as the loader: unavailable on a server and before the interface's first
-/// step, missing for an action the build does not name.
-pub(crate) extern "system" fn game_binding(
-    _me: ModHandle,
-    action: Str,
-    out: *mut enshwick_core::abi::GameBinding,
-) -> Status {
-    use enshwick_core::abi::GameBinding;
-    if out.is_null() {
-        return Status::BAD_ARGS;
+entries! {
+    /// The keys of the game action `action` as the interface last read
+    /// them; as the loader: unavailable on a server and before the
+    /// interface's first step, missing for an action the build does not
+    /// name.
+    pub(crate) fn game_binding(
+        me as Caller,
+        action: Str as args::Text,
+        out: *mut enshwick_core::abi::GameBinding as args::HeadedOut,
+    ) -> Status {
+        use enshwick_core::abi::GameBinding;
+        let action = text(action);
+        with(Status::MISSING, |s| {
+            if s.host.base.side == enshwick_core::abi::Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            match s.actions.bindings.binding(&action) {
+                Ok([first, second]) => super::put_headed(
+                    out,
+                    GameBinding {
+                        first,
+                        second,
+                        ..GameBinding::EMPTY
+                    },
+                ),
+                Err(status) => status,
+            }
+        })
     }
-    let action = text(action);
-    with(Status::MISSING, |s| {
-        if s.host.base.side == enshwick_core::abi::Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        match s.actions.bindings.binding(&action) {
-            Ok([first, second]) => super::put_headed(
-                out,
-                GameBinding {
-                    first,
-                    second,
-                    ..GameBinding::EMPTY
-                },
-            ),
-            Err(status) => status,
-        }
-    })
-}
 
-/// Rebinds the first key of the game action `action` for the mod `me`, or
-/// with 0 ends its rebind, as the loader: unavailable on a server and
-/// before the interface's first step, missing for an action the build does
-/// not name, a bad argument for a key a mod control may not take or a
-/// modifier the game's list lacks. The interface's next step writes it.
-pub(crate) extern "system" fn game_rebind(me: ModHandle, action: Str, key: u32) -> Status {
-    let action = text(action);
-    with(Status::MISSING, |s| {
-        if s.host.base.side == enshwick_core::abi::Side::SERVER {
-            return Status::UNAVAILABLE;
-        }
-        s.actions.bindings.rebind(me, action, key)
-    })
+    /// Rebinds the first key of the game action `action` for the mod `me`,
+    /// or with 0 ends its rebind, as the loader: unavailable on a server and
+    /// before the interface's first step, missing for an action the build
+    /// does not name, a bad argument for a key a mod control may not take
+    /// or a modifier the game's list lacks. The interface's next step
+    /// writes it.
+    pub(crate) fn game_rebind(me as Mod, action: Str as args::Text, key: u32) -> Status {
+        let action = text(action);
+        with(Status::MISSING, |s| {
+            if s.host.base.side == enshwick_core::abi::Side::SERVER {
+                return Status::UNAVAILABLE;
+            }
+            s.actions.bindings.rebind(me, action, key)
+        })
+    }
 }
 
 /// Whether `key` is one a mod control may take with modifiers all in

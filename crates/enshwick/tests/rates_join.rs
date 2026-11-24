@@ -43,7 +43,7 @@ mod tests {
         let loader = FakeHost::new().pack(ModHandle(2), Side::BOTH).install();
         // SAFETY: the fake host's table lives for the process; the loader
         // makes its own handle the host of the copy that runs the packs.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         let declare = |me, side| {
             // SAFETY: the fake host's table lives for the process.
             unsafe {
@@ -70,8 +70,8 @@ mod tests {
         assert_eq!((api.rate)(ModHandle(3), seen), Status::REFUSED);
         assert_eq!(
             (api.rate)(ModHandle(4), seen),
-            Status::REFUSED,
-            "a pack no test named is of side server"
+            Status::BAD_ARGS,
+            "a handle the loader never gave out"
         );
         assert_eq!((api.rate)(ModHandle(2), seen), Status::OK);
         let own = Rate::all().find(|rate| !rate.seen_by_clients()).unwrap();

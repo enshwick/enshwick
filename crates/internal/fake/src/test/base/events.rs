@@ -290,6 +290,21 @@ fn raise_in(kept: fn(&table::State) -> &GameEventHandlers, type_hash: u32, bytes
 /// As [`Installed::raise_raw`]: `data` is null or the event's data struct,
 /// readable, aligned and unchanged for the call.
 pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> usize {
+    // SAFETY: the caller's guarantee for `data` is `dispatch_to`'s.
+    unsafe { dispatch_to(event, data, None) }
+}
+
+/// [`dispatch`] to the handlers of `owner` alone, as the loader raises an
+/// event that tells one mod of its own request; to every mod's for `None`.
+///
+/// # Safety
+///
+/// As [`dispatch`].
+pub(crate) unsafe fn dispatch_to(
+    event: Event,
+    data: *const core::ffi::c_void,
+    owner: Option<enshwick_core::abi::ModHandle>,
+) -> usize {
     if event == Event::LOADER_SETTINGS_CHANGED {
         // As the loader refreshes its own copy, which runs the packs.
         enshwick_core::__fake::refresh_levels();
@@ -303,6 +318,7 @@ pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> u
             .map(|sub| sub.1)
             .chain(periodic.into_iter().flatten())
             .filter(|handler| !handler.owner_off(&s.base.off))
+            .filter(|handler| owner.is_none_or(|owner| handler.owner() == Some(owner)))
             .collect()
     });
     // As the loader, a building event reads in its player's language.
