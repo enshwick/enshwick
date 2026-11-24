@@ -700,10 +700,12 @@ side = "both""#
         let ask =
             Dialog::new("Reset", "Reset the world?").buttons(&[Response::Ok, Response::Cancel]);
         ui.dialog(&ask, |_| {}).unwrap();
+        let snapshot = input.client_snapshot().unwrap();
         assert_eq!(
-            input.client_snapshot().unwrap().dialog_buttons(),
+            snapshot.dialog_buttons(),
             Some(vec![Response::Cancel, Response::Ok])
         );
+        assert_eq!(snapshot.dialog_mod(), Some("you.client-commands"));
         assert!(
             matches!(
                 input.client_command(&answer(Response::Retry)),

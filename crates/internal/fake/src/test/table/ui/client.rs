@@ -268,9 +268,20 @@ entries! {
                 enshwick_core::abi::ClientSnapshot::EMPTY
             };
             // As the loader: the dialog that shows, the oldest waiting one
-            // here, by its buttons; the fake names no mod.
+            // here, by its buttons and the mod the fake runs, which asked it.
             snapshot.available |= enshwick_core::abi::ClientSnapshot::DIALOG;
-            snapshot.dialog_buttons = s.ui.dialogs.first().map_or(0, |(shown, _)| shown.buttons);
+            if let Some((shown, _)) = s.ui.dialogs.first() {
+                snapshot.dialog_buttons = shown.buttons;
+                // The manifest's id lives as long as the fake.
+                snapshot.dialog_mod = s
+
+                    .base
+                    .manifest
+                    .as_ref()
+                    .map_or(enshwick_core::abi::Str::EMPTY, |manifest| {
+                        enshwick_core::abi::Str::new(&manifest.id)
+                    });
+            }
             crate::test::table::put_headed(out, snapshot)
         })
     }
