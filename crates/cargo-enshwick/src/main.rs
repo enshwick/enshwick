@@ -183,12 +183,16 @@ enum Command {
     },
     /// Writes the typed API, `enshwick::typed`, from the newest server
     /// build's snapshot of the game's reflection in the game data folder;
-    /// with `--from`, snapshots that executable's reflection there first and
-    /// writes from it when it is a server build no table is kept for.
+    /// with `--from`, snapshots that executable's reflection there first,
+    /// recording its Steam build so the newest build ranks first.
     Generate {
         /// The game executable, or the game folder holding it, to snapshot.
         #[arg(long, conflicts_with = "check")]
         from: Option<PathBuf>,
+        /// The Steam build of `--from`'s executable, for one without Steam's
+        /// appmanifest beside it, such as a kept copy.
+        #[arg(long, requires = "from")]
+        steam_build: Option<u64>,
         /// The enshwick repository to write in.
         #[arg(long, default_value = ".")]
         root: PathBuf,
@@ -347,6 +351,7 @@ fn run(args: Args) -> ExitCode {
         } => types::run(&from, &names, rust.as_deref(), luau.as_deref()),
         Command::Generate {
             from,
+            steam_build,
             root,
             data,
             check,
@@ -354,7 +359,10 @@ fn run(args: Args) -> ExitCode {
             .as_deref()
             .map(types::executable)
             .transpose()
-            .and_then(|from| generate::run(&root, &data, from.as_deref(), check)),
+            .and_then(|from| {
+                let steam = steam_build.map(enshwick_gamedata::SteamBuild::new);
+                generate::run(&root, &data, from.as_deref(), steam, check)
+            }),
     };
     match outcome {
         Ok(done) if done.is_empty() => ExitCode::SUCCESS,

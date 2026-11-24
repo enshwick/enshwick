@@ -684,15 +684,11 @@ fn a_run_on_the_anchors_alone_misses_what_only_a_route_finds() {
     );
 }
 
-/// The Steam build is the appmanifest's `buildid`, beside a Steam library
-/// (two folders up) or inside a `SteamCMD` install, also one at a drive's
-/// root.
+/// The running side's Steam build is its own app's appmanifest `buildid`.
 #[test]
-fn the_steam_build_comes_from_the_appmanifest_where_steam_keeps_it() {
+fn the_steam_build_comes_from_the_running_side_s_appmanifest() {
     let manifest =
         "\"AppState\"\n{\n\t\"appid\"\t\t\"2278520\"\n\t\"buildid\"\t\t\"26430253\"\n}\n";
-    assert_eq!(manifest_build(manifest), Some(SteamBuild::new(26_430_253)));
-    assert_eq!(manifest_build("\"buildid\"\t\"next\"\n"), None);
     let root = std::env::temp_dir().join(format!("enshwick-appmanifest-{}", std::process::id()));
     let library = root.join("steamapps");
     let client = library.join("common").join("Enshrouded");

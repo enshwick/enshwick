@@ -86,6 +86,24 @@ impl Side {
             Self::Client => "client",
         }
     }
+
+    /// The Steam app that installs the side, which names its
+    /// `appmanifest_<app>.acf`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::Side;
+    ///
+    /// assert_eq!(Side::Server.steam_app(), 2_278_520);
+    /// ```
+    #[must_use]
+    pub const fn steam_app(self) -> u32 {
+        match self {
+            Self::Server => 2_278_520,
+            Self::Client => 1_203_620,
+        }
+    }
 }
 
 impl std::fmt::Display for SteamBuild {

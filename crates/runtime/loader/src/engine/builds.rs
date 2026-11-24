@@ -401,33 +401,11 @@ pub fn fingerprint_name(fingerprint: Fingerprint) -> String {
     name
 }
 
-/// The Steam app ids of the client and the dedicated server.
-const APPS: [(Side, u32); 2] = [(Side::CLIENT, 1_203_620), (Side::SERVER, 2_278_520)];
-
-/// The Steam build of the game in `game_dir` on `running`'s side, from the
-/// appmanifest Steam keeps beside its library (`steamapps/`, two folders
-/// up) or `SteamCMD` inside the install (`steamapps/` in it).
+/// The Steam build of the game in `game_dir` on `running`'s side, as
+/// [`SteamBuild::installed`] reads it.
 #[must_use]
 pub fn steam_build(game_dir: &Path, running: Side) -> Option<SteamBuild> {
-    let (_, app) = APPS.iter().find(|(side, _)| *side == running)?;
-    let file = format!("appmanifest_{app}.acf");
-    let text = std::fs::read_to_string(game_dir.join("steamapps").join(&file))
-        .ok()
-        .or_else(|| {
-            let library = game_dir.parent()?.parent()?.join(&file);
-            std::fs::read_to_string(library).ok()
-        })?;
-    manifest_build(&text)
-}
-
-/// The `buildid` of an appmanifest's text.
-fn manifest_build(text: &str) -> Option<SteamBuild> {
-    text.lines().find_map(|line| {
-        let mut quoted = line.split('"').skip(1).step_by(2);
-        (quoted.next()? == "buildid")
-            .then(|| quoted.next()?.parse().ok().map(SteamBuild::new))
-            .flatten()
-    })
+    SteamBuild::installed(game_dir, side(running)?)
 }
 
 /// The running build's name for the log and the status report: its side,
