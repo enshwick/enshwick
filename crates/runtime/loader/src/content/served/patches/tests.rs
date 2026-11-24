@@ -289,14 +289,9 @@ unsafe fn zero_tail_after(data: usize, len: usize) -> bool {
 }
 
 #[test]
-fn a_large_buffer_keeps_zeros_past_the_whole_last_layer_the_game_sweeps() {
-    // `VoxelTemperatureResource` part 3 on client 26430625: a 44-byte head,
-    // 83 layers of 548 x 244 bytes and 7,280 of the 84th, read whole.
-    let layer = 548 * 244;
-    let len = 44 + 83 * layer + 7_280;
-    assert_eq!(len, 11_105_420);
-    assert!(tail(len) >= layer - 7_280);
-    assert_eq!(tail(1), PAGE, "a small buffer keeps a page");
+fn a_large_buffer_keeps_a_sixteenth_of_its_length_as_zeros_and_a_small_one_a_page() {
+    assert_eq!(tail(1 << 20), 1 << 16);
+    assert_eq!(tail(1), PAGE);
 }
 
 #[test]

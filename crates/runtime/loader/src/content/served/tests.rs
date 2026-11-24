@@ -314,3 +314,52 @@ fn a_served_key_is_named_by_the_catalogue_type_of_its_hash() {
         assert_eq!(named(type_hash), format!("{kind} {guid}"));
     }
 }
+
+#[test]
+fn a_base_builds_from_its_whole_length_where_all_of_it_reads_copying_it_from_writable_pages() {
+    use crate::engine::pages::protect;
+    use windows_sys::Win32::System::Memory::{PAGE_NOACCESS, PAGE_READONLY};
+
+    const PAGE: usize = 4096;
+    let key = ResourceKey {
+        guid: Guid([2; 16]),
+        type_hash: 1,
+        part: 3,
+    };
+    // The pages stay for the test process.
+    let pages = crate::engine::pages::allocate(None, 3 * PAGE).expect("fresh pages");
+    let start = pages.as_ptr().expose_provenance();
+    // SAFETY: the pages are the test's own read-write allocation of
+    // `3 * PAGE` bytes, used by no one else.
+    unsafe { pages.as_ptr().wrapping_add(2 * PAGE - 1).write(7) };
+    let mut copy = Vec::new();
+    let held_at = held(&key, (start, 16), 2 * PAGE, &mut copy);
+    assert_eq!(
+        held_at,
+        (copy.as_ptr().expose_provenance(), 2 * PAGE),
+        "read-write pages, copied"
+    );
+    assert_eq!((copy.len(), copy.last()), (2 * PAGE, Some(&7)));
+    // SAFETY: the pages are the test's own allocation, used by no one else.
+    unsafe { protect(start, 2 * PAGE, PAGE_READONLY) }.expect("two pages read-only");
+    // SAFETY: the third page is the test's own allocation, used by no one
+    // else.
+    unsafe { protect(start + 2 * PAGE, PAGE, PAGE_NOACCESS) }.expect("a page that does not read");
+    let mut copy = Vec::new();
+    assert_eq!(
+        held(&key, (start, 16), 2 * PAGE, &mut copy),
+        (start, 2 * PAGE),
+        "held whole"
+    );
+    assert!(copy.is_empty(), "read in place");
+    assert_eq!(
+        held(&key, (start, 16), 3 * PAGE, &mut Vec::new()),
+        (start, 16),
+        "past the pages that read"
+    );
+    assert_eq!(
+        held(&key, (start + PAGE, 16), 16, &mut Vec::new()),
+        (start + PAGE, 16),
+        "not cut"
+    );
+}
