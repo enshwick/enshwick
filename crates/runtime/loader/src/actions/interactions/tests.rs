@@ -134,7 +134,7 @@ fn a_hosted_game_s_end_forgets_its_players_and_keeps_the_link() {
     let fuse = Fuse::new("test inventory actions");
     state.reads_inputs.store(true, Ordering::Release);
     crate::inventory::item_actions::keep_players(Some(std::sync::Arc::new(vec![7, 9])));
-    super::forget();
+    forget();
     assert!(
         crate::inventory::item_actions::players().is_none(),
         "the next world reads anew"
