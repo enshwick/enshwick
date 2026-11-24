@@ -166,12 +166,11 @@ debug = "line-tables-only"
 debug = false
 opt-level = 2
 
-# `cargo bench` inherits this profile, fat LTO included, so hot-path numbers
-# are the shipped build's: thin LTO moved hot-path benches by far more than
-# noise, both ways, and so did 16 codegen units for the generated types alone,
-# a loader hot path 7% slower (2026-11-24). Fat LTO links each bench alone over
-# the whole loader, so build one at a time with `cargo xtask bench <name>`,
-# which compares with main's kept numbers instead of building main again.
+# Fat LTO reaches only targets whose every crate type can take it: the
+# loader's library is a cdylib and an rlib, so its DLL ships without
+# cross-crate LTO, while the stub DLL, a cdylib alone, gets it. One
+# codegen unit stays: 16 for the generated types alone made a loader hot path
+# 7% slower (2026-11-24).
 [profile.release]
 opt-level = 3
 lto = "fat"
@@ -180,6 +179,14 @@ codegen-units = 1
 panic = "unwind"
 debug = "line-tables-only"
 strip = "none"
+
+# Benches build as the loader DLL ships, without cross-crate LTO, so their
+# numbers are the shipped code's; a fat-LTO link per bench took about 190 s of
+# a 340 s build (2026-11-24). Once the DLL ships with fat LTO, this goes back.
+# Build one bench at a time with `cargo xtask bench <name>`, which compares
+# with main's kept executable instead of building main again.
+[profile.bench]
+lto = false
 
 [profile.profiling]
 inherits = "release"
