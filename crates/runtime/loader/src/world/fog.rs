@@ -226,11 +226,12 @@ pub(crate) fn link(loader: &'static Loader) {
     if !STATE.openers.sealed().is_empty() {
         find_layout(loader);
     }
-    link_at(
+    let linked = link_at(
         loader,
         Target::Pinned(pinned::map::FOG_DESTROY),
         Target::Pinned(pinned::map::FOG_REVEAL),
     );
+    STATE.reveal_linked.store(linked, Ordering::Release);
 }
 
 /// Keeps the fog's layout for the copy, or turns the copy off for the
@@ -246,12 +247,12 @@ fn find_layout(loader: &Loader) {
     }
 }
 
-/// Links the fog's `destroy` and its `reveal`, both or neither.
-fn link_at(loader: &Loader, destroy_at: Target<'_>, reveal_at: Target<'_>) {
+/// Links the fog's `destroy` and its `reveal`, both or neither; true when
+/// both linked.
+fn link_at(loader: &Loader, destroy_at: Target<'_>, reveal_at: Target<'_>) -> bool {
     // The destroy goes first: a copy must never outlive its fog.
-    let linked = loader.link_feature(&FUSE, destroy_at, &DESTROY_NEXT, destroy, HookFlags::NONE)
-        && loader.link_feature(&FUSE, reveal_at, &REVEAL_NEXT, reveal, HookFlags::NONE);
-    STATE.reveal_linked.store(linked, Ordering::Release);
+    loader.link_feature(&FUSE, destroy_at, &DESTROY_NEXT, destroy, HookFlags::NONE)
+        && loader.link_feature(&FUSE, reveal_at, &REVEAL_NEXT, reveal, HookFlags::NONE)
 }
 
 crate::engine::chains::chain_detour! {
@@ -700,13 +701,13 @@ mod tests {
     #[test]
     fn a_fog_whose_reveal_fails_to_link_is_wholly_off_and_its_destroy_never_armed() {
         let loader = crate::start::tests::bare_loader();
-        link_at(
+        let linked = link_at(
             &loader,
             Target::Found("fog.destroy", Some(0x1000)),
             Target::Found("fog.reveal", None),
         );
         assert!(FUSE.is_off());
-        assert!(!STATE.reveal_linked.load(Ordering::Acquire));
+        assert!(!linked);
         let mut chains = loader.chains.relock();
         chains.seal();
         assert!(chains.is_empty(), "the destroy went with its feature");

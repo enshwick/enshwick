@@ -43,15 +43,59 @@ struct Shared {
     answer: Option<&'static str>,
 }
 
-static STATE: State = State {
-    open: AtomicBool::new(false),
-    hud: AtomicBool::new(false),
-    fill: AtomicU32::new(0.25f32.to_bits()),
-    shared: Mutex::new(Shared {
-        at: None,
-        answer: None,
-    }),
-};
+impl State {
+    /// The state before any request: closed, the HUD samples hidden.
+    const fn new() -> Self {
+        Self {
+            open: AtomicBool::new(false),
+            hud: AtomicBool::new(false),
+            fill: AtomicU32::new(0.25f32.to_bits()),
+            shared: Mutex::new(Shared {
+                at: None,
+                answer: None,
+            }),
+        }
+    }
+
+    /// [`open`] on this state.
+    fn open(&self, at: Option<[i64; 3]>) {
+        let mut shared = self.shared.relock();
+        shared.at = at;
+        self.open.store(true, Ordering::Release);
+    }
+
+    /// [`forget`] on this state.
+    fn forget(&self) {
+        let mut shared = self.shared.relock();
+        self.open.store(false, Ordering::Release);
+        shared.at = None;
+        self.hud.store(false, Ordering::Relaxed);
+    }
+
+    /// [`hud_fill`] on this state.
+    fn hud_fill(&self) -> Option<f32> {
+        self.hud
+            .load(Ordering::Relaxed)
+            .then(|| f32::from_bits(self.fill.load(Ordering::Relaxed)))
+    }
+
+    /// [`take_open`] on this state.
+    fn take_open(&self) -> Option<Opening> {
+        if !self.open.load(Ordering::Acquire) {
+            return None;
+        }
+        let mut shared = self.shared.relock();
+        if !self.open.swap(false, Ordering::AcqRel) {
+            return None;
+        }
+        shared.answer = None;
+        Some(Opening {
+            at: shared.at.take(),
+        })
+    }
+}
+
+static STATE: State = State::new();
 
 /// The demo's widget state.
 struct Demo {
@@ -73,9 +117,7 @@ thread_local! {
 
 /// Opens the demo at its next frame; `at` is where the administrator stood.
 pub(crate) fn open(at: Option<[i64; 3]>) {
-    let mut shared = STATE.shared.relock();
-    shared.at = at;
-    STATE.open.store(true, Ordering::Release);
+    STATE.open(at);
 }
 
 /// Forgets a request to open that no frame drew yet, with the place it was
@@ -83,18 +125,12 @@ pub(crate) fn open(at: Option<[i64; 3]>) {
 /// or a hosted game ends; an open demo keeps its own place and marker
 /// toggle.
 pub(crate) fn forget() {
-    let mut shared = STATE.shared.relock();
-    STATE.open.store(false, Ordering::Release);
-    shared.at = None;
-    STATE.hud.store(false, Ordering::Relaxed);
+    STATE.forget();
 }
 
 /// The fill of the HUD samples' bar while they show.
 fn hud_fill() -> Option<f32> {
-    STATE
-        .hud
-        .load(Ordering::Relaxed)
-        .then(|| f32::from_bits(STATE.fill.load(Ordering::Relaxed)))
+    STATE.hud_fill()
 }
 
 /// Closes the demo in `slot`, clearing its map marker; the HUD samples stay
@@ -116,17 +152,7 @@ struct Opening {
 /// Takes a request to open with its place, dropping an answer meant for an
 /// earlier demo's dialog.
 fn take_open() -> Option<Opening> {
-    if !STATE.open.load(Ordering::Acquire) {
-        return None;
-    }
-    let mut shared = STATE.shared.relock();
-    if !STATE.open.swap(false, Ordering::AcqRel) {
-        return None;
-    }
-    shared.answer = None;
-    Some(Opening {
-        at: shared.at.take(),
-    })
+    STATE.take_open()
 }
 
 /// Starts a fresh demo at `at`; true when the demo it replaced had its map
@@ -517,21 +543,21 @@ mod tests {
 
     #[test]
     fn a_new_demo_takes_its_place_and_drops_an_earlier_demos_answer() {
-        let _shared = SHARED.relock();
-        STATE.shared.relock().answer = Some("OK");
-        open(Some([4, 5, 6]));
+        let state = State::new();
+        state.shared.relock().answer = Some("OK");
+        state.open(Some([4, 5, 6]));
         assert_eq!(
-            take_open(),
+            state.take_open(),
             Some(Opening {
                 at: Some([4, 5, 6])
             })
         );
         assert_eq!(
-            STATE.shared.relock().answer,
+            state.shared.relock().answer,
             None,
             "the old answer is not shown"
         );
-        assert_eq!(take_open(), None, "a request opens one demo");
+        assert_eq!(state.take_open(), None, "a request opens one demo");
     }
 
     #[test]
@@ -548,18 +574,18 @@ mod tests {
 
     #[test]
     fn the_hud_samples_outlast_the_demo_s_window_and_go_with_the_world() {
-        let _shared = SHARED.relock();
+        let state = State::new();
         let _replaced = start(None);
-        STATE.hud.store(true, Ordering::Relaxed);
+        state.hud.store(true, Ordering::Relaxed);
         DEMO.with_borrow_mut(close);
         assert!(DEMO.with_borrow(Option::is_none), "the window closed");
         assert_eq!(
-            hud_fill(),
-            Some(f32::from_bits(STATE.fill.load(Ordering::Relaxed))),
+            state.hud_fill(),
+            Some(0.25),
             "the samples show once the window closed"
         );
-        forget();
-        assert_eq!(hud_fill(), None, "the world took them");
+        state.forget();
+        assert_eq!(state.hud_fill(), None, "the world took them");
     }
 
     #[test]
