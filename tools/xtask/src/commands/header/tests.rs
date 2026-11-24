@@ -48,11 +48,7 @@ fn a_struct_and_callback_in_a_domain_folder_reach_the_header_with_their_asserts(
             "language = \"C\"\ntrailer = \"#pragma pack(pop)\"\n",
         ),
     ];
-    for (path, text) in files {
-        let path = root.join(path);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, text).unwrap();
-    }
+    write_tree(&root, &files);
     let header = generate(&root);
     drop(root);
     let header = header.unwrap();
@@ -65,6 +61,56 @@ fn a_struct_and_callback_in_a_domain_folder_reach_the_header_with_their_asserts(
         header.contains("offsetof(EnshwickDeep, value) == 0"),
         "{header}"
     );
+}
+
+/// Writes each `(path, text)` of `files` under `root`, making its folders.
+fn write_tree(root: &Path, files: &[(&str, &str)]) {
+    for (path, text) in files {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+}
+
+#[test]
+fn callbacks_come_from_declared_and_inline_modules_but_not_from_tests_or_strays() {
+    let root = Scratch::new("header-test-callbacks").unwrap();
+    write_tree(
+        &root,
+        &[
+            (ABI_SOURCE, "mod events;\n"),
+            (
+                "crates/internal/abi/src/abi/events.rs",
+                "mod knowledge;\n#[cfg(test)]\nmod tests;\n",
+            ),
+            (
+                "crates/internal/abi/src/abi/events/knowledge.rs",
+                "pub type DeepFn = extern \"system\" fn();\n\
+                 pub mod hooks {\n    pub type ProbeFn = extern \"system\" fn(u32);\n}\n\
+                 #[cfg(test)]\nmod tests {\n    pub type InlineFixtureFn = extern \"system\" fn();\n}\n",
+            ),
+            (
+                "crates/internal/abi/src/abi/events/tests.rs",
+                "pub type FixtureFn = extern \"system\" fn();\n",
+            ),
+            (
+                "crates/internal/abi/src/abi/stray.rs",
+                "pub type StrayFn = extern \"system\" fn();\n",
+            ),
+        ],
+    );
+    assert_eq!(callback_types(&root).unwrap(), ["DeepFn", "ProbeFn"]);
+}
+
+#[test]
+fn a_failed_copy_names_the_scratch_path_it_could_not_write() {
+    let root = Scratch::new("header-test-copy").unwrap();
+    write_tree(&root, &[(ABI_SOURCE, ""), (VALUES_ABI_SOURCE, "")]);
+    let taken = root.join("taken");
+    std::fs::write(&taken, "").unwrap();
+    let error = copy_abi(&root, &taken).unwrap_err();
+    let into = taken.join("lib.rs").display().to_string();
+    assert!(error.starts_with(&into), "{error}");
 }
 
 #[test]

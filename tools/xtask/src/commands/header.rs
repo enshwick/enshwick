@@ -10,7 +10,6 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::check::rust_files;
 use crate::scratch::Scratch;
 
 /// The package the header describes.
@@ -210,28 +209,87 @@ fn abi_modules(root: &Path) -> PathBuf {
     root.join(ABI_SOURCE).with_extension("")
 }
 
-/// The Rust files under `modules`, a domain's folder (`events/knowledge.rs`)
-/// included, in path order.
-fn abi_files(modules: &Path) -> Result<Vec<PathBuf>, String> {
+/// The files of the ABI module's submodules, parsed, a domain's folder
+/// (`events/knowledge.rs`) included: the modules rustc builds outside tests,
+/// which are the ones cbindgen reads.
+fn abi_files(root: &Path) -> Result<Vec<(PathBuf, syn::File)>, String> {
     let mut files = Vec::new();
-    rust_files(modules, &mut files)?;
-    files.sort();
+    let source = parse_source(&root.join(ABI_SOURCE))?;
+    submodules(&source, &abi_modules(root), &mut files)?;
     Ok(files)
 }
 
-/// The callback types of the ABI module, every `pub type <Name>Fn`.
+/// Adds the files of the modules `file` declares, which sit in `dir`, and of
+/// theirs to `out`; a `#[cfg(test)]` module is left out, as cbindgen leaves
+/// it.
+fn submodules(
+    file: &syn::File,
+    dir: &Path,
+    out: &mut Vec<(PathBuf, syn::File)>,
+) -> Result<(), String> {
+    for item in &file.items {
+        let syn::Item::Mod(module) = item else {
+            continue;
+        };
+        if module.content.is_some() || is_test(&module.attrs) {
+            continue;
+        }
+        let name = module.ident.to_string();
+        let path = dir.join(format!("{name}.rs"));
+        let parsed = parse_source(&path)?;
+        submodules(&parsed, &dir.join(name), out)?;
+        out.push((path, parsed));
+    }
+    Ok(())
+}
+
+/// The Rust file at `path`, parsed.
+fn parse_source(path: &Path) -> Result<syn::File, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    syn::parse_file(&text).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+/// Whether `attrs` hold `#[cfg(test)]`.
+fn is_test(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg")
+            && attr
+                .parse_args::<syn::Path>()
+                .is_ok_and(|path| path.is_ident("test"))
+    })
+}
+
+/// The callback types of the ABI module's submodules, every public
+/// `type <Name>Fn`.
 fn callback_types(root: &Path) -> Result<Vec<String>, String> {
     let mut found = Vec::new();
-    for path in abi_files(&abi_modules(root))? {
-        let text = std::fs::read_to_string(&path)
-            .map_err(|error| format!("{}: {error}", path.display()))?;
-        found.extend(text.lines().filter_map(|line| {
-            let name = line.strip_prefix("pub type ")?.split([' ', '=']).next()?;
-            name.ends_with("Fn").then(|| name.to_owned())
-        }));
+    for (_, file) in abi_files(root)? {
+        callbacks(&file.items, &mut found);
     }
     found.sort();
     Ok(found)
+}
+
+/// Adds the public `type <Name>Fn` items of `items` and of their inline
+/// modules but `#[cfg(test)]` ones to `out`.
+fn callbacks(items: &[syn::Item], out: &mut Vec<String>) {
+    for item in items {
+        match item {
+            syn::Item::Type(alias) if matches!(alias.vis, syn::Visibility::Public(_)) => {
+                let name = alias.ident.to_string();
+                if name.ends_with("Fn") {
+                    out.push(name);
+                }
+            }
+            syn::Item::Mod(module) if !is_test(&module.attrs) => {
+                if let Some((_, inner)) = &module.content {
+                    callbacks(inner, out);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// `header` with every `Option` of a callback type as the callback type
@@ -557,17 +615,18 @@ fn cbindgen_annotations(source: &str) -> String {
 /// and the rest of the API crate stays out of the header.
 fn copy_abi(root: &Path, to: &Path) -> Result<(), String> {
     let copy = |from: &Path, name: &Path| {
+        let text = std::fs::read_to_string(from)
+            .map_err(|error| format!("{}: {error}", from.display()))?;
         let into = to.join(name);
         into.parent()
             .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| std::fs::read_to_string(from))
-            .and_then(|text| std::fs::write(&into, cbindgen_annotations(&text)))
-            .map_err(|error| format!("{}: {error}", from.display()))
+            .and_then(|()| std::fs::write(&into, cbindgen_annotations(&text)))
+            .map_err(|error| format!("{}: {error}", into.display()))
     };
     copy(&root.join(ABI_SOURCE), Path::new("lib.rs"))?;
     copy(&root.join(VALUES_ABI_SOURCE), Path::new(VALUES_ABI_COPY))?;
     let modules = abi_modules(root);
-    for path in abi_files(&modules)? {
+    for (path, _) in abi_files(root)? {
         let name = path
             .strip_prefix(&modules)
             .map_err(|error| format!("{}: {error}", path.display()))?;
