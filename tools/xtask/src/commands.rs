@@ -2,6 +2,7 @@
 //! `compat.rs` here is the root of the binary `xtask-compat`, which links
 //! the loader and so is a binary of its own.
 
+pub(crate) mod bench;
 pub(crate) mod check;
 pub(crate) mod close;
 pub(crate) mod dist;

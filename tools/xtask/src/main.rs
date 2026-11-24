@@ -39,6 +39,9 @@ struct Cli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Task {
+    /// Runs one criterion benchmark and compares it with main without
+    /// building main again, or keeps its numbers on a clean main commit.
+    Bench(commands::bench::Args),
     /// Runs the compiling checks a change needs before it merges.
     Check(commands::check::Args),
     /// Writes `enshwick.zip`, the loader players unpack into the game folder.
@@ -95,6 +98,7 @@ fn main() -> ExitCode {
 fn run(task: Task) -> Result<ExitCode, String> {
     let root = workspace_root();
     let passed = match task {
+        Task::Bench(args) => commands::bench::run(&args)?,
         Task::Check(args) => commands::check::run(&args)?,
         Task::Dist { out, signed } => commands::dist::run(&out, signed)?,
         Task::Notes(args) => commands::notes::run(&args)?,
