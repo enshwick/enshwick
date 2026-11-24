@@ -51,7 +51,6 @@ use crate::engine::pinned;
 use crate::engine::texts;
 use crate::ui::listing;
 use crate::ui::mods_screen::{self, BACK_PRESSED, Back, Heard, Kind};
-use enshwick_base::Relock;
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
 use super::{ENGINE, Painter, Widgets, copy};
@@ -570,7 +569,7 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
         Page::List { .. } => copy(&[texts::text("mods.title").as_bytes()]),
         Page::Settings { index, .. } => loader.mods.get(*index).map_or_else(
             || copy(&[texts::text("mods.title").as_bytes()]),
-            |m| copy(&[m.label().as_bytes()]),
+            |m| copy(&[crate::base::manifest::label(m).as_bytes()]),
         ),
         Page::Bindings { name, .. } => copy(&[name.as_bytes()]),
         Page::ServerList { .. } => copy(&[texts::text("mods.server").as_bytes()]),
@@ -814,7 +813,8 @@ fn place(from: u8, joined: bool) -> mods_screen::Place {
 /// settings on a page of its own, which its administrators change.
 fn server_id(loader: &Loader, index: usize, place: mods_screen::Place) -> Option<String> {
     let record = loader.mods.get(index)?;
-    (place.joined && !record.settings_files.relock().is_empty()).then(|| record.id.clone())
+    (place.joined && !crate::base::worlds::settings_files(record).is_empty())
+        .then(|| record.id.clone())
 }
 
 /// Frames between two looks at whether the joined server takes messages,

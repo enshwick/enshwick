@@ -213,8 +213,11 @@ pub(crate) fn apply_server_value(id: &str, values: &str) {
     else {
         return;
     };
+    let Some(settings) = crate::base::worlds::settings_of(record) else {
+        return;
+    };
     let first = {
-        let mut held = record.server_values.relock();
+        let mut held = settings.server_values.relock();
         if held.as_deref() == Some(values) {
             return;
         }
@@ -240,7 +243,9 @@ pub(crate) fn forget_server_values() {
         return;
     };
     for (index, record) in loader.mods.iter().enumerate() {
-        if record.server_values.relock().take().is_some() {
+        let taken = crate::base::worlds::settings_of(record)
+            .and_then(|settings| settings.server_values.relock().take());
+        if taken.is_some() {
             crate::engine::log::write(
                 Level::INFO,
                 &record.id,

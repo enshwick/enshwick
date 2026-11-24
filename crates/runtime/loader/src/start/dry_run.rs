@@ -14,7 +14,7 @@ use crate::{engine::builds, engine::log};
 
 use super::game::GAME_DIRS;
 use super::library::{Found, Library, Run, libraries};
-use super::{initialise, read_frame, records, skipped};
+use super::{initialise, loader_facts, read_frame, records, skipped};
 
 /// Why a dry run could not start the loader.
 #[derive(Debug, thiserror::Error)]
@@ -230,7 +230,7 @@ fn outcomes(
             }
         })
         .collect();
-    mods.extend(loader.skipped.iter().map(|skipped| DryMod {
+    mods.extend(resolve::skipped(loader).iter().map(|skipped| DryMod {
         file: skipped.file.clone(),
         id: skipped.id.clone(),
         version: skipped.version.clone(),
@@ -263,24 +263,30 @@ mod tests {
     #[test]
     fn a_dry_run_lists_every_mod_the_loader_skipped_with_its_reason() {
         let mut loader = crate::start::tests::bare_loader();
-        loader.skipped.push(Skipped {
-            id: "you.safes".into(),
-            version: Some("0.2.0".into()),
-            label: "Safes".into(),
-            file: "old/you.safes.dll".into(),
-            reason: Skip::Copy {
+        crate::start::tests::add_skipped(
+            &mut loader,
+            Skipped {
                 id: "you.safes".into(),
+                version: Some("0.2.0".into()),
+                label: "Safes".into(),
+                file: "old/you.safes.dll".into(),
+                reason: Skip::Copy {
+                    id: "you.safes".into(),
+                },
             },
-        });
-        loader.skipped.push(Skipped {
-            id: "broken".into(),
-            version: None,
-            label: "broken".into(),
-            file: "broken/broken.dll".into(),
-            reason: Skip::Refused {
-                skip: crate::base::discovery::Skip::NotAMod,
+        );
+        crate::start::tests::add_skipped(
+            &mut loader,
+            Skipped {
+                id: "broken".into(),
+                version: None,
+                label: "broken".into(),
+                file: "broken/broken.dll".into(),
+                reason: Skip::Refused {
+                    skip: crate::base::discovery::Skip::NotAMod,
+                },
             },
-        });
+        );
         let [skipped, refused] = super::outcomes(&loader, &[], &[]).try_into().unwrap();
         assert_eq!(
             (

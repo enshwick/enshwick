@@ -107,8 +107,7 @@ fn off_records(
 pub(crate) fn skipped_off(
     loader: &crate::engine::loader::Loader,
 ) -> impl Iterator<Item = &crate::base::resolve::Skipped> + '_ {
-    loader
-        .skipped
+    crate::base::resolve::skipped(loader)
         .iter()
         .filter(|skipped| counts_off(loader, skipped))
 }

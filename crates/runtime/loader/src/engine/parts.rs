@@ -83,7 +83,7 @@ pub(crate) struct Part {
     pub(crate) handover: Option<fn(u64) -> bool>,
     /// What the part keeps of each mod, made with the mod's record at the
     /// start and read through [`ModRecord::fact`].
-    pub(crate) facts: Option<fn(&ModRecord) -> Box<dyn Fact>>,
+    pub(crate) facts: Option<MakeFact>,
     /// A mod turned off, or back on: the part follows what it keeps of it.
     pub(crate) turned: Option<fn(&Loader, &ModRecord)>,
     /// What the part rests on code patches for, settled at each arming.
@@ -191,6 +191,9 @@ impl<F: Copy> Fused<F> {
         self.fuse.run(site, || call(self.run))
     }
 }
+
+/// Makes what a part keeps of one mod from its record.
+pub(crate) type MakeFact = fn(&ModRecord) -> Box<dyn Fact>;
 
 /// What a part settles of the code patches it rests on, as
 /// [`crate::engine::code::arming`] and [`crate::engine::code::disarm`] do.

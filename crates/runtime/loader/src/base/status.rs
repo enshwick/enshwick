@@ -176,8 +176,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         last_crash: crate::engine::crash::last().map(str::to_owned),
         at: crate::engine::diag::now(),
         mods,
-        skipped: loader
-            .skipped
+        skipped: crate::base::resolve::skipped(loader)
             .iter()
             .map(|s| crate::engine::diag::SkippedMod {
                 id: s.id.clone(),

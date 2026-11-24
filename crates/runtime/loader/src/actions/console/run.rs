@@ -7,7 +7,6 @@ use enshwick_core::abi::PlayerInfo;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::texts;
-use enshwick_base::Relock;
 
 use super::input::{self, End};
 use super::{Line, Tool, log_query, parse, submit, take};

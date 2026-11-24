@@ -158,8 +158,8 @@ pub(super) fn names(loader: &Loader) -> Vec<(String, String)> {
         .mods
         .iter()
         // The manifest's name: players of any language read the list.
-        .filter(|m| m.joins() && !m.meta.name.is_empty())
-        .map(|m| (m.id.clone(), m.meta.name.clone()))
+        .filter(|m| m.joins() && !crate::base::manifest::shown(m).name.is_empty())
+        .map(|m| (m.id.clone(), crate::base::manifest::shown(m).name.clone()))
         .collect()
 }
 

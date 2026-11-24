@@ -285,7 +285,10 @@ pub(crate) fn check_settings(
     else {
         return Ok(());
     };
-    let found = record
+    let Some(settings) = crate::base::worlds::settings_of(record) else {
+        return Ok(());
+    };
+    let found = settings
         .checks
         .relock()
         .iter()

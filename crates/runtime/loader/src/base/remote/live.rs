@@ -375,8 +375,7 @@ fn edit(
     let (index, record) = loader
         .find_mod(id)
         .ok_or_else(|| EditSettingError::UnknownMod { id: id.to_owned() })?;
-    let schema = record
-        .settings_schema()
+    let schema = crate::base::worlds::schema_of(record)
         .ok_or_else(|| EditSettingError::NoSchema { id: id.to_owned() })?;
     let now = Instant::now();
     admit(

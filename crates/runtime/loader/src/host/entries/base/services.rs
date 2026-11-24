@@ -37,7 +37,7 @@ impl crate::base::services::Names for Loader {
 /// so what it offers is known by now.
 pub(crate) fn required_owner<'a>(record: &ModRecord, name: &'a str) -> Option<&'a str> {
     let (owner, _) = name.split_once(':')?;
-    record.requires(owner).then_some(owner)
+    crate::base::manifest::requires(record, owner).then_some(owner)
 }
 
 /// Why the mod of `record` may not use the `kind` `name`, `<id>:<what>`: a
@@ -52,7 +52,12 @@ pub(crate) fn unexported(
 ) -> Option<String> {
     let (owner, _) = name.split_once(':')?;
     let (_, provider) = loader.find_mod(owner)?;
-    crate::base::manifest::unexported(kind, name, &record.id, &provider.exports())
+    crate::base::manifest::unexported(
+        kind,
+        name,
+        &record.id,
+        &crate::base::manifest::exported(provider),
+    )
 }
 
 /// [`unexported`] as a refusal of the call.

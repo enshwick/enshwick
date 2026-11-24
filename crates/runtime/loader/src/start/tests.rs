@@ -138,6 +138,13 @@ pub(crate) fn bare_loader() -> Loader {
     loader(&[], false).0
 }
 
+/// Adds `skipped` to the mods `loader` did not load, as the start finds them.
+pub(crate) fn add_skipped(loader: &mut Loader, skipped: resolve::Skipped) {
+    let mut all = resolve::skipped(loader).to_vec();
+    all.push(skipped);
+    loader.facts = loader_facts(all);
+}
+
 /// A server's loader with no game running the plain mods `ids`, in that
 /// order, for the tests of other parts that ask about a mod.
 pub(crate) fn loader_running(ids: &[&'static str]) -> Loader {
@@ -174,8 +181,8 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
         1,
         "only the copy that loads has a record"
     );
-    let [skipped] = loader.skipped.as_slice() else {
-        panic!("{:?}", loader.skipped);
+    let [skipped] = resolve::skipped(&loader) else {
+        panic!("{:?}", resolve::skipped(&loader));
     };
     assert_eq!(
         (
@@ -241,13 +248,16 @@ fn the_off_names_and_count_follow_a_mod_that_turns_off() {
     let names = crate::base::off_line::names(&loader);
     assert_eq!(names.first().map(String::as_str), Some("you.altars"));
     let mut loader = loader;
-    loader.skipped.push(resolve::Skipped {
-        id: "you.map".into(),
-        version: Some("1.0.0".into()),
-        label: "Map".into(),
-        file: "you.map/you.map.dll".into(),
-        reason: resolve::Skip::Missing { id: "you.x".into() },
-    });
+    add_skipped(
+        &mut loader,
+        resolve::Skipped {
+            id: "you.map".into(),
+            version: Some("1.0.0".into()),
+            label: "Map".into(),
+            file: "you.map/you.map.dll".into(),
+            reason: resolve::Skip::Missing { id: "you.x".into() },
+        },
+    );
     assert_eq!(
         crate::base::off_line::mods_off(&loader),
         ["you.altars", "Map"]
@@ -325,7 +335,7 @@ fn a_found_pack_counts_its_files_in_the_join_version_after_it_turns_off_too() {
     );
     let (mut loader, _) = loader(&[TestMod::plain(id)], false);
     loader.mods[0].pack = true;
-    let version = loader.mods[0].join_version();
+    let version = crate::base::join::client::join_version(&loader.mods[0]);
     assert!(
         version
             .strip_prefix("1.0.0+")
@@ -334,7 +344,7 @@ fn a_found_pack_counts_its_files_in_the_join_version_after_it_turns_off_too() {
     );
     loader.turn_off(ModIndex::new(0), "turned off by the test");
     assert_eq!(
-        loader.mods[0].join_version(),
+        crate::base::join::client::join_version(&loader.mods[0]),
         version,
         "an off pack keeps its files' hash, so a refusal tells a restart from other files"
     );

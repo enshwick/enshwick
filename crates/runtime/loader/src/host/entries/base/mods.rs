@@ -85,17 +85,12 @@ entries! {
     }
 
     fn settings(me as AnyMod, file as Text, out as Out<Str>) -> Status {
-        if !me
-            .record
-            .settings_files
-            .relock()
-            .iter()
-            .any(|f| f.file == file)
-        {
+        let settings = crate::base::worlds::settings_of(me.record).ok_or(Status::UNAVAILABLE)?;
+        if !settings.files.relock().iter().any(|f| f.file == file) {
             return Err(Status::MISSING.into());
         }
         let content = crate::base::worlds::file_text(me.record, file);
-        out.put(Str::new(me.record.settings.relock().keep(&content).unwrap_or_default()))
+        out.put(Str::new(settings.settings.relock().keep(&content).unwrap_or_default()))
     }
 
     fn rename_content(me as Mod, [renames, count] as List<ContentRename>) -> Status {
@@ -150,7 +145,8 @@ entries! {
         if !enshwick_core::config::__file_name(file) {
             return Err(Status::BAD_ARGS.into());
         }
-        let mut files = me.record.settings_files.relock();
+        let settings = crate::base::worlds::settings_of(me.record).ok_or(Status::UNAVAILABLE)?;
+        let mut files = settings.files.relock();
         if let Some(known) = files.iter().find(|f| f.file == file) {
             return if known.schema == parsed {
                 Ok(())
@@ -173,7 +169,8 @@ entries! {
         user: *mut core::ffi::c_void,
     ) -> Status {
         in_init(me.index)?;
-        let mut checks = me.record.checks.relock();
+        let settings = crate::base::worlds::settings_of(me.record).ok_or(Status::UNAVAILABLE)?;
+        let mut checks = settings.checks.relock();
         if checks.iter().any(|(known, _, _)| known == file) {
             return Err(Status::REFUSED.into());
         }

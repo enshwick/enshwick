@@ -140,7 +140,7 @@ pub(crate) fn start(loader: &'static Loader) {
             }
             // A mod may declare a settings file after the watch started.
             for (owner, record) in loader.mods.iter().enumerate() {
-                for declared in crate::base::worlds::settings_files(record).iter() {
+                for declared in &crate::base::worlds::settings_files(record) {
                     let known = worlds
                         .iter()
                         .any(|w| w.owner.get() == owner && w.file == declared.file);

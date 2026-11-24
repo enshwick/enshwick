@@ -158,6 +158,10 @@ pub(crate) static PARTS: &[&Part] = &[
         seal: Some(|_| bases::seal()),
         link: Some(bases::link),
         forget: Some(|_| bases::forget()),
+        patches: Some(Patches {
+            arming: bases::arming,
+            disarm: bases::disarm,
+        }),
         ..part!("bases", bases)
     },
     &Part {
