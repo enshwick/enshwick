@@ -1,11 +1,13 @@
 //! The fake loader's controls: the mod's declared controls, keys the test
 //! holds down, game actions it fires and the action runs a client sent.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 use core::time::Duration;
 
 use enshwick_core::abi::{
-    ControlEvent, ControlFn, ControlSpec, Header, ModHandle, PlayerInfo, Status, Str, read_headed,
+    ControlEvent, ControlFn, ControlSpec, Header, PlayerInfo, Status, Str, read_headed,
 };
 use enshwick_core::controls::{
     GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases,
@@ -44,94 +46,96 @@ pub(crate) struct FakeControls {
     targets: Vec<Option<enshwick_core::actions::ActionTarget>>,
 }
 
-pub(crate) extern "system" fn control(
-    me: ModHandle,
-    spec: *const ControlSpec,
-    callback: Option<ControlFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    // SAFETY: the safe layer passes a live `ControlSpec` for the call.
-    let Some(spec) = (unsafe { read_headed(spec, size_of::<ControlSpec>()) }) else {
-        return Status::BAD_ARGS;
-    };
-    if crate::test::table::late() {
-        return Status::TOO_LATE;
-    }
-    let name = text(spec.name);
-    let link = text(spec.link);
-    let key = |bits: u32| (bits != 0).then(|| Key::from_bits(bits));
-    let keys = [key(spec.key), key(spec.second)];
-    let link = match GameAction::ALL.iter().find(|a| a.name() == link) {
-        Some(action) => Some(*action),
-        None if link.is_empty() => None,
-        None => return Status::BAD_ARGS,
-    };
-    let action = text(spec.action);
-    if !is_valid_name(&name)
-        || keys.iter().any(|k| matches!(k, Some(None)))
-        || !valid_phases(spec.fires)
-        || !(action.is_empty() || is_valid_name(&action))
-    {
-        return Status::BAD_ARGS;
-    }
-    with_open(|s| {
-        if s.actions.controls.controls.iter().any(|c| c.name == name) {
-            return Status::REFUSED;
+entries! {
+    pub(crate) fn control(
+        me as Mod,
+        spec: *const ControlSpec as args::Headed,
+        callback: Option<ControlFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the safe layer passes a live `ControlSpec` for the call.
+        let Some(spec) = (unsafe { read_headed(spec, size_of::<ControlSpec>()) }) else {
+            return Status::BAD_ARGS;
+        };
+        if crate::test::table::late() {
+            return Status::TOO_LATE;
         }
-        let mut keys = keys.map(Option::flatten);
-        for (_, slot, key) in s
-            .host
-            .actions
-            .bindings
-            .iter()
-            .filter(|(n, _, _)| *n == name)
+        let name = text(spec.name);
+        let link = text(spec.link);
+        let key = |bits: u32| (bits != 0).then(|| Key::from_bits(bits));
+        let keys = [key(spec.key), key(spec.second)];
+        let link = match GameAction::ALL.iter().find(|a| a.name() == link) {
+            Some(action) => Some(*action),
+            None if link.is_empty() => None,
+            None => return Status::BAD_ARGS,
+        };
+        let action = text(spec.action);
+        if !is_valid_name(&name)
+            || keys.iter().any(|k| matches!(k, Some(None)))
+            || !valid_phases(spec.fires)
+            || !(action.is_empty() || is_valid_name(&action))
         {
-            if let Some(kept) = keys.get_mut(*slot) {
-                *kept = *key;
+            return Status::BAD_ARGS;
+        }
+        with_open(|s| {
+            if s.actions.controls.controls.iter().any(|c| c.name == name) {
+                return Status::REFUSED;
             }
-        }
-        s.actions.controls.controls.push(FakeControl {
-            keys,
-            label: text(spec.label),
-            name,
-            link,
-            fires: spec.fires,
-            hold_ms: spec.hold_ms,
-            action,
-            handler: Registered::new(callback, user, me),
-            tracker: Tracker::default(),
-            players: Vec::new(),
-        });
-        Status::OK
-    })
-}
+            let mut keys = keys.map(Option::flatten);
+            for (_, slot, key) in s
+                .host
+                .actions
+                .bindings
+                .iter()
+                .filter(|(n, _, _)| *n == name)
+            {
+                if let Some(kept) = keys.get_mut(*slot) {
+                    *kept = *key;
+                }
+            }
+            s.actions.controls.controls.push(FakeControl {
+                keys,
+                label: text(spec.label),
+                name,
+                link,
+                fires: spec.fires,
+                hold_ms: spec.hold_ms,
+                action,
+                handler: Registered::new(callback, user, me),
+                tracker: Tracker::default(),
+                players: Vec::new(),
+            });
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn run_action(
-    _me: ModHandle,
-    action: Str,
-    args: Str,
-    target: *const enshwick_core::abi::ActionTarget,
-) -> Status {
-    // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
-    let named = match unsafe { enshwick_core::abi::ActionTarget::read(target) } {
-        Ok(named) => named,
-        Err(status) => return status,
-    };
-    let named = named
-        .as_ref()
-        .and_then(enshwick_core::__fake::action_target);
-    let (action, args) = (text(action), text(args));
-    with(Status::MISSING, |s| {
-        if s.host.base.side != enshwick_core::abi::Side::CLIENT {
-            return Status::UNAVAILABLE;
-        }
-        s.actions.controls.runs.push((action, args));
-        s.actions.controls.targets.push(named);
-        Status::OK
-    })
+    pub(crate) fn run_action(
+        me as Mod,
+        action: Str as args::Text,
+        args: Str as args::Text,
+        target: *const enshwick_core::abi::ActionTarget,
+    ) -> Status {
+        // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
+        let named = match unsafe { enshwick_core::abi::ActionTarget::read(target) } {
+            Ok(named) => named,
+            Err(status) => return status,
+        };
+        let named = named
+            .as_ref()
+            .and_then(enshwick_core::__fake::action_target);
+        let (action, args) = (text(action), text(args));
+        with(Status::MISSING, |s| {
+            if s.host.base.side != enshwick_core::abi::Side::CLIENT {
+                return Status::UNAVAILABLE;
+            }
+            s.actions.controls.runs.push((action, args));
+            s.actions.controls.targets.push(named);
+            Status::OK
+        })
+    }
 }
 
 impl FakeHost {
@@ -393,6 +397,8 @@ impl Installed {
 
 #[cfg(test)]
 mod tests {
+    use enshwick_core::abi::ModHandle;
+
     use super::*;
 
     unsafe extern "system" fn nothing(event: *const ControlEvent, _: *mut c_void) {
@@ -423,6 +429,7 @@ mod tests {
 
     #[test]
     fn the_fake_refuses_a_control_that_never_fires_or_an_unbindable_key() {
+        let _loader = FakeHost::new().install();
         let h = Key::parse("H").unwrap().bits();
         assert_eq!(declared(h, 0), Status::BAD_ARGS, "no phase");
         assert_eq!(declared(h, 8), Status::BAD_ARGS, "an unknown phase");

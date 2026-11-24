@@ -1,8 +1,10 @@
 //! The fake's spawn points and the respawn point each player's character
 //! holds, as the loader reads and sets them.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, ModHandle, RespawnPointInfo, Status};
+use enshwick_core::abi::{Header, RespawnPointInfo, Status};
 use enshwick_core::content::Guid;
 #[cfg(feature = "unstable")]
 use enshwick_core::game_events::UniqueSceneId;
@@ -200,76 +202,78 @@ fn off(s: &table::State) -> bool {
     table::world::entity_calls_off(s)
 }
 
-pub(crate) extern "system" fn respawn_point(
-    _me: ModHandle,
-    character: Entity,
-    out: *mut RespawnPointInfo,
-) -> Status {
-    if !table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    with(Status::UNAVAILABLE, |s| {
-        if unread(s) {
-            return Status::UNAVAILABLE;
+entries! {
+    pub(crate) fn respawn_point(
+        me as Caller,
+        character: Entity,
+        out: *mut RespawnPointInfo as args::HeadedOut,
+    ) -> Status {
+        if !table::on_game_thread() {
+            return Status::WRONG_THREAD;
         }
-        if !s.host.base.players.iter().any(|p| p.entity == character) {
-            return Status::MISSING;
-        }
-        let point = s
-            .host
-            .world
-            .respawn_points
-            .get(&character.0)
-            .and_then(|at| s.host.world.spawn_points.iter().find(|p| p.entity == *at));
-        let Some(point) = point else {
-            return Status::MISSING;
-        };
-        table::base::io::put_headed(
-            out,
-            RespawnPointInfo {
-                header: Header::of::<RespawnPointInfo>(),
-                entity: point.entity,
-                kind: point.kind,
-                position: point.position,
-                orientation: point.orientation,
-            },
-        )
-    })
-}
-
-pub(crate) extern "system" fn set_respawn_point(
-    _me: ModHandle,
-    character: Entity,
-    spawn_point: Entity,
-) -> Status {
-    if !table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let set = with(Err(Status::UNAVAILABLE), |s| {
-        if off(s) {
-            return Err(Status::UNAVAILABLE);
-        }
-        let point = s
-            .host
-            .world
-            .spawn_points
-            .iter()
-            .find(|p| p.entity == spawn_point && p.kind != RespawnPointInfo::NO_RESPAWN)
-            .copied()
-            .ok_or(Status::BAD_ARGS)?;
-        if !s.host.base.players.iter().any(|p| p.entity == character) {
-            return Err(Status::MISSING);
-        }
-        s.host.world.respawn_points.insert(character.0, spawn_point);
-        Ok(point)
-    });
-    match set {
-        Ok(point) => {
-            if point.base.is_some() || point.scene.is_some() {
-                let _ran = raise(character_guid(character), point.base, point.scene);
+        with(Status::UNAVAILABLE, |s| {
+            if unread(s) {
+                return Status::UNAVAILABLE;
             }
-            Status::OK
+            if !s.host.base.players.iter().any(|p| p.entity == character) {
+                return Status::MISSING;
+            }
+            let point = s
+                .host
+                .world
+                .respawn_points
+                .get(&character.0)
+                .and_then(|at| s.host.world.spawn_points.iter().find(|p| p.entity == *at));
+            let Some(point) = point else {
+                return Status::MISSING;
+            };
+            table::base::io::put_headed(
+                out,
+                RespawnPointInfo {
+                    header: Header::of::<RespawnPointInfo>(),
+                    entity: point.entity,
+                    kind: point.kind,
+                    position: point.position,
+                    orientation: point.orientation,
+                },
+            )
+        })
+    }
+
+    pub(crate) fn set_respawn_point(
+        me as Caller,
+        character: Entity,
+        spawn_point: Entity,
+    ) -> Status {
+        if !table::on_game_thread() {
+            return Status::WRONG_THREAD;
         }
-        Err(status) => status,
+        let set = with(Err(Status::UNAVAILABLE), |s| {
+            if off(s) {
+                return Err(Status::UNAVAILABLE);
+            }
+            let point = s
+                .host
+                .world
+                .spawn_points
+                .iter()
+                .find(|p| p.entity == spawn_point && p.kind != RespawnPointInfo::NO_RESPAWN)
+                .copied()
+                .ok_or(Status::BAD_ARGS)?;
+            if !s.host.base.players.iter().any(|p| p.entity == character) {
+                return Err(Status::MISSING);
+            }
+            s.host.world.respawn_points.insert(character.0, spawn_point);
+            Ok(point)
+        });
+        match set {
+            Ok(point) => {
+                if point.base.is_some() || point.scene.is_some() {
+                    let _ran = raise(character_guid(character), point.base, point.scene);
+                }
+                Status::OK
+            }
+            Err(status) => status,
+        }
     }
 }

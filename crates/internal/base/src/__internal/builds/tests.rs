@@ -513,6 +513,47 @@ fn a_rebuild_that_changed_bytes_rebuilds_its_readers_once_each() {
 }
 
 #[test]
+fn a_rebuild_of_a_key_the_game_never_built_still_rebuilds_its_readers() {
+    let table = table(vec![
+        entry(1, &[(1, Does::Add)]),
+        entry(2, &[(1, Does::Read(0))]),
+    ]);
+    {
+        let mut entries = table.entries.borrow_mut();
+        entries[1].held = Some((Some(vec![0]), vec![9], vec![1]));
+        entries[0].read_by = vec![1];
+    }
+    let mut done = Vec::new();
+    assert_eq!(rebuild_in(&table, 0, &mut done), Ok(()));
+    assert_eq!(done, [key(1), key(2)], "served reads saw it, so its reader");
+}
+
+#[test]
+fn a_reader_whose_build_runs_on_this_thread_is_left() {
+    let table = table(vec![
+        entry(1, &[(1, Does::Add)]),
+        entry(2, &[(1, Does::Read(0))]),
+    ]);
+    {
+        let mut entries = table.entries.borrow_mut();
+        entries[0].held = Some((Some(vec![0]), vec![9], vec![1]));
+        entries[1].held = Some((Some(vec![0]), vec![9], vec![1]));
+        entries[0].read_by = vec![1];
+    }
+    table
+        .frames
+        .borrow_mut()
+        .push((1, false, false, Vec::new()));
+    let mut done = Vec::new();
+    assert_eq!(rebuild_in(&table, 0, &mut done), Ok(()));
+    assert_eq!(
+        done,
+        [key(1)],
+        "its build reads the key as it is when it does"
+    );
+}
+
+#[test]
 fn a_served_read_builds_falls_back_to_the_archive_and_refuses_before_the_seal() {
     let mut new = entry(2, &[(1, Does::Answer(Status::REFUSED))]);
     new.base = key(1);

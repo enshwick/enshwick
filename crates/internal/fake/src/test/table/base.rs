@@ -11,7 +11,9 @@ use crate::test::base::{points::FakePoints, ticks::FakeTicks};
 use crate::test::table::Registration;
 use registered::Registered;
 
+pub(crate) mod args;
 pub(crate) mod build;
+pub(crate) mod caller;
 #[cfg(test)]
 mod headed_tests;
 pub(crate) mod hooks;
@@ -23,8 +25,9 @@ pub(crate) mod pacing;
 pub(crate) mod registered;
 pub(crate) mod services;
 
-/// A defined mod event: name, layout and the size of its data.
-pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32);
+/// A defined mod event: name, layout, the size of its data and the mod that
+/// defined it.
+pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32, ModHandle);
 
 /// A mod event handler: name, layout, the bytes it reads and the handler.
 pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, Registered<ModEventFn>);

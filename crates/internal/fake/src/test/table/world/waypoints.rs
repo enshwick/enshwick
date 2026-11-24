@@ -2,9 +2,11 @@
 //! [`HostApi::waypoint`](enshwick_core::abi::HostApi::waypoint) and
 //! `Event::WAYPOINT_CHANGED`, through the base's one watcher.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use enshwick_base::__internal::waypoints::{self, Waypoints};
 use enshwick_core::__fake::ids;
-use enshwick_core::abi::{Event, Metres, ModHandle, Status, WaypointData};
+use enshwick_core::abi::{Event, Metres, Status, WaypointData};
 use enshwick_core::{Entity, PlayerKey};
 
 use super::no_world;
@@ -78,30 +80,32 @@ fn key_of(s: &State, entity: Entity) -> Option<PlayerKey> {
         .map(|p| p.key)
 }
 
-pub(crate) extern "system" fn waypoint(
-    _me: ModHandle,
-    entity: Entity,
-    out: *mut WaypointData,
-) -> Status {
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let data = with(Err(Status::MISSING), |s| {
-        if no_world(s) {
-            return Err(Status::UNAVAILABLE);
+entries! {
+    pub(crate) fn waypoint(
+        me as Caller,
+        entity: Entity,
+        out: *mut WaypointData as args::HeadedOut,
+    ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
         }
-        let key = key_of(s, entity).unwrap_or(PlayerKey::new(0));
-        Ok(waypoints::data(key, entity, read(s, entity)?))
-    });
-    let data = match data {
-        Ok(data) => data,
-        Err(status) => return status,
-    };
-    // SAFETY: the safe layer passes a headed struct for the call.
-    if unsafe { enshwick_core::abi::write_headed(out, data) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
+        let data = with(Err(Status::MISSING), |s| {
+            if no_world(s) {
+                return Err(Status::UNAVAILABLE);
+            }
+            let key = key_of(s, entity).unwrap_or(PlayerKey::new(0));
+            Ok(waypoints::data(key, entity, read(s, entity)?))
+        });
+        let data = match data {
+            Ok(data) => data,
+            Err(status) => return status,
+        };
+        // SAFETY: the safe layer passes a headed struct for the call.
+        if unsafe { enshwick_core::abi::write_headed(out, data) } {
+            Status::OK
+        } else {
+            Status::BAD_ARGS
+        }
     }
 }
 

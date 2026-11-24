@@ -146,12 +146,7 @@ side = "both""#
         // SAFETY: the fake table remains valid throughout its installation.
         let register = unsafe { &*loader.api() }.subscribe_client_game_event;
         assert_eq!(
-            register(
-                enshwick::abi::ModHandle(0),
-                42,
-                Some(unused),
-                core::ptr::null_mut()
-            ),
+            register(loader.handle(), 42, Some(unused), core::ptr::null_mut()),
             Status::TOO_LATE,
             "client subscriptions close when initialization ends"
         );
@@ -183,12 +178,11 @@ side = "both""#
 
     #[test]
     fn a_dedicated_server_keeps_a_client_subscription_that_never_runs() {
-        use enshwick::abi::ModHandle;
         let loader = enshwick::test::FakeHost::new().side(Side::SERVER).install();
         // SAFETY: the fake's table is readable and lives for the installation.
         let register = unsafe { &*loader.api() }.subscribe_client_game_event;
         assert_eq!(
-            register(ModHandle(0), 42, Some(unused), core::ptr::null_mut()),
+            register(loader.handle(), 42, Some(unused), core::ptr::null_mut()),
             Status::OK
         );
         assert_eq!(loader.raise_client_game_event(42, &[0; 8]), 0);
@@ -196,17 +190,16 @@ side = "both""#
 
     #[test]
     fn a_client_takes_every_event_type_and_any_number_of_subscriptions() {
-        use enshwick::abi::ModHandle;
         let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
         // SAFETY: the fake's table is readable and lives for the installation.
         let register = unsafe { &*loader.api() }.subscribe_client_game_event;
         assert_eq!(
-            register(ModHandle(0), 0, Some(unused), core::ptr::null_mut()),
+            register(loader.handle(), 0, Some(unused), core::ptr::null_mut()),
             Status::OK
         );
         for _ in 0..100 {
             assert_eq!(
-                register(ModHandle(0), 42, Some(unused), core::ptr::null_mut()),
+                register(loader.handle(), 42, Some(unused), core::ptr::null_mut()),
                 Status::OK
             );
         }
@@ -216,7 +209,6 @@ side = "both""#
 
     #[test]
     fn a_client_subscription_after_init_is_too_late_on_either_side() {
-        use enshwick::abi::ModHandle;
         for side in [Side::SERVER, Side::CLIENT] {
             let loader = host(side).install();
             // SAFETY: these exports are generated for this module's test mod.
@@ -226,7 +218,7 @@ side = "both""#
             // SAFETY: the fake's table is readable and lives for the installation.
             let register = unsafe { &*loader.api() }.subscribe_client_game_event;
             assert_eq!(
-                register(ModHandle(0), 42, Some(unused), core::ptr::null_mut()),
+                register(loader.handle(), 42, Some(unused), core::ptr::null_mut()),
                 Status::TOO_LATE,
                 "{side:?}"
             );

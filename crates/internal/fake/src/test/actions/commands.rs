@@ -461,8 +461,8 @@ impl Installed {
         }
     }
 
-    /// `player` leaves, as far as the mod's windows and permission changes
-    /// go: their client holds no window any more, what waited for it is
+    /// `player` leaves: their character is in no level step and no list of
+    /// players any more, their client holds no window, what waited for it is
     /// dropped, every mod's change to their permissions ends, and the mod
     /// hears that the player left, as the loader tells every mod with
     /// actions.
@@ -477,6 +477,7 @@ impl Installed {
     pub fn player_left(&self, player: enshwick_core::PlayerKey) {
         let key = player.get();
         table::with((), |s| {
+            s.host.base.players.retain(|p| p.key != player);
             s.actions.commands.carried.retain(|(k, _, _)| *k != key);
             s.actions.commands.pending.retain(|(k, _)| *k != key);
             s.actions.commands.windows.retain(|(k, _, _)| *k != key);

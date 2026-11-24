@@ -151,8 +151,10 @@ impl FakeHost {
     /// `pack.toml` says. Its calls are refused by that side as the loader
     /// refuses them: a rate or value clients read, a crafting prop and a
     /// net channel need [`Side::BOTH`](enshwick_core::abi::Side::BOTH). A
-    /// handle that is neither the mod's nor a pack named here counts as a
-    /// pack of side server.
+    /// call with a handle that is neither the mod's, a pack named here nor
+    /// a mod [`other_mod`](Self::other_mod) named answers
+    /// [`Status::BAD_ARGS`](enshwick_core::abi::Status::BAD_ARGS), as the
+    /// loader answers a handle it never gave out.
     ///
     /// # Examples
     ///
@@ -168,6 +170,34 @@ impl FakeHost {
     pub fn pack(mut self, pack: ModHandle, side: enshwick_core::abi::Side) -> Self {
         self.base.pack_sides.retain(|(other, _)| *other != pack);
         self.base.pack_sides.push((pack, side));
+        self
+    }
+
+    /// Another mod the loader runs beside the mod under test, with handle
+    /// `handle`, so a test calls [`Installed::api`] with that handle to act
+    /// as a second mod: one that holds what the mod under test asks for,
+    /// say. It runs on both sides, and the loader's rules for a mod apply to
+    /// its calls: what it asks for in init is its own, the events it sends
+    /// must be its own, and it has no settings files.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Level, ModHandle, Status, Str};
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .other_mod(ModHandle(2))
+    ///     .install();
+    /// // SAFETY: the fake's table is a static; the message lives for the call.
+    /// let api = unsafe { &*loader.api() };
+    /// assert_eq!((api.log)(ModHandle(2), Level::INFO, Str::new("hi")), Status::OK);
+    /// assert_eq!((api.log)(ModHandle(3), Level::INFO, Str::new("hi")), Status::BAD_ARGS);
+    /// ```
+    #[must_use]
+    pub fn other_mod(mut self, handle: ModHandle) -> Self {
+        if !self.base.other_mods.contains(&handle) {
+            self.base.other_mods.push(handle);
+        }
         self
     }
 }

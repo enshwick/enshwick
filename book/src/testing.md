@@ -136,6 +136,16 @@ these:
 Hooks, code patches, points and rates asked for after `init` returns come too
 late.
 
+Every call names its caller by its handle. The fake reads the caller and then
+each argument before the call does anything, as the loader does. A handle the
+loader never gave out answers `Status::BAD_ARGS`. A mod that is off answers
+`Status::FAULTED` to most calls. It still logs and reads its fault, settings,
+folders, language, symbols, constants, resources, the mods, missing mods and
+what is off. To call
+as a second mod, name its handle with `other_mod`; for a data pack, use
+`pack`. A null pointer the call needs, or text that is not UTF-8, answers
+`Status::BAD_ARGS` first.
+
 No world runs while `init` runs, as in the game, where mods start before a
 world loads. The world's calls answer `Status::UNAVAILABLE` there: players,
 entities, components, events, teleports and spawns. Make them from a handler,

@@ -12,7 +12,7 @@
 /// assert_ne!(RateId::EXPERIENCE_COMBAT, RateId::FACTORY_PRODUCTION_SPEED);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, bytemuck::Zeroable)]
 pub struct RateId(pub u32);
 
 impl RateId {

@@ -1,6 +1,8 @@
 //! The fake's answers about the mods: their manifests, logs, faults,
 //! settings and what is loaded.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use super::io::list;
@@ -22,8 +24,9 @@ pub(crate) struct ManifestFacts {
 /// Whether the caller `me` runs on both sides, as the loader reads it from
 /// the caller's own record: a pack named by
 /// [`FakeHost::pack`](crate::test::FakeHost::pack) by its side, the mod
-/// under test by its manifest (both when it declared none), any other
-/// handle as a pack of side server.
+/// under test by its manifest (both when it declared none), a mod
+/// [`FakeHost::other_mod`](crate::test::FakeHost::other_mod) named as both,
+/// and the loader's own copy as the server only.
 pub(crate) fn joins(s: &State, me: ModHandle) -> bool {
     if let Some(&(_, side)) = s.host.base.pack_sides.iter().find(|(pack, _)| *pack == me) {
         side == Side::BOTH
@@ -33,7 +36,7 @@ pub(crate) fn joins(s: &State, me: ModHandle) -> bool {
             .as_ref()
             .is_none_or(|manifest| manifest.joins)
     } else {
-        false
+        s.host.base.other_mods.contains(&me)
     }
 }
 
@@ -189,151 +192,167 @@ pub(crate) fn loader_turns_off(owner: ModHandle, reason: String) {
     super::registered::turn_off(owner);
 }
 
-pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) -> Status {
-    let reason = text(reason);
-    // The loader logs every turn-off with its reason.
-    let line = off_line(&reason.replace('\t', " "));
-    with((), |s| {
-        s.base.faults.push(reason);
-        s.base.sent.push((me, Level::ERROR, line.clone()));
-        s.base.logs.push((Level::ERROR, line));
-    });
-    super::registered::turn_off(me);
-    Status::OK
-}
-
-pub(crate) extern "system" fn log(me: ModHandle, level: Level, message: Str) -> Status {
-    let message = text(message);
-    with((), |s| {
-        s.base.sent.push((me, level, message.clone()));
-        s.base.logs.push((level, message));
-    });
-    Status::OK
-}
-
-pub(crate) extern "system" fn settings(_me: ModHandle, file: Str, out: *mut Str) -> Status {
-    let file = text(file);
-    let served = with(None, |s| {
-        if !s.base.config_schemas.contains_key(&file) {
-            return None;
-        }
-        let served: Box<str> = s
-            .host
-            .base
-            .settings
-            .get(&file)
-            .cloned()
-            .unwrap_or_default()
-            .into();
-        // The heap text stays where it is while the box lives in the state.
-        let view = Str::new(&served);
-        s.base.settings.push(served);
-        Some(view)
-    });
-    found(served, out)
-}
-
-pub(crate) extern "system" fn mods(
-    _me: ModHandle,
-    out: *mut ModInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let mods = with(Vec::new(), |s| s.host.base.mods.clone());
-    list(&mods, out, entry_size, capacity, count)
-}
-
-pub(crate) extern "system" fn loader_off(
-    _me: ModHandle,
-    out: *mut enshwick_core::abi::LoaderOff,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let off = with(Vec::new(), |s| s.base.loader_off.clone());
-    list(&off, out, entry_size, capacity, count)
-}
-
-pub(crate) extern "system" fn join_missing(
-    _me: ModHandle,
-    out: *mut ModInfo,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let mods = with(Vec::new(), |s| s.host.base.join_missing.clone());
-    list(&mods, out, entry_size, capacity, count)
-}
-
-pub(crate) extern "system" fn config_schema(
-    _me: ModHandle,
-    file: Str,
-    schema: Str,
-    _template: Str,
-) -> Status {
-    let (file, text) = (text(file), text(schema));
-    if !enshwick_core::config::__file_name(&file)
-        || enshwick_core::config::Schema::parse(&text).is_err()
-    {
-        return Status::BAD_ARGS;
+entries! {
+    pub(crate) fn fault(me as AnyMod, reason: Str) -> Status {
+        let reason = text(reason);
+        // The loader logs every turn-off with its reason.
+        let line = off_line(&reason.replace('\t', " "));
+        with((), |s| {
+            s.base.faults.push(reason);
+            s.base.sent.push((me, Level::ERROR, line.clone()));
+            s.base.logs.push((Level::ERROR, line));
+        });
+        super::registered::turn_off(me);
+        Status::OK
     }
-    with(Status::REFUSED, |s| {
-        if s.base
-            .config_schemas
-            .get(&file)
-            .is_some_and(|known| *known != text)
+
+    pub(crate) fn log(me as Writer, level: Level, message: Str as args::Text) -> Status {
+        let message = text(message);
+        with((), |s| {
+            s.base.sent.push((me, level, message.clone()));
+            s.base.logs.push((level, message));
+        });
+        Status::OK
+    }
+
+    pub(crate) fn settings(
+        me as AnyMod,
+        file: Str as args::Text,
+        out: *mut Str as args::Out,
+    ) -> Status {
+        let file = text(file);
+        let served = with(None, |s| {
+            if !s.base.config_schemas.contains_key(&file) {
+                return None;
+            }
+            let served: Box<str> = s
+                .host
+                .base
+                .settings
+                .get(&file)
+                .cloned()
+                .unwrap_or_default()
+                .into();
+            // The heap text stays where it is while the box lives in the state.
+            let view = Str::new(&served);
+            s.base.settings.push(served);
+            Some(view)
+        });
+        found(served, out)
+    }
+
+    pub(crate) fn mods(
+        me as AnyMod,
+        [out: *mut ModInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let mods = with(Vec::new(), |s| s.host.base.mods.clone());
+        list(&mods, out, entry_size, capacity, count)
+    }
+
+    pub(crate) fn loader_off(
+        me as AnyMod,
+        [out: *mut enshwick_core::abi::LoaderOff, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let off = with(Vec::new(), |s| s.base.loader_off.clone());
+        list(&off, out, entry_size, capacity, count)
+    }
+
+    pub(crate) fn join_missing(
+        me as AnyMod,
+        [out: *mut ModInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let mods = with(Vec::new(), |s| s.host.base.join_missing.clone());
+        list(&mods, out, entry_size, capacity, count)
+    }
+
+    pub(crate) fn config_schema(
+        me as AnyMod,
+        file: Str as args::Text,
+        schema: Str as args::Text,
+        _template: Str as args::Text,
+    ) -> Status {
+        let (file, text) = (text(file), text(schema));
+        if !enshwick_core::config::__file_name(&file)
+            || enshwick_core::config::Schema::parse(&text).is_err()
         {
-            return Status::REFUSED;
+            return Status::BAD_ARGS;
         }
-        s.base.config_schemas.insert(file, text);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn config_check(
-    me: ModHandle,
-    file: Str,
-    callback: Option<ConfigCheckFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    let file = text(file);
-    crate::test::table::with_open(|s| {
-        if s.base.config_checks.contains_key(&file) {
-            return Status::REFUSED;
-        }
-        s.base
-            .config_checks
-            .insert(file, Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn set_config(
-    _me: ModHandle,
-    file: Str,
-    key: Str,
-    value: Str,
-) -> Status {
-    let entered = with(false, |s| {
-        let refused = s.base.config_writes.iter().any(|&checking| checking)
-            || s.base.config_writes.len() >= enshwick_core::config::MAX_NESTED_WRITES;
-        if !refused {
-            s.base.config_writes.push(false);
-        }
-        !refused
-    });
-    if !entered {
-        return Status::REFUSED;
+        with(Status::REFUSED, |s| {
+            if s.base
+                .config_schemas
+                .get(&file)
+                .is_some_and(|known| *known != text)
+            {
+                return Status::REFUSED;
+            }
+            s.base.config_schemas.insert(file, text);
+            Status::OK
+        })
     }
-    let status = write_setting(text(file), &text(key), &text(value));
-    with((), |s| {
-        s.base.config_writes.pop();
-    });
-    status
+
+    pub(crate) fn config_check(
+        me as Mod,
+        file: Str as args::Text,
+        callback: Option<ConfigCheckFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        let file = text(file);
+        crate::test::table::with_open(|s| {
+            if s.base.config_checks.contains_key(&file) {
+                return Status::REFUSED;
+            }
+            s.base
+                .config_checks
+                .insert(file, Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
+
+    pub(crate) fn set_config(
+        me as Mod,
+        file: Str as args::Text,
+        key: Str as args::Text,
+        value: Str as args::Text,
+    ) -> Status {
+        // As the loader: a mod without settings files has nothing to write,
+        // only a running world's server writes, and a file the mod does not
+        // have is missing, before nesting counts. Only the mod under test
+        // has settings files here.
+        let file = text(file);
+        let placed = with(Some(Status::MISSING), |s| {
+            if me != s.host.base.handle || s.base.config_schemas.is_empty() {
+                Some(Status::MISSING)
+            } else if !s.host.base.serving() || s.host.base.world_key.is_none() {
+                Some(Status::UNAVAILABLE)
+            } else if !file.is_empty() && !s.base.config_schemas.contains_key(&file) {
+                Some(Status::MISSING)
+            } else {
+                None
+            }
+        });
+        if let Some(refused) = placed {
+            return refused;
+        }
+        let entered = with(false, |s| {
+            let refused = s.base.config_writes.iter().any(|&checking| checking)
+                || s.base.config_writes.len() >= enshwick_core::config::MAX_NESTED_WRITES;
+            if !refused {
+                s.base.config_writes.push(false);
+            }
+            !refused
+        });
+        if !entered {
+            return Status::REFUSED;
+        }
+        let status = write_setting(file, &text(key), &text(value));
+        with((), |s| {
+            s.base.config_writes.pop();
+        });
+        status
+    }
 }
 
 /// Marks whether the innermost settings write runs the mod's check.
@@ -443,12 +462,14 @@ fn set_dotted(table: &mut toml::Table, key: &str, value: toml::Value) -> bool {
     false
 }
 
-pub(crate) extern "system" fn texts(_me: ModHandle, toml: Str) -> Status {
-    let toml = text(toml);
-    with(Status::MISSING, |s| {
-        s.base.published_texts = Some(toml);
-        Status::OK
-    })
+entries! {
+    pub(crate) fn texts(me as Mod, toml: Str as args::Text) -> Status {
+        let toml = text(toml);
+        with(Status::MISSING, |s| {
+            s.base.published_texts = Some(toml);
+            Status::OK
+        })
+    }
 }
 
 std::thread_local! {
@@ -483,11 +504,13 @@ pub(crate) fn language_of_character(entity: enshwick_core::Entity) -> Option<u32
     })
 }
 
-pub(crate) extern "system" fn language(_me: ModHandle, out: *mut u32) -> Status {
-    crate::test::table::put(
-        out,
-        READER
-            .get()
-            .unwrap_or_else(|| with(0, |s| s.host.base.language)),
-    )
+entries! {
+    pub(crate) fn language(me as Writer, out: *mut u32 as args::Out) -> Status {
+        crate::test::table::put(
+            out,
+            READER
+                .get()
+                .unwrap_or_else(|| with(0, |s| s.host.base.language)),
+        )
+    }
 }

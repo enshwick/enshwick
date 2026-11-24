@@ -129,7 +129,10 @@ mod tests {
         assert_eq!(start(&loader), Status::OK);
         assert_eq!(loader.published(), [("you.market:stalls".to_owned(), 2)]);
         assert_eq!(loader.defined_events(), ["you.market:opened"]);
-        assert_eq!(loader.sent_events(), ["you.market:opened"]);
+        assert!(
+            loader.sent_events().is_empty(),
+            "a send in init reaches no one"
+        );
         EARNED.store(0, Ordering::Relaxed);
         assert_eq!(loader.send_mod_event(&Sold { item: 1, price: 7 }), 1);
         assert_eq!(EARNED.load(Ordering::Relaxed), 7);

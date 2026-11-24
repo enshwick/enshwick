@@ -145,6 +145,17 @@ manifest rows, sits in `enshwick-base` and `enshwick-abi`.
   core: a peel moves no fake file into its domain's crate, since the
   presets are inherent methods of `FakeHost`, which only this crate may
   add.
+- Every fake entry passes through the fake's `entries!`
+  (`test/table/base/caller.rs`), as every loader entry passes through the
+  loader's: it reads the caller and each parameter by the kind the entry's
+  twin in the loader names, in the same order, so the fake refuses a call
+  where the loader does. The loader's `host/contract_tests.rs` calls every
+  `HostApi` entry with zeroed arguments on both tables, by an unknown mod,
+  a mod that is off, a mod in its init, the loader's own copy and a mod
+  after init, and fails where their answers differ; a difference the two
+  keep on purpose is a row of its list with the reason. Its bare loader
+  runs no game, so an entry it answers `Status::UNAVAILABLE` is not
+  compared.
 - Each domain turns its own errors into `Off`, and keeps the state it needs
   while a mod initialises in the base handle's typed slots, keyed by a type
   of its own, so `Load` names no domain.

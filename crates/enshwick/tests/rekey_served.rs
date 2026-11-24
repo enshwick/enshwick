@@ -49,7 +49,13 @@ mod tests {
     /// its category, one re-keys `OTHER_ITEM` back to `LOOT_ITEM`; then
     /// this file's mod.
     fn start() -> Installed {
-        let loader = FakeHost::new().items().removal().install();
+        let loader = FakeHost::new()
+            .items()
+            .removal()
+            .pack(ModHandle(6), enshwick::abi::Side::SERVER)
+            .pack(ModHandle(7), enshwick::abi::Side::SERVER)
+            .pack(ModHandle(8), enshwick::abi::Side::SERVER)
+            .install();
         let pack = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
             // SAFETY: the fake host's table lives for the process.
             let status = unsafe {

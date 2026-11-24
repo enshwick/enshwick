@@ -1,12 +1,14 @@
 //! The fake's knowledge entries: knowledge, quests, game queries, skills,
 //! comfort and experience.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 
 use crate::test::table::{Registered, State, with};
 use enshwick_core::abi::{
-    ComfortFilterFn, ExperienceFilterFn, KnowledgeInfo, KnowledgeInputFilterFn, ModHandle,
-    SkillCheckFn, Status,
+    ComfortFilterFn, ExperienceFilterFn, KnowledgeInfo, KnowledgeInputFilterFn, SkillCheckFn,
+    Status,
 };
 
 /// What the installed fake's knowledge answers and has recorded.
@@ -47,53 +49,55 @@ pub(crate) struct KnowledgeState {
     pub(crate) experience_filters: Vec<Registered<ExperienceFilterFn>>,
 }
 
-pub(crate) extern "system" fn skill_override(
-    me: ModHandle,
-    node: enshwick_core::abi::SkillNode,
-    callback: Option<SkillCheckFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        s.knowledge
-            .skills
-            .push((node, Registered::new(callback, user, me)));
-        Status::OK
-    })
-}
+entries! {
+    pub(crate) fn skill_override(
+        me as Mod,
+        node: enshwick_core::abi::SkillNode,
+        callback: Option<SkillCheckFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            s.knowledge
+                .skills
+                .push((node, Registered::new(callback, user, me)));
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn comfort_filter(
-    me: ModHandle,
-    callback: Option<ComfortFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        s.knowledge
-            .comfort_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
+    pub(crate) fn comfort_filter(
+        me as Mod,
+        callback: Option<ComfortFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            s.knowledge
+                .comfort_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
 
-pub(crate) extern "system" fn experience_filter(
-    me: ModHandle,
-    callback: Option<ExperienceFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        s.knowledge
-            .experience_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
+    pub(crate) fn experience_filter(
+        me as Mod,
+        callback: Option<ExperienceFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        crate::test::table::with_open(|s| {
+            s.knowledge
+                .experience_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
+    }
 }
 
 /// The scope and expected flags of knowledge `id` when the fake knows it
@@ -171,110 +175,112 @@ fn for_account(
     })
 }
 
-pub(crate) extern "system" fn knowledge_input_filter(
-    me: ModHandle,
-    callback: Option<KnowledgeInputFilterFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    crate::test::table::with_open(|s| {
-        s.knowledge
-            .knowledge_input_filters
-            .push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn knowledge(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    id: enshwick_core::abi::KnowledgeId,
-    out: *mut KnowledgeInfo,
-) -> Status {
-    let (known, found) = with((false, None), |s| {
-        let mut values = s.knowledge.values.iter().filter(|(_, k)| k.id == id);
-        let known = values.clone().next().is_some();
-        let found = values
-            .find(|(e, k)| k.scope == KnowledgeInfo::WORLD || *e == Some(entity))
-            .map(|(_, k)| *k);
-        (known, found)
-    });
-    let Some(info) = found else {
-        return if known {
-            Status::REFUSED
-        } else {
-            Status::MISSING
+entries! {
+    pub(crate) fn knowledge_input_filter(
+        me as Mod,
+        callback: Option<KnowledgeInputFilterFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
         };
-    };
-    // SAFETY: the safe layer passes a headed struct for the call.
-    if unsafe { enshwick_core::abi::write_headed(out, info) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
+        crate::test::table::with_open(|s| {
+            s.knowledge
+                .knowledge_input_filters
+                .push(Registered::new(callback, user, me));
+            Status::OK
+        })
     }
-}
 
-pub(crate) extern "system" fn game_query(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    query: u32,
-    holds: *mut u32,
-) -> Status {
-    if holds.is_null() {
-        return Status::BAD_ARGS;
-    }
-    let holder = (entity != enshwick_core::Entity(0)).then_some(entity);
-    let answer = with(Err(Status::MISSING), |s| {
-        // As the loader, which refuses a character with no player record.
-        if holder.is_some()
-            && !s
-                .host
-                .base
-                .players
-                .iter()
-                .any(|player| player.entity == entity)
-        {
-            return Err(Status::REFUSED);
+    pub(crate) fn knowledge(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        id: enshwick_core::abi::KnowledgeId,
+        out: *mut KnowledgeInfo as args::HeadedOut,
+    ) -> Status {
+        let (known, found) = with((false, None), |s| {
+            let mut values = s.knowledge.values.iter().filter(|(_, k)| k.id == id);
+            let known = values.clone().next().is_some();
+            let found = values
+                .find(|(e, k)| k.scope == KnowledgeInfo::WORLD || *e == Some(entity))
+                .map(|(_, k)| *k);
+            (known, found)
+        });
+        let Some(info) = found else {
+            return if known {
+                Status::REFUSED
+            } else {
+                Status::MISSING
+            };
+        };
+        // SAFETY: the safe layer passes a headed struct for the call.
+        if unsafe { enshwick_core::abi::write_headed(out, info) } {
+            Status::OK
+        } else {
+            Status::BAD_ARGS
         }
-        s.knowledge
-            .game_queries
-            .iter()
-            .find(|(e, q, _)| *q == query && *e == holder)
-            .map(|(_, _, held)| *held)
-            .ok_or(Status::MISSING)
-    });
-    let held = match answer {
-        Ok(held) => held,
-        Err(status) => return status,
-    };
-    // SAFETY: `holds` is non-null, checked above, and `HostApi::game_query`
-    // has the mod pass it writable for the call.
-    unsafe { holds.write(u32::from(held)) };
-    Status::OK
-}
+    }
 
-/// As the loader's `change_knowledge`: a grant or revoke of a character
-/// or the world, or a change of an account.
-pub(crate) extern "system" fn change_knowledge(
-    _me: ModHandle,
-    change: *const enshwick_core::abi::KnowledgeChange,
-) -> Status {
-    let Some(change) = super::get_headed(change) else {
-        return Status::BAD_ARGS;
-    };
-    let revoking = match change.op {
-        enshwick_core::abi::KnowledgeChange::GRANT => false,
-        enshwick_core::abi::KnowledgeChange::REVOKE => true,
-        _ => return Status::BAD_ARGS,
-    };
-    let (id, kind, value) = (change.id, u32::from(change.kind), change.value);
-    match (change.account.get(), change.entity) {
-        (0, entity) if revoking => revoke(entity, id, kind, value),
-        (0, entity) => grant(entity, id, kind, value),
-        (_, enshwick_core::Entity(0)) => for_account(change.account, id, kind, value, revoking),
-        _ => Status::BAD_ARGS,
+    pub(crate) fn game_query(
+        me as Caller,
+        entity: enshwick_core::Entity,
+        query: u32,
+        holds: *mut u32 as args::Out,
+    ) -> Status {
+        if holds.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let holder = (entity != enshwick_core::Entity(0)).then_some(entity);
+        let answer = with(Err(Status::MISSING), |s| {
+            // As the loader, which refuses a character with no player record.
+            if holder.is_some()
+                && !s
+                    .host
+                    .base
+                    .players
+                    .iter()
+                    .any(|player| player.entity == entity)
+            {
+                return Err(Status::REFUSED);
+            }
+            s.knowledge
+                .game_queries
+                .iter()
+                .find(|(e, q, _)| *q == query && *e == holder)
+                .map(|(_, _, held)| *held)
+                .ok_or(Status::MISSING)
+        });
+        let held = match answer {
+            Ok(held) => held,
+            Err(status) => return status,
+        };
+        // SAFETY: `holds` is non-null, checked above, and `HostApi::game_query`
+        // has the mod pass it writable for the call.
+        unsafe { holds.write(u32::from(held)) };
+        Status::OK
+    }
+
+    /// As the loader's `change_knowledge`: a grant or revoke of a character
+    /// or the world, or a change of an account.
+    pub(crate) fn change_knowledge(
+        me as Caller,
+        change: *const enshwick_core::abi::KnowledgeChange as args::Headed,
+    ) -> Status {
+        let Some(change) = super::get_headed(change) else {
+            return Status::BAD_ARGS;
+        };
+        let revoking = match change.op {
+            enshwick_core::abi::KnowledgeChange::GRANT => false,
+            enshwick_core::abi::KnowledgeChange::REVOKE => true,
+            _ => return Status::BAD_ARGS,
+        };
+        let (id, kind, value) = (change.id, u32::from(change.kind), change.value);
+        match (change.account.get(), change.entity) {
+            (0, entity) if revoking => revoke(entity, id, kind, value),
+            (0, entity) => grant(entity, id, kind, value),
+            (_, enshwick_core::Entity(0)) => for_account(change.account, id, kind, value, revoking),
+            _ => Status::BAD_ARGS,
+        }
     }
 }
 
@@ -302,29 +308,29 @@ fn grant(
     })
 }
 
-pub(crate) extern "system" fn quests(
-    _me: ModHandle,
-    out: *mut enshwick_core::abi::KnowledgeId,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let ids = with(Vec::new(), |s| s.knowledge.quests.clone());
-    if count.is_null() {
-        return Status::BAD_ARGS;
-    }
-    if !out.is_null() {
-        for (i, id) in ids.iter().take(capacity as usize).enumerate() {
-            // SAFETY: `i` is below `capacity` and the safe layer passes a
-            // non-null `out` with room for `capacity` ids, so the offset
-            // stays inside that array.
-            let slot = unsafe { out.add(i) };
-            // SAFETY: `slot` is inside the `capacity` writable, aligned
-            // ids the safe layer passes at `out`.
-            unsafe { slot.write(*id) };
+entries! {
+    pub(crate) fn quests(
+        me as Caller,
+        [out: *mut enshwick_core::abi::KnowledgeId, capacity: u32, count: *mut u32] as args::ListOut,
+    ) -> Status {
+        let ids = with(Vec::new(), |s| s.knowledge.quests.clone());
+        if count.is_null() {
+            return Status::BAD_ARGS;
         }
+        if !out.is_null() {
+            for (i, id) in ids.iter().take(capacity as usize).enumerate() {
+                // SAFETY: `i` is below `capacity` and the safe layer passes a
+                // non-null `out` with room for `capacity` ids, so the offset
+                // stays inside that array.
+                let slot = unsafe { out.add(i) };
+                // SAFETY: `slot` is inside the `capacity` writable, aligned
+                // ids the safe layer passes at `out`.
+                unsafe { slot.write(*id) };
+            }
+        }
+        // SAFETY: `count` is non-null, checked at the top; the safe layer passes
+        // it pointing at a writable, aligned `u32` for the call.
+        unsafe { count.write(u32::try_from(ids.len()).unwrap_or(u32::MAX)) };
+        Status::OK
     }
-    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
-    // it pointing at a writable, aligned `u32` for the call.
-    unsafe { count.write(u32::try_from(ids.len()).unwrap_or(u32::MAX)) };
-    Status::OK
 }

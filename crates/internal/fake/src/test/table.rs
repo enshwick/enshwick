@@ -26,6 +26,7 @@ mod ui;
 pub(crate) mod world;
 
 use actions::{commands::*, *};
+pub(crate) use base::caller::entries;
 pub(crate) use base::io::{
     found, found_headed, get_headed, get_headed_list, list, put, put_headed, put_list, text,
 };
@@ -404,6 +405,7 @@ pub(crate) static TABLE: HostApi = HostApi {
 pub(crate) fn after_step() {
     run_settled();
     waypoints::after_step();
+    super::world::progress::after_step();
 }
 
 /// What the loader does as a client's hosted game ends: counts the ended
@@ -414,5 +416,6 @@ pub(crate) fn end_game() {
         s.base.ticks.games_ended += 1;
         end_saves(s);
     });
+    super::world::progress::game_ended();
     end_world();
 }

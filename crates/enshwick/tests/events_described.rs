@@ -6,9 +6,10 @@
 mod tests {
     use std::sync::Mutex;
 
+    use enshwick::abi::ModHandle;
     use enshwick::abi::Status;
     use enshwick::points::DescribedField;
-    use enshwick::services::{DescribedEvent, ModEvent};
+    use enshwick::services::{DescribedEmitter, DescribedEvent, ModEvent};
     use enshwick::{Load, Mod, Off};
 
     /// A sale at the trading post.
@@ -25,6 +26,14 @@ mod tests {
 
     static SEEN: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
     static SIZE: Mutex<u32> = Mutex::new(16);
+    static EMITTER: Mutex<Option<DescribedEmitter>> = Mutex::new(None);
+
+    /// The bytes the definer sends: item 3, the rest zero.
+    fn sale() -> [u8; 16] {
+        let mut data = [0u8; 16];
+        data[..4].copy_from_slice(&3u32.to_le_bytes());
+        data
+    }
 
     fn described(size: u32) -> DescribedEvent {
         let fields = Sold::LAYOUT
@@ -48,10 +57,10 @@ mod tests {
             // SAFETY: the fields are two `u32` and a `u64`, for which any
             // bytes are valid.
             let send = unsafe { load.define_described_event(&described(16)) }?;
-            let mut data = [0u8; 16];
-            data[..4].copy_from_slice(&3u32.to_le_bytes());
-            send.send(&data);
-            send.send(&data[..4]);
+            // As in the game, a send before the events are sealed reaches
+            // no one.
+            send.send(&sale());
+            *EMITTER.lock().unwrap() = Some(send);
             Ok(Self)
         }
     }
@@ -97,8 +106,35 @@ mod tests {
     #[test]
     fn a_described_definition_sends_its_bytes_and_nothing_of_another_size() {
         let loader = start(16);
+        assert!(loader.sent_events().is_empty(), "sent in init");
+        let send = EMITTER.lock().unwrap().unwrap();
+        send.send(&sale());
+        send.send(&sale()[..4]);
         assert_eq!(loader.sent_events(), [Sold::NAME]);
         assert_eq!(&loader.sent_event_data()[0][..4], &3u32.to_le_bytes());
+    }
+
+    #[test]
+    fn another_mod_sending_the_mod_s_event_is_refused() {
+        let other = ModHandle(2);
+        let loader = enshwick::test::FakeHost::new().other_mod(other).install();
+        SEEN.lock().unwrap().clear();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        // SAFETY: the fake's table is a static.
+        let api = unsafe { &*loader.api() };
+        let data = sale();
+        assert_eq!(
+            (api.send_event)(other, 0, data.as_ptr().cast()),
+            Status::REFUSED
+        );
+        assert_eq!(
+            (api.send_event)(loader.handle(), 0, data.as_ptr().cast()),
+            Status::OK
+        );
+        assert_eq!(loader.sent_events(), [Sold::NAME]);
     }
 
     #[test]

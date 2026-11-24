@@ -30,7 +30,13 @@ mod tests {
     /// `OTHER_ITEM`; with `ring`, a third closes the ring with `OTHER_ITEM`
     /// to `SPARE_ITEM`; then this file's mod, which re-keys nothing.
     fn start(ring: bool) -> Installed {
-        let loader = FakeHost::new().items().removal().install();
+        let loader = FakeHost::new()
+            .items()
+            .removal()
+            .pack(ModHandle(6), enshwick::abi::Side::SERVER)
+            .pack(ModHandle(7), enshwick::abi::Side::SERVER)
+            .pack(ModHandle(8), enshwick::abi::Side::SERVER)
+            .install();
         let pack = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
             // SAFETY: the fake host's table lives for the process.
             let status = unsafe {
@@ -137,7 +143,13 @@ mod tests {
 
     #[test]
     fn a_rekey_to_itself_or_to_another_type_is_a_bad_argument() {
-        let loader = FakeHost::new().items().removal().install();
+        let loader = FakeHost::new()
+            .items()
+            .removal()
+            .pack(ModHandle(6), enshwick::abi::Side::SERVER)
+            .pack(ModHandle(7), enshwick::abi::Side::SERVER)
+            .pack(ModHandle(8), enshwick::abi::Side::SERVER)
+            .install();
         let mut answers = Vec::new();
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {

@@ -2,12 +2,12 @@
 //! links a test attaches as other mods would, and the links the mod
 //! attaches to other mods' points, which a test runs as their owner would.
 
+use crate::test::table::base::args;
+use crate::test::table::entries;
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_core::abi::{
-    ModHandle, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, Status, Str,
-};
+use enshwick_core::abi::{PointFn, PointHandle, PointLink, PointSpec, PointVerdict, Status, Str};
 use enshwick_core::points::{Decision, LinkPlace, Point, Verdict, order};
 
 use crate::test::Installed;
@@ -128,116 +128,118 @@ fn ids(raw: *const Str, count: u32) -> Vec<String> {
         .collect()
 }
 
-pub(crate) extern "system" fn define_point(
-    _me: ModHandle,
-    spec: *const PointSpec,
-    out: *mut PointHandle,
-) -> Status {
-    if crate::test::table::late() {
-        return Status::TOO_LATE;
-    }
-    let Some(declared) = declared(spec) else {
-        return Status::BAD_ARGS;
-    };
-    let defined = with(Err(Status::MISSING), |s| {
-        let named_after_the_mod = s.base.manifest.as_ref().is_none_or(|manifest| {
-            enshwick_core::__fake::rules::is_named_after(&declared.name, &manifest.id)
-        });
-        let points = &mut s.base.points;
-        let defined_twice = points
-            .defined
-            .iter()
-            .any(|d| d.declared.name == declared.name);
-        if !named_after_the_mod || defined_twice {
-            return Err(Status::REFUSED);
+entries! {
+    pub(crate) fn define_point(
+        me as Mod,
+        spec: *const PointSpec as args::Headed,
+        out: *mut PointHandle as args::HeadedOut,
+    ) -> Status {
+        if crate::test::table::late() {
+            return Status::TOO_LATE;
         }
-        let live: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
-        points.defined.push(Defined {
-            declared,
-            live,
-            links: Vec::new(),
-        });
-        let id = u32::try_from(points.defined.len() - 1).map_err(|_| Status::REFUSED)?;
-        Ok((id, live))
-    });
-    match defined {
-        Ok((id, live)) => crate::test::table::put_headed(
-            out,
-            PointHandle {
-                header: enshwick_core::abi::Header::of::<PointHandle>(),
-                id,
+        let Some(declared) = declared(spec) else {
+            return Status::BAD_ARGS;
+        };
+        let defined = with(Err(Status::MISSING), |s| {
+            let named_after_the_mod = s.base.manifest.as_ref().is_none_or(|manifest| {
+                enshwick_core::__fake::rules::is_named_after(&declared.name, &manifest.id)
+            });
+            let points = &mut s.base.points;
+            let defined_twice = points
+                .defined
+                .iter()
+                .any(|d| d.declared.name == declared.name);
+            if !named_after_the_mod || defined_twice {
+                return Err(Status::REFUSED);
+            }
+            let live: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
+            points.defined.push(Defined {
+                declared,
                 live,
-            },
-        ),
-        Err(status) => status,
-    }
-}
-
-pub(crate) extern "system" fn attach_point(
-    me: ModHandle,
-    link: *const PointLink,
-    callback: Option<PointFn>,
-    user: *mut c_void,
-) -> Status {
-    let Some(callback) = callback else {
-        return Status::BAD_ARGS;
-    };
-    if crate::test::table::late() {
-        return Status::TOO_LATE;
-    }
-    let Some(link) = crate::test::table::get_headed(link) else {
-        return Status::BAD_ARGS;
-    };
-    let Some(declared) = declared(link.point) else {
-        return Status::BAD_ARGS;
-    };
-    let attached = Attached {
-        declared,
-        id: String::new(),
-        priority: link.priority,
-        before: ids(link.before, link.before_count),
-        after: ids(link.after, link.after_count),
-        link: Link {
-            handler: Registered::new(callback, user, me),
-            on: true,
-        },
-    };
-    with(Status::MISSING, |s| {
-        let required = s
-            .base
-            .manifest
-            .as_ref()
-            .is_some_and(|manifest| manifest.requires_owner_of(&attached.declared.name));
-        let unexported = s.base.manifest.as_ref().is_some_and(|manifest| {
-            manifest.unexported(
-                enshwick_core::schema_section::Kind::Point,
-                &attached.declared.name,
-                &s.host.base.exports,
-            )
+                links: Vec::new(),
+            });
+            let id = u32::try_from(points.defined.len() - 1).map_err(|_| Status::REFUSED)?;
+            Ok((id, live))
         });
-        if unexported
-            || (required
-                && !s
-                    .base
-                    .points
-                    .others
-                    .iter()
-                    .any(|other| other.serves(&attached.declared)))
-        {
-            return Status::REFUSED;
+        match defined {
+            Ok((id, live)) => crate::test::table::put_headed(
+                out,
+                PointHandle {
+                    header: enshwick_core::abi::Header::of::<PointHandle>(),
+                    id,
+                    live,
+                },
+            ),
+            Err(status) => status,
         }
-        let attached_already = s
-            .base
-            .points
-            .attached
-            .iter()
-            .any(|a| a.declared.name == attached.declared.name);
-        if attached_already {
-            return Status::REFUSED;
+    }
+
+    pub(crate) fn attach_point(
+        me as Mod,
+        link: *const PointLink as args::Headed,
+        callback: Option<PointFn> as args::Callback,
+        user: *mut c_void,
+    ) -> Status {
+        let Some(callback) = callback else {
+            return Status::BAD_ARGS;
+        };
+        if crate::test::table::late() {
+            return Status::TOO_LATE;
         }
-        s.base.points.attached.push(attached);
-        Status::OK
-    })
+        let Some(link) = crate::test::table::get_headed(link) else {
+            return Status::BAD_ARGS;
+        };
+        let Some(declared) = declared(link.point) else {
+            return Status::BAD_ARGS;
+        };
+        let attached = Attached {
+            declared,
+            id: String::new(),
+            priority: link.priority,
+            before: ids(link.before, link.before_count),
+            after: ids(link.after, link.after_count),
+            link: Link {
+                handler: Registered::new(callback, user, me),
+                on: true,
+            },
+        };
+        with(Status::MISSING, |s| {
+            let required = s
+                .base
+                .manifest
+                .as_ref()
+                .is_some_and(|manifest| manifest.requires_owner_of(&attached.declared.name));
+            let unexported = s.base.manifest.as_ref().is_some_and(|manifest| {
+                manifest.unexported(
+                    enshwick_core::schema_section::Kind::Point,
+                    &attached.declared.name,
+                    &s.host.base.exports,
+                )
+            });
+            if unexported
+                || (required
+                    && !s
+                        .base
+                        .points
+                        .others
+                        .iter()
+                        .any(|other| other.serves(&attached.declared)))
+            {
+                return Status::REFUSED;
+            }
+            let attached_already = s
+                .base
+                .points
+                .attached
+                .iter()
+                .any(|a| a.declared.name == attached.declared.name);
+            if attached_already {
+                return Status::REFUSED;
+            }
+            s.base.points.attached.push(attached);
+            Status::OK
+        })
+    }
 }
 
 /// Runs `links` in turn over `value`; the positions of links that panicked
@@ -267,38 +269,40 @@ fn run(
     (verdict, panicked)
 }
 
-pub(crate) extern "system" fn run_point(
-    _me: ModHandle,
-    point: u32,
-    input: *const c_void,
-    value: *mut c_void,
-    verdict: *mut PointVerdict,
-) -> Status {
-    let Some((links, changes, refuse)) = with(None, |s| {
-        s.base.points.defined.get(point as usize).map(|d| {
-            (
-                d.links.clone(),
-                d.declared.mode != enshwick_core::abi::PointMode::OBSERVE,
-                d.declared.refuse,
-            )
-        })
-    }) else {
-        return Status::BAD_ARGS;
-    };
-    let (answer, panicked) = run(&links, changes, refuse, input, value);
-    if !panicked.is_empty() {
-        with((), |s| {
-            if let Some(defined) = s.base.points.defined.get_mut(point as usize) {
-                for &i in &panicked {
-                    if let Some(link) = defined.links.get_mut(i) {
-                        link.on = false;
-                        defined.live.fetch_sub(1, Ordering::Relaxed);
+entries! {
+    pub(crate) fn run_point(
+        me as Mod,
+        point: u32,
+        input: *const c_void,
+        value: *mut c_void,
+        verdict: *mut PointVerdict as args::Out,
+    ) -> Status {
+        let Some((links, changes, refuse)) = with(None, |s| {
+            s.base.points.defined.get(point as usize).map(|d| {
+                (
+                    d.links.clone(),
+                    d.declared.mode != enshwick_core::abi::PointMode::OBSERVE,
+                    d.declared.refuse,
+                )
+            })
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        let (answer, panicked) = run(&links, changes, refuse, input, value);
+        if !panicked.is_empty() {
+            with((), |s| {
+                if let Some(defined) = s.base.points.defined.get_mut(point as usize) {
+                    for &i in &panicked {
+                        if let Some(link) = defined.links.get_mut(i) {
+                            link.on = false;
+                            defined.live.fetch_sub(1, Ordering::Relaxed);
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+        put(verdict, answer)
     }
-    put(verdict, answer)
 }
 
 #[expect(

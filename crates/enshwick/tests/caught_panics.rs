@@ -102,7 +102,7 @@ mod tests {
     fn a_panicking_pack_init_faults_the_pack_and_not_the_loader() {
         let loader = FakeHost::new().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle::NONE) };
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(loader.api(), ModHandle(1), Side::SERVER, |_| {

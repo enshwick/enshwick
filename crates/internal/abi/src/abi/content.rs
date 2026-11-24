@@ -85,7 +85,7 @@ pub type ResourcePatchFn = unsafe extern "system" fn(
 /// assert_ne!(RecipeRuleKind::RECIPE, RecipeRuleKind::OUTPUT);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct RecipeRuleKind(pub u32);
 
 impl RecipeRuleKind {
@@ -341,7 +341,7 @@ impl DataSelect {
 /// assert_ne!(EntityDataFlags::SENT, EntityDataFlags::NONE);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct EntityDataFlags(pub u32);
 
 impl EntityDataFlags {

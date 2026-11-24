@@ -73,6 +73,7 @@ mod tests {
         let sound_hash = fnv1a32(SOUND.as_bytes());
         FakeHost::new()
             .side(Side::CLIENT)
+            .pack(ModHandle(2), Side::BOTH)
             .types(types())
             .type_hash(
                 types::SOUND_CONTAINER_RESOURCE.id(),

@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn two_mods_lookups_chain_in_load_order_and_the_first_answer_decides() {
-        let loader = enshwick::test::FakeHost::new().install();
+        let loader = enshwick::test::FakeHost::new().other_mod(EARLIER).install();
         // SAFETY: the installed fake's table, alive while `loader` is.
         let api = unsafe { &*loader.api() };
         let earlier = (api.survivor_lookup)(EARLIER, Some(earlier_lookup), core::ptr::null_mut());
@@ -132,7 +132,11 @@ mod tests {
 
     #[test]
     fn two_mods_menu_merges_chain_in_load_order_and_the_first_set_status_decides() {
-        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .other_mod(EARLIER)
+            .other_mod(ModHandle(78))
+            .install();
         // SAFETY: the installed fake's table, alive while `loader` is.
         let api = unsafe { &*loader.api() };
         let null = core::ptr::null_mut();

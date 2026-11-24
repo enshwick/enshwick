@@ -9,10 +9,29 @@ use super::BaseCode;
 use crate::test::{FakeHost, Installed, table};
 
 impl FakeHost {
+    /// Plays a game build without the code altars are read from, as the
+    /// loader finds when its engine anchor misses: asking for the altars
+    /// (`Load::altars`) and adding an altar zone filter
+    /// (`Load::on_altar_zone`) answer
+    /// [`Status::UNAVAILABLE`](enshwick_core::abi::Status::UNAVAILABLE), so a
+    /// mod turns off only what needs them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().without_altar_code().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_altar_code(mut self) -> Self {
+        self.world.no_altar_code = true;
+        self
+    }
+
     /// Plays a game build whose base code the platform does not know:
     /// `request_base_limits` answers
-    /// [`Status::MISSING`](enshwick_core::abi::Status::MISSING), and the game
-    /// keeps its own limits.
+    /// [`Status::UNAVAILABLE`](enshwick_core::abi::Status::UNAVAILABLE), and
+    /// the game keeps its own limits.
     ///
     /// # Examples
     ///
@@ -79,7 +98,10 @@ impl Installed {
     #[must_use]
     pub fn altars_opened(&self) -> (bool, bool) {
         table::with((false, false), |s| {
-            (s.world.altars_opened, s.world.zone_control)
+            (
+                s.world.altar_openers.contains(&self.handle),
+                s.world.zone_controllers.contains(&self.handle),
+            )
         })
     }
 

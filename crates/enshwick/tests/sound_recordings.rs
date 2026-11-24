@@ -132,6 +132,8 @@ mod tests {
         let creak = sound("FramelessQOA", 2, vec![Value::Uint(7); 8], 0, 0);
         let mut host = FakeHost::new()
             .side(Side::CLIENT)
+            .pack(ModHandle(2), Side::BOTH)
+            .pack(ModHandle(3), Side::BOTH)
             .types(types())
             .type_hash(types::SOUND_RESOURCE.id(), sound_hash())
             .type_hash(

@@ -88,4 +88,6 @@ impl Loader {
 }
 
 #[cfg(test)]
+mod contract_tests;
+#[cfg(test)]
 mod headed_tests;
