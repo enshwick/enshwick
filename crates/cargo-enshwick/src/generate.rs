@@ -14,7 +14,7 @@ use enshwick_gamedata::typed::{
     Catalogue, RELEVANCE, RENAMES, Relevance, Renames, SNAPSHOTS, newest_snapshot, snapshot_build,
     snapshot_in,
 };
-use enshwick_gamedata::{Side, Table, exact, file_name, tables_in};
+use enshwick_gamedata::{Side, SteamBuild, Table, exact, file_name, tables_in};
 
 /// The one hand-written file among the generated modules.
 const RUNTIME: &str = "crates/internal/typed/src/typed/runtime.rs";
@@ -133,7 +133,7 @@ pub fn write_api(root: &Path, catalogue: &Catalogue, build: &str) -> anyhow::Res
 
 /// Writes `catalogue`, every reflected type of the build as [`catalogue`]
 /// reads them, as the snapshot of `side`'s build `fingerprint` in the game
-/// data folder `data`.
+/// data folder `data`, recording its Steam build `steam` when known.
 ///
 /// # Errors
 ///
@@ -143,21 +143,51 @@ pub fn write_snapshot(
     catalogue: &Catalogue,
     side: Side,
     fingerprint: enshwick_gamedata::Fingerprint,
+    steam: Option<SteamBuild>,
 ) -> anyhow::Result<PathBuf> {
     let path = snapshot_in(data, &file_name(side, fingerprint));
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).with_context(|| dir.display().to_string())?;
     }
-    std::fs::write(&path, catalogue.snapshot()).with_context(|| path.display().to_string())?;
+    std::fs::write(&path, catalogue.snapshot_for(steam))
+        .with_context(|| path.display().to_string())?;
     Ok(path)
 }
 
-/// Snapshots the executable `from` into the game data folder `data` when
-/// given, then writes the typed API.
+/// The Steam build of `side`'s executable `exe` to record in its snapshot.
 ///
-/// It writes from that snapshot when `from` is a server build no table is
-/// kept for, else from [`newest_snapshot`]'s pick. With `check` it writes
-/// nothing and fails when the committed files differ.
+/// It is `given`, else its kept `table`'s, which matches its fingerprint,
+/// else the one Steam's appmanifest beside it names; `None` only for a kept
+/// build whose table names none, as its table ranks it.
+///
+/// # Errors
+///
+/// For a build without a kept table whose Steam build none of them names,
+/// since its snapshot would rank below every older one that records one.
+pub fn steam_build_of(
+    exe: &Path,
+    side: Side,
+    given: Option<SteamBuild>,
+    table: Option<&Table>,
+) -> anyhow::Result<Option<SteamBuild>> {
+    let steam = given
+        .or_else(|| table?.steam_build())
+        .or_else(|| SteamBuild::installed(exe.parent()?, side));
+    if steam.is_none() && table.is_none() {
+        bail!(
+            "{}: its Steam build is unknown, with no kept table and no Steam appmanifest beside it; pass --steam-build",
+            exe.display()
+        );
+    }
+    Ok(steam)
+}
+
+/// Snapshots the executable `from` into the game data folder `data` when
+/// given, then writes the typed API from [`newest_snapshot`]'s pick.
+///
+/// The snapshot records the Steam build [`steam_build_of`] names, `steam`
+/// first. With `check` it writes nothing and fails when the committed files
+/// differ.
 ///
 /// # Errors
 ///
@@ -165,7 +195,13 @@ pub fn write_snapshot(
 /// write, the executable's side shows neither in its name nor in a kept
 /// table, no server snapshot is kept, or with `check`, when a generated
 /// file differs.
-pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow::Result<String> {
+pub fn run(
+    root: &Path,
+    data: &Path,
+    from: Option<&Path>,
+    steam: Option<SteamBuild>,
+    check: bool,
+) -> anyhow::Result<String> {
     if !root.join(RUNTIME).is_file() {
         bail!(
             "{} is not the enshwick repository: {RUNTIME} is missing; pass --root",
@@ -174,7 +210,6 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
     }
     let tables = tables_of(data)?;
     let mut done = Vec::new();
-    let mut snapshotted = None;
     if let Some(exe) = from {
         let bytes = std::fs::read(exe).with_context(|| exe.display().to_string())?;
         let fingerprint = Image::parse(&bytes, Layout::File, None)?
@@ -189,29 +224,34 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
                     exe.display()
                 )
             })?;
+        let steam = steam_build_of(exe, side, steam, exact(&tables, side, fingerprint))?;
         let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
-        let path = write_snapshot(data, &catalogue, side, fingerprint)?;
-        done.push(format!("snapshot {}", path.display()));
-        // A build without a table ranks only by write time, so pin it rather than trust the clock.
-        let untabled = side_of(&tables, fingerprint).is_none();
-        snapshotted = (side == Side::Server && untabled).then_some(path);
+        let path = write_snapshot(data, &catalogue, side, fingerprint, steam)?;
+        done.push(match steam {
+            Some(steam) => format!("snapshot {} of Steam build {steam}", path.display()),
+            None => format!("snapshot {} of no known Steam build", path.display()),
+        });
     }
     let snapshots = data.join(SNAPSHOTS);
-    let path = match snapshotted {
-        Some(path) => path,
-        None => newest_snapshot(data, &tables, Side::Server)
-            .with_context(|| snapshots.display().to_string())?
-            .ok_or_else(|| {
-                anyhow!(
-                    "{}: no server build snapshot; run with --from the server's executable",
-                    snapshots.display()
-                )
-            })?,
-    };
-    let text = std::fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+    let newest = newest_snapshot(data, &tables, Side::Server)
+        .with_context(|| snapshots.display().to_string())?
+        .ok_or_else(|| {
+            anyhow!(
+                "{}: no server build snapshot; run with --from the server's executable",
+                snapshots.display()
+            )
+        })?;
+    done.extend(newest.unranked().iter().map(|path| {
+        format!(
+            "{} records no Steam build, so it ranks below every snapshot that does; take it again with --from and --steam-build",
+            path.display()
+        )
+    }));
+    let path = newest.path();
+    let text = std::fs::read_to_string(path).with_context(|| path.display().to_string())?;
     let all = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
     let catalogue = covered(root, all)?;
-    let build = snapshot_build(&path, &tables);
+    let build = snapshot_build(path, &tables, newest.steam_build());
     if check {
         let (files, stale) = generated(root, &catalogue, &build)?;
         let mut differ: Vec<String> = files
@@ -226,7 +266,8 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
                 differ.join("\n")
             );
         }
-        return Ok(format!("the typed API matches {build}"));
+        done.push(format!("the typed API matches {build}"));
+        return Ok(done.join("\n"));
     }
     let written = write_api(root, &catalogue, &build)?;
     done.push(format!(
@@ -275,6 +316,38 @@ mod tests {
         std::fs::write(path, text).unwrap();
     }
 
+    /// The given Steam build wins, then the kept table's, which matches the
+    /// executable exactly, then Steam's appmanifest; a build without a table
+    /// whose Steam build is unknown is refused.
+    #[test]
+    fn a_snapshot_s_steam_build_is_given_else_its_table_s_else_steam_s_and_never_unknown() {
+        let root = repo("steam-of");
+        let exe = root.join("enshrouded_server.exe");
+        let table = Table::parse(TABLE).unwrap();
+        let unnamed = Table::parse(&TABLE.replace("steam_build = 3\n", "")).unwrap();
+        let of = |given: Option<u64>, table| {
+            steam_build_of(&exe, Side::Server, given.map(SteamBuild::new), table)
+                .map_err(|e| e.to_string())
+        };
+        let error = of(None, None).unwrap_err();
+        assert!(error.contains("pass --steam-build"), "{error}");
+        assert_eq!(of(None, Some(&unnamed)), Ok(None));
+        std::fs::create_dir_all(root.join("steamapps")).unwrap();
+        std::fs::write(
+            root.join("steamapps").join("appmanifest_2278520.acf"),
+            "\"buildid\"\t\t\"9\"\n",
+        )
+        .unwrap();
+        let found = (
+            of(Some(5), Some(&table)),
+            of(None, Some(&table)),
+            of(None, None),
+        );
+        drop(std::fs::remove_dir_all(&root));
+        let steam = |n| Ok(Some(SteamBuild::new(n)));
+        assert_eq!(found, (steam(5), steam(3), steam(9)));
+    }
+
     #[test]
     fn the_api_follows_the_rule_of_the_repository_it_is_written_into() {
         let root = repo("rule");
@@ -285,15 +358,15 @@ mod tests {
                 .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
                 .collect()
         };
-        run(&root, &data, None, false).unwrap();
+        run(&root, &data, None, None, false).unwrap();
         assert!(written().contains("LootResource"));
         rule(&root, &DEMO_RULE.replace("[\"Resource\"]", "[]"));
-        run(&root, &data, None, false).unwrap();
+        run(&root, &data, None, None, false).unwrap();
         let api = written();
         assert!(!api.contains("LootResource"), "{api}");
         assert!(api.contains("Fuel"), "the other roles stay");
         std::fs::write(root.join(RELEVANCE), "roots = 1").unwrap();
-        let error = format!("{:#}", run(&root, &data, None, false).unwrap_err());
+        let error = format!("{:#}", run(&root, &data, None, None, false).unwrap_err());
         assert!(error.contains("relevant.toml"), "{error}");
         drop(std::fs::remove_dir_all(&root));
     }
@@ -306,7 +379,7 @@ mod tests {
     fn the_typed_api_is_written_then_checked_and_a_hand_edit_or_stale_module_fails() {
         let root = repo("check");
         let data = data(&root);
-        let run = |check| run(&root, &data, None, check);
+        let run = |check| run(&root, &data, None, None, check);
         let wrote = run(false).unwrap();
         assert!(wrote.starts_with("wrote 4 files"), "{wrote}");
         assert!(wrote.ends_with("server build 2 (Steam 3)"), "{wrote}");
@@ -348,7 +421,7 @@ mod tests {
     fn a_folder_without_the_typed_runtime_is_refused_and_left_alone() {
         let root = repo("foreign");
         std::fs::remove_dir_all(root.join(TYPED)).unwrap();
-        let error = run(&root, &data(&root), None, false)
+        let error = run(&root, &data(&root), None, None, false)
             .unwrap_err()
             .to_string();
         assert!(error.contains("not the enshwick repository"), "{error}");
@@ -361,7 +434,9 @@ mod tests {
         let root = repo("snapshotless");
         let empty = root.join("gamedata-without-snapshots");
         std::fs::create_dir_all(&empty).unwrap();
-        let error = run(&root, &empty, None, false).unwrap_err().to_string();
+        let error = run(&root, &empty, None, None, false)
+            .unwrap_err()
+            .to_string();
         assert!(
             error.contains("gamedata-without-snapshots")
                 && error.contains("no server build snapshot"),
@@ -371,35 +446,49 @@ mod tests {
     }
 
     #[test]
-    fn a_data_folder_with_two_snapshots_and_no_table_takes_the_one_written_last() {
+    fn a_data_folder_with_untabled_snapshots_takes_the_newest_steam_build_not_the_last_written() {
         let root = repo("untabled");
         let data = root.join("untabled-data");
-        let fixture = include_str!("../../enshwick-gamedata/src/typed/fixture.jsonl");
+        let fixture = Catalogue::from_snapshot(include_str!(
+            "../../enshwick-gamedata/src/typed/fixture.jsonl"
+        ))
+        .unwrap();
         let fingerprint = |byte, age| enshwick_gamedata::Fingerprint::new([byte; 16], age);
         let start = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1 << 30);
         // A new GUID starts the linker age over: the later build has the lower age.
-        for (side, fingerprint, hours) in [
-            (Side::Server, fingerprint(1, 12), 0),
-            (Side::Server, fingerprint(2, 7), 2),
-            (Side::Client, fingerprint(3, 40), 3),
+        for (side, fingerprint, steam, hours) in [
+            (Side::Server, fingerprint(2, 7), Some(20), 0),
+            (Side::Server, fingerprint(1, 12), Some(10), 2),
+            (Side::Server, fingerprint(4, 30), None, 4),
+            (Side::Client, fingerprint(3, 40), Some(30), 3),
         ] {
-            let path = snapshot_in(&data, &file_name(side, fingerprint));
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(&path, fixture).unwrap();
+            let path = write_snapshot(
+                &data,
+                &fixture,
+                side,
+                fingerprint,
+                steam.map(SteamBuild::new),
+            )
+            .unwrap();
             let file = std::fs::File::options().write(true).open(&path).unwrap();
             file.set_modified(start + std::time::Duration::from_secs(hours * 3600))
                 .unwrap();
         }
         std::fs::write(data.join(SNAPSHOTS).join("notes.jsonl"), "").unwrap();
-        let wrote = run(&root, &data, None, false).unwrap();
-        assert!(wrote.ends_with("from server build 7"), "{wrote}");
+        let wrote = run(&root, &data, None, None, false).unwrap();
+        assert!(wrote.ends_with("from server build 7 (Steam 20)"), "{wrote}");
+        assert!(
+            wrote.contains("-30.jsonl records no Steam build"),
+            "{wrote}"
+        );
         let header = std::fs::read_to_string(root.join(TYPED).join("ecs.rs")).unwrap();
-        assert!(header.contains("server build 7"), "{header}");
+        assert!(header.contains("server build 7 (Steam 20)"), "{header}");
         drop(std::fs::remove_dir_all(&root));
     }
 
     /// `--from` snapshots a build no table is kept for, its side from the
-    /// executable's name; it needs the server executable (`ENSH_SERVER_EXE`).
+    /// executable's name and its Steam build given; it needs the server
+    /// executable (`ENSH_SERVER_EXE`).
     #[test]
     #[cfg_attr(miri, ignore = "scans a game executable")]
     fn from_an_executable_without_a_table_snapshots_it_and_writes_its_api() {
@@ -412,7 +501,7 @@ mod tests {
             include_str!("../../enshwick-gamedata/src/typed/relevant.toml"),
         );
         let data = root.join("tableless-data");
-        // Another untabled snapshot stamped in the future would win a pick by write time.
+        // Another untabled snapshot, stamped in the future, records no Steam build.
         let later = enshwick_gamedata::Fingerprint::new([9; 16], 4_000_000_000);
         let later = snapshot_in(&data, &file_name(Side::Server, later));
         std::fs::create_dir_all(later.parent().unwrap()).unwrap();
@@ -428,10 +517,15 @@ mod tests {
             .unwrap()
             .set_modified(future)
             .unwrap();
-        let wrote = run(&root, &data, Some(&exe), false).unwrap();
+        let steam = Some(SteamBuild::new(26_430_253));
+        let wrote = run(&root, &data, Some(&exe), steam, false).unwrap();
         assert!(wrote.starts_with("snapshot "), "{wrote}");
-        assert!(wrote.contains("wrote "), "{wrote}");
-        assert!(!wrote.contains("4000000000"), "{wrote}");
+        assert!(wrote.contains("of Steam build 26430253"), "{wrote}");
+        assert!(
+            wrote.contains("4000000000.jsonl records no Steam build"),
+            "{wrote}"
+        );
+        assert!(wrote.ends_with("(Steam 26430253)"), "{wrote}");
         let snapshots = std::fs::read_dir(data.join(SNAPSHOTS)).unwrap().count();
         assert_eq!(snapshots, 2, "the server's snapshot beside the later one");
         drop(std::fs::remove_dir_all(&root));
@@ -462,7 +556,8 @@ mod tests {
             "name = \"older\"\nside = \"server\"\nguid = \"{guid}\"\nage = {age}\nsteam_build = 1\n"
         );
         std::fs::write(data.join("tables").join(&name), older).unwrap();
-        let wrote = run(&root, &data, Some(&exe), false).unwrap();
+        let wrote = run(&root, &data, Some(&exe), None, false).unwrap();
+        assert!(wrote.contains(" of Steam build "), "{wrote}");
         assert!(wrote.ends_with("from server build 2 (Steam 3)"), "{wrote}");
         assert!(snapshot_in(&data, &name).is_file(), "{wrote}");
         let header = std::fs::read_to_string(root.join(TYPED).join("ecs.rs")).unwrap();

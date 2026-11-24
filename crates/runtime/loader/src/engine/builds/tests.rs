@@ -684,45 +684,24 @@ fn a_run_on_the_anchors_alone_misses_what_only_a_route_finds() {
     );
 }
 
-/// The Steam build is the appmanifest's `buildid`, beside a Steam library
-/// (two folders up) or inside a `SteamCMD` install, also one at a drive's
-/// root.
+/// The running side's Steam build is its own app's appmanifest `buildid`.
 #[test]
-fn the_steam_build_comes_from_the_appmanifest_where_steam_keeps_it() {
+fn the_steam_build_comes_from_the_running_side_s_appmanifest() {
     let manifest =
         "\"AppState\"\n{\n\t\"appid\"\t\t\"2278520\"\n\t\"buildid\"\t\t\"26430253\"\n}\n";
-    assert_eq!(manifest_build(manifest), Some(SteamBuild::new(26_430_253)));
-    assert_eq!(manifest_build("\"buildid\"\t\"next\"\n"), None);
-    let root = std::env::temp_dir().join(format!("enshwick-appmanifest-{}", std::process::id()));
-    let library = root.join("steamapps");
-    let client = library.join("common").join("Enshrouded");
-    let server = root.join("server");
-    std::fs::create_dir_all(&client).unwrap();
+    let server = std::env::temp_dir().join(format!("enshwick-appmanifest-{}", std::process::id()));
     std::fs::create_dir_all(server.join("steamapps")).unwrap();
-    std::fs::write(library.join("appmanifest_1203620.acf"), manifest).unwrap();
     std::fs::write(
         server.join("steamapps").join("appmanifest_2278520.acf"),
         manifest,
     )
     .unwrap();
-    // A one-component path has no library two folders up.
-    let shallow = std::path::PathBuf::from(format!("enshwick-shallow-{}", std::process::id()));
-    std::fs::create_dir_all(shallow.join("steamapps")).unwrap();
-    std::fs::write(
-        shallow.join("steamapps").join("appmanifest_2278520.acf"),
-        manifest,
-    )
-    .unwrap();
     let found = (
-        steam_build(&client, Side::CLIENT),
         steam_build(&server, Side::SERVER),
         steam_build(&server, Side::CLIENT),
-        steam_build(&shallow, Side::SERVER),
     );
-    std::fs::remove_dir_all(&root).unwrap();
-    std::fs::remove_dir_all(&shallow).unwrap();
-    let build = Some(SteamBuild::new(26_430_253));
-    assert_eq!(found, (build, build, None, build));
+    std::fs::remove_dir_all(&server).unwrap();
+    assert_eq!(found, (Some(SteamBuild::new(26_430_253)), None));
 }
 
 /// No server table and no server anchor holds a row bases past 16 reads

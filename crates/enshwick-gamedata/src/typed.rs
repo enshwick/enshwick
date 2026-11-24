@@ -96,38 +96,147 @@ pub fn snapshot_path(table_file: &str) -> Option<std::path::PathBuf> {
     crate::data_dir().map(|dir| snapshot_in(&dir, table_file))
 }
 
-/// The newest snapshot of `side` in the game data folder `dir`, ranked as
-/// its build's kept table among `tables` ranks, or first without one.
-///
-/// A build no table is kept for is newer than every kept one, since the
-/// tables are frozen, and among such builds the snapshot written last wins.
-/// The linker age in a file name ranks nothing: it starts over with each
-/// new GUID.
+/// The key of a snapshot's first type that records its build's Steam build.
+const STEAM_BUILD_KEY: &str = "steam_build";
+
+/// The Steam build a snapshot's first type records, a key [`Ty`] ignores.
+#[derive(Deserialize)]
+struct Stamp {
+    #[serde(default)]
+    steam_build: Option<crate::SteamBuild>,
+}
+
+/// The Steam build the snapshot file `path` records on its first type, as
+/// [`Catalogue::snapshot_for`] writes it; `None` for one that records none
+/// or whose first line is no text.
 ///
 /// # Errors
 ///
-/// When the folder or a file's time does not read.
+/// When the file does not open or read.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_gamedata::{Side, typed::newest_snapshot};
+/// use enshwick_gamedata::{SteamBuild, typed::{Catalogue, snapshot_steam_build}};
 ///
-/// let none = newest_snapshot(std::path::Path::new("no-such-folder"), &[], Side::Server)?;
-/// assert!(none.is_none());
-/// # Ok::<(), std::io::Error>(())
+/// let path = std::env::temp_dir().join(format!("steam-build-doc-{}.jsonl", std::process::id()));
+/// let catalogue = Catalogue::from_snapshot(r#"{"name":"demo::Id","kind":17,"size":4,"align":4}"#)?;
+/// std::fs::write(&path, catalogue.snapshot_for(Some(SteamBuild::new(7))))?;
+/// let steam = snapshot_steam_build(&path)?;
+/// std::fs::remove_file(&path)?;
+/// assert_eq!(steam, Some(SteamBuild::new(7)));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn snapshot_steam_build(path: &std::path::Path) -> std::io::Result<Option<crate::SteamBuild>> {
+    use std::io::BufRead as _;
+
+    let mut first = String::new();
+    match std::io::BufReader::new(std::fs::File::open(path)?).read_line(&mut first) {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => return Ok(None),
+        Err(e) => return Err(e),
+    }
+    Ok(serde_json::from_str::<Stamp>(&first)
+        .ok()
+        .and_then(|s| s.steam_build))
+}
+
+/// The newest snapshot of a side in a game data folder, as
+/// [`newest_snapshot`] picks it, with the snapshots it could not rank.
+///
+/// # Examples
+///
+/// See [`newest_snapshot`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewestSnapshot {
+    path: std::path::PathBuf,
+    steam: Option<crate::SteamBuild>,
+    unranked: Vec<std::path::PathBuf>,
+}
+
+impl NewestSnapshot {
+    /// The snapshot file.
+    ///
+    /// # Examples
+    ///
+    /// See [`newest_snapshot`].
+    #[must_use]
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    /// The Steam build the snapshot records; `None` for a kept build's
+    /// snapshot, whose table names it, or one that records none.
+    ///
+    /// # Examples
+    ///
+    /// See [`newest_snapshot`].
+    #[must_use]
+    pub const fn steam_build(&self) -> Option<crate::SteamBuild> {
+        self.steam
+    }
+
+    /// The snapshots of builds without a kept table that record no Steam
+    /// build, so they ranked below every one that does.
+    ///
+    /// # Examples
+    ///
+    /// See [`newest_snapshot`].
+    #[must_use]
+    pub fn unranked(&self) -> &[std::path::PathBuf] {
+        &self.unranked
+    }
+}
+
+/// The newest snapshot of `side` in the game data folder `dir`, ranked as
+/// its build's kept table among `tables` ranks, or first without one.
+///
+/// A build no table is kept for is newer than every kept one, since the
+/// tables are frozen, and such builds rank by the Steam build their
+/// snapshot records; one that records none ranks below every one that does,
+/// by write time among its like. The linker age in a file name ranks
+/// nothing: it starts over with each new GUID.
+///
+/// # Errors
+///
+/// When the folder or a snapshot without a table does not read.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::{Fingerprint, Side, SteamBuild, file_name};
+/// use enshwick_gamedata::typed::{Catalogue, newest_snapshot, snapshot_in};
+///
+/// let dir = std::env::temp_dir().join(format!("newest-snapshot-doc-{}", std::process::id()));
+/// assert!(newest_snapshot(&dir, &[], Side::Server)?.is_none());
+/// let catalogue = Catalogue::from_snapshot(r#"{"name":"demo::Id","kind":17,"size":4,"align":4}"#)?;
+/// let snapshot = |byte, steam: Option<u64>| -> std::io::Result<_> {
+///     let path = snapshot_in(&dir, &file_name(Side::Server, Fingerprint::new([byte; 16], 1)));
+///     std::fs::create_dir_all(path.parent().unwrap_or(&dir))?;
+///     std::fs::write(&path, catalogue.snapshot_for(steam.map(SteamBuild::new)))?;
+///     Ok(path)
+/// };
+/// let newer = snapshot(1, Some(20))?;
+/// snapshot(2, Some(10))?;
+/// let unranked = snapshot(3, None)?;
+/// let newest = newest_snapshot(&dir, &[], Side::Server)?.ok_or("no snapshot")?;
+/// std::fs::remove_dir_all(&dir)?;
+/// assert_eq!(newest.path(), newer);
+/// assert_eq!(newest.steam_build(), Some(SteamBuild::new(20)));
+/// assert_eq!(newest.unranked(), [unranked]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn newest_snapshot(
     dir: &std::path::Path,
     tables: &[crate::Table],
     side: crate::Side,
-) -> std::io::Result<Option<std::path::PathBuf>> {
+) -> std::io::Result<Option<NewestSnapshot>> {
     let entries = match std::fs::read_dir(dir.join(SNAPSHOTS)) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e),
     };
-    let mut written_last: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+    let mut untabled = Vec::new();
     let mut kept = Vec::new();
     for entry in entries {
         let entry = entry?;
@@ -143,18 +252,27 @@ pub fn newest_snapshot(
             kept.push(table);
             continue;
         }
-        // shortcut: a build without a table ranks by when it was
-        // snapshotted, as nothing else orders it; upgrade when a snapshot
-        // records its Steam build.
         let written = entry.metadata()?.modified()?;
-        if written_last.as_ref().is_none_or(|(at, _)| written > *at) {
-            written_last = Some((written, entry.path()));
-        }
+        untabled.push((snapshot_steam_build(&entry.path())?, written, entry.path()));
     }
-    Ok(written_last.map(|(_, path)| path).or_else(|| {
-        kept.into_iter()
-            .max_by_key(|t| crate::resolve::rank(t))
-            .map(|t| snapshot_in(dir, &t.file_name()))
+    let unranked = untabled
+        .iter()
+        .filter(|(steam, ..)| steam.is_none())
+        .map(|(.., path)| path.clone())
+        .collect();
+    let newest = untabled
+        .into_iter()
+        .max()
+        .map(|(steam, _, path)| (steam, path))
+        .or_else(|| {
+            kept.into_iter()
+                .max_by_key(|t| crate::resolve::rank(t))
+                .map(|t| (None, snapshot_in(dir, &t.file_name())))
+        });
+    Ok(newest.map(|(steam, path)| NewestSnapshot {
+        path,
+        steam,
+        unranked,
     }))
 }
 
@@ -200,18 +318,30 @@ pub fn build_name(table: &crate::Table) -> String {
 }
 
 /// The words a generated file's header names the build of the snapshot
-/// `path` by: its kept table's [`build_name`] among `tables`, else its side
-/// and the linker age in its file name.
+/// `path` by.
+///
+/// They are its kept table's [`build_name`] among `tables`, else its side
+/// and the linker age in its file name, with the Steam build `recorded` the
+/// snapshot records.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick_gamedata::{SteamBuild, typed::snapshot_build};
+///
 /// let path = format!("data/reflection/server-{}-224.jsonl", "ab".repeat(16));
-/// let name = enshwick_gamedata::typed::snapshot_build(path.as_ref(), &[]);
-/// assert_eq!(name, "server build 224");
+/// assert_eq!(snapshot_build(path.as_ref(), &[], None), "server build 224");
+/// assert_eq!(
+///     snapshot_build(path.as_ref(), &[], Some(SteamBuild::new(9))),
+///     "server build 224 (Steam 9)"
+/// );
 /// ```
 #[must_use]
-pub fn snapshot_build(path: &std::path::Path, tables: &[crate::Table]) -> String {
+pub fn snapshot_build(
+    path: &std::path::Path,
+    tables: &[crate::Table],
+    recorded: Option<crate::SteamBuild>,
+) -> String {
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -223,7 +353,7 @@ pub fn snapshot_build(path: &std::path::Path, tables: &[crate::Table]) -> String
     {
         return build_name(table);
     }
-    [crate::Side::Server, crate::Side::Client]
+    let build = [crate::Side::Server, crate::Side::Client]
         .into_iter()
         .find_map(|side| {
             Some(format!(
@@ -232,7 +362,11 @@ pub fn snapshot_build(path: &std::path::Path, tables: &[crate::Table]) -> String
                 snapshot_age(name, side)?
             ))
         })
-        .unwrap_or_else(|| name.to_owned())
+        .unwrap_or_else(|| name.to_owned());
+    match recorded {
+        Some(id) => format!("{build} (Steam {id})"),
+        None => build,
+    }
 }
 
 /// What a covered type is to a mod: a component an entity holds, an event
@@ -684,7 +818,33 @@ impl Catalogue {
         out
     }
 
-    /// The catalogue `snapshot` holds, as [`Catalogue::snapshot`] writes it.
+    /// The catalogue as the snapshot of a build, its first type recording
+    /// the build's Steam build when known, so [`newest_snapshot`] can rank
+    /// it; a catalogue without types records none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::{SteamBuild, typed::Catalogue};
+    ///
+    /// let catalogue = Catalogue::from_snapshot(r#"{"name":"demo::Id","kind":17,"size":4,"align":4}"#)?;
+    /// let snapshot = catalogue.snapshot_for(Some(SteamBuild::new(7)));
+    /// assert!(snapshot.starts_with(r#"{"steam_build":7,"name":"demo::Id""#));
+    /// assert_eq!(Catalogue::from_snapshot(&snapshot)?, catalogue);
+    /// # Ok::<(), enshwick_gamedata::typed::SnapshotError>(())
+    /// ```
+    #[must_use]
+    pub fn snapshot_for(&self, steam: Option<crate::SteamBuild>) -> String {
+        let snapshot = self.snapshot();
+        // A key on a type, not a line of its own, so an older tree reading the shared snapshot skips it.
+        match (steam, snapshot.strip_prefix('{')) {
+            (Some(steam), Some(rest)) => format!("{{\"{STEAM_BUILD_KEY}\":{steam},{rest}"),
+            _ => snapshot,
+        }
+    }
+
+    /// The catalogue `snapshot` holds, as [`Catalogue::snapshot`] or
+    /// [`Catalogue::snapshot_for`] writes it.
     ///
     /// # Errors
     ///

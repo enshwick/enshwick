@@ -466,9 +466,10 @@ fn committed() -> Option<(Catalogue, String)> {
         .iter()
         .map(|(_, text)| crate::Table::parse(text).unwrap())
         .collect();
-    let path = newest_snapshot(&crate::data_dir()?, &tables, crate::Side::Server).unwrap()?;
-    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
-    let build = snapshot_build(&path, &tables);
+    let newest = newest_snapshot(&crate::data_dir()?, &tables, crate::Side::Server).unwrap()?;
+    let path = newest.path();
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
+    let build = snapshot_build(path, &tables, newest.steam_build());
     let all = Catalogue::from_snapshot(&text).unwrap();
     Some((all.covered(&Relevance::committed()), build))
 }
@@ -553,15 +554,21 @@ fn the_newest_snapshot_ranks_kept_builds_by_steam_build_and_puts_an_untabled_one
     let newest = newest_snapshot(&dir, &tables, crate::Side::Server)
         .unwrap()
         .unwrap();
-    assert_eq!(newest, snapshot_in(&dir, &tables[1].file_name()));
-    assert_eq!(snapshot_build(&newest, &tables), build_name(&tables[1]));
+    assert_eq!(newest.path(), snapshot_in(&dir, &tables[1].file_name()));
+    assert_eq!(
+        snapshot_build(newest.path(), &tables, None),
+        build_name(&tables[1])
+    );
     let untabled = snapshot_in(&dir, &table(0x22, 3, 1).file_name());
     std::fs::write(&untabled, "").unwrap();
     let newest = newest_snapshot(&dir, &tables, crate::Side::Server)
         .unwrap()
         .unwrap();
-    assert_eq!(newest, untabled);
-    assert_eq!(snapshot_build(&newest, &tables), "server build 3");
+    assert_eq!(newest.path(), untabled);
+    assert_eq!(
+        snapshot_build(newest.path(), &tables, None),
+        "server build 3"
+    );
     assert_eq!(
         newest_snapshot(&dir, &tables, crate::Side::Client).unwrap(),
         None
@@ -570,30 +577,73 @@ fn the_newest_snapshot_ranks_kept_builds_by_steam_build_and_puts_an_untabled_one
 }
 
 #[test]
-fn among_untabled_snapshots_the_one_written_last_wins_and_a_missing_folder_has_none() {
-    let dir = std::env::temp_dir().join(format!("ensh-written-last-{}", std::process::id()));
+fn untabled_snapshots_rank_by_their_steam_build_and_one_without_ranks_last() {
+    let dir = std::env::temp_dir().join(format!("ensh-steam-ranked-{}", std::process::id()));
     drop(std::fs::remove_dir_all(&dir));
     assert_eq!(
         newest_snapshot(&dir, &[], crate::Side::Server).unwrap(),
         None
     );
     let start = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1 << 30);
-    let snapshot = |guid: &str, age: u32, hours: u64| {
+    let snapshot = |guid: &str, age: u32, steam: Option<u64>, hours: u64| {
         let path = dir
             .join(SNAPSHOTS)
             .join(format!("server-{}-{age}.jsonl", guid.repeat(16)));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        let file = std::fs::File::create(&path).unwrap();
+        let text = fixture().snapshot_for(steam.map(crate::SteamBuild::new));
+        std::fs::write(&path, text).unwrap();
+        let file = std::fs::File::options().write(true).open(&path).unwrap();
         file.set_modified(start + std::time::Duration::from_secs(hours * 3600))
             .unwrap();
         path
     };
-    snapshot("aa", 9, 1);
-    let last = snapshot("bb", 2, 5);
-    snapshot("cc", 7, 3);
+    // The older build is retaken last, and one without a Steam build later still.
+    let newer = snapshot("bb", 2, Some(26_430_253), 1);
+    snapshot("aa", 9, Some(26_319_703), 5);
+    let unranked = snapshot("ff", 7, None, 9);
+    let newest = newest_snapshot(&dir, &[], crate::Side::Server)
+        .unwrap()
+        .unwrap();
+    assert_eq!(newest.path(), newer);
     assert_eq!(
-        newest_snapshot(&dir, &[], crate::Side::Server).unwrap(),
-        Some(last)
+        newest.steam_build(),
+        Some(crate::SteamBuild::new(26_430_253))
+    );
+    assert_eq!(newest.unranked(), [unranked]);
+    assert_eq!(
+        snapshot_build(newest.path(), &[], newest.steam_build()),
+        "server build 2 (Steam 26430253)"
+    );
+    assert_eq!(
+        Catalogue::from_snapshot(&std::fs::read_to_string(&newer).unwrap()).unwrap(),
+        fixture(),
+        "the Steam build is a key every type reader, an older tree's too, skips"
+    );
+    drop(std::fs::remove_dir_all(&dir));
+    // Among snapshots without a Steam build the one written last wins, not the last name.
+    let last = snapshot("aa", 7, None, 9);
+    snapshot("ff", 8, None, 2);
+    let unreadable = dir
+        .join(SNAPSHOTS)
+        .join(format!("server-{}-3.jsonl", "cc".repeat(16)));
+    std::fs::write(&unreadable, [0xff, 0xfe, b'\n']).unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&unreadable)
+        .unwrap()
+        .set_modified(start)
+        .unwrap();
+    let newest = newest_snapshot(&dir, &[], crate::Side::Server)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (newest.path(), newest.steam_build()),
+        (last.as_path(), None)
+    );
+    assert_eq!(
+        newest.unranked().len(),
+        3,
+        "a first line that is no text records no build"
     );
     drop(std::fs::remove_dir_all(&dir));
     // A snapshot folder that is a file, not a folder, does not read.

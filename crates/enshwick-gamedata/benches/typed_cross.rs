@@ -18,7 +18,7 @@ fn typed_cross(c: &mut Criterion) {
         .collect();
     let Some(text) = data_dir()
         .and_then(|dir| newest_snapshot(&dir, &tables, Side::Server).ok().flatten())
-        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|newest| std::fs::read_to_string(newest.path()).ok())
     else {
         return;
     };
