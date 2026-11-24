@@ -1,16 +1,22 @@
 //! Changes and removals of the game's quests and lore pages: every field the
 //! journal holds, steps inserted, removed and moved.
 
+use std::cell::LazyCell;
+
 use crate::content::knowledge::{KnowledgeQuery, hash_key, key_of_hash};
 use crate::knowledge::KnowledgeId;
 use crate::resources::Value;
-use crate::typed::{QuestSourceType, QuestType, Reflected as _};
+use crate::typed::{KnowledgeQueryDataType, QuestSourceType, QuestType, Reflected as _};
 use crate::{ItemId, Off};
 
 use super::{
-    COLLECTIONS, DOCUMENT, DONE, ENTRIES, EntryId, FOR_ALL, Guid, PROGRESS, QUESTS, QuestReward,
-    QuestStep, REWARDS, SHOWN, entry_id, holds, list_mut, never, text_key,
+    COLLECTIONS, DOCUMENT, DONE, ENTRIES, EntryId, FOR_ALL, Guid, PROGRESS, QUERY_ID, QUESTS,
+    QuestReward, QuestStep, REWARDS, SHOWN, TYPE, entry_id, holds, list_mut, never, text_key,
 };
+
+/// The knowledge each game query reads, by query id, sorted; `None` when
+/// the query database does not read, so every game query may ask.
+pub(super) type Reads = Option<Vec<(u32, Vec<u32>)>>;
 
 /// A change of one step of a vanilla quest or entry of a vanilla page; `None`
 /// keeps a field. A text tag of zeros clears the map marker and the
@@ -173,11 +179,34 @@ fn set(value: &mut Value, name: &str, new: Value) -> Result<(), Off> {
 
 /// The id of the query `value` names, `None` for a form without one.
 fn query_id(value: &Value) -> Option<u32> {
-    value.field("knowledgeOrQueryId").and_then(key_of_hash)
+    value.field(QUERY_ID).and_then(key_of_hash)
 }
 
-/// Whether a step of the collection `entry` asks for knowledge `id`.
-fn asks_for(entry: &Value, id: u32) -> bool {
+/// Whether the step query `query` asks for one of the knowledge `ids`: names
+/// it, or is a game query that `reads` lists it under; `reads` is read only
+/// for a game query.
+fn reads_knowledge(
+    query: &Value,
+    ids: &[u32],
+    reads: &LazyCell<Reads, impl FnOnce() -> Reads>,
+) -> bool {
+    let Some(named) = query_id(query) else {
+        return false;
+    };
+    ids.contains(&named)
+        || matches!(
+            query.field(TYPE).map(KnowledgeQueryDataType::from_value),
+            Some(Ok(KnowledgeQueryDataType::Extern))
+        ) && LazyCell::force(reads).as_ref().is_none_or(|reads| {
+            reads
+                .binary_search_by_key(&named, |(query, _)| *query)
+                .is_ok_and(|at| reads[at].1.iter().any(|read| ids.contains(read)))
+        })
+}
+
+/// Whether a step of the collection `entry` asks for one of the knowledge
+/// `ids`, itself or through a game query of `reads`.
+fn asks_for(entry: &Value, ids: &[u32], reads: &LazyCell<Reads, impl FnOnce() -> Reads>) -> bool {
     let Some(Value::List(steps)) = entry.field(ENTRIES) else {
         return false;
     };
@@ -190,7 +219,7 @@ fn asks_for(entry: &Value, id: u32) -> bool {
             .into_iter()
             .flatten()
             .chain(progress)
-            .any(|query| query_id(query) == Some(id))
+            .any(|query| reads_knowledge(query, ids, reads))
     })
 }
 
@@ -380,7 +409,7 @@ pub(super) fn change_quest_in(
         set(&mut held, "source", source.to_value())?;
     }
     if let Some(kind) = &change.kind {
-        set(&mut held, "type", kind.to_value())?;
+        set(&mut held, TYPE, kind.to_value())?;
     }
     if let Some(main) = change.main {
         set(&mut held, "isMainQuest", Value::Bool(main))?;
@@ -443,22 +472,28 @@ pub(super) fn change_page_in(
 }
 
 /// Removes the vanilla quest `quest` from `registry`, refused while a quest
-/// of another mod asks for its knowledge: one neither in the game's quests
-/// `vanilla` (sorted) nor the mod's own `own`.
+/// of another mod asks for its or a step's knowledge, itself or through a
+/// game query of `reads`: a quest neither in the game's quests `vanilla`
+/// (sorted) nor the mod's own `own`.
 pub(super) fn remove_quest_in(
     registry: &mut Value,
     quest: KnowledgeId,
     vanilla: &[u32],
     own: &[u32],
+    reads: &LazyCell<Reads, impl FnOnce() -> Reads>,
 ) -> Result<(), Off> {
     let id = quest.get();
     let at = position(registry, QUESTS, id)
         .ok_or_else(|| Off::new(format!("quest {quest}: no quest of the journal")))?;
     let quests = list_mut(registry, QUESTS)?;
+    let mut ids = vec![id];
+    if let Some(Value::List(steps)) = quests[at].field(ENTRIES) {
+        ids.extend(steps.iter().filter_map(entry_id));
+    }
     if let Some(chained) = quests.iter().find(|held| {
         entry_id(held).is_some_and(|held| {
             held != id && vanilla.binary_search(&held).is_err() && !own.contains(&held)
-        }) && asks_for(held, id)
+        }) && asks_for(held, &ids, reads)
     }) {
         return Err(Off::new(format!(
             "quest {quest}: the quest {} of another mod chains on it",

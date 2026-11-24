@@ -17,7 +17,7 @@ use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
 use crate::resources::Value;
 use crate::{ItemId, Off, RecipeId};
 
-use super::{Edit, Guid, Id, LoadHelpers as _, item_set_category, list_mut};
+use super::{Edit, Guid, Id, LoadHelpers as _, QUERY_ID, item_set_category, list_mut};
 
 const CATEGORIES: &str = "itemSetCategories";
 const REWARDS: &str = "itemSetRewards";
@@ -371,7 +371,7 @@ fn key(value: &Value, name: &str) -> Option<u32> {
 fn query_of(value: &Value, name: &str) -> Option<u32> {
     value
         .field(name)
-        .and_then(|query| query.field("knowledgeOrQueryId"))
+        .and_then(|query| query.field(QUERY_ID))
         .and_then(key_of_hash)
 }
 

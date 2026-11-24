@@ -253,7 +253,8 @@ fn indices_of(queries: &[Value], id: u32) -> Option<(u64, u64)> {
 }
 
 /// The knowledge ids each query of the database `db` reads, its own parts'
-/// and those of the queries its parts name, by query id, sorted.
+/// and those of the queries its parts name, by query id, sorted; a world and
+/// a player twin of one id read as one query.
 fn knowledge_read(db: &Value) -> Vec<(u32, Vec<u32>)> {
     let Some(Value::List(queries)) = db.field(QUERIES) else {
         return Vec::new();
@@ -280,6 +281,13 @@ fn knowledge_read(db: &Value) -> Vec<(u32, Vec<u32>)> {
         })
         .collect();
     direct.sort_unstable_by_key(|(id, _, _)| *id);
+    direct.dedup_by(|(id, ids, named), (kept, kept_ids, kept_named)| {
+        *id == *kept && {
+            kept_ids.append(ids);
+            kept_named.append(named);
+            true
+        }
+    });
     let find = |id: u32| direct.binary_search_by_key(&id, |(at, _, _)| *at).ok();
     direct
         .iter()
